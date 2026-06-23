@@ -71,6 +71,24 @@ sharedOptions(
     })
 );
 
+// ---------------------------------------------------------------------------
+// balance — 余额查询
+// ---------------------------------------------------------------------------
+
+sharedOptions(
+  program
+    .command("balance")
+    .description("查询账户余额")
+    .action(async (options) => {
+      try {
+        await handleBalance(options);
+      } catch (err) {
+        console.error(`\n❌ 余额查询失败: ${err.message}`);
+        process.exit(1);
+      }
+    })
+);
+
 program.parse();
 
 // ---------------------------------------------------------------------------
@@ -199,7 +217,6 @@ async function handleOrder(options) {
   try {
     result = await client.orderInfo(options.orderNid);
   } catch (err) {
-    // Record failed query
     const store = new SubmissionStore();
     await store.record({
       command: "order",
@@ -216,7 +233,6 @@ async function handleOrder(options) {
   console.log(`\n📋 订单详情:`);
   console.log(JSON.stringify(result, null, 2));
 
-  // Record successful query
   const store = new SubmissionStore();
   await store.record({
     command: "order",
@@ -225,6 +241,42 @@ async function handleOrder(options) {
       api_key: apiKey,
       order_nids: [options.orderNid],
     },
+    result: { success: true, data: result },
+  });
+}
+
+async function handleBalance(options) {
+  const apiKey = resolveApiKey(options.apiKey);
+  console.log(`🔑 API Key: ${maskApiKey(apiKey)}`);
+  console.log(`💰 查询余额...`);
+
+  const client = new MediaClient({
+    apiKey,
+    baseUrl: options.baseUrl,
+  });
+
+  let result;
+  try {
+    result = await client.getBalance();
+  } catch (err) {
+    const store = new SubmissionStore();
+    await store.record({
+      command: "balance",
+      dryRun: false,
+      params: { api_key: apiKey },
+      result: { success: false, error: err.message },
+    });
+    throw err;
+  }
+
+  console.log(`\n💰 余额信息:`);
+  console.log(JSON.stringify(result, null, 2));
+
+  const store = new SubmissionStore();
+  await store.record({
+    command: "balance",
+    dryRun: false,
+    params: { api_key: apiKey },
     result: { success: true, data: result },
   });
 }
