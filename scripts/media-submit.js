@@ -89,6 +89,24 @@ sharedOptions(
     })
 );
 
+// ---------------------------------------------------------------------------
+// list — 网站媒体列表
+// ---------------------------------------------------------------------------
+
+sharedOptions(
+  program
+    .command("list")
+    .description("查看可用的网站媒体列表")
+    .action(async (options) => {
+      try {
+        await handleList(options);
+      } catch (err) {
+        console.error(`\n❌ 查询媒体列表失败: ${err.message}`);
+        process.exit(1);
+      }
+    })
+);
+
 program.parse();
 
 // ---------------------------------------------------------------------------
@@ -275,6 +293,46 @@ async function handleBalance(options) {
   const store = new SubmissionStore();
   await store.record({
     command: "balance",
+    dryRun: false,
+    params: { api_key: apiKey },
+    result: { success: true, data: result },
+  });
+}
+
+async function handleList(options) {
+  const apiKey = resolveApiKey(options.apiKey);
+  console.log(`🔑 API Key: ${maskApiKey(apiKey)}`);
+  console.log(`📋 正在获取网站媒体列表...`);
+
+  const client = new MediaClient({
+    apiKey,
+    baseUrl: options.baseUrl,
+  });
+
+  const result = await client.mediaList();
+
+  // Try to format nicely if data is an array
+  const data = result?.data ?? result;
+  if (Array.isArray(data)) {
+    console.log(`\n📋 共 ${data.length} 个可用媒体:\n`);
+    for (const item of data) {
+      console.log(`  ID: ${item.resource_id ?? item.id ?? "?"}`);
+      if (item.name || item.media_name) {
+        console.log(`  名称: ${item.name ?? item.media_name}`);
+      }
+      if (item.price !== undefined) {
+        console.log(`  价格: ${item.price}`);
+      }
+      console.log("");
+    }
+  } else {
+    console.log(`\n📋 媒体列表（原始返回）:`);
+    console.log(JSON.stringify(result, null, 2));
+  }
+
+  const store = new SubmissionStore();
+  await store.record({
+    command: "list",
     dryRun: false,
     params: { api_key: apiKey },
     result: { success: true, data: result },
