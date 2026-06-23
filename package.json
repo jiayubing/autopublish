@@ -1,0 +1,22 @@
+{
+  "name": "media-submission",
+  "version": "1.0.0",
+  "description": "媒体投稿渠道对接模块",
+  "type": "module",
+  "main": "src/core/media-client.js",
+  "scripts": {
+    "submit": "node scripts/media-submit.js submit",
+    "order": "node scripts/media-submit.js order",
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "form-data": "^4.0.6",
+    "mammoth": "^1.12.0"
+  }
+}
