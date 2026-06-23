@@ -1,7 +1,7 @@
 ﻿import FormData from "form-data";
 import { maskApiKey } from "./config.js";
 
-const DEFAULT_BASE_URL = "https://api.xqwmedia.com";
+const DEFAULT_BASE_URL = "http://8.138.187.158:8082";
 const DEFAULT_TIMEOUT_MS = 30000;
 
 /**

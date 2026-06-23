@@ -317,8 +317,8 @@ async function handleList(options) {
     console.log(`\n📋 共 ${data.length} 个可用媒体:\n`);
     for (const item of data) {
       console.log(`  ID: ${item.resource_id ?? item.id ?? "?"}`);
-      if (item.name || item.media_name) {
-        console.log(`  名称: ${item.name ?? item.media_name}`);
+      if (item.title) {
+        console.log(`  名称: ${item.title}`);
       }
       if (item.price !== undefined) {
         console.log(`  价格: ${item.price}`);
