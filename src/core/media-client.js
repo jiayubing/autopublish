@@ -49,11 +49,16 @@ export class MediaClient {
    * List available media resources.
    * POST /api/media/media_list
    *
+   * @param {object} [opts]
+   * @param {number} [opts.page] - Page number (1-based, default 1, 20 per page)
    * @returns {Promise<object>} Raw API response
    */
-  async mediaList() {
+  async mediaList(opts = {}) {
     const form = new FormData();
     form.append("api_key", this.apiKey);
+    if (opts.page != null) {
+      form.append("page", String(opts.page));
+    }
     return this._post("/api/media/media_list", form);
   }
 

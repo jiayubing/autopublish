@@ -97,6 +97,8 @@ sharedOptions(
   program
     .command("list")
     .description("查看可用的网站媒体列表")
+    .option("--page <n>", "页码（1 开始，每页 20 条）", "1")
+    .option("--all", "获取全部媒体（会发起多次请求）")
     .action(async (options) => {
       try {
         await handleList(options);
@@ -302,19 +304,77 @@ async function handleBalance(options) {
 async function handleList(options) {
   const apiKey = resolveApiKey(options.apiKey);
   console.log(`🔑 API Key: ${maskApiKey(apiKey)}`);
-  console.log(`📋 正在获取网站媒体列表...`);
 
   const client = new MediaClient({
     apiKey,
     baseUrl: options.baseUrl,
   });
 
-  const result = await client.mediaList();
+  if (options.all) {
+    await handleListAll(client, apiKey);
+    return;
+  }
 
-  // Try to format nicely if data is an array
+  const page = parseInt(options.page, 10) || 1;
+  console.log(`📋 正在获取网站媒体列表（第 ${page} 页）...`);
+
+  const result = await client.mediaList({ page });
+  printMediaList(result, page);
+
+  const store = new SubmissionStore();
+  await store.record({
+    command: "list",
+    dryRun: false,
+    params: { api_key: apiKey, page },
+    result: { success: true, data: result },
+  });
+}
+
+async function handleListAll(client, apiKey) {
+  console.log(`📋 正在获取全部网站媒体列表...`);
+
+  const allItems = [];
+  let page = 1;
+
+  while (true) {
+    const result = await client.mediaList({ page });
+    const data = result?.data ?? result;
+
+    if (!Array.isArray(data) || data.length === 0) break;
+
+    for (const item of data) {
+      allItems.push({
+        resource_id: item.resource_id,
+        title: item.title,
+        price: item.price,
+      });
+    }
+
+    process.stdout.write(`\r   已获取 ${allItems.length} 条 (第 ${page} 页)...`);
+    page++;
+
+    // Safety limit
+    if (page > 1000) break;
+  }
+
+  console.log(`\n\n📋 共 ${allItems.length} 个可用媒体:\n`);
+  for (const item of allItems) {
+    console.log(`  ID: ${item.resource_id}  名称: ${item.title}  价格: ${item.price}`);
+  }
+
+  const store = new SubmissionStore();
+  await store.record({
+    command: "list",
+    dryRun: false,
+    params: { api_key: apiKey, all: true },
+    result: { success: true, count: allItems.length },
+  });
+}
+
+function printMediaList(result, page) {
   const data = result?.data ?? result;
   if (Array.isArray(data)) {
-    console.log(`\n📋 共 ${data.length} 个可用媒体:\n`);
+    console.log(`\n📋 第 ${page} 页，${data.length} 个媒体:\n`);
     for (const item of data) {
       console.log(`  ID: ${item.resource_id ?? item.id ?? "?"}`);
       if (item.title) {
@@ -329,12 +389,4 @@ async function handleList(options) {
     console.log(`\n📋 媒体列表（原始返回）:`);
     console.log(JSON.stringify(result, null, 2));
   }
-
-  const store = new SubmissionStore();
-  await store.record({
-    command: "list",
-    dryRun: false,
-    params: { api_key: apiKey },
-    result: { success: true, data: result },
-  });
 }
