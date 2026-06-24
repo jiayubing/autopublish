@@ -88,5 +88,9 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   scanMediaArticles: function() {
     return ipcRenderer.invoke("media:scan-articles");
   },
+
+  runPreflight: function(articles, dryRun) {
+    return ipcRenderer.invoke("media:preflight", articles, dryRun);
+  },
   }
 });

@@ -700,6 +700,78 @@ if (mediaQueueElements.bulkSelectMediaBtn) {
 }
 
 
+
+
+// -------- Preflight / Dry-Run --------
+
+var preflightBtn = document.getElementById("preflightBtn");
+
+async function runPreflightCheck() {
+  var articles = mediaQueueState.articles;
+  if (articles.length === 0) {
+    alert("没有待投稿文章。请先将文章放入 input/media 目录并刷新队列。");
+    return;
+  }
+
+  var payload = articles.map(function(a) {
+    return {
+      filename: a.filename,
+      title: a.title,
+      resourceId: a.resourceId,
+      resourceName: a.resourceName,
+      hasImages: a.hasImages,
+      imageCount: a.imageCount,
+      ignoreImages: a.ignoreImages
+    };
+  });
+
+  try {
+    var result = await window.desktopConsole.runPreflight(payload, true);
+    if (result && result.ok && result.data) {
+      var pf = result.data;
+      var msg = "=== 预检报告 (Dry-Run) ===
+
+";
+      msg += "文章数: " + pf.articles.length + "
+";
+      msg += "全部通过: " + (pf.ok ? "是" : "否") + "
+";
+      msg += "所有文章已选媒体: " + (pf.checks.allHaveResources ? "是" : "否") + "
+";
+      msg += "无图片阻塞: " + (pf.checks.noImageBlockers ? "是" : "否") + "
+
+";
+      
+      pf.articles.forEach(function(a) {
+        msg += "[" + (a.ok ? "OK" : "FAIL") + "] " + a.title + "
+";
+        msg += "  媒体: " + (a.resourceName || a.resourceId || "未选择") + "
+";
+        if (a.errors.length) msg += "  错误: " + a.errors.join("; ") + "
+";
+        if (a.warnings.length) msg += "  警告: " + a.warnings.join("; ") + "
+";
+      });
+
+      if (pf.errors.length) msg += "
+总错误:
+" + pf.errors.map(function(e) { return "  - " + e; }).join("
+");
+      
+      alert(msg);
+    } else {
+      alert("预检失败: " + (result && result.error || "未知错误"));
+    }
+  } catch (err) {
+    alert("预检异常: " + err.message);
+  }
+}
+
+if (preflightBtn) {
+  preflightBtn.addEventListener("click", runPreflightCheck);
+}
+
+
 // Initialize media panel on load
 updateMediaCacheInfo();
 loadPoolIds();

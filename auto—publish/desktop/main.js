@@ -322,6 +322,18 @@ app.whenReady().then(function() {
     return { ok: true, data: articles };
   });
 
+
+  const { runPreflight } = require("../src/platforms/media/preflight");
+
+  ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
+    try {
+      var result = await runPreflight({ articles: articles, dryRun: dryRun !== false });
+      return { ok: true, data: result };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   app.on("activate", function() {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
