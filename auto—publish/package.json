@@ -1,8 +1,8 @@
-﻿{
+{
   "name": "auto-publish",
   "private": true,
   "version": "1.0.0",
-  "description": "鑷姩鍙戞枃桌面端",
+  "description": "自动发文桌面端",
   "scripts": {
     "desktop": "scripts\\desktop.cmd"
   },
