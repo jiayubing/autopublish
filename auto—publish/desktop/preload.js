@@ -39,5 +39,34 @@ contextBridge.exposeInMainWorld("desktopConsole", {
     return function() {
       ipcRenderer.removeListener("queue-updated", handler);
     };
+
+  // Media submission APIs
+  listResources: function() {
+    return ipcRenderer.invoke("media:list-resources");
+  },
+  getCachedResources: function() {
+    return ipcRenderer.invoke("media:get-cached-resources");
+  },
+  searchResources: function(keyword) {
+    return ipcRenderer.invoke("media:search-resources", keyword);
+  },
+  filterResourcesByPrice: function(minPrice, maxPrice) {
+    return ipcRenderer.invoke("media:filter-resources-by-price", minPrice, maxPrice);
+  },
+  getPool: function() {
+    return ipcRenderer.invoke("media:get-pool");
+  },
+  addToPool: function(resource) {
+    return ipcRenderer.invoke("media:add-to-pool", resource);
+  },
+  removeFromPool: function(resourceId) {
+    return ipcRenderer.invoke("media:remove-from-pool", resourceId);
+  },
+  poolContains: function(resourceId) {
+    return ipcRenderer.invoke("media:pool-contains", resourceId);
+  },
+  getBalance: function() {
+    return ipcRenderer.invoke("media:get-balance");
+  },
   }
 });

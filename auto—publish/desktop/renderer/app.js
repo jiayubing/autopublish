@@ -402,6 +402,172 @@ window.desktopConsole.onQueueUpdated(function(result) {
   renderSnapshotResult(result);
 });
 
+
+
+// -------- Media resource library --------
+
+var mediaElements = {
+  refreshMediaBtn: document.getElementById("refreshMediaBtn"),
+  mediaSearchInput: document.getElementById("mediaSearchInput"),
+  mediaPriceMin: document.getElementById("mediaPriceMin"),
+  mediaPriceMax: document.getElementById("mediaPriceMax"),
+  mediaFilterBtn: document.getElementById("mediaFilterBtn"),
+  mediaCacheInfo: document.getElementById("mediaCacheInfo"),
+  mediaResourceList: document.getElementById("mediaResourceList")
+};
+
+var mediaState = {
+  poolIds: {}
+};
+
+function updateMediaCacheInfo() {
+  window.desktopConsole.getCachedResources().then(function(result) {
+    if (result && result.ok && result.data && result.data.updatedAt) {
+      mediaElements.mediaCacheInfo.textContent = result.data.count + " 条, " + new Date(result.data.updatedAt).toLocaleString();
+    } else {
+      mediaElements.mediaCacheInfo.textContent = "未缓存";
+    }
+  }).catch(function() {
+    mediaElements.mediaCacheInfo.textContent = "读取失败";
+  });
+}
+
+function loadPoolIds() {
+  window.desktopConsole.getPool().then(function(result) {
+    if (result && result.ok && result.data) {
+      mediaState.poolIds = {};
+      result.data.forEach(function(e) {
+        mediaState.poolIds[e.resourceId] = true;
+      });
+    }
+  }).catch(function() {});
+}
+
+function renderMediaResources(resources) {
+  if (!resources || resources.length === 0) {
+    mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">没有媒体资源。点击刷新按钮从 API 获取。</p>';
+    return;
+  }
+
+  mediaElements.mediaResourceList.innerHTML = resources.map(function(r) {
+    var rid = String(r.id || r.resource_id || "");
+    var name = r.name || r.title || "未知";
+    var price = r.price !== undefined && r.price !== null ? String(r.price) : "-";
+    var cat = r.category || r.channelType || r.mediaType || "";
+    var inPool = mediaState.poolIds[rid];
+    var poolBtnLabel = inPool ? "移出媒体池" : "加入媒体池";
+    var poolBtnClass = inPool ? "danger" : "secondary";
+
+    return [
+      '<article class="media-item">',
+      '<div class="media-item-info">',
+      '<p class="media-item-name">' + escapeHtml(name) + '</p>',
+      '<p class="media-item-meta">ID: ' + escapeHtml(rid) + (cat ? ' | ' + escapeHtml(cat) : '') + '</p>',
+      '</div>',
+      '<p class="media-item-price">' + (price === "-" ? "价格未知" : "\u00a5" + escapeHtml(price)) + '</p>',
+      '<button class="' + poolBtnClass + ' media-pool-btn" data-rid="' + escapeHtml(rid) + '" data-name="' + escapeHtml(name) + '" data-price="' + escapeHtml(price) + '" data-cat="' + escapeHtml(cat) + '">' + poolBtnLabel + '</button>',
+      '</article>'
+    ].join("");
+  }).join("");
+
+  // Attach pool toggle handlers
+  var poolBtns = document.querySelectorAll(".media-pool-btn");
+  poolBtns.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var rid = btn.getAttribute("data-rid");
+      var inPool = mediaState.poolIds[rid];
+      if (inPool) {
+        window.desktopConsole.removeFromPool(rid).then(function() {
+          mediaState.poolIds[rid] = false;
+          renderMediaResources(resources);
+        });
+      } else {
+        var resource = {
+          id: rid,
+          name: btn.getAttribute("data-name"),
+          price: btn.getAttribute("data-price") === "-" ? undefined : Number(btn.getAttribute("data-price")),
+          category: btn.getAttribute("data-cat")
+        };
+        window.desktopConsole.addToPool(resource).then(function() {
+          mediaState.poolIds[rid] = true;
+          renderMediaResources(resources);
+        });
+      }
+    });
+  });
+}
+
+async function refreshMediaResources() {
+  mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">正在拉取媒体资源...</p>';
+  try {
+    var result = await window.desktopConsole.listResources();
+    if (result && result.ok) {
+      updateMediaCacheInfo();
+      loadPoolIds().then(function() {
+        window.desktopConsole.getCachedResources().then(function(cached) {
+          if (cached && cached.ok && cached.data) {
+            renderMediaResources(cached.data.resources);
+          }
+        });
+      });
+    } else {
+      mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">拉取失败: ' + (result && result.error || "未知错误") + '</p>';
+    }
+  } catch (err) {
+    mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">拉取异常: ' + err.message + '</p>';
+  }
+}
+
+function searchMediaResources() {
+  var keyword = mediaElements.mediaSearchInput.value;
+  window.desktopConsole.searchResources(keyword).then(function(result) {
+    if (result && result.ok) {
+      renderMediaResources(result.data);
+    }
+  });
+}
+
+function filterMediaResourcesByPrice() {
+  var min = mediaElements.mediaPriceMin.value ? Number(mediaElements.mediaPriceMin.value) : null;
+  var max = mediaElements.mediaPriceMax.value ? Number(mediaElements.mediaPriceMax.value) : null;
+  window.desktopConsole.filterResourcesByPrice(min, max).then(function(result) {
+    if (result && result.ok) {
+      renderMediaResources(result.data);
+    }
+  });
+}
+
+if (mediaElements.refreshMediaBtn) {
+  mediaElements.refreshMediaBtn.addEventListener("click", refreshMediaResources);
+}
+if (mediaElements.mediaFilterBtn) {
+  mediaElements.mediaFilterBtn.addEventListener("click", filterMediaResourcesByPrice);
+}
+if (mediaElements.mediaSearchInput) {
+  mediaElements.mediaSearchInput.addEventListener("input", function() {
+    if (!mediaElements.mediaSearchInput.value) {
+      window.desktopConsole.getCachedResources().then(function(result) {
+        if (result && result.ok && result.data) {
+          renderMediaResources(result.data.resources);
+        }
+      });
+    }
+  });
+  mediaElements.mediaSearchInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") searchMediaResources();
+  });
+}
+
+// Initialize media panel on load
+updateMediaCacheInfo();
+loadPoolIds();
+window.desktopConsole.getCachedResources().then(function(result) {
+  if (result && result.ok && result.data && result.data.resources) {
+    renderMediaResources(result.data.resources);
+  }
+}).catch(function() {});
+
+
 loadInitialState().catch(function(error) {
   elements.generatedAt.textContent = error.message;
   setRefreshing(false);

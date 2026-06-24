@@ -22,6 +22,7 @@
           <button class="nav-item" type="button" data-target="platformPanel">Platforms</button>
           <button class="nav-item" type="button" data-target="queuePanel">Queue</button>
           <button class="nav-item" type="button" data-target="logsPanel">Logs</button>
+          <button class="nav-item" type="button" data-target="mediaPanel">Media</button>
         </nav>
 
         <section class="sidebar-section">
@@ -119,7 +120,28 @@
             <div id="queueList" class="queue-list"></div>
           </section>
 
-          <section class="panel panel-logs" id="logsPanel">
+          
+          <section class="panel panel-media" id="mediaPanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Media Resources</p>
+                <h2>媒体资源库</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button id="refreshMediaBtn" class="icon-button" type="button" aria-label="刷新媒体资源">↻</button>
+                <span id="mediaCacheInfo" class="panel-meta" style="margin-left:8px">未缓存</span>
+              </div>
+            </div>
+            <div class="media-controls">
+              <input id="mediaSearchInput" type="text" placeholder="搜索媒体名称..." class="media-search">
+              <input id="mediaPriceMin" type="number" placeholder="最低价" class="media-price-input" min="0">
+              <span class="media-price-sep">-</span>
+              <input id="mediaPriceMax" type="number" placeholder="最高价" class="media-price-input" min="0">
+              <button id="mediaFilterBtn" type="button" class="secondary">筛选</button>
+            </div>
+            <div id="mediaResourceList" class="media-list"></div>
+          </section>
+<section class="panel panel-logs" id="logsPanel">
             <div class="panel-head">
               <div>
                 <p class="panel-kicker">Activity</p>
