@@ -92,5 +92,12 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   runPreflight: function(articles, dryRun) {
     return ipcRenderer.invoke("media:preflight", articles, dryRun);
   },
+
+  getOrders: function() {
+    return ipcRenderer.invoke("media:get-orders");
+  },
+  syncOrder: function(orderNid) {
+    return ipcRenderer.invoke("media:sync-order", orderNid);
+  },
   }
 });

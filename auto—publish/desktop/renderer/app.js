@@ -772,6 +772,163 @@ if (preflightBtn) {
 }
 
 
+
+
+// -------- Order center --------
+
+var orderElements = {
+  refreshOrdersBtn: document.getElementById("refreshOrdersBtn"),
+  orderStatusFilter: document.getElementById("orderStatusFilter"),
+  syncAllOrdersBtn: document.getElementById("syncAllOrdersBtn"),
+  ordersList: document.getElementById("ordersList")
+};
+
+var ordersState = {
+  orders: []
+};
+
+function statusLabel(status) {
+  if (status === "submitted" || status === "success") return "已投稿";
+  if (status === "published") return "已发布";
+  if (status === "failed" || status === "error") return "失败";
+  return status || "未知";
+}
+
+function statusClass(status) {
+  if (status === "submitted" || status === "success") return "status-submitted";
+  if (status === "published") return "status-published";
+  if (status === "failed" || status === "error") return "status-failed";
+  return "status-unknown";
+}
+
+function renderOrders(orders) {
+  ordersState.orders = orders || [];
+
+  if (!orders || orders.length === 0) {
+    orderElements.ordersList.innerHTML = '<p class="empty-state">没有投稿订单记录。</p>';
+    return;
+  }
+
+  var filterStatus = orderElements.orderStatusFilter ? orderElements.orderStatusFilter.value : "";
+
+  var filtered = orders;
+  if (filterStatus) {
+    filtered = orders.filter(function(o) {
+      var rs = o.result && o.result.success;
+      if (filterStatus === "submitted") return rs === true;
+      if (filterStatus === "failed") return rs === false;
+      return false;
+    });
+  }
+
+  if (filtered.length === 0) {
+    orderElements.ordersList.innerHTML = '<p class="empty-state">没有匹配的订单。</p>';
+    return;
+  }
+
+  orderElements.ordersList.innerHTML = filtered.map(function(o) {
+    var params = o.params || {};
+    var result = o.result || {};
+    var success = result.success;
+    var stLabel = statusLabel(success ? "submitted" : "failed");
+    var stClass = statusClass(success ? "submitted" : "failed");
+
+    var orderNid = "";
+    if (result.data && result.data.data && result.data.data.order_nid) {
+      orderNid = result.data.data.order_nid;
+    }
+
+    return [
+      '<article class="order-item">',
+      '<div class="order-item-info">',
+      '<p class="order-item-title">' + escapeHtml(params.title || "未知") + '</p>',
+      '<p class="order-item-meta">',
+      '资源: ' + escapeHtml(params.resource_id || "-") +
+      (orderNid ? ' | 订单号: ' + escapeHtml(orderNid) : '') +
+      ' | ' + (o.ts ? new Date(o.ts).toLocaleString() : "未知时间") +
+      '</p>',
+      '</div>',
+      '<span class="order-status ' + stClass + '">' + stLabel + '</span>',
+      orderNid ? '<button class="secondary sync-order-btn" data-nid="' + escapeHtml(orderNid) + '">同步</button>' : '',
+      '</article>'
+    ].join("");
+  }).join("");
+
+  // Attach sync handlers
+  var syncBtns = document.querySelectorAll(".sync-order-btn");
+  syncBtns.forEach(function(btn) {
+    btn.addEventListener("click", async function() {
+      var nid = btn.getAttribute("data-nid");
+      btn.disabled = true;
+      btn.textContent = "同步中...";
+      try {
+        var result = await window.desktopConsole.syncOrder(nid);
+        if (result && result.ok) {
+          alert("订单 " + nid + " 同步成功");
+          refreshOrders();
+        } else {
+          alert("同步失败: " + (result && result.error || "未知错误"));
+        }
+      } catch (err) {
+        alert("同步异常: " + err.message);
+      }
+      btn.disabled = false;
+      btn.textContent = "同步";
+    });
+  });
+}
+
+async function refreshOrders() {
+  orderElements.ordersList.innerHTML = '<p class="empty-state">正在加载订单...</p>';
+  try {
+    var result = await window.desktopConsole.getOrders();
+    if (result && result.ok) {
+      renderOrders(result.data);
+    } else {
+      orderElements.ordersList.innerHTML = '<p class="empty-state">加载失败: ' + (result && result.error || "未知错误") + '</p>';
+    }
+  } catch (err) {
+    orderElements.ordersList.innerHTML = '<p class="empty-state">加载异常: ' + err.message + '</p>';
+  }
+}
+
+async function syncAllOrders() {
+  var orders = ordersState.orders;
+  if (orders.length === 0) return;
+  orderElements.syncAllOrdersBtn.disabled = true;
+  var synced = 0;
+  var failed = 0;
+  for (var i = 0; i < orders.length; i++) {
+    var o = orders[i];
+    var data = o.result && o.result.data;
+    if (data && data.data && data.data.order_nid) {
+      try {
+        var result = await window.desktopConsole.syncOrder(data.data.order_nid);
+        if (result && result.ok) synced++; else failed++;
+      } catch (_) { failed++; }
+    }
+  }
+  orderElements.syncAllOrdersBtn.disabled = false;
+  alert("同步完成: " + synced + " 成功, " + failed + " 失败");
+  refreshOrders();
+}
+
+if (orderElements.refreshOrdersBtn) {
+  orderElements.refreshOrdersBtn.addEventListener("click", refreshOrders);
+}
+if (orderElements.syncAllOrdersBtn) {
+  orderElements.syncAllOrdersBtn.addEventListener("click", syncAllOrders);
+}
+if (orderElements.orderStatusFilter) {
+  orderElements.orderStatusFilter.addEventListener("change", function() {
+    renderOrders(ordersState.orders);
+  });
+}
+
+// Initialize orders on load
+refreshOrders();
+
+
 // Initialize media panel on load
 updateMediaCacheInfo();
 loadPoolIds();

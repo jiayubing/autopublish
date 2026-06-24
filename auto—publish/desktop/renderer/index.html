@@ -22,6 +22,7 @@
           <button class="nav-item" type="button" data-target="platformPanel">Platforms</button>
           <button class="nav-item" type="button" data-target="queuePanel">Queue</button>
           <button class="nav-item" type="button" data-target="logsPanel">Logs</button>
+          <button class="nav-item" type="button" data-target="ordersPanel">Orders</button>
           <button class="nav-item" type="button" data-target="mediaPanel">Media</button>
           <button class="nav-item" type="button" data-target="mediaQueuePanel">Media Queue</button>
         </nav>
@@ -138,6 +139,27 @@
             </div>
             <div id="mediaQueueList" class="media-queue-list"></div>
           </section>
+
+          <section class="panel panel-orders" id="ordersPanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Submission Orders</p>
+                <h2>投稿订单</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button id="refreshOrdersBtn" class="icon-button" type="button" aria-label="刷新订单">↻</button>
+                <select id="orderStatusFilter" class="order-filter-select">
+                  <option value="">全部状态</option>
+                  <option value="submitted">已投稿</option>
+                  <option value="published">已发布</option>
+                  <option value="failed">失败</option>
+                </select>
+                <button id="syncAllOrdersBtn" class="secondary" type="button">同步全部</button>
+              </div>
+            </div>
+            <div id="ordersList" class="orders-list"></div>
+          </section>
+
 <section class="panel panel-media" id="mediaPanel">
             <div class="panel-head">
               <div>

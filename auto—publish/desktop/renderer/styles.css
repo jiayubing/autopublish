@@ -756,3 +756,60 @@ button:disabled {
   border-radius: 3px;
   white-space: nowrap;
 }
+/* Order center */
+.orders-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.order-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f1ed;
+}
+
+.order-item:last-child {
+  border-bottom: none;
+}
+
+.order-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #202124;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-item-meta {
+  font-size: 11px;
+  color: #80868b;
+  margin-top: 2px;
+}
+
+.order-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.status-submitted { background: #e8f0fe; color: #1a73e8; }
+.status-published { background: #e6f4ea; color: #137333; }
+.status-failed { background: #fce8e6; color: #c5221f; }
+.status-unknown { background: #f1f3f4; color: #5f6368; }
+
+.order-filter-select {
+  padding: 4px 8px;
+  border: 1px solid #d0d2cc;
+  border-radius: 4px;
+  font-size: 12px;
+}

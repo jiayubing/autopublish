@@ -334,6 +334,40 @@ app.whenReady().then(function() {
     }
   });
 
+
+  const { SubmissionOrderStore } = require("../src/platforms/media/submission-order-store");
+  var submissionOrderStore = new SubmissionOrderStore();
+
+  ipcMain.handle("media:get-orders", async function() {
+    // Read all orders from JSONL
+    var fs = require("fs");
+    var path = require("path");
+    var storePath = path.resolve(__dirname, "..", "data", "submission-orders.jsonl");
+    var orders = [];
+    try {
+      if (fs.existsSync(storePath)) {
+        var lines = fs.readFileSync(storePath, "utf-8").trim().split("
+");
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].trim()) {
+            try { orders.push(JSON.parse(lines[i])); } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+    return { ok: true, data: orders };
+  });
+
+  ipcMain.handle("media:sync-order", async function(event, orderNid) {
+    try {
+      var client = getMediaClient();
+      var response = await client.orderInfo(orderNid);
+      return { ok: true, data: response };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   app.on("activate", function() {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
