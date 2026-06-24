@@ -1,31 +1,19 @@
 ﻿// auto—publish/src/platforms/media/adapter.js
 // Media platform adapter for Electron auto-publishing workflow.
+// Implements both createMediaAdapter() and the Platform Adapter contract.
 // CommonJS port from root src/platforms/media/adapter.js.
 
 const { MediaClient } = require('./media-client');
 const { convertArticle } = require('./article-converter');
+const { detectDocxImages } = require('./article-converter');
 const { SubmissionOrderStore } = require('./submission-order-store');
+const { MediaDraftStore } = require('./media-draft-store');
 const { resolveApiKey } = require('./config');
 
-/**
- * Media platform adapter for Electron auto-publishing workflow.
- *
- * Usage from Electron main process or task queue:
- *
- *   const { createMediaAdapter } = require('./platforms/media/adapter');
- *   const adapter = createMediaAdapter({ apiKey });
- *   const result = await adapter.publish({
- *     title: '...',
- *     contentFile: '/path/to/article.docx',
- *     resourceId: '123456',
- *     remark: '请按原文发布',
- *   });
- *
- * @param {object} opts
- * @param {string} [opts.apiKey] - API key (or use env/.env fallback)
- * @param {string} [opts.baseUrl] - Custom API base URL
- * @returns {object} adapter instance with { publish, queryOrder, getBalance }
- */
+// ---------------------------------------------------------------------------
+// createMediaAdapter — standalone API adapter
+// ---------------------------------------------------------------------------
+
 function createMediaAdapter(opts) {
   opts = opts || {};
   const apiKey = resolveApiKey(opts.apiKey || null);
@@ -36,17 +24,6 @@ function createMediaAdapter(opts) {
   const store = new SubmissionOrderStore();
 
   return {
-    /**
-     * Submit an article to the media platform.
-     *
-     * @param {object} params
-     * @param {string} params.title          - Article title
-     * @param {string} params.contentFile     - Path to .txt or .docx file
-     * @param {string|number} params.resourceId - Target media resource ID
-     * @param {string} [params.remark]        - Remark for editor
-     * @param {string} [params.thirdId]       - Client-side tracking ID
-     * @returns {Promise<object>} Unified publish result
-     */
     publish: async function (params) {
       var title = params.title;
       var contentFile = params.contentFile;
@@ -54,7 +31,6 @@ function createMediaAdapter(opts) {
       var remark = params.remark;
       var thirdId = params.thirdId;
 
-      // Convert article
       var article;
       try {
         article = await convertArticle(contentFile);
@@ -68,7 +44,6 @@ function createMediaAdapter(opts) {
         };
       }
 
-      // Submit
       var response;
       try {
         response = await client.sendArticle({
@@ -79,7 +54,6 @@ function createMediaAdapter(opts) {
           thirdId: thirdId
         });
       } catch (err) {
-        // Record failure
         await store.record({
           command: 'submit',
           dryRun: false,
@@ -102,7 +76,6 @@ function createMediaAdapter(opts) {
         };
       }
 
-      // Record success
       await store.record({
         command: 'submit',
         dryRun: false,
@@ -116,7 +89,6 @@ function createMediaAdapter(opts) {
         result: { success: true, data: response }
       });
 
-      // Extract key fields from response
       var data = response && response.data ? response.data : {};
       return {
         platform: 'media',
@@ -131,9 +103,6 @@ function createMediaAdapter(opts) {
       };
     },
 
-    /**
-     * Query order status.
-     */
     queryOrder: async function (orderNid) {
       var response;
       try {
@@ -168,9 +137,6 @@ function createMediaAdapter(opts) {
       };
     },
 
-    /**
-     * Get account balance.
-     */
     getBalance: async function () {
       var response;
       try {
@@ -192,4 +158,50 @@ function createMediaAdapter(opts) {
   };
 }
 
-module.exports = { createMediaAdapter };
+// ---------------------------------------------------------------------------
+// Platform Adapter contract for auto-publish batch system
+// ---------------------------------------------------------------------------
+
+var draftStore = new MediaDraftStore();
+
+module.exports = {
+  id: 'media',
+  scanDir: 'media',
+
+  ensureSession: function() {},
+
+  ensureLoggedIn: async function() {
+    return true;
+  },
+
+  closeSession: function() {},
+
+  publishArticle: async function(article, options) {
+    var draft = draftStore.get(article.filename);
+    if (!draft || !draft.resourceId) {
+      throw new Error('未选择媒体资源: ' + article.filename);
+    }
+
+    var imgInfo = detectDocxImages(article.sourceFile || article.file);
+    if (imgInfo.hasImages && !draft.ignoreImages) {
+      throw new Error('文章包含 ' + imgInfo.imageCount + ' 张图片，未勾选忽略图片');
+    }
+
+    var adapter = createMediaAdapter();
+    var result = await adapter.publish({
+      title: draft.title || article.title,
+      contentFile: article.sourceFile || article.file,
+      resourceId: draft.resourceId,
+      remark: draft.remark || undefined,
+      thirdId: article.filename
+    });
+
+    if (result.status === 'submitted') {
+      return 'submitted';
+    }
+
+    throw new Error(result.error || '投稿失败');
+  },
+
+  createMediaAdapter: createMediaAdapter
+};

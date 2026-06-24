@@ -6,6 +6,7 @@ var STATUSES = {
   PENDING: "pending",
   RUNNING: "running",
   SUCCEEDED: "succeeded",
+  SUBMITTED: "submitted",
   FAILED: "failed",
   NEEDS_LOGIN: "needs_login",
   STOPPED: "stopped"
@@ -28,6 +29,7 @@ function createJob(article, adapter) {
 
 function statusForResult(result) {
   if (result === true) return STATUSES.SUCCEEDED;
+  if (result === "submitted") return STATUSES.SUBMITTED;
   if (result === "pending") return STATUSES.NEEDS_LOGIN;
   return STATUSES.FAILED;
 }
@@ -64,6 +66,8 @@ async function runJob(job, options) {
     if (job.status === STATUSES.SUCCEEDED) {
       archivePublishedArticle(article);
       log("[" + job.adapterId + "] OK: " + article.title, "INFO");
+    } else if (job.status === STATUSES.SUBMITTED) {
+      log("[" + job.adapterId + "] Submitted (pending review): " + article.title, "INFO");
     } else if (job.status === STATUSES.NEEDS_LOGIN) {
       log("[" + job.adapterId + "] Waiting for manual completion: " + article.title, "INFO");
     } else {
@@ -109,6 +113,8 @@ async function runJobs(jobs, options) {
     await runJob(job, opts);
 
     if (job.status === STATUSES.SUCCEEDED) {
+      ok++;
+    } else if (job.status === STATUSES.SUBMITTED) {
       ok++;
     } else if (job.status === STATUSES.NEEDS_LOGIN) {
       needsLogin++;
