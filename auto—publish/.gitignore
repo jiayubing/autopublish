@@ -11,3 +11,6 @@ scripts/.playwright-cli/
 /.playwright-cli/
 __pycache__/
 *.pyc
+
+data/*
+!data/.gitkeep
