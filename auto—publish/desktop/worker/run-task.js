@@ -33,7 +33,8 @@ process.on("message", function(message) {
 
     if (task === "snapshot") {
       const { createQueueSnapshot } = require("../../src/app/publish-batch");
-      send("result", { ok: true, data: createQueueSnapshot() });
+      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+      send("result", { ok: true, data: createQueueSnapshot(options) });
       return;
     }
 

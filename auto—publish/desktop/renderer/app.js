@@ -2,7 +2,8 @@ var state = {
   isBatchRunning: false,
   isRefreshing: false,
   isStopPending: false,
-  snapshot: null
+  snapshot: null,
+  selectedPlatformIds: null
 };
 
 var elements = {
@@ -119,24 +120,95 @@ function setRefreshing(isRefreshing) {
   syncControls();
 }
 
+function getSelectedPlatformIds() {
+  if (state.selectedPlatformIds === null && state.snapshot && state.snapshot.platforms) {
+    state.selectedPlatformIds = state.snapshot.platforms.map(function(p) { return p.id; });
+  }
+  return state.selectedPlatformIds || [];
+}
+
+function isPlatformSelected(platformId) {
+  var ids = getSelectedPlatformIds();
+  return ids.indexOf(platformId) !== -1;
+}
+
+function togglePlatform(platformId) {
+  if (state.selectedPlatformIds === null && state.snapshot && state.snapshot.platforms) {
+    state.selectedPlatformIds = state.snapshot.platforms.map(function(p) { return p.id; });
+  }
+  if (!state.selectedPlatformIds) return;
+  var idx = state.selectedPlatformIds.indexOf(platformId);
+  if (idx !== -1) {
+    state.selectedPlatformIds.splice(idx, 1);
+  } else {
+    state.selectedPlatformIds.push(platformId);
+  }
+}
+
+function selectAllPlatforms() {
+  if (state.snapshot && state.snapshot.platforms) {
+    state.selectedPlatformIds = state.snapshot.platforms.map(function(p) { return p.id; });
+    renderPlatformList(state.snapshot);
+  }
+}
+
+function deselectAllPlatforms() {
+  state.selectedPlatformIds = [];
+  renderPlatformList(state.snapshot);
+}
+
 function renderPlatformList(snapshot) {
   if (!snapshot || !snapshot.platforms || snapshot.platforms.length === 0) {
     elements.platformList.innerHTML = '<p class="empty-state">没有启用的平台。</p>';
     return;
   }
 
-  elements.platformList.innerHTML = snapshot.platforms.map(function(platform) {
+  var selectedIds = getSelectedPlatformIds();
+  var allSelected = selectedIds.length === snapshot.platforms.length;
+
+  var selectAllHtml = '<div class="platform-select-all">' +
+    '<label class="platform-checkbox-label">' +
+    '<input type="checkbox" class="platform-checkbox" id="selectAllPlatforms"' + (allSelected ? ' checked' : '') + '>' +
+    '<span>全选 / 取消全选</span>' +
+    '</label>' +
+    '</div>';
+
+  elements.platformList.innerHTML = selectAllHtml + snapshot.platforms.map(function(platform) {
     var hasQueue = Number(platform.queueCount || 0) > 0;
+    var checked = selectedIds.indexOf(platform.id) !== -1 ? ' checked' : '';
     return [
       '<article class="platform-item">',
+      '<label class="platform-checkbox-label platform-item-label">',
+      '<input type="checkbox" class="platform-checkbox" data-platform-id="' + escapeHtml(platform.id) + '"' + checked + '>',
       '<div class="platform-row-meta">',
       '<p class="platform-id">' + escapeHtml(platform.id) + '</p>',
       '<p class="platform-dir">input/' + escapeHtml(platform.scanDir) + '</p>',
       '</div>',
-      '<p class="platform-badge' + (hasQueue ? "" : " empty") + '">' + escapeHtml(platform.queueCount) + ' queued</p>',
+      '<p class="platform-badge' + (hasQueue ? '' : ' empty') + '">' + escapeHtml(platform.queueCount) + ' queued</p>',
+      '</label>',
       '</article>'
     ].join("");
   }).join("");
+
+  var selectAllCheckbox = document.getElementById('selectAllPlatforms');
+  if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener('change', function() {
+      if (selectAllCheckbox.checked) {
+        selectAllPlatforms();
+      } else {
+        deselectAllPlatforms();
+      }
+    });
+  }
+
+  var platformCheckboxes = document.querySelectorAll('.platform-checkbox[data-platform-id]');
+  platformCheckboxes.forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      togglePlatform(cb.getAttribute('data-platform-id'));
+      var allNow = state.snapshot && state.snapshot.platforms && getSelectedPlatformIds().length === state.snapshot.platforms.length;
+      if (selectAllCheckbox) selectAllCheckbox.checked = allNow;
+    });
+  });
 }
 
 function renderQueue(snapshot) {
@@ -235,7 +307,7 @@ async function refreshQueue() {
   elements.generatedAt.textContent = "正在刷新队列...";
 
   try {
-    var result = await window.desktopConsole.refreshQueue();
+    var result = await window.desktopConsole.refreshQueue({ platformIds: state.selectedPlatformIds });
     renderSnapshotResult(result);
   } finally {
     setRefreshing(false);
@@ -252,7 +324,8 @@ async function runBatch() {
   var result = await window.desktopConsole.startBatch({
     autoSubmit: !elements.manualMode.checked,
     interactive: false,
-    intervalMs: Math.floor(intervalSeconds * 1000)
+    intervalMs: Math.floor(intervalSeconds * 1000),
+    platformIds: state.selectedPlatformIds
   });
 
   if (!result.ok) {

@@ -4,8 +4,8 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   getState: function() {
     return ipcRenderer.invoke("desktop:get-state");
   },
-  refreshQueue: function() {
-    return ipcRenderer.invoke("desktop:refresh-queue");
+  refreshQueue: function(options) {
+    return ipcRenderer.invoke("desktop:refresh-queue", options || {});
   },
   startBatch: function(options) {
     return ipcRenderer.invoke("desktop:start-batch", options || {});

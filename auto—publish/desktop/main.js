@@ -94,9 +94,10 @@ function spawnDesktopTask(taskName, payload, hooks) {
   return { child: child, promise: promise };
 }
 
-function refreshQueueSnapshot() {
+function refreshQueueSnapshot(options) {
+  var payload = options || {};
   if (!snapshotTask) {
-    snapshotTask = spawnDesktopTask("snapshot", {}).promise.finally(function() {
+    snapshotTask = spawnDesktopTask("snapshot", payload).promise.finally(function() {
       snapshotTask = null;
     });
   }
@@ -118,8 +119,9 @@ app.whenReady().then(function() {
     };
   });
 
-  ipcMain.handle("desktop:refresh-queue", function() {
-    return refreshQueueSnapshot();
+  ipcMain.handle("desktop:refresh-queue", function(event, options) {
+    snapshotTask = null;
+    return refreshQueueSnapshot(options || {});
   });
 
   ipcMain.handle("desktop:start-batch", async function(event, options) {
@@ -148,7 +150,7 @@ app.whenReady().then(function() {
       isBatchRunning = false;
       isStopPending = false;
       emitBatchState();
-      sendToRenderer("queue-updated", await refreshQueueSnapshot());
+      sendToRenderer("queue-updated", await refreshQueueSnapshot(options));
     }
   });
 
