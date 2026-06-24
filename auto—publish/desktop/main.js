@@ -262,6 +262,66 @@ app.whenReady().then(function() {
     }
   });
 
+
+  const { MediaDraftStore } = require("../src/platforms/media/media-draft-store");
+  var mediaDraftStore = new MediaDraftStore();
+
+  ipcMain.handle("media:get-drafts", function() {
+    return { ok: true, data: mediaDraftStore.getAll() };
+  });
+
+  ipcMain.handle("media:get-draft", function(event, filename) {
+    var draft = mediaDraftStore.get(filename);
+    return { ok: true, data: draft };
+  });
+
+  ipcMain.handle("media:set-draft", function(event, filename, draft) {
+    mediaDraftStore.set(filename, draft);
+    return { ok: true };
+  });
+
+  ipcMain.handle("media:remove-draft", function(event, filename) {
+    mediaDraftStore.remove(filename);
+    return { ok: true };
+  });
+
+  ipcMain.handle("media:set-bulk-resource", function(event, filenames, resourceId, resourceName) {
+    mediaDraftStore.setBulkResource(filenames, resourceId, resourceName);
+    return { ok: true };
+  });
+
+  ipcMain.handle("media:scan-articles", function() {
+    var fs = require("fs");
+    var path = require("path");
+    var scanDir = path.resolve(__dirname, "..", "input", "media");
+    if (!fs.existsSync(scanDir)) {
+      return { ok: true, data: [] };
+    }
+    var files = fs.readdirSync(scanDir).filter(function(name) {
+      if (name.indexOf("~$") === 0) return false;
+      if (name === ".gitkeep") return false;
+      return name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
+    });
+    // Auto-detect title from filename (simple: strip extension)
+    var articles = files.map(function(fn) {
+      var ext = path.extname(fn);
+      var base = path.basename(fn, ext);
+      // Check draft for title override
+      var draft = mediaDraftStore.get(fn);
+      return {
+        filename: fn,
+        filePath: path.join(scanDir, fn),
+        title: (draft && draft.title) || base,
+        hasImages: draft ? draft.hasImages : null,
+        imageCount: draft ? draft.imageCount : null,
+        resourceId: draft ? draft.resourceId : null,
+        resourceName: draft ? draft.resourceName : null,
+        ignoreImages: draft ? !!draft.ignoreImages : false
+      };
+    });
+    return { ok: true, data: articles };
+  });
+
   app.on("activate", function() {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();

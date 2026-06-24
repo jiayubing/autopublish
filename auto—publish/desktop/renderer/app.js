@@ -558,6 +558,148 @@ if (mediaElements.mediaSearchInput) {
   });
 }
 
+
+
+// -------- Media article queue --------
+
+var mediaQueueElements = {
+  refreshMediaQueueBtn: document.getElementById("refreshMediaQueueBtn"),
+  bulkSelectMediaBtn: document.getElementById("bulkSelectMediaBtn"),
+  mediaQueueCount: document.getElementById("mediaQueueCount"),
+  mediaQueueList: document.getElementById("mediaQueueList")
+};
+
+var mediaQueueState = {
+  articles: [],
+  poolResources: []
+};
+
+function renderMediaQueue(articles) {
+  mediaQueueState.articles = articles || [];
+  mediaQueueElements.mediaQueueCount.textContent = (articles ? articles.length : 0) + " 篇";
+
+  if (!articles || articles.length === 0) {
+    mediaQueueElements.mediaQueueList.innerHTML = '<p class="empty-state">input/media 目录下没有文章。将 .docx 或 .txt 文件放入该目录后刷新。</p>';
+    return;
+  }
+
+  mediaQueueElements.mediaQueueList.innerHTML = articles.map(function(a, idx) {
+    var resourceInfo = a.resourceId ? ('ID: ' + escapeHtml(String(a.resourceId)) + (a.resourceName ? ' (' + escapeHtml(a.resourceName) + ')' : '')) : '未选择';
+    var imageWarning = a.hasImages && !a.ignoreImages ? '<span class="image-warning">含图片</span>' : '';
+    var imgIgnored = a.hasImages && a.ignoreImages ? '<span class="image-ignored">已忽略图片</span>' : '';
+
+    return [
+      '<article class="media-queue-item">',
+      '<div class="media-queue-item-info">',
+      '<p class="media-queue-title">' + escapeHtml(a.title) + '</p>',
+      '<p class="media-queue-file">' + escapeHtml(a.filename) + '</p>',
+      '</div>',
+      '<div class="media-queue-resource">',
+      '<select class="media-resource-select" data-idx="' + idx + '">',
+      '<option value="">' + resourceInfo + '</option>',
+      '</select>',
+      imageWarning,
+      imgIgnored,
+      '</div>',
+      '</article>'
+    ].join("");
+  }).join("");
+
+  // Populate dropdowns with pool resources
+  window.desktopConsole.getPool().then(function(result) {
+    if (result && result.ok && result.data) {
+      mediaQueueState.poolResources = result.data;
+      var selects = document.querySelectorAll(".media-resource-select");
+      selects.forEach(function(sel) {
+        var idx = parseInt(sel.getAttribute("data-idx"), 10);
+        var article = mediaQueueState.articles[idx];
+        var currentVal = sel.value;
+        sel.innerHTML = '<option value="">未选择</option>' + mediaQueueState.poolResources.map(function(r) {
+          var label = r.name + ' (ID: ' + r.resourceId + (r.price !== undefined ? ', ' + r.price : '') + ')';
+          var selected = article && String(article.resourceId) === String(r.resourceId) ? ' selected' : '';
+          return '<option value="' + r.resourceId + '"' + selected + '>' + escapeHtml(label) + '</option>';
+        }).join("");
+      });
+
+      // Attach change handlers
+      selects.forEach(function(sel) {
+        sel.addEventListener("change", function() {
+          var idx = parseInt(sel.getAttribute("data-idx"), 10);
+          var article = mediaQueueState.articles[idx];
+          var newResourceId = sel.value;
+          if (newResourceId) {
+            var poolEntry = mediaQueueState.poolResources.find(function(r) {
+              return String(r.resourceId) === newResourceId;
+            });
+            window.desktopConsole.setDraft(article.filename, {
+              resourceId: newResourceId,
+              resourceName: poolEntry ? poolEntry.name : "",
+              title: article.title
+            }).then(function() {
+              article.resourceId = newResourceId;
+              article.resourceName = poolEntry ? poolEntry.name : "";
+            });
+          } else {
+            window.desktopConsole.setDraft(article.filename, {
+              resourceId: null,
+              resourceName: "",
+              title: article.title
+            }).then(function() {
+              article.resourceId = null;
+              article.resourceName = null;
+            });
+          }
+        });
+      });
+    }
+  });
+}
+
+async function refreshMediaQueue() {
+  mediaQueueElements.mediaQueueList.innerHTML = '<p class="empty-state">正在扫描 input/media...</p>';
+  try {
+    var result = await window.desktopConsole.scanMediaArticles();
+    if (result && result.ok) {
+      renderMediaQueue(result.data);
+    } else {
+      mediaQueueElements.mediaQueueList.innerHTML = '<p class="empty-state">扫描失败: ' + (result && result.error || "未知错误") + '</p>';
+    }
+  } catch (err) {
+    mediaQueueElements.mediaQueueList.innerHTML = '<p class="empty-state">扫描异常: ' + err.message + '</p>';
+  }
+}
+
+async function bulkSelectMedia() {
+  // Pop up a pool picker from the pool data
+  window.desktopConsole.getPool().then(function(result) {
+    if (!result || !result.ok || !result.data || result.data.length === 0) {
+      alert("媒体池为空。请先在媒体资源库中将媒体加入媒体池。");
+      return;
+    }
+    var pool = result.data;
+    var resourceId = prompt("输入媒体 resource_id 批量应用:
+" + pool.map(function(r) {
+      return r.resourceId + " - " + r.name;
+    }).join("
+"));
+    if (resourceId) {
+      var entry = pool.find(function(r) { return String(r.resourceId) === String(resourceId); });
+      var filenames = mediaQueueState.articles.map(function(a) { return a.filename; });
+      window.desktopConsole.setBulkResource(filenames, resourceId, entry ? entry.name : "").then(function() {
+        refreshMediaQueue();
+      });
+    }
+  });
+}
+
+if (mediaQueueElements.refreshMediaQueueBtn) {
+  mediaQueueElements.refreshMediaQueueBtn.addEventListener("click", refreshMediaQueue);
+}
+if (mediaQueueElements.bulkSelectMediaBtn) {
+  mediaQueueElements.bulkSelectMediaBtn.addEventListener("click", bulkSelectMedia);
+}
+
+
 // Initialize media panel on load
 updateMediaCacheInfo();
 loadPoolIds();

@@ -23,6 +23,7 @@
           <button class="nav-item" type="button" data-target="queuePanel">Queue</button>
           <button class="nav-item" type="button" data-target="logsPanel">Logs</button>
           <button class="nav-item" type="button" data-target="mediaPanel">Media</button>
+          <button class="nav-item" type="button" data-target="mediaQueuePanel">Media Queue</button>
         </nav>
 
         <section class="sidebar-section">
@@ -121,7 +122,22 @@
           </section>
 
           
-          <section class="panel panel-media" id="mediaPanel">
+          
+          <section class="panel panel-media-queue" id="mediaQueuePanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Media Queue</p>
+                <h2>媒体投稿队列</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button id="refreshMediaQueueBtn" class="icon-button" type="button" aria-label="刷新媒体队列">↻</button>
+                <button id="bulkSelectMediaBtn" class="secondary" type="button">批量选择媒体</button>
+                <span id="mediaQueueCount" class="panel-meta" style="margin-left:8px">0 篇</span>
+              </div>
+            </div>
+            <div id="mediaQueueList" class="media-queue-list"></div>
+          </section>
+<section class="panel panel-media" id="mediaPanel">
             <div class="panel-head">
               <div>
                 <p class="panel-kicker">Media Resources</p>

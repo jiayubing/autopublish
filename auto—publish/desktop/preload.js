@@ -68,5 +68,25 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   getBalance: function() {
     return ipcRenderer.invoke("media:get-balance");
   },
+
+  // Media draft APIs
+  getDrafts: function() {
+    return ipcRenderer.invoke("media:get-drafts");
+  },
+  getDraft: function(filename) {
+    return ipcRenderer.invoke("media:get-draft", filename);
+  },
+  setDraft: function(filename, draft) {
+    return ipcRenderer.invoke("media:set-draft", filename, draft);
+  },
+  removeDraft: function(filename) {
+    return ipcRenderer.invoke("media:remove-draft", filename);
+  },
+  setBulkResource: function(filenames, resourceId, resourceName) {
+    return ipcRenderer.invoke("media:set-bulk-resource", filenames, resourceId, resourceName);
+  },
+  scanMediaArticles: function() {
+    return ipcRenderer.invoke("media:scan-articles");
+  },
   }
 });
