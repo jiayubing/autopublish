@@ -5,7 +5,8 @@ import { resolveApiKey, maskApiKey, getProjectRoot } from "../src/core/config.js
 import { MediaClient } from "../src/core/media-client.js";
 import { convertArticle } from "../src/core/article-converter.js";
 import { SubmissionStore } from "../src/core/submission-store.js";
-import { resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, extname, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Shared options
@@ -99,6 +100,11 @@ sharedOptions(
     .description("查看可用的网站媒体列表")
     .option("--page <n>", "页码（1 开始，每页 20 条）", "1")
     .option("--all", "获取全部媒体（会发起多次请求）")
+    .option("--keyword <text>", "按媒体名称/备注关键词筛选")
+    .option("--min-price <n>", "最低价格筛选")
+    .option("--max-price <n>", "最高价格筛选")
+    .option("--save <path>", "保存媒体列表到文件（.json 或 .csv）")
+    .option("--format <type>", "保存格式：json 或 csv（默认按文件扩展名判断）")
     .action(async (options) => {
       try {
         await handleList(options);
@@ -311,7 +317,7 @@ async function handleList(options) {
   });
 
   if (options.all) {
-    await handleListAll(client, apiKey);
+    await handleListAll(client, apiKey, options);
     return;
   }
 
@@ -319,18 +325,23 @@ async function handleList(options) {
   console.log(`📋 正在获取网站媒体列表（第 ${page} 页）...`);
 
   const result = await client.mediaList({ page });
-  printMediaList(result, page);
+  const items = filterMediaItems(extractMediaItems(result), options);
+  printMediaItems(items, `第 ${page} 页`);
+
+  if (options.save) {
+    await saveMediaItems(items, options.save, options.format);
+  }
 
   const store = new SubmissionStore();
   await store.record({
     command: "list",
     dryRun: false,
     params: { api_key: apiKey, page },
-    result: { success: true, data: result },
+    result: { success: true, count: items.length, data: result },
   });
 }
 
-async function handleListAll(client, apiKey) {
+async function handleListAll(client, apiKey, options) {
   console.log(`📋 正在获取全部网站媒体列表...`);
 
   const allItems = [];
@@ -338,17 +349,11 @@ async function handleListAll(client, apiKey) {
 
   while (true) {
     const result = await client.mediaList({ page });
-    const data = result?.data ?? result;
+    const data = extractMediaItems(result);
 
     if (!Array.isArray(data) || data.length === 0) break;
 
-    for (const item of data) {
-      allItems.push({
-        resource_id: item.resource_id,
-        title: item.title,
-        price: item.price,
-      });
-    }
+    allItems.push(...data);
 
     process.stdout.write(`\r   已获取 ${allItems.length} 条 (第 ${page} 页)...`);
     page++;
@@ -357,36 +362,140 @@ async function handleListAll(client, apiKey) {
     if (page > 1000) break;
   }
 
-  console.log(`\n\n📋 共 ${allItems.length} 个可用媒体:\n`);
-  for (const item of allItems) {
-    console.log(`  ID: ${item.resource_id}  名称: ${item.title}  价格: ${item.price}`);
+  const filtered = filterMediaItems(allItems, options);
+  console.log("");
+  printMediaItems(filtered, `全部媒体，共 ${allItems.length} 条，筛选后 ${filtered.length} 条`);
+
+  if (options.save) {
+    await saveMediaItems(filtered, options.save, options.format);
   }
 
   const store = new SubmissionStore();
   await store.record({
     command: "list",
     dryRun: false,
-    params: { api_key: apiKey, all: true },
-    result: { success: true, count: allItems.length },
+    params: {
+      api_key: apiKey,
+      all: true,
+      keyword: options.keyword,
+      min_price: options.minPrice,
+      max_price: options.maxPrice,
+      save: options.save,
+    },
+    result: { success: true, count: filtered.length, total: allItems.length },
   });
 }
 
-function printMediaList(result, page) {
-  const data = result?.data ?? result;
-  if (Array.isArray(data)) {
-    console.log(`\n📋 第 ${page} 页，${data.length} 个媒体:\n`);
-    for (const item of data) {
-      console.log(`  ID: ${item.resource_id ?? item.id ?? "?"}`);
-      if (item.title) {
-        console.log(`  名称: ${item.title}`);
-      }
-      if (item.price !== undefined) {
-        console.log(`  价格: ${item.price}`);
-      }
-      console.log("");
+function extractMediaItems(result) {
+  const candidates = [
+    result,
+    result?.data,
+    result?.data?.data,
+    result?.data?.list,
+    result?.data?.items,
+    result?.data?.rows,
+  ];
+
+  for (const value of candidates) {
+    if (Array.isArray(value)) {
+      return value.map(normalizeMediaItem);
     }
-  } else {
-    console.log(`\n📋 媒体列表（原始返回）:`);
-    console.log(JSON.stringify(result, null, 2));
   }
+
+  return [];
+}
+
+function normalizeMediaItem(item) {
+  return {
+    resource_id: item.resource_id ?? item.id ?? "",
+    title: item.title ?? item.name ?? item.media_name ?? "",
+    price: item.price ?? item.money ?? item.amount ?? "",
+    media_type: item.media_type ?? item.type ?? "",
+    success_rate: item.success_rate ?? item.successRate ?? item.rate ?? "",
+    remark: item.remark ?? item.note ?? item.desc ?? "",
+    raw: item,
+  };
+}
+
+function filterMediaItems(items, options) {
+  const keyword = options.keyword?.trim().toLowerCase();
+  const minPrice = options.minPrice == null ? null : Number(options.minPrice);
+  const maxPrice = options.maxPrice == null ? null : Number(options.maxPrice);
+
+  return items.filter((item) => {
+    if (keyword) {
+      const haystack = [
+        item.resource_id,
+        item.title,
+        item.media_type,
+        item.remark,
+      ].join(" ").toLowerCase();
+
+      if (!haystack.includes(keyword)) {
+        return false;
+      }
+    }
+
+    const price = parsePrice(item.price);
+    if (minPrice != null && Number.isFinite(minPrice) && price < minPrice) {
+      return false;
+    }
+    if (maxPrice != null && Number.isFinite(maxPrice) && price > maxPrice) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function parsePrice(value) {
+  if (value == null || value === "") return 0;
+  const n = Number(String(value).replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function printMediaItems(items, label) {
+  console.log(`\n📋 ${label}，${items.length} 个媒体:\n`);
+  for (const item of items) {
+    console.log(`  ID: ${item.resource_id || "?"}`);
+    if (item.title) console.log(`  名称: ${item.title}`);
+    if (item.price !== "") console.log(`  价格: ${item.price}`);
+    if (item.media_type) console.log(`  类型: ${item.media_type}`);
+    if (item.success_rate) console.log(`  成功率: ${item.success_rate}`);
+    if (item.remark) console.log(`  备注: ${item.remark}`);
+    console.log("");
+  }
+}
+
+async function saveMediaItems(items, outputPath, requestedFormat) {
+  const target = resolve(outputPath);
+  const format = (requestedFormat || extname(target).slice(1) || "json").toLowerCase();
+  await mkdir(dirname(target), { recursive: true });
+
+  if (format === "json") {
+    await writeFile(target, JSON.stringify(items, null, 2), "utf-8");
+  } else if (format === "csv") {
+    await writeFile(target, toCsv(items), "utf-8");
+  } else {
+    throw new Error(`不支持的保存格式: ${format}。请使用 json 或 csv。`);
+  }
+
+  console.log(`✅ 已保存 ${items.length} 条媒体到: ${target}`);
+}
+
+function toCsv(items) {
+  const headers = ["resource_id", "title", "price", "media_type", "success_rate", "remark"];
+  const lines = [headers.join(",")];
+  for (const item of items) {
+    lines.push(headers.map((key) => csvEscape(item[key])).join(","));
+  }
+  return lines.join("\n") + "\n";
+}
+
+function csvEscape(value) {
+  const text = value == null ? "" : String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
 }

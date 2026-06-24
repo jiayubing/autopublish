@@ -104,6 +104,40 @@ node scripts/media-submit.js balance
 node scripts/media-submit.js balance --base-url https://custom-api.example.com
 ```
 
+### 媒体列表管理
+
+媒体数量较多时，建议先把全部媒体拉取并保存成本地文件，再用 Excel、表格软件或桌面端做二次筛选。
+
+保存为 JSON：
+
+```powershell
+node scripts/media-submit.js list --all --save data\media-list.json
+```
+
+保存为 CSV：
+
+```powershell
+node scripts/media-submit.js list --all --save data\media-list.csv --format csv
+```
+
+按关键词筛选：
+
+```powershell
+node scripts/media-submit.js list --all --keyword "科技" --save data\media-tech.csv --format csv
+```
+
+按价格筛选：
+
+```powershell
+node scripts/media-submit.js list --all --max-price 200 --save data\media-under-200.csv --format csv
+```
+
+推荐管理方式：
+
+- `data/media-list.json`：保存平台原始字段，方便后续程序读取。
+- `data/media-list.csv`：人工筛选、排序、备注，适合用 Excel 打开。
+- 单独维护一份“常用媒体池”，记录 `resource_id`、媒体名称、价格、适合栏目、备注、最近投稿效果。
+
 ## 支持的文件格式
 
 | 格式 | 说明 |

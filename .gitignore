@@ -3,5 +3,7 @@
 *.log
 logs/
 submission-records.jsonl
+data/media-list*.json
+data/media-list*.csv
 dist/
 .DS_Store
