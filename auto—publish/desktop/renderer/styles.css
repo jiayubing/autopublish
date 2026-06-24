@@ -813,3 +813,34 @@ button:disabled {
   border-radius: 4px;
   font-size: 12px;
 }
+/* Settings panel */
+.settings-content {
+  padding: 16px;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f1ed;
+}
+
+.settings-item:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #202124;
+  min-width: 120px;
+}
+
+.settings-value {
+  font-size: 13px;
+  color: #5f6368;
+}
+
+.settings-value.ok { color: #137333; }
+.settings-value.error { color: #c5221f; }

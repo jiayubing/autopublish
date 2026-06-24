@@ -17,14 +17,14 @@
           </div>
         </div>
 
-        <nav class="side-nav" aria-label="Dashboard sections">
-          <button class="nav-item active" type="button" data-target="overviewPanel">Cockpit</button>
-          <button class="nav-item" type="button" data-target="platformPanel">Platforms</button>
-          <button class="nav-item" type="button" data-target="queuePanel">Queue</button>
-          <button class="nav-item" type="button" data-target="logsPanel">Logs</button>
-          <button class="nav-item" type="button" data-target="ordersPanel">Orders</button>
-          <button class="nav-item" type="button" data-target="mediaPanel">Media</button>
-          <button class="nav-item" type="button" data-target="mediaQueuePanel">Media Queue</button>
+        <nav class="side-nav" aria-label="工作台导航">
+          <button class="nav-item active" type="button" data-target="overviewPanel">总览</button>
+          <button class="nav-item" type="button" data-target="queuePanel">文章队列</button>
+          <button class="nav-item" type="button" data-target="platformPanel">平台管理</button>
+          <button class="nav-item" type="button" data-target="mediaPanel">媒体投稿</button>
+          <button class="nav-item" type="button" data-target="ordersPanel">订单中心</button>
+          <button class="nav-item" type="button" data-target="logsPanel">日志</button>
+          <button class="nav-item" type="button" data-target="settingsPanel">设置</button>
         </nav>
 
         <section class="sidebar-section">
@@ -190,6 +190,39 @@
             </div>
             <pre id="logStream" class="log-stream"></pre>
           </section>
+
+          <section class="panel panel-settings" id="settingsPanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Settings</p>
+                <h2>设置</h2>
+              </div>
+            </div>
+            <div class="settings-content">
+              <div class="settings-item">
+                <span class="settings-label">API Key</span>
+                <span id="apiKeyStatus" class="settings-value">检测中...</span>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">媒体 API 地址</span>
+                <span class="settings-value">http://8.138.187.158:8082</span>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">数据目录</span>
+                <span class="settings-value">auto—publish/data/</span>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">测试连接</span>
+                <button id="testConnectionBtn" class="secondary" type="button">测试连接</button>
+              </div>
+              <div class="settings-item">
+                <span class="settings-label">查询余额</span>
+                <button id="checkBalanceBtn" class="secondary" type="button">查询余额</button>
+                <span id="balanceDisplay" class="settings-value" style="margin-left:8px"></span>
+              </div>
+            </div>
+          </section>
+
         </main>
       </div>
     </div>

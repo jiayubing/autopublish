@@ -939,6 +939,68 @@ window.desktopConsole.getCachedResources().then(function(result) {
 }).catch(function() {});
 
 
+
+
+// -------- Settings panel --------
+
+var testConnectionBtn = document.getElementById("testConnectionBtn");
+var checkBalanceBtn = document.getElementById("checkBalanceBtn");
+var apiKeyStatus = document.getElementById("apiKeyStatus");
+var balanceDisplay = document.getElementById("balanceDisplay");
+
+// Check API key status on load
+window.desktopConsole.getBalance().then(function(result) {
+  if (apiKeyStatus) {
+    apiKeyStatus.textContent = result && result.ok ? "已配置" : "未配置或连接失败";
+    apiKeyStatus.className = result && result.ok ? "settings-value ok" : "settings-value error";
+  }
+}).catch(function() {
+  if (apiKeyStatus) apiKeyStatus.textContent = "检测失败";
+});
+
+if (testConnectionBtn) {
+  testConnectionBtn.addEventListener("click", async function() {
+    testConnectionBtn.disabled = true;
+    testConnectionBtn.textContent = "测试中...";
+    try {
+      var result = await window.desktopConsole.getBalance();
+      if (result && result.ok) {
+        alert("连接成功！API 响应正常。");
+        if (apiKeyStatus) { apiKeyStatus.textContent = "已配置"; apiKeyStatus.className = "settings-value ok"; }
+      } else {
+        alert("连接失败: " + (result && result.error || "未知错误"));
+        if (apiKeyStatus) { apiKeyStatus.textContent = "未配置或连接失败"; apiKeyStatus.className = "settings-value error"; }
+      }
+    } catch (err) {
+      alert("连接异常: " + err.message);
+    }
+    testConnectionBtn.disabled = false;
+    testConnectionBtn.textContent = "测试连接";
+  });
+}
+
+if (checkBalanceBtn) {
+  checkBalanceBtn.addEventListener("click", async function() {
+    checkBalanceBtn.disabled = true;
+    checkBalanceBtn.textContent = "查询中...";
+    try {
+      var result = await window.desktopConsole.getBalance();
+      if (result && result.ok) {
+        var data = result.data;
+        var balance = data && data.data && data.data.balance !== undefined ? data.data.balance : "未知";
+        balanceDisplay.textContent = "余额: " + balance;
+      } else {
+        balanceDisplay.textContent = "查询失败";
+      }
+    } catch (err) {
+      balanceDisplay.textContent = "查询异常";
+    }
+    checkBalanceBtn.disabled = false;
+    checkBalanceBtn.textContent = "查询余额";
+  });
+}
+
+
 loadInitialState().catch(function(error) {
   elements.generatedAt.textContent = error.message;
   setRefreshing(false);
