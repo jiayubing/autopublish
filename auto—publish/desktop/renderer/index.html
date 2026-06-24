@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Publish Desktop Console</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AP</div>
+          <div>
+            <p class="brand-name">Auto Publish</p>
+            <p class="brand-subtitle">Desktop Console</p>
+          </div>
+        </div>
+
+        <nav class="side-nav" aria-label="Dashboard sections">
+          <button class="nav-item active" type="button" data-target="overviewPanel">Cockpit</button>
+          <button class="nav-item" type="button" data-target="platformPanel">Platforms</button>
+          <button class="nav-item" type="button" data-target="queuePanel">Queue</button>
+          <button class="nav-item" type="button" data-target="logsPanel">Logs</button>
+        </nav>
+
+        <section class="sidebar-section">
+          <label class="field-control side-control">
+            <span>发布间隔（秒）</span>
+            <input id="intervalSeconds" type="number" min="0" step="1" value="3">
+          </label>
+
+          <label class="mode-toggle side-toggle">
+            <input id="manualMode" type="checkbox">
+            <span>手动确认模式</span>
+          </label>
+        </section>
+
+        <div class="sidebar-footer">
+          <p class="sidebar-footer-label">Batch</p>
+          <p id="batchStatus" class="status-pill">空闲</p>
+        </div>
+      </aside>
+
+      <div class="main-shell">
+        <header class="topbar">
+          <div class="topbar-title">
+            <button id="refreshButton" class="icon-button" type="button" aria-label="刷新队列">↻</button>
+            <div>
+              <p class="eyebrow">Publishing Cockpit</p>
+              <h1>自动发文控制台</h1>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <p id="generatedAt" class="topbar-meta">正在加载队列...</p>
+            <div class="button-row">
+              <button id="runButton" class="primary" type="button">开始发文</button>
+              <button id="stopButton" class="danger" type="button">停止</button>
+            </div>
+          </div>
+        </header>
+
+        <main class="dashboard">
+          <section class="panel panel-main" id="overviewPanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Overview</p>
+                <h2>平台概览</h2>
+              </div>
+              <p id="queueSummary" class="panel-meta">正在加载队列...</p>
+            </div>
+
+            <div class="hero-stats">
+              <div class="stat-block">
+                <span>待发文章</span>
+                <strong id="totalJobsCount">0</strong>
+              </div>
+              <div class="stat-block">
+                <span>启用平台</span>
+                <strong id="enabledPlatformsCount">0</strong>
+              </div>
+              <div class="stat-block">
+                <span>运行模式</span>
+                <strong id="modeLabel">自动</strong>
+              </div>
+            </div>
+
+            <div id="platformList" class="platform-list"></div>
+          </section>
+
+          <aside class="right-rail">
+            <section class="metric-card">
+              <p>Outstanding Offers</p>
+              <strong id="pendingArticlesMetric">0</strong>
+            </section>
+            <section class="metric-card">
+              <p>Enabled Platforms</p>
+              <strong id="enabledPlatformsMetric">0</strong>
+            </section>
+            <section class="metric-card">
+              <p>Batch State</p>
+              <strong id="batchStateMetric">空闲</strong>
+            </section>
+            <section class="metric-card">
+              <p>Interval</p>
+              <strong id="intervalMetric">3s</strong>
+            </section>
+          </aside>
+
+          <section class="panel panel-table" id="platformPanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Platforms</p>
+                <h2>平台队列</h2>
+              </div>
+              <p class="panel-meta">按平台分组显示</p>
+            </div>
+            <div id="queueList" class="queue-list"></div>
+          </section>
+
+          <section class="panel panel-logs" id="logsPanel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Activity</p>
+                <h2>实时日志</h2>
+              </div>
+              <p id="logsHint" class="panel-meta">等待操作...</p>
+            </div>
+            <pre id="logStream" class="log-stream"></pre>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

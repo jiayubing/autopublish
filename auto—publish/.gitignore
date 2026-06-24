@@ -1,0 +1,13 @@
+backup/
+input/
+published/
+failed/
+logs/
+state/
+tmp/
+work/
+node_modules/
+scripts/.playwright-cli/
+/.playwright-cli/
+__pycache__/
+*.pyc

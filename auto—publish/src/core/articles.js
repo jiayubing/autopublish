@@ -1,0 +1,133 @@
+const fs = require("fs");
+const path = require("path");
+
+const { DIRS } = require("../../scripts/config");
+const { log } = require("./logger");
+const { copyToFailed } = require("./files");
+const { convertDocxToMd, parseArticle } = require("./markitdown");
+
+function stripDuplicateMarker(text) {
+  return String(text || "")
+    .replace(/\s*-\s*副本$/g, "")
+    .replace(/\s*\+\s*副本$/g, "")
+    .replace(/\+\(\d+\)$/g, "")
+    .replace(/\(\d+\)$/g, "")
+    .replace(/_\d+$/g, "")
+    .trim();
+}
+
+function normalizeWhitespace(text) {
+  return String(text || "")
+    .replace(/[\s\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g, "")
+    .trim();
+}
+
+function parseFilenameMeta(name) {
+  var ext = path.extname(name);
+  var base = stripDuplicateMarker(normalizeWhitespace(path.basename(name, ext)));
+  var parts = base.split("_").map(function(part) {
+    return normalizeWhitespace(part);
+  }).filter(Boolean);
+
+  if (parts.length >= 3) {
+    var serial = "";
+    var tail = parts.slice(3).join("_");
+    if (tail && /^\d+$/.test(tail)) {
+      serial = tail;
+    } else {
+      var oldMatch = base.match(/(?:\+\((\d+)\)|\((\d+)\)|_(\d+))$/);
+      if (oldMatch) {
+        serial = oldMatch[1] || oldMatch[2] || oldMatch[3] || "";
+      }
+    }
+
+    return {
+      city: parts[0],
+      phone: parts[1],
+      contact: stripDuplicateMarker(parts[2]),
+      serial: serial
+    };
+  }
+
+  var compactMatch = base.match(/^([\u4e00-\u9fa5]+)(\d{7,15})([\u4e00-\u9fa5A-Za-z]+?)(\d+)?$/);
+  if (!compactMatch) {
+    return null;
+  }
+
+  return {
+    city: compactMatch[1],
+    phone: compactMatch[2],
+    contact: stripDuplicateMarker(compactMatch[3]),
+    serial: compactMatch[4] || ""
+  };
+}
+
+function buildNormalizedFilename(article) {
+  var ext = path.extname(article.filename);
+  return article.city + article.phone + article.contact + (article.serial || "") + ext;
+}
+
+function scanArticles(scanDir) {
+  var inputDir = path.join(DIRS.inputDir, scanDir);
+  if (!fs.existsSync(inputDir)) {
+    return [];
+  }
+
+  return fs.readdirSync(inputDir).filter(function(name) {
+    if (name.indexOf("~$") === 0) {
+      return false;
+    }
+    return name.endsWith(".docx") || name.endsWith(".md");
+  }).map(function(name) {
+    var meta = parseFilenameMeta(name);
+    if (!meta) {
+      log("跳过（文件名格式不符）: " + name, "WARN");
+      return null;
+    }
+    return {
+      file: path.join(inputDir, name),
+      filename: name,
+      city: meta.city,
+      phone: meta.phone,
+      contact: meta.contact,
+      serial: meta.serial
+    };
+  }).filter(Boolean);
+}
+
+function parseArticleFiles(articles) {
+  var parsed = [];
+
+  for (var i = 0; i < articles.length; i++) {
+    var article = articles[i];
+    try {
+      var mdPath = path.extname(article.file).toLowerCase() === ".docx"
+        ? convertDocxToMd(article.file)
+        : article.file;
+      var data = parseArticle(mdPath);
+      data.city = article.city;
+      data.phone = article.phone;
+      data.contact = article.contact;
+      data.serial = article.serial;
+      data.sourceFile = article.file;
+      data.filename = article.filename;
+      data.normalizedFilename = buildNormalizedFilename(data);
+      parsed.push(data);
+      log("文章: " + data.title + " [" + data.city + "/" + data.phone + "/" + data.contact + "]", "INFO");
+    } catch (e) {
+      copyToFailed(article.file, article.filename);
+      log("转换失败: " + article.filename + " - " + e.message, "ERROR");
+    }
+  }
+
+  return parsed;
+}
+
+module.exports = {
+  stripDuplicateMarker,
+  normalizeWhitespace,
+  parseFilenameMeta,
+  buildNormalizedFilename,
+  scanArticles,
+  parseArticleFiles
+};
