@@ -74,25 +74,30 @@ function scanArticles(scanDir) {
   }
 
   return fs.readdirSync(inputDir).filter(function(name) {
-    if (name.indexOf("~$") === 0) {
-      return false;
-    }
+    if (name.indexOf("~$") === 0) return false;
     return name.endsWith(".docx") || name.endsWith(".md");
   }).map(function(name) {
     var meta = parseFilenameMeta(name);
-    if (!meta) {
-      log("跳过（文件名格式不符）: " + name, "WARN");
-      return null;
+    if (meta) {
+      return {
+        file: path.join(inputDir, name),
+        filename: name,
+        city: meta.city,
+        phone: meta.phone,
+        contact: meta.contact,
+        serial: meta.serial
+      };
     }
+    // 不匹配列举网格式时不过滤，用空字段兜底
     return {
       file: path.join(inputDir, name),
       filename: name,
-      city: meta.city,
-      phone: meta.phone,
-      contact: meta.contact,
-      serial: meta.serial
+      city: "",
+      phone: "",
+      contact: "",
+      serial: ""
     };
-  }).filter(Boolean);
+  });
 }
 
 function parseArticleFiles(articles) {
