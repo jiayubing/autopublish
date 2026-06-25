@@ -346,8 +346,7 @@ app.whenReady().then(function() {
     var orders = [];
     try {
       if (fs.existsSync(storePath)) {
-        var lines = fs.readFileSync(storePath, "utf-8").trim().split("
-");
+        var lines = fs.readFileSync(storePath, "utf-8").trim().split("\n");
         for (var i = 0; i < lines.length; i++) {
           if (lines[i].trim()) {
             try { orders.push(JSON.parse(lines[i])); } catch (_) {}

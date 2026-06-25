@@ -677,11 +677,9 @@ async function bulkSelectMedia() {
       return;
     }
     var pool = result.data;
-    var resourceId = prompt("输入媒体 resource_id 批量应用:
-" + pool.map(function(r) {
+    var resourceId = prompt("输入媒体 resource_id 批量应用:\n" + pool.map(function(r) {
       return r.resourceId + " - " + r.name;
-    }).join("
-"));
+    }).join("\n"));
     if (resourceId) {
       var entry = pool.find(function(r) { return String(r.resourceId) === String(resourceId); });
       var filenames = mediaQueueState.articles.map(function(a) { return a.filename; });
@@ -699,6 +697,15 @@ if (mediaQueueElements.bulkSelectMediaBtn) {
   mediaQueueElements.bulkSelectMediaBtn.addEventListener("click", bulkSelectMedia);
 }
 
+
+// Initialize media panel on load
+updateMediaCacheInfo();
+loadPoolIds();
+window.desktopConsole.getCachedResources().then(function(result) {
+  if (result && result.ok && result.data && result.data.resources) {
+    renderMediaResources(result.data.resources);
+  }
+}).catch(function() {});
 
 
 
@@ -729,34 +736,20 @@ async function runPreflightCheck() {
     var result = await window.desktopConsole.runPreflight(payload, true);
     if (result && result.ok && result.data) {
       var pf = result.data;
-      var msg = "=== 预检报告 (Dry-Run) ===
-
-";
-      msg += "文章数: " + pf.articles.length + "
-";
-      msg += "全部通过: " + (pf.ok ? "是" : "否") + "
-";
-      msg += "所有文章已选媒体: " + (pf.checks.allHaveResources ? "是" : "否") + "
-";
-      msg += "无图片阻塞: " + (pf.checks.noImageBlockers ? "是" : "否") + "
-
-";
+      var msg = "=== 预检报告 (Dry-Run) ===\n\n";
+      msg += "文章数: " + pf.articles.length + "\n";
+      msg += "全部通过: " + (pf.ok ? "是" : "否") + "\n";
+      msg += "所有文章已选媒体: " + (pf.checks.allHaveResources ? "是" : "否") + "\n";
+      msg += "无图片阻塞: " + (pf.checks.noImageBlockers ? "是" : "否") + "\n\n";
       
       pf.articles.forEach(function(a) {
-        msg += "[" + (a.ok ? "OK" : "FAIL") + "] " + a.title + "
-";
-        msg += "  媒体: " + (a.resourceName || a.resourceId || "未选择") + "
-";
-        if (a.errors.length) msg += "  错误: " + a.errors.join("; ") + "
-";
-        if (a.warnings.length) msg += "  警告: " + a.warnings.join("; ") + "
-";
+        msg += "[" + (a.ok ? "OK" : "FAIL") + "] " + a.title + "\n";
+        msg += "  媒体: " + (a.resourceName || a.resourceId || "未选择") + "\n";
+        if (a.errors.length) msg += "  错误: " + a.errors.join("; ") + "\n";
+        if (a.warnings.length) msg += "  警告: " + a.warnings.join("; ") + "\n";
       });
 
-      if (pf.errors.length) msg += "
-总错误:
-" + pf.errors.map(function(e) { return "  - " + e; }).join("
-");
+      if (pf.errors.length) msg += "\n总错误:\n" + pf.errors.map(function(e) { return "  - " + e; }).join("\n");
       
       alert(msg);
     } else {
@@ -770,8 +763,6 @@ async function runPreflightCheck() {
 if (preflightBtn) {
   preflightBtn.addEventListener("click", runPreflightCheck);
 }
-
-
 
 
 // -------- Order center --------
@@ -854,7 +845,6 @@ function renderOrders(orders) {
     ].join("");
   }).join("");
 
-  // Attach sync handlers
   var syncBtns = document.querySelectorAll(".sync-order-btn");
   syncBtns.forEach(function(btn) {
     btn.addEventListener("click", async function() {
@@ -925,20 +915,7 @@ if (orderElements.orderStatusFilter) {
   });
 }
 
-// Initialize orders on load
 refreshOrders();
-
-
-// Initialize media panel on load
-updateMediaCacheInfo();
-loadPoolIds();
-window.desktopConsole.getCachedResources().then(function(result) {
-  if (result && result.ok && result.data && result.data.resources) {
-    renderMediaResources(result.data.resources);
-  }
-}).catch(function() {});
-
-
 
 
 // -------- Settings panel --------
@@ -948,7 +925,6 @@ var checkBalanceBtn = document.getElementById("checkBalanceBtn");
 var apiKeyStatus = document.getElementById("apiKeyStatus");
 var balanceDisplay = document.getElementById("balanceDisplay");
 
-// Check API key status on load
 window.desktopConsole.getBalance().then(function(result) {
   if (apiKeyStatus) {
     apiKeyStatus.textContent = result && result.ok ? "已配置" : "未配置或连接失败";
@@ -999,7 +975,6 @@ if (checkBalanceBtn) {
     checkBalanceBtn.textContent = "查询余额";
   });
 }
-
 
 loadInitialState().catch(function(error) {
   elements.generatedAt.textContent = error.message;

@@ -1,6 +1,7 @@
-const { contextBridge, ipcRenderer } = require("electron");
+﻿const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopConsole", {
+  // --- Batch operations ---
   getState: function() {
     return ipcRenderer.invoke("desktop:get-state");
   },
@@ -14,33 +15,22 @@ contextBridge.exposeInMainWorld("desktopConsole", {
     return ipcRenderer.invoke("desktop:stop-batch");
   },
   onLog: function(listener) {
-    var handler = function(event, payload) {
-      listener(payload);
-    };
+    var handler = function(event, payload) { listener(payload); };
     ipcRenderer.on("publish-log", handler);
-    return function() {
-      ipcRenderer.removeListener("publish-log", handler);
-    };
+    return function() { ipcRenderer.removeListener("publish-log", handler); };
   },
   onBatchState: function(listener) {
-    var handler = function(event, payload) {
-      listener(payload);
-    };
+    var handler = function(event, payload) { listener(payload); };
     ipcRenderer.on("batch-state", handler);
-    return function() {
-      ipcRenderer.removeListener("batch-state", handler);
-    };
+    return function() { ipcRenderer.removeListener("batch-state", handler); };
   },
   onQueueUpdated: function(listener) {
-    var handler = function(event, payload) {
-      listener(payload);
-    };
+    var handler = function(event, payload) { listener(payload); };
     ipcRenderer.on("queue-updated", handler);
-    return function() {
-      ipcRenderer.removeListener("queue-updated", handler);
-    };
+    return function() { ipcRenderer.removeListener("queue-updated", handler); };
+  },
 
-  // Media submission APIs
+  // --- Media resource library ---
   listResources: function() {
     return ipcRenderer.invoke("media:list-resources");
   },
@@ -69,7 +59,7 @@ contextBridge.exposeInMainWorld("desktopConsole", {
     return ipcRenderer.invoke("media:get-balance");
   },
 
-  // Media draft APIs
+  // --- Media drafts ---
   getDrafts: function() {
     return ipcRenderer.invoke("media:get-drafts");
   },
@@ -89,15 +79,16 @@ contextBridge.exposeInMainWorld("desktopConsole", {
     return ipcRenderer.invoke("media:scan-articles");
   },
 
+  // --- Preflight ---
   runPreflight: function(articles, dryRun) {
     return ipcRenderer.invoke("media:preflight", articles, dryRun);
   },
 
+  // --- Orders ---
   getOrders: function() {
     return ipcRenderer.invoke("media:get-orders");
   },
   syncOrder: function(orderNid) {
     return ipcRenderer.invoke("media:sync-order", orderNid);
-  },
   }
 });
