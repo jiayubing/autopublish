@@ -237,7 +237,10 @@ app.whenReady().then(function() {
         }
       };
     } catch (err) {
-      return { ok: false, error: err.message };
+      if (allResources.length > 0) {
+        try { mediaResourceStore.setAll(allResources, { total: allResources.length, partial: true }); } catch (_) {}
+      }
+      return { ok: false, error: err.message, partialCount: allResources.length };
     }
   });
 
