@@ -1288,3 +1288,12 @@ docs: 完成媒体投稿接入验收文档
 **修复**：
 - 媒体列表全量拉取增加 `MAX_SAFE_PAGES=1000` 安全上限
 - 部分拉取成功时（partialCount > 0），UI 显示已缓存数据量和错误信息，而非完全空白
+### 修复 5：预检失败 — runPreflight 未导入
+
+状态：已完成  
+验收：已验收  
+提交：8de97fd
+
+**问题**：点击"预检 / Dry-Run"按钮提示"预检失败"。根因是 `main.js` 中 `media:preflight` IPC handler 调用了 `runPreflight()` 函数，但从未 `require("../src/platforms/media/preflight")` 导入该模块，导致调用时 `runPreflight is not defined`。
+
+**修复**：在 main.js 的 Media submission IPC handlers 区域添加 `const { runPreflight } = require("../src/platforms/media/preflight");`。
