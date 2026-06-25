@@ -322,7 +322,7 @@ app.whenReady().then(function() {
     return { ok: true };
   });
 
-  ipcMain.handle("media:scan-articles", function() {
+  ipcMain.handle("media:scan-articles", async function() {
     var fs = require("fs");
     var path = require("path");
     var { detectDocxImages } = require("../src/platforms/media/article-converter");
@@ -342,33 +342,43 @@ app.whenReady().then(function() {
       var filePath = path.join(scanDir, fn);
       var draft = mediaDraftStore.get(fn);
 
-      var autoTitle = path.basename(fn, path.extname(fn));
+      var autoTitle = "";
       var imgInfo = { hasImages: false, imageCount: 0 };
       try {
         if (ext === ".txt") {
           var raw = fs.readFileSync(filePath, "utf-8").trim();
-          autoTitle = raw.split(/\n/)[0].replace(/^#+\s*/, "").trim() || autoTitle;
+          var txtLines = raw.split(/\n/);
+          for (var ti = 0; ti < txtLines.length; ti++) {
+            var tl = txtLines[ti].replace(/^#+\s*/, "").trim();
+            if (tl) { autoTitle = tl; break; }
+          }
         } else if (ext === ".docx") {
           imgInfo = detectDocxImages(filePath);
           try {
             var mammoth = require("mammoth");
             var buf = fs.readFileSync(filePath);
-            var result = mammoth.extractRawText({ buffer: buf });
+            var result = await mammoth.extractRawText({ buffer: buf });
             var text = (result && result.value || "").trim();
-            autoTitle = text.split(/\n/)[0].trim() || autoTitle;
+            var docLines = text.split(/\n/);
+            for (var di = 0; di < docLines.length; di++) {
+              var dl = docLines[di].trim();
+              if (dl) { autoTitle = dl; break; }
+            }
           } catch(_) {}
         } else if (ext === ".md") {
           var mdRaw = fs.readFileSync(filePath, "utf-8").trim();
-          var lines = mdRaw.split(/\n/);
-          for (var j = 0; j < lines.length; j++) {
-            var line = lines[j].trim();
+          var mdLines = mdRaw.split(/\n/);
+          for (var j = 0; j < mdLines.length; j++) {
+            var line = mdLines[j].trim();
             if (!line || line === "---") continue;
             autoTitle = line.replace(/^#+\s*/, "").trim();
-            break;
+            if (autoTitle) break;
           }
         }
       } catch(_) {}
-
+      if (!autoTitle) {
+        autoTitle = path.basename(fn, path.extname(fn));
+      }
       articles.push({
         filename: fn,
         filePath: filePath,
@@ -383,7 +393,7 @@ app.whenReady().then(function() {
     return { ok: true, data: articles };
   });
 
-ipcMain.handle("media:preview-article", function(event, filename) {
+ipcMain.handle("media:preview-article", async function(event, filename) {
     var fs = require("fs");
     var path = require("path");
     var articleDir = path.resolve(__dirname, "..", "input", "media");
@@ -407,7 +417,7 @@ ipcMain.handle("media:preview-article", function(event, filename) {
         try {
           var mammoth = require("mammoth");
           var buf = fs.readFileSync(filePath);
-          var result = mammoth.extractRawText({ buffer: buf });
+          var result = await mammoth.extractRawText({ buffer: buf });
           var text = (result && result.value || "").trim();
           var docLines = text.split(/\n/);
           for (var di = 0; di < docLines.length; di++) {
