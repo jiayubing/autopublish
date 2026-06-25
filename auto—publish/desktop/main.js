@@ -1,4 +1,4 @@
-const path = require("path");
+﻿const path = require("path");
 const { fork } = require("child_process");
 const { app, BrowserWindow, ipcMain } = require("electron");
 
@@ -194,12 +194,12 @@ app.whenReady().then(function() {
   ipcMain.handle("media:list-resources", async function(event, opts) {
     try {
       var fetchAll = opts && opts.fetchAll !== false;
-      var maxPages = (opts && opts.maxPages) || 0;
+      var maxPages = (opts && opts.maxPages) || 0; var MAX_SAFE_PAGES = 1000;
       var client = getMediaClient();
       var allResources = [];
       var page = 1;
 
-      while (maxPages === 0 || page <= maxPages) {
+      while ((maxPages === 0 || page <= maxPages) && page <= MAX_SAFE_PAGES) {
         var response = await client.mediaList({ page: page });
         var pageItems = [];
         if (response && response.data) {
@@ -214,7 +214,7 @@ app.whenReady().then(function() {
         if (pageItems.length === 0) break;
         allResources = allResources.concat(pageItems);
         // If less than a full page, we've reached the end
-        if (pageItems.length < 20) break;
+        if (pageItems.length < 20) break; if (page > MAX_SAFE_PAGES) { console.warn('media:list-resources hit MAX_SAFE_PAGES=' + MAX_SAFE_PAGES); }
         if (!fetchAll) break;
         page++;
       }
@@ -337,19 +337,41 @@ app.whenReady().then(function() {
     var articles = [];
     for (var i = 0; i < files.length; i++) {
       var fn = files[i];
-      var ext = path.extname(fn);
-      var base = path.basename(fn, ext);
+      var ext = path.extname(fn).toLowerCase();
       var filePath = path.join(scanDir, fn);
       var draft = mediaDraftStore.get(fn);
-      // Detect images for .docx files
+
+      var autoTitle = path.basename(fn, path.extname(fn));
       var imgInfo = { hasImages: false, imageCount: 0 };
-      if (ext.toLowerCase() === ".docx") {
-        try { imgInfo = detectDocxImages(filePath); } catch(_) {}
-      }
+      try {
+        if (ext === ".txt") {
+          var raw = fs.readFileSync(filePath, "utf-8").trim();
+          autoTitle = raw.split(/\n/)[0].replace(/^#+\s*/, "").trim() || autoTitle;
+        } else if (ext === ".docx") {
+          imgInfo = detectDocxImages(filePath);
+          try {
+            var mammoth = require("mammoth");
+            var buf = fs.readFileSync(filePath);
+            var result = mammoth.extractRawText({ buffer: buf });
+            var text = (result && result.value || "").trim();
+            autoTitle = text.split(/\n/)[0].trim() || autoTitle;
+          } catch(_) {}
+        } else if (ext === ".md") {
+          var mdRaw = fs.readFileSync(filePath, "utf-8").trim();
+          var lines = mdRaw.split(/\n/);
+          for (var j = 0; j < lines.length; j++) {
+            var line = lines[j].trim();
+            if (!line || line === "---") continue;
+            autoTitle = line.replace(/^#+\s*/, "").trim();
+            break;
+          }
+        }
+      } catch(_) {}
+
       articles.push({
         filename: fn,
         filePath: filePath,
-        title: (draft && draft.title) || base,
+        title: (draft && draft.title) || autoTitle,
         hasImages: imgInfo.hasImages,
         imageCount: imgInfo.imageCount,
         resourceId: draft ? draft.resourceId : null,
@@ -360,10 +382,7 @@ app.whenReady().then(function() {
     return { ok: true, data: articles };
   });
 
-
-  const { runPreflight } = require("../src/platforms/media/preflight");
-
-  ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
+ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
     try {
       var result = await runPreflight({ articles: articles, dryRun: dryRun !== false });
       return { ok: true, data: result };

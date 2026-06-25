@@ -1,4 +1,4 @@
-var state = {
+﻿var state = {
   isBatchRunning: false,
   isRefreshing: false,
   isStopPending: false,
@@ -700,17 +700,6 @@ if (mediaQueueElements.refreshMediaQueueBtn) {
 if (mediaQueueElements.bulkSelectMediaBtn) {
   mediaQueueElements.bulkSelectMediaBtn.addEventListener("click", bulkSelectMedia);
 }
-
-
-// Initialize media panel on load
-updateMediaCacheInfo();
-loadPoolIds();
-window.desktopConsole.getCachedResources().then(function(result) {
-  if (result && result.ok && result.data && result.data.resources) {
-    renderMediaResources(result.data.resources);
-  }
-}).catch(function() {});
-
 
 
 // -------- Preflight / Dry-Run --------

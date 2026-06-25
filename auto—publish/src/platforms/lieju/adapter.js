@@ -1,5 +1,6 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const readline = require("readline");
+const path = require("path");
 const { execSync } = require("child_process");
 
 const { DIRS, PW, LIEJU } = require("../../../scripts/config");
