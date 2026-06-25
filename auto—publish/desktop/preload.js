@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+﻿const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopConsole", {
   // --- Batch operations ---
@@ -77,6 +77,11 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   },
   scanMediaArticles: function() {
     return ipcRenderer.invoke("media:scan-articles");
+  },
+
+  // --- Preview ---
+  previewArticle: function(filename) {
+    return ipcRenderer.invoke("media:preview-article", filename);
   },
 
   // --- Preflight ---

@@ -383,7 +383,69 @@ app.whenReady().then(function() {
     return { ok: true, data: articles };
   });
 
-ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
+ipcMain.handle("media:preview-article", function(event, filename) {
+    var fs = require("fs");
+    var path = require("path");
+    var articleDir = path.resolve(__dirname, "..", "input", "media");
+    var filePath = path.join(articleDir, filename);
+    if (!fs.existsSync(filePath)) {
+      return { ok: false, error: "File not found: " + filename };
+    }
+    var ext = path.extname(filename).toLowerCase();
+    var title = "";
+    var content = "";
+    try {
+      if (ext === ".txt") {
+        var raw = fs.readFileSync(filePath, "utf-8").trim();
+        var lines = raw.split(/\n/);
+        for (var i = 0; i < lines.length; i++) {
+          var tl = lines[i].replace(/^#+\s*/, "").trim();
+          if (tl) { title = tl; break; }
+        }
+        content = raw;
+      } else if (ext === ".docx") {
+        try {
+          var mammoth = require("mammoth");
+          var buf = fs.readFileSync(filePath);
+          var result = mammoth.extractRawText({ buffer: buf });
+          var text = (result && result.value || "").trim();
+          var docLines = text.split(/\n/);
+          for (var di = 0; di < docLines.length; di++) {
+            var dl = docLines[di].trim();
+            if (dl) { title = dl; break; }
+          }
+          content = text;
+        } catch (docxErr) {
+          content = "[Cannot read .docx: " + docxErr.message + "]";
+        }
+      } else if (ext === ".md") {
+        var mdRaw = fs.readFileSync(filePath, "utf-8").trim();
+        var mdLines = mdRaw.split(/\n/);
+        for (var j = 0; j < mdLines.length; j++) {
+          var line = mdLines[j].trim();
+          if (!line || line === "---") continue;
+          title = line.replace(/^#+\s*/, "").trim();
+          if (title) break;
+        }
+        content = mdRaw;
+      }
+    } catch (e) {
+      return { ok: false, error: "Read error: " + e.message };
+    }
+    var draft = mediaDraftStore.get(filename);
+    return {
+      ok: true,
+      data: {
+        filename: filename,
+        title: (draft && draft.title) || title || path.basename(filename, ext),
+        content: content,
+        resourceId: draft ? draft.resourceId : null,
+        resourceName: draft ? draft.resourceName : null
+      }
+    };
+  });
+
+  ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
     try {
       var result = await runPreflight({ articles: articles, dryRun: dryRun !== false });
       return { ok: true, data: result };
@@ -419,6 +481,48 @@ ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
     try {
       var client = getMediaClient();
       var response = await client.orderInfo(orderNid);
+      var fs = require("fs");
+      var path = require("path");
+      var storePath = path.resolve(__dirname, "..", "data", "submission-orders.jsonl");
+      try {
+        if (fs.existsSync(storePath)) {
+          var raw = fs.readFileSync(storePath, "utf-8");
+          var lines = raw.trim().split("\n");
+          var updated = false;
+          var newLines = lines.map(function(line) {
+            if (!line.trim()) return line;
+            try {
+              var record = JSON.parse(line);
+              var data = record.result && record.result.data;
+              if (data && data.data && data.data.order_nid === orderNid) {
+                var respData = response && response.data;
+                var orderData = respData && respData.data;
+                var status = "submitted";
+                if (orderData) {
+                  if (orderData.status !== undefined) status = String(orderData.status);
+                  else if (orderData.order_status !== undefined) status = String(orderData.order_status);
+                }
+                var success = true;
+                if (status === "failed" || status === "rejected" || status === "canceled" || status === "cancelled" || status === "2" || status === "3" || status === "4") {
+                  success = false;
+                }
+                record.result.success = success;
+                record.result.syncedAt = new Date().toISOString();
+                record.result.syncStatus = status;
+                record.result.syncRaw = response;
+                updated = true;
+                return JSON.stringify(record);
+              }
+            } catch (_) {}
+            return line;
+          });
+          if (updated) {
+            fs.writeFileSync(storePath, newLines.join("\n") + "\n", "utf-8");
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to update local order store: " + e.message);
+      }
       return { ok: true, data: response };
     } catch (err) {
       return { ok: false, error: err.message };

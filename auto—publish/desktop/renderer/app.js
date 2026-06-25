@@ -625,6 +625,35 @@ function renderMediaQueue(articles) {
         }).join("");
       });
 
+      // Attach preview button handlers
+      var previewBtns = document.querySelectorAll(".preview-article-btn");
+      previewBtns.forEach(function(btn) {
+        btn.addEventListener("click", async function() {
+          var fn = btn.getAttribute("data-fn");
+          btn.disabled = true;
+          btn.textContent = "加载中...";
+          try {
+            var result = await window.desktopConsole.previewArticle(fn);
+            if (result && result.ok) {
+              var d = result.data;
+              var previewText = "=== 文章预览 ===\n\n";
+              previewText += "文件名: " + d.filename + "\n";
+              previewText += "标题: " + d.title + "\n";
+              if (d.resourceId) previewText += "媒体: " + (d.resourceName || d.resourceId) + "\n";
+              previewText += "\n--- 正文 ---\n\n";
+              previewText += d.content;
+              alert(previewText);
+            } else {
+              alert("预览失败: " + (result && result.error || "未知错误"));
+            }
+          } catch (err) {
+            alert("预览异常: " + err.message);
+          }
+          btn.disabled = false;
+          btn.textContent = "预览";
+        });
+      });
+
       // Attach change handlers
       selects.forEach(function(sel) {
         sel.addEventListener("change", function() {
