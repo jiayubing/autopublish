@@ -604,6 +604,7 @@ function renderMediaQueue(articles) {
       '</select>',
       imageWarning,
       imgIgnored,
+      '<button class="preview-article-btn secondary" data-fn="' + escapeHtml(a.filename) + '">预览</button>',
       '</div>',
       '</article>'
     ].join("");
