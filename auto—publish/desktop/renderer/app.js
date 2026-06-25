@@ -839,17 +839,30 @@ function renderOrders(orders) {
     return;
   }
 
-  orderElements.ordersList.innerHTML = filtered.map(function(o) {
+    orderElements.ordersList.innerHTML = filtered.map(function(o) {
     var params = o.params || {};
     var result = o.result || {};
+    var syncStatus = result.syncStatus;
     var success = result.success;
-    var stLabel = statusLabel(success ? "submitted" : "failed");
-    var stClass = statusClass(success ? "submitted" : "failed");
+    var displayStatus;
+    if (syncStatus === "published" || syncStatus === "1") {
+      displayStatus = "published";
+    } else if (syncStatus === "failed" || syncStatus === "rejected" || syncStatus === "canceled" || syncStatus === "cancelled" || syncStatus === "2" || syncStatus === "3" || syncStatus === "4") {
+      displayStatus = "failed";
+    } else if (syncStatus) {
+      displayStatus = "submitted";
+    } else {
+      displayStatus = success ? "submitted" : "failed";
+    }
+    var stLabel = statusLabel(displayStatus);
+    var stClass = statusClass(displayStatus);
 
     var orderNid = "";
     if (result.data && result.data.data && result.data.data.order_nid) {
       orderNid = result.data.data.order_nid;
     }
+
+    var syncedInfo = result.syncedAt ? ' | 同步于 ' + new Date(result.syncedAt).toLocaleString() : '';
 
     return [
       '<article class="order-item">',
@@ -859,6 +872,7 @@ function renderOrders(orders) {
       '资源: ' + escapeHtml(params.resource_id || "-") +
       (orderNid ? ' | 订单号: ' + escapeHtml(orderNid) : '') +
       ' | ' + (o.ts ? new Date(o.ts).toLocaleString() : "未知时间") +
+      syncedInfo +
       '</p>',
       '</div>',
       '<span class="order-status ' + stClass + '">' + stLabel + '</span>',
