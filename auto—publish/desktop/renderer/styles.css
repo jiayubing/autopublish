@@ -844,3 +844,18 @@ button:disabled {
 
 .settings-value.ok { color: #137333; }
 .settings-value.error { color: #c5221f; }
+/* Media pagination */
+.media-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e2e4df;
+  background: #f8f9fa;
+}
+
+.media-page-info {
+  font-size: 12px;
+  color: #5f6368;
+}
