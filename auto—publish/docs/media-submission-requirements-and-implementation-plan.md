@@ -1312,3 +1312,59 @@ docs: 完成媒体投稿接入验收文档
 - 新增 `media:preview-article` IPC 处理器，读取文章文件返回完整标题和正文
 - 媒体队列每条文章右侧添加"预览"按钮，点击弹出文章全文
 - 订单列表展示同步后的状态（已投稿/已发布/失败）和同步时间
+---
+
+## 2026-06-25 修复记录（完整）
+
+### 修复批次的完整提交链（media-deep 分支）
+
+| 提交 | 说明 |
+|------|------|
+| 39c2571 | fix: 修复桌面端初始化异常、标题提取和文件名扫描 |
+| 03d39ce | docs: 记录 Bug 修复 |
+| 8de97fd | fix: 预检失败 — main.js 缺少 preflight 模块导入 |
+| a0ba931 | docs: 记录预检修复 |
+| 67434b5 | feat: 订单同步写回本地存储 + 文章投稿前预览功能 |
+| 594d4d7 | docs: 记录订单同步和预览 |
+| 1e74bb2 | fix: 订单列表 renderOrders 同步状态显示逻辑修复 |
+| 613c049 | fix: 修复 docx 异步提取 + 标题从内容提取 + 订单同步状态显示 |
+
+### 尝试过的方法与教训
+
+1. **PowerShell `Replace` 不可靠**
+   - 尝试用 `Get-Content -Raw | Replace | Set-Content` 做字符串替换
+   - 失败原因：文件编码/换行符不匹配（文件为 LF，PowerShell 读为 CRLF，导致替换串对不上）
+   - 正确方法：Python `open(file, "r", encoding="utf-8")` + `str.replace()`
+
+2. **mammoth 是异步的（关键发现）**
+   - `mammoth.extractRawText({ buffer })` 返回 Promise，不能同步调用
+   - 影响了 scan-articles 的标题提取和 preview 的内容提取
+   - 修复后 .docx 标题正确从内容第一段提取（如 "官方非遗申报太难？评估第三方协助机构的三个硬性标准"）
+
+3. **app.js 中残留未定义函数调用**
+   - 第 706-712 行 `updateMediaCacheInfo()`、`loadPoolIds()`、`renderMediaResources()` 均未定义
+   - 导致 ReferenceError 中断脚本，设置面板、订单中心、预检等全部未初始化
+   - 修复：删除残留代码块
+
+4. **main.js 缺少 preflight 模块导入**
+   - `runPreflight` 被调用但未 require，导致预检始终返回"失败"
+
+5. **订单同步只查不存**
+   - `media:sync-order` 调 API 返回结果但未写回本地 JSONL
+   - 修复后同步时将状态/syncStatus/syncedAt 写回
+
+6. **通用文件名格式不应强制**
+   - `articles.js` 的 `scanArticles` 对全部平台解析"城市_电话_联系人"
+   - 修复后仅在 列举网 adapter 保留紧凑格式
+
+### 待解决问题（退回主线研究）
+
+- 预览按钮和订单同步在桌面端实际表现仍不符合预期
+- 怀疑 IPC 通信、Electron 上下文隔离或缓存导致修改未生效
+- 需在主线重新审查整个调用链路
+
+---
+
+## 退回主线
+
+所有以上修复已合入 media-deep 分支。操作者将切回 main/master 分支重新评估问题。
