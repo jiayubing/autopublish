@@ -406,6 +406,7 @@ window.desktopConsole.onQueueUpdated(function(result) {
 
 // -------- Media resource library --------
 
+var MEDIA_PAGE_SIZE = 50;
 var mediaElements = {
   refreshMediaBtn: document.getElementById("refreshMediaBtn"),
   mediaSearchInput: document.getElementById("mediaSearchInput"),
@@ -415,150 +416,151 @@ var mediaElements = {
   mediaCacheInfo: document.getElementById("mediaCacheInfo"),
   mediaResourceList: document.getElementById("mediaResourceList")
 };
+var mediaAll = [];
+var mediaPage = 0;
+var mediaPool = {};
 
-var mediaState = {
-  poolIds: {}
-};
+function mediaRender() {
+  var total = mediaAll.length;
+  var pages = Math.max(1, Math.ceil(total / MEDIA_PAGE_SIZE));
+  if (mediaPage >= pages) mediaPage = pages - 1;
+  if (mediaPage < 0) mediaPage = 0;
+  var start = mediaPage * MEDIA_PAGE_SIZE;
+  var items = mediaAll.slice(start, start + MEDIA_PAGE_SIZE);
 
-function updateMediaCacheInfo() {
-  window.desktopConsole.getCachedResources().then(function(result) {
-    if (result && result.ok && result.data && result.data.updatedAt) {
-      mediaElements.mediaCacheInfo.textContent = result.data.count + " 条, " + new Date(result.data.updatedAt).toLocaleString();
+  var html = "";
+  if (total > MEDIA_PAGE_SIZE) {
+    html += '<div class="media-pagination">';
+    html += '<button id="mediaPrev" class="secondary"' + (mediaPage === 0 ? ' disabled' : '') + '>上一页</button>';
+    html += '<span class="media-page-info">第 ' + (mediaPage + 1) + ' / ' + pages + ' 页，共 ' + total + ' 条</span>';
+    html += '<button id="mediaNext" class="secondary"' + (mediaPage >= pages - 1 ? ' disabled' : '') + '>下一页</button>';
+    html += '</div>';
+  }
+
+  if (items.length === 0) {
+    html += '<p class="empty-state">没有媒体资源。点击刷新按钮拉取。</p>';
+  } else {
+    for (var i = 0; i < items.length; i++) {
+      var r = items[i];
+      var rid = String(r.id || r.resource_id || "");
+      var name = r.name || r.title || "未知";
+      var price = r.price != null ? String(r.price) : "-";
+      var cat = r.category || r.channelType || r.mediaType || "";
+      var inPool = !!mediaPool[rid];
+      html += '<article class="media-item">';
+      html += '<div class="media-item-info">';
+      html += '<p class="media-item-name">' + escapeHtml(name) + '</p>';
+      html += '<p class="media-item-meta">ID: ' + escapeHtml(rid) + (cat ? ' | ' + escapeHtml(cat) : '') + '</p>';
+      html += '</div>';
+      html += '<p class="media-item-price">' + (price === "-" ? "价格未知" : "\u00a5" + escapeHtml(price)) + '</p>';
+      html += '<button class="' + (inPool ? 'danger' : 'secondary') + ' media-pool-btn" data-rid="' + escapeHtml(rid) + '">' + (inPool ? '移出媒体池' : '加入媒体池') + '</button>';
+      html += '</article>';
+    }
+  }
+
+  mediaElements.mediaResourceList.innerHTML = html;
+
+  // Hook up pagination
+  var prevBtn = document.getElementById("mediaPrev");
+  var nextBtn = document.getElementById("mediaNext");
+  if (prevBtn) prevBtn.onclick = function() { if (mediaPage > 0) { mediaPage--; mediaRender(); } };
+  if (nextBtn) nextBtn.onclick = function() { if (mediaPage < pages - 1) { mediaPage++; mediaRender(); } };
+
+  // Hook up pool buttons
+  var btns = document.querySelectorAll(".media-pool-btn");
+  for (var j = 0; j < btns.length; j++) {
+    btns[j].onclick = (function(rid) {
+      return function() {
+        if (mediaPool[rid]) {
+          window.desktopConsole.removeFromPool(rid).then(function() {
+            delete mediaPool[rid];
+            mediaRender();
+          });
+        } else {
+          var item = null;
+          for (var k = 0; k < mediaAll.length; k++) {
+            if (String(mediaAll[k].id || mediaAll[k].resource_id) === rid) { item = mediaAll[k]; break; }
+          }
+          window.desktopConsole.addToPool(item || { id: rid }).then(function() {
+            mediaPool[rid] = true;
+            mediaRender();
+          });
+        }
+      };
+    })(btns[j].getAttribute("data-rid"));
+  }
+}
+
+function mediaLoadCache() {
+  window.desktopConsole.getCachedResources().then(function(r) {
+    if (r && r.ok && r.data && r.data.resources && r.data.resources.length > 0) {
+      mediaAll = r.data.resources;
+      mediaPage = 0;
+      mediaElements.mediaCacheInfo.textContent = r.data.count + " 条, " + new Date(r.data.updatedAt).toLocaleString();
+      mediaRender();
     } else {
       mediaElements.mediaCacheInfo.textContent = "未缓存";
     }
-  }).catch(function() {
-    mediaElements.mediaCacheInfo.textContent = "读取失败";
+  }).catch(function(e) {
+    mediaElements.mediaCacheInfo.textContent = "读取缓存失败";
   });
 }
 
-function loadPoolIds() {
-  window.desktopConsole.getPool().then(function(result) {
-    if (result && result.ok && result.data) {
-      mediaState.poolIds = {};
-      result.data.forEach(function(e) {
-        mediaState.poolIds[e.resourceId] = true;
-      });
+function mediaLoadPool() {
+  window.desktopConsole.getPool().then(function(r) {
+    if (r && r.ok && r.data) {
+      mediaPool = {};
+      for (var i = 0; i < r.data.length; i++) {
+        mediaPool[r.data[i].resourceId] = true;
+      }
     }
   }).catch(function() {});
 }
 
-function renderMediaResources(resources) {
-  if (!resources || resources.length === 0) {
-    mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">没有媒体资源。点击刷新按钮从 API 获取。</p>';
-    return;
-  }
-
-  mediaElements.mediaResourceList.innerHTML = resources.map(function(r) {
-    var rid = String(r.id || r.resource_id || "");
-    var name = r.name || r.title || "未知";
-    var price = r.price !== undefined && r.price !== null ? String(r.price) : "-";
-    var cat = r.category || r.channelType || r.mediaType || "";
-    var inPool = mediaState.poolIds[rid];
-    var poolBtnLabel = inPool ? "移出媒体池" : "加入媒体池";
-    var poolBtnClass = inPool ? "danger" : "secondary";
-
-    return [
-      '<article class="media-item">',
-      '<div class="media-item-info">',
-      '<p class="media-item-name">' + escapeHtml(name) + '</p>',
-      '<p class="media-item-meta">ID: ' + escapeHtml(rid) + (cat ? ' | ' + escapeHtml(cat) : '') + '</p>',
-      '</div>',
-      '<p class="media-item-price">' + (price === "-" ? "价格未知" : "\u00a5" + escapeHtml(price)) + '</p>',
-      '<button class="' + poolBtnClass + ' media-pool-btn" data-rid="' + escapeHtml(rid) + '" data-name="' + escapeHtml(name) + '" data-price="' + escapeHtml(price) + '" data-cat="' + escapeHtml(cat) + '">' + poolBtnLabel + '</button>',
-      '</article>'
-    ].join("");
-  }).join("");
-
-  // Attach pool toggle handlers
-  var poolBtns = document.querySelectorAll(".media-pool-btn");
-  poolBtns.forEach(function(btn) {
-    btn.addEventListener("click", function() {
-      var rid = btn.getAttribute("data-rid");
-      var inPool = mediaState.poolIds[rid];
-      if (inPool) {
-        window.desktopConsole.removeFromPool(rid).then(function() {
-          mediaState.poolIds[rid] = false;
-          renderMediaResources(resources);
-        });
-      } else {
-        var resource = {
-          id: rid,
-          name: btn.getAttribute("data-name"),
-          price: btn.getAttribute("data-price") === "-" ? undefined : Number(btn.getAttribute("data-price")),
-          category: btn.getAttribute("data-cat")
-        };
-        window.desktopConsole.addToPool(resource).then(function() {
-          mediaState.poolIds[rid] = true;
-          renderMediaResources(resources);
-        });
-      }
-    });
-  });
-}
-
 async function refreshMediaResources() {
-  mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">正在拉取媒体资源...</p>';
+  mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">正在拉取全部媒体资源，请耐心等待...</p>';
+  mediaElements.refreshMediaBtn.disabled = true;
   try {
-    var result = await window.desktopConsole.listResources();
+    var result = await window.desktopConsole.listResources({ fetchAll: true });
     if (result && result.ok) {
-      updateMediaCacheInfo();
-      loadPoolIds().then(function() {
-        window.desktopConsole.getCachedResources().then(function(cached) {
-          if (cached && cached.ok && cached.data) {
-            renderMediaResources(cached.data.resources);
-          }
-        });
-      });
+      mediaLoadCache();
+      mediaLoadPool();
     } else {
-      mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">拉取失败: ' + (result && result.error || "未知错误") + '</p>';
+      mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">拉取失败: ' + (result ? result.error : "未知") + '</p>';
     }
   } catch (err) {
-    mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">拉取异常: ' + err.message + '</p>';
+    mediaElements.mediaResourceList.innerHTML = '<p class="empty-state">拉取异常: ' + (err ? err.message || err : "未知") + '</p>';
   }
+  mediaElements.refreshMediaBtn.disabled = false;
 }
 
 function searchMediaResources() {
-  var keyword = mediaElements.mediaSearchInput.value;
-  window.desktopConsole.searchResources(keyword).then(function(result) {
-    if (result && result.ok) {
-      renderMediaResources(result.data);
-    }
-  });
+  var kw = mediaElements.mediaSearchInput.value.trim();
+  if (!kw) { mediaPage = 0; mediaLoadCache(); return; }
+  window.desktopConsole.searchResources(kw).then(function(r) {
+    if (r && r.ok) { mediaAll = r.data || []; mediaPage = 0; mediaRender(); }
+  }).catch(function() {});
 }
 
 function filterMediaResourcesByPrice() {
   var min = mediaElements.mediaPriceMin.value ? Number(mediaElements.mediaPriceMin.value) : null;
   var max = mediaElements.mediaPriceMax.value ? Number(mediaElements.mediaPriceMax.value) : null;
-  window.desktopConsole.filterResourcesByPrice(min, max).then(function(result) {
-    if (result && result.ok) {
-      renderMediaResources(result.data);
-    }
-  });
+  if (min === null && max === null) { mediaPage = 0; mediaLoadCache(); return; }
+  window.desktopConsole.filterResourcesByPrice(min, max).then(function(r) {
+    if (r && r.ok) { mediaAll = r.data || []; mediaPage = 0; mediaRender(); }
+  }).catch(function() {});
 }
 
-if (mediaElements.refreshMediaBtn) {
-  mediaElements.refreshMediaBtn.addEventListener("click", refreshMediaResources);
-}
-if (mediaElements.mediaFilterBtn) {
-  mediaElements.mediaFilterBtn.addEventListener("click", filterMediaResourcesByPrice);
-}
+// Hook up UI
+if (mediaElements.refreshMediaBtn) mediaElements.refreshMediaBtn.addEventListener("click", refreshMediaResources);
+if (mediaElements.mediaFilterBtn) mediaElements.mediaFilterBtn.addEventListener("click", filterMediaResourcesByPrice);
 if (mediaElements.mediaSearchInput) {
-  mediaElements.mediaSearchInput.addEventListener("input", function() {
-    if (!mediaElements.mediaSearchInput.value) {
-      window.desktopConsole.getCachedResources().then(function(result) {
-        if (result && result.ok && result.data) {
-          renderMediaResources(result.data.resources);
-        }
-      });
-    }
-  });
-  mediaElements.mediaSearchInput.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") searchMediaResources();
-  });
+  mediaElements.mediaSearchInput.addEventListener("keydown", function(e) { if (e.key === "Enter") searchMediaResources(); });
 }
 
-
+// Init on load
+mediaLoadCache();
+mediaLoadPool();
 
 // -------- Media article queue --------
 

@@ -213,12 +213,6 @@ app.whenReady().then(function() {
         }
         if (pageItems.length === 0) break;
         allResources = allResources.concat(pageItems);
-        // Send progress to renderer
-        mainWindow && mainWindow.webContents.send("media:fetch-progress", {
-          page: page,
-          pageCount: pageItems.length,
-          total: allResources.length
-        });
         // If less than a full page, we've reached the end
         if (pageItems.length < 20) break;
         if (!fetchAll) break;
