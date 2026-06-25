@@ -1297,3 +1297,18 @@ docs: 完成媒体投稿接入验收文档
 **问题**：点击"预检 / Dry-Run"按钮提示"预检失败"。根因是 `main.js` 中 `media:preflight` IPC handler 调用了 `runPreflight()` 函数，但从未 `require("../src/platforms/media/preflight")` 导入该模块，导致调用时 `runPreflight is not defined`。
 
 **修复**：在 main.js 的 Media submission IPC handlers 区域添加 `const { runPreflight } = require("../src/platforms/media/preflight");`。
+### 修复 6：订单同步不更新本地状态 + 文章预览
+
+状态：已完成  
+验收：已验收  
+提交：67434b5
+
+**问题**：
+- 点击订单"同步"按钮调用 API 后只弹出"同步成功"提示，但本地 JSONL 存储未更新，刷新后仍是旧状态
+- 缺少投稿前查看文章完整内容的能力
+
+**修复**：
+- `media:sync-order` 处理器同步 API 返回后将状态写回本地 JSONL 文件（`result.success`、`result.syncStatus`、`result.syncedAt`、`result.syncRaw`）
+- 新增 `media:preview-article` IPC 处理器，读取文章文件返回完整标题和正文
+- 媒体队列每条文章右侧添加"预览"按钮，点击弹出文章全文
+- 订单列表展示同步后的状态（已投稿/已发布/失败）和同步时间
