@@ -194,12 +194,12 @@ app.whenReady().then(function() {
   ipcMain.handle("media:list-resources", async function(event, opts) {
     try {
       var fetchAll = opts && opts.fetchAll !== false;
-      var maxPages = (opts && opts.maxPages) || 200;
+      var maxPages = (opts && opts.maxPages) || 0;
       var client = getMediaClient();
       var allResources = [];
       var page = 1;
 
-      while (page <= maxPages) {
+      while (maxPages === 0 || page <= maxPages) {
         var response = await client.mediaList({ page: page });
         var pageItems = [];
         if (response && response.data) {
