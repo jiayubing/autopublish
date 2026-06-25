@@ -195,10 +195,20 @@ app.whenReady().then(function() {
     try {
       var client = getMediaClient();
       var response = await client.mediaList({ page: 1 });
+      // API returns { code: 1, data: [...] } where data is the array directly.
+      // Also handle { data: { list: [...], total: N } } format as fallback.
       var resources = [];
       if (response && response.data) {
-        resources = Array.isArray(response.data) ? response.data :
-                    Array.isArray(response.data.list) ? response.data.list : [];
+        if (Array.isArray(response.data)) {
+          resources = response.data;
+        } else if (response.data && Array.isArray(response.data.list)) {
+          resources = response.data.list;
+        } else if (Array.isArray(response.data.data)) {
+          resources = response.data.data;
+        }
+      }
+      if (resources.length === 0) {
+        return { ok: false, error: "API 返回空媒体列表，请检查 API Key 是否有效" };
       }
       mediaResourceStore.setAll(resources, {
         total: response && response.data && response.data.total,
@@ -256,7 +266,16 @@ app.whenReady().then(function() {
     try {
       var client = getMediaClient();
       var response = await client.getBalance();
-      return { ok: true, data: response };
+      // Extract balance info: API returns { data: { money: "xxx", power_count: N } }
+      var balanceData = response && response.data ? response.data : {};
+      return {
+        ok: true,
+        data: {
+          balance: balanceData.money || "0",
+          powerCount: balanceData.power_count || 0,
+          raw: response
+        }
+      };
     } catch (err) {
       return { ok: false, error: err.message };
     }

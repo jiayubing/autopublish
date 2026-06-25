@@ -963,7 +963,7 @@ if (checkBalanceBtn) {
       var result = await window.desktopConsole.getBalance();
       if (result && result.ok) {
         var data = result.data;
-        var balance = data && data.data && data.data.balance !== undefined ? data.data.balance : "未知";
+        var balance = (data && data.data && data.data.balance) || (data && data.balance) || "未知";
         balanceDisplay.textContent = "余额: " + balance;
       } else {
         balanceDisplay.textContent = "查询失败";
