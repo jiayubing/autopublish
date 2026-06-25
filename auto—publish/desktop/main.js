@@ -506,14 +506,14 @@ ipcMain.handle("media:preview-article", async function(event, filename) {
               var data = record.result && record.result.data;
               if (data && data.data && data.data.order_nid === orderNid) {
                 var respData = response && response.data;
-                var orderData = respData && respData.data;
+                var orderData = respData && (Array.isArray(respData) ? respData[0] : (respData.data || respData));
                 var status = "submitted";
                 if (orderData) {
                   if (orderData.status !== undefined) status = String(orderData.status);
                   else if (orderData.order_status !== undefined) status = String(orderData.order_status);
                 }
                 var success = true;
-                if (status === "failed" || status === "rejected" || status === "canceled" || status === "cancelled" || status === "2" || status === "3" || status === "4") {
+                if (status === "3" || status === "4" || status === "failed" || status === "rejected" || status === "canceled" || status === "cancelled") {
                   success = false;
                 }
                 record.result.success = success;

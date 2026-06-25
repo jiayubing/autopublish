@@ -805,10 +805,14 @@ function getOrderStatus(o) {
   var result = o.result || {};
   var syncStatus = result.syncStatus;
   var success = result.success;
-  if (syncStatus === "published" || syncStatus === "1") {
+  if (syncStatus === "2") {
     return "published";
-  } else if (syncStatus === "failed" || syncStatus === "rejected" || syncStatus === "canceled" || syncStatus === "cancelled" || syncStatus === "2" || syncStatus === "3" || syncStatus === "4") {
+  } else if (syncStatus === "0" || syncStatus === "1") {
+    return "submitted";
+  } else if (syncStatus === "3" || syncStatus === "4" || syncStatus === "failed" || syncStatus === "rejected" || syncStatus === "canceled" || syncStatus === "cancelled") {
     return "failed";
+  } else if (syncStatus === "published") {
+    return "published";
   } else if (syncStatus) {
     return "submitted";
   }
