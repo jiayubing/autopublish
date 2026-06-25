@@ -182,6 +182,7 @@ app.whenReady().then(function() {
   const { MediaPoolStore } = require("../src/platforms/media/media-pool-store");
   const { MediaClient } = require("../src/platforms/media/media-client");
   const { resolveApiKey } = require("../src/platforms/media/config");
+  const { runPreflight } = require("../src/platforms/media/preflight");
 
   var mediaResourceStore = new MediaResourceStore();
   var mediaPoolStore = new MediaPoolStore();
