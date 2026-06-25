@@ -34,11 +34,6 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   listResources: function(opts) {
     return ipcRenderer.invoke("media:list-resources", opts || {});
   },
-  onMediaFetchProgress: function(listener) {
-    var handler = function(event, payload) { listener(payload); };
-    ipcRenderer.on("media:fetch-progress", handler);
-    return function() { ipcRenderer.removeListener("media:fetch-progress", handler); };
-  },
   getCachedResources: function() {
     return ipcRenderer.invoke("media:get-cached-resources");
   },
