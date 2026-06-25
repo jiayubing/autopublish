@@ -191,33 +191,48 @@ app.whenReady().then(function() {
     return new MediaClient({ apiKey: apiKey });
   }
 
-  ipcMain.handle("media:list-resources", async function() {
+  ipcMain.handle("media:list-resources", async function(event, opts) {
     try {
+      var fetchAll = opts && opts.fetchAll !== false;
+      var maxPages = (opts && opts.maxPages) || 200;
       var client = getMediaClient();
-      var response = await client.mediaList({ page: 1 });
-      // API returns { code: 1, data: [...] } where data is the array directly.
-      // Also handle { data: { list: [...], total: N } } format as fallback.
-      var resources = [];
-      if (response && response.data) {
-        if (Array.isArray(response.data)) {
-          resources = response.data;
-        } else if (response.data && Array.isArray(response.data.list)) {
-          resources = response.data.list;
-        } else if (Array.isArray(response.data.data)) {
-          resources = response.data.data;
+      var allResources = [];
+      var page = 1;
+
+      while (page <= maxPages) {
+        var response = await client.mediaList({ page: page });
+        var pageItems = [];
+        if (response && response.data) {
+          if (Array.isArray(response.data)) {
+            pageItems = response.data;
+          } else if (response.data && Array.isArray(response.data.list)) {
+            pageItems = response.data.list;
+          } else if (Array.isArray(response.data.data)) {
+            pageItems = response.data.data;
+          }
         }
+        if (pageItems.length === 0) break;
+        allResources = allResources.concat(pageItems);
+        // Send progress to renderer
+        mainWindow && mainWindow.webContents.send("media:fetch-progress", {
+          page: page,
+          pageCount: pageItems.length,
+          total: allResources.length
+        });
+        // If less than a full page, we've reached the end
+        if (pageItems.length < 20) break;
+        if (!fetchAll) break;
+        page++;
       }
-      if (resources.length === 0) {
+
+      if (allResources.length === 0) {
         return { ok: false, error: "API 返回空媒体列表，请检查 API Key 是否有效" };
       }
-      mediaResourceStore.setAll(resources, {
-        total: response && response.data && response.data.total,
-        raw: response
-      });
+      mediaResourceStore.setAll(allResources, { total: allResources.length });
       return {
         ok: true,
         data: {
-          count: resources.length,
+          count: allResources.length,
           updatedAt: mediaResourceStore.getAll().updatedAt
         }
       };
