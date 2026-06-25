@@ -801,6 +801,20 @@ var ordersState = {
   orders: []
 };
 
+function getOrderStatus(o) {
+  var result = o.result || {};
+  var syncStatus = result.syncStatus;
+  var success = result.success;
+  if (syncStatus === "published" || syncStatus === "1") {
+    return "published";
+  } else if (syncStatus === "failed" || syncStatus === "rejected" || syncStatus === "canceled" || syncStatus === "cancelled" || syncStatus === "2" || syncStatus === "3" || syncStatus === "4") {
+    return "failed";
+  } else if (syncStatus) {
+    return "submitted";
+  }
+  return success ? "submitted" : "failed";
+}
+
 function statusLabel(status) {
   if (status === "submitted" || status === "success") return "已投稿";
   if (status === "published") return "已发布";
@@ -828,10 +842,7 @@ function renderOrders(orders) {
   var filtered = orders;
   if (filterStatus) {
     filtered = orders.filter(function(o) {
-      var rs = o.result && o.result.success;
-      if (filterStatus === "submitted") return rs === true;
-      if (filterStatus === "failed") return rs === false;
-      return false;
+      return getOrderStatus(o) === filterStatus;
     });
   }
 
@@ -845,16 +856,7 @@ function renderOrders(orders) {
     var result = o.result || {};
     var syncStatus = result.syncStatus;
     var success = result.success;
-    var displayStatus;
-    if (syncStatus === "published" || syncStatus === "1") {
-      displayStatus = "published";
-    } else if (syncStatus === "failed" || syncStatus === "rejected" || syncStatus === "canceled" || syncStatus === "cancelled" || syncStatus === "2" || syncStatus === "3" || syncStatus === "4") {
-      displayStatus = "failed";
-    } else if (syncStatus) {
-      displayStatus = "submitted";
-    } else {
-      displayStatus = success ? "submitted" : "failed";
-    }
+    var displayStatus = getOrderStatus(o);
     var stLabel = statusLabel(displayStatus);
     var stClass = statusClass(displayStatus);
 
