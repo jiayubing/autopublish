@@ -558,9 +558,11 @@ if (mediaElements.mediaSearchInput) {
   mediaElements.mediaSearchInput.addEventListener("keydown", function(e) { if (e.key === "Enter") searchMediaResources(); });
 }
 
-// Init on load
-mediaLoadCache();
-mediaLoadPool();
+// Init on load - wrapped to prevent blocking other sections
+setTimeout(function() {
+  try { mediaLoadCache(); } catch(_) {}
+  try { mediaLoadPool(); } catch(_) {}
+}, 100);
 
 // -------- Media article queue --------
 

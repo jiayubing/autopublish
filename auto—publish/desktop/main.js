@@ -324,6 +324,7 @@ app.whenReady().then(function() {
   ipcMain.handle("media:scan-articles", function() {
     var fs = require("fs");
     var path = require("path");
+    var { detectDocxImages } = require("../src/platforms/media/article-converter");
     var scanDir = path.resolve(__dirname, "..", "input", "media");
     if (!fs.existsSync(scanDir)) {
       return { ok: true, data: [] };
@@ -333,23 +334,29 @@ app.whenReady().then(function() {
       if (name === ".gitkeep") return false;
       return name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
     });
-    // Auto-detect title from filename (simple: strip extension)
-    var articles = files.map(function(fn) {
+    var articles = [];
+    for (var i = 0; i < files.length; i++) {
+      var fn = files[i];
       var ext = path.extname(fn);
       var base = path.basename(fn, ext);
-      // Check draft for title override
+      var filePath = path.join(scanDir, fn);
       var draft = mediaDraftStore.get(fn);
-      return {
+      // Detect images for .docx files
+      var imgInfo = { hasImages: false, imageCount: 0 };
+      if (ext.toLowerCase() === ".docx") {
+        try { imgInfo = detectDocxImages(filePath); } catch(_) {}
+      }
+      articles.push({
         filename: fn,
-        filePath: path.join(scanDir, fn),
+        filePath: filePath,
         title: (draft && draft.title) || base,
-        hasImages: draft ? draft.hasImages : null,
-        imageCount: draft ? draft.imageCount : null,
+        hasImages: imgInfo.hasImages,
+        imageCount: imgInfo.imageCount,
         resourceId: draft ? draft.resourceId : null,
         resourceName: draft ? draft.resourceName : null,
         ignoreImages: draft ? !!draft.ignoreImages : false
-      };
-    });
+      });
+    }
     return { ok: true, data: articles };
   });
 

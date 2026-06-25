@@ -1,4 +1,4 @@
-﻿// auto—publish/src/platforms/media/adapter.js
+// auto—publish/src/platforms/media/adapter.js
 // Media platform adapter for Electron auto-publishing workflow.
 // Implements both createMediaAdapter() and the Platform Adapter contract.
 // CommonJS port from root src/platforms/media/adapter.js.
@@ -172,6 +172,29 @@ module.exports = {
 
   ensureLoggedIn: async function() {
     return true;
+  },
+
+
+  scanArticles: function(scanDir) {
+    var fs = require("fs");
+    var path = require("path");
+    var inputDir = path.resolve(__dirname, "..", "..", "..", "input", scanDir);
+    if (!fs.existsSync(inputDir)) return [];
+    return fs.readdirSync(inputDir).filter(function(name) {
+      if (name.indexOf("~$") === 0) return false;
+      if (name === ".gitkeep") return false;
+      return name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
+    }).map(function(name) {
+      return {
+        file: path.join(inputDir, name),
+        filename: name,
+        title: path.basename(name, path.extname(name))
+      };
+    });
+  },
+
+  parseArticleFiles: function(articles) {
+    return articles.map(function(a) { return a; });
   },
 
   closeSession: function() {},
