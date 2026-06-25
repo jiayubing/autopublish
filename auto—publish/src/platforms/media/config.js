@@ -8,7 +8,7 @@ const dotenv = require('dotenv');
 
 const projectRoot = path.resolve(__dirname, '..', '..', '..');
 
-dotenv.config({ path: path.join(projectRoot, '.env') });
+dotenv.config({ path: path.join(projectRoot, '.env'), quiet: true });
 
 /**
  * Resolve the API key with the following priority:
