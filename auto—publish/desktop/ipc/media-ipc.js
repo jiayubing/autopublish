@@ -307,6 +307,15 @@ function registerMediaIpc(deps) {
     }
   });
 
+  ipcMain.handle("media:stop-submit", function() {
+    try {
+      mediaWorkbenchService.requestStop();
+      return { ok: true, data: { stopped: true } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("media:get-orders", async function() {
     var orders = mediaOrderService.listOrders();
     return { ok: true, data: orders };
