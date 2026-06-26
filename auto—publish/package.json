@@ -2,9 +2,14 @@
   "name": "auto-publish",
   "private": true,
   "version": "1.0.0",
-  "description": "自动发文桌面端",
+  "description": "Auto publish desktop console",
   "scripts": {
     "desktop": "scripts\\desktop.cmd"
   },
-  "dependencies": {}
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "electron": "^33.4.11",
+    "form-data": "^4.0.6",
+    "mammoth": "^1.12.0"
+  }
 }
