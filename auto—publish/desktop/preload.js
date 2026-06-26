@@ -1,4 +1,4 @@
-﻿const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 const api = {
   batch: {
@@ -50,41 +50,5 @@ const api = {
     syncOrder: function(orderNid) { return ipcRenderer.invoke("media:sync-order", orderNid); }
   }
 };
-
-// Temporary compatibility aliases for old renderer (remove in Task 9)
-api.getState = api.batch.getState;
-api.refreshQueue = api.batch.refreshQueue;
-api.startBatch = api.batch.startBatch;
-api.stopBatch = api.batch.stopBatch;
-api.onLog = api.batch.onLog;
-api.onBatchState = api.batch.onState;
-api.onQueueUpdated = api.batch.onQueueUpdated;
-api.listResources = api.media.listResources;
-api.getCachedResources = api.media.getCachedResources;
-api.searchResources = api.media.searchResources;
-api.filterResourcesByPrice = function(minPrice, maxPrice) {
-  return ipcRenderer.invoke("media:filter-resources-by-price", minPrice, maxPrice);
-};
-api.getPool = api.media.getPool;
-api.addToPool = api.media.addToPool;
-api.removeFromPool = api.media.removeFromPool;
-api.poolContains = function(resourceId) {
-  return ipcRenderer.invoke("media:pool-contains", resourceId);
-};
-api.getBalance = api.media.getBalance;
-api.getDrafts = api.media.getDrafts;
-api.getDraft = api.media.getDraft;
-api.setDraft = api.media.setDraft;
-api.removeDraft = api.media.removeDraft;
-api.setBulkResource = function(filenames, resourceId, resourceName) {
-  return ipcRenderer.invoke("media:set-bulk-resource", filenames, resourceId, resourceName);
-};
-api.scanMediaArticles = api.media.scanArticles;
-api.previewArticle = api.media.previewArticle;
-api.runPreflight = function(articles, dryRun) {
-  return ipcRenderer.invoke("media:preflight", articles, dryRun);
-};
-api.getOrders = api.orders.getOrders;
-api.syncOrder = api.orders.syncOrder;
 
 contextBridge.exposeInMainWorld("desktopConsole", api);

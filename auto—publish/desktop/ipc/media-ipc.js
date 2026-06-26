@@ -4,7 +4,6 @@ const { MediaResourceStore } = require("../../src/platforms/media/media-resource
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaClient } = require("../../src/platforms/media/media-client");
 const { resolveApiKey } = require("../../src/platforms/media/config");
-const { runPreflight } = require("../../src/platforms/media/preflight");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
 const { detectDocxImages } = require("../../src/platforms/media/article-converter");
 const { createMediaOrderService } = require("../services/media-order-service");
@@ -86,12 +85,6 @@ function registerMediaIpc(deps) {
     var results = mediaResourceStore.search(keyword);
     return { ok: true, data: results };
   });
-
-  ipcMain.handle("media:filter-resources-by-price", function(event, minPrice, maxPrice) {
-    var results = mediaResourceStore.filterByPrice(minPrice, maxPrice);
-    return { ok: true, data: results };
-  });
-
   ipcMain.handle("media:get-pool", function() {
     return { ok: true, data: mediaPoolStore.getAll() };
   });
@@ -105,11 +98,6 @@ function registerMediaIpc(deps) {
     mediaPoolStore.remove(resourceId);
     return { ok: true };
   });
-
-  ipcMain.handle("media:pool-contains", function(event, resourceId) {
-    return { ok: true, data: mediaPoolStore.contains(resourceId) };
-  });
-
   ipcMain.handle("media:get-balance", async function() {
     try {
       var client = getMediaClient();
@@ -146,12 +134,6 @@ function registerMediaIpc(deps) {
     mediaDraftStore.remove(filename);
     return { ok: true };
   });
-
-  ipcMain.handle("media:set-bulk-resource", function(event, filenames, resourceId, resourceName) {
-    mediaDraftStore.setBulkResource(filenames, resourceId, resourceName);
-    return { ok: true };
-  });
-
   ipcMain.handle("media:scan-articles", async function() {
     var scanDir = path.resolve(__dirname, "..", "..", "input", "media");
     if (!fs.existsSync(scanDir)) {
@@ -278,15 +260,6 @@ function registerMediaIpc(deps) {
         resourceName: draft ? draft.resourceName : null
       }
     };
-  });
-
-  ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
-    try {
-      var result = await runPreflight({ articles: articles, dryRun: dryRun !== false });
-      return { ok: true, data: result };
-    } catch (err) {
-      return { ok: false, error: err.message };
-    }
   });
 
   ipcMain.handle("media:build-confirmation", function(event, articles) {
