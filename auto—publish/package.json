@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Auto publish desktop console",
   "scripts": {
-    "desktop": "scripts\\desktop.cmd"
+    "desktop": "scripts\\desktop.cmd",
+    "snapshot": "scripts\\snapshot.cmd"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

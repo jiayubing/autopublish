@@ -9,6 +9,16 @@ if (!task) {
 function send(type, payload) {
   if (typeof process.send === "function") {
     process.send({ type, payload });
+    return;
+  }
+
+  if (type === "result") {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  if (type === "log" && payload && payload.line) {
+    console.log(payload.line);
   }
 }
 

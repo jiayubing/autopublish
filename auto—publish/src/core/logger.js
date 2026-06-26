@@ -28,6 +28,7 @@ function log(message, type) {
 
   entry.line = "[" + entry.ts + "] [" + entry.level + "] " + entry.message;
   console.log(entry.line);
+  fs.mkdirSync(DIRS.logsDir, { recursive: true });
   fs.appendFileSync(path.join(DIRS.logsDir, "publish.log"), entry.line + "\n", "utf-8");
   emit(entry);
   return entry;

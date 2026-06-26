@@ -25,11 +25,11 @@ class MediaClient {
    * @param {number} [opts.timeoutMs] - Request timeout in milliseconds
    */
   constructor({ apiKey, baseUrl, timeoutMs } = {}) {
-    if (!apiKey) {
+    if (!hasText(apiKey)) {
       throw new Error('MediaClient requires an apiKey.');
     }
-    this.apiKey = apiKey;
-    this.baseUrl = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.apiKey = String(apiKey).trim();
+    this.baseUrl = normalizeBaseUrl(baseUrl || DEFAULT_BASE_URL);
     this.timeoutMs = timeoutMs || DEFAULT_TIMEOUT_MS;
   }
 
@@ -62,7 +62,7 @@ class MediaClient {
     const form = new FormData();
     form.append('api_key', this.apiKey);
     if (opts.page != null) {
-      form.append('page', String(opts.page));
+      form.append('page', String(parsePositiveInteger(opts.page, 'page')));
     }
     return this._post('/api/media/media_list', form);
   }
@@ -80,21 +80,21 @@ class MediaClient {
    * @returns {Promise<object>} Raw API response
    */
   async sendArticle({ resourceId, title, content, remark, thirdId }) {
-    if (!resourceId) throw new Error('缺少 resourceId');
-    if (!title) throw new Error('缺少 title');
-    if (!content) throw new Error('缺少 content');
+    var normalizedResourceId = requireText(resourceId, 'resourceId');
+    var normalizedTitle = requireText(title, 'title');
+    var normalizedContent = requireText(content, 'content');
 
     const form = new FormData();
     form.append('api_key', this.apiKey);
-    form.append('resource_id', String(resourceId));
-    form.append('title', title);
-    form.append('content', content);
+    form.append('resource_id', normalizedResourceId);
+    form.append('title', normalizedTitle);
+    form.append('content', normalizedContent);
 
-    if (remark) {
-      form.append('remark', remark);
+    if (hasText(remark)) {
+      form.append('remark', String(remark).trim());
     }
-    if (thirdId) {
-      form.append('third_id', thirdId);
+    if (hasText(thirdId)) {
+      form.append('third_id', String(thirdId).trim());
     }
 
     return this._post('/api/media/send', form);
@@ -108,7 +108,9 @@ class MediaClient {
    * @returns {Promise<object>} Raw API response
    */
   async orderInfo(orderNids) {
-    const nids = Array.isArray(orderNids) ? orderNids : [orderNids];
+    const nids = (Array.isArray(orderNids) ? orderNids : [orderNids])
+      .map(function(nid) { return String(nid == null ? '' : nid).trim(); })
+      .filter(Boolean);
     if (nids.length === 0) throw new Error('缺少 order_nids');
 
     const form = new FormData();
@@ -177,3 +179,31 @@ class MediaClient {
 }
 
 module.exports = { MediaClient };
+
+function normalizeBaseUrl(baseUrl) {
+  var normalized = requireText(baseUrl, 'baseUrl').replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(normalized)) {
+    throw new Error('baseUrl 必须以 http:// 或 https:// 开头');
+  }
+  return normalized;
+}
+
+function parsePositiveInteger(value, label) {
+  var normalized = Number(value);
+  if (!Number.isInteger(normalized) || normalized < 1) {
+    throw new Error(label + ' 必须是大于 0 的整数');
+  }
+  return normalized;
+}
+
+function requireText(value, label) {
+  var text = String(value == null ? '' : value).trim();
+  if (!text) {
+    throw new Error('缺少 ' + label);
+  }
+  return text;
+}
+
+function hasText(value) {
+  return String(value == null ? '' : value).trim().length > 0;
+}
