@@ -1,4 +1,4 @@
-// Convert document files to HTML and plain-text representations.
+﻿// Convert document files to HTML and plain-text representations.
 
 const { readFile } = require('node:fs/promises');
 const { extname, basename } = require('node:path');
@@ -22,11 +22,45 @@ async function convertArticle(filePath) {
     return convertTextFile(filePath);
   }
 
+  if (ext === '.md') {
+    return convertMarkdownFile(filePath);
+  }
+
   if (ext === '.docx') {
     return convertDocxFile(filePath);
   }
 
-  throw new Error('不支持的文件格式: "' + ext + '"。当前支持 .txt 和 .docx。');
+  throw new Error('不支持的文件格式: "' + ext + '"。当前支持 .txt、.md 和 .docx。');
+}
+
+
+async function convertMarkdownFile(filePath) {
+  const raw = await readFile(filePath, 'utf-8');
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    throw new Error('文件内容为空。');
+  }
+
+  const blocks = trimmed.split(/\n\s*\n/).map(function(block) {
+    return block.trim();
+  }).filter(Boolean);
+
+  const html = blocks.map(function(block) {
+    if (/^#\s+/.test(block)) {
+      return '<h1>' + escapeHtml(block.replace(/^#\s+/, '').trim()) + '</h1>';
+    }
+    if (/^##\s+/.test(block)) {
+      return '<h2>' + escapeHtml(block.replace(/^##\s+/, '').trim()) + '</h2>';
+    }
+    return '<p>' + escapeHtml(block) + '</p>';
+  }).join('\n');
+
+  return {
+    html: html,
+    plainText: trimmed.replace(/^#{1,6}\s+/gm, ''),
+    sourceFile: basename(filePath)
+  };
 }
 
 async function convertTextFile(filePath) {
