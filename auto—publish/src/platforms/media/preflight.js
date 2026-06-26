@@ -7,10 +7,26 @@ const { MediaResourceStore } = require('./media-resource-store');
 const { resolveApiKey } = require('./config');
 
 /**
+ * Resolve the list of selected resources from an article, supporting both
+ * the new multi-resource `selectedResources` array and the legacy single
+ * `resourceId` / `resourceName` fields.
+ */
+function getSelectedResources(article) {
+  if (Array.isArray(article.selectedResources) && article.selectedResources.length > 0) {
+    return article.selectedResources;
+  }
+  if (article.resourceId) {
+    return [{ resourceId: article.resourceId, name: article.resourceName || "" }];
+  }
+  return [];
+}
+
+/**
  * Run preflight checks for a set of media articles.
  *
  * @param {object} opts
- * @param {object[]} opts.articles - Array of { filename, title, resourceId, hasImages, imageCount, ignoreImages }
+ * @param {object[]} opts.articles - Array of { filename, title, resourceId, hasImages, imageCount, ignoreImages } 
+ *   or { filename, title, selectedResources: [{ resourceId, name }], ... }
  * @param {boolean} [opts.dryRun] - If true, do not call real API (only local checks)
  * @returns {Promise<object>} PreflightResult
  */
@@ -31,17 +47,18 @@ async function runPreflight(opts) {
     totalEstimatedCost: 0,
     balance: null,
     errors: [],
-    warnings: []
+    warnings: [],
+    taskCount: 0
   };
 
-  // Check 1: all articles have resourceId
+  // Check 1: all articles have at least one selected resource
   for (var i = 0; i < articles.length; i++) {
     var a = articles[i];
     var entry = {
       filename: a.filename,
       title: a.title,
-      resourceId: a.resourceId || null,
-      resourceName: a.resourceName || null,
+      selectedResources: [],
+      resourceCount: 0,
       hasImages: !!a.hasImages,
       imageCount: a.imageCount || 0,
       ignoreImages: !!a.ignoreImages,
@@ -50,7 +67,12 @@ async function runPreflight(opts) {
       warnings: []
     };
 
-    if (!a.resourceId) {
+    var selectedResources = getSelectedResources(a);
+    entry.selectedResources = selectedResources;
+    entry.resourceCount = selectedResources.length;
+    result.taskCount += selectedResources.length;
+
+    if (selectedResources.length === 0) {
       entry.ok = false;
       entry.errors.push('未选择媒体资源');
       result.checks.allHaveResources = false;
