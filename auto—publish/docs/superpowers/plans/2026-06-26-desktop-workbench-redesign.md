@@ -50,6 +50,8 @@
   - Validate expanded article-resource tasks.
 - `src/platforms/media/adapter.js`
   - Keep existing batch adapter behavior. Do not overload it with Desktop-only multi-submit logic.
+- `src/platforms/media/article-converter.js`
+  - Keep the existing async `convertArticle(filePath)` contract and HTML output shape. Add `.md` support because the Desktop media scanner accepts `.md` files.
 
 ### New Main-Process Files
 
@@ -70,7 +72,7 @@
 - `desktop/services/media-order-service.js`
   - Owns reading and syncing media submission orders.
 - `desktop/services/platform-workbench-service.js`
-  - Owns non-media queue scan and selected article-to-target-platform planning.
+  - Owns non-media queue scan, selected article-to-target-platform planning, and serial selected publishing.
 
 ### New Renderer Files
 
@@ -88,8 +90,6 @@
   - Order list, filters, and sync actions.
 - `desktop/renderer/platform-workbench.js`
   - Other-platform article selection and target platform routing.
-- `desktop/renderer/batch-log-panel.js`
-  - Shared log/status rendering.
 
 ### Test Files To Create
 
@@ -97,6 +97,7 @@
 - `tests/media-draft-store.test.js`
 - `tests/media-workbench-service.test.js`
 - `tests/media-preflight.test.js`
+- `tests/media-article-converter.test.js`
 - `tests/platform-workbench-service.test.js`
 
 ---
@@ -365,10 +366,113 @@ git commit -m "feat: support multiple media resources per draft"
 ## Task 3: Add Media Workbench Service
 
 **Files:**
+- Modify: `src/platforms/media/article-converter.js`
 - Create: `desktop/services/media-workbench-service.js`
+- Test: `tests/media-article-converter.test.js`
 - Test: `tests/media-workbench-service.test.js`
 
-- [ ] **Step 1: Write failing service tests**
+- [ ] **Step 1: Write failing markdown converter test**
+
+Create `tests/media-article-converter.test.js`:
+
+```js
+const { describe, it, beforeEach, afterEach } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const { convertArticle } = require("../src/platforms/media/article-converter");
+
+describe("media article converter", function() {
+  let dir;
+
+  beforeEach(function() {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "media-converter-"));
+  });
+
+  afterEach(function() {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("converts markdown articles to html", async function() {
+    const filePath = path.join(dir, "a.md");
+    fs.writeFileSync(filePath, "# Title A\n\nBody paragraph", "utf-8");
+
+    const result = await convertArticle(filePath);
+    assert.match(result.html, /<h1>Title A<\/h1>/);
+    assert.match(result.html, /<p>Body paragraph<\/p>/);
+    assert.strictEqual(result.sourceFile, "a.md");
+  });
+});
+```
+
+- [ ] **Step 2: Verify markdown conversion test fails**
+
+Run:
+
+```powershell
+npm test
+```
+
+Expected: fails because `convertArticle` does not support `.md`.
+
+- [ ] **Step 3: Add markdown conversion**
+
+Modify `src/platforms/media/article-converter.js`.
+
+Add this branch to `convertArticle(filePath)` after `.txt`:
+
+```js
+if (ext === ".md") {
+  return convertMarkdownFile(filePath);
+}
+```
+
+Add this function:
+
+```js
+async function convertMarkdownFile(filePath) {
+  const raw = await readFile(filePath, "utf-8");
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    throw new Error("文件内容为空。");
+  }
+
+  const blocks = trimmed.split(/\n\s*\n/).map(function(block) {
+    return block.trim();
+  }).filter(Boolean);
+
+  const html = blocks.map(function(block) {
+    if (/^#\s+/.test(block)) {
+      return "<h1>" + escapeHtml(block.replace(/^#\s+/, "").trim()) + "</h1>";
+    }
+    if (/^##\s+/.test(block)) {
+      return "<h2>" + escapeHtml(block.replace(/^##\s+/, "").trim()) + "</h2>";
+    }
+    return "<p>" + escapeHtml(block) + "</p>";
+  }).join("\n");
+
+  return {
+    html: html,
+    plainText: trimmed.replace(/^#{1,6}\s+/gm, ""),
+    sourceFile: basename(filePath)
+  };
+}
+```
+
+- [ ] **Step 4: Verify markdown conversion test passes**
+
+Run:
+
+```powershell
+npm test
+```
+
+Expected: converter test passes.
+
+- [ ] **Step 5: Write failing service tests**
 
 Create `tests/media-workbench-service.test.js`:
 
@@ -449,10 +553,61 @@ describe("media-workbench-service", function() {
       blockers: []
     });
   });
+
+  it("submits tasks serially and continues after one failure", async function() {
+    fs.writeFileSync(path.join(inputDir, "a.txt"), "A\n\nBody A", "utf-8");
+    fs.writeFileSync(path.join(inputDir, "b.txt"), "B\n\nBody B", "utf-8");
+    const calls = [];
+    const records = [];
+    const client = {
+      sendArticle: async function(payload) {
+        calls.push(payload.resourceId);
+        if (payload.resourceId === "bad") throw new Error("submit failed");
+        return { data: { order_nid: "order-" + payload.resourceId } };
+      }
+    };
+    const orderStore = {
+      record: async function(entry) {
+        records.push(entry);
+      }
+    };
+
+    const result = await service.submitTasksSerially([
+      { filename: "a.txt", filePath: path.join(inputDir, "a.txt"), title: "A", selectedResources: [{ resourceId: "ok1" }, { resourceId: "bad" }] },
+      { filename: "b.txt", filePath: path.join(inputDir, "b.txt"), title: "B", selectedResources: [{ resourceId: "ok2" }] }
+    ], { client: client, orderStore: orderStore });
+
+    assert.deepStrictEqual(calls, ["ok1", "bad", "ok2"]);
+    assert.strictEqual(result.ok, 2);
+    assert.strictEqual(result.fail, 1);
+    assert.strictEqual(result.skipped, 0);
+    assert.strictEqual(records.length, 3);
+  });
+
+  it("stop request skips tasks after the current request", async function() {
+    fs.writeFileSync(path.join(inputDir, "a.txt"), "A\n\nBody A", "utf-8");
+    const calls = [];
+    const client = {
+      sendArticle: async function(payload) {
+        calls.push(payload.resourceId);
+        service.requestStop();
+        return { data: { order_nid: "order-" + payload.resourceId } };
+      }
+    };
+    const orderStore = { record: async function() {} };
+
+    const result = await service.submitTasksSerially([
+      { filename: "a.txt", filePath: path.join(inputDir, "a.txt"), title: "A", selectedResources: [{ resourceId: "first" }, { resourceId: "second" }] }
+    ], { client: client, orderStore: orderStore });
+
+    assert.deepStrictEqual(calls, ["first"]);
+    assert.strictEqual(result.ok, 1);
+    assert.strictEqual(result.skipped, 1);
+  });
 });
 ```
 
-- [ ] **Step 2: Verify the test fails**
+- [ ] **Step 6: Verify the service tests fail**
 
 Run:
 
@@ -462,7 +617,7 @@ npm test
 
 Expected: fails because `media-workbench-service.js` does not exist.
 
-- [ ] **Step 3: Implement the service**
+- [ ] **Step 7: Implement the service**
 
 Create `desktop/services/media-workbench-service.js` with:
 
@@ -609,17 +764,14 @@ function createMediaWorkbenchService(opts) {
       }
 
       try {
-        var converted = convertArticle(task.article.filePath, {
+        var converted = await convertArticle(task.article.filePath);
+        var response = await client.sendArticle({
+          resourceId: task.resource.resourceId,
           title: task.article.title,
-          ignoreImages: task.article.ignoreImages
+          content: converted.html,
+          remark: task.article.remark || "",
+          thirdId: task.article.filename + "::" + task.resource.resourceId
         });
-        var payload = {
-          title: task.article.title,
-          content: converted.content,
-          resource_id: task.resource.resourceId,
-          remark: task.article.remark || ""
-        };
-        var response = await client.submitArticle(payload);
         var record = {
           taskId: task.taskId,
           article: task.article,
@@ -627,9 +779,30 @@ function createMediaWorkbenchService(opts) {
           result: response,
           submittedAt: new Date().toISOString()
         };
-        orderStore.append(record);
+        await orderStore.record({
+          command: "submit",
+          dryRun: false,
+          params: {
+            resource_id: task.resource.resourceId,
+            title: task.article.title,
+            content_file: task.article.filePath,
+            remark: task.article.remark || "",
+            third_id: task.article.filename + "::" + task.resource.resourceId
+          },
+          result: { success: true, data: record }
+        });
         results.push({ taskId: task.taskId, status: "success", response: response });
       } catch (error) {
+        await orderStore.record({
+          command: "submit",
+          dryRun: false,
+          params: {
+            resource_id: task.resource && task.resource.resourceId,
+            title: task.article && task.article.title,
+            content_file: task.article && task.article.filePath
+          },
+          result: { success: false, error: error.message }
+        });
         results.push({ taskId: task.taskId, status: "failed", error: error.message });
       }
     }
@@ -654,7 +827,7 @@ function createMediaWorkbenchService(opts) {
 module.exports = { createMediaWorkbenchService };
 ```
 
-- [ ] **Step 4: Verify tests pass**
+- [ ] **Step 8: Verify tests pass**
 
 Run:
 
@@ -664,10 +837,10 @@ npm test
 
 Expected: all current tests pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add desktop/services/media-workbench-service.js tests/media-workbench-service.test.js
+git add src/platforms/media/article-converter.js desktop/services/media-workbench-service.js tests/media-article-converter.test.js tests/media-workbench-service.test.js
 git commit -m "feat: add media workbench service"
 ```
 
@@ -816,10 +989,17 @@ describe("platform-workbench-service", function() {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "platform-workbench-"));
     fs.mkdirSync(path.join(root, "input", "lieju"), { recursive: true });
     fs.mkdirSync(path.join(root, "input", "toutiao"), { recursive: true });
+    fs.mkdirSync(path.join(root, "input", "hepan"), { recursive: true });
+    fs.mkdirSync(path.join(root, "input", "media"), { recursive: true });
     fs.writeFileSync(path.join(root, "input", "lieju", "a.txt"), "A\nBody", "utf-8");
     service = createPlatformWorkbenchService({
       rootDir: root,
-      platformIds: ["lieju", "toutiao", "hepan"]
+      platforms: [
+        { id: "lieju", scanDir: "lieju" },
+        { id: "toutiao", scanDir: "toutiao" },
+        { id: "hepan", scanDir: "hepan" },
+        { id: "media", scanDir: "media" }
+      ]
     });
   });
 
@@ -842,6 +1022,56 @@ describe("platform-workbench-service", function() {
     assert.deepStrictEqual(plan.tasks.map(function(task) {
       return task.targetPlatformId;
     }), ["toutiao", "hepan"]);
+  });
+
+  it("submits selected platform tasks serially and continues after failure", async function() {
+    const calls = [];
+    const serviceWithAdapters = createPlatformWorkbenchService({
+      rootDir: root,
+      platforms: [{ id: "lieju", scanDir: "lieju" }],
+      adapters: {
+        toutiao: {
+          id: "toutiao",
+          parseArticleFiles: function(items) {
+            return items.map(function(item) {
+              return { title: item.filename, sourceFile: item.filePath, filename: item.filename };
+            });
+          },
+          ensureSession: function() {},
+          ensureLoggedIn: async function() {},
+          publishArticle: async function(article) {
+            calls.push("toutiao:" + article.filename);
+            return true;
+          },
+          closeSession: function() {}
+        },
+        hepan: {
+          id: "hepan",
+          parseArticleFiles: function(items) {
+            return items.map(function(item) {
+              return { title: item.filename, sourceFile: item.filePath, filename: item.filename };
+            });
+          },
+          ensureSession: function() {},
+          ensureLoggedIn: async function() {},
+          publishArticle: async function(article) {
+            calls.push("hepan:" + article.filename);
+            throw new Error("hepan failed");
+          },
+          closeSession: function() {}
+        }
+      }
+    });
+
+    const plan = serviceWithAdapters.buildSelectedPlan({
+      selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt" }],
+      targetPlatformIds: ["toutiao", "hepan"]
+    });
+    const result = await serviceWithAdapters.submitSelectedPlanSerially(plan, { autoSubmit: true, interactive: false });
+
+    assert.deepStrictEqual(calls, ["toutiao:a.txt", "hepan:a.txt"]);
+    assert.strictEqual(result.ok, 1);
+    assert.strictEqual(result.fail, 1);
   });
 });
 ```
@@ -866,11 +1096,16 @@ function firstTitle(raw, fallback) {
 function createPlatformWorkbenchService(opts) {
   var options = opts || {};
   var rootDir = options.rootDir || path.resolve(__dirname, "..", "..");
-  var platformIds = options.platformIds || [];
+  var platforms = options.platforms || [];
+  var adapters = options.adapters || {};
 
   function scanQueue() {
-    return platformIds.map(function(platformId) {
-      var inputDir = path.join(rootDir, "input", platformId);
+    return platforms.filter(function(platform) {
+      return platform.id !== "media";
+    }).map(function(platform) {
+      var platformId = platform.id;
+      var scanDir = platform.scanDir || platform.id;
+      var inputDir = path.join(rootDir, "input", scanDir);
       var articles = [];
       if (fs.existsSync(inputDir)) {
         articles = fs.readdirSync(inputDir).filter(function(name) {
@@ -881,10 +1116,17 @@ function createPlatformWorkbenchService(opts) {
           if (filename.endsWith(".txt") || filename.endsWith(".md")) {
             title = firstTitle(fs.readFileSync(filePath, "utf-8"), title);
           }
-          return { filename: filename, filePath: filePath, title: title };
+          return {
+            filename: filename,
+            filePath: filePath,
+            file: filePath,
+            sourceFile: filePath,
+            fileBaseName: path.basename(filename, path.extname(filename)),
+            title: title
+          };
         });
       }
-      return { platformId: platformId, articles: articles };
+      return { platformId: platformId, scanDir: scanDir, articles: articles };
     });
   }
 
@@ -893,10 +1135,17 @@ function createPlatformWorkbenchService(opts) {
     var targetPlatformIds = input.targetPlatformIds || [];
     var tasks = [];
     for (var i = 0; i < selectedArticles.length; i++) {
+      var filePath = resolveSelectedFilePath(selectedArticles[i]);
       for (var j = 0; j < targetPlatformIds.length; j++) {
         tasks.push({
           sourcePlatformId: selectedArticles[i].sourcePlatformId,
           filename: selectedArticles[i].filename,
+          filePath: filePath,
+          sourceArticle: Object.assign({}, selectedArticles[i], {
+            file: filePath,
+            sourceFile: filePath,
+            fileBaseName: path.basename(selectedArticles[i].filename, path.extname(selectedArticles[i].filename))
+          }),
           targetPlatformId: targetPlatformIds[j]
         });
       }
@@ -904,7 +1153,65 @@ function createPlatformWorkbenchService(opts) {
     return { taskCount: tasks.length, tasks: tasks };
   }
 
-  return { scanQueue: scanQueue, buildSelectedPlan: buildSelectedPlan };
+  function resolveSelectedFilePath(article) {
+    if (article.filePath) return article.filePath;
+    var source = platforms.filter(function(platform) {
+      return platform.id === article.sourcePlatformId;
+    })[0] || { scanDir: article.sourcePlatformId };
+    return path.join(rootDir, "input", source.scanDir || source.id, article.filename);
+  }
+
+  async function submitSelectedPlanSerially(plan, submitOptions) {
+    var opts = submitOptions || {};
+    var tasks = plan.tasks || [];
+    var results = [];
+
+    for (var i = 0; i < tasks.length; i++) {
+      var task = tasks[i];
+      var adapter = adapters[task.targetPlatformId];
+      if (!adapter) {
+        results.push({ task: task, status: "failed", error: "Missing adapter: " + task.targetPlatformId });
+        continue;
+      }
+
+      try {
+        adapter.ensureSession();
+        await adapter.ensureLoggedIn({ interactive: opts.interactive, timeoutMs: opts.timeoutMs });
+        var sourceArticle = task.sourceArticle || {
+          file: task.filePath,
+          filePath: task.filePath,
+          sourceFile: task.filePath,
+          filename: task.filename,
+          fileBaseName: path.basename(task.filename, path.extname(task.filename))
+        };
+        var parsed = adapter.parseArticleFiles
+          ? adapter.parseArticleFiles([sourceArticle])
+          : [{ sourceFile: sourceArticle.sourceFile, file: sourceArticle.file, filename: sourceArticle.filename, title: sourceArticle.title || sourceArticle.fileBaseName }];
+        if (!parsed.length) throw new Error("Article parse returned no publishable article");
+        var publishResult = await adapter.publishArticle(parsed[0], {
+          autoSubmit: opts.autoSubmit !== false,
+          interactive: opts.interactive,
+          timeoutMs: opts.timeoutMs
+        });
+        results.push({ task: task, status: publishResult === "pending" ? "pending" : "success", result: publishResult });
+      } catch (error) {
+        results.push({ task: task, status: "failed", error: error.message });
+      } finally {
+        if (adapter.closeSession && opts.closeAfterEach !== false) {
+          try { adapter.closeSession(); } catch (_) {}
+        }
+      }
+    }
+
+    return {
+      ok: results.filter(function(item) { return item.status === "success"; }).length,
+      fail: results.filter(function(item) { return item.status === "failed"; }).length,
+      pending: results.filter(function(item) { return item.status === "pending"; }).length,
+      results: results
+    };
+  }
+
+  return { scanQueue: scanQueue, buildSelectedPlan: buildSelectedPlan, submitSelectedPlanSerially: submitSelectedPlanSerially };
 }
 
 module.exports = { createPlatformWorkbenchService };
@@ -920,21 +1227,32 @@ module.exports = {
 };
 ```
 
-The service must expose:
+The service must expose these methods and preserve the current state payload shape:
 
 ```js
 refreshQueueSnapshot(options)
-startBatch(options, hooks)
+startBatch(options)
 stopBatch()
 getState()
-onState(listener)
 ```
 
-Keep existing stop behavior using `requestStopSignal`, `clearStopSignal`, and child IPC.
+`getState()` must return:
+
+```js
+{
+  isBatchRunning: Boolean,
+  isStopPending: Boolean,
+  snapshot: Object
+}
+```
+
+Keep existing stop behavior using `requestStopSignal`, `clearStopSignal`, and child IPC. `startBatch()` must send `batch-state` and `queue-updated` through the injected `sendToRenderer` callback exactly as `desktop/main.js` does now.
 
 - [ ] **Step 4: Create media order service**
 
-Create `desktop/services/media-order-service.js` with:
+Create `desktop/services/media-order-service.js` by moving the existing `media:get-orders` and `media:sync-order` logic out of `desktop/main.js`. Do not replace it with a simpler implementation that only calls `client.orderInfo`; the current code also updates `data/submission-orders.jsonl` after sync and that behavior must be preserved.
+
+Use this service shape:
 
 ```js
 const fs = require("fs");
@@ -959,10 +1277,37 @@ function createMediaOrderService(opts) {
 
   async function syncOrder(orderNid) {
     var client = new MediaClient({ apiKey: resolveApiKey(null) });
-    return client.orderInfo(orderNid);
+    var response = await client.orderInfo(orderNid);
+    updateLocalOrderRecord(storePath, orderNid, response);
+    return response;
   }
 
   return { listOrders: listOrders, syncOrder: syncOrder };
+}
+
+function updateLocalOrderRecord(storePath, orderNid, response) {
+  if (!fs.existsSync(storePath)) return;
+  var raw = fs.readFileSync(storePath, "utf-8");
+  var lines = raw.trim().split("\n");
+  var updated = false;
+  var newLines = lines.map(function(line) {
+    if (!line.trim()) return line;
+    try {
+      var record = JSON.parse(line);
+      var data = record.result && record.result.data;
+      var nested = data && data.result && data.result.data;
+      var knownOrderNid = record.orderNid || data && data.orderNid || nested && nested.order_nid;
+      if (String(knownOrderNid) === String(orderNid)) {
+        record.result = record.result || {};
+        record.result.syncedAt = new Date().toISOString();
+        record.result.syncRaw = response;
+        updated = true;
+        return JSON.stringify(record);
+      }
+    } catch (_) {}
+    return line;
+  });
+  if (updated) fs.writeFileSync(storePath, newLines.join("\n") + "\n", "utf-8");
 }
 
 module.exports = { createMediaOrderService };
@@ -982,7 +1327,101 @@ function registerIpc(deps) {
 module.exports = { registerIpc };
 ```
 
-Each IPC file must import `wrap` from `desktop/services/ipc-response.js` and return the same response shape used by the current renderer. Start by moving existing handlers from `desktop/main.js` without changing channel names.
+Each IPC file must import `wrap` from `desktop/services/ipc-response.js` only for handlers whose service returns raw data. Do not wrap handlers that already return `{ ok, data }` or `{ ok, error }`, otherwise the renderer receives `{ ok: true, data: { ok: true, ... } }`.
+
+Channel ownership must be:
+
+```text
+batch-ipc.js:
+  desktop:get-state
+  desktop:refresh-queue
+  desktop:start-batch
+  desktop:stop-batch
+
+media-ipc.js:
+  media:list-resources
+  media:get-cached-resources
+  media:search-resources
+  media:filter-resources-by-price
+  media:get-pool
+  media:add-to-pool
+  media:remove-from-pool
+  media:pool-contains
+  media:get-balance
+  media:get-drafts
+  media:get-draft
+  media:set-draft
+  media:remove-draft
+  media:set-bulk-resource
+  media:scan-articles
+  media:preview-article
+  media:preflight
+  media:get-orders
+  media:sync-order
+
+platform-ipc.js:
+  platforms:get-queue
+  platforms:build-selected-plan
+  platforms:submit-selected-plan
+```
+
+Move existing handler behavior from `desktop/main.js` without changing existing channel names or response shapes. Add only the new `platforms:*` channels in this task; add media submit channels in Task 8.
+
+Implement `desktop/ipc/platform-ipc.js` with this shape:
+
+```js
+const { loadPlatforms } = require("../../src/core/platforms");
+const { createPlatformWorkbenchService } = require("../services/platform-workbench-service");
+const { wrap } = require("../services/ipc-response");
+
+function registerPlatformIpc(deps) {
+  var ipcMain = deps.ipcMain;
+  var rootDir = deps.rootDir;
+  var loadedPlatforms = loadPlatforms();
+  var nonMediaPlatforms = loadedPlatforms.filter(function(platform) {
+    return platform.id !== "media";
+  });
+  var adapters = {};
+  loadedPlatforms.forEach(function(platform) {
+    adapters[platform.id] = platform;
+  });
+  var service = createPlatformWorkbenchService({
+    rootDir: rootDir,
+    platforms: loadedPlatforms.map(function(platform) {
+      return { id: platform.id, scanDir: platform.scanDir };
+    }),
+    adapters: adapters
+  });
+
+  ipcMain.handle("platforms:get-queue", function() {
+    return wrap(function() {
+      return {
+        platforms: nonMediaPlatforms.map(function(platform) {
+          return { id: platform.id, scanDir: platform.scanDir };
+        }),
+        queue: service.scanQueue()
+      };
+    });
+  });
+
+  ipcMain.handle("platforms:build-selected-plan", function(event, input) {
+    return wrap(function() {
+      return service.buildSelectedPlan(input || {});
+    });
+  });
+
+  ipcMain.handle("platforms:submit-selected-plan", function(event, plan) {
+    return wrap(function() {
+      return service.submitSelectedPlanSerially(plan || { tasks: [] }, {
+        autoSubmit: true,
+        interactive: false
+      });
+    });
+  });
+}
+
+module.exports = { registerPlatformIpc };
+```
 
 - [ ] **Step 6: Reduce `main.js`**
 
@@ -1029,7 +1468,11 @@ app.whenReady().then(function() {
     cwd: path.resolve(__dirname, ".."),
     sendToRenderer: sendToRenderer
   });
-  registerIpc({ ipcMain: ipcMain, taskService: taskService });
+  registerIpc({
+    ipcMain: ipcMain,
+    taskService: taskService,
+    rootDir: path.resolve(__dirname, "..")
+  });
   unsubscribeLogs = subscribe(function(entry) { sendToRenderer("publish-log", entry); });
 });
 ```
@@ -1061,10 +1504,10 @@ git commit -m "refactor: split desktop main process services"
 
 - [ ] **Step 1: Replace the flat preload API with grouped APIs**
 
-Expose this shape:
+Create the API object first, then expose it:
 
 ```js
-contextBridge.exposeInMainWorld("desktopConsole", {
+const api = {
   batch: {
     getState: function() { return ipcRenderer.invoke("desktop:get-state"); },
     refreshQueue: function(options) { return ipcRenderer.invoke("desktop:refresh-queue", options || {}); },
@@ -1106,13 +1549,16 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   },
   platforms: {
     getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
-    buildSelectedPlan: function(input) { return ipcRenderer.invoke("platforms:build-selected-plan", input); }
+    buildSelectedPlan: function(input) { return ipcRenderer.invoke("platforms:build-selected-plan", input); },
+    submitSelectedPlan: function(plan) { return ipcRenderer.invoke("platforms:submit-selected-plan", plan); }
   },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },
     syncOrder: function(orderNid) { return ipcRenderer.invoke("media:sync-order", orderNid); }
   }
-});
+};
+
+contextBridge.exposeInMainWorld("desktopConsole", api);
 ```
 
 - [ ] **Step 2: Keep temporary compatibility aliases**
@@ -1124,8 +1570,36 @@ api.getState = api.batch.getState;
 api.refreshQueue = api.batch.refreshQueue;
 api.startBatch = api.batch.startBatch;
 api.stopBatch = api.batch.stopBatch;
+api.onLog = api.batch.onLog;
+api.onBatchState = api.batch.onState;
+api.onQueueUpdated = api.batch.onQueueUpdated;
+api.listResources = api.media.listResources;
+api.getCachedResources = api.media.getCachedResources;
+api.searchResources = api.media.searchResources;
+api.filterResourcesByPrice = function(minPrice, maxPrice) {
+  return ipcRenderer.invoke("media:filter-resources-by-price", minPrice, maxPrice);
+};
+api.getPool = api.media.getPool;
+api.addToPool = api.media.addToPool;
+api.removeFromPool = api.media.removeFromPool;
+api.poolContains = function(resourceId) {
+  return ipcRenderer.invoke("media:pool-contains", resourceId);
+};
+api.getBalance = api.media.getBalance;
+api.getDrafts = api.media.getDrafts;
+api.getDraft = api.media.getDraft;
+api.setDraft = api.media.setDraft;
+api.removeDraft = api.media.removeDraft;
+api.setBulkResource = function(filenames, resourceId, resourceName) {
+  return ipcRenderer.invoke("media:set-bulk-resource", filenames, resourceId, resourceName);
+};
 api.scanMediaArticles = api.media.scanArticles;
 api.previewArticle = api.media.previewArticle;
+api.runPreflight = function(articles, dryRun) {
+  return ipcRenderer.invoke("media:preflight", articles, dryRun);
+};
+api.getOrders = api.orders.getOrders;
+api.syncOrder = api.orders.syncOrder;
 ```
 
 Remove these aliases in Task 9.
@@ -1160,7 +1634,6 @@ git commit -m "refactor: group desktop preload APIs"
 - Create: `desktop/renderer/media-resource-library.js`
 - Create: `desktop/renderer/media-orders-drawer.js`
 - Create: `desktop/renderer/platform-workbench.js`
-- Create: `desktop/renderer/batch-log-panel.js`
 
 - [ ] **Step 1: Replace `index.html` with an app shell**
 
@@ -1188,7 +1661,6 @@ Load scripts in this order:
 <script src="./shared/dom.js"></script>
 <script src="./shared/drawer.js"></script>
 <script src="./shared/confirm.js"></script>
-<script src="./batch-log-panel.js"></script>
 <script src="./media-orders-drawer.js"></script>
 <script src="./media-resource-library.js"></script>
 <script src="./media-workbench.js"></script>
@@ -1266,10 +1738,20 @@ Create `desktop/renderer/media-resource-library.js` with a module factory:
 ```js
 window.createMediaResourceLibrary = function(api) {
   var pool = [];
+  var library = [];
+  var keyword = "";
 
   async function load() {
-    var result = await api.media.getPool();
-    pool = result.ok ? result.data.resources || result.data || [] : [];
+    var poolResult = await api.media.getPool();
+    pool = poolResult.ok ? poolResult.data.resources || poolResult.data || [] : [];
+    if (keyword) {
+      var searchResult = await api.media.searchResources(keyword);
+      library = searchResult.ok ? searchResult.data : [];
+    } else {
+      var cachedResult = await api.media.getCachedResources();
+      var cached = cachedResult.ok ? cachedResult.data : null;
+      library = cached && cached.resources ? cached.resources.slice(0, 80) : [];
+    }
     return pool;
   }
 
@@ -1284,8 +1766,16 @@ window.createMediaResourceLibrary = function(api) {
       '<div class="resource-list">',
       pool.map(function(resource) {
         var id = resource.resourceId || resource.id || resource.resource_id;
-        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.name || id) + '</strong><span>' + window.dom.escapeHtml(resource.price || "") + '</span></div>';
+        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.name || id) + '</strong><span>' + window.dom.escapeHtml(resource.price || "") + '</span><button class="secondary remove-from-pool" data-resource-id="' + window.dom.escapeHtml(id) + '">移除</button></div>';
       }).join("") || '<p class="empty-state">媒体池为空，请先从资源库添加媒体。</p>',
+      '</div>',
+      '<div class="panel-head"><h2>全量资源库</h2><button id="fetchMediaResources" class="secondary">同步资源</button></div>',
+      '<div class="toolbar"><input id="mediaResourceKeyword" class="text-input" value="' + window.dom.escapeHtml(keyword) + '" placeholder="搜索媒体名称"><button id="searchMediaResources" class="secondary">搜索</button></div>',
+      '<div class="resource-list">',
+      library.map(function(resource) {
+        var id = resource.resourceId || resource.id || resource.resource_id;
+        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.name || resource.title || id) + '</strong><span>' + window.dom.escapeHtml(resource.price || "") + '</span><button class="secondary add-to-pool" data-resource-id="' + window.dom.escapeHtml(id) + '">加入媒体池</button></div>';
+      }).join("") || '<p class="empty-state">暂无缓存资源，请先同步或搜索。</p>',
       '</div>',
       '</section>'
     ].join("");
@@ -1299,6 +1789,40 @@ window.createMediaResourceLibrary = function(api) {
         rerender();
       });
     }
+    var fetchButton = root.querySelector("#fetchMediaResources");
+    if (fetchButton) {
+      fetchButton.addEventListener("click", async function() {
+        await api.media.listResources({ fetchAll: true });
+        await load();
+        rerender();
+      });
+    }
+    var searchButton = root.querySelector("#searchMediaResources");
+    if (searchButton) {
+      searchButton.addEventListener("click", async function() {
+        keyword = root.querySelector("#mediaResourceKeyword").value.trim();
+        await load();
+        rerender();
+      });
+    }
+    root.querySelectorAll(".add-to-pool").forEach(function(button) {
+      button.addEventListener("click", async function() {
+        var id = button.getAttribute("data-resource-id");
+        var resource = library.find(function(item) {
+          return String(item.resourceId || item.id || item.resource_id) === String(id);
+        });
+        if (resource) await api.media.addToPool(resource);
+        await load();
+        rerender();
+      });
+    });
+    root.querySelectorAll(".remove-from-pool").forEach(function(button) {
+      button.addEventListener("click", async function() {
+        await api.media.removeFromPool(button.getAttribute("data-resource-id"));
+        await load();
+        rerender();
+      });
+    });
   }
 
   return { load: load, getPool: getPool, render: render, bind: bind };
@@ -1311,6 +1835,17 @@ Create `desktop/renderer/media-orders-drawer.js`:
 
 ```js
 window.createMediaOrdersDrawer = function(api) {
+  function extractOrderNid(order) {
+    var data = order.result && order.result.data;
+    var nestedResult = data && data.result;
+    var nestedData = nestedResult && nestedResult.data;
+    return order.orderNid ||
+      (data && data.orderNid) ||
+      (data && data.order_nid) ||
+      (nestedData && nestedData.order_nid) ||
+      "";
+  }
+
   async function open() {
     var result = await api.orders.getOrders();
     var orders = result.ok ? result.data : [];
@@ -1318,14 +1853,15 @@ window.createMediaOrdersDrawer = function(api) {
       '<div class="drawer-head"><h2>投稿订单</h2><button data-close-drawer class="icon-button">×</button></div>',
       '<div class="drawer-body">',
       orders.map(function(order) {
-        var orderNid = order.orderNid || (order.result && order.result.order_nid) || "";
+        var orderNid = extractOrderNid(order);
         return '<div class="order-row"><span>' + window.dom.escapeHtml(order.taskId || orderNid) + '</span><button class="secondary sync-order" data-order-nid="' + window.dom.escapeHtml(orderNid) + '">同步</button></div>';
       }).join("") || '<p class="empty-state">暂无订单。</p>',
       '</div>'
     ].join(""), function(root) {
       root.querySelectorAll(".sync-order").forEach(function(button) {
         button.addEventListener("click", function() {
-          api.orders.syncOrder(button.getAttribute("data-order-nid"));
+          var orderNid = button.getAttribute("data-order-nid");
+          if (orderNid) api.orders.syncOrder(orderNid);
         });
       });
     });
@@ -1463,6 +1999,7 @@ window.createPlatformWorkbench = function(api) {
   var queue = [];
   var platforms = [];
   var selectedTargets = {};
+  var currentPlan = null;
 
   async function load() {
     var result = await api.platforms.getQueue();
@@ -1491,7 +2028,7 @@ window.createPlatformWorkbench = function(api) {
       platforms.map(function(platform) {
         return '<label class="check-row"><input type="checkbox" class="platform-target-check" data-platform="' + window.dom.escapeHtml(platform.id) + '"> ' + window.dom.escapeHtml(platform.id) + '</label>';
       }).join(""),
-      '<button id="buildPlatformPlan" class="primary">生成投喂计划</button><pre id="platformPlanPreview" class="log-stream"></pre></section>'
+      '<div class="toolbar"><button id="buildPlatformPlan" class="secondary">生成投喂计划</button><button id="submitPlatformPlan" class="primary" disabled>确认投喂</button></div><pre id="platformPlanPreview" class="log-stream"></pre></section>'
     ].join("");
   }
 
@@ -1512,7 +2049,23 @@ window.createPlatformWorkbench = function(api) {
       });
       var targetPlatformIds = Object.keys(selectedTargets).filter(function(id) { return selectedTargets[id]; });
       var result = await api.platforms.buildSelectedPlan({ selectedArticles: articles, targetPlatformIds: targetPlatformIds });
+      currentPlan = result.ok ? result.data : null;
       window.dom.byId("platformPlanPreview").textContent = JSON.stringify(result, null, 2);
+      window.dom.byId("submitPlatformPlan").disabled = !(currentPlan && currentPlan.taskCount > 0);
+    });
+    window.dom.byId("submitPlatformPlan").addEventListener("click", async function() {
+      if (!currentPlan || currentPlan.taskCount === 0) return;
+      window.confirmPanel.open({
+        articleCount: currentPlan.tasks.length,
+        resourceCount: 0,
+        taskCount: currentPlan.taskCount,
+        estimatedTotalPrice: 0,
+        blockers: []
+      }, async function() {
+        var result = await api.platforms.submitSelectedPlan(currentPlan);
+        window.dom.byId("platformPlanPreview").textContent = JSON.stringify(result, null, 2);
+        window.drawer.close();
+      });
     });
   }
 
@@ -1772,7 +2325,7 @@ npm run snapshot
 ## Workspaces
 
 - Media Submission: scan `input/media`, select one or more Media Pool resources per article, preview, confirm, submit, and sync orders.
-- Other Platforms: scan non-media platform queues, select articles, choose target platforms, and build publishing plans.
+- Other Platforms: scan non-media platform queues, select articles, choose target platforms, confirm, and publish selected tasks serially.
 
 ## Safety
 
