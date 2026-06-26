@@ -23,18 +23,37 @@ function registerPlatformIpc(deps) {
       var nonMedia = loadedPlatforms.filter(function(platform) {
         return platform.id !== "media";
       });
+      var grouped = service.scanQueue();
+      var flat = [];
+      grouped.forEach(function(group) {
+        var articles = group.articles || [];
+        articles.forEach(function(article) {
+          flat.push({
+            filename: article.filename,
+            filePath: article.filePath || article.file,
+            title: article.title,
+            platformId: group.platformId,
+            sourcePlatformId: group.platformId,
+            sourceArticle: article
+          });
+        });
+      });
       return {
         platforms: nonMedia.map(function(platform) {
           return { id: platform.id, scanDir: platform.scanDir };
         }),
-        queue: service.scanQueue()
+        queue: flat
       };
     });
   });
 
   ipcMain.handle("platforms:build-selected-plan", function(event, input) {
     return wrap(function() {
-      return service.buildSelectedPlan(input || {});
+      var mapped = {
+        selectedArticles: input.articles || input.selectedArticles || [],
+        targetPlatformIds: input.platformIds || input.targetPlatformIds || []
+      };
+      return service.buildSelectedPlan(mapped);
     });
   });
 
@@ -43,6 +62,9 @@ function registerPlatformIpc(deps) {
       return service.submitSelectedPlanSerially(plan || { tasks: [] }, {
         autoSubmit: true,
         interactive: false
+      }).then(function(result) {
+        result.skipped = result.skipped || result.pending || 0;
+        return result;
       });
     });
   });

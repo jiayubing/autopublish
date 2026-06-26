@@ -8,6 +8,7 @@ const { runPreflight } = require("../../src/platforms/media/preflight");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
 const { detectDocxImages } = require("../../src/platforms/media/article-converter");
 const { createMediaOrderService } = require("../services/media-order-service");
+const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 
 function registerMediaIpc(deps) {
   var ipcMain = deps.ipcMain;
@@ -16,6 +17,11 @@ function registerMediaIpc(deps) {
   var mediaPoolStore = new MediaPoolStore();
   var mediaDraftStore = new MediaDraftStore();
   var mediaOrderService = createMediaOrderService({});
+
+  var mediaWorkbenchService = createMediaWorkbenchService({
+    inputDir: path.resolve(__dirname, "..", "..", "input", "media"),
+    draftStore: mediaDraftStore
+  });
 
   function getMediaClient() {
     var apiKey = resolveApiKey(null);
@@ -277,6 +283,24 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:preflight", async function(event, articles, dryRun) {
     try {
       var result = await runPreflight({ articles: articles, dryRun: dryRun !== false });
+      return { ok: true, data: result };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("media:build-confirmation", function(event, articles) {
+    try {
+      var summary = mediaWorkbenchService.buildConfirmationSummary(articles || []);
+      return { ok: true, data: summary };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("media:submit-selected", async function(event, articles) {
+    try {
+      var result = await mediaWorkbenchService.submitTasksSerially(articles || []);
       return { ok: true, data: result };
     } catch (err) {
       return { ok: false, error: err.message };

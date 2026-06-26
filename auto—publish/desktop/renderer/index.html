@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
@@ -9,224 +9,24 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">AP</div>
-          <div>
-            <p class="brand-name">Auto Publish</p>
-            <p class="brand-subtitle">Desktop Console</p>
-          </div>
-        </div>
-
-        <nav class="side-nav" aria-label="工作台导航">
-          <button class="nav-item active" type="button" data-target="overviewPanel">总览</button>
-          <button class="nav-item" type="button" data-target="queuePanel">文章队列</button>
-          <button class="nav-item" type="button" data-target="platformPanel">平台管理</button>
-          <button class="nav-item" type="button" data-target="mediaPanel">媒体投稿</button>
-          <button class="nav-item" type="button" data-target="ordersPanel">订单中心</button>
-          <button class="nav-item" type="button" data-target="logsPanel">日志</button>
-          <button class="nav-item" type="button" data-target="settingsPanel">设置</button>
-        </nav>
-
-        <section class="sidebar-section">
-          <label class="field-control side-control">
-            <span>发布间隔（秒）</span>
-            <input id="intervalSeconds" type="number" min="0" step="1" value="3">
-          </label>
-
-          <label class="mode-toggle side-toggle">
-            <input id="manualMode" type="checkbox">
-            <span>手动确认模式</span>
-          </label>
-        </section>
-
-        <div class="sidebar-footer">
-          <p class="sidebar-footer-label">Batch</p>
-          <p id="batchStatus" class="status-pill">空闲</p>
-        </div>
+        <div class="brand">Auto Publish</div>
+        <button class="nav-item active" data-workspace="mediaWorkspace">媒体投稿</button>
+        <button class="nav-item" data-workspace="platformWorkspace">其他平台</button>
+        <div class="status-line">状态：<span id="globalStatus">空闲</span></div>
       </aside>
-
-      <div class="main-shell">
-        <header class="topbar">
-          <div class="topbar-title">
-            <button id="refreshButton" class="icon-button" type="button" aria-label="刷新队列">↻</button>
-            <div>
-              <p class="eyebrow">Publishing Cockpit</p>
-              <h1>自动发文控制台</h1>
-            </div>
-          </div>
-
-          <div class="topbar-actions">
-            <p id="generatedAt" class="topbar-meta">正在加载队列...</p>
-            <div class="button-row">
-              <button id="runButton" class="primary" type="button">开始发文</button>
-              <button id="stopButton" class="danger" type="button">停止</button>
-            </div>
-          </div>
-        </header>
-
-        <main class="dashboard">
-          <section class="panel panel-main" id="overviewPanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Overview</p>
-                <h2>平台概览</h2>
-              </div>
-              <p id="queueSummary" class="panel-meta">正在加载队列...</p>
-            </div>
-
-            <div class="hero-stats">
-              <div class="stat-block">
-                <span>待发文章</span>
-                <strong id="totalJobsCount">0</strong>
-              </div>
-              <div class="stat-block">
-                <span>启用平台</span>
-                <strong id="enabledPlatformsCount">0</strong>
-              </div>
-              <div class="stat-block">
-                <span>运行模式</span>
-                <strong id="modeLabel">自动</strong>
-              </div>
-            </div>
-
-            <div id="platformList" class="platform-list"></div>
-          </section>
-
-          <aside class="right-rail">
-            <section class="metric-card">
-              <p>Outstanding Offers</p>
-              <strong id="pendingArticlesMetric">0</strong>
-            </section>
-            <section class="metric-card">
-              <p>Enabled Platforms</p>
-              <strong id="enabledPlatformsMetric">0</strong>
-            </section>
-            <section class="metric-card">
-              <p>Batch State</p>
-              <strong id="batchStateMetric">空闲</strong>
-            </section>
-            <section class="metric-card">
-              <p>Interval</p>
-              <strong id="intervalMetric">3s</strong>
-            </section>
-          </aside>
-
-          <section class="panel panel-table" id="platformPanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Platforms</p>
-                <h2>平台队列</h2>
-              </div>
-              <p class="panel-meta">按平台分组显示</p>
-            </div>
-            <div id="queueList" class="queue-list"></div>
-          </section>
-
-          
-          
-          <section class="panel panel-media-queue" id="mediaQueuePanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Media Queue</p>
-                <h2>媒体投稿队列</h2>
-              </div>
-              <div class="panel-head-actions">
-                <button id="refreshMediaQueueBtn" class="icon-button" type="button" aria-label="刷新媒体队列">↻</button>
-                <button id="bulkSelectMediaBtn" class="secondary" type="button">批量选择媒体</button>
-                <button id="preflightBtn" class="primary" type="button">预检 / Dry-Run</button>
-                <span id="mediaQueueCount" class="panel-meta" style="margin-left:8px">0 篇</span>
-              </div>
-            </div>
-            <div id="mediaQueueList" class="media-queue-list"></div>
-          </section>
-
-          <section class="panel panel-orders" id="ordersPanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Submission Orders</p>
-                <h2>投稿订单</h2>
-              </div>
-              <div class="panel-head-actions">
-                <button id="refreshOrdersBtn" class="icon-button" type="button" aria-label="刷新订单">↻</button>
-                <select id="orderStatusFilter" class="order-filter-select">
-                  <option value="">全部状态</option>
-                  <option value="submitted">已投稿</option>
-                  <option value="published">已发布</option>
-                  <option value="failed">失败</option>
-                </select>
-                <button id="syncAllOrdersBtn" class="secondary" type="button">同步全部</button>
-              </div>
-            </div>
-            <div id="ordersList" class="orders-list"></div>
-          </section>
-
-<section class="panel panel-media" id="mediaPanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Media Resources</p>
-                <h2>媒体资源库</h2>
-              </div>
-              <div class="panel-head-actions">
-                <button id="refreshMediaBtn" class="icon-button" type="button" aria-label="刷新媒体资源">↻</button>
-                <span id="mediaCacheInfo" class="panel-meta" style="margin-left:8px">未缓存</span>
-              </div>
-            </div>
-            <div class="media-controls">
-              <input id="mediaSearchInput" type="text" placeholder="搜索媒体名称..." class="media-search">
-              <input id="mediaPriceMin" type="number" placeholder="最低价" class="media-price-input" min="0">
-              <span class="media-price-sep">-</span>
-              <input id="mediaPriceMax" type="number" placeholder="最高价" class="media-price-input" min="0">
-              <button id="mediaFilterBtn" type="button" class="secondary">筛选</button>
-            </div>
-            <div id="mediaResourceList" class="media-list"></div>
-          </section>
-<section class="panel panel-logs" id="logsPanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Activity</p>
-                <h2>实时日志</h2>
-              </div>
-              <p id="logsHint" class="panel-meta">等待操作...</p>
-            </div>
-            <pre id="logStream" class="log-stream"></pre>
-          </section>
-
-          <section class="panel panel-settings" id="settingsPanel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Settings</p>
-                <h2>设置</h2>
-              </div>
-            </div>
-            <div class="settings-content">
-              <div class="settings-item">
-                <span class="settings-label">API Key</span>
-                <span id="apiKeyStatus" class="settings-value">检测中...</span>
-              </div>
-              <div class="settings-item">
-                <span class="settings-label">媒体 API 地址</span>
-                <span class="settings-value">http://8.138.187.158:8082</span>
-              </div>
-              <div class="settings-item">
-                <span class="settings-label">数据目录</span>
-                <span class="settings-value">auto—publish/data/</span>
-              </div>
-              <div class="settings-item">
-                <span class="settings-label">测试连接</span>
-                <button id="testConnectionBtn" class="secondary" type="button">测试连接</button>
-              </div>
-              <div class="settings-item">
-                <span class="settings-label">查询余额</span>
-                <button id="checkBalanceBtn" class="secondary" type="button">查询余额</button>
-                <span id="balanceDisplay" class="settings-value" style="margin-left:8px"></span>
-              </div>
-            </div>
-          </section>
-
-        </main>
-      </div>
+      <main class="main-area">
+        <section id="mediaWorkspace" class="workspace active"></section>
+        <section id="platformWorkspace" class="workspace"></section>
+      </main>
     </div>
-
+    <div id="drawerRoot"></div>
+    <script src="./shared/dom.js"></script>
+    <script src="./shared/drawer.js"></script>
+    <script src="./shared/confirm.js"></script>
+    <script src="./media-orders-drawer.js"></script>
+    <script src="./media-resource-library.js"></script>
+    <script src="./media-workbench.js"></script>
+    <script src="./platform-workbench.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

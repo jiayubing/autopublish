@@ -1,0 +1,13 @@
+﻿window.dom = {
+  byId: function(id) {
+    return document.getElementById(id);
+  },
+  escapeHtml: function(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+};
