@@ -2,21 +2,53 @@
 // Local JSON store for media submission drafts.
 // Tracks per-article settings: media selection, title override, notes, image handling.
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const DATA_DIR = path.resolve(__dirname, '..', '..', '..', 'data');
-const DEFAULT_PATH = path.join(DATA_DIR, 'media-drafts.json');
+const DATA_DIR = path.resolve(__dirname, "..", "..", "..", "data");
+const DEFAULT_PATH = path.join(DATA_DIR, "media-drafts.json");
+
+function normalizeResource(resource) {
+  if (!resource) return null;
+  var resourceId = resource.resourceId || resource.id || resource.resource_id;
+  if (!resourceId) return null;
+  return {
+    resourceId: String(resourceId),
+    name: resource.name || resource.title || resource.resourceName || "",
+    price: resource.price
+  };
+}
+
+function normalizeDraft(draft) {
+  var source = draft || {};
+  var selectedResources = [];
+
+  if (Array.isArray(source.selectedResources)) {
+    selectedResources = source.selectedResources.map(normalizeResource).filter(Boolean);
+  } else if (source.resourceId) {
+    selectedResources = [{
+      resourceId: String(source.resourceId),
+      name: source.resourceName || "",
+      price: source.price
+    }];
+  }
+
+  return Object.assign({}, source, {
+    selectedResources: selectedResources,
+    resourceId: selectedResources[0] ? selectedResources[0].resourceId : null,
+    resourceName: selectedResources[0] ? selectedResources[0].name : ""
+  });
+}
 
 class MediaDraftStore {
   constructor(opts) {
     opts = opts || {};
-    this.filePath = opts.filePath || DEFAULT_PATH;
+    this.filePath = opts.storePath || opts.filePath || DEFAULT_PATH;
   }
 
   _read() {
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
+      const raw = fs.readFileSync(this.filePath, "utf-8");
       return JSON.parse(raw);
     } catch (_) {
       return {};
@@ -28,84 +60,60 @@ class MediaDraftStore {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(this.filePath, JSON.stringify(drafts, null, 2), 'utf-8');
+    fs.writeFileSync(this.filePath, JSON.stringify(drafts, null, 2), "utf-8");
   }
 
-  /**
-   * Get draft for a specific article file.
-   * Keyed by the article's filename (e.g. "article001.docx").
-   * @param {string} filename
-   * @returns {object|null}
-   */
   get(filename) {
     var drafts = this._read();
-    return drafts[filename] || null;
+    var draft = drafts[filename];
+    return draft ? normalizeDraft(draft) : null;
   }
 
-  /**
-   * Save or update a draft for an article.
-   * @param {string} filename
-   * @param {object} draft
-   * @param {string} [draft.title] - Manual title override
-   * @param {string|number} [draft.resourceId] - Selected media resource ID
-   * @param {string} [draft.resourceName] - Selected media resource name
-   * @param {string} [draft.remark] - Remark for the editor
-   * @param {boolean} [draft.ignoreImages] - Explicitly allow submission despite images
-   * @param {boolean} [draft.hasImages] - Whether the article has images
-   * @param {number} [draft.imageCount] - Number of images detected
-   * @param {string} [draft.autoTitle] - Auto-detected title from file
-   */
   set(filename, draft) {
     var drafts = this._read();
     var existing = drafts[filename] || {};
-    drafts[filename] = Object.assign({}, existing, draft, {
+    var normalized = normalizeDraft(Object.assign({}, existing, draft));
+    drafts[filename] = Object.assign(normalized, {
       updatedAt: new Date().toISOString()
     });
     this._write(drafts);
   }
 
-  /**
-   * Remove a draft.
-   * @param {string} filename
-   */
   remove(filename) {
     var drafts = this._read();
     delete drafts[filename];
     this._write(drafts);
   }
 
-  /**
-   * Get all drafts.
-   * @returns {object} Map of filename -> draft
-   */
   getAll() {
-    return this._read();
+    var drafts = this._read();
+    var result = {};
+    for (var key in drafts) {
+      if (drafts.hasOwnProperty(key)) {
+        result[key] = normalizeDraft(drafts[key]);
+      }
+    }
+    return result;
   }
 
-  /**
-   * Bulk-set the same resourceId for multiple filenames.
-   * @param {string[]} filenames
-   * @param {string|number} resourceId
-   * @param {string} [resourceName]
-   */
   setBulkResource(filenames, resourceId, resourceName) {
     var drafts = this._read();
     var now = new Date().toISOString();
     for (var i = 0; i < filenames.length; i++) {
       var fn = filenames[i];
       var existing = drafts[fn] || {};
-      drafts[fn] = Object.assign({}, existing, {
-        resourceId: String(resourceId),
-        resourceName: resourceName || existing.resourceName || '',
+      var merged = Object.assign({}, existing, {
+        selectedResources: [normalizeResource({
+          resourceId: resourceId,
+          name: resourceName || existing.resourceName || ""
+        })],
         updatedAt: now
       });
+      drafts[fn] = normalizeDraft(merged);
     }
     this._write(drafts);
   }
 
-  /**
-   * Clear all drafts.
-   */
   clearAll() {
     try { fs.unlinkSync(this.filePath); } catch (_) {}
   }
