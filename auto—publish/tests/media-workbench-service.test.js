@@ -42,22 +42,24 @@ describe("media-workbench-service", function() {
   });
 
   it("previews text articles with draft resource fields merged", async function() {
-    fs.writeFileSync(path.join(inputDir, "preview.txt"), "# Preview Title\n\nPreview body", "utf-8");
+    fs.writeFileSync(path.join(inputDir, "preview.txt"), "\n\n# Preview Title\n\nPreview body\n\n", "utf-8");
     draftStore.set("preview.txt", {
       title: "Draft Title",
       resourceId: "77",
-      resourceName: "Draft Resource"
+      resourceName: "Draft Resource",
+      selectedResources: [{ resourceId: "101", name: "Media One" }]
     });
 
     const preview = await service.previewArticle("preview.txt");
 
-    assert.deepStrictEqual(preview, {
-      filename: "preview.txt",
-      title: "Draft Title",
-      content: "# Preview Title\n\nPreview body",
-      resourceId: "77",
-      resourceName: "Draft Resource"
-    });
+    assert.strictEqual(preview.filename, "preview.txt");
+    assert.strictEqual(preview.title, "Draft Title");
+    assert.strictEqual(preview.content, "# Preview Title\n\nPreview body");
+    assert.strictEqual(preview.resourceId, "101");
+    assert.strictEqual(preview.resourceName, "Media One");
+    assert.deepStrictEqual(preview.selectedResources, [
+      { resourceId: "101", name: "Media One", price: undefined }
+    ]);
   });
 
   it("rejects unsafe preview filenames", async function() {

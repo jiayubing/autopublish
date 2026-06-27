@@ -111,6 +111,9 @@ function createMediaWorkbenchService(opts) {
 
     var draft = draftStore.get(filename) || {};
     var content = await readPreviewSource(filePath);
+    if (ext === ".txt" || ext === ".md") {
+      content = String(content || "").trim();
+    }
     var title = draft.title || firstTextLine(content) || path.basename(filename, ext);
 
     return {
@@ -118,7 +121,8 @@ function createMediaWorkbenchService(opts) {
       title: title,
       content: content,
       resourceId: draft.resourceId || "",
-      resourceName: draft.resourceName || ""
+      resourceName: draft.resourceName || "",
+      selectedResources: draft.selectedResources || []
     };
   }
 
