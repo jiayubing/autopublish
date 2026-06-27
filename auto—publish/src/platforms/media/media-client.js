@@ -64,6 +64,9 @@ class MediaClient {
     if (opts.page != null) {
       form.append('page', String(parsePositiveInteger(opts.page, 'page')));
     }
+    if (opts.pageSize != null) {
+      form.append('pageSize', String(parsePositiveInteger(opts.pageSize, 'pageSize')));
+    }
     return this._post('/api/media/media_list', form);
   }
 
