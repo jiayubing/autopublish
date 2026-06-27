@@ -1,12 +1,20 @@
-﻿window.createMediaResourceLibrary = function(api) {
+﻿window.createMediaResourceLibrary = function(api, opts) {
+  var options = opts || {};
   var pool = [];
   var keyword = "";
   var page = 1;
   var perPage = 20;
   var resourcePage = emptyPage();
+  var mode = options.mode || "management";
+  var selectedResourceIds = [];
+  var onPick = options.onPick || null;
+  var searchTimer = null;
+  var restoreSearchFocus = false;
+  var restoreSearchSelection = { start: 0, end: 0 };
+  var isComposing = false;
 
-  function rid(r) {
-    return r.resource_id || r.resourceId || r.id;
+  function rid(resource) {
+    return resource.resource_id || resource.resourceId || resource.id;
   }
 
   function emptyPage() {
@@ -39,20 +47,33 @@
     return pool;
   }
 
+  function setMode(nextMode) {
+    mode = nextMode || "management";
+  }
+
+  function setSelectedResourceIds(ids) {
+    selectedResourceIds = Array.isArray(ids) ? ids.map(function(id) { return String(id); }) : [];
+  }
+
+  function formatPrice(value) {
+    return value === undefined || value === null || value === "" ? "?" : String(value);
+  }
+
   function render() {
     var items = resourcePage.items || [];
     var currentPage = resourcePage.page || page;
     var totalPages = resourcePage.totalPages || 0;
     var total = resourcePage.total || 0;
     var empty = items.length === 0;
+    var pickerMode = mode === "picker";
 
-    var poolSection = [
+    var poolSection = pickerMode ? "" : [
       '<section class="panel">',
       '<div class="panel-head"><h2>媒体池</h2><button id="refreshMediaPool" class="secondary">刷新</button></div>',
       '<div class="resource-list">',
       pool.map(function(resource) {
         var id = rid(resource);
-        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.name || resource.title || String(id)) + '</strong><button data-remove-pool="' + window.dom.escapeHtml(String(id)) + '" class="icon-button">×</button></div>';
+        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.name || resource.title || String(id)) + '</strong><span class="count-pill">￥' + window.dom.escapeHtml(formatPrice(resource.price)) + '</span><button data-remove-pool="' + window.dom.escapeHtml(String(id)) + '" class="icon-button">×</button></div>';
       }).join(""),
       '</div>',
       '</section>'
@@ -60,14 +81,21 @@
 
     var libBody;
     if (empty) {
-      libBody = '<p class="empty-state">资源库暂无数据，请点击顶部的「拉取资源库」按钮获取最新资源。</p>';
+      libBody = '<p class="empty-state">' + (pickerMode ? '资源库暂无数据，请先拉取资源库。' : '资源库暂无数据，请点击顶部的「拉取资源库」按钮获取最新资源。') + '</p>';
     } else {
       libBody = [
         '<div class="resource-list">',
         items.map(function(resource) {
           var id = rid(resource);
           var inPool = pool.some(function(p) { return rid(p) === id; });
-          return '<div class="resource-row"><span>' + window.dom.escapeHtml(resource.name || resource.title || String(id)) + '</span><span class="count-pill">￥' + window.dom.escapeHtml(String(resource.price || "?")) + '</span>' + (inPool ? '<span>已在池中</span>' : '<button data-add-pool="' + window.dom.escapeHtml(String(id)) + '" class="secondary">加入池</button>') + '</div>';
+          var isPicked = selectedResourceIds.indexOf(String(id)) !== -1;
+          var action;
+          if (pickerMode) {
+            action = isPicked ? '<span class="count-pill">已选择</span>' : '<button data-pick-resource="' + window.dom.escapeHtml(String(id)) + '" class="secondary">选择</button>';
+          } else {
+            action = inPool ? '<span>已在池中</span>' : '<button data-add-pool="' + window.dom.escapeHtml(String(id)) + '" class="secondary">加入池</button>';
+          }
+          return '<div class="resource-row"><span>' + window.dom.escapeHtml(resource.name || resource.title || String(id)) + '</span><span class="count-pill">￥' + window.dom.escapeHtml(formatPrice(resource.price)) + '</span>' + action + '</div>';
         }).join(""),
         '<div class="pagination">',
         '<button id="prevPageBtn" class="secondary" ' + (currentPage <= 1 ? 'disabled' : '') + '>上一页</button>',
@@ -81,29 +109,73 @@
     return [
       poolSection,
       '<section class="panel">',
-      '<div class="panel-head"><h2>资源库</h2><input id="resourceSearchInput" type="text" value="' + window.dom.escapeHtml(keyword) + '" placeholder="搜索媒体名称..." class="media-search"></div>',
+      '<div class="panel-head"><h2>' + (pickerMode ? '资源选择' : '资源库') + '</h2><input id="resourceSearchInput" type="text" value="' + window.dom.escapeHtml(keyword) + '" placeholder="搜索媒体名称..." class="media-search"></div>',
       libBody,
       '</section>'
     ].join("");
   }
 
   function bind(root, rerender) {
-    var refreshBtn = root.querySelector("#refreshMediaPool");
-    if (refreshBtn) {
-      refreshBtn.addEventListener("click", async function() {
-        await load();
-        rerender();
-      });
+    if (mode !== "picker") {
+      var refreshBtn = root.querySelector("#refreshMediaPool");
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", async function() {
+          await load();
+          rerender();
+        });
+      }
     }
 
     var searchInput = root.querySelector("#resourceSearchInput");
     if (searchInput) {
-      searchInput.addEventListener("input", function() {
+      if (restoreSearchFocus) {
+        searchInput.focus();
+        if (typeof searchInput.setSelectionRange === "function") {
+          var length = searchInput.value.length;
+          searchInput.setSelectionRange(
+            Math.min(restoreSearchSelection.start, length),
+            Math.min(restoreSearchSelection.end, length)
+          );
+        }
+        restoreSearchFocus = false;
+      }
+
+      searchInput.addEventListener("compositionstart", function() {
+        isComposing = true;
+        if (searchTimer) clearTimeout(searchTimer);
+      });
+
+      searchInput.addEventListener("compositionend", function() {
+        isComposing = false;
         keyword = searchInput.value.trim();
-        (async function() {
-          await load();
-          rerender();
-        })();
+        page = 1;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(function() {
+          load().then(function() {
+            rerender();
+          });
+        }, 0);
+      });
+
+      searchInput.addEventListener("input", function(event) {
+        if (event && (event.isComposing || isComposing)) {
+          return;
+        }
+        if (document.activeElement === searchInput) {
+          restoreSearchFocus = true;
+          restoreSearchSelection = {
+            start: typeof searchInput.selectionStart === "number" ? searchInput.selectionStart : searchInput.value.length,
+            end: typeof searchInput.selectionEnd === "number" ? searchInput.selectionEnd : searchInput.value.length
+          };
+        }
+        keyword = searchInput.value.trim();
+        page = 1;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(function() {
+          load().then(function() {
+            rerender();
+          });
+        }, 180);
       });
     }
 
@@ -149,7 +221,15 @@
         rerender();
       });
     });
+
+    root.querySelectorAll("[data-pick-resource]").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var id = btn.getAttribute("data-pick-resource");
+        var resource = (resourcePage.items || []).find(function(r) { return String(rid(r)) === id; });
+        if (resource && onPick) onPick(resource);
+      });
+    });
   }
 
-  return { load: load, render: render, bind: bind, getPool: getPool };
+  return { load: load, render: render, bind: bind, getPool: getPool, setMode: setMode, setSelectedResourceIds: setSelectedResourceIds };
 };

@@ -181,7 +181,7 @@ describe("media-resource-service", function() {
     ]);
   });
 
-  it("returns the balance response from the api client", async function() {
+  it("returns a normalized balance dto from the api client", async function() {
     const serviceWithClient = createMediaResourceService({
       resourceStore: {
         getAll: function() {
@@ -196,8 +196,8 @@ describe("media-resource-service", function() {
     });
 
     await assert.deepStrictEqual(await serviceWithClient.getBalance(), {
-      code: 0,
-      data: { balance: "123.45" }
+      balance: "123.45",
+      raw: { code: 0, data: { balance: "123.45" } }
     });
   });
 });

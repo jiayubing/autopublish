@@ -17,7 +17,7 @@ function createMediaResourceService(opts) {
     return {
       resourceId: resourceId,
       name: firstText(input.name, input.title, input.resource_name, input.resourceName),
-      price: pickValue(input.price),
+      price: pickValue(input.price, input.cost, input.amount, input.fee),
       remarks: pickValue(input.remarks, input.remark, input.note),
       publishRate: pickValue(input.publishRate, input.publish_rate),
       publishTime: pickValue(input.publishTime, input.publish_time),
@@ -104,7 +104,12 @@ function createMediaResourceService(opts) {
     if (!client) {
       throw new Error("媒体资源服务缺少 API 客户端配置");
     }
-    return client.getBalance();
+    return client.getBalance().then(function(response) {
+      return {
+        balance: extractBalanceValue(response),
+        raw: response
+      };
+    });
   }
 
   return {
@@ -234,6 +239,22 @@ function cloneRaw(value) {
 
 function hasResourceId(resource) {
   return !!(resource && resource.resourceId);
+}
+
+function extractBalanceValue(response) {
+  var data = response && response.data ? response.data : {};
+  var nested = data && data.data ? data.data : {};
+  return firstText(
+    data.balance,
+    data.money,
+    data.amount,
+    nested.balance,
+    nested.money,
+    nested.amount,
+    response && response.balance,
+    response && response.money,
+    response && response.amount
+  );
 }
 
 module.exports = { createMediaResourceService };

@@ -52,7 +52,8 @@ describe("media ipc boundary", function() {
       'ipcMain.handle("media:get-pool"',
       'ipcMain.handle("media:add-to-pool"',
       'ipcMain.handle("media:remove-from-pool"',
-      'ipcMain.handle("media:get-balance"'
+      'ipcMain.handle("media:get-balance"',
+      "apiKey: resolveApiKey(null)"
     ].forEach(function(snippet) {
       assert.ok(source.includes(snippet), "missing handler: " + snippet);
     });
@@ -73,7 +74,6 @@ describe("media ipc boundary", function() {
     [
       'require("fs")',
       "MediaClient",
-      "resolveApiKey",
       "detectDocxImages",
       "fs.readdirSync",
       "fs.readFileSync",

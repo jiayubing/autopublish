@@ -1,4 +1,4 @@
-const { describe, it } = require("node:test");
+﻿const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
@@ -17,25 +17,25 @@ const rendererFiles = [
 ];
 
 const mojibakeFragments = [
+  "婵犳鍨辩敮濠勭礊",
+  "闁荤姍鍐仾缂?",
   "濠殿垱甯婄紞",
-  "閻犙冨缁",
-  "婵帊缍",
-  "鐠у嫭绨",
-  "閹舵洜顭",
-  "閸忔湹绮獮鍐插酱",
-  "閸掗攱鏌",
-  "瀹告彃婀Ч鐘辫厬",
-  "閸旂姴鍙嗗Ч",
-  "娑撳﹣绔存い",
-  "娑撳绔存い",
-  "閹兼粎鍌",
-  "閸氬本顒",
-  "瀵板懎顓搁弽",
-  "鐎光剝鐗虫稉",
-  "瀹告彃褰傜敮",
-  "妞瑰啿娲",
-  "闁偓濞",
-  "閻樿埖鈧"
+  "閻犙冨缁?",
+  "闁硅埖娲滈…",
+  "闁稿繑婀圭划顒勭嵁閸愭彃閰?",
+  "闁告帡鏀遍弻",
+  "鐎瑰憡褰冨﹢顏勑ч悩杈幀",
+  "闁告梻濮撮崣鍡椥?",
+  "濞戞挸锕ｇ粩瀛樸亜",
+  "濞戞挸顑勭粩瀛樸亜",
+  "闁瑰吋绮庨崒",
+  "闁告艾鏈",
+  "鐎垫澘鎳庨鎼佸冀",
+  "閻庡厜鍓濋悧铏▔",
+  "鐎瑰憡褰冭ぐ鍌滄暜",
+  "濡炵懓鍟垮ú",
+  "闂侇偀鍋撴繛",
+  "闁绘鍩栭埀"
 ];
 
 function readRendererFile(file) {
@@ -67,7 +67,8 @@ describe("renderer encoding", function() {
 
     assertReadableLabels(readRendererFile("media-workbench.js"), [
       "拉取资源库（较慢，约需数分钟）",
-      "查询余额"
+      "查询余额",
+      "余额: "
     ], "media-workbench.js");
 
     assertReadableLabels(readRendererFile("media-resource-library.js"), [

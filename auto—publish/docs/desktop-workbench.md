@@ -18,6 +18,12 @@ npm run snapshot
 - **Media Submission** (媒体投稿): scan `input/media`, select one or more Media Pool resources per article, preview, confirm, submit, and sync orders.
 - **Other Platforms** (其他平台): scan non-media platform queues (lieju/toutiao/hepan), select articles, choose target platforms, confirm, and publish selected tasks serially.
 
+## Flow
+
+- Switching between workspaces keeps each workspace stateful.
+- Media article editing happens in a drawer with explicit save/apply.
+- Other platform submission uses a batch selector on the page and a confirmation drawer before real submit.
+
 ## Safety
 
 - Media submission requires a final confirmation drawer before any API submission.
@@ -42,6 +48,7 @@ The Media Submission workspace reads from the local media resource cache by defa
 - `media-workbench-service`: article scan, preview, confirmation summary, serial submit, and stop handling.
 - `media-order-service`: order record loading, order view DTOs, and sync.
 - `media-ipc`: transport only; it forwards requests and does not own parsing, pagination, normalization, or view shaping.
+- `desktop/preload.js`: exposes only the canonical media/platform/order IPC surface.
 
 ## Tests
 

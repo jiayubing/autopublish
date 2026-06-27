@@ -2,6 +2,7 @@ const path = require("path");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
+const { resolveApiKey } = require("../../src/platforms/media/config");
 const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 const { createMediaResourceService } = require("../services/media-resource-service");
@@ -14,7 +15,8 @@ function registerMediaIpc(deps) {
   var mediaDraftStore = new MediaDraftStore();
   var mediaResourceService = createMediaResourceService({
     resourceStore: mediaResourceStore,
-    poolStore: mediaPoolStore
+    poolStore: mediaPoolStore,
+    apiKey: resolveApiKey(null)
   });
   var mediaOrderService = createMediaOrderService({});
   var mediaWorkbenchService = createMediaWorkbenchService({
