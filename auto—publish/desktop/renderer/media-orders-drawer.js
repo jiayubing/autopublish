@@ -2,17 +2,19 @@ window.ordersDrawer = {
   open: async function(api) {
     var result = await api.orders.getOrders();
     var orders = result.ok ? result.data || [] : [];
+    var statusLabels = {
+      "0": "待审核",
+      "1": "审核中",
+      "2": "已发布",
+      "3": "驳回",
+      "4": "退款"
+    };
     window.drawer.open([
       '<div class="drawer-head"><h2>投稿订单</h2><button data-close-drawer class="icon-button">×</button></div>',
       '<div class="drawer-body">',
-      orders.length === 0 ? '<p class="empty-state">暂无订单</p>' : orders.map(function(o) {
-        var data = o.result && o.result.data ? o.result.data : {};
-        var syncStatus = (o.result && o.result.syncStatus) || (o.result && o.result.syncRaw && o.result.syncRaw.data && o.result.syncRaw.data[0] && o.result.syncRaw.data[0].status);
-        var statusMap = { '0': '待审核', '1': '审核中', '2': '已发布', '3': '驳回', '4': '退款' };
-        var status = statusMap[String(syncStatus)] || ('状态码:' + (syncStatus || '?'));
-        var title = (o.params && o.params.title) || (o.params && o.params.content_file && o.params.content_file.split('\\').pop().split('/').pop()) || '';
-        var orderNid = data.order_nid || (o.result && o.result.syncRaw && o.result.syncRaw.data && o.result.syncRaw.data[0] && o.result.syncRaw.data[0].order_nid);
-        return '<div class="order-row"><span>' + window.dom.escapeHtml(title) + '</span><span>' + window.dom.escapeHtml(status) + '</span><span style="font-size:12px;color:var(--muted);">' + window.dom.escapeHtml(pubTime || '') + '</span>' + (orderNid ? '<button class="secondary sync-order-btn" data-nid="' + window.dom.escapeHtml(orderNid) + '">同步</button>' : '') + '</div>';
+      orders.length === 0 ? '<p class="empty-state">暂无订单</p>' : orders.map(function(order) {
+        var pubTime = order.publishedAt || order.submittedAt || "";
+        return '<div class="order-row"><span>' + window.dom.escapeHtml(order.title || order.filename || "") + '</span><span>' + window.dom.escapeHtml(order.statusLabel || statusLabels[String(order.statusCode)] || "") + '</span><span style="font-size:12px;color:var(--muted);">' + window.dom.escapeHtml(pubTime) + '</span>' + (order.orderNid ? '<button class="secondary sync-order-btn" data-nid="' + window.dom.escapeHtml(order.orderNid) + '">同步</button>' : '') + '</div>';
       }).join(""),
       '</div>'
     ].join(""), function(root) {

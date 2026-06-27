@@ -116,7 +116,7 @@ function registerMediaIpc(deps) {
 
   ipcMain.handle("media:get-orders", function() {
     return wrap(function() {
-      return mediaOrderService.listOrders();
+      return mediaOrderService.listOrderViews();
     });
   });
 
