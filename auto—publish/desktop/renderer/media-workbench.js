@@ -1,4 +1,4 @@
-ï»¿window.createMediaWorkbench = function(api) {
+window.createMediaWorkbench = function(api) {
   var articles = [];
   var resourceLib = null;
 
@@ -13,29 +13,29 @@
     var pool = resourceLib ? resourceLib.getPool() : [];
     return [
       '<div class="workspace-head">',
-      '<h2>åª’ä½“æŠ•ç¨¿</h2>',
+      '<h2>Ã½ÌåÍ¶¸å</h2>',
       '<div class="toolbar">',
-      '<button id="scanMediaBtn" class="secondary">æ‰«ææ–‡ç« </button>',
-      '<button id="preflightMediaBtn" class="primary">é¢„æ£€å¹¶æäº¤</button>',
-      '<button id="openOrdersBtn" class="secondary">æŸ¥çœ‹è®¢å•</button>',
-      '<button id="fetchResourcesBtn" class="secondary">æ‹‰å–èµ„æºåº“</button>',
-      '<button id="checkBalanceBtn" class="secondary">æŸ¥è¯¢ä½™é¢</button>',
+      '<button id="scanMediaBtn" class="secondary">É¨ÃèÎÄÕÂ</button>',
+      '<button id="preflightMediaBtn" class="primary">Ô¤¼ì²¢Ìá½»</button>',
+      '<button id="openOrdersBtn" class="secondary">²é¿´¶©µ¥</button>',
+      '<button id="fetchResourcesBtn" class="secondary">À­È¡×ÊÔ´¿â£¨½ÏÂı£¬Ô¼ĞèÊı·ÖÖÓ£©</button>',
+      '<button id="checkBalanceBtn" class="secondary">²éÑ¯Óà¶î</button>',
       '<span id="balanceDisplay" style="margin-left:8px;font-size:13px;color:var(--muted);"></span>',
       '</div>',
       '</div>',
       '<div class="media-workbench-grid">',
       '<div>',
       '<section class="panel">',
-      '<div class="panel-head"><h2>æ–‡ç« åˆ—è¡¨</h2><span id="mediaArticleCount" class="count-pill">' + articles.length + ' ç¯‡</span></div>',
-      articles.length === 0 ? '<p class="empty-state">æš‚æ— æ–‡ç« ï¼Œå°† .txt / .docx / .md æ–‡ä»¶æ”¾å…¥ input/media ç›®å½•</p>' : articles.map(function(a) {
+      '<div class="panel-head"><h2>ÎÄÕÂÁĞ±í</h2><span id="mediaArticleCount" class="count-pill">' + articles.length + ' Æª</span></div>',
+      articles.length === 0 ? '<p class="empty-state">ÔİÎŞÎÄÕÂ£¬½« .txt / .docx / .md ÎÄ¼ş·ÅÈë input/media Ä¿Â¼</p>' : articles.map(function(a) {
         var filename = a.filename || a.filePath || "";
         var title = a.title || filename;
-        return '<div class="article-row"><span class="article-title">' + window.dom.escapeHtml(title) + '</span><span class="article-meta">' + window.dom.escapeHtml(filename) + '</span><button data-preview="' + window.dom.escapeHtml(filename) + '" class="secondary">é¢„è§ˆ</button></div>';
+        return '<div class="article-row"><span class="article-title">' + window.dom.escapeHtml(title) + '</span><span class="article-meta">' + window.dom.escapeHtml(filename) + '</span><button data-preview="' + window.dom.escapeHtml(filename) + '" class="secondary">Ô¤ÀÀ</button></div>';
       }).join(""),
       '</section>',
       '<section class="panel">',
-      '<div class="panel-head"><h2>åª’ä½“é€‰æ‹©</h2><span class="count-pill">æ± ä¸­ ' + pool.length + ' ä¸ª</span></div>',
-      '<p>åœ¨å³ä¾§èµ„æºåº“ä¸­ç®¡ç†åª’ä½“æ± ï¼Œæ± ä¸­æ‰€æœ‰åª’ä½“å°†ä½œä¸ºæŠ•ç¨¿ç›®æ ‡ã€‚</p>',
+      '<div class="panel-head"><h2>Ã½ÌåÑ¡Ôñ</h2><span class="count-pill">³ØÖĞ ' + pool.length + ' ¸ö</span></div>',
+      '<p>ÔÚÓÒ²à×ÊÔ´¿âÖĞ¹ÜÀíÃ½Ìå³Ø£¬³ØÖĞËùÓĞÃ½Ìå½«×÷ÎªÍ¶¸åÄ¿±ê¡£</p>',
       '</section>',
       '</div>',
       '<div id="mediaResourceLibraryRoot">' + (resourceLib ? resourceLib.render() : '') + '</div>',
@@ -48,11 +48,11 @@
     
     root.querySelector("#preflightMediaBtn").addEventListener("click", async function() {
       var result = await api.media.buildConfirmation(articles);
-      if (!result.ok) { alert("é¢„æ£€å¤±è´¥: " + result.error); return; }
+      if (!result.ok) { alert("Ô¤¼ìÊ§°Ü: " + result.error); return; }
       window.confirmPanel.open(result.data, async function() {
         var submitResult = await api.media.submitSelected(articles);
-        if (!submitResult.ok) { alert("æäº¤å¤±è´¥: " + submitResult.error); return; }
-        alert("æäº¤å®Œæˆï¼šæˆåŠŸ " + submitResult.data.ok + "ï¼Œå¤±è´¥ " + submitResult.data.fail + "ï¼Œè·³è¿‡ " + submitResult.data.skipped);
+        if (!submitResult.ok) { alert("Ìá½»Ê§°Ü: " + submitResult.error); return; }
+        alert("Ìá½»Íê³É£º³É¹¦ " + submitResult.data.ok + "£¬Ê§°Ü " + submitResult.data.fail + "£¬Ìø¹ı " + submitResult.data.skipped);
         window.drawer.close();
         window.ordersDrawer.open(api);
       });
@@ -63,35 +63,35 @@
     root.querySelector("#fetchResourcesBtn").addEventListener("click", async function() {
       var btn = root.querySelector("#fetchResourcesBtn");
       btn.disabled = true;
-      btn.textContent = 'æ‹‰å–ä¸­...';
+      btn.textContent = 'À­È¡ÖĞ...';
       try {
         var result = await api.media.listResources({ fetchAll: true });
         if (result.ok) {
           await load();
           rerender();
         } else {
-          alert('æ‹‰å–å¤±è´¥: ' + (result.error || 'æœªçŸ¥é”™è¯¯'));
+          alert('À­È¡Ê§°Ü: ' + (result.error || 'Î´Öª´íÎó'));
         }
       } catch (err) {
-        alert('æ‹‰å–å¼‚å¸¸: ' + err.message);
+        alert('À­È¡Òì³£: ' + err.message);
       }
       btn.disabled = false;
-      btn.textContent = 'æ‹‰å–èµ„æºåº“';
+      btn.textContent = 'À­È¡×ÊÔ´¿â£¨½ÏÂı£¬Ô¼ĞèÊı·ÖÖÓ£©';
     });
 
     root.querySelector("#checkBalanceBtn").addEventListener("click", async function() {
       var display = root.querySelector("#balanceDisplay");
-      display.textContent = 'æŸ¥è¯¢ä¸­...';
+      display.textContent = '²éÑ¯ÖĞ...';
       try {
         var result = await api.media.getBalance();
         if (result.ok && result.data) {
-          var balance = result.data.balance || 'æœªçŸ¥';
-          display.textContent = 'ä½™é¢: ' + balance;
+          var balance = result.data.balance || 'Î´Öª';
+          display.textContent = 'Óà¶î: ' + balance;
         } else {
-          display.textContent = 'æŸ¥è¯¢å¤±è´¥';
+          display.textContent = '²éÑ¯Ê§°Ü';
         }
       } catch (err) {
-        display.textContent = 'æŸ¥è¯¢å¼‚å¸¸';
+        display.textContent = '²éÑ¯Òì³£';
       }
     });
 
@@ -99,10 +99,10 @@
       btn.addEventListener("click", async function() {
         var filename = btn.getAttribute("data-preview");
         var result = await api.media.previewArticle(filename);
-        if (!result.ok) { alert("é¢„è§ˆå¤±è´¥: " + result.error); return; }
+        if (!result.ok) { alert("Ô¤ÀÀÊ§°Ü: " + result.error); return; }
         var data = result.data;
         window.drawer.open([
-          '<div class="drawer-head"><h2>' + window.dom.escapeHtml(data.title || filename) + '</h2><button data-close-drawer class="icon-button">Ã—</button></div>',
+          '<div class="drawer-head"><h2>' + window.dom.escapeHtml(data.title || filename) + '</h2><button data-close-drawer class="icon-button">¡Á</button></div>',
           '<div class="drawer-body"><pre class="preview-text">' + window.dom.escapeHtml(data.content || "") + '</pre></div>'
         ].join(""));
       });

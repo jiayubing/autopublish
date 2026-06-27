@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   color-scheme: light;
   --bg: #f6f7f4;
   --panel: #ffffff;
@@ -91,3 +91,6 @@ button.danger { color: #9f2d20; border-color: #e2b7b0; }
 .media-search { width: 100%; min-height: 36px; border: 1px solid #d9ded6; border-radius: 8px; padding: 0 10px; margin-bottom: 10px; }
 
 .resource-list { max-height: 320px; overflow: auto; }
+
+.pagination { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e7ebe4; }
+.pagination .page-info { font-size: 13px; color: var(--muted); }
