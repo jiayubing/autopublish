@@ -64,7 +64,7 @@
       var btn = root.querySelector("#fetchResourcesBtn");
       btn.disabled = true; btn.textContent = '拉取中...';
       try {
-        var result = await api.media.listResources({ fetchAll: true });
+        var result = await api.media.refreshResources({ fetchAll: true });
         if (result.ok) { await load(); rerender(); }
         else { alert('拉取失败: ' + (result.error || '未知错误')); }
       } catch (err) { alert('拉取异常: ' + err.message); }
