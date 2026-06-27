@@ -1,4 +1,4 @@
-window.createMediaResourceLibrary = function(api) {
+﻿window.createMediaResourceLibrary = function(api) {
   var pool = [];
   var keyword = "";
   var page = 1;
