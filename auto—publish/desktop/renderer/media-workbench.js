@@ -18,6 +18,9 @@
       '<button id="scanMediaBtn" class="secondary">扫描文章</button>',
       '<button id="preflightMediaBtn" class="primary">预检并提交</button>',
       '<button id="openOrdersBtn" class="secondary">查看订单</button>',
+      '<button id="fetchResourcesBtn" class="secondary">拉取资源库</button>',
+      '<button id="checkBalanceBtn" class="secondary">查询余额</button>',
+      '<span id="balanceDisplay" style="margin-left:8px;font-size:13px;color:var(--muted);"></span>',
       '</div>',
       '</div>',
       '<div class="media-workbench-grid">',
@@ -56,6 +59,41 @@
     });
 
     root.querySelector("#openOrdersBtn").addEventListener("click", function() { window.ordersDrawer.open(api); });
+
+    root.querySelector("#fetchResourcesBtn").addEventListener("click", async function() {
+      var btn = root.querySelector("#fetchResourcesBtn");
+      btn.disabled = true;
+      btn.textContent = '拉取中...';
+      try {
+        var result = await api.media.listResources({ fetchAll: true });
+        if (result.ok) {
+          await load();
+          rerender();
+        } else {
+          alert('拉取失败: ' + (result.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('拉取异常: ' + err.message);
+      }
+      btn.disabled = false;
+      btn.textContent = '拉取资源库';
+    });
+
+    root.querySelector("#checkBalanceBtn").addEventListener("click", async function() {
+      var display = root.querySelector("#balanceDisplay");
+      display.textContent = '查询中...';
+      try {
+        var result = await api.media.getBalance();
+        if (result.ok && result.data) {
+          var balance = result.data.balance || '未知';
+          display.textContent = '余额: ' + balance;
+        } else {
+          display.textContent = '查询失败';
+        }
+      } catch (err) {
+        display.textContent = '查询异常';
+      }
+    });
 
     root.querySelectorAll("[data-preview]").forEach(function(btn) {
       btn.addEventListener("click", async function() {

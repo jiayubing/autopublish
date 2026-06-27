@@ -26,7 +26,13 @@ function createPlatformWorkbenchService(opts) {
       var articles = [];
       if (fs.existsSync(inputDir)) {
         articles = fs.readdirSync(inputDir).filter(function(name) {
-          return name !== ".gitkeep" && name.indexOf("~$") !== 0;
+          if (name === ".gitkeep" || name.indexOf("~$") === 0) return false;
+          var stat = fs.statSync(path.join(inputDir, name));
+          if (stat.isDirectory()) return false;
+          var ext = path.extname(name).toLowerCase();
+          var imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico'];
+          if (imageExts.indexOf(ext) !== -1) return false;
+          return true;
         }).map(function(filename) {
           var filePath = path.join(inputDir, filename);
           var title = path.basename(filename, path.extname(filename));

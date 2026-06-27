@@ -7,8 +7,12 @@
       '<div class="drawer-body">',
       orders.length === 0 ? '<p class="empty-state">暂无订单</p>' : orders.map(function(o) {
         var data = o.result && o.result.data ? o.result.data : {};
-        var status = o.status || "unknown";
-        return '<div class="order-row"><span>' + window.dom.escapeHtml(o.platform || "") + '</span><span>' + window.dom.escapeHtml(status) + '</span>' + (data.order_nid ? '<button class="secondary sync-order-btn" data-nid="' + window.dom.escapeHtml(data.order_nid) + '">同步</button>' : '') + '</div>';
+        var syncStatus = (o.result && o.result.syncStatus) || (o.result && o.result.syncRaw && o.result.syncRaw.data && o.result.syncRaw.data[0] && o.result.syncRaw.data[0].status);
+        var statusMap = { '0': '待审核', '1': '审核中', '2': '已发布', '3': '驳回', '4': '退款' };
+        var status = statusMap[String(syncStatus)] || ('状态码:' + (syncStatus || '?'));
+        var platform = 'media';
+        var orderNid = data.order_nid || (o.result && o.result.syncRaw && o.result.syncRaw.data && o.result.syncRaw.data[0] && o.result.syncRaw.data[0].order_nid);
+        return '<div class="order-row"><span>' + window.dom.escapeHtml(platform) + '</span><span>' + window.dom.escapeHtml(status) + '</span>' + (orderNid ? '<button class="secondary sync-order-btn" data-nid="' + window.dom.escapeHtml(orderNid) + '">同步</button>' : '') + '</div>';
       }).join(""),
       '</div>'
     ].join(""), function(root) {
