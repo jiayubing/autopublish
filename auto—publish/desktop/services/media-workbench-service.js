@@ -21,10 +21,33 @@ function normalizePrice(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function isSafeFilename(filename) {
+  return typeof filename === "string" &&
+    filename.trim() === filename &&
+    filename !== "" &&
+    path.basename(filename) === filename &&
+    !path.isAbsolute(filename) &&
+    filename.indexOf("/") === -1 &&
+    filename.indexOf("\\") === -1;
+}
+
+function readPreviewSource(filePath) {
+  var ext = path.extname(filePath).toLowerCase();
+  if (ext === ".docx") {
+    return mammoth.extractRawText({ buffer: fs.readFileSync(filePath) }).then(function(result) {
+      return String(result && result.value || "");
+    });
+  }
+  if (ext === ".txt" || ext === ".md") {
+    return Promise.resolve(fs.readFileSync(filePath, "utf-8"));
+  }
+  return Promise.reject(new Error("unsupported file type: " + ext));
+}
+
 function createMediaWorkbenchService(opts) {
   var options = opts || {};
   var inputDir = options.inputDir;
-  var draftStore = options.draftStore;
+  var draftStore = options.draftStore || { get: function() { return null; } };
   var stopRequested = false;
 
   async function readAutoTitle(filePath) {
@@ -66,6 +89,37 @@ function createMediaWorkbenchService(opts) {
       });
     }
     return articles;
+  }
+
+  async function previewArticle(filename) {
+    if (!isSafeFilename(filename)) {
+      throw new Error("unsafe preview filename");
+    }
+
+    var filePath = path.join(inputDir, filename);
+    if (path.dirname(filePath) !== path.resolve(inputDir)) {
+      throw new Error("unsafe preview filename");
+    }
+    if (!fs.existsSync(filePath)) {
+      throw new Error("preview file not found");
+    }
+
+    var ext = path.extname(filename).toLowerCase();
+    if (ext !== ".txt" && ext !== ".md" && ext !== ".docx") {
+      throw new Error("unsupported file type: " + ext);
+    }
+
+    var draft = draftStore.get(filename) || {};
+    var content = await readPreviewSource(filePath);
+    var title = draft.title || firstTextLine(content) || path.basename(filename, ext);
+
+    return {
+      filename: filename,
+      title: title,
+      content: content,
+      resourceId: draft.resourceId || "",
+      resourceName: draft.resourceName || ""
+    };
   }
 
   function expandSubmissionTasks(articles) {
@@ -165,7 +219,8 @@ function createMediaWorkbenchService(opts) {
   }
 
   return {
-    scanArticles: scanArticles, expandSubmissionTasks: expandSubmissionTasks,
+    scanArticles: scanArticles, previewArticle: previewArticle,
+    expandSubmissionTasks: expandSubmissionTasks,
     buildConfirmationSummary: buildConfirmationSummary,
     submitTasksSerially: submitTasksSerially, requestStop: requestStop
   };

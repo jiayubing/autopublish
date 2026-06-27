@@ -41,6 +41,32 @@ describe("media-workbench-service", function() {
     }), ["101"]);
   });
 
+  it("previews text articles with draft resource fields merged", async function() {
+    fs.writeFileSync(path.join(inputDir, "preview.txt"), "# Preview Title\n\nPreview body", "utf-8");
+    draftStore.set("preview.txt", {
+      title: "Draft Title",
+      resourceId: "77",
+      resourceName: "Draft Resource"
+    });
+
+    const preview = await service.previewArticle("preview.txt");
+
+    assert.deepStrictEqual(preview, {
+      filename: "preview.txt",
+      title: "Draft Title",
+      content: "# Preview Title\n\nPreview body",
+      resourceId: "77",
+      resourceName: "Draft Resource"
+    });
+  });
+
+  it("rejects unsafe preview filenames", async function() {
+    await assert.rejects(
+      function() { return service.previewArticle("../escape.txt"); },
+      /invalid|unsafe/i
+    );
+  });
+
   it("expands selected articles into serial submission tasks", function() {
     const tasks = service.expandSubmissionTasks([
       {
