@@ -1,4 +1,4 @@
-﻿window.ordersDrawer = {
+window.ordersDrawer = {
   open: async function(api) {
     var result = await api.orders.getOrders();
     var orders = result.ok ? result.data || [] : [];

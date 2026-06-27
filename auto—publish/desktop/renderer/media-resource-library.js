@@ -1,4 +1,4 @@
-﻿window.createMediaResourceLibrary = function(api) {
+window.createMediaResourceLibrary = function(api) {
   var pool = [];
   var library = [];
   var keyword = "";
@@ -29,34 +29,41 @@
   function render() {
     var totalPages = Math.ceil(library.length / perPage) || 1;
     var pageItems = library.slice((page - 1) * perPage, page * perPage);
-    var libBody;
-    if (library.length === 0) {
-      libBody = '<p class="empty-state">资源库暂无数据，请点击顶部的「拉取资源库」按钮获取最新资源。</p>';
-    } else {
-      libBody =
-        '<div class="resource-list">' +
-        pageItems.map(function(resource) {
-          var id = rid(resource);
-          var inPool = pool.some(function(p) { return rid(p) === id; });
-          return '<div class="resource-row"><span>' + window.dom.escapeHtml(resource.title || id) + '</span><span class="count-pill">' + (resource.price || "?") + '</span>' + (inPool ? '<span>已在池中</span>' : '<button data-add-pool="' + window.dom.escapeHtml(String(id)) + '" class="secondary">加入池</button>') + '</div>';
-        }).join("") +
-        '<div class="pagination">' +
-        '<button id="prevPageBtn" class="secondary" ' + (page <= 1 ? 'disabled' : '') + '>上一页</button>' +
-        '<span class="page-info">第 ' + page + ' / ' + totalPages + ' 页（共 ' + library.length + ' 条）</span>' +
-        '<button id="nextPageBtn" class="secondary" ' + (page * perPage >= library.length ? 'disabled' : '') + '>下一页</button>' +
-        '</div>' +
-        '</div>';
-    }
-    return [
+
+    var poolSection = [
       '<section class="panel">',
       '<div class="panel-head"><h2>媒体池</h2><button id="refreshMediaPool" class="secondary">刷新</button></div>',
       '<div class="resource-list">',
       pool.map(function(resource) {
         var id = rid(resource);
-        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.title || id) + '</strong><button data-remove-pool="' + window.dom.escapeHtml(String(id)) + '" class="icon-button">×</button></div>';
+        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.title || String(id)) + '</strong><button data-remove-pool="' + window.dom.escapeHtml(String(id)) + '" class="icon-button">×</button></div>';
       }).join(""),
       '</div>',
-      '</section>',
+      '</section>'
+    ].join("");
+
+    var libBody;
+    if (library.length === 0) {
+      libBody = '<p class="empty-state">资源库暂无数据，请点击顶部的「拉取资源库」按钮获取最新资源。</p>';
+    } else {
+      libBody = [
+        '<div class="resource-list">',
+        pageItems.map(function(resource) {
+          var id = rid(resource);
+          var inPool = pool.some(function(p) { return rid(p) === id; });
+          return '<div class="resource-row"><span>' + window.dom.escapeHtml(resource.title || String(id)) + '</span><span class="count-pill">¥' + window.dom.escapeHtml(String(resource.price || "?")) + '</span>' + (inPool ? '<span>已在池中</span>' : '<button data-add-pool="' + window.dom.escapeHtml(String(id)) + '" class="secondary">加入池</button>') + '</div>';
+        }).join(""),
+        '<div class="pagination">',
+        '<button id="prevPageBtn" class="secondary" ' + (page <= 1 ? 'disabled' : '') + '>上一页</button>',
+        '<span class="page-info">第 ' + page + ' / ' + totalPages + ' 页（共 ' + library.length + ' 条）</span>',
+        '<button id="nextPageBtn" class="secondary" ' + (page * perPage >= library.length ? 'disabled' : '') + '>下一页</button>',
+        '</div>',
+        '</div>'
+      ].join("");
+    }
+
+    return [
+      poolSection,
       '<section class="panel">',
       '<div class="panel-head"><h2>资源库</h2><input id="resourceSearchInput" type="text" placeholder="搜索媒体名称..." class="media-search"></div>',
       libBody,
@@ -74,13 +81,9 @@
       rerender();
     });
     var prevBtn = root.querySelector("#prevPageBtn");
-    if (prevBtn) prevBtn.addEventListener("click", function() {
-      if (page > 1) { page--; rerender(); }
-    });
+    if (prevBtn) prevBtn.addEventListener("click", function() { if (page > 1) { page--; rerender(); } });
     var nextBtn = root.querySelector("#nextPageBtn");
-    if (nextBtn) nextBtn.addEventListener("click", function() {
-      if (page * perPage < library.length) { page++; rerender(); }
-    });
+    if (nextBtn) nextBtn.addEventListener("click", function() { if (page * perPage < library.length) { page++; rerender(); } });
     root.querySelectorAll("[data-add-pool]").forEach(function(btn) {
       btn.addEventListener("click", async function() {
         var id = btn.getAttribute("data-add-pool");
