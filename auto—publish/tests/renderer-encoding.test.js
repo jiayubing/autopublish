@@ -17,25 +17,25 @@ const rendererFiles = [
 ];
 
 const mojibakeFragments = [
+  "濠殿垱甯婄紞",
+  "閻犙冨缁",
   "婵帊缍",
   "鐠у嫭绨",
-  "濯掍綋",
-  "璧勬簮",
-  "鎶曠",
-  "鍏朵粬骞冲彴",
-  "鍒锋柊",
-  "宸插湪姹犱腑",
-  "鍔犲叆姹",
-  "涓婁竴椤",
-  "涓嬩竴椤",
-  "鎼滅储",
-  "鍚屾",
-  "寰呭鏍",
-  "瀹℃牳涓",
-  "宸插彂甯",
-  "椹冲洖",
-  "閫€娆",
-  "鐘舵€"
+  "閹舵洜顭",
+  "閸忔湹绮獮鍐插酱",
+  "閸掗攱鏌",
+  "瀹告彃婀Ч鐘辫厬",
+  "閸旂姴鍙嗗Ч",
+  "娑撳﹣绔存い",
+  "娑撳绔存い",
+  "閹兼粎鍌",
+  "閸氬本顒",
+  "瀵板懎顓搁弽",
+  "鐎光剝鐗虫稉",
+  "瀹告彃褰傜敮",
+  "妞瑰啿娲",
+  "闁偓濞",
+  "閻樿埖鈧"
 ];
 
 function readRendererFile(file) {
@@ -44,7 +44,7 @@ function readRendererFile(file) {
 
 function assertReadableLabels(text, labels, file) {
   labels.forEach(function(label) {
-    assert.match(text, new RegExp(label), file + " is missing readable label: " + label);
+    assert.equal(text.includes(label), true, file + " is missing readable label: " + label);
   });
 }
 
