@@ -32,6 +32,17 @@ npm run snapshot
 - **Renderer:** `desktop/renderer/app.js` (bootstrapper), `media-workbench.js`, `platform-workbench.js`, `media-resource-library.js`, `media-orders-drawer.js`, `shared/dom.js`, `shared/drawer.js`, `shared/confirm.js`
 - **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
 
+## Resource Cache
+
+The Media Submission workspace reads from the local media resource cache by default. Refreshing resources updates `data/media-resources.json`, and the renderer requests 20-row pages from the service layer. Search also runs against the cached resource set.
+
+## Service Boundaries
+
+- `media-resource-service`: resource normalization, cache refresh, cached paging/search, pool management, and balance.
+- `media-workbench-service`: article scan, preview, confirmation summary, serial submit, and stop handling.
+- `media-order-service`: order record loading, order view DTOs, and sync.
+- `media-ipc`: transport only; it forwards requests and does not own parsing, pagination, normalization, or view shaping.
+
 ## Tests
 
 ```powershell
