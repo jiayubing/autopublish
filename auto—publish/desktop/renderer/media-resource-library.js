@@ -36,7 +36,7 @@ window.createMediaResourceLibrary = function(api) {
       '<div class="resource-list">',
       pool.map(function(resource) {
         var id = rid(resource);
-        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.title || String(id)) + '</strong><button data-remove-pool="' + window.dom.escapeHtml(String(id)) + '" class="icon-button">×</button></div>';
+        return '<div class="resource-row"><strong>' + window.dom.escapeHtml(resource.name || resource.title || String(id)) + '</strong><button data-remove-pool="' + window.dom.escapeHtml(String(id)) + '" class="icon-button">×</button></div>';
       }).join(""),
       '</div>',
       '</section>'

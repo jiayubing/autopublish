@@ -12,7 +12,7 @@ window.ordersDrawer = {
         var status = statusMap[String(syncStatus)] || ('状态码:' + (syncStatus || '?'));
         var title = (o.params && o.params.title) || (o.params && o.params.content_file && o.params.content_file.split('\\').pop().split('/').pop()) || '';
         var orderNid = data.order_nid || (o.result && o.result.syncRaw && o.result.syncRaw.data && o.result.syncRaw.data[0] && o.result.syncRaw.data[0].order_nid);
-        return '<div class="order-row"><span>' + window.dom.escapeHtml(title) + '</span><span>' + window.dom.escapeHtml(status) + '</span>' + (orderNid ? '<button class="secondary sync-order-btn" data-nid="' + window.dom.escapeHtml(orderNid) + '">同步</button>' : '') + '</div>';
+        return '<div class="order-row"><span>' + window.dom.escapeHtml(title) + '</span><span>' + window.dom.escapeHtml(status) + '</span><span style="font-size:12px;color:var(--muted);">' + window.dom.escapeHtml(pubTime || '') + '</span>' + (orderNid ? '<button class="secondary sync-order-btn" data-nid="' + window.dom.escapeHtml(orderNid) + '">同步</button>' : '') + '</div>';
       }).join(""),
       '</div>'
     ].join(""), function(root) {
