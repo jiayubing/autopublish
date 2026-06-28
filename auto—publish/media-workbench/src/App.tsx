@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { ViewMode, Article, MediaResource, Draft, Order } from './types';
-import { INITIAL_ARTICLES, INITIAL_RESOURCES, INITIAL_ORDERS } from './mockData';
+import {
+  scanArticles,
+  setDraft,
+  addToPool,
+  removeFromPool,
+  getBalance,
+  getOrders,
+  getResourcePage,
+  persistArticles,
+  persistResources,
+  persistOrders,
+  persistBalance,
+} from "./electron-api";
 import Sidebar from './components/Sidebar';
 import ArticleList from './components/ArticleList';
 import ArticleEditor from './components/ArticleEditor';
@@ -26,64 +38,71 @@ export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('workbench');
   
   // Data State with Local Storage Synchronization if desired, otherwise memory-based
-  const [articles, setArticles] = useState<Article[]>(() => {
-    const saved = localStorage.getItem('mw_articles');
-    return saved ? JSON.parse(saved) : INITIAL_ARTICLES;
-  });
+  const [articles, setArticles] = useState<Article[]>([]);
   
-  const [resources, setResources] = useState<MediaResource[]>(() => {
-    const saved = localStorage.getItem('mw_resources');
-    return saved ? JSON.parse(saved) : INITIAL_RESOURCES;
-  });
+  const [resources, setResources] = useState<MediaResource[]>([]);
   
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('mw_orders');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
 
-  const [balance, setBalance] = useState<number>(() => {
-    const saved = localStorage.getItem('mw_balance');
-    return saved ? parseFloat(saved) : 3420.50;
-  });
+  const [balance, setBalance] = useState<number>(0);
 
   // UI States
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
   const [isPreflightOpen, setIsPreflightOpen] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Sync to Local Storage on updates
+  // Load data from API (or localStorage fallback) on mount
   useEffect(() => {
-    localStorage.setItem('mw_articles', JSON.stringify(articles));
-  }, [articles]);
-
-  useEffect(() => {
-    localStorage.setItem('mw_resources', JSON.stringify(resources));
-  }, [resources]);
-
-  useEffect(() => {
-    localStorage.setItem('mw_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('mw_balance', String(balance));
-  }, [balance]);
+    async function loadData() {
+      try {
+        const [articlesData, resourcePage, ordersData, balanceData] =
+          await Promise.all([
+            scanArticles(),
+            getResourcePage({ page: 1, pageSize: 200 }),
+            getOrders(),
+            getBalance(),
+          ]);
+        setArticles(articlesData);
+        setResources(resourcePage.items);
+        setOrders(ordersData);
+        setBalance(balanceData);
+      } catch (e) {
+        console.error("Failed to load initial data:", e);
+      } finally {
+        setDataLoaded(true);
+      }
+    }
+    loadData();
+  }, []);
 
   // Balance Refresh Handler
-  const handleCheckBalance = () => {
+  const handleCheckBalance = async () => {
     setIsCheckingBalance(true);
-    setTimeout(() => {
+    try {
+      const bal = await getBalance();
+      setBalance(bal);
+      persistBalance(bal);
+    } catch (e) {
+      console.error("Balance check failed:", e);
+    } finally {
       setIsCheckingBalance(false);
-    }, 800);
+    }
   };
 
   // Article scan triggers simulation
-  const handleScanArticles = () => {
+  const handleScanArticles = async () => {
     setIsScanning(true);
-    setTimeout(() => {
-      // Simulate discovering or reloading articles
+    try {
+      const fresh = await scanArticles();
+      setArticles(fresh);
+      persistArticles(fresh);
+    } catch (e) {
+      console.error("Scan failed:", e);
+    } finally {
       setIsScanning(false);
-    }, 1000);
+    }
   };
 
   // Add a new mock article from input folder
@@ -116,40 +135,40 @@ export default function App() {
       lastModified: new Date().toISOString().replace('T', ' ').substring(0, 16)
     };
 
-    setArticles(prev => [newArticle, ...prev]);
+    const updated = [newArticle, ...articles];
+    setArticles(updated);
+    persistArticles(updated);
   };
 
   // Save drafts and update internal list states
   const handleSaveDraft = async (draft: Draft): Promise<void> => {
-    // Artificial save delay
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        setArticles(prev => prev.map(art => {
-          if (art.filename === draft.filename) {
-            return {
-              ...art,
-              title: draft.title,
-              selectedResources: draft.selectedResources
-            };
-          }
-          return art;
-        }));
+    await setDraft(draft.filename, draft);
 
-        // Keep active article in sync
-        setActiveArticle(prev => {
-          if (prev && prev.filename === draft.filename) {
-            return {
-              ...prev,
-              title: draft.title,
-              selectedResources: draft.selectedResources
-            };
-          }
-          return prev;
-        });
+    setArticles((prev) =>
+      prev.map((art) => {
+        if (art.filename === draft.filename) {
+          return {
+            ...art,
+            title: draft.title,
+            selectedResources: draft.selectedResources,
+          };
+        }
+        return art;
+      })
+    );
 
-        resolve();
-      }, 500);
+    setActiveArticle((prev) => {
+      if (prev && prev.filename === draft.filename) {
+        return {
+          ...prev,
+          title: draft.title,
+          selectedResources: draft.selectedResources,
+        };
+      }
+      return prev;
     });
+
+    persistArticles(articles);
   };
 
   // Remove individual bound resource from the draft
@@ -170,15 +189,17 @@ export default function App() {
       return art;
     }));
 
-    setActiveArticle(prev => {
+    setActiveArticle((prev) => {
       if (prev) {
         return {
           ...prev,
-          selectedResources: updatedResources
+          selectedResources: updatedResources,
         };
       }
       return null;
     });
+
+    removeFromPool(resourceId).catch(console.error);
   };
 
   // Bind or unbind a resource to the active article
@@ -192,10 +213,12 @@ export default function App() {
     let updatedResources: MediaResource[];
     if (isAlreadySelected) {
       updatedResources = activeArticle.selectedResources.filter(
-        r => r.resourceId !== resource.resourceId
+        (r) => r.resourceId !== resource.resourceId
       );
+      removeFromPool(resource.resourceId).catch(console.error);
     } else {
       updatedResources = [...activeArticle.selectedResources, resource];
+      addToPool(resource).catch(console.error);
     }
 
     setArticles(prev => prev.map(art => {
@@ -220,27 +243,49 @@ export default function App() {
   };
 
   // Add new media item into the pool
-  const handleAddResource = (newResource: Omit<MediaResource, 'createdAt'>) => {
+  const handleAddResource = (newResource: Omit<MediaResource, "createdAt">) => {
     const resourceWithDate: MediaResource = {
       ...newResource,
-      createdAt: new Date().toISOString().substring(0, 10)
+      createdAt: new Date().toISOString().substring(0, 10),
     };
-    setResources(prev => [resourceWithDate, ...prev]);
+    const updated = [resourceWithDate, ...resources];
+    setResources(updated);
+    persistResources(updated);
+    addToPool(resourceWithDate).catch(console.error);
   };
 
   // Submission Queue Completed Handler
   const handleSubmissionComplete = (newOrder: Order) => {
-    setOrders(prev => [newOrder, ...prev]);
-    // Deduct total fee from balance
-    setBalance(prev => Math.max(0, prev - newOrder.totalFee));
+    const updatedOrders = [newOrder, ...orders];
+    setOrders(updatedOrders);
+    persistOrders(updatedOrders);
+
+    const newBalance = Math.max(0, balance - newOrder.totalFee);
+    setBalance(newBalance);
+    persistBalance(newBalance);
   };
 
   const handleClearOrders = () => {
     setOrders([]);
+    persistOrders([]);
   };
 
+  // Show a brief loading placeholder while data loads on first mount
+  if (!dataLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f6f7f4]">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-slate-500">
+            姝ｅ湪鍔犺浇宸ヤ綔鍙版暟�?..
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div id="app-shell" className="app-shell flex h-screen bg-slate-100 font-sans text-slate-800 antialiased overflow-hidden">
+    <div id="app-shell" className="app-shell flex h-screen bg-[#f6f7f4] font-sans text-slate-800 antialiased overflow-hidden">
       {/* 1. Left Navigation Sidebar */}
       <Sidebar
         currentView={currentView}

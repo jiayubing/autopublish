@@ -1,4 +1,4 @@
-﻿const path = require("path");
+const path = require("path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const { subscribe } = require("../src/core/logger");
 const { registerIpc } = require("./ipc/register");
@@ -28,7 +28,7 @@ function createMainWindow() {
     }
   });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  mainWindow.loadFile(path.join(__dirname, "..", "media-workbench", "dist", "index.html"));
   mainWindow.on("closed", function() { mainWindow = null; });
 }
 
