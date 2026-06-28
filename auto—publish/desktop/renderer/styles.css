@@ -61,6 +61,26 @@ button { border: 0; cursor: pointer; }
 
 .media-workbench-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr); gap: 16px; align-items: start; }
 
+.media-workbench-main { display: grid; gap: 16px; min-width: 0; }
+
+.media-article-panel-root { min-width: 0; }
+
+.article-detail-shell { display: grid; gap: 16px; }
+
+.article-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr); gap: 16px; align-items: start; }
+
+.article-detail-column { min-width: 0; display: grid; gap: 16px; }
+
+.article-detail-header { margin-bottom: 0; }
+
+.media-article-panel .preview-text { max-height: 420px; }
+
+.article-summary-name { font-weight: 600; }
+
+.resource-picker-hint { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: #eef4ef; color: #365346; font-size: 13px; }
+
+.media-workbench-grid #mediaResourceLibraryRoot { position: sticky; top: 16px; align-self: start; }
+
 .platform-batch-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 16px; align-items: start; }
 
 .article-row, .resource-row, .order-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e7ebe4; }
@@ -99,6 +119,8 @@ button { border: 0; cursor: pointer; }
 
 .selected-resource-list { display: grid; gap: 8px; }
 
+.media-article-panel .selected-resource-list .resource-row { padding: 8px 0; }
+
 .drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 .drawer-tip { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
@@ -130,4 +152,7 @@ button.danger { color: #9f2d20; border-color: #e2b7b0; }
 @media (max-width: 1100px) {
   .article-drawer-layout { grid-template-columns: minmax(0, 1fr); }
   .platform-batch-layout { grid-template-columns: minmax(0, 1fr); }
+  .article-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .media-workbench-grid { grid-template-columns: minmax(0, 1fr); }
+  .media-workbench-grid #mediaResourceLibraryRoot { position: static; }
 }

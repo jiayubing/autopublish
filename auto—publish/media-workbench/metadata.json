@@ -1,0 +1,6 @@
+{
+  "name": "Media Workbench",
+  "description": "A highly polished, modern media submission and workbench dashboard for managing articles, matching media resources, editing drafts, and submitting them to platforms.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

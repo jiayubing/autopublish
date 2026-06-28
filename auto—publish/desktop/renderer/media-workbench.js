@@ -5,6 +5,7 @@ window.createMediaWorkbench = function(api) {
   var activeArticleFilename = "";
   var activeArticle = null;
   var activeDraft = null;
+  var articlePanelOpen = false;
 
   function normalizeResource(resource) {
     if (!resource) return null;
@@ -27,6 +28,10 @@ window.createMediaWorkbench = function(api) {
     });
   }
 
+  function activeArticleLabel() {
+    return activeDraft && activeDraft.title || (activeArticle && activeArticle.title) || activeArticleFilename || "未打开";
+  }
+
   function syncActiveArticleIntoList() {
     if (!activeArticleFilename || !activeDraft) return;
     articles = articles.map(function(article) {
@@ -43,16 +48,9 @@ window.createMediaWorkbench = function(api) {
 
   function updateLibrarySelectionState() {
     if (!resourceLib) return;
-    resourceLib.setMode(activeArticleFilename ? "picker" : "management");
+    resourceLib.setMode(articlePanelOpen ? "picker" : "management");
     resourceLib.setSelectedResourceIds(activeSelectedResourceIds());
-  }
-
-  function clearActiveArticleContext() {
-    activeArticleFilename = "";
-    activeArticle = null;
-    activeDraft = null;
-    updateLibrarySelectionState();
-    rerenderWorkspace();
+    resourceLib.setActiveArticleLabel(activeArticleLabel());
   }
 
   function rerenderWorkspace() {
@@ -60,20 +58,23 @@ window.createMediaWorkbench = function(api) {
   }
 
   function syncDrawerSelection() {
-    if (!activeDraft) return;
+    if (!activeDraft || !window.mediaArticleDrawer || !window.mediaArticleDrawer.isOpen()) return;
     window.mediaArticleDrawer.syncSelectedResources(cloneSelectedResources(activeDraft.selectedResources));
   }
 
-  function addResourceToActiveDraft(resource) {
+  function applyResourceSelection(resource) {
     if (!activeDraft) return;
     var normalized = normalizeResource(resource);
     if (!normalized) return;
     var items = cloneSelectedResources(activeDraft.selectedResources);
-    var exists = items.some(function(item) {
+    var index = items.findIndex(function(item) {
       return String(item.resourceId) === String(normalized.resourceId);
     });
-    if (exists) return;
-    items.push(normalized);
+    if (index >= 0) {
+      items.splice(index, 1);
+    } else {
+      items.push(normalized);
+    }
     activeDraft.selectedResources = items;
     syncActiveArticleIntoList();
     updateLibrarySelectionState();
@@ -81,11 +82,68 @@ window.createMediaWorkbench = function(api) {
     rerenderWorkspace();
   }
 
+  function removeSelectedResource(resourceId) {
+    if (!activeDraft || !resourceId) return;
+    var items = cloneSelectedResources(activeDraft.selectedResources).filter(function(item) {
+      return String(item.resourceId) !== String(resourceId);
+    });
+    activeDraft.selectedResources = items;
+    syncActiveArticleIntoList();
+    updateLibrarySelectionState();
+    syncDrawerSelection();
+    rerenderWorkspace();
+  }
+
+  function openArticlePanel(article) {
+    activeArticleFilename = article.filename;
+    activeArticle = article;
+    articlePanelOpen = true;
+    window.mediaArticleDrawer.open(api, article, {
+      onDraftLoaded: function(payload) {
+        activeArticle = payload.article;
+        activeDraft = {
+          filename: payload.draft.filename,
+          title: payload.draft.title,
+          remark: payload.draft.remark,
+          ignoreImages: payload.draft.ignoreImages,
+          selectedResources: cloneSelectedResources(payload.draft.selectedResources)
+        };
+        syncActiveArticleIntoList();
+        updateLibrarySelectionState();
+        rerenderWorkspace();
+      },
+      onRemoveSelectedResource: function(resourceId) {
+        removeSelectedResource(resourceId);
+      },
+      onSaved: function(selectedResources) {
+        if (activeDraft) {
+          activeDraft.selectedResources = cloneSelectedResources(selectedResources);
+        }
+        syncActiveArticleIntoList();
+        updateLibrarySelectionState();
+        load().then(function() {
+          updateLibrarySelectionState();
+          rerenderWorkspace();
+        });
+      },
+      onClosed: function() {
+        window.mediaArticleDrawer.close();
+        articlePanelOpen = false;
+        activeArticleFilename = "";
+        activeArticle = null;
+        activeDraft = null;
+        updateLibrarySelectionState();
+        rerenderWorkspace();
+      }
+    });
+    syncDrawerSelection();
+  }
+
   async function load() {
     resourceLib = resourceLib || window.createMediaResourceLibrary(api, {
       mode: "management",
       onPick: function(resource) {
-        addResourceToActiveDraft(resource);
+        applyResourceSelection(resource);
       }
     });
     updateLibrarySelectionState();
@@ -101,17 +159,16 @@ window.createMediaWorkbench = function(api) {
   }
 
   function renderActiveArticleHint() {
-    if (!activeArticleFilename || !activeDraft) {
-      return '<section class="panel"><div class="panel-head"><h2>媒体选择</h2><span class="count-pill">池中 ' + (resourceLib ? resourceLib.getPool().length : 0) + ' 个</span></div><p>在右侧资源库中管理媒体池，打开文章后可直接将媒体加入当前草稿。</p></section>';
+    if (!articlePanelOpen || !activeDraft) {
+      return [
+        '<section class="panel">',
+        '<div class="panel-head"><h2>文章详情</h2><span class="count-pill">未打开</span></div>',
+        '<p>点击文章“打开”后，详情会显示在这里。右侧媒体池保持可见，可直接选择。</p>',
+        '</section>'
+      ].join("");
     }
 
-    return [
-      '<section class="panel">',
-      '<div class="panel-head"><h2>媒体选择</h2><span class="count-pill">编辑中</span></div>',
-      '<p>当前文章：' + window.dom.escapeHtml(activeDraft.title || (activeArticle && activeArticle.title) || activeArticleFilename) + '</p>',
-      '<p>已选媒体：' + activeSelectedResourceIds().length + ' 个。请在右侧共享资源库中继续选择。</p>',
-      '</section>'
-    ].join("");
+    return window.mediaArticleDrawer.render();
   }
 
   function render() {
@@ -129,7 +186,7 @@ window.createMediaWorkbench = function(api) {
       '</div>',
       '</div>',
       '<div class="media-workbench-grid">',
-      '<div>',
+      '<div class="media-workbench-main">',
       '<section class="panel">',
       '<div class="panel-head"><h2>文章列表</h2><span id="mediaArticleCount" class="count-pill">' + articles.length + ' 篇</span></div>',
       articles.length === 0 ? '<p class="empty-state">暂无文章，将 .txt / .docx / .md 文件放入 input/media 目录</p>' : articles.map(function(a) {
@@ -139,53 +196,11 @@ window.createMediaWorkbench = function(api) {
         return '<div class="article-row"><span class="article-title">' + window.dom.escapeHtml(title) + '</span><span class="article-meta">' + window.dom.escapeHtml(filename) + '</span><span class="count-pill">' + selectedCount + ' 个媒体</span><button data-open-article="' + window.dom.escapeHtml(filename) + '" class="secondary">打开</button></div>';
       }).join(""),
       '</section>',
-      renderActiveArticleHint(),
+      '<div id="mediaArticlePanelRoot" class="media-article-panel-root">' + renderActiveArticleHint() + '</div>',
       '</div>',
       '<div id="mediaResourceLibraryRoot">' + (resourceLib ? resourceLib.render() : "") + '</div>',
       '</div>'
     ].join("");
-  }
-
-  function openArticle(filename) {
-    activeArticleFilename = filename;
-    activeArticle = articles.find(function(item) {
-      return item.filename === filename;
-    }) || { filename: filename };
-
-    window.mediaArticleDrawer.open(api, activeArticle, {
-      onDraftLoaded: function(payload) {
-        activeArticle = payload.article;
-        activeDraft = {
-          filename: payload.draft.filename,
-          title: payload.draft.title,
-          remark: payload.draft.remark,
-          ignoreImages: payload.draft.ignoreImages,
-          selectedResources: cloneSelectedResources(payload.draft.selectedResources)
-        };
-        syncActiveArticleIntoList();
-        updateLibrarySelectionState();
-        rerenderWorkspace();
-      },
-      onSaved: function(selectedResources) {
-        if (activeDraft) {
-          activeDraft.selectedResources = cloneSelectedResources(selectedResources);
-        }
-        syncActiveArticleIntoList();
-        if (refreshView) {
-          load().then(function() {
-            updateLibrarySelectionState();
-            refreshView();
-          });
-        } else {
-          load().then(function() {
-            updateLibrarySelectionState();
-          });
-        }
-      },
-      onClosed: function() {
-        clearActiveArticleContext();
-      }
-    });
   }
 
   function bind(root, rerender) {
@@ -201,7 +216,7 @@ window.createMediaWorkbench = function(api) {
       window.confirmPanel.open(result.data, async function() {
         var submitResult = await api.media.submitSelected(articles);
         if (!submitResult.ok) { alert("提交失败: " + submitResult.error); return; }
-        alert("提交完成：成功" + submitResult.data.ok + "，失败" + submitResult.data.fail + "，跳过" + submitResult.data.skipped);
+        alert("提交完成：成功 " + submitResult.data.ok + "，失败 " + submitResult.data.fail + "，跳过 " + submitResult.data.skipped);
         window.drawer.close();
         window.ordersDrawer.open(api);
       });
@@ -243,9 +258,23 @@ window.createMediaWorkbench = function(api) {
     root.querySelectorAll("[data-open-article]").forEach(function(btn) {
       btn.addEventListener("click", function() {
         var filename = btn.getAttribute("data-open-article");
-        openArticle(filename);
+        var article = articles.find(function(item) {
+          return item.filename === filename;
+        }) || { filename: filename };
+        openArticlePanel(article);
+        rerender();
       });
     });
+
+    var articleRoot = root.querySelector("#mediaArticlePanelRoot");
+    if (articleRoot) {
+      if (window.mediaArticleDrawer && window.mediaArticleDrawer.isOpen()) {
+        articleRoot.innerHTML = window.mediaArticleDrawer.render();
+        window.mediaArticleDrawer.bind(articleRoot, rerender);
+      } else {
+        articleRoot.innerHTML = renderActiveArticleHint();
+      }
+    }
 
     var libRoot = root.querySelector("#mediaResourceLibraryRoot");
     if (libRoot && resourceLib) {

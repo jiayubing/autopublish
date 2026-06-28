@@ -8,15 +8,13 @@ function read(file) {
 }
 
 describe("media article drawer boundary", function() {
-  it("keeps the drawer article-only and lets the workbench own the shared resource library", function() {
+  it("keeps the article detail focused on preview, editing, and selected media summary", function() {
     const drawer = read("desktop/renderer/media-article-drawer.js");
-    const workbench = read("desktop/renderer/media-workbench.js");
 
-    assert.ok(!drawer.includes("createMediaResourceLibrary("), "drawer should not create its own resource library");
-    assert.ok(!drawer.includes("bind(libRoot"), "drawer should not bind a resource library root");
-    assert.ok(drawer.includes("renderSelectedResources"), "drawer should still show the selected media summary");
-    assert.ok(workbench.includes("createMediaResourceLibrary(api,"), "workbench should own the shared resource library");
-    assert.ok(workbench.includes("mode: \"management\""), "workbench should initialize the shared resource library in management mode");
-    assert.ok(workbench.includes("resourceLib.bind(libRoot, refreshLibrary)"), "workbench should bind the shared resource library");
+    assert.ok(drawer.includes("已选媒体摘要"), "drawer should show the selected media summary");
+    assert.ok(drawer.includes("右侧媒体池"), "drawer should point selection to the shared media pool");
+    assert.ok(drawer.includes("data-remove-selected-resource"), "drawer should let users remove selected media from the summary");
+    assert.equal(drawer.includes("createMediaResourceLibrary("), false, "drawer should not create its own resource library");
+    assert.equal(drawer.includes("mediaResourceLibraryRoot"), false, "drawer should not own the resource library root");
   });
 });
