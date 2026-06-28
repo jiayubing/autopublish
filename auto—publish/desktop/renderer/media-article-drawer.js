@@ -1,6 +1,5 @@
 window.mediaArticleDrawer = (function() {
   var state = null;
-  var resourceLibrary = null;
 
   function normalizeResource(resource) {
     if (!resource) return null;
@@ -32,20 +31,13 @@ window.mediaArticleDrawer = (function() {
     };
   }
 
-  function selectedResourceIds() {
-    return (state && state.draft.selectedResources || []).map(function(resource) {
-      return String(resource.resourceId);
-    });
-  }
-
   function firstSelectedResource() {
     return state && state.draft.selectedResources && state.draft.selectedResources[0] || null;
   }
 
-  function syncLibrary() {
-    if (!resourceLibrary) return;
-    resourceLibrary.setMode("picker");
-    resourceLibrary.setSelectedResourceIds(selectedResourceIds());
+  function readOnlySelectedResources() {
+    if (!state || !state.draft || !Array.isArray(state.draft.selectedResources)) return [];
+    return state.draft.selectedResources.map(normalizeResource).filter(Boolean);
   }
 
   function renderPreview() {
@@ -62,51 +54,46 @@ window.mediaArticleDrawer = (function() {
   }
 
   function renderSelectedResources() {
-    var items = state.draft.selectedResources || [];
-    if (items.length === 0) return '<p class="empty-state">尚未选择媒体资源</p>';
+    var items = readOnlySelectedResources();
+    if (items.length === 0) {
+      return [
+        '<p class="empty-state">尚未选择媒体资源</p>',
+        '<p class="drawer-tip">请在工作台右侧的共享资源库中为这篇文章选择媒体。</p>'
+      ].join("");
+    }
     return [
       '<div class="selected-resource-list">',
       items.map(function(resource) {
-        return '<div class="resource-row"><span>' + window.dom.escapeHtml(resource.name || String(resource.resourceId)) + '</span><span class="count-pill">￥' + window.dom.escapeHtml(String(resource.price || "?")) + '</span><button class="secondary" data-remove-selected="' + window.dom.escapeHtml(String(resource.resourceId)) + '">移除</button></div>';
+        return '<div class="resource-row"><span>' + window.dom.escapeHtml(resource.name || String(resource.resourceId)) + '</span><span class="count-pill">￥' + window.dom.escapeHtml(String(resource.price || "?")) + '</span></div>';
       }).join(""),
-      '</div>'
+      '</div>',
+      '<p class="drawer-tip">媒体选择已移动到工作台右侧的共享资源库。</p>'
     ].join("");
   }
 
   function renderEditor() {
     return [
       '<section class="drawer-section">',
-      '<div class="panel-head"><h2>草稿编辑</h2><span class="count-pill">' + state.draft.selectedResources.length + ' 个媒体</span></div>',
+      '<div class="panel-head"><h2>草稿编辑</h2><span class="count-pill">' + readOnlySelectedResources().length + ' 个媒体</span></div>',
       '<label class="draft-field">标题<input id="draftTitleInput" type="text" value="' + window.dom.escapeHtml(state.draft.title || "") + '" placeholder="标题"></label>',
       '<label class="draft-field">备注<textarea id="draftRemarkInput" rows="4" placeholder="备注">' + window.dom.escapeHtml(state.draft.remark || "") + '</textarea></label>',
       '<label class="check-row"><input id="ignoreImagesInput" type="checkbox" ' + (state.draft.ignoreImages ? "checked" : "") + '>忽略图片</label>',
-      '<div class="selected-resource-block">',
-      '<div class="panel-head"><h2>已选媒体</h2></div>',
+      '</section>',
+      '<section class="drawer-section">',
+      '<div class="panel-head"><h2>已选媒体摘要</h2></div>',
       renderSelectedResources(),
-      '</div>',
+      '</section>',
       '<div class="drawer-actions">',
       '<button id="saveDraftBtn" class="primary">保存</button>',
       '<button id="saveCloseDraftBtn" class="secondary">保存并关闭</button>',
       '<button data-close-drawer class="secondary">取消</button>',
       '</div>',
-      '<p class="drawer-tip">' + (state.message || "修改不会自动保存。") + '</p>',
-      '</section>'
-    ].join("");
-  }
-
-  function renderLibrary() {
-    return [
-      '<section class="drawer-section">',
-      '<div class="panel-head"><h2>媒体资源</h2><span class="count-pill">选择加入草稿</span></div>',
-      '<div id="articleResourceLibraryRoot">',
-      resourceLibrary ? resourceLibrary.render() : "",
-      '</div>',
-      '</section>'
+      '<p class="drawer-tip">' + (state.message || "修改不会自动保存。") + '</p>'
     ].join("");
   }
 
   function saveDraft(closeAfterSave) {
-    if (!state) return;
+    if (!state) return Promise.resolve();
     state.message = "保存中...";
     render();
 
@@ -115,13 +102,13 @@ window.mediaArticleDrawer = (function() {
       title: state.draft.title,
       remark: state.draft.remark,
       ignoreImages: !!state.draft.ignoreImages,
-      selectedResources: state.draft.selectedResources,
+      selectedResources: readOnlySelectedResources(),
       resourceId: first ? first.resourceId : "",
       resourceName: first ? first.name : ""
     }).then(function(result) {
       if (result && result.ok) {
         state.message = "已保存";
-        if (state.onSaved) state.onSaved();
+        if (state.onSaved) state.onSaved(readOnlySelectedResources(), { closeAfterSave: closeAfterSave });
         if (closeAfterSave) {
           window.drawer.close();
           return;
@@ -138,7 +125,6 @@ window.mediaArticleDrawer = (function() {
 
   function render() {
     if (!state) return;
-    syncLibrary();
     window.drawer.open([
       '<div class="drawer-head"><h2>' + window.dom.escapeHtml(state.article.title || state.article.filename) + '</h2><button data-close-drawer class="icon-button">×</button></div>',
       '<div class="drawer-body">',
@@ -148,7 +134,6 @@ window.mediaArticleDrawer = (function() {
       '</div>',
       '<div class="article-drawer-column">',
       renderEditor(),
-      renderLibrary(),
       '</div>',
       '</div>',
       '</div>'
@@ -177,49 +162,22 @@ window.mediaArticleDrawer = (function() {
         });
       }
 
-      root.querySelectorAll("[data-remove-selected]").forEach(function(button) {
-        button.addEventListener("click", function() {
-          var resourceId = button.getAttribute("data-remove-selected");
-          state.draft.selectedResources = (state.draft.selectedResources || []).filter(function(resource) {
-            return String(resource.resourceId) !== String(resourceId);
-          });
-          state.message = "";
-          render();
-        });
-      });
-
       var saveBtn = root.querySelector("#saveDraftBtn");
       if (saveBtn) saveBtn.addEventListener("click", function() { saveDraft(false); });
 
       var saveCloseBtn = root.querySelector("#saveCloseDraftBtn");
       if (saveCloseBtn) saveCloseBtn.addEventListener("click", function() { saveDraft(true); });
 
-      var libRoot = root.querySelector("#articleResourceLibraryRoot");
-      if (libRoot && resourceLibrary) {
-        resourceLibrary.bind(libRoot, function() {
-          render();
+      root.querySelectorAll("[data-close-drawer]").forEach(function(button) {
+        button.addEventListener("click", function() {
+          if (state && state.onClosed) state.onClosed();
         });
-      }
+      });
     });
   }
 
   async function open(api, article, opts) {
     var options = opts || {};
-    resourceLibrary = window.createMediaResourceLibrary(api, {
-      mode: "picker",
-      onPick: function(resource) {
-        var normalized = normalizeResource(resource);
-        if (!normalized) return;
-        var items = state.draft.selectedResources || [];
-        var exists = items.some(function(item) { return String(item.resourceId) === String(normalized.resourceId); });
-        if (!exists) {
-          items.push(normalized);
-          state.message = "";
-          render();
-        }
-      }
-    });
-
     var previewResult = await api.media.previewArticle(article.filename);
     var draftResult = await api.media.getDraft(article.filename);
 
@@ -229,12 +187,52 @@ window.mediaArticleDrawer = (function() {
       preview: previewResult && previewResult.ok ? previewResult.data : null,
       draft: ensureDraft(article, previewResult && previewResult.data, draftResult && draftResult.ok ? draftResult.data : null),
       message: "",
-      onSaved: options.onSaved || null
+      onSaved: options.onSaved || null,
+      onClosed: options.onClosed || null
     };
 
-    await resourceLibrary.load();
+    if (options.onDraftLoaded) {
+      options.onDraftLoaded({
+        article: article,
+        preview: state.preview,
+        draft: {
+          filename: state.draft.filename,
+          title: state.draft.title,
+          remark: state.draft.remark,
+          ignoreImages: state.draft.ignoreImages,
+          selectedResources: readOnlySelectedResources()
+        }
+      });
+    }
+
     render();
   }
 
-  return { open: open };
+  function syncSelectedResources(selectedResources) {
+    if (!state || !state.draft) return;
+    state.draft.selectedResources = Array.isArray(selectedResources) ? selectedResources.map(normalizeResource).filter(Boolean) : [];
+    state.message = "";
+    render();
+  }
+
+  function getState() {
+    if (!state) return null;
+    return {
+      article: state.article,
+      preview: state.preview,
+      draft: {
+        filename: state.draft.filename,
+        title: state.draft.title,
+        remark: state.draft.remark,
+        ignoreImages: state.draft.ignoreImages,
+        selectedResources: readOnlySelectedResources()
+      }
+    };
+  }
+
+  return {
+    open: open,
+    syncSelectedResources: syncSelectedResources,
+    getState: getState
+  };
 })();
