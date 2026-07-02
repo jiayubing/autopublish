@@ -1,6 +1,8 @@
-﻿const path = require('path');
+const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
+// In packaged mode, AUTO_PUBLISH_ROOT_DIR is set by desktop/runtime-paths.js
+// to the writable workspace. In development it falls back to the project root.
+const ROOT = process.env.AUTO_PUBLISH_ROOT_DIR || path.resolve(__dirname, '..');
 
 const DIRS = {
   rootDir: ROOT,

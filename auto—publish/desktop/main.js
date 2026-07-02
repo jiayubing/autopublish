@@ -1,6 +1,7 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const { subscribe } = require("../src/core/logger");
+const { configureRuntimeEnvironment } = require("./runtime-paths");
 const { registerIpc } = require("./ipc/register");
 const { createDesktopTaskService } = require("./services/desktop-task-service");
 
@@ -34,15 +35,16 @@ function createMainWindow() {
 
 app.whenReady().then(function() {
   createMainWindow();
+  const runtimeRoot = configureRuntimeEnvironment();
   const taskService = createDesktopTaskService({
-    cwd: path.resolve(__dirname, ".."),
+    cwd: runtimeRoot,
     sendToRenderer: sendToRenderer
   });
   registerIpc({
     ipcMain: ipcMain,
     taskService: taskService,
     sendToRenderer: sendToRenderer,
-    rootDir: path.resolve(__dirname, "..")
+    rootDir: runtimeRoot
   });
   unsubscribeLogs = subscribe(function(entry) { sendToRenderer("publish-log", entry); });
 });

@@ -1,17 +1,25 @@
 {
-  "name": "auto-publish",
-  "private": true,
-  "version": "1.0.0",
-  "description": "Auto publish desktop console",
-  "scripts": {
-    "desktop": "scripts\\desktop.cmd",
-    "snapshot": "scripts\\snapshot.cmd",
-    "test": "node --test tests/*.test.js"
-  },
-  "dependencies": {
-    "dotenv": "^17.4.2",
-    "electron": "^33.4.11",
-    "form-data": "^4.0.6",
-    "mammoth": "^1.12.0"
-  }
+    "name":  "auto-publish",
+    "private":  true,
+    "version":  "1.0.0",
+    "description":  "Auto publish desktop console",
+    "scripts":  {
+                    "desktop":  "scripts\\desktop.cmd",
+                    "snapshot":  "scripts\\snapshot.cmd",
+                    "test":  "node --test tests/*.test.js",
+                    "build:renderer":  "cd media-workbench \u0026\u0026 npm run build",
+                    "pack:alpha":  "npm run build:renderer \u0026\u0026 electron-builder --win portable --config electron-builder.alpha.yml",
+                    "dist:alpha":  "npm run build:renderer \u0026\u0026 electron-builder --win nsis --config electron-builder.alpha.yml"
+                },
+    "dependencies":  {
+                         "dotenv":  "^17.4.2",
+                         "form-data":  "^4.0.6",
+                         "mammoth":  "^1.12.0"
+                     },
+    "devDependencies":  {
+                            "electron-builder":  "^26.15.3",
+                            "electron":  "^33.4.11"
+                        },
+    "author":  "Auto Publish Team",
+    "main":  "desktop/main.js"
 }

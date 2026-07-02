@@ -1,4 +1,4 @@
-﻿# Desktop Workbench
+# Desktop Workbench
 
 ## Start
 
@@ -59,3 +59,20 @@ The Media Submission workspace reads from the local media resource cache by defa
 ## Dependencies
 
 Do not remove: `electron`, `dotenv`, `form-data`, `mammoth`.
+
+
+## Alpha Packaging
+
+Portable alpha:
+
+`powershell
+npm run pack:alpha
+` 
+
+Installer alpha:
+
+`powershell
+npm run dist:alpha
+` 
+
+The packaged app creates runtime folders under Electron userData unless AUTO_PUBLISH_WORKSPACE is set. Do not place private .env, article drafts, logs, or order history in the installer package.
