@@ -1,12 +1,12 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain } = require("electron");
-const { subscribe } = require("../src/core/logger");
-const { configureRuntimeEnvironment } = require("./runtime-paths");
-const { registerIpc } = require("./ipc/register");
-const { createDesktopTaskService } = require("./services/desktop-task-service");
 
 let mainWindow = null;
 let unsubscribeLogs = null;
+let configureRuntimeEnvironment = null;
+let subscribe = null;
+let registerIpc = null;
+let createDesktopTaskService = null;
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -35,17 +35,28 @@ function createMainWindow() {
 
 app.whenReady().then(function() {
   createMainWindow();
+
+  // Lazy-load config-dependent modules AFTER runtime environment is configured.
+  // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
+  // its default project-root path.
+  configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
   const runtimeRoot = configureRuntimeEnvironment();
+
+  createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
   const taskService = createDesktopTaskService({
     cwd: runtimeRoot,
     sendToRenderer: sendToRenderer
   });
+
+  registerIpc = require("./ipc/register").registerIpc;
   registerIpc({
     ipcMain: ipcMain,
     taskService: taskService,
     sendToRenderer: sendToRenderer,
     rootDir: runtimeRoot
   });
+
+  subscribe = require("../src/core/logger").subscribe;
   unsubscribeLogs = subscribe(function(entry) { sendToRenderer("publish-log", entry); });
 });
 

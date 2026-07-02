@@ -14,7 +14,7 @@
 
 ## Paid Media Flow
 
-- [ ] 付费媒体投稿 page opens.
+- [ ] 浠樿垂濯掍綋鎶曠 page opens.
 - [ ] Article scan works.
 - [ ] Media resource pool loads or shows a clear empty/error state.
 - [ ] Draft save works.
@@ -22,7 +22,7 @@
 
 ## Other Platforms Flow
 
-- [ ] 其他平台投稿 page opens if that feature branch has been merged.
+- [ ] 鍏朵粬骞冲彴鎶曠 page opens if that feature branch has been merged.
 - [ ] Queue refresh works for `lieju`, `toutiao`, and `hepan`.
 - [ ] Submit confirmation appears before real submission.
 
@@ -32,3 +32,9 @@
 - [ ] `hepan` requires local Python and cookie configuration.
 - [ ] Code signing is not configured.
 - [ ] Auto-update is not configured.
+## Startup Verification (Alpha)
+
+- [ ] Installed package contains esources/app/scripts/config.js.
+- [ ] Installed app opens without Cannot find module '../../scripts/config'.
+- [ ] Run 
+ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package contents.

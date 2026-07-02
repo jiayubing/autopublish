@@ -29,4 +29,30 @@ describe("desktop alpha packaging", function() {
     assert.ok(config.includes("!data/**"));
     assert.ok(config.includes("!logs/**"));
   });
+
+  it("packages scripts/config.js because runtime modules require it", function() {
+    const config = read("electron-builder.alpha.yml");
+    assert.ok(
+      config.includes("scripts/**/*") || config.includes("scripts/config.js"),
+      "electron-builder config must include scripts/config.js"
+    );
+    assert.equal(
+      config.includes("!scripts/**"),
+      false,
+      "electron-builder config must not exclude the scripts directory"
+    );
+  });
+
+  it("initializes runtime environment before loading config-dependent services", function() {
+    const main = read("desktop/main.js");
+    assert.ok(main.includes("configureRuntimeEnvironment"));
+    assert.ok(
+      main.indexOf("configureRuntimeEnvironment") < main.indexOf('require("../src/core/logger")'),
+      "logger must be required after runtime environment configuration"
+    );
+    assert.ok(
+      main.indexOf("configureRuntimeEnvironment") < main.indexOf('require("./ipc/register")'),
+      "IPC registration must be required after runtime environment configuration"
+    );
+  });
 });
