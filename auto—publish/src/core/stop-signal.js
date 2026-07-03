@@ -7,6 +7,10 @@ function stopFilePath() {
   return path.join(DIRS.tmpDir, "desktop-stop.json");
 }
 
+function pauseFilePath() {
+  return path.join(DIRS.tmpDir, "desktop-pause.json");
+}
+
 function clearStopSignal() {
   try {
     fs.unlinkSync(stopFilePath());
@@ -24,9 +28,30 @@ function isStopRequested() {
   return fs.existsSync(stopFilePath());
 }
 
+function clearPauseSignal() {
+  try {
+    fs.unlinkSync(pauseFilePath());
+  } catch (e) {}
+}
+
+function requestPauseSignal(reason) {
+  fs.writeFileSync(pauseFilePath(), JSON.stringify({
+    requestedAt: new Date().toISOString(),
+    reason: reason || "operator_pause"
+  }), "utf8");
+}
+
+function isPauseRequested() {
+  return fs.existsSync(pauseFilePath());
+}
+
 module.exports = {
   stopFilePath,
   clearStopSignal,
   requestStopSignal,
-  isStopRequested
+  isStopRequested,
+  pauseFilePath,
+  clearPauseSignal,
+  requestPauseSignal,
+  isPauseRequested
 };

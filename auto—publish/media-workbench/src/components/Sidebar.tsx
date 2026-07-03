@@ -10,7 +10,8 @@ import {
   Sparkles, 
   Activity,
   CheckCircle,
-  TrendingUp
+  TrendingUp,
+  Globe
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -23,6 +24,7 @@ interface SidebarProps {
   totalArticles: number;
   totalResources: number;
   totalOrders: number;
+  totalPlatformArticles?: number;
 }
 
 export default function Sidebar({
@@ -33,13 +35,14 @@ export default function Sidebar({
   isCheckingBalance,
   totalArticles,
   totalResources,
-  totalOrders
+  totalOrders,
+  totalPlatformArticles
 }: SidebarProps) {
   const [showWalletDetails, setShowWalletDetails] = useState(false);
 
   const menuItems = [
-    { id: 'workbench' as ViewMode, label: '稿件与工作台', icon: Files, badge: totalArticles },
-    { id: 'resources' as ViewMode, label: '媒体资源库', icon: FolderOpen, badge: totalResources },
+    { id: 'platforms' as ViewMode, label: '其他平台投稿', icon: Globe, badge: totalPlatformArticles },
+    { id: 'workbench' as ViewMode, label: '付费媒体投稿', icon: Files, badge: totalArticles },
     { id: 'orders' as ViewMode, label: '投稿订单记录', icon: ClipboardList, badge: totalOrders },
     { id: 'settings' as ViewMode, label: '配置中心', icon: Settings },
   ];

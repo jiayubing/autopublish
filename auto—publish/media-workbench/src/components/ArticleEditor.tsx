@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Article, Draft, MediaResource } from '../types';
+import { getDraft } from '../electron-api';
 import { 
   FileText, 
   Trash2, 
@@ -84,6 +85,20 @@ export default function ArticleEditor({
     }
   };
 
+    const handleClose = async () => {
+    if (activeArticle) {
+      const draft: Draft = {
+        filename: activeArticle.filename,
+        title: title,
+        remark: remark,
+        ignoreImages: ignoreImages,
+        selectedResources: activeArticle.selectedResources,
+      };
+      try { await onSaveDraft(draft); } catch (e) { console.error(e); }
+    }
+    onCloseArticle();
+  };
+
   const getMediaIcon = (type: string) => {
     switch (type) {
       case 'image': return <ImageIcon className="w-4 h-4 text-emerald-500" />;
@@ -140,7 +155,7 @@ export default function ArticleEditor({
           </button>
 
           <button
-            onClick={onCloseArticle}
+            onClick={handleClose}
             className="flex items-center space-x-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 text-xs font-semibold rounded-lg shadow-2xs transition-all"
           >
             <X className="w-3.5 h-3.5" />

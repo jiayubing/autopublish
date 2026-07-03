@@ -20,6 +20,13 @@ export interface Article {
   tags: string[];
   selectedResources: MediaResource[];
   lastModified: string;
+  // IPC fields from scanArticles service
+  filePath: string;
+  autoTitle: string;
+  remark: string;
+  hasImages: boolean;
+  imageCount: number;
+  ignoreImages: boolean;
 }
 
 export interface Draft {
@@ -38,7 +45,8 @@ export interface OrderPlatform {
   error?: string;
 }
 
-export interface Order {
+// SubmissionOrder: used for preflight/UI flow (legacy mock shape)
+export interface SubmissionOrder {
   id: string;
   articleTitle: string;
   filename: string;
@@ -50,4 +58,61 @@ export interface Order {
   logs: string[];
 }
 
-export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings';
+// RealOrder: matches the real order view shape from media-order-service.js
+export interface RealOrder {
+  title: string;
+  filename: string;
+  orderNid: string;
+  statusCode: string;
+  statusLabel: string;
+  submittedAt: string;
+  publishedAt: string;
+  resourceId: string;
+  resourceName: string;
+  price: string;
+  orderUrl: string;
+}
+
+// Backward-compatible alias for PreflightModal and mockData
+export type Order = SubmissionOrder;
+
+export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'platforms';
+
+export interface PlatformArticle {
+  filename: string;
+  filePath: string;
+  title: string;
+  platformId: string;
+  sourcePlatformId: string;
+}
+
+export interface PlatformTarget {
+  id: string;
+  displayName: string;
+  scanDir: string;
+}
+
+export interface PlatformSubmitPlan {
+  taskCount: number;
+  tasks: PlatformSubmitTask[];
+}
+
+export interface PlatformSubmitTask {
+  sourcePlatformId: string;
+  filename: string;
+  filePath: string;
+  targetPlatformId: string;
+}
+
+export interface PlatformSubmitResult {
+  ok: number;
+  fail: number;
+  skipped: number;
+  results: PlatformTaskResult[];
+}
+
+export interface PlatformTaskResult {
+  task: PlatformSubmitTask;
+  status: 'success' | 'failed' | 'pending';
+  error?: string;
+}

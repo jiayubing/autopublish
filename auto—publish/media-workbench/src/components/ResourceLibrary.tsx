@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { MediaResource, MediaType } from '../types';
 import { 
   Search, 
@@ -14,25 +14,36 @@ import {
   Tag,
   ChevronLeft,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  BookmarkPlus,
+  BookmarkMinus,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ResourceLibraryProps {
   resources: MediaResource[];
   selectedResourceIds: string[];
+  poolResourceIds: string[];
   mode: 'management' | 'picker';
   activeArticleLabel: string;
   onPickResource: (resource: MediaResource) => void;
+  onTogglePool: (resource: MediaResource) => void;
+  onRefreshResources?: () => void;
+  isRefreshingResources?: boolean;
   onAddResource: (resource: Omit<MediaResource, 'createdAt'>) => void;
 }
 
 export default function ResourceLibrary({
   resources,
   selectedResourceIds,
+  poolResourceIds,
   mode,
   activeArticleLabel,
   onPickResource,
+  onTogglePool,
+  onRefreshResources,
+  isRefreshingResources,
   onAddResource
 }: ResourceLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,13 +120,26 @@ export default function ResourceLibrary({
             <h2 className="text-sm font-bold text-slate-800">公共媒体资源池</h2>
           </div>
           
-          <button
+          <div className="flex items-center space-x-1.5">
+            {mode === "management" && onRefreshResources && (
+              <button
+                onClick={onRefreshResources}
+                disabled={isRefreshingResources}
+                className="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100/80 rounded-lg text-xs font-semibold flex items-center space-x-1 border border-amber-200/20 transition-all"
+                title="从服务器拉取全部资源（较慢）"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingResources ? "animate-spin" : ""}`} />
+                <span>{isRefreshingResources ? "拉取中..." : "刷新库"}</span>
+              </button>
+            )}
+            <button
             onClick={() => setShowAddForm(!showAddForm)}
             className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100/80 rounded-lg text-xs font-semibold flex items-center space-x-1 border border-blue-200/20 transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>添加媒体</span>
           </button>
+          </div>
         </div>
 
         {/* Dynamic Hint according to mode */}
@@ -297,6 +321,18 @@ export default function ResourceLibrary({
                 </div>
 
                 <div className="flex items-center space-x-2 flex-shrink-0">
+                  {/* Pool toggle button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onTogglePool(resource); }}
+                    className={`p-1 rounded-md transition-all ${
+                      poolResourceIds.includes(resource.resourceId)
+                        ? "text-amber-500 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                        : "text-slate-300 hover:text-amber-500 hover:bg-amber-50 border border-transparent"
+                    }`}
+                    title={poolResourceIds.includes(resource.resourceId) ? "移出资源池" : "加入资源池"}
+                  >
+                    {poolResourceIds.includes(resource.resourceId) ? <BookmarkMinus className="w-3.5 h-3.5" /> : <BookmarkPlus className="w-3.5 h-3.5" />}
+                  </button>
                   <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200/50 px-1.5 py-0.5 rounded-full">
                     ¥{resource.price.toFixed(1)}
                   </span>

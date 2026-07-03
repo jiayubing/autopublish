@@ -1,67 +1,81 @@
-import React, { useState } from 'react';
-import { Order, OrderStatus } from '../types';
+﻿import React, { useState } from 'react';
+import { RealOrder } from '../types';
+import { syncOrder } from '../electron-api';
 import { 
   ClipboardList, 
   CheckCircle2, 
   XCircle, 
   AlertTriangle, 
   Clock, 
-  Terminal, 
   Search,
-  ArrowRight,
-  Eye,
+  RefreshCw,
   Trash2,
-  Calendar
+  Calendar,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface OrdersViewProps {
-  orders: Order[];
+  orders: RealOrder[];
   onClearOrders: () => void;
+}
+
+const STATUS_MAP: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
+  '0': { label: '待安排', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', icon: <Clock className="w-3.5 h-3.5" /> },
+  '1': { label: '已安排', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: <Clock className="w-3.5 h-3.5 animate-pulse" /> },
+  '2': { label: '已发布', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+  '4': { label: '已退稿', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: <XCircle className="w-3.5 h-3.5" /> },
+  '9': { label: '售后中', color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+};
+
+function getStatusInfo(statusCode: string) {
+  return STATUS_MAP[statusCode] || { label: statusCode ? `状态:${statusCode}` : '未知', color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> };
 }
 
 export default function OrdersView({
   orders,
   onClearOrders
 }: OrdersViewProps) {
-  const [activeTab, setActiveTab] = useState<OrderStatus | 'all'>('all');
+  const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOrderIdForLogs, setSelectedOrderIdForLogs] = useState<string | null>(null);
+  const [expandedOrderNid, setExpandedOrderNid] = useState<string | null>(null);
+  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
 
-  // Filter orders based on tabs & search
   const filteredOrders = orders.filter(order => {
-    const matchesTab = activeTab === 'all' || order.status === activeTab;
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          order.articleTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          order.filename.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTab = activeTab === 'all' || order.statusCode === activeTab;
+    const matchesSearch = 
+      order.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      order.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.orderNid.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.resourceName.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
   });
 
-  const getStatusBadge = (status: OrderStatus) => {
-    switch (status) {
-      case 'success':
-        return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-semibold">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>发布成功</span>
-          </span>
-        );
-      case 'partial':
-        return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-xs font-semibold">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>局部异常</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-full text-xs font-semibold">
-            <XCircle className="w-3.5 h-3.5" />
-            <span>发布失败</span>
-          </span>
-        );
+  const handleSync = async (orderNid: string) => {
+    if (!orderNid) return;
+    setSyncingIds(prev => new Set(prev).add(orderNid));
+    try {
+      await syncOrder(orderNid);
+    } catch (e) {
+      console.error('syncOrder failed:', e);
+    } finally {
+      setSyncingIds(prev => {
+        const next = new Set(prev);
+        next.delete(orderNid);
+        return next;
+      });
     }
   };
+
+  const tabs = [
+    { id: 'all', label: '全部记录' },
+    { id: '2', label: '已发布' },
+    { id: '1', label: '已安排' },
+    { id: '0', label: '待安排' },
+    { id: '4', label: '已退稿' },
+    { id: '9', label: '售后中' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -84,32 +98,23 @@ export default function OrdersView({
       </div>
 
       {/* Orders Filter Toolbar */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Status filtering */}
-        <div className="flex items-center space-x-2">
-          {(['all', 'success', 'partial', 'failed'] as const).map((tab) => {
-            let label = '全部记录';
-            if (tab === 'success') label = '成功完成';
-            if (tab === 'partial') label = '部分异常';
-            if (tab === 'failed') label = '完全失败';
-
-            return (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  activeTab === tab
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-2xs'
-                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Search input */}
         <div className="relative flex items-center w-full md:w-72">
           <Search className="w-4 h-4 text-slate-400 absolute left-3" />
           <input
@@ -117,130 +122,165 @@ export default function OrdersView({
             placeholder="搜索文章标题、订单编号..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-lg outline-hidden focus:border-blue-500 transition-all"
+            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
           />
         </div>
       </div>
 
-      {/* Orders list view */}
-      <div className="space-y-4">
-        {filteredOrders.length === 0 ? (
-          <div className="bg-white border border-slate-200/60 rounded-2xl py-16 px-4 text-center flex flex-col items-center justify-center shadow-2xs">
-            <ClipboardList className="w-12 h-12 text-slate-300 mb-3 animate-pulse" />
-            <p className="text-sm font-bold text-slate-700">暂无符合条件的投稿记录</p>
-            <p className="text-xs text-slate-400 mt-1 max-w-xs leading-relaxed">
-              尚未启动投稿。请在主工作台选择要发布的稿件并点击顶部的【预检并提交】。
-            </p>
+      {/* Orders List */}
+      <div className="space-y-3">
+        {filteredOrders.length === 0 && (
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center">
+            <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm font-medium text-slate-500">暂无订单记录</p>
+            <p className="text-[11px] text-slate-400 mt-1">提交分发任务后，订单将自动出现在这里。</p>
           </div>
-        ) : (
-          filteredOrders.map((order) => {
-            const isLogsOpen = selectedOrderIdForLogs === order.id;
+        )}
+
+        <AnimatePresence>
+          {filteredOrders.map((order, index) => {
+            const statusInfo = getStatusInfo(order.statusCode);
+            const isExpanded = expandedOrderNid === order.orderNid;
+            const isSyncing = syncingIds.has(order.orderNid);
 
             return (
-              <div
-                key={order.id}
-                className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden transition-all hover:border-slate-300"
+              <motion.div
+                key={order.orderNid || `order-${index}`}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.12, delay: index * 0.03 }}
+                className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden"
               >
-                {/* Header overview row */}
-                <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/30">
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-slate-500">
-                        {order.id}
+                {/* Header row */}
+                <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2.5 mb-1.5">
+                      <h3 className="text-sm font-bold text-slate-800 truncate">{order.title || order.filename || '(无标题)'}</h3>
+                      <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}>
+                        {statusInfo.icon}
+                        <span>{statusInfo.label}</span>
                       </span>
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-bold flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {order.createdAt}
-                      </span>
-                      {getStatusBadge(order.status)}
                     </div>
-                    
-                    <h3 className="text-xs font-bold text-slate-800 truncate">
-                      {order.articleTitle}
-                    </h3>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                      {order.resourceName && (
+                        <span className="flex items-center space-x-1">
+                          <Globe className="w-3 h-3" />
+                          <span className="font-medium text-slate-700">{order.resourceName}</span>
+                        </span>
+                      )}
+                      {order.submittedAt && (
+                        <span className="flex items-center space-x-1">
+                          <Calendar className="w-3 h-3" />
+                          <span>提交: {order.submittedAt}</span>
+                        </span>
+                      )}
+                      {order.publishedAt && (
+                        <span className="flex items-center space-x-1 text-emerald-600">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>发布: {order.publishedAt}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Pricing and platform counts details */}
-                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500 md:text-right">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">清算费用</span>
-                      <span className="font-bold text-slate-800 font-mono text-sm">¥{order.totalFee.toFixed(2)}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">伴生媒体</span>
-                      <span className="font-bold text-slate-800">{order.mediaCount} 个</span>
-                    </div>
-                    <button
-                      onClick={() => setSelectedOrderIdForLogs(isLogsOpen ? null : order.id)}
-                      className="flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg border border-slate-200/60 transition-all self-start md:self-center"
-                    >
-                      <Terminal className="w-3.5 h-3.5" />
-                      <span>{isLogsOpen ? '收起控制台' : '云网关日志'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Body: list of platforms and status */}
-                <div className="p-5 border-t border-slate-100">
-                  <div className="flex flex-wrap gap-2.5">
-                    {order.platforms.map((platform) => (
-                      <div
-                        key={platform.name}
-                        className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-medium ${
-                          platform.status === 'success'
-                            ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800'
-                            : platform.status === 'pending'
-                            ? 'bg-amber-50/50 border-amber-100 text-amber-800'
-                            : 'bg-rose-50/50 border-rose-100 text-rose-800'
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                        <span className="font-semibold">{platform.name}</span>
-                        {platform.status === 'success' ? (
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100/50 px-1 py-0.2 rounded">发布完毕</span>
-                        ) : platform.status === 'pending' ? (
-                          <span className="text-[10px] font-bold text-amber-600 bg-amber-100/50 px-1 py-0.2 rounded">处理中</span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-rose-600 bg-rose-100/50 px-1 py-0.2 rounded" title={platform.error}>发布失败</span>
-                        )}
+                  {/* Actions and price */}
+                  <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+                    {order.price && (
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">费用</span>
+                        <span className="font-bold text-slate-800 font-mono text-sm">¥{order.price}</span>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Expandable cloud gateway logs console */}
-                  <AnimatePresence>
-                    {isLogsOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden mt-4 pt-4 border-t border-slate-100"
-                      >
-                        <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 font-mono text-[10.5px] leading-relaxed text-slate-300 space-y-1 overflow-y-auto max-h-[200px] select-text">
-                          <div className="flex items-center space-x-2 border-b border-slate-800 pb-2 mb-2">
-                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                            <span className="text-slate-500 uppercase font-bold tracking-wider text-[9px]">API 通讯详情控制台</span>
-                          </div>
-                          {order.logs.map((log, index) => (
-                            <div key={index}>
-                              {log.includes('成功') || log.includes('正常') ? (
-                                <span className="text-emerald-400">{log}</span>
-                              ) : log.includes('退回') || log.includes('失败') || log.includes('异常') ? (
-                                <span className="text-rose-400">{log}</span>
-                              ) : (
-                                <span>{log}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </motion.div>
                     )}
-                  </AnimatePresence>
+                    {order.filename && (
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">源文件</span>
+                        <span className="font-mono text-[11px] font-semibold text-slate-600">{order.filename}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={() => setExpandedOrderNid(isExpanded ? null : order.orderNid)}
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg border border-slate-200/60 transition-all text-xs"
+                      >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        <span>{isExpanded ? '收起详情' : '订单详情'}</span>
+                      </button>
+                      <button
+                        onClick={() => handleSync(order.orderNid)}
+                        disabled={!order.orderNid || isSyncing}
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg border border-blue-200/60 transition-all disabled:opacity-50 text-xs"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                        <span>同步</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+
+                {/* Expandable order details */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 pb-4 border-t border-slate-100 pt-4">
+                        <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 font-mono text-[10.5px] leading-relaxed text-slate-300 space-y-1.5">
+                          <div className="flex items-center space-x-2 border-b border-slate-800 pb-2 mb-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            <span className="text-slate-500 uppercase font-bold tracking-wider text-[9px]">订单详情控制台</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">订单编号:</span>
+                              <span className="text-slate-300">{order.orderNid || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">资源ID:</span>
+                              <span className="text-slate-300">{order.resourceId || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">状态码:</span>
+                              <span className={statusInfo.color}>{order.statusCode} ({statusInfo.label})</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">费用:</span>
+                              <span className="text-slate-300">¥{order.price || '0'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">提交时间:</span>
+                              <span className="text-slate-300">{order.submittedAt || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">发布时间:</span>
+                              <span className="text-emerald-400">{order.publishedAt || '-'}</span>
+                            </div>
+                          </div>
+                          {order.orderUrl && (
+                            <div className="pt-2 border-t border-slate-800 mt-2">
+                              <a
+                                href={order.orderUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center space-x-1.5 text-blue-400 hover:text-blue-300 transition-colors"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span className="truncate">{order.orderUrl}</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             );
-          })
-        )}
+          })}
+        </AnimatePresence>
       </div>
     </div>
   );

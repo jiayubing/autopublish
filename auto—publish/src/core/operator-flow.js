@@ -1,4 +1,4 @@
-﻿const { sleep } = require("./files");
+const { sleep } = require("./files");
 const { isStopRequested } = require("./stop-signal");
 
 function resolveInteractive(options) {

@@ -1,5 +1,7 @@
-﻿const fs = require("fs");
+const fs = require("fs");
 const path = require("path");
+const mammoth = require("mammoth");
+const { throwIfStopped } = require("../../src/core/operator-flow");
 
 function firstTitle(raw, fallback) {
   var lines = String(raw || "").split(/\n/);
@@ -89,6 +91,7 @@ function createPlatformWorkbenchService(opts) {
     var tasks = plan.tasks || [];
     var results = [];
     for (var i = 0; i < tasks.length; i++) {
+      throwIfStopped();
       var task = tasks[i];
       var adapter = adapters[task.targetPlatformId];
       if (!adapter) {
@@ -98,14 +101,56 @@ function createPlatformWorkbenchService(opts) {
       try {
         adapter.ensureSession();
         await adapter.ensureLoggedIn({ interactive: opts.interactive, timeoutMs: opts.timeoutMs });
+        throwIfStopped();
+
         var sourceArticle = task.sourceArticle || {
           file: task.filePath, filePath: task.filePath, sourceFile: task.filePath,
           filename: task.filename, fileBaseName: path.basename(task.filename, path.extname(task.filename))
         };
         var parsed = adapter.parseArticleFiles
           ? adapter.parseArticleFiles([sourceArticle])
-          : [{ sourceFile: sourceArticle.sourceFile, file: sourceArticle.file, filename: sourceArticle.filename, title: sourceArticle.title || sourceArticle.fileBaseName }];
+          : await (async function() {
+              var article = { sourceFile: sourceArticle.sourceFile, file: sourceArticle.file, filename: sourceArticle.filename, title: sourceArticle.title || sourceArticle.fileBaseName };
+              var filePath = sourceArticle.filePath || sourceArticle.file || sourceArticle.sourceFile;
+              if (filePath) {
+                try {
+                  var ext = require("path").extname(filePath).toLowerCase();
+                  if (ext === ".txt" || ext === ".md") {
+                    var raw = require("fs").readFileSync(filePath, "utf-8");
+                    var rawLines = raw.split(/\n/);
+                    var bodyStart = 0;
+                    for (var li = 0; li < rawLines.length; li++) {
+                      if (rawLines[li].replace(/^#+\s*/, "").trim()) {
+                        bodyStart = li + 1;
+                        break;
+                      }
+                    }
+                    article.body = rawLines.slice(bodyStart).join("\n").trim();
+                  } else if (ext === ".docx") {
+                    var docxResult = await mammoth.extractRawText({ buffer: require("fs").readFileSync(filePath) });
+                    var fullText = String(docxResult && docxResult.value || "");
+                    var paraBreak = fullText.indexOf("\n\n");
+                    if (paraBreak > 0) {
+                      article.body = fullText.substring(paraBreak + 2).trim();
+                    } else {
+                      var titleLen = Math.min(String(article.title || "").length, 60);
+                      article.body = fullText.substring(titleLen).trim();
+                    }
+                  }
+                } catch (_) {}
+              }
+              var baseName = require("path").basename(article.filename, require("path").extname(article.filename));
+              var metaMatch = baseName.match(/^([\u4e00-\u9fa5]+)(\d+)(.+)$/);
+              if (metaMatch) {
+                article.city = metaMatch[1];
+                article.phone = metaMatch[2];
+                article.contact = metaMatch[3];
+              }
+              return [article];
+            })();
         if (!parsed.length) throw new Error("Article parse returned no publishable article");
+        throwIfStopped();
+
         var publishResult = await adapter.publishArticle(parsed[0], {
           autoSubmit: opts.autoSubmit !== false,
           interactive: opts.interactive,
@@ -113,7 +158,9 @@ function createPlatformWorkbenchService(opts) {
         });
         results.push({ task: task, status: publishResult === "pending" ? "pending" : "success", result: publishResult });
       } catch (error) {
-        results.push({ task: task, status: "failed", error: error.message });
+        var isStopError = error && error.message && error.message.indexOf("Stop requested") !== -1;
+        results.push({ task: task, status: isStopError ? "skipped" : "failed", error: error.message });
+        if (isStopError) break;
       } finally {
         if (adapter.closeSession && opts.closeAfterEach !== false) {
           try { adapter.closeSession(); } catch (_) {}
@@ -124,6 +171,7 @@ function createPlatformWorkbenchService(opts) {
       ok: results.filter(function(item) { return item.status === "success"; }).length,
       fail: results.filter(function(item) { return item.status === "failed"; }).length,
       pending: results.filter(function(item) { return item.status === "pending"; }).length,
+      skipped: results.filter(function(item) { return item.status === "skipped"; }).length,
       results: results
     };
   }

@@ -1,7 +1,6 @@
-import { Article, Draft, MediaResource, Order } from "./types";
-import { INITIAL_ARTICLES, INITIAL_RESOURCES, INITIAL_ORDERS } from "./mockData";
+import { Article, Draft, MediaResource, PlatformArticle, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, SubmissionOrder } from "./types";
 
-// 鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€
+// 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
 
 interface DesktopConsoleMedia {
   scanArticles(): Promise<{ ok: boolean; data?: unknown[]; error?: string }>;
@@ -19,17 +18,28 @@ interface DesktopConsoleMedia {
   getPool(): Promise<{ ok: boolean; data?: MediaResource[]; error?: string }>;
   addToPool(resource: MediaResource): Promise<{ ok: boolean; error?: string }>;
   removeFromPool(resourceId: string): Promise<{ ok: boolean; error?: string }>;
-  getBalance(): Promise<{ ok: boolean; data?: number; error?: string }>;
+  getBalance(): Promise<{ ok: boolean; data?: { balance: string; raw?: unknown }; error?: string }>;
 }
 
 interface DesktopConsoleOrders {
-  getOrders(): Promise<{ ok: boolean; data?: Order[]; error?: string }>;
+  getOrders(): Promise<{ ok: boolean; data?: RealOrder[]; error?: string }>;
   syncOrder(orderNid: string): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+}
+
+interface DesktopConsolePlatforms {
+  getQueue(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  buildSelectedPlan(input: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  submitSelectedPlan(plan: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  pauseSubmit(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  stopSubmit(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  getState(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  onState(listener: (state: { isPlatformRunning: boolean; isPlatformRunning: boolean }) => void): () => void;
 }
 
 interface DesktopConsole {
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
+  platforms: DesktopConsolePlatforms;
 }
 
 declare global {
@@ -38,7 +48,7 @@ declare global {
   }
 }
 
-// 鈹€鈹€ Helper utilities 鈹€鈹€
+// 鈹€鈹€鈹€ Helper utilities 鈹€鈹€鈹€
 
 export function isElectron(): boolean {
   return typeof window !== "undefined" && !!window.desktopConsole;
@@ -61,14 +71,14 @@ function writeLocalStorage<T>(key: string, value: T): void {
   }
 }
 
-// 鈹€鈹€ Data normalization (backend 鈫?React types) 鈹€鈹€
+// 鈹€鈹€鈹€ Data normalization (backend 鈫?React types) 鈹€鈹€鈹€
 
 function normalizeArticle(raw: Record<string, unknown>): Article {
   return {
     filename: String(raw.filename || ""),
     title: String(raw.title || ""),
     content: String(raw.content || ""),
-    words: typeof raw.words === "number" ? raw.words : 0,
+    words: typeof raw.words === "number" && raw.words > 0 ? raw.words : (typeof raw.content === "string" ? raw.content.replace(/\s/g, "").length : 0),
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
     selectedResources: Array.isArray(raw.selectedResources)
       ? (raw.selectedResources as MediaResource[])
@@ -77,17 +87,54 @@ function normalizeArticle(raw: Record<string, unknown>): Article {
       raw.lastModified ||
         new Date().toISOString().replace("T", " ").substring(0, 16)
     ),
+    // IPC fields preserved from scanArticles service
+    filePath: String(raw.filePath || ""),
+    autoTitle: String(raw.autoTitle || ""),
+    remark: String(raw.remark || ""),
+    hasImages: Boolean(raw.hasImages),
+    imageCount: typeof raw.imageCount === "number" ? raw.imageCount : 0,
+    ignoreImages: Boolean(raw.ignoreImages),
   };
 }
 
-// 鈹€鈹€ Fallback implementations (dev / no-Electron mode) 鈹€鈹€
+function normalizeOrder(raw: Record<string, unknown>): RealOrder {
+  return {
+    title: String(raw.title || ""),
+    filename: String(raw.filename || ""),
+    orderNid: String(raw.orderNid || ""),
+    statusCode: String(raw.statusCode || ""),
+    statusLabel: String(raw.statusLabel || ""),
+    submittedAt: String(raw.submittedAt || ""),
+    publishedAt: String(raw.publishedAt || ""),
+    resourceId: String(raw.resourceId || ""),
+    resourceName: String(raw.resourceName || ""),
+    price: String(raw.price != null ? raw.price : ""),
+    orderUrl: String(raw.orderUrl || ""),
+  };
+}
+
+function normalizeResource(raw: Record<string, unknown>): MediaResource {
+  return {
+    resourceId: String(raw.resourceId || ""),
+    name: String(raw.name || ""),
+    price: Number(raw.price) || 0,
+    type: (raw.type as MediaResource["type"]) || "image",
+    url: raw.url ? String(raw.url) : undefined,
+    duration: raw.duration ? String(raw.duration) : undefined,
+    resolution: raw.resolution ? String(raw.resolution) : undefined,
+    size: raw.size ? String(raw.size) : undefined,
+    createdAt: String(raw.createdAt || ""),
+  };
+}
+
+// 鈹€鈹€鈹€ Fallback implementations (dev / no-Electron mode) 鈹€鈹€鈹€
 
 async function fallbackScanArticles(): Promise<Article[]> {
-  return readLocalStorage<Article[]>("mw_articles", INITIAL_ARTICLES);
+  return readLocalStorage<Article[]>("mw_articles", []);
 }
 
 async function fallbackPreviewArticle(filename: string): Promise<Article> {
-  const articles = readLocalStorage<Article[]>("mw_articles", INITIAL_ARTICLES);
+  const articles = readLocalStorage<Article[]>("mw_articles", []);
   const article = articles.find((a) => a.filename === filename);
   if (!article) throw new Error("Article not found: " + filename);
   return article;
@@ -104,48 +151,47 @@ async function fallbackGetDraft(filename: string): Promise<Draft> {
   return draft;
 }
 
-async function fallbackSetDraft(filename: string, draft: Draft): Promise<void> {
+async function fallbackSetDraft(
+  filename: string,
+  draft: Draft
+): Promise<void> {
   const drafts = readLocalStorage<Draft[]>("mw_drafts", []);
   const idx = drafts.findIndex((d) => d.filename === filename);
-  if (idx >= 0) {
-    drafts[idx] = draft;
-  } else {
-    drafts.push(draft);
-  }
+  if (idx >= 0) drafts[idx] = draft;
+  else drafts.push(draft);
   writeLocalStorage("mw_drafts", drafts);
 }
 
 async function fallbackRemoveDraft(filename: string): Promise<void> {
   const drafts = readLocalStorage<Draft[]>("mw_drafts", []);
-  writeLocalStorage(
-    "mw_drafts",
-    drafts.filter((d) => d.filename !== filename)
-  );
+  writeLocalStorage("mw_drafts", drafts.filter((d) => d.filename !== filename));
 }
 
 async function fallbackBuildConfirmation(
-  _articles: Article[]
+  articles: Article[]
 ): Promise<unknown> {
-  return { built: _articles.length };
+  // Return a minimal confirmation shape for dev mode
+  return { articleCount: articles.length, platforms: [] };
 }
 
 async function fallbackSubmitSelected(
-  _articles: Article[]
+  articles: Article[]
 ): Promise<unknown> {
-  return { submitted: _articles.length };
+  // No-op in dev; return empty success envelope
+  return { ok: 1, fail: 0, skipped: 0, results: [] };
 }
 
 async function fallbackStopSubmit(): Promise<void> {
-  // No-op in fallback
+  // No-op
 }
 
 async function fallbackRefreshResources(
   _opts?: Record<string, unknown>
 ): Promise<void> {
-  // No-op in fallback 鈥?data lives in localStorage
+  // No-op
 }
 
-async function fallbackGetResourcePage(opts: {
+async function fallbackGetResourcePage(_opts: {
   page?: number;
   pageSize?: number;
 }): Promise<{
@@ -154,22 +200,10 @@ async function fallbackGetResourcePage(opts: {
   page: number;
   pageSize: number;
 }> {
-  const all = readLocalStorage<MediaResource[]>(
-    "mw_resources",
-    INITIAL_RESOURCES
-  );
-  const page = opts.page || 1;
-  const pageSize = opts.pageSize || 20;
-  const start = (page - 1) * pageSize;
-  return {
-    items: all.slice(start, start + pageSize),
-    total: all.length,
-    page,
-    pageSize,
-  };
+  return { items: [], total: 0, page: 1, pageSize: 20 };
 }
 
-async function fallbackSearchResourcePage(opts: {
+async function fallbackSearchResourcePage(_opts: {
   query: string;
   page?: number;
   pageSize?: number;
@@ -179,25 +213,7 @@ async function fallbackSearchResourcePage(opts: {
   page: number;
   pageSize: number;
 }> {
-  const all = readLocalStorage<MediaResource[]>(
-    "mw_resources",
-    INITIAL_RESOURCES
-  );
-  const q = (opts.query || "").toLowerCase();
-  const filtered = all.filter(
-    (r) =>
-      r.name.toLowerCase().includes(q) ||
-      r.resourceId.toLowerCase().includes(q)
-  );
-  const page = opts.page || 1;
-  const pageSize = opts.pageSize || 20;
-  const start = (page - 1) * pageSize;
-  return {
-    items: filtered.slice(start, start + pageSize),
-    total: filtered.length,
-    page,
-    pageSize,
-  };
+  return { items: [], total: 0, page: 1, pageSize: 20 };
 }
 
 async function fallbackGetPool(): Promise<MediaResource[]> {
@@ -206,10 +222,10 @@ async function fallbackGetPool(): Promise<MediaResource[]> {
 
 async function fallbackAddToPool(resource: MediaResource): Promise<void> {
   const pool = readLocalStorage<MediaResource[]>("mw_pool", []);
-  if (!pool.find((r) => r.resourceId === resource.resourceId)) {
+  if (!pool.some((r) => r.resourceId === resource.resourceId)) {
     pool.push(resource);
+    writeLocalStorage("mw_pool", pool);
   }
-  writeLocalStorage("mw_pool", pool);
 }
 
 async function fallbackRemoveFromPool(resourceId: string): Promise<void> {
@@ -221,36 +237,40 @@ async function fallbackRemoveFromPool(resourceId: string): Promise<void> {
 }
 
 async function fallbackGetBalance(): Promise<number> {
-  return readLocalStorage<number>("mw_balance", 3420.5);
+  return 0;
 }
 
-async function fallbackGetOrders(): Promise<Order[]> {
-  return readLocalStorage<Order[]>("mw_orders", INITIAL_ORDERS);
+async function fallbackGetOrders(): Promise<RealOrder[]> {
+  return [];
 }
 
 async function fallbackSyncOrder(_orderNid: string): Promise<unknown> {
-  return { synced: _orderNid };
+  return { synced: false };
 }
 
-// 鈹€鈹€ Public API functions 鈹€鈹€
+// 鈹€鈹€鈹€ Public API exports 鈹€鈹€鈹€
 
 export async function scanArticles(): Promise<Article[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.scanArticles();
     if (!result.ok) throw new Error(result.error || "scanArticles failed");
-    const rawArticles = result.data || [];
-    return rawArticles.map((r: unknown) => normalizeArticle(r as Record<string, unknown>));
+    const rawList = result.data || [];
+    return rawList.map((item: unknown) =>
+      normalizeArticle(item as Record<string, unknown>)
+    );
   }
   return fallbackScanArticles();
 }
 
-export async function previewArticle(filename: string): Promise<Article> {
+export async function previewArticle(
+  filename: string
+): Promise<Article> {
   if (isElectron()) {
     const result =
       await window.desktopConsole!.media.previewArticle(filename);
     if (!result.ok)
       throw new Error(result.error || "previewArticle failed");
-    return normalizeArticle(result.data || {});
+    return normalizeArticle(result.data as Record<string, unknown>);
   }
   return fallbackPreviewArticle(filename);
 }
@@ -259,7 +279,7 @@ export async function getDrafts(): Promise<Draft[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getDrafts();
     if (!result.ok) throw new Error(result.error || "getDrafts failed");
-    return result.data!;
+    return (result.data || []) as Draft[];
   }
   return fallbackGetDrafts();
 }
@@ -267,8 +287,9 @@ export async function getDrafts(): Promise<Draft[]> {
 export async function getDraft(filename: string): Promise<Draft> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getDraft(filename);
-    if (!result.ok) throw new Error(result.error || "getDraft failed");
-    return result.data!;
+    if (!result.ok)
+      throw new Error(result.error || "getDraft failed: " + filename);
+    return result.data as Draft;
   }
   return fallbackGetDraft(filename);
 }
@@ -382,7 +403,13 @@ export async function searchResourcePage(opts: {
       await window.desktopConsole!.media.searchResourcePage(opts);
     if (!result.ok)
       throw new Error(result.error || "searchResourcePage failed");
-    return result.data!;
+    const raw = result.data!;
+    return {
+      items: (raw.items || []).map((r: unknown) => normalizeResource(r as Record<string, unknown>)),
+      total: raw.total,
+      page: raw.page,
+      pageSize: raw.pageSize,
+    };
   }
   return fallbackSearchResourcePage(opts);
 }
@@ -422,16 +449,19 @@ export async function getBalance(): Promise<number> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getBalance();
     if (!result.ok) throw new Error(result.error || "getBalance failed");
-    return result.data!;
+    return Number((result.data as { balance: string }).balance || 0);
   }
   return fallbackGetBalance();
 }
 
-export async function getOrders(): Promise<Order[]> {
+export async function getOrders(): Promise<RealOrder[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.orders.getOrders();
     if (!result.ok) throw new Error(result.error || "getOrders failed");
-    return result.data!;
+    const rawList = result.data || [];
+    return rawList.map((item: unknown) =>
+      normalizeOrder(item as Record<string, unknown>)
+    );
   }
   return fallbackGetOrders();
 }
@@ -446,20 +476,85 @@ export async function syncOrder(orderNid: string): Promise<unknown> {
   return fallbackSyncOrder(orderNid);
 }
 
-// 鈹€鈹€ Fallback persistence helpers (for App.tsx to use when not in Electron) 鈹€鈹€
+// ============ Platform APIs ============
 
-export function persistArticles(articles: Article[]): void {
-  writeLocalStorage("mw_articles", articles);
+const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+  lieju: '列举网',
+  toutiao: '头条',
+  hepan: '蓝色河畔',
+};
+
+export function getPlatformDisplayName(id: string): string {
+  return PLATFORM_DISPLAY_NAMES[id] || id;
 }
 
-export function persistResources(resources: MediaResource[]): void {
-  writeLocalStorage("mw_resources", resources);
+export async function getPlatformQueue(): Promise<{
+  platforms: PlatformTarget[];
+  queue: PlatformArticle[];
+}> {
+  if (isElectron()) {
+    const result = await window.desktopConsole!.platforms.getQueue();
+    if (!result.ok) throw new Error(result.error || 'getPlatformQueue failed');
+    const data = result.data as {
+      platforms: Array<{ id: string; scanDir: string }>;
+      queue: PlatformArticle[];
+    };
+    return {
+      platforms: data.platforms.map((p) => ({
+        id: p.id,
+        displayName: getPlatformDisplayName(p.id),
+        scanDir: p.scanDir,
+      })),
+      queue: data.queue || [],
+    };
+  }
+  return { platforms: [], queue: [] };
 }
 
-export function persistOrders(orders: Order[]): void {
-  writeLocalStorage("mw_orders", orders);
+export async function buildPlatformPlan(input: {
+  articles: PlatformArticle[];
+  platformIds: string[];
+}): Promise<PlatformSubmitPlan> {
+  if (isElectron()) {
+    const result = await window.desktopConsole!.platforms.buildSelectedPlan(input);
+    if (!result.ok) throw new Error(result.error || 'buildPlatformPlan failed');
+    return result.data as PlatformSubmitPlan;
+  }
+  return { taskCount: 0, tasks: [] };
 }
 
-export function persistBalance(balance: number): void {
-  writeLocalStorage("mw_balance", balance);
+export async function submitPlatformPlan(
+  plan: PlatformSubmitPlan
+): Promise<PlatformSubmitResult> {
+  if (isElectron()) {
+    const result = await window.desktopConsole!.platforms.submitSelectedPlan(plan);
+    if (!result.ok) throw new Error(result.error || 'submitPlatformPlan failed');
+    return result.data as PlatformSubmitResult;
+  }
+  return { ok: 0, fail: 0, skipped: 0, results: [] };
+}
+
+export async function pausePlatformSubmit(): Promise<void> {
+  if (isElectron()) {
+    const result = await window.desktopConsole!.platforms.pauseSubmit();
+    if (!result.ok) throw new Error(result.error || "pausePlatformSubmit failed");
+    return;
+  }
+}
+
+export async function stopPlatformSubmit(): Promise<void> {
+  if (isElectron()) {
+    const result = await window.desktopConsole!.platforms.stopSubmit();
+    if (!result.ok) throw new Error(result.error || "stopPlatformSubmit failed");
+    return;
+  }
+}
+
+export async function getPlatformState(): Promise<{ isPlatformRunning: boolean; isPlatformPaused: boolean }> {
+  if (isElectron()) {
+    const result = await window.desktopConsole!.platforms.getState();
+    if (!result.ok) return { isPlatformRunning: false };
+    return result.data as { isPlatformRunning: boolean };
+  }
+  return { isPlatformRunning: false };
 }

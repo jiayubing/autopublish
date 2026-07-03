@@ -43,7 +43,15 @@ const api = {
   platforms: {
     getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
     buildSelectedPlan: function(input) { return ipcRenderer.invoke("platforms:build-selected-plan", input); },
-    submitSelectedPlan: function(plan) { return ipcRenderer.invoke("platforms:submit-selected-plan", plan); }
+    submitSelectedPlan: function(plan) { return ipcRenderer.invoke("platforms:submit-selected-plan", plan); },
+    pauseSubmit: function() { return ipcRenderer.invoke("platforms:pause-submit"); },
+    stopSubmit: function() { return ipcRenderer.invoke("platforms:stop-submit"); },
+    getState: function() { return ipcRenderer.invoke("platforms:get-state"); },
+    onState: function(listener) {
+      var handler = function(event, payload) { listener(payload); };
+      ipcRenderer.on("platform-state", handler);
+      return function() { ipcRenderer.removeListener("platform-state", handler); };
+    }
   },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },

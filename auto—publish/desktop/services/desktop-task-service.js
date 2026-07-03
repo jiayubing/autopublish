@@ -1,6 +1,8 @@
-﻿const path = require("path");
-const { fork } = require("child_process");
+const path = require("path");
+const { fork, exec } = require("child_process");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
+
+var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
 
 function createDesktopTaskService(opts) {
   var options = opts || {};
@@ -12,11 +14,21 @@ function createDesktopTaskService(opts) {
   var snapshotTask = null;
   var batchTask = null;
   var batchChild = null;
+  var platformChild = null;
+  var isPlatformRunning = false;
+  var platformAbort = null;
+  var platformTaskCount = 0;
 
   function emitBatchState() {
     sendToRenderer("batch-state", {
       isBatchRunning: isBatchRunning,
       isStopPending: isStopPending
+    });
+  }
+
+  function emitPlatformState() {
+    sendToRenderer("platform-state", {
+      isPlatformRunning: isPlatformRunning
     });
   }
 
@@ -34,15 +46,11 @@ function createDesktopTaskService(opts) {
       var settled = false;
 
       child.on("message", function(message) {
-        if (!message) {
-          return;
-        }
-
+        if (!message) return;
         if (message.type === "log" && hooks && typeof hooks.onLog === "function") {
           hooks.onLog(message.payload);
           return;
         }
-
         if (message.type === "result") {
           settled = true;
           resolve(message.payload);
@@ -65,6 +73,19 @@ function createDesktopTaskService(opts) {
     return { child: child, promise: promise };
   }
 
+  function closeBrowserSessions() {
+    var rootDir = path.resolve(cwd);
+    var workDir = path.join(rootDir, "work", "playwright-cli");
+    var nodeExe = process.env.AUTO_PUBLISH_NODE_EXEC_PATH || process.execPath;
+    var cliJs = "C:/Users/violet/AppData/Roaming/npm/node_modules/@playwright/cli/playwright-cli.js";
+
+    PLATFORM_SESSIONS.forEach(function(session) {
+      var sessionDir = path.join(workDir, "sessions", session);
+      var cmd = 'chcp 65001 > nul && set PLAYWRIGHT_DAEMON_SESSION_DIR=' + sessionDir + ' && "' + nodeExe + '" "' + cliJs + '" -s=' + session + ' close';
+      exec(cmd, { timeout: 5000 }, function() {});
+    });
+  }
+
   function refreshQueueSnapshot(options) {
     var payload = options || {};
     if (!snapshotTask) {
@@ -76,42 +97,27 @@ function createDesktopTaskService(opts) {
   }
 
   async function startBatch(options, hooks) {
-    if (isBatchRunning) {
-      throw new Error("当前已有发文批次正在运行。");
-    }
-
+    if (isBatchRunning) throw new Error("当前已有发文批次正在运行。");
     clearStopSignal();
     isBatchRunning = true;
     isStopPending = false;
     emitBatchState();
-
     try {
-      var task = spawnDesktopTask("batch", options || {}, {
-        onLog: hooks && hooks.onLog ? hooks.onLog : function() {}
-      });
+      var task = spawnDesktopTask("batch", options || {}, { onLog: hooks && hooks.onLog ? hooks.onLog : function() {} });
       batchChild = task.child;
       batchTask = task.promise;
-      var result = await batchTask;
-      return result;
+      return await batchTask;
     } finally {
-      batchChild = null;
-      batchTask = null;
-      isBatchRunning = false;
-      isStopPending = false;
+      batchChild = null; batchTask = null;
+      isBatchRunning = false; isStopPending = false;
       emitBatchState();
       sendToRenderer("queue-updated", await refreshQueueSnapshot(options));
     }
   }
 
   function stopBatch() {
-    if (!isBatchRunning || !batchChild) {
-      throw new Error("当前没有正在运行的发文批次。");
-    }
-
-    if (isStopPending) {
-      return { alreadyRequested: true };
-    }
-
+    if (!isBatchRunning || !batchChild) throw new Error("当前没有正在运行的发文批次。");
+    if (isStopPending) return { alreadyRequested: true };
     requestStopSignal("desktop_stop_button");
     batchChild.send({ type: "stop" });
     isStopPending = true;
@@ -119,15 +125,82 @@ function createDesktopTaskService(opts) {
     return { alreadyRequested: false };
   }
 
+  async function startPlatformSubmit(plan, hooks) {
+    if (isPlatformRunning) throw new Error("当前已有平台投稿任务正在运行。");
+
+    clearStopSignal();
+    isPlatformRunning = true;
+    platformTaskCount = (plan && plan.tasks) ? plan.tasks.length : 0;
+    emitPlatformState();
+
+    try {
+      var payload = { plan: plan, submitOptions: { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 } };
+      var task = spawnDesktopTask("platform-submit", payload, { onLog: hooks && hooks.onLog ? hooks.onLog : function() {} });
+      platformChild = task.child;
+
+      var abortPromise = new Promise(function(resolve) {
+        platformAbort = function() {
+          resolve({ ok: true, data: { ok: 0, fail: 0, skipped: platformTaskCount, pending: 0, results: [] } });
+        };
+      });
+
+      var timeoutMs = 120000;
+      var timeoutPromise = new Promise(function(resolve) {
+        setTimeout(function() {
+          resolve({ ok: false, error: "Platform publish timed out after " + (timeoutMs / 1000) + "s" });
+        }, timeoutMs);
+      });
+
+      var result = await Promise.race([task.promise, abortPromise, timeoutPromise]);
+
+      if (result && !result.ok && result.error && result.error.indexOf("timed out") !== -1) {
+        try { platformChild.kill(); } catch (_) {}
+      }
+
+      return result;
+    } finally {
+      platformAbort = null;
+      platformTaskCount = 0;
+      platformChild = null;
+      isPlatformRunning = false;
+      emitPlatformState();
+    }
+  }
+
+  function pausePlatformSubmit() {
+    if (!isPlatformRunning) return { ok: true };
+
+    if (platformAbort) { platformAbort(); platformAbort = null; }
+    if (platformChild) { try { platformChild.send({ type: "pause" }); } catch (_) {} }
+
+    closeBrowserSessions();
+    requestStopSignal("operator_pause");
+
+    isPlatformRunning = false;
+    emitPlatformState();
+    return { ok: true };
+  }
+
+  function stopPlatformSubmit() {
+    if (!isPlatformRunning) return { alreadyStopped: true };
+    if (platformAbort) { platformAbort(); platformAbort = null; }
+    if (platformChild) {
+      requestStopSignal("desktop_stop_button");
+      platformChild.send({ type: "stop" });
+      setTimeout(function() { try { if (platformChild) platformChild.kill(); } catch (_) {} }, 3000);
+    }
+    isPlatformRunning = false;
+    emitPlatformState();
+    return { alreadyRequested: false };
+  }
+
   function getState() {
-    return { isBatchRunning: isBatchRunning, isStopPending: isStopPending };
+    return { isBatchRunning: isBatchRunning, isStopPending: isStopPending, isPlatformRunning: isPlatformRunning };
   }
 
   return {
-    refreshQueueSnapshot: refreshQueueSnapshot,
-    startBatch: startBatch,
-    stopBatch: stopBatch,
-    getState: getState
+    refreshQueueSnapshot, startBatch, stopBatch,
+    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState
   };
 }
 

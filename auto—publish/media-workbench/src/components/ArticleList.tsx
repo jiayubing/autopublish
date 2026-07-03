@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Article } from '../types';
 import { 
   FileText, 
@@ -20,7 +20,6 @@ interface ArticleListProps {
   onOpenArticle: (article: Article) => void;
   onScanArticles: () => void;
   isScanning: boolean;
-  onAddNewMockArticle: () => void;
 }
 
 export default function ArticleList({
@@ -29,7 +28,6 @@ export default function ArticleList({
   onOpenArticle,
   onScanArticles,
   isScanning,
-  onAddNewMockArticle
 }: ArticleListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,14 +60,6 @@ export default function ArticleList({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-blue-500' : ''}`} />
             <span>{isScanning ? '扫描中...' : '重新扫描'}</span>
-          </button>
-          
-          <button
-            onClick={onAddNewMockArticle}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-sm transition-all active:scale-95"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>导入本地稿件</span>
           </button>
         </div>
       </div>
