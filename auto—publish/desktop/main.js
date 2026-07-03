@@ -40,11 +40,11 @@ app.whenReady().then(function() {
   // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
   // its default project-root path.
   configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
-  const runtimeRoot = configureRuntimeEnvironment();
+  const runtime = configureRuntimeEnvironment();
 
   createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
   const taskService = createDesktopTaskService({
-    cwd: runtimeRoot,
+    cwd: runtime.workspaceRoot,
     sendToRenderer: sendToRenderer
   });
 
@@ -53,7 +53,8 @@ app.whenReady().then(function() {
     ipcMain: ipcMain,
     taskService: taskService,
     sendToRenderer: sendToRenderer,
-    rootDir: runtimeRoot
+    rootDir: runtime.workspaceRoot,
+    appRoot: runtime.appRoot
   });
 
   subscribe = require("../src/core/logger").subscribe;

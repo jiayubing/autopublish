@@ -3,7 +3,7 @@
 ## Start
 
 ```powershell
-cd F:\官媒投稿\auto—publish
+cd F:\瀹樺獟鎶曠\auto鈥攑ublish
 npm run desktop
 ```
 
@@ -15,8 +15,8 @@ npm run snapshot
 
 ## Workspaces
 
-- **Media Submission** (媒体投稿): scan `input/media`, select one or more Media Pool resources per article, preview, confirm, submit, and sync orders.
-- **Other Platforms** (其他平台): scan non-media platform queues (lieju/toutiao/hepan), select articles, choose target platforms, confirm, and publish selected tasks serially.
+- **Media Submission** (濯掍綋鎶曠): scan `input/media`, select one or more Media Pool resources per article, preview, confirm, submit, and sync orders.
+- **Other Platforms** (鍏朵粬骞冲彴): scan non-media platform queues (lieju/toutiao/hepan), select articles, choose target platforms, confirm, and publish selected tasks serially.
 
 ## Flow
 
@@ -27,13 +27,13 @@ npm run snapshot
 ## Safety
 
 - Media submission requires a final confirmation drawer before any API submission.
-- Media submission runs serially — one task at a time.
+- Media submission runs serially 鈥?one task at a time.
 - A failed media task does not stop later tasks. The final result summarizes success, failure, and skipped tasks.
 - Stop prevents new tasks from starting and lets the current request finish.
 
 ## Architecture
 
-- **Main process:** `desktop/main.js` (lifecycle only) → `desktop/ipc/register.js` → `batch-ipc.js`, `media-ipc.js`, `platform-ipc.js`
+- **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`batch-ipc.js`, `media-ipc.js`, `platform-ipc.js`
 - **Services:** `desktop/services/ipc-response.js`, `media-workbench-service.js`, `platform-workbench-service.js`, `media-order-service.js`, `desktop-task-service.js`
 - **Renderer:** `desktop/renderer/app.js` (bootstrapper), `media-workbench.js`, `platform-workbench.js`, `media-resource-library.js`, `media-orders-drawer.js`, `shared/dom.js`, `shared/drawer.js`, `shared/confirm.js`
 - **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
@@ -76,3 +76,16 @@ npm run dist:alpha
 ` 
 
 The packaged app creates runtime folders under Electron userData unless AUTO_PUBLISH_WORKSPACE is set. Do not place private .env, article drafts, logs, or order history in the installer package.
+
+
+## Packaged App Workspace
+
+Alpha packaged app uses %USERPROFILE%\\Documents\\AutoPublish by default.
+Put media articles in Documents\\AutoPublish\\input\\media.
+Put platform articles in Documents\\AutoPublish\\input\\lieju, input\\toutiao, or input\\hepan.
+Put .env containing XQW_API_KEY=... in Documents\\AutoPublish\\.env.
+
+Create a smoke workspace:
+`powershell
+powershell -ExecutionPolicy Bypass -File scripts/create-alpha-smoke-workspace.ps1
+` 

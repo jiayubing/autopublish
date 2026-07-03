@@ -1,10 +1,10 @@
-﻿// auto—publish/src/platforms/media/media-resource-store.js
+// auto—publish/src/platforms/media/media-resource-store.js
 // Local JSON store for cached media resources fetched from the API.
 
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.resolve(__dirname, '..', '..', '..', 'data');
+const DATA_DIR = process.env.AUTO_PUBLISH_ROOT_DIR ? path.join(process.env.AUTO_PUBLISH_ROOT_DIR, 'data') : path.resolve(__dirname, '..', '..', '..', 'data');
 const DEFAULT_PATH = path.join(DATA_DIR, 'media-resources.json');
 
 class MediaResourceStore {

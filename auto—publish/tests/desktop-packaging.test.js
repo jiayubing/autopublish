@@ -18,7 +18,7 @@ describe("desktop alpha packaging", function() {
   it("configures a writable runtime workspace before IPC registration", function() {
     const main = read("desktop/main.js");
     assert.ok(main.includes("configureRuntimeEnvironment"));
-    assert.ok(main.includes("rootDir: runtimeRoot"));
+    assert.ok(main.includes("rootDir: runtime.workspaceRoot") || main.includes("rootDir: runtimeRoot"));
     assert.ok(main.indexOf("configureRuntimeEnvironment") < main.indexOf("registerIpc"));
   });
 

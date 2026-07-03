@@ -7,13 +7,16 @@ const fs = require("fs");
 const path = require("path");
 
 const REQUIRED_FILES = [
+  "package.json",
   "desktop/main.js",
   "desktop/preload.js",
   "desktop/runtime-paths.js",
-  "desktop/ipc/register.js",
+  "desktop/ipc/media-ipc.js",
+  "desktop/ipc/platform-ipc.js",
+  "src/core/logger.js",
   "scripts/config.js",
+  "config/platforms.json",
   "media-workbench/dist/index.html",
-  "package.json",
 ];
 
 const REQUIRED_DIRS = [

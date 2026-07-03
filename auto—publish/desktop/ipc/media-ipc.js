@@ -20,7 +20,7 @@ function registerMediaIpc(deps) {
   });
   var mediaOrderService = createMediaOrderService({});
   var mediaWorkbenchService = createMediaWorkbenchService({
-    inputDir: path.resolve(__dirname, "..", "..", "input", "media"),
+    inputDir: path.join(deps.rootDir || path.resolve(__dirname, "..", ".."), "input", "media"),
     draftStore: mediaDraftStore
   });
 

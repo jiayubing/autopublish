@@ -1,4 +1,4 @@
-﻿// auto—publish/src/platforms/media/media-draft-store.js
+// auto—publish/src/platforms/media/media-draft-store.js
 // Local JSON store for media submission drafts.
 // Tracks per-article settings: media selection, title override, notes, image handling.
 

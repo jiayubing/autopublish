@@ -1,11 +1,11 @@
-﻿// auto—publish/src/platforms/media/submission-order-store.js
+// auto—publish/src/platforms/media/submission-order-store.js
 // Submission record store backed by a JSONL file.
 // CommonJS port from root src/core/submission-store.js.
 
 const { appendFile, mkdir } = require('node:fs/promises');
 const { dirname, resolve, join } = require('node:path');
 
-const projectRoot = resolve(__dirname, '..', '..', '..');
+const projectRoot = process.env.AUTO_PUBLISH_ROOT_DIR || resolve(__dirname, '..', '..', '..');
 const DEFAULT_STORE_PATH = join(projectRoot, 'data', 'submission-orders.jsonl');
 
 /**
