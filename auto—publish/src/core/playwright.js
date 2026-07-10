@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
@@ -7,7 +7,7 @@ const { log } = require("./logger");
 const { quoteArg } = require("./files");
 
 function nodeExecPath() {
-  return process.env.AUTO_PUBLISH_NODE_EXEC_PATH || process.execPath;
+  if (process.env.AUTO_PUBLISH_NODE_EXEC_PATH && process.env.AUTO_PUBLISH_NODE_EXEC_PATH.trim()) { return process.env.AUTO_PUBLISH_NODE_EXEC_PATH.trim(); } try { var r = require("child_process").execSync("where node 2>nul",{encoding:"utf8",timeout:5000}); var ls = String(r).trim().split(/\r?\n/).filter(Boolean); for (var i=0;i<ls.length;i++) { var c=ls[i].trim(); if (c&&require("fs").existsSync(c)&&c.toLowerCase().indexOf("electron")===-1) return c; } } catch(_){} return process.execPath;
 }
 
 // Each Platform Adapter owns its own Platform Session: an isolated daemon

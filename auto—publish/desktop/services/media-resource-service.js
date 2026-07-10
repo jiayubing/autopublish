@@ -1,9 +1,10 @@
-const { MediaClient } = require("../../src/platforms/media/media-client");
+﻿const { MediaClient } = require("../../src/platforms/media/media-client");
 const { resolveApiKey } = require("../../src/platforms/media/config");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 
-const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_MAX_PAGES = 600;
 
 function createMediaResourceService(opts) {
   opts = opts || {};
@@ -57,7 +58,7 @@ function createMediaResourceService(opts) {
     opts = opts || {};
     var fetchAll = !!opts.fetchAll;
     var pageSizeHint = normalizePositiveInteger(opts.pageSizeHint, DEFAULT_PAGE_SIZE);
-    var maxPages = normalizePositiveInteger(opts.maxPages, 50);
+    var maxPages = normalizePositiveInteger(opts.maxPages, DEFAULT_MAX_PAGES);
     var page = 1;
     var allResources = [];
 
@@ -65,7 +66,7 @@ function createMediaResourceService(opts) {
       var response = await client.mediaList({ page: page, pageSize: pageSizeHint });
       var pageItems = extractResourceItems(response).map(normalizeResource).filter(hasResourceId);
       allResources = allResources.concat(pageItems);
-      if (!fetchAll || pageItems.length < pageSizeHint || pageItems.length === 0) {
+      if (!fetchAll || pageItems.length === 0) {
         break;
       }
       page++;

@@ -1,4 +1,4 @@
-const path = require("path");
+﻿const path = require("path");
 const { fork, exec } = require("child_process");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 
@@ -37,7 +37,7 @@ function createDesktopTaskService(opts) {
       cwd: cwd,
       env: Object.assign({}, process.env, {
         AUTO_PUBLISH_DESKTOP: "1",
-        AUTO_PUBLISH_NODE_EXEC_PATH: process.env.AUTO_PUBLISH_NODE_EXEC_PATH || process.execPath
+        AUTO_PUBLISH_NODE_EXEC_PATH: process.env.AUTO_PUBLISH_NODE_EXEC_PATH || ''
       }),
       stdio: ["ignore", "ignore", "ignore", "ipc"]
     });
@@ -73,18 +73,27 @@ function createDesktopTaskService(opts) {
     return { child: child, promise: promise };
   }
 
-  function closeBrowserSessions() {
-    var rootDir = path.resolve(cwd);
-    var workDir = path.join(rootDir, "work", "playwright-cli");
-    var nodeExe = process.env.AUTO_PUBLISH_NODE_EXEC_PATH || process.execPath;
-    var cliJs = "C:/Users/violet/AppData/Roaming/npm/node_modules/@playwright/cli/playwright-cli.js";
+function closeBrowserSessions() {
+    // Resolve real Node.js (not Electron EXE) to run playwright-cli correctly
+    var nodeExe = process.env.AUTO_PUBLISH_NODE_EXEC_PATH || "";
+    if (!nodeExe) {
+      try {
+        var whereResult = require("child_process").execSync("where node 2>nul", { encoding: "utf8", timeout: 5000 });
+        var lines = String(whereResult).trim().split(/\r?\n/).filter(Boolean);
+        nodeExe = lines[0] || process.execPath;
+      } catch (_) { nodeExe = process.execPath; }
+    }
+    var cliJs = require("../../scripts/config").PLAYWRIGHT_CLI_JS;
+    // Use workspace root for sessions, same as pwSessionConfig
+    var rootDir = require("../../scripts/config").DIRS.rootDir;
+    var workDir = require("path").join(rootDir, "work", "playwright-cli");
 
     PLATFORM_SESSIONS.forEach(function(session) {
-      var sessionDir = path.join(workDir, "sessions", session);
+      var sessionDir = require("path").join(workDir, "sessions", session);
       var cmd = 'chcp 65001 > nul && set PLAYWRIGHT_DAEMON_SESSION_DIR=' + sessionDir + ' && "' + nodeExe + '" "' + cliJs + '" -s=' + session + ' close';
       exec(cmd, { timeout: 5000 }, function() {});
     });
-  }
+}
 
   function refreshQueueSnapshot(options) {
     var payload = options || {};
@@ -171,7 +180,14 @@ function createDesktopTaskService(opts) {
     if (!isPlatformRunning) return { ok: true };
 
     if (platformAbort) { platformAbort(); platformAbort = null; }
-    if (platformChild) { try { platformChild.send({ type: "pause" }); } catch (_) {} }
+
+    // Kill the worker immediately to prevent ensureDaemon from reopening browser.
+    // The main promise already resolved via platformAbort.
+    if (platformChild) {
+      try { platformChild.send({ type: "pause" }); } catch (_) {}
+      var dyingChild = platformChild;
+      setTimeout(function() { try { dyingChild.kill("SIGKILL"); } catch (_) {} }, 500);
+    }
 
     closeBrowserSessions();
     requestStopSignal("operator_pause");
