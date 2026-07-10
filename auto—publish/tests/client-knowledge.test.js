@@ -79,4 +79,18 @@ describe("client knowledge", function() {
       return error.code === "SEARCH_QUERY_MISSING";
     });
   });
+
+  it("rejects reading a client directory outside workspace.clients", function() {
+    const outsideDirectory = path.join(root, "outside-client");
+    fs.mkdirSync(outsideDirectory, { recursive: true });
+    fs.writeFileSync(path.join(outsideDirectory, "search_query.txt"), "outside", "utf8");
+    fs.writeFileSync(path.join(outsideDirectory, "facts.md"), "outside", "utf8");
+
+    assert.throws(function() { readSearchQuery(outsideDirectory, root); }, function(error) {
+      return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+    });
+    assert.throws(function() { loadClientKnowledge(outsideDirectory, root); }, function(error) {
+      return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+    });
+  });
 });

@@ -9,6 +9,38 @@ function contentError(code, message) {
   return error;
 }
 
+function getClientsRoot(workspaceRootOrClients) {
+  const resolved = path.resolve(workspaceRootOrClients);
+  return path.basename(resolved) === "clients"
+    ? resolved
+    : getContentWorkspace(resolved).clients;
+}
+
+function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
+  if (typeof clientDirectory !== "string" || !clientDirectory) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  }
+
+  const resolved = path.resolve(clientDirectory);
+  const clientsRoot = workspaceRootOrClients
+    ? getClientsRoot(workspaceRootOrClients)
+    : path.dirname(resolved);
+  if (!workspaceRootOrClients && path.basename(clientsRoot) !== "clients") {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  }
+
+  const relative = path.relative(clientsRoot, resolved);
+  if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  }
+
+  const expected = getClientWorkspace({ clients: clientsRoot }, path.basename(resolved));
+  if (expected !== resolved) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  }
+  return resolved;
+}
+
 function readClientMetadata(directory) {
   const metadataPath = path.join(directory, "client.json");
   if (!fs.existsSync(metadataPath)) {
@@ -28,7 +60,8 @@ function readClientMetadata(directory) {
   }
 }
 
-function readSearchQuery(clientDirectory) {
+function readSearchQuery(clientDirectory, workspaceRootOrClients) {
+  clientDirectory = assertClientDirectory(clientDirectory, workspaceRootOrClients);
   const filename = path.join(clientDirectory, "search_query.txt");
   if (!fs.existsSync(filename)) {
     throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
@@ -43,7 +76,8 @@ function readSearchQuery(clientDirectory) {
   return query;
 }
 
-function loadClientKnowledge(clientDirectory) {
+function loadClientKnowledge(clientDirectory, workspaceRootOrClients) {
+  clientDirectory = assertClientDirectory(clientDirectory, workspaceRootOrClients);
   if (!fs.existsSync(clientDirectory) || !fs.statSync(clientDirectory).isDirectory()) {
     throw contentError("CLIENT_NOT_FOUND", "Client directory is missing");
   }
@@ -88,8 +122,8 @@ function listClients(workspaceRoot) {
         id: metadata.id,
         name: metadata.name,
         directory: directory,
-        searchQuery: readSearchQuery(directory),
-        knowledgeFiles: loadClientKnowledge(directory)
+        searchQuery: readSearchQuery(directory, workspace.clients),
+        knowledgeFiles: loadClientKnowledge(directory, workspace.clients)
       };
     });
 }

@@ -36,6 +36,10 @@ function normalizeResearch(clientId, research) {
 
 function normalizeReferences(references) {
   return Array.isArray(references) ? references.map(function(reference) {
+    if (!reference || typeof reference.title !== "string" || !reference.title.trim() ||
+        typeof reference.url !== "string" || !reference.url.trim()) {
+      throw storeError("RESEARCH_INVALID_REFERENCE", "Research reference requires title and url");
+    }
     return {
       title: reference && reference.title,
       url: reference && reference.url,

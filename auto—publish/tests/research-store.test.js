@@ -85,4 +85,23 @@ describe("research store", function() {
 
     assert.equal(fs.existsSync(path.join(root, "research", "client-2", "query-3.json")), true);
   });
+
+  it("rejects references without required title or url", function() {
+    [
+      { url: "https://example.com" },
+      { title: "Reference" },
+      { title: " ", url: "https://example.com" },
+      { title: "Reference", url: " " }
+    ].forEach(function(reference) {
+      assert.throws(function() {
+        store.saveResearch("client-1", {
+          id: "invalid-reference-" + Math.random(),
+          question: "问题",
+          answerText: "答案",
+          references: [reference],
+          createdAt: "2026-07-11T00:00:00.000Z"
+        });
+      }, function(error) { return error.code === "RESEARCH_INVALID_REFERENCE"; });
+    });
+  });
 });
