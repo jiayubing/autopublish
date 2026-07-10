@@ -11,6 +11,44 @@ function ensureDir(dir) {
   }
 }
 
+function getContentWorkspace(root) {
+  var resolvedRoot = path.resolve(root);
+  return {
+    root: resolvedRoot,
+    clients: path.join(resolvedRoot, "clients"),
+    research: path.join(resolvedRoot, "research"),
+    templates: path.join(resolvedRoot, "templates"),
+    generated: path.join(resolvedRoot, "generated"),
+    published: path.join(resolvedRoot, "published"),
+    logs: path.join(resolvedRoot, "logs")
+  };
+}
+
+function getClientWorkspace(workspace, clientName) {
+  if (typeof clientName !== "string" || clientName.trim() === "") {
+    throw new Error("Invalid client name");
+  }
+
+  if (
+    clientName === "." ||
+    clientName === ".." ||
+    clientName.includes("/") ||
+    clientName.includes("\\") ||
+    path.isAbsolute(clientName) ||
+    path.win32.isAbsolute(clientName)
+  ) {
+    throw new Error("Invalid client name");
+  }
+
+  var clientRoot = path.resolve(workspace.clients, clientName);
+  var relativePath = path.relative(path.resolve(workspace.clients), clientRoot);
+  if (relativePath === ".." || relativePath.startsWith(".." + path.sep) || path.isAbsolute(relativePath)) {
+    throw new Error("Invalid client name");
+  }
+
+  return clientRoot;
+}
+
 function ensureAllDirs() {
   Object.keys(DIRS).forEach(function(key) {
     ensureDir(DIRS[key]);
@@ -64,4 +102,13 @@ function archivePublishedArticle(article) {
   log("已移动到 published: " + path.basename(target), "INFO");
 }
 
-module.exports = { ensureDir, ensureAllDirs, sleep, quoteArg, copyToFailed, archivePublishedArticle };
+module.exports = {
+  ensureDir,
+  ensureAllDirs,
+  sleep,
+  quoteArg,
+  copyToFailed,
+  archivePublishedArticle,
+  getContentWorkspace,
+  getClientWorkspace
+};
