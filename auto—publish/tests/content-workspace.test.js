@@ -72,6 +72,7 @@ describe("content workspace", function() {
       "foo|bar",
       "foo?bar",
       "foo*bar",
+      "foo\u0001bar",
       "foo\0bar"
     ];
 

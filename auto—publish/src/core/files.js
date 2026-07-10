@@ -39,7 +39,7 @@ function getClientWorkspace(workspace, clientName) {
     clientName === ".." ||
     clientName.includes("/") ||
     clientName.includes("\\") ||
-    /[<>:"/\\|?*\u0000]/.test(clientName) ||
+    /[<>:"/\\|?*\u0000-\u001F]/.test(clientName) ||
     clientName.endsWith(" ") ||
     clientName.endsWith(".") ||
     isWindowsReservedDeviceName(clientName) ||
