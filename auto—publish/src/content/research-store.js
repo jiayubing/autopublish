@@ -35,17 +35,29 @@ function normalizeResearch(clientId, research) {
 }
 
 function normalizeReferences(references) {
-  return Array.isArray(references) ? references.map(function(reference) {
+  if (!Array.isArray(references)) {
+    throw storeError("RESEARCH_INVALID_REFERENCE", "Research references must be an array");
+  }
+  return references.map(function(reference) {
     if (!reference || typeof reference.title !== "string" || !reference.title.trim() ||
         typeof reference.url !== "string" || !reference.url.trim()) {
       throw storeError("RESEARCH_INVALID_REFERENCE", "Research reference requires title and url");
+    }
+    let url;
+    try {
+      url = new URL(reference.url);
+    } catch (error) {
+      throw storeError("RESEARCH_INVALID_REFERENCE", "Research reference URL is invalid");
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw storeError("RESEARCH_INVALID_REFERENCE", "Research reference URL protocol is invalid");
     }
     return {
       title: reference && reference.title,
       url: reference && reference.url,
       snippet: reference && reference.snippet
     };
-  }) : [];
+  });
 }
 
 function readRecord(filename) {
@@ -57,7 +69,7 @@ function readRecord(filename) {
     invalid.cause = error;
     throw invalid;
   }
-  if (!record || typeof record !== "object") {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
     throw storeError("RESEARCH_INVALID_JSON", "Research JSON is invalid");
   }
   return Object.assign({}, record, {
@@ -101,7 +113,26 @@ function createResearchStore(workspaceRoot) {
     const temporary = filename + ".tmp-" + process.pid + "-" + Date.now();
     try {
       fs.writeFileSync(temporary, JSON.stringify(record, null, 2) + "\n", "utf8");
-      fs.renameSync(temporary, filename);
+      const backup = filename + ".bak-" + process.pid + "-" + Date.now();
+      let movedExisting = false;
+      try {
+        try {
+          fs.renameSync(filename, backup);
+          movedExisting = true;
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        try {
+          fs.renameSync(temporary, filename);
+        } catch (error) {
+          if (movedExisting) fs.renameSync(backup, filename);
+          throw error;
+        }
+        if (movedExisting) fs.unlinkSync(backup);
+      } catch (error) {
+        if (fs.existsSync(backup) && !fs.existsSync(filename)) fs.renameSync(backup, filename);
+        throw error;
+      }
     } finally {
       if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
     }
