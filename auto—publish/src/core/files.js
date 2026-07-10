@@ -24,6 +24,11 @@ function getContentWorkspace(root) {
   };
 }
 
+function isWindowsReservedDeviceName(clientName) {
+  var baseName = clientName.split(".")[0].replace(/[ .]+$/g, "").toUpperCase();
+  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(baseName);
+}
+
 function getClientWorkspace(workspace, clientName) {
   if (typeof clientName !== "string" || clientName.trim() === "") {
     throw new Error("Invalid client name");
@@ -34,6 +39,10 @@ function getClientWorkspace(workspace, clientName) {
     clientName === ".." ||
     clientName.includes("/") ||
     clientName.includes("\\") ||
+    /[<>:"/\\|?*\u0000]/.test(clientName) ||
+    clientName.endsWith(" ") ||
+    clientName.endsWith(".") ||
+    isWindowsReservedDeviceName(clientName) ||
     path.isAbsolute(clientName) ||
     path.win32.isAbsolute(clientName)
   ) {

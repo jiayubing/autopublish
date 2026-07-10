@@ -61,4 +61,54 @@ describe("content workspace", function() {
       getClientWorkspace(workspace, "nested/../../outside");
     }, /client name/i);
   });
+
+  it("rejects Windows-illegal characters and NUL characters", function() {
+    const workspace = getContentWorkspace(path.join(os.tmpdir(), "content-workspace"));
+    const invalidNames = [
+      "foo:bar",
+      "foo<bar",
+      "foo>bar",
+      "foo\"bar",
+      "foo|bar",
+      "foo?bar",
+      "foo*bar",
+      "foo\0bar"
+    ];
+
+    invalidNames.forEach(function(name) {
+      assert.throws(function() {
+        getClientWorkspace(workspace, name);
+      }, /client name/i);
+    });
+  });
+
+  it("rejects names ending in spaces or periods", function() {
+    const workspace = getContentWorkspace(path.join(os.tmpdir(), "content-workspace"));
+
+    ["foo ", "foo.", "客户 ", "客户."].forEach(function(name) {
+      assert.throws(function() {
+        getClientWorkspace(workspace, name);
+      }, /client name/i);
+    });
+  });
+
+  it("rejects Windows reserved device names regardless of case or extension", function() {
+    const workspace = getContentWorkspace(path.join(os.tmpdir(), "content-workspace"));
+    const reservedNames = [
+      "CON",
+      "prn",
+      "Aux.txt",
+      "nul.backup",
+      "Com1.log",
+      "COM9.data",
+      "lpt1.archive",
+      "LPT9.txt"
+    ];
+
+    reservedNames.forEach(function(name) {
+      assert.throws(function() {
+        getClientWorkspace(workspace, name);
+      }, /client name/i);
+    });
+  });
 });
