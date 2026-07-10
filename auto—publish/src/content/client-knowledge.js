@@ -21,21 +21,31 @@ function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
     throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
   }
 
-  const resolved = path.resolve(clientDirectory);
-  const clientsRoot = workspaceRootOrClients
-    ? getClientsRoot(workspaceRootOrClients)
-    : path.dirname(resolved);
-  if (!workspaceRootOrClients && path.basename(clientsRoot) !== "clients") {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  if (!workspaceRootOrClients) {
+    throw contentError("CLIENT_PATH_CONTEXT_REQUIRED", "Workspace context is required for client directory access");
   }
+
+  const resolved = path.resolve(clientDirectory);
+  const clientsRoot = getClientsRoot(workspaceRootOrClients);
 
   const relative = path.relative(clientsRoot, resolved);
   if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
     throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
   }
 
-  const expected = getClientWorkspace({ clients: clientsRoot }, path.basename(resolved));
-  if (expected !== resolved) {
+  let realClientsRoot;
+  let realClientDirectory;
+  try {
+    realClientsRoot = fs.realpathSync(clientsRoot);
+    realClientDirectory = fs.realpathSync(resolved);
+  } catch (error) {
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    realClientsRoot = fs.realpathSync(clientsRoot);
+    realClientDirectory = path.join(realClientsRoot, path.basename(resolved));
+  }
+
+  const realRelative = path.relative(realClientsRoot, realClientDirectory);
+  if (!realRelative || realRelative === ".." || realRelative.startsWith(".." + path.sep) || path.isAbsolute(realRelative)) {
     throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
   }
   return resolved;
