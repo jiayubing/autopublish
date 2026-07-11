@@ -9,6 +9,11 @@ const { createMediaWorkbenchService } = require("../services/media-workbench-ser
 const { createMediaResourceService } = require("../services/media-resource-service");
 const { wrap } = require("../services/ipc-response");
 
+function resolveMediaInputDir(deps) {
+  if (deps.paths && deps.paths.mediaInput) return deps.paths.mediaInput;
+  return path.join(deps.rootDir || path.resolve(__dirname, "..", ".."), "input", "media");
+}
+
 function registerMediaIpc(deps) {
   var ipcMain = deps.ipcMain;
   var mediaResourceStore = new MediaResourceStore({ paths: deps.paths });
@@ -22,7 +27,7 @@ function registerMediaIpc(deps) {
   });
   var mediaOrderService = createMediaOrderService({ paths: deps.paths });
   var mediaWorkbenchService = createMediaWorkbenchService({
-    inputDir: deps.paths && deps.paths.mediaInput || path.join(deps.rootDir || process.cwd(), "input", "media"),
+    inputDir: resolveMediaInputDir(deps),
     draftStore: mediaDraftStore,
     paths: deps.paths,
     orderStore: submissionOrderStore

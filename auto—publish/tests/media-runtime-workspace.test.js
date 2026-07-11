@@ -49,6 +49,34 @@ describe("media IPC runtime workspace", function() {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("scans the historical app media input when no runtime paths are injected", async function() {
+    const originalCwd = process.cwd();
+    const unrelatedDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-unrelated-cwd-"));
+    const historicalInput = path.join(path.resolve(__dirname, ".."), "input", "media");
+    const hadHistoricalInput = fs.existsSync(historicalInput);
+    const filename = "ipc-historical-input-regression.txt";
+    const filePath = path.join(historicalInput, filename);
+    const handlers = new Map();
+    try {
+      fs.mkdirSync(historicalInput, { recursive: true });
+      fs.writeFileSync(filePath, "Historical input title\nBody", "utf8");
+      process.chdir(unrelatedDirectory);
+
+      registerMediaIpc({
+        ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } }
+      });
+
+      const response = await handlers.get("media:scan-articles")();
+      assert.equal(response.ok, true);
+      assert.ok(response.data.some(function(article) { return article.filename === filename; }));
+    } finally {
+      process.chdir(originalCwd);
+      fs.rmSync(filePath, { force: true });
+      if (!hadHistoricalInput) fs.rmSync(historicalInput, { recursive: true, force: true });
+      fs.rmSync(unrelatedDirectory, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("media submission workspace override", function() {
