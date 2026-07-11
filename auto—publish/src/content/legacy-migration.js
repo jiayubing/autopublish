@@ -230,9 +230,13 @@ function createLegacyMigrator(options) {
       const existing = researchStore.getResearch(item.client.id, item.record.id);
       const expected = Object.assign({}, item.record, { clientId: item.client.id, isAnswerComplete: true });
       if (!sameRecord(existing, expected)) planWarning(item, "research");
+      item.finalResearch = existing;
       return true;
     } catch (error) {
-      if (error.code === "RESEARCH_NOT_FOUND") return false;
+      if (error.code === "RESEARCH_NOT_FOUND") {
+        item.finalResearch = item.record;
+        return false;
+      }
       throw error;
     }
   }
@@ -269,8 +273,13 @@ function createLegacyMigrator(options) {
       if (item.exists) plan.stats.skipped += 1;
       else plan.stats.researchImported += 1;
     });
+    const finalResearch = new Map(plan.research.map(function(item) {
+      return [item.client.id + "\u0000" + item.record.id, item.finalResearch];
+    }));
     plan.articles.forEach(function(item) {
       item.plan = plan;
+      const research = finalResearch.get(item.client.id + "\u0000" + item.record.researchQueryId);
+      item.record.source.references = Boolean(research && Array.isArray(research.references) && research.references.length);
       item.exists = existingArticle(item, articleStore);
       if (item.exists) plan.stats.skipped += 1;
       else plan.stats.articlesImported += 1;

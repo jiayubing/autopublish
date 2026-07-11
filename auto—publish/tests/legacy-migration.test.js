@@ -161,6 +161,20 @@ describe("legacy GEO migration", function() {
     });
   });
 
+  it("uses the preserved research references when an existing legacy query is skipped", function() {
+    createResearchStore(workspaceRoot).saveResearch("travel-client", {
+      id: "legacy-query-7",
+      question: "Shanghai hotels",
+      answerText: "Existing answer",
+      references: [],
+      createdAt: "2025-01-01T00:00:00.000Z"
+    });
+    const result = migrator().migrate();
+    assert.equal(result.researchImported, 0);
+    assert.equal(result.articlesImported, 1);
+    assert.equal(createArticleStore(workspaceRoot).getArticle("travel-client", "legacy-article-8").source.references, false);
+  });
+
   it("validates command parameters and emits JSON statistics", function() {
     const script = path.resolve(__dirname, "..", "scripts", "migrate-geo-data.js");
     const missing = spawnSync(process.execPath, [script, "--source", sourceRoot], { encoding: "utf8" });
