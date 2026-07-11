@@ -1,5 +1,6 @@
 import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder } from "./types";
 
+
 // 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
 
 interface DraftPayload extends Omit<Draft, "filename" | "selectedResources"> {
@@ -76,7 +77,13 @@ export function isElectron(): boolean {
   return typeof window !== "undefined" && !!window.desktopConsole;
 }
 
+function fixturesEnabled(): boolean {
+  const env = (import.meta as unknown as { env: { DEV: boolean; VITE_ENABLE_FIXTURES?: string } }).env;
+  return Boolean(env.DEV && env.VITE_ENABLE_FIXTURES === "true");
+}
+
 function readLocalStorage<T>(key: string, fallback: T): T {
+  if (!fixturesEnabled()) return fallback;
   try {
     const saved = localStorage.getItem(key);
     return saved ? (JSON.parse(saved) as T) : fallback;
@@ -86,6 +93,7 @@ function readLocalStorage<T>(key: string, fallback: T): T {
 }
 
 function writeLocalStorage<T>(key: string, value: T): void {
+  if (!fixturesEnabled()) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {

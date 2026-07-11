@@ -22,6 +22,11 @@ function componentExists(name) {
 }
 
 describe("react workbench regression", function() {
+  it("gates renderer localStorage fixtures behind an explicit development flag", function() {
+    const source = readApp("electron-api.ts");
+    assert.ok(source.includes("VITE_ENABLE_FIXTURES === \"true\""));
+    assert.ok(source.includes("import.meta.env.DEV"));
+  });
   it("has PlatformWorkbench component", function() {
     assert.ok(componentExists("PlatformWorkbench.tsx"),
       "PlatformWorkbench.tsx must be present for other-platform posting");
