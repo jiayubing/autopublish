@@ -52,6 +52,14 @@ describe("ai client", function() {
     assert.throws(function() {
       createAiClient(config({ baseUrl: "https://provider.example/v1?target=chat" }));
     }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
+    ["https://user:password@provider.example/v1", "http://provider.example/v1"].forEach(function(baseUrl) {
+      assert.throws(function() {
+        createAiClient(config({ baseUrl: baseUrl }));
+      }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
+    });
+    ["http://localhost:11434/v1", "http://127.0.0.1:8080/v1", "http://[::1]:8080/v1"].forEach(function(baseUrl) {
+      assert.doesNotThrow(function() { createAiClient(config({ baseUrl: baseUrl })); });
+    });
   });
 
   it("maps provider failures without exposing the API key", async function() {
@@ -85,6 +93,25 @@ describe("ai client", function() {
           reject(error);
         });
       });
+    } }));
+    await assert.rejects(client.complete([]), function(error) { return error.code === "AI_TIMEOUT"; });
+  });
+
+  it("keeps the timeout active while reading a response body", async function() {
+    const client = createAiClient(config({ timeoutMs: 5, fetch: async function(url, options) {
+      return {
+        ok: true,
+        status: 200,
+        text: function() {
+          return new Promise(function(resolve, reject) {
+            options.signal.addEventListener("abort", function() {
+              const error = new Error("body read aborted");
+              error.name = "AbortError";
+              reject(error);
+            });
+          });
+        }
+      };
     } }));
     await assert.rejects(client.complete([]), function(error) { return error.code === "AI_TIMEOUT"; });
   });

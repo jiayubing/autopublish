@@ -77,4 +77,22 @@ describe("article generator", function() {
     assert.notEqual(first.id, second.id);
     assert.deepStrictEqual(first.source, { client_material: false, doubao_answer: true, references: false, template: true });
   });
+
+  it("retries a duplicate generated id instead of returning it twice", async function() {
+    const ids = ["article-1", "article-1", "article-2"];
+    const generator = createArticleGenerator(dependencies({ createId: function() { return ids.shift(); } }));
+    const input = { clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
+    assert.equal((await generator.generateArticle(input)).id, "article-1");
+    assert.equal((await generator.generateArticle(input)).id, "article-2");
+  });
+
+  it("rejects unsafe ids and an id generator that cannot escape duplicates", async function() {
+    const input = { clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
+    await assert.rejects(createArticleGenerator(dependencies({ createId: function() { return " "; } })).generateArticle(input), function(value) {
+      return value.code === "ARTICLE_ID_INVALID";
+    });
+    const generator = createArticleGenerator(dependencies({ createId: function() { return "article-1"; } }));
+    await generator.generateArticle(input);
+    await assert.rejects(generator.generateArticle(input), function(value) { return value.code === "ARTICLE_ID_DUPLICATE"; });
+  });
 });

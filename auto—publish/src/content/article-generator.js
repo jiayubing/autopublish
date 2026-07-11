@@ -26,6 +26,10 @@ function parseArticle(value) {
   return { title: title, content: content };
 }
 
+function isSafeArticleId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value);
+}
+
 function createArticleGenerator(deps) {
   if (!deps || typeof deps.getClient !== "function" || !deps.researchStore ||
       typeof deps.researchStore.getResearch !== "function" || !deps.templateStore ||
@@ -34,6 +38,19 @@ function createArticleGenerator(deps) {
     throw generatorError("ARTICLE_GENERATOR_INVALID", "Article generator dependencies are invalid");
   }
   const now = typeof deps.now === "function" ? deps.now : function() { return new Date().toISOString(); };
+  const seenIds = deps.seenIds instanceof Set ? deps.seenIds : new Set();
+
+  function createUniqueId() {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const id = deps.createId();
+      if (!isSafeArticleId(id)) throw generatorError("ARTICLE_ID_INVALID", "Generated article id is invalid");
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        return id;
+      }
+    }
+    throw generatorError("ARTICLE_ID_DUPLICATE", "Generated article id is duplicated");
+  }
 
   async function generateArticle(input) {
     const client = deps.getClient(input.clientId);
@@ -51,7 +68,7 @@ function createArticleGenerator(deps) {
     const article = parseArticle(output);
     const timestamp = now();
     return {
-      id: deps.createId(),
+      id: createUniqueId(),
       clientId: input.clientId,
       researchQueryId: input.researchQueryId,
       platform: input.platform,

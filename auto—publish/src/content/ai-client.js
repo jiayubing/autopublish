@@ -27,7 +27,9 @@ function validateConfig(config) {
   } catch (error) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
-  if (!["http:", "https:"].includes(parsed.protocol) || !/^\/v1\/?$/.test(parsed.pathname) || parsed.search || parsed.hash) {
+  const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  if ((!isLoopback && parsed.protocol !== "https:") || (parsed.protocol === "http:" && !isLoopback) ||
+      !/^\/v1\/?$/.test(parsed.pathname) || parsed.search || parsed.hash || parsed.username || parsed.password) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
 
@@ -54,9 +56,8 @@ function createAiClient(config) {
       controller.abort();
     }, settings.timeoutMs);
 
-    let response;
     try {
-      response = await settings.fetch(settings.baseUrl + "/chat/completions", {
+      const response = await settings.fetch(settings.baseUrl + "/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -65,30 +66,34 @@ function createAiClient(config) {
         body: JSON.stringify({ model: settings.model, messages: messages }),
         signal: controller.signal
       });
+
+      if (response.status === 401) throw aiError("AI_UNAUTHORIZED", "AI request was unauthorized");
+      if (response.status === 429) throw aiError("AI_RATE_LIMITED", "AI request was rate limited");
+      if (!response.ok) throw aiError("AI_REQUEST_FAILED", "AI request failed");
+
+      let payload;
+      try {
+        payload = JSON.parse(await response.text());
+      } catch (error) {
+        if (timedOut || (error && error.name === "AbortError")) {
+          throw aiError("AI_TIMEOUT", "AI request timed out");
+        }
+        throw aiError("AI_REQUEST_FAILED", "AI response was invalid");
+      }
+      const content = payload && payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw aiError("AI_EMPTY_RESPONSE", "AI response was empty");
+      }
+      return content;
     } catch (error) {
+      if (error && error.code) throw error;
       if (timedOut || (error && error.name === "AbortError")) {
         throw aiError("AI_TIMEOUT", "AI request timed out");
       }
-      throw aiError("AI_REQUEST_FAILED", "AI request failed");
+      throw aiError("AI_REQUEST_FAILED", "AI response was invalid");
     } finally {
       clearTimeout(timeout);
     }
-
-    if (response.status === 401) throw aiError("AI_UNAUTHORIZED", "AI request was unauthorized");
-    if (response.status === 429) throw aiError("AI_RATE_LIMITED", "AI request was rate limited");
-    if (!response.ok) throw aiError("AI_REQUEST_FAILED", "AI request failed");
-
-    let payload;
-    try {
-      payload = JSON.parse(await response.text());
-    } catch (error) {
-      throw aiError("AI_REQUEST_FAILED", "AI response was invalid");
-    }
-    const content = payload && payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
-    if (typeof content !== "string" || !content.trim()) {
-      throw aiError("AI_EMPTY_RESPONSE", "AI response was empty");
-    }
-    return content;
   }
 
   return { complete: complete };
