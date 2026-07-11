@@ -57,6 +57,11 @@ describe("ai client", function() {
         createAiClient(config({ baseUrl: baseUrl }));
       }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
     });
+    ["ftp://localhost/v1", "ftp://127.0.0.1/v1", "ftp://[::1]/v1"].forEach(function(baseUrl) {
+      assert.throws(function() {
+        createAiClient(config({ baseUrl: baseUrl }));
+      }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
+    });
     ["http://localhost:11434/v1", "http://127.0.0.1:8080/v1", "http://[::1]:8080/v1"].forEach(function(baseUrl) {
       assert.doesNotThrow(function() { createAiClient(config({ baseUrl: baseUrl })); });
     });
@@ -93,6 +98,34 @@ describe("ai client", function() {
           reject(error);
         });
       });
+    } }));
+    await assert.rejects(client.complete([]), function(error) { return error.code === "AI_TIMEOUT"; });
+  });
+
+  it("rejects a successful response that arrives after the timeout", async function() {
+    const client = createAiClient(config({ timeoutMs: 5, fetch: async function() {
+      return new Promise(function(resolve) {
+        setTimeout(function() {
+          resolve(response(200, { choices: [{ message: { content: "Late article" } }] }));
+        }, 20);
+      });
+    } }));
+    await assert.rejects(client.complete([]), function(error) { return error.code === "AI_TIMEOUT"; });
+  });
+
+  it("rejects a successful response body that arrives after the timeout", async function() {
+    const client = createAiClient(config({ timeoutMs: 5, fetch: async function() {
+      return {
+        ok: true,
+        status: 200,
+        text: async function() {
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              resolve(JSON.stringify({ choices: [{ message: { content: "Late article" } }] }));
+            }, 20);
+          });
+        }
+      };
     } }));
     await assert.rejects(client.complete([]), function(error) { return error.code === "AI_TIMEOUT"; });
   });

@@ -28,7 +28,7 @@ function validateConfig(config) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
   const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
-  if ((!isLoopback && parsed.protocol !== "https:") || (parsed.protocol === "http:" && !isLoopback) ||
+  if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopback)) ||
       !/^\/v1\/?$/.test(parsed.pathname) || parsed.search || parsed.hash || parsed.username || parsed.password) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
@@ -67,13 +67,16 @@ function createAiClient(config) {
         signal: controller.signal
       });
 
+      if (timedOut) throw aiError("AI_TIMEOUT", "AI request timed out");
       if (response.status === 401) throw aiError("AI_UNAUTHORIZED", "AI request was unauthorized");
       if (response.status === 429) throw aiError("AI_RATE_LIMITED", "AI request was rate limited");
       if (!response.ok) throw aiError("AI_REQUEST_FAILED", "AI request failed");
 
       let payload;
       try {
-        payload = JSON.parse(await response.text());
+        const responseText = await response.text();
+        if (timedOut) throw aiError("AI_TIMEOUT", "AI request timed out");
+        payload = JSON.parse(responseText);
       } catch (error) {
         if (timedOut || (error && error.name === "AbortError")) {
           throw aiError("AI_TIMEOUT", "AI request timed out");
