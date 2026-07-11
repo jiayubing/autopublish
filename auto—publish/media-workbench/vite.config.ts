@@ -35,7 +35,7 @@ export default defineConfig(() => {
     build: {
       rollupOptions: {
         output: {
-          format: 'iife',
+          format: 'iife' as const,
         },
       },
     },

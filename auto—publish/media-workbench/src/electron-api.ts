@@ -1,48 +1,48 @@
-import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, MediaResource, PlatformArticle, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, SubmissionOrder } from "./types";
+import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder } from "./types";
 
 // 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
 
 interface DesktopConsoleMedia {
-  scanArticles(): Promise<{ ok: boolean; data?: unknown[]; error?: string }>;
-  previewArticle(filename: string): Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
-  getDrafts(): Promise<{ ok: boolean; data?: Draft[]; error?: string }>;
-  getDraft(filename: string): Promise<{ ok: boolean; data?: Draft; error?: string }>;
-  setDraft(filename: string, draft: Draft): Promise<{ ok: boolean; error?: string }>;
-  removeDraft(filename: string): Promise<{ ok: boolean; error?: string }>;
-  buildConfirmation(articles: Article[]): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  submitSelected(articles: Article[]): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  stopSubmit(): Promise<{ ok: boolean; error?: string }>;
-  refreshResources(opts?: Record<string, unknown>): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  getResourcePage(opts: { page?: number; pageSize?: number }): Promise<{ ok: boolean; data?: { items: MediaResource[]; total: number; page: number; pageSize: number }; error?: string }>;
-  searchResourcePage(opts: { query: string; page?: number; pageSize?: number }): Promise<{ ok: boolean; data?: { items: MediaResource[]; total: number; page: number; pageSize: number }; error?: string }>;
-  getPool(): Promise<{ ok: boolean; data?: MediaResource[]; error?: string }>;
-  addToPool(resource: MediaResource): Promise<{ ok: boolean; error?: string }>;
-  removeFromPool(resourceId: string): Promise<{ ok: boolean; error?: string }>;
-  getBalance(): Promise<{ ok: boolean; data?: { balance: string; raw?: unknown }; error?: string }>;
+  scanArticles(): Promise<IpcResponse<unknown[]>>;
+  previewArticle(filename: string): Promise<IpcResponse<Record<string, unknown>>>;
+  getDrafts(): Promise<IpcResponse<Draft[]>>;
+  getDraft(filename: string): Promise<IpcResponse<Draft>>;
+  setDraft(filename: string, draft: Draft): Promise<IpcResponse<void>>;
+  removeDraft(filename: string): Promise<IpcResponse<void>>;
+  buildConfirmation(articles: Article[]): Promise<IpcResponse<unknown>>;
+  submitSelected(articles: Article[]): Promise<IpcResponse<unknown>>;
+  stopSubmit(): Promise<IpcResponse<void>>;
+  refreshResources(opts?: Record<string, unknown>): Promise<IpcResponse<unknown>>;
+  getResourcePage(opts: { page?: number; pageSize?: number }): Promise<IpcResponse<{ items: MediaResource[]; total: number; page: number; pageSize: number }>>;
+  searchResourcePage(opts: { query: string; page?: number; pageSize?: number }): Promise<IpcResponse<{ items: MediaResource[]; total: number; page: number; pageSize: number }>>;
+  getPool(): Promise<IpcResponse<MediaResource[]>>;
+  addToPool(resource: MediaResource): Promise<IpcResponse<void>>;
+  removeFromPool(resourceId: string): Promise<IpcResponse<void>>;
+  getBalance(): Promise<IpcResponse<{ balance: string; raw?: unknown }>>;
 }
 
 interface DesktopConsoleOrders {
-  getOrders(): Promise<{ ok: boolean; data?: RealOrder[]; error?: string }>;
-  syncOrder(orderNid: string): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  getOrders(): Promise<IpcResponse<RealOrder[]>>;
+  syncOrder(orderNid: string): Promise<IpcResponse<unknown>>;
 }
 
 interface DesktopConsolePlatforms {
-  getQueue(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  buildSelectedPlan(input: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  submitSelectedPlan(plan: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  pauseSubmit(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  stopSubmit(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  getState(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  onState(listener: (state: { isPlatformRunning: boolean; isPlatformRunning: boolean }) => void): () => void;
+  getQueue(): Promise<IpcResponse<unknown>>;
+  buildSelectedPlan(input: unknown): Promise<IpcResponse<unknown>>;
+  submitSelectedPlan(plan: unknown): Promise<IpcResponse<unknown>>;
+  pauseSubmit(): Promise<IpcResponse<unknown>>;
+  stopSubmit(): Promise<IpcResponse<unknown>>;
+  getState(): Promise<IpcResponse<PlatformStatus>>;
+  onState(listener: (state: PlatformStatus) => void): () => void;
 }
 
 interface DesktopConsoleContent {
-  listClients(): Promise<{ ok: boolean; data?: ContentClient[]; error?: unknown }>;
-  listResearch(clientId: string): Promise<{ ok: boolean; data?: ContentResearch[]; error?: unknown }>;
-  listTemplates(platform: string): Promise<{ ok: boolean; data?: ContentTemplate[]; error?: unknown }>;
-  generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<{ ok: boolean; data?: GeneratedContentArticle; error?: unknown }>;
-  saveArticle(article: GeneratedContentArticle): Promise<{ ok: boolean; data?: GeneratedContentArticle; error?: unknown }>;
-  listGeneratedArticles(clientId: string): Promise<{ ok: boolean; data?: GeneratedContentArticle[]; error?: unknown }>;
+  listClients(): Promise<IpcResponse<ContentClient[]>>;
+  listResearch(clientId: string): Promise<IpcResponse<ContentResearch[]>>;
+  listTemplates(platform: string): Promise<IpcResponse<ContentTemplate[]>>;
+  generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
+  saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
+  listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
 }
 
 interface DesktopConsole {
@@ -607,11 +607,11 @@ export async function stopPlatformSubmit(): Promise<void> {
   }
 }
 
-export async function getPlatformState(): Promise<{ isPlatformRunning: boolean; isPlatformPaused: boolean }> {
+export async function getPlatformState(): Promise<PlatformStatus> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.getState();
     if (!result.ok) return { isPlatformRunning: false };
-    return result.data as { isPlatformRunning: boolean };
+    return result.data || { isPlatformRunning: false };
   }
   return { isPlatformRunning: false };
 }

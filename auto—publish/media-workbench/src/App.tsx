@@ -411,7 +411,6 @@ export default function App() {
                 <OrdersView
                   orders={orders}
                   onClearOrders={handleClearOrders}
-                  onRefreshOrders={handleRefreshOrders}
                 />
               </motion.div>
             )}

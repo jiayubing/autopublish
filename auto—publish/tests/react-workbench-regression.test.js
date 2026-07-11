@@ -78,4 +78,47 @@ describe("react workbench regression", function() {
     assert.ok(preload.includes("getQueue"),
       "preload must expose getQueue");
   });
+
+  it("shares the IPC response envelope with structured errors", function() {
+    const types = readApp("types.ts");
+    const api = readApp("electron-api.ts");
+    const ipcResponse = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "services", "ipc-response.js"), "utf8");
+
+    assert.ok(types.includes("interface IpcError") && types.includes("code: string") && types.includes("message: string"),
+      "renderer IPC errors must expose code and message");
+    assert.ok(types.includes("IpcResponse<T>"),
+      "renderer must use a reusable IPC response envelope");
+    assert.ok(api.includes("IpcResponse<"),
+      "preload API declarations must use the shared IPC response envelope");
+    assert.ok(ipcResponse.includes("ok: true") && ipcResponse.includes("data: data") && ipcResponse.includes("ok: false") && ipcResponse.includes("code:") && ipcResponse.includes("message:"),
+      "main-process IPC must return the shared ok/data/error envelope");
+  });
+
+  it("uses the main-process platform status shape without a paused flag", function() {
+    const types = readApp("types.ts");
+    const api = readApp("electron-api.ts");
+
+    assert.ok(types.includes("interface PlatformStatus") && types.includes("isPlatformRunning: boolean"),
+      "platform status must model the maintained main-process field");
+    assert.equal(types.includes("isPlatformPaused"), false,
+      "platform status must not invent an unmaintained paused field");
+    assert.equal(api.includes("isPlatformPaused"), false,
+      "electron API must not expose an unmaintained paused field");
+  });
+
+  it("type-checks before building the renderer and provides a root verifier", function() {
+    const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8"));
+    const verifyScript = path.resolve(__dirname, "..", "scripts", "verify.js");
+
+    assert.ok(packageJson.scripts["build:renderer"].includes("npm run lint"),
+      "root renderer build must type-check before invoking Vite");
+    assert.equal(packageJson.scripts.verify, "node scripts/verify.js",
+      "root verify script must delegate to the verification runner");
+    assert.ok(fs.existsSync(verifyScript), "verification runner must exist");
+    const runner = fs.readFileSync(verifyScript, "utf8");
+    assert.ok(runner.includes("media-workbench") && runner.includes("verify-alpha-package.js"),
+      "verification runner must check renderer quality gates and optional alpha packages");
+    assert.ok(runner.includes("process.env.ComSpec"),
+      "verification runner must invoke npm through the Windows command shell without shell argument warnings");
+  });
 });
