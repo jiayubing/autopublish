@@ -3,6 +3,7 @@
   require("./media-ipc").registerMediaIpc(deps);
   require("./platform-ipc").registerPlatformIpc(deps);
   require("./ai-content-ipc").registerAiContentIpc(deps);
+  require("./content-submission-ipc").registerContentSubmissionIpc(deps);
 }
 
 module.exports = { registerIpc };
