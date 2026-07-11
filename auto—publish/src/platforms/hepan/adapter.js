@@ -5,15 +5,18 @@ const { spawnSync } = require("child_process");
 const { DIRS } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 
-function workspaceHepanConfig() {
-  try { return JSON.parse(fs.readFileSync(path.join(DIRS.rootDir, "config", "hepan.json"), "utf8")); } catch (_) { return {}; }
+function resolveHepanRuntime(workspaceRoot, environment) {
+  var root = workspaceRoot || DIRS.rootDir;
+  var env = environment || process.env;
+  var configured = {};
+  try { configured = JSON.parse(fs.readFileSync(path.join(root, "config", "hepan.json"), "utf8")); } catch (_) {}
+  return {
+    cookiePath: configured.cookiePath || env.HEPAN_COOKIE_PATH || path.join(root, "config", "hepan-cookie.txt"),
+    pythonPath: configured.pythonPath || env.HEPAN_PYTHON || "python"
+  };
 }
 
-var configuredHepan = workspaceHepanConfig();
-var HEPAN = {
-  cookiePath: process.env.HEPAN_COOKIE_PATH || configuredHepan.cookiePath || path.join(DIRS.rootDir, "config", "hepan-cookie.txt"),
-  pythonPath: process.env.HEPAN_PYTHON || configuredHepan.pythonPath || "python"
-};
+var HEPAN = resolveHepanRuntime(DIRS.rootDir);
 
 function scriptPath() {
   return path.join(__dirname, "hepan_publish.py");
@@ -150,4 +153,5 @@ module.exports = {
   closeSession: closeSession,
   scanArticles: scanArticles,
   parseArticleFiles: parseArticleFiles
+  ,resolveHepanRuntime: resolveHepanRuntime
 };

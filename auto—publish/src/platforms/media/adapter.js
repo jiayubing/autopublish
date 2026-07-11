@@ -10,6 +10,7 @@ const { SubmissionOrderStore } = require('./submission-order-store');
 const { MediaDraftStore } = require('./media-draft-store');
 const { resolveApiKey } = require('./config');
 const { DIRS } = require('../../../scripts/config');
+const path = require('path');
 
 // ---------------------------------------------------------------------------
 // createMediaAdapter — standalone API adapter
@@ -23,8 +24,16 @@ function createMediaAdapter(opts) {
     baseUrl: opts.baseUrl
   });
   const store = new SubmissionOrderStore({ paths: opts.paths });
+  const inputDir = opts.paths && opts.paths.mediaInput || path.join(DIRS.inputDir, "media");
 
   return {
+    scanArticles: function() {
+      var fs = require("fs");
+      if (!fs.existsSync(inputDir)) return [];
+      return fs.readdirSync(inputDir).filter(function(name) {
+        return name.indexOf("~$") !== 0 && name !== ".gitkeep" && /\.(docx|txt|md)$/i.test(name);
+      }).map(function(name) { return { file: path.join(inputDir, name), filename: name, title: path.basename(name, path.extname(name)) }; });
+    },
     publish: async function (params) {
       var title = params.title;
       var contentFile = params.contentFile;
