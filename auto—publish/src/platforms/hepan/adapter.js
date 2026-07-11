@@ -5,9 +5,14 @@ const { spawnSync } = require("child_process");
 const { DIRS } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 
+function workspaceHepanConfig() {
+  try { return JSON.parse(fs.readFileSync(path.join(DIRS.rootDir, "config", "hepan.json"), "utf8")); } catch (_) { return {}; }
+}
+
+var configuredHepan = workspaceHepanConfig();
 var HEPAN = {
-  cookiePath: process.env.HEPAN_COOKIE_PATH || "D:\\fenxi\\蓝色河畔发布软件\\db\\cookie.txt",
-  pythonPath: process.env.HEPAN_PYTHON || "C:\\Users\\violet\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+  cookiePath: process.env.HEPAN_COOKIE_PATH || configuredHepan.cookiePath || path.join(DIRS.rootDir, "config", "hepan-cookie.txt"),
+  pythonPath: process.env.HEPAN_PYTHON || configuredHepan.pythonPath || "python"
 };
 
 function scriptPath() {

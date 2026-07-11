@@ -13,6 +13,7 @@ const REQUIRED_FILES = [
   "desktop/runtime-paths.js",
   "desktop/ipc/media-ipc.js",
   "desktop/ipc/platform-ipc.js",
+  "desktop/services/runtime-diagnostics-service.js",
   "src/core/logger.js",
   "scripts/config.js",
   "config/platforms.json",
@@ -85,4 +86,25 @@ function verifyPackage(appDir) {
   console.log("Alpha package contents OK: " + appDir);
 }
 
-verifyPackage(process.argv[2]);
+function verifyRuntimeSmoke(appDir) {
+  var workspace = fs.mkdtempSync(path.join(require("os").tmpdir(), "auto-publish-alpha-smoke-"));
+  try {
+    var paths = require(path.join(appDir, "desktop", "workspace-paths"));
+    var runtime = require(path.join(appDir, "desktop", "services", "runtime-diagnostics-service"));
+    var workspacePaths = paths.ensureWorkspaceDirectories(paths.createWorkspacePaths(workspace));
+    [workspacePaths.mediaInput, workspacePaths.liejuInput, workspacePaths.toutiaoInput, workspacePaths.hepanInput].forEach(function(dir) {
+      if (!fs.existsSync(dir)) throw new Error("Runtime workspace initialization failed");
+    });
+    var diagnostics = runtime.createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appDir, pathLookup: function() { return null; } }).diagnose();
+    if (!diagnostics || !Array.isArray(diagnostics.errors)) throw new Error("Runtime diagnostics did not return actionable results");
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+if (require.main === module) {
+  verifyPackage(process.argv[2]);
+  verifyRuntimeSmoke(process.argv[2]);
+}
+
+module.exports = { verifyPackage, verifyRuntimeSmoke };

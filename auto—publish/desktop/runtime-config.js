@@ -2,6 +2,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const dotenv = require("dotenv");
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("./workspace-paths");
+const { createRuntimeDiagnosticsService } = require("./services/runtime-diagnostics-service");
 
 let loadedWorkspaceEnv;
 let loadedWorkspaceValues = {};
@@ -66,9 +67,13 @@ function configureRuntimeEnvironment(options) {
   process.env.AUTO_PUBLISH_APP_ROOT = appRoot;
   process.env.AUTO_PUBLISH_WORKSPACE = workspaceRoot;
   loadWorkspaceEnvironment(workspaceRoot);
-  const configErrors = validateRuntimeConfiguration();
+  const diagnostics = createRuntimeDiagnosticsService({ workspaceRoot, appRoot }).diagnose();
+  if (!process.env.MARKITDOWN_CMD && diagnostics.tools.markitdown.command) process.env.MARKITDOWN_CMD = diagnostics.tools.markitdown.command;
+  if (!process.env.PLAYWRIGHT_CLI_JS && diagnostics.tools.playwright.command) process.env.PLAYWRIGHT_CLI_JS = diagnostics.tools.playwright.command;
+  if (!process.env.HEPAN_PYTHON && diagnostics.tools.hepanPython.command) process.env.HEPAN_PYTHON = diagnostics.tools.hepanPython.command;
+  const configErrors = validateRuntimeConfiguration().concat(diagnostics.errors);
 
-  return { appRoot, workspaceRoot, paths, configErrors };
+  return { appRoot, workspaceRoot, paths, configErrors, diagnostics };
 }
 
 module.exports = { configureRuntimeEnvironment, loadWorkspaceEnvironment, validateRuntimeConfiguration };

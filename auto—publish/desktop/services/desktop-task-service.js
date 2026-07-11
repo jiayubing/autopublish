@@ -39,6 +39,8 @@ function createDesktopTaskService(opts) {
       cwd: cwd,
       env: Object.assign({}, process.env, {
         AUTO_PUBLISH_DESKTOP: "1",
+        AUTO_PUBLISH_WORKSPACE: cwd,
+        AUTO_PUBLISH_ROOT_DIR: cwd,
         AUTO_PUBLISH_NODE_EXEC_PATH: process.env.AUTO_PUBLISH_NODE_EXEC_PATH || ''
       }),
       stdio: ["ignore", "ignore", "ignore", "ipc"]

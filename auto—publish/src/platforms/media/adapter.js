@@ -9,6 +9,7 @@ const { detectDocxImages } = require('./article-converter');
 const { SubmissionOrderStore } = require('./submission-order-store');
 const { MediaDraftStore } = require('./media-draft-store');
 const { resolveApiKey } = require('./config');
+const { DIRS } = require('../../../scripts/config');
 
 // ---------------------------------------------------------------------------
 // createMediaAdapter — standalone API adapter
@@ -21,7 +22,7 @@ function createMediaAdapter(opts) {
     apiKey: apiKey,
     baseUrl: opts.baseUrl
   });
-  const store = new SubmissionOrderStore();
+  const store = new SubmissionOrderStore({ paths: opts.paths });
 
   return {
     publish: async function (params) {
@@ -178,7 +179,7 @@ module.exports = {
   scanArticles: function(scanDir) {
     var fs = require("fs");
     var path = require("path");
-    var inputDir = path.resolve(__dirname, "..", "..", "..", "input", scanDir);
+    var inputDir = path.join(DIRS.inputDir, scanDir);
     if (!fs.existsSync(inputDir)) return [];
     return fs.readdirSync(inputDir).filter(function(name) {
       if (name.indexOf("~$") === 0) return false;
