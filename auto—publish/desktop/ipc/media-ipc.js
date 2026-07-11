@@ -67,22 +67,27 @@ function registerMediaIpc(deps) {
   });
 
   ipcMain.handle("media:get-drafts", function() {
-    return { ok: true, data: mediaDraftStore.getAll() };
+    return wrap(function() {
+      return mediaDraftStore.getAll();
+    });
   });
 
   ipcMain.handle("media:get-draft", function(event, filename) {
-    var draft = mediaDraftStore.get(filename);
-    return { ok: true, data: draft };
+    return wrap(function() {
+      return mediaDraftStore.get(filename);
+    });
   });
 
   ipcMain.handle("media:set-draft", function(event, filename, draft) {
-    mediaDraftStore.set(filename, draft);
-    return { ok: true };
+    return wrap(function() {
+      mediaDraftStore.set(filename, draft);
+    });
   });
 
   ipcMain.handle("media:remove-draft", function(event, filename) {
-    mediaDraftStore.remove(filename);
-    return { ok: true };
+    return wrap(function() {
+      mediaDraftStore.remove(filename);
+    });
   });
 
   ipcMain.handle("media:scan-articles", function() {

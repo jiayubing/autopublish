@@ -28,6 +28,8 @@ function createDesktopTaskService(opts) {
 
   function emitPlatformState() {
     sendToRenderer("platform-state", {
+      isBatchRunning: isBatchRunning,
+      isStopPending: isStopPending,
       isPlatformRunning: isPlatformRunning
     });
   }

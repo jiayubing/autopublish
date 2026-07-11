@@ -109,6 +109,16 @@ describe("react workbench regression", function() {
       "electron API must not expose an unmaintained paused field");
   });
 
+  it("emits the complete platform status payload to preload listeners", function() {
+    const taskService = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "services", "desktop-task-service.js"), "utf8");
+    const emitStart = taskService.indexOf('sendToRenderer("platform-state", {');
+    const emitEnd = taskService.indexOf("\n    });", emitStart);
+    const payload = taskService.slice(emitStart, emitEnd);
+
+    assert.ok(payload.includes("isBatchRunning: isBatchRunning") && payload.includes("isStopPending: isStopPending") && payload.includes("isPlatformRunning: isPlatformRunning"),
+      "platform-state events must use the complete PlatformStatus wire shape");
+  });
+
   it("type-checks before building the renderer and provides a root verifier", function() {
     const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8"));
     const verifyScript = path.resolve(__dirname, "..", "scripts", "verify.js");
