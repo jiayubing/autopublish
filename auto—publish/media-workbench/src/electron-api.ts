@@ -50,7 +50,12 @@ interface DesktopConsoleContent {
   generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
+  previewExport(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
+  exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
 }
+
+export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: "media" | "lieju" | "toutiao" | "hepan"; confirmed: true; }
+export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
 
 interface DesktopConsole {
   media: DesktopConsoleMedia;
@@ -635,4 +640,18 @@ export async function getPlatformState(): Promise<PlatformStatus> {
     return result.data || { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
   }
   return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+}
+
+export async function previewExport(input: ContentExportInput): Promise<ContentExportPreview> {
+  if (!isElectron()) throw new Error("Export requires the desktop app");
+  const result = await window.desktopConsole!.content.previewExport(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "preview export failed");
+  return result.data;
+}
+
+export async function exportToSubmissionQueue(input: ContentExportInput): Promise<ContentExportPreview> {
+  if (!isElectron()) throw new Error("Export requires the desktop app");
+  const result = await window.desktopConsole!.content.exportArticle(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "export failed");
+  return result.data;
 }
