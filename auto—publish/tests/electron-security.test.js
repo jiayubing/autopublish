@@ -6,6 +6,13 @@ const path = require("path");
 function read(file) { return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8"); }
 
 describe("Electron security boundary", function() {
+  it("permits navigation only to the exact packaged renderer entry", function() {
+    const { isAllowedRendererNavigation } = require("../desktop/security/navigation");
+    const entry = path.resolve(__dirname, "..", "media-workbench", "dist", "index.html");
+    assert.equal(isAllowedRendererNavigation("file:///C:/untrusted/index.html", entry), false);
+    assert.equal(isAllowedRendererNavigation(new URL("file://" + entry.replace(/\\/g, "/")).href, entry), true);
+  });
+
   it("uses a sandboxed, isolated renderer and prevents renderer-created windows", function() {
     const main = read("desktop/main.js");
     assert.match(main, /sandbox:\s*true/);

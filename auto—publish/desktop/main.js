@@ -1,5 +1,6 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { isAllowedRendererNavigation } = require("./security/navigation");
 
 let mainWindow = null;
 let unsubscribeLogs = null;
@@ -23,6 +24,7 @@ function sendToRenderer(channel, payload) {
 }
 
 function createMainWindow() {
+  var rendererEntryPath = path.join(__dirname, "..", "media-workbench", "dist", "index.html");
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -43,12 +45,12 @@ function createMainWindow() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", function(event, url) {
-    if (!url.startsWith("file:")) event.preventDefault();
+    if (!isAllowedRendererNavigation(url, rendererEntryPath)) event.preventDefault();
   });
   mainWindow.webContents.session.setPermissionRequestHandler(function(webContents, permission, callback) {
     callback(false);
   });
-  mainWindow.loadFile(path.join(__dirname, "..", "media-workbench", "dist", "index.html"));
+  mainWindow.loadFile(rendererEntryPath);
   mainWindow.on("closed", function() { mainWindow = null; });
 }
 
