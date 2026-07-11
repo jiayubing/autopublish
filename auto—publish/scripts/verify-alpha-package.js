@@ -87,6 +87,7 @@ function verifyPackage(appDir) {
 }
 
 function verifyRuntimeSmoke(appDir) {
+  appDir = path.resolve(appDir);
   var workspace = fs.mkdtempSync(path.join(require("os").tmpdir(), "auto-publish-alpha-smoke-"));
   try {
     var paths = require(path.join(appDir, "desktop", "workspace-paths"));
