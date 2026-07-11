@@ -20,7 +20,7 @@ describe("legacy GEO migration", function() {
     sourceRoot = path.join(root, "legacy");
     workspaceRoot = path.join(root, "workspace");
     fs.mkdirSync(path.join(sourceRoot, "clients", "travel-client", "articles"), { recursive: true });
-    fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "search_query.txt"), "\uFEFFShanghai hotels\r\n");
+    fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "search_query.txt"), "\uFEFFShanghai hotels");
     fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "brand.md"), "# Hotel Brand\n");
     fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "notes.txt"), "Family friendly\n");
     fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "ignored.png"), "image");
@@ -80,6 +80,15 @@ describe("legacy GEO migration", function() {
     assert.deepStrictEqual(snapshot(sourceRoot), sourceBefore);
   });
 
+  it("matches only the exact search query after removing a UTF-8 BOM", function() {
+    assert.equal(migrator().dryRun().researchImported, 1);
+    fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "search_query.txt"), " Shanghai hotels ");
+    const result = migrator().dryRun();
+    assert.equal(result.researchImported, 0);
+    assert.equal(result.articlesImported, 0);
+    assert.deepStrictEqual(result.warnings, ["No legacy query matches client travel-client search query"]);
+  });
+
   it("skips unmatched customers and empty answers while preserving existing knowledge", function() {
     fs.mkdirSync(path.join(sourceRoot, "clients", "unmatched"), { recursive: true });
     fs.writeFileSync(path.join(sourceRoot, "clients", "unmatched", "search_query.txt"), "Not in database");
@@ -115,6 +124,18 @@ describe("legacy GEO migration", function() {
     assert.throws(function() { migrator().dryRun(); }, function(error) { return error.code === "LEGACY_DATABASE_INVALID"; });
   });
 
+  it("rejects schemas that omit required columns without exposing SQLite details", function() {
+    fs.unlinkSync(path.join(sourceRoot, "data", "geo_data.db"));
+    const db = new DatabaseSync(path.join(sourceRoot, "data", "geo_data.db"));
+    db.exec("CREATE TABLE queries (id INTEGER PRIMARY KEY, question TEXT)");
+    db.exec("CREATE TABLE citations (id INTEGER PRIMARY KEY, query_id INTEGER, ref_order INTEGER, ref_title TEXT, ref_url TEXT)");
+    db.exec("CREATE TABLE articles (id INTEGER PRIMARY KEY, query_id INTEGER, platform TEXT, scenario TEXT, client_material TEXT, content TEXT, timestamp TEXT)");
+    db.close();
+    assert.throws(function() { migrator().dryRun(); }, function(error) {
+      return error.code === "LEGACY_SCHEMA_INVALID" && error.message === "Legacy database schema is invalid";
+    });
+  });
+
   it("skips malformed citation URLs instead of failing the matching research import", function() {
     const db = new DatabaseSync(path.join(sourceRoot, "data", "geo_data.db"));
     db.prepare("UPDATE citations SET ref_url = ? WHERE id = ?").run("not-a-url", 1);
@@ -126,6 +147,18 @@ describe("legacy GEO migration", function() {
       "Skipped citation 1 for query 7 because its URL is invalid",
       "Skipped citation 2 for query 7 because its URL is empty"
     ]);
+    assert.equal(createArticleStore(workspaceRoot).getArticle("travel-client", "legacy-article-8").source.references, false);
+  });
+
+  it("reports existing legacy records as skipped during dry-run", function() {
+    migrator().migrate();
+    assert.deepStrictEqual(migrator().dryRun(), {
+      clientsCopied: 0,
+      researchImported: 0,
+      articlesImported: 0,
+      skipped: 3,
+      warnings: ["Skipped citation 2 for query 7 because its URL is empty"]
+    });
   });
 
   it("validates command parameters and emits JSON statistics", function() {
@@ -137,6 +170,19 @@ describe("legacy GEO migration", function() {
     assert.equal(dryRun.status, 0, dryRun.stderr);
     assert.equal(JSON.parse(dryRun.stdout).researchImported, 1);
     assert.equal(fs.existsSync(workspaceRoot), false);
+  });
+
+  it("exits nonzero from the command when the schema is invalid", function() {
+    fs.unlinkSync(path.join(sourceRoot, "data", "geo_data.db"));
+    const db = new DatabaseSync(path.join(sourceRoot, "data", "geo_data.db"));
+    db.exec("CREATE TABLE queries (id INTEGER PRIMARY KEY)");
+    db.exec("CREATE TABLE citations (id INTEGER PRIMARY KEY)");
+    db.exec("CREATE TABLE articles (id INTEGER PRIMARY KEY)");
+    db.close();
+    const script = path.resolve(__dirname, "..", "scripts", "migrate-geo-data.js");
+    const result = spawnSync(process.execPath, [script, "--source", sourceRoot, "--workspace", workspaceRoot, "--dry-run"], { encoding: "utf8" });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stderr.trim(), "Legacy database schema is invalid");
   });
 
   function snapshot(directory) {

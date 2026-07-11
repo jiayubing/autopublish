@@ -7,7 +7,11 @@ const { createResearchStore } = require("./research-store");
 const { createArticleStore } = require("./article-store");
 
 const KNOWLEDGE_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json"]);
-const REQUIRED_TABLES = ["queries", "citations", "articles"];
+const REQUIRED_SCHEMA = {
+  queries: ["id", "timestamp", "question", "category", "city", "answer_text"],
+  citations: ["id", "query_id", "ref_order", "ref_title", "ref_url", "platform"],
+  articles: ["id", "query_id", "platform", "scenario", "client_material", "content", "timestamp"]
+};
 
 function migrationError(code, message) {
   const error = new Error(message);
@@ -19,8 +23,12 @@ function createStats() {
   return { clientsCopied: 0, researchImported: 0, articlesImported: 0, skipped: 0, warnings: [] };
 }
 
-function normalizeQuery(value) {
-  return typeof value === "string" ? value.replace(/^\uFEFF/, "").trim() : "";
+function withoutBom(value) {
+  return typeof value === "string" ? value.replace(/^\uFEFF/, "") : "";
+}
+
+function hasText(value) {
+  return typeof value === "string" && Boolean(value.trim());
 }
 
 function timestamp(value) {
@@ -74,8 +82,8 @@ function createLegacyMigrator(options) {
         }
         const queryPath = path.join(directory, "search_query.txt");
         const query = fs.existsSync(queryPath) && fs.lstatSync(queryPath).isFile()
-          ? normalizeQuery(fs.readFileSync(queryPath, "utf8")) : "";
-        if (!query) stats.warnings.push("Legacy client " + entry.name + " has no search query");
+          ? withoutBom(fs.readFileSync(queryPath, "utf8")) : "";
+        if (!hasText(query)) stats.warnings.push("Legacy client " + entry.name + " has no search query");
         const files = fs.readdirSync(directory, { withFileTypes: true })
           .filter(function(file) {
             return file.isFile() && !file.name.startsWith(".") && KNOWLEDGE_EXTENSIONS.has(path.extname(file.name).toLowerCase());
@@ -95,15 +103,16 @@ function createLegacyMigrator(options) {
     try {
       db = new DatabaseSync(databasePath, { readOnly: true });
       const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(function(row) { return row.name; }));
-      const missing = REQUIRED_TABLES.filter(function(table) { return !tables.has(table); });
-      if (missing.length) {
-        db.close();
-        stats.warnings.push("Legacy database schema is missing required tables: " + missing.join(", "));
-        return null;
-      }
+      const schemaValid = Object.keys(REQUIRED_SCHEMA).every(function(table) {
+        if (!tables.has(table)) return false;
+        const columns = new Set(db.prepare("PRAGMA table_info(" + table + ")").all().map(function(row) { return row.name; }));
+        return REQUIRED_SCHEMA[table].every(function(column) { return columns.has(column); });
+      });
+      if (!schemaValid) throw migrationError("LEGACY_SCHEMA_INVALID", "Legacy database schema is invalid");
       return db;
     } catch (error) {
       if (db) db.close();
+      if (error.code === "LEGACY_SCHEMA_INVALID") throw error;
       throw migrationError("LEGACY_DATABASE_INVALID", "Legacy database is invalid");
     }
   }
@@ -119,12 +128,17 @@ function createLegacyMigrator(options) {
       const articles = db.prepare("SELECT id, query_id, platform, scenario, client_material, content, timestamp FROM articles").all();
       const clientsByQuery = new Map();
       clients.forEach(function(client) {
-        if (!client.query) return;
+        if (!hasText(client.query)) return;
         queries.filter(function(query) { return query.question === client.query; }).forEach(function(query) {
           const matched = clientsByQuery.get(query.id) || [];
           matched.push(client);
           clientsByQuery.set(query.id, matched);
         });
+      });
+      clients.forEach(function(client) {
+        if (hasText(client.query) && !queries.some(function(query) { return query.question === client.query; })) {
+          stats.warnings.push("No legacy query matches client " + client.id + " search query");
+        }
       });
       const citationsByQuery = new Map();
       citations.forEach(function(citation) {
@@ -137,13 +151,13 @@ function createLegacyMigrator(options) {
       queries.forEach(function(query) {
         const matchedClients = clientsByQuery.get(query.id) || [];
         if (!matchedClients.length) return;
-        if (!normalizeQuery(query.answer_text)) {
+        if (!hasText(query.answer_text)) {
           stats.skipped += matchedClients.length;
           emptyAnswerQueryIds.add(query.id);
           return;
         }
         const references = (citationsByQuery.get(query.id) || []).reduce(function(result, citation) {
-          if (!normalizeQuery(citation.ref_url)) {
+          if (!hasText(citation.ref_url)) {
             stats.warnings.push("Skipped citation " + citation.id + " for query " + query.id + " because its URL is empty");
             return result;
           }
@@ -154,7 +168,7 @@ function createLegacyMigrator(options) {
             stats.warnings.push("Skipped citation " + citation.id + " for query " + query.id + " because its URL is invalid");
             return result;
           }
-          if (!normalizeQuery(citation.ref_title)) {
+          if (!hasText(citation.ref_title)) {
             stats.warnings.push("Skipped citation " + citation.id + " for query " + query.id + " because its title is empty");
             return result;
           }
@@ -172,6 +186,9 @@ function createLegacyMigrator(options) {
         });
       });
       const importedQueryIds = new Set(research.map(function(item) { return item.query.id; }));
+      const researchByClientAndQuery = new Map(research.map(function(item) {
+        return [item.client.id + "\u0000" + item.query.id, item.record];
+      }));
       const migratedArticles = [];
       articles.forEach(function(article) {
         const queryClients = clientsByQuery.get(article.query_id) || [];
@@ -192,9 +209,9 @@ function createLegacyMigrator(options) {
             content: String(article.content || ""),
             status: "generated",
             source: {
-              client_material: Boolean(normalizeQuery(article.client_material)),
+              client_material: hasText(article.client_material),
               doubao_answer: true,
-              references: Boolean((citationsByQuery.get(article.query_id) || []).length),
+              references: researchByClientAndQuery.get(client.id + "\u0000" + article.query_id).references.length > 0,
               template: Boolean(article.platform && article.scenario)
             },
             createdAt: timestamp(article.timestamp),
@@ -208,23 +225,64 @@ function createLegacyMigrator(options) {
     }
   }
 
-  function countDryRun(plan) {
-    const workspace = getContentWorkspace(workspaceRoot);
+  function existingResearch(item, researchStore) {
+    try {
+      const existing = researchStore.getResearch(item.client.id, item.record.id);
+      const expected = Object.assign({}, item.record, { clientId: item.client.id, isAnswerComplete: true });
+      if (!sameRecord(existing, expected)) planWarning(item, "research");
+      return true;
+    } catch (error) {
+      if (error.code === "RESEARCH_NOT_FOUND") return false;
+      throw error;
+    }
+  }
+
+  function planWarning(item, kind) {
+    item.plan.stats.warnings.push("Existing legacy " + kind + " " + item.record.id + " differs and was not replaced");
+  }
+
+  function existingArticle(item, articleStore) {
+    const directory = path.join(workspaceRoot, "generated", item.client.id);
+    const json = path.join(directory, item.record.id + ".json");
+    const markdown = path.join(directory, item.record.id + ".md");
+    if (!fs.existsSync(json) && !fs.existsSync(markdown)) return false;
+    try {
+      const existing = articleStore.getArticle(item.client.id, item.record.id);
+      if (!sameRecord(existing, item.record)) planWarning(item, "article");
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  function countOperations(plan) {
+    const researchStore = createResearchStore(workspaceRoot);
+    const articleStore = createArticleStore(workspaceRoot);
     plan.clients.forEach(function(client) {
       const changed = client.files.some(function(name) { return !fs.existsSync(path.join(client.destination, name)); });
       if (changed) plan.stats.clientsCopied += 1;
       else plan.stats.skipped += 1;
     });
-    plan.stats.researchImported = plan.research.length;
-    plan.stats.articlesImported = plan.articles.length;
+    plan.research.forEach(function(item) {
+      item.plan = plan;
+      item.exists = existingResearch(item, researchStore);
+      if (item.exists) plan.stats.skipped += 1;
+      else plan.stats.researchImported += 1;
+    });
+    plan.articles.forEach(function(item) {
+      item.plan = plan;
+      item.exists = existingArticle(item, articleStore);
+      if (item.exists) plan.stats.skipped += 1;
+      else plan.stats.articlesImported += 1;
+    });
     return plan.stats;
   }
 
-  function copyClients(plan) {
+  function copyClients(plan, count) {
     plan.clients.forEach(function(client) {
       const changed = client.files.some(function(name) { return !fs.existsSync(path.join(client.destination, name)); });
       if (!changed) {
-        plan.stats.skipped += 1;
+        if (count) plan.stats.skipped += 1;
         return;
       }
       client.files.forEach(function(name) {
@@ -233,44 +291,32 @@ function createLegacyMigrator(options) {
         fs.mkdirSync(path.dirname(destination), { recursive: true });
         fs.copyFileSync(path.join(client.directory, name), destination, fs.constants.COPYFILE_EXCL);
       });
-      plan.stats.clientsCopied += 1;
+      if (count) plan.stats.clientsCopied += 1;
     });
   }
 
   function migrate() {
     const plan = buildPlan();
     if (!plan.research.length && !plan.articles.length && !plan.clients.length) return plan.stats;
-    copyClients(plan);
+    countOperations(plan);
+    copyClients(plan, false);
     const researchStore = createResearchStore(workspaceRoot);
     const articleStore = createArticleStore(workspaceRoot);
     plan.research.forEach(function(item) {
-      try {
-        const existing = researchStore.getResearch(item.client.id, item.record.id);
-        const expected = Object.assign({}, item.record, { clientId: item.client.id, isAnswerComplete: true });
-        if (!sameRecord(existing, expected)) plan.stats.warnings.push("Existing legacy research " + item.record.id + " differs and was not replaced");
-        plan.stats.skipped += 1;
-      } catch (error) {
-        if (error.code !== "RESEARCH_NOT_FOUND") throw error;
+      if (!item.exists) {
         researchStore.saveResearch(item.client.id, item.record);
-        plan.stats.researchImported += 1;
       }
     });
     plan.articles.forEach(function(item) {
-      try {
-        const existing = articleStore.getArticle(item.client.id, item.record.id);
-        if (!sameRecord(existing, item.record)) plan.stats.warnings.push("Existing legacy article " + item.record.id + " differs and was not replaced");
-        plan.stats.skipped += 1;
-      } catch (error) {
-        if (error.code !== "ARTICLE_NOT_FOUND") throw error;
+      if (!item.exists) {
         articleStore.saveArticle(item.record);
-        plan.stats.articlesImported += 1;
       }
     });
     return plan.stats;
   }
 
   function dryRun() {
-    return countDryRun(buildPlan());
+    return countOperations(buildPlan());
   }
 
   return { dryRun: dryRun, migrate: migrate };
