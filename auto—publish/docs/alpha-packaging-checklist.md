@@ -18,7 +18,7 @@
 - [ ] Article scan works.
 - [ ] Media resource pool loads or shows a clear empty/error state.
 - [ ] Draft save works.
-- [ ] Preflight opens.
+- [ ] Real preflight opens, then the final confirmation appears before any media submission.
 
 ## Other Platforms Flow
 

@@ -35,7 +35,7 @@ npm run snapshot
 
 - **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`batch-ipc.js`, `media-ipc.js`, `platform-ipc.js`
 - **Services:** `desktop/services/ipc-response.js`, `media-workbench-service.js`, `platform-workbench-service.js`, `media-order-service.js`, `desktop-task-service.js`
-- **Renderer:** `desktop/renderer/app.js` (bootstrapper), `media-workbench.js`, `platform-workbench.js`, `media-resource-library.js`, `media-orders-drawer.js`, `shared/dom.js`, `shared/drawer.js`, `shared/confirm.js`
+- **Renderer:** React source under `media-workbench/src`; production loads only the packaged `media-workbench/dist` bundle.
 - **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
 
 ## Resource Cache
@@ -75,7 +75,7 @@ Installer alpha:
 npm run dist:alpha
 ` 
 
-The packaged app creates runtime folders under Electron userData unless AUTO_PUBLISH_WORKSPACE is set. Do not place private .env, article drafts, logs, or order history in the installer package.
+The packaged app creates runtime folders under `%USERPROFILE%\Documents\AutoPublish` unless AUTO_PUBLISH_WORKSPACE is set. Do not place private .env, article drafts, logs, or order history in the installer package.
 
 
 ## Packaged App Workspace
