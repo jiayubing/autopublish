@@ -10,6 +10,7 @@ directories:
 files:
   # Electron main process
   - desktop/**/*
+  - "!desktop/renderer/**"
   # Business logic (adapters, core, platforms)
   - src/**/*
   # Config defaults (platforms.json)
