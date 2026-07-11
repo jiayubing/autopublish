@@ -92,3 +92,5 @@ powershell -ExecutionPolicy Bypass -File scripts/create-alpha-smoke-workspace.ps
 # Workspace and manual submission
 
 The production renderer is the React build. Runtime files belong in `%USERPROFILE%\Documents\AutoPublish` (or the explicit workspace override). Queue scanning, preflight, and submission remain operator-confirmed actions; no exported GEO article is published automatically.
+
+The legacy `desktop/renderer` is not part of the production architecture. The React renderer runs preflight first, then shows a final confirmation; only that explicit confirmation invokes submission.

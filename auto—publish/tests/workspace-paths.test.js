@@ -16,6 +16,7 @@ describe("workspace paths", function() {
 
       [
         "input", "mediaInput", "liejuInput", "toutiaoInput", "hepanInput",
+        "config",
         "data", "logs", "published", "failed", "tmp", "work",
         "clients", "research", "templates", "generated"
       ].forEach(function(key) {

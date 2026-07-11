@@ -41,3 +41,5 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
 # Runtime workspace check
 
 Verify that the packaged app creates `%USERPROFILE%\Documents\AutoPublish` and its input/data/config folders. Confirm diagnostics before adding credentials or submitting work. The package must not contain user `.env`, input, data, logs, or backup files.
+
+Keep workspace tool settings in `config/runtime-tools.json` and Hepan settings in `config/hepan.json`; these workspace files are created outside the package.
