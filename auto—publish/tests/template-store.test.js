@@ -42,6 +42,19 @@ describe("template store", function() {
     assert.throws(function() { getTemplate(root, "ctrip", "ctrip_rank"); }, function(error) { return error.code === "TEMPLATE_DUPLICATE_ID"; });
   });
 
+  it("rejects duplicate front matter keys", function() {
+    fs.writeFileSync(path.join(ctripDirectory, "duplicate-key.md"), "---\nplatform: ctrip\nscenario: 重复键\nname: first\nname: second\n---\n正文。\n");
+    assert.throws(function() { listTemplates(root, "ctrip"); }, function(error) { return error.code === "TEMPLATE_FRONT_MATTER_INVALID"; });
+  });
+
+  it("rejects unsafe front matter template names", function() {
+    ["../x", "   ", "folder/x", "folder\\x", path.resolve(root, "outside")].forEach(function(name, index) {
+      fs.writeFileSync(path.join(ctripDirectory, "unsafe-name-" + index + ".md"), "---\nplatform: ctrip\nscenario: 场景\nname: " + name + "\n---\n正文。\n");
+      assert.throws(function() { listTemplates(root, "ctrip"); }, function(error) { return error.code === "TEMPLATE_INVALID_ID"; });
+      fs.unlinkSync(path.join(ctripDirectory, "unsafe-name-" + index + ".md"));
+    });
+  });
+
   it("rejects missing front matter, required fields, platform mismatches, and empty bodies", function() {
     const cases = [
       ["no-front-matter.md", "正文", "TEMPLATE_FRONT_MATTER_REQUIRED"],

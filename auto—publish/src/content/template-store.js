@@ -28,7 +28,10 @@ function parseFrontMatter(source) {
     if (separator < 1) throw templateError("TEMPLATE_FRONT_MATTER_INVALID", "Template front matter is invalid");
     const key = line.slice(0, separator).trim();
     const value = line.slice(separator + 1).trim();
-    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(key) || !value) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(key) || (!value && key !== "name")) {
+      throw templateError("TEMPLATE_FRONT_MATTER_INVALID", "Template front matter is invalid");
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
       throw templateError("TEMPLATE_FRONT_MATTER_INVALID", "Template front matter is invalid");
     }
     fields[key] = value.replace(/^(['"])(.*)\1$/, "$2");
@@ -38,11 +41,15 @@ function parseFrontMatter(source) {
 
 function readTemplate(filename, platform) {
   const parsed = parseFrontMatter(fs.readFileSync(filename, "utf8"));
-  ["platform", "scenario", "name"].forEach(function(field) {
+  ["platform", "scenario"].forEach(function(field) {
     if (typeof parsed.fields[field] !== "string" || !parsed.fields[field].trim()) {
       throw templateError("TEMPLATE_FIELD_MISSING", "Template field is missing: " + field);
     }
   });
+  if (!Object.prototype.hasOwnProperty.call(parsed.fields, "name")) {
+    throw templateError("TEMPLATE_FIELD_MISSING", "Template field is missing: name");
+  }
+  assertSegment(parsed.fields.name, "TEMPLATE_INVALID_ID", "id");
   if (parsed.fields.platform !== platform) {
     throw templateError("TEMPLATE_PLATFORM_MISMATCH", "Template platform does not match directory");
   }

@@ -57,6 +57,14 @@ describe("prompt builder", function() {
     });
   });
 
+  it("requires a non-empty string template body", function() {
+    ["", "  ", {}, [], 1, null, undefined].forEach(function(body) {
+      assert.throws(function() {
+        buildPrompt(input({ template: Object.assign({}, input().template, { body: body }) }));
+      }, function(error) { return error.code === "PROMPT_TEMPLATE_REQUIRED"; });
+    });
+  });
+
   it("keeps platform and scenario data-driven instead of using an industry taxonomy", function() {
     const prompt = buildPrompt(input({
       platform: "custom-platform",

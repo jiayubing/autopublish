@@ -38,7 +38,7 @@ function buildPrompt(input) {
   const template = input.template || {};
   const platform = text(input.platform || template.platform);
   const scenario = text(input.scenario || template.scenario);
-  if (!platform || !scenario || !template.body) {
+  if (!platform || !scenario || typeof template.body !== "string" || !template.body.trim()) {
     throw promptError("PROMPT_TEMPLATE_REQUIRED", "Platform, scenario, and template body are required");
   }
 
