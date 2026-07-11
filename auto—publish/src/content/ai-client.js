@@ -81,7 +81,7 @@ function createAiClient(config) {
         if (timedOut) throw aiError("AI_TIMEOUT", "AI request timed out");
         payload = JSON.parse(responseText);
       } catch (error) {
-        if (timedOut || (error && error.name === "AbortError")) {
+        if (timedOut) {
           throw aiError("AI_TIMEOUT", "AI request timed out");
         }
         throw aiError("AI_REQUEST_FAILED", "AI response was invalid");
@@ -93,7 +93,7 @@ function createAiClient(config) {
       return content;
     } catch (error) {
       if (error && safeAiErrors.has(error)) throw error;
-      if (timedOut || (error && error.name === "AbortError")) {
+      if (timedOut) {
         throw aiError("AI_TIMEOUT", "AI request timed out");
       }
       throw aiError("AI_REQUEST_FAILED", "AI response was invalid");

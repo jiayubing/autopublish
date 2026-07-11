@@ -94,6 +94,17 @@ describe("ai client", function() {
     }
   });
 
+  it("maps external AbortErrors to safe request failures", async function() {
+    const transportError = new Error("connection reset review-api-key");
+    transportError.code = "ECONNRESET";
+    transportError.name = "AbortError";
+    const client = createAiClient(config({ fetch: async function() { throw transportError; } }));
+
+    await assert.rejects(client.complete([]), function(error) {
+      return error.code === "AI_REQUEST_FAILED" && !String(error.message).includes("review-api-key");
+    });
+  });
+
   it("aborts a request that exceeds the configured timeout", async function() {
     const client = createAiClient(config({ timeoutMs: 5, fetch: function(url, options) {
       return new Promise(function(resolve, reject) {
