@@ -121,10 +121,15 @@ describe("react workbench regression", function() {
 
   it("type-checks before building the renderer and provides a root verifier", function() {
     const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8"));
+    const rendererPackageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "media-workbench", "package.json"), "utf8"));
     const verifyScript = path.resolve(__dirname, "..", "scripts", "verify.js");
 
-    assert.ok(packageJson.scripts["build:renderer"].includes("npm run lint"),
+    assert.ok(packageJson.scripts["build:renderer"].includes("--prefix media-workbench run lint"),
       "root renderer build must type-check before invoking Vite");
+    assert.equal(packageJson.scripts["build:renderer"].includes("build.cmd"), false,
+      "root renderer build must not depend on Windows command files");
+    assert.equal(rendererPackageJson.scripts.build.includes("build.cmd"), false,
+      "renderer build script must be shell-portable");
     assert.equal(packageJson.scripts.verify, "node scripts/verify.js",
       "root verify script must delegate to the verification runner");
     assert.ok(fs.existsSync(verifyScript), "verification runner must exist");
