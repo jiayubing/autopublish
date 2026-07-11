@@ -10,9 +10,11 @@ function storeError(code, message) {
 }
 
 function assertPathSegment(value, label) {
+  const deviceName = typeof value === "string" && value.split(".")[0].replace(/[ .]+$/g, "").toUpperCase();
   if (typeof value !== "string" || !value || value === "." || value === ".." ||
       !value.trim() || value.endsWith(" ") || value.endsWith(".") || value.includes("/") || value.includes("\\") ||
-      /[<>:"|?*\u0000-\u001F]/.test(value) || path.isAbsolute(value) || path.win32.isAbsolute(value)) {
+      /[<>:"|?*\u0000-\u001F]/.test(value) || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(deviceName) ||
+      path.isAbsolute(value) || path.win32.isAbsolute(value)) {
     throw storeError("ARTICLE_PATH_OUT_OF_BOUNDS", "Invalid " + label);
   }
 }
@@ -138,52 +140,115 @@ function createArticleStore(workspaceRoot) {
     return temporary;
   }
 
+  function transactionFiles(files) {
+    return {
+      journal: path.join(files.directory, path.basename(files.json, ".json") + ".journal"),
+      jsonBackup: files.json + ".backup",
+      markdownBackup: files.markdown + ".backup"
+    };
+  }
+
+  function removeRegularFile(filename) {
+    if (!fs.existsSync(filename)) return;
+    assertRegularFile(filename);
+    fs.unlinkSync(filename);
+  }
+
+  function validTemporaryName(name, target) {
+    return typeof name === "string" && path.basename(name) === name && name.startsWith(path.basename(target) + ".tmp-");
+  }
+
+  function recoverArticle(files) {
+    const transaction = transactionFiles(files);
+    if (!fs.existsSync(transaction.journal)) return;
+    assertRegularFile(transaction.journal);
+    let journal;
+    try {
+      journal = JSON.parse(fs.readFileSync(transaction.journal, "utf8"));
+    } catch (error) {
+      throw storeError("ARTICLE_INVALID", "Article transaction journal is invalid");
+    }
+    if (!journal || journal.version !== 1 || !validTemporaryName(journal.temporaryJson, files.json) || !validTemporaryName(journal.temporaryMarkdown, files.markdown)) {
+      throw storeError("ARTICLE_INVALID", "Article transaction journal is invalid");
+    }
+    const hasBackups = fs.existsSync(transaction.jsonBackup) && fs.existsSync(transaction.markdownBackup);
+    if (hasBackups) {
+      assertRegularFile(transaction.jsonBackup);
+      assertRegularFile(transaction.markdownBackup);
+      removeRegularFile(files.json);
+      removeRegularFile(files.markdown);
+      fs.renameSync(transaction.jsonBackup, files.json);
+      fs.renameSync(transaction.markdownBackup, files.markdown);
+    } else if (!fs.existsSync(files.json) || !fs.existsSync(files.markdown)) {
+      const temporaryJson = path.join(files.directory, journal.temporaryJson);
+      const temporaryMarkdown = path.join(files.directory, journal.temporaryMarkdown);
+      if ((!fs.existsSync(temporaryJson) && !fs.existsSync(files.json)) || (!fs.existsSync(temporaryMarkdown) && !fs.existsSync(files.markdown))) {
+        throw storeError("ARTICLE_INVALID", "Article files are incomplete");
+      }
+      if (fs.existsSync(temporaryJson)) {
+        assertRegularFile(temporaryJson);
+        removeRegularFile(files.json);
+        fs.renameSync(temporaryJson, files.json);
+      }
+      if (fs.existsSync(temporaryMarkdown)) {
+        assertRegularFile(temporaryMarkdown);
+        removeRegularFile(files.markdown);
+        fs.renameSync(temporaryMarkdown, files.markdown);
+      }
+    }
+    const temporaryJson = path.join(files.directory, journal.temporaryJson);
+    const temporaryMarkdown = path.join(files.directory, journal.temporaryMarkdown);
+    removeRegularFile(temporaryJson);
+    removeRegularFile(temporaryMarkdown);
+    removeRegularFile(transaction.jsonBackup);
+    removeRegularFile(transaction.markdownBackup);
+    removeRegularFile(transaction.journal);
+  }
+
   function replaceArticleFiles(files, article) {
     const temporaryMarkdown = writeTemporary(files.markdown, markdownFor(article));
     const temporaryJson = writeTemporary(files.json, JSON.stringify(article, null, 2) + "\n");
-    const markdownBackup = files.markdown + ".bak-" + process.pid + "-" + Date.now();
-    const jsonBackup = files.json + ".bak-" + process.pid + "-" + Date.now();
-    let backedUpMarkdown = false;
-    let backedUpJson = false;
-    let wroteMarkdown = false;
-    let wroteJson = false;
+    const transaction = transactionFiles(files);
     try {
+      fs.writeFileSync(transaction.journal, JSON.stringify({
+        version: 1,
+        temporaryJson: path.basename(temporaryJson),
+        temporaryMarkdown: path.basename(temporaryMarkdown)
+      }) + "\n", "utf8");
       if (fs.existsSync(files.markdown)) {
         assertRegularFile(files.markdown);
-        fs.renameSync(files.markdown, markdownBackup);
-        backedUpMarkdown = true;
+        fs.renameSync(files.markdown, transaction.markdownBackup);
       }
       if (fs.existsSync(files.json)) {
         assertRegularFile(files.json);
-        fs.renameSync(files.json, jsonBackup);
-        backedUpJson = true;
+        fs.renameSync(files.json, transaction.jsonBackup);
       }
       fs.renameSync(temporaryMarkdown, files.markdown);
-      wroteMarkdown = true;
       fs.renameSync(temporaryJson, files.json);
-      wroteJson = true;
-      if (backedUpMarkdown) fs.unlinkSync(markdownBackup);
-      if (backedUpJson) fs.unlinkSync(jsonBackup);
+      removeRegularFile(transaction.markdownBackup);
+      removeRegularFile(transaction.jsonBackup);
+      removeRegularFile(transaction.journal);
     } catch (error) {
-      if (wroteMarkdown && fs.existsSync(files.markdown)) fs.unlinkSync(files.markdown);
-      if (wroteJson && fs.existsSync(files.json)) fs.unlinkSync(files.json);
-      if (backedUpMarkdown && fs.existsSync(markdownBackup)) fs.renameSync(markdownBackup, files.markdown);
-      if (backedUpJson && fs.existsSync(jsonBackup)) fs.renameSync(jsonBackup, files.json);
       throw error;
     } finally {
-      if (fs.existsSync(temporaryMarkdown)) fs.unlinkSync(temporaryMarkdown);
-      if (fs.existsSync(temporaryJson)) fs.unlinkSync(temporaryJson);
+      if (!fs.existsSync(transaction.journal)) {
+        removeRegularFile(temporaryMarkdown);
+        removeRegularFile(temporaryJson);
+      }
     }
   }
 
   function saveArticle(article) {
     const normalized = normalizeArticle(article);
     const files = articlePaths(normalized.clientId, normalized.id, true);
+    recoverArticle(files);
     replaceArticleFiles(files, normalized);
     return normalized;
   }
 
   function getArticle(clientId, articleId) {
+    const files = articlePaths(clientId, articleId, false);
+    recoverArticle(files);
     return readArticle(clientId, articleId);
   }
 
@@ -192,7 +257,12 @@ function createArticleStore(workspaceRoot) {
     if (!fs.existsSync(directory)) return [];
     return fs.readdirSync(directory, { withFileTypes: true })
       .filter(function(entry) { return entry.isFile() && path.extname(entry.name).toLowerCase() === ".json"; })
-      .map(function(entry) { return readArticle(clientId, path.basename(entry.name, ".json")); })
+      .map(function(entry) { return path.basename(entry.name, ".json"); })
+      .map(function(articleId) {
+        const files = articlePaths(clientId, articleId, false);
+        recoverArticle(files);
+        return readArticle(clientId, articleId);
+      })
       .sort(function(a, b) { return (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt); });
   }
 

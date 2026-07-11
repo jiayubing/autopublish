@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const { DatabaseSync } = require("node:sqlite");
 
 const { getContentWorkspace, getClientWorkspace } = require("../core/files");
 const { createResearchStore } = require("./research-store");
@@ -63,6 +62,44 @@ function createLegacyMigrator(options) {
   const sourceClients = path.join(sourceRoot, "clients");
   const databasePath = path.join(sourceRoot, "data", "geo_data.db");
 
+  function databaseSync() {
+    try {
+      const sqlite = require("node:sqlite");
+      if (!sqlite || typeof sqlite.DatabaseSync !== "function") {
+        throw new Error("DatabaseSync is unavailable");
+      }
+      return sqlite.DatabaseSync;
+    } catch (error) {
+      throw migrationError("LEGACY_SQLITE_UNSUPPORTED", "Legacy SQLite migration is unsupported in this runtime");
+    }
+  }
+
+  function copyDestination(client) {
+    const clientsRoot = getContentWorkspace(workspaceRoot).clients;
+    fs.mkdirSync(clientsRoot, { recursive: true });
+    const clientsStats = fs.lstatSync(clientsRoot);
+    if (!clientsStats.isDirectory() || clientsStats.isSymbolicLink()) {
+      throw migrationError("CLIENT_PATH_OUT_OF_BOUNDS", "Workspace clients directory is unsafe");
+    }
+    const realClientsRoot = fs.realpathSync(clientsRoot);
+    const destination = path.resolve(clientsRoot, client.id);
+    const relative = path.relative(clientsRoot, destination);
+    if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+      throw migrationError("CLIENT_PATH_OUT_OF_BOUNDS", "Workspace client directory is unsafe");
+    }
+    if (!fs.existsSync(destination)) fs.mkdirSync(destination, { recursive: true });
+    const destinationStats = fs.lstatSync(destination);
+    if (!destinationStats.isDirectory() || destinationStats.isSymbolicLink()) {
+      throw migrationError("LEGACY_TARGET_PATH_UNSAFE", "Workspace client directory is unsafe");
+    }
+    const realDestination = fs.realpathSync(destination);
+    const realRelative = path.relative(realClientsRoot, realDestination);
+    if (realRelative === ".." || realRelative.startsWith(".." + path.sep) || path.isAbsolute(realRelative)) {
+      throw migrationError("CLIENT_PATH_OUT_OF_BOUNDS", "Workspace client directory is unsafe");
+    }
+    return realDestination;
+  }
+
   function sourceClientPlans(stats) {
     if (!fs.existsSync(sourceClients)) {
       stats.warnings.push("Legacy clients directory is missing");
@@ -101,6 +138,7 @@ function createLegacyMigrator(options) {
     }
     let db;
     try {
+      const DatabaseSync = databaseSync();
       db = new DatabaseSync(databasePath, { readOnly: true });
       const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(function(row) { return row.name; }));
       const schemaValid = Object.keys(REQUIRED_SCHEMA).every(function(table) {
@@ -112,7 +150,7 @@ function createLegacyMigrator(options) {
       return db;
     } catch (error) {
       if (db) db.close();
-      if (error.code === "LEGACY_SCHEMA_INVALID") throw error;
+      if (error.code === "LEGACY_SCHEMA_INVALID" || error.code === "LEGACY_SQLITE_UNSUPPORTED") throw error;
       throw migrationError("LEGACY_DATABASE_INVALID", "Legacy database is invalid");
     }
   }
@@ -289,13 +327,14 @@ function createLegacyMigrator(options) {
 
   function copyClients(plan, count) {
     plan.clients.forEach(function(client) {
-      const changed = client.files.some(function(name) { return !fs.existsSync(path.join(client.destination, name)); });
+      const destinationDirectory = copyDestination(client);
+      const changed = client.files.some(function(name) { return !fs.existsSync(path.join(destinationDirectory, name)); });
       if (!changed) {
         if (count) plan.stats.skipped += 1;
         return;
       }
       client.files.forEach(function(name) {
-        const destination = path.join(client.destination, name);
+        const destination = path.join(destinationDirectory, name);
         if (fs.existsSync(destination)) return;
         fs.mkdirSync(path.dirname(destination), { recursive: true });
         fs.copyFileSync(path.join(client.directory, name), destination, fs.constants.COPYFILE_EXCL);

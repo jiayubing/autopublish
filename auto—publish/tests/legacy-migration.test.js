@@ -124,6 +124,73 @@ describe("legacy GEO migration", function() {
     assert.throws(function() { migrator().dryRun(); }, function(error) { return error.code === "LEGACY_DATABASE_INVALID"; });
   });
 
+  it("loads without node:sqlite and reports a stable unsupported error only when migration reads a database", function() {
+    const modulePath = path.resolve(__dirname, "..", "src", "content", "legacy-migration.js");
+    const script = [
+      "const Module = require('module');",
+      "const originalLoad = Module._load;",
+      "Module._load = function(request) { if (request === 'node:sqlite') { const error = new Error('Cannot find module node:sqlite'); error.code = 'MODULE_NOT_FOUND'; throw error; } return originalLoad.apply(this, arguments); };",
+      "const { createLegacyMigrator } = require(" + JSON.stringify(modulePath) + ");",
+      "const migrator = createLegacyMigrator({ sourceRoot: " + JSON.stringify(sourceRoot) + ", workspaceRoot: " + JSON.stringify(workspaceRoot) + " });",
+      "try { migrator.dryRun(); } catch (error) { process.stderr.write(error.code + ':' + error.message); process.exitCode = 1; }"
+    ].join("\n");
+    const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stderr, "LEGACY_SQLITE_UNSUPPORTED:Legacy SQLite migration is unsupported in this runtime");
+    const hook = path.join(root, "block-node-sqlite.js");
+    fs.writeFileSync(hook, "const Module = require('module'); const originalLoad = Module._load; Module._load = function(request) { if (request === 'node:sqlite') { const error = new Error('Cannot find module node:sqlite'); error.code = 'MODULE_NOT_FOUND'; throw error; } return originalLoad.apply(this, arguments); };\n");
+    const cli = spawnSync(process.execPath, ["--require", hook, path.resolve(__dirname, "..", "scripts", "migrate-geo-data.js"), "--source", sourceRoot, "--workspace", workspaceRoot, "--dry-run"], { encoding: "utf8" });
+    assert.notEqual(cli.status, 0);
+    assert.equal(cli.stderr.trim(), "Legacy SQLite migration is unsupported in this runtime");
+  });
+
+  it("rejects a linked workspace client target before copying legacy files", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "legacy-migration-outside-"));
+    const clients = path.join(workspaceRoot, "clients");
+    fs.mkdirSync(clients, { recursive: true });
+    try {
+      fs.symlinkSync(outside, path.join(clients, "travel-client"), "junction");
+    } catch (error) {
+      fs.rmSync(outside, { recursive: true, force: true });
+      if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+        t.skip("symlinks or junctions are unavailable in this environment");
+        return;
+      }
+      throw error;
+    }
+    try {
+      assert.throws(function() { migrator().migrate(); }, function(error) {
+        return error.code === "LEGACY_TARGET_PATH_UNSAFE";
+      });
+      assert.equal(fs.existsSync(path.join(outside, "brand.md")), false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a linked workspace clients root before copying legacy files", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "legacy-migration-outside-"));
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    try {
+      fs.symlinkSync(outside, path.join(workspaceRoot, "clients"), "junction");
+    } catch (error) {
+      fs.rmSync(outside, { recursive: true, force: true });
+      if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+        t.skip("symlinks or junctions are unavailable in this environment");
+        return;
+      }
+      throw error;
+    }
+    try {
+      assert.throws(function() { migrator().migrate(); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.equal(fs.existsSync(path.join(outside, "brand.md")), false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it("rejects schemas that omit required columns without exposing SQLite details", function() {
     fs.unlinkSync(path.join(sourceRoot, "data", "geo_data.db"));
     const db = new DatabaseSync(path.join(sourceRoot, "data", "geo_data.db"));

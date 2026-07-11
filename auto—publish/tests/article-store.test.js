@@ -78,6 +78,13 @@ describe("article store", function() {
     });
   });
 
+  it("rejects Windows reserved device names in client and article path segments", function() {
+    ["CON", "prn.txt", "Aux", "nul.log", "COM1", "com9.md", "LPT1", "lpt9.json"].forEach(function(value) {
+      assert.throws(function() { store.listArticles(value); }, function(error) { return error.code === "ARTICLE_PATH_OUT_OF_BOUNDS"; });
+      assert.throws(function() { store.getArticle("client-1", value); }, function(error) { return error.code === "ARTICLE_PATH_OUT_OF_BOUNDS"; });
+    });
+  });
+
   it("rejects articles missing required content or provenance fields", function() {
     [
       valid("empty-title", { title: "  " }),
@@ -113,6 +120,28 @@ describe("article store", function() {
     fs.writeFileSync(path.join(directory, "article-2.json.tmp-123"), JSON.stringify(valid("article-2")));
     fs.writeFileSync(path.join(directory, "note.md"), "not an article");
     assert.deepStrictEqual(store.listArticles("client-1").map(function(article) { return article.id; }), ["article-1"]);
+  });
+
+  it("recovers a complete prior article after an interrupted two-file update", function() {
+    const original = valid("article-1");
+    const updated = valid("article-1", { title: "Updated title", content: "Updated body.", updatedAt: "2026-07-11T01:00:00.000Z" });
+    store.saveArticle(original);
+    const directory = path.join(root, "generated", "client-1");
+    fs.renameSync(path.join(directory, "article-1.json"), path.join(directory, "article-1.json.backup"));
+    fs.renameSync(path.join(directory, "article-1.md"), path.join(directory, "article-1.md.backup"));
+    fs.writeFileSync(path.join(directory, "article-1.json"), JSON.stringify(updated, null, 2) + "\n");
+    fs.writeFileSync(path.join(directory, "article-1.md"), "---\ntitle: " + JSON.stringify(original.title) + "\n---\n\n" + original.content + "\n");
+    fs.writeFileSync(path.join(directory, "article-1.journal"), JSON.stringify({
+      version: 1,
+      temporaryJson: "article-1.json.tmp-interrupted",
+      temporaryMarkdown: "article-1.md.tmp-interrupted"
+    }) + "\n");
+
+    assert.deepStrictEqual(store.getArticle("client-1", "article-1"), original);
+    assert.equal(fs.existsSync(path.join(directory, "article-1.journal")), false);
+    assert.equal(fs.existsSync(path.join(directory, "article-1.json.backup")), false);
+    assert.equal(fs.existsSync(path.join(directory, "article-1.md.backup")), false);
+    assert.deepStrictEqual(store.listArticles("client-1"), [original]);
   });
 
   it("rejects generated client directories that resolve outside generated", function(t) {
