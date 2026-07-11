@@ -53,6 +53,17 @@ const api = {
       return function() { ipcRenderer.removeListener("platform-state", handler); };
     }
   },
+  content: {
+    listClients: function() { return ipcRenderer.invoke("content:list-clients"); },
+    getClient: function(clientId) { return ipcRenderer.invoke("content:get-client", clientId); },
+    listResearch: function(clientId) { return ipcRenderer.invoke("content:list-research", clientId); },
+    getResearch: function(input) { return ipcRenderer.invoke("content:get-research", input); },
+    listTemplates: function(platform) { return ipcRenderer.invoke("content:list-templates", platform); },
+    generateArticle: function(input) { return ipcRenderer.invoke("content:generate-article", input); },
+    saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
+    listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
+    getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); }
+  },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },
     syncOrder: function(orderNid) { return ipcRenderer.invoke("media:sync-order", orderNid); }

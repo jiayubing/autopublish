@@ -1,4 +1,4 @@
-import { Article, Draft, MediaResource, PlatformArticle, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, SubmissionOrder } from "./types";
+import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, MediaResource, PlatformArticle, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, SubmissionOrder } from "./types";
 
 // 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
 
@@ -36,10 +36,20 @@ interface DesktopConsolePlatforms {
   onState(listener: (state: { isPlatformRunning: boolean; isPlatformRunning: boolean }) => void): () => void;
 }
 
+interface DesktopConsoleContent {
+  listClients(): Promise<{ ok: boolean; data?: ContentClient[]; error?: unknown }>;
+  listResearch(clientId: string): Promise<{ ok: boolean; data?: ContentResearch[]; error?: unknown }>;
+  listTemplates(platform: string): Promise<{ ok: boolean; data?: ContentTemplate[]; error?: unknown }>;
+  generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<{ ok: boolean; data?: GeneratedContentArticle; error?: unknown }>;
+  saveArticle(article: GeneratedContentArticle): Promise<{ ok: boolean; data?: GeneratedContentArticle; error?: unknown }>;
+  listGeneratedArticles(clientId: string): Promise<{ ok: boolean; data?: GeneratedContentArticle[]; error?: unknown }>;
+}
+
 interface DesktopConsole {
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
+  content: DesktopConsoleContent;
 }
 
 declare global {
@@ -69,6 +79,53 @@ function writeLocalStorage<T>(key: string, value: T): void {
   } catch {
     // Silently ignore quota/access errors
   }
+}
+
+function getContentError(value: unknown, fallback: string): Error {
+  if (value && typeof value === "object" && "message" in value) return new Error(String((value as { message: unknown }).message));
+  return new Error(typeof value === "string" ? value : fallback);
+}
+
+export async function listContentClients(): Promise<ContentClient[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listClients();
+  if (!result.ok) throw getContentError(result.error, "Unable to load clients");
+  return result.data || [];
+}
+
+export async function listContentResearch(clientId: string): Promise<ContentResearch[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listResearch(clientId);
+  if (!result.ok) throw getContentError(result.error, "Unable to load research");
+  return result.data || [];
+}
+
+export async function listContentTemplates(platform: string): Promise<ContentTemplate[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listTemplates(platform);
+  if (!result.ok) throw getContentError(result.error, "Unable to load templates");
+  return result.data || [];
+}
+
+export async function generateContentArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<GeneratedContentArticle> {
+  if (!isElectron()) throw new Error("AI content generation requires the desktop app");
+  const result = await window.desktopConsole!.content.generateArticle(input);
+  if (!result.ok || !result.data) throw getContentError(result.error, "Unable to generate article");
+  return result.data;
+}
+
+export async function saveContentArticle(article: GeneratedContentArticle): Promise<GeneratedContentArticle> {
+  if (!isElectron()) throw new Error("AI content saving requires the desktop app");
+  const result = await window.desktopConsole!.content.saveArticle(article);
+  if (!result.ok || !result.data) throw getContentError(result.error, "Unable to save article");
+  return result.data;
+}
+
+export async function listContentArticles(clientId: string): Promise<GeneratedContentArticle[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listGeneratedArticles(clientId);
+  if (!result.ok) throw getContentError(result.error, "Unable to load generated articles");
+  return result.data || [];
 }
 
 // 鈹€鈹€鈹€ Data normalization (backend 鈫?React types) 鈹€鈹€鈹€

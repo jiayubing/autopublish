@@ -22,6 +22,7 @@ import PreflightModal from './components/PreflightModal';
 import OrdersView from './components/OrdersView';
 import SettingsView from './components/SettingsView';
 import PlatformWorkbench from './components/PlatformWorkbench';
+import ContentWorkbench from './components/ContentWorkbench';
 import { 
   Database, 
   HelpCircle, 
@@ -371,6 +372,19 @@ export default function App() {
             )}
 
             {/* View 2.5: Platforms View */}
+            {currentView === 'content' && (
+              <motion.div
+                key="content-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="h-full"
+              >
+                <ContentWorkbench />
+              </motion.div>
+            )}
+
             {currentView === 'platforms' && (
               <motion.div
                 key="platforms-view"

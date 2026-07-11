@@ -76,7 +76,15 @@ export interface RealOrder {
 // Backward-compatible alias for PreflightModal and mockData
 export type Order = SubmissionOrder;
 
-export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'platforms';
+export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'platforms' | 'content';
+
+export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: Array<{ name: string; content: string }>; }
+export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; createdAt?: string; isAnswerComplete?: boolean; }
+export interface ContentTemplate { id: string; platform: string; scenario: string; name: string; body: string; }
+export interface GeneratedContentArticle {
+  id: string; clientId: string; researchQueryId: string; platform: string; scenario: string; templateId: string;
+  title: string; content: string; status: string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string;
+}
 
 export interface PlatformArticle {
   filename: string;
