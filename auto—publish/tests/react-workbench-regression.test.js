@@ -25,7 +25,12 @@ describe("react workbench regression", function() {
   it("gates renderer localStorage fixtures behind an explicit development flag", function() {
     const source = readApp("electron-api.ts");
     assert.ok(source.includes("VITE_ENABLE_FIXTURES === \"true\""));
-    assert.ok(source.includes("import.meta.env.DEV"));
+    assert.ok(source.includes("import.meta as unknown"));
+  });
+  it("keeps Settings limited to actual manual workflow features", function() {
+    const source = readComponent("SettingsView.tsx");
+    ["AES-256", "LocalStorage", "自动实时监测", "跳过结算"].forEach(function(claim) { assert.equal(source.includes(claim), false); });
+    assert.ok(source.includes("不会因文件新增或预检通过而自动投稿"));
   });
   it("has PlatformWorkbench component", function() {
     assert.ok(componentExists("PlatformWorkbench.tsx"),
