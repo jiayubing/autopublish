@@ -57,6 +57,28 @@ describe("runtime configuration", function() {
       assert.equal(error.message.includes("API_KEY"), false);
     });
   });
+
+  it("does not retain workspace secrets after switching to a workspace without them", function() {
+    const first = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-first-"));
+    const second = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-second-"));
+    const original = process.env.XQW_API_KEY;
+    try {
+      delete process.env.XQW_API_KEY;
+      fs.writeFileSync(path.join(first, ".env"), "XQW_API_KEY=first-workspace-secret\n", "utf8");
+      configureRuntimeEnvironment({ appRoot: first, workspaceRoot: first });
+      assert.equal(process.env.XQW_API_KEY, "first-workspace-secret");
+
+      const runtime = configureRuntimeEnvironment({ appRoot: second, workspaceRoot: second });
+      assert.equal(process.env.XQW_API_KEY, undefined);
+      assert.ok(runtime.configErrors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }));
+      assert.equal(JSON.stringify(runtime.configErrors).includes("first-workspace-secret"), false);
+    } finally {
+      if (original === undefined) delete process.env.XQW_API_KEY;
+      else process.env.XQW_API_KEY = original;
+      fs.rmSync(first, { recursive: true, force: true });
+      fs.rmSync(second, { recursive: true, force: true });
+    }
+  });
 });
 
 it("keeps media API key resolution free of dotenv loading side effects", function() {

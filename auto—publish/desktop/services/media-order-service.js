@@ -2,6 +2,7 @@
 const path = require("path");
 const { MediaClient } = require("../../src/platforms/media/media-client");
 const { resolveApiKey } = require("../../src/platforms/media/config");
+const { resolveStorePath } = require("../../src/platforms/media/store-paths");
 
 var STATUS_LABELS = {
   "0": "待审核",
@@ -15,7 +16,7 @@ function createMediaOrderService(opts) {
   var options = opts || {};
   var storePath = options.storePath || (options.paths && options.paths.data
     ? path.join(options.paths.data, "submission-orders.jsonl")
-    : path.join(process.env.AUTO_PUBLISH_ROOT_DIR || process.env.AUTO_PUBLISH_WORKSPACE || process.cwd(), "data", "submission-orders.jsonl"));
+    : resolveStorePath(options, "submission-orders.jsonl"));
 
   function listOrders() {
     var orders = [];
@@ -41,7 +42,7 @@ function createMediaOrderService(opts) {
     return response;
   }
 
-  return { listOrders: listOrders, listOrderViews: listOrderViews, syncOrder: syncOrder };
+  return { storePath: storePath, listOrders: listOrders, listOrderViews: listOrderViews, syncOrder: syncOrder };
 }
 
 function toOrderView(record) {

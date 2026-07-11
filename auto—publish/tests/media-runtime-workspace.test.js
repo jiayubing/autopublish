@@ -93,3 +93,37 @@ describe("media order runtime workspace", function() {
     }
   });
 });
+
+describe("legacy media storage compatibility", function() {
+  it("uses the historical app data directory when no workspace path or environment is supplied", function() {
+    const originalCwd = process.cwd();
+    const original = {
+      root: process.env.AUTO_PUBLISH_ROOT_DIR,
+      workspace: process.env.AUTO_PUBLISH_WORKSPACE,
+      appRoot: process.env.AUTO_PUBLISH_APP_ROOT
+    };
+    const unrelatedDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-unrelated-cwd-"));
+    const expectedDataDirectory = path.join(path.resolve(__dirname, ".."), "data");
+    try {
+      delete process.env.AUTO_PUBLISH_ROOT_DIR;
+      delete process.env.AUTO_PUBLISH_WORKSPACE;
+      delete process.env.AUTO_PUBLISH_APP_ROOT;
+      process.chdir(unrelatedDirectory);
+
+      assert.equal(new MediaDraftStore().filePath, path.join(expectedDataDirectory, "media-drafts.json"));
+      assert.equal(new MediaPoolStore().filePath, path.join(expectedDataDirectory, "media-pool.json"));
+      assert.equal(new MediaResourceStore().filePath, path.join(expectedDataDirectory, "media-resources.json"));
+      assert.equal(new SubmissionOrderStore().storePath, path.join(expectedDataDirectory, "submission-orders.jsonl"));
+      assert.equal(createMediaOrderService().storePath, path.join(expectedDataDirectory, "submission-orders.jsonl"));
+    } finally {
+      process.chdir(originalCwd);
+      if (original.root === undefined) delete process.env.AUTO_PUBLISH_ROOT_DIR;
+      else process.env.AUTO_PUBLISH_ROOT_DIR = original.root;
+      if (original.workspace === undefined) delete process.env.AUTO_PUBLISH_WORKSPACE;
+      else process.env.AUTO_PUBLISH_WORKSPACE = original.workspace;
+      if (original.appRoot === undefined) delete process.env.AUTO_PUBLISH_APP_ROOT;
+      else process.env.AUTO_PUBLISH_APP_ROOT = original.appRoot;
+      fs.rmSync(unrelatedDirectory, { recursive: true, force: true });
+    }
+  });
+});

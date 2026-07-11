@@ -1,15 +1,35 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const dotenv = require("dotenv");
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("./workspace-paths");
 
 let loadedWorkspaceEnv;
+let loadedWorkspaceValues = {};
+
+function unloadWorkspaceEnvironment() {
+  Object.keys(loadedWorkspaceValues).forEach(function(key) {
+    const loaded = loadedWorkspaceValues[key];
+    if (process.env[key] !== loaded.value) return;
+    if (loaded.previous === undefined) delete process.env[key];
+    else process.env[key] = loaded.previous;
+  });
+  loadedWorkspaceValues = {};
+}
 
 function loadWorkspaceEnvironment(workspaceRoot) {
   const envPath = path.join(workspaceRoot, ".env");
-  if (loadedWorkspaceEnv !== envPath) {
-    dotenv.config({ path: envPath, quiet: true });
-    loadedWorkspaceEnv = envPath;
-  }
+  if (loadedWorkspaceEnv === envPath) return;
+
+  unloadWorkspaceEnvironment();
+  loadedWorkspaceEnv = envPath;
+  if (!fs.existsSync(envPath)) return;
+
+  const values = dotenv.parse(fs.readFileSync(envPath, "utf8"));
+  Object.keys(values).forEach(function(key) {
+    if (process.env[key] !== undefined) return;
+    process.env[key] = values[key];
+    loadedWorkspaceValues[key] = { previous: undefined, value: values[key] };
+  });
 }
 
 function validateRuntimeConfiguration(environment) {
