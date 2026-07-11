@@ -2,6 +2,7 @@ const mammoth = require("mammoth");
 const { loadPlatforms } = require("../../src/core/platforms");
 const { createPlatformWorkbenchService } = require("../services/platform-workbench-service");
 const { wrap } = require("../services/ipc-response");
+const { validatePlatformSubmission, inputError } = require("../services/submission-boundary");
 
 function registerPlatformIpc(deps) {
   var ipcMain = deps.ipcMain;
@@ -20,6 +21,14 @@ function registerPlatformIpc(deps) {
     }),
     adapters: adapters
   });
+
+  function buildPlanFromSubmission(value) {
+    var submission = validatePlatformSubmission(value);
+    return service.buildSelectedPlan({
+      selectedArticles: [{ sourcePlatformId: submission.sourcePlatformId, filename: submission.filename }],
+      targetPlatformIds: submission.targetPlatformIds
+    });
+  }
 
   ipcMain.handle("platforms:get-queue", function() {
     return wrap(async function() {
@@ -69,17 +78,14 @@ function registerPlatformIpc(deps) {
 
   ipcMain.handle("platforms:build-selected-plan", function(event, input) {
     return wrap(function() {
-      var mapped = {
-        selectedArticles: input.articles || input.selectedArticles || [],
-        targetPlatformIds: input.platformIds || input.targetPlatformIds || []
-      };
-      return service.buildSelectedPlan(mapped);
+      return buildPlanFromSubmission(input);
     });
   });
 
-  ipcMain.handle("platforms:submit-selected-plan", function(event, plan) {
+  ipcMain.handle("platforms:submit-selected-plan", function(event, input) {
     return wrap(async function() {
-      var workerResult = await taskService.startPlatformSubmit(plan || { tasks: [] }, {
+      var plan = buildPlanFromSubmission(input);
+      var workerResult = await taskService.startPlatformSubmit(plan, {
         onLog: function(entry) {
           sendToRenderer("publish-log", entry);
         }

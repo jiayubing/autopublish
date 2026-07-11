@@ -36,6 +36,7 @@ describe("media IPC runtime workspace", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-ipc-runtime-"));
     try {
       const paths = ensureWorkspaceDirectories(createWorkspacePaths(root));
+      fs.writeFileSync(path.join(paths.mediaInput, "article.docx"), "placeholder", "utf8");
       const handlers = new Map();
       registerMediaIpc({
         ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } },

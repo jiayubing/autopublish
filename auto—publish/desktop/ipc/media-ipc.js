@@ -8,6 +8,7 @@ const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 const { createMediaResourceService } = require("../services/media-resource-service");
 const { wrap } = require("../services/ipc-response");
+const { validateMediaSubmission, validateDraft, inputError } = require("../services/submission-boundary");
 
 function resolveMediaInputDir(deps) {
   if (deps.paths && deps.paths.mediaInput) return deps.paths.mediaInput;
@@ -81,20 +82,59 @@ function registerMediaIpc(deps) {
     });
   });
 
+  function resolveDraftFilename(filename) {
+    mediaWorkbenchService.resolveSubmissionFile(filename);
+    return filename;
+  }
+
+  async function resolveSubmissions(submissions) {
+    if (!Array.isArray(submissions) || !submissions.length) throw inputError();
+    var pool = mediaPoolStore.getAll();
+    var cached = mediaResourceStore.getAll();
+    var known = (Array.isArray(pool) ? pool : []).concat(cached && Array.isArray(cached.resources) ? cached.resources : []);
+    var resourceById = {};
+    known.forEach(function(resource) {
+      var resourceId = resource && (resource.resourceId || resource.id || resource.resource_id);
+      if (resourceId != null) resourceById[String(resourceId)] = {
+        resourceId: String(resourceId), name: resource.name || resource.title || resource.resourceName || "", price: resource.price
+      };
+    });
+    var articles = await mediaWorkbenchService.scanArticles();
+    return submissions.map(function(value) {
+      var submission = validateMediaSubmission(value);
+      var filePath = mediaWorkbenchService.resolveSubmissionFile(submission.filename);
+      var draft = mediaDraftStore.get(submission.filename) || {};
+      if (submission.draftRevision && submission.draftRevision !== draft.updatedAt) throw inputError();
+      var resources = submission.resourceIds.map(function(resourceId) {
+        if (!resourceById[resourceId]) throw inputError();
+        return resourceById[resourceId];
+      });
+      var scanned = articles.filter(function(article) { return article.filename === submission.filename; })[0] || {};
+      return Object.assign({}, scanned, {
+        filename: submission.filename, filePath: filePath,
+        title: draft.title || scanned.title || path.basename(submission.filename, path.extname(submission.filename)),
+        remark: draft.remark || "", ignoreImages: !!draft.ignoreImages, selectedResources: resources
+      });
+    });
+  }
+
   ipcMain.handle("media:get-draft", function(event, filename) {
     return wrap(function() {
+      resolveDraftFilename(filename);
       return mediaDraftStore.get(filename);
     });
   });
 
   ipcMain.handle("media:set-draft", function(event, filename, draft) {
     return wrap(function() {
-      mediaDraftStore.set(filename, draft);
+      resolveDraftFilename(filename);
+      mediaDraftStore.set(filename, validateDraft(draft));
     });
   });
 
   ipcMain.handle("media:remove-draft", function(event, filename) {
     return wrap(function() {
+      resolveDraftFilename(filename);
       mediaDraftStore.remove(filename);
     });
   });
@@ -112,14 +152,14 @@ function registerMediaIpc(deps) {
   });
 
   ipcMain.handle("media:build-confirmation", function(event, articles) {
-    return wrap(function() {
-      return mediaWorkbenchService.buildConfirmationSummary(articles || []);
+    return wrap(async function() {
+      return mediaWorkbenchService.buildConfirmationSummary(await resolveSubmissions(articles));
     });
   });
 
   ipcMain.handle("media:submit-selected", function(event, articles) {
-    return wrap(function() {
-      return mediaWorkbenchService.submitTasksSerially(articles || []);
+    return wrap(async function() {
+      return mediaWorkbenchService.submitTasksSerially(await resolveSubmissions(articles));
     });
   });
 

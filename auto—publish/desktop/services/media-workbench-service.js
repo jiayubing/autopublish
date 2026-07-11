@@ -31,6 +31,25 @@ function isSafeFilename(filename) {
     filename.indexOf("\\") === -1;
 }
 
+function submissionInputError() {
+  var error = new Error("Invalid submission input");
+  error.code = "SUBMISSION_INPUT_INVALID";
+  return error;
+}
+
+function resolveSubmissionFile(inputDir, filename) {
+  if (!isSafeFilename(filename)) throw submissionInputError();
+  var ext = path.extname(filename).toLowerCase();
+  if ([".md", ".txt", ".docx"].indexOf(ext) === -1) throw submissionInputError();
+  var resolvedInputDir = path.resolve(inputDir);
+  var filePath = path.resolve(resolvedInputDir, filename);
+  if (path.dirname(filePath) !== resolvedInputDir) throw submissionInputError();
+  var stat;
+  try { stat = fs.lstatSync(filePath); } catch (_) { throw submissionInputError(); }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw submissionInputError();
+  return filePath;
+}
+
 function readPreviewSource(filePath) {
   var ext = path.extname(filePath).toLowerCase();
   if (ext === ".docx") {
@@ -94,22 +113,8 @@ function createMediaWorkbenchService(opts) {
   }
 
   async function previewArticle(filename) {
-    if (!isSafeFilename(filename)) {
-      throw new Error("unsafe preview filename");
-    }
-
-    var filePath = path.join(inputDir, filename);
-    if (path.dirname(filePath) !== path.resolve(inputDir)) {
-      throw new Error("unsafe preview filename");
-    }
-    if (!fs.existsSync(filePath)) {
-      throw new Error("preview file not found");
-    }
-
+    var filePath = resolveSubmissionFile(inputDir, filename);
     var ext = path.extname(filename).toLowerCase();
-    if (ext !== ".txt" && ext !== ".md" && ext !== ".docx") {
-      throw new Error("unsupported file type: " + ext);
-    }
 
     var draft = draftStore.get(filename) || {};
     var content = await readPreviewSource(filePath);
@@ -228,7 +233,8 @@ function createMediaWorkbenchService(opts) {
     scanArticles: scanArticles, previewArticle: previewArticle,
     expandSubmissionTasks: expandSubmissionTasks,
     buildConfirmationSummary: buildConfirmationSummary,
-    submitTasksSerially: submitTasksSerially, requestStop: requestStop
+    submitTasksSerially: submitTasksSerially, requestStop: requestStop,
+    resolveSubmissionFile: function(filename) { return resolveSubmissionFile(inputDir, filename); }
   };
 }
 

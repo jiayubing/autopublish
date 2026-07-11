@@ -2,15 +2,19 @@ import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, Genera
 
 // 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
 
+interface DraftPayload extends Omit<Draft, "filename" | "selectedResources"> {
+  selectedResources: Array<{ resourceId: string; name?: string; price?: number }>;
+}
+
 interface DesktopConsoleMedia {
   scanArticles(): Promise<IpcResponse<unknown[]>>;
   previewArticle(filename: string): Promise<IpcResponse<Record<string, unknown>>>;
   getDrafts(): Promise<IpcResponse<Draft[]>>;
   getDraft(filename: string): Promise<IpcResponse<Draft>>;
-  setDraft(filename: string, draft: Draft): Promise<IpcResponse<void>>;
+  setDraft(filename: string, draft: DraftPayload): Promise<IpcResponse<void>>;
   removeDraft(filename: string): Promise<IpcResponse<void>>;
-  buildConfirmation(articles: Article[]): Promise<IpcResponse<unknown>>;
-  submitSelected(articles: Article[]): Promise<IpcResponse<unknown>>;
+  buildConfirmation(articles: MediaSubmission[]): Promise<IpcResponse<unknown>>;
+  submitSelected(articles: MediaSubmission[]): Promise<IpcResponse<unknown>>;
   stopSubmit(): Promise<IpcResponse<void>>;
   refreshResources(opts?: Record<string, unknown>): Promise<IpcResponse<unknown>>;
   getResourcePage(opts: { page?: number; pageSize?: number }): Promise<IpcResponse<{ items: MediaResource[]; total: number; page: number; pageSize: number }>>;
@@ -28,13 +32,16 @@ interface DesktopConsoleOrders {
 
 interface DesktopConsolePlatforms {
   getQueue(): Promise<IpcResponse<unknown>>;
-  buildSelectedPlan(input: unknown): Promise<IpcResponse<unknown>>;
-  submitSelectedPlan(plan: unknown): Promise<IpcResponse<unknown>>;
+  buildSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
+  submitSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
   pauseSubmit(): Promise<IpcResponse<unknown>>;
   stopSubmit(): Promise<IpcResponse<unknown>>;
   getState(): Promise<IpcResponse<PlatformStatus>>;
   onState(listener: (state: PlatformStatus) => void): () => void;
 }
+
+interface MediaSubmission { filename: string; resourceIds: string[]; draftRevision?: string; }
+interface PlatformSubmission { sourcePlatformId: string; filename: string; targetPlatformIds: string[]; }
 
 interface DesktopConsoleContent {
   listClients(): Promise<IpcResponse<ContentClient[]>>;
@@ -356,7 +363,11 @@ export async function setDraft(
   draft: Draft
 ): Promise<void> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.media.setDraft(filename, draft);
+    const { filename: _filename, selectedResources, ...fields } = draft;
+    const result = await window.desktopConsole!.media.setDraft(filename, {
+      ...fields,
+      selectedResources: selectedResources.map((resource) => ({ resourceId: resource.resourceId, name: resource.name, price: resource.price })),
+    });
     if (!result.ok) throw getIpcError(result.error, "setDraft failed");
     return;
   }
@@ -377,7 +388,7 @@ export async function buildConfirmation(
 ): Promise<unknown> {
   if (isElectron()) {
     const result =
-      await window.desktopConsole!.media.buildConfirmation(articles);
+      await window.desktopConsole!.media.buildConfirmation(articles.map((article) => ({ filename: article.filename, resourceIds: article.selectedResources.map((resource) => resource.resourceId) })));
     if (!result.ok)
       throw getIpcError(result.error, "buildConfirmation failed");
     return result.data;
@@ -390,7 +401,7 @@ export async function submitSelected(
 ): Promise<unknown> {
   if (isElectron()) {
     const result =
-      await window.desktopConsole!.media.submitSelected(articles);
+      await window.desktopConsole!.media.submitSelected(articles.map((article) => ({ filename: article.filename, resourceIds: article.selectedResources.map((resource) => resource.resourceId) })));
     if (!result.ok)
       throw getIpcError(result.error, "submitSelected failed");
     return result.data;
@@ -573,9 +584,12 @@ export async function buildPlatformPlan(input: {
   platformIds: string[];
 }): Promise<PlatformSubmitPlan> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.platforms.buildSelectedPlan(input);
-    if (!result.ok) throw getIpcError(result.error, 'buildPlatformPlan failed');
-    return result.data as PlatformSubmitPlan;
+    const plans = await Promise.all(input.articles.map(async (article) => {
+      const result = await window.desktopConsole!.platforms.buildSelectedPlan({ sourcePlatformId: article.sourcePlatformId, filename: article.filename, targetPlatformIds: input.platformIds });
+      if (!result.ok) throw getIpcError(result.error, 'buildPlatformPlan failed');
+      return result.data as PlatformSubmitPlan;
+    }));
+    return { taskCount: plans.reduce((count, plan) => count + plan.taskCount, 0), tasks: plans.flatMap((plan) => plan.tasks) };
   }
   return { taskCount: 0, tasks: [] };
 }
@@ -584,9 +598,19 @@ export async function submitPlatformPlan(
   plan: PlatformSubmitPlan
 ): Promise<PlatformSubmitResult> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.platforms.submitSelectedPlan(plan);
-    if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
-    return result.data as PlatformSubmitResult;
+    const submissions = new Map<string, PlatformSubmission>();
+    plan.tasks.forEach((task) => {
+      const key = task.sourcePlatformId + "\u0000" + task.filename;
+      const submission = submissions.get(key) || { sourcePlatformId: task.sourcePlatformId, filename: task.filename, targetPlatformIds: [] };
+      if (!submission.targetPlatformIds.includes(task.targetPlatformId)) submission.targetPlatformIds.push(task.targetPlatformId);
+      submissions.set(key, submission);
+    });
+    const results = await Promise.all([...submissions.values()].map(async (submission) => {
+      const result = await window.desktopConsole!.platforms.submitSelectedPlan(submission);
+      if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
+      return result.data as PlatformSubmitResult;
+    }));
+    return results.reduce<PlatformSubmitResult>((total, result) => ({ ok: total.ok + result.ok, fail: total.fail + result.fail, skipped: total.skipped + result.skipped, results: total.results.concat(result.results) }), { ok: 0, fail: 0, skipped: 0, results: [] });
   }
   return { ok: 0, fail: 0, skipped: 0, results: [] };
 }
