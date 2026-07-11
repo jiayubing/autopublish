@@ -13,6 +13,8 @@ import {
   getResourcePage,
   getDraft,
   getPlatformQueue,
+  buildConfirmation,
+  submitSelected,
 } from "./electron-api";
 import Sidebar from './components/Sidebar';
 import ArticleList from './components/ArticleList';
@@ -56,7 +58,7 @@ export default function App() {
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
-  const [, setIsPreflightOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
 
@@ -242,6 +244,14 @@ export default function App() {
   const handleClearOrders = () => {
     setOrders([]);
   };
+  const readyForSubmit = articles.length > 0 && articles.every((article) => article.selectedResources && article.selectedResources.length > 0 && (!article.hasImages || article.ignoreImages));
+  const handleRealSubmit = async () => {
+    if (!readyForSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    try { const preflight = await buildConfirmation(articles); if ((preflight as { blockers?: string[] }).blockers?.length) return; await submitSelected(articles); await handleRefreshOrders(); }
+    catch (e) { console.error('media submit failed', e); }
+    finally { setIsSubmitting(false); }
+  };
 
   // Clear all local order records
     return (
@@ -279,11 +289,13 @@ export default function App() {
             </div>
             {currentView === 'workbench' && articles.some(a => a.selectedResources && a.selectedResources.length > 0) && (
               <button
-                onClick={() => setIsPreflightOpen(true)}
+                onClick={handleRealSubmit}
+                disabled={!readyForSubmit || isSubmitting}
+                title={readyForSubmit ? "将执行真实预检并提交" : "所有文章必须选择资源，并处理图片后才能提交"}
                 className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95"
               >
                 <Send className="w-4 h-4" />
-                <span>发布</span>
+                <span>{isSubmitting ? '提交中' : '预检并提交'}</span>
               </button>
             )}
           </div>
