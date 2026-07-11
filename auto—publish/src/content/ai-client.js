@@ -1,6 +1,9 @@
+const safeAiErrors = new WeakSet();
+
 function aiError(code, message) {
   const error = new Error(message);
   error.code = code;
+  safeAiErrors.add(error);
   return error;
 }
 
@@ -89,7 +92,7 @@ function createAiClient(config) {
       }
       return content;
     } catch (error) {
-      if (error && error.code) throw error;
+      if (error && safeAiErrors.has(error)) throw error;
       if (timedOut || (error && error.name === "AbortError")) {
         throw aiError("AI_TIMEOUT", "AI request timed out");
       }

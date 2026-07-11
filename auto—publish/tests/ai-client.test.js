@@ -77,15 +77,20 @@ describe("ai client", function() {
   });
 
   it("maps network failures, invalid JSON, and missing output to safe errors", async function() {
+    const transportError = new Error("transport failed review-api-key");
+    transportError.code = "ECONNRESET";
     const cases = [
       { fetch: async function() { throw new Error("network down"); }, code: "AI_REQUEST_FAILED" },
+      { fetch: async function() { throw transportError; }, code: "AI_REQUEST_FAILED", secret: "review-api-key" },
       { fetch: async function() { return response(200, "not json"); }, code: "AI_REQUEST_FAILED" },
       { fetch: async function() { return response(200, { choices: [] }); }, code: "AI_EMPTY_RESPONSE" },
       { fetch: async function() { return response(200, { choices: [{ message: { content: "  " } }] }); }, code: "AI_EMPTY_RESPONSE" }
     ];
     for (const item of cases) {
       const client = createAiClient(config({ fetch: item.fetch }));
-      await assert.rejects(client.complete([]), function(error) { return error.code === item.code; });
+      await assert.rejects(client.complete([]), function(error) {
+        return error.code === item.code && (!item.secret || !String(error.message).includes(item.secret));
+      });
     }
   });
 
