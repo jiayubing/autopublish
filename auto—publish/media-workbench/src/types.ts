@@ -110,6 +110,8 @@ export interface PlatformTarget {
 }
 
 export interface PlatformStatus {
+  isBatchRunning: boolean;
+  isStopPending: boolean;
   isPlatformRunning: boolean;
 }
 

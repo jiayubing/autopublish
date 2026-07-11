@@ -97,9 +97,12 @@ describe("react workbench regression", function() {
   it("uses the main-process platform status shape without a paused flag", function() {
     const types = readApp("types.ts");
     const api = readApp("electron-api.ts");
+    const taskService = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "services", "desktop-task-service.js"), "utf8");
 
-    assert.ok(types.includes("interface PlatformStatus") && types.includes("isPlatformRunning: boolean"),
-      "platform status must model the maintained main-process field");
+    assert.ok(types.includes("interface PlatformStatus") && types.includes("isBatchRunning: boolean") && types.includes("isStopPending: boolean") && types.includes("isPlatformRunning: boolean"),
+      "platform status must model every maintained main-process state field");
+    assert.ok(taskService.includes("isBatchRunning: isBatchRunning") && taskService.includes("isStopPending: isStopPending") && taskService.includes("isPlatformRunning: isPlatformRunning"),
+      "platform status must match the task service payload");
     assert.equal(types.includes("isPlatformPaused"), false,
       "platform status must not invent an unmaintained paused field");
     assert.equal(api.includes("isPlatformPaused"), false,

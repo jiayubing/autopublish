@@ -610,8 +610,8 @@ export async function stopPlatformSubmit(): Promise<void> {
 export async function getPlatformState(): Promise<PlatformStatus> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.getState();
-    if (!result.ok) return { isPlatformRunning: false };
-    return result.data || { isPlatformRunning: false };
+    if (!result.ok) return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+    return result.data || { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
   }
-  return { isPlatformRunning: false };
+  return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
 }
