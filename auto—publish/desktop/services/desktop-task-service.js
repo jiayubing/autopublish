@@ -158,15 +158,17 @@ function closeBrowserSessions() {
       });
 
       var timeoutMs = 120000;
+      var timeoutId;
       var timeoutPromise = new Promise(function(resolve) {
-        setTimeout(function() {
+        timeoutId = setTimeout(function() {
           resolve({ ok: false, error: "Platform publish timed out after " + (timeoutMs / 1000) + "s" });
         }, timeoutMs);
       });
 
       var result = await Promise.race([task.promise, abortPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
 
-      if (result && !result.ok && result.error && result.error.indexOf("timed out") !== -1) {
+      if (result && ((!result.ok && result.error && result.error.indexOf("timed out") !== -1) || result && result.data && result.data.skipped === platformTaskCount)) {
         try { platformChild.kill(); } catch (_) {}
       }
 
