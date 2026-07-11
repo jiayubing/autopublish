@@ -5,6 +5,7 @@ const { detectDocxImages, convertArticle } = require("../../src/platforms/media/
 const { MediaClient } = require("../../src/platforms/media/media-client");
 const { resolveApiKey } = require("../../src/platforms/media/config");
 const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
+const { runPreflight } = require("../../src/platforms/media/preflight");
 
 function firstTextLine(raw) {
   var lines = String(raw || "").split(/\n/);
@@ -171,6 +172,8 @@ function createMediaWorkbenchService(opts) {
 
   async function submitTasksSerially(articles, injected) {
     stopRequested = false;
+    var preflight = await runPreflight({ articles: articles || [], dryRun: true });
+    if (!preflight.ok) return { ok: 0, fail: 0, skipped: 0, results: [], preflight: preflight };
     var deps = injected || {};
     var client = deps.client || new MediaClient({ apiKey: resolveApiKey(null) });
     var orderStore = deps.orderStore || configuredOrderStore || new SubmissionOrderStore({ paths: workspacePaths });
