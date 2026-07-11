@@ -3,6 +3,7 @@ const path = require('path');
 // In packaged mode, AUTO_PUBLISH_ROOT_DIR is set by desktop/runtime-paths.js
 // to the writable workspace. In development it falls back to the project root.
 const ROOT = process.env.AUTO_PUBLISH_ROOT_DIR || path.resolve(__dirname, '..');
+const DATA_DIR = path.join(ROOT, 'data');
 
 const DIRS = {
   rootDir: ROOT,
@@ -11,6 +12,7 @@ const DIRS = {
   failedDir: path.join(ROOT, 'failed'),
   tmpDir: path.join(ROOT, 'tmp'),
   logsDir: path.join(ROOT, 'logs'),
+  dataDir: DATA_DIR,
   stateDir: path.join(ROOT, 'work', 'playwright-cli', 'state'),
 };
 

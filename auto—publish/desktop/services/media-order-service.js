@@ -13,7 +13,9 @@ var STATUS_LABELS = {
 
 function createMediaOrderService(opts) {
   var options = opts || {};
-  var storePath = options.storePath || path.resolve(__dirname, "..", "..", "data", "submission-orders.jsonl");
+  var storePath = options.storePath || (options.paths && options.paths.data
+    ? path.join(options.paths.data, "submission-orders.jsonl")
+    : path.join(process.env.AUTO_PUBLISH_ROOT_DIR || process.env.AUTO_PUBLISH_WORKSPACE || process.cwd(), "data", "submission-orders.jsonl"));
 
   function listOrders() {
     var orders = [];

@@ -10,17 +10,17 @@ const { wrap } = require("../services/ipc-response");
 
 function registerMediaIpc(deps) {
   var ipcMain = deps.ipcMain;
-  var mediaResourceStore = new MediaResourceStore();
-  var mediaPoolStore = new MediaPoolStore();
-  var mediaDraftStore = new MediaDraftStore();
+  var mediaResourceStore = new MediaResourceStore({ paths: deps.paths });
+  var mediaPoolStore = new MediaPoolStore({ paths: deps.paths });
+  var mediaDraftStore = new MediaDraftStore({ paths: deps.paths });
   var mediaResourceService = createMediaResourceService({
     resourceStore: mediaResourceStore,
     poolStore: mediaPoolStore,
     apiKey: resolveApiKey(null)
   });
-  var mediaOrderService = createMediaOrderService({});
+  var mediaOrderService = createMediaOrderService({ paths: deps.paths });
   var mediaWorkbenchService = createMediaWorkbenchService({
-    inputDir: path.join(deps.rootDir || path.resolve(__dirname, "..", ".."), "input", "media"),
+    inputDir: deps.paths && deps.paths.mediaInput || path.join(deps.rootDir || process.cwd(), "input", "media"),
     draftStore: mediaDraftStore
   });
 

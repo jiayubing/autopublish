@@ -54,7 +54,8 @@ app.whenReady().then(function() {
     taskService: taskService,
     sendToRenderer: sendToRenderer,
     rootDir: runtime.workspaceRoot,
-    appRoot: runtime.appRoot
+    appRoot: runtime.appRoot,
+    paths: runtime.paths
   });
 
   subscribe = require("../src/core/logger").subscribe;
