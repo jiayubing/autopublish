@@ -32,4 +32,10 @@ describe("content workbench regression", function() {
     assert.equal(workbench.includes("generateContentArticle"), true);
     assert.equal(workbench.includes("saveContentArticle"), true);
   });
+
+  it("keeps existing renderer IPC errors readable after structured responses", function() {
+    const api = read("media-workbench/src/electron-api.ts");
+    assert.equal(api.includes("function getIpcError"), true);
+    assert.equal(api.includes("new Error(result.error ||"), false);
+  });
 });

@@ -81,7 +81,7 @@ function writeLocalStorage<T>(key: string, value: T): void {
   }
 }
 
-function getContentError(value: unknown, fallback: string): Error {
+function getIpcError(value: unknown, fallback: string): Error {
   if (value && typeof value === "object" && "message" in value) return new Error(String((value as { message: unknown }).message));
   return new Error(typeof value === "string" ? value : fallback);
 }
@@ -89,42 +89,42 @@ function getContentError(value: unknown, fallback: string): Error {
 export async function listContentClients(): Promise<ContentClient[]> {
   if (!isElectron()) return [];
   const result = await window.desktopConsole!.content.listClients();
-  if (!result.ok) throw getContentError(result.error, "Unable to load clients");
+  if (!result.ok) throw getIpcError(result.error, "Unable to load clients");
   return result.data || [];
 }
 
 export async function listContentResearch(clientId: string): Promise<ContentResearch[]> {
   if (!isElectron()) return [];
   const result = await window.desktopConsole!.content.listResearch(clientId);
-  if (!result.ok) throw getContentError(result.error, "Unable to load research");
+  if (!result.ok) throw getIpcError(result.error, "Unable to load research");
   return result.data || [];
 }
 
 export async function listContentTemplates(platform: string): Promise<ContentTemplate[]> {
   if (!isElectron()) return [];
   const result = await window.desktopConsole!.content.listTemplates(platform);
-  if (!result.ok) throw getContentError(result.error, "Unable to load templates");
+  if (!result.ok) throw getIpcError(result.error, "Unable to load templates");
   return result.data || [];
 }
 
 export async function generateContentArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<GeneratedContentArticle> {
   if (!isElectron()) throw new Error("AI content generation requires the desktop app");
   const result = await window.desktopConsole!.content.generateArticle(input);
-  if (!result.ok || !result.data) throw getContentError(result.error, "Unable to generate article");
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to generate article");
   return result.data;
 }
 
 export async function saveContentArticle(article: GeneratedContentArticle): Promise<GeneratedContentArticle> {
   if (!isElectron()) throw new Error("AI content saving requires the desktop app");
   const result = await window.desktopConsole!.content.saveArticle(article);
-  if (!result.ok || !result.data) throw getContentError(result.error, "Unable to save article");
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to save article");
   return result.data;
 }
 
 export async function listContentArticles(clientId: string): Promise<GeneratedContentArticle[]> {
   if (!isElectron()) return [];
   const result = await window.desktopConsole!.content.listGeneratedArticles(clientId);
-  if (!result.ok) throw getContentError(result.error, "Unable to load generated articles");
+  if (!result.ok) throw getIpcError(result.error, "Unable to load generated articles");
   return result.data || [];
 }
 
@@ -310,7 +310,7 @@ async function fallbackSyncOrder(_orderNid: string): Promise<unknown> {
 export async function scanArticles(): Promise<Article[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.scanArticles();
-    if (!result.ok) throw new Error(result.error || "scanArticles failed");
+    if (!result.ok) throw getIpcError(result.error, "scanArticles failed");
     const rawList = result.data || [];
     return rawList.map((item: unknown) =>
       normalizeArticle(item as Record<string, unknown>)
@@ -326,7 +326,7 @@ export async function previewArticle(
     const result =
       await window.desktopConsole!.media.previewArticle(filename);
     if (!result.ok)
-      throw new Error(result.error || "previewArticle failed");
+      throw getIpcError(result.error, "previewArticle failed");
     return normalizeArticle(result.data as Record<string, unknown>);
   }
   return fallbackPreviewArticle(filename);
@@ -335,7 +335,7 @@ export async function previewArticle(
 export async function getDrafts(): Promise<Draft[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getDrafts();
-    if (!result.ok) throw new Error(result.error || "getDrafts failed");
+    if (!result.ok) throw getIpcError(result.error, "getDrafts failed");
     return (result.data || []) as Draft[];
   }
   return fallbackGetDrafts();
@@ -345,7 +345,7 @@ export async function getDraft(filename: string): Promise<Draft> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getDraft(filename);
     if (!result.ok)
-      throw new Error(result.error || "getDraft failed: " + filename);
+      throw getIpcError(result.error, "getDraft failed: " + filename);
     return result.data as Draft;
   }
   return fallbackGetDraft(filename);
@@ -357,7 +357,7 @@ export async function setDraft(
 ): Promise<void> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.setDraft(filename, draft);
-    if (!result.ok) throw new Error(result.error || "setDraft failed");
+    if (!result.ok) throw getIpcError(result.error, "setDraft failed");
     return;
   }
   await fallbackSetDraft(filename, draft);
@@ -366,7 +366,7 @@ export async function setDraft(
 export async function removeDraft(filename: string): Promise<void> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.removeDraft(filename);
-    if (!result.ok) throw new Error(result.error || "removeDraft failed");
+    if (!result.ok) throw getIpcError(result.error, "removeDraft failed");
     return;
   }
   await fallbackRemoveDraft(filename);
@@ -379,7 +379,7 @@ export async function buildConfirmation(
     const result =
       await window.desktopConsole!.media.buildConfirmation(articles);
     if (!result.ok)
-      throw new Error(result.error || "buildConfirmation failed");
+      throw getIpcError(result.error, "buildConfirmation failed");
     return result.data;
   }
   return fallbackBuildConfirmation(articles);
@@ -392,7 +392,7 @@ export async function submitSelected(
     const result =
       await window.desktopConsole!.media.submitSelected(articles);
     if (!result.ok)
-      throw new Error(result.error || "submitSelected failed");
+      throw getIpcError(result.error, "submitSelected failed");
     return result.data;
   }
   return fallbackSubmitSelected(articles);
@@ -401,7 +401,7 @@ export async function submitSelected(
 export async function stopSubmit(): Promise<void> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.stopSubmit();
-    if (!result.ok) throw new Error(result.error || "stopSubmit failed");
+    if (!result.ok) throw getIpcError(result.error, "stopSubmit failed");
     return;
   }
   await fallbackStopSubmit();
@@ -414,7 +414,7 @@ export async function refreshResources(
     const result =
       await window.desktopConsole!.media.refreshResources(opts);
     if (!result.ok)
-      throw new Error(result.error || "refreshResources failed");
+      throw getIpcError(result.error, "refreshResources failed");
     return;
   }
   await fallbackRefreshResources(opts);
@@ -433,7 +433,7 @@ export async function getResourcePage(opts: {
     const result =
       await window.desktopConsole!.media.getResourcePage(opts);
     if (!result.ok)
-      throw new Error(result.error || "getResourcePage failed");
+      throw getIpcError(result.error, "getResourcePage failed");
     const raw = result.data!;
     return {
       items: (raw.items || []).map((r: unknown) => normalizeResource(r as Record<string, unknown>)),
@@ -459,7 +459,7 @@ export async function searchResourcePage(opts: {
     const result =
       await window.desktopConsole!.media.searchResourcePage(opts);
     if (!result.ok)
-      throw new Error(result.error || "searchResourcePage failed");
+      throw getIpcError(result.error, "searchResourcePage failed");
     const raw = result.data!;
     return {
       items: (raw.items || []).map((r: unknown) => normalizeResource(r as Record<string, unknown>)),
@@ -474,7 +474,7 @@ export async function searchResourcePage(opts: {
 export async function getPool(): Promise<MediaResource[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getPool();
-    if (!result.ok) throw new Error(result.error || "getPool failed");
+    if (!result.ok) throw getIpcError(result.error, "getPool failed");
     const rawPool = result.data || [];
     return rawPool.map((r: unknown) => normalizeResource(r as Record<string, unknown>));
   }
@@ -485,7 +485,7 @@ export async function addToPool(resource: MediaResource): Promise<void> {
   if (isElectron()) {
     const result =
       await window.desktopConsole!.media.addToPool(resource);
-    if (!result.ok) throw new Error(result.error || "addToPool failed");
+    if (!result.ok) throw getIpcError(result.error, "addToPool failed");
     return;
   }
   await fallbackAddToPool(resource);
@@ -496,7 +496,7 @@ export async function removeFromPool(resourceId: string): Promise<void> {
     const result =
       await window.desktopConsole!.media.removeFromPool(resourceId);
     if (!result.ok)
-      throw new Error(result.error || "removeFromPool failed");
+      throw getIpcError(result.error, "removeFromPool failed");
     return;
   }
   await fallbackRemoveFromPool(resourceId);
@@ -505,7 +505,7 @@ export async function removeFromPool(resourceId: string): Promise<void> {
 export async function getBalance(): Promise<number> {
   if (isElectron()) {
     const result = await window.desktopConsole!.media.getBalance();
-    if (!result.ok) throw new Error(result.error || "getBalance failed");
+    if (!result.ok) throw getIpcError(result.error, "getBalance failed");
     return Number((result.data as { balance: string }).balance || 0);
   }
   return fallbackGetBalance();
@@ -514,7 +514,7 @@ export async function getBalance(): Promise<number> {
 export async function getOrders(): Promise<RealOrder[]> {
   if (isElectron()) {
     const result = await window.desktopConsole!.orders.getOrders();
-    if (!result.ok) throw new Error(result.error || "getOrders failed");
+    if (!result.ok) throw getIpcError(result.error, "getOrders failed");
     const rawList = result.data || [];
     return rawList.map((item: unknown) =>
       normalizeOrder(item as Record<string, unknown>)
@@ -527,7 +527,7 @@ export async function syncOrder(orderNid: string): Promise<unknown> {
   if (isElectron()) {
     const result =
       await window.desktopConsole!.orders.syncOrder(orderNid);
-    if (!result.ok) throw new Error(result.error || "syncOrder failed");
+    if (!result.ok) throw getIpcError(result.error, "syncOrder failed");
     return result.data;
   }
   return fallbackSyncOrder(orderNid);
@@ -551,7 +551,7 @@ export async function getPlatformQueue(): Promise<{
 }> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.getQueue();
-    if (!result.ok) throw new Error(result.error || 'getPlatformQueue failed');
+    if (!result.ok) throw getIpcError(result.error, 'getPlatformQueue failed');
     const data = result.data as {
       platforms: Array<{ id: string; scanDir: string }>;
       queue: PlatformArticle[];
@@ -574,7 +574,7 @@ export async function buildPlatformPlan(input: {
 }): Promise<PlatformSubmitPlan> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.buildSelectedPlan(input);
-    if (!result.ok) throw new Error(result.error || 'buildPlatformPlan failed');
+    if (!result.ok) throw getIpcError(result.error, 'buildPlatformPlan failed');
     return result.data as PlatformSubmitPlan;
   }
   return { taskCount: 0, tasks: [] };
@@ -585,7 +585,7 @@ export async function submitPlatformPlan(
 ): Promise<PlatformSubmitResult> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.submitSelectedPlan(plan);
-    if (!result.ok) throw new Error(result.error || 'submitPlatformPlan failed');
+    if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
     return result.data as PlatformSubmitResult;
   }
   return { ok: 0, fail: 0, skipped: 0, results: [] };
@@ -594,7 +594,7 @@ export async function submitPlatformPlan(
 export async function pausePlatformSubmit(): Promise<void> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.pauseSubmit();
-    if (!result.ok) throw new Error(result.error || "pausePlatformSubmit failed");
+    if (!result.ok) throw getIpcError(result.error, "pausePlatformSubmit failed");
     return;
   }
 }
@@ -602,7 +602,7 @@ export async function pausePlatformSubmit(): Promise<void> {
 export async function stopPlatformSubmit(): Promise<void> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.stopSubmit();
-    if (!result.ok) throw new Error(result.error || "stopPlatformSubmit failed");
+    if (!result.ok) throw getIpcError(result.error, "stopPlatformSubmit failed");
     return;
   }
 }
