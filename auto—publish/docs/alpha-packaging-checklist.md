@@ -38,3 +38,6 @@
 - [ ] Installed app opens without Cannot find module '../../scripts/config'.
 - [ ] Run 
 ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package contents.
+# Runtime workspace check
+
+Verify that the packaged app creates `%USERPROFILE%\Documents\AutoPublish` and its input/data/config folders. Confirm diagnostics before adding credentials or submitting work. The package must not contain user `.env`, input, data, logs, or backup files.

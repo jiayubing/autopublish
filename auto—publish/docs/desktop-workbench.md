@@ -89,3 +89,6 @@ Create a smoke workspace:
 `powershell
 powershell -ExecutionPolicy Bypass -File scripts/create-alpha-smoke-workspace.ps1
 ` 
+# Workspace and manual submission
+
+The production renderer is the React build. Runtime files belong in `%USERPROFILE%\Documents\AutoPublish` (or the explicit workspace override). Queue scanning, preflight, and submission remain operator-confirmed actions; no exported GEO article is published automatically.
