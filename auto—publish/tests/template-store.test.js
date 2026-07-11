@@ -36,6 +36,12 @@ describe("template store", function() {
     assert.throws(function() { getTemplate(root, "ctrip", "toutiao_news"); }, function(error) { return error.code === "TEMPLATE_NOT_FOUND"; });
   });
 
+  it("rejects duplicate template names within one platform", function() {
+    fs.writeFileSync(path.join(ctripDirectory, "duplicate.md"), "---\nplatform: ctrip\nscenario: 重复场景\nname: ctrip_rank\n---\n重复模板。\n");
+    assert.throws(function() { listTemplates(root, "ctrip"); }, function(error) { return error.code === "TEMPLATE_DUPLICATE_ID"; });
+    assert.throws(function() { getTemplate(root, "ctrip", "ctrip_rank"); }, function(error) { return error.code === "TEMPLATE_DUPLICATE_ID"; });
+  });
+
   it("rejects missing front matter, required fields, platform mismatches, and empty bodies", function() {
     const cases = [
       ["no-front-matter.md", "正文", "TEMPLATE_FRONT_MATTER_REQUIRED"],
@@ -57,5 +63,26 @@ describe("template store", function() {
     assert.throws(function() { listTemplates(root, "../ctrip"); }, function(error) { return error.code === "TEMPLATE_INVALID_PLATFORM"; });
     assert.throws(function() { getTemplate(root, "ctrip", "../secret"); }, function(error) { return error.code === "TEMPLATE_INVALID_ID"; });
     assert.throws(function() { getTemplate(root, "ctrip", "missing"); }, function(error) { return error.code === "TEMPLATE_NOT_FOUND"; });
+  });
+
+  it("rejects a platform symlink resolving outside the real templates directory", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "template-store-outside-"));
+    const linkedDirectory = path.join(root, "templates", "linked");
+    try {
+      fs.writeFileSync(path.join(outside, "outside.md"), "---\nplatform: linked\nscenario: 外部\nname: outside\n---\n外部模板。\n");
+      fs.symlinkSync(outside, linkedDirectory, "junction");
+    } catch (error) {
+      fs.rmSync(outside, { recursive: true, force: true });
+      if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+        t.skip("symlinks or junctions are unavailable in this environment");
+        return;
+      }
+      throw error;
+    }
+    try {
+      assert.throws(function() { listTemplates(root, "linked"); }, function(error) { return error.code === "TEMPLATE_INVALID_PLATFORM"; });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

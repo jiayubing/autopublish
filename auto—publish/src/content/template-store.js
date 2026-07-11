@@ -60,12 +60,21 @@ function readTemplate(filename, platform) {
 function getTemplateDirectory(workspaceRoot, platform) {
   assertSegment(platform, "TEMPLATE_INVALID_PLATFORM", "platform");
   const workspace = getContentWorkspace(workspaceRoot);
-  const directory = path.resolve(workspace.templates, platform);
-  const relative = path.relative(path.resolve(workspace.templates), directory);
+  const templatesDirectory = path.resolve(workspace.templates);
+  const directory = path.resolve(templatesDirectory, platform);
+  const relative = path.relative(templatesDirectory, directory);
   if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
     throw templateError("TEMPLATE_INVALID_PLATFORM", "Template platform is outside workspace");
   }
-  return directory;
+  if (!fs.existsSync(directory)) return directory;
+
+  const realTemplatesDirectory = fs.realpathSync(templatesDirectory);
+  const realDirectory = fs.realpathSync(directory);
+  const realRelative = path.relative(realTemplatesDirectory, realDirectory);
+  if (realRelative === ".." || realRelative.startsWith(".." + path.sep) || path.isAbsolute(realRelative)) {
+    throw templateError("TEMPLATE_INVALID_PLATFORM", "Template platform is outside workspace");
+  }
+  return realDirectory;
 }
 
 function templateEntries(directory) {
@@ -79,6 +88,13 @@ function listTemplates(workspaceRoot, platform) {
   const directory = getTemplateDirectory(workspaceRoot, platform);
   const templates = templateEntries(directory).map(function(entry) {
     return readTemplate(path.join(directory, entry.name), platform);
+  });
+  const ids = new Set();
+  templates.forEach(function(template) {
+    if (ids.has(template.id)) {
+      throw templateError("TEMPLATE_DUPLICATE_ID", "Template id is duplicated for platform");
+    }
+    ids.add(template.id);
   });
   return templates.sort(function(a, b) { return a.scenario.localeCompare(b.scenario) || a.id.localeCompare(b.id); });
 }
