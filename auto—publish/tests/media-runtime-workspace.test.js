@@ -10,6 +10,7 @@ const { MediaResourceStore } = require("../src/platforms/media/media-resource-st
 const { SubmissionOrderStore } = require("../src/platforms/media/submission-order-store");
 const { createMediaOrderService } = require("../desktop/services/media-order-service");
 const { registerMediaIpc } = require("../desktop/ipc/media-ipc");
+const { createMediaWorkbenchService } = require("../desktop/services/media-workbench-service");
 
 describe("media runtime workspace", function() {
   it("writes media state exclusively to an explicit workspace paths data directory", async function() {
@@ -46,6 +47,34 @@ describe("media IPC runtime workspace", function() {
       assert.ok(fs.existsSync(path.join(paths.data, "media-drafts.json")));
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("media submission workspace override", function() {
+  it("writes submitted orders to injected workspace paths even when environment points elsewhere", async function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-submit-runtime-"));
+    const otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-other-runtime-"));
+    const originalRoot = process.env.AUTO_PUBLISH_ROOT_DIR;
+    try {
+      const paths = ensureWorkspaceDirectories(createWorkspacePaths(root));
+      fs.writeFileSync(path.join(paths.mediaInput, "article.txt"), "Workspace title\nBody", "utf8");
+      process.env.AUTO_PUBLISH_ROOT_DIR = otherRoot;
+      const service = createMediaWorkbenchService({ inputDir: paths.mediaInput, paths: paths });
+      await service.submitTasksSerially([{
+        filename: "article.txt",
+        filePath: path.join(paths.mediaInput, "article.txt"),
+        title: "Workspace title",
+        selectedResources: [{ resourceId: "1", name: "Media" }]
+      }], { client: { sendArticle: async function() { return { success: true }; } } });
+
+      assert.equal(createMediaOrderService({ paths }).listOrders()[0].params.title, "Workspace title");
+      assert.equal(fs.existsSync(path.join(otherRoot, "data", "submission-orders.jsonl")), false);
+    } finally {
+      if (originalRoot === undefined) delete process.env.AUTO_PUBLISH_ROOT_DIR;
+      else process.env.AUTO_PUBLISH_ROOT_DIR = originalRoot;
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(otherRoot, { recursive: true, force: true });
     }
   });
 });

@@ -2,6 +2,7 @@ const path = require("path");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
+const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
 const { resolveApiKey } = require("../../src/platforms/media/config");
 const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
@@ -13,6 +14,7 @@ function registerMediaIpc(deps) {
   var mediaResourceStore = new MediaResourceStore({ paths: deps.paths });
   var mediaPoolStore = new MediaPoolStore({ paths: deps.paths });
   var mediaDraftStore = new MediaDraftStore({ paths: deps.paths });
+  var submissionOrderStore = deps.orderStore || new SubmissionOrderStore({ paths: deps.paths });
   var mediaResourceService = createMediaResourceService({
     resourceStore: mediaResourceStore,
     poolStore: mediaPoolStore,
@@ -21,7 +23,9 @@ function registerMediaIpc(deps) {
   var mediaOrderService = createMediaOrderService({ paths: deps.paths });
   var mediaWorkbenchService = createMediaWorkbenchService({
     inputDir: deps.paths && deps.paths.mediaInput || path.join(deps.rootDir || process.cwd(), "input", "media"),
-    draftStore: mediaDraftStore
+    draftStore: mediaDraftStore,
+    paths: deps.paths,
+    orderStore: submissionOrderStore
   });
 
   ipcMain.handle("media:refresh-resources", function(event, opts) {

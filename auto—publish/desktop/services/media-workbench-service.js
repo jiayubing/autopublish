@@ -48,6 +48,8 @@ function createMediaWorkbenchService(opts) {
   var options = opts || {};
   var inputDir = options.inputDir;
   var draftStore = options.draftStore || { get: function() { return null; } };
+  var workspacePaths = options.paths;
+  var configuredOrderStore = options.orderStore;
   var stopRequested = false;
 
   async function readAutoTitle(filePath) {
@@ -166,7 +168,7 @@ function createMediaWorkbenchService(opts) {
     stopRequested = false;
     var deps = injected || {};
     var client = deps.client || new MediaClient({ apiKey: resolveApiKey(null) });
-    var orderStore = deps.orderStore || new SubmissionOrderStore();
+    var orderStore = deps.orderStore || configuredOrderStore || new SubmissionOrderStore({ paths: workspacePaths });
     var tasks = expandSubmissionTasks(articles);
     var results = [];
     for (var i = 0; i < tasks.length; i++) {
