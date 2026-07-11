@@ -98,6 +98,9 @@ function verifyRuntimeSmoke(appDir) {
     });
     var diagnostics = runtime.createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appDir, pathLookup: function() { return null; } }).diagnose();
     if (!diagnostics || !Array.isArray(diagnostics.errors)) throw new Error("Runtime diagnostics did not return actionable results");
+    ["mammoth", "form-data", "dotenv"].forEach(function(name) {
+      try { require(path.join(appDir, "node_modules", name)); } catch (_) { throw new Error("Packaged production dependency missing: " + name); }
+    });
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }

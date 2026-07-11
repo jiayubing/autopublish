@@ -21,17 +21,9 @@ files:
   - media-workbench/dist/**/*
   # Adapter runtime helpers (Python scripts, etc.)
   - src/platforms/hepan/hepan_publish.py
-  # Explicit production runtime dependencies. Electron is supplied by the
-  # packaged runtime; do not ship the development dependency tree.
-  - node_modules/dotenv/**
-  - node_modules/form-data/**
-  - node_modules/mammoth/**
-  - node_modules/jszip/**
-  - node_modules/xmlbuilder/**
-  - node_modules/combined-stream/**
-  - node_modules/asynckit/**
-  - node_modules/mime-types/**
-  - node_modules/axios/**
+  # Do not list node_modules here. electron-builder derives the complete
+  # production dependency closure from package.json/package-lock, including
+  # transitive dependencies required by mammoth and form-data.
   # Exclude dev/cache noise
   - "!node_modules/.cache/**"
   - "!**/*.map"
