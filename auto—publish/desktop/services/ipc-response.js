@@ -5,7 +5,10 @@
 function fail(error) {
   return {
     ok: false,
-    error: error && error.message ? error.message : String(error || "Unknown error")
+    error: {
+      code: error && typeof error.code === "string" && error.code ? error.code : "IPC_ERROR",
+      message: error && error.message ? error.message : String(error || "Unknown error")
+    }
   };
 }
 
