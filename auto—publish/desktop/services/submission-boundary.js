@@ -14,7 +14,8 @@ function validateFilename(filename) {
 }
 
 function validateIdList(ids) {
-  if (!Array.isArray(ids) || !ids.length || !ids.every(function(id) { return typeof id === "string" && id && id.trim() === id; })) throw inputError();
+  if (!Array.isArray(ids) || !ids.length || !ids.every(function(id) { return typeof id === "string" && id && id.trim() === id; }) ||
+      new Set(ids).size !== ids.length) throw inputError();
   return ids.slice();
 }
 

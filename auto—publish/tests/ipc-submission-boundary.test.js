@@ -54,6 +54,9 @@ describe("IPC submission schemas", function() {
     assert.throws(function() {
       validateMediaSubmission({ filename: "article.md", resourceIds: ["101"], title: "renderer supplied" });
     }, { code: "SUBMISSION_INPUT_INVALID" });
+    assert.throws(function() {
+      validateMediaSubmission({ filename: "article.md", resourceIds: ["101", "101"] });
+    }, { code: "SUBMISSION_INPUT_INVALID" });
   });
 
   it("accepts platform submissions containing only source platform, filename, and targets", function() {

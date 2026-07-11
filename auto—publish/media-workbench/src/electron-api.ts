@@ -33,7 +33,7 @@ interface DesktopConsoleOrders {
 interface DesktopConsolePlatforms {
   getQueue(): Promise<IpcResponse<unknown>>;
   buildSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
-  submitSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
+  submitSelectedPlan(input: PlatformSubmission | PlatformSubmission[]): Promise<IpcResponse<unknown>>;
   pauseSubmit(): Promise<IpcResponse<unknown>>;
   stopSubmit(): Promise<IpcResponse<unknown>>;
   getState(): Promise<IpcResponse<PlatformStatus>>;
@@ -605,12 +605,9 @@ export async function submitPlatformPlan(
       if (!submission.targetPlatformIds.includes(task.targetPlatformId)) submission.targetPlatformIds.push(task.targetPlatformId);
       submissions.set(key, submission);
     });
-    const results = await Promise.all([...submissions.values()].map(async (submission) => {
-      const result = await window.desktopConsole!.platforms.submitSelectedPlan(submission);
-      if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
-      return result.data as PlatformSubmitResult;
-    }));
-    return results.reduce<PlatformSubmitResult>((total, result) => ({ ok: total.ok + result.ok, fail: total.fail + result.fail, skipped: total.skipped + result.skipped, results: total.results.concat(result.results) }), { ok: 0, fail: 0, skipped: 0, results: [] });
+    const result = await window.desktopConsole!.platforms.submitSelectedPlan([...submissions.values()]);
+    if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
+    return result.data as PlatformSubmitResult;
   }
   return { ok: 0, fail: 0, skipped: 0, results: [] };
 }

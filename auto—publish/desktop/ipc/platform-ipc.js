@@ -30,6 +30,15 @@ function registerPlatformIpc(deps) {
     });
   }
 
+  function buildPlanFromSubmissions(values) {
+    if (!Array.isArray(values) || !values.length) throw inputError();
+    var tasks = [];
+    values.forEach(function(value) {
+      tasks = tasks.concat(buildPlanFromSubmission(value).tasks);
+    });
+    return { taskCount: tasks.length, tasks: tasks };
+  }
+
   ipcMain.handle("platforms:get-queue", function() {
     return wrap(async function() {
       var nonMedia = loadedPlatforms.filter(function(platform) {
@@ -84,7 +93,7 @@ function registerPlatformIpc(deps) {
 
   ipcMain.handle("platforms:submit-selected-plan", function(event, input) {
     return wrap(async function() {
-      var plan = buildPlanFromSubmission(input);
+      var plan = Array.isArray(input) ? buildPlanFromSubmissions(input) : buildPlanFromSubmission(input);
       var workerResult = await taskService.startPlatformSubmit(plan, {
         onLog: function(entry) {
           sendToRenderer("publish-log", entry);
