@@ -18,7 +18,6 @@ import Sidebar from './components/Sidebar';
 import ArticleList from './components/ArticleList';
 import ArticleEditor from './components/ArticleEditor';
 import ResourceLibrary from './components/ResourceLibrary';
-import PreflightModal from './components/PreflightModal';
 import OrdersView from './components/OrdersView';
 import SettingsView from './components/SettingsView';
 import PlatformWorkbench from './components/PlatformWorkbench';
@@ -57,7 +56,7 @@ export default function App() {
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
-  const [isPreflightOpen, setIsPreflightOpen] = useState(false);
+  const [, setIsPreflightOpen] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
 
@@ -242,10 +241,6 @@ export default function App() {
 
   const handleClearOrders = () => {
     setOrders([]);
-  };
-  const handleSubmissionComplete = () => {
-    setIsPreflightOpen(false);
-    handleRefreshOrders();
   };
 
   // Clear all local order records
@@ -433,18 +428,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* 3. Global Interactive Modals */}
-      <AnimatePresence>
-        {isPreflightOpen && (
-          <PreflightModal
-            isOpen={isPreflightOpen}
-            onClose={() => setIsPreflightOpen(false)}
-            articles={articles}
-            balance={balance}
-            onSubmissionComplete={handleSubmissionComplete}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
