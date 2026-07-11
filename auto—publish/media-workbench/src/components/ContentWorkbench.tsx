@@ -57,7 +57,7 @@ export default function ContentWorkbench() {
     if (!article) return;
     setSaving(true); setError('');
     try {
-      const saved = await saveContentArticle({ ...article, updatedAt: new Date().toISOString() });
+      const saved = await saveContentArticle({ ...article, status: 'saved', updatedAt: new Date().toISOString() });
       setArticle(saved); setHistory(await listContentArticles(clientId));
     } catch (value) { setError(value instanceof Error ? value.message : 'Unable to save article'); }
     finally { setSaving(false); }

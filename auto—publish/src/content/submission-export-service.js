@@ -25,7 +25,12 @@ function createSubmissionExportService(options) {
     const v = prepare(input); fs.mkdirSync(v.dir, { recursive: true });
     if (fs.existsSync(v.filePath) && fs.readFileSync(v.filePath, "utf8") !== v.markdown) throw error("CONTENT_EXPORT_CONFLICT", "Export file already exists with different content");
     const record = { generatedArticleId: v.article.id, clientId: v.article.clientId, targetPlatform: input.targetPlatform, filename: v.filename, contentHash: v.hash, exportedAt: new Date().toISOString(), status: "queued" };
-    if (fs.existsSync(v.filePath)) return Object.assign({ filePath: v.filePath, sidecarPath: v.sidecarPath, idempotent: true }, record);
+    if (fs.existsSync(v.filePath)) {
+      var validSidecar = false;
+      try { var existing = JSON.parse(fs.readFileSync(v.sidecarPath, "utf8")); validSidecar = existing && existing.contentHash === v.hash && existing.generatedArticleId === v.article.id; } catch (_) {}
+      if (!validSidecar) fs.writeFileSync(v.sidecarPath, JSON.stringify(record, null, 2), "utf8");
+      return Object.assign({ filePath: v.filePath, sidecarPath: v.sidecarPath, idempotent: true }, record);
+    }
     fs.writeFileSync(v.filePath, v.markdown, "utf8"); fs.writeFileSync(v.sidecarPath, JSON.stringify(record, null, 2), "utf8");
     return Object.assign({ filePath: v.filePath, sidecarPath: v.sidecarPath, idempotent: false }, record);
   }

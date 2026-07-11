@@ -14,6 +14,9 @@ it("exports only saved generated articles as idempotent queued Markdown with saf
     assert.match(fs.readFileSync(result.filePath, "utf8"), /^# 标题\r?\n\r?\n正文/);
     assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(result.sidecarPath, "utf8"))).sort(), ["clientId", "contentHash", "exportedAt", "filename", "generatedArticleId", "status", "targetPlatform"]);
     assert.equal(service.exportArticle({ generatedArticleId: "saved", targetPlatform: "media", confirmed: true }).idempotent, true);
+    fs.unlinkSync(result.sidecarPath);
+    assert.equal(service.exportArticle({ generatedArticleId: "saved", targetPlatform: "media", confirmed: true }).idempotent, true);
+    assert.ok(fs.existsSync(result.sidecarPath));
     assert.throws(function() { service.exportArticle({ generatedArticleId: "draft", targetPlatform: "media", confirmed: true }); }, { code: "CONTENT_EXPORT_NOT_SAVED" });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
