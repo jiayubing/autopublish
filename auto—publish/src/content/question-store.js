@@ -38,7 +38,7 @@ function validateQuestion(question) {
   if (typeof question.createdAt !== "string" || !question.createdAt) {
     throw questionError("QUESTION_INVALID", "Question createdAt is invalid");
   }
-  if (question.updatedAt !== undefined && (typeof question.updatedAt !== "string" || !question.updatedAt)) {
+  if (typeof question.updatedAt !== "string" || !question.updatedAt) {
     throw questionError("QUESTION_INVALID", "Question updatedAt is invalid");
   }
   const normalized = {
@@ -47,7 +47,7 @@ function validateQuestion(question) {
     enabled: question.enabled,
     createdAt: question.createdAt
   };
-  if (question.updatedAt !== undefined) normalized.updatedAt = question.updatedAt;
+  normalized.updatedAt = question.updatedAt;
   return normalized;
 }
 
@@ -131,6 +131,37 @@ function createQuestionStore(workspaceRoot, options) {
     return path.join(clientDirectory(clientId), "questions.json");
   }
 
+  function safeFileExists(filename) {
+    const outOfBounds = function() {
+      throw questionError("CLIENT_PATH_OUT_OF_BOUNDS", "Client file is outside workspace.clients");
+    };
+    let stats;
+    try {
+      stats = fs.lstatSync(filename);
+    } catch (error) {
+      if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
+      outOfBounds();
+    }
+    let realFilename;
+    try {
+      realFilename = fs.realpathSync(filename);
+    } catch (error) {
+      outOfBounds();
+    }
+    if (!stats || stats.isSymbolicLink() || !stats.isFile()) outOfBounds();
+    let realDirectory;
+    try {
+      realDirectory = fs.realpathSync(path.dirname(filename));
+    } catch (error) {
+      outOfBounds();
+    }
+    const relative = path.relative(realDirectory, realFilename);
+    if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+      outOfBounds();
+    }
+    return true;
+  }
+
   function validateDocument(document) {
     if (!document || typeof document !== "object" || Array.isArray(document) || document.version !== 1 || !Array.isArray(document.questions) ||
         Object.keys(document).some(function(key) { return key !== "version" && key !== "questions"; })) {
@@ -176,23 +207,23 @@ function createQuestionStore(workspaceRoot, options) {
 
   function readDocument(clientId) {
     const filename = questionsPath(clientId);
-    if (!fs.existsSync(filename)) return null;
-    let document;
+    if (!safeFileExists(filename)) return null;
     try {
-      document = JSON.parse(fs.readFileSync(filename, "utf8"));
+      const document = JSON.parse(fs.readFileSync(filename, "utf8"));
+      return validateDocument(document);
     } catch (error) {
+      if (error && error.code === "QUESTION_INVALID_JSON") throw error;
       const invalid = questionError("QUESTION_INVALID_JSON", "Questions JSON is invalid");
       invalid.cause = error;
       throw invalid;
     }
-    return validateDocument(document);
   }
 
   function importLegacyQuestions(clientId) {
     const directory = clientDirectory(clientId);
     const legacyPath = path.join(directory, "search_query.txt");
     let questions = [];
-    if (fs.existsSync(legacyPath)) {
+    if (safeFileExists(legacyPath)) {
       const text = fs.readFileSync(legacyPath, "utf8").replace(/^\uFEFF/, "");
       if (text.trim()) {
         const timestamp = now();

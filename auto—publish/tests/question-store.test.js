@@ -88,6 +88,61 @@ describe("question store", function() {
     assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
       return error.code === "QUESTION_INVALID_JSON";
     });
+    fs.writeFileSync(filename, JSON.stringify({ version: 1, questions: [{
+      id: "question-1",
+      text: "缺少更新时间",
+      enabled: true,
+      createdAt: "2026-07-12T00:00:00.000Z"
+    }] }), "utf8");
+    assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
+      return error.code === "QUESTION_INVALID_JSON";
+    });
+  });
+
+  it("rejects a questions.json file symlink escaping workspace", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "question-store-file-outside-"));
+    const external = path.join(outside, "questions.json");
+    const linked = path.join(root, "clients", "client-1", "questions.json");
+    fs.writeFileSync(external, JSON.stringify({ version: 1, questions: [{
+      id: "outside-question",
+      text: "外部文件内容",
+      enabled: true,
+      createdAt: "2026-07-12T00:00:00.000Z",
+      updatedAt: "2026-07-12T00:00:00.000Z"
+    }] }), "utf8");
+    try {
+      try {
+        fs.symlinkSync(external, linked, "file");
+      } catch (error) {
+        t.skip("file links are unavailable: " + error.code);
+        return;
+      }
+      assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a search_query.txt file symlink escaping workspace", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "question-store-query-outside-"));
+    const external = path.join(outside, "search_query.txt");
+    const linked = path.join(root, "clients", "client-1", "search_query.txt");
+    fs.writeFileSync(external, "外部旧查询", "utf8");
+    try {
+      try {
+        fs.symlinkSync(external, linked, "file");
+      } catch (error) {
+        t.skip("file links are unavailable: " + error.code);
+        return;
+      }
+      assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("rejects a customer directory symlink escaping workspace.clients", function(t) {
