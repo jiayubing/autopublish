@@ -51,6 +51,7 @@ function markdownFor(article) {
 }
 
 function parseMarkdown(markdown) {
+  markdown = String(markdown).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const match = /^---\r?\ntitle: (.+)\r?\n---\r?\n\r?\n([\s\S]*)$/.exec(markdown);
   if (!match) throw storeError("ARTICLE_INVALID", "Article markdown is invalid");
   let title;

@@ -113,6 +113,18 @@ describe("article store", function() {
     assert.throws(function() { store.getArticle("client-1", "article-1"); }, function(error) { return error.code === "ARTICLE_INVALID"; });
   });
 
+  it("reads markdown checked out with Windows CRLF line endings", function() {
+    const article = valid("article-crlf");
+    store.saveArticle(article);
+    const directory = path.join(root, "generated", "client-1");
+    const markdownPath = path.join(directory, "article-crlf.md");
+    const markdown = fs.readFileSync(markdownPath, "utf8").replace(/\n/g, "\r\n");
+    fs.writeFileSync(markdownPath, markdown, "utf8");
+
+    assert.deepStrictEqual(store.getArticle("client-1", "article-crlf"), article);
+    assert.deepStrictEqual(store.listArticles("client-1").map(function(item) { return item.id; }), ["article-crlf"]);
+  });
+
   it("ignores temporary and non-JSON files while listing", function() {
     store.saveArticle(valid("article-1"));
     const directory = path.join(root, "generated", "client-1");
