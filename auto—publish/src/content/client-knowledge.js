@@ -31,7 +31,9 @@ function assertClientsRoot(workspaceRootOrClients) {
     realWorkspaceRoot = fs.realpathSync(clients.workspaceRoot);
     realClientsRoot = fs.realpathSync(clients.clientsRoot);
   } catch (error) {
-    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+      throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+    }
     return clients;
   }
 
@@ -66,8 +68,17 @@ function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
     realClientsRoot = fs.realpathSync(clientsRoot);
     realClientDirectory = fs.realpathSync(resolved);
   } catch (error) {
-    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
-    realClientsRoot = fs.realpathSync(clientsRoot);
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+      throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+    }
+    try {
+      realClientsRoot = fs.realpathSync(clientsRoot);
+    } catch (fallbackError) {
+      if (fallbackError.code !== "ENOENT" && fallbackError.code !== "ENOTDIR") {
+        throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+      }
+      throw fallbackError;
+    }
     realClientDirectory = path.join(realClientsRoot, path.basename(resolved));
   }
 

@@ -8,9 +8,16 @@ function questionError(code, message) {
   return error;
 }
 
+function isWindowsReservedDeviceName(value) {
+  const baseName = value.split(".")[0].replace(/[ .]+$/g, "").toUpperCase();
+  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(baseName);
+}
+
 function assertPathSegment(value, code, label) {
-  if (typeof value !== "string" || !value || value === "." || value === ".." ||
-      value.includes("/") || value.includes("\\") || path.isAbsolute(value) || path.win32.isAbsolute(value)) {
+  if (typeof value !== "string" || value.trim() === "" || value === "." || value === ".." ||
+      value.includes("/") || value.includes("\\") || /[<>:"/\\|?*\u0000-\u001F]/.test(value) ||
+      value.endsWith(" ") || value.endsWith(".") || isWindowsReservedDeviceName(value) ||
+      path.isAbsolute(value) || path.win32.isAbsolute(value)) {
     throw questionError(code, "Invalid " + label);
   }
 }
@@ -182,12 +189,20 @@ function createQuestionStore(workspaceRoot, options) {
   function writeAtomic(filename, document) {
     const temporary = filename + ".tmp-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
     fs.mkdirSync(path.dirname(filename), { recursive: true });
+    let operationError;
     try {
       fs.writeFileSync(temporary, JSON.stringify(document, null, 2) + "\n", "utf8");
       fs.renameSync(temporary, filename);
+    } catch (error) {
+      operationError = error;
     } finally {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      try {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      } catch (cleanupError) {
+        if (!operationError) operationError = cleanupError;
+      }
     }
+    if (operationError) throw operationError;
   }
 
   function readDocument(clientId) {

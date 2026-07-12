@@ -87,6 +87,74 @@ describe("question store", function() {
     }), []);
   });
 
+  it("preserves the atomic operation error when temporary cleanup fails", function() {
+    const created = store.createQuestion("client-1", { text: "original question" });
+    const filename = path.join(root, "clients", "client-1", "questions.json");
+    const originalExistsSync = fs.existsSync;
+    const originalRenameSync = fs.renameSync;
+    const originalUnlinkSync = fs.unlinkSync;
+    const operationError = new Error("simulated rename failure");
+    operationError.code = "EACCES";
+    const cleanupError = new Error("simulated cleanup failure");
+    cleanupError.code = "EPERM";
+
+    fs.renameSync = function(source, destination) {
+      if (source.startsWith(filename + ".tmp-") && destination === filename) throw operationError;
+      return originalRenameSync.apply(this, arguments);
+    };
+    fs.existsSync = function(candidate) {
+      if (candidate.startsWith(filename + ".tmp-")) return true;
+      return originalExistsSync.apply(this, arguments);
+    };
+    fs.unlinkSync = function(candidate) {
+      if (candidate.startsWith(filename + ".tmp-")) throw cleanupError;
+      return originalUnlinkSync.apply(this, arguments);
+    };
+
+    try {
+      assert.throws(function() {
+        store.updateQuestion("client-1", created.id, { text: "failed update" });
+      }, function(error) {
+        assert.equal(error, operationError);
+        return true;
+      });
+    } finally {
+      fs.existsSync = originalExistsSync;
+      fs.renameSync = originalRenameSync;
+      fs.unlinkSync = originalUnlinkSync;
+    }
+  });
+
+  it("throws a temporary cleanup error when the atomic operation succeeds", function() {
+    store.createQuestion("client-1", { text: "original question" });
+    const filename = path.join(root, "clients", "client-1", "questions.json");
+    const originalExistsSync = fs.existsSync;
+    const originalUnlinkSync = fs.unlinkSync;
+    const cleanupError = new Error("simulated cleanup failure");
+    cleanupError.code = "EPERM";
+
+    fs.existsSync = function(candidate) {
+      if (candidate.startsWith(filename + ".tmp-")) return true;
+      return originalExistsSync.apply(this, arguments);
+    };
+    fs.unlinkSync = function(candidate) {
+      if (candidate.startsWith(filename + ".tmp-")) throw cleanupError;
+      return originalUnlinkSync.apply(this, arguments);
+    };
+
+    try {
+      assert.throws(function() {
+        store.updateQuestion("client-1", "question-1", { text: "updated question" });
+      }, function(error) {
+        assert.equal(error, cleanupError);
+        return true;
+      });
+    } finally {
+      fs.existsSync = originalExistsSync;
+      fs.unlinkSync = originalUnlinkSync;
+    }
+  });
+
   it("returns stable errors for invalid paths and question data", function() {
     assert.throws(function() { store.listQuestions("../client-1"); }, function(error) {
       return error.code === "CLIENT_ID_INVALID";
@@ -102,6 +170,37 @@ describe("question store", function() {
     });
     assert.throws(function() { store.deleteQuestion("client-1", "question/1"); }, function(error) {
       return error.code === "QUESTION_ID_INVALID";
+    });
+    const invalidSegments = [
+      " ",
+      "\t",
+      "client ",
+      "client.",
+      "foo:bar",
+      "foo\u0001bar",
+      "CON",
+      "prn.txt",
+      "Aux.backup",
+      "COM1.log",
+      "LPT9.data"
+    ];
+    invalidSegments.forEach(function(clientId) {
+      assert.throws(function() { store.listQuestions(clientId); }, function(error) {
+        return error.code === "CLIENT_ID_INVALID";
+      });
+    });
+    invalidSegments.forEach(function(questionId) {
+      assert.throws(function() { store.getQuestion("client-1", questionId); }, function(error) {
+        return error.code === "QUESTION_ID_INVALID";
+      });
+    });
+    invalidSegments.forEach(function(id) {
+      const invalidIdStore = createQuestionStore(root, { createId: function() { return id; } });
+      assert.throws(function() {
+        invalidIdStore.createQuestion("client-1", { text: "question for " + id });
+      }, function(error) {
+        return error.code === "QUESTION_ID_INVALID";
+      });
     });
     assert.throws(function() { store.createQuestion("client-1", { text: " " }); }, function(error) {
       return error.code === "QUESTION_TEXT_INVALID";

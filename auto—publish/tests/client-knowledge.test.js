@@ -47,6 +47,53 @@ describe("client knowledge", function() {
     assert.equal(client.name, "travel-client");
   });
 
+  it("normalizes unexpected clients root realpath errors", function() {
+    const originalRealpathSync = fs.realpathSync;
+    const realpathError = new Error("simulated realpath failure");
+    realpathError.code = "EIO";
+    fs.realpathSync = function() { throw realpathError; };
+
+    try {
+      assert.throws(function() { listClients(root); }, function(error) {
+        assert.equal(error.code, "CLIENT_PATH_OUT_OF_BOUNDS");
+        assert.notEqual(error, realpathError);
+        return true;
+      });
+    } finally {
+      fs.realpathSync = originalRealpathSync;
+    }
+  });
+
+  it("normalizes unexpected client directory realpath errors", function() {
+    const originalRealpathSync = fs.realpathSync;
+    const realpathError = new Error("simulated client realpath failure");
+    realpathError.code = "EIO";
+    let calls = 0;
+    fs.realpathSync = function() {
+      calls += 1;
+      if (calls === 3) throw realpathError;
+      return originalRealpathSync.apply(this, arguments);
+    };
+
+    try {
+      assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) {
+        assert.equal(error.code, "CLIENT_PATH_OUT_OF_BOUNDS");
+        assert.notEqual(error, realpathError);
+        return true;
+      });
+    } finally {
+      fs.realpathSync = originalRealpathSync;
+    }
+  });
+
+  it("keeps missing workspace and clients roots as an empty client list", function() {
+    const missingWorkspace = path.join(root, "missing-workspace");
+    const missingClients = path.join(root, "missing-clients");
+    assert.deepStrictEqual(listClients(missingWorkspace), []);
+    fs.mkdirSync(missingClients);
+    assert.deepStrictEqual(listClients(missingClients), []);
+  });
+
   it("rejects client metadata that is not a regular file", function() {
     const metadataPath = path.join(clientDirectory, "client.json");
     fs.unlinkSync(metadataPath);
