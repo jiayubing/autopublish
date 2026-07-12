@@ -23,6 +23,24 @@ function isPathWithin(parent, child) {
   return relative && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
 }
 
+function assertClientsRoot(workspaceRootOrClients) {
+  const clients = getClientsRoot(workspaceRootOrClients);
+  let realWorkspaceRoot;
+  let realClientsRoot;
+  try {
+    realWorkspaceRoot = fs.realpathSync(clients.workspaceRoot);
+    realClientsRoot = fs.realpathSync(clients.clientsRoot);
+  } catch (error) {
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    return clients;
+  }
+
+  if (!isPathWithin(realWorkspaceRoot, realClientsRoot)) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  }
+  return clients;
+}
+
 function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
   if (typeof clientDirectory !== "string" || !clientDirectory) {
     throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
@@ -33,7 +51,7 @@ function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
   }
 
   const resolved = path.resolve(clientDirectory);
-  const clients = getClientsRoot(workspaceRootOrClients);
+  const clients = assertClientsRoot(workspaceRootOrClients);
   const clientsRoot = clients.clientsRoot;
 
   if (!isPathWithin(clientsRoot, resolved)) {
@@ -155,6 +173,7 @@ function getClient(workspaceRoot, clientId) {
 
 function listClients(workspaceRoot) {
   const workspace = getContentWorkspace(workspaceRoot);
+  assertClientsRoot(workspace.root);
   if (!fs.existsSync(workspace.clients)) return [];
 
   return fs.readdirSync(workspace.clients, { withFileTypes: true })

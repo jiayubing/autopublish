@@ -62,8 +62,6 @@ describe("client knowledge", function() {
     const originalClients = path.join(root, "clients");
     const outsideClients = fs.mkdtempSync(path.join(os.tmpdir(), "content-clients-outside-"));
     const externalClient = path.join(outsideClients, "travel-client");
-    fs.mkdirSync(externalClient, { recursive: true });
-    fs.writeFileSync(path.join(externalClient, "search_query.txt"), "outside");
     fs.rmSync(originalClients, { recursive: true, force: true });
     try {
       try {
@@ -72,6 +70,14 @@ describe("client knowledge", function() {
         t.skip("directory links are unavailable: " + error.code);
         return;
       }
+      assert.throws(function() {
+        listClients(root);
+      }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
+      assert.throws(function() {
+        getClient(root, "client-1");
+      }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
+      fs.mkdirSync(externalClient, { recursive: true });
+      fs.writeFileSync(path.join(externalClient, "search_query.txt"), "outside");
       assert.throws(function() {
         readSearchQuery(path.join(originalClients, "travel-client"), root);
       }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
