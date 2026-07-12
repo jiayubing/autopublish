@@ -60,7 +60,71 @@ function createQuestionStore(workspaceRoot, options) {
 
   function clientDirectory(clientId) {
     assertPathSegment(clientId, "CLIENT_ID_INVALID", "client id");
-    return path.join(clientsRoot, clientId);
+    const resolved = path.join(clientsRoot, clientId);
+    const outOfBounds = function() {
+      throw questionError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+    };
+
+    let realWorkspaceRoot;
+    try {
+      realWorkspaceRoot = fs.realpathSync(root);
+    } catch (error) {
+      outOfBounds();
+    }
+
+    let clientsStats;
+    try {
+      clientsStats = fs.lstatSync(clientsRoot);
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") outOfBounds();
+      try {
+        fs.mkdirSync(clientsRoot, { recursive: true });
+        clientsStats = fs.lstatSync(clientsRoot);
+      } catch (mkdirError) {
+        outOfBounds();
+      }
+    }
+    if (!clientsStats || (!clientsStats.isDirectory() && !clientsStats.isSymbolicLink())) outOfBounds();
+
+    let realClientsRoot;
+    try {
+      realClientsRoot = fs.realpathSync(clientsRoot);
+    } catch (error) {
+      outOfBounds();
+    }
+    const clientsRelative = path.relative(realWorkspaceRoot, realClientsRoot);
+    if (!clientsRelative || clientsRelative === ".." || clientsRelative.startsWith(".." + path.sep) || path.isAbsolute(clientsRelative)) {
+      outOfBounds();
+    }
+    try {
+      if (!fs.statSync(realClientsRoot).isDirectory()) outOfBounds();
+    } catch (error) {
+      outOfBounds();
+    }
+
+    try {
+      fs.lstatSync(resolved);
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") outOfBounds();
+      return resolved;
+    }
+
+    let realClientDirectory;
+    try {
+      realClientDirectory = fs.realpathSync(resolved);
+    } catch (error) {
+      outOfBounds();
+    }
+    const clientRelative = path.relative(realClientsRoot, realClientDirectory);
+    if (!clientRelative || clientRelative === ".." || clientRelative.startsWith(".." + path.sep) || path.isAbsolute(clientRelative)) {
+      outOfBounds();
+    }
+    try {
+      if (!fs.statSync(realClientDirectory).isDirectory()) outOfBounds();
+    } catch (error) {
+      outOfBounds();
+    }
+    return resolved;
   }
 
   function questionsPath(clientId) {
