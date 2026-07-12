@@ -3,14 +3,12 @@
 
 const fs = require('fs');
 const path = require('path');
-
-const DATA_DIR = process.env.AUTO_PUBLISH_ROOT_DIR ? path.join(process.env.AUTO_PUBLISH_ROOT_DIR, 'data') : path.resolve(__dirname, '..', '..', '..', 'data');
-const DEFAULT_PATH = path.join(DATA_DIR, 'media-resources.json');
+const { resolveStorePath } = require('./store-paths');
 
 class MediaResourceStore {
   constructor(opts) {
     opts = opts || {};
-    this.filePath = opts.filePath || DEFAULT_PATH;
+    this.filePath = resolveStorePath(opts, 'media-resources.json');
   }
 
   /** Read the cache file and return parsed data, or null if missing/corrupt. */

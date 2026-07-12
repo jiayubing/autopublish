@@ -11,7 +11,8 @@ import {
   Activity,
   CheckCircle,
   TrendingUp,
-  Globe
+  Globe,
+  PenLine
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -41,6 +42,7 @@ export default function Sidebar({
   const [showWalletDetails, setShowWalletDetails] = useState(false);
 
   const menuItems = [
+    { id: 'content' as ViewMode, label: 'AI内容生成', icon: PenLine },
     { id: 'platforms' as ViewMode, label: '其他平台投稿', icon: Globe, badge: totalPlatformArticles },
     { id: 'workbench' as ViewMode, label: '付费媒体投稿', icon: Files, badge: totalArticles },
     { id: 'orders' as ViewMode, label: '投稿订单记录', icon: ClipboardList, badge: totalOrders },

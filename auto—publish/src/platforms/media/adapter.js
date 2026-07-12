@@ -9,6 +9,8 @@ const { detectDocxImages } = require('./article-converter');
 const { SubmissionOrderStore } = require('./submission-order-store');
 const { MediaDraftStore } = require('./media-draft-store');
 const { resolveApiKey } = require('./config');
+const { DIRS } = require('../../../scripts/config');
+const path = require('path');
 
 // ---------------------------------------------------------------------------
 // createMediaAdapter — standalone API adapter
@@ -21,9 +23,17 @@ function createMediaAdapter(opts) {
     apiKey: apiKey,
     baseUrl: opts.baseUrl
   });
-  const store = new SubmissionOrderStore();
+  const store = new SubmissionOrderStore({ paths: opts.paths });
+  const inputDir = opts.paths && opts.paths.mediaInput || path.join(DIRS.inputDir, "media");
 
   return {
+    scanArticles: function() {
+      var fs = require("fs");
+      if (!fs.existsSync(inputDir)) return [];
+      return fs.readdirSync(inputDir).filter(function(name) {
+        return name.indexOf("~$") !== 0 && name !== ".gitkeep" && /\.(docx|txt|md)$/i.test(name);
+      }).map(function(name) { return { file: path.join(inputDir, name), filename: name, title: path.basename(name, path.extname(name)) }; });
+    },
     publish: async function (params) {
       var title = params.title;
       var contentFile = params.contentFile;
@@ -178,7 +188,7 @@ module.exports = {
   scanArticles: function(scanDir) {
     var fs = require("fs");
     var path = require("path");
-    var inputDir = path.resolve(__dirname, "..", "..", "..", "input", scanDir);
+    var inputDir = path.join(DIRS.inputDir, scanDir);
     if (!fs.existsSync(inputDir)) return [];
     return fs.readdirSync(inputDir).filter(function(name) {
       if (name.indexOf("~$") === 0) return false;

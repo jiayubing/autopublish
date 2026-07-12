@@ -5,10 +5,18 @@ const { spawnSync } = require("child_process");
 const { DIRS } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 
-var HEPAN = {
-  cookiePath: process.env.HEPAN_COOKIE_PATH || "D:\\fenxi\\蓝色河畔发布软件\\db\\cookie.txt",
-  pythonPath: process.env.HEPAN_PYTHON || "C:\\Users\\violet\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
-};
+function resolveHepanRuntime(workspaceRoot, environment) {
+  var root = workspaceRoot || DIRS.rootDir;
+  var env = environment || process.env;
+  var configured = {};
+  try { configured = JSON.parse(fs.readFileSync(path.join(root, "config", "hepan.json"), "utf8")); } catch (_) {}
+  return {
+    cookiePath: configured.cookiePath || env.HEPAN_COOKIE_PATH || path.join(root, "config", "hepan-cookie.txt"),
+    pythonPath: configured.pythonPath || env.HEPAN_PYTHON || "python"
+  };
+}
+
+var HEPAN = resolveHepanRuntime(DIRS.rootDir);
 
 function scriptPath() {
   return path.join(__dirname, "hepan_publish.py");
@@ -145,4 +153,5 @@ module.exports = {
   closeSession: closeSession,
   scanArticles: scanArticles,
   parseArticleFiles: parseArticleFiles
+  ,resolveHepanRuntime: resolveHepanRuntime
 };

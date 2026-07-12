@@ -1,5 +1,6 @@
 const path = require("path");
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { isAllowedRendererNavigation } = require("./security/navigation");
 
 let mainWindow = null;
 let unsubscribeLogs = null;
@@ -7,6 +8,14 @@ let configureRuntimeEnvironment = null;
 let subscribe = null;
 let registerIpc = null;
 let createDesktopTaskService = null;
+const EXTERNAL_LINK_HOSTS = new Set(["www.toutiao.com", "mp.weixin.qq.com", "www.lieju.com"]);
+
+function isAllowedExternalUrl(value) {
+  try {
+    var url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && EXTERNAL_LINK_HOSTS.has(url.hostname);
+  } catch (_) { return false; }
+}
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -15,6 +24,7 @@ function sendToRenderer(channel, payload) {
 }
 
 function createMainWindow() {
+  var rendererEntryPath = path.join(__dirname, "..", "media-workbench", "dist", "index.html");
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -25,11 +35,22 @@ function createMainWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, "..", "media-workbench", "dist", "index.html"));
+  mainWindow.webContents.setWindowOpenHandler(function(details) {
+    if (isAllowedExternalUrl(details.url)) shell.openExternal(details.url);
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", function(event, url) {
+    if (!isAllowedRendererNavigation(url, rendererEntryPath)) event.preventDefault();
+  });
+  mainWindow.webContents.session.setPermissionRequestHandler(function(webContents, permission, callback) {
+    callback(false);
+  });
+  mainWindow.loadFile(rendererEntryPath);
   mainWindow.on("closed", function() { mainWindow = null; });
 }
 
@@ -54,7 +75,8 @@ app.whenReady().then(function() {
     taskService: taskService,
     sendToRenderer: sendToRenderer,
     rootDir: runtime.workspaceRoot,
-    appRoot: runtime.appRoot
+    appRoot: runtime.appRoot,
+    paths: runtime.paths
   });
 
   subscribe = require("../src/core/logger").subscribe;

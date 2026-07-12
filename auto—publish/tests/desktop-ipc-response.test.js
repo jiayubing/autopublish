@@ -9,7 +9,7 @@ describe("ipc-response", function() {
   });
 
   it("wraps errors without stack traces", function() {
-    assert.deepStrictEqual(fail(new Error("bad input")), { ok: false, error: "bad input" });
+    assert.deepStrictEqual(fail(new Error("bad input")), { ok: false, error: { code: "IPC_ERROR", message: "bad input" } });
   });
 
   it("wraps async handlers", async function() {
@@ -23,6 +23,12 @@ describe("ipc-response", function() {
     const result = await wrap(async function() {
       throw new Error("boom");
     });
-    assert.deepStrictEqual(result, { ok: false, error: "boom" });
+    assert.deepStrictEqual(result, { ok: false, error: { code: "IPC_ERROR", message: "boom" } });
+  });
+
+  it("preserves stable error codes", function() {
+    const error = new Error("bad input");
+    error.code = "CONTENT_INPUT_INVALID";
+    assert.deepStrictEqual(fail(error), { ok: false, error: { code: "CONTENT_INPUT_INVALID", message: "bad input" } });
   });
 });

@@ -1,5 +1,7 @@
 import { Article, MediaResource, Order } from './types';
 
+type MockArticle = Omit<Article, 'filePath' | 'autoTitle' | 'remark' | 'hasImages' | 'imageCount' | 'ignoreImages'>;
+
 export const INITIAL_RESOURCES: MediaResource[] = [
   {
     resourceId: "RES-001",
@@ -75,7 +77,7 @@ export const INITIAL_RESOURCES: MediaResource[] = [
   }
 ];
 
-export const INITIAL_ARTICLES: Article[] = [
+export const INITIAL_ARTICLES: MockArticle[] = [
   {
     filename: "ai_trend_2026.md",
     title: "2026 智能 AI 发展大趋势分析：从大模型到通用具身智能",

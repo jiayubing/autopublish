@@ -1,8 +1,10 @@
 const path = require('path');
+const fs = require('fs');
 
 // In packaged mode, AUTO_PUBLISH_ROOT_DIR is set by desktop/runtime-paths.js
 // to the writable workspace. In development it falls back to the project root.
-const ROOT = process.env.AUTO_PUBLISH_ROOT_DIR || path.resolve(__dirname, '..');
+const ROOT = process.env.AUTO_PUBLISH_WORKSPACE || process.env.AUTO_PUBLISH_ROOT_DIR || path.resolve(__dirname, '..');
+const DATA_DIR = path.join(ROOT, 'data');
 
 const DIRS = {
   rootDir: ROOT,
@@ -11,6 +13,7 @@ const DIRS = {
   failedDir: path.join(ROOT, 'failed'),
   tmpDir: path.join(ROOT, 'tmp'),
   logsDir: path.join(ROOT, 'logs'),
+  dataDir: DATA_DIR,
   stateDir: path.join(ROOT, 'work', 'playwright-cli', 'state'),
 };
 
@@ -39,7 +42,12 @@ const LIEJU = {
   },
 };
 
-const MARKITDOWN_CMD = 'C:/Users/violet/AppData/Local/Programs/Python/Launcher/py.exe -m markitdown';
-const PLAYWRIGHT_CLI_JS = 'C:/Users/violet/AppData/Roaming/npm/node_modules/@playwright/cli/playwright-cli.js';
+function workspaceTools() {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'runtime-tools.json'), 'utf8')); } catch (_) { return {}; }
+}
+
+const TOOLS = workspaceTools();
+const MARKITDOWN_CMD = TOOLS.markitdownCmd || process.env.MARKITDOWN_CMD || 'markitdown';
+const PLAYWRIGHT_CLI_JS = TOOLS.playwrightCliJs || process.env.PLAYWRIGHT_CLI_JS || 'playwright-cli';
 
 module.exports = { DIRS, PW, LIEJU, MARKITDOWN_CMD, PLAYWRIGHT_CLI_JS };

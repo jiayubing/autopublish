@@ -2,26 +2,36 @@ const path = require("path");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
+const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
 const { resolveApiKey } = require("../../src/platforms/media/config");
 const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 const { createMediaResourceService } = require("../services/media-resource-service");
 const { wrap } = require("../services/ipc-response");
+const { validateMediaSubmission, validateDraft, inputError } = require("../services/submission-boundary");
+
+function resolveMediaInputDir(deps) {
+  if (deps.paths && deps.paths.mediaInput) return deps.paths.mediaInput;
+  return path.join(deps.rootDir || path.resolve(__dirname, "..", ".."), "input", "media");
+}
 
 function registerMediaIpc(deps) {
   var ipcMain = deps.ipcMain;
-  var mediaResourceStore = new MediaResourceStore();
-  var mediaPoolStore = new MediaPoolStore();
-  var mediaDraftStore = new MediaDraftStore();
+  var mediaResourceStore = new MediaResourceStore({ paths: deps.paths });
+  var mediaPoolStore = new MediaPoolStore({ paths: deps.paths });
+  var mediaDraftStore = new MediaDraftStore({ paths: deps.paths });
+  var submissionOrderStore = deps.orderStore || new SubmissionOrderStore({ paths: deps.paths });
   var mediaResourceService = createMediaResourceService({
     resourceStore: mediaResourceStore,
     poolStore: mediaPoolStore,
     apiKey: resolveApiKey(null)
   });
-  var mediaOrderService = createMediaOrderService({});
+  var mediaOrderService = createMediaOrderService({ paths: deps.paths });
   var mediaWorkbenchService = createMediaWorkbenchService({
-    inputDir: path.join(deps.rootDir || path.resolve(__dirname, "..", ".."), "input", "media"),
-    draftStore: mediaDraftStore
+    inputDir: resolveMediaInputDir(deps),
+    draftStore: mediaDraftStore,
+    paths: deps.paths,
+    orderStore: submissionOrderStore
   });
 
   ipcMain.handle("media:refresh-resources", function(event, opts) {
@@ -67,22 +77,66 @@ function registerMediaIpc(deps) {
   });
 
   ipcMain.handle("media:get-drafts", function() {
-    return { ok: true, data: mediaDraftStore.getAll() };
+    return wrap(function() {
+      return mediaDraftStore.getAll();
+    });
   });
 
+  function resolveDraftFilename(filename) {
+    mediaWorkbenchService.resolveSubmissionFile(filename);
+    return filename;
+  }
+
+  async function resolveSubmissions(submissions) {
+    if (!Array.isArray(submissions) || !submissions.length) throw inputError();
+    var pool = mediaPoolStore.getAll();
+    var cached = mediaResourceStore.getAll();
+    var known = (Array.isArray(pool) ? pool : []).concat(cached && Array.isArray(cached.resources) ? cached.resources : []);
+    var resourceById = {};
+    known.forEach(function(resource) {
+      var resourceId = resource && (resource.resourceId || resource.id || resource.resource_id);
+      if (resourceId != null) resourceById[String(resourceId)] = {
+        resourceId: String(resourceId), name: resource.name || resource.title || resource.resourceName || "", price: resource.price
+      };
+    });
+    var articles = await mediaWorkbenchService.scanArticles();
+    return submissions.map(function(value) {
+      var submission = validateMediaSubmission(value);
+      var filePath = mediaWorkbenchService.resolveSubmissionFile(submission.filename);
+      var draft = mediaDraftStore.get(submission.filename) || {};
+      if (submission.draftRevision && submission.draftRevision !== draft.updatedAt) throw inputError();
+      var resources = submission.resourceIds.map(function(resourceId) {
+        if (!resourceById[resourceId]) throw inputError();
+        return resourceById[resourceId];
+      });
+      var scanned = articles.filter(function(article) { return article.filename === submission.filename; })[0] || {};
+      return Object.assign({}, scanned, {
+        filename: submission.filename, filePath: filePath,
+        title: draft.title || scanned.title || path.basename(submission.filename, path.extname(submission.filename)),
+        remark: draft.remark || "", ignoreImages: !!draft.ignoreImages, selectedResources: resources
+      });
+    });
+  }
+
   ipcMain.handle("media:get-draft", function(event, filename) {
-    var draft = mediaDraftStore.get(filename);
-    return { ok: true, data: draft };
+    return wrap(function() {
+      resolveDraftFilename(filename);
+      return mediaDraftStore.get(filename);
+    });
   });
 
   ipcMain.handle("media:set-draft", function(event, filename, draft) {
-    mediaDraftStore.set(filename, draft);
-    return { ok: true };
+    return wrap(function() {
+      resolveDraftFilename(filename);
+      mediaDraftStore.set(filename, validateDraft(draft));
+    });
   });
 
   ipcMain.handle("media:remove-draft", function(event, filename) {
-    mediaDraftStore.remove(filename);
-    return { ok: true };
+    return wrap(function() {
+      resolveDraftFilename(filename);
+      mediaDraftStore.remove(filename);
+    });
   });
 
   ipcMain.handle("media:scan-articles", function() {
@@ -98,14 +152,14 @@ function registerMediaIpc(deps) {
   });
 
   ipcMain.handle("media:build-confirmation", function(event, articles) {
-    return wrap(function() {
-      return mediaWorkbenchService.buildConfirmationSummary(articles || []);
+    return wrap(async function() {
+      return mediaWorkbenchService.buildConfirmationSummary(await resolveSubmissions(articles));
     });
   });
 
   ipcMain.handle("media:submit-selected", function(event, articles) {
-    return wrap(function() {
-      return mediaWorkbenchService.submitTasksSerially(articles || []);
+    return wrap(async function() {
+      return mediaWorkbenchService.submitTasksSerially(await resolveSubmissions(articles));
     });
   });
 
