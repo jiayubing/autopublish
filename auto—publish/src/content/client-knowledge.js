@@ -11,9 +11,16 @@ function contentError(code, message) {
 
 function getClientsRoot(workspaceRootOrClients) {
   const resolved = path.resolve(workspaceRootOrClients);
-  return path.basename(resolved) === "clients"
-    ? resolved
-    : getContentWorkspace(resolved).clients;
+  if (path.basename(resolved) === "clients") {
+    return { workspaceRoot: path.dirname(resolved), clientsRoot: resolved };
+  }
+  const workspace = getContentWorkspace(resolved);
+  return { workspaceRoot: workspace.root, clientsRoot: workspace.clients };
+}
+
+function isPathWithin(parent, child) {
+  const relative = path.relative(parent, child);
+  return relative && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
 }
 
 function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
@@ -26,16 +33,18 @@ function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
   }
 
   const resolved = path.resolve(clientDirectory);
-  const clientsRoot = getClientsRoot(workspaceRootOrClients);
+  const clients = getClientsRoot(workspaceRootOrClients);
+  const clientsRoot = clients.clientsRoot;
 
-  const relative = path.relative(clientsRoot, resolved);
-  if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+  if (!isPathWithin(clientsRoot, resolved)) {
     throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
   }
 
+  let realWorkspaceRoot;
   let realClientsRoot;
   let realClientDirectory;
   try {
+    realWorkspaceRoot = fs.realpathSync(clients.workspaceRoot);
     realClientsRoot = fs.realpathSync(clientsRoot);
     realClientDirectory = fs.realpathSync(resolved);
   } catch (error) {
@@ -44,8 +53,7 @@ function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
     realClientDirectory = path.join(realClientsRoot, path.basename(resolved));
   }
 
-  const realRelative = path.relative(realClientsRoot, realClientDirectory);
-  if (!realRelative || realRelative === ".." || realRelative.startsWith(".." + path.sep) || path.isAbsolute(realRelative)) {
+  if (!isPathWithin(realWorkspaceRoot, realClientsRoot) || !isPathWithin(realClientsRoot, realClientDirectory)) {
     throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
   }
   return resolved;

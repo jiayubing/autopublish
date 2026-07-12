@@ -58,6 +58,29 @@ describe("client knowledge", function() {
     assert.throws(function() { loadClientKnowledge(linked, root); }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
   });
 
+  it("rejects a clients root symlink resolving outside the workspace", function(t) {
+    const originalClients = path.join(root, "clients");
+    const outsideClients = fs.mkdtempSync(path.join(os.tmpdir(), "content-clients-outside-"));
+    const externalClient = path.join(outsideClients, "travel-client");
+    fs.mkdirSync(externalClient, { recursive: true });
+    fs.writeFileSync(path.join(externalClient, "search_query.txt"), "outside");
+    fs.rmSync(originalClients, { recursive: true, force: true });
+    try {
+      try {
+        fs.symlinkSync(outsideClients, originalClients, process.platform === "win32" ? "junction" : "dir");
+      } catch (error) {
+        t.skip("directory links are unavailable: " + error.code);
+        return;
+      }
+      assert.throws(function() {
+        readSearchQuery(path.join(originalClients, "travel-client"), root);
+      }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
+    } finally {
+      fs.rmSync(originalClients, { recursive: true, force: true });
+      fs.rmSync(outsideClients, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a search query file link resolving outside the client directory", function(t) {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "content-query-outside-"));
     const external = path.join(outside, "search_query.txt");
