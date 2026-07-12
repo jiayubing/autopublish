@@ -96,7 +96,7 @@ function loadClientKnowledge(clientDirectory, workspaceRootOrClients) {
   return fs.readdirSync(clientDirectory, { withFileTypes: true })
     .filter(function(entry) {
       if (!entry.isFile() || entry.name.startsWith(".")) return false;
-      if (entry.name === "search_query.txt" || entry.name === "client.json") return false;
+      if (entry.name === "search_query.txt" || entry.name === "client.json" || entry.name === "questions.json") return false;
       return allowedExtensions.has(path.extname(entry.name).toLowerCase());
     })
     .sort(function(a, b) { return a.name.localeCompare(b.name); })

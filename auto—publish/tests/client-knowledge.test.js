@@ -19,6 +19,7 @@ describe("client knowledge", function() {
     fs.writeFileSync(path.join(clientDirectory, "brand.md"), "# Brand");
     fs.writeFileSync(path.join(clientDirectory, "service.txt"), "service");
     fs.writeFileSync(path.join(clientDirectory, "facts.json"), "{\"city\":\"Shanghai\"}");
+    fs.writeFileSync(path.join(clientDirectory, "questions.json"), JSON.stringify({ version: 1, questions: [] }));
     fs.writeFileSync(path.join(clientDirectory, "ignored.png"), "not knowledge");
     fs.writeFileSync(path.join(clientDirectory, "articles", "old.md"), "old");
   });

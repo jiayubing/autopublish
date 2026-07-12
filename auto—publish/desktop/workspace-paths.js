@@ -21,7 +21,10 @@ function createWorkspacePaths(root) {
     clients: path.join(workspaceRoot, "clients"),
     research: path.join(workspaceRoot, "research"),
     templates: path.join(workspaceRoot, "templates"),
-    generated: path.join(workspaceRoot, "generated")
+    generated: path.join(workspaceRoot, "generated"),
+    browser: path.join(workspaceRoot, "browser"),
+    doubaoBrowser: path.join(workspaceRoot, "browser", "doubao"),
+    doubaoDiagnostics: path.join(workspaceRoot, "logs", "doubao-diagnostics")
   };
 }
 

@@ -18,7 +18,8 @@ describe("workspace paths", function() {
         "input", "mediaInput", "liejuInput", "toutiaoInput", "hepanInput",
         "config",
         "data", "logs", "published", "failed", "tmp", "work",
-        "clients", "research", "templates", "generated"
+        "clients", "research", "templates", "generated",
+        "browser", "doubaoBrowser", "doubaoDiagnostics"
       ].forEach(function(key) {
         assert.ok(paths[key].startsWith(paths.root + path.sep), key + " escapes workspace");
         assert.ok(fs.statSync(paths[key]).isDirectory(), key + " was not created");
