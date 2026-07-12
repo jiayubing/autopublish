@@ -58,6 +58,36 @@ describe("client knowledge", function() {
     assert.throws(function() { loadClientKnowledge(linked, root); }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
   });
 
+  it("rejects a search query file link resolving outside the client directory", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "content-query-outside-"));
+    const external = path.join(outside, "search_query.txt");
+    const linked = path.join(clientDirectory, "search_query.txt");
+    fs.writeFileSync(external, "outside");
+    fs.unlinkSync(linked);
+    try {
+      try {
+        fs.symlinkSync(external, linked, "file");
+      } catch (error) {
+        t.skip("file links are unavailable: " + error.code);
+        return;
+      }
+      assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a search query entry that is not a regular file", function() {
+    const queryPath = path.join(clientDirectory, "search_query.txt");
+    fs.unlinkSync(queryPath);
+    fs.mkdirSync(queryPath);
+    assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) {
+      return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+    });
+  });
+
   it("rejects missing and empty queries", function() {
     fs.unlinkSync(path.join(clientDirectory, "search_query.txt"));
     assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) { return error.code === "SEARCH_QUERY_MISSING"; });

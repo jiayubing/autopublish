@@ -73,8 +73,35 @@ function readClientMetadata(directory) {
 function readSearchQuery(clientDirectory, workspaceRootOrClients) {
   clientDirectory = assertClientDirectory(clientDirectory, workspaceRootOrClients);
   const filename = path.join(clientDirectory, "search_query.txt");
-  if (!fs.existsSync(filename)) {
-    throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
+
+  let fileStats;
+  try {
+    fileStats = fs.lstatSync(filename);
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
+    }
+    throw error;
+  }
+  if (!fileStats.isFile()) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  }
+
+  let realClientDirectory;
+  let realFilename;
+  try {
+    realClientDirectory = fs.realpathSync(clientDirectory);
+    realFilename = fs.realpathSync(filename);
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
+    }
+    throw error;
+  }
+
+  const relative = path.relative(realClientDirectory, realFilename);
+  if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
   }
 
   const query = fs.readFileSync(filename, "utf8")
