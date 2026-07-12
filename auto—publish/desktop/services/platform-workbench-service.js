@@ -12,6 +12,31 @@ function firstTitle(raw, fallback) {
   return fallback;
 }
 
+function submissionInputError() {
+  var error = new Error("Invalid submission input");
+  error.code = "SUBMISSION_INPUT_INVALID";
+  return error;
+}
+
+function resolvePlatformSubmissionFile(rootDir, platforms, sourcePlatformId, filename) {
+  if (typeof sourcePlatformId !== "string" || !sourcePlatformId || typeof filename !== "string" ||
+      !filename || filename.trim() !== filename || path.basename(filename) !== filename ||
+      path.isAbsolute(filename) || filename.indexOf("/") !== -1 || filename.indexOf("\\") !== -1) {
+    throw submissionInputError();
+  }
+  var source = platforms.filter(function(platform) { return platform.id === sourcePlatformId; })[0];
+  if (!source) throw submissionInputError();
+  var ext = path.extname(filename).toLowerCase();
+  if ([".md", ".txt", ".docx"].indexOf(ext) === -1) throw submissionInputError();
+  var inputDir = path.resolve(rootDir, "input", source.scanDir || source.id);
+  var filePath = path.resolve(inputDir, filename);
+  if (path.dirname(filePath) !== inputDir) throw submissionInputError();
+  var stat;
+  try { stat = fs.lstatSync(filePath); } catch (_) { throw submissionInputError(); }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw submissionInputError();
+  return filePath;
+}
+
 function createPlatformWorkbenchService(opts) {
   var options = opts || {};
   var rootDir = options.rootDir || path.resolve(__dirname, "..", "..");
@@ -56,16 +81,17 @@ function createPlatformWorkbenchService(opts) {
   }
 
   function resolveSelectedFilePath(article) {
-    if (article.filePath) return article.filePath;
-    var source = platforms.filter(function(platform) {
-      return platform.id === article.sourcePlatformId;
-    })[0] || { scanDir: article.sourcePlatformId };
-    return path.join(rootDir, "input", source.scanDir || source.id, article.filename);
+    return resolvePlatformSubmissionFile(rootDir, platforms, article.sourcePlatformId, article.filename);
   }
 
   function buildSelectedPlan(input) {
     var selectedArticles = input.selectedArticles || [];
     var targetPlatformIds = input.targetPlatformIds || [];
+    if (!Array.isArray(selectedArticles) || !Array.isArray(targetPlatformIds) || targetPlatformIds.length === 0) throw submissionInputError();
+    for (var targetIndex = 0; targetIndex < targetPlatformIds.length; targetIndex++) {
+      if (typeof targetPlatformIds[targetIndex] !== "string" || !targetPlatformIds[targetIndex] ||
+          (!platforms.some(function(platform) { return platform.id === targetPlatformIds[targetIndex] && platform.id !== "media"; }) && !adapters[targetPlatformIds[targetIndex]])) throw submissionInputError();
+    }
     var tasks = [];
     for (var i = 0; i < selectedArticles.length; i++) {
       var filePath = resolveSelectedFilePath(selectedArticles[i]);
@@ -176,7 +202,8 @@ function createPlatformWorkbenchService(opts) {
     };
   }
 
-  return { scanQueue: scanQueue, buildSelectedPlan: buildSelectedPlan, submitSelectedPlanSerially: submitSelectedPlanSerially };
+  return { scanQueue: scanQueue, buildSelectedPlan: buildSelectedPlan, submitSelectedPlanSerially: submitSelectedPlanSerially,
+    resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(rootDir, platforms, sourcePlatformId, filename); } };
 }
 
 module.exports = { createPlatformWorkbenchService };

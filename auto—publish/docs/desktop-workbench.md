@@ -35,7 +35,7 @@ npm run snapshot
 
 - **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`batch-ipc.js`, `media-ipc.js`, `platform-ipc.js`
 - **Services:** `desktop/services/ipc-response.js`, `media-workbench-service.js`, `platform-workbench-service.js`, `media-order-service.js`, `desktop-task-service.js`
-- **Renderer:** `desktop/renderer/app.js` (bootstrapper), `media-workbench.js`, `platform-workbench.js`, `media-resource-library.js`, `media-orders-drawer.js`, `shared/dom.js`, `shared/drawer.js`, `shared/confirm.js`
+- **Renderer:** React source under `media-workbench/src`; production loads only the packaged `media-workbench/dist` bundle.
 - **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
 
 ## Resource Cache
@@ -75,7 +75,7 @@ Installer alpha:
 npm run dist:alpha
 ` 
 
-The packaged app creates runtime folders under Electron userData unless AUTO_PUBLISH_WORKSPACE is set. Do not place private .env, article drafts, logs, or order history in the installer package.
+The packaged app creates runtime folders under `%USERPROFILE%\Documents\AutoPublish` unless AUTO_PUBLISH_WORKSPACE is set. Do not place private .env, article drafts, logs, or order history in the installer package.
 
 
 ## Packaged App Workspace
@@ -89,3 +89,8 @@ Create a smoke workspace:
 `powershell
 powershell -ExecutionPolicy Bypass -File scripts/create-alpha-smoke-workspace.ps1
 ` 
+# Workspace and manual submission
+
+The production renderer is the React build. Runtime files belong in `%USERPROFILE%\Documents\AutoPublish` (or the explicit workspace override). Queue scanning, preflight, and submission remain operator-confirmed actions; no exported GEO article is published automatically.
+
+The legacy `desktop/renderer` is not part of the production architecture. The React renderer runs preflight first, then shows a final confirmation; only that explicit confirmation invokes submission.

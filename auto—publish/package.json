@@ -7,7 +7,8 @@
                     "desktop":  "scripts\\desktop.cmd",
                     "snapshot":  "scripts\\snapshot.cmd",
                     "test":  "node --test tests/*.test.js",
-                    "build:renderer":  "cd media-workbench \u0026\u0026 npm run build",
+                    "build:renderer":  "npm --prefix media-workbench run lint \u0026\u0026 npm --prefix media-workbench run build",
+                    "verify": "node scripts/verify.js",
                     "pack:alpha":  "npm run build:renderer \u0026\u0026 electron-builder --win portable --config electron-builder.alpha.yml",
                     "dist:alpha":  "npm run build:renderer \u0026\u0026 electron-builder --win nsis --config electron-builder.alpha.yml"
                 },

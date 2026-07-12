@@ -28,6 +28,8 @@ function createDesktopTaskService(opts) {
 
   function emitPlatformState() {
     sendToRenderer("platform-state", {
+      isBatchRunning: isBatchRunning,
+      isStopPending: isStopPending,
       isPlatformRunning: isPlatformRunning
     });
   }
@@ -37,6 +39,8 @@ function createDesktopTaskService(opts) {
       cwd: cwd,
       env: Object.assign({}, process.env, {
         AUTO_PUBLISH_DESKTOP: "1",
+        AUTO_PUBLISH_WORKSPACE: cwd,
+        AUTO_PUBLISH_ROOT_DIR: cwd,
         AUTO_PUBLISH_NODE_EXEC_PATH: process.env.AUTO_PUBLISH_NODE_EXEC_PATH || ''
       }),
       stdio: ["ignore", "ignore", "ignore", "ipc"]
@@ -154,15 +158,17 @@ function closeBrowserSessions() {
       });
 
       var timeoutMs = 120000;
+      var timeoutId;
       var timeoutPromise = new Promise(function(resolve) {
-        setTimeout(function() {
+        timeoutId = setTimeout(function() {
           resolve({ ok: false, error: "Platform publish timed out after " + (timeoutMs / 1000) + "s" });
         }, timeoutMs);
       });
 
       var result = await Promise.race([task.promise, abortPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
 
-      if (result && !result.ok && result.error && result.error.indexOf("timed out") !== -1) {
+      if (result && ((!result.ok && result.error && result.error.indexOf("timed out") !== -1) || result && result.data && result.data.skipped === platformTaskCount)) {
         try { platformChild.kill(); } catch (_) {}
       }
 

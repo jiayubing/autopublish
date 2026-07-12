@@ -1,49 +1,62 @@
-import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, MediaResource, PlatformArticle, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, SubmissionOrder } from "./types";
+import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder } from "./types";
+
 
 // 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
 
+interface DraftPayload extends Omit<Draft, "filename" | "selectedResources"> {
+  selectedResources: Array<{ resourceId: string; name?: string; price?: number }>;
+}
+
 interface DesktopConsoleMedia {
-  scanArticles(): Promise<{ ok: boolean; data?: unknown[]; error?: string }>;
-  previewArticle(filename: string): Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
-  getDrafts(): Promise<{ ok: boolean; data?: Draft[]; error?: string }>;
-  getDraft(filename: string): Promise<{ ok: boolean; data?: Draft; error?: string }>;
-  setDraft(filename: string, draft: Draft): Promise<{ ok: boolean; error?: string }>;
-  removeDraft(filename: string): Promise<{ ok: boolean; error?: string }>;
-  buildConfirmation(articles: Article[]): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  submitSelected(articles: Article[]): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  stopSubmit(): Promise<{ ok: boolean; error?: string }>;
-  refreshResources(opts?: Record<string, unknown>): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  getResourcePage(opts: { page?: number; pageSize?: number }): Promise<{ ok: boolean; data?: { items: MediaResource[]; total: number; page: number; pageSize: number }; error?: string }>;
-  searchResourcePage(opts: { query: string; page?: number; pageSize?: number }): Promise<{ ok: boolean; data?: { items: MediaResource[]; total: number; page: number; pageSize: number }; error?: string }>;
-  getPool(): Promise<{ ok: boolean; data?: MediaResource[]; error?: string }>;
-  addToPool(resource: MediaResource): Promise<{ ok: boolean; error?: string }>;
-  removeFromPool(resourceId: string): Promise<{ ok: boolean; error?: string }>;
-  getBalance(): Promise<{ ok: boolean; data?: { balance: string; raw?: unknown }; error?: string }>;
+  scanArticles(): Promise<IpcResponse<unknown[]>>;
+  previewArticle(filename: string): Promise<IpcResponse<Record<string, unknown>>>;
+  getDrafts(): Promise<IpcResponse<Draft[]>>;
+  getDraft(filename: string): Promise<IpcResponse<Draft>>;
+  setDraft(filename: string, draft: DraftPayload): Promise<IpcResponse<void>>;
+  removeDraft(filename: string): Promise<IpcResponse<void>>;
+  buildConfirmation(articles: MediaSubmission[]): Promise<IpcResponse<unknown>>;
+  submitSelected(articles: MediaSubmission[]): Promise<IpcResponse<unknown>>;
+  stopSubmit(): Promise<IpcResponse<void>>;
+  refreshResources(opts?: Record<string, unknown>): Promise<IpcResponse<unknown>>;
+  getResourcePage(opts: { page?: number; pageSize?: number }): Promise<IpcResponse<{ items: MediaResource[]; total: number; page: number; pageSize: number }>>;
+  searchResourcePage(opts: { query: string; page?: number; pageSize?: number }): Promise<IpcResponse<{ items: MediaResource[]; total: number; page: number; pageSize: number }>>;
+  getPool(): Promise<IpcResponse<MediaResource[]>>;
+  addToPool(resource: MediaResource): Promise<IpcResponse<void>>;
+  removeFromPool(resourceId: string): Promise<IpcResponse<void>>;
+  getBalance(): Promise<IpcResponse<{ balance: string; raw?: unknown }>>;
 }
 
 interface DesktopConsoleOrders {
-  getOrders(): Promise<{ ok: boolean; data?: RealOrder[]; error?: string }>;
-  syncOrder(orderNid: string): Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  getOrders(): Promise<IpcResponse<RealOrder[]>>;
+  syncOrder(orderNid: string): Promise<IpcResponse<unknown>>;
 }
 
 interface DesktopConsolePlatforms {
-  getQueue(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  buildSelectedPlan(input: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  submitSelectedPlan(plan: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  pauseSubmit(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  stopSubmit(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  getState(): Promise<{ ok: boolean; data?: unknown; error?: string }>;
-  onState(listener: (state: { isPlatformRunning: boolean; isPlatformRunning: boolean }) => void): () => void;
+  getQueue(): Promise<IpcResponse<unknown>>;
+  buildSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
+  submitSelectedPlan(input: PlatformSubmission | PlatformSubmission[]): Promise<IpcResponse<unknown>>;
+  pauseSubmit(): Promise<IpcResponse<unknown>>;
+  stopSubmit(): Promise<IpcResponse<unknown>>;
+  getState(): Promise<IpcResponse<PlatformStatus>>;
+  onState(listener: (state: PlatformStatus) => void): () => void;
 }
 
+interface MediaSubmission { filename: string; resourceIds: string[]; draftRevision?: string; }
+interface PlatformSubmission { sourcePlatformId: string; filename: string; targetPlatformIds: string[]; }
+
 interface DesktopConsoleContent {
-  listClients(): Promise<{ ok: boolean; data?: ContentClient[]; error?: unknown }>;
-  listResearch(clientId: string): Promise<{ ok: boolean; data?: ContentResearch[]; error?: unknown }>;
-  listTemplates(platform: string): Promise<{ ok: boolean; data?: ContentTemplate[]; error?: unknown }>;
-  generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<{ ok: boolean; data?: GeneratedContentArticle; error?: unknown }>;
-  saveArticle(article: GeneratedContentArticle): Promise<{ ok: boolean; data?: GeneratedContentArticle; error?: unknown }>;
-  listGeneratedArticles(clientId: string): Promise<{ ok: boolean; data?: GeneratedContentArticle[]; error?: unknown }>;
+  listClients(): Promise<IpcResponse<ContentClient[]>>;
+  listResearch(clientId: string): Promise<IpcResponse<ContentResearch[]>>;
+  listTemplates(platform: string): Promise<IpcResponse<ContentTemplate[]>>;
+  generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
+  saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
+  listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
+  previewExport(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
+  exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
 }
+
+export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: "media" | "lieju" | "toutiao" | "hepan"; confirmed: true; }
+export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
 
 interface DesktopConsole {
   media: DesktopConsoleMedia;
@@ -64,7 +77,13 @@ export function isElectron(): boolean {
   return typeof window !== "undefined" && !!window.desktopConsole;
 }
 
+function fixturesEnabled(): boolean {
+  const env = (import.meta as unknown as { env: { DEV: boolean; VITE_ENABLE_FIXTURES?: string } }).env;
+  return Boolean(env.DEV && env.VITE_ENABLE_FIXTURES === "true");
+}
+
 function readLocalStorage<T>(key: string, fallback: T): T {
+  if (!fixturesEnabled()) return fallback;
   try {
     const saved = localStorage.getItem(key);
     return saved ? (JSON.parse(saved) as T) : fallback;
@@ -74,6 +93,7 @@ function readLocalStorage<T>(key: string, fallback: T): T {
 }
 
 function writeLocalStorage<T>(key: string, value: T): void {
+  if (!fixturesEnabled()) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -356,7 +376,11 @@ export async function setDraft(
   draft: Draft
 ): Promise<void> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.media.setDraft(filename, draft);
+    const { filename: _filename, selectedResources, ...fields } = draft;
+    const result = await window.desktopConsole!.media.setDraft(filename, {
+      ...fields,
+      selectedResources: selectedResources.map((resource) => ({ resourceId: resource.resourceId, name: resource.name, price: resource.price })),
+    });
     if (!result.ok) throw getIpcError(result.error, "setDraft failed");
     return;
   }
@@ -377,7 +401,7 @@ export async function buildConfirmation(
 ): Promise<unknown> {
   if (isElectron()) {
     const result =
-      await window.desktopConsole!.media.buildConfirmation(articles);
+      await window.desktopConsole!.media.buildConfirmation(articles.map((article) => ({ filename: article.filename, resourceIds: article.selectedResources.map((resource) => resource.resourceId) })));
     if (!result.ok)
       throw getIpcError(result.error, "buildConfirmation failed");
     return result.data;
@@ -390,7 +414,7 @@ export async function submitSelected(
 ): Promise<unknown> {
   if (isElectron()) {
     const result =
-      await window.desktopConsole!.media.submitSelected(articles);
+      await window.desktopConsole!.media.submitSelected(articles.map((article) => ({ filename: article.filename, resourceIds: article.selectedResources.map((resource) => resource.resourceId) })));
     if (!result.ok)
       throw getIpcError(result.error, "submitSelected failed");
     return result.data;
@@ -573,9 +597,12 @@ export async function buildPlatformPlan(input: {
   platformIds: string[];
 }): Promise<PlatformSubmitPlan> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.platforms.buildSelectedPlan(input);
-    if (!result.ok) throw getIpcError(result.error, 'buildPlatformPlan failed');
-    return result.data as PlatformSubmitPlan;
+    const plans = await Promise.all(input.articles.map(async (article) => {
+      const result = await window.desktopConsole!.platforms.buildSelectedPlan({ sourcePlatformId: article.sourcePlatformId, filename: article.filename, targetPlatformIds: input.platformIds });
+      if (!result.ok) throw getIpcError(result.error, 'buildPlatformPlan failed');
+      return result.data as PlatformSubmitPlan;
+    }));
+    return { taskCount: plans.reduce((count, plan) => count + plan.taskCount, 0), tasks: plans.flatMap((plan) => plan.tasks) };
   }
   return { taskCount: 0, tasks: [] };
 }
@@ -584,7 +611,14 @@ export async function submitPlatformPlan(
   plan: PlatformSubmitPlan
 ): Promise<PlatformSubmitResult> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.platforms.submitSelectedPlan(plan);
+    const submissions = new Map<string, PlatformSubmission>();
+    plan.tasks.forEach((task) => {
+      const key = task.sourcePlatformId + "\u0000" + task.filename;
+      const submission = submissions.get(key) || { sourcePlatformId: task.sourcePlatformId, filename: task.filename, targetPlatformIds: [] };
+      if (!submission.targetPlatformIds.includes(task.targetPlatformId)) submission.targetPlatformIds.push(task.targetPlatformId);
+      submissions.set(key, submission);
+    });
+    const result = await window.desktopConsole!.platforms.submitSelectedPlan([...submissions.values()]);
     if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
     return result.data as PlatformSubmitResult;
   }
@@ -607,11 +641,25 @@ export async function stopPlatformSubmit(): Promise<void> {
   }
 }
 
-export async function getPlatformState(): Promise<{ isPlatformRunning: boolean; isPlatformPaused: boolean }> {
+export async function getPlatformState(): Promise<PlatformStatus> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.getState();
-    if (!result.ok) return { isPlatformRunning: false };
-    return result.data as { isPlatformRunning: boolean };
+    if (!result.ok) return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+    return result.data || { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
   }
-  return { isPlatformRunning: false };
+  return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+}
+
+export async function previewExport(input: ContentExportInput): Promise<ContentExportPreview> {
+  if (!isElectron()) throw new Error("Export requires the desktop app");
+  const result = await window.desktopConsole!.content.previewExport(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "preview export failed");
+  return result.data;
+}
+
+export async function exportToSubmissionQueue(input: ContentExportInput): Promise<ContentExportPreview> {
+  if (!isElectron()) throw new Error("Export requires the desktop app");
+  const result = await window.desktopConsole!.content.exportArticle(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "export failed");
+  return result.data;
 }

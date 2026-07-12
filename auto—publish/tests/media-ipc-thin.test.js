@@ -84,4 +84,27 @@ describe("media ipc boundary", function() {
       assert.equal(source.includes(snippet), false, "heavy media concern still present: " + snippet);
     });
   });
+
+  it("wraps draft store failures in the shared IPC error envelope", async function() {
+    const { registerMediaIpc } = require("../desktop/ipc/media-ipc");
+    const { MediaDraftStore } = require("../src/platforms/media/media-draft-store");
+    const handlers = new Map();
+    const originalGetAll = MediaDraftStore.prototype.getAll;
+    const error = new Error("draft store unavailable");
+    error.code = "DRAFT_STORE_UNAVAILABLE";
+
+    MediaDraftStore.prototype.getAll = function() { throw error; };
+    try {
+      registerMediaIpc({
+        ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } },
+        rootDir: path.resolve(__dirname, "..")
+      });
+      assert.deepStrictEqual(await handlers.get("media:get-drafts")(), {
+        ok: false,
+        error: { code: "DRAFT_STORE_UNAVAILABLE", message: "draft store unavailable" }
+      });
+    } finally {
+      MediaDraftStore.prototype.getAll = originalGetAll;
+    }
+  });
 });

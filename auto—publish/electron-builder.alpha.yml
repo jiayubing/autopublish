@@ -10,6 +10,7 @@ directories:
 files:
   # Electron main process
   - desktop/**/*
+  - "!desktop/renderer/**"
   # Business logic (adapters, core, platforms)
   - src/**/*
   # Config defaults (platforms.json)
@@ -20,8 +21,9 @@ files:
   - media-workbench/dist/**/*
   # Adapter runtime helpers (Python scripts, etc.)
   - src/platforms/hepan/hepan_publish.py
-  # Production Node dependencies
-  - node_modules/**/*
+  # Do not list node_modules here. electron-builder derives the complete
+  # production dependency closure from package.json/package-lock, including
+  # transitive dependencies required by mammoth and form-data.
   # Exclude dev/cache noise
   - "!node_modules/.cache/**"
   - "!**/*.map"
@@ -48,6 +50,8 @@ files:
   - "!.git/**"
   - "!release-alpha/**"
 
+# Keep files unpacked: adapters execute Python helpers and resolve workspace
+# runtime scripts by filesystem path; packing them into asar would break that.
 asar: false
 
 win:

@@ -4,9 +4,7 @@
 
 const fs = require("fs");
 const path = require("path");
-
-const DATA_DIR = path.resolve(__dirname, "..", "..", "..", "data");
-const DEFAULT_PATH = path.join(DATA_DIR, "media-drafts.json");
+const { resolveStorePath } = require("./store-paths");
 
 function normalizeResource(resource) {
   if (!resource) return null;
@@ -43,7 +41,7 @@ function normalizeDraft(draft) {
 class MediaDraftStore {
   constructor(opts) {
     opts = opts || {};
-    this.filePath = opts.storePath || opts.filePath || DEFAULT_PATH;
+    this.filePath = resolveStorePath(opts, "media-drafts.json");
   }
 
   _read() {

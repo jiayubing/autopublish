@@ -5,6 +5,7 @@ const { detectDocxImages, convertArticle } = require("../../src/platforms/media/
 const { MediaClient } = require("../../src/platforms/media/media-client");
 const { resolveApiKey } = require("../../src/platforms/media/config");
 const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
+const { runPreflight } = require("../../src/platforms/media/preflight");
 
 function firstTextLine(raw) {
   var lines = String(raw || "").split(/\n/);
@@ -31,6 +32,25 @@ function isSafeFilename(filename) {
     filename.indexOf("\\") === -1;
 }
 
+function submissionInputError() {
+  var error = new Error("Invalid submission input");
+  error.code = "SUBMISSION_INPUT_INVALID";
+  return error;
+}
+
+function resolveSubmissionFile(inputDir, filename) {
+  if (!isSafeFilename(filename)) throw submissionInputError();
+  var ext = path.extname(filename).toLowerCase();
+  if ([".md", ".txt", ".docx"].indexOf(ext) === -1) throw submissionInputError();
+  var resolvedInputDir = path.resolve(inputDir);
+  var filePath = path.resolve(resolvedInputDir, filename);
+  if (path.dirname(filePath) !== resolvedInputDir) throw submissionInputError();
+  var stat;
+  try { stat = fs.lstatSync(filePath); } catch (_) { throw submissionInputError(); }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw submissionInputError();
+  return filePath;
+}
+
 function readPreviewSource(filePath) {
   var ext = path.extname(filePath).toLowerCase();
   if (ext === ".docx") {
@@ -48,6 +68,8 @@ function createMediaWorkbenchService(opts) {
   var options = opts || {};
   var inputDir = options.inputDir;
   var draftStore = options.draftStore || { get: function() { return null; } };
+  var workspacePaths = options.paths;
+  var configuredOrderStore = options.orderStore;
   var stopRequested = false;
 
   async function readAutoTitle(filePath) {
@@ -92,22 +114,8 @@ function createMediaWorkbenchService(opts) {
   }
 
   async function previewArticle(filename) {
-    if (!isSafeFilename(filename)) {
-      throw new Error("unsafe preview filename");
-    }
-
-    var filePath = path.join(inputDir, filename);
-    if (path.dirname(filePath) !== path.resolve(inputDir)) {
-      throw new Error("unsafe preview filename");
-    }
-    if (!fs.existsSync(filePath)) {
-      throw new Error("preview file not found");
-    }
-
+    var filePath = resolveSubmissionFile(inputDir, filename);
     var ext = path.extname(filename).toLowerCase();
-    if (ext !== ".txt" && ext !== ".md" && ext !== ".docx") {
-      throw new Error("unsupported file type: " + ext);
-    }
 
     var draft = draftStore.get(filename) || {};
     var content = await readPreviewSource(filePath);
@@ -164,9 +172,11 @@ function createMediaWorkbenchService(opts) {
 
   async function submitTasksSerially(articles, injected) {
     stopRequested = false;
+    var preflight = await runPreflight({ articles: articles || [], dryRun: true });
+    if (!preflight.ok) return { ok: 0, fail: 0, skipped: 0, results: [], preflight: preflight };
     var deps = injected || {};
     var client = deps.client || new MediaClient({ apiKey: resolveApiKey(null) });
-    var orderStore = deps.orderStore || new SubmissionOrderStore();
+    var orderStore = deps.orderStore || configuredOrderStore || new SubmissionOrderStore({ paths: workspacePaths });
     var tasks = expandSubmissionTasks(articles);
     var results = [];
     for (var i = 0; i < tasks.length; i++) {
@@ -226,7 +236,8 @@ function createMediaWorkbenchService(opts) {
     scanArticles: scanArticles, previewArticle: previewArticle,
     expandSubmissionTasks: expandSubmissionTasks,
     buildConfirmationSummary: buildConfirmationSummary,
-    submitTasksSerially: submitTasksSerially, requestStop: requestStop
+    submitTasksSerially: submitTasksSerially, requestStop: requestStop,
+    resolveSubmissionFile: function(filename) { return resolveSubmissionFile(inputDir, filename); }
   };
 }
 

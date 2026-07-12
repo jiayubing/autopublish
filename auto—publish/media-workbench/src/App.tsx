@@ -13,12 +13,13 @@ import {
   getResourcePage,
   getDraft,
   getPlatformQueue,
+  buildConfirmation,
+  submitSelected,
 } from "./electron-api";
 import Sidebar from './components/Sidebar';
 import ArticleList from './components/ArticleList';
 import ArticleEditor from './components/ArticleEditor';
 import ResourceLibrary from './components/ResourceLibrary';
-import PreflightModal from './components/PreflightModal';
 import OrdersView from './components/OrdersView';
 import SettingsView from './components/SettingsView';
 import PlatformWorkbench from './components/PlatformWorkbench';
@@ -57,7 +58,8 @@ export default function App() {
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
-  const [isPreflightOpen, setIsPreflightOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ blockers?: string[] } | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
 
@@ -243,10 +245,15 @@ export default function App() {
   const handleClearOrders = () => {
     setOrders([]);
   };
-  const handleSubmissionComplete = () => {
-    setIsPreflightOpen(false);
-    handleRefreshOrders();
+  const readyForSubmit = articles.length > 0 && articles.every((article) => article.selectedResources && article.selectedResources.length > 0 && (!article.hasImages || article.ignoreImages));
+  const handleRealSubmit = async () => {
+    if (!readyForSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    try { const preflight = await buildConfirmation(articles) as { blockers?: string[] }; if (preflight.blockers?.length) return; setConfirmation(preflight); }
+    catch (e) { console.error('media submit failed', e); }
+    finally { setIsSubmitting(false); }
   };
+  const confirmRealSubmit = async () => { setIsSubmitting(true); try { await submitSelected(articles); await handleRefreshOrders(); setConfirmation(null); } finally { setIsSubmitting(false); } };
 
   // Clear all local order records
     return (
@@ -284,11 +291,13 @@ export default function App() {
             </div>
             {currentView === 'workbench' && articles.some(a => a.selectedResources && a.selectedResources.length > 0) && (
               <button
-                onClick={() => setIsPreflightOpen(true)}
+                onClick={handleRealSubmit}
+                disabled={!readyForSubmit || isSubmitting}
+                title={readyForSubmit ? "将执行真实预检并提交" : "所有文章必须选择资源，并处理图片后才能提交"}
                 className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95"
               >
                 <Send className="w-4 h-4" />
-                <span>发布</span>
+                <span>{isSubmitting ? '提交中' : '预检并提交'}</span>
               </button>
             )}
           </div>
@@ -411,7 +420,6 @@ export default function App() {
                 <OrdersView
                   orders={orders}
                   onClearOrders={handleClearOrders}
-                  onRefreshOrders={handleRefreshOrders}
                 />
               </motion.div>
             )}
@@ -432,20 +440,9 @@ export default function App() {
 
           </AnimatePresence>
         </main>
+        {confirmation && <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"><div className="bg-white rounded-lg p-5"><h3>确认真实投稿</h3><p>预检已通过。确认后才会提交。</p><button onClick={() => setConfirmation(null)}>取消</button><button onClick={confirmRealSubmit} disabled={isSubmitting}>确认提交</button></div></div>}
       </div>
 
-      {/* 3. Global Interactive Modals */}
-      <AnimatePresence>
-        {isPreflightOpen && (
-          <PreflightModal
-            isOpen={isPreflightOpen}
-            onClose={() => setIsPreflightOpen(false)}
-            articles={articles}
-            balance={balance}
-            onSubmissionComplete={handleSubmissionComplete}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -3,10 +3,8 @@
 // CommonJS port from root src/core/submission-store.js.
 
 const { appendFile, mkdir } = require('node:fs/promises');
-const { dirname, resolve, join } = require('node:path');
-
-const projectRoot = process.env.AUTO_PUBLISH_ROOT_DIR || resolve(__dirname, '..', '..', '..');
-const DEFAULT_STORE_PATH = join(projectRoot, 'data', 'submission-orders.jsonl');
+const { dirname } = require('node:path');
+const { resolveStorePath } = require('./store-paths');
 
 /**
  * Submission order store backed by a JSONL file.
@@ -25,7 +23,7 @@ class SubmissionOrderStore {
    */
   constructor(opts) {
     opts = opts || {};
-    this.storePath = opts.storePath || DEFAULT_STORE_PATH;
+    this.storePath = resolveStorePath(opts, 'submission-orders.jsonl');
   }
 
   /**

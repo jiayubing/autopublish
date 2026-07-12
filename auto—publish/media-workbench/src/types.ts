@@ -1,5 +1,14 @@
 export type MediaType = 'image' | 'video' | 'audio' | 'document';
 
+export interface IpcError {
+  code: string;
+  message: string;
+}
+
+export type IpcResponse<T> =
+  | { ok: true; data?: T; error?: never }
+  | { ok: false; data?: never; error: IpcError };
+
 export interface MediaResource {
   resourceId: string;
   name: string;
@@ -98,6 +107,12 @@ export interface PlatformTarget {
   id: string;
   displayName: string;
   scanDir: string;
+}
+
+export interface PlatformStatus {
+  isBatchRunning: boolean;
+  isStopPending: boolean;
+  isPlatformRunning: boolean;
 }
 
 export interface PlatformSubmitPlan {

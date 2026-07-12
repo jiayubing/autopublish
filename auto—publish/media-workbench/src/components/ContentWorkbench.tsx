@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, FileText, LoaderCircle, Save, Sparkles } from 'lucide-react';
 import { ContentClient, ContentResearch, ContentTemplate, GeneratedContentArticle } from '../types';
-import { generateContentArticle, listContentArticles, listContentClients, listContentResearch, listContentTemplates, saveContentArticle } from '../electron-api';
+import { exportToSubmissionQueue, generateContentArticle, listContentArticles, listContentClients, listContentResearch, listContentTemplates, previewExport, saveContentArticle } from '../electron-api';
 
 const PLATFORM_OPTIONS = ['ctrip', 'xiaohongshu', 'dianping'];
 
@@ -19,6 +19,8 @@ export default function ContentWorkbench() {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [exportTarget, setExportTarget] = useState<'media' | 'lieju' | 'toutiao' | 'hepan'>('media');
+  const [exportPreview, setExportPreview] = useState('');
 
   const selectedClient = useMemo(() => clients.find((item) => item.id === clientId) || null, [clients, clientId]);
   const selectedResearch = useMemo(() => research.find((item) => item.id === researchId) || null, [research, researchId]);
@@ -55,10 +57,18 @@ export default function ContentWorkbench() {
     if (!article) return;
     setSaving(true); setError('');
     try {
-      const saved = await saveContentArticle({ ...article, updatedAt: new Date().toISOString() });
+      const saved = await saveContentArticle({ ...article, status: 'saved', updatedAt: new Date().toISOString() });
       setArticle(saved); setHistory(await listContentArticles(clientId));
     } catch (value) { setError(value instanceof Error ? value.message : 'Unable to save article'); }
     finally { setSaving(false); }
+  }
+  async function previewSubmissionExport() {
+    if (!article || !clientId) return;
+    try { const preview = await previewExport({ clientId, generatedArticleId: article.id, targetPlatform: exportTarget, confirmed: true }); setExportPreview(preview.filename); } catch (value) { setError(value instanceof Error ? value.message : 'Export preview failed'); }
+  }
+  async function exportSubmission() {
+    if (!article || !clientId) return;
+    try { await exportToSubmissionQueue({ clientId, generatedArticleId: article.id, targetPlatform: exportTarget, confirmed: true }); } catch (value) { setError(value instanceof Error ? value.message : 'Export failed'); }
   }
 
   if (loading) return <div className="h-full flex items-center justify-center text-slate-500"><LoaderCircle className="w-5 h-5 animate-spin mr-2" />加载客户资料</div>;
@@ -85,7 +95,7 @@ export default function ContentWorkbench() {
     <section className="bg-white border border-slate-200 rounded-lg min-h-0 flex flex-col overflow-hidden">
       <div className="h-12 px-4 border-b border-slate-200 flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><FileText className="w-4 h-4" />文章编辑</div><button onClick={save} disabled={!article || saving} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-40" title="保存文章"><Save className="w-4 h-4" /></button></div>
       {error && <div className="mx-4 mt-3 flex gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-100 p-2 rounded-md"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
-      {article ? <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col"><input value={article.title} onChange={(event) => setArticle({ ...article, title: event.target.value })} className="h-10 px-2 border border-slate-300 rounded-md text-base font-semibold" /><textarea value={article.content} onChange={(event) => setArticle({ ...article, content: event.target.value })} className="flex-1 min-h-64 resize-none p-3 border border-slate-300 rounded-md text-sm leading-6" /></div> : <div className="flex-1 flex items-center justify-center text-sm text-slate-400">生成或选择一篇已保存文章</div>}
+      {article ? <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col"><input value={article.title} onChange={(event) => setArticle({ ...article, title: event.target.value })} className="h-10 px-2 border border-slate-300 rounded-md text-base font-semibold" /><textarea value={article.content} onChange={(event) => setArticle({ ...article, content: event.target.value })} className="flex-1 min-h-64 resize-none p-3 border border-slate-300 rounded-md text-sm leading-6" /><div className="flex gap-2"><select value={exportTarget} onChange={(event) => setExportTarget(event.target.value as typeof exportTarget)}><option value="media">media</option><option value="lieju">lieju</option><option value="toutiao">toutiao</option><option value="hepan">hepan</option></select><button onClick={previewSubmissionExport}>预览导出</button><button onClick={exportSubmission} disabled={article.status !== 'saved'}>导出待投稿队列</button></div><p className="text-xs">导出到待投稿队列，仍需在投稿工作台确认</p>{exportPreview && <p className="text-xs">{exportPreview}</p>}</div> : <div className="flex-1 flex items-center justify-center text-sm text-slate-400">生成或选择一篇已保存文章</div>}
     </section>
   </div>;
 }

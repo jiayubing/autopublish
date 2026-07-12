@@ -38,7 +38,11 @@ function pwEnv(sessionCtx) {
 
 function pwCmd(args, sessionCtx) {
   var ctx = sessionCtx || pwSessionConfig();
-  return `chcp 65001 > nul && set PLAYWRIGHT_DAEMON_SESSION_DIR=${ctx.daemonDir} && "${nodeExecPath()}" "${PLAYWRIGHT_CLI_JS}" -s=${ctx.session} ${args}`;
+  var cli = String(PLAYWRIGHT_CLI_JS || "");
+  var launch = /\.js$/i.test(cli) || fs.existsSync(cli)
+    ? `"${nodeExecPath()}" "${cli}"`
+    : `"${cli || "playwright-cli"}"`;
+  return `chcp 65001 > nul && set PLAYWRIGHT_DAEMON_SESSION_DIR=${ctx.daemonDir} && ${launch} -s=${ctx.session} ${args}`;
 }
 
 function pwRun(args, opts) {

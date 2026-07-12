@@ -1,0 +1,31 @@
+const { execFileSync } = require("child_process");
+const path = require("path");
+
+const rootDir = path.resolve(__dirname, "..");
+const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+
+function runNpm(args) {
+  if (process.platform === "win32") {
+    execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", [npm].concat(args).join(" ")], {
+      cwd: rootDir,
+      stdio: "inherit"
+    });
+    return;
+  }
+  execFileSync(npm, args, {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
+}
+
+runNpm(["test"]);
+runNpm(["--prefix", "media-workbench", "run", "lint"]);
+runNpm(["run", "build:renderer"]);
+
+const unpackedAppDir = process.argv[2];
+if (unpackedAppDir) {
+  execFileSync(process.execPath, [path.join(__dirname, "verify-alpha-package.js"), unpackedAppDir], {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
+}

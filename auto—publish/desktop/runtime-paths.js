@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const { app } = require("electron");
+const runtimeConfig = require("./runtime-config");
 
 /**
  * Return the directory that contains the application code.
@@ -51,16 +52,10 @@ function ensureRuntimeDirs(root) {
 }
 
 function configureRuntimeEnvironment() {
-  var appDir = appRoot();
-  var workDir = workspaceRoot();
-  ensureRuntimeDirs(workDir);
-
-  // Legacy: scripts/config.js reads AUTO_PUBLISH_ROOT_DIR for data/input paths
-  process.env.AUTO_PUBLISH_ROOT_DIR = workDir;
-  // New: services can use AUTO_PUBLISH_APP_ROOT for config files
-  process.env.AUTO_PUBLISH_APP_ROOT = appDir;
-
-  return { appRoot: appDir, workspaceRoot: workDir };
+  return runtimeConfig.configureRuntimeEnvironment({
+    appRoot: appRoot(),
+    workspaceRoot: workspaceRoot()
+  });
 }
 
 module.exports = {

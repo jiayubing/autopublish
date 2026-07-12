@@ -117,3 +117,6 @@ silently invented by a later module.
   so that provenance can be displayed and audited.
 - The existing publishing workflow consumes generated article content; it does
   not own research or template storage.
+# Generated article export lifecycle
+
+Saved generated articles may be exported only to the `media`, `lieju`, `toutiao`, or `hepan` input queue after explicit manual confirmation. Export is queue creation only: it never publishes or opens a browser. Operators must still confirm the queued article in the submission workbench.
