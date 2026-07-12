@@ -40,6 +40,43 @@ describe("client knowledge", function() {
     assert.deepStrictEqual(loadClientKnowledge(clientDirectory, root).map(function(file) { return file.name; }), ["brand.md", "facts.json", "service.txt"]);
   });
 
+  it("uses directory defaults when client metadata is missing", function() {
+    fs.unlinkSync(path.join(clientDirectory, "client.json"));
+    const client = listClients(root)[0];
+    assert.equal(client.id, "travel-client");
+    assert.equal(client.name, "travel-client");
+  });
+
+  it("rejects client metadata that is not a regular file", function() {
+    const metadataPath = path.join(clientDirectory, "client.json");
+    fs.unlinkSync(metadataPath);
+    fs.mkdirSync(metadataPath);
+    assert.throws(function() { listClients(root); }, function(error) {
+      return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+    });
+  });
+
+  it("rejects client metadata symlinks resolving outside the client directory", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "content-metadata-outside-"));
+    const external = path.join(outside, "client.json");
+    const linked = path.join(clientDirectory, "client.json");
+    fs.writeFileSync(external, JSON.stringify({ id: "outside", name: "Outside" }));
+    fs.unlinkSync(linked);
+    try {
+      try {
+        fs.symlinkSync(external, linked, "file");
+      } catch (error) {
+        t.skip("file links are unavailable: " + error.code);
+        return;
+      }
+      assert.throws(function() { listClients(root); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it("requires context instead of trusting a clients basename", function() {
     const fakeClient = path.join(root, "other", "clients", "fake-client");
     fs.mkdirSync(fakeClient, { recursive: true });

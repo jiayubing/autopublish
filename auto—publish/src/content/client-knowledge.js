@@ -79,8 +79,31 @@ function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
 
 function readClientMetadata(directory) {
   const metadataPath = path.join(directory, "client.json");
-  if (!fs.existsSync(metadataPath)) {
-    return { id: path.basename(directory), name: path.basename(directory) };
+  const defaults = { id: path.basename(directory), name: path.basename(directory) };
+  let metadataStats;
+  try {
+    metadataStats = fs.lstatSync(metadataPath);
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return defaults;
+    throw error;
+  }
+
+  if (metadataStats.isSymbolicLink() || !metadataStats.isFile()) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client metadata is outside the client directory");
+  }
+
+  let realDirectory;
+  let realMetadataPath;
+  try {
+    realDirectory = fs.realpathSync(directory);
+    realMetadataPath = fs.realpathSync(metadataPath);
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return defaults;
+    throw error;
+  }
+
+  if (!isPathWithin(realDirectory, realMetadataPath)) {
+    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client metadata is outside the client directory");
   }
 
   try {

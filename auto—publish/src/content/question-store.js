@@ -181,27 +181,12 @@ function createQuestionStore(workspaceRoot, options) {
 
   function writeAtomic(filename, document) {
     const temporary = filename + ".tmp-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-    const backup = filename + ".bak-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-    let movedExisting = false;
     fs.mkdirSync(path.dirname(filename), { recursive: true });
     try {
       fs.writeFileSync(temporary, JSON.stringify(document, null, 2) + "\n", "utf8");
-      try {
-        fs.renameSync(filename, backup);
-        movedExisting = true;
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
-      try {
-        fs.renameSync(temporary, filename);
-      } catch (error) {
-        if (movedExisting) fs.renameSync(backup, filename);
-        throw error;
-      }
-      if (movedExisting) fs.unlinkSync(backup);
+      fs.renameSync(temporary, filename);
     } finally {
       if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-      if (fs.existsSync(backup) && fs.existsSync(filename)) fs.unlinkSync(backup);
     }
   }
 

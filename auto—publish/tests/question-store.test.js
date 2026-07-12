@@ -54,6 +54,39 @@ describe("question store", function() {
     });
   });
 
+  it("keeps the old questions file readable when the atomic rename fails", function() {
+    const created = store.createQuestion("client-1", { text: "original question" });
+    const filename = path.join(root, "clients", "client-1", "questions.json");
+    const originalRenameSync = fs.renameSync;
+    const renameCalls = [];
+    fs.renameSync = function(source, destination) {
+      renameCalls.push({ source: source, destination: destination });
+      if (source.startsWith(filename + ".tmp-") && destination === filename) {
+        const error = new Error("simulated rename failure");
+        error.code = "EACCES";
+        throw error;
+      }
+      return originalRenameSync.apply(this, arguments);
+    };
+
+    try {
+      assert.throws(function() {
+        store.updateQuestion("client-1", created.id, { text: "failed update" });
+      }, function(error) {
+        return error.code === "EACCES";
+      });
+    } finally {
+      fs.renameSync = originalRenameSync;
+    }
+
+    assert.equal(renameCalls.length, 1);
+    assert.equal(renameCalls[0].destination, filename);
+    assert.deepStrictEqual(store.listQuestions("client-1"), [created]);
+    assert.deepStrictEqual(fs.readdirSync(path.dirname(filename)).filter(function(name) {
+      return name.includes(".tmp-") || name.includes(".bak-");
+    }), []);
+  });
+
   it("returns stable errors for invalid paths and question data", function() {
     assert.throws(function() { store.listQuestions("../client-1"); }, function(error) {
       return error.code === "CLIENT_ID_INVALID";
@@ -120,6 +153,18 @@ describe("question store", function() {
       assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
+      assert.throws(function() { store.getQuestion("client-1", "outside-question"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.createQuestion("client-1", { text: "new outside question" }); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.updateQuestion("client-1", "outside-question", { enabled: false }); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.deleteQuestion("client-1", "outside-question"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }
@@ -138,6 +183,18 @@ describe("question store", function() {
         return;
       }
       assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.getQuestion("client-1", "missing-question"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.createQuestion("client-1", { text: "new outside query" }); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.updateQuestion("client-1", "missing-question", { enabled: false }); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.deleteQuestion("client-1", "missing-question"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
     } finally {
@@ -159,6 +216,15 @@ describe("question store", function() {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
       assert.throws(function() { store.createQuestion("linked-client", { text: "outside" }); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.getQuestion("linked-client", "question-1"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.updateQuestion("linked-client", "question-1", { enabled: false }); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { store.deleteQuestion("linked-client", "question-1"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
     } finally {
