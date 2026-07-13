@@ -3,6 +3,8 @@ const path = require("path");
 
 const { getContentWorkspace } = require("../core/files");
 
+const LEGACY_ARTICLE = Symbol("legacyArticle");
+
 function storeError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -25,13 +27,80 @@ function assertNonEmptyString(value, label) {
   }
 }
 
+function normalizeResearchQueryIds(article) {
+  const hasResearchQueryIds = article.researchQueryIds !== undefined;
+  const hasLegacyResearchQueryId = article.researchQueryId !== undefined;
+  const hasResearchSnapshots = article.researchSnapshots !== undefined;
+  const normalizedLegacy = article[LEGACY_ARTICLE] === true;
+  const isRoundtrippedLegacy = hasResearchQueryIds && hasLegacyResearchQueryId && !hasResearchSnapshots &&
+    Array.isArray(article.researchQueryIds) && article.researchQueryIds.length === 1 &&
+    article.researchQueryIds[0] === article.researchQueryId;
+  if (!hasResearchQueryIds && hasResearchSnapshots) {
+    throw storeError("ARTICLE_INVALID", "Legacy article cannot contain research snapshots");
+  }
+  if (hasResearchQueryIds && hasLegacyResearchQueryId && !normalizedLegacy && !isRoundtrippedLegacy) {
+    throw storeError("ARTICLE_INVALID", "Article mixes legacy and new research metadata");
+  }
+  const legacy = !hasResearchQueryIds || normalizedLegacy || isRoundtrippedLegacy;
+  const ids = legacy ? [article.researchQueryId] : article.researchQueryIds;
+  if (legacy && hasResearchQueryIds && (!Array.isArray(article.researchQueryIds) || article.researchQueryIds.length !== 1 || article.researchQueryIds[0] !== article.researchQueryId)) {
+    throw storeError("ARTICLE_INVALID", "Legacy article research ids are inconsistent");
+  }
+  if (legacy && hasResearchSnapshots) {
+    throw storeError("ARTICLE_INVALID", "Legacy article cannot contain research snapshots");
+  }
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
+    throw storeError("ARTICLE_INVALID", "Article research query ids are invalid");
+  }
+  const seen = new Set();
+  ids.forEach(function(id) {
+    if (typeof id !== "string" || !id.trim() || seen.has(id)) {
+      throw storeError("ARTICLE_INVALID", "Article research query ids are invalid");
+    }
+    seen.add(id);
+  });
+  return { ids: ids.slice(), legacy: legacy };
+}
+
+function normalizeResearchSnapshots(snapshots, ids) {
+  if (!Array.isArray(snapshots) || snapshots.length !== ids.length) {
+    throw storeError("ARTICLE_INVALID", "Article research snapshots do not match query ids");
+  }
+  return snapshots.map(function(snapshot, index) {
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
+        snapshot.questionId !== ids[index] || typeof snapshot.question !== "string" || !snapshot.question.trim() ||
+        typeof snapshot.answerText !== "string" || !snapshot.answerText.trim() ||
+        !Array.isArray(snapshot.references) || typeof snapshot.collectedAt !== "string" || !snapshot.collectedAt.trim() ||
+        typeof snapshot.collectionMethod !== "string" || !snapshot.collectionMethod.trim()) {
+      throw storeError("ARTICLE_INVALID", "Article research snapshot is invalid");
+    }
+    return {
+      questionId: snapshot.questionId,
+      question: snapshot.question,
+      answerText: snapshot.answerText,
+      references: snapshot.references.map(function(reference) {
+        if (!reference || typeof reference.title !== "string" || !reference.title.trim() ||
+            typeof reference.url !== "string" || !reference.url.trim()) {
+          throw storeError("ARTICLE_INVALID", "Article research snapshot reference is invalid");
+        }
+        const value = { title: reference.title, url: reference.url };
+        if (Object.prototype.hasOwnProperty.call(reference, "snippet")) value.snippet = reference.snippet;
+        return value;
+      }),
+      collectedAt: snapshot.collectedAt,
+      collectionMethod: snapshot.collectionMethod
+    };
+  });
+}
+
 function normalizeArticle(article) {
   if (!article || typeof article !== "object" || Array.isArray(article)) {
     throw storeError("ARTICLE_INVALID", "Article is invalid");
   }
   assertPathSegment(article.id, "id");
   assertPathSegment(article.clientId, "client id");
-  ["researchQueryId", "platform", "scenario", "templateId", "title", "content", "status", "createdAt"].forEach(function(field) {
+  const researchIds = normalizeResearchQueryIds(article);
+  ["platform", "scenario", "templateId", "title", "content", "status", "createdAt"].forEach(function(field) {
     assertNonEmptyString(article[field], field);
   });
   if (article.updatedAt !== undefined) assertNonEmptyString(article.updatedAt, "updatedAt");
@@ -43,7 +112,17 @@ function normalizeArticle(article) {
       throw storeError("ARTICLE_INVALID", "Article source is invalid");
     }
   });
-  return Object.assign({}, article, { source: Object.assign({}, article.source) });
+  const normalized = Object.assign({}, article, {
+    researchQueryIds: researchIds.ids,
+    source: Object.assign({}, article.source)
+  });
+  if (researchIds.legacy) {
+    assertNonEmptyString(article.researchQueryId, "researchQueryId");
+    Object.defineProperty(normalized, LEGACY_ARTICLE, { value: true, enumerable: false });
+  } else {
+    normalized.researchSnapshots = normalizeResearchSnapshots(article.researchSnapshots, researchIds.ids);
+  }
+  return normalized;
 }
 
 function markdownFor(article) {
@@ -243,7 +322,12 @@ function createArticleStore(workspaceRoot) {
     const normalized = normalizeArticle(article);
     const files = articlePaths(normalized.clientId, normalized.id, true);
     recoverArticle(files);
-    replaceArticleFiles(files, normalized);
+    const persisted = normalized[LEGACY_ARTICLE] ? Object.assign({}, normalized) : normalized;
+    if (normalized[LEGACY_ARTICLE]) {
+      delete persisted.researchQueryIds;
+      delete persisted.researchSnapshots;
+    }
+    replaceArticleFiles(files, persisted);
     return normalized;
   }
 

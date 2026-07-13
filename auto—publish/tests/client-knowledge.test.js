@@ -6,6 +6,21 @@ const path = require("path");
 
 const { listClients, getClient, loadClientKnowledge, readSearchQuery } = require("../src/content/client-knowledge");
 
+const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
+
+function createLinkOrSkip(t, target, link, type) {
+  try {
+    fs.symlinkSync(target, link, type);
+    return true;
+  } catch (error) {
+    if (LINK_UNAVAILABLE_CODES.has(error.code)) {
+      t.skip("links are unavailable: " + error.code);
+      return false;
+    }
+    throw error;
+  }
+}
+
 describe("client knowledge", function() {
   let root;
   let clientDirectory;
@@ -35,9 +50,53 @@ describe("client knowledge", function() {
     assert.deepStrictEqual(getClient(root, "client-1"), clients[0]);
   });
 
+  it("rejects null and non-string workspace roots with a boundary error", function() {
+    [null, 42, {}, []].forEach(function(workspaceRoot) {
+      assert.throws(function() { listClients(workspaceRoot); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.throws(function() { getClient(workspaceRoot, "client-1"); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+    });
+  });
+
+  it("treats a workspace named clients as a workspace root", function() {
+    const workspaceRoot = path.join(root, "clients");
+    const clientsRoot = path.join(workspaceRoot, "clients");
+    const nestedClientDirectory = path.join(clientsRoot, "client-1");
+    fs.mkdirSync(nestedClientDirectory, { recursive: true });
+    fs.writeFileSync(path.join(nestedClientDirectory, "client.json"), JSON.stringify({ id: "client-1", name: "Nested Client" }));
+    fs.writeFileSync(path.join(nestedClientDirectory, "search_query.txt"), "nested query");
+    fs.writeFileSync(path.join(nestedClientDirectory, "brand.md"), "# Nested Brand");
+
+    const clients = listClients(workspaceRoot);
+    assert.equal(clients.length, 1);
+    assert.equal(clients[0].id, "client-1");
+    assert.equal(clients[0].searchQuery, "nested query");
+    assert.deepStrictEqual(clients[0].knowledgeFiles.map(function(file) { return file.name; }), ["brand.md"]);
+    const boundary = { workspaceRoot: workspaceRoot, clientsRoot: clientsRoot };
+    assert.equal(readSearchQuery(nestedClientDirectory, boundary), "nested query");
+    assert.deepStrictEqual(loadClientKnowledge(nestedClientDirectory, boundary).map(function(file) { return file.name; }), ["brand.md"]);
+  });
+
   it("reads query and knowledge with explicit workspace context", function() {
     assert.equal(readSearchQuery(clientDirectory, root), "Shanghai hotels\nfamily travel ");
     assert.deepStrictEqual(loadClientKnowledge(clientDirectory, root).map(function(file) { return file.name; }), ["brand.md", "facts.json", "service.txt"]);
+  });
+
+  it("rejects an explicit boundary whose clients root is not workspace.clients", function() {
+    const otherClientDirectory = path.join(root, "other", "client");
+    fs.mkdirSync(otherClientDirectory, { recursive: true });
+    fs.writeFileSync(path.join(otherClientDirectory, "search_query.txt"), "other query");
+    const forgedBoundary = { workspaceRoot: root, clientsRoot: path.join(root, "other") };
+
+    assert.throws(function() {
+      readSearchQuery(otherClientDirectory, forgedBoundary);
+    }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
+    assert.throws(function() {
+      loadClientKnowledge(otherClientDirectory, forgedBoundary);
+    }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
   });
 
   it("uses directory defaults when client metadata is missing", function() {
@@ -68,10 +127,8 @@ describe("client knowledge", function() {
     const originalRealpathSync = fs.realpathSync;
     const realpathError = new Error("simulated client realpath failure");
     realpathError.code = "EIO";
-    let calls = 0;
-    fs.realpathSync = function() {
-      calls += 1;
-      if (calls === 3) throw realpathError;
+    fs.realpathSync = function(candidate) {
+      if (path.resolve(candidate) === path.resolve(clientDirectory)) throw realpathError;
       return originalRealpathSync.apply(this, arguments);
     };
 
@@ -94,6 +151,26 @@ describe("client knowledge", function() {
     assert.deepStrictEqual(listClients(missingClients), []);
   });
 
+  it("does not use the workspace as clients root when clients is missing", function() {
+    const outsideClient = path.join(root, "outside-client");
+    fs.rmSync(path.join(root, "clients"), { recursive: true, force: true });
+    fs.mkdirSync(outsideClient, { recursive: true });
+    fs.writeFileSync(path.join(outsideClient, "search_query.txt"), "outside");
+
+    assert.throws(function() {
+      readSearchQuery(outsideClient, root);
+    }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
+  });
+
+  it("rejects a clients root that is a regular file", function() {
+    const clientsRoot = path.join(root, "clients");
+    fs.rmSync(clientsRoot, { recursive: true, force: true });
+    fs.writeFileSync(clientsRoot, "not a directory");
+    assert.throws(function() { listClients(root); }, function(error) {
+      return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+    });
+  });
+
   it("rejects client metadata that is not a regular file", function() {
     const metadataPath = path.join(clientDirectory, "client.json");
     fs.unlinkSync(metadataPath);
@@ -110,12 +187,7 @@ describe("client knowledge", function() {
     fs.writeFileSync(external, JSON.stringify({ id: "outside", name: "Outside" }));
     fs.unlinkSync(linked);
     try {
-      try {
-        fs.symlinkSync(external, linked, "file");
-      } catch (error) {
-        t.skip("file links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, external, linked, "file")) return;
       assert.throws(function() { listClients(root); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
@@ -132,12 +204,12 @@ describe("client knowledge", function() {
     assert.throws(function() { loadClientKnowledge(fakeClient); }, function(error) { return error.code === "CLIENT_PATH_CONTEXT_REQUIRED"; });
   });
 
-  it("rejects a client symlink resolving outside workspace.clients", { skip: process.platform === "win32" }, function() {
+  it("rejects a client symlink resolving outside workspace.clients", function(t) {
     const outside = path.join(root, "outside-client");
     const linked = path.join(root, "clients", "linked-client");
     fs.mkdirSync(outside, { recursive: true });
     fs.writeFileSync(path.join(outside, "search_query.txt"), "outside");
-    fs.symlinkSync(outside, linked, "junction");
+    if (!createLinkOrSkip(t, outside, linked, process.platform === "win32" ? "junction" : "dir")) return;
     assert.throws(function() { readSearchQuery(linked, root); }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
     assert.throws(function() { loadClientKnowledge(linked, root); }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
   });
@@ -148,12 +220,7 @@ describe("client knowledge", function() {
     const externalClient = path.join(outsideClients, "travel-client");
     fs.rmSync(originalClients, { recursive: true, force: true });
     try {
-      try {
-        fs.symlinkSync(outsideClients, originalClients, process.platform === "win32" ? "junction" : "dir");
-      } catch (error) {
-        t.skip("directory links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, outsideClients, originalClients, process.platform === "win32" ? "junction" : "dir")) return;
       assert.throws(function() {
         listClients(root);
       }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
@@ -178,12 +245,7 @@ describe("client knowledge", function() {
     fs.writeFileSync(external, "outside");
     fs.unlinkSync(linked);
     try {
-      try {
-        fs.symlinkSync(external, linked, "file");
-      } catch (error) {
-        t.skip("file links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, external, linked, "file")) return;
       assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
@@ -206,6 +268,13 @@ describe("client knowledge", function() {
     assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) { return error.code === "SEARCH_QUERY_MISSING"; });
     fs.writeFileSync(path.join(clientDirectory, "search_query.txt"), " \n\t");
     assert.throws(function() { readSearchQuery(clientDirectory, root); }, function(error) { return error.code === "SEARCH_QUERY_MISSING"; });
+  });
+
+  it("reports a missing client before checking its search query", function() {
+    const missingClientDirectory = path.join(root, "clients", "missing-client");
+    assert.throws(function() { readSearchQuery(missingClientDirectory, root); }, function(error) {
+      return error.code === "CLIENT_NOT_FOUND";
+    });
   });
 
   it("rejects directories outside workspace.clients", function() {

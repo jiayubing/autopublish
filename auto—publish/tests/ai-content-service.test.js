@@ -71,4 +71,25 @@ describe("ai content service", function() {
     });
     assert.throws(function() { setup.service.getGeneratedArticle("client-1", ""); }, function(value) { return value.code === "CONTENT_INPUT_INVALID"; });
   });
+
+  it("passes multiple research ids to the generator in the requested order", async function() {
+    let generatedInput;
+    const setup = createService({
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function(input) { generatedInput = input; return setup.article; } };
+      }
+    });
+    await setup.service.generateArticle({ clientId: "client-1", researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1" });
+    assert.deepStrictEqual(generatedInput.researchQueryIds, ["query-1", "query-2"]);
+  });
+
+  it("rejects empty, duplicate, and oversized research id arrays at the service boundary", async function() {
+    const setup = createService();
+    const inputs = [[], ["query-1", "query-1"], Array.from({ length: 51 }, function(_, index) { return "query-" + index; })];
+    for (const researchQueryIds of inputs) {
+      await assert.rejects(setup.service.generateArticle({ clientId: "client-1", researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
+        return value.code === "CONTENT_INPUT_INVALID";
+      });
+    }
+  });
 });

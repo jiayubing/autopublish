@@ -9,12 +9,17 @@ function contentError(code, message) {
   return error;
 }
 
-function getClientsRoot(workspaceRootOrClients) {
-  const resolved = path.resolve(workspaceRootOrClients);
-  if (path.basename(resolved) === "clients") {
-    return { workspaceRoot: path.dirname(resolved), clientsRoot: resolved };
-  }
-  const workspace = getContentWorkspace(resolved);
+function pathOutOfBounds() {
+  return contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client path is outside workspace.clients");
+}
+
+function isMissingPathError(error) {
+  return error && (error.code === "ENOENT" || error.code === "ENOTDIR");
+}
+
+function getClientsRoot(workspaceRoot) {
+  if (typeof workspaceRoot !== "string" || !workspaceRoot) throw pathOutOfBounds();
+  const workspace = getContentWorkspace(workspaceRoot);
   return { workspaceRoot: workspace.root, clientsRoot: workspace.clients };
 }
 
@@ -23,164 +28,183 @@ function isPathWithin(parent, child) {
   return relative && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
 }
 
-function assertClientsRoot(workspaceRootOrClients) {
-  const clients = getClientsRoot(workspaceRootOrClients);
-  let realWorkspaceRoot;
-  let realClientsRoot;
+function resolveRealPath(filename, allowMissing) {
   try {
-    realWorkspaceRoot = fs.realpathSync(clients.workspaceRoot);
-    realClientsRoot = fs.realpathSync(clients.clientsRoot);
+    return fs.realpathSync(filename);
   } catch (error) {
-    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
-      throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-    }
-    return clients;
+    if (allowMissing && isMissingPathError(error)) return null;
+    throw pathOutOfBounds();
   }
-
-  if (!isPathWithin(realWorkspaceRoot, realClientsRoot)) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-  }
-  return clients;
 }
 
-function assertClientDirectory(clientDirectory, workspaceRootOrClients) {
-  if (typeof clientDirectory !== "string" || !clientDirectory) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+function assertRegularDirectory(directory, allowMissing) {
+  let stats;
+  try {
+    stats = fs.lstatSync(directory);
+  } catch (error) {
+    if (allowMissing && isMissingPathError(error)) return null;
+    throw pathOutOfBounds();
   }
 
-  if (!workspaceRootOrClients) {
+  const isLink = stats.isSymbolicLink();
+  if (!stats.isDirectory() && !isLink) throw pathOutOfBounds();
+
+  const realDirectory = resolveRealPath(directory, allowMissing && !isLink);
+  if (!realDirectory) return null;
+  let realStats;
+  try {
+    realStats = fs.statSync(realDirectory);
+  } catch (error) {
+    if (allowMissing && !isLink && isMissingPathError(error)) return null;
+    throw pathOutOfBounds();
+  }
+  if (!realStats.isDirectory()) throw pathOutOfBounds();
+  return realDirectory;
+}
+
+function assertRegularFile(filename, realDirectory, allowMissing) {
+  let stats;
+  try {
+    stats = fs.lstatSync(filename);
+  } catch (error) {
+    if (allowMissing && isMissingPathError(error)) return null;
+    throw pathOutOfBounds();
+  }
+  if (stats.isSymbolicLink() || !stats.isFile()) throw pathOutOfBounds();
+
+  const realFilename = resolveRealPath(filename, allowMissing);
+  if (!realFilename) return null;
+  if (!realDirectory || !isPathWithin(realDirectory, realFilename)) throw pathOutOfBounds();
+  return realFilename;
+}
+
+function assertClientsRoot(workspaceRootOrBoundary) {
+  const clients = workspaceRootOrBoundary && workspaceRootOrBoundary.clientsRoot
+    ? workspaceRootOrBoundary
+    : getClientsRoot(workspaceRootOrBoundary);
+  if (typeof clients.workspaceRoot !== "string" || !clients.workspaceRoot ||
+      typeof clients.clientsRoot !== "string" || !clients.clientsRoot ||
+      path.resolve(clients.clientsRoot) !== path.resolve(clients.workspaceRoot, "clients")) {
+    throw pathOutOfBounds();
+  }
+  const realWorkspaceRoot = assertRegularDirectory(clients.workspaceRoot, true);
+  const realClientsRoot = assertRegularDirectory(clients.clientsRoot, true);
+  if (realWorkspaceRoot && realClientsRoot && !isPathWithin(realWorkspaceRoot, realClientsRoot)) {
+    throw pathOutOfBounds();
+  }
+  return {
+    workspaceRoot: clients.workspaceRoot,
+    clientsRoot: clients.clientsRoot,
+    realWorkspaceRoot: realWorkspaceRoot,
+    realClientsRoot: realClientsRoot
+  };
+}
+
+function resolveClientContext(workspaceRoot) {
+  if (typeof workspaceRoot !== "string" || !workspaceRoot) throw pathOutOfBounds();
+  return assertClientsRoot(getClientsRoot(workspaceRoot));
+}
+
+function assertClientDirectory(clientDirectory, workspaceRootOrBoundary) {
+  if (typeof clientDirectory !== "string" || !clientDirectory) throw pathOutOfBounds();
+  if (!workspaceRootOrBoundary) {
     throw contentError("CLIENT_PATH_CONTEXT_REQUIRED", "Workspace context is required for client directory access");
   }
 
+  const clients = workspaceRootOrBoundary && workspaceRootOrBoundary.clientsRoot
+    ? assertClientsRoot(workspaceRootOrBoundary)
+    : resolveClientContext(workspaceRootOrBoundary);
   const resolved = path.resolve(clientDirectory);
-  const clients = assertClientsRoot(workspaceRootOrClients);
-  const clientsRoot = clients.clientsRoot;
+  if (!isPathWithin(clients.clientsRoot, resolved)) throw pathOutOfBounds();
 
-  if (!isPathWithin(clientsRoot, resolved)) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+  const realClientDirectory = assertRegularDirectory(resolved, true);
+  if (!realClientDirectory) {
+    return {
+      workspaceRoot: clients.workspaceRoot,
+      clientsRoot: clients.clientsRoot,
+      realWorkspaceRoot: clients.realWorkspaceRoot,
+      realClientsRoot: clients.realClientsRoot,
+      resolved: resolved,
+      realClientDirectory: null
+    };
   }
-
-  let realWorkspaceRoot;
-  let realClientsRoot;
-  let realClientDirectory;
-  try {
-    realWorkspaceRoot = fs.realpathSync(clients.workspaceRoot);
-    realClientsRoot = fs.realpathSync(clientsRoot);
-    realClientDirectory = fs.realpathSync(resolved);
-  } catch (error) {
-    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
-      throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-    }
-    try {
-      realClientsRoot = fs.realpathSync(clientsRoot);
-    } catch (fallbackError) {
-      if (fallbackError.code !== "ENOENT" && fallbackError.code !== "ENOTDIR") {
-        throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-      }
-      throw fallbackError;
-    }
-    realClientDirectory = path.join(realClientsRoot, path.basename(resolved));
+  if (!clients.realWorkspaceRoot || !clients.realClientsRoot ||
+      !isPathWithin(clients.realWorkspaceRoot, clients.realClientsRoot) ||
+      !isPathWithin(clients.realClientsRoot, realClientDirectory)) {
+    throw pathOutOfBounds();
   }
-
-  if (!isPathWithin(realWorkspaceRoot, realClientsRoot) || !isPathWithin(realClientsRoot, realClientDirectory)) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-  }
-  return resolved;
+  return {
+    workspaceRoot: clients.workspaceRoot,
+    clientsRoot: clients.clientsRoot,
+    realWorkspaceRoot: clients.realWorkspaceRoot,
+    realClientsRoot: clients.realClientsRoot,
+    resolved: resolved,
+    realClientDirectory: realClientDirectory
+  };
 }
 
-function readClientMetadata(directory) {
-  const metadataPath = path.join(directory, "client.json");
+function readClientMetadata(clientBoundary) {
+  const directory = clientBoundary.resolved;
   const defaults = { id: path.basename(directory), name: path.basename(directory) };
-  let metadataStats;
+  const metadataPath = path.join(directory, "client.json");
+  const realMetadataPath = assertRegularFile(metadataPath, clientBoundary.realClientDirectory, true);
+  if (!realMetadataPath) return defaults;
+
+  let source;
   try {
-    metadataStats = fs.lstatSync(metadataPath);
+    source = fs.readFileSync(metadataPath, "utf8");
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return defaults;
-    throw error;
+    if (isMissingPathError(error)) return defaults;
+    throw pathOutOfBounds();
   }
 
-  if (metadataStats.isSymbolicLink() || !metadataStats.isFile()) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client metadata is outside the client directory");
-  }
-
-  let realDirectory;
-  let realMetadataPath;
+  let metadata;
   try {
-    realDirectory = fs.realpathSync(directory);
-    realMetadataPath = fs.realpathSync(metadataPath);
-  } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return defaults;
-    throw error;
-  }
-
-  if (!isPathWithin(realDirectory, realMetadataPath)) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client metadata is outside the client directory");
-  }
-
-  try {
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
-    return {
-      id: typeof metadata.id === "string" && metadata.id ? metadata.id : path.basename(directory),
-      name: typeof metadata.name === "string" && metadata.name ? metadata.name : path.basename(directory)
-    };
+    metadata = JSON.parse(source);
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) throw new Error("Client metadata must be an object");
   } catch (error) {
     const invalid = contentError("CLIENT_INVALID_JSON", "Invalid client metadata");
     invalid.cause = error;
     throw invalid;
   }
+  return {
+    id: typeof metadata.id === "string" && metadata.id ? metadata.id : path.basename(directory),
+    name: typeof metadata.name === "string" && metadata.name ? metadata.name : path.basename(directory)
+  };
 }
 
-function readSearchQuery(clientDirectory, workspaceRootOrClients) {
-  clientDirectory = assertClientDirectory(clientDirectory, workspaceRootOrClients);
-  const filename = path.join(clientDirectory, "search_query.txt");
+function readSearchQueryWithinBoundary(clientBoundary) {
+  if (!clientBoundary.realClientDirectory) throw contentError("CLIENT_NOT_FOUND", "Client directory is missing");
 
-  let fileStats;
+  const filename = path.join(clientBoundary.resolved, "search_query.txt");
+  const realFilename = assertRegularFile(filename, clientBoundary.realClientDirectory, true);
+  if (!realFilename) throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
+
+  let query;
   try {
-    fileStats = fs.lstatSync(filename);
+    query = fs.readFileSync(filename, "utf8");
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
-      throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
-    }
-    throw error;
+    if (isMissingPathError(error)) throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
+    throw pathOutOfBounds();
   }
-  if (!fileStats.isFile()) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-  }
-
-  let realClientDirectory;
-  let realFilename;
-  try {
-    realClientDirectory = fs.realpathSync(clientDirectory);
-    realFilename = fs.realpathSync(filename);
-  } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
-      throw contentError("SEARCH_QUERY_MISSING", "Search query is missing");
-    }
-    throw error;
-  }
-
-  const relative = path.relative(realClientDirectory, realFilename);
-  if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
-    throw contentError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
-  }
-
-  const query = fs.readFileSync(filename, "utf8")
-    .replace(/^\uFEFF/, "")
-    .replace(/\r?\n$/, "");
-  if (!query.trim()) {
-    throw contentError("SEARCH_QUERY_MISSING", "Search query is empty");
-  }
+  query = query.replace(/^\uFEFF/, "").replace(/\r?\n$/, "");
+  if (!query.trim()) throw contentError("SEARCH_QUERY_MISSING", "Search query is empty");
   return query;
 }
 
-function loadClientKnowledge(clientDirectory, workspaceRootOrClients) {
-  clientDirectory = assertClientDirectory(clientDirectory, workspaceRootOrClients);
-  if (!fs.existsSync(clientDirectory) || !fs.statSync(clientDirectory).isDirectory()) {
-    throw contentError("CLIENT_NOT_FOUND", "Client directory is missing");
+function loadClientKnowledgeWithinBoundary(clientBoundary) {
+  if (!clientBoundary.realClientDirectory) throw contentError("CLIENT_NOT_FOUND", "Client directory is missing");
+
+  let entries;
+  try {
+    entries = fs.readdirSync(clientBoundary.resolved, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") throw contentError("CLIENT_NOT_FOUND", "Client directory is missing");
+    throw pathOutOfBounds();
   }
 
   const allowedExtensions = new Set([".txt", ".md", ".markdown", ".json"]);
-  return fs.readdirSync(clientDirectory, { withFileTypes: true })
+  return entries
     .filter(function(entry) {
       if (!entry.isFile() || entry.name.startsWith(".")) return false;
       if (entry.name === "search_query.txt" || entry.name === "client.json" || entry.name === "questions.json") return false;
@@ -188,13 +212,24 @@ function loadClientKnowledge(clientDirectory, workspaceRootOrClients) {
     })
     .sort(function(a, b) { return a.name.localeCompare(b.name); })
     .map(function(entry) {
-      const filePath = path.join(clientDirectory, entry.name);
-      return {
-        name: entry.name,
-        path: filePath,
-        content: fs.readFileSync(filePath, "utf8")
-      };
+      const filePath = path.join(clientBoundary.resolved, entry.name);
+      assertRegularFile(filePath, clientBoundary.realClientDirectory, false);
+      let content;
+      try {
+        content = fs.readFileSync(filePath, "utf8");
+      } catch (error) {
+        throw pathOutOfBounds();
+      }
+      return { name: entry.name, path: filePath, content: content };
     });
+}
+
+function readSearchQuery(clientDirectory, workspaceRootOrBoundary) {
+  return readSearchQueryWithinBoundary(assertClientDirectory(clientDirectory, workspaceRootOrBoundary));
+}
+
+function loadClientKnowledge(clientDirectory, workspaceRootOrBoundary) {
+  return loadClientKnowledgeWithinBoundary(assertClientDirectory(clientDirectory, workspaceRootOrBoundary));
 }
 
 function getClient(workspaceRoot, clientId) {
@@ -206,22 +241,36 @@ function getClient(workspaceRoot, clientId) {
 }
 
 function listClients(workspaceRoot) {
-  const workspace = getContentWorkspace(workspaceRoot);
-  assertClientsRoot(workspace.root);
-  if (!fs.existsSync(workspace.clients)) return [];
+  const clients = resolveClientContext(workspaceRoot);
+  const workspace = { root: clients.workspaceRoot, clients: clients.clientsRoot };
+  if (!clients.realClientsRoot) return [];
 
-  return fs.readdirSync(workspace.clients, { withFileTypes: true })
+  let entries;
+  try {
+    entries = fs.readdirSync(clients.clientsRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw pathOutOfBounds();
+  }
+
+  return entries
     .filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); })
     .sort(function(a, b) { return a.name.localeCompare(b.name); })
     .map(function(entry) {
-      const directory = getClientWorkspace(workspace, entry.name);
-      const metadata = readClientMetadata(directory);
+      let directory;
+      try {
+        directory = getClientWorkspace(workspace, entry.name);
+      } catch (error) {
+        throw pathOutOfBounds();
+      }
+      const clientBoundary = assertClientDirectory(directory, clients);
+      const metadata = readClientMetadata(clientBoundary);
       return {
         id: metadata.id,
         name: metadata.name,
         directory: directory,
-        searchQuery: readSearchQuery(directory, workspace.clients),
-        knowledgeFiles: loadClientKnowledge(directory, workspace.clients)
+        searchQuery: readSearchQueryWithinBoundary(clientBoundary),
+        knowledgeFiles: loadClientKnowledgeWithinBoundary(clientBoundary)
       };
     });
 }

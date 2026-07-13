@@ -1,0 +1,46 @@
+{
+  "url": "https://www.doubao.com/chat/current-fixture",
+  "inputAvailable": true,
+  "generating": false,
+  "challenge": false,
+  "errorText": "",
+  "messageCandidates": [
+    {
+      "messageId": "message-user-001",
+      "className": "flex items-start justify-end gap-2",
+      "ancestorClassNames": ["message-row", "conversation-list"],
+      "text": "当前问题"
+    },
+    {
+      "messageId": "message-assistant-001",
+      "className": "flex items-start gap-2",
+      "ancestorClassNames": ["message-row", "conversation-list"],
+      "text": "当前回答正文足够长，可以保存。",
+      "references": [
+        {
+          "title": "关联资料面板",
+          "url": "https://example.com/associated-panel",
+          "snippet": "脱敏资料摘要"
+        }
+      ]
+    },
+    {
+      "messageId": "message-explicit-001",
+      "role": "assistant",
+      "className": "justify-end",
+      "ancestorClassNames": ["message-row"],
+      "text": "显式角色优先于布局类名。"
+    },
+    {
+      "className": "justify-end decorative-wrapper",
+      "ancestorClassNames": ["message-row"],
+      "text": "这不是消息，不应保存。"
+    },
+    {
+      "messageId": "message-empty-001",
+      "className": "message-row",
+      "ancestorClassNames": [],
+      "text": "   "
+    }
+  ]
+}

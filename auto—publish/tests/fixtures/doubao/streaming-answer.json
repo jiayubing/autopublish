@@ -1,0 +1,11 @@
+{
+  "url": "https://www.doubao.com/chat/fixture",
+  "inputAvailable": true,
+  "generating": true,
+  "challenge": false,
+  "errorText": "",
+  "messages": [
+    { "role": "user", "text": "测试问题" },
+    { "role": "assistant", "text": "这是仍在生成的回答" }
+  ]
+}

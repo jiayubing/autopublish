@@ -7,3 +7,10 @@
 }
 
 body { background-color: #f6f7f4; }
+
+.content-workbench { min-width: 0; }
+.content-panel { min-width: 0; }
+.collection-task-bar { width: 100%; }
+.task-icon-button { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 6px; color: #475569; }
+.task-icon-button:hover { background: #f1f5f9; }
+.task-icon-button:disabled { cursor: not-allowed; opacity: .4; }

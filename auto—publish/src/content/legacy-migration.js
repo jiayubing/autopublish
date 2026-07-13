@@ -52,6 +52,19 @@ function sameRecord(left, right) {
   });
 }
 
+function normalizeLegacyArticleForComparison(existing, expected) {
+  if (existing && typeof existing === "object" && expected && typeof expected === "object" &&
+      Object.prototype.hasOwnProperty.call(existing, "researchQueryIds") &&
+      !Object.prototype.hasOwnProperty.call(expected, "researchQueryIds") &&
+      Array.isArray(existing.researchQueryIds) && existing.researchQueryIds.length === 1 &&
+      existing.researchQueryIds[0] === existing.researchQueryId) {
+    const normalized = Object.assign({}, existing);
+    delete normalized.researchQueryIds;
+    return normalized;
+  }
+  return existing;
+}
+
 function createLegacyMigrator(options) {
   if (!options || typeof options.sourceRoot !== "string" || !options.sourceRoot.trim() || typeof options.workspaceRoot !== "string" || !options.workspaceRoot.trim()) {
     throw migrationError("LEGACY_MIGRATION_CONFIG_INVALID", "sourceRoot and workspaceRoot are required");
@@ -290,7 +303,7 @@ function createLegacyMigrator(options) {
     if (!fs.existsSync(json) && !fs.existsSync(markdown)) return false;
     try {
       const existing = articleStore.getArticle(item.client.id, item.record.id);
-      if (!sameRecord(existing, item.record)) planWarning(item, "article");
+      if (!sameRecord(normalizeLegacyArticleForComparison(existing, item.record), item.record)) planWarning(item, "article");
       return true;
     } catch (error) {
       throw error;

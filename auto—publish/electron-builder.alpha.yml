@@ -39,14 +39,13 @@ files:
   - "!tmp/**"
   - "!work/**"
   - "!.playwright-cli/**"
-  # Keep test articles out of the package
-  - "!input/media/**"
-  - "!input/lieju/**"
-  - "!input/toutiao/**"
-  - "!input/hepan/**"
+  - "!browser/**"
+  - "!research/**"
+  - "!clients/**"
+  - "!generated/**"
+  - "!tests/fixtures/**"
   # Repo metadata
   - "!docs/**"
-  - "!tests/**"
   - "!.git/**"
   - "!release-alpha/**"
 

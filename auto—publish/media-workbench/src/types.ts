@@ -88,10 +88,17 @@ export type Order = SubmissionOrder;
 export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'platforms' | 'content';
 
 export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: Array<{ name: string; content: string }>; }
-export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; createdAt?: string; isAnswerComplete?: boolean; }
+export interface ContentQuestion { id: string; text: string; enabled: boolean; createdAt: string; updatedAt: string; }
+export type DoubaoLoginStatus = 'unknown' | 'checking' | 'login_required' | 'authenticated' | 'session_error';
+export type DoubaoTaskStatus = 'pending' | 'waiting_login' | 'running' | 'waiting_interval' | 'paused' | 'succeeded' | 'failed' | 'cancelled';
+export interface DoubaoTask { id: string; clientId: string; questionId: string; status: DoubaoTaskStatus; answerLength: number; referenceCount: number; error?: { code: string; message: string } | null; }
+export interface DoubaoQueueState { status: 'idle' | 'running' | 'paused' | 'stopping' | 'completed'; currentTaskId: string | null; completed: number; total: number; waitRemainingMs: number; tasks: DoubaoTask[]; }
+export interface DoubaoLoginState { status: DoubaoLoginStatus; errorText?: string; }
+export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; collectionMethod: 'automatic' | 'manual' | 'legacy'; collectedAt?: string; updatedAt?: string; createdAt?: string; isAnswerComplete?: boolean; }
 export interface ContentTemplate { id: string; platform: string; scenario: string; name: string; body: string; }
+export interface ResearchSnapshot { questionId: string; question?: string; answerText: string; references: Array<{ title: string; url: string; snippet?: string }>; collectedAt?: string; collectionMethod: 'automatic' | 'manual' | 'legacy'; }
 export interface GeneratedContentArticle {
-  id: string; clientId: string; researchQueryId: string; platform: string; scenario: string; templateId: string;
+  id: string; clientId: string; researchQueryIds: string[]; researchQueryId?: string; researchSnapshots?: ResearchSnapshot[]; platform: string; scenario: string; templateId: string;
   title: string; content: string; status: string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string;
 }
 

@@ -8,6 +8,9 @@ let configureRuntimeEnvironment = null;
 let subscribe = null;
 let registerIpc = null;
 let createDesktopTaskService = null;
+let doubaoCollectionService = null;
+let unsubscribeDoubaoQueue = null;
+let isQuitting = false;
 const EXTERNAL_LINK_HOSTS = new Set(["www.toutiao.com", "mp.weixin.qq.com", "www.lieju.com"]);
 
 function isAllowedExternalUrl(value) {
@@ -69,6 +72,9 @@ app.whenReady().then(function() {
     sendToRenderer: sendToRenderer
   });
 
+  const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
+  doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot });
+
   registerIpc = require("./ipc/register").registerIpc;
   registerIpc({
     ipcMain: ipcMain,
@@ -76,7 +82,12 @@ app.whenReady().then(function() {
     sendToRenderer: sendToRenderer,
     rootDir: runtime.workspaceRoot,
     appRoot: runtime.appRoot,
-    paths: runtime.paths
+    paths: runtime.paths,
+    doubaoCollectionService: doubaoCollectionService
+  });
+
+  unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) {
+    sendToRenderer("content:doubao-queue-state", state);
   });
 
   subscribe = require("../src/core/logger").subscribe;
@@ -91,6 +102,14 @@ app.on("window-all-closed", function() {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", function() {
+app.on("before-quit", async function(event) {
+  if (isQuitting) return;
+  isQuitting = true;
+  event.preventDefault();
+  if (unsubscribeDoubaoQueue) { unsubscribeDoubaoQueue(); unsubscribeDoubaoQueue = null; }
   if (unsubscribeLogs) { unsubscribeLogs(); unsubscribeLogs = null; }
+  const service = doubaoCollectionService;
+  doubaoCollectionService = null;
+  try { if (service) await service.dispose(); } catch (_) {}
+  app.quit();
 });

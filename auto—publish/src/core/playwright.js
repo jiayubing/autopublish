@@ -1,6 +1,6 @@
 ﻿const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const { execSync, execFile, execFileSync } = require("child_process");
 
 const { DIRS, PW, PLAYWRIGHT_CLI_JS } = require("../../scripts/config");
 const { log } = require("./logger");
@@ -50,7 +50,7 @@ function pwRun(args, opts) {
   var timeout = options.timeout || 30000;
   var sessionCtx = options.session || null;
   log("PW: " + args.substring(0, 120), "DEBUG");
-  return execSync(pwCmd(args, sessionCtx), {
+  return (options.execSync || execSync)(pwCmd(args, sessionCtx), {
     encoding: "utf-8",
     timeout: timeout,
     env: pwEnv(sessionCtx)
@@ -81,10 +81,161 @@ function runCode(jsCode, opts) {
   var wrapped = "async page => {\n" + jsCode + "\n}";
   fs.writeFileSync(filePath, wrapped, "utf-8");
   try {
-    return extractResult(pwRun("run-code --filename=" + quoteArg(filePath), { timeout: options.timeout || 60000, session: sessionCtx }));
+    return extractResult(pwRun("run-code --filename=" + quoteArg(filePath), {
+      timeout: options.timeout || 60000,
+      session: sessionCtx,
+      execSync: options.execSync
+    }));
   } finally {
     try { fs.unlinkSync(filePath); } catch (e) {}
   }
 }
 
-module.exports = { pwSessionConfig, pwEnv, pwCmd, pwRun, runCode };
+function execFileAsync(file, args, options, runner) {
+  return new Promise(function(resolve, reject) {
+    (runner || execFile)(file, args, options, function(error, stdout, stderr) {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+        return;
+      }
+      resolve({ stdout: stdout, stderr: stderr });
+    });
+  });
+}
+
+function mapRuntimeError(error) {
+  var source = error instanceof Error ? error : new Error(String(error || "Playwright command failed"));
+  var timedOut = source.code === "ETIMEDOUT" || (source.killed && (source.signal === "SIGTERM" || source.signal === "SIGKILL"));
+  var stdout = source.stdout || "";
+  var stderr = source.stderr || "";
+  var diagnostics = String(stdout) + "\n" + String(stderr);
+  var sessionNotOpen = !timedOut && (
+    /browser\s+['"][^'"]+['"]\s+is\s+not\s+open/i.test(diagnostics) ||
+    /please\s+run\s+open\s+first/i.test(diagnostics)
+  );
+  var mapped = new Error(
+    timedOut ? "Playwright command timed out" :
+      sessionNotOpen ? "Playwright session is not open" : "Playwright command failed"
+  );
+  mapped.code = timedOut ? "PLAYWRIGHT_TIMEOUT" :
+    sessionNotOpen ? "PLAYWRIGHT_SESSION_NOT_OPEN" : "PLAYWRIGHT_EXEC_FAILED";
+  Object.defineProperty(mapped, "cause", {
+    value: source,
+    enumerable: false,
+    writable: true,
+    configurable: true
+  });
+  mapped.originalCode = source.code;
+  Object.defineProperty(mapped, "stdout", {
+    value: stdout,
+    enumerable: false,
+    writable: true,
+    configurable: true
+  });
+  Object.defineProperty(mapped, "stderr", {
+    value: stderr,
+    enumerable: false,
+    writable: true,
+    configurable: true
+  });
+  return mapped;
+}
+
+function windowsNpmCliEntrypoint(cli) {
+  if (process.platform !== "win32" || !cli) return null;
+  var candidates = [cli];
+  if (!path.isAbsolute(cli) && !path.win32.isAbsolute(cli) && !cli.includes("\\") && !cli.includes("/")) {
+    try {
+      var located = execFileSync("where.exe", [cli], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      candidates = candidates.concat(String(located).split(/\r?\n/).map(function(value) { return value.trim(); }).filter(Boolean));
+    } catch (_) {}
+  }
+  for (var i = 0; i < candidates.length; i += 1) {
+    var candidate = candidates[i];
+    if (/\.js$/i.test(candidate)) return fs.existsSync(candidate) ? candidate : null;
+    if (!/\.(?:cmd|bat)$/i.test(candidate) && path.extname(candidate)) continue;
+    var entrypoint = path.join(path.dirname(candidate), "node_modules", "@playwright", "cli", "playwright-cli.js");
+    if (fs.existsSync(entrypoint)) return entrypoint;
+  }
+  return null;
+}
+
+function playwrightExecutable(cliOverride) {
+  var cli = String(cliOverride || PLAYWRIGHT_CLI_JS || "");
+  if (/\.js$/i.test(cli)) return { file: nodeExecPath(), prefix: [cli] };
+  var windowsEntrypoint = windowsNpmCliEntrypoint(cli);
+  if (windowsEntrypoint) return { file: nodeExecPath(), prefix: [windowsEntrypoint] };
+  return { file: cli || "playwright-cli", prefix: [] };
+}
+
+function runtimeArgs(sessionCtx, commandArgs) {
+  var ctx = sessionCtx || pwSessionConfig();
+  return ["-s=" + ctx.session].concat(commandArgs);
+}
+
+function createPlaywrightRuntime(options) {
+  var opts = options || {};
+  var sessionCtx = opts.session || pwSessionConfig();
+  var executable = playwrightExecutable(opts.playwrightCli);
+  var execFileRunner = opts.execFile || execFile;
+  var timeout = opts.timeout || 60000;
+  var tempDir = opts.tempDir || DIRS.tmpDir;
+
+  async function invoke(commandArgs, commandTimeout) {
+    try {
+      var result = await execFileAsync(
+        executable.file,
+        executable.prefix.concat(runtimeArgs(sessionCtx, commandArgs)),
+        { encoding: "utf8", timeout: commandTimeout || timeout, env: pwEnv(sessionCtx) },
+        execFileRunner
+      );
+      return extractResult(result.stdout);
+    } catch (error) {
+      throw mapRuntimeError(error);
+    }
+  }
+
+  async function open(input) {
+    var value = input || {};
+    var url = String(value.url || "");
+    if (!url) throw new Error("Playwright open requires a URL");
+    var args = ["open", url];
+    if (value.browser) args.push("--browser=" + String(value.browser));
+    if (value.headed !== false) args.push("--headed");
+    if (value.persistent !== false) args.push("--persistent");
+    if (sessionCtx.profileDir) args.push("--profile=" + sessionCtx.profileDir);
+    return invoke(args, value.timeoutMs || value.timeout);
+  }
+
+  async function evaluate(input) {
+    var value = input || {};
+    var script = String(value.script || "");
+    if (!script) throw new Error("Playwright evaluate requires a script");
+    fs.mkdirSync(tempDir, { recursive: true });
+    var filePath = path.join(tempDir, "runtime-evaluate-" + Date.now() + "-" + Math.random().toString(16).slice(2) + ".js");
+    fs.writeFileSync(filePath, "async page => {\n" + script + "\n}", "utf8");
+    try {
+      return await invoke(["run-code", "--filename=" + filePath], value.timeoutMs || value.timeout);
+    } finally {
+      try { fs.unlinkSync(filePath); } catch (_) {}
+    }
+  }
+
+  async function screenshot(input) {
+    var value = input || {};
+    var filePath = String(value.path || "");
+    if (!filePath) throw new Error("Playwright screenshot requires a path");
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    return invoke(["screenshot", "--filename=" + filePath], value.timeoutMs || value.timeout);
+  }
+
+  async function close(input) {
+    return invoke(["close"], input && (input.timeoutMs || input.timeout));
+  }
+
+  return { open: open, evaluate: evaluate, screenshot: screenshot, close: close };
+}
+
+module.exports = { pwSessionConfig, pwEnv, pwCmd, pwRun, runCode, createPlaywrightRuntime };

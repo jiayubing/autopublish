@@ -1,0 +1,17 @@
+{
+  "url": "https://www.doubao.com/chat/fixture",
+  "inputAvailable": true,
+  "generating": false,
+  "challenge": false,
+  "errorText": "",
+  "messages": [
+    { "role": "user", "text": "测试问题" },
+    {
+      "role": "assistant",
+      "text": "这是用于自动化测试的完整回答正文。",
+      "references": [
+        { "title": "公开资料", "url": "https://example.com/source", "snippet": "摘要" }
+      ]
+    }
+  ]
+}

@@ -71,6 +71,9 @@ function createQuestionStore(workspaceRoot, options) {
     const outOfBounds = function() {
       throw questionError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
     };
+    const notFound = function() {
+      throw questionError("CLIENT_NOT_FOUND", "Client directory was not found");
+    };
 
     let realWorkspaceRoot;
     try {
@@ -84,12 +87,7 @@ function createQuestionStore(workspaceRoot, options) {
       clientsStats = fs.lstatSync(clientsRoot);
     } catch (error) {
       if (error.code !== "ENOENT" && error.code !== "ENOTDIR") outOfBounds();
-      try {
-        fs.mkdirSync(clientsRoot, { recursive: true });
-        clientsStats = fs.lstatSync(clientsRoot);
-      } catch (mkdirError) {
-        outOfBounds();
-      }
+      notFound();
     }
     if (!clientsStats || (!clientsStats.isDirectory() && !clientsStats.isSymbolicLink())) outOfBounds();
 
@@ -113,7 +111,7 @@ function createQuestionStore(workspaceRoot, options) {
       fs.lstatSync(resolved);
     } catch (error) {
       if (error.code !== "ENOENT" && error.code !== "ENOTDIR") outOfBounds();
-      return resolved;
+      notFound();
     }
 
     let realClientDirectory;
@@ -188,7 +186,6 @@ function createQuestionStore(workspaceRoot, options) {
 
   function writeAtomic(filename, document) {
     const temporary = filename + ".tmp-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-    fs.mkdirSync(path.dirname(filename), { recursive: true });
     let operationError;
     try {
       fs.writeFileSync(temporary, JSON.stringify(document, null, 2) + "\n", "utf8");

@@ -28,14 +28,45 @@ describe("content workbench regression", function() {
     assert.equal(app.includes("ContentWorkbench"), true);
     assert.equal(app.includes("currentView === 'content'"), true);
     assert.equal(sidebar.includes("id: 'content' as ViewMode"), true);
-    assert.equal(workbench.includes("listContentResearch"), true);
-    assert.equal(workbench.includes("generateContentArticle"), true);
-    assert.equal(workbench.includes("saveContentArticle"), true);
+    assert.equal(workbench.includes("QuestionCollectionView"), true);
+    assert.equal(workbench.includes("ArticleGenerationView"), true);
+    assert.equal(workbench.includes("GeneratedArticlesView"), true);
   });
 
   it("keeps existing renderer IPC errors readable after structured responses", function() {
     const api = read("media-workbench/src/electron-api.ts");
     assert.equal(api.includes("function getIpcError"), true);
     assert.equal(api.includes("new Error(result.error ||"), false);
+  });
+
+  it("defines the three content workbench tabs and shared refresh boundary", function() {
+    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
+    ["questions", "generate", "history", "QuestionCollectionView", "ArticleGenerationView", "GeneratedArticlesView"].forEach(function(value) {
+      assert.equal(workbench.includes(value), true, "missing " + value);
+    });
+    assert.match(workbench, /onRefresh|refresh/);
+  });
+
+  it("exposes the collection API and multi-research generation contract", function() {
+    const api = read("media-workbench/src/electron-api.ts");
+    [
+      "listContentQuestions",
+      "createContentQuestion",
+      "updateContentQuestion",
+      "deleteContentQuestion",
+      "getDoubaoLoginStatus",
+      "openDoubaoLogin",
+      "collectDoubaoQuestion",
+      "startDoubaoBatch",
+      "pauseDoubaoBatch",
+      "resumeDoubaoBatch",
+      "stopDoubaoBatch",
+      "retryFailedDoubao",
+      "getDoubaoQueueState",
+      "subscribeDoubaoQueue",
+      "saveManualResearch",
+      "researchQueryIds: string[]"
+    ].forEach(function(value) { assert.equal(api.includes(value), true, "missing " + value); });
+    assert.match(api, /subscribeDoubaoQueue[\s\S]*\(\) => void/);
   });
 });

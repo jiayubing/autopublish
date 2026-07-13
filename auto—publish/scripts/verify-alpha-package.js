@@ -33,6 +33,50 @@ const REQUIRED_DIRS = [
   "node_modules",
 ];
 
+function relativePath(appDir, filename) {
+  return path.relative(appDir, filename).split(path.sep).join("/");
+}
+
+function findPrivateEntries(appDir) {
+  var found = [];
+
+  function visit(current) {
+    fs.readdirSync(current, { withFileTypes: true }).forEach(function(entry) {
+      var entryPath = path.join(current, entry.name);
+      var relative = relativePath(appDir, entryPath);
+      var segments = relative.split("/");
+      var lowerSegments = segments.map(function(segment) { return segment.toLowerCase(); });
+      var lowerName = entry.name.toLowerCase();
+
+      // Production dependencies can contain legitimate fixtures and data-like
+      // filenames. They are already required by the package and are not app
+      // workspace content, so do not inspect any node_modules subtree.
+      if (entry.isDirectory() && lowerName === "node_modules") return;
+
+      if (lowerName === ".env" || lowerName === "questions.json") {
+        found.push(relative);
+      } else if (lowerName.endsWith(".json") && lowerSegments.slice(0, -1).includes("research")) {
+        found.push(relative);
+      } else if (lowerSegments.length >= 2 && lowerSegments[lowerSegments.length - 2] === "browser" &&
+                 lowerName === "doubao") {
+        found.push(relative);
+      } else if (entry.isDirectory() && lowerSegments.slice(-4).join("/") === "work/playwright-cli/profiles/doubao") {
+        found.push(relative);
+      } else if (lowerName === "doubao-diagnostics") {
+        found.push(relative);
+      } else if (lowerSegments.length >= 2 && lowerSegments[lowerSegments.length - 2] === "tests" &&
+                 lowerName === "fixtures") {
+        found.push(relative);
+      }
+
+      if (entry.isDirectory()) visit(entryPath);
+    });
+  }
+
+  visit(appDir);
+  return found;
+}
+
 function verifyPackage(appDir) {
   if (!appDir) {
     console.error("Usage: node scripts/verify-alpha-package.js <app-dir>");
@@ -63,7 +107,6 @@ function verifyPackage(appDir) {
 
   // Also check that private data is NOT bundled
   var shouldNotExist = [
-    ".env",
     "input/media",
     "data/media-resources.json",
     "data/media-drafts.json",
@@ -76,6 +119,10 @@ function verifyPackage(appDir) {
       missing.push("SHOULD_NOT_EXIST: " + shouldNotExist[k]);
     }
   }
+
+  findPrivateEntries(appDir).forEach(function(entry) {
+    missing.push("SHOULD_NOT_EXIST: " + entry);
+  });
 
   if (missing.length > 0) {
     console.error("FAILED: " + appDir);
@@ -111,4 +158,4 @@ if (require.main === module) {
   verifyRuntimeSmoke(process.argv[2]);
 }
 
-module.exports = { verifyPackage, verifyRuntimeSmoke };
+module.exports = { verifyPackage, verifyRuntimeSmoke, findPrivateEntries };

@@ -5,6 +5,21 @@ const os = require("node:os");
 const path = require("node:path");
 const { createQuestionStore } = require("../src/content/question-store");
 
+const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
+
+function createLinkOrSkip(t, target, link, type) {
+  try {
+    fs.symlinkSync(target, link, type);
+    return true;
+  } catch (error) {
+    if (LINK_UNAVAILABLE_CODES.has(error.code)) {
+      t.skip("links are unavailable: " + error.code);
+      return false;
+    }
+    throw error;
+  }
+}
+
 describe("question store", function() {
   let root;
   let store;
@@ -52,6 +67,14 @@ describe("question store", function() {
     assert.throws(function() { store.createQuestion("client-1", { text: "上海 酒店推荐" }); }, function(error) {
       return error.code === "QUESTION_DUPLICATE";
     });
+  });
+
+  it("does not create a missing client directory", function() {
+    const clientDirectory = path.join(root, "clients", "ghost");
+    assert.throws(function() { store.createQuestion("ghost", { text: "ghost question" }); }, function(error) {
+      return error.code === "CLIENT_NOT_FOUND";
+    });
+    assert.equal(fs.existsSync(clientDirectory), false);
   });
 
   it("keeps the old questions file readable when the atomic rename fails", function() {
@@ -243,12 +266,7 @@ describe("question store", function() {
       updatedAt: "2026-07-12T00:00:00.000Z"
     }] }), "utf8");
     try {
-      try {
-        fs.symlinkSync(external, linked, "file");
-      } catch (error) {
-        t.skip("file links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, external, linked, "file")) return;
       assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
@@ -275,12 +293,7 @@ describe("question store", function() {
     const linked = path.join(root, "clients", "client-1", "search_query.txt");
     fs.writeFileSync(external, "外部旧查询", "utf8");
     try {
-      try {
-        fs.symlinkSync(external, linked, "file");
-      } catch (error) {
-        t.skip("file links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, external, linked, "file")) return;
       assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
@@ -305,12 +318,7 @@ describe("question store", function() {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "question-store-outside-"));
     const linked = path.join(root, "clients", "linked-client");
     try {
-      try {
-        fs.symlinkSync(outside, linked, process.platform === "win32" ? "junction" : "dir");
-      } catch (error) {
-        t.skip("directory links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, outside, linked, process.platform === "win32" ? "junction" : "dir")) return;
       assert.throws(function() { store.listQuestions("linked-client"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });
@@ -336,12 +344,7 @@ describe("question store", function() {
     const outsideClients = fs.mkdtempSync(path.join(os.tmpdir(), "question-store-clients-outside-"));
     fs.rmSync(originalClients, { recursive: true, force: true });
     try {
-      try {
-        fs.symlinkSync(outsideClients, originalClients, process.platform === "win32" ? "junction" : "dir");
-      } catch (error) {
-        t.skip("directory links are unavailable: " + error.code);
-        return;
-      }
+      if (!createLinkOrSkip(t, outsideClients, originalClients, process.platform === "win32" ? "junction" : "dir")) return;
       assert.throws(function() { store.listQuestions("client-1"); }, function(error) {
         return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
       });

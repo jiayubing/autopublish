@@ -21,7 +21,8 @@ describe("article store", function() {
     return Object.assign({
       id: id,
       clientId: "client-1",
-      researchQueryId: "query-1",
+      researchQueryIds: ["query-1"],
+      researchSnapshots: [{ questionId: "query-1", question: "Question", answerText: "Answer", references: [], collectedAt: "2026-07-11T00:00:00.000Z", collectionMethod: "automatic" }],
       platform: "ctrip",
       scenario: "guide",
       templateId: "template-1",
@@ -175,5 +176,91 @@ describe("article store", function() {
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }
+  });
+
+  it("normalizes a legacy single research id without manufacturing snapshots", function() {
+    const legacy = valid("legacy-article");
+    delete legacy.researchQueryIds;
+    delete legacy.researchSnapshots;
+    legacy.researchQueryId = "legacy-query";
+    const directory = path.join(root, "generated", "client-1");
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, "legacy-article.json"), JSON.stringify(legacy));
+    fs.writeFileSync(path.join(directory, "legacy-article.md"), "---\ntitle: " + JSON.stringify(legacy.title) + "\n---\n\n" + legacy.content + "\n");
+
+    const loaded = store.getArticle("client-1", "legacy-article");
+    assert.deepStrictEqual(loaded.researchQueryIds, ["legacy-query"]);
+    assert.equal(Object.prototype.hasOwnProperty.call(loaded, "researchSnapshots"), false);
+    assert.equal(store.listArticles("client-1")[0].researchQueryId, "legacy-query");
+
+    const saved = store.saveArticle(loaded);
+    assert.deepStrictEqual(saved.researchQueryIds, ["legacy-query"]);
+    assert.equal(Object.prototype.hasOwnProperty.call(saved, "researchSnapshots"), false);
+    const metadata = JSON.parse(fs.readFileSync(path.join(directory, "legacy-article.json"), "utf8"));
+    assert.equal(Object.prototype.hasOwnProperty.call(metadata, "researchSnapshots"), false);
+  });
+
+  it("accepts an IPC-roundtripped legacy article with matching singular and plural research ids", function() {
+    const legacy = valid("roundtripped-legacy");
+    delete legacy.researchSnapshots;
+    legacy.researchQueryId = "legacy-query";
+    legacy.researchQueryIds = ["legacy-query"];
+    const directory = path.join(root, "generated", "client-1");
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, "roundtripped-legacy.json"), JSON.stringify(JSON.parse(JSON.stringify(legacy))));
+    fs.writeFileSync(path.join(directory, "roundtripped-legacy.md"), "---\ntitle: " + JSON.stringify(legacy.title) + "\n---\n\n" + legacy.content + "\n");
+
+    const loaded = store.getArticle("client-1", "roundtripped-legacy");
+    assert.deepStrictEqual(loaded.researchQueryIds, ["legacy-query"]);
+    assert.equal(Object.prototype.hasOwnProperty.call(loaded, "researchSnapshots"), false);
+    const saved = store.saveArticle(Object.assign({}, loaded, { title: "Edited legacy title", content: "Edited legacy body." }));
+    assert.equal(saved.title, "Edited legacy title");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, "roundtripped-legacy.json"), "utf8")).researchQueryId, "legacy-query");
+    assert.equal(Object.prototype.hasOwnProperty.call(JSON.parse(fs.readFileSync(path.join(directory, "roundtripped-legacy.json"), "utf8")), "researchQueryIds"), false);
+  });
+
+  it("rejects inconsistent singular and plural research ids without snapshots", function() {
+    assert.throws(function() {
+      store.saveArticle(valid("inconsistent-roundtripped-legacy", {
+        researchQueryId: "legacy-query",
+        researchQueryIds: ["different-query"],
+        researchSnapshots: undefined
+      }));
+    }, function(error) { return error.code === "ARTICLE_INVALID"; });
+  });
+
+  it("requires new research ids and snapshots to correspond", function() {
+    assert.throws(function() { store.saveArticle(valid("missing-snapshots", { researchSnapshots: undefined })); }, function(error) {
+      return error.code === "ARTICLE_INVALID";
+    });
+    assert.throws(function() { store.saveArticle(valid("mismatched-snapshots", { researchSnapshots: [] })); }, function(error) {
+      return error.code === "ARTICLE_INVALID";
+    });
+  });
+
+  it("rejects mixed legacy and new research metadata instead of dropping new ids", function() {
+    assert.throws(function() {
+      store.saveArticle(valid("mixed-missing-snapshots", {
+        researchQueryId: "legacy-query",
+        researchQueryIds: ["query-1", "query-2"],
+        researchSnapshots: undefined
+      }));
+    }, function(error) { return error.code === "ARTICLE_INVALID"; });
+    assert.throws(function() {
+      store.saveArticle(valid("mixed-with-snapshots", {
+        researchQueryId: "legacy-query",
+        researchQueryIds: ["query-1"],
+        researchSnapshots: valid("snapshot-source").researchSnapshots
+      }));
+    }, function(error) { return error.code === "ARTICLE_INVALID"; });
+  });
+
+  it("rejects legacy metadata that already contains research snapshots", function() {
+    const legacyWithSnapshots = valid("legacy-with-snapshots");
+    delete legacyWithSnapshots.researchQueryIds;
+    legacyWithSnapshots.researchQueryId = "legacy-query";
+    assert.throws(function() { store.saveArticle(legacyWithSnapshots); }, function(error) {
+      return error.code === "ARTICLE_INVALID";
+    });
   });
 });

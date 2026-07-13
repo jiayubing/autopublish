@@ -1,0 +1,190 @@
+const { describe, it } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("fs");
+const path = require("path");
+
+function read(file) {
+  return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
+}
+
+describe("Doubao content workbench renderer contracts", function() {
+  it("declares collection types and research provenance fields", function() {
+    const types = read("media-workbench/src/types.ts");
+    [
+      "ContentQuestion",
+      "DoubaoLoginStatus",
+      "DoubaoTaskStatus",
+      "DoubaoQueueState",
+      "collectionMethod",
+      "collectedAt",
+      "updatedAt",
+      "researchQueryIds",
+      "researchSnapshots",
+      "researchQueryId?"
+    ].forEach(function(value) { assert.equal(types.includes(value), true, "missing " + value); });
+  });
+
+  it("keeps privileged and browser-only implementation out of React files", function() {
+    const files = [
+      "media-workbench/src/components/ContentWorkbench.tsx",
+      "media-workbench/src/components/content/QuestionCollectionView.tsx",
+      "media-workbench/src/components/content/ArticleGenerationView.tsx",
+      "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+      "media-workbench/src/components/content/CollectionTaskBar.tsx"
+    ];
+    const forbidden = /fs|child_process|PLAYWRIGHT_CLI_JS|browser_data|ipcRenderer/;
+    files.forEach(function(file) { assert.doesNotMatch(read(file), forbidden, "privileged code in " + file); });
+  });
+
+  it("renders collection controls, explicit recollection confirmation, and task icons", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
+    ["createContentQuestion", "updateContentQuestion", "deleteContentQuestion", "confirm", "force: true", "saveManualResearch", "collectionMethod", "references", "collectedAt", "不会修改已保存文章"].forEach(function(value) {
+      assert.equal(questions.includes(value), true, "missing " + value);
+    });
+    ["Play", "Pause", "Square", "RotateCcw", "LogIn", "title=", "width", "height"].forEach(function(value) {
+      assert.equal(taskBar.includes(value), true, "missing " + value);
+    });
+  });
+
+  it("uses selected research ids in generation and delegates history selection", function() {
+    const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    const history = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
+    assert.match(generation, /generateContentArticle\(\{[\s\S]*researchQueryIds: selectedIds/);
+    ["checkbox", "answerText", "length", "saveContentArticle", "previewExport", "exportToSubmissionQueue"].forEach(function(value) {
+      assert.equal(generation.includes(value), true, "missing " + value);
+    });
+    assert.match(history, /onSelect|onArticleSelect/);
+    assert.doesNotMatch(history, /saveContentArticle|generateContentArticle/);
+  });
+
+  it("initializes the queue snapshot before subscribing and cleans up", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const snapshotIndex = questions.lastIndexOf("getDoubaoQueueState()");
+    const subscribeIndex = questions.lastIndexOf("subscribeDoubaoQueue");
+    assert.equal(snapshotIndex >= 0, true);
+    assert.equal(subscribeIndex < snapshotIndex, true);
+    assert.match(questions, /subscribeDoubaoQueue[\s\S]*getDoubaoQueueState\(\)[\s\S]*catch/);
+    assert.match(questions, /queueEventReceived[\s\S]*subscribeDoubaoQueue[\s\S]*queueEventReceived = true/);
+    assert.match(questions, /!queueEventReceived[\s\S]*setQueue\(snapshot\)/);
+    assert.match(questions, /subscribeDoubaoQueue[\s\S]*return \(\) =>[\s\S]*unsubscribe/);
+  });
+
+  it("separates question research loading from login checking and preserves session errors", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const types = read("media-workbench/src/types.ts");
+    assert.match(types, /DoubaoLoginStatus =[^;]*'checking'/);
+    assert.match(questions, /status: 'checking'/);
+    assert.match(questions, /setLogin\(\{ status: 'checking' \}\)/);
+    assert.match(questions, /status: 'session_error'/);
+    assert.match(questions, /listContentQuestions\(targetClientId\), listContentResearch\(targetClientId\)/);
+    assert.doesNotMatch(questions, /Promise\.all\(\[listContentQuestions\(clientId\), listContentResearch\(clientId\), getDoubaoLoginStatus\(\)\]\)/);
+  });
+
+  it("does not refresh login when passive view data changes", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const passiveEffect = questions.slice(questions.indexOf("void loadQuestions(clientId"), questions.indexOf("}, [clientId, refreshToken])") + 1);
+    assert.match(passiveEffect, /void loadQuestions\(clientId/);
+    assert.doesNotMatch(passiveEffect, /refreshLogin/);
+    assert.match(questions, /onClick=\{refreshLogin\}/);
+  });
+
+  it("refreshes once after collection completion and prevents duplicate submissions", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
+    assert.match(questions, /useRef<Promise<void> \| null>/);
+    assert.match(questions, /activeQueueStatus[\s\S]*completed/);
+    assert.match(questions, /loadQuestions\(\)[\s\S]*onRefresh\(\)/);
+    assert.match(questions, /isCollecting/);
+    assert.match(questions, /disabled=\{isCollecting\}/);
+    assert.match(taskBar, /disabled=\{busy \|\| active\}/);
+  });
+
+  it("uses current client refs and request cancellation guards for queue refreshes", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    assert.match(questions, /clientIdRef = useRef\(clientId\)/);
+    assert.match(questions, /onRefreshRef = useRef\(onRefresh\)/);
+    assert.match(questions, /clientIdRef\.current/);
+    assert.match(questions, /loadQuestions\(targetClientId/);
+    assert.match(questions, /loadSequence/);
+    assert.match(questions, /cancelled/);
+    assert.match(questions, /sequence !== loadSequence\.current/);
+    assert.match(questions, /onRefreshRef\.current/);
+  });
+
+  it("uses a synchronous collection lock and clears it on every exit", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    assert.match(questions, /collectionPendingRef = useRef\(false\)/);
+    assert.match(questions, /tryBeginCollection/);
+    assert.match(questions, /collectionPendingRef\.current = true/);
+    assert.match(questions, /collectionPendingRef\.current = false/);
+    assert.match(questions, /finally \{ finishCollection\(\); \}/);
+  });
+
+  it("routes retry through the shared collection lock and surfaces rejected commands", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
+    assert.match(questions, /async function retryFailed\(\)/);
+    assert.match(questions, /retryFailedDoubao\(\)/);
+    assert.match(questions, /retryFailedDoubao\(\)[\s\S]*catch \(value\)[\s\S]*setError/);
+    assert.match(questions, /retryFailed\(\)[\s\S]*finally \{ finishCollection\(\); \}/);
+    assert.match(questions, /onRetry=\{retryFailed\}/);
+  });
+
+  it("deduplicates collection refreshes by run token and refreshes empty/external completions", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    assert.match(questions, /queueRunToken/);
+    assert.match(questions, /refreshedCollectionToken/);
+    assert.match(questions, /queueRunToken\(state\)/);
+    assert.match(questions, /state\.total === 0/);
+    assert.doesNotMatch(questions, /skipNextCompletionRefresh/);
+  });
+
+  it("shows queue status, current question, wait seconds, and the latest safe failure", function() {
+    const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
+    ["running", "paused", "stopping", "completed", "当前问题", "等待", "失败", "waitRemainingMs / 1000", "error?.code", "error?.message"].forEach(function(value) {
+      assert.equal(taskBar.includes(value), true, "missing " + value);
+    });
+  });
+
+  it("makes the task bar information area shrink and truncate long text", function() {
+    const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
+    assert.match(taskBar, /flex-1 min-w-0/);
+    assert.match(taskBar, /overflow-hidden/);
+    assert.match(taskBar, /truncate/);
+  });
+
+  it("clears article and research selection when the customer changes", function() {
+    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
+    const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    assert.match(workbench, /setClientId\(nextClientId\)[\s\S]*setArticle\(null\)/);
+    assert.match(generation, /useEffect\(\(\) => \{[\s\S]*setSelectedIds\(\[\]\)[\s\S]*\[clientId, platform, refreshToken\]/);
+  });
+
+  it("resets platform templates and ignores stale template requests", function() {
+    const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    const platformEffect = generation.slice(generation.indexOf("let cancelled"), generation.indexOf("}, [clientId, platform, refreshToken]"));
+    assert.doesNotMatch(platformEffect, /setSelectedIds/);
+    assert.match(generation, /useEffect\(\(\) => \{[\s\S]*setSelectedIds\(\[\]\)[\s\S]*\[clientId\]\)/);
+    assert.match(generation, /selectedArticleRef\.current[\s\S]*templateId/);
+    assert.match(generation, /current \|\| nextTemplates\[0\]/);
+    assert.match(generation, /cancelled/);
+    assert.match(generation, /if \(cancelled\) return/);
+    assert.match(generation, /return \(\) => \{ cancelled = true; \}/);
+  });
+
+  it("preserves a history article template when template loading completes", function() {
+    const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    assert.match(generation, /setTemplateId\(resolvedTemplateId\)/);
+    assert.match(generation, /setTemplateId\(\(current\) => current \|\| nextTemplates\[0\]\?\.id/);
+    assert.match(generation, /selectedArticleRef\.current\?\.platform === platform/);
+  });
+
+  it("maps legacy history templates by platform and scenario before editing and saving", function() {
+    const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    assert.match(generation, /nextTemplates\.find\(\(item\) => item\.platform === article\.platform && item\.scenario === article\.scenario\)/);
+    assert.match(generation, /onArticleChange\(\{ \.\.\.currentArticle, templateId: resolvedTemplateId \}\)/);
+    assert.match(generation, /saveContentArticle\(\{ \.\.\.selectedArticle, templateId: resolvedTemplateId/);
+    assert.match(generation, /templateId: resolvedTemplateId/);
+  });
+});

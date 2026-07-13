@@ -19,6 +19,21 @@ function assertId(value, label) {
   }
 }
 
+function normalizeResearchQueryIds(input) {
+  const ids = input.researchQueryIds === undefined ? [input.researchQueryId] : input.researchQueryIds;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
+    throw contentError("CONTENT_INPUT_INVALID", "Research ids must contain 1 to 50 items");
+  }
+  const seen = new Set();
+  ids.forEach(function(id) {
+    if (typeof id !== "string" || !id.trim() || seen.has(id)) {
+      throw contentError("CONTENT_INPUT_INVALID", "Research ids must be non-empty and unique");
+    }
+    seen.add(id);
+  });
+  return ids.slice();
+}
+
 function clientDto(client) {
   const value = Object.assign({}, client);
   delete value.directory;
@@ -75,7 +90,7 @@ function createAiContentService(opts) {
   async function generateArticle(input) {
     const request = input || {};
     assertId(request.clientId, "Client id");
-    assertId(request.researchQueryId, "Research id");
+    const researchQueryIds = normalizeResearchQueryIds(request);
     assertId(request.platform, "Platform");
     assertId(request.templateId, "Template id");
     const generator = articleGeneratorFactory({
@@ -87,7 +102,7 @@ function createAiContentService(opts) {
       createId: createId,
       seenIds: seenIds
     });
-    return generator.generateArticle(request);
+    return generator.generateArticle(Object.assign({}, request, { researchQueryIds: researchQueryIds }));
   }
 
   function saveArticle(article) {

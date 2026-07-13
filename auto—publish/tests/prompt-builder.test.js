@@ -75,4 +75,30 @@ describe("prompt builder", function() {
     assert.match(prompt.user, /场景：季节专题/);
     assert.doesNotMatch(prompt.user, /餐饮|住宿/);
   });
+
+  it("keeps multiple research question, answer, and reference groups in stable order", function() {
+    const prompt = buildPrompt(input({
+      researches: [
+        { id: "query-1", question: "Question one", answerText: "Answer one", references: [{ title: "Reference one", url: "https://one.example" }] },
+        { id: "query-2", question: "Question two", answerText: "Answer two", references: [{ title: "Reference two", url: "https://two.example" }] }
+      ],
+      research: undefined
+    }));
+    const questionOne = prompt.user.indexOf("Question one");
+    const answerOne = prompt.user.indexOf("Answer one");
+    const referenceOne = prompt.user.indexOf("Reference one");
+    const questionTwo = prompt.user.indexOf("Question two");
+    const answerTwo = prompt.user.indexOf("Answer two");
+    const referenceTwo = prompt.user.indexOf("Reference two");
+    assert.ok(questionOne >= 0 && questionOne < answerOne && answerOne < referenceOne);
+    assert.ok(referenceOne < questionTwo && questionTwo < answerTwo && answerTwo < referenceTwo);
+  });
+
+  it("rejects an empty or duplicated research id list", function() {
+    [[], ["query-1", "query-1"]].forEach(function(researchQueryIds) {
+      assert.throws(function() {
+        buildPrompt(input({ researchQueryIds: researchQueryIds, researches: [input().research] }));
+      }, function(error) { return error.code === "RESEARCH_QUERY_IDS_INVALID"; });
+    });
+  });
 });

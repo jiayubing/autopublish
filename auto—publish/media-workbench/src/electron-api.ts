@@ -1,4 +1,4 @@
-import { Article, ContentClient, ContentResearch, ContentTemplate, Draft, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder } from "./types";
+import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder } from "./types";
 
 
 // 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
@@ -47,8 +47,23 @@ interface PlatformSubmission { sourcePlatformId: string; filename: string; targe
 interface DesktopConsoleContent {
   listClients(): Promise<IpcResponse<ContentClient[]>>;
   listResearch(clientId: string): Promise<IpcResponse<ContentResearch[]>>;
+  listQuestions(clientId: string): Promise<IpcResponse<ContentQuestion[]>>;
+  createQuestion(input: { clientId: string; text: string; enabled?: boolean }): Promise<IpcResponse<ContentQuestion>>;
+  updateQuestion(input: { clientId: string; questionId: string; text?: string; enabled?: boolean }): Promise<IpcResponse<ContentQuestion>>;
+  deleteQuestion(input: { clientId: string; questionId: string }): Promise<IpcResponse<ContentQuestion>>;
+  getDoubaoLoginState(): Promise<IpcResponse<Record<string, unknown>>>;
+  openDoubaoLogin(): Promise<IpcResponse<Record<string, unknown>>>;
+  collectDoubaoOne(input: { clientId: string; questionId: string; force?: boolean }): Promise<IpcResponse<ContentResearch>>;
+  startDoubaoBatch(tasks: Array<{ clientId: string; questionId: string; force?: boolean }>): Promise<IpcResponse<DoubaoQueueState>>;
+  pauseDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
+  resumeDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
+  stopDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
+  retryFailedDoubao(): Promise<IpcResponse<DoubaoQueueState>>;
+  getDoubaoQueueState(): Promise<IpcResponse<DoubaoQueueState>>;
+  saveManualResearch(input: { clientId: string; questionId: string; answerText: string; references: ContentResearch["references"] }): Promise<IpcResponse<ContentResearch>>;
+  onDoubaoQueueState(listener: (state: DoubaoQueueState) => void): () => void;
   listTemplates(platform: string): Promise<IpcResponse<ContentTemplate[]>>;
-  generateArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
+  generateArticle(input: { clientId: string; researchQueryIds: string[]; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
   previewExport(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
@@ -120,6 +135,96 @@ export async function listContentResearch(clientId: string): Promise<ContentRese
   return result.data || [];
 }
 
+export async function listContentQuestions(clientId: string): Promise<ContentQuestion[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listQuestions(clientId);
+  if (!result.ok) throw getIpcError(result.error, "Unable to load questions");
+  return result.data || [];
+}
+
+export async function createContentQuestion(input: { clientId: string; text: string; enabled?: boolean }): Promise<ContentQuestion> {
+  if (!isElectron()) throw new Error("Question editing requires the desktop app");
+  const result = await window.desktopConsole!.content.createQuestion(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to create question");
+  return result.data;
+}
+
+export async function updateContentQuestion(input: { clientId: string; questionId: string; text?: string; enabled?: boolean }): Promise<ContentQuestion> {
+  if (!isElectron()) throw new Error("Question editing requires the desktop app");
+  const result = await window.desktopConsole!.content.updateQuestion(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to update question");
+  return result.data;
+}
+
+export async function deleteContentQuestion(input: { clientId: string; questionId: string }): Promise<ContentQuestion> {
+  if (!isElectron()) throw new Error("Question editing requires the desktop app");
+  const result = await window.desktopConsole!.content.deleteQuestion(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to delete question");
+  return result.data;
+}
+
+function normalizeLoginState(raw: Record<string, unknown> | undefined): DoubaoLoginState {
+  const status = raw && raw.status;
+  if (status === "authenticated" || status === "login_required") return { status };
+  if (status === "session_error" || status === "challenge" || status === "page_error") return { status: "session_error", errorText: raw && typeof raw.errorText === "string" ? raw.errorText : undefined };
+  return { status: "unknown" };
+}
+
+export async function getDoubaoLoginStatus(): Promise<DoubaoLoginState> {
+  if (!isElectron()) return { status: "unknown" };
+  const result = await window.desktopConsole!.content.getDoubaoLoginState();
+  if (!result.ok) throw getIpcError(result.error, "Unable to read Doubao login state");
+  return normalizeLoginState(result.data);
+}
+
+export const getDoubaoLoginState = getDoubaoLoginStatus;
+
+export async function openDoubaoLogin(): Promise<DoubaoLoginState> {
+  if (!isElectron()) throw new Error("Doubao login requires the desktop app");
+  const result = await window.desktopConsole!.content.openDoubaoLogin();
+  if (!result.ok) throw getIpcError(result.error, "Unable to open Doubao login");
+  return normalizeLoginState(result.data);
+}
+
+export async function collectDoubaoQuestion(input: { clientId: string; questionId: string; force?: boolean }): Promise<ContentResearch> {
+  if (!isElectron()) throw new Error("Doubao collection requires the desktop app");
+  const result = await window.desktopConsole!.content.collectDoubaoOne(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to collect Doubao answer");
+  return result.data;
+}
+
+export async function startDoubaoBatch(tasks: Array<{ clientId: string; questionId: string; force?: boolean }>): Promise<DoubaoQueueState> {
+  if (!isElectron()) throw new Error("Doubao collection requires the desktop app");
+  const result = await window.desktopConsole!.content.startDoubaoBatch(tasks);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to start Doubao batch");
+  return result.data;
+}
+
+async function doubaoQueueCommand(command: () => Promise<IpcResponse<DoubaoQueueState>>, fallback: string): Promise<DoubaoQueueState> {
+  if (!isElectron()) throw new Error("Doubao collection requires the desktop app");
+  const result = await command();
+  if (!result.ok || !result.data) throw getIpcError(result.error, fallback);
+  return result.data;
+}
+
+export function pauseDoubaoBatch(): Promise<DoubaoQueueState> { return doubaoQueueCommand(() => window.desktopConsole!.content.pauseDoubaoBatch(), "Unable to pause Doubao batch"); }
+export function resumeDoubaoBatch(): Promise<DoubaoQueueState> { return doubaoQueueCommand(() => window.desktopConsole!.content.resumeDoubaoBatch(), "Unable to resume Doubao batch"); }
+export function stopDoubaoBatch(): Promise<DoubaoQueueState> { return doubaoQueueCommand(() => window.desktopConsole!.content.stopDoubaoBatch(), "Unable to stop Doubao batch"); }
+export function retryFailedDoubao(): Promise<DoubaoQueueState> { return doubaoQueueCommand(() => window.desktopConsole!.content.retryFailedDoubao(), "Unable to retry Doubao tasks"); }
+export function getDoubaoQueueState(): Promise<DoubaoQueueState> { return doubaoQueueCommand(() => window.desktopConsole!.content.getDoubaoQueueState(), "Unable to read Doubao queue"); }
+
+export function subscribeDoubaoQueue(listener: (state: DoubaoQueueState) => void): () => void {
+  if (!isElectron()) return () => undefined;
+  return window.desktopConsole!.content.onDoubaoQueueState(listener);
+}
+
+export async function saveManualResearch(input: { clientId: string; questionId: string; answerText: string; references: ContentResearch["references"] }): Promise<ContentResearch> {
+  if (!isElectron()) throw new Error("Manual research saving requires the desktop app");
+  const result = await window.desktopConsole!.content.saveManualResearch(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to save manual research");
+  return result.data;
+}
+
 export async function listContentTemplates(platform: string): Promise<ContentTemplate[]> {
   if (!isElectron()) return [];
   const result = await window.desktopConsole!.content.listTemplates(platform);
@@ -127,7 +232,7 @@ export async function listContentTemplates(platform: string): Promise<ContentTem
   return result.data || [];
 }
 
-export async function generateContentArticle(input: { clientId: string; researchQueryId: string; platform: string; templateId: string }): Promise<GeneratedContentArticle> {
+export async function generateContentArticle(input: { clientId: string; researchQueryIds: string[]; platform: string; templateId: string }): Promise<GeneratedContentArticle> {
   if (!isElectron()) throw new Error("AI content generation requires the desktop app");
   const result = await window.desktopConsole!.content.generateArticle(input);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to generate article");

@@ -64,7 +64,26 @@ const api = {
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
     getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); },
     previewExport: function(input) { return ipcRenderer.invoke("content:preview-export", input); },
-    exportArticle: function(input) { return ipcRenderer.invoke("content:export-article", input); }
+    exportArticle: function(input) { return ipcRenderer.invoke("content:export-article", input); },
+    listQuestions: function(clientId) { return ipcRenderer.invoke("content:list-questions", { clientId: clientId }); },
+    createQuestion: function(input) { return ipcRenderer.invoke("content:create-question", input); },
+    updateQuestion: function(input) { return ipcRenderer.invoke("content:update-question", input); },
+    deleteQuestion: function(input) { return ipcRenderer.invoke("content:delete-question", input); },
+    getDoubaoLoginState: function() { return ipcRenderer.invoke("content:get-doubao-login-state"); },
+    openDoubaoLogin: function() { return ipcRenderer.invoke("content:open-doubao-login"); },
+    collectDoubaoOne: function(input) { return ipcRenderer.invoke("content:collect-doubao-one", input); },
+    startDoubaoBatch: function(tasks) { return ipcRenderer.invoke("content:start-doubao-batch", { tasks: tasks }); },
+    pauseDoubaoBatch: function() { return ipcRenderer.invoke("content:pause-doubao-batch"); },
+    resumeDoubaoBatch: function() { return ipcRenderer.invoke("content:resume-doubao-batch"); },
+    stopDoubaoBatch: function() { return ipcRenderer.invoke("content:stop-doubao-batch"); },
+    retryFailedDoubao: function() { return ipcRenderer.invoke("content:retry-failed-doubao"); },
+    getDoubaoQueueState: function() { return ipcRenderer.invoke("content:get-doubao-queue-state"); },
+    saveManualResearch: function(input) { return ipcRenderer.invoke("content:save-manual-research", input); },
+    onDoubaoQueueState: function(listener) {
+      const handler = function(event, payload) { listener(payload); };
+      ipcRenderer.on("content:doubao-queue-state", handler);
+      return function() { ipcRenderer.removeListener("content:doubao-queue-state", handler); };
+    }
   },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },

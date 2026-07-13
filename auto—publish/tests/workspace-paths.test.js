@@ -7,6 +7,30 @@ const path = require("node:path");
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../desktop/workspace-paths");
 const { configureRuntimeEnvironment } = require("../desktop/runtime-config");
 
+const RUNTIME_ENV_KEYS = [
+  "AUTO_PUBLISH_ROOT_DIR",
+  "AUTO_PUBLISH_APP_ROOT",
+  "AUTO_PUBLISH_WORKSPACE",
+  "XQW_API_KEY",
+  "MARKITDOWN_CMD",
+  "PLAYWRIGHT_CLI_JS",
+  "HEPAN_PYTHON"
+];
+
+function saveRuntimeEnvironment() {
+  return RUNTIME_ENV_KEYS.reduce(function(values, key) {
+    values[key] = process.env[key];
+    return values;
+  }, {});
+}
+
+function restoreRuntimeEnvironment(values) {
+  RUNTIME_ENV_KEYS.forEach(function(key) {
+    if (values[key] === undefined) delete process.env[key];
+    else process.env[key] = values[key];
+  });
+}
+
 describe("workspace paths", function() {
   it("creates every runtime directory below the supplied workspace root", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-workspace-"));
@@ -21,7 +45,9 @@ describe("workspace paths", function() {
         "clients", "research", "templates", "generated",
         "browser", "doubaoBrowser", "doubaoDiagnostics"
       ].forEach(function(key) {
-        assert.ok(paths[key].startsWith(paths.root + path.sep), key + " escapes workspace");
+        const relative = path.relative(paths.root, paths[key]);
+        const firstSegment = relative.split(path.sep)[0];
+        assert.ok(relative && relative !== ".." && !path.isAbsolute(relative) && firstSegment !== "..", key + " escapes workspace");
         assert.ok(fs.statSync(paths[key]).isDirectory(), key + " was not created");
       });
     } finally {
@@ -33,7 +59,7 @@ describe("workspace paths", function() {
 describe("runtime configuration", function() {
   it("loads the workspace environment once and exposes workspace paths", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-"));
-    const original = process.env.XQW_API_KEY;
+    const original = saveRuntimeEnvironment();
     try {
       fs.writeFileSync(path.join(root, ".env"), "XQW_API_KEY=workspace-secret\n", "utf8");
       delete process.env.XQW_API_KEY;
@@ -43,8 +69,7 @@ describe("runtime configuration", function() {
       assert.equal(process.env.XQW_API_KEY, "workspace-secret");
       assert.equal(process.env.AUTO_PUBLISH_ROOT_DIR, path.resolve(root));
     } finally {
-      if (original === undefined) delete process.env.XQW_API_KEY;
-      else process.env.XQW_API_KEY = original;
+      restoreRuntimeEnvironment(original);
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
@@ -63,7 +88,7 @@ describe("runtime configuration", function() {
   it("does not retain workspace secrets after switching to a workspace without them", function() {
     const first = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-first-"));
     const second = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-second-"));
-    const original = process.env.XQW_API_KEY;
+    const original = saveRuntimeEnvironment();
     try {
       delete process.env.XQW_API_KEY;
       fs.writeFileSync(path.join(first, ".env"), "XQW_API_KEY=first-workspace-secret\n", "utf8");
@@ -75,8 +100,7 @@ describe("runtime configuration", function() {
       assert.ok(runtime.configErrors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }));
       assert.equal(JSON.stringify(runtime.configErrors).includes("first-workspace-secret"), false);
     } finally {
-      if (original === undefined) delete process.env.XQW_API_KEY;
-      else process.env.XQW_API_KEY = original;
+      restoreRuntimeEnvironment(original);
       fs.rmSync(first, { recursive: true, force: true });
       fs.rmSync(second, { recursive: true, force: true });
     }

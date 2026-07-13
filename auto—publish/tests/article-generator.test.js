@@ -95,4 +95,76 @@ describe("article generator", function() {
     await generator.generateArticle(input);
     await assert.rejects(generator.generateArticle(input), function(value) { return value.code === "ARTICLE_ID_DUPLICATE"; });
   });
+
+  it("reads multiple research records in order and returns safe immutable snapshots", async function() {
+    const calls = [];
+    const researchById = {
+      "query-1": { id: "query-1", question: "Question one", answerText: "Answer one", references: [{ title: "Reference one", url: "https://one.example", snippet: "Snippet one", secret: "do-not-copy" }], collectedAt: "2026-07-12T00:00:00.000Z", collectionMethod: "automatic", apiKey: "do-not-copy" },
+      "query-2": { id: "query-2", question: "Question two", answerText: "Answer two", references: [], collectedAt: "2026-07-12T00:01:00.000Z", collectionMethod: "manual", clientKnowledge: "do-not-copy" }
+    };
+    const deps = dependencies({
+      researchStore: { getResearch: function(clientId, queryId) { calls.push(queryId); return researchById[queryId]; } },
+      templateStore: { getTemplate: function() { calls.push("template"); return { id: "template-1", scenario: "Guide", body: "Template instructions" }; } },
+      buildPrompt: function(value) { calls.push("prompt"); assert.deepStrictEqual(value.researchItems, [researchById["query-1"], researchById["query-2"]]); return { system: "System", user: "User" }; },
+      aiClient: { complete: async function() { calls.push("ai"); return "# Article title\n\nArticle body"; } }
+    });
+    const article = await createArticleGenerator(deps).generateArticle({
+      clientId: "client-1", researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1"
+    });
+    assert.deepStrictEqual(calls, ["query-1", "query-2", "template", "prompt", "ai"]);
+    assert.deepStrictEqual(article.researchQueryIds, ["query-1", "query-2"]);
+    assert.deepStrictEqual(article.researchSnapshots, [
+      { questionId: "query-1", question: "Question one", answerText: "Answer one", references: [{ title: "Reference one", url: "https://one.example", snippet: "Snippet one" }], collectedAt: "2026-07-12T00:00:00.000Z", collectionMethod: "automatic" },
+      { questionId: "query-2", question: "Question two", answerText: "Answer two", references: [], collectedAt: "2026-07-12T00:01:00.000Z", collectionMethod: "manual" }
+    ]);
+    researchById["query-1"].references[0].title = "Changed later";
+    assert.equal(article.researchSnapshots[0].references[0].title, "Reference one");
+    assert.equal(Object.prototype.hasOwnProperty.call(article.researchSnapshots[0], "apiKey"), false);
+  });
+
+  it("deeply clones object and array reference snippets in research snapshots", async function() {
+    const source = {
+      id: "query-1",
+      question: "Question one",
+      answerText: "Answer one",
+      references: [
+        { title: "Object reference", url: "https://one.example", snippet: { highlights: ["one"] } },
+        { title: "Array reference", url: "https://two.example", snippet: [{ text: "two" }] }
+      ],
+      collectedAt: "2026-07-12T00:00:00.000Z",
+      collectionMethod: "automatic"
+    };
+    const deps = dependencies({
+      researchStore: { getResearch: function() { return source; } }
+    });
+    const article = await createArticleGenerator(deps).generateArticle({
+      clientId: "client-1", researchQueryIds: ["query-1"], platform: "ctrip", templateId: "template-1"
+    });
+    source.references[0].snippet.highlights[0] = "changed";
+    source.references[1].snippet[0].text = "changed";
+    assert.deepStrictEqual(article.researchSnapshots[0].references, [
+      { title: "Object reference", url: "https://one.example", snippet: { highlights: ["one"] } },
+      { title: "Array reference", url: "https://two.example", snippet: [{ text: "two" }] }
+    ]);
+  });
+
+  it("blocks any empty answer before template or AI access", async function() {
+    const deps = dependencies({
+      researchStore: { getResearch: function(clientId, queryId) { return queryId === "query-2" ? { id: queryId, answerText: "  " } : { id: queryId, answerText: "Answer one" }; } }
+    });
+    await assert.rejects(createArticleGenerator(deps).generateArticle({
+      clientId: "client-1", researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1"
+    }), function(value) { return value.code === "RESEARCH_EMPTY_ANSWER"; });
+    assert.deepStrictEqual(deps.calls, ["client:client-1"]);
+  });
+
+  it("rejects empty, duplicate, and oversized research id lists", async function() {
+    const generator = createArticleGenerator(dependencies());
+    const inputs = [[], ["query-1", "query-1"], Array.from({ length: 51 }, function(_, index) { return "query-" + index; })];
+    for (const researchQueryIds of inputs) {
+      await assert.rejects(generator.generateArticle({ clientId: "client-1", researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
+        return value.code === "RESEARCH_QUERY_IDS_INVALID";
+      });
+    }
+  });
 });

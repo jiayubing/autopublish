@@ -31,6 +31,38 @@ describe("research store", function() {
     assert.deepStrictEqual(store.getResearch("client-1", "query-1"), updated);
   });
 
+  it("stores collection provenance and removes only the requested research", function() {
+    const record = store.saveResearch("client-1", {
+      id: "question-1",
+      question: "上海酒店推荐",
+      answerText: "这是一个有效且完整的豆包回答。",
+      references: [],
+      collectionMethod: "automatic",
+      collectedAt: "2026-07-12T00:00:00.000Z",
+      updatedAt: "2026-07-12T00:00:00.000Z"
+    });
+    assert.equal(record.collectionMethod, "automatic");
+    assert.equal(record.collectedAt, "2026-07-12T00:00:00.000Z");
+    assert.equal(store.deleteResearch("client-1", "question-1"), true);
+    assert.throws(function() { store.getResearch("client-1", "question-1"); }, function(error) {
+      return error.code === "RESEARCH_NOT_FOUND";
+    });
+  });
+
+  it("rejects short or oversized answers and invalid collection methods", function() {
+    ["short", " ".repeat(20)].forEach(function(answerText) {
+      assert.throws(function() {
+        store.saveResearch("client-1", Object.assign(valid("bad", answerText), { collectionMethod: "automatic" }));
+      });
+    });
+    assert.throws(function() {
+      store.saveResearch("client-1", Object.assign(valid("bad-method", "这是足够长的有效回答正文。"), { collectionMethod: "robot" }));
+    }, function(error) { return error.code === "RESEARCH_INVALID_METHOD"; });
+    assert.throws(function() {
+      store.saveResearch("client-1", Object.assign(valid("too-long", "a".repeat(200001)), { collectionMethod: "manual" }));
+    });
+  });
+
   it("requires references to be an array of title and valid HTTP URL", function() {
     [undefined, null, {}, "not-array"].forEach(function(references, index) {
       assert.throws(function() { store.saveResearch("client-1", valid("missing-" + index, "answer", references)); }, function(error) { return error.code === "RESEARCH_INVALID_REFERENCE"; });
@@ -52,6 +84,36 @@ describe("research store", function() {
   it("rejects empty answers and missing records", function() {
     assert.throws(function() { store.saveResearch("client-1", { id: "empty", answerText: "  ", references: [] }); }, function(error) { return error.code === "RESEARCH_EMPTY_ANSWER"; });
     assert.throws(function() { store.getResearch("client-1", "missing"); }, function(error) { return error.code === "RESEARCH_NOT_FOUND"; });
+    assert.equal(store.deleteResearch("client-1", "missing"), false);
+  });
+
+  it("rejects unsafe research path segments and linked client directories", function(t) {
+    ["../client", "client/path", "client\\path", ".", "..", " ", path.resolve(root, "outside")].forEach(function(clientId) {
+      assert.throws(function() { store.listResearch(clientId); }, function(error) { return error.code === "RESEARCH_INVALID_ID"; });
+    });
+    ["../research", "research/path", "research\\path", ".", "..", " ", path.resolve(root, "outside")].forEach(function(queryId) {
+      assert.throws(function() { store.getResearch("client-1", queryId); }, function(error) { return error.code === "RESEARCH_INVALID_ID"; });
+    });
+
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "research-store-outside-"));
+    const research = path.join(root, "research");
+    fs.mkdirSync(research, { recursive: true });
+    try {
+      fs.symlinkSync(outside, path.join(research, "linked"), "junction");
+    } catch (error) {
+      fs.rmSync(outside, { recursive: true, force: true });
+      if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+        t.skip("symlinks or junctions are unavailable in this environment");
+        return;
+      }
+      throw error;
+    }
+    try {
+      assert.throws(function() { store.listResearch("linked"); }, function(error) { return error.code === "RESEARCH_PATH_OUT_OF_BOUNDS"; });
+      assert.throws(function() { store.saveResearch("linked", Object.assign(valid("query-1", "这是一个足够长的有效回答。"), { collectionMethod: "manual" })); }, function(error) { return error.code === "RESEARCH_PATH_OUT_OF_BOUNDS"; });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("stores records below the workspace research directory", function() {

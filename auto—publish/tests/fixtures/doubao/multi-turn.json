@@ -1,0 +1,28 @@
+{
+  "url": "https://www.doubao.com/chat/fixture",
+  "inputAvailable": true,
+  "generating": false,
+  "challenge": false,
+  "errorText": "",
+  "messages": [
+    { "role": "user", "text": "历史问题" },
+    {
+      "role": "assistant",
+      "text": "这是历史回答正文至少十个字符。",
+      "references": [
+        { "title": "旧资料", "url": "https://example.com/old" }
+      ]
+    },
+    { "role": "user", "text": "目标问题" },
+    {
+      "role": "assistant",
+      "text": "目标回答正文至少十个字符。",
+      "references": [
+        { "title": "目标资料", "url": "https://example.com/target" },
+        { "title": "重复目标资料", "url": "https://example.com/target" },
+        { "title": "无效协议", "url": "ftp://example.com/file" },
+        { "title": "", "url": "https://reference.example/path" }
+      ]
+    }
+  ]
+}

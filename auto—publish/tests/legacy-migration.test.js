@@ -70,7 +70,8 @@ describe("legacy GEO migration", function() {
     assert.deepStrictEqual(createResearchStore(workspaceRoot).getResearch("travel-client", "legacy-query-7"), {
       id: "legacy-query-7", clientId: "travel-client", question: "Shanghai hotels", answerText: "Research answer",
       references: [{ title: "Useful source", url: "https://example.com/source", snippet: "" }],
-      createdAt: "2025-01-02T03:04:05.000Z", isAnswerComplete: true
+      collectionMethod: "legacy", collectedAt: "2025-01-02T03:04:05.000Z",
+      updatedAt: "2025-01-02T03:04:05.000Z", isAnswerComplete: true
     });
     const article = createArticleStore(workspaceRoot).getArticle("travel-client", "legacy-article-8");
     assert.equal(article.title, "Migrated title");
@@ -112,7 +113,10 @@ describe("legacy GEO migration", function() {
     const research = createResearchStore(workspaceRoot);
     research.saveResearch("travel-client", { id: "user-query", question: "user", answerText: "user", references: [], createdAt: "2025-01-01T00:00:00.000Z" });
     const second = migrator().migrate();
-    assert.deepStrictEqual(second, { clientsCopied: 0, researchImported: 0, articlesImported: 0, skipped: 3, warnings: ["Skipped citation 2 for query 7 because its URL is empty"] });
+    assert.deepStrictEqual(second, { clientsCopied: 0, researchImported: 0, articlesImported: 0, skipped: 3, warnings: [
+      "Skipped citation 2 for query 7 because its URL is empty",
+      "Existing legacy research legacy-query-7 differs and was not replaced"
+    ] });
     assert.equal(research.getResearch("travel-client", "user-query").answerText, "user");
   });
 
@@ -224,8 +228,18 @@ describe("legacy GEO migration", function() {
       researchImported: 0,
       articlesImported: 0,
       skipped: 3,
-      warnings: ["Skipped citation 2 for query 7 because its URL is empty"]
+      warnings: [
+        "Skipped citation 2 for query 7 because its URL is empty",
+        "Existing legacy research legacy-query-7 differs and was not replaced"
+      ]
     });
+  });
+
+  it("ignores the in-memory legacy researchQueryIds compatibility field when comparing articles", function() {
+    migrator().migrate();
+    const existing = createArticleStore(workspaceRoot).getArticle("travel-client", "legacy-article-8");
+    assert.deepStrictEqual(existing.researchQueryIds, ["legacy-query-7"]);
+    assert.equal(migrator().dryRun().warnings.includes("Existing legacy article legacy-article-8 differs and was not replaced"), false);
   });
 
   it("uses the preserved research references when an existing legacy query is skipped", function() {
