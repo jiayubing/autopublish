@@ -11,6 +11,10 @@ const RUNTIME_ENV_KEYS = [
   "AUTO_PUBLISH_ROOT_DIR",
   "AUTO_PUBLISH_APP_ROOT",
   "AUTO_PUBLISH_WORKSPACE",
+  "AI_API_KEY",
+  "AI_BASE_URL",
+  "AI_MODEL",
+  "AI_TIMEOUT_MS",
   "XQW_API_KEY",
   "MARKITDOWN_CMD",
   "PLAYWRIGHT_CLI_JS",
@@ -86,12 +90,16 @@ describe("runtime configuration", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-"));
     const original = saveRuntimeEnvironment();
     try {
-      fs.writeFileSync(path.join(root, ".env"), "XQW_API_KEY=workspace-secret\n", "utf8");
+      fs.writeFileSync(path.join(root, ".env"), "XQW_API_KEY=workspace-secret\nAI_API_KEY=workspace-ai-secret\nAI_BASE_URL=https://workspace.example/v1\nAI_MODEL=workspace-model\nAI_TIMEOUT_MS=10\n", "utf8");
       delete process.env.XQW_API_KEY;
       const runtime = configureRuntimeEnvironment({ appRoot: path.join(root, "app"), workspaceRoot: root });
       assert.equal(runtime.workspaceRoot, path.resolve(root));
       assert.equal(runtime.paths.data, path.join(root, "data"));
       assert.equal(process.env.XQW_API_KEY, "workspace-secret");
+      assert.equal(process.env.AI_API_KEY, undefined);
+      assert.equal(process.env.AI_BASE_URL, undefined);
+      assert.equal(process.env.AI_MODEL, undefined);
+      assert.equal(process.env.AI_TIMEOUT_MS, undefined);
       assert.equal(process.env.AUTO_PUBLISH_ROOT_DIR, path.resolve(root));
     } finally {
       restoreRuntimeEnvironment(original);
@@ -102,7 +110,7 @@ describe("runtime configuration", function() {
   it("reports stable secrets-free validation errors for missing startup configuration", function() {
     const { validateRuntimeConfiguration } = require("../desktop/runtime-config");
     const errors = validateRuntimeConfiguration({});
-    assert.ok(errors.some(function(error) { return error.code === "AI_CONFIG_INVALID"; }));
+    assert.equal(errors.some(function(error) { return error.code === "AI_CONFIG_INVALID"; }), false);
     assert.ok(errors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }));
     errors.forEach(function(error) {
       assert.equal(error.message.includes("secret"), false);

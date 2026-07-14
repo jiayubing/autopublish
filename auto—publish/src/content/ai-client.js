@@ -7,16 +7,12 @@ function aiError(code, message) {
   return error;
 }
 
-function valueOrEnvironment(config, key, envKey) {
-  return config[key] == null ? process.env[envKey] : config[key];
-}
-
 function validateConfig(config) {
   const input = config || {};
-  const apiKey = valueOrEnvironment(input, "apiKey", "AI_API_KEY");
-  const baseUrl = valueOrEnvironment(input, "baseUrl", "AI_BASE_URL");
-  const model = valueOrEnvironment(input, "model", "AI_MODEL");
-  const timeoutValue = valueOrEnvironment(input, "timeoutMs", "AI_TIMEOUT_MS");
+  const apiKey = input.apiKey;
+  const baseUrl = input.baseUrl;
+  const model = input.model;
+  const timeoutValue = input.timeoutMs;
   const timeoutMs = timeoutValue == null || timeoutValue === "" ? 60000 : Number(timeoutValue);
 
   if (typeof apiKey !== "string" || !apiKey.trim() || typeof baseUrl !== "string" || !baseUrl.trim() ||
@@ -105,4 +101,4 @@ function createAiClient(config) {
   return { complete: complete };
 }
 
-module.exports = { createAiClient };
+module.exports = { createAiClient, validateAiConfig: validateConfig };

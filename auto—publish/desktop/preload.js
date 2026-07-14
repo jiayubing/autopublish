@@ -18,6 +18,12 @@ const api = {
     openCurrent: function() { return ipcRenderer.invoke("workspace:open-current"); },
     requestSwitch: function() { return ipcRenderer.invoke("workspace:request-switch"); }
   },
+  aiProvider: {
+    getStatus: function() { return ipcRenderer.invoke("ai-provider:get-status"); },
+    save: function(input) { return ipcRenderer.invoke("ai-provider:save", input || {}); },
+    testConnection: function(input) { return ipcRenderer.invoke("ai-provider:test", input || {}); },
+    clear: function() { return ipcRenderer.invoke("ai-provider:clear"); }
+  },
   batch: {
     getState: function() { return ipcRenderer.invoke("desktop:get-state"); },
     refreshQueue: function(options) { return ipcRenderer.invoke("desktop:refresh-queue", options || {}); },

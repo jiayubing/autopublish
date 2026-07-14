@@ -21,6 +21,19 @@ function response(status, payload) {
 }
 
 describe("ai client", function() {
+  it("requires explicit configuration instead of reading process environment", function() {
+    const original = process.env.AI_API_KEY;
+    process.env.AI_API_KEY = "environment-secret";
+    try {
+      assert.throws(function() { createAiClient({ baseUrl: config().baseUrl, model: config().model }); }, function(error) {
+        return error.code === "AI_CONFIG_INVALID";
+      });
+    } finally {
+      if (original === undefined) delete process.env.AI_API_KEY;
+      else process.env.AI_API_KEY = original;
+    }
+  });
+
   it("posts model and messages to the OpenAI compatible chat endpoint", async function() {
     let request;
     const client = createAiClient(config({ fetch: async function(url, options) {

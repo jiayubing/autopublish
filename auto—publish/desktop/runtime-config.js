@@ -27,6 +27,7 @@ function loadWorkspaceEnvironment(workspaceRoot) {
 
   const values = dotenv.parse(fs.readFileSync(envPath, "utf8"));
   Object.keys(values).forEach(function(key) {
+    if (key.startsWith("AI_")) return;
     if (process.env[key] !== undefined) return;
     process.env[key] = values[key];
     loadedWorkspaceValues[key] = { previous: undefined, value: values[key] };
@@ -36,9 +37,6 @@ function loadWorkspaceEnvironment(workspaceRoot) {
 function validateRuntimeConfiguration(environment) {
   const env = environment || process.env;
   const errors = [];
-  if (!env.AI_API_KEY || !env.AI_BASE_URL || !env.AI_MODEL) {
-    errors.push({ code: "AI_CONFIG_INVALID", message: "AI configuration is invalid" });
-  }
   if (!env.XQW_API_KEY) {
     errors.push({ code: "MEDIA_CONFIG_INVALID", message: "Media configuration is invalid" });
   }

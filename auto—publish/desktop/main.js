@@ -1,11 +1,12 @@
 const path = require("path");
-const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage } = require("electron");
 const { isAllowedRendererNavigation } = require("./security/navigation");
 
 let mainWindow = null;
 let unsubscribeLogs = null;
 let unsubscribeDoubaoQueue = null;
 let doubaoCollectionService = null;
+let aiProviderService = null;
 let taskService = null;
 let runtimeDisposePromise = null;
 let quitPromise = null;
@@ -92,6 +93,7 @@ async function disposeRuntime() {
     }
     const service = doubaoCollectionService;
     doubaoCollectionService = null;
+    aiProviderService = null;
     taskService = null;
     try {
       if (service && typeof service.dispose === "function") await service.dispose();
@@ -129,7 +131,7 @@ function openWorkspacePath(value) {
   });
 }
 
-function initializeRuntime(bootstrapState, appRoot) {
+function initializeRuntime(bootstrapState, appRoot, userDataPath) {
   // Lazy-load config-dependent modules only after workspace bootstrap is ready.
   // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
   // its default project-root path.
@@ -148,6 +150,20 @@ function initializeRuntime(bootstrapState, appRoot) {
   const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
   doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot });
 
+  const createAiProviderService = require("./services/ai-provider-service").createAiProviderService;
+  aiProviderService = createAiProviderService({
+    userDataPath: userDataPath,
+    safeStorage: safeStorage,
+    getBatchState: function() {
+      return taskService && typeof taskService.getState === "function" ? taskService.getState() : {};
+    }
+  });
+  const createAiContentService = require("./services/ai-content-service").createAiContentService;
+  const aiContentService = createAiContentService({
+    workspaceRoot: runtime.workspaceRoot,
+    aiClientFactory: function() { return aiProviderService.createClient(); }
+  });
+
   const registerIpc = require("./ipc/register").registerIpc;
   registerIpc({
     ipcMain: ipcMain,
@@ -156,7 +172,9 @@ function initializeRuntime(bootstrapState, appRoot) {
     rootDir: runtime.workspaceRoot,
     appRoot: runtime.appRoot,
     paths: runtime.paths,
-    doubaoCollectionService: doubaoCollectionService
+    doubaoCollectionService: doubaoCollectionService,
+    aiProviderService: aiProviderService,
+    aiContentService: aiContentService
   });
 
   unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) {
@@ -192,7 +210,7 @@ function initializeWorkspaceBootstrap() {
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService
   });
-  return { service: workspaceBootstrapService, appRoot: appRoot };
+  return { service: workspaceBootstrapService, appRoot: appRoot, userDataPath: userDataPath };
 }
 
 function failStartup() {
@@ -208,7 +226,7 @@ async function startApplication() {
     const bootstrapState = workspace.service.bootstrap();
     if (bootstrapState && bootstrapState.state === "ready" &&
       typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
-      initializeRuntime(bootstrapState, workspace.appRoot);
+      initializeRuntime(bootstrapState, workspace.appRoot, workspace.userDataPath);
     }
     startupStatus = "ready";
     createMainWindow();
