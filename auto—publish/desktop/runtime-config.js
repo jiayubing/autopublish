@@ -59,8 +59,14 @@ function validateRuntimeConfiguration(environment) {
 
 function configureRuntimeEnvironment(options) {
   const values = options || {};
-  const appRoot = path.resolve(values.appRoot || process.env.AUTO_PUBLISH_APP_ROOT || process.cwd());
-  const workspaceRoot = path.resolve(values.workspaceRoot || process.env.AUTO_PUBLISH_WORKSPACE || process.cwd());
+  if (typeof values.appRoot !== "string" || values.appRoot.trim() === "") {
+    throw new Error("appRoot is required");
+  }
+  if (typeof values.workspaceRoot !== "string" || values.workspaceRoot.trim() === "") {
+    throw new Error("workspaceRoot is required");
+  }
+  const appRoot = path.resolve(values.appRoot);
+  const workspaceRoot = path.resolve(values.workspaceRoot);
   const paths = ensureWorkspaceDirectories(createWorkspacePaths(workspaceRoot));
 
   process.env.AUTO_PUBLISH_ROOT_DIR = workspaceRoot;

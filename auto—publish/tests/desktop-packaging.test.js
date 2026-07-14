@@ -484,6 +484,8 @@ describe("source assembly and packaging contract", function() {
     const verifier = path.resolve(__dirname, "..", "scripts", "verify-alpha-package.js");
     const cases = [
       ["nested/.env", ".env"],
+      ["workspace-location.json", "workspace-location.json"],
+      ["nested/.autopublish-workspace.json", "nested/.autopublish-workspace.json"],
       ["clients/client-1/questions.json", "questions.json"],
       ["research/client-1/question-1.json", "research/client-1/question-1.json"],
       ["browser/doubao/profile/marker", "browser/doubao"],

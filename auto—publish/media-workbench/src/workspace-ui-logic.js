@@ -1,4 +1,5 @@
 const ERROR_MESSAGES = Object.freeze({
+  WORKSPACE_LOCATION_INVALID: '\u5df2\u4fdd\u5b58\u7684\u5de5\u4f5c\u533a\u914d\u7f6e\u65e0\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9',
   WORKSPACE_SELECTION_CANCELLED: '已取消选择，当前工作区没有改变。',
   WORKSPACE_SELECTION_REQUIRED: '尚未选择工作区，请选择一个可用目录。',
   WORKSPACE_CONFIRMATION_REQUIRED: '请确认后再初始化工作区。',
@@ -38,7 +39,7 @@ export function getBootstrapView(state) {
   return {
     kind: 'welcome',
     mountsApp: false,
-    text: state?.state === 'invalid'
+    text: state?.error
       ? getWorkspaceErrorMessage(state.error)
       : '请选择一个工作区后继续使用应用。',
   };

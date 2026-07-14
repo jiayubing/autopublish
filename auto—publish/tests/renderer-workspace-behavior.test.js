@@ -16,6 +16,12 @@ async function loadLogic() {
 }
 
 const selectionRequired = { state: "selection_required", workspacePath: null, envOverride: false };
+const invalidSavedSelection = {
+  state: "selection_required",
+  workspacePath: null,
+  envOverride: false,
+  error: { code: "WORKSPACE_LOCATION_INVALID", message: "unsafe internal detail" },
+};
 const invalid = {
   state: "invalid",
   workspacePath: null,
@@ -85,6 +91,15 @@ describe("executable renderer workspace behavior", function() {
     assert.equal(relaunchingView.chooseDisabled, true);
     assert.equal(relaunchingView.confirmDisabled, true);
     assert.equal(relaunchingView.cancelDisabled, true);
+  });
+
+  it("shows a saved workspace configuration error while remaining in selection_required", async function() {
+    const { getBootstrapView, getSelectionView, getWorkspaceErrorMessage } = await loadLogic();
+    const expected = "\u5df2\u4fdd\u5b58\u7684\u5de5\u4f5c\u533a\u914d\u7f6e\u65e0\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9";
+    assert.equal(getWorkspaceErrorMessage(invalidSavedSelection.error), expected);
+    assert.equal(getBootstrapView(invalidSavedSelection).kind, "welcome");
+    assert.equal(getBootstrapView(invalidSavedSelection).text, expected);
+    assert.equal(getSelectionView(invalidSavedSelection).errorMessage, expected);
   });
 
   it("keeps the welcome state after picker cancellation", async function() {

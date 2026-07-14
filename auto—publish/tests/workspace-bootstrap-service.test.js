@@ -136,17 +136,26 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
-  it("requires selection without a fallback directory or when saved configuration is damaged", function() {
-    for (const setup of ["missing", "corrupt", "unknown-version"]) {
+  it("requires selection with a specific stable error when saved configuration is damaged", function() {
+    for (const setup of ["missing", "corrupt", "unknown-version", "invalid-fields"]) {
       const harness = createHarness();
       try {
         if (setup === "corrupt") fs.writeFileSync(path.join(harness.userDataPath, "workspace-location.json"), "{bad", "utf8");
         if (setup === "unknown-version") fs.writeFileSync(path.join(harness.userDataPath, "workspace-location.json"), JSON.stringify({ version: 2, workspacePath: "C:\\workspace" }), "utf8");
+        if (setup === "invalid-fields") fs.writeFileSync(
+          path.join(harness.userDataPath, "workspace-location.json"),
+          JSON.stringify({ version: 1, workspacePath: path.join(harness.root, "saved"), extra: true }),
+          "utf8"
+        );
         const state = harness.service.bootstrap();
         assert.equal(state.state, "selection_required", setup);
         assert.equal(state.workspacePath, null, setup);
         assert.equal(state.envOverride, false, setup);
-        assert.equal(state.error.code, "WORKSPACE_SELECTION_REQUIRED", setup);
+        const expectedCode = setup === "missing" ? "WORKSPACE_SELECTION_REQUIRED" : "WORKSPACE_LOCATION_INVALID";
+        assert.equal(state.error.code, expectedCode, setup);
+        if (setup !== "missing") {
+          assert.equal(state.error.message, "\u5df2\u4fdd\u5b58\u7684\u5de5\u4f5c\u533a\u914d\u7f6e\u65e0\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9", setup);
+        }
         assert.equal(fs.existsSync(path.join(harness.userDataPath, "workspace-location.json")), setup !== "missing", setup);
         assert.notEqual(state.workspacePath, path.join(process.cwd(), "Documents", "AutoPublish"));
       } finally { harness.cleanup(); }
@@ -268,6 +277,93 @@ describe("workspace bootstrap service", function() {
       assert.equal(fs.readFileSync(path.join(candidate, "keep.txt"), "utf8"), "keep");
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), true);
       assert.equal(fs.existsSync(path.join(candidate, "data")), true);
+    } finally { harness.cleanup(); }
+  });
+
+  it("rejects every existing AutoPublish directory link before initialization", async function(t) {
+    const directDirectories = [
+      "input", "data", "logs", "published", "failed", "tmp", "work", "config",
+      "clients", "research", "templates", "generated", "browser"
+    ];
+    const nestedDirectories = ["input/media", "browser/doubao", "logs/doubao-diagnostics"];
+    let linkPermissionError = null;
+
+    for (const relativePath of directDirectories.concat(nestedDirectories)) {
+      const harness = createHarness();
+      const candidate = path.join(harness.root, "candidate");
+      const outside = path.join(harness.root, "outside-" + relativePath.replace(/[^a-z0-9]+/gi, "-"));
+      const linkPath = path.join(candidate, relativePath);
+      try {
+        fs.mkdirSync(candidate);
+        fs.writeFileSync(path.join(candidate, "keep.txt"), "keep", "utf8");
+        fs.mkdirSync(outside);
+        fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+        try {
+          fs.symlinkSync(outside, linkPath, "junction");
+        } catch (error) {
+          if (error && ["EACCES", "EPERM", "UNKNOWN"].includes(error.code)) {
+            linkPermissionError = error;
+            t.skip("directory symlinks are not permitted in this environment");
+            return;
+          }
+          throw error;
+        }
+
+        const selected = harness.service.chooseDirectory(candidate);
+        await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_PATH_FORBIDDEN");
+        assert.deepEqual(harness.events.relaunches, []);
+        assert.deepEqual(fs.readdirSync(outside), [], relativePath + " must not be initialized outside the workspace");
+      } finally {
+        harness.cleanup();
+      }
+    }
+    assert.equal(linkPermissionError, null);
+  });
+
+  it("rejects an existing non-directory AutoPublish path before initialization", async function() {
+    const harness = createHarness();
+    const candidate = path.join(harness.root, "candidate");
+    try {
+      fs.mkdirSync(candidate);
+      fs.writeFileSync(path.join(candidate, "keep.txt"), "keep", "utf8");
+      fs.writeFileSync(path.join(candidate, "data"), "not a directory", "utf8");
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_PATH_INVALID");
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
+      assert.deepEqual(harness.events.relaunches, []);
+    } finally { harness.cleanup(); }
+  });
+
+  it("fails closed when lstat cannot inspect an AutoPublish path", async function() {
+    const harness = createHarness();
+    const candidate = path.join(harness.root, "candidate");
+    const io = Object.create(fs);
+    const dataPath = path.join(candidate, "data");
+    io.lstatSync = function(target) {
+      if (target === dataPath) {
+        const error = new Error("inspection denied");
+        error.code = "EACCES";
+        throw error;
+      }
+      return fs.lstatSync(target);
+    };
+    const service = createWorkspaceBootstrapService({
+      env: {},
+      locationStore: harness.locationStore,
+      validator: harness.validator,
+      fs: io,
+      clock: function() { return new Date("2026-07-14T12:00:00.000Z"); },
+      tokenGenerator: function() { return "inspection-token"; },
+      createWorkspacePaths,
+      ensureWorkspaceDirectories,
+      relaunch: function() { harness.events.relaunches.push(true); }
+    });
+    try {
+      fs.mkdirSync(candidate);
+      fs.writeFileSync(path.join(candidate, "keep.txt"), "keep", "utf8");
+      const selected = service.chooseDirectory(candidate);
+      await assertError(service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_PATH_FORBIDDEN");
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
     } finally { harness.cleanup(); }
   });
 

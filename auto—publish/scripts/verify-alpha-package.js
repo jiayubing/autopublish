@@ -48,9 +48,15 @@ function findPrivateEntries(appDir) {
       var lowerSegments = segments.map(function(segment) { return segment.toLowerCase(); });
       var lowerName = entry.name.toLowerCase();
 
+      // These two files are always workspace state, even if a dependency
+      // happens to contain a file with the same name.
+      if (lowerName === "workspace-location.json" || lowerName === ".autopublish-workspace.json") {
+        found.push(relative);
+      }
+
       // Production dependencies can contain legitimate fixtures and data-like
       // filenames. They are already required by the package and are not app
-      // workspace content, so do not inspect any node_modules subtree.
+      // workspace content, so do not inspect any other node_modules subtree.
       if (entry.isDirectory() && lowerName === "node_modules") return;
 
       if (lowerName === ".env" || lowerName === "questions.json") {

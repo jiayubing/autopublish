@@ -13,6 +13,7 @@ const ERROR_MESSAGES = {
   WORKSPACE_CONFIRMATION_REQUIRED: "Workspace confirmation is required",
   WORKSPACE_PATH_INVALID: "Workspace path is invalid",
   WORKSPACE_PATH_FORBIDDEN: "Workspace path is forbidden",
+  WORKSPACE_LOCATION_INVALID: "\u5df2\u4fdd\u5b58\u7684\u5de5\u4f5c\u533a\u914d\u7f6e\u65e0\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9",
   WORKSPACE_NOT_WRITABLE: "Workspace path is not writable",
   WORKSPACE_MARKER_INVALID: "Workspace marker is invalid",
   WORKSPACE_SELECTION_EXPIRED: "Workspace selection has expired",
@@ -37,6 +38,15 @@ function safeErrorCode(error, fallback) {
   return error && typeof error.code === "string" && ERROR_MESSAGES[error.code]
     ? error.code
     : fallback;
+}
+
+function isInvalidSavedLocation(result) {
+  const code = result && result.error && result.error.code;
+  return [
+    "WORKSPACE_LOCATION_INVALID",
+    "WORKSPACE_LOCATION_INVALID_JSON",
+    "WORKSPACE_LOCATION_VERSION_UNSUPPORTED"
+  ].includes(code);
 }
 
 function stableValidation(validation) {
@@ -201,7 +211,9 @@ function createWorkspaceBootstrapService(options) {
 
       let saved;
       try { saved = locationStore.read(); } catch (error) { return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED"); }
-      if (!saved || saved.ok !== true) return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
+      if (!saved || saved.ok !== true) {
+        return setSelectionRequired(isInvalidSavedLocation(saved) ? "WORKSPACE_LOCATION_INVALID" : "WORKSPACE_SELECTION_REQUIRED");
+      }
       if (!saved.value || typeof saved.value.workspacePath !== "string") return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
 
       const savedResult = classify(saved.value.workspacePath);
@@ -352,26 +364,75 @@ function createWorkspaceBootstrapService(options) {
     });
   }
 
-  function initializeWorkspace(root) {
-    const paths = makePaths(root);
+  function inspectWorkspaceDirectory(target) {
+    let stats;
+    try {
+      stats = io.lstatSync(target);
+    } catch (error) {
+      if (error && error.code === "ENOENT") return false;
+      throwStable("WORKSPACE_PATH_FORBIDDEN");
+    }
+    if (stats.isSymbolicLink()) throwStable("WORKSPACE_PATH_FORBIDDEN");
+    if (!stats.isDirectory()) throwStable("WORKSPACE_PATH_INVALID");
+    return true;
+  }
+
+  function collectWorkspaceDirectories(paths, workspaceRoot) {
+    const root = path.resolve(workspaceRoot);
     const directories = [];
     const seen = new Set();
+
+    inspectWorkspaceDirectory(root);
+
     Object.keys(paths).forEach(function(key) {
       const target = paths[key];
-      if (key === "root" || typeof target !== "string" || seen.has(target)) return;
-      seen.add(target);
-      let present;
-      try {
-        io.lstatSync(target);
-        present = true;
-      } catch (error) {
-        if (error && error.code === "ENOENT") present = false;
-        else throwStable("WORKSPACE_NOT_WRITABLE");
+      if (typeof target !== "string") throwStable("WORKSPACE_PATH_INVALID");
+      const resolvedTarget = path.resolve(target);
+      const relative = path.relative(root, resolvedTarget);
+      if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+        throwStable("WORKSPACE_PATH_FORBIDDEN");
       }
-      directories.push({ path: target, present: present });
+      if (seen.has(resolvedTarget)) return;
+      seen.add(resolvedTarget);
+
+      let current = root;
+      const segments = relative ? relative.split(path.sep) : [];
+      for (const segment of segments) {
+        current = path.join(current, segment);
+        inspectWorkspaceDirectory(current);
+      }
+      if (key !== "root") directories.push({ path: resolvedTarget, present: inspectWorkspaceDirectory(resolvedTarget) });
     });
+
+    return directories;
+  }
+
+  function secureEnsureWorkspaceDirectories(paths) {
+    const targets = Object.keys(paths)
+      .filter(function(key) { return key !== "root"; })
+      .map(function(key) { return path.resolve(paths[key]); })
+      .filter(function(target, index, all) { return all.indexOf(target) === index; })
+      .sort(function(first, second) { return first.length - second.length; });
+
+    targets.forEach(function(target) {
+      if (inspectWorkspaceDirectory(target)) return;
+      try {
+        io.mkdirSync(target);
+      } catch (error) {
+        if (!error || error.code !== "EEXIST") throw error;
+      }
+      inspectWorkspaceDirectory(target);
+    });
+    return paths;
+  }
+
+  function initializeWorkspace(root) {
+    const workspaceRoot = path.resolve(root);
+    const paths = makePaths(workspaceRoot);
+    const directories = collectWorkspaceDirectories(paths, workspaceRoot)
+      .filter(function(item) { return item.path !== workspaceRoot; });
     const record = {
-      markerPath: path.join(root, WORKSPACE_MARKER_FILE),
+      markerPath: path.join(workspaceRoot, WORKSPACE_MARKER_FILE),
       markerCreated: false,
       markerIdentity: null,
       markerContent: null,
@@ -380,7 +441,8 @@ function createWorkspaceBootstrapService(options) {
       rollback: function() { return rollbackInitialization(record); }
     };
     try {
-      ensureDirectories(paths);
+      if (opts.ensureWorkspaceDirectories) ensureDirectories(paths);
+      else secureEnsureWorkspaceDirectories(paths);
       captureDirectoryArtifacts(record);
       const marker = JSON.stringify({ version: 1, createdAt: readClock(clock).toISOString() }) + "\n";
       try {
