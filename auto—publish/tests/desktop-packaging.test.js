@@ -5,6 +5,7 @@ const fs = require("fs");
 const Module = require("module");
 const os = require("os");
 const path = require("path");
+const vm = require("vm");
 
 function read(file) {
   return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
@@ -25,6 +26,9 @@ function loadMainWithQuitHarness(dispose) {
   const quitEvents = [];
   const app = {
     on: function(name, handler) { listeners.set(name, handler); },
+    getPath: function() { return "C:\\Users\\test\\AppData\\Roaming\\AutoPublish"; },
+    getAppPath: function() { return "C:\\Program Files\\AutoPublish"; },
+    relaunch: function() {},
     whenReady: function() {
       return { then: function(callback) { callback(); } };
     },
@@ -50,8 +54,20 @@ function loadMainWithQuitHarness(dispose) {
   BrowserWindow.prototype.on = function() {};
 
   const mocks = new Map([
-    ["electron", { app: app, BrowserWindow: BrowserWindow, ipcMain: {}, shell: {} }],
+    ["electron", {
+      app: app,
+      BrowserWindow: BrowserWindow,
+      ipcMain: {},
+      dialog: { showOpenDialog: function() {} },
+      shell: { openPath: function() {} }
+    }],
     ["./security/navigation", { isAllowedRendererNavigation: function() { return true; } }],
+    ["./workspace-bootstrap-service", {
+      createWorkspaceBootstrapService: function() {
+        return { bootstrap: function() { return { state: "ready" }; } };
+      }
+    }],
+    ["./ipc/workspace-bootstrap-ipc", { registerWorkspaceBootstrapIpc: function() {} }],
     ["./runtime-paths", {
       configureRuntimeEnvironment: function() {
         return { workspaceRoot: "workspace", appRoot: "app", paths: {} };
@@ -84,7 +100,272 @@ function loadMainWithQuitHarness(dispose) {
   };
 }
 
+function loadPreloadHarness() {
+  const calls = [];
+  const exposed = {};
+  const ipcRenderer = {
+    invoke: function(channel, input) {
+      calls.push([channel, input]);
+      return Promise.resolve({ ok: true });
+    },
+    on: function() {},
+    removeListener: function() {}
+  };
+  vm.runInNewContext(read("desktop/preload.js"), {
+    require: function(name) {
+      if (name === "electron") {
+        return {
+          contextBridge: { exposeInMainWorld: function(name, api) { exposed[name] = api; } },
+          ipcRenderer: ipcRenderer
+        };
+      }
+      throw new Error("unexpected require: " + name);
+    }
+  }, { filename: path.resolve(__dirname, "..", "desktop", "preload.js") });
+  return { calls: calls, api: exposed.desktopConsole };
+}
+
+function loadMainWithStartupHarness(bootstrapState) {
+  const mainPath = path.resolve(__dirname, "..", "desktop", "main.js");
+  const listeners = new Map();
+  const events = [];
+  const handles = new Map();
+  let readyPromise = null;
+  const app = {
+    on: function(name, handler) { listeners.set(name, handler); },
+    whenReady: function() {
+      return {
+        then: function(callback) {
+          readyPromise = Promise.resolve(callback());
+          return readyPromise;
+        }
+      };
+    },
+    getPath: function(name) {
+      events.push(["getPath", name]);
+      return "C:\\Users\\test\\AppData\\Roaming\\AutoPublish";
+    },
+    getAppPath: function() {
+      events.push(["getAppPath"]);
+      return "C:\\Program Files\\AutoPublish";
+    },
+    relaunch: function() { events.push(["relaunch"]); },
+    quit: function() { events.push(["quit"]); }
+  };
+  function BrowserWindow() {
+    events.push(["window"]);
+    this.webContents = {
+      setWindowOpenHandler: function() {},
+      on: function() {},
+      session: { setPermissionRequestHandler: function() {} },
+      send: function() {}
+    };
+  }
+  BrowserWindow.getAllWindows = function() { return []; };
+  BrowserWindow.prototype.setMenuBarVisibility = function() {};
+  BrowserWindow.prototype.loadFile = function() {};
+  BrowserWindow.prototype.on = function() {};
+
+  const ipcMain = {
+    handle: function(channel, handler) {
+      handles.set(channel, handler);
+      events.push(["handle", channel]);
+    }
+  };
+  const service = {
+    bootstrap: function() {
+      events.push(["bootstrap"]);
+      return bootstrapState;
+    },
+    getBootstrapState: function() { return bootstrapState; },
+    chooseDirectory: function() {},
+    confirmSelection: function() {},
+    cancelSelection: function() {},
+    requestSwitch: function() {},
+    getCurrent: function() {},
+    openCurrent: function() {}
+  };
+  const mocks = new Map([
+    ["electron", {
+      app: app,
+      BrowserWindow: BrowserWindow,
+      ipcMain: ipcMain,
+      dialog: { showOpenDialog: function() {} },
+      shell: { openPath: function() {} }
+    }],
+    ["./security/navigation", { isAllowedRendererNavigation: function() { return true; } }],
+    ["./workspace-bootstrap-service", {
+      createWorkspaceBootstrapService: function(options) {
+        events.push(["create-bootstrap", options]);
+        return service;
+      }
+    }],
+    ["./ipc/workspace-bootstrap-ipc", {
+      registerWorkspaceBootstrapIpc: function() { events.push(["workspace-ipc"]); }
+    }],
+    ["./runtime-paths", {
+      configureRuntimeEnvironment: function() {
+        events.push(["runtime"]);
+        return { workspaceRoot: "workspace", appRoot: "app", paths: {} };
+      }
+    }],
+    ["./services/desktop-task-service", {
+      createDesktopTaskService: function() { events.push(["task"]); return {}; }
+    }],
+    ["./services/doubao-collection-service", {
+      createDoubaoCollectionDesktopService: function() {
+        events.push(["doubao"]);
+        return {
+          subscribe: function() { return function() {}; },
+          dispose: function() { events.push(["dispose"]); },
+          getQueueState: function() { return { state: "idle" }; }
+        };
+      }
+    }],
+    ["./ipc/register", { registerIpc: function() { events.push(["business-ipc"]); } }],
+    ["../src/core/logger", { subscribe: function() { events.push(["logger"]); return function() {}; } }]
+  ]);
+  const originalLoad = Module._load;
+  Module._load = function(request, parent, isMain) {
+    if (mocks.has(request)) return mocks.get(request);
+    return originalLoad.apply(this, arguments);
+  };
+  delete require.cache[mainPath];
+  try {
+    require(mainPath);
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[mainPath];
+  }
+  return {
+    app: app,
+    events: events,
+    handles: handles,
+    ready: function() { return readyPromise; },
+    listeners: listeners
+  };
+}
+
 describe("source assembly and packaging contract", function() {
+  it("does not create runtime or business services before workspace bootstrap is ready", async function() {
+    const harness = loadMainWithStartupHarness({ state: "selection_required" });
+    await harness.ready();
+
+    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), [
+      "getPath",
+      "getAppPath",
+      "create-bootstrap",
+      "workspace-ipc",
+      "bootstrap",
+      "window"
+    ]);
+    assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
+    assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false);
+    assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false);
+    assert.equal(harness.events.some(function(event) { return event[0] === "business-ipc"; }), false);
+    assert.equal(harness.events.some(function(event) { return event[0] === "logger"; }), false);
+  });
+
+  it("keeps every non-ready bootstrap state free of runtime and business initialization", async function() {
+    for (const state of ["checking", "selection_required", "invalid", "confirmation_required", "relaunching"]) {
+      const harness = loadMainWithStartupHarness({ state: state });
+      await harness.ready();
+      assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false, state);
+      assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false, state);
+      assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false, state);
+      assert.equal(harness.events.some(function(event) { return event[0] === "business-ipc"; }), false, state);
+      assert.equal(harness.events.some(function(event) { return event[0] === "logger"; }), false, state);
+    }
+  });
+
+  it("initializes ready runtime after bootstrap and injects protected runtime dependencies", async function() {
+    const harness = loadMainWithStartupHarness({ state: "ready" });
+    await harness.ready();
+
+    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), [
+      "getPath",
+      "getAppPath",
+      "create-bootstrap",
+      "workspace-ipc",
+      "bootstrap",
+      "runtime",
+      "task",
+      "doubao",
+      "business-ipc",
+      "logger",
+      "window"
+    ]);
+    const options = harness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
+    assert.equal(options.userDataPath, "C:\\Users\\test\\AppData\\Roaming\\AutoPublish");
+    assert.equal(options.validatorOptions.appPath, "C:\\Program Files\\AutoPublish");
+    assert.equal(options.validatorOptions.resourcesPath, process.resourcesPath);
+    assert.equal(options.validatorOptions.userDataPath, options.userDataPath);
+    assert.equal(options.env, process.env);
+    assert.equal(typeof options.taskService.getState, "function");
+    assert.equal(typeof options.doubaoCollectionService.getQueueState, "function");
+    assert.equal(typeof options.relaunch, "function");
+    assert.equal(typeof options.disposeRuntime, "function");
+  });
+
+  it("disposes the current runtime once before relaunch and tolerates relaunch without runtime", async function() {
+    const readyHarness = loadMainWithStartupHarness({ state: "ready" });
+    await readyHarness.ready();
+    const options = readyHarness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
+    await options.relaunch();
+    await options.disposeRuntime();
+    assert.equal(readyHarness.events.filter(function(event) { return event[0] === "dispose"; }).length, 1);
+    assert.deepEqual(readyHarness.events.slice(-2).map(function(event) { return event[0]; }), ["relaunch", "quit"]);
+
+    const selectionHarness = loadMainWithStartupHarness({ state: "selection_required" });
+    await selectionHarness.ready();
+    const selectionOptions = selectionHarness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
+    await selectionOptions.relaunch();
+    assert.deepEqual(selectionHarness.events.slice(-2).map(function(event) { return event[0]; }), ["relaunch", "quit"]);
+  });
+
+  it("exposes only the workspace bootstrap API and forwards token-only confirmations", async function() {
+    const harness = loadPreloadHarness();
+    assert.deepEqual(Object.keys(harness.api.workspace).sort(), [
+      "cancelSelection",
+      "chooseDirectory",
+      "confirmSelection",
+      "getBootstrapState",
+      "getCurrent",
+      "openCurrent",
+      "requestSwitch"
+    ]);
+    assert.equal(Object.prototype.hasOwnProperty.call(harness.api.workspace, "setPath"), false);
+
+    await harness.api.workspace.getBootstrapState();
+    await harness.api.workspace.chooseDirectory();
+    await harness.api.workspace.confirmSelection({ token: "selection-token" });
+    await harness.api.workspace.cancelSelection();
+    await harness.api.workspace.getCurrent();
+    await harness.api.workspace.openCurrent();
+    await harness.api.workspace.requestSwitch();
+    assert.deepEqual(harness.calls.map(function(call) { return call[0]; }).slice(-7), [
+      "workspace:get-bootstrap-state",
+      "workspace:choose-directory",
+      "workspace:confirm-selection",
+      "workspace:cancel-selection",
+      "workspace:get-current",
+      "workspace:open-current",
+      "workspace:request-switch"
+    ]);
+    assert.equal(harness.calls[harness.calls.length - 5][1].token, "selection-token");
+    await assert.rejects(function() {
+      return harness.api.workspace.confirmSelection({ token: "selection-token", path: "C:\\private" });
+    });
+    assert.equal(harness.calls.filter(function(call) { return call[0] === "workspace:confirm-selection"; }).length, 1);
+  });
+
+  it("does not retain a default Documents or cwd workspace fallback", function() {
+    const main = read("desktop/main.js");
+    assert.doesNotMatch(main, /Documents[\\/]/i);
+    assert.doesNotMatch(main, /process\.cwd\s*\(/);
+    assert.doesNotMatch(main, /homedir\s*\(/);
+  });
+
   it("loads the React build from the packaged app files", function() {
     const main = read("desktop/main.js");
     assert.ok(main.includes("media-workbench"));

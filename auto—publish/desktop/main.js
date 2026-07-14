@@ -1,15 +1,13 @@
 const path = require("path");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const { isAllowedRendererNavigation } = require("./security/navigation");
 
 let mainWindow = null;
 let unsubscribeLogs = null;
-let configureRuntimeEnvironment = null;
-let subscribe = null;
-let registerIpc = null;
-let createDesktopTaskService = null;
-let doubaoCollectionService = null;
 let unsubscribeDoubaoQueue = null;
+let doubaoCollectionService = null;
+let taskService = null;
+let runtimeDisposePromise = null;
 let isQuitting = false;
 const EXTERNAL_LINK_HOSTS = new Set(["www.toutiao.com", "mp.weixin.qq.com", "www.lieju.com"]);
 
@@ -57,17 +55,63 @@ function createMainWindow() {
   mainWindow.on("closed", function() { mainWindow = null; });
 }
 
-app.whenReady().then(function() {
-  createMainWindow();
+function createDeferredTaskService() {
+  return {
+    getState: function() {
+      if (taskService && typeof taskService.getState === "function") return taskService.getState();
+      return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+    }
+  };
+}
 
-  // Lazy-load config-dependent modules AFTER runtime environment is configured.
+function createDeferredQueueService() {
+  return {
+    getQueueState: function() {
+      if (doubaoCollectionService && typeof doubaoCollectionService.getQueueState === "function") {
+        return doubaoCollectionService.getQueueState();
+      }
+      return { state: "idle" };
+    }
+  };
+}
+
+async function disposeRuntime() {
+  if (runtimeDisposePromise) return runtimeDisposePromise;
+  runtimeDisposePromise = (async function() {
+    if (unsubscribeDoubaoQueue) {
+      unsubscribeDoubaoQueue();
+      unsubscribeDoubaoQueue = null;
+    }
+    if (unsubscribeLogs) {
+      unsubscribeLogs();
+      unsubscribeLogs = null;
+    }
+    const service = doubaoCollectionService;
+    doubaoCollectionService = null;
+    taskService = null;
+    try {
+      if (service && typeof service.dispose === "function") await service.dispose();
+    } catch (_) {}
+  })();
+  return runtimeDisposePromise;
+}
+
+async function relaunchApplication() {
+  await disposeRuntime();
+  app.relaunch();
+  isQuitting = true;
+  app.quit();
+}
+
+function initializeRuntime() {
+  // Lazy-load config-dependent modules only after workspace bootstrap is ready.
   // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
   // its default project-root path.
-  configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
+  const configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
   const runtime = configureRuntimeEnvironment();
 
-  createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
-  const taskService = createDesktopTaskService({
+  const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
+  taskService = createDesktopTaskService({
     cwd: runtime.workspaceRoot,
     sendToRenderer: sendToRenderer
   });
@@ -75,7 +119,7 @@ app.whenReady().then(function() {
   const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
   doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot });
 
-  registerIpc = require("./ipc/register").registerIpc;
+  const registerIpc = require("./ipc/register").registerIpc;
   registerIpc({
     ipcMain: ipcMain,
     taskService: taskService,
@@ -90,8 +134,42 @@ app.whenReady().then(function() {
     sendToRenderer("content:doubao-queue-state", state);
   });
 
-  subscribe = require("../src/core/logger").subscribe;
+  const subscribe = require("../src/core/logger").subscribe;
   unsubscribeLogs = subscribe(function(entry) { sendToRenderer("publish-log", entry); });
+}
+
+function initializeWorkspaceBootstrap() {
+  const userDataPath = app.getPath("userData");
+  const createWorkspaceBootstrapService = require("./workspace-bootstrap-service").createWorkspaceBootstrapService;
+  const workspaceBootstrapService = createWorkspaceBootstrapService({
+    userDataPath: userDataPath,
+    env: process.env,
+    validatorOptions: {
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      userDataPath: userDataPath
+    },
+    taskService: createDeferredTaskService(),
+    doubaoCollectionService: createDeferredQueueService(),
+    disposeRuntime: disposeRuntime,
+    relaunch: relaunchApplication,
+    openPath: function(value) { return shell.openPath(value); }
+  });
+
+  const registerWorkspaceBootstrapIpc = require("./ipc/workspace-bootstrap-ipc").registerWorkspaceBootstrapIpc;
+  registerWorkspaceBootstrapIpc({
+    ipcMain: ipcMain,
+    dialog: dialog,
+    workspaceBootstrapService: workspaceBootstrapService
+  });
+  return workspaceBootstrapService;
+}
+
+app.whenReady().then(function() {
+  const workspaceBootstrapService = initializeWorkspaceBootstrap();
+  const bootstrapState = workspaceBootstrapService.bootstrap();
+  if (bootstrapState && bootstrapState.state === "ready") initializeRuntime();
+  createMainWindow();
 });
 
 app.on("activate", function() {
@@ -106,10 +184,6 @@ app.on("before-quit", async function(event) {
   if (isQuitting) return;
   isQuitting = true;
   event.preventDefault();
-  if (unsubscribeDoubaoQueue) { unsubscribeDoubaoQueue(); unsubscribeDoubaoQueue = null; }
-  if (unsubscribeLogs) { unsubscribeLogs(); unsubscribeLogs = null; }
-  const service = doubaoCollectionService;
-  doubaoCollectionService = null;
-  try { if (service) await service.dispose(); } catch (_) {}
+  await disposeRuntime();
   app.quit();
 });
