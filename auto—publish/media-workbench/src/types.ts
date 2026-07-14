@@ -138,6 +138,16 @@ export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'plat
 
 export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: Array<{ name: string; content: string }>; }
 export interface ContentQuestion { id: string; text: string; enabled: boolean; createdAt: string; updatedAt: string; }
+export type DoubaoBatchMode = 'missing' | 'recollect';
+export interface DoubaoBatchTask { clientId: string; questionId: string; force: boolean; }
+export interface DoubaoBatchPreview {
+  mode: DoubaoBatchMode;
+  clientCount: number;
+  taskCount: number;
+  skippedExisting: number;
+  disabledQuestions: number;
+  tasks: DoubaoBatchTask[];
+}
 export type DoubaoLoginStatus = 'unknown' | 'checking' | 'login_required' | 'authenticated' | 'session_error';
 export type DoubaoTaskStatus = 'pending' | 'waiting_login' | 'running' | 'waiting_interval' | 'paused' | 'succeeded' | 'failed' | 'cancelled';
 export interface DoubaoTask { id: string; clientId: string; questionId: string; status: DoubaoTaskStatus; answerLength: number; referenceCount: number; error?: { code: string; message: string } | null; }

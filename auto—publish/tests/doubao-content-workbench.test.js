@@ -42,9 +42,41 @@ describe("Doubao content workbench renderer contracts", function() {
     ["createContentQuestion", "updateContentQuestion", "deleteContentQuestion", "confirm", "force: true", "saveManualResearch", "collectionMethod", "references", "collectedAt", "不会修改已保存文章"].forEach(function(value) {
       assert.equal(questions.includes(value), true, "missing " + value);
     });
-    ["Play", "Pause", "Square", "RotateCcw", "LogIn", "title=", "width", "height"].forEach(function(value) {
+    ["Pause", "Play", "Square", "RotateCcw", "title=", "width", "height"].forEach(function(value) {
       assert.equal(taskBar.includes(value), true, "missing " + value);
     });
+    assert.doesNotMatch(taskBar, /onStart|<LogIn/);
+  });
+
+  it("keeps one current-client selector and exposes independent batch commands", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const api = read("media-workbench/src/electron-api.ts");
+    assert.equal((questions.match(/onClientChange/g) || []).length, 0);
+    ["全选客户", "取消全选", "采集选中客户", "重新采集选中客户"].forEach(function(value) {
+      assert.match(questions, new RegExp(value));
+    });
+    assert.match(questions, /previewDoubaoBatch/);
+    assert.match(questions, /startPreparedDoubaoBatch/);
+    assert.match(api, /previewDoubaoBatch|DoubaoBatchPreview/);
+  });
+
+  it("uses pure batch-selection helpers and keeps current-client changes isolated", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    assert.match(questions, /export function toggleAllClientIds/);
+    assert.match(questions, /export function getBatchSelectionState/);
+    assert.doesNotMatch(questions, /useEffect\(\(\) => \{ setSelectedClientIds[\s\S]*\[clientId\]/);
+    assert.match(questions, /selectedClientIds\.length/);
+    assert.match(questions, /useState<string\[\]>\(clientId \? \[clientId\] : \[\]\)/);
+  });
+
+  it("renders collected answers through the shared collapsed source item", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");
+    assert.match(item, /defaultExpanded = false/);
+    assert.match(item, /aria-expanded/);
+    assert.match(item, /type=\"checkbox\"|type='checkbox'/);
+    assert.match(questions, /CollapsibleSourceItem/);
+    assert.match(questions, /defaultExpanded=\{false\}/);
   });
 
   it("uses selected research ids in generation and delegates history selection", function() {
@@ -107,7 +139,7 @@ describe("Doubao content workbench renderer contracts", function() {
     assert.match(questions, /loadQuestions\(\)[\s\S]*onRefresh\(\)/);
     assert.match(questions, /isCollecting/);
     assert.match(questions, /disabled=\{isCollecting\}/);
-    assert.match(taskBar, /disabled=\{busy \|\| active\}/);
+    assert.match(taskBar, /disabled=\{busy\}/);
   });
 
   it("uses current client refs and request cancellation guards for queue refreshes", function() {

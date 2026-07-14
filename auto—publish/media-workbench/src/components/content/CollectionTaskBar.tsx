@@ -1,19 +1,17 @@
 import React from 'react';
-import { LogIn, Pause, Play, RotateCcw, Square } from 'lucide-react';
+import { Pause, Play, RotateCcw, Square } from 'lucide-react';
 import { DoubaoQueueState } from '../../types';
 
 interface CollectionTaskBarProps {
   queue: DoubaoQueueState;
   busy?: boolean;
-  onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
   onRetry: () => void;
-  onLogin: () => void;
 }
 
-export default function CollectionTaskBar({ queue, busy = false, onStart, onPause, onResume, onStop, onRetry, onLogin }: CollectionTaskBarProps) {
+export default function CollectionTaskBar({ queue, busy = false, onPause, onResume, onStop, onRetry }: CollectionTaskBarProps) {
   const active = queue.status === 'running' || queue.status === 'paused' || queue.status === 'stopping';
   const statusLabels = { idle: '空闲', running: '运行中', paused: '已暂停', stopping: '停止中', completed: '已完成' };
   const currentTask = queue.tasks.find((task) => task.id === queue.currentTaskId);
@@ -33,12 +31,10 @@ export default function CollectionTaskBar({ queue, busy = false, onStart, onPaus
       </div>
     </div>
     <div className="flex items-center gap-1">
-      {!active && <button type="button" disabled={busy || active} onClick={onStart} title="开始批量采集" className="task-icon-button"><Play className="h-4 w-4" /></button>}
       {queue.status === 'running' && <button type="button" onClick={onPause} title="暂停批量采集" className="task-icon-button"><Pause className="h-4 w-4" /></button>}
       {queue.status === 'paused' && <button type="button" onClick={onResume} title="继续批量采集" className="task-icon-button"><Play className="h-4 w-4" /></button>}
       {active && <button type="button" onClick={onStop} title="停止批量采集" className="task-icon-button"><Square className="h-4 w-4" /></button>}
       {queue.status === 'completed' && <button type="button" disabled={busy} onClick={onRetry} title="重试失败任务" className="task-icon-button"><RotateCcw className="h-4 w-4" /></button>}
-      <button type="button" onClick={onLogin} title="打开豆包登录" className="task-icon-button"><LogIn className="h-4 w-4" /></button>
     </div>
   </div>;
 }

@@ -1,4 +1,4 @@
-import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 
 
 // Global type declaration for desktopConsole
@@ -54,6 +54,7 @@ interface DesktopConsoleContent {
   getDoubaoLoginState(): Promise<IpcResponse<Record<string, unknown>>>;
   openDoubaoLogin(): Promise<IpcResponse<Record<string, unknown>>>;
   collectDoubaoOne(input: { clientId: string; questionId: string; force?: boolean }): Promise<IpcResponse<ContentResearch>>;
+  previewDoubaoBatch(input: { clientIds: string[]; mode: DoubaoBatchMode }): Promise<IpcResponse<DoubaoBatchPreview>>;
   startDoubaoBatch(tasks: Array<{ clientId: string; questionId: string; force?: boolean }>): Promise<IpcResponse<DoubaoQueueState>>;
   pauseDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
   resumeDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
@@ -280,11 +281,37 @@ export async function collectDoubaoQuestion(input: { clientId: string; questionI
   return result.data;
 }
 
+export async function previewDoubaoBatch(input: { clientIds: string[]; mode: DoubaoBatchMode }): Promise<DoubaoBatchPreview> {
+  const clientIds = [...new Set(input.clientIds)].filter(Boolean);
+  if (!clientIds.length) throw new Error("At least one batch client is required");
+  const entries = await Promise.all(clientIds.map(async (clientId) => {
+    const [questions, research] = await Promise.all([listContentQuestions(clientId), listContentResearch(clientId)]);
+    const existingIds = new Set(research.map((item) => item.id));
+    return { questions, existingIds };
+  }));
+  const tasks: DoubaoBatchTask[] = [];
+  let skippedExisting = 0;
+  let disabledQuestions = 0;
+  entries.forEach(({ questions, existingIds }, index) => {
+    questions.forEach((question) => {
+      if (!question.enabled) { disabledQuestions += 1; return; }
+      if (input.mode === "missing" && existingIds.has(question.id)) { skippedExisting += 1; return; }
+      tasks.push({ clientId: clientIds[index], questionId: question.id, force: input.mode === "recollect" });
+    });
+  });
+  if (tasks.length > 500) throw new Error("Queue cannot contain more than 500 tasks");
+  return { mode: input.mode, clientCount: clientIds.length, taskCount: tasks.length, skippedExisting, disabledQuestions, tasks };
+}
+
 export async function startDoubaoBatch(tasks: Array<{ clientId: string; questionId: string; force?: boolean }>): Promise<DoubaoQueueState> {
   if (!isElectron()) throw new Error("Doubao collection requires the desktop app");
   const result = await window.desktopConsole!.content.startDoubaoBatch(tasks);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to start Doubao batch");
   return result.data;
+}
+
+export function startPreparedDoubaoBatch(tasks: DoubaoBatchTask[]): Promise<DoubaoQueueState> {
+  return startDoubaoBatch(tasks);
 }
 
 async function doubaoQueueCommand(command: () => Promise<IpcResponse<DoubaoQueueState>>, fallback: string): Promise<DoubaoQueueState> {

@@ -69,4 +69,23 @@ describe("content workbench regression", function() {
     ].forEach(function(value) { assert.equal(api.includes(value), true, "missing " + value); });
     assert.match(api, /subscribeDoubaoQueue[\s\S]*\(\) => void/);
   });
+
+  it("exposes the Task 1 batch preview and prepared-start renderer API", function() {
+    const api = read("media-workbench/src/electron-api.ts");
+    ["previewDoubaoBatch", "startPreparedDoubaoBatch", "DoubaoBatchPreview"].forEach(function(value) {
+      assert.match(api, new RegExp(value));
+    });
+  });
+
+  it("keeps batch selection and answer expansion as independent controls", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");
+    assert.doesNotMatch(questions, /onClientChange/);
+    assert.match(questions, /indeterminate/);
+    assert.match(questions, /二次确认|confirm/);
+    assert.match(item, /defaultExpanded = false/);
+    assert.match(item, /onSelectedChange/);
+    assert.match(item, /aria-expanded/);
+    assert.doesNotMatch(item, /activeId/);
+  });
 });
