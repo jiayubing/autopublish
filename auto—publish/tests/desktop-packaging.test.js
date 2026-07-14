@@ -15,11 +15,12 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function loadMainWithQuitHarness(dispose) {
+function loadMainWithQuitHarness(dispose, harnessOptions) {
+  const options = harnessOptions || {};
   const mainPath = path.resolve(__dirname, "..", "desktop", "main.js");
   const listeners = new Map();
   const service = {
-    subscribe: function() { return function() {}; },
+    subscribe: function() { return options.unsubscribeDoubaoQueue || function() {}; },
     dispose: dispose
   };
   let quitCalls = 0;
@@ -80,7 +81,7 @@ function loadMainWithQuitHarness(dispose) {
       createDoubaoCollectionDesktopService: function() { return service; }
     }],
     ["./ipc/register", { registerIpc: function() {} }],
-    ["../src/core/logger", { subscribe: function() { return function() {}; } }]
+    ["../src/core/logger", { subscribe: function() { return options.unsubscribeLogs || function() {}; } }]
   ]);
   const originalLoad = Module._load;
   Module._load = function(request, parent, isMain) {
@@ -127,7 +128,8 @@ function loadPreloadHarness() {
   return { calls: calls, api: exposed.desktopConsole };
 }
 
-function loadMainWithStartupHarness(bootstrapState) {
+function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
+  const options = harnessOptions || {};
   const mainPath = path.resolve(__dirname, "..", "desktop", "main.js");
   const listeners = new Map();
   const events = [];
@@ -178,6 +180,7 @@ function loadMainWithStartupHarness(bootstrapState) {
   const service = {
     bootstrap: function() {
       events.push(["bootstrap"]);
+      if (options.bootstrapError) throw options.bootstrapError;
       return bootstrapState;
     },
     getBootstrapState: function() { return bootstrapState; },
@@ -194,7 +197,7 @@ function loadMainWithStartupHarness(bootstrapState) {
       BrowserWindow: BrowserWindow,
       ipcMain: ipcMain,
       dialog: { showOpenDialog: function() {} },
-      shell: { openPath: function() {} }
+      shell: { openPath: options.openPath || function() {} }
     }],
     ["./security/navigation", { isAllowedRendererNavigation: function() { return true; } }],
     ["./workspace-bootstrap-service", {
@@ -209,6 +212,7 @@ function loadMainWithStartupHarness(bootstrapState) {
     ["./runtime-paths", {
       configureRuntimeEnvironment: function(options) {
         events.push(["runtime", options]);
+        if (harnessOptions && harnessOptions.runtimeError) throw harnessOptions.runtimeError;
         return { workspaceRoot: options.workspaceRoot, appRoot: options.appRoot, paths: {} };
       }
     }],
@@ -291,6 +295,30 @@ describe("source assembly and packaging contract", function() {
     }
   });
 
+  it("fails closed when workspace bootstrap throws and activate does not create a window", async function() {
+    const harness = loadMainWithStartupHarness({ state: "selection_required" }, {
+      bootstrapError: new Error("bootstrap leaked internal details")
+    });
+    await harness.ready();
+
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
+    assert.equal(harness.events.filter(function(event) { return event[0] === "quit"; }).length, 1);
+    harness.listeners.get("activate")();
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
+  });
+
+  it("fails closed when runtime initialization throws", async function() {
+    const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace" }, {
+      runtimeError: new Error("runtime leaked internal details")
+    });
+    await harness.ready();
+
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
+    assert.equal(harness.events.filter(function(event) { return event[0] === "quit"; }).length, 1);
+    harness.listeners.get("activate")();
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
+  });
+
   it("initializes ready runtime after bootstrap and injects protected runtime dependencies", async function() {
     const bootstrapWorkspacePath = "C:\\workspace-from-bootstrap";
     const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: bootstrapWorkspacePath });
@@ -329,6 +357,22 @@ describe("source assembly and packaging contract", function() {
     assert.equal(taskEvent[1].cwd, bootstrapWorkspacePath);
     const doubaoEvent = harness.events.filter(function(event) { return event[0] === "doubao"; })[0];
     assert.equal(doubaoEvent[1].workspaceRoot, bootstrapWorkspacePath);
+  });
+
+  it("wraps shell.openPath failures with a stable safe error", async function() {
+    const systemError = "The system cannot find the path: C:\\private\\workspace-token";
+    const harness = loadMainWithStartupHarness({ state: "selection_required" }, {
+      openPath: function() { return Promise.resolve(systemError); }
+    });
+    await harness.ready();
+    const options = harness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
+
+    await assert.rejects(options.openPath("C:\\private\\workspace-token"), function(error) {
+      assert.equal(error.code, "WORKSPACE_OPEN_FAILED");
+      assert.equal(error.message, "Could not open the current workspace");
+      assert.equal(error.message.includes(systemError), false);
+      return true;
+    });
   });
 
   it("disposes the current runtime once before relaunch and tolerates relaunch without runtime", async function() {
@@ -546,6 +590,46 @@ describe("source assembly and packaging contract", function() {
     assert.equal(secondEvent.prevented, false);
     assert.equal(harness.quitCalls(), 1);
     assert.equal(disposeCalls, 1);
+  });
+
+  it("continues runtime disposal and quits when either unsubscribe throws", async function() {
+    let disposeCalls = 0;
+    const harness = loadMainWithQuitHarness(function() { disposeCalls += 1; }, {
+      unsubscribeDoubaoQueue: function() { throw new Error("queue cleanup leaked details"); },
+      unsubscribeLogs: function() { throw new Error("log cleanup leaked details"); }
+    });
+    const event = { prevented: false, preventDefault: function() { this.prevented = true; } };
+
+    await harness.beforeQuit(event);
+
+    assert.equal(event.prevented, true);
+    assert.equal(disposeCalls, 1);
+    assert.equal(harness.quitCalls(), 1);
+    assert.equal(harness.quitEvents[0].prevented, false);
+  });
+
+  it("prevents concurrent before-quit events until the shared disposal completes", async function() {
+    let resolveDispose;
+    let disposeCalls = 0;
+    const disposePromise = new Promise(function(resolve) { resolveDispose = resolve; });
+    const harness = loadMainWithQuitHarness(function() {
+      disposeCalls += 1;
+      return disposePromise;
+    });
+    const firstEvent = { prevented: false, preventDefault: function() { this.prevented = true; } };
+    const secondEvent = { prevented: false, preventDefault: function() { this.prevented = true; } };
+
+    const firstQuit = harness.beforeQuit(firstEvent);
+    const secondQuit = harness.beforeQuit(secondEvent);
+    assert.equal(firstEvent.prevented, true);
+    assert.equal(secondEvent.prevented, true);
+    assert.equal(disposeCalls, 1);
+    assert.equal(harness.quitCalls(), 0);
+
+    resolveDispose();
+    await Promise.all([firstQuit, secondQuit]);
+    assert.equal(harness.quitCalls(), 1);
+    assert.equal(harness.quitEvents[0].prevented, false);
   });
 
   it("exposes Doubao commands and a removable queue-state listener", function() {

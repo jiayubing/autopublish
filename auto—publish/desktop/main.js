@@ -8,8 +8,12 @@ let unsubscribeDoubaoQueue = null;
 let doubaoCollectionService = null;
 let taskService = null;
 let runtimeDisposePromise = null;
+let quitPromise = null;
+let quitReady = false;
+let startupStatus = "starting";
 let isQuitting = false;
 const EXTERNAL_LINK_HOSTS = new Set(["www.toutiao.com", "mp.weixin.qq.com", "www.lieju.com"]);
+const WORKSPACE_OPEN_FAILED_MESSAGE = "Could not open the current workspace";
 
 function isAllowedExternalUrl(value) {
   try {
@@ -79,12 +83,12 @@ async function disposeRuntime() {
   if (runtimeDisposePromise) return runtimeDisposePromise;
   runtimeDisposePromise = (async function() {
     if (unsubscribeDoubaoQueue) {
-      unsubscribeDoubaoQueue();
-      unsubscribeDoubaoQueue = null;
+      try { unsubscribeDoubaoQueue(); } catch (_) {}
+      finally { unsubscribeDoubaoQueue = null; }
     }
     if (unsubscribeLogs) {
-      unsubscribeLogs();
-      unsubscribeLogs = null;
+      try { unsubscribeLogs(); } catch (_) {}
+      finally { unsubscribeLogs = null; }
     }
     const service = doubaoCollectionService;
     doubaoCollectionService = null;
@@ -100,7 +104,29 @@ async function relaunchApplication() {
   await disposeRuntime();
   app.relaunch();
   isQuitting = true;
+  quitReady = true;
   app.quit();
+}
+
+function workspaceOpenError() {
+  const error = new Error(WORKSPACE_OPEN_FAILED_MESSAGE);
+  error.code = "WORKSPACE_OPEN_FAILED";
+  return error;
+}
+
+function openWorkspacePath(value) {
+  let result;
+  try {
+    result = shell.openPath(value);
+  } catch (_) {
+    return Promise.reject(workspaceOpenError());
+  }
+  return Promise.resolve(result).then(function(errorMessage) {
+    if (typeof errorMessage === "string" && errorMessage !== "") throw workspaceOpenError();
+    return errorMessage;
+  }, function() {
+    throw workspaceOpenError();
+  });
 }
 
 function initializeRuntime(bootstrapState, appRoot) {
@@ -157,7 +183,7 @@ function initializeWorkspaceBootstrap() {
     doubaoCollectionService: createDeferredQueueService(),
     disposeRuntime: disposeRuntime,
     relaunch: relaunchApplication,
-    openPath: function(value) { return shell.openPath(value); }
+    openPath: openWorkspacePath
   });
 
   const registerWorkspaceBootstrapIpc = require("./ipc/workspace-bootstrap-ipc").registerWorkspaceBootstrapIpc;
@@ -169,17 +195,32 @@ function initializeWorkspaceBootstrap() {
   return { service: workspaceBootstrapService, appRoot: appRoot };
 }
 
-app.whenReady().then(function() {
-  const workspace = initializeWorkspaceBootstrap();
-  const bootstrapState = workspace.service.bootstrap();
-  if (bootstrapState && bootstrapState.state === "ready" &&
-    typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
-    initializeRuntime(bootstrapState, workspace.appRoot);
+function failStartup() {
+  startupStatus = "failed";
+  return disposeRuntime().catch(function() {}).then(function() {
+    app.quit();
+  });
+}
+
+async function startApplication() {
+  try {
+    const workspace = initializeWorkspaceBootstrap();
+    const bootstrapState = workspace.service.bootstrap();
+    if (bootstrapState && bootstrapState.state === "ready" &&
+      typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
+      initializeRuntime(bootstrapState, workspace.appRoot);
+    }
+    startupStatus = "ready";
+    createMainWindow();
+  } catch (_) {
+    await failStartup();
   }
-  createMainWindow();
-});
+}
+
+app.whenReady().then(startApplication, failStartup);
 
 app.on("activate", function() {
+  if (startupStatus !== "ready") return;
   if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
 });
 
@@ -187,10 +228,14 @@ app.on("window-all-closed", function() {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", async function(event) {
-  if (isQuitting) return;
-  isQuitting = true;
+app.on("before-quit", function(event) {
+  if (quitReady) return;
   event.preventDefault();
-  await disposeRuntime();
-  app.quit();
+  if (quitPromise) return quitPromise;
+  isQuitting = true;
+  quitPromise = disposeRuntime().then(function() {
+    quitReady = true;
+    app.quit();
+  });
+  return quitPromise;
 });
