@@ -164,6 +164,33 @@ describe("Doubao desktop IPC", function() {
     assert.equal(calls.close, 3);
   });
 
+  it("runs retryFailed through the session lifecycle and closes after it finishes", async function() {
+    const calls = [];
+    const desktopService = createDoubaoCollectionDesktopService({
+      workspaceRoot: "F:\\doubao-workspace",
+      collectionService: {
+        close: async function() { calls.push("close"); }
+      },
+      queue: {
+        retryFailed: async function() {
+          calls.push("retryFailed");
+          return { status: "completed", tasks: [{ status: "succeeded" }] };
+        },
+        getState: function() {
+          calls.push("getState");
+          return { status: "completed", tasks: [] };
+        },
+        subscribe: function() { return function() {}; },
+        dispose: async function() {}
+      }
+    });
+
+    const result = await desktopService.retryFailed();
+
+    assert.deepEqual(result, { status: "completed", tasks: [{ status: "succeeded" }] });
+    assert.deepEqual(calls, ["retryFailed", "getState", "close"]);
+  });
+
   it("keeps the browser open while paused with pending tasks and does not close login sessions", async function() {
     let release;
     const running = new Promise(function(resolve) { release = resolve; });

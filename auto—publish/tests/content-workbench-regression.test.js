@@ -71,10 +71,13 @@ describe("content workbench regression", function() {
   });
 
   it("exposes the Task 1 batch preview and prepared-start renderer API", function() {
+    const preload = read("desktop/preload.js");
     const api = read("media-workbench/src/electron-api.ts");
-    ["previewDoubaoBatch", "startPreparedDoubaoBatch", "DoubaoBatchPreview"].forEach(function(value) {
-      assert.match(api, new RegExp(value));
-    });
+    assert.match(preload, /previewDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:preview-doubao-batch", input\); \}/);
+    assert.match(preload, /startPreparedDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:start-prepared-doubao-batch", input\); \}/);
+    assert.match(api, /export async function previewDoubaoBatch[\s\S]*window\.desktopConsole!\.content\.previewDoubaoBatch\(input\)/);
+    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*window\.desktopConsole!\.content\.startPreparedDoubaoBatch\(\{ tasks \}\)/);
+    assert.doesNotMatch(api, /export function startPreparedDoubaoBatch[\s\S]*return startDoubaoBatch\(tasks\)/);
   });
 
   it("keeps batch selection and answer expansion as independent controls", function() {

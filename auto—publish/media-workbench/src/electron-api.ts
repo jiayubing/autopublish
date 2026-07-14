@@ -56,6 +56,7 @@ interface DesktopConsoleContent {
   collectDoubaoOne(input: { clientId: string; questionId: string; force?: boolean }): Promise<IpcResponse<ContentResearch>>;
   previewDoubaoBatch(input: { clientIds: string[]; mode: DoubaoBatchMode }): Promise<IpcResponse<DoubaoBatchPreview>>;
   startDoubaoBatch(tasks: Array<{ clientId: string; questionId: string; force?: boolean }>): Promise<IpcResponse<DoubaoQueueState>>;
+  startPreparedDoubaoBatch(input: { tasks: DoubaoBatchTask[] }): Promise<IpcResponse<DoubaoQueueState>>;
   pauseDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
   resumeDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
   stopDoubaoBatch(): Promise<IpcResponse<DoubaoQueueState>>;
@@ -282,25 +283,10 @@ export async function collectDoubaoQuestion(input: { clientId: string; questionI
 }
 
 export async function previewDoubaoBatch(input: { clientIds: string[]; mode: DoubaoBatchMode }): Promise<DoubaoBatchPreview> {
-  const clientIds = [...new Set(input.clientIds)].filter(Boolean);
-  if (!clientIds.length) throw new Error("At least one batch client is required");
-  const entries = await Promise.all(clientIds.map(async (clientId) => {
-    const [questions, research] = await Promise.all([listContentQuestions(clientId), listContentResearch(clientId)]);
-    const existingIds = new Set(research.map((item) => item.id));
-    return { questions, existingIds };
-  }));
-  const tasks: DoubaoBatchTask[] = [];
-  let skippedExisting = 0;
-  let disabledQuestions = 0;
-  entries.forEach(({ questions, existingIds }, index) => {
-    questions.forEach((question) => {
-      if (!question.enabled) { disabledQuestions += 1; return; }
-      if (input.mode === "missing" && existingIds.has(question.id)) { skippedExisting += 1; return; }
-      tasks.push({ clientId: clientIds[index], questionId: question.id, force: input.mode === "recollect" });
-    });
-  });
-  if (tasks.length > 500) throw new Error("Queue cannot contain more than 500 tasks");
-  return { mode: input.mode, clientCount: clientIds.length, taskCount: tasks.length, skippedExisting, disabledQuestions, tasks };
+  if (!isElectron()) throw new Error("Doubao batch preview requires the desktop app");
+  const result = await window.desktopConsole!.content.previewDoubaoBatch(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to preview Doubao batch");
+  return result.data;
 }
 
 export async function startDoubaoBatch(tasks: Array<{ clientId: string; questionId: string; force?: boolean }>): Promise<DoubaoQueueState> {
@@ -310,8 +296,8 @@ export async function startDoubaoBatch(tasks: Array<{ clientId: string; question
   return result.data;
 }
 
-export function startPreparedDoubaoBatch(tasks: DoubaoBatchTask[]): Promise<DoubaoQueueState> {
-  return startDoubaoBatch(tasks);
+export async function startPreparedDoubaoBatch(tasks: DoubaoBatchTask[]): Promise<DoubaoQueueState> {
+  return doubaoQueueCommand(() => window.desktopConsole!.content.startPreparedDoubaoBatch({ tasks }), "Unable to start prepared Doubao batch");
 }
 
 async function doubaoQueueCommand(command: () => Promise<IpcResponse<DoubaoQueueState>>, fallback: string): Promise<DoubaoQueueState> {

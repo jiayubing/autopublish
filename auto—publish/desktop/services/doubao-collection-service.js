@@ -170,7 +170,7 @@ function createDoubaoCollectionDesktopService(options) {
     pauseBatch: function() { return queue.pause(); },
     resumeBatch: function() { return queue.resume(); },
     stopBatch: function() { return queue.stop(); },
-    retryFailed: function() { return queue.retryFailed(); },
+    retryFailed: function() { return runWithSession(function() { return queue.retryFailed(); }); },
     getQueueState: function() { return queue.getState(); },
     subscribe: function(listener) { return queue.subscribe(listener); },
     dispose: dispose
