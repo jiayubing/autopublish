@@ -34,6 +34,8 @@ describe("client knowledge", function() {
     fs.writeFileSync(path.join(clientDirectory, "brand.md"), "# Brand");
     fs.writeFileSync(path.join(clientDirectory, "service.txt"), "service");
     fs.writeFileSync(path.join(clientDirectory, "facts.json"), "{\"city\":\"Shanghai\"}");
+    fs.writeFileSync(path.join(clientDirectory, "details.markdown"), "details");
+    fs.writeFileSync(path.join(clientDirectory, "menu.docx"), "not text knowledge");
     fs.writeFileSync(path.join(clientDirectory, "questions.json"), JSON.stringify({ version: 1, questions: [] }));
     fs.writeFileSync(path.join(clientDirectory, "ignored.png"), "not knowledge");
     fs.writeFileSync(path.join(clientDirectory, "articles", "old.md"), "old");
@@ -46,7 +48,7 @@ describe("client knowledge", function() {
     assert.equal(clients.length, 1);
     assert.equal(clients[0].id, "client-1");
     assert.equal(clients[0].searchQuery, "Shanghai hotels\nfamily travel ");
-    assert.deepStrictEqual(clients[0].knowledgeFiles.map(function(file) { return file.name; }), ["brand.md", "facts.json", "service.txt"]);
+    assert.deepStrictEqual(clients[0].knowledgeFiles.map(function(file) { return file.name; }), ["brand.md", "details.markdown", "facts.json", "service.txt"]);
     assert.deepStrictEqual(getClient(root, "client-1"), clients[0]);
   });
 
@@ -101,7 +103,7 @@ describe("client knowledge", function() {
 
   it("reads query and knowledge with explicit workspace context", function() {
     assert.equal(readSearchQuery(clientDirectory, root), "Shanghai hotels\nfamily travel ");
-    assert.deepStrictEqual(loadClientKnowledge(clientDirectory, root).map(function(file) { return file.name; }), ["brand.md", "facts.json", "service.txt"]);
+    assert.deepStrictEqual(loadClientKnowledge(clientDirectory, root).map(function(file) { return file.name; }), ["brand.md", "details.markdown", "facts.json", "service.txt"]);
   });
 
   it("rejects an explicit boundary whose clients root is not workspace.clients", function() {

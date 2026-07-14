@@ -3,6 +3,11 @@ const path = require("path");
 
 const { getContentWorkspace, getClientWorkspace } = require("../core/files");
 
+// Legacy knowledge loading remains synchronous and text-only. DOCX is handled
+// by client-material-store so it can be converted, cached, and retried safely.
+const TEXT_KNOWLEDGE_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json"]);
+const RESERVED_KNOWLEDGE_FILES = new Set(["search_query.txt", "client.json", "questions.json"]);
+
 function contentError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -203,12 +208,11 @@ function loadClientKnowledgeWithinBoundary(clientBoundary) {
     throw pathOutOfBounds();
   }
 
-  const allowedExtensions = new Set([".txt", ".md", ".markdown", ".json"]);
   return entries
     .filter(function(entry) {
       if (!entry.isFile() || entry.name.startsWith(".")) return false;
-      if (entry.name === "search_query.txt" || entry.name === "client.json" || entry.name === "questions.json") return false;
-      return allowedExtensions.has(path.extname(entry.name).toLowerCase());
+      if (RESERVED_KNOWLEDGE_FILES.has(entry.name)) return false;
+      return TEXT_KNOWLEDGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase());
     })
     .sort(function(a, b) { return a.name.localeCompare(b.name); })
     .map(function(entry) {

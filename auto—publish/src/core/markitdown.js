@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 
 const { DIRS, MARKITDOWN_CMD } = require("../../scripts/config");
 const { log } = require("./logger");
@@ -17,6 +17,42 @@ function convertDocxToMd(filePath) {
     throw new Error("转换后文件未生成");
   }
   return mdPath;
+}
+
+function convertDocxToText(inputPath, outputPath, options) {
+  var opts = options || {};
+  var command = opts.command || MARKITDOWN_CMD;
+  var execute = opts.execFileSync || execFileSync;
+  try {
+    execute(command, [inputPath, "-o", outputPath], {
+      encoding: "utf8",
+      timeout: opts.timeout || 60000,
+      windowsHide: true
+    });
+  } catch (error) {
+    var message = String(error && error.message || "").toLowerCase() + " " + String(error && error.stderr || "").toLowerCase() + " " + String(error && error.stdout || "").toLowerCase();
+    var mappedCode = error && ["MATERIAL_MARKITDOWN_UNAVAILABLE", "MATERIAL_DOCX_ENCRYPTED", "MATERIAL_DOCX_CONVERSION_FAILED"].includes(error.code)
+      ? error.code
+      : error && error.code === "ENOENT"
+      ? "MATERIAL_MARKITDOWN_UNAVAILABLE"
+      : /encrypt|password|protected/.test(message)
+        ? "MATERIAL_DOCX_ENCRYPTED"
+        : "MATERIAL_DOCX_CONVERSION_FAILED";
+    var mapped = new Error(mappedCode === "MATERIAL_MARKITDOWN_UNAVAILABLE"
+      ? "MarkItDown is unavailable"
+      : mappedCode === "MATERIAL_DOCX_ENCRYPTED"
+        ? "DOCX is encrypted or damaged"
+        : "DOCX conversion failed");
+    mapped.code = mappedCode;
+    throw mapped;
+  }
+  try {
+    return markdownToPlainText(fs.readFileSync(outputPath, "utf8"));
+  } catch (error) {
+    var failed = new Error("DOCX conversion failed");
+    failed.code = "MATERIAL_DOCX_CONVERSION_FAILED";
+    throw failed;
+  }
 }
 
 function markdownToPlainText(markdown) {
@@ -59,4 +95,4 @@ function parseArticle(mdPath) {
   };
 }
 
-module.exports = { convertDocxToMd, markdownToPlainText, parseArticle };
+module.exports = { convertDocxToMd, convertDocxToText, markdownToPlainText, parseArticle };

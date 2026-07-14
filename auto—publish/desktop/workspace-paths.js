@@ -17,6 +17,7 @@ function createWorkspacePaths(root) {
     failed: path.join(workspaceRoot, "failed"),
     tmp: path.join(workspaceRoot, "tmp"),
     work: path.join(workspaceRoot, "work"),
+    clientMaterialCache: path.join(workspaceRoot, "work", "client-material-cache"),
     config: path.join(workspaceRoot, "config"),
     clients: path.join(workspaceRoot, "clients"),
     research: path.join(workspaceRoot, "research"),

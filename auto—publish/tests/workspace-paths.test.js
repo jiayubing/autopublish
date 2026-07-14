@@ -42,6 +42,7 @@ describe("workspace paths", function() {
         "input", "mediaInput", "liejuInput", "toutiaoInput", "hepanInput",
         "config",
         "data", "logs", "published", "failed", "tmp", "work",
+        "clientMaterialCache",
         "clients", "research", "templates", "generated",
         "browser", "doubaoBrowser", "doubaoDiagnostics"
       ].forEach(function(key) {
@@ -50,6 +51,7 @@ describe("workspace paths", function() {
         assert.ok(relative && relative !== ".." && !path.isAbsolute(relative) && firstSegment !== "..", key + " escapes workspace");
         assert.ok(fs.statSync(paths[key]).isDirectory(), key + " was not created");
       });
+      assert.equal(paths.clientMaterialCache, path.join(paths.work, "client-material-cache"));
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
