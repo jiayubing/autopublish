@@ -57,6 +57,29 @@ describe("workspace paths", function() {
 });
 
 describe("runtime configuration", function() {
+  it("requires explicit appRoot and workspaceRoot at every runtime configuration entry point", function() {
+    const runtimePaths = require("../desktop/runtime-paths");
+    const original = saveRuntimeEnvironment();
+    try {
+      delete process.env.AUTO_PUBLISH_APP_ROOT;
+      delete process.env.AUTO_PUBLISH_WORKSPACE;
+      assert.throws(function() {
+        configureRuntimeEnvironment({ appRoot: process.cwd() });
+      }, /workspaceRoot is required/);
+      assert.throws(function() {
+        configureRuntimeEnvironment({ workspaceRoot: process.cwd() });
+      }, /appRoot is required/);
+      assert.throws(function() {
+        runtimePaths.configureRuntimeEnvironment({ appRoot: process.cwd() });
+      }, /workspaceRoot is required/);
+      assert.throws(function() {
+        runtimePaths.configureRuntimeEnvironment({ workspaceRoot: process.cwd() });
+      }, /appRoot is required/);
+    } finally {
+      restoreRuntimeEnvironment(original);
+    }
+  });
+
   it("loads the workspace environment once and exposes workspace paths", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-"));
     const original = saveRuntimeEnvironment();

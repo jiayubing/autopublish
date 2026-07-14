@@ -228,6 +228,15 @@ function readSearchQuery(clientDirectory, workspaceRootOrBoundary) {
   return readSearchQueryWithinBoundary(assertClientDirectory(clientDirectory, workspaceRootOrBoundary));
 }
 
+function readOptionalSearchQueryWithinBoundary(clientBoundary) {
+  try {
+    return readSearchQueryWithinBoundary(clientBoundary);
+  } catch (error) {
+    if (error && error.code === "SEARCH_QUERY_MISSING") return undefined;
+    throw error;
+  }
+}
+
 function loadClientKnowledge(clientDirectory, workspaceRootOrBoundary) {
   return loadClientKnowledgeWithinBoundary(assertClientDirectory(clientDirectory, workspaceRootOrBoundary));
 }
@@ -265,13 +274,15 @@ function listClients(workspaceRoot) {
       }
       const clientBoundary = assertClientDirectory(directory, clients);
       const metadata = readClientMetadata(clientBoundary);
-      return {
+      const client = {
         id: metadata.id,
         name: metadata.name,
         directory: directory,
-        searchQuery: readSearchQueryWithinBoundary(clientBoundary),
         knowledgeFiles: loadClientKnowledgeWithinBoundary(clientBoundary)
       };
+      const searchQuery = readOptionalSearchQueryWithinBoundary(clientBoundary);
+      if (searchQuery !== undefined) client.searchQuery = searchQuery;
+      return client;
     });
 }
 

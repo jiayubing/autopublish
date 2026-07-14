@@ -1,6 +1,23 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+function confirmWorkspaceSelection(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 ||
+    typeof input.token !== "string" || input.token.trim() === "") {
+    return Promise.reject(new TypeError("Confirmation token is invalid"));
+  }
+  return ipcRenderer.invoke("workspace:confirm-selection", { token: input.token });
+}
+
 const api = {
+  workspace: {
+    getBootstrapState: function() { return ipcRenderer.invoke("workspace:get-bootstrap-state"); },
+    chooseDirectory: function() { return ipcRenderer.invoke("workspace:choose-directory"); },
+    confirmSelection: confirmWorkspaceSelection,
+    cancelSelection: function() { return ipcRenderer.invoke("workspace:cancel-selection"); },
+    getCurrent: function() { return ipcRenderer.invoke("workspace:get-current"); },
+    openCurrent: function() { return ipcRenderer.invoke("workspace:open-current"); },
+    requestSwitch: function() { return ipcRenderer.invoke("workspace:request-switch"); }
+  },
   batch: {
     getState: function() { return ipcRenderer.invoke("desktop:get-state"); },
     refreshQueue: function(options) { return ipcRenderer.invoke("desktop:refresh-queue", options || {}); },

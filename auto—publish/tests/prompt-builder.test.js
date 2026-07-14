@@ -49,6 +49,13 @@ describe("prompt builder", function() {
     assert.match(prompt.user, /不得将参考资料写成客户官方背书/);
   });
 
+  it("requires a publish-ready response without template scaffolding", function() {
+    const prompt = buildPrompt(input());
+    assert.match(prompt.system, /只输出可以直接发布的最终文章/);
+    assert.match(prompt.system, /第一行直接输出文章标题/);
+    assert.match(prompt.system, /不得原样作为文章内容输出/);
+  });
+
   it("rejects construction when the Doubao answer is missing or empty", function() {
     [undefined, "", "  "].forEach(function(answerText) {
       assert.throws(function() {

@@ -1,7 +1,7 @@
-import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder } from "./types";
+import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 
 
-// 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
+// Global type declaration for desktopConsole
 
 interface DraftPayload extends Omit<Draft, "filename" | "selectedResources"> {
   selectedResources: Array<{ resourceId: string; name?: string; price?: number }>;
@@ -70,10 +70,21 @@ interface DesktopConsoleContent {
   exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
 }
 
+interface DesktopConsoleWorkspace {
+  getBootstrapState(): Promise<IpcResponse<WorkspaceBootstrapState>>;
+  chooseDirectory(): Promise<IpcResponse<WorkspaceBootstrapState>>;
+  confirmSelection(input: WorkspaceSelectionToken): Promise<IpcResponse<WorkspaceConfirmationResult>>;
+  cancelSelection(): Promise<IpcResponse<WorkspaceBootstrapState>>;
+  getCurrent(): Promise<IpcResponse<WorkspaceCurrent>>;
+  openCurrent(): Promise<IpcResponse<void>>;
+  requestSwitch(): Promise<IpcResponse<WorkspaceBootstrapState>>;
+}
+
 export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: "media" | "lieju" | "toutiao" | "hepan"; confirmed: true; }
 export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
 
 interface DesktopConsole {
+  workspace: DesktopConsoleWorkspace;
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
@@ -86,7 +97,7 @@ declare global {
   }
 }
 
-// 鈹€鈹€鈹€ Helper utilities 鈹€鈹€鈹€
+// Helper utilities
 
 export function isElectron(): boolean {
   return typeof window !== "undefined" && !!window.desktopConsole;
@@ -147,6 +158,54 @@ function getIpcError(value: unknown, fallback: string): Error {
     (error as Error & { code?: string }).code = (value as { code: string }).code;
   }
   return error;
+}
+
+export async function getWorkspaceBootstrapState(): Promise<WorkspaceBootstrapState> {
+  if (!isElectron()) return { state: "selection_required", workspacePath: null, envOverride: false };
+  const result = await window.desktopConsole!.workspace.getBootstrapState();
+  if (!result.ok) throw getIpcError(result.error, "Unable to read workspace bootstrap state");
+  return result.data || { state: "checking", workspacePath: null, envOverride: false };
+}
+
+export async function chooseWorkspaceDirectory(): Promise<WorkspaceBootstrapState> {
+  if (!isElectron()) return { state: "selection_required", workspacePath: null, envOverride: false };
+  const result = await window.desktopConsole!.workspace.chooseDirectory();
+  if (!result.ok) throw getIpcError(result.error, "Unable to choose a workspace");
+  return result.data || { state: "selection_required", workspacePath: null, envOverride: false };
+}
+
+export async function confirmWorkspaceSelection(input: WorkspaceSelectionToken): Promise<WorkspaceConfirmationResult> {
+  if (!isElectron()) throw new Error("Workspace selection requires the desktop app");
+  const result = await window.desktopConsole!.workspace.confirmSelection(input);
+  if (!result.ok) throw getIpcError(result.error, "Unable to confirm workspace selection");
+  return result.data || { state: "relaunching" };
+}
+
+export async function cancelWorkspaceSelection(): Promise<WorkspaceBootstrapState> {
+  if (!isElectron()) return { state: "selection_required", workspacePath: null, envOverride: false };
+  const result = await window.desktopConsole!.workspace.cancelSelection();
+  if (!result.ok) throw getIpcError(result.error, "Unable to cancel workspace selection");
+  return result.data || { state: "selection_required", workspacePath: null, envOverride: false };
+}
+
+export async function getCurrentWorkspace(): Promise<WorkspaceCurrent> {
+  if (!isElectron()) return { workspacePath: null, envOverride: false, validation: null };
+  const result = await window.desktopConsole!.workspace.getCurrent();
+  if (!result.ok) throw getIpcError(result.error, "Unable to read the current workspace");
+  return result.data || { workspacePath: null, envOverride: false, validation: null };
+}
+
+export async function openCurrentWorkspace(): Promise<void> {
+  if (!isElectron()) throw new Error("Opening a workspace requires the desktop app");
+  const result = await window.desktopConsole!.workspace.openCurrent();
+  if (!result.ok) throw getIpcError(result.error, "Unable to open the current workspace");
+}
+
+export async function requestWorkspaceSwitch(): Promise<WorkspaceBootstrapState> {
+  if (!isElectron()) return { state: "selection_required", workspacePath: null, envOverride: false };
+  const result = await window.desktopConsole!.workspace.requestSwitch();
+  if (!result.ok) throw getIpcError(result.error, "Unable to switch workspace");
+  return result.data || { state: "selection_required", workspacePath: null, envOverride: false };
 }
 
 export async function listContentClients(): Promise<ContentClient[]> {
@@ -281,7 +340,7 @@ export async function listContentArticles(clientId: string): Promise<GeneratedCo
   return result.data || [];
 }
 
-// 鈹€鈹€鈹€ Data normalization (backend 鈫?React types) 鈹€鈹€鈹€
+// Data normalization from backend values to React types
 
 function normalizeArticle(raw: Record<string, unknown>): Article {
   return {
@@ -337,7 +396,7 @@ function normalizeResource(raw: Record<string, unknown>): MediaResource {
   };
 }
 
-// 鈹€鈹€鈹€ Fallback implementations (dev / no-Electron mode) 鈹€鈹€鈹€
+// Fallback implementations for development and no-Electron mode
 
 async function fallbackScanArticles(): Promise<Article[]> {
   return readLocalStorage<Article[]>("mw_articles", []);
@@ -458,7 +517,7 @@ async function fallbackSyncOrder(_orderNid: string): Promise<unknown> {
   return { synced: false };
 }
 
-// 鈹€鈹€鈹€ Public API exports 鈹€鈹€鈹€
+// Public API exports
 
 export async function scanArticles(): Promise<Article[]> {
   if (isElectron()) {

@@ -51,10 +51,17 @@ function ensureRuntimeDirs(root) {
   });
 }
 
-function configureRuntimeEnvironment() {
+function configureRuntimeEnvironment(options) {
+  var values = options || {};
+  if (typeof values.workspaceRoot !== "string" || values.workspaceRoot.trim() === "") {
+    throw new Error("workspaceRoot is required");
+  }
+  if (typeof values.appRoot !== "string" || values.appRoot.trim() === "") {
+    throw new Error("appRoot is required");
+  }
   return runtimeConfig.configureRuntimeEnvironment({
-    appRoot: appRoot(),
-    workspaceRoot: workspaceRoot()
+    appRoot: values.appRoot,
+    workspaceRoot: values.workspaceRoot
   });
 }
 

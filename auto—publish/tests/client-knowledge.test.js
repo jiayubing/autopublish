@@ -50,6 +50,25 @@ describe("client knowledge", function() {
     assert.deepStrictEqual(getClient(root, "client-1"), clients[0]);
   });
 
+  it("lists a client without search_query.txt when questions.json already exists", function() {
+    fs.unlinkSync(path.join(clientDirectory, "search_query.txt"));
+
+    const clients = listClients(root);
+    assert.equal(clients.length, 1);
+    assert.equal(clients[0].id, "client-1");
+    assert.equal(clients[0].name, "Travel Client");
+  });
+
+  it("lists a client without search_query.txt when questions.json can be created", function() {
+    fs.unlinkSync(path.join(clientDirectory, "search_query.txt"));
+    fs.unlinkSync(path.join(clientDirectory, "questions.json"));
+
+    const clients = listClients(root);
+    assert.equal(clients.length, 1);
+    assert.equal(clients[0].id, "client-1");
+    assert.equal(clients[0].name, "Travel Client");
+  });
+
   it("rejects null and non-string workspace roots with a boundary error", function() {
     [null, 42, {}, []].forEach(function(workspaceRoot) {
       assert.throws(function() { listClients(workspaceRoot); }, function(error) {
