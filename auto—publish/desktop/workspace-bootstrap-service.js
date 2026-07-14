@@ -342,7 +342,9 @@ function createWorkspaceBootstrapService(options) {
         if (!stats.isDirectory() || stats.isSymbolicLink()) {
           record.captureFailed = true;
         } else {
-          item.identity = statIdentity(stats, item.path);
+          const identity = statIdentity(stats, item.path);
+          if (!item.identity) item.identity = identity;
+          else if (!sameIdentity(item.identity, identity)) record.captureFailed = true;
         }
       } catch (error) {
         if (!error || error.code !== "ENOENT") record.captureFailed = true;

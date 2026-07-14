@@ -384,6 +384,31 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
+  it("keeps the first directory identity when replacement races with marker failure", async function() {
+    let candidate;
+    const io = Object.create(fs);
+    io.writeFileSync = function(target, content, options) {
+      if (target === path.join(candidate, ".autopublish-workspace.json")) {
+        const input = path.join(candidate, "input");
+        fs.rmSync(input, { recursive: true, force: true });
+        fs.mkdirSync(input);
+        const error = new Error("marker write failed after directory replacement");
+        error.code = "EIO";
+        throw error;
+      }
+      return fs.writeFileSync(target, content, options);
+    };
+    const harness = createHarness({ fs: io });
+    candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
+      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
+    } finally { harness.cleanup(); }
+  });
+
   it("reports cleanup failure when a newly created directory cannot be removed", async function() {
     let candidate;
     const failingFs = Object.create(fs);
