@@ -9,6 +9,55 @@ export type IpcResponse<T> =
   | { ok: true; data?: T; error?: never }
   | { ok: false; data?: never; error: IpcError };
 
+export type WorkspaceBootstrapStatus =
+  | 'checking'
+  | 'selection_required'
+  | 'confirmation_required'
+  | 'ready'
+  | 'invalid'
+  | 'relaunching';
+
+export type WorkspaceSelectionKind =
+  | 'existing_workspace'
+  | 'empty_directory'
+  | 'nonempty_directory';
+
+export interface WorkspaceSelectionToken {
+  token: string;
+}
+
+export interface WorkspaceSelection {
+  token: string;
+  path: string;
+  kind: WorkspaceSelectionKind;
+}
+
+export interface WorkspaceValidation {
+  kind: WorkspaceSelectionKind;
+  error?: IpcError;
+}
+
+export interface WorkspaceBootstrapState {
+  state: WorkspaceBootstrapStatus;
+  workspacePath?: string | null;
+  envOverride?: boolean;
+  error?: IpcError;
+  selection?: WorkspaceSelection;
+}
+
+export interface WorkspaceCurrent {
+  workspacePath: string | null;
+  envOverride: boolean;
+  validation: WorkspaceValidation | null;
+}
+
+export interface WorkspaceConfirmationResult {
+  state: WorkspaceBootstrapStatus;
+  workspacePath?: string | null;
+  envOverride?: boolean;
+  changed?: boolean;
+}
+
 export interface MediaResource {
   resourceId: string;
   name: string;
