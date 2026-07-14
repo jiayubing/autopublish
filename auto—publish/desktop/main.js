@@ -103,12 +103,15 @@ async function relaunchApplication() {
   app.quit();
 }
 
-function initializeRuntime() {
+function initializeRuntime(bootstrapState, appRoot) {
   // Lazy-load config-dependent modules only after workspace bootstrap is ready.
   // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
   // its default project-root path.
   const configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
-  const runtime = configureRuntimeEnvironment();
+  const runtime = configureRuntimeEnvironment({
+    workspaceRoot: bootstrapState.workspacePath,
+    appRoot: appRoot
+  });
 
   const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
   taskService = createDesktopTaskService({
@@ -140,12 +143,13 @@ function initializeRuntime() {
 
 function initializeWorkspaceBootstrap() {
   const userDataPath = app.getPath("userData");
+  const appRoot = app.getAppPath();
   const createWorkspaceBootstrapService = require("./workspace-bootstrap-service").createWorkspaceBootstrapService;
   const workspaceBootstrapService = createWorkspaceBootstrapService({
     userDataPath: userDataPath,
     env: process.env,
     validatorOptions: {
-      appPath: app.getAppPath(),
+      appPath: appRoot,
       resourcesPath: process.resourcesPath,
       userDataPath: userDataPath
     },
@@ -162,13 +166,16 @@ function initializeWorkspaceBootstrap() {
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService
   });
-  return workspaceBootstrapService;
+  return { service: workspaceBootstrapService, appRoot: appRoot };
 }
 
 app.whenReady().then(function() {
-  const workspaceBootstrapService = initializeWorkspaceBootstrap();
-  const bootstrapState = workspaceBootstrapService.bootstrap();
-  if (bootstrapState && bootstrapState.state === "ready") initializeRuntime();
+  const workspace = initializeWorkspaceBootstrap();
+  const bootstrapState = workspace.service.bootstrap();
+  if (bootstrapState && bootstrapState.state === "ready" &&
+    typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
+    initializeRuntime(bootstrapState, workspace.appRoot);
+  }
   createMainWindow();
 });
 

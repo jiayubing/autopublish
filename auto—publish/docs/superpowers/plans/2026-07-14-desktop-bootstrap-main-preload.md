@@ -4,7 +4,7 @@
 
 **Goal:** Gate Electron runtime and business IPC behind the existing workspace bootstrap service and expose only the approved workspace preload API.
 
-**Architecture:** Keep orchestration in `desktop/main.js`. Create bootstrap dependencies after Electron ready, register bootstrap IPC before calling `bootstrap()`, and use deferred runtime references plus one idempotent disposer for startup, relaunch, and quit. Keep the existing workspace service, validator, React renderer, and business IPC implementations unchanged.
+**Architecture:** Keep orchestration in `desktop/main.js`. Create bootstrap dependencies after Electron ready, register bootstrap IPC before calling `bootstrap()`, and use deferred runtime references plus one idempotent disposer for startup, relaunch, and quit. Pass the bootstrap workspace path explicitly through `desktop/runtime-paths.js` so runtime initialization cannot fall back to cwd/Documents. Keep the existing workspace service, validator, React renderer, and business IPC implementations unchanged.
 
 **Tech Stack:** Node.js test runner, Electron harness mocks, CommonJS Electron main/preload scripts.
 

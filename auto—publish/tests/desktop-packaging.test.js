@@ -64,7 +64,9 @@ function loadMainWithQuitHarness(dispose) {
     ["./security/navigation", { isAllowedRendererNavigation: function() { return true; } }],
     ["./workspace-bootstrap-service", {
       createWorkspaceBootstrapService: function() {
-        return { bootstrap: function() { return { state: "ready" }; } };
+        return { bootstrap: function() {
+          return { state: "ready", workspacePath: "C:\\workspace" };
+        } };
       }
     }],
     ["./ipc/workspace-bootstrap-ipc", { registerWorkspaceBootstrapIpc: function() {} }],
@@ -130,6 +132,7 @@ function loadMainWithStartupHarness(bootstrapState) {
   const listeners = new Map();
   const events = [];
   const handles = new Map();
+  const requires = [];
   let readyPromise = null;
   const app = {
     on: function(name, handler) { listeners.set(name, handler); },
@@ -204,17 +207,17 @@ function loadMainWithStartupHarness(bootstrapState) {
       registerWorkspaceBootstrapIpc: function() { events.push(["workspace-ipc"]); }
     }],
     ["./runtime-paths", {
-      configureRuntimeEnvironment: function() {
-        events.push(["runtime"]);
-        return { workspaceRoot: "workspace", appRoot: "app", paths: {} };
+      configureRuntimeEnvironment: function(options) {
+        events.push(["runtime", options]);
+        return { workspaceRoot: options.workspaceRoot, appRoot: options.appRoot, paths: {} };
       }
     }],
     ["./services/desktop-task-service", {
-      createDesktopTaskService: function() { events.push(["task"]); return {}; }
+      createDesktopTaskService: function(options) { events.push(["task", options]); return {}; }
     }],
     ["./services/doubao-collection-service", {
-      createDoubaoCollectionDesktopService: function() {
-        events.push(["doubao"]);
+      createDoubaoCollectionDesktopService: function(options) {
+        events.push(["doubao", options]);
         return {
           subscribe: function() { return function() {}; },
           dispose: function() { events.push(["dispose"]); },
@@ -227,6 +230,7 @@ function loadMainWithStartupHarness(bootstrapState) {
   ]);
   const originalLoad = Module._load;
   Module._load = function(request, parent, isMain) {
+    requires.push(request);
     if (mocks.has(request)) return mocks.get(request);
     return originalLoad.apply(this, arguments);
   };
@@ -241,6 +245,7 @@ function loadMainWithStartupHarness(bootstrapState) {
     app: app,
     events: events,
     handles: handles,
+    requires: requires,
     ready: function() { return readyPromise; },
     listeners: listeners
   };
@@ -264,6 +269,14 @@ describe("source assembly and packaging contract", function() {
     assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "business-ipc"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "logger"; }), false);
+    for (const request of [
+      "./runtime-paths",
+      "./runtime-config",
+      "./services/desktop-task-service",
+      "./services/doubao-collection-service",
+      "./ipc/register",
+      "../src/core/logger"
+    ]) assert.equal(harness.requires.includes(request), false, request + " must not be required");
   });
 
   it("keeps every non-ready bootstrap state free of runtime and business initialization", async function() {
@@ -279,7 +292,8 @@ describe("source assembly and packaging contract", function() {
   });
 
   it("initializes ready runtime after bootstrap and injects protected runtime dependencies", async function() {
-    const harness = loadMainWithStartupHarness({ state: "ready" });
+    const bootstrapWorkspacePath = "C:\\workspace-from-bootstrap";
+    const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: bootstrapWorkspacePath });
     await harness.ready();
 
     assert.deepEqual(harness.events.map(function(event) { return event[0]; }), [
@@ -305,10 +319,20 @@ describe("source assembly and packaging contract", function() {
     assert.equal(typeof options.doubaoCollectionService.getQueueState, "function");
     assert.equal(typeof options.relaunch, "function");
     assert.equal(typeof options.disposeRuntime, "function");
+
+    const runtimeEvent = harness.events.filter(function(event) { return event[0] === "runtime"; })[0];
+    assert.deepEqual(runtimeEvent[1], {
+      workspaceRoot: bootstrapWorkspacePath,
+      appRoot: "C:\\Program Files\\AutoPublish"
+    });
+    const taskEvent = harness.events.filter(function(event) { return event[0] === "task"; })[0];
+    assert.equal(taskEvent[1].cwd, bootstrapWorkspacePath);
+    const doubaoEvent = harness.events.filter(function(event) { return event[0] === "doubao"; })[0];
+    assert.equal(doubaoEvent[1].workspaceRoot, bootstrapWorkspacePath);
   });
 
   it("disposes the current runtime once before relaunch and tolerates relaunch without runtime", async function() {
-    const readyHarness = loadMainWithStartupHarness({ state: "ready" });
+    const readyHarness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace" });
     await readyHarness.ready();
     const options = readyHarness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
     await options.relaunch();
@@ -516,6 +540,12 @@ describe("source assembly and packaging contract", function() {
     assert.equal(harness.quitCalls(), 1);
     assert.equal(disposeCalls, 1);
     assert.equal(harness.quitEvents[0].prevented, false);
+
+    const secondEvent = { prevented: false, preventDefault: function() { this.prevented = true; } };
+    await harness.beforeQuit(secondEvent);
+    assert.equal(secondEvent.prevented, false);
+    assert.equal(harness.quitCalls(), 1);
+    assert.equal(disposeCalls, 1);
   });
 
   it("exposes Doubao commands and a removable queue-state listener", function() {
