@@ -1,44 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import App from '../App';
 import { getWorkspaceBootstrapState } from '../electron-api';
 import { WorkspaceBootstrapState } from '../types';
+import { createBootstrapGateController, getBootstrapView } from '../workspace-ui-logic.js';
 import WorkspaceWelcome from './WorkspaceWelcome';
 
-const CHECKING_STATE: WorkspaceBootstrapState = {
-  state: 'checking',
-  workspacePath: null,
-  envOverride: false,
-};
-
 export default function WorkspaceBootstrapGate() {
-  const [state, setState] = useState<WorkspaceBootstrapState>(CHECKING_STATE);
+  const controllerRef = useRef<ReturnType<typeof createBootstrapGateController> | null>(null);
+  if (!controllerRef.current) {
+    controllerRef.current = createBootstrapGateController({ getBootstrapState: getWorkspaceBootstrapState });
+  }
+  const controller = controllerRef.current;
+  const [state, setState] = useState<WorkspaceBootstrapState>(controller.getState());
 
   useEffect(() => {
     let active = true;
-    getWorkspaceBootstrapState()
-      .then((nextState) => {
-        if (active) setState(nextState);
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        const message = error instanceof Error ? error.message : '工作区状态检查失败';
-        setState({
-          state: 'invalid',
-          workspacePath: null,
-          envOverride: false,
-          error: { code: 'WORKSPACE_BOOTSTRAP_FAILED', message },
-        });
-      });
+    controller.start().then((nextState) => {
+      if (active) setState(nextState);
+    });
     return () => {
       active = false;
     };
-  }, []);
+  }, [controller]);
 
-  if (state.state === 'checking') {
-    return <div className="min-h-screen flex items-center justify-center text-slate-600">正在检查工作区…</div>;
+  const view = getBootstrapView(state);
+  if (view.kind === 'checking') {
+    return <div className="min-h-screen flex items-center justify-center text-slate-600">{view.text}</div>;
   }
 
-  if (state.state === 'ready') return <App />;
+  if (view.kind === 'app') return <App />;
 
   return <WorkspaceWelcome state={state} onStateChange={setState} />;
 }

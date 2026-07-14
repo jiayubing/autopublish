@@ -1,7 +1,7 @@
 import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 
 
-// 鈹€鈹€鈹€ Global type declaration for desktopConsole 鈹€鈹€鈹€
+// Global type declaration for desktopConsole
 
 interface DraftPayload extends Omit<Draft, "filename" | "selectedResources"> {
   selectedResources: Array<{ resourceId: string; name?: string; price?: number }>;
@@ -97,7 +97,7 @@ declare global {
   }
 }
 
-// 鈹€鈹€鈹€ Helper utilities 鈹€鈹€鈹€
+// Helper utilities
 
 export function isElectron(): boolean {
   return typeof window !== "undefined" && !!window.desktopConsole;
@@ -340,7 +340,7 @@ export async function listContentArticles(clientId: string): Promise<GeneratedCo
   return result.data || [];
 }
 
-// 鈹€鈹€鈹€ Data normalization (backend 鈫?React types) 鈹€鈹€鈹€
+// Data normalization from backend values to React types
 
 function normalizeArticle(raw: Record<string, unknown>): Article {
   return {
@@ -396,7 +396,7 @@ function normalizeResource(raw: Record<string, unknown>): MediaResource {
   };
 }
 
-// 鈹€鈹€鈹€ Fallback implementations (dev / no-Electron mode) 鈹€鈹€鈹€
+// Fallback implementations for development and no-Electron mode
 
 async function fallbackScanArticles(): Promise<Article[]> {
   return readLocalStorage<Article[]>("mw_articles", []);
@@ -517,7 +517,7 @@ async function fallbackSyncOrder(_orderNid: string): Promise<unknown> {
   return { synced: false };
 }
 
-// 鈹€鈹€鈹€ Public API exports 鈹€鈹€鈹€
+// Public API exports
 
 export async function scanArticles(): Promise<Article[]> {
   if (isElectron()) {

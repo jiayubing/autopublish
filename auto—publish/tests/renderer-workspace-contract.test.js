@@ -17,12 +17,13 @@ describe("renderer workspace bootstrap contract", function() {
     assert.match(main, /WorkspaceBootstrapGate/);
     assert.doesNotMatch(main, /<App\s*\/>/);
     assert.match(gate, /getWorkspaceBootstrapState/);
-    assert.match(gate, /state\s*===\s*["']ready["']/);
+    assert.match(gate, /createBootstrapGateController/);
+    assert.match(gate, /getBootstrapView/);
     assert.match(gate, /<App\s*\/>/);
   });
 
   it("keeps the welcome flow isolated from business APIs and default paths", function() {
-    const welcome = readSource("components/WorkspaceWelcome.tsx") + readSource("components/WorkspaceSelectionPanel.tsx");
+    const welcome = readSource("components/WorkspaceWelcome.tsx") + readSource("components/WorkspaceSelectionPanel.tsx") + readSource("workspace-ui-logic.js");
 
     assert.match(welcome, /chooseWorkspaceDirectory/);
     assert.match(welcome, /confirmWorkspaceSelection/);
@@ -31,6 +32,8 @@ describe("renderer workspace bootstrap contract", function() {
     assert.match(welcome, /nonempty_directory/);
     assert.match(welcome, /selection\.path/);
     assert.match(welcome, /token/);
+    assert.match(welcome, /createWorkspaceSelectionController/);
+    assert.match(welcome, /getWorkspaceErrorMessage/);
     assert.doesNotMatch(welcome, /Documents/);
     assert.doesNotMatch(welcome, /最近/);
     ["scanArticles", "getResourcePage", "getPlatformQueue", "listContentClients", "getDoubaoQueueState"].forEach(function(api) {
@@ -46,6 +49,43 @@ describe("renderer workspace bootstrap contract", function() {
     assert.match(api, /confirmSelection\(input: WorkspaceSelectionToken\)/);
     assert.match(api, /workspace\.confirmSelection\(input\)/);
     assert.doesNotMatch(api, /confirmSelection\([^)]*path/);
+  });
+
+  it("keeps exactly the seven workspace preload methods and existing namespaces", function() {
+    const api = readSource("electron-api.ts");
+    const workspaceInterface = api.match(/interface DesktopConsoleWorkspace\s*\{([\s\S]*?)\n\}/);
+    assert.ok(workspaceInterface, "workspace preload interface must exist");
+    const methods = [...workspaceInterface[1].matchAll(/^\s+([a-zA-Z]+)\(/gm)].map((match) => match[1]);
+    assert.deepEqual(methods, [
+      "getBootstrapState",
+      "chooseDirectory",
+      "confirmSelection",
+      "cancelSelection",
+      "getCurrent",
+      "openCurrent",
+      "requestSwitch",
+    ]);
+    ["workspace", "media", "orders", "platforms", "content"].forEach((namespace) => {
+      assert.match(api, new RegExp(`\\b${namespace}:`), `${namespace} namespace must remain exposed`);
+    });
+  });
+
+  it("keeps key React renderer files UTF-8 readable without mojibake", function() {
+    [
+      "main.tsx",
+      "types.ts",
+      "electron-api.ts",
+      "workspace-ui-logic.js",
+      "components/WorkspaceBootstrapGate.tsx",
+      "components/WorkspaceSelectionPanel.tsx",
+      "components/WorkspaceWelcome.tsx",
+      "components/SettingsView.tsx",
+    ].forEach((file) => {
+      const source = readSource(file);
+      assert.equal(source.includes("\uFFFD"), false, `${file} contains replacement characters`);
+      assert.equal(source.includes("鈹"), false, `${file} contains mojibake box-drawing text`);
+      assert.equal(source.includes("闁"), false, `${file} contains mojibake Chinese text`);
+    });
   });
 
   it("lets Settings show and operate on the current workspace", function() {
