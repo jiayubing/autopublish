@@ -146,4 +146,17 @@ describe("executable renderer workspace behavior", function() {
       "工作区操作失败，请重试。",
     );
   });
+
+  it("disables Settings workspace commands while relaunching", async function() {
+    const { getSettingsCommandState } = await loadLogic();
+    const commandState = getSettingsCommandState({
+      loading: false,
+      switchBusy: false,
+      current: { workspacePath: "D:\\Workspace", envOverride: false },
+      switchState: { state: "relaunching" },
+    });
+
+    assert.equal(commandState.openDisabled, true);
+    assert.equal(commandState.switchDisabled, true);
+  });
 });

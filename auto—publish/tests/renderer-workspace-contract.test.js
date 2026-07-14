@@ -97,7 +97,6 @@ describe("renderer workspace bootstrap contract", function() {
     assert.match(settings, /workspacePath/);
     assert.match(settings, /validation/);
     assert.match(settings, /envOverride/);
-    assert.match(settings, /disabled=\{[^}]*envOverride/);
     assert.match(settings, /当前工作区由环境变量控制/);
     assert.match(settings, /window\.confirm/);
   });
@@ -119,6 +118,7 @@ describe("renderer workspace bootstrap contract", function() {
   it("deduplicates Settings bootstrap reads and blocks top-level commands while switching", function() {
     const settings = readSource("components/SettingsView.tsx");
 
+    assert.match(settings, /getSettingsCommandState/);
     assert.match(settings, /useRef/);
     assert.match(settings, /currentWorkspaceRequestRef/);
     assert.match(settings, /currentWorkspaceRequestRef\.current\s*\|\|/);
@@ -126,6 +126,9 @@ describe("renderer workspace bootstrap contract", function() {
     assert.match(settings, /mountedRef\.current/);
     assert.match(settings, /switchBusy/);
     assert.match(settings, /onBusyChange=\{setSwitchBusy\}/);
-    assert.match(settings, /disabled=\{[^}]*switchBusy/);
+    assert.match(settings, /getSettingsCommandState/);
+    assert.match(settings, /switchBusy/);
+    assert.match(settings, /commandState\.openDisabled/);
+    assert.match(settings, /commandState\.switchDisabled/);
   });
 });

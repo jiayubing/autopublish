@@ -106,6 +106,16 @@ export function getSelectionView(state) {
   };
 }
 
+export function getSettingsCommandState({ loading, switchBusy, current, switchState }) {
+  const relaunching = switchState?.state === 'relaunching';
+  const envOverride = current?.envOverride === true;
+  const hasWorkspacePath = Boolean(current?.workspacePath);
+  return {
+    openDisabled: Boolean(loading || switchBusy || relaunching || !hasWorkspacePath),
+    switchDisabled: Boolean(loading || switchBusy || relaunching || envOverride),
+  };
+}
+
 export function createWorkspaceSelectionController({
   initialState,
   chooseDirectory,

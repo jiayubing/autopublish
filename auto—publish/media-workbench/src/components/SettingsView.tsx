@@ -12,6 +12,7 @@ import {
   WorkspaceConfirmationResult,
   WorkspaceCurrent,
 } from '../types';
+import { getSettingsCommandState } from '../workspace-ui-logic.js';
 import WorkspaceSelectionPanel from './WorkspaceSelectionPanel';
 
 const READY_STATE: WorkspaceBootstrapState = {
@@ -79,6 +80,7 @@ export default function SettingsView() {
   }, []);
 
   const envOverride = current?.envOverride === true;
+  const commandState = getSettingsCommandState({ loading, switchBusy, current, switchState });
 
   const handleOpen = async () => {
     setOperationError(null);
@@ -136,10 +138,10 @@ export default function SettingsView() {
         )}
         {operationError && <p className="text-sm text-red-700">{operationError}</p>}
         <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={handleOpen} disabled={loading || switchBusy || !current?.workspacePath} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handleOpen} disabled={commandState.openDisabled} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
             <ExternalLink className="h-4 w-4" /> 打开文件夹
           </button>
-          <button type="button" onClick={() => setSwitchOpen(true)} disabled={loading || switchBusy || envOverride} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={() => setSwitchOpen(true)} disabled={commandState.switchDisabled} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
             <RefreshCw className="h-4 w-4" /> 更换工作区
           </button>
         </div>
