@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Pencil, Plus, Save, Trash2 } from 'lucide-react';
-import { collectDoubaoQuestion, createContentQuestion, deleteContentQuestion, getDoubaoLoginStatus, getDoubaoQueueState, listContentQuestions, listContentResearch, openDoubaoLogin, pauseDoubaoBatch, retryFailedDoubao, resumeDoubaoBatch, saveManualResearch, startDoubaoBatch, stopDoubaoBatch, subscribeDoubaoQueue, updateContentQuestion } from '../../electron-api';
+import { collectDoubaoQuestion, createContentQuestion, deleteContentQuestion, getCachedDoubaoLoginState, getDoubaoLoginStatus, getDoubaoQueueState, listContentQuestions, listContentResearch, openDoubaoLogin, pauseDoubaoBatch, rememberDoubaoLoginState, retryFailedDoubao, resumeDoubaoBatch, saveManualResearch, startDoubaoBatch, stopDoubaoBatch, subscribeDoubaoQueue, updateContentQuestion } from '../../electron-api';
 import { ContentClient, ContentQuestion, ContentResearch, DoubaoLoginState, DoubaoQueueState } from '../../types';
 import CollectionTaskBar from './CollectionTaskBar';
 
@@ -23,7 +23,7 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
   const [answerText, setAnswerText] = useState('');
   const [referenceTitle, setReferenceTitle] = useState('');
   const [referenceUrl, setReferenceUrl] = useState('');
-  const [login, setLogin] = useState<DoubaoLoginState>({ status: 'unknown' });
+  const [login, setLogin] = useState<DoubaoLoginState>(() => getCachedDoubaoLoginState());
   const [queue, setQueue] = useState<DoubaoQueueState>(emptyQueue);
   const [error, setError] = useState('');
   const [collectionPending, setCollectionPending] = useState(false);
@@ -224,9 +224,19 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
   }
 
   async function refreshLogin() {
+    const previousLogin = login;
     setLogin({ status: 'checking' });
-    try { setLogin(await getDoubaoLoginStatus()); }
+    try {
+      const nextLogin = await getDoubaoLoginStatus();
+      setLogin(nextLogin);
+      rememberDoubaoLoginState(nextLogin);
+    }
     catch (value) {
+      if (value instanceof Error && 'code' in value && value.code === 'PLAYWRIGHT_SESSION_NOT_OPEN') {
+        setLogin(previousLogin);
+        setError('');
+        return;
+      }
       const errorText = value instanceof Error ? value.message : '无法读取登录状态';
       setLogin({ status: 'session_error', errorText });
       setError(errorText);
@@ -234,7 +244,11 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
   }
   async function loginNow() {
     setLogin({ status: 'checking' });
-    try { setLogin(await openDoubaoLogin()); }
+    try {
+      const nextLogin = await openDoubaoLogin();
+      setLogin(nextLogin);
+      rememberDoubaoLoginState(nextLogin);
+    }
     catch (value) {
       const errorText = value instanceof Error ? value.message : '无法打开豆包登录';
       setLogin({ status: 'session_error', errorText });

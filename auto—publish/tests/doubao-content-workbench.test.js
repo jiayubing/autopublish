@@ -89,6 +89,16 @@ describe("Doubao content workbench renderer contracts", function() {
     assert.match(questions, /onClick=\{refreshLogin\}/);
   });
 
+  it("restores the last stable login state when a passive session is unavailable", function() {
+    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const api = read("media-workbench/src/electron-api.ts");
+    assert.match(questions, /getCachedDoubaoLoginState/);
+    assert.match(questions, /useState<DoubaoLoginState>\(\(\) => getCachedDoubaoLoginState\(\)\)/);
+    assert.match(questions, /rememberDoubaoLoginState/);
+    assert.match(questions, /PLAYWRIGHT_SESSION_NOT_OPEN/);
+    assert.match(api, /\.code =/);
+  });
+
   it("refreshes once after collection completion and prevents duplicate submissions", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
     const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");

@@ -116,9 +116,37 @@ function writeLocalStorage<T>(key: string, value: T): void {
   }
 }
 
+const DOUBAO_LOGIN_STATE_KEY = "auto-publish:doubao-login-state";
+
+export function getCachedDoubaoLoginState(): DoubaoLoginState {
+  if (typeof localStorage === "undefined") return { status: "unknown" };
+  try {
+    const saved = JSON.parse(localStorage.getItem(DOUBAO_LOGIN_STATE_KEY) || "null") as { status?: unknown } | null;
+    if (saved?.status === "authenticated" || saved?.status === "login_required") return { status: saved.status };
+  } catch {
+    // Ignore malformed or unavailable browser storage.
+  }
+  return { status: "unknown" };
+}
+
+export function rememberDoubaoLoginState(state: DoubaoLoginState): void {
+  if (state.status !== "authenticated" && state.status !== "login_required") return;
+  try {
+    localStorage.setItem(DOUBAO_LOGIN_STATE_KEY, JSON.stringify({ status: state.status }));
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+}
+
 function getIpcError(value: unknown, fallback: string): Error {
-  if (value && typeof value === "object" && "message" in value) return new Error(String((value as { message: unknown }).message));
-  return new Error(typeof value === "string" ? value : fallback);
+  const message = value && typeof value === "object" && "message" in value
+    ? String((value as { message: unknown }).message)
+    : typeof value === "string" ? value : fallback;
+  const error = new Error(message);
+  if (value && typeof value === "object" && "code" in value && typeof (value as { code?: unknown }).code === "string") {
+    (error as Error & { code?: string }).code = (value as { code: string }).code;
+  }
+  return error;
 }
 
 export async function listContentClients(): Promise<ContentClient[]> {
