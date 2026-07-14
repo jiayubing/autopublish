@@ -86,8 +86,13 @@ export function getSelectionView(state) {
   const selection = state?.selection;
   const relaunching = state?.state === 'relaunching';
   const isConfirmation = state?.state === 'confirmation_required' && Boolean(selection);
+  const kind = isConfirmation
+    ? 'confirmation_required'
+    : state?.state === 'confirmation_required'
+      ? 'selection_required'
+      : state?.state || 'selection_required';
   return {
-    kind: isConfirmation ? 'confirmation_required' : state?.state || 'selection_required',
+    kind,
     path: selection?.path || null,
     category: selection ? kindLabel(selection.kind) : null,
     warning: selection?.kind === 'nonempty_directory'

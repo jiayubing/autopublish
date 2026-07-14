@@ -74,6 +74,12 @@ describe("executable renderer workspace behavior", function() {
     assert.match(pendingView.warning, /AutoPublish/);
     assert.equal(pendingView.confirmDisabled, false);
 
+    const missingSelectionView = getSelectionView({ state: "confirmation_required" });
+    assert.equal(missingSelectionView.kind, "selection_required");
+    assert.equal(missingSelectionView.chooseDisabled, false);
+    assert.equal(missingSelectionView.confirmDisabled, true);
+    assert.equal(missingSelectionView.cancelDisabled, true);
+
     const relaunchingView = getSelectionView({ state: "relaunching" });
     assert.match(relaunchingView.text, /重启/);
     assert.equal(relaunchingView.chooseDisabled, true);
