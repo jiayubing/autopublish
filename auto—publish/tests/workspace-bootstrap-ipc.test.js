@@ -157,4 +157,27 @@ describe("workspace bootstrap IPC", function() {
     assert.deepEqual(result, { ok: true, data: { opened: true } });
     assert.equal(opened, 1);
   });
+
+  it("sanitizes open-current failures with the stable open error code", async function() {
+    const fake = fakeIpc();
+    registerWorkspaceBootstrapIpc({
+      ipcMain: fake.ipcMain,
+      workspaceBootstrapService: {
+        openCurrent: function() {
+          const error = new Error("API key secret C:\\private\\workspace");
+          error.code = "WORKSPACE_OPEN_FAILED";
+          throw error;
+        },
+        getBootstrapState: function() { return {}; }, getCurrent: function() { return {}; }, chooseDirectory: function() {},
+        requestSwitch: function() {}, confirmSelection: function() {}, cancelSelection: function() {}
+      },
+      showOpenDialog: async function() { return { canceled: true, filePaths: [] }; }
+    });
+    const result = await fake.handlers.get("workspace:open-current")();
+    assertEnvelope(result);
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "WORKSPACE_OPEN_FAILED");
+    assert.equal(result.error.message.includes("secret"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(result.error, "stack"), false);
+  });
 });

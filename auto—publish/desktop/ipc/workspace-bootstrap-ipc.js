@@ -12,6 +12,7 @@ const SAFE_MESSAGES = {
   WORKSPACE_SWITCH_BUSY: "Workspace cannot be switched while work is active",
   WORKSPACE_ENV_OVERRIDE: "Workspace is controlled by AUTO_PUBLISH_WORKSPACE",
   WORKSPACE_RELAUNCH_FAILED: "Application relaunch failed",
+  WORKSPACE_OPEN_FAILED: "Could not open the current workspace",
   WORKSPACE_LOCATION_WRITE_FAILED: "Workspace location could not be saved",
   WORKSPACE_IPC_INPUT_INVALID: "Workspace IPC input is invalid",
   IPC_ERROR: "Workspace operation failed"

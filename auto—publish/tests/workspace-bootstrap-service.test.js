@@ -80,6 +80,20 @@ function assertError(errorPromise, code) {
   });
 }
 
+function assertSyncError(fn, code) {
+  assert.throws(fn, function(error) {
+    assert.equal(error.code, code);
+    assert.equal(Object.prototype.hasOwnProperty.call(error, "stack"), false);
+    return true;
+  });
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(function(done) { resolve = done; });
+  return { promise, resolve };
+}
+
 describe("workspace bootstrap service", function() {
   it("prefers a valid environment workspace and marks it as an override", function() {
     const harness = createHarness();
@@ -182,7 +196,7 @@ describe("workspace bootstrap service", function() {
     const harness = createHarness();
     try {
       harness.service.bootstrap();
-      await assertError(harness.service.cancelSelection(), "WORKSPACE_SELECTION_CANCELLED");
+      assertSyncError(function() { harness.service.cancelSelection(); }, "WORKSPACE_SELECTION_CANCELLED");
       assert.deepEqual(harness.events.relaunches, []);
       assert.deepEqual(fs.readdirSync(harness.userDataPath), []);
     } finally { harness.cleanup(); }
@@ -259,7 +273,8 @@ describe("workspace bootstrap service", function() {
 
   it("returns a stable initialization error without saving or relaunching", async function() {
     const harness = createHarness({
-      ensureWorkspaceDirectories: function() {
+      ensureWorkspaceDirectories: function(paths) {
+        fs.mkdirSync(paths.input, { recursive: true });
         const error = new Error("simulated directory initialization failure");
         error.code = "EACCES";
         throw error;
@@ -267,12 +282,35 @@ describe("workspace bootstrap service", function() {
     });
     const candidate = path.join(harness.root, "candidate");
     fs.mkdirSync(candidate);
+    fs.mkdirSync(path.join(candidate, "data"));
+    fs.writeFileSync(path.join(candidate, "keep.txt"), "keep", "utf8");
     try {
       const selected = harness.service.chooseDirectory(candidate);
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_NOT_WRITABLE");
-      assert.equal(harness.locationStore.read().value, null);
+      assert.deepEqual(fs.readdirSync(candidate).sort(), ["data", "keep.txt"]);
       assert.deepEqual(harness.events.relaunches, []);
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
+    } finally { harness.cleanup(); }
+  });
+
+  it("rolls back initialized directories and marker when location persistence fails", async function() {
+    const writes = [];
+    const harness = createHarness({
+      locationStore: {
+        read: function() { return { ok: true, value: null }; },
+        write: function() { writes.push(true); return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } }; }
+      }
+    });
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    fs.mkdirSync(path.join(candidate, "data"));
+    fs.writeFileSync(path.join(candidate, "keep.txt"), "keep", "utf8");
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_LOCATION_WRITE_FAILED");
+      assert.deepEqual(fs.readdirSync(candidate).sort(), ["data", "keep.txt"]);
+      assert.equal(writes.length, 1);
+      assert.deepEqual(harness.events.relaunches, []);
     } finally { harness.cleanup(); }
   });
 
@@ -287,7 +325,7 @@ describe("workspace bootstrap service", function() {
       await assertError(harness.service.confirmSelection({ token: selected.selection.token, path: second }), "WORKSPACE_SELECTION_EXPIRED");
       const selectedAgain = harness.service.chooseDirectory(first);
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SELECTION_EXPIRED");
-      await assertError(harness.service.cancelSelection(), "WORKSPACE_SELECTION_CANCELLED");
+      assertSyncError(function() { harness.service.cancelSelection(); }, "WORKSPACE_SELECTION_CANCELLED");
       await assertError(harness.service.confirmSelection({ token: selectedAgain.selection.token }), "WORKSPACE_SELECTION_EXPIRED");
       const selectedExpired = harness.service.chooseDirectory(first);
       harness.setTime("2026-07-14T12:00:01.000Z");
@@ -361,6 +399,62 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
+  it("allows a failed relaunch to be retried for the same path and then becomes idempotent", async function() {
+    let attempts = 0;
+    const harness = createHarness({
+      relaunch: function() {
+        attempts += 1;
+        if (attempts === 1) throw new Error("first relaunch failed");
+      }
+    });
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const first = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: first.selection.token }), "WORKSPACE_RELAUNCH_FAILED");
+      assert.equal(harness.service.getBootstrapState().state, "ready");
+      assert.equal(harness.service.getBootstrapState().error.code, "WORKSPACE_RELAUNCH_FAILED");
+
+      const retry = harness.service.chooseDirectory(candidate);
+      const retried = await harness.service.confirmSelection({ token: retry.selection.token });
+      assert.equal(retried.state, "relaunching");
+      assert.equal(attempts, 2);
+
+      const afterSuccess = harness.service.chooseDirectory(candidate);
+      const noOp = await harness.service.confirmSelection({ token: afterSuccess.selection.token });
+      assert.equal(noOp.changed, false);
+      assert.equal(attempts, 2);
+    } finally { harness.cleanup(); }
+  });
+
+  it("serializes confirm, choose, and cancel while confirmation awaits relaunch", async function() {
+    const gate = deferred();
+    const harness = createHarness({
+      relaunch: function() {
+        harness.events.relaunches.push(true);
+        return gate.promise;
+      }
+    });
+    const firstPath = path.join(harness.root, "first");
+    const secondPath = path.join(harness.root, "second");
+    fs.mkdirSync(firstPath);
+    fs.mkdirSync(secondPath);
+    try {
+      const selected = harness.service.chooseDirectory(firstPath);
+      const firstConfirmation = harness.service.confirmSelection({ token: selected.selection.token });
+      while (harness.events.relaunches.length === 0) await Promise.resolve();
+
+      assertSyncError(function() { harness.service.chooseDirectory(secondPath); }, "WORKSPACE_SWITCH_BUSY");
+      assertSyncError(function() { harness.service.cancelSelection(); }, "WORKSPACE_SWITCH_BUSY");
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SWITCH_BUSY");
+
+      gate.resolve();
+      const result = await firstConfirmation;
+      assert.equal(result.state, "relaunching");
+      assert.equal(harness.events.relaunches.length, 1);
+    } finally { harness.cleanup(); }
+  });
+
   it("treats confirming the current path as a stable no-op", async function() {
     const harness = createHarness();
     const candidate = path.join(harness.root, "candidate");
@@ -391,6 +485,20 @@ describe("workspace bootstrap service", function() {
       assert.equal(current.validation.kind, "existing_workspace");
       harness.service.openCurrent();
       assert.deepEqual(harness.events.opens, [fs.realpathSync(candidate)]);
+    } finally { harness.cleanup(); }
+  });
+
+  it("maps openPath failures to a stable error without exposing the original message", async function() {
+    const harness = createHarness({
+      openPath: function() { throw new Error("API key secret C:\\private\\workspace"); }
+    });
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    writeMarker(candidate);
+    harness.locationStore.write(candidate);
+    try {
+      harness.service.bootstrap();
+      await assertError(harness.service.openCurrent(), "WORKSPACE_OPEN_FAILED");
     } finally { harness.cleanup(); }
   });
 });

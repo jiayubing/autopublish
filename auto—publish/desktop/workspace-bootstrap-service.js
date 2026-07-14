@@ -19,7 +19,8 @@ const ERROR_MESSAGES = {
   WORKSPACE_SWITCH_BUSY: "Workspace cannot be switched while work is active",
   WORKSPACE_ENV_OVERRIDE: "Workspace is controlled by AUTO_PUBLISH_WORKSPACE",
   WORKSPACE_RELAUNCH_FAILED: "Application relaunch failed",
-  WORKSPACE_LOCATION_WRITE_FAILED: "Workspace location could not be saved"
+  WORKSPACE_LOCATION_WRITE_FAILED: "Workspace location could not be saved",
+  WORKSPACE_OPEN_FAILED: "Could not open the current workspace"
 };
 
 function stableError(code, message) {
@@ -85,6 +86,9 @@ function createWorkspaceBootstrapService(options) {
   let current = null;
   let lastError = null;
   let pending = null;
+  let retryRelaunchPath = null;
+  let activeOperation = null;
+  let operationGeneration = 0;
 
   function currentPath() { return current ? current.path : null; }
 
@@ -99,6 +103,23 @@ function createWorkspaceBootstrapService(options) {
   }
 
   function invalidateSelection() { pending = null; }
+
+  function beginOperation() {
+    if (activeOperation) throwStable("WORKSPACE_SWITCH_BUSY");
+    const operation = { generation: ++operationGeneration };
+    activeOperation = operation;
+    return operation;
+  }
+
+  function endOperation(operation) {
+    if (activeOperation === operation) activeOperation = null;
+  }
+
+  function assertOperation(operation) {
+    if (activeOperation !== operation || operation.generation !== operationGeneration) {
+      throwStable("WORKSPACE_SWITCH_BUSY");
+    }
+  }
 
   function classify(candidate) {
     let result;
@@ -174,7 +195,7 @@ function createWorkspaceBootstrapService(options) {
     };
   }
 
-  function chooseDirectory(candidate) {
+  function selectDirectory(candidate) {
     invalidateSelection();
     if (candidate === null || candidate === undefined) throwStable("WORKSPACE_SELECTION_CANCELLED");
     const result = classify(candidate);
@@ -191,6 +212,11 @@ function createWorkspaceBootstrapService(options) {
     return pendingDto();
   }
 
+  function chooseDirectory(candidate) {
+    if (activeOperation) throwStable("WORKSPACE_SWITCH_BUSY");
+    return selectDirectory(candidate);
+  }
+
   async function readBusyState() {
     const taskValue = typeof taskService.getState === "function" ? await taskService.getState() : null;
     const queueValue = typeof doubaoCollectionService.getQueueState === "function"
@@ -200,16 +226,23 @@ function createWorkspaceBootstrapService(options) {
   }
 
   async function requestSwitch(candidate) {
-    if (current && current.envOverride) throwStable("WORKSPACE_ENV_OVERRIDE");
-    await readBusyState();
-    return chooseDirectory(candidate);
+    const operation = beginOperation();
+    try {
+      if (current && current.envOverride) throwStable("WORKSPACE_ENV_OVERRIDE");
+      await readBusyState();
+      assertOperation(operation);
+      return selectDirectory(candidate);
+    } finally {
+      endOperation(operation);
+    }
   }
 
   function cancelSelection() {
+    if (activeOperation) throwStable("WORKSPACE_SWITCH_BUSY");
     invalidateSelection();
     state = current ? "ready" : "selection_required";
     lastError = null;
-    return Promise.reject(stableError("WORKSPACE_SELECTION_CANCELLED"));
+    throwStable("WORKSPACE_SELECTION_CANCELLED");
   }
 
   function getPending(input) {
@@ -225,62 +258,134 @@ function createWorkspaceBootstrapService(options) {
     return pending;
   }
 
+  function rollbackInitialization(record) {
+    if (record.markerCreated) {
+      try {
+        const markerStats = io.lstatSync(record.markerPath);
+        if (markerStats.isFile() && !markerStats.isSymbolicLink()) io.unlinkSync(record.markerPath);
+      } catch (error) {
+        // A failed cleanup must never cause deletion outside the exact marker path.
+      }
+    }
+    record.directories
+      .filter(function(item) { return !item.present; })
+      .sort(function(first, second) { return second.path.length - first.path.length; })
+      .forEach(function(item) {
+        try {
+          const stats = io.lstatSync(item.path);
+          if (stats.isDirectory() && !stats.isSymbolicLink()) io.rmdirSync(item.path);
+        } catch (error) {
+          // Only empty directories are removed; nonempty or changed paths stay intact.
+        }
+      });
+  }
+
   function initializeWorkspace(root) {
+    const paths = makePaths(root);
+    const directories = [];
+    const seen = new Set();
+    Object.keys(paths).forEach(function(key) {
+      const target = paths[key];
+      if (key === "root" || typeof target !== "string" || seen.has(target)) return;
+      seen.add(target);
+      let present;
+      try {
+        io.lstatSync(target);
+        present = true;
+      } catch (error) {
+        if (error && error.code === "ENOENT") present = false;
+        else throwStable("WORKSPACE_NOT_WRITABLE");
+      }
+      directories.push({ path: target, present: present });
+    });
+    const record = {
+      markerPath: path.join(root, WORKSPACE_MARKER_FILE),
+      markerCreated: false,
+      directories: directories,
+      rollback: function() { rollbackInitialization(record); }
+    };
     try {
-      const paths = makePaths(root);
       ensureDirectories(paths);
-      const markerPath = path.join(root, WORKSPACE_MARKER_FILE);
       const marker = JSON.stringify({ version: 1, createdAt: readClock(clock).toISOString() }) + "\n";
       try {
-        io.writeFileSync(markerPath, marker, { encoding: "utf8", flag: "wx" });
+        io.writeFileSync(record.markerPath, marker, { encoding: "utf8", flag: "wx" });
+        record.markerCreated = true;
       } catch (error) {
         if (!error || error.code !== "EEXIST") throw error;
         const rechecked = classify(root);
         if (rechecked.kind !== "existing_workspace") throwStable("WORKSPACE_MARKER_INVALID");
       }
+      return record;
     } catch (error) {
+      record.rollback();
       if (error && error.code && ERROR_MESSAGES[error.code]) throw error;
       throwStable(safeErrorCode(error, "WORKSPACE_NOT_WRITABLE"));
     }
   }
 
-  async function confirmSelection(input) {
-    const selection = getPending(input);
-    invalidateSelection();
-    if (current && current.envOverride) throwStable("WORKSPACE_ENV_OVERRIDE");
-
-    const rechecked = classify(selection.path);
-    if (rechecked.kind === "invalid" || rechecked.path !== selection.path || rechecked.kind !== selection.kind) {
-      throwStable(rechecked.kind === "invalid" ? rechecked.error.code : "WORKSPACE_SELECTION_EXPIRED");
-    }
-    await readBusyState();
-
-    if (current && current.path === selection.path) {
-      state = "ready";
-      lastError = null;
-      return { state: "ready", workspacePath: current.path, envOverride: current.envOverride, changed: false };
-    }
-
-    if (selection.kind !== "existing_workspace") initializeWorkspace(selection.path);
-
-    let saved;
-    try { saved = locationStore.write(selection.path); } catch (error) { saved = { ok: false, error: error }; }
-    if (!saved || saved.ok !== true) {
-      throwStable(safeErrorCode(saved && saved.error, "WORKSPACE_LOCATION_WRITE_FAILED"));
-    }
-
-    current = { path: selection.path, envOverride: false, validation: classify(selection.path) };
+  async function relaunchWorkspace(workspacePath, changed, operation) {
     state = "relaunching";
     lastError = null;
     try {
       const result = await relaunch();
+      assertOperation(operation);
       if (result === false) throw new Error("relaunch returned false");
+      retryRelaunchPath = null;
+      return { state: "relaunching", workspacePath: workspacePath, envOverride: false, changed: changed };
     } catch (error) {
+      retryRelaunchPath = workspacePath;
       state = "ready";
       lastError = stableError("WORKSPACE_RELAUNCH_FAILED");
       throw lastError;
     }
-    return { state: "relaunching", workspacePath: selection.path, envOverride: false, changed: true };
+  }
+
+  async function confirmSelection(input) {
+    const operation = beginOperation();
+    try {
+      const selection = getPending(input);
+      invalidateSelection();
+      if (current && current.envOverride) throwStable("WORKSPACE_ENV_OVERRIDE");
+
+      const rechecked = classify(selection.path);
+      if (rechecked.kind === "invalid" || rechecked.path !== selection.path || rechecked.kind !== selection.kind) {
+        throwStable(rechecked.kind === "invalid" ? rechecked.error.code : "WORKSPACE_SELECTION_EXPIRED");
+      }
+      await readBusyState();
+      assertOperation(operation);
+
+      const retryingCurrentPath = current && current.path === selection.path && retryRelaunchPath === selection.path;
+      if (current && current.path === selection.path && !retryingCurrentPath) {
+        state = "ready";
+        lastError = null;
+        return { state: "ready", workspacePath: current.path, envOverride: current.envOverride, changed: false };
+      }
+
+      let initialization = null;
+      if (!retryingCurrentPath && selection.kind !== "existing_workspace") initialization = initializeWorkspace(selection.path);
+
+      if (!retryingCurrentPath) {
+        let saved;
+        try { saved = locationStore.write(selection.path); } catch (error) { saved = { ok: false, error: error }; }
+        if (!saved || saved.ok !== true) {
+          if (initialization) initialization.rollback();
+          throwStable(safeErrorCode(saved && saved.error, "WORKSPACE_LOCATION_WRITE_FAILED"));
+        }
+        current = { path: selection.path, envOverride: false, validation: classify(selection.path) };
+        retryRelaunchPath = null;
+      }
+
+      return await relaunchWorkspace(selection.path, true, operation);
+    } catch (error) {
+      const code = safeErrorCode(error, "WORKSPACE_NOT_WRITABLE");
+      if (code !== "WORKSPACE_RELAUNCH_FAILED") {
+        state = current ? "ready" : "selection_required";
+        lastError = stableError(code);
+      }
+      throw stableError(code);
+    } finally {
+      endOperation(operation);
+    }
   }
 
   function getCurrent() {
@@ -294,7 +399,11 @@ function createWorkspaceBootstrapService(options) {
 
   async function openCurrent() {
     if (!current || !current.path) throwStable("WORKSPACE_SELECTION_REQUIRED");
-    return await openPath(current.path);
+    try {
+      return await openPath(current.path);
+    } catch (error) {
+      throwStable("WORKSPACE_OPEN_FAILED");
+    }
   }
 
   return {
