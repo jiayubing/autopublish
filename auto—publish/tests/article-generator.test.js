@@ -63,6 +63,15 @@ describe("article generator", function() {
     assert.equal(article.content, "Body text");
   });
 
+  it("removes model preambles and template section markers from publishable output", async function() {
+    const deps = dependencies({ aiClient: { complete: async function() {
+      return "好的，作为严谨的内容编辑，我将为您创作文章。\n---\n### 标题\n\n榜单标题\n\n### 开头\n\n这是文章正文。\n\n### 结尾\n\n这是结尾。";
+    } } });
+    const article = await createArticleGenerator(deps).generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    assert.equal(article.title, "榜单标题");
+    assert.equal(article.content, "这是文章正文。\n\n这是结尾。");
+  });
+
   it("creates a new id for repeated inputs and derives source flags from supplied data", async function() {
     let nextId = 0;
     const deps = dependencies({

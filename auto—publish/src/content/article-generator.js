@@ -15,13 +15,28 @@ function cleanMarkdown(value) {
     .trim();
 }
 
+function isOutputScaffolding(line) {
+  return /^(?:#{1,6}\s*)?(?:标题|文章标题|开头|正文|正文内容|结尾|收尾)\s*[:：]?\s*$/.test(line.trim()) ||
+    /^---+$/.test(line.trim());
+}
+
+function isModelPreamble(line) {
+  return /^(?:好的|当然|没问题|以下是|下面是|作为.{0,20}(?:编辑|助手)|我将根据|根据您提供)/.test(line.trim());
+}
+
 function parseArticle(value) {
   const cleaned = cleanMarkdown(value);
-  const lines = cleaned.split(/\r?\n/);
+  let lines = cleaned.split(/\r?\n/).map(function(line) { return line.trimEnd(); });
+  while (lines.length && (!lines[0].trim() || isOutputScaffolding(lines[0]))) lines.shift();
+  if (lines.length && isModelPreamble(lines[0]) && lines.slice(1).some(isOutputScaffolding)) {
+    lines.shift();
+    while (lines.length && (!lines[0].trim() || isOutputScaffolding(lines[0]))) lines.shift();
+  }
+  lines = lines.filter(function(line) { return !isOutputScaffolding(line); });
   const first = lines.shift() || "";
   const heading = first.match(/^\s{0,3}#+\s+(.+)$/);
   const title = (heading ? heading[1] : first).trim();
-  const content = lines.join("\n").trim();
+  const content = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   if (!title || !content) throw generatorError("AI_EMPTY_RESPONSE", "AI response was empty");
   return { title: title, content: content };
 }
