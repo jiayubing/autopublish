@@ -15,6 +15,22 @@ function formatKnowledge(files) {
   }).join("\n\n");
 }
 
+function normalizeMaterials(input) {
+  const client = Object.assign({}, input.client || {});
+  const materials = Object.prototype.hasOwnProperty.call(input, "materialItems")
+    ? input.materialItems
+    : client.knowledgeFiles;
+  if (!Array.isArray(materials) || !materials.length) {
+    throw promptError("CLIENT_MATERIAL_REQUIRED", "At least one client material is required");
+  }
+  materials.forEach(function(material) {
+    if (!material || material.status === "error" || typeof material.content !== "string" || !material.content.trim()) {
+      throw promptError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
+    }
+  });
+  return materials;
+}
+
 function formatReferences(references) {
   if (!Array.isArray(references) || !references.length) return "（无参考资料）";
   return references.map(function(reference) {
@@ -60,11 +76,15 @@ function buildPrompt(input) {
     throw promptError("PROMPT_INVALID_INPUT", "Prompt input is invalid");
   }
 
+  const materials = normalizeMaterials(input);
+  if (Array.isArray(input.researchItems) && input.researchItems.length === 0) {
+    throw promptError("GEO_RESEARCH_REQUIRED", "At least one GEO research answer is required");
+  }
   const researchQueryIds = normalizeResearchQueryIds(input);
   const researches = normalizeResearches(input, researchQueryIds);
   const research = researches[0];
 
-  const client = input.client || {};
+  const client = Object.assign({}, input.client || {});
   const template = input.template || {};
   const platform = text(input.platform || template.platform);
   const scenario = text(input.scenario || template.scenario);
@@ -91,6 +111,7 @@ function buildPrompt(input) {
     "客户资料和豆包回答没有提供的店名、地址、价格、评分、经营年限、调研数据、实地探访、评价数量或菜品细节不得补写；缺少的信息直接省略。"
   ].join("\n");
 
+  client.knowledgeFiles = materials;
   const userSections = [
     "【客户资料】\n客户：" + text(client.name || client.id || "未提供") + "\n" + formatKnowledge(client.knowledgeFiles),
     "【豆包搜索问题及回答】\n问题：" + text(research.question || "未提供") + "\n回答：" + text(research.answerText),

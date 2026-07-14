@@ -108,4 +108,29 @@ describe("prompt builder", function() {
       }, function(error) { return error.code === "RESEARCH_QUERY_IDS_INVALID"; });
     });
   });
+
+  it("formats only explicitly selected client materials", function() {
+    const prompt = buildPrompt(input({
+      client: {
+        id: "client-1",
+        name: "Client",
+        knowledgeFiles: [
+          { name: "selected.md", content: "selected material" },
+          { name: "unchecked.md", content: "must not be included" }
+        ]
+      },
+      materialItems: [{ id: "selected.md", name: "selected.md", content: "selected material", status: "ready" }]
+    }));
+    assert.match(prompt.user, /selected material/);
+    assert.doesNotMatch(prompt.user, /must not be included/);
+  });
+
+  it("enforces both material and research source gates", function() {
+    assert.throws(function() {
+      buildPrompt(input({ materialItems: [] }));
+    }, function(error) { return error.code === "CLIENT_MATERIAL_REQUIRED"; });
+    assert.throws(function() {
+      buildPrompt(input({ researchItems: [], research: undefined, researchQueryIds: [] }));
+    }, function(error) { return error.code === "GEO_RESEARCH_REQUIRED"; });
+  });
 });

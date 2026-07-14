@@ -93,6 +93,61 @@ function normalizeResearchSnapshots(snapshots, ids) {
   });
 }
 
+function normalizeMaterialSnapshots(snapshots) {
+  if (snapshots === undefined) return undefined;
+  if (!Array.isArray(snapshots) || snapshots.length < 1) {
+    throw storeError("ARTICLE_INVALID", "Article material snapshots are invalid");
+  }
+  return snapshots.map(function(snapshot) {
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
+        typeof snapshot.id !== "string" || !snapshot.id.trim() ||
+        typeof snapshot.name !== "string" || !snapshot.name.trim() ||
+        typeof snapshot.extension !== "string" || !snapshot.extension.trim() ||
+        typeof snapshot.content !== "string" || !snapshot.content.trim() ||
+        typeof snapshot.contentHash !== "string" || !snapshot.contentHash.trim() ||
+        typeof snapshot.source !== "string" || !snapshot.source.trim()) {
+      throw storeError("ARTICLE_INVALID", "Article material snapshot is invalid");
+    }
+    return {
+      id: snapshot.id, name: snapshot.name, extension: snapshot.extension,
+      content: snapshot.content, contentHash: snapshot.contentHash, source: snapshot.source
+    };
+  });
+}
+
+function normalizeTemplateSnapshot(snapshot) {
+  if (snapshot === undefined) return undefined;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
+      typeof snapshot.platform !== "string" || !snapshot.platform.trim() ||
+      typeof snapshot.id !== "string" || !snapshot.id.trim() ||
+      typeof snapshot.name !== "string" || !snapshot.name.trim() ||
+      typeof snapshot.scenario !== "string" || !snapshot.scenario.trim() ||
+      typeof snapshot.body !== "string" || !snapshot.body.trim() ||
+      typeof snapshot.bodyHash !== "string" || !snapshot.bodyHash.trim()) {
+    throw storeError("ARTICLE_INVALID", "Article template snapshot is invalid");
+  }
+  return {
+    platform: snapshot.platform, id: snapshot.id, name: snapshot.name,
+    scenario: snapshot.scenario, body: snapshot.body, bodyHash: snapshot.bodyHash
+  };
+}
+
+function normalizeOptionalProvenance(value, label) {
+  if (value === undefined) return undefined;
+  if (value !== null && (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value))) {
+    throw storeError("ARTICLE_INVALID", "Article " + label + " is invalid");
+  }
+  return value;
+}
+
+function normalizeReviewedAt(value) {
+  if (value === undefined) return undefined;
+  if (value !== null && (typeof value !== "string" || !value.trim() || Number.isNaN(Date.parse(value)))) {
+    throw storeError("ARTICLE_INVALID", "Article reviewedAt is invalid");
+  }
+  return value;
+}
+
 function normalizeArticle(article) {
   if (!article || typeof article !== "object" || Array.isArray(article)) {
     throw storeError("ARTICLE_INVALID", "Article is invalid");
@@ -103,6 +158,9 @@ function normalizeArticle(article) {
   ["platform", "scenario", "templateId", "title", "content", "status", "createdAt"].forEach(function(field) {
     assertNonEmptyString(article[field], field);
   });
+  if (article.status !== "generated" && article.status !== "saved") {
+    throw storeError("ARTICLE_INVALID", "Article status is invalid");
+  }
   if (article.updatedAt !== undefined) assertNonEmptyString(article.updatedAt, "updatedAt");
   if (!article.source || typeof article.source !== "object" || Array.isArray(article.source)) {
     throw storeError("ARTICLE_INVALID", "Article source is invalid");
@@ -116,6 +174,16 @@ function normalizeArticle(article) {
     researchQueryIds: researchIds.ids,
     source: Object.assign({}, article.source)
   });
+  const materialSnapshots = normalizeMaterialSnapshots(article.materialSnapshots);
+  const templateSnapshot = normalizeTemplateSnapshot(article.templateSnapshot);
+  const generationBatchId = normalizeOptionalProvenance(article.generationBatchId, "generationBatchId");
+  const generationTaskId = normalizeOptionalProvenance(article.generationTaskId, "generationTaskId");
+  const reviewedAt = normalizeReviewedAt(article.reviewedAt);
+  if (materialSnapshots !== undefined) normalized.materialSnapshots = materialSnapshots;
+  if (templateSnapshot !== undefined) normalized.templateSnapshot = templateSnapshot;
+  if (generationBatchId !== undefined) normalized.generationBatchId = generationBatchId;
+  if (generationTaskId !== undefined) normalized.generationTaskId = generationTaskId;
+  if (reviewedAt !== undefined) normalized.reviewedAt = reviewedAt;
   if (researchIds.legacy) {
     assertNonEmptyString(article.researchQueryId, "researchQueryId");
     Object.defineProperty(normalized, LEGACY_ARTICLE, { value: true, enumerable: false });

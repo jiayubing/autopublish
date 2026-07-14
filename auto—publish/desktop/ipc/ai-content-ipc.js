@@ -1,6 +1,19 @@
 const { createAiContentService } = require("../services/ai-content-service");
 const { wrap } = require("../services/ipc-response");
 
+function contentInputError(message) {
+  const error = new Error(message);
+  error.code = "CONTENT_INPUT_INVALID";
+  return error;
+}
+
+function generationInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw contentInputError("Generation input must be an object");
+  }
+  return Object.assign({}, input);
+}
+
 function registerAiContentIpc(deps) {
   const ipcMain = deps.ipcMain;
   const service = deps.aiContentService || createAiContentService({ workspaceRoot: deps.rootDir });
@@ -12,7 +25,7 @@ function registerAiContentIpc(deps) {
     return wrap(function() { return service.getResearch(input && input.clientId, input && input.researchId); });
   });
   ipcMain.handle("content:list-templates", function(event, platform) { return wrap(function() { return service.listTemplates(platform); }); });
-  ipcMain.handle("content:generate-article", function(event, input) { return wrap(function() { return service.generateArticle(input || {}); }); });
+  ipcMain.handle("content:generate-article", function(event, input) { return wrap(function() { return service.generateArticle(generationInput(input)); }); });
   ipcMain.handle("content:save-article", function(event, article) { return wrap(function() { return service.saveArticle(article); }); });
   ipcMain.handle("content:list-generated-articles", function(event, clientId) { return wrap(function() { return service.listGeneratedArticles(clientId); }); });
   ipcMain.handle("content:get-generated-article", function(event, input) {

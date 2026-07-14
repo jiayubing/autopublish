@@ -33,4 +33,23 @@ describe("ai content ipc", function() {
     const result = await ipc.handlers.get("content:list-clients")();
     assert.deepStrictEqual(result, { ok: false, error: { code: "CONTENT_INPUT_INVALID", message: "safe failure" } });
   });
+
+  it("returns safe provenance validation errors through the generation IPC boundary", async function() {
+    const ipc = createIpc();
+    const failure = new Error("Client material selection is invalid");
+    failure.code = "CLIENT_MATERIAL_INVALID";
+    registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: {
+      generateArticle: function() { throw failure; }
+    } });
+    const result = await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1", materialIds: ["missing"] });
+    assert.deepStrictEqual(result, { ok: false, error: { code: "CLIENT_MATERIAL_INVALID", message: "Client material selection is invalid" } });
+    assert.equal(Object.prototype.hasOwnProperty.call(result.error, "stack"), false);
+  });
+
+  it("rejects non-object generation payloads without exposing internal details", async function() {
+    const ipc = createIpc();
+    registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: { generateArticle: function() { throw new Error("should not run"); } } });
+    const result = await ipc.handlers.get("content:generate-article")(null, []);
+    assert.deepStrictEqual(result, { ok: false, error: { code: "CONTENT_INPUT_INVALID", message: "Generation input must be an object" } });
+  });
 });

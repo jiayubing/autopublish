@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 function generatorError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -60,6 +62,21 @@ function normalizeResearchQueryIds(input) {
   return ids.slice();
 }
 
+function normalizeMaterialIds(input) {
+  const ids = input.materialIds;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
+    throw generatorError("CLIENT_MATERIAL_REQUIRED", "At least one client material is required");
+  }
+  const seen = new Set();
+  ids.forEach(function(id) {
+    if (typeof id !== "string" || !id.trim() || id.includes("/") || id.includes("\\") || seen.has(id)) {
+      throw generatorError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
+    }
+    seen.add(id);
+  });
+  return ids.slice();
+}
+
 function cloneValue(value) {
   if (Array.isArray(value)) return value.map(cloneValue);
   if (!value || typeof value !== "object") return value;
@@ -67,6 +84,49 @@ function cloneValue(value) {
     copy[key] = cloneValue(value[key]);
     return copy;
   }, {});
+}
+
+function hashText(value) {
+  return crypto.createHash("sha256").update(String(value), "utf8").digest("hex");
+}
+
+function materialSnapshot(material) {
+  if (!material || material.status === "error" || typeof material.name !== "string" || !material.name.trim() ||
+      typeof material.content !== "string" || !material.content.trim()) {
+    throw generatorError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
+  }
+  return {
+    id: typeof material.id === "string" && material.id ? material.id : material.name,
+    name: material.name,
+    extension: typeof material.extension === "string" ? material.extension : "",
+    content: material.content,
+    contentHash: typeof material.contentHash === "string" && material.contentHash
+      ? material.contentHash
+      : (typeof material.sourceHash === "string" && material.sourceHash ? material.sourceHash : hashText(material.content)),
+    source: typeof material.source === "string" && material.source
+      ? material.source
+      : (material.extension === ".docx" ? "docx" : "text")
+  };
+}
+
+function snapshotTemplate(template, platform, templateId) {
+  if (!template || typeof template.body !== "string" || !template.body.trim()) {
+    throw generatorError("PROMPT_TEMPLATE_REQUIRED", "Template body is required");
+  }
+  return {
+    platform: platform,
+    id: templateId,
+    name: typeof template.name === "string" ? template.name : "",
+    scenario: typeof template.scenario === "string" ? template.scenario : "",
+    body: template.body,
+    bodyHash: typeof template.bodyHash === "string" && template.bodyHash ? template.bodyHash : hashText(template.body)
+  };
+}
+
+function optionalProvenanceId(value, label) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value)) throw generatorError("GENERATION_PROVENANCE_INVALID", label + " is invalid");
+  return value;
 }
 
 function snapshotResearch(queryId, research) {
@@ -88,7 +148,8 @@ function createArticleGenerator(deps) {
   if (!deps || typeof deps.getClient !== "function" || !deps.researchStore ||
       typeof deps.researchStore.getResearch !== "function" || !deps.templateStore ||
       typeof deps.templateStore.getTemplate !== "function" || typeof deps.buildPrompt !== "function" ||
-      !deps.aiClient || typeof deps.aiClient.complete !== "function" || typeof deps.createId !== "function") {
+      !deps.aiClient || typeof deps.aiClient.complete !== "function" || typeof deps.createId !== "function" ||
+      !deps.materialStore || typeof deps.materialStore.getSelectedMaterials !== "function") {
     throw generatorError("ARTICLE_GENERATOR_INVALID", "Article generator dependencies are invalid");
   }
   const now = typeof deps.now === "function" ? deps.now : function() { return new Date().toISOString(); };
@@ -111,7 +172,19 @@ function createArticleGenerator(deps) {
       throw generatorError("RESEARCH_QUERY_IDS_INVALID", "Article generation input is invalid");
     }
     const researchQueryIds = normalizeResearchQueryIds(input);
+    const materialIds = normalizeMaterialIds(input);
     const client = deps.getClient(input.clientId);
+    let materials;
+    try {
+      materials = await deps.materialStore.getSelectedMaterials(input.clientId, materialIds);
+    } catch (error) {
+      if (error && typeof error.code === "string" && (error.code === "CLIENT_MATERIAL_INVALID" || error.code === "CLIENT_MATERIAL_REQUIRED")) throw error;
+      throw generatorError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
+    }
+    if (!Array.isArray(materials) || materials.length !== materialIds.length) {
+      throw generatorError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
+    }
+    const materialSnapshots = materials.map(materialSnapshot);
     const researches = researchQueryIds.map(function(researchQueryId) {
       const research = deps.researchStore.getResearch(input.clientId, researchQueryId);
       if (!research || !hasText(research.answerText)) {
@@ -121,8 +194,10 @@ function createArticleGenerator(deps) {
     });
     const template = deps.templateStore.getTemplate(input.platform, input.templateId);
     const scenario = input.scenario || template.scenario;
+    const templateSnapshot = snapshotTemplate(template, input.platform, input.templateId);
     const prompt = deps.buildPrompt({
       client: client,
+      materialItems: materials,
       research: researches[0],
       researchItems: researches,
       researchQueryIds: researchQueryIds,
@@ -148,12 +223,17 @@ function createArticleGenerator(deps) {
       content: article.content,
       status: "generated",
       source: {
-        client_material: Boolean(client && Array.isArray(client.knowledgeFiles) && client.knowledgeFiles.some(function(file) { return file && hasText(file.content); })),
+        client_material: materialSnapshots.length > 0,
         doubao_answer: researches.every(function(research) { return hasText(research.answerText); }),
         references: researches.some(function(research) { return Array.isArray(research.references) && research.references.length; }),
         template: Boolean(template && hasText(template.body))
       },
-      createdAt: timestamp
+      createdAt: timestamp,
+      materialSnapshots: materialSnapshots,
+      templateSnapshot: templateSnapshot,
+      generationBatchId: optionalProvenanceId(input.generationBatchId, "Generation batch id"),
+      generationTaskId: optionalProvenanceId(input.generationTaskId, "Generation task id"),
+      reviewedAt: null
     };
   }
 

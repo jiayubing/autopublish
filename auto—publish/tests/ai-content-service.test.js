@@ -49,7 +49,7 @@ describe("ai content service", function() {
 
   it("creates the AI client only while generating and saves separately", async function() {
     const setup = createService();
-    const generated = await setup.service.generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    const generated = await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
     assert.equal(generated.id, "article-1");
     assert.equal(setup.calls.includes("aiClientFactory"), true);
     assert.deepStrictEqual(setup.service.saveArticle(generated), generated);
@@ -59,14 +59,14 @@ describe("ai content service", function() {
   it("preserves safe AI configuration failures without touching local reads", async function() {
     const setup = createService({ aiClientFactory: function() { throw error("AI_CONFIG_INVALID", "AI client configuration is invalid"); } });
     assert.deepStrictEqual(setup.service.listGeneratedArticles("client-1").map(function(item) { return item.id; }), ["article-1"]);
-    await assert.rejects(setup.service.generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
+    await assert.rejects(setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
       return value.code === "AI_CONFIG_INVALID" && !value.message.includes("key");
     });
   });
 
   it("rejects missing request identifiers before invoking dependencies", async function() {
     const setup = createService();
-    await assert.rejects(setup.service.generateArticle({ clientId: "", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
+    await assert.rejects(setup.service.generateArticle({ clientId: "", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
       return value.code === "CONTENT_INPUT_INVALID";
     });
     assert.throws(function() { setup.service.getGeneratedArticle("client-1", ""); }, function(value) { return value.code === "CONTENT_INPUT_INVALID"; });
@@ -79,17 +79,39 @@ describe("ai content service", function() {
         return { generateArticle: async function(input) { generatedInput = input; return setup.article; } };
       }
     });
-    await setup.service.generateArticle({ clientId: "client-1", researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1" });
+    await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1" });
     assert.deepStrictEqual(generatedInput.researchQueryIds, ["query-1", "query-2"]);
   });
 
   it("rejects empty, duplicate, and oversized research id arrays at the service boundary", async function() {
     const setup = createService();
-    const inputs = [[], ["query-1", "query-1"], Array.from({ length: 51 }, function(_, index) { return "query-" + index; })];
-    for (const researchQueryIds of inputs) {
-      await assert.rejects(setup.service.generateArticle({ clientId: "client-1", researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
+    await assert.rejects(setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: [], platform: "ctrip", templateId: "template-1" }), function(value) {
+      return value.code === "GEO_RESEARCH_REQUIRED";
+    });
+    for (const researchQueryIds of [["query-1", "query-1"], Array.from({ length: 51 }, function(_, index) { return "query-" + index; })]) {
+      await assert.rejects(setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
         return value.code === "CONTENT_INPUT_INVALID";
       });
     }
+  });
+
+  it("requires explicit material and research selections and forwards provenance ids", async function() {
+    const setup = createService();
+    await assert.rejects(setup.service.generateArticle({
+      clientId: "client-1", materialIds: [], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
+    }), function(value) { return value.code === "CLIENT_MATERIAL_REQUIRED"; });
+    await assert.rejects(setup.service.generateArticle({
+      clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: [], platform: "ctrip", templateId: "template-1"
+    }), function(value) { return value.code === "GEO_RESEARCH_REQUIRED"; });
+    let generatedInput;
+    const configured = createService({
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function(input) { generatedInput = input; return configured.article; } };
+      }
+    });
+    await configured.service.generateArticle({
+      clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: ["query-1"], platform: "ctrip", templateId: "template-1"
+    });
+    assert.deepStrictEqual(generatedInput.materialIds, ["facts.md"]);
   });
 });

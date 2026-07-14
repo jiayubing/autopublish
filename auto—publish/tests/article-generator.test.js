@@ -19,6 +19,7 @@ function dependencies(overrides) {
     getClient: function(id) { calls.push("client:" + id); return client; },
     researchStore: { getResearch: function(clientId, queryId) { calls.push("research:" + clientId + ":" + queryId); return research; } },
     templateStore: { getTemplate: function(platform, templateId) { calls.push("template:" + platform + ":" + templateId); return template; } },
+    materialStore: { getSelectedMaterials: async function() { return [{ id: "brand.md", name: "brand.md", extension: ".md", status: "ready", content: "Client material", contentHash: "material-hash", source: "text" }]; } },
     buildPrompt: function(input) { calls.push("prompt"); return { system: "System", user: "User" }; },
     aiClient: { complete: async function(messages) { calls.push("ai"); return "# Article title\n\nArticle body"; } },
     createId: function() { return "article-" + (calls.filter(function(call) { return call === "ai"; }).length); },
@@ -30,7 +31,7 @@ describe("article generator", function() {
   it("loads dependencies in order, cleans markdown, and returns a generated article", async function() {
     const deps = dependencies();
     const article = await createArticleGenerator(deps).generateArticle({
-      clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
+      clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
     });
     assert.deepStrictEqual(deps.calls, ["client:client-1", "research:client-1:query-1", "template:ctrip:template-1", "prompt", "ai"]);
     assert.equal(article.id, "article-1");
@@ -43,7 +44,7 @@ describe("article generator", function() {
 
   it("blocks an empty research answer before template or AI access", async function() {
     const deps = dependencies({ researchStore: { getResearch: function() { return { answerText: "  " }; } } });
-    await assert.rejects(createArticleGenerator(deps).generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
+    await assert.rejects(createArticleGenerator(deps).generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
       return value.code === "RESEARCH_EMPTY_ANSWER";
     });
     assert.deepStrictEqual(deps.calls, ["client:client-1"]);
@@ -51,14 +52,14 @@ describe("article generator", function() {
 
   it("surfaces empty AI output and does not manufacture an article", async function() {
     const deps = dependencies({ aiClient: { complete: async function() { throw error("AI_EMPTY_RESPONSE"); } } });
-    await assert.rejects(createArticleGenerator(deps).generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
+    await assert.rejects(createArticleGenerator(deps).generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
       return value.code === "AI_EMPTY_RESPONSE";
     });
   });
 
   it("removes markdown fences and derives a title from the first line", async function() {
     const deps = dependencies({ aiClient: { complete: async function() { return "```markdown\nPlain title\n\nBody text\n```"; } } });
-    const article = await createArticleGenerator(deps).generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    const article = await createArticleGenerator(deps).generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
     assert.equal(article.title, "Plain title");
     assert.equal(article.content, "Body text");
   });
@@ -67,7 +68,7 @@ describe("article generator", function() {
     const deps = dependencies({ aiClient: { complete: async function() {
       return "好的，作为严谨的内容编辑，我将为您创作文章。\n---\n### 标题\n\n榜单标题\n\n### 开头\n\n这是文章正文。\n\n### 结尾\n\n这是结尾。";
     } } });
-    const article = await createArticleGenerator(deps).generateArticle({ clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    const article = await createArticleGenerator(deps).generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
     assert.equal(article.title, "榜单标题");
     assert.equal(article.content, "这是文章正文。\n\n这是结尾。");
   });
@@ -80,23 +81,23 @@ describe("article generator", function() {
       createId: function() { nextId += 1; return "article-" + nextId; }
     });
     const generator = createArticleGenerator(deps);
-    const input = { clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
+    const input = { clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
     const first = await generator.generateArticle(input);
     const second = await generator.generateArticle(input);
     assert.notEqual(first.id, second.id);
-    assert.deepStrictEqual(first.source, { client_material: false, doubao_answer: true, references: false, template: true });
+    assert.deepStrictEqual(first.source, { client_material: true, doubao_answer: true, references: false, template: true });
   });
 
   it("retries a duplicate generated id instead of returning it twice", async function() {
     const ids = ["article-1", "article-1", "article-2"];
     const generator = createArticleGenerator(dependencies({ createId: function() { return ids.shift(); } }));
-    const input = { clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
+    const input = { clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
     assert.equal((await generator.generateArticle(input)).id, "article-1");
     assert.equal((await generator.generateArticle(input)).id, "article-2");
   });
 
   it("rejects unsafe ids and an id generator that cannot escape duplicates", async function() {
-    const input = { clientId: "client-1", researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
+    const input = { clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
     await assert.rejects(createArticleGenerator(dependencies({ createId: function() { return " "; } })).generateArticle(input), function(value) {
       return value.code === "ARTICLE_ID_INVALID";
     });
@@ -118,7 +119,7 @@ describe("article generator", function() {
       aiClient: { complete: async function() { calls.push("ai"); return "# Article title\n\nArticle body"; } }
     });
     const article = await createArticleGenerator(deps).generateArticle({
-      clientId: "client-1", researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1"
+      clientId: "client-1", materialIds: ["brand.md"], researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1"
     });
     assert.deepStrictEqual(calls, ["query-1", "query-2", "template", "prompt", "ai"]);
     assert.deepStrictEqual(article.researchQueryIds, ["query-1", "query-2"]);
@@ -147,7 +148,7 @@ describe("article generator", function() {
       researchStore: { getResearch: function() { return source; } }
     });
     const article = await createArticleGenerator(deps).generateArticle({
-      clientId: "client-1", researchQueryIds: ["query-1"], platform: "ctrip", templateId: "template-1"
+      clientId: "client-1", materialIds: ["brand.md"], researchQueryIds: ["query-1"], platform: "ctrip", templateId: "template-1"
     });
     source.references[0].snippet.highlights[0] = "changed";
     source.references[1].snippet[0].text = "changed";
@@ -162,7 +163,7 @@ describe("article generator", function() {
       researchStore: { getResearch: function(clientId, queryId) { return queryId === "query-2" ? { id: queryId, answerText: "  " } : { id: queryId, answerText: "Answer one" }; } }
     });
     await assert.rejects(createArticleGenerator(deps).generateArticle({
-      clientId: "client-1", researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1"
+      clientId: "client-1", materialIds: ["brand.md"], researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1"
     }), function(value) { return value.code === "RESEARCH_EMPTY_ANSWER"; });
     assert.deepStrictEqual(deps.calls, ["client:client-1"]);
   });
@@ -171,9 +172,61 @@ describe("article generator", function() {
     const generator = createArticleGenerator(dependencies());
     const inputs = [[], ["query-1", "query-1"], Array.from({ length: 51 }, function(_, index) { return "query-" + index; })];
     for (const researchQueryIds of inputs) {
-      await assert.rejects(generator.generateArticle({ clientId: "client-1", researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
+      await assert.rejects(generator.generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
         return value.code === "RESEARCH_QUERY_IDS_INVALID";
       });
+    }
+  });
+
+  it("loads explicitly selected materials and persists material, template, batch, and task snapshots", async function() {
+    let promptInput;
+    const deps = dependencies({
+      materialStore: {
+        getSelectedMaterials: async function(clientId, materialIds) {
+          assert.equal(clientId, "client-1");
+          assert.deepStrictEqual(materialIds, ["brand.md"]);
+          return [{
+            id: "brand.md", name: "brand.md", extension: ".md", status: "ready",
+            content: "Client material", contentHash: "material-hash", source: "text"
+          }];
+        }
+      },
+      buildPrompt: function(value) {
+        promptInput = value;
+        return { system: "System", user: "User" };
+      },
+      templateStore: { getTemplate: function() {
+        return { id: "template-1", platform: "ctrip", scenario: "Guide", name: "Guide", body: "Template instructions", bodyHash: "template-hash" };
+      } }
+    });
+    const article = await createArticleGenerator(deps).generateArticle({
+      clientId: "client-1", materialIds: ["brand.md"], researchQueryIds: ["query-1"],
+      platform: "ctrip", templateId: "template-1", generationBatchId: "batch-1", generationTaskId: "task-1"
+    });
+    assert.deepStrictEqual(promptInput.materialItems.map(function(item) { return item.name; }), ["brand.md"]);
+    assert.deepStrictEqual(article.materialSnapshots, [{
+      id: "brand.md", name: "brand.md", extension: ".md", content: "Client material",
+      contentHash: "material-hash", source: "text"
+    }]);
+    assert.equal(article.templateSnapshot.platform, "ctrip");
+    assert.equal(article.templateSnapshot.id, "template-1");
+    assert.equal(article.templateSnapshot.body, "Template instructions");
+    assert.equal(article.templateSnapshot.bodyHash, "template-hash");
+    assert.equal(article.generationBatchId, "batch-1");
+    assert.equal(article.generationTaskId, "task-1");
+    assert.equal(article.reviewedAt, null);
+  });
+
+  it("rejects missing or damaged selected materials before AI access", async function() {
+    for (const materialStore of [
+      { getSelectedMaterials: async function() { return []; } },
+      { getSelectedMaterials: async function() { return [{ id: "brand.md", status: "error", error: { code: "MATERIAL_READ_FAILED" } }]; } }
+    ]) {
+      const deps = dependencies({ materialStore: materialStore });
+      await assert.rejects(createArticleGenerator(deps).generateArticle({
+        clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
+      }), function(value) { return value.code === "CLIENT_MATERIAL_INVALID"; });
+      assert.equal(deps.calls.includes("ai"), false);
     }
   });
 });

@@ -4,6 +4,7 @@ const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleStore } = require("../../src/content/article-store");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
+const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const crypto = require("crypto");
 
@@ -22,12 +23,27 @@ function assertId(value, label) {
 function normalizeResearchQueryIds(input) {
   const ids = input.researchQueryIds === undefined ? [input.researchQueryId] : input.researchQueryIds;
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
-    throw contentError("CONTENT_INPUT_INVALID", "Research ids must contain 1 to 50 items");
+    throw contentError(ids && Array.isArray(ids) && ids.length === 0 ? "GEO_RESEARCH_REQUIRED" : "CONTENT_INPUT_INVALID", "At least one GEO research answer is required");
   }
   const seen = new Set();
   ids.forEach(function(id) {
     if (typeof id !== "string" || !id.trim() || seen.has(id)) {
       throw contentError("CONTENT_INPUT_INVALID", "Research ids must be non-empty and unique");
+    }
+    seen.add(id);
+  });
+  return ids.slice();
+}
+
+function normalizeMaterialIds(input) {
+  const ids = input.materialIds;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
+    throw contentError("CLIENT_MATERIAL_REQUIRED", "At least one client material is required");
+  }
+  const seen = new Set();
+  ids.forEach(function(id) {
+    if (typeof id !== "string" || !id.trim() || id.includes("/") || id.includes("\\") || seen.has(id)) {
+      throw contentError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
     }
     seen.add(id);
   });
@@ -56,6 +72,19 @@ function createAiContentService(opts) {
   const researchStore = options.researchStore || createResearchStore(workspaceRoot);
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot);
   const articleStore = options.articleStore || createArticleStore(workspaceRoot);
+  const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot }) : {
+    getSelectedMaterials: async function(clientId, materialIds) {
+      const client = clientKnowledge.getClient(clientId);
+      const files = Array.isArray(client && client.knowledgeFiles) ? client.knowledgeFiles : [];
+      return materialIds.map(function(id) {
+        const item = files.find(function(file) { return file && (file.id === id || file.name === id); });
+        if (!item || typeof item.content !== "string" || !item.content.trim()) {
+          throw contentError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
+        }
+        return Object.assign({ id: item.id || item.name, extension: "", status: "ready", source: "text" }, item);
+      });
+    }
+  });
   const aiClientFactory = options.aiClientFactory || function() { return createAiClient(); };
   const articleGeneratorFactory = options.articleGeneratorFactory || createArticleGenerator;
   const promptBuilder = options.buildPrompt || buildPrompt;
@@ -90,19 +119,21 @@ function createAiContentService(opts) {
   async function generateArticle(input) {
     const request = input || {};
     assertId(request.clientId, "Client id");
+    const materialIds = normalizeMaterialIds(request);
     const researchQueryIds = normalizeResearchQueryIds(request);
     assertId(request.platform, "Platform");
     assertId(request.templateId, "Template id");
     const generator = articleGeneratorFactory({
       getClient: function(id) { return clientKnowledge.getClient(id); },
       researchStore: researchStore,
+      materialStore: materialStore,
       templateStore: templateStore,
       buildPrompt: promptBuilder,
       aiClient: aiClientFactory(),
       createId: createId,
       seenIds: seenIds
     });
-    return generator.generateArticle(Object.assign({}, request, { researchQueryIds: researchQueryIds }));
+    return generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds }));
   }
 
   function saveArticle(article) {

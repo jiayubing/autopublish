@@ -238,6 +238,26 @@ describe("article store", function() {
     });
   });
 
+  it("persists and validates explicit material and template provenance", function() {
+    const article = valid("provenance", {
+      materialSnapshots: [{ id: "brand.md", name: "brand.md", extension: ".md", content: "facts", contentHash: "material-hash", source: "text" }],
+      templateSnapshot: { platform: "ctrip", id: "template-1", name: "Guide", scenario: "guide", body: "Template body", bodyHash: "template-hash" },
+      generationBatchId: "batch-1", generationTaskId: "task-1", reviewedAt: null
+    });
+    assert.deepStrictEqual(store.saveArticle(article), article);
+    assert.deepStrictEqual(store.getArticle("client-1", "provenance"), article);
+    for (const invalid of [
+      { materialSnapshots: [{ id: "brand.md" }] },
+      { templateSnapshot: { platform: "ctrip", id: "template-1", body: "" } },
+      { generationBatchId: 1 },
+      { reviewedAt: "not-a-date" }
+    ]) {
+      assert.throws(function() { store.saveArticle(valid("invalid-provenance", invalid)); }, function(error) {
+        return error.code === "ARTICLE_INVALID";
+      });
+    }
+  });
+
   it("rejects mixed legacy and new research metadata instead of dropping new ids", function() {
     assert.throws(function() {
       store.saveArticle(valid("mixed-missing-snapshots", {
