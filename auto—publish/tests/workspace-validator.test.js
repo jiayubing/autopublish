@@ -66,6 +66,46 @@ describe("workspace validator", function() {
     }
   });
 
+  it("validates a marker through a fixed path when its filename uses Windows casing", function(t) {
+    if (process.platform !== "win32") {
+      t.skip("case-insensitive marker semantics are Windows-specific");
+      return;
+    }
+    const root = createTempDirectory("autopublish-validator-marker-case-");
+    const workspace = path.join(root, "workspace");
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(
+      path.join(workspace, ".AUTOPUBLISH-WORKSPACE.JSON"),
+      JSON.stringify({ version: 1, createdAt: "2026-07-14T00:00:00.000Z" }),
+      "utf8"
+    );
+    try {
+      const result = createValidator(root).validate(workspace);
+      assert.equal(result.kind, "existing_workspace");
+      assert.deepEqual(result.marker, { version: 1, createdAt: "2026-07-14T00:00:00.000Z" });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not classify a damaged case-variant marker as a nonempty directory", function(t) {
+    if (process.platform !== "win32") {
+      t.skip("case-insensitive marker semantics are Windows-specific");
+      return;
+    }
+    const root = createTempDirectory("autopublish-validator-marker-case-invalid-");
+    const workspace = path.join(root, "workspace");
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, ".Autopublish-Workspace.Json"), "{not-json", "utf8");
+    try {
+      const result = createValidator(root).validate(workspace);
+      assert.equal(result.kind, "invalid");
+      assert.equal(result.error.code, "WORKSPACE_MARKER_INVALID");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("returns stable invalid errors for missing paths and files", function() {
     const root = createTempDirectory("autopublish-validator-invalid-path-");
     const filePath = path.join(root, "file.txt");

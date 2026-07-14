@@ -10,7 +10,27 @@ function createTempDirectory(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+function assertSafeError(result, code) {
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, code);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.error, "stack"), false);
+}
+
 describe("workspace location store", function() {
+  it("rejects missing or invalid userData paths without falling back to cwd", function() {
+    const workspacePath = createTempDirectory("autopublish-location-no-userdata-workspace-");
+    try {
+      for (const userDataPath of [undefined, null, "", "   ", "relative-user-data"]) {
+        const store = createWorkspaceLocationStore({ userDataPath });
+        assert.equal(store.userDataPath, null, JSON.stringify(userDataPath));
+        assertSafeError(store.read(), "WORKSPACE_LOCATION_USER_DATA_INVALID");
+        assertSafeError(store.write(workspacePath), "WORKSPACE_LOCATION_USER_DATA_INVALID");
+      }
+    } finally {
+      fs.rmSync(workspacePath, { recursive: true, force: true });
+    }
+  });
+
   it("reports a missing configuration without creating one", function() {
     const userDataPath = createTempDirectory("autopublish-location-missing-");
     try {
@@ -115,6 +135,51 @@ describe("workspace location store", function() {
       fs.rmSync(userDataPath, { recursive: true, force: true });
       fs.rmSync(firstWorkspace, { recursive: true, force: true });
       fs.rmSync(secondWorkspace, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a symlink configuration file for both reads and writes", function(t) {
+    const userDataPath = createTempDirectory("autopublish-location-link-");
+    const workspacePath = createTempDirectory("autopublish-location-link-workspace-");
+    const targetPath = path.join(userDataPath, "real-location.json");
+    const locationPath = path.join(userDataPath, "workspace-location.json");
+    try {
+      fs.writeFileSync(targetPath, JSON.stringify({ version: 1, workspacePath }), "utf8");
+      try {
+        fs.symlinkSync(targetPath, locationPath, "file");
+      } catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+          t.skip("symlinks are unavailable in this environment");
+          return;
+        }
+        throw error;
+      }
+      assertSafeError(createWorkspaceLocationStore({ userDataPath }).read(), "WORKSPACE_LOCATION_INVALID");
+      assertSafeError(createWorkspaceLocationStore({ userDataPath }).write(workspacePath), "WORKSPACE_LOCATION_INVALID");
+      assert.equal(fs.lstatSync(locationPath).isSymbolicLink(), true);
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+      fs.rmSync(workspacePath, { recursive: true, force: true });
+    }
+  });
+
+  it("returns a stable error when a write input getter throws", function() {
+    const userDataPath = createTempDirectory("autopublish-location-getter-");
+    try {
+      const input = {};
+      Object.defineProperty(input, "version", {
+        enumerable: true,
+        get: function() { throw new Error("secret getter failure"); }
+      });
+      Object.defineProperty(input, "workspacePath", {
+        enumerable: true,
+        get: function() { throw new Error("secret getter failure"); }
+      });
+      const result = createWorkspaceLocationStore({ userDataPath }).write(input);
+      assertSafeError(result, "WORKSPACE_LOCATION_INVALID");
+      assert.equal(fs.existsSync(path.join(userDataPath, "workspace-location.json")), false);
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
     }
   });
 });

@@ -66,10 +66,22 @@ function validateMarker(io, markerPath) {
   return { ok: true, value: { version: 1, createdAt: value.createdAt } };
 }
 
+function inspectMarker(io, markerPath) {
+  try {
+    const markerStats = io.lstatSync(markerPath);
+    if (markerStats.isSymbolicLink() || !markerStats.isFile()) return { ok: false, exists: true };
+    const marker = validateMarker(io, markerPath);
+    return { ok: marker.ok, exists: true, value: marker.value };
+  } catch (error) {
+    if (error && error.code === "ENOENT") return { ok: true, exists: false };
+    return { ok: false, exists: true };
+  }
+}
+
 function createWorkspaceValidator(options) {
   options = options || {};
   const io = options.fs || fs;
-  const markerFileName = options.markerFileName || WORKSPACE_MARKER_FILE;
+  const markerFileName = WORKSPACE_MARKER_FILE;
   const userDataPath = canonicalPath(io, options.userDataPath);
   const applicationPaths = [options.appPath, options.applicationPath, options.installPath, options.resourcesPath]
     .filter(function(value) { return typeof value === "string" && value.trim() !== ""; })
@@ -133,6 +145,17 @@ function createWorkspaceValidator(options) {
     } catch (error) {
       return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid", realPath);
     }
+    const markerPath = path.join(realPath, markerFileName);
+    const marker = inspectMarker(io, markerPath);
+    if (marker.exists && !marker.ok) {
+      return invalid("WORKSPACE_MARKER_INVALID", "Workspace marker is invalid", realPath);
+    }
+    if (marker.exists) {
+      if (!isWritable(realPath)) {
+        return invalid("WORKSPACE_NOT_WRITABLE", "Workspace path is not writable", realPath);
+      }
+      return { kind: "existing_workspace", path: realPath, marker: marker.value };
+    }
     if (!isWritable(realPath)) {
       return invalid("WORKSPACE_NOT_WRITABLE", "Workspace path is not writable", realPath);
     }
@@ -142,12 +165,6 @@ function createWorkspaceValidator(options) {
       entries = io.readdirSync(realPath);
     } catch (error) {
       return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid", realPath);
-    }
-    const markerPath = path.join(realPath, markerFileName);
-    if (entries.includes(markerFileName)) {
-      const marker = validateMarker(io, markerPath);
-      if (!marker.ok) return invalid("WORKSPACE_MARKER_INVALID", "Workspace marker is invalid", realPath);
-      return { kind: "existing_workspace", path: realPath, marker: marker.value };
     }
     if (entries.length === 0) return { kind: "empty_directory", path: realPath };
     return { kind: "nonempty_directory", path: realPath };

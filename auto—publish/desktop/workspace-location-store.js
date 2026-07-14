@@ -8,6 +8,10 @@ function resultError(code, message) {
   return { code: code, message: message };
 }
 
+function invalidUserDataResult() {
+  return { ok: false, error: resultError("WORKSPACE_LOCATION_USER_DATA_INVALID", "Electron userData path is invalid") };
+}
+
 function isPlainObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -15,43 +19,79 @@ function isPlainObject(value) {
 }
 
 function validateWorkspaceLocation(value) {
-  if (!isPlainObject(value)) {
-    return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
-  }
+  try {
+    if (!isPlainObject(value)) {
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
+    }
 
-  const keys = Object.keys(value).sort();
-  if (keys.length !== 2 || keys[0] !== "version" || keys[1] !== "workspacePath") {
+    const keys = Object.keys(value).sort();
+    if (keys.length !== 2 || keys[0] !== "version" || keys[1] !== "workspacePath") {
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
+    }
+    if (value.version !== 1) {
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_VERSION_UNSUPPORTED", "Workspace location configuration version is unsupported") };
+    }
+    if (
+      typeof value.workspacePath !== "string" ||
+      value.workspacePath.length === 0 ||
+      value.workspacePath.trim().length === 0 ||
+      value.workspacePath !== value.workspacePath.trim() ||
+      value.workspacePath.includes("\0") ||
+      !path.isAbsolute(value.workspacePath)
+    ) {
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
+    }
+    return { ok: true, value: { version: 1, workspacePath: value.workspacePath } };
+  } catch (error) {
     return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
   }
-  if (value.version !== 1) {
-    return { ok: false, error: resultError("WORKSPACE_LOCATION_VERSION_UNSUPPORTED", "Workspace location configuration version is unsupported") };
-  }
-  if (
-    typeof value.workspacePath !== "string" ||
-    value.workspacePath.length === 0 ||
-    value.workspacePath.trim().length === 0 ||
-    value.workspacePath !== value.workspacePath.trim() ||
-    value.workspacePath.includes("\0") ||
-    !path.isAbsolute(value.workspacePath)
-  ) {
-    return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
-  }
-  return { ok: true, value: { version: 1, workspacePath: value.workspacePath } };
 }
 
 function createWorkspaceLocationStore(options) {
   if (typeof options === "string") options = { userDataPath: options };
   options = options || {};
   const io = options.fs || fs;
-  const userDataPath = path.resolve(options.userDataPath || "");
+  const requestedUserDataPath = options.userDataPath;
+  const userDataPath = typeof requestedUserDataPath === "string" &&
+    requestedUserDataPath.length > 0 &&
+    requestedUserDataPath === requestedUserDataPath.trim() &&
+    path.isAbsolute(requestedUserDataPath)
+    ? path.resolve(requestedUserDataPath)
+    : null;
+  if (!userDataPath) {
+    return {
+      userDataPath: null,
+      locationPath: null,
+      read: invalidUserDataResult,
+      write: invalidUserDataResult,
+      save: invalidUserDataResult
+    };
+  }
   const locationPath = path.join(userDataPath, WORKSPACE_LOCATION_FILE);
 
+  function inspectLocationFile() {
+    let stats;
+    try {
+      stats = io.lstatSync(locationPath);
+    } catch (error) {
+      if (error && error.code === "ENOENT") return { ok: true, exists: false };
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_READ_FAILED", "Workspace location configuration could not be inspected") };
+    }
+    if (stats.isSymbolicLink() || !stats.isFile()) {
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
+    }
+    return { ok: true, exists: true };
+  }
+
   function read() {
+    const inspected = inspectLocationFile();
+    if (!inspected.ok) return inspected;
+    if (!inspected.exists) return { ok: true, value: null };
+
     let raw;
     try {
       raw = io.readFileSync(locationPath, "utf8");
     } catch (error) {
-      if (error && error.code === "ENOENT") return { ok: true, value: null };
       return { ok: false, error: resultError("WORKSPACE_LOCATION_READ_FAILED", "Workspace location configuration could not be read") };
     }
 
@@ -68,16 +108,25 @@ function createWorkspaceLocationStore(options) {
     const config = typeof workspacePathOrConfig === "string"
       ? { version: 1, workspacePath: workspacePathOrConfig }
       : workspacePathOrConfig;
-    const validation = validateWorkspaceLocation(config);
+    let validation;
+    try {
+      validation = validateWorkspaceLocation(config);
+    } catch (error) {
+      return { ok: false, error: resultError("WORKSPACE_LOCATION_INVALID", "Workspace location configuration is invalid") };
+    }
     if (!validation.ok) return validation;
 
-    const serialized = JSON.stringify(validation.value) + "\n";
-    const temporaryPath = path.join(
-      userDataPath,
-      ".workspace-location-" + process.pid + "-" + crypto.randomBytes(16).toString("hex") + ".tmp"
-    );
+    const inspected = inspectLocationFile();
+    if (!inspected.ok) return inspected;
+
     let descriptor = null;
+    let temporaryPath = null;
     try {
+      const serialized = JSON.stringify(validation.value) + "\n";
+      temporaryPath = path.join(
+        userDataPath,
+        ".workspace-location-" + process.pid + "-" + crypto.randomBytes(16).toString("hex") + ".tmp"
+      );
       io.mkdirSync(userDataPath, { recursive: true });
       descriptor = io.openSync(temporaryPath, "wx", 0o600);
       io.writeSync(descriptor, serialized, 0, "utf8");
@@ -90,7 +139,9 @@ function createWorkspaceLocationStore(options) {
       if (descriptor !== null) {
         try { io.closeSync(descriptor); } catch (closeError) { /* best effort cleanup */ }
       }
-      try { io.unlinkSync(temporaryPath); } catch (cleanupError) { /* best effort cleanup */ }
+      if (temporaryPath) {
+        try { io.unlinkSync(temporaryPath); } catch (cleanupError) { /* best effort cleanup */ }
+      }
       return { ok: false, error: resultError("WORKSPACE_LOCATION_WRITE_FAILED", "Workspace location configuration could not be written") };
     }
   }
