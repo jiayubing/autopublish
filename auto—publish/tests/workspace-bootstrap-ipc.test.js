@@ -88,9 +88,14 @@ describe("workspace bootstrap IPC", function() {
         confirmSelection: function() {}, cancelSelection: function() {}
       }
     });
-    const result = await fake.handlers.get("workspace:request-switch")({ ignored: true }, { path: "C:\\renderer-forged" });
+    const result = await fake.handlers.get("workspace:request-switch")({}, undefined);
     assert.deepEqual(calls, [{ properties: ["openDirectory"] }]);
     assert.equal(result.ok, true);
+
+    const forged = await fake.handlers.get("workspace:request-switch")({}, { path: "C:\\renderer-forged" });
+    assertEnvelope(forged);
+    assert.equal(forged.ok, false);
+    assert.equal(forged.error.code, "WORKSPACE_IPC_INPUT_INVALID");
   });
 
   it("passes only a token to confirm-selection and rejects renderer paths", async function() {

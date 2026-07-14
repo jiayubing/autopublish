@@ -85,8 +85,11 @@ function registerWorkspaceBootstrapIpc(deps) {
   ipcMain.handle("workspace:open-current", function(event, input) {
     return safeWrap(function() { noInput(input, "Open current workspace"); return service.openCurrent(); });
   });
-  ipcMain.handle("workspace:request-switch", function() {
-    return safeWrap(async function() { return service.requestSwitch(await pickDirectory()); });
+  ipcMain.handle("workspace:request-switch", function(event, input) {
+    return safeWrap(async function() {
+      noInput(input, "Request switch");
+      return service.requestSwitch(await pickDirectory());
+    });
   });
 }
 

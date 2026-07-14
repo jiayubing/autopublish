@@ -129,6 +129,14 @@ function createWorkspaceBootstrapService(options) {
     return stateDto();
   }
 
+  function setInvalid(code) {
+    current = null;
+    state = "invalid";
+    lastError = stableError(code || "WORKSPACE_PATH_INVALID");
+    invalidateSelection();
+    return stateDto();
+  }
+
   function bootstrap() {
     state = "checking";
     lastError = null;
@@ -139,7 +147,7 @@ function createWorkspaceBootstrapService(options) {
       : null;
     if (environmentPath) {
       const environmentResult = classify(environmentPath);
-      if (environmentResult.kind === "invalid") return setSelectionRequired(environmentResult.error.code);
+      if (environmentResult.kind === "invalid") return setInvalid(environmentResult.error.code);
       current = { path: environmentResult.path, envOverride: true, validation: environmentResult };
       state = "ready";
       return stateDto();
@@ -151,7 +159,7 @@ function createWorkspaceBootstrapService(options) {
     if (!saved.value || typeof saved.value.workspacePath !== "string") return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
 
     const savedResult = classify(saved.value.workspacePath);
-    if (savedResult.kind === "invalid") return setSelectionRequired(savedResult.error.code);
+    if (savedResult.kind === "invalid") return setInvalid(savedResult.error.code);
     current = { path: savedResult.path, envOverride: false, validation: savedResult };
     state = "ready";
     return stateDto();
@@ -167,10 +175,10 @@ function createWorkspaceBootstrapService(options) {
   }
 
   function chooseDirectory(candidate) {
+    invalidateSelection();
     if (candidate === null || candidate === undefined) throwStable("WORKSPACE_SELECTION_CANCELLED");
     const result = classify(candidate);
     if (result.kind === "invalid") throwStable(result.error.code);
-    invalidateSelection();
     const now = readClock(clock).getTime();
     pending = {
       token: String(makeToken()),
@@ -210,7 +218,7 @@ function createWorkspaceBootstrapService(options) {
       invalidateSelection();
       throwStable("WORKSPACE_SELECTION_EXPIRED");
     }
-    if (!pending || pending.token !== input.token || readClock(clock).getTime() > pending.expiresAt) {
+    if (!pending || pending.token !== input.token || readClock(clock).getTime() >= pending.expiresAt) {
       invalidateSelection();
       throwStable("WORKSPACE_SELECTION_EXPIRED");
     }

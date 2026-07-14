@@ -123,21 +123,37 @@ describe("workspace bootstrap service", function() {
   });
 
   it("requires selection without a fallback directory or when saved configuration is damaged", function() {
-    for (const setup of ["missing", "corrupt", "unknown-version", "invalid-path"]) {
+    for (const setup of ["missing", "corrupt", "unknown-version"]) {
       const harness = createHarness();
       try {
         if (setup === "corrupt") fs.writeFileSync(path.join(harness.userDataPath, "workspace-location.json"), "{bad", "utf8");
         if (setup === "unknown-version") fs.writeFileSync(path.join(harness.userDataPath, "workspace-location.json"), JSON.stringify({ version: 2, workspacePath: "C:\\workspace" }), "utf8");
-        if (setup === "invalid-path") fs.writeFileSync(path.join(harness.userDataPath, "workspace-location.json"), JSON.stringify({ version: 1, workspacePath: path.join(harness.root, "missing") }), "utf8");
         const state = harness.service.bootstrap();
         assert.equal(state.state, "selection_required", setup);
         assert.equal(state.workspacePath, null, setup);
         assert.equal(state.envOverride, false, setup);
-        assert.equal(state.error.code === "WORKSPACE_SELECTION_REQUIRED" || state.error.code === "WORKSPACE_PATH_INVALID", true, setup);
+        assert.equal(state.error.code, "WORKSPACE_SELECTION_REQUIRED", setup);
         assert.equal(fs.existsSync(path.join(harness.userDataPath, "workspace-location.json")), setup !== "missing", setup);
         assert.notEqual(state.workspacePath, path.join(process.cwd(), "Documents", "AutoPublish"));
       } finally { harness.cleanup(); }
     }
+  });
+
+  it("uses invalid state for a saved path rejected by the validator", function() {
+    const harness = createHarness();
+    const missing = path.join(harness.root, "missing-saved");
+    fs.writeFileSync(
+      path.join(harness.userDataPath, "workspace-location.json"),
+      JSON.stringify({ version: 1, workspacePath: missing }),
+      "utf8"
+    );
+    try {
+      const state = harness.service.bootstrap();
+      assert.equal(state.state, "invalid");
+      assert.equal(state.error.code, "WORKSPACE_PATH_INVALID");
+      assert.equal(state.workspacePath, null);
+      assert.equal(fs.existsSync(path.join(harness.userDataPath, "workspace-location.json")), true);
+    } finally { harness.cleanup(); }
   });
 
   it("does not fall back when the environment override itself is invalid", function() {
@@ -155,7 +171,7 @@ describe("workspace bootstrap service", function() {
     });
     try {
       const state = harness.service.bootstrap();
-      assert.equal(state.state, "selection_required");
+      assert.equal(state.state, "invalid");
       assert.equal(state.error.code, "WORKSPACE_PATH_INVALID");
       assert.equal(state.workspacePath, null);
       assert.equal(state.envOverride, false);
@@ -274,8 +290,22 @@ describe("workspace bootstrap service", function() {
       await assertError(harness.service.cancelSelection(), "WORKSPACE_SELECTION_CANCELLED");
       await assertError(harness.service.confirmSelection({ token: selectedAgain.selection.token }), "WORKSPACE_SELECTION_EXPIRED");
       const selectedExpired = harness.service.chooseDirectory(first);
-      harness.setTime("2026-07-14T12:00:02.000Z");
+      harness.setTime("2026-07-14T12:00:01.000Z");
       await assertError(harness.service.confirmSelection({ token: selectedExpired.selection.token }), "WORKSPACE_SELECTION_EXPIRED");
+    } finally { harness.cleanup(); }
+  });
+
+  it("invalidates the previous token before attempting an invalid new selection", async function() {
+    const harness = createHarness();
+    const valid = path.join(harness.root, "valid");
+    fs.mkdirSync(valid);
+    try {
+      const selected = harness.service.chooseDirectory(valid);
+      assert.throws(function() { harness.service.chooseDirectory(path.join(harness.root, "missing")); }, function(error) {
+        assert.equal(error.code, "WORKSPACE_PATH_INVALID");
+        return true;
+      });
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SELECTION_EXPIRED");
     } finally { harness.cleanup(); }
   });
 
