@@ -39,6 +39,7 @@ function createDoubaoCollectionDesktopService(options) {
     collectOne: function(input) { return collectionService.collectOne(input); }
   });
   let disposePromise = null;
+  let lastCloseError = null;
 
   function clientIdOf(input) {
     return typeof input === "string" ? input : input && input.clientId;
@@ -66,30 +67,79 @@ function createDoubaoCollectionDesktopService(options) {
     return collectionService.deleteQuestionAndResearch(input);
   }
 
+  function hasPendingWork(state) {
+    return state && state.status === "paused" && Array.isArray(state.tasks) && state.tasks.some(function(task) {
+      return task.status === "pending" || task.status === "waiting_login" || task.status === "running";
+    });
+  }
+
+  async function closeSessionSafely() {
+    if (typeof collectionService.close !== "function") return;
+    try {
+      await collectionService.close();
+    } catch (error) {
+      lastCloseError = safeError(error);
+      if (typeof opts.onCloseError === "function") opts.onCloseError(lastCloseError);
+    }
+  }
+
+  async function runWithSession(operation) {
+    try {
+      return await operation();
+    } finally {
+      let state;
+      try { state = queue.getState(); } catch (_) {}
+      if (!hasPendingWork(state)) await closeSessionSafely();
+    }
+  }
+
   function startBatch(tasks) {
-    return queue.start(Array.isArray(tasks) ? tasks : tasks && tasks.tasks);
+    const inputTasks = Array.isArray(tasks) ? tasks : tasks && tasks.tasks;
+    return runWithSession(function() { return queue.start(inputTasks); });
+  }
+
+  function previewBatch(input) {
+    if (typeof collectionService.previewBatch !== "function") {
+      throw serviceError("DOUBAO_ADAPTER_UNSUPPORTED", "Doubao collection service does not support batch preview");
+    }
+    return collectionService.previewBatch(input);
+  }
+
+  function startPreparedBatch(input) {
+    if (typeof collectionService.validatePreparedBatch !== "function") {
+      return Promise.reject(serviceError("DOUBAO_ADAPTER_UNSUPPORTED", "Doubao collection service does not support prepared batches"));
+    }
+    let tasks;
+    try {
+      tasks = collectionService.validatePreparedBatch(input);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return startBatch(tasks);
   }
 
   async function collectOne(input) {
     try {
-      const state = await queue.start([input]);
-      if (!state || typeof state !== "object" || Array.isArray(state) || state.status !== "completed" ||
-          !Array.isArray(state.tasks) || state.tasks.length !== 1) {
-        throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not complete successfully");
-      }
-      const task = state.tasks[0];
-      if (!task || task.clientId !== input.clientId || task.questionId !== input.questionId) {
-        throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not complete successfully");
-      }
-      if (task.status !== "succeeded") {
-        const failure = task && task.error ? task.error : { code: "DOUBAO_COLLECTION_FAILED", message: "Doubao collection failed" };
-        throw serviceError(failure.code, failure.message);
-      }
-      const record = await researchStore.getResearch(input.clientId, input.questionId);
-      if (!record || typeof record !== "object" || Array.isArray(record)) {
-        throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not produce a research record");
-      }
-      return record;
+      return await runWithSession(async function() {
+        const state = await queue.start([input]);
+        if (!state || typeof state !== "object" || Array.isArray(state) || state.status !== "completed" ||
+            !Array.isArray(state.tasks) || state.tasks.length !== 1) {
+          throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not complete successfully");
+        }
+        const task = state.tasks[0];
+        if (!task || task.clientId !== input.clientId || task.questionId !== input.questionId) {
+          throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not complete successfully");
+        }
+        if (task.status !== "succeeded") {
+          const failure = task && task.error ? task.error : { code: "DOUBAO_COLLECTION_FAILED", message: "Doubao collection failed" };
+          throw serviceError(failure.code, failure.message);
+        }
+        const record = await researchStore.getResearch(input.clientId, input.questionId);
+        if (!record || typeof record !== "object" || Array.isArray(record)) {
+          throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not produce a research record");
+        }
+        return record;
+      });
     } catch (error) {
       const safe = safeError(error);
       throw serviceError(safe.code, safe.message);
@@ -100,7 +150,7 @@ function createDoubaoCollectionDesktopService(options) {
     if (disposePromise) return disposePromise;
     disposePromise = Promise.resolve().then(async function() {
       await queue.dispose();
-      if (typeof collectionService.close === "function") await collectionService.close();
+      await closeSessionSafely();
     });
     return disposePromise;
   }
@@ -114,7 +164,9 @@ function createDoubaoCollectionDesktopService(options) {
     openLogin: function() { return collectionService.openLogin(); },
     collectOne: collectOne,
     saveManual: function(input) { return collectionService.saveManual(input); },
+    previewBatch: previewBatch,
     startBatch: startBatch,
+    startPreparedBatch: startPreparedBatch,
     pauseBatch: function() { return queue.pause(); },
     resumeBatch: function() { return queue.resume(); },
     stopBatch: function() { return queue.stop(); },

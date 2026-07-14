@@ -29,6 +29,40 @@ function assertQuestionMatches(question, clientId, questionId) {
   }
 }
 
+function assertBatchMode(mode) {
+  if (mode !== "missing" && mode !== "recollect") {
+    throw serviceError("DOUBAO_BATCH_MODE_INVALID", "Batch mode must be missing or recollect");
+  }
+}
+
+function assertClientIds(clientIds) {
+  if (!Array.isArray(clientIds) || clientIds.length === 0) {
+    throw serviceError("DOUBAO_BATCH_CLIENTS_REQUIRED", "At least one client is required");
+  }
+  if (clientIds.length > 500) {
+    throw serviceError("DOUBAO_QUEUE_LIMIT", "Batch cannot contain more than 500 clients");
+  }
+  const seen = new Set();
+  clientIds.forEach(function(clientId) {
+    if (!isSafeId(clientId)) throw serviceError("DOUBAO_INVALID_ID", "Client id is invalid");
+    if (seen.has(clientId)) throw serviceError("DOUBAO_BATCH_CLIENT_DUPLICATE", "Batch client ids must be unique");
+    seen.add(clientId);
+  });
+}
+
+function assertBatchTask(task) {
+  if (!task || typeof task !== "object" || Array.isArray(task) ||
+      !isSafeId(task.clientId) || !isSafeId(task.questionId)) {
+    throw serviceError("DOUBAO_QUEUE_TASK_INVALID", "Batch task requires safe clientId and questionId");
+  }
+  if (Object.keys(task).some(function(key) { return ["clientId", "questionId", "force"].indexOf(key) === -1; })) {
+    throw serviceError("DOUBAO_QUEUE_TASK_INVALID", "Batch task contains an unsupported field");
+  }
+  if (task.force !== undefined && typeof task.force !== "boolean") {
+    throw serviceError("DOUBAO_FORCE_INVALID", "Force flag is invalid");
+  }
+}
+
 function validateAnswer(answerText) {
   if (typeof answerText !== "string" || answerText.trim().length < 10 || answerText.trim().length > 200000) {
     throw serviceError("RESEARCH_INVALID_ANSWER", "Research answer length is invalid");
@@ -60,6 +94,7 @@ function validateReferences(references) {
 function createDoubaoCollectionService(deps) {
   deps = deps || {};
   if (!deps.questionStore || typeof deps.questionStore.getQuestion !== "function" ||
+      typeof deps.questionStore.listQuestions !== "function" ||
       typeof deps.questionStore.deleteQuestion !== "function" || !deps.researchStore ||
       typeof deps.researchStore.getResearch !== "function" ||
       typeof deps.researchStore.saveResearch !== "function" ||
@@ -87,6 +122,73 @@ function createDoubaoCollectionService(deps) {
       if (error && error.code === "RESEARCH_NOT_FOUND") return null;
       throw error;
     }
+  }
+
+  function previewBatch(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw serviceError("DOUBAO_BATCH_INPUT_INVALID", "Batch preview input is invalid");
+    }
+    assertBatchMode(input.mode);
+    assertClientIds(input.clientIds);
+
+    const tasks = [];
+    let skippedExisting = 0;
+    let disabledQuestions = 0;
+    input.clientIds.forEach(function(clientId) {
+      const questions = questionStore.listQuestions(clientId);
+      if (!Array.isArray(questions)) {
+        throw serviceError("DOUBAO_BATCH_QUESTIONS_INVALID", "Client questions are invalid");
+      }
+      questions.forEach(function(question) {
+        if (!question || typeof question !== "object" || !isSafeId(question.id)) {
+          throw serviceError("DOUBAO_BATCH_QUESTIONS_INVALID", "Client question is invalid");
+        }
+        if (question.enabled !== true) {
+          disabledQuestions += 1;
+          return;
+        }
+        const existing = getExistingResearch(clientId, question.id);
+        if (input.mode === "missing" && existing) {
+          skippedExisting += 1;
+          return;
+        }
+        tasks.push({
+          clientId: clientId,
+          questionId: question.id,
+          force: input.mode === "recollect"
+        });
+      });
+    });
+
+    if (tasks.length > 500) throw serviceError("DOUBAO_QUEUE_LIMIT", "Queue cannot contain more than 500 tasks");
+    return {
+      mode: input.mode,
+      clientCount: input.clientIds.length,
+      taskCount: tasks.length,
+      skippedExisting: skippedExisting,
+      disabledQuestions: disabledQuestions,
+      tasks: tasks
+    };
+  }
+
+  function validatePreparedBatch(input) {
+    const tasks = Array.isArray(input) ? input : input && input.tasks;
+    if (!Array.isArray(tasks)) throw serviceError("DOUBAO_BATCH_TASKS_INVALID", "Prepared batch tasks are invalid");
+    if (tasks.length > 500) throw serviceError("DOUBAO_QUEUE_LIMIT", "Queue cannot contain more than 500 tasks");
+    const seen = new Set();
+    return tasks.map(function(task) {
+      assertBatchTask(task);
+      const key = task.clientId + ":" + task.questionId;
+      if (seen.has(key)) throw serviceError("DOUBAO_BATCH_TASK_DUPLICATE", "Prepared batch tasks must be unique");
+      seen.add(key);
+      const question = getQuestion(task);
+      if (question.enabled !== true) throw serviceError("DOUBAO_QUESTION_DISABLED", "Question is disabled");
+      const force = task.force === true;
+      if (!force && getExistingResearch(task.clientId, task.questionId)) {
+        throw serviceError("DOUBAO_RESEARCH_EXISTS", "Research already exists; force is required to recollect");
+      }
+      return { clientId: task.clientId, questionId: task.questionId, force: force };
+    });
   }
 
   async function getLoginState() {
@@ -193,6 +295,8 @@ function createDoubaoCollectionService(deps) {
   }
 
   return {
+    previewBatch: previewBatch,
+    validatePreparedBatch: validatePreparedBatch,
     getLoginState: getLoginState,
     openLogin: openLogin,
     collectOne: collectOne,

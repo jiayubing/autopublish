@@ -193,6 +193,10 @@ function trimDiagnostics(directory, limit) {
 
 function createDoubaoBrowserAdapter(options) {
   const opts = options || {};
+  const mode = opts.mode === undefined ? "visible" : opts.mode;
+  if (mode !== "visible" && mode !== "background") {
+    throw codedError("DOUBAO_BROWSER_MODE_INVALID", "Doubao browser mode must be visible or background");
+  }
   const session = opts.session || pwSessionConfig("doubao");
   const runtime = opts.runtime || createPlaywrightRuntime({ session: session });
   const sleep = opts.sleep || defaultSleep;
@@ -213,7 +217,7 @@ function createDoubaoBrowserAdapter(options) {
       url: DOUBAO_CHAT_URL,
       session: session,
       browser: "msedge",
-      headed: true,
+      headed: mode === "visible",
       persistent: true,
       profileDir: session.profileDir,
       daemonDir: session.daemonDir,
@@ -297,6 +301,7 @@ function createDoubaoBrowserAdapter(options) {
   }
 
   async function getLoginState() {
+    if (mode === "background") throw codedError("DOUBAO_BACKGROUND_UNAVAILABLE", "Background Doubao collection is not available");
     const snapshot = await inspectExistingSession();
     return classifyPage(snapshot);
   }
@@ -322,11 +327,13 @@ function createDoubaoBrowserAdapter(options) {
   }
 
   async function openLogin() {
+    if (mode === "background") throw codedError("DOUBAO_BACKGROUND_UNAVAILABLE", "Background Doubao collection is not available");
     await ensureSession();
     return getLoginState();
   }
 
   async function collect(question) {
+    if (mode === "background") throw codedError("DOUBAO_BACKGROUND_UNAVAILABLE", "Background Doubao collection is not available");
     const requestedQuestion = String(question == null ? "" : question);
     if (!requestedQuestion.trim()) throw codedError("DOUBAO_INVALID_QUESTION", "Doubao question is required");
 
@@ -420,7 +427,7 @@ function createDoubaoBrowserAdapter(options) {
     return undefined;
   }
 
-  return { openLogin: openLogin, getLoginState: getLoginState, collect: collect, close: close };
+  return { mode: mode, openLogin: openLogin, getLoginState: getLoginState, collect: collect, close: close };
 }
 
 module.exports = { createDoubaoBrowserAdapter, inspectPageScript };

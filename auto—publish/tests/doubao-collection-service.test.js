@@ -25,10 +25,22 @@ function createContext(options) {
     createdAt: "2026-07-12T00:00:00.000Z",
     updatedAt: "2026-07-12T00:00:00.000Z"
   }, options.question || {});
-  questions.set("client-1:question-1", question);
+  const configuredQuestions = options.questions || [{ clientId: "client-1", question: question }];
+  configuredQuestions.forEach(function(item) {
+    questions.set(item.clientId + ":" + item.question.id, Object.assign({}, item.question));
+  });
+  (options.researchRecords || []).forEach(function(record) {
+    research.set(record.clientId + ":" + record.id, Object.assign({}, record));
+  });
   let failSave = false;
 
   const questionStore = {
+    listQuestions: function(clientId) {
+      calls.push("listQuestions");
+      return Array.from(questions.entries())
+        .filter(function(entry) { return entry[0].indexOf(clientId + ":") === 0; })
+        .map(function(entry) { return copy(entry[1]); });
+    },
     getQuestion: function(clientId, questionId) {
       calls.push("getQuestion");
       const found = questions.get(clientId + ":" + questionId);
@@ -127,6 +139,76 @@ function oldRecord() {
 }
 
 describe("Doubao collection service", function() {
+  it("builds missing-only and force-enabled batches from selected clients", function() {
+    const question = function(clientId, questionId, enabled) {
+      return { clientId: clientId, question: {
+        id: questionId,
+        text: "问题 " + clientId + " " + questionId + " 足够长的采集问题文本",
+        enabled: enabled,
+        createdAt: "2026-07-12T00:00:00.000Z",
+        updatedAt: "2026-07-12T00:00:00.000Z"
+      } };
+    };
+    const existing = function(clientId) {
+      return {
+        clientId: clientId,
+        id: "q-existing",
+        question: "已存在问题",
+        answerText: "这是已经保存的足够长度研究回答。",
+        references: [],
+        collectionMethod: "automatic",
+        collectedAt: "2026-07-12T00:00:00.000Z",
+        updatedAt: "2026-07-12T00:00:00.000Z"
+      };
+    };
+    const context = createContext({
+      questions: [
+        question("client-1", "q-new", true),
+        question("client-1", "q-existing", true),
+        question("client-1", "q-disabled", false),
+        question("client-2", "q-new", true),
+        question("client-2", "q-existing", true),
+        question("client-2", "q-disabled", false)
+      ],
+      researchRecords: [existing("client-1"), existing("client-2")]
+    });
+
+    const missing = context.service.previewBatch({ clientIds: ["client-1", "client-2"], mode: "missing" });
+    assert.deepStrictEqual(missing.tasks.map(function(task) { return [task.clientId, task.questionId, task.force]; }), [
+      ["client-1", "q-new", false],
+      ["client-2", "q-new", false]
+    ]);
+    assert.equal(missing.skippedExisting, 2);
+
+    const force = context.service.previewBatch({ clientIds: ["client-1", "client-2"], mode: "recollect" });
+    assert.deepStrictEqual(force.tasks.map(function(task) { return task.force; }), [true, true, true, true]);
+    assert.equal(force.disabledQuestions, 2);
+  });
+
+  it("rejects empty, duplicate, oversized, unknown-mode, and disabled-only batch input", function() {
+    const context = createContext();
+    assert.throws(function() { context.service.previewBatch({ clientIds: [], mode: "missing" }); }, /client/i);
+    assert.throws(function() { context.service.previewBatch({ clientIds: ["client-1", "client-1"], mode: "missing" }); }, function(error) {
+      return error.code === "DOUBAO_BATCH_CLIENT_DUPLICATE";
+    });
+    assert.throws(function() { context.service.previewBatch({ clientIds: ["client-1"], mode: "unknown" }); }, /mode/i);
+    assert.throws(function() {
+      context.service.previewBatch({ clientIds: Array.from({ length: 501 }, function(_, index) { return "client-" + index; }), mode: "missing" });
+    }, /500|limit/i);
+
+    const disabled = createContext({ question: { enabled: false } });
+    const preview = disabled.service.previewBatch({ clientIds: ["client-1"], mode: "recollect" });
+    assert.equal(preview.tasks.length, 0);
+    assert.equal(preview.disabledQuestions, 1);
+  });
+
+  it("revalidates prepared tasks against the current question and research state", function() {
+    const context = createContext({ question: { enabled: false } });
+    assert.throws(function() {
+      context.service.validatePreparedBatch({ tasks: [{ clientId: "client-1", questionId: "question-1", force: false }] });
+    }, function(error) { return error.code === "DOUBAO_QUESTION_DISABLED"; });
+  });
+
   it("collects an existing question and saves normalized research", async function() {
     const context = createContext();
     const saved = await context.service.collectOne({ clientId: "client-1", questionId: "question-1", force: false });

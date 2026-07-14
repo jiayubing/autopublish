@@ -95,6 +95,9 @@ function createDoubaoCollectionQueue(options) {
         typeof input.questionId !== "string" || !input.questionId.trim()) {
       throw queueError("DOUBAO_QUEUE_TASK_INVALID", "Queue task requires clientId and questionId");
     }
+    if (input.force !== undefined && typeof input.force !== "boolean") {
+      throw queueError("DOUBAO_FORCE_INVALID", "Force flag is invalid");
+    }
     const id = sourceId || ("task-" + nextTaskNumber++);
     return {
       id: id,

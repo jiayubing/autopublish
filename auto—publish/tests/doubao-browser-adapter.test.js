@@ -104,6 +104,20 @@ afterEach(function() {
 });
 
 describe("Doubao browser adapter", { concurrency: false }, function() {
+  it("exposes the visible mode, rejects hidden mode, and does not claim background support", async function() {
+    const visible = createDoubaoBrowserAdapter({ runtime: fakeRuntime(completeFixture, []), mode: "visible" });
+    assert.equal(visible.mode, "visible");
+    assert.throws(function() {
+      createDoubaoBrowserAdapter({ runtime: fakeRuntime(completeFixture, []), mode: "hidden" });
+    }, function(error) { return error.code === "DOUBAO_BROWSER_MODE_INVALID"; });
+
+    const background = createDoubaoBrowserAdapter({ runtime: fakeRuntime(completeFixture, []), mode: "background" });
+    assert.equal(background.mode, "background");
+    await assert.rejects(background.collect(fixtureQuestion), function(error) {
+      return error.code === "DOUBAO_BACKGROUND_UNAVAILABLE";
+    });
+  });
+
   it("derives generating only from a visible stop control and scopes references to each message", async function() {
     const link = { href: "https://example.com/scoped", innerText: "公开资料", textContent: "公开资料" };
     const message = domNode({
