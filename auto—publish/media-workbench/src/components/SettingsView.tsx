@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink, FolderOpen, Info, RefreshCw, ShieldCheck } from 'lucide-react';
 import {
   cancelWorkspaceSelection,
@@ -43,10 +43,21 @@ export default function SettingsView() {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [switchState, setSwitchState] = useState<WorkspaceBootstrapState>(READY_STATE);
+  const [switchBusy, setSwitchBusy] = useState(false);
+  const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
-    getCurrentWorkspace()
+    const request = currentWorkspaceRequestRef.current || (currentWorkspaceRequestRef.current = getCurrentWorkspace());
+    request
       .then((workspace) => {
         if (!active) return;
         setCurrent(workspace);
@@ -73,8 +84,10 @@ export default function SettingsView() {
     setOperationError(null);
     try {
       await openCurrentWorkspace();
+      if (!mountedRef.current) return;
+      setOperationError(null);
     } catch (error) {
-      setOperationError(safeErrorMessage(error));
+      if (mountedRef.current) setOperationError(safeErrorMessage(error));
     }
   };
 
@@ -123,10 +136,10 @@ export default function SettingsView() {
         )}
         {operationError && <p className="text-sm text-red-700">{operationError}</p>}
         <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={handleOpen} disabled={loading || !current?.workspacePath} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handleOpen} disabled={loading || switchBusy || !current?.workspacePath} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
             <ExternalLink className="h-4 w-4" /> 打开文件夹
           </button>
-          <button type="button" onClick={() => setSwitchOpen(true)} disabled={loading || envOverride} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={() => setSwitchOpen(true)} disabled={loading || switchBusy || envOverride} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
             <RefreshCw className="h-4 w-4" /> 更换工作区
           </button>
         </div>
@@ -139,6 +152,7 @@ export default function SettingsView() {
           onConfirmSelection={async (input): Promise<WorkspaceConfirmationResult> => confirmWorkspaceSelection(input)}
           onCancelSelection={cancelWorkspaceSelection}
           onStateChange={handleSwitchStateChange}
+          onBusyChange={setSwitchBusy}
           title="更换工作区"
           description="选择新目录后，主进程会再次检查运行状态并在确认后重启应用。"
         />

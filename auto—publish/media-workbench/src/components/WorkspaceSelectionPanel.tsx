@@ -14,6 +14,7 @@ interface WorkspaceSelectionPanelProps {
   onConfirmSelection: (input: { token: string }) => Promise<WorkspaceConfirmationResult>;
   onCancelSelection: () => Promise<WorkspaceBootstrapState>;
   onStateChange: (state: WorkspaceBootstrapState) => void;
+  onBusyChange?: (busy: boolean) => void;
   title: string;
   description: string;
   showAppName?: boolean;
@@ -25,6 +26,7 @@ export default function WorkspaceSelectionPanel({
   onConfirmSelection,
   onCancelSelection,
   onStateChange,
+  onBusyChange,
   title,
   description,
   showAppName = false,
@@ -42,6 +44,15 @@ export default function WorkspaceSelectionPanel({
   const [flowState, setFlowState] = useState(state);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(() => state.error ? getWorkspaceErrorMessage(state.error) : null);
+  const activeRef = useRef(true);
+
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+      onBusyChange?.(false);
+    };
+  }, [onBusyChange]);
 
   useEffect(() => {
     controller.reset(state);
@@ -50,17 +61,25 @@ export default function WorkspaceSelectionPanel({
   }, [controller, state]);
 
   const updateState = (nextState: WorkspaceBootstrapState) => {
+    if (!activeRef.current) return;
     setFlowState(nextState);
     onStateChange(nextState);
   };
 
+  const updateBusy = (nextBusy: boolean) => {
+    if (!activeRef.current) return;
+    setBusy(nextBusy);
+    onBusyChange?.(nextBusy);
+  };
+
   const handleChoose = async () => {
     if (busy || flowState.state === 'relaunching') return;
-    setBusy(true);
+    updateBusy(true);
     setError(null);
     try {
       updateState(await controller.chooseDirectory());
     } catch (operationError) {
+      if (!activeRef.current) return;
       if (getWorkspaceErrorCode(operationError) === 'WORKSPACE_SELECTION_CANCELLED') {
         updateState(state);
         setError(null);
@@ -68,31 +87,33 @@ export default function WorkspaceSelectionPanel({
         setError(getWorkspaceErrorMessage(operationError));
       }
     } finally {
-      setBusy(false);
+      if (activeRef.current) updateBusy(false);
     }
   };
 
   const handleConfirm = async () => {
     const selection = flowState.selection;
     if (busy || flowState.state !== 'confirmation_required' || !selection) return;
-    setBusy(true);
+    updateBusy(true);
     setError(null);
     try {
       updateState(await controller.confirmSelection());
     } catch (operationError) {
+      if (!activeRef.current) return;
       setError(getWorkspaceErrorMessage(operationError));
     } finally {
-      setBusy(false);
+      if (activeRef.current) updateBusy(false);
     }
   };
 
   const handleCancel = async () => {
     if (busy) return;
-    setBusy(true);
+    updateBusy(true);
     setError(null);
     try {
       updateState(await controller.cancelSelection());
     } catch (operationError) {
+      if (!activeRef.current) return;
       if (getWorkspaceErrorCode(operationError) === 'WORKSPACE_SELECTION_CANCELLED') {
         updateState(state);
         setError(null);
@@ -100,7 +121,7 @@ export default function WorkspaceSelectionPanel({
         setError(getWorkspaceErrorMessage(operationError));
       }
     } finally {
-      setBusy(false);
+      if (activeRef.current) updateBusy(false);
     }
   };
 

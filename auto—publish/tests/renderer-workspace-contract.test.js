@@ -101,4 +101,31 @@ describe("renderer workspace bootstrap contract", function() {
     assert.match(settings, /当前工作区由环境变量控制/);
     assert.match(settings, /window\.confirm/);
   });
+
+  it("guards selection awaits after unmount and exposes parent busy cleanup", function() {
+    const panel = readSource("components/WorkspaceSelectionPanel.tsx");
+
+    assert.match(panel, /onBusyChange\?:/);
+    assert.match(panel, /activeRef/);
+    assert.match(panel, /activeRef\.current\s*=\s*false/);
+    assert.match(panel, /onBusyChange\?\.\(false\)/);
+    assert.match(panel, /if\s*\(!activeRef\.current\)/);
+    assert.match(panel, /setBusy\(nextBusy\)/);
+    assert.match(panel, /updateBusy\(true\)/);
+    assert.match(panel, /setError\(null\)/);
+    assert.match(panel, /onStateChange\(nextState\)/);
+  });
+
+  it("deduplicates Settings bootstrap reads and blocks top-level commands while switching", function() {
+    const settings = readSource("components/SettingsView.tsx");
+
+    assert.match(settings, /useRef/);
+    assert.match(settings, /currentWorkspaceRequestRef/);
+    assert.match(settings, /currentWorkspaceRequestRef\.current\s*\|\|/);
+    assert.match(settings, /mountedRef/);
+    assert.match(settings, /mountedRef\.current/);
+    assert.match(settings, /switchBusy/);
+    assert.match(settings, /onBusyChange=\{setSwitchBusy\}/);
+    assert.match(settings, /disabled=\{[^}]*switchBusy/);
+  });
 });
