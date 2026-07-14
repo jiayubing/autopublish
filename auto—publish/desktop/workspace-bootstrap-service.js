@@ -20,7 +20,9 @@ const ERROR_MESSAGES = {
   WORKSPACE_ENV_OVERRIDE: "Workspace is controlled by AUTO_PUBLISH_WORKSPACE",
   WORKSPACE_RELAUNCH_FAILED: "Application relaunch failed",
   WORKSPACE_LOCATION_WRITE_FAILED: "Workspace location could not be saved",
-  WORKSPACE_OPEN_FAILED: "Could not open the current workspace"
+  WORKSPACE_OPEN_FAILED: "Could not open the current workspace",
+  WORKSPACE_CLEANUP_FAILED: "Workspace cleanup failed; some newly created items remain",
+  WORKSPACE_SWITCH_STATE_UNAVAILABLE: "Workspace switch state is unavailable"
 };
 
 function stableError(code, message) {
@@ -48,6 +50,26 @@ function readClock(clock) {
   if (value instanceof Date) return value;
   if (typeof value === "number") return new Date(value);
   return new Date(value);
+}
+
+function statIdentity(stats, target) {
+  if (stats.dev !== undefined && stats.ino !== undefined && String(stats.ino) !== "0") {
+    return { kind: "devino", dev: String(stats.dev), ino: String(stats.ino) };
+  }
+  if (!Number.isFinite(stats.birthtimeMs)) return { kind: "unverifiable" };
+  return {
+    kind: "stat",
+    mode: stats.mode,
+    birthtimeMs: stats.birthtimeMs,
+    path: path.resolve(target)
+  };
+}
+
+function sameIdentity(first, second) {
+  if (!first || !second || first.kind !== second.kind) return false;
+  if (first.kind === "devino") return first.dev === second.dev && first.ino === second.ino;
+  if (first.kind === "unverifiable" || second.kind === "unverifiable") return false;
+  return first.mode === second.mode && first.birthtimeMs === second.birthtimeMs && first.path === second.path;
 }
 
 function stateValue(value) {
@@ -159,31 +181,37 @@ function createWorkspaceBootstrapService(options) {
   }
 
   function bootstrap() {
-    state = "checking";
-    lastError = null;
-    invalidateSelection();
+    const operation = beginOperation();
+    try {
+      state = "checking";
+      lastError = null;
+      invalidateSelection();
+      retryRelaunchPath = null;
 
-    const environmentPath = typeof env.AUTO_PUBLISH_WORKSPACE === "string" && env.AUTO_PUBLISH_WORKSPACE.trim() !== ""
-      ? env.AUTO_PUBLISH_WORKSPACE
-      : null;
-    if (environmentPath) {
-      const environmentResult = classify(environmentPath);
-      if (environmentResult.kind === "invalid") return setInvalid(environmentResult.error.code);
-      current = { path: environmentResult.path, envOverride: true, validation: environmentResult };
+      const environmentPath = typeof env.AUTO_PUBLISH_WORKSPACE === "string" && env.AUTO_PUBLISH_WORKSPACE.trim() !== ""
+        ? env.AUTO_PUBLISH_WORKSPACE
+        : null;
+      if (environmentPath) {
+        const environmentResult = classify(environmentPath);
+        if (environmentResult.kind === "invalid") return setInvalid(environmentResult.error.code);
+        current = { path: environmentResult.path, envOverride: true, validation: environmentResult };
+        state = "ready";
+        return stateDto();
+      }
+
+      let saved;
+      try { saved = locationStore.read(); } catch (error) { return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED"); }
+      if (!saved || saved.ok !== true) return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
+      if (!saved.value || typeof saved.value.workspacePath !== "string") return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
+
+      const savedResult = classify(saved.value.workspacePath);
+      if (savedResult.kind === "invalid") return setInvalid(savedResult.error.code);
+      current = { path: savedResult.path, envOverride: false, validation: savedResult };
       state = "ready";
       return stateDto();
+    } finally {
+      endOperation(operation);
     }
-
-    let saved;
-    try { saved = locationStore.read(); } catch (error) { return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED"); }
-    if (!saved || saved.ok !== true) return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
-    if (!saved.value || typeof saved.value.workspacePath !== "string") return setSelectionRequired("WORKSPACE_SELECTION_REQUIRED");
-
-    const savedResult = classify(saved.value.workspacePath);
-    if (savedResult.kind === "invalid") return setInvalid(savedResult.error.code);
-    current = { path: savedResult.path, envOverride: false, validation: savedResult };
-    state = "ready";
-    return stateDto();
   }
 
   function getBootstrapState() { return stateDto(); }
@@ -218,10 +246,20 @@ function createWorkspaceBootstrapService(options) {
   }
 
   async function readBusyState() {
-    const taskValue = typeof taskService.getState === "function" ? await taskService.getState() : null;
-    const queueValue = typeof doubaoCollectionService.getQueueState === "function"
-      ? await doubaoCollectionService.getQueueState()
-      : null;
+    let taskValue = null;
+    let queueValue = null;
+    let unavailable = false;
+    try {
+      if (typeof taskService.getState === "function") taskValue = await taskService.getState();
+    } catch (error) {
+      unavailable = true;
+    }
+    try {
+      if (typeof doubaoCollectionService.getQueueState === "function") queueValue = await doubaoCollectionService.getQueueState();
+    } catch (error) {
+      unavailable = true;
+    }
+    if (unavailable) throwStable("WORKSPACE_SWITCH_STATE_UNAVAILABLE");
     if (isBusy(taskValue) || isBusy(queueValue)) throwStable("WORKSPACE_SWITCH_BUSY");
   }
 
@@ -259,12 +297,20 @@ function createWorkspaceBootstrapService(options) {
   }
 
   function rollbackInitialization(record) {
+    let failed = record.captureFailed;
     if (record.markerCreated) {
       try {
         const markerStats = io.lstatSync(record.markerPath);
-        if (markerStats.isFile() && !markerStats.isSymbolicLink()) io.unlinkSync(record.markerPath);
+        const markerContent = io.readFileSync(record.markerPath, "utf8");
+        if (!sameIdentity(record.markerIdentity, statIdentity(markerStats, record.markerPath)) || markerContent !== record.markerContent) {
+          failed = true;
+        } else if (markerStats.isFile() && !markerStats.isSymbolicLink()) {
+          io.unlinkSync(record.markerPath);
+        } else {
+          failed = true;
+        }
       } catch (error) {
-        // A failed cleanup must never cause deletion outside the exact marker path.
+        if (!error || error.code !== "ENOENT") failed = true;
       }
     }
     record.directories
@@ -273,11 +319,34 @@ function createWorkspaceBootstrapService(options) {
       .forEach(function(item) {
         try {
           const stats = io.lstatSync(item.path);
-          if (stats.isDirectory() && !stats.isSymbolicLink()) io.rmdirSync(item.path);
+          if (!sameIdentity(item.identity, statIdentity(stats, item.path))) {
+            failed = true;
+          } else if (stats.isDirectory() && !stats.isSymbolicLink()) {
+            io.rmdirSync(item.path);
+          } else {
+            failed = true;
+          }
         } catch (error) {
-          // Only empty directories are removed; nonempty or changed paths stay intact.
+          if (!error || error.code !== "ENOENT") failed = true;
         }
       });
+    return !failed;
+  }
+
+  function captureDirectoryArtifacts(record) {
+    record.directories.forEach(function(item) {
+      if (item.present) return;
+      try {
+        const stats = io.lstatSync(item.path);
+        if (!stats.isDirectory() || stats.isSymbolicLink()) {
+          record.captureFailed = true;
+        } else {
+          item.identity = statIdentity(stats, item.path);
+        }
+      } catch (error) {
+        if (!error || error.code !== "ENOENT") record.captureFailed = true;
+      }
+    });
   }
 
   function initializeWorkspace(root) {
@@ -301,15 +370,21 @@ function createWorkspaceBootstrapService(options) {
     const record = {
       markerPath: path.join(root, WORKSPACE_MARKER_FILE),
       markerCreated: false,
+      markerIdentity: null,
+      markerContent: null,
+      captureFailed: false,
       directories: directories,
-      rollback: function() { rollbackInitialization(record); }
+      rollback: function() { return rollbackInitialization(record); }
     };
     try {
       ensureDirectories(paths);
+      captureDirectoryArtifacts(record);
       const marker = JSON.stringify({ version: 1, createdAt: readClock(clock).toISOString() }) + "\n";
       try {
         io.writeFileSync(record.markerPath, marker, { encoding: "utf8", flag: "wx" });
         record.markerCreated = true;
+        record.markerContent = io.readFileSync(record.markerPath, "utf8");
+        record.markerIdentity = statIdentity(io.lstatSync(record.markerPath), record.markerPath);
       } catch (error) {
         if (!error || error.code !== "EEXIST") throw error;
         const rechecked = classify(root);
@@ -317,7 +392,9 @@ function createWorkspaceBootstrapService(options) {
       }
       return record;
     } catch (error) {
-      record.rollback();
+      if (!record.markerCreated) captureDirectoryArtifacts(record);
+      const cleanupSucceeded = record.rollback();
+      if (!cleanupSucceeded) throwStable("WORKSPACE_CLEANUP_FAILED");
       if (error && error.code && ERROR_MESSAGES[error.code]) throw error;
       throwStable(safeErrorCode(error, "WORKSPACE_NOT_WRITABLE"));
     }
@@ -368,7 +445,10 @@ function createWorkspaceBootstrapService(options) {
         let saved;
         try { saved = locationStore.write(selection.path); } catch (error) { saved = { ok: false, error: error }; }
         if (!saved || saved.ok !== true) {
-          if (initialization) initialization.rollback();
+          if (initialization) {
+            const cleanupSucceeded = initialization.rollback();
+            if (!cleanupSucceeded) throwStable("WORKSPACE_CLEANUP_FAILED");
+          }
           throwStable(safeErrorCode(saved && saved.error, "WORKSPACE_LOCATION_WRITE_FAILED"));
         }
         current = { path: selection.path, envOverride: false, validation: classify(selection.path) };

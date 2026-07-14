@@ -180,4 +180,27 @@ describe("workspace bootstrap IPC", function() {
     assert.equal(result.error.message.includes("secret"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(result.error, "stack"), false);
   });
+
+  it("sanitizes unavailable switch state errors", async function() {
+    const fake = fakeIpc();
+    registerWorkspaceBootstrapIpc({
+      ipcMain: fake.ipcMain,
+      workspaceBootstrapService: {
+        requestSwitch: function() {
+          const error = new Error("private task state");
+          error.code = "WORKSPACE_SWITCH_STATE_UNAVAILABLE";
+          throw error;
+        },
+        getBootstrapState: function() { return {}; }, getCurrent: function() { return {}; }, chooseDirectory: function() {},
+        openCurrent: function() {}, confirmSelection: function() {}, cancelSelection: function() {}
+      },
+      showOpenDialog: async function() { return { canceled: false, filePaths: ["C:\\candidate"] }; }
+    });
+    const result = await fake.handlers.get("workspace:request-switch")({}, undefined);
+    assertEnvelope(result);
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "WORKSPACE_SWITCH_STATE_UNAVAILABLE");
+    assert.equal(result.error.message.includes("private"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(result.error, "stack"), false);
+  });
 });

@@ -14,6 +14,8 @@ const SAFE_MESSAGES = {
   WORKSPACE_RELAUNCH_FAILED: "Application relaunch failed",
   WORKSPACE_OPEN_FAILED: "Could not open the current workspace",
   WORKSPACE_LOCATION_WRITE_FAILED: "Workspace location could not be saved",
+  WORKSPACE_CLEANUP_FAILED: "Workspace cleanup failed; some newly created items remain",
+  WORKSPACE_SWITCH_STATE_UNAVAILABLE: "Workspace switch state is unavailable",
   WORKSPACE_IPC_INPUT_INVALID: "Workspace IPC input is invalid",
   IPC_ERROR: "Workspace operation failed"
 };

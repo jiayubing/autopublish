@@ -314,6 +314,61 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
+  it("refuses to remove a marker replaced before rollback and reports cleanup failure", async function() {
+    let candidate;
+    const harness = createHarness({
+      locationStore: {
+        read: function() { return { ok: true, value: null }; },
+        write: function() {
+          const markerPath = path.join(candidate, ".autopublish-workspace.json");
+          fs.unlinkSync(markerPath);
+          fs.writeFileSync(markerPath, "external marker", "utf8");
+          return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } };
+        }
+      }
+    });
+    candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
+      assert.equal(fs.readFileSync(path.join(candidate, ".autopublish-workspace.json"), "utf8"), "external marker");
+    } finally { harness.cleanup(); }
+  });
+
+  it("reports cleanup failure when a newly created directory cannot be removed", async function() {
+    let candidate;
+    const failingFs = Object.create(fs);
+    failingFs.rmdirSync = function(target) {
+      if (target === path.join(candidate, "input")) {
+        const error = new Error("simulated cleanup failure");
+        error.code = "EPERM";
+        throw error;
+      }
+      return fs.rmdirSync(target);
+    };
+    const harness = createHarness({
+      fs: failingFs,
+      locationStore: {
+        read: function() { return { ok: true, value: null }; },
+        write: function() { return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } }; }
+      },
+      ensureWorkspaceDirectories: function(paths) {
+        Object.keys(paths).forEach(function(key) {
+          if (key !== "root") fs.mkdirSync(paths[key], { recursive: true });
+        });
+      }
+    });
+    candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
+      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
+    } finally { harness.cleanup(); }
+  });
+
   it("makes selection tokens single-use, expiring, and immune to renderer path substitution", async function() {
     const harness = createHarness({ selectionTtlMs: 1000 });
     const first = path.join(harness.root, "first");
@@ -452,6 +507,36 @@ describe("workspace bootstrap service", function() {
       const result = await firstConfirmation;
       assert.equal(result.state, "relaunching");
       assert.equal(harness.events.relaunches.length, 1);
+    } finally { harness.cleanup(); }
+  });
+
+  it("rejects bootstrap while confirmation is waiting for relaunch", async function() {
+    const gate = deferred();
+    const harness = createHarness({
+      relaunch: function() { return gate.promise; }
+    });
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      const confirmation = harness.service.confirmSelection({ token: selected.selection.token });
+      while (harness.service.getBootstrapState().state !== "relaunching") await Promise.resolve();
+      assertSyncError(function() { harness.service.bootstrap(); }, "WORKSPACE_SWITCH_BUSY");
+      gate.resolve();
+      await confirmation;
+    } finally { harness.cleanup(); }
+  });
+
+  it("maps task and queue state exceptions to a stable unavailable error", async function() {
+    const harness = createHarness({
+      taskService: { getState: function() { throw new Error("private task state"); } },
+      doubaoCollectionService: { getQueueState: function() { throw new Error("private queue state"); } }
+    });
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SWITCH_STATE_UNAVAILABLE");
     } finally { harness.cleanup(); }
   });
 
