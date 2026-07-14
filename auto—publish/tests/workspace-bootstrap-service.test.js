@@ -336,6 +336,54 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
+  it("detects marker modification immediately after the write and preserves it", async function() {
+    let candidate;
+    const io = Object.create(fs);
+    io.writeFileSync = function(target, content, options) {
+      fs.writeFileSync(target, content, options);
+      if (target === path.join(candidate, ".autopublish-workspace.json")) {
+        fs.writeFileSync(target, "external after write", "utf8");
+      }
+    };
+    const harness = createHarness({
+      fs: io,
+      locationStore: {
+        read: function() { return { ok: true, value: null }; },
+        write: function() { return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } }; }
+      }
+    });
+    candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
+      assert.equal(fs.readFileSync(path.join(candidate, ".autopublish-workspace.json"), "utf8"), "external after write");
+    } finally { harness.cleanup(); }
+  });
+
+  it("refuses to remove a directory deleted and rebuilt before rollback", async function() {
+    let candidate;
+    const harness = createHarness({
+      locationStore: {
+        read: function() { return { ok: true, value: null }; },
+        write: function() {
+          const input = path.join(candidate, "input");
+          fs.rmSync(input, { recursive: true, force: true });
+          fs.mkdirSync(input);
+          return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } };
+        }
+      }
+    });
+    candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
+      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
+    } finally { harness.cleanup(); }
+  });
+
   it("reports cleanup failure when a newly created directory cannot be removed", async function() {
     let candidate;
     const failingFs = Object.create(fs);
@@ -469,6 +517,7 @@ describe("workspace bootstrap service", function() {
       await assertError(harness.service.confirmSelection({ token: first.selection.token }), "WORKSPACE_RELAUNCH_FAILED");
       assert.equal(harness.service.getBootstrapState().state, "ready");
       assert.equal(harness.service.getBootstrapState().error.code, "WORKSPACE_RELAUNCH_FAILED");
+      assert.equal(harness.service.bootstrap().state, "ready");
 
       const retry = harness.service.chooseDirectory(candidate);
       const retried = await harness.service.confirmSelection({ token: retry.selection.token });

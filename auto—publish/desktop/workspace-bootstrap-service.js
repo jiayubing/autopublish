@@ -186,7 +186,6 @@ function createWorkspaceBootstrapService(options) {
       state = "checking";
       lastError = null;
       invalidateSelection();
-      retryRelaunchPath = null;
 
       const environmentPath = typeof env.AUTO_PUBLISH_WORKSPACE === "string" && env.AUTO_PUBLISH_WORKSPACE.trim() !== ""
         ? env.AUTO_PUBLISH_WORKSPACE
@@ -194,6 +193,7 @@ function createWorkspaceBootstrapService(options) {
       if (environmentPath) {
         const environmentResult = classify(environmentPath);
         if (environmentResult.kind === "invalid") return setInvalid(environmentResult.error.code);
+        if (retryRelaunchPath && retryRelaunchPath !== environmentResult.path) retryRelaunchPath = null;
         current = { path: environmentResult.path, envOverride: true, validation: environmentResult };
         state = "ready";
         return stateDto();
@@ -206,6 +206,7 @@ function createWorkspaceBootstrapService(options) {
 
       const savedResult = classify(saved.value.workspacePath);
       if (savedResult.kind === "invalid") return setInvalid(savedResult.error.code);
+      if (retryRelaunchPath && retryRelaunchPath !== savedResult.path) retryRelaunchPath = null;
       current = { path: savedResult.path, envOverride: false, validation: savedResult };
       state = "ready";
       return stateDto();
@@ -383,8 +384,12 @@ function createWorkspaceBootstrapService(options) {
       try {
         io.writeFileSync(record.markerPath, marker, { encoding: "utf8", flag: "wx" });
         record.markerCreated = true;
-        record.markerContent = io.readFileSync(record.markerPath, "utf8");
+        record.markerContent = marker;
         record.markerIdentity = statIdentity(io.lstatSync(record.markerPath), record.markerPath);
+        if (io.readFileSync(record.markerPath, "utf8") !== marker) {
+          record.captureFailed = true;
+          throwStable("WORKSPACE_CLEANUP_FAILED");
+        }
       } catch (error) {
         if (!error || error.code !== "EEXIST") throw error;
         const rechecked = classify(root);
