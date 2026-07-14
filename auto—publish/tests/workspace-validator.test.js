@@ -112,7 +112,14 @@ describe("workspace validator", function() {
     fs.writeFileSync(filePath, "file", "utf8");
     try {
       const validator = createValidator(root);
-      for (const candidate of [path.join(root, "missing"), filePath, "", null]) {
+      for (const candidate of [
+        path.join(root, "missing"),
+        filePath,
+        path.join("relative", "workspace"),
+        "C:relative-workspace",
+        "",
+        null
+      ]) {
         const result = validator.validate(candidate);
         assert.equal(result.kind, "invalid");
         assert.equal(result.error.code, "WORKSPACE_PATH_INVALID");
@@ -187,6 +194,61 @@ describe("workspace validator", function() {
       const result = createValidator(root, { fs: failingFs }).validate(candidate);
       assert.equal(result.kind, "invalid");
       assert.equal(result.error.code, "WORKSPACE_PATH_INVALID");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when a protected path realpath fails", function() {
+    const root = createTempDirectory("autopublish-validator-protected-realpath-");
+    const candidate = path.join(root, "candidate");
+    const appPath = path.join(root, "protected", "app");
+    fs.mkdirSync(candidate);
+    fs.mkdirSync(appPath, { recursive: true });
+    try {
+      const failingFs = Object.create(fs);
+      failingFs.realpathSync = function(value) {
+        if (path.resolve(value) === path.resolve(appPath)) {
+          const error = new Error("simulated protected realpath failure");
+          error.code = "EIO";
+          throw error;
+        }
+        return fs.realpathSync(value);
+      };
+      const result = createValidator(root, {
+        fs: failingFs,
+        appPath,
+        resourcesPath: path.join(root, "protected", "resources"),
+        userDataPath: path.join(root, "protected", "user-data"),
+        systemPaths: []
+      }).validate(candidate);
+      assert.equal(result.kind, "invalid");
+      assert.equal(result.error.code, "WORKSPACE_PATH_INVALID");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports probe cleanup failures without claiming the directory is merely unwritable", function() {
+    const root = createTempDirectory("autopublish-validator-cleanup-");
+    const candidate = path.join(root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const failingFs = Object.create(fs);
+      failingFs.unlinkSync = function(filePath) {
+        if (filePath.includes(".autopublish-write-probe-")) {
+          const error = new Error("simulated probe cleanup failure");
+          error.code = "EPERM";
+          throw error;
+        }
+        return fs.unlinkSync(filePath);
+      };
+      const result = createValidator(root, { fs: failingFs }).validate(candidate);
+      assert.equal(result.kind, "invalid");
+      assert.equal(result.error.code, "WORKSPACE_PROBE_CLEANUP_FAILED");
+      fs.readdirSync(candidate).filter(function(name) { return name.includes(".autopublish-write-probe-"); }).forEach(function(name) {
+        fs.unlinkSync(path.join(candidate, name));
+      });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

@@ -20,7 +20,7 @@ describe("workspace location store", function() {
   it("rejects missing or invalid userData paths without falling back to cwd", function() {
     const workspacePath = createTempDirectory("autopublish-location-no-userdata-workspace-");
     try {
-      for (const userDataPath of [undefined, null, "", "   ", "relative-user-data"]) {
+      for (const userDataPath of [undefined, null, "", "   ", "relative-user-data", path.join("invalid", "user\0data")]) {
         const store = createWorkspaceLocationStore({ userDataPath });
         assert.equal(store.userDataPath, null, JSON.stringify(userDataPath));
         assertSafeError(store.read(), "WORKSPACE_LOCATION_USER_DATA_INVALID");
@@ -112,6 +112,36 @@ describe("workspace location store", function() {
     }
   });
 
+  it("does not rename a truncated write and handles short writes by completing the buffer", function() {
+    const userDataPath = createTempDirectory("autopublish-location-short-write-");
+    const workspacePath = createTempDirectory("autopublish-location-short-write-workspace-");
+    try {
+      const shortWriteFs = Object.create(fs);
+      shortWriteFs.writeSync = function(fd, data, offset, length, position) {
+        const requestedLength = typeof length === "number" ? length : data.length;
+        const shortLength = Math.max(1, Math.min(requestedLength, 1));
+        return fs.writeSync(fd, data, offset, shortLength, position);
+      };
+      const result = createWorkspaceLocationStore({ userDataPath, fs: shortWriteFs }).write(workspacePath);
+      assert.equal(result.ok, true);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userDataPath, "workspace-location.json"), "utf8")), result.value);
+
+      const zeroWriteUserDataPath = createTempDirectory("autopublish-location-zero-write-");
+      try {
+        const zeroWriteFs = Object.create(fs);
+        zeroWriteFs.writeSync = function() { return 0; };
+        const failed = createWorkspaceLocationStore({ userDataPath: zeroWriteUserDataPath, fs: zeroWriteFs }).write(workspacePath);
+        assertSafeError(failed, "WORKSPACE_LOCATION_WRITE_FAILED");
+        assert.deepEqual(fs.readdirSync(zeroWriteUserDataPath), []);
+      } finally {
+        fs.rmSync(zeroWriteUserDataPath, { recursive: true, force: true });
+      }
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+      fs.rmSync(workspacePath, { recursive: true, force: true });
+    }
+  });
+
   it("preserves the old configuration when the atomic rename fails", function() {
     const userDataPath = createTempDirectory("autopublish-location-atomic-");
     const firstWorkspace = createTempDirectory("autopublish-old-workspace-");
@@ -135,6 +165,35 @@ describe("workspace location store", function() {
       fs.rmSync(userDataPath, { recursive: true, force: true });
       fs.rmSync(firstWorkspace, { recursive: true, force: true });
       fs.rmSync(secondWorkspace, { recursive: true, force: true });
+    }
+  });
+
+  it("reports cleanup failure separately when an atomic write cannot remove its temporary file", function() {
+    const userDataPath = createTempDirectory("autopublish-location-cleanup-");
+    const workspacePath = createTempDirectory("autopublish-location-cleanup-workspace-");
+    try {
+      const failingFs = Object.create(fs);
+      failingFs.renameSync = function() {
+        const error = new Error("simulated rename failure");
+        error.code = "EIO";
+        throw error;
+      };
+      failingFs.unlinkSync = function(filePath) {
+        if (filePath.includes(".workspace-location-")) {
+          const error = new Error("simulated cleanup failure");
+          error.code = "EPERM";
+          throw error;
+        }
+        return fs.unlinkSync(filePath);
+      };
+      const result = createWorkspaceLocationStore({ userDataPath, fs: failingFs }).write(workspacePath);
+      assertSafeError(result, "WORKSPACE_LOCATION_CLEANUP_FAILED");
+      fs.readdirSync(userDataPath).filter(function(name) { return name.includes(".workspace-location-"); }).forEach(function(name) {
+        fs.unlinkSync(path.join(userDataPath, name));
+      });
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+      fs.rmSync(workspacePath, { recursive: true, force: true });
     }
   });
 

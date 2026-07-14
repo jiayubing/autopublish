@@ -18,13 +18,16 @@ function isRelated(first, second) {
   return isWithin(first, second) || isWithin(second, first);
 }
 
-function canonicalPath(io, value) {
-  if (typeof value !== "string" || value.trim() === "" || value.includes("\0")) return null;
+function canonicalPath(io, value, allowMissing) {
+  if (typeof value !== "string" || value.trim() === "" || value.includes("\0")) return { ok: false };
   const normalized = path.resolve(value);
   try {
-    return io.realpathSync(normalized);
+    const realPath = io.realpathSync(normalized);
+    if (typeof realPath !== "string" || !path.isAbsolute(realPath)) return { ok: false };
+    return { ok: true, value: realPath };
   } catch (error) {
-    return normalized;
+    if (allowMissing && error && error.code === "ENOENT") return { ok: true, value: normalized };
+    return { ok: false };
   }
 }
 
@@ -82,14 +85,32 @@ function createWorkspaceValidator(options) {
   options = options || {};
   const io = options.fs || fs;
   const markerFileName = WORKSPACE_MARKER_FILE;
-  const userDataPath = canonicalPath(io, options.userDataPath);
-  const applicationPaths = [options.appPath, options.applicationPath, options.installPath, options.resourcesPath]
-    .filter(function(value) { return typeof value === "string" && value.trim() !== ""; })
-    .map(function(value) { return canonicalPath(io, value); })
-    .filter(Boolean);
-  const systemPaths = (options.systemPaths === undefined ? defaultSystemPaths() : options.systemPaths)
-    .map(function(value) { return canonicalPath(io, value); })
-    .filter(Boolean);
+  let protectedPathInvalid = false;
+
+  function collectProtectedPaths(values) {
+    const paths = [];
+    if (!Array.isArray(values)) {
+      protectedPathInvalid = true;
+      return paths;
+    }
+    values.forEach(function(value) {
+      const canonical = canonicalPath(io, value, true);
+      if (!canonical.ok) protectedPathInvalid = true;
+      else paths.push(canonical.value);
+    });
+    return paths;
+  }
+
+  const userDataValues = options.userDataPath === undefined || options.userDataPath === null
+    ? []
+    : [options.userDataPath];
+  const userDataPaths = collectProtectedPaths(userDataValues);
+  const applicationPaths = collectProtectedPaths(
+    [options.appPath, options.applicationPath, options.installPath, options.resourcesPath]
+      .filter(function(value) { return value !== undefined && value !== null; })
+  );
+  const systemPaths = collectProtectedPaths(options.systemPaths === undefined ? defaultSystemPaths() : options.systemPaths);
+  const userDataPath = userDataPaths[0] || null;
 
   function isForbidden(candidatePath) {
     if (path.parse(candidatePath).root === candidatePath) return true;
@@ -105,23 +126,34 @@ function createWorkspaceValidator(options) {
       ".autopublish-write-probe-" + process.pid + "-" + crypto.randomBytes(16).toString("hex") + ".tmp"
     );
     let descriptor = null;
+    let operationError = null;
+    let probeCreated = false;
+    let cleanupFailed = false;
     try {
       descriptor = io.openSync(probePath, "wx", 0o600);
+      probeCreated = true;
       io.closeSync(descriptor);
       descriptor = null;
-      io.unlinkSync(probePath);
-      return true;
     } catch (error) {
+      operationError = error;
+    } finally {
       if (descriptor !== null) {
-        try { io.closeSync(descriptor); } catch (closeError) { /* best effort cleanup */ }
+        try { io.closeSync(descriptor); } catch (error) { cleanupFailed = true; }
       }
-      try { io.unlinkSync(probePath); } catch (cleanupError) { /* best effort cleanup */ }
-      return false;
+      if (probeCreated) {
+        try { io.unlinkSync(probePath); } catch (error) { cleanupFailed = true; }
+      }
     }
+    if (cleanupFailed) return { ok: false, code: "WORKSPACE_PROBE_CLEANUP_FAILED" };
+    if (operationError) return { ok: false, code: "WORKSPACE_NOT_WRITABLE" };
+    return { ok: true };
   }
 
   function validate(candidate) {
     if (typeof candidate !== "string" || candidate.trim() === "" || candidate.includes("\0")) {
+      return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid");
+    }
+    if (!path.isAbsolute(candidate)) {
       return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid");
     }
     const normalized = path.resolve(candidate);
@@ -132,6 +164,9 @@ function createWorkspaceValidator(options) {
       return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid");
     }
     if (typeof realPath !== "string" || !path.isAbsolute(realPath)) {
+      return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid");
+    }
+    if (protectedPathInvalid) {
       return invalid("WORKSPACE_PATH_INVALID", "Workspace path is invalid");
     }
     if (isForbidden(realPath)) {
@@ -151,13 +186,19 @@ function createWorkspaceValidator(options) {
       return invalid("WORKSPACE_MARKER_INVALID", "Workspace marker is invalid", realPath);
     }
     if (marker.exists) {
-      if (!isWritable(realPath)) {
-        return invalid("WORKSPACE_NOT_WRITABLE", "Workspace path is not writable", realPath);
+      const writable = isWritable(realPath);
+      if (!writable.ok) {
+        return invalid(writable.code, writable.code === "WORKSPACE_PROBE_CLEANUP_FAILED"
+          ? "Workspace write probe could not be cleaned up"
+          : "Workspace path is not writable", realPath);
       }
       return { kind: "existing_workspace", path: realPath, marker: marker.value };
     }
-    if (!isWritable(realPath)) {
-      return invalid("WORKSPACE_NOT_WRITABLE", "Workspace path is not writable", realPath);
+    const writable = isWritable(realPath);
+    if (!writable.ok) {
+      return invalid(writable.code, writable.code === "WORKSPACE_PROBE_CLEANUP_FAILED"
+        ? "Workspace write probe could not be cleaned up"
+        : "Workspace path is not writable", realPath);
     }
 
     let entries;

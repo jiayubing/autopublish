@@ -12,6 +12,32 @@ function invalidUserDataResult() {
   return { ok: false, error: resultError("WORKSPACE_LOCATION_USER_DATA_INVALID", "Electron userData path is invalid") };
 }
 
+function cleanupTemporaryFile(io, temporaryPath, descriptor) {
+  let cleanupFailed = false;
+  if (descriptor !== null) {
+    try { io.closeSync(descriptor); } catch (error) { cleanupFailed = true; }
+  }
+  if (temporaryPath) {
+    try {
+      io.unlinkSync(temporaryPath);
+    } catch (error) {
+      if (!error || error.code !== "ENOENT") cleanupFailed = true;
+    }
+  }
+  return cleanupFailed;
+}
+
+function writeBufferFully(io, descriptor, buffer) {
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = io.writeSync(descriptor, buffer, offset, buffer.length - offset, null);
+    if (!Number.isInteger(written) || written <= 0 || written > buffer.length - offset) {
+      throw new Error("Workspace location temporary write made no progress");
+    }
+    offset += written;
+  }
+}
+
 function isPlainObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -55,6 +81,7 @@ function createWorkspaceLocationStore(options) {
   const userDataPath = typeof requestedUserDataPath === "string" &&
     requestedUserDataPath.length > 0 &&
     requestedUserDataPath === requestedUserDataPath.trim() &&
+    !requestedUserDataPath.includes("\0") &&
     path.isAbsolute(requestedUserDataPath)
     ? path.resolve(requestedUserDataPath)
     : null;
@@ -122,27 +149,30 @@ function createWorkspaceLocationStore(options) {
     let descriptor = null;
     let temporaryPath = null;
     try {
-      const serialized = JSON.stringify(validation.value) + "\n";
+      const serialized = Buffer.from(JSON.stringify(validation.value) + "\n", "utf8");
       temporaryPath = path.join(
         userDataPath,
         ".workspace-location-" + process.pid + "-" + crypto.randomBytes(16).toString("hex") + ".tmp"
       );
       io.mkdirSync(userDataPath, { recursive: true });
       descriptor = io.openSync(temporaryPath, "wx", 0o600);
-      io.writeSync(descriptor, serialized, 0, "utf8");
+      writeBufferFully(io, descriptor, serialized);
       if (typeof io.fsyncSync === "function") io.fsyncSync(descriptor);
       io.closeSync(descriptor);
       descriptor = null;
       io.renameSync(temporaryPath, locationPath);
       return { ok: true, value: validation.value };
     } catch (error) {
-      if (descriptor !== null) {
-        try { io.closeSync(descriptor); } catch (closeError) { /* best effort cleanup */ }
-      }
-      if (temporaryPath) {
-        try { io.unlinkSync(temporaryPath); } catch (cleanupError) { /* best effort cleanup */ }
-      }
-      return { ok: false, error: resultError("WORKSPACE_LOCATION_WRITE_FAILED", "Workspace location configuration could not be written") };
+      const cleanupFailed = cleanupTemporaryFile(io, temporaryPath, descriptor);
+      return {
+        ok: false,
+        error: resultError(
+          cleanupFailed ? "WORKSPACE_LOCATION_CLEANUP_FAILED" : "WORKSPACE_LOCATION_WRITE_FAILED",
+          cleanupFailed
+            ? "Workspace location temporary file could not be cleaned up"
+            : "Workspace location configuration could not be written"
+        )
+      };
     }
   }
 
