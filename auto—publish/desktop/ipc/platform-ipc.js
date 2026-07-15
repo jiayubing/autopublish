@@ -16,6 +16,7 @@ function registerPlatformIpc(deps) {
   });
   var service = createPlatformWorkbenchService({
     rootDir: rootDir,
+    paths: deps.paths,
     platforms: loadedPlatforms.map(function(platform) {
       return { id: platform.id, scanDir: platform.scanDir };
     }),

@@ -18,7 +18,7 @@ function submissionInputError() {
   return error;
 }
 
-function resolvePlatformSubmissionFile(rootDir, platforms, sourcePlatformId, filename) {
+function resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename) {
   if (typeof sourcePlatformId !== "string" || !sourcePlatformId || typeof filename !== "string" ||
       !filename || filename.trim() !== filename || path.basename(filename) !== filename ||
       path.isAbsolute(filename) || filename.indexOf("/") !== -1 || filename.indexOf("\\") !== -1) {
@@ -28,7 +28,7 @@ function resolvePlatformSubmissionFile(rootDir, platforms, sourcePlatformId, fil
   if (!source) throw submissionInputError();
   var ext = path.extname(filename).toLowerCase();
   if ([".md", ".txt", ".docx"].indexOf(ext) === -1) throw submissionInputError();
-  var inputDir = path.resolve(rootDir, "input", source.scanDir || source.id);
+  var inputDir = path.resolve(inputRoot, source.scanDir || source.id);
   var filePath = path.resolve(inputDir, filename);
   if (path.dirname(filePath) !== inputDir) throw submissionInputError();
   var stat;
@@ -40,6 +40,9 @@ function resolvePlatformSubmissionFile(rootDir, platforms, sourcePlatformId, fil
 function createPlatformWorkbenchService(opts) {
   var options = opts || {};
   var rootDir = options.rootDir || path.resolve(__dirname, "..", "..");
+  var inputRoot = options.paths && typeof options.paths.input === "string"
+    ? path.resolve(options.paths.input)
+    : path.join(rootDir, "input");
   var platforms = options.platforms || [];
   var adapters = options.adapters || {};
 
@@ -49,7 +52,7 @@ function createPlatformWorkbenchService(opts) {
     }).map(function(platform) {
       var platformId = platform.id;
       var scanDir = platform.scanDir || platform.id;
-      var inputDir = path.join(rootDir, "input", scanDir);
+      var inputDir = path.join(inputRoot, scanDir);
       var articles = [];
       if (fs.existsSync(inputDir)) {
         articles = fs.readdirSync(inputDir).filter(function(name) {
@@ -81,7 +84,7 @@ function createPlatformWorkbenchService(opts) {
   }
 
   function resolveSelectedFilePath(article) {
-    return resolvePlatformSubmissionFile(rootDir, platforms, article.sourcePlatformId, article.filename);
+    return resolvePlatformSubmissionFile(inputRoot, platforms, article.sourcePlatformId, article.filename);
   }
 
   function buildSelectedPlan(input) {

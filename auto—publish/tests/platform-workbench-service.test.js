@@ -38,6 +38,25 @@ describe("platform-workbench-service", function() {
     assert.strictEqual(queue[0].articles[0].filename, "a.txt");
   });
 
+  it("scans and resolves platform queues from the injected content input path", function() {
+    const portableInput = path.join(root, ".autopublish", "input");
+    fs.mkdirSync(path.join(portableInput, "lieju"), { recursive: true });
+    fs.writeFileSync(path.join(portableInput, "lieju", "portable.txt"), "Portable\nBody", "utf-8");
+    const portableService = createPlatformWorkbenchService({
+      rootDir: root,
+      paths: { input: portableInput },
+      platforms: [{ id: "lieju", scanDir: "lieju" }]
+    });
+
+    const queue = portableService.scanQueue();
+    assert.deepStrictEqual(queue[0].articles.map(function(article) { return article.filename; }), ["portable.txt"]);
+    const plan = portableService.buildSelectedPlan({
+      selectedArticles: [{ sourcePlatformId: "lieju", filename: "portable.txt" }],
+      targetPlatformIds: ["lieju"]
+    });
+    assert.equal(plan.tasks[0].filePath, path.join(portableInput, "lieju", "portable.txt"));
+  });
+
   it("builds selected article target plan", function() {
     const plan = service.buildSelectedPlan({
       selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt" }],
