@@ -104,8 +104,24 @@ function createContentSubmissionService(opts) {
     batch.updatedAt = new Date().toISOString(); batchStore.save(batch);
     return { batchId: batch.id, cancelledCount, skippedCount, items: batch.items };
   }
+  function previewCancelBatch(value) {
+    if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
+    const batch = batchStore.get(value.batchId);
+    let cancelableCount = 0; let uncancelableCount = 0;
+    const items = batch.items.map((item) => {
+      const copy = Object.assign({}, item); delete copy.filePath; delete copy.sidecarPath;
+      if (item.status !== "queued") { uncancelableCount += 1; return Object.assign(copy, { cancelable: false }); }
+      try {
+        const sidecar = JSON.parse(fs.readFileSync(item.sidecarPath, "utf8"));
+        const valid = sidecar.submissionBatchId === batch.id && fs.existsSync(item.filePath) && hash(fs.readFileSync(item.filePath, "utf8")) === item.contentHash;
+        if (valid) cancelableCount += 1; else uncancelableCount += 1;
+        return Object.assign(copy, { cancelable: valid });
+      } catch (_) { uncancelableCount += 1; return Object.assign(copy, { cancelable: false }); }
+    });
+    return { batchId: batch.id, cancelableCount, uncancelableCount, items };
+  }
   function input(value) { if (!value || value.confirmed !== true || !value.clientId) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return value; }
   function exporterFor(value) { return options.exporter || createSubmissionExportService({ rootDir: options.workspaceRoot, getArticle: function(id) { return store.getArticle(value.clientId, id); } }); }
-  return { previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); }, exportArticle: function(value) { value = input(value); return exporterFor(value).exportArticle(value); }, listPlatforms, previewBatch, createBatch, cancelBatch, getBatch: function(batchId) { return batchStore.get(batchId); }, listBatches: function() { return batchStore.list(); } };
+  return { previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); }, exportArticle: function(value) { value = input(value); return exporterFor(value).exportArticle(value); }, listPlatforms, previewBatch, createBatch, previewCancelBatch, cancelBatch, getBatch: function(batchId) { return batchStore.get(batchId); }, listBatches: function() { return batchStore.list(); } };
 }
 module.exports = { createContentSubmissionService };

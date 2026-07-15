@@ -267,12 +267,17 @@ export interface GeneratedContentArticle {
   id: string; clientId: string; materialIds?: string[]; researchQueryIds: string[]; researchQueryId?: string; researchSnapshots?: ResearchSnapshot[]; platform: string; scenario: string; templateId: string;
   title: string; content: string; status: 'generated' | 'saved' | string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string; reviewedAt?: string | null;
   materialSnapshots?: Array<{ id: string; name: string; extension: string; content: string; contentHash: string; source: string }>;
-  templateSnapshot?: { platform: string; id: string; name: string; scenario: string; body: string; bodyHash: string };
+  templateSnapshot?: { platform: string; id: string; name: string; scenario: string; body: string; bodyHash: string; source?: 'builtin' | 'custom' };
   generationBatchId?: string | null; generationTaskId?: string | null;
 }
 
 export interface ArticleReviewSelection { clientId: string; articleId: string; }
 export interface ArticleReviewResult { approved: string[]; rejected: Array<{ articleId: string; code: string }>; skipped: string[]; }
+export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
+export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: string; contentHash: string; filePath?: string; sidecarPath?: string; }
+export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; conflictCount: number; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
+export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
+export interface ContentSubmissionCancellationPreview { batchId: string; cancelableCount: number; uncancelableCount: number; items: Array<ContentSubmissionBatchItem & { cancelable: boolean }>; }
 
 export interface PlatformArticle {
   filename: string;

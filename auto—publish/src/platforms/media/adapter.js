@@ -176,6 +176,7 @@ var draftStore = new MediaDraftStore();
 
 module.exports = {
   id: 'media',
+  contentQueueImport: true,
   scanDir: 'media',
 
   ensureSession: function() {},

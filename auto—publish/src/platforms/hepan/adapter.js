@@ -146,6 +146,7 @@ async function publishArticle(article) {
 
 module.exports = {
   id: "hepan",
+  contentQueueImport: true,
   scanDir: "hepan",
   ensureSession: ensureSession,
   ensureLoggedIn: ensureLoggedIn,

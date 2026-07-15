@@ -1,0 +1,5 @@
+# Separate installation, local state, and portable content
+
+AutoPublish separates immutable installation resources, machine-local application state, and a user-selected portable content library. The installation contains only code and bundled read-only assets; small settings and encrypted credentials live under `%APPDATA%`, caches, logs, browser profiles, and temporary runtime state live under `%LOCALAPPDATA%`, while clients, generated articles, custom templates, research, generation batches, submission queues, and submission records travel with the content library. Existing data is converted once by an external dry-run-capable migration script rather than by permanent in-app migration machinery.
+
+This avoids writing mutable data into an upgrade-controlled installation directory, prevents large browser caches from entering roaming configuration, and keeps all business records portable without exposing every managed directory to users. The content library presents `clients`, `generated`, and `templates` as user-facing folders and stores other portable records under its managed `.autopublish` directory.

@@ -14,6 +14,7 @@ import {
   AiProviderTestResult,
   GenerationBatchState,
 } from '../types';
+import { formatBeijingTime } from '../time-format';
 
 const DEFAULT_TIMEOUT_MS = 60000;
 const GENERATION_BATCH_STATE_EVENT = 'content:generation-batch-state';
@@ -91,7 +92,7 @@ function initialForm(status: AiProviderStatus): AiProviderConfigInput {
 
 function formatTestResult(result: AiProviderTestResult | null): string {
   if (!result) return '尚未测试连接。';
-  const time = result.testedAt ? new Date(result.testedAt).toLocaleString() : '刚刚';
+  const time = result.testedAt ? formatBeijingTime(result.testedAt) : '刚刚';
   return result.ok ? `最近测试成功：${time}` : `最近测试失败：${time}`;
 }
 

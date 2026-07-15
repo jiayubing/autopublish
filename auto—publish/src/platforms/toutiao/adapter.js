@@ -465,6 +465,7 @@ function loadSidecar(articleFile) {
 
 module.exports = {
   id: "toutiao",
+  contentQueueImport: true,
   scanDir: "toutiao",
   ensureSession: ensureDaemon,
   ensureLoggedIn: ensureLoggedIn,

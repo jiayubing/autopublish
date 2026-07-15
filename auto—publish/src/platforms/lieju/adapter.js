@@ -331,6 +331,7 @@ async function ensureLoggedIn(options) {
 
 module.exports = {
   id: "lieju",
+  contentQueueImport: true,
   scanDir: LIEJU.selectors.articleDir,
   ensureSession: ensureDaemon,
   ensureLoggedIn: ensureLoggedIn,

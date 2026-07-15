@@ -131,7 +131,7 @@ export default function PreflightModal({
       platforms: orderPlatforms,
       totalFee: totalSubmissionFee,
       mediaCount: totalMedia,
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      createdAt: new Date().toISOString(),
       status: status,
       logs: currentLogs
     };

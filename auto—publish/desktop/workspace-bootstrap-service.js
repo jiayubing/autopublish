@@ -449,7 +449,7 @@ function createWorkspaceBootstrapService(options) {
     };
     try {
       if (opts.ensureWorkspaceDirectories) ensureDirectories(paths);
-      else secureEnsureWorkspaceDirectories(paths);
+      secureEnsureWorkspaceDirectories(paths);
       captureDirectoryArtifacts(record);
       const marker = JSON.stringify({ version: 1, createdAt: readClock(clock).toISOString() }) + "\n";
       try {

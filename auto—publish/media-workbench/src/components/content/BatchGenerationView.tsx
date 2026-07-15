@@ -79,7 +79,7 @@ export default function BatchGenerationView({ clients, refreshToken, onRefresh }
   const operationBusyRef = useRef(false);
 
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
-  const templateGroups = useMemo(() => groupTemplatesByPlatform(templates.map((template) => ({ ...template, name: `${template.name} ? ${templateSourceLabel(template)}` }))), [templates]);
+  const templateGroups = useMemo(() => groupTemplatesByPlatform(templates.map((template) => ({ ...template, name: `${template.name} · ${templateSourceLabel(template)}` }))), [templates]);
   const currentSources = useMemo<GenerationBatchSourceSelection[]>(() => selectedClientIds.map((clientId) => ({
     clientId,
     ...reconcileSourceSelection(
