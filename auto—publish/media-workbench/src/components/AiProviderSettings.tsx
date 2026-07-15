@@ -169,9 +169,6 @@ export default function AiProviderSettings() {
     setError(null);
     setNotice(null);
     if (!validateForm()) return;
-    const confirmed = typeof window === 'undefined' || typeof window.confirm !== 'function'
-      || window.confirm('保存后将供下一次生成使用。是否继续？');
-    if (!confirmed) return;
     setSaving(true);
     try {
       const nextStatus = await saveAiProviderConfig(currentInput());

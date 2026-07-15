@@ -126,7 +126,8 @@ function createAiProviderService(options) {
     }).then(function() {
       const result = { testedAt: now(), ok: true, code: "AI_CONNECTION_OK" };
       lastTransientTest = result;
-      if (current) configStore.write({ baseUrl: current.baseUrl, apiKey: current.apiKey, model: current.model, timeoutMs: current.timeoutMs, lastTest: result });
+      const persisted = current || config;
+      configStore.write({ baseUrl: persisted.baseUrl, apiKey: persisted.apiKey, model: persisted.model, timeoutMs: persisted.timeoutMs, lastTest: result });
       return result;
     }, function() {
       throw providerError("AI_CONNECTION_FAILED", "AI connection test failed");

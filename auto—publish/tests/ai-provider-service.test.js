@@ -96,6 +96,26 @@ describe("AI provider service", function() {
     assert.equal(service.getStatus().configured, false);
   });
 
+  it("persists a successful first connection test when no application config exists", async function() {
+    const store = createStore();
+    const service = createAiProviderService({
+      configStore: store,
+      now: function() { return "2026-07-15T01:00:00.000Z"; },
+      aiClientFactory: function() { return { complete: async function() { return "OK"; } }; }
+    });
+
+    const result = await service.testConnection(config);
+
+    assert.deepStrictEqual(result, { testedAt: "2026-07-15T01:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" });
+    assert.deepStrictEqual(service.getStatus(), {
+      source: "application", configured: true, baseUrl: config.baseUrl, model: config.model,
+      timeoutMs: 60000, hasApiKey: true, apiKeyMask: "••••••••", lastTest: result
+    });
+    assert.deepStrictEqual(store.read(), {
+      baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: 60000, lastTest: result
+    });
+  });
+
   it("blocks configuration mutations while a generation batch is running or stopping", function() {
     const store = createStore(config);
     const service = createAiProviderService({ configStore: store, getBatchState: function() { return { isBatchRunning: true }; } });

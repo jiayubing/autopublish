@@ -10,6 +10,12 @@ function readSource(relativePath) {
   return fs.readFileSync(path.join(MW, relativePath), "utf8");
 }
 
+function readFunction(source, name) {
+  const start = source.indexOf(`const ${name} =`);
+  const end = source.indexOf("\n  const ", start + 1);
+  return source.slice(start, end === -1 ? source.length : end);
+}
+
 describe("renderer AI provider settings", function() {
   it("exposes the Task 5 provider IPC through typed renderer helpers", function() {
     const api = readSource("electron-api.ts");
@@ -38,19 +44,30 @@ describe("renderer AI provider settings", function() {
     assert.doesNotMatch(settings, /\bfetch\s*\(/);
   });
 
-  it("covers source, confirmations, cost warning, and generation busy state", function() {
+  it("confirms only connection tests and clearing, not saving", function() {
     const settings = readSource("components/AiProviderSettings.tsx");
+    const save = readFunction(settings, "handleSave");
+    const test = readFunction(settings, "handleTest");
+    const clear = readFunction(settings, "handleClear");
 
     assert.match(settings, /source/);
-    assert.match(settings, /window\.confirm/);
-    assert.match(settings, /handleSave[\s\S]*window\.confirm/);
-    assert.match(settings, /handleTest[\s\S]*window\.confirm/);
-    assert.match(settings, /handleClear[\s\S]*window\.confirm/);
-    assert.match(settings, /可能产生少量费用/);
+    assert.match(test, /window\.confirm/);
+    assert.match(clear, /window\.confirm/);
+    assert.doesNotMatch(save, /window\.confirm/);
+    assert.match(settings, /completion/);
+  });
+
+  it("guards generation state to the content channel", function() {
+    const settings = readSource("components/AiProviderSettings.tsx");
+    const api = readSource("electron-api.ts");
+
     assert.match(settings, /running/);
     assert.match(settings, /stopping/);
     assert.match(settings, /content:generation-batch-state/);
     assert.match(settings, /disabled=\{[^}]*busy/);
+    assert.match(api, /return \{ state: 'idle', status: 'idle' \}/);
+    assert.doesNotMatch(api, /window\.desktopConsole!\.batch\.getState\(\)/);
+    assert.doesNotMatch(api, /window\.desktopConsole!\.batch\.onState\(listener\)/);
   });
 
   it("keeps long provider URLs inside the settings layout", function() {
@@ -65,16 +82,10 @@ describe("renderer AI provider settings", function() {
     assert.match(settingsView, /<AiProviderSettings\s*\/>/);
   });
 
-  it("uses the existing preload batch state channel to disable provider mutations", function() {
+  it("declares the optional content generation state channel", function() {
     const api = readSource("electron-api.ts");
-    const preload = fs.readFileSync(path.join(ROOT, "desktop", "preload.js"), "utf8");
 
-    assert.match(preload, /batch:\s*\{/);
-    assert.match(preload, /getState:\s*function\(\)\s*\{\s*return ipcRenderer\.invoke\("desktop:get-state"\)/);
-    assert.match(preload, /onState:\s*function\(listener\)/);
-    assert.match(api, /interface DesktopConsoleBatch/);
-    assert.match(api, /batch:\s*DesktopConsoleBatch/);
-    assert.match(api, /window\.desktopConsole!\.batch\.getState\(\)/);
-    assert.match(api, /window\.desktopConsole!\.batch\.onState\(listener\)/);
+    assert.match(api, /getGenerationBatchState\?:/);
+    assert.match(api, /onGenerationBatchState\?:/);
   });
 });

@@ -74,11 +74,6 @@ interface DesktopConsoleContent {
   onGenerationBatchState?: (listener: (state: GenerationBatchState) => void) => () => void;
 }
 
-interface DesktopConsoleBatch {
-  getState(): Promise<IpcResponse<GenerationBatchState>>;
-  onState(listener: (state: GenerationBatchState) => void): () => void;
-}
-
 interface DesktopConsoleAiProvider {
   getStatus(): Promise<IpcResponse<AiProviderStatus>>;
   save(input: AiProviderConfigInput): Promise<IpcResponse<AiProviderStatus>>;
@@ -102,7 +97,6 @@ export interface ContentExportPreview { filename: string; targetPlatform: string
 interface DesktopConsole {
   workspace: DesktopConsoleWorkspace;
   aiProvider: DesktopConsoleAiProvider;
-  batch: DesktopConsoleBatch;
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
@@ -339,20 +333,17 @@ export async function clearAiProviderConfig(): Promise<AiProviderClearResult> {
 
 export async function getGenerationBatchState(): Promise<GenerationBatchState> {
   if (!isElectron()) return { state: 'idle', status: 'idle' };
-  const command = window.desktopConsole!.content.getGenerationBatchState;
-  const result = typeof command === 'function'
-    ? await command()
-    : await window.desktopConsole!.batch.getState();
+  const command = window.desktopConsole!.content?.getGenerationBatchState;
+  if (typeof command !== 'function') return { state: 'idle', status: 'idle' };
+  const result = await command();
   if (!result.ok) throw getIpcError(result.error, "Unable to read generation batch state");
   return result.data || { state: 'idle', status: 'idle' };
 }
 
 export function subscribeGenerationBatchState(listener: (state: GenerationBatchState) => void): () => void {
   if (!isElectron()) return () => undefined;
-  const subscribe = window.desktopConsole!.content.onGenerationBatchState;
-  return typeof subscribe === 'function'
-    ? subscribe(listener)
-    : window.desktopConsole!.batch.onState(listener);
+  const subscribe = window.desktopConsole!.content?.onGenerationBatchState;
+  return typeof subscribe === 'function' ? subscribe(listener) : () => undefined;
 }
 
 export async function previewDoubaoBatch(input: { clientIds: string[]; mode: DoubaoBatchMode }): Promise<DoubaoBatchPreview> {
