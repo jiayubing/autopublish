@@ -105,12 +105,14 @@ function createGenerationBatchRunner(options) {
   }
 
   function findExistingArticle(task) {
-    const finder = typeof deps.findByGenerationTaskId === "function"
-      ? deps.findByGenerationTaskId
-      : (deps.articleStore && typeof deps.articleStore.findByGenerationTaskId === "function"
-        ? deps.articleStore.findByGenerationTaskId.bind(deps.articleStore) : null);
-    if (!finder) return null;
-    return Promise.resolve().then(function() { return finder(task.id); }).catch(function(error) {
+    const injectedFinder = typeof deps.findByGenerationTaskId === "function" ? deps.findByGenerationTaskId : null;
+    const articleStoreFinder = !injectedFinder && deps.articleStore && typeof deps.articleStore.findByGenerationTaskId === "function"
+      ? deps.articleStore.findByGenerationTaskId.bind(deps.articleStore) : null;
+    if (!injectedFinder && !articleStoreFinder) return null;
+    return Promise.resolve().then(function() {
+      if (injectedFinder) return injectedFinder(task);
+      return articleStoreFinder(task.id);
+    }).catch(function(error) {
       if (error && (error.code === "ARTICLE_NOT_FOUND" || error.code === "GENERATION_ARTICLE_NOT_FOUND")) return null;
       throw error;
     });
@@ -177,11 +179,6 @@ function createGenerationBatchRunner(options) {
         if (error && (error.code === "GENERATION_TASK_ALREADY_SUCCEEDED" || error.code === "GENERATION_TASK_BUSY")) return;
         throw error;
       }
-      const existingAfterClaim = await findExistingArticle(task);
-      if (existingAfterClaim) {
-        if (!stopSignal.aborted) deps.batchStore.markTaskSucceeded(batchId, task.id, existingAfterClaim.id);
-        return;
-      }
       const result = await executeWithRetry(task, controller.signal);
       if (stopSignal.aborted) throw abortError();
       if (deps.articleStore && typeof deps.articleStore.saveArticle === "function" && result && typeof result === "object" &&
@@ -196,11 +193,11 @@ function createGenerationBatchRunner(options) {
         return;
       }
       if (isConfigurationError(error)) {
-        if (claimed) deps.batchStore.markTaskFailed(batchId, task.id, safeError(error));
+        deps.batchStore.markTaskFailed(batchId, task.id, safeError(error));
         deps.batchStore.updateBatchStatus(batchId, "paused_configuration");
         throw error;
       }
-      if (claimed) deps.batchStore.markTaskFailed(batchId, task.id, safeError(error));
+      deps.batchStore.markTaskFailed(batchId, task.id, safeError(error));
     } finally {
       stopSignal.removeEventListener("abort", onStop);
       activeTasks.delete(task.id);
