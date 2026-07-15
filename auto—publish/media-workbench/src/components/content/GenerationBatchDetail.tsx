@@ -23,7 +23,7 @@ export default function GenerationBatchDetail({ batch, state, busy, onPause, onR
   const runtimeStateMatches = state.batchId === batch.id && Boolean(state.status) && state.status !== 'idle';
   const effectiveStatus = runtimeStateMatches ? state.status as string : batch.status;
   const active = effectiveStatus === 'running' || effectiveStatus === 'stopping';
-  const unfinished = counts.pending > 0 || counts.interrupted > 0;
+  const unfinished = counts.pending > 0 || counts.failed > 0 || counts.interrupted > 0;
   const showCostWarning = active || (batch.status === 'stopped' && unfinished);
   const failed = counts.failed > 0;
   const terminal = batch.status === 'completed' || batch.status === 'stopped';

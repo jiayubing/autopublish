@@ -198,4 +198,20 @@ describe("renderer content generation workflow", function() {
     assert.match(detail, /effectiveStatus/);
     assert.match(detail, /batch\.status/);
   });
+
+  it("does not let initial idle hydration overwrite a matching runtime batch state", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.match(batch, /state\.batchId === persistedBatch\?\.id/);
+    assert.match(batch, /state\.status !== 'idle'/);
+  });
+
+  it("clears the optimistic running state when a batch command fails", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.match(batch, /catch \(value\)[\s\S]*setBatchState\(\{ status: 'idle', state: 'idle', batchId \}\)/);
+  });
+
+  it("offers continuation when failed tasks are the only unfinished work", function() {
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(detail, /const unfinished = counts\.pending > 0 \|\| counts\.failed > 0 \|\| counts\.interrupted > 0/);
+  });
 });

@@ -153,10 +153,10 @@ export default function BatchGenerationView({ clients, refreshToken, onRefresh }
     });
     Promise.all([getGenerationBatchState(), listGenerationBatches()]).then(([state, batches]) => {
       if (disposed) return;
-      setBatchState(state);
       const persistedBatch = batches.find((item) => RESUMABLE_BATCH_STATUSES.has(item.status) || !TERMINAL_BATCH_STATUSES.has(item.status))
         || batches[batches.length - 1]
         || null;
+      if (state.batchId === persistedBatch?.id && state.status !== 'idle') setBatchState(state);
       if (persistedBatch) {
         setBatch(persistedBatch);
         setViewMode('monitoring');
@@ -234,7 +234,10 @@ export default function BatchGenerationView({ clients, refreshToken, onRefresh }
       if (next) setBatch(next);
       setBatch(await getGenerationBatch(batchId));
     }
-    catch (value) { setError(value instanceof Error ? value.message : '批量任务操作失败'); }
+    catch (value) {
+      setBatchState({ status: 'idle', state: 'idle', batchId });
+      setError(value instanceof Error ? value.message : '批量任务操作失败');
+    }
     finally { operationBusyRef.current = false; setLoading(false); }
   }
 
