@@ -91,4 +91,17 @@ describe("content workbench regression", function() {
     assert.match(item, /aria-expanded/);
     assert.doesNotMatch(item, /activeId/);
   });
+
+  it("keeps Task 10 single and batch generation workflows on renderer APIs", function() {
+    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const api = read("media-workbench/src/electron-api.ts");
+    ["单篇生成", "批量生成", "CollapsibleSourceItem", "materialIds", "researchQueryIds"].forEach(function(value) {
+      assert.equal(article.includes(value), true, "missing " + value);
+    });
+    ["previewGenerationBatch", "startGenerationBatch", "getGenerationBatchState", "pauseGenerationBatch", "resumeGenerationBatch", "stopGenerationBatch", "retryFailedGenerationBatch"].forEach(function(value) {
+      assert.equal(batch.includes(value) && api.includes(value), true, "missing " + value);
+    });
+    assert.doesNotMatch(batch, /safeStorage|readFileSync|Playwright|playwright|fetch\(/i);
+  });
 });

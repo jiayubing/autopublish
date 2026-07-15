@@ -17,3 +17,13 @@ body { background-color: #f6f7f4; }
 .task-icon-button:hover { background: #f1f5f9; }
 .task-icon-button:disabled { cursor: not-allowed; opacity: .4; }
 .ai-provider-url { overflow-wrap: anywhere; word-break: break-all; }
+.segmented-control { display: inline-flex; min-height: 36px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 7px; background: #f8fafc; }
+.segmented-control button { min-width: 112px; padding: 0 16px; color: #64748b; font-size: 12px; font-weight: 600; }
+.segmented-control button + button { border-left: 1px solid #cbd5e1; }
+.segmented-control button.is-active { background: #0f172a; color: #fff; }
+.batch-stepper { min-width: 0; }
+.batch-step { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 6px; padding: 7px 4px; color: #64748b; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.batch-step span { display: inline-flex; height: 20px; width: 20px; align-items: center; justify-content: center; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 10px; }
+.batch-step.is-active { color: #0f172a; }
+.batch-step.is-active span, .batch-step.is-complete span { background: #2563eb; color: #fff; }
+.generation-batch-task-list { scrollbar-gutter: stable; }

@@ -44,6 +44,18 @@ export interface GenerationBatchState {
   status?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
   isBatchRunning?: boolean;
   isStopPending?: boolean;
+  batchId?: string | null;
+  counts?: GenerationBatchCounts;
+  taskId?: string | null;
+  error?: { code?: string; message?: string } | null;
+}
+
+export interface GenerationBatchCounts {
+  total: number;
+  succeeded: number;
+  failed: number;
+  pending: number;
+  interrupted: number;
 }
 
 export type WorkspaceBootstrapStatus =
@@ -173,7 +185,16 @@ export type Order = SubmissionOrder;
 
 export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'platforms' | 'content';
 
-export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: Array<{ name: string; content: string }>; }
+export interface ContentMaterial {
+  id?: string;
+  name: string;
+  extension?: string;
+  status?: 'ready' | 'error' | 'converting' | string;
+  content: string;
+  characterCount?: number;
+  error?: { code?: string; message?: string } | null;
+}
+export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: ContentMaterial[]; }
 export interface ContentQuestion { id: string; text: string; enabled: boolean; createdAt: string; updatedAt: string; }
 export type DoubaoBatchMode = 'missing' | 'recollect';
 export interface DoubaoBatchTask { clientId: string; questionId: string; force: boolean; }
@@ -192,9 +213,47 @@ export interface DoubaoQueueState { status: 'idle' | 'running' | 'paused' | 'sto
 export interface DoubaoLoginState { status: DoubaoLoginStatus; errorText?: string; }
 export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; collectionMethod: 'automatic' | 'manual' | 'legacy'; collectedAt?: string; updatedAt?: string; createdAt?: string; isAnswerComplete?: boolean; }
 export interface ContentTemplate { id: string; platform: string; scenario: string; name: string; body: string; }
+export interface GenerationBatchTemplateSelection { platform: string; templateId: string; }
+export interface GenerationBatchSourceSelection { clientId: string; materialIds: string[]; researchQueryIds: string[]; }
+export interface GenerationBatchExcludedClient { clientId: string; codes: string[]; }
+export interface GenerationBatchPreview {
+  clientCount: number;
+  executableClientCount: number;
+  taskCount: number;
+  executableTaskCount: number;
+  excludedTaskCount: number;
+  excludedClients: GenerationBatchExcludedClient[];
+  templates: GenerationBatchTemplateSelection[];
+  clientSources: GenerationBatchSourceSelection[];
+  tasks?: Array<GenerationBatchSourceSelection & { platform: string; templateId: string }>;
+}
+export type GenerationTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'interrupted';
+export interface GenerationBatchTask {
+  id: string;
+  clientId: string;
+  platform: string;
+  templateId: string;
+  materialIds: string[];
+  researchQueryIds: string[];
+  status: GenerationTaskStatus;
+  attempts: number;
+  error?: { code?: string; message?: string } | null;
+  articleId?: string | null;
+}
+export interface GenerationBatch {
+  id: string;
+  status: string;
+  clientSources: GenerationBatchSourceSelection[];
+  templates: GenerationBatchTemplateSelection[];
+  tasks: GenerationBatchTask[];
+  counts: GenerationBatchCounts;
+  excludedClients?: GenerationBatchExcludedClient[];
+  aiConfigFingerprint?: string;
+  updatedAt?: string;
+}
 export interface ResearchSnapshot { questionId: string; question?: string; answerText: string; references: Array<{ title: string; url: string; snippet?: string }>; collectedAt?: string; collectionMethod: 'automatic' | 'manual' | 'legacy'; }
 export interface GeneratedContentArticle {
-  id: string; clientId: string; researchQueryIds: string[]; researchQueryId?: string; researchSnapshots?: ResearchSnapshot[]; platform: string; scenario: string; templateId: string;
+  id: string; clientId: string; materialIds?: string[]; researchQueryIds: string[]; researchQueryId?: string; researchSnapshots?: ResearchSnapshot[]; platform: string; scenario: string; templateId: string;
   title: string; content: string; status: string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string;
 }
 
