@@ -50,8 +50,9 @@ function createAiProviderService(options) {
   }
 
   function statusFor(config, source) {
+    const lastTest = lastTransientTest || (config && config.lastTest) || null;
     if (!config) {
-      return { source: "application", configured: false, baseUrl: "", model: "", timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: null };
+      return { source: "application", configured: false, baseUrl: "", model: "", timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: lastTest };
     }
     return {
       source: source || config.source || "application",
@@ -61,7 +62,7 @@ function createAiProviderService(options) {
       timeoutMs: Number(config.timeoutMs),
       hasApiKey: Boolean(config.apiKey),
       apiKeyMask: config.apiKey ? "••••••••" : "",
-      lastTest: config.lastTest || null
+      lastTest: lastTest
     };
   }
 
@@ -115,9 +116,13 @@ function createAiProviderService(options) {
     try {
       client = aiClientFactory({ apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model, timeoutMs: config.timeoutMs });
     } catch (_) {
+      lastTransientTest = { testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" };
       return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
     }
-    if (!client || typeof client.complete !== "function") return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
+    if (!client || typeof client.complete !== "function") {
+      lastTransientTest = { testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" };
+      return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
+    }
     return Promise.resolve().then(function() {
       return client.complete([
         { role: "system", content: "Connection test" },
@@ -130,6 +135,7 @@ function createAiProviderService(options) {
       configStore.write({ baseUrl: persisted.baseUrl, apiKey: persisted.apiKey, model: persisted.model, timeoutMs: persisted.timeoutMs, lastTest: result });
       return result;
     }, function() {
+      lastTransientTest = { testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" };
       throw providerError("AI_CONNECTION_FAILED", "AI connection test failed");
     });
   }

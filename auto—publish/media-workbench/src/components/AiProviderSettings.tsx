@@ -195,6 +195,12 @@ export default function AiProviderSettings() {
       setStatus((current) => ({ ...current, lastTest: result }));
       setNotice('连接测试成功；测试回答不会被保存。');
     } catch (testError) {
+      try {
+        const nextStatus = await getAiProviderStatus();
+        setStatus(nextStatus);
+      } catch (_) {
+        // Keep the original rejected test error when the status refresh is unavailable.
+      }
       setError(safeErrorMessage(testError));
     } finally {
       setTesting(false);

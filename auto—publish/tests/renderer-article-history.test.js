@@ -45,11 +45,21 @@ describe("article history grouping", async function() {
     assert.equal(resolveAvailableTemplateId(historical, [{ id: "current", platform: "ctrip", scenario: "guide" }]), "deleted-template");
     assert.equal(summarizeTemplateSnapshot(historical.templateSnapshot), "body");
 
-    const groups = groupArticlesByTemplate([item("legacy", "ctrip", "deleted-template", "2026-07-12T00:00:00.000Z", { templateSnapshot: undefined })]);
+    const groups = groupArticlesByTemplate([item("legacy", "", undefined, "2026-07-12T00:00:00.000Z", { templateSnapshot: undefined })]);
 
     assert.equal(groups.length, 1);
     assert.equal(groups[0].label, "旧版未分类");
     assert.deepStrictEqual(groups[0].articles.map((article) => article.id), ["legacy"]);
+  });
+
+  it("separates legacy articles by platform and template id when available", function() {
+    const groups = groupArticlesByTemplate([
+      item("ctrip-legacy", "ctrip", "old-guide", "2026-07-12T00:00:00.000Z", { templateSnapshot: undefined }),
+      item("toutiao-legacy", "toutiao", "old-news", "2026-07-13T00:00:00.000Z", { templateSnapshot: undefined }),
+    ]);
+
+    assert.deepStrictEqual(groups.map((group) => group.key), ["toutiao:old-news", "ctrip:old-guide"]);
+    assert.deepStrictEqual(groups.map((group) => group.articles.map((article) => article.id)), [["toutiao-legacy"], ["ctrip-legacy"]]);
   });
 
   it("keeps article opening separate from explicit review selection", function() {

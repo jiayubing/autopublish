@@ -32,19 +32,20 @@ export function groupArticlesByTemplate(articles) {
   (Array.isArray(articles) ? articles : []).forEach(function(article) {
     const snapshot = snapshotFor(article);
     const platform = snapshot ? snapshot.platform : (article && article.platform) || "";
-    const templateId = snapshot ? snapshot.id : null;
-    const key = snapshot ? platform + ":" + templateId : "legacy";
+    const templateId = snapshot ? snapshot.id : (article && article.templateId) || null;
+    const hasTemplateIdentity = Boolean(platform && templateId);
+    const key = snapshot || hasTemplateIdentity ? platform + ":" + templateId : "legacy";
     let group = groups.get(key);
     if (!group) {
-      const legacy = !snapshot;
+      const legacy = !snapshot && !hasTemplateIdentity;
       group = {
         key: key,
         platform: platform,
         templateId: templateId,
         templateSnapshot: snapshot,
-        name: legacy ? "旧版未分类" : snapshot.name,
-        scenario: legacy ? "" : snapshot.scenario,
-        label: legacy ? "旧版未分类" : snapshot.name + (snapshot.scenario ? " · " + snapshot.scenario : ""),
+        name: legacy ? "旧版未分类" : snapshot ? snapshot.name : templateId,
+        scenario: snapshot ? snapshot.scenario : "",
+        label: legacy ? "旧版未分类" : snapshot ? snapshot.name + (snapshot.scenario ? " · " + snapshot.scenario : "") : platform + " · " + templateId,
         articles: []
       };
       groups.set(key, group);

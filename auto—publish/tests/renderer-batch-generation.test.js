@@ -73,6 +73,20 @@ describe("renderer content generation workflow", function() {
     });
   });
 
+  it("keeps invalid GEO answers unchecked and disabled at the source boundary", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.match(batch, /selected=\{isUsableResearch\(item\) && source\.researchQueryIds\.includes\(item\.id\)\}/);
+    assert.match(batch, /disabled=\{!isUsableResearch\(item\)\}/);
+    assert.match(batch, /onSelectedChange=\{\(selected\) => isUsableResearch\(item\) && updateSource/);
+  });
+
+  it("shows a visible cost warning while a batch is active or stopping", function() {
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(detail, /batch-cost-warning/);
+    assert.match(detail, /费用/);
+    assert.match(detail, /active &&[\s\S]*batch-cost-warning/);
+  });
+
   it("discovers every returned template platform and counts all selected templates", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     assert.doesNotMatch(batch, /const PLATFORMS =/);

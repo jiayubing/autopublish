@@ -57,6 +57,15 @@ describe("renderer AI provider settings", function() {
     assert.match(settings, /completion/);
   });
 
+  it("refreshes safe status after a rejected connection test while retaining the UI error", function() {
+    const settings = readSource("components/AiProviderSettings.tsx");
+    const test = readFunction(settings, "handleTest");
+    assert.match(test, /catch \(testError\)/);
+    assert.match(test, /getAiProviderStatus\(\)/);
+    assert.match(test, /setStatus\(nextStatus\)/);
+    assert.match(test, /setError\(safeErrorMessage\(testError\)\)/);
+  });
+
   it("guards generation state to the content channel", function() {
     const settings = readSource("components/AiProviderSettings.tsx");
     const api = readSource("electron-api.ts");

@@ -76,7 +76,29 @@ describe("AI provider service", function() {
       { role: "user", content: "Reply with OK only" }
     ]);
     assert.equal(store.writes.length, 0);
-    assert.equal(service.getStatus().lastTest, null);
+    assert.equal(service.getStatus().lastTest.ok, false);
+    assert.equal(service.getStatus().lastTest.code, "AI_CONNECTION_FAILED");
+  });
+
+  it("exposes a safe transient failure without writing or replacing the saved configuration", async function() {
+    const store = createStore(Object.assign({}, config, { lastTest: { testedAt: "2026-07-14T00:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" } }));
+    const service = createAiProviderService({
+      configStore: store,
+      now: function() { return "2026-07-15T02:00:00.000Z"; },
+      aiClientFactory: function() { return { complete: async function() { throw new Error("provider-secret-key leaked"); } }; }
+    });
+
+    await assert.rejects(service.testConnection(config), function(error) {
+      return error.code === "AI_CONNECTION_FAILED" && error.message === "AI connection test failed";
+    });
+    assert.equal(store.writes.length, 0);
+    assert.deepStrictEqual(service.getStatus().lastTest, {
+      testedAt: "2026-07-15T02:00:00.000Z", ok: false, code: "AI_CONNECTION_FAILED"
+    });
+    assert.deepStrictEqual(store.read().lastTest, {
+      testedAt: "2026-07-14T00:00:00.000Z", ok: true, code: "AI_CONNECTION_OK"
+    });
+    assert.equal(JSON.stringify(service.getStatus()).includes("provider-secret-key"), false);
   });
 
   it("records only a safe successful test result, supports clear, and fingerprints settings", async function() {
