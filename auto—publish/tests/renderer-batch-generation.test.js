@@ -84,7 +84,12 @@ describe("renderer content generation workflow", function() {
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
     assert.match(detail, /batch-cost-warning/);
     assert.match(detail, /费用/);
-    assert.match(detail, /active &&[\s\S]*batch-cost-warning/);
+    assert.match(detail, /showCostWarning &&[\s\S]*batch-cost-warning/);
+  });
+
+  it("retains the cost warning for a stopped batch with unfinished tasks", function() {
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(detail, /active \|\| \(batch\.status === 'stopped' && unfinished\)/);
   });
 
   it("discovers every returned template platform and counts all selected templates", function() {
