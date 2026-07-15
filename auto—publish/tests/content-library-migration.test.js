@@ -144,6 +144,8 @@ describe("content library v2 migration", function() {
       assert.ok(result.completionMarkerPath.endsWith("content-library-v2-migration-complete.json"));
       assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, "clients/acme/profile.md"), "utf8"), "Acme profile\n");
       assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/research/acme/question-1.json"), "utf8"), '{"answer":"answer"}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/batches/batch-1.json"), "utf8"), '{"id":"batch-1"}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/queue/queue-1.json"), "utf8"), '{"id":"queue-1"}\n');
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "logs/app.log"), "utf8"), "diagnostic log\n");
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "cache/client-material/acme/material.json"), "utf8"), '{"cached":true}\n');
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser-profile/playwright-cli/profiles/doubao/session.json"), "utf8"), '{"profile":true}\n');
