@@ -8,7 +8,7 @@ const BATCH_VERSION = 1;
 const MAX_TASKS = 1000;
 const MAX_ITEMS = 1000;
 const TASK_STATUSES = new Set(["pending", "running", "succeeded", "failed", "interrupted"]);
-const BATCH_STATUSES = new Set(["pending", "running", "stopping", "stopped", "interrupted", "completed", "failed"]);
+const BATCH_STATUSES = new Set(["pending", "running", "stopping", "stopped", "interrupted", "paused_configuration", "completed", "failed"]);
 const RESUMABLE_STATUSES = new Set(["pending", "failed", "interrupted"]);
 
 function storeError(code, message, cause) {
@@ -187,7 +187,7 @@ function createGenerationBatchStore(options) {
     assertIdentifier(batch.id, "batch id");
     if (batch.tasks.length > MAX_TASKS) throw storeError("GENERATION_BATCH_INVALID", "Generation batch has too many tasks");
     const concurrency = batch.concurrency === undefined ? 1 : batch.concurrency;
-    if (concurrency !== 1) throw storeError("GENERATION_CONCURRENCY_INVALID", "Generation concurrency must be 1");
+    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw storeError("GENERATION_CONCURRENCY_INVALID", "Generation concurrency must be an integer from 1 to 4");
     const normalized = {
       version: BATCH_VERSION,
       id: batch.id,
@@ -295,7 +295,8 @@ function createGenerationBatchStore(options) {
 
   function markTaskRunning(batchId, taskIdValue) {
     return updateTask(batchId, taskIdValue, function(task, batch) {
-      if (!RESUMABLE_STATUSES.has(task.status) && task.status !== "running") {
+      if (task.status === "running") throw storeError("GENERATION_TASK_BUSY", "Generation task is already running");
+      if (!RESUMABLE_STATUSES.has(task.status)) {
         if (task.status === "succeeded") throw storeError("GENERATION_TASK_ALREADY_SUCCEEDED", "Succeeded task cannot run again");
         throw storeError("GENERATION_TASK_STATUS_INVALID", "Generation task cannot run");
       }
@@ -380,8 +381,8 @@ function createGenerationBatchStore(options) {
     const value = input || {};
     assertArray(value.clientSources, "GENERATION_CLIENT_SOURCES_REQUIRED", "Client sources", true);
     assertArray(value.templates, "GENERATION_TEMPLATES_REQUIRED", "Templates", true);
-    if (value.concurrency !== undefined && value.concurrency !== 1) {
-      throw storeError("GENERATION_CONCURRENCY_INVALID", "Generation concurrency must be 1");
+    if (value.concurrency !== undefined && (!Number.isInteger(value.concurrency) || value.concurrency < 1 || value.concurrency > 4)) {
+      throw storeError("GENERATION_CONCURRENCY_INVALID", "Generation concurrency must be an integer from 1 to 4");
     }
     if (typeof value.aiConfigFingerprint !== "string" || !value.aiConfigFingerprint.trim()) {
       throw storeError("GENERATION_AI_FINGERPRINT_REQUIRED", "aiConfigFingerprint is required");
@@ -416,7 +417,7 @@ function createGenerationBatchStore(options) {
     return writeBatch({
       version: BATCH_VERSION,
       id: id,
-      concurrency: 1,
+      concurrency: value.concurrency === undefined ? 1 : value.concurrency,
       status: "pending",
       createdAt: createdAt,
       updatedAt: createdAt,

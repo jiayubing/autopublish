@@ -1,8 +1,9 @@
 const safeAiErrors = new WeakSet();
 
-function aiError(code, message) {
+function aiError(code, message, retryable) {
   const error = new Error(message);
   error.code = code;
+  if (retryable !== undefined) error.retryable = retryable;
   safeAiErrors.add(error);
   return error;
 }
@@ -47,9 +48,20 @@ function createAiClient(config) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
 
-  async function complete(messages) {
+  async function complete(messages, options) {
     const controller = new AbortController();
     let timedOut = false;
+    let externallyAborted = false;
+    const externalSignal = options && options.signal;
+    function abortFromOutside() {
+      externallyAborted = true;
+      controller.abort();
+    }
+    if (externalSignal) {
+      if (typeof externalSignal.addEventListener !== "function") throw aiError("AI_CONFIG_INVALID", "AI abort signal is invalid");
+      if (externalSignal.aborted) abortFromOutside();
+      else externalSignal.addEventListener("abort", abortFromOutside, { once: true });
+    }
     const timeout = setTimeout(function() {
       timedOut = true;
       controller.abort();
@@ -67,20 +79,23 @@ function createAiClient(config) {
       });
 
       if (timedOut) throw aiError("AI_TIMEOUT", "AI request timed out");
+      if (externallyAborted) throw aiError("AI_ABORTED", "AI request was aborted");
       if (response.status === 401) throw aiError("AI_UNAUTHORIZED", "AI request was unauthorized");
+      if (response.status === 403) throw aiError("AI_FORBIDDEN", "AI request was forbidden");
       if (response.status === 429) throw aiError("AI_RATE_LIMITED", "AI request was rate limited");
-      if (!response.ok) throw aiError("AI_REQUEST_FAILED", "AI request failed");
+      if (!response.ok) throw aiError("AI_REQUEST_FAILED", "AI request failed", response.status >= 500);
 
       let payload;
       try {
         const responseText = await response.text();
         if (timedOut) throw aiError("AI_TIMEOUT", "AI request timed out");
+        if (externallyAborted) throw aiError("AI_ABORTED", "AI request was aborted");
         payload = JSON.parse(responseText);
       } catch (error) {
         if (timedOut) {
           throw aiError("AI_TIMEOUT", "AI request timed out");
         }
-        throw aiError("AI_REQUEST_FAILED", "AI response was invalid");
+        throw aiError("AI_REQUEST_FAILED", "AI response was invalid", false);
       }
       const content = payload && payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
       if (typeof content !== "string" || !content.trim()) {
@@ -92,9 +107,13 @@ function createAiClient(config) {
       if (timedOut) {
         throw aiError("AI_TIMEOUT", "AI request timed out");
       }
+      if (externallyAborted) throw aiError("AI_ABORTED", "AI request was aborted");
       throw aiError("AI_REQUEST_FAILED", "AI response was invalid");
     } finally {
       clearTimeout(timeout);
+      if (externalSignal && typeof externalSignal.removeEventListener === "function") {
+        externalSignal.removeEventListener("abort", abortFromOutside);
+      }
     }
   }
 

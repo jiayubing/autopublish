@@ -81,7 +81,7 @@ describe("ai client", function() {
   });
 
   it("maps provider failures without exposing the API key", async function() {
-    for (const item of [[401, "AI_UNAUTHORIZED"], [429, "AI_RATE_LIMITED"], [500, "AI_REQUEST_FAILED"]]) {
+    for (const item of [[401, "AI_UNAUTHORIZED"], [403, "AI_FORBIDDEN"], [429, "AI_RATE_LIMITED"], [500, "AI_REQUEST_FAILED"]]) {
       const client = createAiClient(config({ fetch: async function() { return response(item[0], {}); } }));
       await assert.rejects(client.complete([]), function(error) {
         return error.code === item[1] && !String(error.message).includes("test-secret-key");
@@ -116,6 +116,23 @@ describe("ai client", function() {
     await assert.rejects(client.complete([]), function(error) {
       return error.code === "AI_REQUEST_FAILED" && !String(error.message).includes("review-api-key");
     });
+  });
+
+  it("accepts and forwards an external abort signal", async function() {
+    const controller = new AbortController();
+    let requestAborted = false;
+    const client = createAiClient(config({ fetch: async function(url, options) {
+      options.signal.addEventListener("abort", function() { requestAborted = true; }, { once: true });
+      return new Promise(function(resolve) {
+        setTimeout(function() { resolve(response(200, { choices: [{ message: { content: "Generated" } }] })); }, 20);
+      });
+    } }));
+
+    const pending = client.complete([], { signal: controller.signal });
+    controller.abort();
+
+    await assert.rejects(pending, function(error) { return error.code === "AI_ABORTED"; });
+    assert.equal(requestAborted, true);
   });
 
   it("aborts a request that exceeds the configured timeout", async function() {
