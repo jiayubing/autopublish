@@ -50,6 +50,18 @@ describe("article generator", function() {
     assert.deepStrictEqual(deps.calls, ["client:client-1"]);
   });
 
+  it("blocks a GEO answer marked incomplete even when its text is non-empty", async function() {
+    const deps = dependencies({ researchStore: { getResearch: function() {
+      return { answerText: "This answer has enough text", isAnswerComplete: false };
+    } } });
+    await assert.rejects(createArticleGenerator(deps).generateArticle({
+      clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
+    }), function(value) {
+      return value.code === "RESEARCH_EMPTY_ANSWER";
+    });
+    assert.deepStrictEqual(deps.calls, ["client:client-1"]);
+  });
+
   it("surfaces empty AI output and does not manufacture an article", async function() {
     const deps = dependencies({ aiClient: { complete: async function() { throw error("AI_EMPTY_RESPONSE"); } } });
     await assert.rejects(createArticleGenerator(deps).generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {

@@ -187,7 +187,7 @@ function createArticleGenerator(deps) {
     const materialSnapshots = materials.map(materialSnapshot);
     const researches = researchQueryIds.map(function(researchQueryId) {
       const research = deps.researchStore.getResearch(input.clientId, researchQueryId);
-      if (!research || !hasText(research.answerText)) {
+      if (!research || research.isAnswerComplete === false || !hasText(research.answerText)) {
         throw generatorError("RESEARCH_EMPTY_ANSWER", "Research answer is empty");
       }
       return research;

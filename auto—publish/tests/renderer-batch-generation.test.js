@@ -10,6 +10,28 @@ function read(file) {
 }
 
 describe("renderer content generation workflow", function() {
+  it("preserves explicit empty client and template selections across async refresh", async function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const { preserveSelection } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
+
+    assert.deepEqual(preserveSelection([], ["client-1", "client-2"], false), ["client-1", "client-2"]);
+    assert.deepEqual(preserveSelection([], ["client-1", "client-2"], true), []);
+    assert.deepEqual(preserveSelection(["client-1", "removed"], ["client-1", "client-2"], true), ["client-1"]);
+    assert.match(batch, /clientSelectionTouchedRef/);
+    assert.match(batch, /templateSelectionTouchedRef/);
+    assert.match(batch, /preserveSelection\(/);
+  });
+
+  it("offers one-material retry in the batch source step and updates only that client material", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.match(batch, /retryContentMaterial/);
+    assert.match(batch, /retryMaterialItem/);
+    assert.match(batch, /setMaterialOverrides/);
+    assert.match(batch, /actions=/);
+    assert.match(batch, /materialForClient\([^)]*materialOverrides/);
+    assert.doesNotMatch(batch, /readFileSync|readdirSync|safeStorage|Playwright|playwright|fs\./i);
+  });
+
   it("keeps the single article source gate and collapsed source contract", function() {
     const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");

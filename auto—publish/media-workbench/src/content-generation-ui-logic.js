@@ -6,6 +6,14 @@ export function countGenerationTasks(clientCount, templateCount) {
   return clients * templates;
 }
 
+export function preserveSelection(current, available, touched, getKey = (item) => item) {
+  const currentItems = Array.isArray(current) ? current : [];
+  const availableItems = Array.isArray(available) ? available : [];
+  if (!touched) return availableItems.slice();
+  const availableSet = new Set(availableItems.map(getKey));
+  return currentItems.filter((item) => availableSet.has(getKey(item)));
+}
+
 export function getMaterialId(material) {
   return material.id || material.name;
 }
