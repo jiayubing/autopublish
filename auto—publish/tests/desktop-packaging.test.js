@@ -308,6 +308,11 @@ describe("source assembly and packaging contract", function() {
     assert.match(config, /- media-workbench\/dist\/\*\*\//);
   });
 
+  it("does not package the one-shot content library migration tool", function() {
+    const config = read("electron-builder.alpha.yml");
+    assert.match(config, /^\s*-\s+["']?!scripts\/migrate-content-library-v2\.js["']?\s*$/m);
+  });
+
   it("rejects new private content and AI provider state in an app directory", function() {
     const verifier = require("../scripts/verify-alpha-package");
     const appDir = fs.mkdtempSync(path.join(os.tmpdir(), "alpha-package-content-boundary-"));
