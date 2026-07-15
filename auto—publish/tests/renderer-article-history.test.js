@@ -72,4 +72,17 @@ describe("article history grouping", async function() {
     assert.match(view, /templateSnapshot/);
     assert.match(view, /正文解释|body/);
   });
+
+  it("offers a current-client trash view with restore and confirmed permanent deletion", function() {
+    const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
+    const api = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/electron-api.ts"), "utf8");
+    assert.match(view, /listContentTrash/);
+    assert.match(view, /restoreContentArticle/);
+    assert.match(view, /preparePermanentDeleteContentArticle/);
+    assert.match(view, /permanentlyDeleteContentArticle/);
+    assert.match(view, /删除历史文章/);
+    assert.match(view, /永久删除/);
+    assert.match(api, /preparePermanentDeleteArticle/);
+    assert.match(api, /permanentlyDeleteArticle/);
+  });
 });

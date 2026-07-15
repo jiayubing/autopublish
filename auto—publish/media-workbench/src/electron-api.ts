@@ -1,4 +1,5 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { formatBeijingTime } from "./time-format";
 
 
 // Global type declaration for desktopConsole
@@ -70,8 +71,18 @@ interface DesktopConsoleContent {
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
   reviewArticles(articles: ArticleReviewSelection[]): Promise<IpcResponse<ArticleReviewResult>>;
+  listArticleTrash(clientId: string): Promise<IpcResponse<ArticleTrashRecord[]>>;
+  trashArticles(input: { articles: ArticleReviewSelection[]; confirmed: true }): Promise<IpcResponse<ArticleTrashResult>>;
+  restoreArticle(input: ArticleReviewSelection): Promise<IpcResponse<GeneratedContentArticle>>;
+  preparePermanentDeleteArticle(input: ArticleReviewSelection): Promise<IpcResponse<ArticlePermanentDeleteConfirmation>>;
+  permanentlyDeleteArticle(input: ArticlePermanentDeleteRequest): Promise<IpcResponse<ArticlePermanentDeleteResult>>;
   previewExport(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
   exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
+  previewSubmissionBatch(input: ContentSubmissionBatchInput): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
+  listSubmissionPlatforms(): Promise<IpcResponse<ContentSubmissionPlatform[]>>;
+  createSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
+  cancelSubmissionBatch(input: { batchId: string; confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
+  getSubmissionBatch(batchId: string): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<IpcResponse<GenerationBatchPreview>>;
   createGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<IpcResponse<GenerationBatch>>;
   listGenerationBatches(): Promise<IpcResponse<GenerationBatch[]>>;
@@ -82,6 +93,8 @@ interface DesktopConsoleContent {
   resumeGenerationBatch(input: { batchId: string; confirmConfigChange?: boolean }): Promise<IpcResponse<GenerationBatch>>;
   stopGenerationBatch(): Promise<IpcResponse<GenerationBatch | null>>;
   retryFailedGenerationBatch(input: { batchId: string }): Promise<IpcResponse<GenerationBatch>>;
+  previewCancelPendingGenerationBatch(input: { batchId: string }): Promise<IpcResponse<GenerationBatchCancelPreview>>;
+  cancelPendingGenerationBatch(input: { batchId: string; confirmed: true }): Promise<IpcResponse<GenerationBatch>>;
   getGenerationBatchState?: () => Promise<IpcResponse<GenerationBatchState>>;
   onGenerationBatchState?: (listener: (state: GenerationBatchState) => void) => () => void;
 }
@@ -105,6 +118,11 @@ interface DesktopConsoleWorkspace {
 
 export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: "media" | "lieju" | "toutiao" | "hepan"; confirmed: true; }
 export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
+export interface ArticleTrashRecord { version: 1; deletedAt: string; clientId: string; articleId: string; status: string; references: Array<{ type: string; id: string }>; }
+export interface ArticleTrashResult { moved: ArticleTrashRecord[]; skipped: ArticleTrashRecord[]; rejected: Array<{ clientId: string; articleId: string; code: string }>; }
+export interface ArticlePermanentDeleteConfirmation { token: string; clientId: string; articleId: string; deletedAt: string; status: string; }
+export interface ArticlePermanentDeleteRequest { clientId: string; articleId: string; token: string; }
+export interface ArticlePermanentDeleteResult { clientId: string; articleId: string; deleted: true; deletedAt: string; }
 
 interface DesktopConsole {
   workspace: DesktopConsoleWorkspace;
@@ -502,14 +520,49 @@ export async function retryContentMaterial(input: { clientId: string; materialId
   return result.data;
 }
 
-export async function reviewContentArticles(articles: ArticleReviewSelection[]): Promise<ArticleReviewResult> {
+  export async function reviewContentArticles(articles: ArticleReviewSelection[]): Promise<ArticleReviewResult> {
   if (!isElectron()) throw new Error("Article review requires the desktop app");
   const result = await window.desktopConsole!.content.reviewArticles(articles);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to review articles");
-  return result.data;
-}
+    return result.data;
+  }
 
-// Data normalization from backend values to React types
+  export async function listContentTrash(clientId: string): Promise<ArticleTrashRecord[]> {
+    if (!isElectron()) return [];
+    const result = await window.desktopConsole!.content.listArticleTrash(clientId);
+    if (!result.ok) throw getIpcError(result.error, "Unable to load article trash");
+    return result.data || [];
+  }
+
+  export async function trashContentArticles(input: { articles: ArticleReviewSelection[]; confirmed: true }): Promise<ArticleTrashResult> {
+    if (!isElectron()) throw new Error("Article trash requires the desktop app");
+    const result = await window.desktopConsole!.content.trashArticles(input);
+    if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to move articles to trash");
+    return result.data;
+  }
+
+  export async function restoreContentArticle(input: ArticleReviewSelection): Promise<GeneratedContentArticle> {
+    if (!isElectron()) throw new Error("Article restore requires the desktop app");
+    const result = await window.desktopConsole!.content.restoreArticle(input);
+    if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to restore article");
+    return result.data;
+  }
+
+  export async function preparePermanentDeleteContentArticle(input: ArticleReviewSelection): Promise<ArticlePermanentDeleteConfirmation> {
+    if (!isElectron()) throw new Error("Permanent article deletion requires the desktop app");
+    const result = await window.desktopConsole!.content.preparePermanentDeleteArticle(input);
+    if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to prepare permanent article deletion");
+    return result.data;
+  }
+
+  export async function permanentlyDeleteContentArticle(input: ArticlePermanentDeleteRequest): Promise<ArticlePermanentDeleteResult> {
+    if (!isElectron()) throw new Error("Permanent article deletion requires the desktop app");
+    const result = await window.desktopConsole!.content.permanentlyDeleteArticle(input);
+    if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to permanently delete article");
+    return result.data;
+  }
+
+  // Data normalization from backend values to React types
 
 function normalizeArticle(raw: Record<string, unknown>): Article {
   return {
@@ -521,10 +574,7 @@ function normalizeArticle(raw: Record<string, unknown>): Article {
     selectedResources: Array.isArray(raw.selectedResources)
       ? (raw.selectedResources as MediaResource[])
       : [],
-    lastModified: String(
-      raw.lastModified ||
-        new Date().toISOString().replace("T", " ").substring(0, 16)
-    ),
+    lastModified: formatBeijingTime(raw.lastModified || new Date().toISOString()),
     // IPC fields preserved from scanArticles service
     filePath: String(raw.filePath || ""),
     autoTitle: String(raw.autoTitle || ""),
@@ -1022,5 +1072,47 @@ export async function exportToSubmissionQueue(input: ContentExportInput): Promis
   if (!isElectron()) throw new Error("Export requires the desktop app");
   const result = await window.desktopConsole!.content.exportArticle(input);
   if (!result.ok || !result.data) throw getIpcError(result.error, "export failed");
+  return result.data;
+}
+
+export async function previewContentSubmissionBatch(input: ContentSubmissionBatchInput): Promise<ContentSubmissionBatchPreview> {
+  if (!isElectron()) throw new Error("Batch submission requires the desktop app");
+  const result = await window.desktopConsole!.content.previewSubmissionBatch(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "submission batch preview failed");
+  return result.data;
+}
+
+export async function previewCancelPendingGenerationBatch(input: { batchId: string }): Promise<GenerationBatchCancelPreview> {
+  if (!isElectron()) return { batchId: input.batchId, pendingCount: 0, runningCount: 0, cancelledCount: 0, canCancel: false };
+  const result = await window.desktopConsole!.content.previewCancelPendingGenerationBatch(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to preview pending generation cancellation");
+  return result.data;
+}
+
+export async function cancelPendingGenerationBatch(input: { batchId: string; confirmed: true }): Promise<GenerationBatch> {
+  if (!isElectron()) throw new Error("Batch generation requires the desktop app");
+  const result = await window.desktopConsole!.content.cancelPendingGenerationBatch(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to cancel pending generation tasks");
+  return result.data;
+}
+
+export async function listContentSubmissionPlatforms(): Promise<ContentSubmissionPlatform[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listSubmissionPlatforms();
+  if (!result.ok) throw getIpcError(result.error, "submission platform discovery failed");
+  return result.data || [];
+}
+
+export async function createContentSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<ContentSubmissionBatchPreview> {
+  if (!isElectron()) throw new Error("Batch submission requires the desktop app");
+  const result = await window.desktopConsole!.content.createSubmissionBatch(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "submission batch creation failed");
+  return result.data;
+}
+
+export async function cancelContentSubmissionBatch(batchId: string): Promise<ContentSubmissionBatchPreview> {
+  if (!isElectron()) throw new Error("Batch submission cancellation requires the desktop app");
+  const result = await window.desktopConsole!.content.cancelSubmissionBatch({ batchId, confirmed: true });
+  if (!result.ok || !result.data) throw getIpcError(result.error, "submission batch cancellation failed");
   return result.data;
 }

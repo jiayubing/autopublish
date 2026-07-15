@@ -24,6 +24,10 @@ const api = {
     testConnection: function(input) { return ipcRenderer.invoke("ai-provider:test", input || {}); },
     clear: function() { return ipcRenderer.invoke("ai-provider:clear"); }
   },
+  storageMaintenance: {
+    getUsage: function() { return ipcRenderer.invoke("storage-maintenance:get-usage"); },
+    cleanCaches: function() { return ipcRenderer.invoke("storage-maintenance:clean-caches"); }
+  },
   batch: {
     getState: function() { return ipcRenderer.invoke("desktop:get-state"); },
     refreshQueue: function(options) { return ipcRenderer.invoke("desktop:refresh-queue", options || {}); },
@@ -88,8 +92,18 @@ const api = {
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
     getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); },
     reviewArticles: function(articles) { return ipcRenderer.invoke("content:review-articles", { articles: articles }); },
+    listArticleTrash: function(clientId) { return ipcRenderer.invoke("content:list-article-trash", clientId); },
+    trashArticles: function(input) { return ipcRenderer.invoke("content:trash-articles", input); },
+    restoreArticle: function(input) { return ipcRenderer.invoke("content:restore-article", input); },
+    preparePermanentDeleteArticle: function(input) { return ipcRenderer.invoke("content:prepare-permanent-delete-article", input); },
+    permanentlyDeleteArticle: function(input) { return ipcRenderer.invoke("content:permanently-delete-article", input); },
     previewExport: function(input) { return ipcRenderer.invoke("content:preview-export", input); },
     exportArticle: function(input) { return ipcRenderer.invoke("content:export-article", input); },
+    previewSubmissionBatch: function(input) { return ipcRenderer.invoke("content:preview-submission-batch", input); },
+    listSubmissionPlatforms: function() { return ipcRenderer.invoke("content:list-submission-platforms"); },
+    createSubmissionBatch: function(input) { return ipcRenderer.invoke("content:create-submission-batch", input); },
+    cancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:cancel-submission-batch", input); },
+    getSubmissionBatch: function(batchId) { return ipcRenderer.invoke("content:get-submission-batch", { batchId: batchId }); },
     listQuestions: function(clientId) { return ipcRenderer.invoke("content:list-questions", { clientId: clientId }); },
     createQuestion: function(input) { return ipcRenderer.invoke("content:create-question", input); },
     updateQuestion: function(input) { return ipcRenderer.invoke("content:update-question", input); },
@@ -115,6 +129,8 @@ const api = {
     resumeGenerationBatch: function(input) { return ipcRenderer.invoke("content:resume-generation-batch", input || {}); },
     stopGenerationBatch: function() { return ipcRenderer.invoke("content:stop-generation-batch"); },
     retryFailedGenerationBatch: function(input) { return ipcRenderer.invoke("content:retry-failed-generation-batch", input || {}); },
+    previewCancelPendingGenerationBatch: function(input) { return ipcRenderer.invoke("content:preview-cancel-pending-generation-batch", input || {}); },
+    cancelPendingGenerationBatch: function(input) { return ipcRenderer.invoke("content:cancel-pending-generation-batch", input || {}); },
     getGenerationBatchState: function() { return ipcRenderer.invoke("content:get-generation-batch-state"); },
     onGenerationBatchState: function(listener) {
       const handler = function(event, payload) { listener(payload); };

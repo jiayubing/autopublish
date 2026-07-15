@@ -40,6 +40,21 @@ function registerAiContentIpc(deps) {
       return service.reviewArticles(selections);
     });
   });
+  ipcMain.handle("content:list-article-trash", function(event, clientId) {
+    return wrap(function() { return service.listTrashedArticles(clientId); });
+  });
+  ipcMain.handle("content:trash-articles", function(event, input) {
+    return wrap(function() { return service.trashArticles(input); });
+  });
+  ipcMain.handle("content:restore-article", function(event, input) {
+    return wrap(function() { return service.restoreArticle(input); });
+  });
+  ipcMain.handle("content:prepare-permanent-delete-article", function(event, input) {
+    return wrap(function() { return service.preparePermanentDelete(input); });
+  });
+  ipcMain.handle("content:permanently-delete-article", function(event, input) {
+    return wrap(function() { return service.permanentlyDeleteArticle(input); });
+  });
 }
 
 module.exports = { registerAiContentIpc };

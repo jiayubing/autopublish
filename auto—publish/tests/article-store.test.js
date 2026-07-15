@@ -294,4 +294,94 @@ describe("article store", function() {
       return error.code === "ARTICLE_INVALID";
     });
   });
+
+  it("moves the JSON and Markdown pair into the trash and restores the pair", function() {
+    const article = valid("trash-article", {
+      status: "saved",
+      generationBatchId: "batch-1",
+      generationTaskId: "task-1"
+    });
+    const tombstone = {
+      version: 1,
+      deletedAt: "2026-07-15T12:00:00.000Z",
+      clientId: "client-1",
+      articleId: "trash-article",
+      status: "saved",
+      references: [{ type: "generation-batch", id: "batch-1" }, { type: "generation-task", id: "task-1" }]
+    };
+    store.saveArticle(article);
+
+    assert.deepStrictEqual(store.moveArticleToTrash("client-1", "trash-article", tombstone), tombstone);
+    assert.equal(fs.existsSync(path.join(root, "generated", "client-1", "trash-article.json")), false);
+    assert.equal(fs.existsSync(path.join(root, "generated", "client-1", "trash-article.md")), false);
+    assert.deepStrictEqual(store.listTrashedArticles("client-1"), [tombstone]);
+    assert.equal(fs.existsSync(path.join(root, ".autopublish", "article-trash", "client-1", "trash-article.json")), true);
+    assert.equal(fs.existsSync(path.join(root, ".autopublish", "article-trash", "client-1", "trash-article.md")), true);
+
+    assert.deepStrictEqual(store.restoreTrashedArticle("client-1", "trash-article"), article);
+    assert.deepStrictEqual(store.getArticle("client-1", "trash-article"), article);
+    assert.deepStrictEqual(store.listTrashedArticles("client-1"), []);
+  });
+
+  it("rolls back both source files when the paired trash move fails", function() {
+    const article = valid("failed-trash");
+    store.saveArticle(article);
+    const originalRename = fs.renameSync;
+    let moveCount = 0;
+    fs.renameSync = function(source, target) {
+      if (String(source).includes("generated") || String(target).includes("article-trash")) {
+        moveCount += 1;
+        if (moveCount === 2) throw new Error("simulated paired move failure");
+      }
+      return originalRename.apply(this, arguments);
+    };
+    try {
+      assert.throws(function() {
+        store.moveArticleToTrash("client-1", "failed-trash", {
+          version: 1,
+          deletedAt: "2026-07-15T12:00:00.000Z",
+          clientId: "client-1",
+          articleId: "failed-trash",
+          status: "generated",
+          references: []
+        });
+      }, /simulated paired move failure/);
+    } finally {
+      fs.renameSync = originalRename;
+    }
+    assert.deepStrictEqual(store.getArticle("client-1", "failed-trash"), article);
+    assert.deepStrictEqual(store.listTrashedArticles("client-1"), []);
+  });
+
+  it("rejects an unsafe or conflicting trash path without changing the article", function(t) {
+    const article = valid("safe-trash");
+    store.saveArticle(article);
+    const trashClient = path.join(root, ".autopublish", "article-trash", "client-1");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "article-trash-outside-"));
+    fs.mkdirSync(path.dirname(trashClient), { recursive: true });
+    try {
+      try {
+        fs.symlinkSync(outside, trashClient, "junction");
+      } catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+          t.skip("symlinks or junctions are unavailable in this environment");
+          return;
+        }
+        throw error;
+      }
+      assert.throws(function() {
+        store.moveArticleToTrash("client-1", "safe-trash", {
+          version: 1,
+          deletedAt: "2026-07-15T12:00:00.000Z",
+          clientId: "client-1",
+          articleId: "safe-trash",
+          status: "generated",
+          references: []
+        });
+      }, function(error) { return error.code === "ARTICLE_PATH_OUT_OF_BOUNDS"; });
+      assert.deepStrictEqual(store.getArticle("client-1", "safe-trash"), article);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });

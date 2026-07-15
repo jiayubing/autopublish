@@ -2,6 +2,7 @@ const { listClients, getClient } = require("../../src/content/client-knowledge")
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleStore } = require("../../src/content/article-store");
+const { createArticleTrashService } = require("../../src/content/article-trash-service");
 const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
@@ -72,15 +73,17 @@ function createAiContentService(opts) {
     throw contentError("CONTENT_SERVICE_INVALID", "Workspace root is required");
   }
   const workspaceRoot = options.workspaceRoot;
+  const paths = options.paths;
   const clientKnowledge = options.clientKnowledge || {
     listClients: function() { return listClients(workspaceRoot); },
     getClient: function(id) { return getClient(workspaceRoot, id); }
   };
-  const researchStore = options.researchStore || createResearchStore(workspaceRoot);
-  const templateStore = options.templateStore || createTemplateStore(workspaceRoot);
-  const articleStore = options.articleStore || createArticleStore(workspaceRoot);
+  const researchStore = options.researchStore || createResearchStore(workspaceRoot, { paths: paths });
+  const templateStore = options.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
+  const articleStore = options.articleStore || createArticleStore(workspaceRoot, { paths: paths });
+  const articleTrashService = options.articleTrashService || createArticleTrashService({ articleStore: articleStore });
   const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
-  const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot }) : {
+  const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths }) : {
     getSelectedMaterials: async function(clientId, materialIds) {
       const client = clientKnowledge.getClient(clientId);
       const files = Array.isArray(client && client.knowledgeFiles) ? client.knowledgeFiles : [];
@@ -217,7 +220,12 @@ function createAiContentService(opts) {
     saveArticle: saveArticle,
     listGeneratedArticles: listGeneratedArticles,
     getGeneratedArticle: getGeneratedArticle,
-    reviewArticles: reviewArticles
+    reviewArticles: reviewArticles,
+    listTrashedArticles: articleTrashService.listTrashedArticles,
+    trashArticles: articleTrashService.trashArticles,
+    restoreArticle: articleTrashService.restoreArticle,
+    preparePermanentDelete: articleTrashService.preparePermanentDelete,
+    permanentlyDeleteArticle: articleTrashService.permanentlyDeleteArticle
   };
 }
 
