@@ -22,6 +22,33 @@ const READY_STATE: WorkspaceBootstrapState = {
   envOverride: false,
 };
 
+type StorageUsageCategory = { bytes: number; files: number; followedSymlinks?: number };
+type StorageUsage = {
+  logs: StorageUsageCategory;
+  temporary: StorageUsageCategory;
+  docxCache: StorageUsageCategory;
+  profiles: StorageUsageCategory;
+  active?: boolean;
+};
+type StorageMaintenanceApi = {
+  getUsage: () => Promise<{ ok: boolean; data?: StorageUsage; error?: { message?: string } }>;
+  cleanCaches: () => Promise<{ ok: boolean; data?: { blocked?: boolean }; error?: { message?: string } }>;
+};
+
+function getStorageMaintenanceApi(): StorageMaintenanceApi | null {
+  const value = typeof window !== 'undefined'
+    ? (window as unknown as { desktopConsole?: { storageMaintenance?: StorageMaintenanceApi } }).desktopConsole?.storageMaintenance
+    : undefined;
+  return value || null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 function validationLabel(kind?: string): string {
   if (kind === 'existing_workspace') return '已有工作区，标记有效';
   if (kind === 'empty_directory') return '空目录，可初始化';
@@ -46,6 +73,10 @@ export default function SettingsView() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [switchState, setSwitchState] = useState<WorkspaceBootstrapState>(READY_STATE);
   const [switchBusy, setSwitchBusy] = useState(false);
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  const [storageLoading, setStorageLoading] = useState(true);
+  const [storageCleaning, setStorageCleaning] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(null);
   const mountedRef = useRef(true);
 
@@ -55,6 +86,45 @@ export default function SettingsView() {
       mountedRef.current = false;
     };
   }, []);
+
+  const refreshStorageUsage = async () => {
+    const api = getStorageMaintenanceApi();
+    if (!api) {
+      setStorageLoading(false);
+      return;
+    }
+    setStorageLoading(true);
+    try {
+      const result = await api.getUsage();
+      if (!result.ok || !result.data) throw new Error(result.error?.message || 'Unable to read storage usage');
+      setStorageUsage(result.data);
+      setStorageError(null);
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : 'Unable to read storage usage');
+    } finally {
+      setStorageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshStorageUsage();
+  }, []);
+
+  const handleCleanCaches = async () => {
+    const api = getStorageMaintenanceApi();
+    if (!api || storageCleaning || storageUsage?.active) return;
+    setStorageCleaning(true);
+    try {
+      const result = await api.cleanCaches();
+      if (!result.ok) throw new Error(result.error?.message || 'Cache cleanup failed');
+      if (result.data?.blocked) throw new Error('Cache cleanup is unavailable while a task is active');
+      await refreshStorageUsage();
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : 'Cache cleanup failed');
+    } finally {
+      setStorageCleaning(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -164,6 +234,24 @@ export default function SettingsView() {
       <section className="flex gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs text-blue-800">
         <Info className="h-4 w-4 shrink-0" />
         <span>工作区切换不会复制、移动或删除原工作区数据；最终安全检查由主进程服务完成。投稿不会因文件新增或预检通过而自动投稿。</span>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">运行数据占用</h3>
+            <p className="mt-1 text-xs text-slate-500">只清理过期日志、临时文件和 DOCX 缓存；豆包登录态和内容数据不会被自动删除。</p>
+          </div>
+          <button type="button" onClick={handleCleanCaches} disabled={storageLoading || storageCleaning || storageUsage?.active === true} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {storageCleaning ? '清理中…' : '清理缓存'}
+          </button>
+        </div>
+        {storageError && <p className="text-xs text-red-700">{storageError}</p>}
+        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+          <div>日志：{storageLoading ? '读取中…' : formatBytes(storageUsage?.logs.bytes || 0)}</div>
+          <div>临时文件：{storageLoading ? '读取中…' : formatBytes(storageUsage?.temporary.bytes || 0)}</div>
+          <div>DOCX 缓存：{storageLoading ? '读取中…' : formatBytes(storageUsage?.docxCache.bytes || 0)}</div>
+          <div>浏览器 profile：{storageLoading ? '读取中…' : formatBytes(storageUsage?.profiles.bytes || 0)}</div>
+        </div>
       </section>
       <AiProviderSettings />
     </div>

@@ -16,14 +16,24 @@ function nodeExecPath() {
 // and pass the returned context to pwCmd/pwRun/runCode via opts.session.
 // Omitting the session context falls back to the shared PW session, so legacy
 // callers (e.g. scripts/explore-lieju.js) keep working unchanged.
-function pwSessionConfig(name) {
-  var session = name || PW.session;
-  return {
-    session: session,
-    profileDir: path.join(PW.home, "profiles", session),
-    daemonDir: path.join(PW.home, "sessions", session),
-    stateFile: path.join(DIRS.stateDir, session + ".json")
-  };
+function pwSessionConfig(name, options) {
+  var input = name && typeof name === "object" ? name : Object.assign({}, options || {}, { session: name });
+  var session = input.session || PW.session;
+  var profileId = input.profileId === undefined ? "default" : String(input.profileId);
+  if (!/^[A-Za-z0-9._-]+$/.test(profileId) || profileId === "." || profileId === "..") {
+    var profileError = new Error("Playwright profileId is invalid");
+    profileError.code = "PLAYWRIGHT_PROFILE_ID_INVALID";
+    throw profileError;
+  }
+  var profileDir = path.join(PW.home, "profiles", session);
+  var daemonDir = path.join(PW.home, "sessions", session);
+  var stateFile = path.join(DIRS.stateDir, session + ".json");
+  if (profileId !== "default") {
+    profileDir = path.join(profileDir, profileId);
+    daemonDir = path.join(daemonDir, profileId);
+    stateFile = path.join(DIRS.stateDir, session + "-" + profileId + ".json");
+  }
+  return { session: session, profileId: profileId, profileDir: profileDir, daemonDir: daemonDir, stateFile: stateFile };
 }
 
 function pwEnv(sessionCtx) {
@@ -79,6 +89,7 @@ function runCode(jsCode, opts) {
   var sessionCtx = options.session || null;
   var filePath = path.join(DIRS.tmpDir, "run-" + Date.now() + ".js");
   var wrapped = "async page => {\n" + jsCode + "\n}";
+  fs.mkdirSync(DIRS.tmpDir, { recursive: true });
   fs.writeFileSync(filePath, wrapped, "utf-8");
   try {
     return extractResult(pwRun("run-code --filename=" + quoteArg(filePath), {

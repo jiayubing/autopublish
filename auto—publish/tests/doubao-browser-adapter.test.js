@@ -614,6 +614,21 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     }), false);
   });
 
+  it("passes the explicit default profileId to the Playwright session", async function() {
+    const calls = [];
+    const adapter = createDoubaoBrowserAdapter({
+      profileId: "default",
+      runtime: {
+        open: async function(input) { calls.push(input); return {}; },
+        evaluate: async function() { return loginFixture; },
+        close: async function() {}
+      }
+    });
+
+    await assert.rejects(adapter.collect("test question"));
+    assert.equal(calls[0].profileId, "default");
+  });
+
   it("stops on a page error and does not send a question", async function() {
     const calls = [];
     const diagnosticsDir = makeTemporaryDirectory("doubao-page-error-");

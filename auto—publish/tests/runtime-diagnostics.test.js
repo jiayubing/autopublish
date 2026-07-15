@@ -49,9 +49,20 @@ describe("runtime diagnostics", function() {
 
     assert.deepEqual(Object.keys(runtime).sort(), ["close", "evaluate", "open", "screenshot"]);
     assert.equal(session.session, "doubao");
+    assert.equal(session.profileId, "default");
     assert.match(session.profileDir, /profiles[\\/]doubao$/);
     assert.match(session.daemonDir, /sessions[\\/]doubao$/);
     assert.match(session.stateFile, /state[\\/]doubao\.json$/);
+  });
+
+  it("accepts an explicit Doubao profileId while defaulting to the application profile", function() {
+    const defaultSession = pwSessionConfig({ session: "doubao" });
+    const namedSession = pwSessionConfig({ session: "doubao", profileId: "editor-2" });
+
+    assert.equal(defaultSession.profileId, "default");
+    assert.equal(namedSession.profileId, "editor-2");
+    assert.notEqual(namedSession.profileDir, defaultSession.profileDir);
+    assert.notEqual(namedSession.stateFile, defaultSession.stateFile);
   });
 
   it("invokes execFile with structured Playwright arguments and the session environment", async function() {
