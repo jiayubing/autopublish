@@ -248,8 +248,14 @@ describe("workspace bootstrap service", function() {
       assert.equal(result.workspacePath, fs.realpathSync(candidate));
       const marker = JSON.parse(fs.readFileSync(path.join(candidate, ".autopublish-workspace.json"), "utf8"));
       assert.deepEqual(marker, { version: 1, createdAt: "2026-07-14T12:00:00.000Z" });
-      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish", "input")), true);
       assert.equal(fs.existsSync(path.join(candidate, "clients")), true);
+      assert.equal(fs.existsSync(path.join(candidate, "input")), false);
+      assert.equal(fs.existsSync(path.join(candidate, "data")), false);
+      assert.equal(fs.existsSync(path.join(candidate, "research")), false);
+      assert.equal(fs.existsSync(path.join(candidate, "logs")), false);
+      assert.equal(fs.existsSync(path.join(candidate, "tmp")), false);
+      assert.equal(fs.existsSync(path.join(candidate, "work")), false);
       assert.equal(harness.events.relaunches.length, 1);
     } finally { harness.cleanup(); }
   });
@@ -281,16 +287,18 @@ describe("workspace bootstrap service", function() {
       await harness.service.confirmSelection({ token: selected.selection.token });
       assert.equal(fs.readFileSync(path.join(candidate, "keep.txt"), "utf8"), "keep");
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), true);
-      assert.equal(fs.existsSync(path.join(candidate, "data")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish", "data")), true);
+      assert.equal(fs.existsSync(path.join(candidate, "data")), false);
     } finally { harness.cleanup(); }
   });
 
   it("rejects every existing AutoPublish directory link before initialization", async function(t) {
     const directDirectories = [
-      "input", "data", "logs", "published", "failed", "tmp", "work", "config",
-      "clients", "research", "templates", "generated", "browser"
+      ".autopublish", ".autopublish/input", ".autopublish/data", ".autopublish/published",
+      ".autopublish/failed", ".autopublish/research", ".autopublish/batches",
+      ".autopublish/queue", ".autopublish/submission-records", "clients", "templates", "generated"
     ];
-    const nestedDirectories = ["input/media", "browser/doubao", "logs/doubao-diagnostics"];
+    const nestedDirectories = [".autopublish/input/media", ".autopublish/input/lieju", ".autopublish/input/toutiao"];
     let linkPermissionError = null;
 
     for (const relativePath of directDirectories.concat(nestedDirectories)) {
@@ -331,7 +339,7 @@ describe("workspace bootstrap service", function() {
     try {
       fs.mkdirSync(candidate);
       fs.writeFileSync(path.join(candidate, "keep.txt"), "keep", "utf8");
-      fs.writeFileSync(path.join(candidate, "data"), "not a directory", "utf8");
+      fs.writeFileSync(path.join(candidate, ".autopublish"), "not a directory", "utf8");
       const selected = harness.service.chooseDirectory(candidate);
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_PATH_INVALID");
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
@@ -343,7 +351,7 @@ describe("workspace bootstrap service", function() {
     const harness = createHarness();
     const candidate = path.join(harness.root, "candidate");
     const io = Object.create(fs);
-    const dataPath = path.join(candidate, "data");
+    const dataPath = path.join(candidate, ".autopublish");
     io.lstatSync = function(target) {
       if (target === dataPath) {
         const error = new Error("inspection denied");
@@ -468,7 +476,7 @@ describe("workspace bootstrap service", function() {
       locationStore: {
         read: function() { return { ok: true, value: null }; },
         write: function() {
-          const input = path.join(candidate, "input");
+          const input = path.join(candidate, ".autopublish", "input");
           fs.rmSync(input, { recursive: true, force: true });
           fs.mkdirSync(input);
           return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } };
@@ -480,7 +488,7 @@ describe("workspace bootstrap service", function() {
     try {
       const selected = harness.service.chooseDirectory(candidate);
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
-      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish", "input")), true);
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
     } finally { harness.cleanup(); }
   });
@@ -490,7 +498,7 @@ describe("workspace bootstrap service", function() {
     const io = Object.create(fs);
     io.writeFileSync = function(target, content, options) {
       if (target === path.join(candidate, ".autopublish-workspace.json")) {
-        const input = path.join(candidate, "input");
+        const input = path.join(candidate, ".autopublish", "input");
         fs.rmSync(input, { recursive: true, force: true });
         fs.mkdirSync(input);
         const error = new Error("marker write failed after directory replacement");
@@ -505,7 +513,7 @@ describe("workspace bootstrap service", function() {
     try {
       const selected = harness.service.chooseDirectory(candidate);
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
-      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish", "input")), true);
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
     } finally { harness.cleanup(); }
   });
@@ -514,7 +522,7 @@ describe("workspace bootstrap service", function() {
     let candidate;
     const failingFs = Object.create(fs);
     failingFs.rmdirSync = function(target) {
-      if (target === path.join(candidate, "input")) {
+      if (target === path.join(candidate, ".autopublish", "input")) {
         const error = new Error("simulated cleanup failure");
         error.code = "EPERM";
         throw error;
@@ -538,7 +546,7 @@ describe("workspace bootstrap service", function() {
     try {
       const selected = harness.service.chooseDirectory(candidate);
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_CLEANUP_FAILED");
-      assert.equal(fs.existsSync(path.join(candidate, "input")), true);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish", "input")), true);
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
     } finally { harness.cleanup(); }
   });

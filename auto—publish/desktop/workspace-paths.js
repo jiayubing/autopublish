@@ -37,23 +37,7 @@ function createPortableContentPaths(contentLibrary) {
 
 function createWorkspacePaths(root, storage) {
   const content = createPortableContentPaths(root);
-  if (!storage) {
-    return Object.assign(content, {
-      legacyInput: path.join(content.root, "input"),
-      legacyData: path.join(content.root, "data"),
-      legacyLogs: path.join(content.root, "logs"),
-      legacyPublished: path.join(content.root, "published"),
-      legacyFailed: path.join(content.root, "failed"),
-      legacyTmp: path.join(content.root, "tmp"),
-      legacyWork: path.join(content.root, "work"),
-      legacyConfig: path.join(content.root, "config"),
-      legacyBrowser: path.join(content.root, "browser"),
-      legacyMedia: path.join(content.root, "input", "media"),
-      legacyBrowserDoubao: path.join(content.root, "browser", "doubao"),
-      legacyLogsDiagnostics: path.join(content.root, "logs", "doubao-diagnostics"),
-      legacyResearch: path.join(content.root, "research")
-    });
-  }
+  if (!storage) return content;
   validateStoragePaths(storage);
   if (path.resolve(storage.contentLibrary) !== content.root) {
     throw new Error("storage contentLibrary must match workspace root");
