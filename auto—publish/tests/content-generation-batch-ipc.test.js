@@ -41,4 +41,30 @@ describe("content generation batch IPC", function() {
     listener({ batchId: "batch-1", status: "running", taskId: "task-1" });
     assert.deepStrictEqual(sent, [["content:generation-batch-state", { batchId: "batch-1", status: "running", taskId: "task-1" }]]);
   });
+
+  it("forwards the batch id and configuration confirmation for continuation commands", async function() {
+    const { ipcMain, handlers } = fakeIpc();
+    const calls = [];
+    const service = {
+      continueBatch: async function(input) { calls.push(["continue", input]); return { id: input.batchId, status: "running" }; },
+      resumeBatch: async function(input) { calls.push(["resume", input]); return { id: input.batchId, status: "running" }; },
+      get: function(batchId) { calls.push(["get", batchId]); return { id: batchId, status: "refreshed" }; },
+    };
+    registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: service });
+
+    assert.deepStrictEqual(
+      await handlers.get("content:continue-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: true }),
+      { ok: true, data: { id: "batch-7", status: "refreshed" } },
+    );
+    assert.deepStrictEqual(
+      await handlers.get("content:resume-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: false }),
+      { ok: true, data: { id: "batch-7", status: "refreshed" } },
+    );
+    assert.deepStrictEqual(calls, [
+      ["continue", { batchId: "batch-7", confirmConfigChange: true }],
+      ["get", "batch-7"],
+      ["resume", { batchId: "batch-7", confirmConfigChange: false }],
+      ["get", "batch-7"],
+    ]);
+  });
 });
