@@ -80,6 +80,54 @@ function taskError(code, status) {
 }
 
 describe("generation batch runner", function() {
+  it("passes the complete task to article lookup before generating a pending task", async function() {
+    const batch = makeBatch([{}]);
+    const store = fakeStore(batch);
+    const lookedUp = [];
+    const generated = [];
+    const runner = createGenerationBatchRunner({
+      batchStore: store,
+      findByGenerationTaskId: function(task) {
+        lookedUp.push(task);
+        assert.equal(task.id, "task-1");
+        assert.equal(task.clientId, "client-1");
+        return null;
+      },
+      executeTask: async function(task) {
+        generated.push(task.id);
+        return { id: "article-1" };
+      }
+    });
+
+    const result = await runner.run(batch.id);
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.tasks[0].status, "succeeded");
+    assert.deepStrictEqual(lookedUp.map(function(task) { return task.id; }), ["task-1"]);
+    assert.deepStrictEqual(generated, ["task-1"]);
+  });
+
+  it("does not leave a task pending when article lookup fails before claim", async function() {
+    const batch = makeBatch([{}]);
+    const store = fakeStore(batch);
+    const lookupError = taskError("ARTICLE_STORE_READ_FAILED");
+    const runner = createGenerationBatchRunner({
+      batchStore: store,
+      findByGenerationTaskId: function(task) {
+        assert.equal(task.clientId, "client-1");
+        throw lookupError;
+      },
+      executeTask: async function() { throw new Error("must not generate"); }
+    });
+
+    const result = await runner.run(batch.id);
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.tasks[0].status, "failed");
+    assert.equal(result.tasks[0].attempts, 0);
+    assert.deepStrictEqual(result.tasks[0].error, { code: "ARTICLE_STORE_READ_FAILED", message: "ARTICLE_STORE_READ_FAILED" });
+  });
+
   it("runs tasks serially, skips succeeded work, and completes the batch", async function() {
     const batch = makeBatch([{ status: "succeeded", articleId: "article-1" }, {}]);
     const store = fakeStore(batch);

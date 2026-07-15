@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const { createContentGenerationBatchService } = require("../desktop/services/content-generation-batch-service");
 const { createGenerationBatchRunner } = require("../src/content/generation-batch-runner");
+const { createGenerationBatchStore } = require("../src/content/generation-batch-store");
 const { getClient } = require("../src/content/client-knowledge");
 const { createClientMaterialStore } = require("../src/content/client-material-store");
 
@@ -98,6 +99,86 @@ function makeHarness(options) {
 }
 
 describe("content generation batch service", function() {
+  it("continues a real persisted pending batch when article lookup requires the task client id", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-batch-pending-regression-"));
+    const aiCalls = [];
+    const articleStore = {
+      listArticles: function(clientId) {
+        assert.equal(clientId, "c1");
+        return [];
+      },
+      saveArticle: function(article) { return article; }
+    };
+    const service = createContentGenerationBatchService({
+      workspaceRoot: workspaceRoot,
+      batchStore: createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-1"; } }),
+      clientKnowledge: { getClient: function(clientId) { return { id: clientId, name: "Client 1" }; } },
+      materialStore: { listMaterials: async function() { return [{ id: "brand.md", status: "ready", content: "facts" }]; } },
+      researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
+      templateStore: { getTemplate: function() { return { id: "guide", body: "write" }; } },
+      articleStore: articleStore,
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function() {
+          aiCalls.push("generate");
+          return { id: "article-1", title: "Title", content: "Body" };
+        } };
+      },
+      aiProviderService: { getFingerprint: function() { return "fp-1"; } }
+    });
+
+    try {
+      const pending = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+      assert.equal(pending.status, "pending");
+      assert.equal(pending.tasks[0].attempts, 0);
+
+      const batch = await service.continueBatch({ batchId: pending.id });
+      assert.equal(batch.status, "completed");
+      assert.equal(batch.tasks[0].status, "succeeded");
+      assert.equal(batch.tasks[0].attempts, 1);
+      assert.equal(aiCalls.length, 1);
+    } finally {
+      await service.dispose();
+      fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks a real batch failed when article lookup fails before task claim", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-batch-lookup-error-"));
+    const lookupError = Object.assign(new Error("article store unavailable"), { code: "ARTICLE_STORE_READ_FAILED" });
+    const articleStore = {
+      listArticles: function(clientId) {
+        assert.equal(clientId, "c1");
+        throw lookupError;
+      },
+      saveArticle: function(article) { return article; }
+    };
+    const service = createContentGenerationBatchService({
+      workspaceRoot: workspaceRoot,
+      batchStore: createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-1"; } }),
+      clientKnowledge: { getClient: function(clientId) { return { id: clientId, name: "Client 1" }; } },
+      materialStore: { listMaterials: async function() { return [{ id: "brand.md", status: "ready", content: "facts" }]; } },
+      researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
+      templateStore: { getTemplate: function() { return { id: "guide", body: "write" }; } },
+      articleStore: articleStore,
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function() { throw new Error("must not generate"); } };
+      },
+      aiProviderService: { getFingerprint: function() { return "fp-1"; } }
+    });
+
+    try {
+      const pending = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+      const result = await service.continueBatch({ batchId: pending.id });
+      assert.equal(result.status, "failed");
+      assert.equal(result.tasks[0].status, "failed");
+      assert.equal(result.tasks[0].attempts, 0);
+      assert.equal(result.tasks[0].error.code, "ARTICLE_STORE_READ_FAILED");
+    } finally {
+      await service.dispose();
+      fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reads batch-generation materials through a logical client id", async function() {
     const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-logical-client-"));
     const physicalDirectory = path.join(workspaceRoot, "clients", "physical-client");
