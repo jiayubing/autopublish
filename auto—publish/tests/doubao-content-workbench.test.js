@@ -222,9 +222,12 @@ describe("Doubao content workbench renderer contracts", function() {
     assert.match(generation, /selectedArticleRef\.current\?\.platform === platform/);
   });
 
-  it("maps legacy history templates by platform and scenario before editing and saving", function() {
+  it("maps legacy history templates by platform and scenario without replacing snapshots", async function() {
     const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    assert.match(generation, /nextTemplates\.find\(\(item\) => item\.platform === article\.platform && item\.scenario === article\.scenario\)/);
+    const { resolveAvailableTemplateId } = await import("../media-workbench/src/article-history-logic.js");
+    assert.equal(resolveAvailableTemplateId({ platform: "ctrip", scenario: "guide", templateId: "missing" }, [{ id: "current", platform: "ctrip", scenario: "guide" }]), "current");
+    assert.equal(resolveAvailableTemplateId({ platform: "ctrip", templateId: "deleted", templateSnapshot: { platform: "ctrip", id: "deleted", name: "Old", scenario: "guide", body: "old" } }, [{ id: "current", platform: "ctrip", scenario: "guide" }]), "deleted");
+    assert.match(generation, /resolveAvailableTemplateId/);
     assert.match(generation, /onArticleChange\(\{ \.\.\.currentArticle, templateId: resolvedTemplateId \}\)/);
     assert.match(generation, /saveContentArticle\(\{ \.\.\.selectedArticle, templateId: resolvedTemplateId/);
     assert.match(generation, /templateId: resolvedTemplateId/);
