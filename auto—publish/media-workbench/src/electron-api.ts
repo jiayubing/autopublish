@@ -1,4 +1,4 @@
-import { Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatchState, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 
 
 // Global type declaration for desktopConsole
@@ -70,6 +70,20 @@ interface DesktopConsoleContent {
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
   previewExport(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
   exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
+  getGenerationBatchState?: () => Promise<IpcResponse<GenerationBatchState>>;
+  onGenerationBatchState?: (listener: (state: GenerationBatchState) => void) => () => void;
+}
+
+interface DesktopConsoleBatch {
+  getState(): Promise<IpcResponse<GenerationBatchState>>;
+  onState(listener: (state: GenerationBatchState) => void): () => void;
+}
+
+interface DesktopConsoleAiProvider {
+  getStatus(): Promise<IpcResponse<AiProviderStatus>>;
+  save(input: AiProviderConfigInput): Promise<IpcResponse<AiProviderStatus>>;
+  testConnection(input: AiProviderConfigInput): Promise<IpcResponse<AiProviderTestResult>>;
+  clear(): Promise<IpcResponse<AiProviderClearResult>>;
 }
 
 interface DesktopConsoleWorkspace {
@@ -87,6 +101,8 @@ export interface ContentExportPreview { filename: string; targetPlatform: string
 
 interface DesktopConsole {
   workspace: DesktopConsoleWorkspace;
+  aiProvider: DesktopConsoleAiProvider;
+  batch: DesktopConsoleBatch;
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
@@ -280,6 +296,63 @@ export async function collectDoubaoQuestion(input: { clientId: string; questionI
   const result = await window.desktopConsole!.content.collectDoubaoOne(input);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to collect Doubao answer");
   return result.data;
+}
+
+const EMPTY_AI_PROVIDER_STATUS: AiProviderStatus = {
+  source: 'application',
+  configured: false,
+  baseUrl: '',
+  model: '',
+  timeoutMs: 60000,
+  hasApiKey: false,
+  apiKeyMask: '',
+  lastTest: null,
+};
+
+export async function getAiProviderStatus(): Promise<AiProviderStatus> {
+  if (!isElectron()) return EMPTY_AI_PROVIDER_STATUS;
+  const result = await window.desktopConsole!.aiProvider.getStatus();
+  if (!result.ok) throw getIpcError(result.error, "Unable to read AI provider settings");
+  return result.data || EMPTY_AI_PROVIDER_STATUS;
+}
+
+export async function saveAiProviderConfig(input: AiProviderConfigInput): Promise<AiProviderStatus> {
+  if (!isElectron()) throw new Error("AI provider settings require the desktop app");
+  const result = await window.desktopConsole!.aiProvider.save(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to save AI provider settings");
+  return result.data;
+}
+
+export async function testAiProviderConnection(input: AiProviderConfigInput): Promise<AiProviderTestResult> {
+  if (!isElectron()) throw new Error("AI provider testing requires the desktop app");
+  const result = await window.desktopConsole!.aiProvider.testConnection(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to test the AI provider connection");
+  return result.data;
+}
+
+export async function clearAiProviderConfig(): Promise<AiProviderClearResult> {
+  if (!isElectron()) throw new Error("AI provider settings require the desktop app");
+  const result = await window.desktopConsole!.aiProvider.clear();
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to clear AI provider settings");
+  return result.data;
+}
+
+export async function getGenerationBatchState(): Promise<GenerationBatchState> {
+  if (!isElectron()) return { state: 'idle', status: 'idle' };
+  const command = window.desktopConsole!.content.getGenerationBatchState;
+  const result = typeof command === 'function'
+    ? await command()
+    : await window.desktopConsole!.batch.getState();
+  if (!result.ok) throw getIpcError(result.error, "Unable to read generation batch state");
+  return result.data || { state: 'idle', status: 'idle' };
+}
+
+export function subscribeGenerationBatchState(listener: (state: GenerationBatchState) => void): () => void {
+  if (!isElectron()) return () => undefined;
+  const subscribe = window.desktopConsole!.content.onGenerationBatchState;
+  return typeof subscribe === 'function'
+    ? subscribe(listener)
+    : window.desktopConsole!.batch.onState(listener);
 }
 
 export async function previewDoubaoBatch(input: { clientIds: string[]; mode: DoubaoBatchMode }): Promise<DoubaoBatchPreview> {

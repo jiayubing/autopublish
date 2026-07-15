@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ExternalLink, FolderOpen, Info, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ExternalLink, FolderOpen, Info, RefreshCw } from 'lucide-react';
 import {
   cancelWorkspaceSelection,
   confirmWorkspaceSelection,
@@ -13,6 +13,7 @@ import {
   WorkspaceCurrent,
 } from '../types';
 import { getSettingsCommandState } from '../workspace-ui-logic.js';
+import AiProviderSettings from './AiProviderSettings';
 import WorkspaceSelectionPanel from './WorkspaceSelectionPanel';
 
 const READY_STATE: WorkspaceBootstrapState = {
@@ -164,10 +165,7 @@ export default function SettingsView() {
         <Info className="h-4 w-4 shrink-0" />
         <span>工作区切换不会复制、移动或删除原工作区数据；最终安全检查由主进程服务完成。投稿不会因文件新增或预检通过而自动投稿。</span>
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><ShieldCheck className="h-4 w-4" /> 凭据与运行环境</h3>
-        <p className="text-xs leading-5 text-slate-600">API 密钥、浏览器和平台凭据由工作区环境配置提供。本页面不会保存或展示凭据。</p>
-      </section>
+      <AiProviderSettings />
     </div>
   );
 }

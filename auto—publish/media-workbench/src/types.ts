@@ -9,6 +9,43 @@ export type IpcResponse<T> =
   | { ok: true; data?: T; error?: never }
   | { ok: false; data?: never; error: IpcError };
 
+export type AiProviderSource = 'application' | 'environment';
+
+export interface AiProviderTestResult {
+  testedAt: string;
+  ok: boolean;
+  code: string;
+}
+
+export interface AiProviderStatus {
+  source: AiProviderSource;
+  configured: boolean;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  hasApiKey: boolean;
+  apiKeyMask: string;
+  lastTest: AiProviderTestResult | null;
+}
+
+export interface AiProviderConfigInput {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+}
+
+export interface AiProviderClearResult {
+  cleared: boolean;
+}
+
+export interface GenerationBatchState {
+  state?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
+  status?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
+  isBatchRunning?: boolean;
+  isStopPending?: boolean;
+}
+
 export type WorkspaceBootstrapStatus =
   | 'checking'
   | 'selection_required'
