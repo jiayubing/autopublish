@@ -7,7 +7,7 @@ const { createWorkspacePaths } = require("../../desktop/workspace-paths");
 const BATCH_VERSION = 1;
 const MAX_TASKS = 1000;
 const MAX_ITEMS = 1000;
-const TASK_STATUSES = new Set(["pending", "running", "succeeded", "failed", "interrupted"]);
+const TASK_STATUSES = new Set(["pending", "running", "succeeded", "failed", "interrupted", "cancelled"]);
 const BATCH_STATUSES = new Set(["pending", "running", "stopping", "stopped", "interrupted", "paused_configuration", "completed", "failed"]);
 const RESUMABLE_STATUSES = new Set(["pending", "failed", "interrupted"]);
 
@@ -75,7 +75,7 @@ function normalizeTemplate(template) {
 }
 
 function countsFor(tasks) {
-  const counts = { total: tasks.length, succeeded: 0, failed: 0, pending: 0, interrupted: 0 };
+  const counts = { total: tasks.length, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0 };
   tasks.forEach(function(task) {
     if (Object.prototype.hasOwnProperty.call(counts, task.status)) counts[task.status] += 1;
   });
@@ -296,6 +296,7 @@ function createGenerationBatchStore(options) {
   function markTaskRunning(batchId, taskIdValue) {
     return updateTask(batchId, taskIdValue, function(task, batch) {
       if (task.status === "running") throw storeError("GENERATION_TASK_BUSY", "Generation task is already running");
+      if (task.status === "cancelled") throw storeError("GENERATION_TASK_CANCELLED", "Cancelled generation task cannot run again");
       if (!RESUMABLE_STATUSES.has(task.status)) {
         if (task.status === "succeeded") throw storeError("GENERATION_TASK_ALREADY_SUCCEEDED", "Succeeded task cannot run again");
         throw storeError("GENERATION_TASK_STATUS_INVALID", "Generation task cannot run");
@@ -320,7 +321,7 @@ function createGenerationBatchStore(options) {
       task.articleId = articleId;
       task.error = null;
       task.updatedAt = clock();
-      batch.status = batch.tasks.every(function(item) { return item.status === "succeeded"; }) ? "completed" : "running";
+      batch.status = batch.tasks.every(function(item) { return item.status === "succeeded" || item.status === "cancelled"; }) ? "completed" : "running";
     });
   }
 
@@ -341,6 +342,23 @@ function createGenerationBatchStore(options) {
       task.updatedAt = clock();
       batch.status = "interrupted";
     });
+  }
+
+  function cancelPending(batchId) {
+    const batch = getBatch(batchId);
+    batch.tasks.forEach(function(task) {
+      if (task.status === "pending") {
+        task.status = "cancelled";
+        task.error = null;
+        task.updatedAt = clock();
+      }
+    });
+    if (!batch.tasks.some(function(task) {
+      return task.status === "pending" || task.status === "running" || task.status === "failed" || task.status === "interrupted";
+    })) {
+      batch.status = "completed";
+    }
+    return writeBatch(batch);
   }
 
   function getTasksForContinue(batchId) {
@@ -440,6 +458,7 @@ function createGenerationBatchStore(options) {
     markTaskSucceeded: markTaskSucceeded,
     markTaskFailed: markTaskFailed,
     markTaskInterrupted: markTaskInterrupted,
+    cancelPending: cancelPending,
     recoverInterrupted: recoverInterrupted,
     getTasksForContinue: getTasksForContinue,
     markRunning: markTaskRunning,

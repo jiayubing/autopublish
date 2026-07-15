@@ -168,7 +168,8 @@ function createGenerationBatchRunner(options) {
     try {
       const existingBeforeClaim = await findExistingArticle(task);
       if (existingBeforeClaim) {
-        if (!stopSignal.aborted) deps.batchStore.markTaskSucceeded(batchId, task.id, existingBeforeClaim.id);
+        const current = deps.batchStore.getBatch(batchId).tasks.find(function(item) { return item.id === task.id; });
+        if (!stopSignal.aborted && current && current.status !== "cancelled") deps.batchStore.markTaskSucceeded(batchId, task.id, existingBeforeClaim.id);
         return;
       }
       if (stopSignal.aborted) throw abortError();
@@ -176,7 +177,7 @@ function createGenerationBatchRunner(options) {
         deps.batchStore.markTaskRunning(batchId, task.id);
         claimed = true;
       } catch (error) {
-        if (error && (error.code === "GENERATION_TASK_ALREADY_SUCCEEDED" || error.code === "GENERATION_TASK_BUSY")) return;
+        if (error && (error.code === "GENERATION_TASK_ALREADY_SUCCEEDED" || error.code === "GENERATION_TASK_BUSY" || error.code === "GENERATION_TASK_CANCELLED")) return;
         throw error;
       }
       const result = await executeWithRetry(task, controller.signal);
@@ -211,7 +212,7 @@ function createGenerationBatchRunner(options) {
       return deps.batchStore.getBatch(batchId);
     }
     if (batch.status === "paused_configuration") return batch;
-    if (batch.tasks.every(function(task) { return task.status === "succeeded"; })) {
+    if (batch.tasks.every(function(task) { return task.status === "succeeded" || task.status === "cancelled"; })) {
       if (batch.status !== "completed") deps.batchStore.updateBatchStatus(batchId, "completed");
     } else if (batch.tasks.some(function(task) { return task.status === "failed"; })) {
       if (batch.status !== "failed") deps.batchStore.updateBatchStatus(batchId, "failed");

@@ -47,7 +47,7 @@ function makeHarness(options) {
       });
       const batch = { id, status: "pending", aiConfigFingerprint: input.aiConfigFingerprint,
         clientSources: input.clientSources, templates: input.templates, tasks,
-        counts: { total: tasks.length, succeeded: 0, failed: 0, pending: tasks.length, interrupted: 0 } };
+        counts: { total: tasks.length, succeeded: 0, failed: 0, pending: tasks.length, interrupted: 0, cancelled: 0 } };
       batches.set(id, batch);
       return batch;
     },
@@ -57,7 +57,8 @@ function makeHarness(options) {
     markTaskRunning: function(id, taskId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "running"; task.attempts += 1; return batches.get(id); },
     markTaskSucceeded: function(id, taskId, articleId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "succeeded"; task.articleId = articleId; task.error = null; return batches.get(id); },
     markTaskFailed: function(id, taskId, error) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "failed"; task.error = error; return batches.get(id); },
-    markTaskInterrupted: function(id, taskId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "interrupted"; return batches.get(id); }
+     markTaskInterrupted: function(id, taskId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "interrupted"; return batches.get(id); },
+     cancelPending: function(id) { const batch = batches.get(id); batch.tasks.forEach(function(task) { if (task.status === "pending") task.status = "cancelled"; }); batch.counts.pending = batch.tasks.filter(function(task) { return task.status === "pending"; }).length; batch.counts.cancelled = batch.tasks.filter(function(task) { return task.status === "cancelled"; }).length; if (!batch.tasks.some(function(task) { return ["pending", "running", "failed", "interrupted"].includes(task.status); })) batch.status = "completed"; return batch; }
   };
 
   const runner = {
@@ -72,7 +73,7 @@ function makeHarness(options) {
         const article = await runnerOptions.executeTask(task, { signal: new AbortController().signal });
         batchStore.markTaskSucceeded(batchId, task.id, article.id);
         batch.status = "completed";
-        batch.counts = { total: batch.tasks.length, succeeded: batch.tasks.filter(function(item) { return item.status === "succeeded"; }).length, failed: 0, pending: 0, interrupted: 0 };
+        batch.counts = { total: batch.tasks.length, succeeded: batch.tasks.filter(function(item) { return item.status === "succeeded"; }).length, failed: 0, pending: 0, interrupted: 0, cancelled: batch.tasks.filter(function(item) { return item.status === "cancelled"; }).length };
       }
       return batchStore.getBatch(batchId);
     },
@@ -287,5 +288,18 @@ describe("content generation batch service", function() {
     unsubscribe();
     assert.ok(events.every(function(event) { return event.batchId && !event.prompt && !event.materials && !event.apiKey; }));
     assert.ok(calls.run.length >= 2);
+  });
+
+  it("previews and confirms permanent cancellation of pending tasks", async function() {
+    const { service } = makeHarness();
+    const batch = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    const preview = await service.previewCancelPending({ batchId: batch.id });
+    assert.deepStrictEqual(preview, { batchId: batch.id, pendingCount: 1, runningCount: 0, cancelledCount: 0, canCancel: true });
+    await assert.rejects(service.cancelPending({ batchId: batch.id }), function(error) { return error.code === "GENERATION_CANCEL_CONFIRMATION_REQUIRED"; });
+    const cancelled = await service.cancelPending({ batchId: batch.id, confirmed: true });
+    assert.equal(cancelled.status, "completed");
+    assert.equal(cancelled.tasks[0].status, "cancelled");
+    assert.equal(cancelled.counts.cancelled, 1);
+    await service.dispose();
   });
 });

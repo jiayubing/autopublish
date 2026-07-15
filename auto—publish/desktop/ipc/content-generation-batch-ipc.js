@@ -44,6 +44,8 @@ function registerContentGenerationBatchIpc(deps) {
   ipcMain.handle("content:continue-generation-batch", function(event, value) { return invokeBatchCommand(service, "continueBatch", value); });
   ipcMain.handle("content:resume-generation-batch", function(event, value) { return invokeBatchCommand(service, "resumeBatch", value); });
   ipcMain.handle("content:retry-failed-generation-batch", function(event, value) { return invoke(function() { return service.retryFailed(input(value)); }); });
+  ipcMain.handle("content:preview-cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.previewCancelPending(input(value)); }); });
+  ipcMain.handle("content:cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.cancelPending(input(value)); }); });
   ipcMain.handle("content:get-generation-batch-state", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.getState(); }); });
   const sendToRenderer = values.sendToRenderer;
   const unsubscribe = typeof service.subscribe === "function" ? service.subscribe(function(state) {

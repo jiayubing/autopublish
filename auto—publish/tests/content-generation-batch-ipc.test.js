@@ -15,12 +15,14 @@ describe("content generation batch IPC", function() {
       preview: async function(input) { return { taskCount: input.templates.length }; },
       createBatch: async function() { return { id: "batch-1" }; },
       list: function() { return []; }, get: function() { return { id: "batch-1" }; }, startBatch: async function() { return { status: "completed" }; },
-      stopBatch: async function() { return null; }, continueBatch: async function() { return null; }, retryFailed: async function() { return null; }, getState: function() { return { status: "idle" }; },
+       stopBatch: async function() { return null; }, continueBatch: async function() { return null; }, retryFailed: async function() { return null; }, previewCancelPending: async function() { return { pendingCount: 1, canCancel: true }; }, cancelPending: async function() { return { id: "batch-1", status: "completed" }; }, getState: function() { return { status: "idle" }; },
       subscribe: function() { return function() {}; }
     };
     registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: service });
-    for (const channel of ["content:preview-generation-batch", "content:create-generation-batch", "content:list-generation-batches", "content:get-generation-batch", "content:start-generation-batch", "content:pause-generation-batch", "content:stop-generation-batch", "content:continue-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:get-generation-batch-state"]) assert.ok(handlers.has(channel), channel);
+     for (const channel of ["content:preview-generation-batch", "content:create-generation-batch", "content:list-generation-batches", "content:get-generation-batch", "content:start-generation-batch", "content:pause-generation-batch", "content:stop-generation-batch", "content:continue-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-batch-state"]) assert.ok(handlers.has(channel), channel);
     assert.deepStrictEqual(await handlers.get("content:preview-generation-batch")({}, { templates: ["guide"] }), { ok: true, data: { taskCount: 1 } });
+    assert.deepStrictEqual(await handlers.get("content:preview-cancel-pending-generation-batch")({}, { batchId: "batch-1" }), { ok: true, data: { pendingCount: 1, canCancel: true } });
+    assert.deepStrictEqual(await handlers.get("content:cancel-pending-generation-batch")({}, { batchId: "batch-1", confirmed: true }), { ok: true, data: { id: "batch-1", status: "completed" } });
   });
 
   it("returns only allowlisted error code and message without provider details", async function() {

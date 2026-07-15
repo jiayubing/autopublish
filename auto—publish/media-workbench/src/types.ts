@@ -56,6 +56,15 @@ export interface GenerationBatchCounts {
   failed: number;
   pending: number;
   interrupted: number;
+  cancelled: number;
+}
+
+export interface GenerationBatchCancelPreview {
+  batchId: string;
+  pendingCount: number;
+  runningCount: number;
+  cancelledCount: number;
+  canCancel: boolean;
 }
 
 export type WorkspaceBootstrapStatus =
@@ -229,7 +238,7 @@ export interface GenerationBatchPreview {
   clientSources: GenerationBatchSourceSelection[];
   tasks?: Array<GenerationBatchSourceSelection & { platform: string; templateId: string }>;
 }
-export type GenerationTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'interrupted';
+export type GenerationTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'interrupted' | 'cancelled';
 export interface GenerationBatchTask {
   id: string;
   clientId: string;

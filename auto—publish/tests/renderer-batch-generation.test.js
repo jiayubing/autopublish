@@ -224,4 +224,17 @@ describe("renderer content generation workflow", function() {
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
     assert.match(detail, /const unfinished = counts\.pending > 0 \|\| counts\.failed > 0 \|\| counts\.interrupted > 0/);
   });
+
+  it("exposes cancelled counts and a preview-confirmed pending cancellation action", function() {
+    const api = read("media-workbench/src/electron-api.ts");
+    const preload = read("desktop/preload.js");
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(api, /previewCancelPendingGenerationBatch/);
+    assert.match(api, /cancelPendingGenerationBatch/);
+    assert.match(preload, /previewCancelPendingGenerationBatch/);
+    assert.match(preload, /cancelPendingGenerationBatch/);
+    assert.match(detail, /counts\.cancelled/);
+    assert.match(detail, /window\.confirm/);
+    assert.match(detail, /pendingCount/);
+  });
 });

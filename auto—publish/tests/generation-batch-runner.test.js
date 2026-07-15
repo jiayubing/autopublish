@@ -26,6 +26,11 @@ function makeBatch(tasks) {
 
 function fakeStore(batch) {
   const state = JSON.parse(JSON.stringify(batch));
+  function syncCounts() {
+    state.counts = { total: state.tasks.length, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0 };
+    state.tasks.forEach(function(task) { if (Object.prototype.hasOwnProperty.call(state.counts, task.status)) state.counts[task.status] += 1; });
+  }
+  syncCounts();
   function currentTask(taskId) {
     const task = state.tasks.find(function(item) { return item.id === taskId; });
     if (!task) throw new Error("missing task");
@@ -46,6 +51,7 @@ function fakeStore(batch) {
       const task = currentTask(taskId);
       task.status = "succeeded";
       task.articleId = articleId;
+      syncCounts();
       state.status = state.tasks.every(function(item) { return item.status === "succeeded"; }) ? "completed" : "running";
       return this.getBatch();
     },
@@ -54,6 +60,7 @@ function fakeStore(batch) {
       const task = currentTask(taskId);
       task.status = "failed";
       task.error = { code: error.code, message: error.message };
+      syncCounts();
       state.status = "running";
       return this.getBatch();
     },
@@ -61,7 +68,15 @@ function fakeStore(batch) {
       assert.equal(batchId, state.id);
       const task = currentTask(taskId);
       task.status = "interrupted";
+      syncCounts();
       state.status = "interrupted";
+      return this.getBatch();
+    },
+    cancelPending: function(batchId) {
+      assert.equal(batchId, state.id);
+      state.tasks.forEach(function(task) { if (task.status === "pending") task.status = "cancelled"; });
+      syncCounts();
+      if (!state.tasks.some(function(task) { return ["pending", "running", "failed", "interrupted"].includes(task.status); })) state.status = "completed";
       return this.getBatch();
     },
     updateBatchStatus: function(batchId, status) {
@@ -359,5 +374,33 @@ describe("generation batch runner", function() {
     await runner.dispose();
     assert.equal(store.getBatch(batch.id).status, "stopped");
     assert.equal(runner.getState().status, "stopped");
+  });
+
+  it("keeps the running task alive while cancelling later pending tasks", async function() {
+    const batch = makeBatch([{}, {}, {}]);
+    const store = fakeStore(batch);
+    let resolveTask;
+    let started;
+    const startedPromise = new Promise(function(resolve) { started = resolve; });
+    const calls = [];
+    const runner = createGenerationBatchRunner({
+      batchStore: store,
+      executeTask: function(task) {
+        calls.push(task.id);
+        started();
+        return new Promise(function(resolve) { resolveTask = resolve; });
+      }
+    });
+
+    const running = runner.run(batch.id);
+    await startedPromise;
+    store.cancelPending(batch.id);
+    resolveTask({ id: "article-1" });
+    const result = await running;
+
+    assert.deepStrictEqual(calls, ["task-1"]);
+    assert.deepStrictEqual(result.tasks.map(function(task) { return task.status; }), ["succeeded", "cancelled", "cancelled"]);
+    assert.equal(result.counts.cancelled, 2);
+    assert.equal(result.status, "completed");
   });
 });

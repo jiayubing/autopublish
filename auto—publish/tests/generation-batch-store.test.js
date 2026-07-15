@@ -53,7 +53,7 @@ describe("generation batch store", function() {
     ]);
     assert.deepStrictEqual(batch.tasks[0].materialIds, ["brand.md"]);
     assert.deepStrictEqual(batch.tasks[0].researchQueryIds, ["q1"]);
-    assert.deepStrictEqual(batch.counts, { total: 4, succeeded: 0, failed: 0, pending: 4, interrupted: 0 });
+    assert.deepStrictEqual(batch.counts, { total: 4, succeeded: 0, failed: 0, pending: 4, interrupted: 0, cancelled: 0 });
     assert.equal(batch.status, "pending");
 
     const persisted = fs.readFileSync(path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-batch-1.json"), "utf8");
@@ -105,7 +105,7 @@ describe("generation batch store", function() {
     assert.equal(recovered.tasks[0].status, "interrupted");
     assert.equal(recovered.tasks[1].status, "succeeded");
     assert.equal(recovered.tasks[1].articleId, "article-2");
-    assert.deepStrictEqual(recovered.counts, { total: 2, succeeded: 1, failed: 0, pending: 0, interrupted: 1 });
+    assert.deepStrictEqual(recovered.counts, { total: 2, succeeded: 1, failed: 0, pending: 0, interrupted: 1, cancelled: 0 });
     assert.deepStrictEqual(restarted.getTasksForContinue(batch.id).map(function(task) { return task.id; }), [runningTask]);
 
     const same = restarted.markTaskSucceeded(batch.id, succeededTask, "article-2");
@@ -128,5 +128,26 @@ describe("generation batch store", function() {
       return error.code === "GENERATION_BATCH_INVALID";
     });
     assert.deepStrictEqual(store.getTasksForContinue(batch.id).map(function(task) { return task.status; }), ["failed"]);
+  });
+
+  it("reads old batches without a cancelled count as zero and permanently cancels only pending tasks", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-cancel"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const legacy = JSON.parse(fs.readFileSync(filename, "utf8"));
+    delete legacy.counts.cancelled;
+    fs.writeFileSync(filename, JSON.stringify(legacy), "utf8");
+    assert.equal(store.getBatch(batch.id).counts.cancelled, 0);
+
+    store.markTaskRunning(batch.id, batch.tasks[0].id);
+    const cancelled = store.cancelPending(batch.id);
+    assert.equal(cancelled.tasks[0].status, "running");
+    assert.equal(cancelled.tasks[1].status, "cancelled");
+    assert.deepStrictEqual(cancelled.counts, { total: 2, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 1 });
+    assert.deepStrictEqual(store.getTasksForContinue(batch.id), []);
+
+    const unchanged = store.cancelPending(batch.id);
+    assert.equal(unchanged.counts.cancelled, 1);
+    assert.equal(unchanged.tasks[0].status, "running");
   });
 });
