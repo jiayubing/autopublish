@@ -14,7 +14,15 @@ const REQUIRED_FILES = [
   "desktop/ipc/media-ipc.js",
   "desktop/ipc/platform-ipc.js",
   "desktop/services/runtime-diagnostics-service.js",
+  "desktop/services/ai-provider-service.js",
+  "desktop/services/content-generation-batch-service.js",
+  "desktop/ai-provider-config-store.js",
+  "desktop/ipc/content-generation-batch-ipc.js",
   "src/core/logger.js",
+  "src/content/client-material-store.js",
+  "src/content/generation-batch-store.js",
+  "src/content/generation-batch-runner.js",
+  "src/content/article-review-service.js",
   "scripts/config.js",
   "config/platforms.json",
   "media-workbench/dist/index.html",
@@ -59,7 +67,7 @@ function findPrivateEntries(appDir) {
       // workspace content, so do not inspect any other node_modules subtree.
       if (entry.isDirectory() && lowerName === "node_modules") return;
 
-      if (lowerName === ".env" || lowerName === "questions.json") {
+      if (lowerName === ".env" || lowerName === "questions.json" || lowerName === "ai-provider.json") {
         found.push(relative);
       } else if (lowerName.endsWith(".json") && lowerSegments.slice(0, -1).includes("research")) {
         found.push(relative);
@@ -69,6 +77,9 @@ function findPrivateEntries(appDir) {
       } else if (entry.isDirectory() && lowerSegments.slice(-4).join("/") === "work/playwright-cli/profiles/doubao") {
         found.push(relative);
       } else if (lowerName === "doubao-diagnostics") {
+        found.push(relative);
+      } else if (lowerName === "content-generation-batches" || lowerName === "client-material-cache" ||
+                 lowerName === "generated") {
         found.push(relative);
       } else if (lowerSegments.length >= 2 && lowerSegments[lowerSegments.length - 2] === "tests" &&
                  lowerName === "fixtures") {

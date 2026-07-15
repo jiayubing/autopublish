@@ -256,6 +256,113 @@ function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
 }
 
 describe("source assembly and packaging contract", function() {
+  it("keeps legacy research, article, migration, submission, and media surfaces in the package boundary", function() {
+    const config = read("electron-builder.alpha.yml");
+    for (const legacySurface of [
+      "src/content/research-store.js",
+      "src/content/article-store.js",
+      "src/content/legacy-migration.js",
+      "src/content/submission-export-service.js",
+      "src/platforms/media/adapter.js",
+      "desktop/ipc/content-submission-ipc.js",
+      "desktop/ipc/media-ipc.js",
+      "desktop/ipc/platform-ipc.js"
+    ]) {
+      assert.ok(config.includes("src/**/*") || config.includes(legacySurface), legacySurface + " must remain packaged");
+    }
+  });
+
+  it("declares new content runtime files and renderer build as alpha package requirements", function() {
+    const verifier = read("scripts/verify-alpha-package.js");
+    for (const requiredSurface of [
+      "src/content/client-material-store.js",
+      "src/content/generation-batch-store.js",
+      "src/content/generation-batch-runner.js",
+      "src/content/article-review-service.js",
+      "desktop/ai-provider-config-store.js",
+      "desktop/services/ai-provider-service.js",
+      "desktop/services/content-generation-batch-service.js",
+      "desktop/ipc/content-generation-batch-ipc.js",
+      "media-workbench/dist/index.html"
+    ]) {
+      assert.match(verifier, new RegExp('"' + escapeRegExp(requiredSurface) + '"'), requiredSurface + " must be verified");
+    }
+  });
+
+  it("excludes every private content and application configuration boundary", function() {
+    const config = read("electron-builder.alpha.yml");
+    for (const pattern of [
+      "!**/ai-provider.json",
+      "!**/content-generation-batches/**",
+      "!**/client-material-cache/**",
+      "!**/research/**",
+      "!**/generated/**",
+      "!**/browser/**",
+      "!**/doubao-diagnostics/**",
+      "!**/tests/fixtures/**"
+    ]) {
+      assert.match(config, new RegExp("^\\s*-\\s+[\\\"']?" + escapeRegExp(pattern) + "[\\\"']?\\s*$", "m"), pattern);
+    }
+    assert.match(config, /!\*\*\/\.env/);
+    assert.match(config, /- src\/\*\*\//);
+    assert.match(config, /- media-workbench\/dist\/\*\*\//);
+  });
+
+  it("rejects new private content and AI provider state in an app directory", function() {
+    const verifier = require("../scripts/verify-alpha-package");
+    const appDir = fs.mkdtempSync(path.join(os.tmpdir(), "alpha-package-content-boundary-"));
+    try {
+      for (const relativePath of [
+        "config/ai-provider.json",
+        "data/content-generation-batches/batch.json",
+        "work/client-material-cache/client-1/material.json",
+        "generated/client-1/article.md",
+        "research/client-1/question.json",
+        "browser/doubao/profile/marker",
+        "logs/doubao-diagnostics/summary.json",
+        "tests/fixtures/marker.json"
+      ]) {
+        const filename = path.join(appDir, relativePath);
+        fs.mkdirSync(path.dirname(filename), { recursive: true });
+        fs.writeFileSync(filename, "private\n");
+      }
+
+      const found = verifier.findPrivateEntries(appDir);
+      for (const expectedBoundary of [
+        "config/ai-provider.json",
+        "data/content-generation-batches",
+        "work/client-material-cache",
+        "generated",
+        "research/client-1/question.json",
+        "browser/doubao",
+        "logs/doubao-diagnostics",
+        "tests/fixtures"
+      ]) {
+        assert.ok(found.some(function(entry) {
+          return entry === expectedBoundary || entry.startsWith(expectedBoundary + "/");
+        }), expectedBoundary + " must be rejected");
+      }
+    } finally {
+      fs.rmSync(appDir, { recursive: true, force: true });
+    }
+  });
+
+  it("documents the new workspace boundaries and generation operations without workspace AI assignments", function() {
+    const workspaceContract = read("docs/content-workspace-contract.md");
+    const collectionGuide = read("docs/doubao-collection-operations.md");
+    const generationGuidePath = path.resolve(__dirname, "..", "docs", "content-generation-operations.md");
+    assert.match(workspaceContract, /client-material-cache/);
+    assert.match(workspaceContract, /content-generation-batches/);
+    assert.match(workspaceContract, /snapshot/i);
+    assert.match(workspaceContract, /review status/i);
+    assert.match(collectionGuide, /missing/i);
+    assert.match(collectionGuide, /recollect/i);
+    assert.match(collectionGuide, /background/i);
+    assert.ok(fs.existsSync(generationGuidePath), "generation operations guide must exist");
+    const envExample = read(".env.example");
+    assert.doesNotMatch(envExample, /^AI_[A-Z0-9_]+=/m, "workspace env must not configure AI provider");
+  });
+
   it("does not create runtime or business services before workspace bootstrap is ready", async function() {
     const harness = loadMainWithStartupHarness({ state: "selection_required" });
     await harness.ready();

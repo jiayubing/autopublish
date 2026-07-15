@@ -43,6 +43,18 @@ must not be copied into an alpha package. The browser profile and diagnostics
 remain outside the packaged application so that an installed app can be
 replaced without moving private data.
 
+Content generation adds two private runtime locations:
+
+```text
+data/content-generation-batches/
+work/client-material-cache/
+```
+
+The first stores resumable batch/task state and the second stores versioned
+DOCX conversion results. Both are workspace data, never application resources;
+they must not be committed, copied into an installer, or included in an article
+source snapshot.
+
 The active Doubao login profile is
 `work/playwright-cli/profiles/doubao/`. `src/content/doubao-browser-adapter.js`
 creates `pwSessionConfig("doubao")`, and `src/core/playwright.js` resolves that
@@ -197,6 +209,19 @@ contains `questionId`, `question`, `answerText`, `references`, `collectedAt`,
 and `collectionMethod`. This keeps the article auditable even if the live
 research record is later refreshed or deleted. Older articles may retain the
 single `researchQueryId` field and remain readable.
+
+New articles also store the selected client-material snapshots, the complete
+template snapshot, and their generation batch/task IDs. A generated article is
+initially `generated` (待审核); it becomes `saved` (已审核) only after an
+explicit single-article save or batch review. Review does not submit or export
+the article automatically. The review status is part of the article contract.
+Legacy articles without these new snapshots remain
+readable in an ungrouped legacy history group, but they cannot pass batch review
+until their required provenance is present.
+
+The existing `research/`, legacy article, workspace-selection, media
+submission, platform submission, and export paths remain the compatibility
+boundary. New stores add data beside those paths and do not move old files.
 
 ## Boundary Rules
 

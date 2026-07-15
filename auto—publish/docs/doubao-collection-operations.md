@@ -52,13 +52,26 @@ document.
 
 ## Batch collection
 
-1. Select the intended questions and choose **Start batch**. Only one Doubao
-   queue may run at a time, and tasks run serially.
-2. Watch the task bar for the current question, completed count, wait timer,
+1. Select the batch customers independently from the current customer. **Select
+   all customers** includes only clients with enabled questions; **Cancel all**
+   clears that batch selection without changing the current customer.
+2. Choose **Collect selected customers** for `missing` mode or **Recollect
+   selected customers** for `recollect` mode. Missing mode skips successful
+   existing answers. Recollect mode shows the client/question/task count and
+   requires a second confirmation before it can overwrite an answer.
+3. Select **Start batch** after reviewing the preview. Only enabled questions
+   enter the queue; disabled questions and unselected customers never become
+   tasks. Only one Doubao queue may run at a time, and tasks run serially.
+4. Watch the task bar for the current question, completed count, wait timer,
    and error text. The queue waits a randomized 15–30 seconds between tasks.
-3. Each successful answer is written to the same research store used by single
+5. Each successful answer is written to the same research store used by single
    collection. A later task must not start while the previous task is still
    collecting or saving.
+
+The `background` adapter mode is reserved for a later implementation. It is
+not advertised as available in this release; collection currently requires the
+visible browser mode. The queue belongs to the desktop process, so changing
+content pages or unmounting the collection view does not stop an active batch.
 
 ### Pause, continue, and stop
 
@@ -121,6 +134,10 @@ quit, the desktop service stops active collection, closes the browser session,
 and waits for disposal before the application exits. The persistent profile
 remains for the next login; in-memory queue tasks do not resume after restart.
 Answers already saved in `research/` and generated articles remain available.
+After a single task, the final task in a batch, or a stopped/failed final task,
+the collection session closes automatically. A paused batch with pending work
+keeps its session open; closing the session never deletes the retained login
+profile.
 
 ## Task 11 acceptance record (2026-07-12)
 
