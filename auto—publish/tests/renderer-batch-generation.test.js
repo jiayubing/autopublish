@@ -122,6 +122,16 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /selectedTemplates\.length/);
   });
 
+  it("labels builtin templates as read-only and custom templates as editable", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const types = read("media-workbench/src/types.ts");
+    assert.match(types, /source\?: 'builtin' \| 'custom'/);
+    assert.match(types, /readOnly\?: boolean/);
+    assert.match(batch, /template\.source/);
+    assert.match(batch, /只读|readOnly/);
+    assert.match(batch, /可复制|copy/);
+  });
+
   it("renders the batch client, platform template, source and confirmation contracts", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     assert.match(batch, /四步|步骤/);

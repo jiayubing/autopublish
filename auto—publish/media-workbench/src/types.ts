@@ -214,7 +214,7 @@ export interface DoubaoTask { id: string; clientId: string; questionId: string; 
 export interface DoubaoQueueState { status: 'idle' | 'running' | 'paused' | 'stopping' | 'completed'; currentTaskId: string | null; completed: number; total: number; waitRemainingMs: number; tasks: DoubaoTask[]; }
 export interface DoubaoLoginState { status: DoubaoLoginStatus; errorText?: string; }
 export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; collectionMethod: 'automatic' | 'manual' | 'legacy'; collectedAt?: string; updatedAt?: string; createdAt?: string; isAnswerComplete?: boolean; }
-export interface ContentTemplate { id: string; platform: string; scenario: string; name: string; body: string; }
+export interface ContentTemplate { id: string; platform: string; scenario: string; name: string; body: string; source?: 'builtin' | 'custom'; readOnly?: boolean; bodyHash?: string; }
 export interface GenerationBatchTemplateSelection { platform: string; templateId: string; }
 export interface GenerationBatchSourceSelection { clientId: string; materialIds: string[]; researchQueryIds: string[]; }
 export interface GenerationBatchExcludedClient { clientId: string; codes: string[]; }

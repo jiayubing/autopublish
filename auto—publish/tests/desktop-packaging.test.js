@@ -553,6 +553,17 @@ describe("source assembly and packaging contract", function() {
     assert.ok(main.includes("index.html"));
   });
 
+  it("ships the read-only builtin content template resources", function() {
+    const templatesRoot = path.resolve(__dirname, "..", "resources", "content-templates");
+    assert.ok(fs.existsSync(templatesRoot));
+    const templateFiles = childProcess.execFileSync(process.execPath, ["-e", [
+      "const fs=require('fs'),path=require('path');",
+      "function walk(d){return fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(d,e.name)):[path.join(d,e.name)]);}",
+      "process.stdout.write(JSON.stringify(walk(process.argv[1]).filter(f=>f.endsWith('.md'))));"
+    ].join(""), templatesRoot], { encoding: "utf8" });
+    assert.ok(JSON.parse(templateFiles).length > 0);
+  });
+
   it("configures a writable runtime workspace before IPC registration", function() {
     const main = read("desktop/main.js");
     assert.ok(main.includes("configureRuntimeEnvironment"));

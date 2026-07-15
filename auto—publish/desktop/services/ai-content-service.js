@@ -133,6 +133,26 @@ function createAiContentService(opts) {
     return templateStore.listTemplates(platform);
   }
 
+  function copyBuiltinTemplate(input) {
+    const request = input || {};
+    assertId(request.platform, "Platform");
+    assertId(request.templateId, "Template id");
+    if (!templateStore || typeof templateStore.copyBuiltinTemplate !== "function") {
+      throw contentError("TEMPLATE_COPY_UNAVAILABLE", "Builtin template copy is unavailable");
+    }
+    return templateStore.copyBuiltinTemplate(request.platform, request.templateId, request);
+  }
+
+  function saveCustomTemplate(input) {
+    const request = input || {};
+    assertId(request.platform, "Platform");
+    assertId(request.id, "Template id");
+    if (!templateStore || typeof templateStore.saveTemplate !== "function") {
+      throw contentError("TEMPLATE_SAVE_UNAVAILABLE", "Custom template save is unavailable");
+    }
+    return templateStore.saveTemplate(request);
+  }
+
   async function retryMaterial(clientId, materialId) {
     assertId(clientId, "Client id");
     assertId(materialId, "Material id");
@@ -191,6 +211,8 @@ function createAiContentService(opts) {
     listResearch: listResearch,
     getResearch: getResearch,
     listTemplates: listTemplates,
+    copyBuiltinTemplate: copyBuiltinTemplate,
+    saveCustomTemplate: saveCustomTemplate,
     generateArticle: generateArticle,
     saveArticle: saveArticle,
     listGeneratedArticles: listGeneratedArticles,

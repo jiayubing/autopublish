@@ -4,7 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const { listTemplates, getTemplate } = require("../src/content/template-store");
+const { listTemplates, getTemplate, createTemplateStore } = require("../src/content/template-store");
 
 describe("template store", function() {
   let root;
@@ -102,5 +102,57 @@ describe("template store", function() {
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }
+  });
+
+  it("merges read-only builtins with custom templates and marks their sources", function() {
+    const builtinRoot = path.join(root, "builtin-content-templates");
+    fs.mkdirSync(path.join(builtinRoot, "ctrip"), { recursive: true });
+    fs.writeFileSync(path.join(builtinRoot, "ctrip", "guide.md"), "---\nplatform: ctrip\nscenario: Builtin guide\nname: ctrip_guide\n---\nBuiltin body.\n");
+    fs.writeFileSync(path.join(ctripDirectory, "custom.md"), "---\nplatform: ctrip\nscenario: Custom guide\nname: custom_guide\n---\nCustom body.\n");
+
+    const store = createTemplateStore(root, { builtinRoot: builtinRoot });
+    assert.deepEqual(store.listTemplates("ctrip").map(function(template) {
+      return { id: template.id, source: template.source, readOnly: template.readOnly };
+    }).sort(function(a, b) { return a.id.localeCompare(b.id); }), [
+      { id: "ctrip_explore", source: "custom", readOnly: false },
+      { id: "ctrip_guide", source: "builtin", readOnly: true },
+      { id: "ctrip_rank", source: "custom", readOnly: false },
+      { id: "custom_guide", source: "custom", readOnly: false }
+    ].sort(function(a, b) { return a.id.localeCompare(b.id); }));
+  });
+
+  it("rejects a custom template that collides with a builtin id", function() {
+    const builtinRoot = path.join(root, "builtin-content-templates");
+    fs.mkdirSync(path.join(builtinRoot, "ctrip"), { recursive: true });
+    fs.writeFileSync(path.join(builtinRoot, "ctrip", "guide.md"), "---\nplatform: ctrip\nscenario: Builtin guide\nname: same_id\n---\nBuiltin body.\n");
+    fs.writeFileSync(path.join(ctripDirectory, "custom.md"), "---\nplatform: ctrip\nscenario: Custom guide\nname: same_id\n---\nCustom body.\n");
+
+    const store = createTemplateStore(root, { builtinRoot: builtinRoot });
+    assert.throws(function() { store.listTemplates("ctrip"); }, function(error) {
+      return error.code === "TEMPLATE_ID_CONFLICT";
+    });
+  });
+
+  it("copies a builtin into an independent custom template with a source snapshot", function() {
+    const builtinRoot = path.join(root, "builtin-content-templates");
+    fs.mkdirSync(path.join(builtinRoot, "ctrip"), { recursive: true });
+    fs.writeFileSync(path.join(builtinRoot, "ctrip", "guide.md"), "---\nplatform: ctrip\nscenario: Builtin guide\nname: ctrip_guide\n---\nBuiltin body.\n");
+
+    const store = createTemplateStore(root, { builtinRoot: builtinRoot, createId: function() { return "copy-001"; } });
+    const copied = store.copyBuiltinTemplate("ctrip", "ctrip_guide");
+    assert.equal(copied.source, "custom");
+    assert.equal(copied.readOnly, false);
+    assert.equal(copied.id, "ctrip_guide-custom-copy-001");
+    assert.notEqual(copied.id, "ctrip_guide");
+    assert.deepEqual(copied.sourceSnapshot, {
+      source: "builtin",
+      platform: "ctrip",
+      id: "ctrip_guide",
+      name: "ctrip_guide",
+      scenario: "Builtin guide",
+      body: "Builtin body.",
+      bodyHash: copied.bodyHash
+    });
+    assert.equal(store.getTemplate("ctrip", copied.id).source, "custom");
   });
 });

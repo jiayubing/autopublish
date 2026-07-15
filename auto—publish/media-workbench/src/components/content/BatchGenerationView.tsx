@@ -55,6 +55,10 @@ function errorReason(code: string) {
   return labels[code] || code;
 }
 
+function templateSourceLabel(template: ContentTemplate) {
+  return template.source === 'builtin' || template.readOnly ? '内置模板 · 只读，可复制' : '自定义模板 · 可编辑';
+}
+
 export default function BatchGenerationView({ clients, refreshToken, onRefresh }: BatchGenerationViewProps) {
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
@@ -75,7 +79,7 @@ export default function BatchGenerationView({ clients, refreshToken, onRefresh }
   const operationBusyRef = useRef(false);
 
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
-  const templateGroups = useMemo(() => groupTemplatesByPlatform(templates), [templates]);
+  const templateGroups = useMemo(() => groupTemplatesByPlatform(templates.map((template) => ({ ...template, name: `${template.name} ? ${templateSourceLabel(template)}` }))), [templates]);
   const currentSources = useMemo<GenerationBatchSourceSelection[]>(() => selectedClientIds.map((clientId) => ({
     clientId,
     ...reconcileSourceSelection(

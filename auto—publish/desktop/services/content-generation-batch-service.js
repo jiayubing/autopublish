@@ -242,7 +242,10 @@ function createContentGenerationBatchService(options) {
       try {
         const template = templateStore.getTemplate(item.platform, item.templateId);
         if (!template || typeof template.body !== "string" || !template.body.trim()) throw generationError("GENERATION_TEMPLATE_NOT_FOUND");
-        return { platform: item.platform, templateId: item.templateId };
+        const selection = { platform: item.platform, templateId: item.templateId };
+        if (template.source === "builtin" || template.source === "custom") selection.source = template.source;
+        if (template.readOnly === true) selection.readOnly = true;
+        return selection;
       } catch (error) {
         if (error && error.code === "GENERATION_TEMPLATE_NOT_FOUND") throw error;
         throw generationError("GENERATION_TEMPLATE_NOT_FOUND", SAFE_MESSAGES.GENERATION_TEMPLATE_NOT_FOUND, error);
