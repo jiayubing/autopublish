@@ -42,6 +42,7 @@ const SAFE_MESSAGES = {
   GENERATION_TASK_CONFLICT: "Generation task already has a different article",
   GENERATION_TASK_ALREADY_SUCCEEDED: "Succeeded generation task cannot run again",
   GENERATION_TASK_BUSY: "Generation task is already running",
+  GENERATION_CANCEL_CONFIRMATION_REQUIRED: "Confirm before permanently cancelling pending generation tasks",
   GENERATION_ARTICLE_INVALID: "Generation task did not produce a valid article",
   AI_CONFIG_INVALID: "AI provider configuration is invalid",
   AI_UNAUTHORIZED: "AI provider authorization failed",
@@ -152,15 +153,16 @@ function createContentGenerationBatchService(options) {
   const opts = options || {};
   if (typeof opts.workspaceRoot !== "string" && !opts.batchStore) throw generationError("GENERATION_WORKSPACE_REQUIRED", "Workspace root is required");
   const workspaceRoot = opts.workspaceRoot;
+  const paths = opts.paths;
   const clientKnowledge = opts.clientKnowledge || {
     listClients: function() { return listClients(workspaceRoot); },
     getClient: function(clientId) { return getClient(workspaceRoot, clientId); }
   };
-  const materialStore = opts.materialStore || createClientMaterialStore({ workspaceRoot: workspaceRoot });
-  const researchStore = opts.researchStore || createResearchStore(workspaceRoot);
-  const templateStore = opts.templateStore || createTemplateStore(workspaceRoot);
-  const articleStore = opts.articleStore || createArticleStore(workspaceRoot);
-  const batchStore = opts.batchStore || createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+  const materialStore = opts.materialStore || createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths });
+  const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
+  const templateStore = opts.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
+  const articleStore = opts.articleStore || createArticleStore(workspaceRoot, { paths: paths });
+  const batchStore = opts.batchStore || createGenerationBatchStore({ workspaceRoot: workspaceRoot, paths: paths });
   const provider = opts.aiProviderService || {};
   const generatorFactory = opts.articleGeneratorFactory || createArticleGenerator;
   const promptFactory = opts.buildPrompt || buildPrompt;
@@ -397,6 +399,33 @@ function createContentGenerationBatchService(options) {
     return runBatch(assertId(value.batchId, "batch id"), "failed", true);
   }
 
+  function previewCancelPending(input) {
+    const value = assertObject(input);
+    const batchId = assertId(value.batchId, "batch id");
+    const batch = batchStore.getBatch(batchId);
+    const counts = { pending: 0, running: 0, cancelled: 0 };
+    batch.tasks.forEach(function(task) {
+      if (task.status === "pending" || task.status === "running" || task.status === "cancelled") counts[task.status] += 1;
+    });
+    return {
+      batchId: batch.id,
+      pendingCount: counts.pending,
+      runningCount: counts.running,
+      cancelledCount: counts.cancelled,
+      canCancel: counts.pending > 0
+    };
+  }
+
+  async function cancelPending(input) {
+    const value = assertObject(input);
+    if (value.confirmed !== true) throw generationError("GENERATION_CANCEL_CONFIRMATION_REQUIRED");
+    const batchId = assertId(value.batchId, "batch id");
+    if (!batchStore || typeof batchStore.cancelPending !== "function") throw generationError("GENERATION_BATCH_INVALID");
+    const batch = batchStore.cancelPending(batchId);
+    emitBatch(batch);
+    return clone(batch);
+  }
+
   async function stopBatch() {
     if (!runner || activeStatus === "idle") return activeBatchId ? clone(batchStore.getBatch(activeBatchId)) : null;
     activeStatus = "stopping";
@@ -426,6 +455,8 @@ function createContentGenerationBatchService(options) {
     continueBatch: continueBatch, continueGenerationBatch: continueBatch, resumeBatch: continueBatch, resumeGenerationBatch: continueBatch,
     pauseBatch: pauseBatch, pauseGenerationBatch: pauseBatch, stopBatch: stopBatch, stopGenerationBatch: stopBatch,
     retryFailed: retryFailed, retryFailedBatch: retryFailed, retryFailedGenerationBatch: retryFailed,
+    previewCancelPending: previewCancelPending, previewCancelPendingGenerationBatch: previewCancelPending,
+    cancelPending: cancelPending, cancelPendingGenerationBatch: cancelPending,
     get: get, getBatch: get, getGenerationBatch: get, list: list, listBatches: list, listGenerationBatches: list,
     getState: currentState, getGenerationBatchState: currentState, subscribe: subscribe, dispose: dispose
   };

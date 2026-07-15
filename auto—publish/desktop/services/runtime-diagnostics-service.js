@@ -1,9 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 
-function readWorkspaceTools(workspaceRoot) {
+function readWorkspaceTools(workspaceRoot, paths) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(workspaceRoot, "config", "runtime-tools.json"), "utf8"));
+    const configRoot = paths && paths.config ? paths.config : path.join(workspaceRoot, "config");
+    return JSON.parse(fs.readFileSync(path.join(configRoot, "runtime-tools.json"), "utf8"));
   } catch (_) { return {}; }
 }
 
@@ -13,13 +14,17 @@ function existing(value) {
 
 function createRuntimeDiagnosticsService(options) {
   var opts = options || {};
-  var workspaceRoot = path.resolve(opts.workspaceRoot || process.env.AUTO_PUBLISH_WORKSPACE || process.cwd());
-  var appRoot = path.resolve(opts.appRoot || process.env.AUTO_PUBLISH_APP_ROOT || path.resolve(__dirname, "..", ".."));
+  var workspaceValue = opts.workspaceRoot || process.env.AUTO_PUBLISH_WORKSPACE;
+  var appValue = opts.appRoot || process.env.AUTO_PUBLISH_APP_ROOT;
+  if (typeof workspaceValue !== "string" || !workspaceValue.trim()) throw new Error("workspaceRoot is required");
+  if (typeof appValue !== "string" || !appValue.trim()) throw new Error("appRoot is required");
+  var workspaceRoot = path.resolve(workspaceValue);
+  var appRoot = path.resolve(appValue);
   var env = opts.env || process.env;
   var pathLookup = opts.pathLookup || function(command) {
     try { return require("child_process").execFileSync(process.platform === "win32" ? "where" : "which", [command], { encoding: "utf8" }).trim().split(/\r?\n/)[0] || null; } catch (_) { return null; }
   };
-  var configured = readWorkspaceTools(workspaceRoot);
+  var configured = readWorkspaceTools(workspaceRoot, opts.paths);
 
   function resolve(name, envName, bundledRelative, pathCommand) {
     var value = existing(configured[name]);

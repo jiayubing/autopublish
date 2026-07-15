@@ -78,9 +78,9 @@ function createClientMaterialStore(options) {
   if (typeof opts.workspaceRoot !== "string" || !opts.workspaceRoot) throw pathError();
 
   const workspaceRoot = path.resolve(opts.workspaceRoot);
-  const paths = createWorkspacePaths(workspaceRoot);
+  const paths = opts.paths || createWorkspacePaths(workspaceRoot);
   const clientsRoot = paths.clients;
-  const cacheRoot = paths.clientMaterialCache;
+  const cacheRoot = paths.clientMaterialCache || path.join(workspaceRoot, "work", "client-material-cache");
   const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
   const converter = typeof opts.converter === "function" ? opts.converter : convertDocxToText;
   const hash = typeof opts.hash === "function" ? opts.hash : defaultHash;

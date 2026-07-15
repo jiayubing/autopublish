@@ -79,9 +79,9 @@ function assertInside(root, target, code, message) {
   }
 }
 
-function getTemplateDirectory(workspaceRoot, platform) {
+function getTemplateDirectory(workspaceRoot, platform, paths) {
   assertSegment(platform, "TEMPLATE_INVALID_PLATFORM", "platform");
-  const workspace = getContentWorkspace(workspaceRoot);
+  const workspace = getContentWorkspace(workspaceRoot, paths);
   const templatesDirectory = path.resolve(workspace.templates);
   const directory = path.resolve(templatesDirectory, platform);
   assertInside(templatesDirectory, directory, "TEMPLATE_INVALID_PLATFORM", "Template platform is outside workspace");
@@ -120,8 +120,8 @@ function listDirectories(directory) {
     .sort(function(a, b) { return a.localeCompare(b); });
 }
 
-function listTemplatePlatforms(workspaceRoot) {
-  return listDirectories(path.resolve(getContentWorkspace(workspaceRoot).templates));
+function listTemplatePlatforms(workspaceRoot, options) {
+  return listDirectories(path.resolve(getContentWorkspace(workspaceRoot, options && options.paths).templates));
 }
 
 function listBuiltinTemplatePlatforms(builtinRoot) {
@@ -144,14 +144,14 @@ function listTemplates(workspaceRoot, platform, options) {
   const opts = options || {};
   const builtinRoot = typeof opts.builtinRoot === "string" ? opts.builtinRoot : null;
   if (platform === undefined) {
-    const platforms = new Set(listTemplatePlatforms(workspaceRoot));
+    const platforms = new Set(listTemplatePlatforms(workspaceRoot, opts));
     if (builtinRoot) listBuiltinTemplatePlatforms(builtinRoot).forEach(function(item) { platforms.add(item); });
     return Array.from(platforms).sort(function(a, b) { return a.localeCompare(b); }).flatMap(function(platformId) {
       return listTemplates(workspaceRoot, platformId, opts);
     });
   }
 
-  const custom = listTemplatesFromDirectory(getTemplateDirectory(workspaceRoot, platform), platform, "custom");
+  const custom = listTemplatesFromDirectory(getTemplateDirectory(workspaceRoot, platform, opts.paths), platform, "custom");
   const builtin = builtinRoot ? listTemplatesFromDirectory(getBuiltinTemplateDirectory(builtinRoot, platform), platform, "builtin") : [];
   const ids = new Map();
   custom.concat(builtin).forEach(function(template) {
@@ -183,13 +183,13 @@ function getTemplate(workspaceRoot, platform, templateId, options) {
   return template;
 }
 
-function writeCustomTemplate(workspaceRoot, template) {
+function writeCustomTemplate(workspaceRoot, template, options) {
   assertSegment(template.platform, "TEMPLATE_INVALID_PLATFORM", "platform");
   assertSegment(template.id, "TEMPLATE_INVALID_ID", "id");
   if (typeof template.scenario !== "string" || !template.scenario.trim() || typeof template.body !== "string" || !template.body.trim()) {
     throw templateError("TEMPLATE_INPUT_INVALID", "Custom template scenario and body are required");
   }
-  const directory = getTemplateDirectory(workspaceRoot, template.platform);
+  const directory = getTemplateDirectory(workspaceRoot, template.platform, options && options.paths);
   const filename = path.join(directory, template.id + ".md");
   assertInside(directory, filename, "TEMPLATE_INVALID_ID", "Template id is outside workspace");
   fs.mkdirSync(directory, { recursive: true });
@@ -210,7 +210,7 @@ function createTemplateStore(workspaceRoot, options) {
     const value = Object.assign({}, template, { source: "custom", readOnly: false });
     const builtin = builtinRoot && listTemplatesFromDirectory(getBuiltinTemplateDirectory(builtinRoot, value.platform), value.platform, "builtin").find(function(item) { return item.id === value.id; });
     if (builtin) throw templateError("TEMPLATE_ID_CONFLICT", "Builtin and custom templates cannot share an id");
-    return writeCustomTemplate(workspaceRoot, value);
+    return writeCustomTemplate(workspaceRoot, value, storeOptions);
   }
 
   function copyBuiltinTemplate(platform, templateId, copyOptions) {

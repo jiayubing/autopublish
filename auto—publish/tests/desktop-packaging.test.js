@@ -463,7 +463,9 @@ describe("source assembly and packaging contract", function() {
     const runtimeEvent = harness.events.filter(function(event) { return event[0] === "runtime"; })[0];
     assert.deepEqual(runtimeEvent[1], {
       workspaceRoot: bootstrapWorkspacePath,
-      appRoot: "C:\\Program Files\\AutoPublish"
+      appRoot: "C:\\Program Files\\AutoPublish",
+      roamingConfigRoot: "C:\\Users\\test\\AppData\\Roaming\\AutoPublish",
+      localStateRoot: path.join(process.env.LOCALAPPDATA || "C:\\Users\\test\\AppData\\Local", "AutoPublish")
     });
     const taskEvent = harness.events.filter(function(event) { return event[0] === "task"; })[0];
     assert.equal(taskEvent[1].cwd, bootstrapWorkspacePath);

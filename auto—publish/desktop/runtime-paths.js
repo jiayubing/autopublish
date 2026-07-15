@@ -1,72 +1,37 @@
-const path = require("path");
-const fs = require("fs");
-const { app } = require("electron");
+const path = require("node:path");
+let app = null;
+try { app = require("electron").app; } catch (_) {}
 const runtimeConfig = require("./runtime-config");
 
-/**
- * Return the directory that contains the application code.
- * Read-only in packaged mode.
- * In development this is the project root.
- * In a packaged app (asar:false) this is the resources/ directory.
- */
 function appRoot() {
-  if (app && app.isPackaged) {
-    return process.resourcesPath || path.resolve(__dirname, "..");
-  }
+  if (app && app.isPackaged) return process.resourcesPath || path.resolve(__dirname, "..");
   return path.resolve(__dirname, "..");
 }
 
-/**
- * Return the writable workspace directory.
- *
- * Priority:
- * 1. AUTO_PUBLISH_WORKSPACE env variable (explicit override)
- * 2. %USERPROFILE%\Documents\AutoPublish (packaged mode, user-visible)
- * 3. process.cwd() (development mode)
- */
-function workspaceRoot() {
-  if (process.env.AUTO_PUBLISH_WORKSPACE) {
-    return path.resolve(process.env.AUTO_PUBLISH_WORKSPACE);
+function workspaceRoot(value) {
+  const candidate = value || process.env.AUTO_PUBLISH_WORKSPACE;
+  if (typeof candidate !== "string" || candidate.trim() === "") {
+    throw new Error("workspaceRoot is required");
   }
-  if (app && app.isPackaged) {
-    var homeDir = process.env.USERPROFILE || path.join("C:", "Users", process.env.USERNAME || "default");
-    return path.join(homeDir, "Documents", "AutoPublish");
-  }
-  return process.cwd();
-}
-
-var RUNTIME_DIRS = [
-  "input",
-  "data",
-  "logs",
-  "published",
-  "failed",
-  "tmp",
-  "work"
-];
-
-function ensureRuntimeDirs(root) {
-  RUNTIME_DIRS.forEach(function(relativePath) {
-    fs.mkdirSync(path.join(root, relativePath), { recursive: true });
-  });
+  return path.resolve(candidate);
 }
 
 function configureRuntimeEnvironment(options) {
-  var values = options || {};
-  if (typeof values.workspaceRoot !== "string" || values.workspaceRoot.trim() === "") {
-    throw new Error("workspaceRoot is required");
+  const values = options || {};
+  if (typeof values.workspaceRoot !== "string" || values.workspaceRoot.trim() === "") throw new Error("workspaceRoot is required");
+  if (typeof values.appRoot !== "string" || values.appRoot.trim() === "") throw new Error("appRoot is required");
+  if (typeof (values.roamingConfigRoot || values.userDataPath) !== "string" || !(values.roamingConfigRoot || values.userDataPath).trim()) {
+    throw new Error("roamingConfigRoot is required");
   }
-  if (typeof values.appRoot !== "string" || values.appRoot.trim() === "") {
-    throw new Error("appRoot is required");
+  if (typeof (values.localStateRoot || values.sessionDataPath) !== "string" || !(values.localStateRoot || values.sessionDataPath).trim()) {
+    throw new Error("localStateRoot is required");
   }
   return runtimeConfig.configureRuntimeEnvironment({
     appRoot: values.appRoot,
-    workspaceRoot: values.workspaceRoot
+    workspaceRoot: values.workspaceRoot,
+    roamingConfigRoot: values.roamingConfigRoot || values.userDataPath,
+    localStateRoot: values.localStateRoot || values.sessionDataPath
   });
 }
 
-module.exports = {
-  appRoot: appRoot,
-  workspaceRoot: workspaceRoot,
-  configureRuntimeEnvironment: configureRuntimeEnvironment
-};
+module.exports = { appRoot, workspaceRoot, configureRuntimeEnvironment };

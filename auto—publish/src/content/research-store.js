@@ -117,8 +117,8 @@ function assertRegularFile(filename) {
   return true;
 }
 
-function createResearchStore(workspaceRoot) {
-  const workspace = getContentWorkspace(workspaceRoot);
+function createResearchStore(workspaceRoot, options) {
+  const workspace = getContentWorkspace(workspaceRoot, options && options.paths);
 
   function researchDirectory(create) {
     if (!pathExists(workspace.research)) {

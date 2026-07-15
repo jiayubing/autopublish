@@ -9,6 +9,7 @@ let doubaoCollectionService = null;
 let aiProviderService = null;
 let contentGenerationBatchService = null;
 let taskService = null;
+let storageMaintenanceService = null;
 let runtimeDisposePromise = null;
 let quitPromise = null;
 let quitReady = false;
@@ -107,6 +108,7 @@ async function disposeRuntime() {
     contentGenerationBatchService = null;
     aiProviderService = null;
     taskService = null;
+    storageMaintenanceService = null;
     try {
       if (service && typeof service.dispose === "function") await service.dispose();
     } catch (_) {}
@@ -146,28 +148,47 @@ function openWorkspacePath(value) {
   });
 }
 
-function initializeRuntime(bootstrapState, appRoot, userDataPath) {
+function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPath) {
   // Lazy-load config-dependent modules only after workspace bootstrap is ready.
   // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
   // its default project-root path.
   const configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
   const runtime = configureRuntimeEnvironment({
     workspaceRoot: bootstrapState.workspacePath,
-    appRoot: appRoot
+    appRoot: appRoot,
+    roamingConfigRoot: userDataPath,
+    localStateRoot: sessionDataPath
   });
+  const injectedPaths = runtime.paths && runtime.paths.installation ? runtime.paths : undefined;
+
+  if (runtime.paths && runtime.paths.localState) {
+    const createStorageMaintenanceService = require("./services/storage-maintenance-service").createStorageMaintenanceService;
+    storageMaintenanceService = createStorageMaintenanceService({
+      paths: runtime.paths,
+      getActivityState: function() {
+        return {
+          task: taskService && typeof taskService.getState === "function" ? taskService.getState() : null,
+          collection: doubaoCollectionService && typeof doubaoCollectionService.getQueueState === "function" ? doubaoCollectionService.getQueueState() : null,
+          generation: contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function" ? contentGenerationBatchService.getState() : null
+        };
+      }
+    });
+  }
 
   const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
   taskService = createDesktopTaskService({
     cwd: runtime.workspaceRoot,
+    paths: injectedPaths,
     sendToRenderer: sendToRenderer
   });
 
   const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
-  doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot });
+  doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot, paths: injectedPaths });
 
   const createAiProviderService = require("./services/ai-provider-service").createAiProviderService;
   aiProviderService = createAiProviderService({
     userDataPath: userDataPath,
+    paths: injectedPaths,
     safeStorage: safeStorage,
     getBatchState: function() {
       if (contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function") return contentGenerationBatchService.getState();
@@ -177,11 +198,13 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath) {
   const createAiContentService = require("./services/ai-content-service").createAiContentService;
   const aiContentService = createAiContentService({
     workspaceRoot: runtime.workspaceRoot,
+    paths: injectedPaths,
     aiClientFactory: function() { return aiProviderService.createClient(); }
   });
   const createContentGenerationBatchService = require("./services/content-generation-batch-service").createContentGenerationBatchService;
   contentGenerationBatchService = createContentGenerationBatchService({
     workspaceRoot: runtime.workspaceRoot,
+    paths: injectedPaths,
     aiProviderService: aiProviderService
   });
 
@@ -198,6 +221,12 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath) {
     aiContentService: aiContentService,
     contentGenerationBatchService: contentGenerationBatchService
   });
+  if (storageMaintenanceService) {
+    require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
+      ipcMain: ipcMain,
+      storageMaintenanceService: storageMaintenanceService
+    });
+  }
 
   unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) {
     sendToRenderer("content:doubao-queue-state", state);
@@ -209,6 +238,10 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath) {
 
 function initializeWorkspaceBootstrap() {
   const userDataPath = app.getPath("userData");
+  const localAppData = process.env.LOCALAPPDATA;
+  const sessionDataPath = typeof localAppData === "string" && localAppData.trim() !== ""
+    ? path.join(localAppData, "AutoPublish")
+    : app.getPath("sessionData");
   const appRoot = app.getAppPath();
   const createWorkspaceBootstrapService = require("./workspace-bootstrap-service").createWorkspaceBootstrapService;
   const workspaceBootstrapService = createWorkspaceBootstrapService({
@@ -233,7 +266,7 @@ function initializeWorkspaceBootstrap() {
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService
   });
-  return { service: workspaceBootstrapService, appRoot: appRoot, userDataPath: userDataPath };
+  return { service: workspaceBootstrapService, appRoot: appRoot, userDataPath: userDataPath, sessionDataPath: sessionDataPath };
 }
 
 function failStartup() {
@@ -249,7 +282,7 @@ async function startApplication() {
     const bootstrapState = workspace.service.bootstrap();
     if (bootstrapState && bootstrapState.state === "ready" &&
       typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
-      initializeRuntime(bootstrapState, workspace.appRoot, workspace.userDataPath);
+      initializeRuntime(bootstrapState, workspace.appRoot, workspace.userDataPath, workspace.sessionDataPath);
     }
     startupStatus = "ready";
     createMainWindow();

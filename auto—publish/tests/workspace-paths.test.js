@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../desktop/workspace-paths");
 const { configureRuntimeEnvironment } = require("../desktop/runtime-config");
+const { createStoragePaths, ensureContentLibrary } = require("../desktop/storage-paths");
 
 const RUNTIME_ENV_KEYS = [
   "AUTO_PUBLISH_ROOT_DIR",
@@ -36,29 +37,47 @@ function restoreRuntimeEnvironment(values) {
 }
 
 describe("workspace paths", function() {
-  it("creates every runtime directory below the supplied workspace root", function() {
+  it("keeps the selected content library limited to portable content paths", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-workspace-"));
     try {
       const paths = createWorkspacePaths(root);
       ensureWorkspaceDirectories(paths);
 
       [
-        "input", "mediaInput", "liejuInput", "toutiaoInput", "hepanInput",
-        "config",
-        "data", "generationBatches", "logs", "published", "failed", "tmp", "work",
-        "clientMaterialCache",
-        "clients", "research", "templates", "generated",
-        "browser", "doubaoBrowser", "doubaoDiagnostics"
+        "clients", "generated", "templates", "autopublish", "research",
+        "generationBatches", "queue", "submissionRecords"
       ].forEach(function(key) {
-        const relative = path.relative(paths.root, paths[key]);
-        const firstSegment = relative.split(path.sep)[0];
-        assert.ok(relative && relative !== ".." && !path.isAbsolute(relative) && firstSegment !== "..", key + " escapes workspace");
         assert.ok(fs.statSync(paths[key]).isDirectory(), key + " was not created");
       });
-      assert.equal(paths.clientMaterialCache, path.join(paths.work, "client-material-cache"));
-      assert.equal(paths.generationBatches, path.join(paths.data, "content-generation-batches"));
+      assert.equal(paths.clients, path.join(root, "clients"));
+      assert.equal(paths.generated, path.join(root, "generated"));
+      assert.equal(paths.templates, path.join(root, "templates"));
+      assert.equal(paths.autopublish, path.join(root, ".autopublish"));
+      assert.equal(paths.generationBatches, path.join(paths.autopublish, "batches"));
+      assert.equal(fs.existsSync(path.join(root, "logs")), false);
+      assert.equal(fs.existsSync(path.join(root, "browser")), false);
+      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("initializes a content library without creating local or installation state", function() {
+    const installation = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-install-"));
+    const roamingConfig = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-roaming-"));
+    const localState = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-local-"));
+    const contentLibrary = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-content-"));
+    try {
+      const storage = createStoragePaths({ installation, roamingConfig, localState, contentLibrary });
+      ensureContentLibrary(storage);
+      assert.ok(fs.existsSync(storage.marker));
+      assert.equal(fs.existsSync(path.join(installation, "clients")), false);
+      assert.equal(fs.existsSync(path.join(localState, "logs")), false);
+      assert.equal(fs.existsSync(path.join(contentLibrary, "clients")), true);
+    } finally {
+      [installation, roamingConfig, localState, contentLibrary].forEach(function(root) {
+        fs.rmSync(root, { recursive: true, force: true });
+      });
     }
   });
 });
@@ -82,6 +101,9 @@ describe("runtime configuration", function() {
       assert.throws(function() {
         runtimePaths.configureRuntimeEnvironment({ workspaceRoot: process.cwd() });
       }, /appRoot is required/);
+      assert.throws(function() {
+        configureRuntimeEnvironment({ appRoot: process.cwd(), workspaceRoot: process.cwd() });
+      }, /roamingConfigRoot is required/);
     } finally {
       restoreRuntimeEnvironment(original);
     }
@@ -89,13 +111,23 @@ describe("runtime configuration", function() {
 
   it("loads the workspace environment once and exposes workspace paths", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-"));
+    const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-app-"));
+    const roamingConfigRoot = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-roaming-"));
+    const localStateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-local-"));
     const original = saveRuntimeEnvironment();
     try {
       fs.writeFileSync(path.join(root, ".env"), "XQW_API_KEY=workspace-secret\nAI_API_KEY=workspace-ai-secret\nAI_BASE_URL=https://workspace.example/v1\nAI_MODEL=workspace-model\nAI_TIMEOUT_MS=10\n", "utf8");
       delete process.env.XQW_API_KEY;
-      const runtime = configureRuntimeEnvironment({ appRoot: path.join(root, "app"), workspaceRoot: root });
+      const runtime = configureRuntimeEnvironment({
+        appRoot: appRoot,
+        workspaceRoot: root,
+        roamingConfigRoot: roamingConfigRoot,
+        localStateRoot: localStateRoot
+      });
       assert.equal(runtime.workspaceRoot, path.resolve(root));
-      assert.equal(runtime.paths.data, path.join(root, "data"));
+      assert.equal(runtime.paths.contentLibrary, path.resolve(root));
+      assert.equal(runtime.paths.data, path.join(root, ".autopublish", "data"));
+      assert.equal(runtime.paths.logs, path.join(localStateRoot, "logs"));
       assert.equal(process.env.XQW_API_KEY, "workspace-secret");
       assert.equal(process.env.AI_API_KEY, undefined);
       assert.equal(process.env.AI_BASE_URL, undefined);
@@ -104,7 +136,9 @@ describe("runtime configuration", function() {
       assert.equal(process.env.AUTO_PUBLISH_ROOT_DIR, path.resolve(root));
     } finally {
       restoreRuntimeEnvironment(original);
-      fs.rmSync(root, { recursive: true, force: true });
+      [root, appRoot, roamingConfigRoot, localStateRoot].forEach(function(directory) {
+        fs.rmSync(directory, { recursive: true, force: true });
+      });
     }
   });
 
@@ -122,14 +156,30 @@ describe("runtime configuration", function() {
   it("does not retain workspace secrets after switching to a workspace without them", function() {
     const first = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-first-"));
     const second = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-second-"));
+    const firstApp = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-first-app-"));
+    const secondApp = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-second-app-"));
+    const firstRoaming = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-first-roaming-"));
+    const secondRoaming = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-second-roaming-"));
+    const firstLocal = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-first-local-"));
+    const secondLocal = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-runtime-second-local-"));
     const original = saveRuntimeEnvironment();
     try {
       delete process.env.XQW_API_KEY;
       fs.writeFileSync(path.join(first, ".env"), "XQW_API_KEY=first-workspace-secret\n", "utf8");
-      configureRuntimeEnvironment({ appRoot: first, workspaceRoot: first });
+      configureRuntimeEnvironment({
+        appRoot: firstApp,
+        workspaceRoot: first,
+        roamingConfigRoot: firstRoaming,
+        localStateRoot: firstLocal
+      });
       assert.equal(process.env.XQW_API_KEY, "first-workspace-secret");
 
-      const runtime = configureRuntimeEnvironment({ appRoot: second, workspaceRoot: second });
+      const runtime = configureRuntimeEnvironment({
+        appRoot: secondApp,
+        workspaceRoot: second,
+        roamingConfigRoot: secondRoaming,
+        localStateRoot: secondLocal
+      });
       assert.equal(process.env.XQW_API_KEY, undefined);
       assert.ok(runtime.configErrors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }));
       assert.equal(JSON.stringify(runtime.configErrors).includes("first-workspace-secret"), false);
@@ -137,6 +187,9 @@ describe("runtime configuration", function() {
       restoreRuntimeEnvironment(original);
       fs.rmSync(first, { recursive: true, force: true });
       fs.rmSync(second, { recursive: true, force: true });
+      [firstApp, secondApp, firstRoaming, secondRoaming, firstLocal, secondLocal].forEach(function(directory) {
+        fs.rmSync(directory, { recursive: true, force: true });
+      });
     }
   });
 });

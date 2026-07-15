@@ -22,14 +22,21 @@ function safeError(error) {
 function createDoubaoCollectionDesktopService(options) {
   const opts = options || {};
   const workspaceRoot = opts.workspaceRoot || opts.rootDir;
+  const paths = opts.paths;
   if (typeof workspaceRoot !== "string" || !workspaceRoot.trim()) {
     throw serviceError("DOUBAO_DESKTOP_SERVICE_INVALID", "Doubao workspace root is required");
   }
 
   const questionStore = opts.questionStore || createQuestionStore(workspaceRoot);
-  const researchStore = opts.researchStore || createResearchStore(workspaceRoot);
-  const session = opts.session || pwSessionConfig("doubao");
-  const browserAdapter = opts.browserAdapter || createDoubaoBrowserAdapter({ session: session });
+  const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
+  const profileId = opts.profileId || "default";
+  const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId });
+  const browserAdapter = opts.browserAdapter || createDoubaoBrowserAdapter({
+    session: session,
+    profileId: profileId,
+    diagnosticsDir: paths && paths.doubaoDiagnostics,
+    profileDir: paths && paths.doubaoBrowser
+  });
   const collectionService = opts.collectionService || createSourceCollectionService({
     questionStore: questionStore,
     researchStore: researchStore,
@@ -156,6 +163,7 @@ function createDoubaoCollectionDesktopService(options) {
   }
 
   return {
+    profileId: profileId,
     listQuestions: listQuestions,
     createQuestion: createQuestion,
     updateQuestion: updateQuestion,

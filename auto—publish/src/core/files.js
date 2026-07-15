@@ -4,6 +4,7 @@ const { execSync } = require("child_process");
 
 const { DIRS, PW } = require("../../scripts/config");
 const { log } = require("./logger");
+const { createWorkspacePaths } = require("../../desktop/workspace-paths");
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
@@ -11,17 +12,47 @@ function ensureDir(dir) {
   }
 }
 
-function getContentWorkspace(root) {
-  var resolvedRoot = path.resolve(root);
-  return {
+function getContentWorkspace(root, suppliedPaths) {
+  var input = root && typeof root === "object" ? root : null;
+  var paths = suppliedPaths || (input && input.paths) || (input && input.contentLibrary ? input : null);
+  var resolvedRoot = path.resolve(typeof root === "string" ? root : (paths && (paths.contentLibrary || paths.root)));
+  if (!paths) {
+    return {
+      root: resolvedRoot,
+      clients: path.join(resolvedRoot, "clients"),
+      research: path.join(resolvedRoot, "research"),
+      templates: path.join(resolvedRoot, "templates"),
+      generated: path.join(resolvedRoot, "generated"),
+      published: path.join(resolvedRoot, "published"),
+      logs: path.join(resolvedRoot, "logs")
+    };
+  }
+  var workspace = createWorkspacePaths(resolvedRoot, paths && paths.installation ? paths : null);
+  return Object.assign({}, workspace, {
     root: resolvedRoot,
-    clients: path.join(resolvedRoot, "clients"),
-    research: path.join(resolvedRoot, "research"),
-    templates: path.join(resolvedRoot, "templates"),
-    generated: path.join(resolvedRoot, "generated"),
-    published: path.join(resolvedRoot, "published"),
-    logs: path.join(resolvedRoot, "logs")
-  };
+    clients: workspace.clients,
+    research: workspace.research,
+    templates: workspace.templates,
+    generated: workspace.generated,
+    published: workspace.published,
+    logs: workspace.logs || DIRS.logsDir
+  });
+}
+
+function configureRuntimePaths(paths) {
+  if (!paths || typeof paths !== "object") throw new Error("runtime paths are required");
+  DIRS.rootDir = paths.contentLibrary || paths.workspaceRoot || paths.root;
+  DIRS.inputDir = paths.input;
+  DIRS.publishedDir = paths.published;
+  DIRS.failedDir = paths.failed;
+  DIRS.tmpDir = paths.tmp;
+  DIRS.logsDir = paths.logs;
+  DIRS.dataDir = paths.data;
+  DIRS.stateDir = path.join(paths.work, "playwright-cli", "state");
+  PW.home = path.join(paths.work, "playwright-cli");
+  PW.profileDir = path.join(PW.home, "profiles", PW.session);
+  PW.daemonDir = path.join(PW.home, "sessions", PW.session);
+  return paths;
 }
 
 function isWindowsReservedDeviceName(clientName) {
@@ -119,5 +150,6 @@ module.exports = {
   copyToFailed,
   archivePublishedArticle,
   getContentWorkspace,
-  getClientWorkspace
+  getClientWorkspace,
+  configureRuntimePaths
 };

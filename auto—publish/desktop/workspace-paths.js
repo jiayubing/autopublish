@@ -1,40 +1,64 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { createStoragePaths, validateStoragePaths } = require("./storage-paths");
 
-function createWorkspacePaths(root) {
-  const workspaceRoot = path.resolve(root);
-  const input = path.join(workspaceRoot, "input");
+const CONTENT_DIRECTORY_KEYS = Object.freeze([
+  "clients", "generated", "templates", "autopublish", "input", "data", "research",
+  "generationBatches", "queue", "submissionRecords", "published", "failed"
+]);
+
+function createPortableContentPaths(contentLibrary) {
+  const root = path.resolve(contentLibrary);
+  const autopublish = path.join(root, ".autopublish");
   return {
-    root: workspaceRoot,
-    input: input,
-    mediaInput: path.join(input, "media"),
-    liejuInput: path.join(input, "lieju"),
-    toutiaoInput: path.join(input, "toutiao"),
-    hepanInput: path.join(input, "hepan"),
-    data: path.join(workspaceRoot, "data"),
-    generationBatches: path.join(workspaceRoot, "data", "content-generation-batches"),
-    logs: path.join(workspaceRoot, "logs"),
-    published: path.join(workspaceRoot, "published"),
-    failed: path.join(workspaceRoot, "failed"),
-    tmp: path.join(workspaceRoot, "tmp"),
-    work: path.join(workspaceRoot, "work"),
-    clientMaterialCache: path.join(workspaceRoot, "work", "client-material-cache"),
-    config: path.join(workspaceRoot, "config"),
-    clients: path.join(workspaceRoot, "clients"),
-    research: path.join(workspaceRoot, "research"),
-    templates: path.join(workspaceRoot, "templates"),
-    generated: path.join(workspaceRoot, "generated"),
-    browser: path.join(workspaceRoot, "browser"),
-    doubaoBrowser: path.join(workspaceRoot, "browser", "doubao"),
-    doubaoDiagnostics: path.join(workspaceRoot, "logs", "doubao-diagnostics")
+    root: root,
+    contentLibrary: root,
+    clients: path.join(root, "clients"),
+    generated: path.join(root, "generated"),
+    templates: path.join(root, "templates"),
+    autopublish: autopublish,
+    privateContent: autopublish,
+    input: path.join(autopublish, "input"),
+    mediaInput: path.join(autopublish, "input", "media"),
+    liejuInput: path.join(autopublish, "input", "lieju"),
+    toutiaoInput: path.join(autopublish, "input", "toutiao"),
+    hepanInput: path.join(autopublish, "input", "hepan"),
+    data: path.join(autopublish, "data"),
+    research: path.join(autopublish, "research"),
+    generationBatches: path.join(autopublish, "batches"),
+    queue: path.join(autopublish, "queue"),
+    submissionRecords: path.join(autopublish, "submission-records"),
+    submissions: path.join(autopublish, "submission-records"),
+    published: path.join(autopublish, "published"),
+    failed: path.join(autopublish, "failed")
   };
 }
 
+function createWorkspacePaths(root, storage) {
+  const content = createPortableContentPaths(root);
+  if (!storage) return content;
+  validateStoragePaths(storage);
+  if (path.resolve(storage.contentLibrary) !== content.root) {
+    throw new Error("storage contentLibrary must match workspace root");
+  }
+  return Object.assign({}, storage, content);
+}
+
 function ensureWorkspaceDirectories(paths) {
-  Object.keys(paths).forEach(function(key) {
-    if (key !== "root") fs.mkdirSync(paths[key], { recursive: true });
+  const values = paths || {};
+  const directories = CONTENT_DIRECTORY_KEYS.map(function(key) { return values[key]; }).filter(Boolean);
+  Array.from(new Set(directories.map(function(value) { return path.resolve(value); }))).forEach(function(directory) {
+    fs.mkdirSync(directory, { recursive: true });
   });
   return paths;
 }
 
-module.exports = { createWorkspacePaths, ensureWorkspaceDirectories };
+function createWorkspaceStoragePaths(input) {
+  return createStoragePaths(input);
+}
+
+module.exports = {
+  createWorkspacePaths,
+  ensureWorkspaceDirectories,
+  createWorkspaceStoragePaths
+};
