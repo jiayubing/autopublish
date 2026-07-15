@@ -12,6 +12,7 @@ function createWorkspacePaths(root) {
     toutiaoInput: path.join(input, "toutiao"),
     hepanInput: path.join(input, "hepan"),
     data: path.join(workspaceRoot, "data"),
+    generationBatches: path.join(workspaceRoot, "data", "content-generation-batches"),
     logs: path.join(workspaceRoot, "logs"),
     published: path.join(workspaceRoot, "published"),
     failed: path.join(workspaceRoot, "failed"),
