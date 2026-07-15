@@ -82,6 +82,7 @@ function createAiClient(config) {
       if (externallyAborted) throw aiError("AI_ABORTED", "AI request was aborted");
       if (response.status === 401) throw aiError("AI_UNAUTHORIZED", "AI request was unauthorized");
       if (response.status === 403) throw aiError("AI_FORBIDDEN", "AI request was forbidden");
+      if (response.status === 404) throw aiError("AI_MODEL_NOT_FOUND", "AI model was not found");
       if (response.status === 429) throw aiError("AI_RATE_LIMITED", "AI request was rate limited");
       if (!response.ok) throw aiError("AI_REQUEST_FAILED", "AI request failed", response.status >= 500);
 

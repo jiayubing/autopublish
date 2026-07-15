@@ -1,7 +1,7 @@
 const RETRY_DELAYS = [5000, 15000];
 const VALID_SELECTIONS = new Set(["pending", "failed", "unfinished"]);
 const CONFIGURATION_ERRORS = new Set([
-  "AI_CONFIG_INVALID", "AI_UNAUTHORIZED", "AI_FORBIDDEN", "AI_MODEL_NOT_FOUND",
+  "AI_CONFIG_NOT_SET", "AI_CONFIG_INVALID", "AI_UNAUTHORIZED", "AI_FORBIDDEN", "AI_MODEL_NOT_FOUND",
   "MODEL_NOT_FOUND", "MODEL_INVALID", "GENERATION_AI_CONFIG_CHANGED"
 ]);
 const RETRYABLE_CODES = new Set([
@@ -21,6 +21,7 @@ function clone(value) {
 
 function isRetryable(error) {
   if (!error || error.retryable === false) return false;
+  if (error.status === 404) return false;
   if (RETRYABLE_CODES.has(error.code)) return true;
   if (error.code === "AI_REQUEST_FAILED" && error.retryable !== false) return true;
   return error.status === 429 || (Number.isInteger(error.status) && error.status >= 500 && error.status <= 599);
@@ -28,7 +29,7 @@ function isRetryable(error) {
 
 function isConfigurationError(error) {
   if (!error) return false;
-  return CONFIGURATION_ERRORS.has(error.code) || error.status === 401 || error.status === 403;
+  return CONFIGURATION_ERRORS.has(error.code) || error.status === 401 || error.status === 403 || error.status === 404;
 }
 
 function isAborted(error, signal) {

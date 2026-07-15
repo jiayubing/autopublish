@@ -81,7 +81,7 @@ describe("ai client", function() {
   });
 
   it("maps provider failures without exposing the API key", async function() {
-    for (const item of [[401, "AI_UNAUTHORIZED"], [403, "AI_FORBIDDEN"], [429, "AI_RATE_LIMITED"], [500, "AI_REQUEST_FAILED"]]) {
+    for (const item of [[401, "AI_UNAUTHORIZED"], [403, "AI_FORBIDDEN"], [404, "AI_MODEL_NOT_FOUND"], [429, "AI_RATE_LIMITED"], [500, "AI_REQUEST_FAILED"]]) {
       const client = createAiClient(config({ fetch: async function() { return response(item[0], {}); } }));
       await assert.rejects(client.complete([]), function(error) {
         return error.code === item[1] && !String(error.message).includes("test-secret-key");

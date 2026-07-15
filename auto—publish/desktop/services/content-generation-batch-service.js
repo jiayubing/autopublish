@@ -300,12 +300,21 @@ function createContentGenerationBatchService(options) {
   }
 
   async function findExistingArticle(task) {
-    if (typeof articleStore.findByGenerationTaskId === "function") return articleStore.findByGenerationTaskId(task.id);
+    function isNotFound(error) {
+      return error && (error.code === "ARTICLE_NOT_FOUND" || error.code === "GENERATION_ARTICLE_NOT_FOUND");
+    }
+    if (typeof articleStore.findByGenerationTaskId === "function") {
+      try { return await articleStore.findByGenerationTaskId(task.id); }
+      catch (error) { if (isNotFound(error)) return null; throw error; }
+    }
     if (typeof articleStore.listArticles !== "function") return null;
     try {
       const articles = await articleStore.listArticles(task.clientId);
       return articles.find(function(article) { return article.generationTaskId === task.id; }) || null;
-    } catch (_) { return null; }
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
   }
 
   async function executeTask(task, context) {

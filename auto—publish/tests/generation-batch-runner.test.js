@@ -203,6 +203,31 @@ describe("generation batch runner", function() {
     assert.deepStrictEqual(continued.tasks.map(function(task) { return task.status; }), ["failed", "succeeded"]);
   });
 
+  it("pauses the whole batch for missing configuration and invalid models", async function() {
+    for (const failure of [
+      taskError("AI_CONFIG_NOT_SET"),
+      taskError("AI_MODEL_NOT_FOUND"),
+      taskError("AI_REQUEST_FAILED", 404)
+    ]) {
+      const batch = makeBatch([{}, {}]);
+      const store = fakeStore(batch);
+      const calls = [];
+      const runner = createGenerationBatchRunner({
+        batchStore: store,
+        executeTask: async function(task) {
+          calls.push(task.id);
+          throw failure;
+        }
+      });
+
+      const result = await runner.run(batch.id);
+
+      assert.equal(result.status, "paused_configuration");
+      assert.deepStrictEqual(calls, ["task-1"]);
+      assert.deepStrictEqual(result.tasks.map(function(task) { return task.status; }), ["failed", "pending"]);
+    }
+  });
+
   it("repairs a saved article without another AI call and retries failed tasks only", async function() {
     const batch = makeBatch([
       { status: "succeeded", articleId: "article-1" },
