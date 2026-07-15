@@ -169,4 +169,33 @@ describe("renderer content generation workflow", function() {
     assert.match(article, /BatchGenerationView/);
     assert.match(article, /selectedArticle/);
   });
+
+  it("separates the new-batch wizard from persisted batch monitoring", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.match(batch, /BatchViewMode/);
+    assert.match(batch, /'wizard' \| 'monitoring'/);
+    assert.match(batch, /setViewMode\('monitoring'\)/);
+    assert.match(batch, /viewMode === 'wizard'/);
+    assert.match(batch, /data-view-mode=\{viewMode\}/);
+    assert.match(batch, /pending.*failed.*interrupted/);
+  });
+
+  it("rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(batch, /setBatch\(persistedBatch\)/);
+    assert.match(batch, /setViewMode\('monitoring'\)/);
+    assert.match(batch, /onStartNew/);
+    assert.match(detail, /onStartNew/);
+    assert.match(detail, /completed.*stopped/);
+    assert.match(detail, /开始新批量生成|新建批量生成/);
+  });
+
+  it("uses runtime state only when it belongs to the displayed batch", function() {
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(detail, /state\.batchId === batch\.id/);
+    assert.match(detail, /state\.status !== 'idle'/);
+    assert.match(detail, /effectiveStatus/);
+    assert.match(detail, /batch\.status/);
+  });
 });
