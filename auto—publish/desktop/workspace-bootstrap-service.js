@@ -111,6 +111,7 @@ function createWorkspaceBootstrapService(options) {
   const ensureDirectories = opts.ensureWorkspaceDirectories || ensureWorkspaceDirectories;
   const taskService = opts.taskService || {};
   const doubaoCollectionService = opts.doubaoCollectionService || {};
+  const generationBatchService = opts.generationBatchService || {};
   const relaunch = opts.relaunch || opts.relaunchCallback || function() {};
   const openPath = opts.openPath || opts.openCallback || function() {};
 
@@ -261,6 +262,7 @@ function createWorkspaceBootstrapService(options) {
   async function readBusyState() {
     let taskValue = null;
     let queueValue = null;
+    let generationValue = null;
     let unavailable = false;
     try {
       if (typeof taskService.getState === "function") taskValue = await taskService.getState();
@@ -272,8 +274,13 @@ function createWorkspaceBootstrapService(options) {
     } catch (error) {
       unavailable = true;
     }
+    try {
+      if (typeof generationBatchService.getState === "function") generationValue = await generationBatchService.getState();
+    } catch (error) {
+      unavailable = true;
+    }
     if (unavailable) throwStable("WORKSPACE_SWITCH_STATE_UNAVAILABLE");
-    if (isBusy(taskValue) || isBusy(queueValue)) throwStable("WORKSPACE_SWITCH_BUSY");
+    if (isBusy(taskValue) || isBusy(queueValue) || isBusy(generationValue)) throwStable("WORKSPACE_SWITCH_BUSY");
   }
 
   async function requestSwitch(candidate) {

@@ -30,7 +30,7 @@ function createHarness(options) {
   fs.mkdirSync(userDataPath, { recursive: true });
   let currentTime = new Date("2026-07-14T12:00:00.000Z");
   let tokenNumber = 0;
-  const events = { saves: [], relaunches: [], opens: [], taskReads: 0, queueReads: 0 };
+  const events = { saves: [], relaunches: [], opens: [], taskReads: 0, queueReads: 0, generationReads: 0 };
   const validator = createWorkspaceValidator({
     appPath,
     resourcesPath,
@@ -40,6 +40,7 @@ function createHarness(options) {
   const locationStore = createWorkspaceLocationStore({ userDataPath });
   let taskState = { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
   let queueState = { state: "idle" };
+  let generationState = { status: "idle" };
   const service = createWorkspaceBootstrapService(Object.assign({
     env: {},
     locationStore,
@@ -55,6 +56,9 @@ function createHarness(options) {
     doubaoCollectionService: {
       getQueueState: function() { events.queueReads += 1; return queueState; }
     },
+    generationBatchService: {
+      getState: function() { events.generationReads += 1; return generationState; }
+    },
     relaunch: function() { events.relaunches.push(true); },
     openPath: function(value) { events.opens.push(value); }
   }, options || {}));
@@ -67,6 +71,7 @@ function createHarness(options) {
     events,
     setTaskState: function(value) { taskState = value; },
     setQueueState: function(value) { queueState = value; },
+    setGenerationState: function(value) { generationState = value; },
     setTime: function(value) { currentTime = new Date(value); },
     cleanup: function() { fs.rmSync(root, { recursive: true, force: true }); }
   };
@@ -588,6 +593,19 @@ describe("workspace bootstrap service", function() {
       harness.setQueueState({ state: "paused" });
       await assertError(harness.service.confirmSelection({ token: selectedAgain.selection.token }), "WORKSPACE_SWITCH_BUSY");
       assert.equal(harness.events.queueReads, 2);
+    } finally { harness.cleanup(); }
+  });
+
+  it("blocks workspace switching while a generation batch is running", async function() {
+    const harness = createHarness();
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      harness.setGenerationState({ status: "running", isBatchRunning: true });
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SWITCH_BUSY");
+      assert.equal(harness.events.generationReads, 1);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
     } finally { harness.cleanup(); }
   });
 

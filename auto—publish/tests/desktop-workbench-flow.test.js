@@ -42,4 +42,13 @@ describe("desktop workbench flow", function() {
     assert.equal(preload.includes("getCachedResources"), false, "stale media preload alias still present");
     assert.equal(preload.includes("searchResources"), false, "stale media preload alias still present");
   });
+
+  it("exposes generation batches through preload and registers the main-process service", function() {
+    const preload = read("desktop/preload.js");
+    const register = read("desktop/ipc/register.js");
+    assert.ok(preload.includes("previewGenerationBatch"));
+    assert.ok(preload.includes("onGenerationBatchState"));
+    assert.ok(preload.includes("continueGenerationBatch"));
+    assert.ok(register.includes("content-generation-batch-ipc"));
+  });
 });

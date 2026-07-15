@@ -7,6 +7,7 @@ let unsubscribeLogs = null;
 let unsubscribeDoubaoQueue = null;
 let doubaoCollectionService = null;
 let aiProviderService = null;
+let contentGenerationBatchService = null;
 let taskService = null;
 let runtimeDisposePromise = null;
 let quitPromise = null;
@@ -80,6 +81,15 @@ function createDeferredQueueService() {
   };
 }
 
+function createDeferredGenerationBatchService() {
+  return {
+    getState: function() {
+      if (contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function") return contentGenerationBatchService.getState();
+      return { status: "idle", isBatchRunning: false, isStopPending: false };
+    }
+  };
+}
+
 async function disposeRuntime() {
   if (runtimeDisposePromise) return runtimeDisposePromise;
   runtimeDisposePromise = (async function() {
@@ -93,10 +103,15 @@ async function disposeRuntime() {
     }
     const service = doubaoCollectionService;
     doubaoCollectionService = null;
+    const generationService = contentGenerationBatchService;
+    contentGenerationBatchService = null;
     aiProviderService = null;
     taskService = null;
     try {
       if (service && typeof service.dispose === "function") await service.dispose();
+    } catch (_) {}
+    try {
+      if (generationService && typeof generationService.dispose === "function") await generationService.dispose();
     } catch (_) {}
   })();
   return runtimeDisposePromise;
@@ -155,6 +170,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath) {
     userDataPath: userDataPath,
     safeStorage: safeStorage,
     getBatchState: function() {
+      if (contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function") return contentGenerationBatchService.getState();
       return taskService && typeof taskService.getState === "function" ? taskService.getState() : {};
     }
   });
@@ -162,6 +178,11 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath) {
   const aiContentService = createAiContentService({
     workspaceRoot: runtime.workspaceRoot,
     aiClientFactory: function() { return aiProviderService.createClient(); }
+  });
+  const createContentGenerationBatchService = require("./services/content-generation-batch-service").createContentGenerationBatchService;
+  contentGenerationBatchService = createContentGenerationBatchService({
+    workspaceRoot: runtime.workspaceRoot,
+    aiProviderService: aiProviderService
   });
 
   const registerIpc = require("./ipc/register").registerIpc;
@@ -174,7 +195,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath) {
     paths: runtime.paths,
     doubaoCollectionService: doubaoCollectionService,
     aiProviderService: aiProviderService,
-    aiContentService: aiContentService
+    aiContentService: aiContentService,
+    contentGenerationBatchService: contentGenerationBatchService
   });
 
   unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) {
@@ -199,6 +221,7 @@ function initializeWorkspaceBootstrap() {
     },
     taskService: createDeferredTaskService(),
     doubaoCollectionService: createDeferredQueueService(),
+    generationBatchService: createDeferredGenerationBatchService(),
     disposeRuntime: disposeRuntime,
     relaunch: relaunchApplication,
     openPath: openWorkspacePath

@@ -103,6 +103,22 @@ const api = {
     stopDoubaoBatch: function() { return ipcRenderer.invoke("content:stop-doubao-batch"); },
     retryFailedDoubao: function() { return ipcRenderer.invoke("content:retry-failed-doubao"); },
     getDoubaoQueueState: function() { return ipcRenderer.invoke("content:get-doubao-queue-state"); },
+    previewGenerationBatch: function(input) { return ipcRenderer.invoke("content:preview-generation-batch", input || {}); },
+    createGenerationBatch: function(input) { return ipcRenderer.invoke("content:create-generation-batch", input || {}); },
+    listGenerationBatches: function() { return ipcRenderer.invoke("content:list-generation-batches"); },
+    getGenerationBatch: function(batchId) { return ipcRenderer.invoke("content:get-generation-batch", { batchId: batchId }); },
+    startGenerationBatch: function(input) { return ipcRenderer.invoke("content:start-generation-batch", input || {}); },
+    pauseGenerationBatch: function() { return ipcRenderer.invoke("content:pause-generation-batch"); },
+    continueGenerationBatch: function(input) { return ipcRenderer.invoke("content:continue-generation-batch", input || {}); },
+    resumeGenerationBatch: function(input) { return ipcRenderer.invoke("content:resume-generation-batch", input || {}); },
+    stopGenerationBatch: function() { return ipcRenderer.invoke("content:stop-generation-batch"); },
+    retryFailedGenerationBatch: function(input) { return ipcRenderer.invoke("content:retry-failed-generation-batch", input || {}); },
+    getGenerationBatchState: function() { return ipcRenderer.invoke("content:get-generation-batch-state"); },
+    onGenerationBatchState: function(listener) {
+      const handler = function(event, payload) { listener(payload); };
+      ipcRenderer.on("content:generation-batch-state", handler);
+      return function() { ipcRenderer.removeListener("content:generation-batch-state", handler); };
+    },
     saveManualResearch: function(input) { return ipcRenderer.invoke("content:save-manual-research", input); },
     onDoubaoQueueState: function(listener) {
       const handler = function(event, payload) { listener(payload); };
