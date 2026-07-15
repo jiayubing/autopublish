@@ -22,7 +22,7 @@ node scripts/migrate-content-library-v2.js `
   --source C:\AutoPublish-old `
   --content-library D:\AutoPublish-content `
   --local-state C:\Users\me\AppData\Local\AutoPublish `
-  --app-config C:\Users\me\AppData\Roaming\AutoPublish\platform-runtime.json `
+  --app-config C:\Users\me\AppData\Roaming\AutoPublish\runtime-config.json `
   --dry-run
 ```
 
@@ -40,7 +40,7 @@ node scripts/migrate-content-library-v2.js `
   --source C:\AutoPublish-old `
   --content-library D:\AutoPublish-content `
   --local-state C:\Users\me\AppData\Local\AutoPublish `
-  --app-config C:\Users\me\AppData\Roaming\AutoPublish\platform-runtime.json `
+  --app-config C:\Users\me\AppData\Roaming\AutoPublish\runtime-config.json `
   --execute
 ```
 

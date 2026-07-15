@@ -7,13 +7,14 @@ const os = require("os");
 const path = require("path");
 
 const migration = require("../scripts/migrate-content-library-v2");
+const { createRuntimeConfigStore } = require("../desktop/runtime-config-store");
 
 function makeFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-library-v2-migration-"));
   const sourceRoot = path.join(root, "legacy");
   const contentLibraryRoot = path.join(root, "library");
   const localStateRoot = path.join(root, "local-state");
-  const appConfigPath = path.join(root, "app-config", "platform-runtime.json");
+  const appConfigPath = path.join(root, "app-config", "runtime-config.json");
 
   write(sourceRoot, "clients/acme/profile.md", "Acme profile\n");
   write(sourceRoot, "clients/acme/ignored.bin", "not a special file\n");
@@ -147,10 +148,11 @@ describe("content library v2 migration", function() {
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "cache/client-material/acme/material.json"), "utf8"), '{"cached":true}\n');
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser-profile/playwright-cli/profiles/doubao/session.json"), "utf8"), '{"profile":true}\n');
       const appConfig = JSON.parse(fs.readFileSync(fixture.appConfigPath, "utf8"));
-      assert.equal(appConfig.platformRuntime.HEPAN_PYTHON, "python3");
-      assert.equal(appConfig.platformRuntime.XQW_API_KEY, "secret-test-value");
-      assert.equal(Object.prototype.hasOwnProperty.call(appConfig.platformRuntime, "AI_API_KEY"), false);
-      assert.equal(Object.prototype.hasOwnProperty.call(appConfig.platformRuntime, "UNRELATED"), false);
+      assert.equal(appConfig.values.HEPAN_PYTHON, "python3");
+      assert.equal(appConfig.values.XQW_API_KEY, "secret-test-value");
+      assert.equal(Object.prototype.hasOwnProperty.call(appConfig.values, "AI_API_KEY"), false);
+      assert.equal(Object.prototype.hasOwnProperty.call(appConfig.values, "UNRELATED"), false);
+      assert.equal(createRuntimeConfigStore({ configRoot: path.dirname(fixture.appConfigPath) }).read().XQW_API_KEY, "secret-test-value");
       const manifest = JSON.parse(fs.readFileSync(result.manifestPath, "utf8"));
       assert.equal(manifest.version, 2);
       assert.ok(manifest.files.every((file) => /^[a-f0-9]{64}$/.test(file.sha256)));

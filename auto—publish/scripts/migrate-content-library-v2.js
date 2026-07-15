@@ -246,11 +246,11 @@ function createContentLibraryMigrator(options) {
     const envValues = rejectSymlink(envPath) ? parseEnv(fs.readFileSync(envPath, "utf8")) : {};
     const platformRuntime = {};
     for (const key of ALLOWED_ENV_KEYS) if (Object.prototype.hasOwnProperty.call(envValues, key)) platformRuntime[key] = envValues[key];
-    const appConfig = { version: 1, platformRuntime };
+    const appConfig = { version: 1, values: platformRuntime };
     if (fs.existsSync(roots.appConfigPath) && inspected.conflicts.length === 0) {
       try {
         const existing = JSON.parse(fs.readFileSync(roots.appConfigPath, "utf8"));
-        if (JSON.stringify(existing.platformRuntime || {}) !== JSON.stringify(platformRuntime)) inspected.conflicts.push({ code: "APP_CONFIG_CONFLICT", target: "appConfigPath" });
+        if (JSON.stringify(existing.values || {}) !== JSON.stringify(platformRuntime)) inspected.conflicts.push({ code: "APP_CONFIG_CONFLICT", target: "appConfigPath" });
       } catch (_) {
         inspected.conflicts.push({ code: "APP_CONFIG_CONFLICT", target: "appConfigPath" });
       }
@@ -332,7 +332,7 @@ function createContentLibraryMigrator(options) {
       atomicWrite(roots.appConfigPath, JSON.stringify(Object.assign({}, existingConfig, currentPlan.appConfig), null, 2) + "\n");
       manifest.status = "complete";
       manifest.completedAt = clock();
-      manifest.appConfigKeys = Object.keys(currentPlan.appConfig.platformRuntime).sort();
+      manifest.appConfigKeys = Object.keys(currentPlan.appConfig.values).sort();
       atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
       atomicWrite(completionMarkerPath, JSON.stringify({ version: MIGRATION_VERSION, status: "complete", completedAt: manifest.completedAt, manifest: MANIFEST_NAME }, null, 2) + "\n");
       return resultFor(currentPlan, "execute", { copied, skipped, completed: true });
