@@ -55,7 +55,13 @@ function clientDto(client) {
   const value = Object.assign({}, client);
   delete value.directory;
   value.knowledgeFiles = Array.isArray(client && client.knowledgeFiles)
-    ? client.knowledgeFiles.map(function(file) { return { name: file.name, content: file.content }; })
+    ? client.knowledgeFiles.map(function(file) {
+      const result = { name: file.name, content: file.content };
+      ["id", "extension", "status", "characterCount", "error", "contentHash", "source"].forEach(function(key) {
+        if (file && Object.prototype.hasOwnProperty.call(file, key)) result[key] = file[key];
+      });
+      return result;
+    })
     : [];
   return value;
 }
@@ -93,13 +99,22 @@ function createAiContentService(opts) {
   const createId = options.createId || function() { return crypto.randomUUID(); };
   const seenIds = options.seenIds || new Set();
 
-  function listClientsSafe() {
-    return clientKnowledge.listClients().map(clientDto);
+  async function materializeClient(client) {
+    const value = clientDto(client);
+    if (materialStore && typeof materialStore.listMaterials === "function") {
+      value.knowledgeFiles = await materialStore.listMaterials(client.id);
+    }
+    return clientDto(value);
   }
 
-  function getClientSafe(clientId) {
+  async function listClientsSafe() {
+    const clients = await clientKnowledge.listClients();
+    return Promise.all(clients.map(materializeClient));
+  }
+
+  async function getClientSafe(clientId) {
     assertId(clientId, "Client id");
-    return clientDto(clientKnowledge.getClient(clientId));
+    return materializeClient(await clientKnowledge.getClient(clientId));
   }
 
   function listResearch(clientId) {
@@ -114,8 +129,17 @@ function createAiContentService(opts) {
   }
 
   function listTemplates(platform) {
-    assertId(platform, "Platform");
+    if (platform !== undefined) assertId(platform, "Platform");
     return templateStore.listTemplates(platform);
+  }
+
+  async function retryMaterial(clientId, materialId) {
+    assertId(clientId, "Client id");
+    assertId(materialId, "Material id");
+    if (!materialStore || typeof materialStore.retryMaterial !== "function") {
+      throw contentError("CLIENT_MATERIAL_INVALID", "Material retry is unavailable");
+    }
+    return clientDto({ knowledgeFiles: [await materialStore.retryMaterial(clientId, materialId)] }).knowledgeFiles[0];
   }
 
   async function generateArticle(input) {
@@ -163,6 +187,7 @@ function createAiContentService(opts) {
   return {
     listClients: listClientsSafe,
     getClient: getClientSafe,
+    retryMaterial: retryMaterial,
     listResearch: listResearch,
     getResearch: getResearch,
     listTemplates: listTemplates,

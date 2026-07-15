@@ -36,6 +36,11 @@ describe("template store", function() {
     assert.throws(function() { getTemplate(root, "ctrip", "toutiao_news"); }, function(error) { return error.code === "TEMPLATE_NOT_FOUND"; });
   });
 
+  it("discovers all template platforms when no platform filter is supplied", function() {
+    const templates = listTemplates(root);
+    assert.deepStrictEqual(templates.map(function(template) { return template.platform; }).sort(), ["ctrip", "ctrip", "toutiao"]);
+  });
+
   it("rejects duplicate template names within one platform", function() {
     fs.writeFileSync(path.join(ctripDirectory, "duplicate.md"), "---\nplatform: ctrip\nscenario: 重复场景\nname: ctrip_rank\n---\n重复模板。\n");
     assert.throws(function() { listTemplates(root, "ctrip"); }, function(error) { return error.code === "TEMPLATE_DUPLICATE_ID"; });

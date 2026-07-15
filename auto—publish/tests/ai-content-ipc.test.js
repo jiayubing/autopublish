@@ -12,19 +12,20 @@ describe("ai content ipc", function() {
   it("registers the complete thin content IPC surface", async function() {
     const ipc = createIpc();
     const service = {
-      listClients: function() { return [{ id: "client-1" }]; }, getClient: function() { return {}; },
+      listClients: function() { return [{ id: "client-1" }]; }, getClient: function() { return {}; }, retryMaterial: function(clientId, materialId) { return { clientId: clientId, materialId: materialId, status: "ready" }; },
       listResearch: function() { return []; }, getResearch: function() { return {}; }, listTemplates: function() { return []; },
       generateArticle: async function() { return { id: "article-1" }; }, saveArticle: function(value) { return value; },
       listGeneratedArticles: function() { return []; }, getGeneratedArticle: function() { return {}; },
       reviewArticles: function(value) { return { approved: value.map(function(item) { return item.articleId; }), rejected: [], skipped: [] }; }
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
-    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:review-articles"].forEach(function(channel) {
+    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:review-articles"].forEach(function(channel) {
       assert.equal(ipc.handlers.has(channel), true, "missing " + channel);
     });
     assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: [{ id: "client-1" }] });
     assert.deepStrictEqual(await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1" }), { ok: true, data: { id: "article-1" } });
     assert.deepStrictEqual(await ipc.handlers.get("content:review-articles")(null, { articles: [{ clientId: "c1", articleId: "a1" }] }), { ok: true, data: { approved: ["a1"], rejected: [], skipped: [] } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:retry-material")(null, { clientId: "client-1", materialId: "material-1" }), { ok: true, data: { clientId: "client-1", materialId: "material-1", status: "ready" } });
   });
 
   it("wraps coded service errors without stack traces", async function() {

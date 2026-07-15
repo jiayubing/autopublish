@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 
 
 // Global type declaration for desktopConsole
@@ -64,7 +64,8 @@ interface DesktopConsoleContent {
   getDoubaoQueueState(): Promise<IpcResponse<DoubaoQueueState>>;
   saveManualResearch(input: { clientId: string; questionId: string; answerText: string; references: ContentResearch["references"] }): Promise<IpcResponse<ContentResearch>>;
   onDoubaoQueueState(listener: (state: DoubaoQueueState) => void): () => void;
-  listTemplates(platform: string): Promise<IpcResponse<ContentTemplate[]>>;
+  listTemplates(platform?: string): Promise<IpcResponse<ContentTemplate[]>>;
+  retryMaterial(input: { clientId: string; materialId: string }): Promise<IpcResponse<ContentMaterial>>;
   generateArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
@@ -466,7 +467,7 @@ export async function saveManualResearch(input: { clientId: string; questionId: 
   return result.data;
 }
 
-export async function listContentTemplates(platform: string): Promise<ContentTemplate[]> {
+export async function listContentTemplates(platform?: string): Promise<ContentTemplate[]> {
   if (!isElectron()) return [];
   const result = await window.desktopConsole!.content.listTemplates(platform);
   if (!result.ok) throw getIpcError(result.error, "Unable to load templates");
@@ -492,6 +493,13 @@ export async function listContentArticles(clientId: string): Promise<GeneratedCo
   const result = await window.desktopConsole!.content.listGeneratedArticles(clientId);
   if (!result.ok) throw getIpcError(result.error, "Unable to load generated articles");
   return result.data || [];
+}
+
+export async function retryContentMaterial(input: { clientId: string; materialId: string }): Promise<ContentMaterial> {
+  if (!isElectron()) throw new Error("Material retry requires the desktop app");
+  const result = await window.desktopConsole!.content.retryMaterial(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to retry material");
+  return result.data;
 }
 
 export async function reviewContentArticles(articles: ArticleReviewSelection[]): Promise<ArticleReviewResult> {

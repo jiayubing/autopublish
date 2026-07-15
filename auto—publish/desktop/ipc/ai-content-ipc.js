@@ -25,6 +25,9 @@ function registerAiContentIpc(deps) {
     return wrap(function() { return service.getResearch(input && input.clientId, input && input.researchId); });
   });
   ipcMain.handle("content:list-templates", function(event, platform) { return wrap(function() { return service.listTemplates(platform); }); });
+  ipcMain.handle("content:retry-material", function(event, input) {
+    return wrap(function() { return service.retryMaterial(input && input.clientId, input && input.materialId); });
+  });
   ipcMain.handle("content:generate-article", function(event, input) { return wrap(function() { return service.generateArticle(generationInput(input)); }); });
   ipcMain.handle("content:save-article", function(event, article) { return wrap(function() { return service.saveArticle(article); }); });
   ipcMain.handle("content:list-generated-articles", function(event, clientId) { return wrap(function() { return service.listGeneratedArticles(clientId); }); });

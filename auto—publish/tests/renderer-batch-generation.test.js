@@ -27,10 +27,42 @@ describe("renderer content generation workflow", function() {
     assert.match(article, /错误|error/);
   });
 
+  it("defaults async material and research selections without overwriting an explicit cancellation", function() {
+    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    assert.match(article, /materialSelectionTouchedRef/);
+    assert.match(article, /researchSelectionTouchedRef/);
+    assert.match(article, /setMaterialSelection/);
+    assert.match(article, /setResearchSelection/);
+    assert.match(article, /validMaterials\.map\(\(item\) => item\.id \|\| item\.name\)/);
+    assert.match(article, /validResearch\.map\(\(item\) => item\.id\)/);
+    assert.match(article, /materialSelectionTouchedRef\.current \? current/);
+    assert.match(article, /researchSelectionTouchedRef\.current \? current/);
+  });
+
+  it("retries one material through the material store API", function() {
+    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    const api = read("media-workbench/src/electron-api.ts");
+    const preload = read("desktop/preload.js");
+    const ipc = read("desktop/ipc/ai-content-ipc.js");
+    assert.match(article, /retryContentMaterial/);
+    assert.doesNotMatch(article, /listContentClients\(\)/);
+    assert.match(api, /export async function retryContentMaterial/);
+    assert.match(preload, /retryMaterial/);
+    assert.match(ipc, /content:retry-material/);
+  });
+
   it("defines the four batch steps and Cartesian task count", async function() {
     const { countGenerationTasks, BATCH_GENERATION_STEPS } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
     assert.equal(countGenerationTasks(10, 3), 30);
     assert.deepEqual(BATCH_GENERATION_STEPS, ["clients", "templates", "sources", "confirm"]);
+  });
+
+  it("discovers every returned template platform and counts all selected templates", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.doesNotMatch(batch, /const PLATFORMS =/);
+    assert.match(batch, /listContentTemplates\(\)/);
+    assert.match(batch, /Object\.entries\(templateGroups\)/);
+    assert.match(batch, /selectedTemplates\.length/);
   });
 
   it("renders the batch client, platform template, source and confirmation contracts", function() {

@@ -82,6 +82,7 @@ const api = {
     listResearch: function(clientId) { return ipcRenderer.invoke("content:list-research", clientId); },
     getResearch: function(input) { return ipcRenderer.invoke("content:get-research", input); },
     listTemplates: function(platform) { return ipcRenderer.invoke("content:list-templates", platform); },
+    retryMaterial: function(input) { return ipcRenderer.invoke("content:retry-material", input); },
     generateArticle: function(input) { return ipcRenderer.invoke("content:generate-article", input); },
     saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },

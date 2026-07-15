@@ -193,6 +193,8 @@ export interface ContentMaterial {
   content: string;
   characterCount?: number;
   error?: { code?: string; message?: string } | null;
+  contentHash?: string;
+  source?: 'text' | 'docx' | string;
 }
 export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: ContentMaterial[]; }
 export interface ContentQuestion { id: string; text: string; enabled: boolean; createdAt: string; updatedAt: string; }

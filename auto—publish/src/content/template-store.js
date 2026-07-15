@@ -91,7 +91,22 @@ function templateEntries(directory) {
     .sort(function(a, b) { return a.name.localeCompare(b.name); });
 }
 
+function listTemplatePlatforms(workspaceRoot) {
+  const workspace = getContentWorkspace(workspaceRoot);
+  const directory = path.resolve(workspace.templates);
+  if (!fs.existsSync(directory)) return [];
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); })
+    .map(function(entry) { return entry.name; })
+    .sort(function(a, b) { return a.localeCompare(b); });
+}
+
 function listTemplates(workspaceRoot, platform) {
+  if (platform === undefined) {
+    return listTemplatePlatforms(workspaceRoot).flatMap(function(platformId) {
+      return listTemplates(workspaceRoot, platformId);
+    });
+  }
   const directory = getTemplateDirectory(workspaceRoot, platform);
   const templates = templateEntries(directory).map(function(entry) {
     return readTemplate(path.join(directory, entry.name), platform);
@@ -121,4 +136,4 @@ function createTemplateStore(workspaceRoot) {
   };
 }
 
-module.exports = { listTemplates, getTemplate, createTemplateStore, parseFrontMatter };
+module.exports = { listTemplates, listTemplatePlatforms, getTemplate, createTemplateStore, parseFrontMatter };

@@ -204,7 +204,7 @@ function createClientMaterialStore(options) {
     }
     if (extension !== ".docx") {
       const content = source.toString("utf8");
-      return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: characterCount(content) };
+      return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: characterCount(content), contentHash: await hash(source), source: "text" };
     }
 
     const sourceHash = await hash(source);
@@ -213,7 +213,7 @@ function createClientMaterialStore(options) {
       const cached = readCache(filename, clientId, entry.name, sourceHash);
       if (cached) return {
         id: id, name: entry.name, extension: extension, status: "ready", content: cached.content,
-        characterCount: cached.characterCount, cacheHit: true
+        characterCount: cached.characterCount, contentHash: cached.sourceHash, source: "docx", cacheHit: true
       };
     }
 
@@ -234,7 +234,7 @@ function createClientMaterialStore(options) {
         convertedAt: new Date().toISOString()
       };
       writeAtomic(filename, result);
-      return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: result.characterCount, cacheHit: false };
+      return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: result.characterCount, contentHash: sourceHash, source: "docx", cacheHit: false };
     } catch (error) {
       return materialErrorDto(entry.name, extension, error);
     } finally {

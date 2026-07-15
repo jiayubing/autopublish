@@ -45,9 +45,10 @@ function createService(overrides) {
 }
 
 describe("ai content service", function() {
-  it("lists local content without creating an AI client", function() {
+  it("lists local content without creating an AI client", async function() {
     const setup = createService();
-    assert.deepStrictEqual(setup.service.listClients(), [{ id: "client-1", name: "Client", knowledgeFiles: [{ name: "facts.md", content: "facts" }] }]);
+    const clients = await setup.service.listClients();
+    assert.deepStrictEqual(clients, [{ id: "client-1", name: "Client", knowledgeFiles: [{ name: "facts.md", content: "facts" }] }]);
     assert.deepStrictEqual(setup.service.listResearch("client-1").map(function(item) { return item.id; }), ["query-1"]);
     assert.deepStrictEqual(setup.service.listTemplates("ctrip").map(function(item) { return item.id; }), ["template-1"]);
     assert.equal(setup.calls.includes("aiClientFactory"), false);
@@ -99,6 +100,40 @@ describe("ai content service", function() {
         return value.code === "CONTENT_INPUT_INVALID";
       });
     }
+  });
+
+  it("exposes material metadata through the client DTO and retries one material", async function() {
+    const material = {
+      id: "bWVudS5kb2N4",
+      name: "menu.docx",
+      extension: ".docx",
+      status: "error",
+      content: "",
+      characterCount: 0,
+      error: { code: "MATERIAL_DOCX_CONVERSION_FAILED", message: "DOCX conversion failed" }
+    };
+    const setup = createService({
+      materialStore: {
+        listMaterials: async function() { return [material]; },
+        retryMaterial: async function(clientId, materialId) {
+          assert.equal(clientId, "client-1");
+          assert.equal(materialId, material.id);
+          return Object.assign({}, material, { status: "ready", content: "converted", characterCount: 9, error: null });
+        },
+        getSelectedMaterials: async function() { return []; }
+      }
+    });
+    const clients = await setup.service.listClients();
+    assert.deepStrictEqual(clients[0].knowledgeFiles, [material]);
+    assert.deepStrictEqual(await setup.service.retryMaterial("client-1", material.id), {
+      id: material.id,
+      name: material.name,
+      extension: material.extension,
+      status: "ready",
+      content: "converted",
+      characterCount: 9,
+      error: null
+    });
   });
 
   it("reviews explicitly selected articles through the main content service", function() {
