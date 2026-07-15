@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentQuestion, ContentResearch, ContentTemplate, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 
 
 // Global type declaration for desktopConsole
@@ -68,6 +68,7 @@ interface DesktopConsoleContent {
   generateArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
+  reviewArticles(articles: ArticleReviewSelection[]): Promise<IpcResponse<ArticleReviewResult>>;
   previewExport(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
   exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
   previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<IpcResponse<GenerationBatchPreview>>;
@@ -491,6 +492,13 @@ export async function listContentArticles(clientId: string): Promise<GeneratedCo
   const result = await window.desktopConsole!.content.listGeneratedArticles(clientId);
   if (!result.ok) throw getIpcError(result.error, "Unable to load generated articles");
   return result.data || [];
+}
+
+export async function reviewContentArticles(articles: ArticleReviewSelection[]): Promise<ArticleReviewResult> {
+  if (!isElectron()) throw new Error("Article review requires the desktop app");
+  const result = await window.desktopConsole!.content.reviewArticles(articles);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to review articles");
+  return result.data;
 }
 
 // Data normalization from backend values to React types

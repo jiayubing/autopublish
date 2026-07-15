@@ -419,7 +419,14 @@ function createArticleStore(workspaceRoot) {
       .sort(function(a, b) { return (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt); });
   }
 
-  return { saveArticle, getArticle, listArticles };
+  function reviewArticle(clientId, articleId, reviewedAt) {
+    const article = getArticle(clientId, articleId);
+    if (article.status === "saved") return article;
+    if (article.status !== "generated") throw storeError("ARTICLE_NOT_GENERATED", "Article is not generated");
+    return saveArticle(Object.assign({}, article, { status: "saved", reviewedAt: reviewedAt }));
+  }
+
+  return { saveArticle, getArticle, listArticles, reviewArticle };
 }
 
 module.exports = { createArticleStore };

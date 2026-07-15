@@ -86,6 +86,7 @@ const api = {
     saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
     getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); },
+    reviewArticles: function(articles) { return ipcRenderer.invoke("content:review-articles", { articles: articles }); },
     previewExport: function(input) { return ipcRenderer.invoke("content:preview-export", input); },
     exportArticle: function(input) { return ipcRenderer.invoke("content:export-article", input); },
     listQuestions: function(clientId) { return ipcRenderer.invoke("content:list-questions", { clientId: clientId }); },

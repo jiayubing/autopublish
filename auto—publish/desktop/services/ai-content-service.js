@@ -2,6 +2,7 @@ const { listClients, getClient } = require("../../src/content/client-knowledge")
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleStore } = require("../../src/content/article-store");
+const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
@@ -72,6 +73,7 @@ function createAiContentService(opts) {
   const researchStore = options.researchStore || createResearchStore(workspaceRoot);
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot);
   const articleStore = options.articleStore || createArticleStore(workspaceRoot);
+  const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
   const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot }) : {
     getSelectedMaterials: async function(clientId, materialIds) {
       const client = clientKnowledge.getClient(clientId);
@@ -154,6 +156,10 @@ function createAiContentService(opts) {
     return articleStore.getArticle(clientId, articleId);
   }
 
+  function reviewArticles(selections) {
+    return articleReviewService.reviewMany(selections);
+  }
+
   return {
     listClients: listClientsSafe,
     getClient: getClientSafe,
@@ -163,7 +169,8 @@ function createAiContentService(opts) {
     generateArticle: generateArticle,
     saveArticle: saveArticle,
     listGeneratedArticles: listGeneratedArticles,
-    getGeneratedArticle: getGeneratedArticle
+    getGeneratedArticle: getGeneratedArticle,
+    reviewArticles: reviewArticles
   };
 }
 

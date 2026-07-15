@@ -13,7 +13,12 @@ function createService(overrides) {
   const calls = [];
   const client = { id: "client-1", name: "Client", knowledgeFiles: [{ name: "facts.md", content: "facts" }] };
   const research = { id: "query-1", clientId: "client-1", question: "question", answerText: "answer", references: [] };
-  const article = { id: "article-1", clientId: "client-1", title: "Title", content: "Body" };
+  const article = {
+    id: "article-1", clientId: "client-1", title: "Title", content: "Body", status: "generated",
+    source: { client_material: true, doubao_answer: true, references: false, template: true },
+    materialSnapshots: [{ id: "facts.md" }], researchSnapshots: [{ questionId: "query-1" }],
+    templateSnapshot: { platform: "ctrip", id: "template-1", name: "Guide", scenario: "guide", body: "body", bodyHash: "hash" }
+  };
   const deps = Object.assign({
     clientKnowledge: {
       listClients: function() { calls.push("listClients"); return [client]; },
@@ -27,7 +32,8 @@ function createService(overrides) {
     articleStore: {
       saveArticle: function(value) { calls.push("saveArticle"); return value; },
       listArticles: function(id) { calls.push("listArticles:" + id); return [article]; },
-      getArticle: function(clientId, id) { calls.push("getArticle:" + clientId + ":" + id); return article; }
+      getArticle: function(clientId, id) { calls.push("getArticle:" + clientId + ":" + id); return article; },
+      reviewArticle: function(clientId, id, reviewedAt) { calls.push("reviewArticle:" + clientId + ":" + id); return Object.assign({}, article, { status: "saved", reviewedAt: reviewedAt }); }
     },
     aiClientFactory: function() { calls.push("aiClientFactory"); return { complete: async function() { return "# Title\nBody"; } }; },
     articleGeneratorFactory: function(deps) { calls.push("articleGeneratorFactory"); return { generateArticle: async function(input) { calls.push("generate:" + input.clientId); return article; } }; },
@@ -93,6 +99,13 @@ describe("ai content service", function() {
         return value.code === "CONTENT_INPUT_INVALID";
       });
     }
+  });
+
+  it("reviews explicitly selected articles through the main content service", function() {
+    const setup = createService();
+    const result = setup.service.reviewArticles([{ clientId: "client-1", articleId: "article-1" }]);
+    assert.deepStrictEqual(result.approved, ["article-1"]);
+    assert.equal(setup.calls.includes("reviewArticle:client-1:article-1"), true);
   });
 
   it("requires explicit material and research selections and forwards provenance ids", async function() {

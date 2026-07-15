@@ -116,7 +116,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
     if (!selectedArticle) return;
     setSaving(true); setError('');
     const resolvedTemplateId = resolveAvailableTemplateId({ ...selectedArticle, templateId }, templates) || selectedArticle.templateId;
-    try { onArticleChange(await saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, materialIds, status: 'saved', updatedAt: new Date().toISOString() })); onRefresh(); }
+    try { onArticleChange(await saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, materialIds, status: 'saved', reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })); onRefresh(); }
     catch (value) { setError(value instanceof Error ? value.message : '保存文章失败'); }
     finally { setSaving(false); }
   }

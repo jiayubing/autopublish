@@ -31,6 +31,12 @@ function registerAiContentIpc(deps) {
   ipcMain.handle("content:get-generated-article", function(event, input) {
     return wrap(function() { return service.getGeneratedArticle(input && input.clientId, input && input.articleId); });
   });
+  ipcMain.handle("content:review-articles", function(event, input) {
+    return wrap(function() {
+      const selections = Array.isArray(input) ? input : input && input.articles;
+      return service.reviewArticles(selections);
+    });
+  });
 }
 
 module.exports = { registerAiContentIpc };

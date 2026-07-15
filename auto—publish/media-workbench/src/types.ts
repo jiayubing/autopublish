@@ -254,8 +254,14 @@ export interface GenerationBatch {
 export interface ResearchSnapshot { questionId: string; question?: string; answerText: string; references: Array<{ title: string; url: string; snippet?: string }>; collectedAt?: string; collectionMethod: 'automatic' | 'manual' | 'legacy'; }
 export interface GeneratedContentArticle {
   id: string; clientId: string; materialIds?: string[]; researchQueryIds: string[]; researchQueryId?: string; researchSnapshots?: ResearchSnapshot[]; platform: string; scenario: string; templateId: string;
-  title: string; content: string; status: string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string;
+  title: string; content: string; status: 'generated' | 'saved' | string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string; reviewedAt?: string | null;
+  materialSnapshots?: Array<{ id: string; name: string; extension: string; content: string; contentHash: string; source: string }>;
+  templateSnapshot?: { platform: string; id: string; name: string; scenario: string; body: string; bodyHash: string };
+  generationBatchId?: string | null; generationTaskId?: string | null;
 }
+
+export interface ArticleReviewSelection { clientId: string; articleId: string; }
+export interface ArticleReviewResult { approved: string[]; rejected: Array<{ articleId: string; code: string }>; skipped: string[]; }
 
 export interface PlatformArticle {
   filename: string;

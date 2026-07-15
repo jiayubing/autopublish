@@ -258,6 +258,17 @@ describe("article store", function() {
     }
   });
 
+  it("reviews an article in its existing customer directory without changing creation metadata", function() {
+    const original = valid("reviewable", { createdAt: "2026-07-11T00:00:00.000Z", updatedAt: "2026-07-11T01:00:00.000Z" });
+    store.saveArticle(original);
+    const reviewed = store.reviewArticle("client-1", "reviewable", "2026-07-15T00:00:00.000Z");
+    assert.equal(reviewed.status, "saved");
+    assert.equal(reviewed.reviewedAt, "2026-07-15T00:00:00.000Z");
+    assert.equal(reviewed.createdAt, original.createdAt);
+    assert.equal(reviewed.updatedAt, original.updatedAt);
+    assert.deepStrictEqual(store.getArticle("client-1", "reviewable"), reviewed);
+  });
+
   it("rejects mixed legacy and new research metadata instead of dropping new ids", function() {
     assert.throws(function() {
       store.saveArticle(valid("mixed-missing-snapshots", {
