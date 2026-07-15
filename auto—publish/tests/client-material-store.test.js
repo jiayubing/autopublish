@@ -52,6 +52,32 @@ describe("client material store", function() {
     assert.deepEqual(items.map(function(item) { return item.name; }), ["brand.md", "menu.docx"]);
   });
 
+  it("reads, retries, and selects materials by logical client id when its directory has another name", async function() {
+    const physicalDirectory = path.join(workspaceRoot, "clients", "physical-client-directory");
+    fs.rmSync(clientDirectory, { recursive: true, force: true });
+    fs.mkdirSync(physicalDirectory, { recursive: true });
+    fs.writeFileSync(path.join(physicalDirectory, "client.json"), JSON.stringify({ id: "logical-client-id", name: "Logical Client" }), "utf8");
+    fs.writeFileSync(path.join(physicalDirectory, "brand.md"), "逻辑客户资料", "utf8");
+    fs.writeFileSync(path.join(physicalDirectory, "menu.docx"), "fixture-docx", "utf8");
+    let attempts = 0;
+    const store = createClientMaterialStore({
+      workspaceRoot: workspaceRoot,
+      converter: async function() {
+        attempts += 1;
+        if (attempts === 1) throw Object.assign(new Error("conversion failed"), { code: "MATERIAL_DOCX_CONVERSION_FAILED" });
+        return "重试后的资料";
+      }
+    });
+
+    const listed = await store.listMaterials("logical-client-id");
+    assert.deepEqual(listed.map(function(item) { return [item.name, item.status]; }), [["brand.md", "ready"], ["menu.docx", "error"]]);
+    const selected = await store.getSelectedMaterials("logical-client-id", [listed[0].id]);
+    assert.equal(selected[0].content, "逻辑客户资料");
+    const retried = await store.retryMaterial("logical-client-id", listed[1].id);
+    assert.equal(retried.status, "ready");
+    assert.equal(retried.content, "重试后的资料");
+  });
+
   it("supports text extensions and ignores reserved, hidden, nested, and generated files", async function() {
     fs.writeFileSync(path.join(clientDirectory, "plain.txt"), "plain", "utf8");
     fs.writeFileSync(path.join(clientDirectory, "notes.markdown"), "notes", "utf8");

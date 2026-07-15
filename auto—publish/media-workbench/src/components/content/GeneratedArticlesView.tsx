@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
 import { listContentArticles, reviewContentArticles } from '../../electron-api';
-import { groupArticlesByTemplate } from '../../article-history-logic';
+import { groupArticlesByTemplate, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { GeneratedContentArticle } from '../../types';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; onArticleSelect: (article: GeneratedContentArticle) => void; onRefresh?: () => void; }
@@ -23,7 +23,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
 
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
-    return query ? articles.filter((article) => `${article.title} ${article.content} ${article.platform} ${article.templateId}`.toLowerCase().includes(query)) : articles;
+    return query ? articles.filter((article) => `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query)) : articles;
   }, [articles, filter]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const reviewable = filtered.filter((article) => article.status === 'generated');
@@ -73,11 +73,13 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
         const groupReviewable = group.articles.filter((article) => article.status === 'generated');
         const groupSelected = groupReviewable.length > 0 && groupReviewable.every((article) => selected.includes(selectionKey(article)));
         const isCollapsed = collapsed[group.key] !== false;
+        const templateSnapshot = group.templateSnapshot;
+        const snapshotBody = summarizeTemplateSnapshot(templateSnapshot);
         return <section key={group.key} className="rounded-md border border-slate-200 bg-white">
           <div className="flex items-center gap-3 border-b border-slate-100 p-3">
             <input type="checkbox" aria-label={`全选 ${group.label}`} checked={groupSelected} onChange={() => toggleGroup(group.articles)} disabled={!groupReviewable.length || busy} />
             <button type="button" onClick={() => setCollapsed((current) => ({ ...current, [group.key]: !isCollapsed }))} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.platform} · {group.label}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 待审核 {groupReviewable.length} · 最新 {group.articles[0]?.createdAt || ''}</span></span>
+              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.platform} · {group.label}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 待审核 {groupReviewable.length} · 最新 {group.articles[0]?.createdAt || ''}</span>{templateSnapshot && <span className="mt-1 block truncate text-xs text-slate-400">场景：{templateSnapshot.scenario} · 正文解释：{snapshotBody}</span>}</span>
             </button>
           </div>
           {!isCollapsed && <div className="divide-y divide-slate-100">{group.articles.map((article) => <div key={article.id} className="flex items-start gap-3 p-3">

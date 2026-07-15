@@ -1,7 +1,12 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const { createAiContentService } = require("../desktop/services/ai-content-service");
+const { getClient } = require("../src/content/client-knowledge");
+const { createClientMaterialStore } = require("../src/content/client-material-store");
 
 function error(code, message) {
   const value = new Error(message || code);
@@ -45,6 +50,35 @@ function createService(overrides) {
 }
 
 describe("ai content service", function() {
+  it("reads single-generation materials through a logical client id", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ai-logical-client-"));
+    const physicalDirectory = path.join(workspaceRoot, "clients", "physical-client");
+    try {
+      fs.mkdirSync(physicalDirectory, { recursive: true });
+      fs.writeFileSync(path.join(physicalDirectory, "client.json"), JSON.stringify({ id: "logical-client", name: "Logical Client" }), "utf8");
+      fs.writeFileSync(path.join(physicalDirectory, "brand.md"), "single generation facts", "utf8");
+      const materialStore = createClientMaterialStore({ workspaceRoot: workspaceRoot });
+      let materials;
+      const service = createAiContentService({
+        workspaceRoot: workspaceRoot,
+        clientKnowledge: { getClient: function(id) { return getClient(workspaceRoot, id); } },
+        materialStore: materialStore,
+        researchStore: { getResearch: function() { return { id: "q1", answerText: "answer" }; } },
+        templateStore: { getTemplate: function() { return { id: "template-1", body: "body", scenario: "guide" }; } },
+        aiClientFactory: function() { return { complete: async function() { return "# title\nbody"; } }; },
+        articleGeneratorFactory: function(deps) { return { generateArticle: async function(input) {
+          materials = await deps.materialStore.getSelectedMaterials(input.clientId, input.materialIds);
+          return { id: "article-1" };
+        } }; }
+      });
+
+      await service.generateArticle({ clientId: "logical-client", materialIds: ["brand.md"], researchQueryId: "q1", platform: "ctrip", templateId: "template-1" });
+      assert.equal(materials[0].content, "single generation facts");
+    } finally {
+      fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("lists local content without creating an AI client", async function() {
     const setup = createService();
     const clients = await setup.service.listClients();

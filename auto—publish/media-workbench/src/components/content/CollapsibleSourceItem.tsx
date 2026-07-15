@@ -5,6 +5,7 @@ export interface CollapsibleSourceItemProps {
   title: string;
   summary: string;
   selected?: boolean;
+  disabled?: boolean;
   onSelectedChange?: (selected: boolean) => void;
   defaultExpanded?: boolean;
   children: React.ReactNode;
@@ -16,6 +17,7 @@ export default function CollapsibleSourceItem({
   title,
   summary,
   selected = false,
+  disabled = false,
   onSelectedChange,
   defaultExpanded = false,
   children,
@@ -29,6 +31,7 @@ export default function CollapsibleSourceItem({
       <input
         type="checkbox"
         checked={selected}
+        disabled={disabled}
         onChange={(event) => onSelectedChange?.(event.target.checked)}
         aria-label={`选择${title}`}
         className="mt-1"

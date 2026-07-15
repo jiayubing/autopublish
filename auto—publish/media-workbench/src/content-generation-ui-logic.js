@@ -18,6 +18,24 @@ export function isUsableResearch(research) {
   return research?.isAnswerComplete !== false && Boolean(research?.answerText?.trim());
 }
 
+export function reconcileSourceSelection(materials, research, source) {
+  const materialItems = Array.isArray(materials) ? materials : [];
+  const researchItems = Array.isArray(research) ? research : [];
+  const materialIds = Array.isArray(source?.materialIds) ? source.materialIds : [];
+  const researchQueryIds = Array.isArray(source?.researchQueryIds) ? source.researchQueryIds : [];
+  return {
+    materialIds: [...new Set(materialIds)].filter((id) => isUsableMaterial(materialItems.find((item) => getMaterialId(item) === id))),
+    researchQueryIds: [...new Set(researchQueryIds)].filter((id) => isUsableResearch(researchItems.find((item) => item.id === id))),
+  };
+}
+
+export function isExecutableSource(materials, research, source) {
+  if (!source?.materialIds?.length || !source?.researchQueryIds?.length) return false;
+  const selected = reconcileSourceSelection(materials, research, source);
+  return selected.materialIds.length === source.materialIds.length
+    && selected.researchQueryIds.length === source.researchQueryIds.length;
+}
+
 export function sourceCharacterCount(materials, research) {
   return materials.reduce((total, item) => total + (item.content?.length || 0), 0)
     + research.reduce((total, item) => total + (item.answerText?.length || 0), 0);

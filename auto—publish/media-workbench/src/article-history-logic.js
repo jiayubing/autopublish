@@ -5,6 +5,23 @@ function snapshotFor(article) {
   return snapshot;
 }
 
+export function resolveAvailableTemplateId(article, nextTemplates) {
+  if (!article) return nextTemplates[0]?.id || "";
+  const snapshot = snapshotFor(article);
+  if (snapshot) return snapshot.id;
+  const templates = Array.isArray(nextTemplates) ? nextTemplates : [];
+  const currentTemplate = templates.find((item) => item.id === article.templateId);
+  if (currentTemplate) return currentTemplate.id;
+  const scenarioTemplate = templates.find((item) => item.platform === article.platform && item.scenario === article.scenario);
+  return scenarioTemplate?.id || templates[0]?.id || "";
+}
+
+export function summarizeTemplateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object" || typeof snapshot.body !== "string" || !snapshot.body.trim()) return "";
+  const compact = snapshot.body.trim().replace(/\s+/g, " ");
+  return compact.length > 240 ? compact.slice(0, 240) + "…" : compact;
+}
+
 function compareCreatedAt(left, right) {
   const time = String(right.createdAt || "").localeCompare(String(left.createdAt || ""));
   return time || String(right.id || "").localeCompare(String(left.id || ""));

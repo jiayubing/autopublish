@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const { convertDocxToText } = require("../core/markitdown");
 const { createWorkspacePaths } = require("../../desktop/workspace-paths");
+const { getClient } = require("./client-knowledge");
 
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx"]);
 const EXCLUDED_NAMES = new Set(["questions.json", "client.json", "search_query.txt"]);
@@ -80,6 +81,7 @@ function createClientMaterialStore(options) {
   const paths = createWorkspacePaths(workspaceRoot);
   const clientsRoot = paths.clients;
   const cacheRoot = paths.clientMaterialCache;
+  const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
   const converter = typeof opts.converter === "function" ? opts.converter : convertDocxToText;
   const hash = typeof opts.hash === "function" ? opts.hash : defaultHash;
   const cacheVersion = opts.cacheVersion === undefined ? 1 : opts.cacheVersion;
@@ -100,7 +102,16 @@ function createClientMaterialStore(options) {
     }
     if (!isWithin(realWorkspaceRoot, realClientsRoot)) throw pathError();
 
-    const directory = path.join(clientsRoot, clientId);
+    let client;
+    try {
+      client = clientKnowledge.getClient(clientId);
+    } catch (error) {
+      if (error && error.code === "CLIENT_PATH_OUT_OF_BOUNDS") throw pathError();
+      if (error && error.code === "CLIENT_NOT_FOUND") throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
+      throw pathError();
+    }
+    const directory = client && typeof client.directory === "string" ? path.resolve(client.directory) : null;
+    if (!directory || !isWithin(path.resolve(clientsRoot), directory)) throw pathError();
     let stats;
     try { stats = fs.lstatSync(directory); } catch (error) {
       if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");

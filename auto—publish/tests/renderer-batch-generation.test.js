@@ -57,6 +57,22 @@ describe("renderer content generation workflow", function() {
     assert.deepEqual(BATCH_GENERATION_STEPS, ["clients", "templates", "sources", "confirm"]);
   });
 
+  it("does not report a batch source as executable when a selected material has failed", async function() {
+    const { isExecutableSource, reconcileSourceSelection } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
+    const materials = [
+      { id: "brand.md", name: "brand.md", status: "ready", content: "brand facts" },
+      { id: "broken.docx", name: "broken.docx", status: "error", content: "", error: { code: "MATERIAL_DOCX_CONVERSION_FAILED" } }
+    ];
+    const research = [{ id: "q1", answerText: "valid answer" }];
+    const source = { materialIds: ["brand.md", "broken.docx"], researchQueryIds: ["q1"] };
+
+    assert.equal(isExecutableSource(materials, research, source), false);
+    assert.deepEqual(reconcileSourceSelection(materials, research, source), {
+      materialIds: ["brand.md"],
+      researchQueryIds: ["q1"]
+    });
+  });
+
   it("discovers every returned template platform and counts all selected templates", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     assert.doesNotMatch(batch, /const PLATFORMS =/);

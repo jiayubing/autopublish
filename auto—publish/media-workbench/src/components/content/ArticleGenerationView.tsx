@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Eye, Save, Sparkles } from 'lucide-react';
 import { exportToSubmissionQueue, generateContentArticle, listContentResearch, listContentTemplates, previewExport, retryContentMaterial, saveContentArticle } from '../../electron-api';
 import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, GeneratedContentArticle } from '../../types';
+import { resolveAvailableTemplateId } from '../../article-history-logic';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import BatchGenerationView from './BatchGenerationView';
 
@@ -17,14 +18,6 @@ interface ArticleGenerationViewProps {
 
 const PLATFORMS = ['ctrip', 'xiaohongshu', 'dianping'];
 const EXPORT_TARGETS = ['media', 'lieju', 'toutiao', 'hepan'] as const;
-
-function resolveAvailableTemplateId(article: GeneratedContentArticle | null, nextTemplates: ContentTemplate[]) {
-  if (!article) return nextTemplates[0]?.id || '';
-  const currentTemplate = nextTemplates.find((item) => item.id === article.templateId);
-  if (currentTemplate) return currentTemplate.id;
-  const scenarioTemplate = nextTemplates.find((item) => item.platform === article.platform && item.scenario === article.scenario);
-  return scenarioTemplate?.id || nextTemplates[0]?.id || '';
-}
 
 function toMaterials(client?: ContentClient): ContentMaterial[] {
   return (client?.knowledgeFiles || []).map((item) => ({ ...item, id: item.id || item.name, status: item.status || (item.content?.trim() ? 'ready' : 'error'), characterCount: item.characterCount ?? item.content?.length ?? 0 }));

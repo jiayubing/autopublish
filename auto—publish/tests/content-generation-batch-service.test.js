@@ -1,8 +1,13 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const { createContentGenerationBatchService } = require("../desktop/services/content-generation-batch-service");
 const { createGenerationBatchRunner } = require("../src/content/generation-batch-runner");
+const { getClient } = require("../src/content/client-knowledge");
+const { createClientMaterialStore } = require("../src/content/client-material-store");
 
 function makeHarness(options) {
   const settings = options || {};
@@ -93,6 +98,29 @@ function makeHarness(options) {
 }
 
 describe("content generation batch service", function() {
+  it("reads batch-generation materials through a logical client id", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "batch-logical-client-"));
+    const physicalDirectory = path.join(workspaceRoot, "clients", "physical-client");
+    try {
+      fs.mkdirSync(physicalDirectory, { recursive: true });
+      fs.writeFileSync(path.join(physicalDirectory, "client.json"), JSON.stringify({ id: "logical-client", name: "Logical Client" }), "utf8");
+      fs.writeFileSync(path.join(physicalDirectory, "brand.md"), "batch generation facts", "utf8");
+      const service = createContentGenerationBatchService({
+        workspaceRoot: workspaceRoot,
+        clientKnowledge: { getClient: function(id) { return getClient(workspaceRoot, id); } },
+        materialStore: createClientMaterialStore({ workspaceRoot: workspaceRoot }),
+        researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
+        templateStore: { getTemplate: function() { return { id: "guide", body: "body" }; } },
+        aiProviderService: { getFingerprint: function() { return "test"; } }
+      });
+
+      const preview = await service.preview({ clientIds: ["logical-client"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+      assert.deepEqual(preview.clientSources[0].materialIds, ["YnJhbmQubWQ"]);
+    } finally {
+      fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("previews client by template tasks and excludes clients missing either source gate", async function() {
     const { service } = makeHarness();
     const preview = await service.preview({ clientIds: ["c1", "c2"], templates: [{ platform: "ctrip", templateId: "guide" }] });

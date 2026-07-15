@@ -4,6 +4,8 @@ const fs = require("fs");
 const path = require("path");
 
 let groupArticlesByTemplate;
+let resolveAvailableTemplateId;
+let summarizeTemplateSnapshot;
 
 function item(id, platform, templateId, createdAt, overrides) {
   return Object.assign({
@@ -21,7 +23,10 @@ function item(id, platform, templateId, createdAt, overrides) {
 }
 
 describe("article history grouping", async function() {
-  groupArticlesByTemplate = (await import("../media-workbench/src/article-history-logic.js")).groupArticlesByTemplate;
+  const historyLogic = await import("../media-workbench/src/article-history-logic.js");
+  groupArticlesByTemplate = historyLogic.groupArticlesByTemplate;
+  resolveAvailableTemplateId = historyLogic.resolveAvailableTemplateId;
+  summarizeTemplateSnapshot = historyLogic.summarizeTemplateSnapshot;
   it("groups by platform and template snapshot, sorting groups and articles by createdAt", function() {
     const groups = groupArticlesByTemplate([
       item("old-a", "ctrip", "a", "2026-07-10T00:00:00.000Z", { reviewedAt: "2026-07-15T00:00:00.000Z" }),
@@ -36,6 +41,10 @@ describe("article history grouping", async function() {
   });
 
   it("uses the saved template snapshot after template deletion and keeps old articles visible", function() {
+    const historical = item("historical", "ctrip", "deleted-template", "2026-07-12T00:00:00.000Z");
+    assert.equal(resolveAvailableTemplateId(historical, [{ id: "current", platform: "ctrip", scenario: "guide" }]), "deleted-template");
+    assert.equal(summarizeTemplateSnapshot(historical.templateSnapshot), "body");
+
     const groups = groupArticlesByTemplate([item("legacy", "ctrip", "deleted-template", "2026-07-12T00:00:00.000Z", { templateSnapshot: undefined })]);
 
     assert.equal(groups.length, 1);
@@ -50,5 +59,7 @@ describe("article history grouping", async function() {
     assert.match(view, /article\.status !== 'generated'/);
     assert.match(view, /onArticleSelect\(article\)/);
     assert.match(view, /全选当前结果/);
+    assert.match(view, /templateSnapshot/);
+    assert.match(view, /正文解释|body/);
   });
 });
