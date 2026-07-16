@@ -30,7 +30,7 @@ function createDoubaoCollectionDesktopService(options) {
   const questionStore = opts.questionStore || createQuestionStore(workspaceRoot);
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const profileId = opts.profileId || "default";
-  const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId });
+  const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId, profileDir: paths && paths.doubaoBrowser });
   const browserAdapter = opts.browserAdapter || createDoubaoBrowserAdapter({
     session: session,
     profileId: profileId,

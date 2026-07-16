@@ -22,4 +22,10 @@ describe("renderer Beijing time formatter", function() {
     assert.equal(formatBeijingTime("not-a-date"), "未知时间");
     assert.equal(formatBeijingTime("2026-07-15 00:00:00"), "2026-07-15 08:00:00");
   });
+
+  it("is used by the order history view for persisted timestamps", function() {
+    const source = fs.readFileSync(path.resolve(__dirname, "../media-workbench/src/components/OrdersView.tsx"), "utf8");
+    assert.match(source, /formatBeijingTime\(order\.submittedAt\)/);
+    assert.match(source, /formatBeijingTime\(order\.publishedAt\)/);
+  });
 });

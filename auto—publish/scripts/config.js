@@ -4,24 +4,25 @@ const fs = require('fs');
 // In packaged mode, AUTO_PUBLISH_ROOT_DIR is set by desktop/runtime-paths.js
 // to the writable workspace. In development it falls back to the project root.
 const ROOT = process.env.AUTO_PUBLISH_WORKSPACE || process.env.AUTO_PUBLISH_ROOT_DIR || path.resolve(__dirname, '..');
-const DATA_DIR = path.join(ROOT, 'data');
+const DATA_DIR = process.env.AUTO_PUBLISH_DATA_DIR || path.join(ROOT, 'data');
+const PLAYWRIGHT_HOME = process.env.AUTO_PUBLISH_PLAYWRIGHT_HOME || path.join(ROOT, 'work', 'playwright-cli');
 
 const DIRS = {
   rootDir: ROOT,
-  inputDir: path.join(ROOT, 'input'),
-  publishedDir: path.join(ROOT, 'published'),
-  failedDir: path.join(ROOT, 'failed'),
-  tmpDir: path.join(ROOT, 'tmp'),
-  logsDir: path.join(ROOT, 'logs'),
+  inputDir: process.env.AUTO_PUBLISH_INPUT_DIR || path.join(ROOT, 'input'),
+  publishedDir: process.env.AUTO_PUBLISH_PUBLISHED_DIR || path.join(ROOT, 'published'),
+  failedDir: process.env.AUTO_PUBLISH_FAILED_DIR || path.join(ROOT, 'failed'),
+  tmpDir: process.env.AUTO_PUBLISH_TMP_DIR || path.join(ROOT, 'tmp'),
+  logsDir: process.env.AUTO_PUBLISH_LOGS_DIR || path.join(ROOT, 'logs'),
   dataDir: DATA_DIR,
-  stateDir: path.join(ROOT, 'work', 'playwright-cli', 'state'),
+  stateDir: process.env.AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR || path.join(PLAYWRIGHT_HOME, 'state'),
 };
 
 const PW = {
-  home: path.join(ROOT, 'work', 'playwright-cli'),
+  home: PLAYWRIGHT_HOME,
   session: 'autopublish',
-  profileDir: path.join(ROOT, 'work', 'playwright-cli', 'profiles', 'autopublish'),
-  daemonDir: path.join(ROOT, 'work', 'playwright-cli', 'sessions', 'autopublish'),
+  profileDir: process.env.AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR || path.join(PLAYWRIGHT_HOME, 'profiles', 'autopublish'),
+  daemonDir: path.join(PLAYWRIGHT_HOME, 'sessions', 'autopublish'),
   browserChannel: 'msedge',
   headless: false,
 };

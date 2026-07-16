@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const childProcess = require("node:child_process");
 
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../desktop/workspace-paths");
 const { configureRuntimeEnvironment } = require("../desktop/runtime-config");
@@ -83,6 +84,40 @@ describe("workspace paths", function() {
 });
 
 describe("runtime configuration", function() {
+  it("loads application tool configuration before config-dependent modules are evaluated", function() {
+    const values = {
+      appRoot: fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-config-app-")),
+      workspaceRoot: fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-config-workspace-")),
+      roamingConfigRoot: fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-config-roaming-")),
+      localStateRoot: fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-config-local-"))
+    };
+    try {
+      fs.mkdirSync(path.join(values.roamingConfigRoot, "runtime"), { recursive: true });
+      fs.writeFileSync(path.join(values.roamingConfigRoot, "runtime", "runtime-tools.json"), JSON.stringify({
+        markitdownCmd: "configured-markitdown",
+        playwrightCliJs: "configured-playwright-cli"
+      }), "utf8");
+      const result = childProcess.spawnSync(process.execPath, ["-e", [
+        "const input=JSON.parse(process.argv[1]);",
+        "require('./desktop/runtime-config').configureRuntimeEnvironment(input);",
+        "const config=require('./scripts/config');",
+        "process.stdout.write(JSON.stringify({markitdown:config.MARKITDOWN_CMD,playwright:config.PLAYWRIGHT_CLI_JS}));"
+      ].join(""), JSON.stringify(values)], {
+        cwd: path.resolve(__dirname, ".."),
+        env: Object.assign({}, process.env, { MARKITDOWN_CMD: "", PLAYWRIGHT_CLI_JS: "" }),
+        encoding: "utf8"
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(JSON.parse(result.stdout), {
+        markitdown: "configured-markitdown",
+        playwright: "configured-playwright-cli"
+      });
+    } finally {
+      Object.keys(values).forEach(function(key) { fs.rmSync(values[key], { recursive: true, force: true }); });
+    }
+  });
+
   it("requires explicit appRoot and workspaceRoot at every runtime configuration entry point", function() {
     const runtimePaths = require("../desktop/runtime-paths");
     const original = saveRuntimeEnvironment();

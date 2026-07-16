@@ -80,7 +80,8 @@ function createClientMaterialStore(options) {
   const workspaceRoot = path.resolve(opts.workspaceRoot);
   const paths = opts.paths || createWorkspacePaths(workspaceRoot);
   const clientsRoot = paths.clients;
-  const cacheRoot = paths.clientMaterialCache || path.join(workspaceRoot, "work", "client-material-cache");
+  const cacheBoundary = path.resolve(paths.localState || workspaceRoot);
+  const cacheRoot = path.resolve(paths.clientMaterialCache || path.join(paths.work || path.join(workspaceRoot, "work"), "client-material-cache"));
   const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
   const converter = typeof opts.converter === "function" ? opts.converter : convertDocxToText;
   const hash = typeof opts.hash === "function" ? opts.hash : defaultHash;
@@ -125,14 +126,17 @@ function createClientMaterialStore(options) {
   }
 
   function getCacheDirectory(clientId) {
-    const workDirectory = path.join(workspaceRoot, "work");
     try {
-      const workStats = fs.existsSync(workDirectory) ? fs.lstatSync(workDirectory) : null;
-      if (workStats && (!workStats.isDirectory() || workStats.isSymbolicLink())) throw pathError();
-      fs.mkdirSync(workDirectory, { recursive: true });
+      fs.mkdirSync(cacheBoundary, { recursive: true });
+      const boundaryStats = fs.lstatSync(cacheBoundary);
+      if (!boundaryStats.isDirectory() || boundaryStats.isSymbolicLink()) throw pathError();
+      const realCacheBoundary = fs.realpathSync(cacheBoundary);
+      if (!isWithin(path.resolve(cacheBoundary), cacheRoot)) throw pathError();
       const cacheStats = fs.existsSync(cacheRoot) ? fs.lstatSync(cacheRoot) : null;
       if (cacheStats && (!cacheStats.isDirectory() || cacheStats.isSymbolicLink())) throw pathError();
       fs.mkdirSync(cacheRoot, { recursive: true });
+      const realCacheRoot = fs.realpathSync(cacheRoot);
+      if (!isWithin(realCacheBoundary, realCacheRoot)) throw pathError();
     } catch (error) {
       if (error && error.code === "CLIENT_PATH_OUT_OF_BOUNDS") throw error;
       throw pathError();
@@ -141,7 +145,7 @@ function createClientMaterialStore(options) {
     fs.mkdirSync(directory, { recursive: true });
     const realCacheRoot = fs.realpathSync(cacheRoot);
     const realDirectory = fs.realpathSync(directory);
-    if (!isWithin(path.resolve(workspaceRoot), realCacheRoot) || !isWithin(realCacheRoot, realDirectory)) throw pathError();
+    if (!isWithin(path.resolve(cacheBoundary), realCacheRoot) || !isWithin(realCacheRoot, realDirectory)) throw pathError();
     return directory;
   }
 

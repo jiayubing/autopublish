@@ -14,6 +14,7 @@ function makeService(root, values = {}) {
   const articles = values.articles || [article("saved"), article("generated", "generated")];
   return createContentSubmissionService({
     workspaceRoot: root,
+    paths: values.paths,
     articleStore: {
       getArticle(clientId, id) {
         const found = articles.find((item) => item.clientId === clientId && item.id === id);
@@ -56,11 +57,33 @@ describe("content submission batch", function() {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("writes queued content under the injected portable input root", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-portable-"));
+    const localState = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-state-"));
+    try {
+      const paths = {
+        input: path.join(root, ".autopublish", "input"),
+        submissionRecords: path.join(root, ".autopublish", "submission-records"),
+        localState: localState
+      };
+      const service = makeService(root, { paths: paths });
+      const result = service.createBatch({ clientId: "client-1", articleIds: ["saved"], targetPlatformIds: ["toutiao"], confirmed: true });
+
+      assert.equal(result.items[0].filePath, path.join(paths.input, "toutiao", "Title-saved-saved.md"));
+      assert.equal(fs.existsSync(result.items[0].filePath), true);
+      assert.equal(fs.existsSync(path.join(root, "input", "toutiao")), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(localState, { recursive: true, force: true });
+    }
+  });
+
   it("cancels only unchanged queued pairs and is idempotent", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-batch-"));
     try {
       const service = makeService(root);
       const batch = service.createBatch({ clientId: "client-1", articleIds: ["saved"], targetPlatformIds: ["toutiao"], confirmed: true });
+      assert.equal(service.listBatches("client-1").length, 1);
       const cancelled = service.cancelBatch({ batchId: batch.batchId, confirmed: true });
       assert.equal(cancelled.cancelledCount, 1);
       assert.equal(fs.existsSync(batch.items[0].filePath), false);

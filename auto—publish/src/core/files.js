@@ -48,9 +48,9 @@ function configureRuntimePaths(paths) {
   DIRS.tmpDir = paths.tmp;
   DIRS.logsDir = paths.logs;
   DIRS.dataDir = paths.data;
-  DIRS.stateDir = path.join(paths.work, "playwright-cli", "state");
-  PW.home = path.join(paths.work, "playwright-cli");
-  PW.profileDir = path.join(PW.home, "profiles", PW.session);
+  DIRS.stateDir = paths.browser ? path.join(paths.browser, "state") : path.join(paths.work, "playwright-cli", "state");
+  PW.home = paths.browser || path.join(paths.work, "playwright-cli");
+  PW.profileDir = paths.doubaoBrowser || path.join(PW.home, "profiles", PW.session);
   PW.daemonDir = path.join(PW.home, "sessions", PW.session);
   return paths;
 }

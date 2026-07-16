@@ -29,7 +29,9 @@ function makeFixture() {
   write(sourceRoot, "work/playwright-cli/profiles/doubao/session.json", '{"profile":true}\n');
   write(sourceRoot, ".env", [
     "HEPAN_PYTHON=python3",
+    "HEPAN_VENDOR_DIR=C:\\vendor",
     "XQW_API_KEY=secret-test-value",
+    "XQW_BASE_URL=https://example.test/api",
     "AI_API_KEY=must-not-be-migrated",
     "UNRELATED=value"
   ].join("\n") + "\n");
@@ -151,10 +153,13 @@ describe("content library v2 migration", function() {
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser-profile/playwright-cli/profiles/doubao/session.json"), "utf8"), '{"profile":true}\n');
       const appConfig = JSON.parse(fs.readFileSync(fixture.appConfigPath, "utf8"));
       assert.equal(appConfig.values.HEPAN_PYTHON, "python3");
+      assert.equal(appConfig.values.HEPAN_VENDOR_DIR, "C:\\vendor");
       assert.equal(appConfig.values.XQW_API_KEY, "secret-test-value");
+      assert.equal(appConfig.values.XQW_BASE_URL, "https://example.test/api");
       assert.equal(Object.prototype.hasOwnProperty.call(appConfig.values, "AI_API_KEY"), false);
       assert.equal(Object.prototype.hasOwnProperty.call(appConfig.values, "UNRELATED"), false);
       assert.equal(createRuntimeConfigStore({ configRoot: path.dirname(fixture.appConfigPath) }).read().XQW_API_KEY, "secret-test-value");
+      assert.equal(createRuntimeConfigStore({ configRoot: path.dirname(fixture.appConfigPath) }).read().XQW_BASE_URL, "https://example.test/api");
       const manifest = JSON.parse(fs.readFileSync(result.manifestPath, "utf8"));
       assert.equal(manifest.version, 2);
       assert.ok(manifest.files.every((file) => /^[a-f0-9]{64}$/.test(file.sha256)));

@@ -276,6 +276,7 @@ export interface ArticleReviewResult { approved: string[]; rejected: Array<{ art
 export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
 export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: string; contentHash: string; filePath?: string; sidecarPath?: string; }
 export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; conflictCount: number; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
+export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
 export interface ContentSubmissionCancellationPreview { batchId: string; cancelableCount: number; uncancelableCount: number; items: Array<ContentSubmissionBatchItem & { cancelable: boolean }>; }
 

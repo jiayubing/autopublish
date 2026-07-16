@@ -55,6 +55,7 @@ describe("platform-workbench-service", function() {
       targetPlatformIds: ["lieju"]
     });
     assert.equal(plan.tasks[0].filePath, path.join(portableInput, "lieju", "portable.txt"));
+    assert.equal(portableService.resolveSubmissionFile("lieju", "portable.txt"), path.join(portableInput, "lieju", "portable.txt"));
   });
 
   it("builds selected article target plan", function() {

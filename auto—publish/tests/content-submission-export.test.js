@@ -20,3 +20,24 @@ it("exports only saved generated articles as idempotent queued Markdown with saf
     assert.throws(function() { service.exportArticle({ generatedArticleId: "draft", targetPlatform: "media", confirmed: true }); }, { code: "CONTENT_EXPORT_NOT_SAVED" });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+it("uses the injected portable input root and accepts declared dynamic platforms", function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-export-portable-"));
+  try {
+    const inputRoot = path.join(root, ".autopublish", "input");
+    const service = createSubmissionExportService({
+      rootDir: root,
+      paths: { input: inputRoot },
+      platforms: [{ id: "new-platform", scanDir: "new-platform", contentQueueImport: true }],
+      getArticle: function() {
+        return { id: "saved", clientId: "client", title: "Title", content: "Body", status: "saved" };
+      }
+    });
+
+    const result = service.exportArticle({ generatedArticleId: "saved", targetPlatform: "new-platform", confirmed: true });
+
+    assert.equal(result.filePath, path.join(inputRoot, "new-platform", "Title-saved.md"));
+    assert.equal(fs.existsSync(result.filePath), true);
+    assert.equal(fs.existsSync(path.join(root, "input", "new-platform")), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

@@ -22,6 +22,25 @@ function send(type, payload) {
   }
 }
 
+function configureWorkerEnvironment(paths) {
+  if (!paths || typeof paths !== "object") return;
+  const values = {
+    AUTO_PUBLISH_WORKSPACE: paths.contentLibrary || paths.workspaceRoot,
+    AUTO_PUBLISH_ROOT_DIR: paths.contentLibrary || paths.workspaceRoot,
+    AUTO_PUBLISH_LOCAL_STATE: paths.localState,
+    AUTO_PUBLISH_INPUT_DIR: paths.input,
+    AUTO_PUBLISH_DATA_DIR: paths.data,
+    AUTO_PUBLISH_PUBLISHED_DIR: paths.published,
+    AUTO_PUBLISH_FAILED_DIR: paths.failed,
+    AUTO_PUBLISH_TMP_DIR: paths.tmp,
+    AUTO_PUBLISH_LOGS_DIR: paths.logs,
+    AUTO_PUBLISH_PLAYWRIGHT_HOME: paths.browser,
+    AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR: paths.doubaoBrowser,
+    AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: paths.browser && require("path").join(paths.browser, "state")
+  };
+  Object.keys(values).forEach(function(key) { if (values[key]) process.env[key] = values[key]; });
+}
+
 process.on("message", function(message) {
   if (!message) return;
 
@@ -70,18 +89,20 @@ process.on("message", function(message) {
     process.env.AUTO_PUBLISH_DESKTOP = "1";
 
     if (task === "snapshot") {
-      const { createQueueSnapshot } = require("../../src/app/publish-batch");
       const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+      configureWorkerEnvironment(options.paths);
+      const { createQueueSnapshot } = require("../../src/app/publish-batch");
       send("result", { ok: true, data: createQueueSnapshot(options) });
       return;
     }
 
     if (task === "batch") {
+      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+      configureWorkerEnvironment(options.paths);
       const { clearStopSignal } = require("../../src/core/stop-signal");
       const { subscribe } = require("../../src/core/logger");
       const { runPublicationBatch } = require("../../src/app/publish-batch");
       clearStopSignal();
-      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
       const unsubscribe = subscribe(function(entry) {
         send("log", entry);
       });
@@ -101,12 +122,13 @@ process.on("message", function(message) {
     }
 
     if (task === "platform-submit") {
+      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+      configureWorkerEnvironment(options.paths);
       const { loadPlatforms } = require("../../src/core/platforms");
       const { createPlatformWorkbenchService } = require("../services/platform-workbench-service");
       const { subscribe } = require("../../src/core/logger");
       const { clearStopSignal } = require("../../src/core/stop-signal");
-      const rootDir = require("path").resolve(__dirname, "..", "..");
-      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+      const rootDir = options.paths && (options.paths.contentLibrary || options.paths.workspaceRoot) || process.env.AUTO_PUBLISH_WORKSPACE || require("path").resolve(__dirname, "..", "..");
       const plan = options.plan || { tasks: [] };
       const submitOptions = options.submitOptions || { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
 
@@ -133,7 +155,8 @@ process.on("message", function(message) {
         });
 
         const service = createPlatformWorkbenchService({
-          rootDir: rootDir,
+           rootDir: rootDir,
+           paths: options.paths,
           platforms: servicePlatforms,
           adapters: adapters
         });

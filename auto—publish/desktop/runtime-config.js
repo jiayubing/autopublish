@@ -5,7 +5,6 @@ const { createStoragePaths } = require("./storage-paths");
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("./workspace-paths");
 const { createRuntimeConfigStore, SUPPORTED_RUNTIME_CONFIG_KEYS } = require("./runtime-config-store");
 const { createRuntimeDiagnosticsService } = require("./services/runtime-diagnostics-service");
-const { configureRuntimePaths } = require("../src/core/files");
 
 let loadedWorkspaceEnv;
 let loadedWorkspaceValues = {};
@@ -86,7 +85,6 @@ function configureRuntimeEnvironment(options) {
     contentLibrary: contentLibrary
   });
   const paths = createWorkspacePaths(contentLibrary, storage);
-  configureRuntimePaths(paths);
 
   process.env.AUTO_PUBLISH_ROOT_DIR = contentLibrary;
   process.env.AUTO_PUBLISH_APP_ROOT = appRoot;
@@ -105,6 +103,11 @@ function configureRuntimeEnvironment(options) {
   if (!process.env.MARKITDOWN_CMD && diagnostics.tools.markitdown.command) process.env.MARKITDOWN_CMD = diagnostics.tools.markitdown.command;
   if (!process.env.PLAYWRIGHT_CLI_JS && diagnostics.tools.playwright.command) process.env.PLAYWRIGHT_CLI_JS = diagnostics.tools.playwright.command;
   if (!process.env.HEPAN_PYTHON && diagnostics.tools.hepanPython.command) process.env.HEPAN_PYTHON = diagnostics.tools.hepanPython.command;
+  // src/core/files loads scripts/config.js at module evaluation time. Delay
+  // that dependency until diagnostics has applied tool resolution so values
+  // from runtime-tools.json are not frozen to development defaults.
+  const { configureRuntimePaths } = require("../src/core/files");
+  configureRuntimePaths(paths);
   const configErrors = validateRuntimeConfiguration().concat(diagnostics.errors);
 
   return {

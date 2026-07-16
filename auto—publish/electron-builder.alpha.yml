@@ -23,6 +23,8 @@ files:
   - media-workbench/dist/**/*
   # Adapter runtime helpers (Python scripts, etc.)
   - src/platforms/hepan/hepan_publish.py
+  # Read-only builtin content templates
+  - resources/content-templates/**/*
   # Do not list node_modules here. electron-builder derives the complete
   # production dependency closure from package.json/package-lock, including
   # transitive dependencies required by mammoth and form-data.

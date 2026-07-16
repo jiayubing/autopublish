@@ -564,6 +564,8 @@ describe("source assembly and packaging contract", function() {
       "process.stdout.write(JSON.stringify(walk(process.argv[1]).filter(f=>f.endsWith('.md'))));"
     ].join(""), templatesRoot], { encoding: "utf8" });
     assert.ok(JSON.parse(templateFiles).length > 0);
+    const config = read("electron-builder.alpha.yml");
+    assert.match(config, /resources\/content-templates\/\*\*\/\*/);
   });
 
   it("configures a writable runtime workspace before IPC registration", function() {

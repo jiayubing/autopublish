@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { createContentSubmissionBatch, listContentArticles, listContentSubmissionPlatforms, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewContentSubmissionBatch, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, createContentSubmissionBatch, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewContentSubmissionBatch, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashRecord } from '../../electron-api';
 import { groupArticlesByTemplate, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ContentSubmissionPlatform, GeneratedContentArticle } from '../../types';
 import { formatBeijingTime } from '../../time-format';
@@ -14,16 +14,19 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [submissionPlatforms, setSubmissionPlatforms] = useState<ContentSubmissionPlatform[]>([]);
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
   const [showTrash, setShowTrash] = useState(false);
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
+  const [submissionBatches, setSubmissionBatches] = useState<Array<{ id: string; status: string; items: Array<{ articleId: string; status: string }> }>>([]);
 
   useEffect(() => {
-    if (!clientId) { setArticles([]); setSelected([]); return; }
+    if (!clientId) { setArticles([]); setSelected([]); setSubmissionBatches([]); return; }
     listContentArticles(clientId).then(setArticles).catch((value) => setError(value instanceof Error ? value.message : '无法加载历史文章'));
+    listContentSubmissionBatches(clientId).then(setSubmissionBatches).catch(() => setSubmissionBatches([]));
   }, [clientId, refreshToken]);
 
   useEffect(() => {
@@ -35,14 +38,20 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     listContentTrash(clientId).then(setTrash).catch((value) => setError(value instanceof Error ? value.message : '无法加载回收站'));
   }, [clientId, refreshToken, showTrash]);
 
+  const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
-    return query ? articles.filter((article) => `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query)) : articles;
-  }, [articles, filter]);
+    return articles.filter((article) => {
+      const statusMatches = statusFilter === 'all' || (statusFilter === 'queued' ? queuedArticleIds.has(article.id) : article.status === statusFilter);
+      const textMatches = !query || `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query);
+      return statusMatches && textMatches;
+    });
+  }, [articles, filter, statusFilter, queuedArticleIds]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const reviewable = filtered.filter((article) => article.status === 'generated');
   const selectedReviewable = reviewable.filter((article) => selected.includes(selectionKey(article)));
   const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)));
+  const latestQueuedBatch = submissionBatches.find((batch) => batch.status === 'queued');
 
   function toggleArticle(article: GeneratedContentArticle) {
     if (article.status !== 'generated' && article.status !== 'saved') return;
@@ -79,13 +88,27 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有可入队的已审核文章');
       if (!window.confirm(`确认将 ${preview.queueableTaskCount} 项内容加入投稿队列？`)) return;
       await createContentSubmissionBatch({ ...input, confirmed: true });
-      setSelected([]); setArticles(await listContentArticles(clientId)); onRefresh?.();
+      setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefresh?.();
     } catch (value) { setError(value instanceof Error ? value.message : '批量入队失败'); }
+    finally { setBusy(false); }
+  }
+
+  async function cancelLatestBatch() {
+    if (!latestQueuedBatch) return;
+    setBusy(true); setError('');
+    try {
+      const preview = await previewCancelContentSubmissionBatch(latestQueuedBatch.id);
+      if (!preview.cancelableCount) throw new Error('最近投稿批次没有可撤销项');
+      if (!window.confirm(`确认撤销最近投稿批次的 ${preview.cancelableCount} 项内容？`)) return;
+      await cancelContentSubmissionBatch(latestQueuedBatch.id);
+      setSubmissionBatches(await listContentSubmissionBatches(clientId));
+    } catch (value) { setError(value instanceof Error ? value.message : '撤销投稿批次失败'); }
     finally { setBusy(false); }
   }
 
   async function trashSelected() {
     if (!selectedArticles.length || !window.confirm(`确认删除历史文章 ${selectedArticles.length} 篇？文章会进入回收站，投稿队列副本和记录不会删除。`)) return;
+    if (selectedArticles.some((article) => article.status === 'saved') && !window.confirm('其中包含已审核文章，可能已经进入投稿队列。请再次确认删除原文？')) return;
     setBusy(true); setError('');
     try {
       const result = await trashContentArticles({ articles: selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id })), confirmed: true });
@@ -131,12 +154,14 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     <div className="mb-4 flex flex-wrap items-start gap-3">
       <div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-slate-800">历史文章</h2><p className="mt-1 text-xs text-slate-500">当前客户的文章按平台和生成时模板版本分组。</p></div>
       <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="筛选标题、平台或模板" aria-label="筛选历史文章" className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
+      <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="文章状态" className="h-9 rounded-md border border-slate-300 px-2 text-xs"><option value="all">全部状态</option><option value="generated">待审核</option><option value="saved">已审核</option><option value="queued">已入队</option></select>
       <button type="button" onClick={() => setShowTrash(true)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">打开回收站</button>
       <button type="button" onClick={toggleAll} disabled={!reviewable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
       <button type="button" onClick={() => void reviewSelected()} disabled={!selectedReviewable.length || busy} className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">审核已选 ({selectedReviewable.length})</button>
       <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">删除历史文章 ({selectedArticles.length})</button>
+      {latestQueuedBatch && <button type="button" onClick={() => void cancelLatestBatch()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销最近入队</button>}
       {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName}</button>)}
-      <button type="button" onClick={() => void queueSelected()} disabled={!selected.some((key) => reviewable.some((article) => selectionKey(article) === key && article.status === 'saved')) || !targetPlatformIds.length || busy} className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+      <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'saved') || !targetPlatformIds.length || busy} className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
     </div>
     {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     <div className="grid gap-3">
@@ -156,7 +181,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
           {!isCollapsed && <div className="divide-y divide-slate-100">{group.articles.map((article) => <div key={article.id} className="flex items-start gap-3 p-3">
             <input type="checkbox" aria-label={`选择 ${article.title}`} checked={selected.includes(selectionKey(article))} onChange={() => toggleArticle(article)} disabled={(article.status !== 'generated' && article.status !== 'saved') || busy} className="mt-1" />
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <button type="button" onClick={() => onArticleSelect(article)} className="min-w-0 flex-1 text-left hover:text-blue-700"><span className="block truncate text-sm font-semibold text-slate-800">{article.title}</span><span className="mt-1 block text-xs text-slate-500">{article.status} · {formatBeijingTime(article.createdAt)}</span></button>
+            <button type="button" onClick={() => onArticleSelect(article)} className="min-w-0 flex-1 text-left hover:text-blue-700"><span className="block truncate text-sm font-semibold text-slate-800">{article.title}</span><span className="mt-1 block text-xs text-slate-500">{article.status}{queuedArticleIds.has(article.id) ? ' · 已入队' : ''} · {formatBeijingTime(article.createdAt)}</span></button>
           </div>)}</div>}
         </section>;
       })}

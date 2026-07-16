@@ -13,7 +13,8 @@ function articleMarkdown(article) { return "# " + String(article.title || "") + 
 function createContentSubmissionService(opts) {
   const options = opts || {}; const store = options.articleStore || createArticleStore(options.workspaceRoot, { paths: options.paths });
   const rootDir = path.resolve(options.workspaceRoot || process.cwd());
-  const batchStore = options.batchStore || createSubmissionBatchStore({ workspaceRoot: rootDir });
+  const batchStore = options.batchStore || createSubmissionBatchStore({ workspaceRoot: rootDir, directory: options.paths && options.paths.submissionRecords });
+  const inputRoot = path.resolve(options.paths && options.paths.input || path.join(rootDir, ".autopublish", "input"));
   function availablePlatforms() {
     if (Array.isArray(options.platforms)) return options.platforms.slice();
     const { loadPlatforms } = require("../../src/core/platforms");
@@ -44,7 +45,7 @@ function createContentSubmissionService(opts) {
         const platform = platformMap.get(platformId);
         const item = { articleId, targetPlatformId: platformId, contentHash, status: "excluded" };
         if (article.status === "saved" && platform && platform.contentQueueImport === true) {
-          const directory = path.resolve(rootDir, "input", platform.scanDir || platform.id);
+          const directory = path.resolve(inputRoot, platform.scanDir || platform.id);
           const filePath = path.resolve(directory, safeName(article.title) + "-" + article.id + ".md");
           item.filePath = filePath;
           item.sidecarPath = filePath + ".submission.json";
@@ -78,13 +79,12 @@ function createContentSubmissionService(opts) {
         fs.mkdirSync(path.dirname(item.filePath), { recursive: true });
         const article = store.getArticle(input.clientId, item.articleId);
         const markdown = articleMarkdown(article);
-        fs.writeFileSync(item.filePath, markdown, "utf8");
-        fs.writeFileSync(item.sidecarPath, JSON.stringify({ submissionBatchId: batchId, generatedArticleId: article.id, clientId: article.clientId, targetPlatformId: item.targetPlatformId, contentHash: item.contentHash, status: "queued", queuedAt: batch.createdAt }, null, 2) + "\n", "utf8");
+        writeSubmissionPair(item.filePath, markdown, item.sidecarPath, JSON.stringify({ submissionBatchId: batchId, generatedArticleId: article.id, clientId: article.clientId, targetPlatformId: item.targetPlatformId, contentHash: item.contentHash, status: "queued", queuedAt: batch.createdAt }, null, 2) + "\n");
         createdCount += 1;
         batch.items.push(Object.assign({}, item, { status: "queued", submissionBatchId: batchId }));
       });
     } catch (error) {
-      batch.items.filter((item) => item.submissionBatchId === batchId && item.status === "queued").forEach((item) => { try { fs.unlinkSync(item.filePath); } catch (_) {} try { fs.unlinkSync(item.sidecarPath); } catch (_) {} });
+      batch.items.filter((item) => item.submissionBatchId === batchId && item.status === "queued").forEach((item) => { try { removeSubmissionPair(item.filePath, item.sidecarPath); } catch (_) {} });
       throw error;
     }
     batchStore.save(batch);
@@ -98,7 +98,7 @@ function createContentSubmissionService(opts) {
       let sidecar;
       try { sidecar = JSON.parse(fs.readFileSync(item.sidecarPath, "utf8")); } catch (_) { skippedCount += 1; return; }
       if (sidecar.submissionBatchId !== batch.id || !fs.existsSync(item.filePath) || hash(fs.readFileSync(item.filePath, "utf8")) !== item.contentHash) { item.status = "conflict"; skippedCount += 1; return; }
-      fs.unlinkSync(item.filePath); fs.unlinkSync(item.sidecarPath); item.status = "cancelled"; cancelledCount += 1;
+      removeSubmissionPair(item.filePath, item.sidecarPath); item.status = "cancelled"; cancelledCount += 1;
     });
     batch.status = batch.items.some((item) => item.status === "queued") ? "queued" : "cancelled";
     batch.updatedAt = new Date().toISOString(); batchStore.save(batch);
@@ -121,7 +121,49 @@ function createContentSubmissionService(opts) {
     return { batchId: batch.id, cancelableCount, uncancelableCount, items };
   }
   function input(value) { if (!value || value.confirmed !== true || !value.clientId) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return value; }
-  function exporterFor(value) { return options.exporter || createSubmissionExportService({ rootDir: options.workspaceRoot, getArticle: function(id) { return store.getArticle(value.clientId, id); } }); }
-  return { previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); }, exportArticle: function(value) { value = input(value); return exporterFor(value).exportArticle(value); }, listPlatforms, previewBatch, createBatch, previewCancelBatch, cancelBatch, getBatch: function(batchId) { return batchStore.get(batchId); }, listBatches: function() { return batchStore.list(); } };
+  function exporterFor(value) { return options.exporter || createSubmissionExportService({ rootDir: options.workspaceRoot, paths: options.paths, platforms: availablePlatforms(), getArticle: function(id) { return store.getArticle(value.clientId, id); } }); }
+  return { previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); }, exportArticle: function(value) { value = input(value); return exporterFor(value).exportArticle(value); }, listPlatforms, previewBatch, createBatch, previewCancelBatch, cancelBatch, getBatch: function(batchId) { return batchStore.get(batchId); }, listBatches: function(clientId) { return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }); } };
+}
+
+function writeSubmissionPair(filePath, markdown, sidecarPath, sidecar) {
+  const token = process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  const markdownTemp = filePath + ".tmp-" + token;
+  const sidecarTemp = sidecarPath + ".tmp-" + token;
+  let markdownMoved = false;
+  let sidecarMoved = false;
+  try {
+    fs.writeFileSync(markdownTemp, markdown, "utf8");
+    fs.writeFileSync(sidecarTemp, sidecar, "utf8");
+    fs.renameSync(markdownTemp, filePath); markdownMoved = true;
+    fs.renameSync(sidecarTemp, sidecarPath); sidecarMoved = true;
+  } catch (error) {
+    try { if (sidecarMoved) fs.unlinkSync(sidecarPath); } catch (_) {}
+    try { if (markdownMoved) fs.unlinkSync(filePath); } catch (_) {}
+    throw error;
+  } finally {
+    try { if (fs.existsSync(markdownTemp)) fs.unlinkSync(markdownTemp); } catch (_) {}
+    try { if (fs.existsSync(sidecarTemp)) fs.unlinkSync(sidecarTemp); } catch (_) {}
+  }
+}
+
+function removeSubmissionPair(filePath, sidecarPath) {
+  const token = process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  const markdownTemp = filePath + ".deleting-" + token;
+  const sidecarTemp = sidecarPath + ".deleting-" + token;
+  let markdownMoved = false;
+  let sidecarMoved = false;
+  try {
+    fs.renameSync(sidecarPath, sidecarTemp); sidecarMoved = true;
+    fs.renameSync(filePath, markdownTemp); markdownMoved = true;
+    fs.unlinkSync(sidecarTemp);
+    fs.unlinkSync(markdownTemp);
+  } catch (error) {
+    try { if (markdownMoved && !fs.existsSync(filePath)) fs.renameSync(markdownTemp, filePath); } catch (_) {}
+    try { if (sidecarMoved && !fs.existsSync(sidecarPath)) fs.renameSync(sidecarTemp, sidecarPath); } catch (_) {}
+    throw error;
+  } finally {
+    try { if (fs.existsSync(markdownTemp)) fs.unlinkSync(markdownTemp); } catch (_) {}
+    try { if (fs.existsSync(sidecarTemp)) fs.unlinkSync(sidecarTemp); } catch (_) {}
+  }
 }
 module.exports = { createContentSubmissionService };

@@ -5,10 +5,12 @@ const crypto = require("node:crypto");
 const FILE_NAME = "runtime-config.json";
 const SUPPORTED_RUNTIME_CONFIG_KEYS = Object.freeze([
   "XQW_API_KEY",
+  "XQW_BASE_URL",
   "MARKITDOWN_CMD",
   "PLAYWRIGHT_CLI_JS",
   "BROWSER_CHANNEL",
   "HEPAN_COOKIE_PATH",
+  "HEPAN_VENDOR_DIR",
   "HEPAN_PYTHON",
   "AUTO_PUBLISH_NODE_EXEC_PATH"
 ]);

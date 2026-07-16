@@ -198,7 +198,7 @@ function createDoubaoBrowserAdapter(options) {
     throw codedError("DOUBAO_BROWSER_MODE_INVALID", "Doubao browser mode must be visible or background");
   }
   const profileId = opts.profileId || (opts.session && opts.session.profileId) || "default";
-  const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId });
+  const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId, profileDir: opts.profileDir, daemonDir: opts.daemonDir, stateFile: opts.stateFile });
   const runtime = opts.runtime || createPlaywrightRuntime({ session: session });
   const sleep = opts.sleep || defaultSleep;
   const now = opts.now || function() { return new Date().toISOString(); };

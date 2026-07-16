@@ -101,6 +101,7 @@ const api = {
     exportArticle: function(input) { return ipcRenderer.invoke("content:export-article", input); },
     previewSubmissionBatch: function(input) { return ipcRenderer.invoke("content:preview-submission-batch", input); },
     listSubmissionPlatforms: function() { return ipcRenderer.invoke("content:list-submission-platforms"); },
+    listSubmissionBatches: function(input) { return ipcRenderer.invoke("content:list-submission-batches", input); },
     createSubmissionBatch: function(input) { return ipcRenderer.invoke("content:create-submission-batch", input); },
     previewCancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:preview-cancel-submission-batch", input); },
     cancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:cancel-submission-batch", input); },

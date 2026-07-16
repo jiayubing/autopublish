@@ -8,6 +8,8 @@ function createDesktopTaskService(opts) {
   var options = opts || {};
   var cwd = options.cwd || path.resolve(__dirname, "..", "..");
   var sendToRenderer = options.sendToRenderer || function() {};
+  var storagePaths = options.paths || {};
+  var forkProcess = options.fork || fork;
 
   var isBatchRunning = false;
   var isStopPending = false;
@@ -35,12 +37,23 @@ function createDesktopTaskService(opts) {
   }
 
   function spawnDesktopTask(taskName, payload, hooks) {
-    var child = fork(path.join(__dirname, "..", "worker", "run-task.js"), [taskName, JSON.stringify(payload || {})], {
+    var workerPayload = Object.assign({}, payload || {}, { paths: storagePaths });
+    var child = forkProcess(path.join(__dirname, "..", "worker", "run-task.js"), [taskName, JSON.stringify(workerPayload)], {
       cwd: cwd,
       env: Object.assign({}, process.env, {
         AUTO_PUBLISH_DESKTOP: "1",
-        AUTO_PUBLISH_WORKSPACE: cwd,
-        AUTO_PUBLISH_ROOT_DIR: cwd,
+        AUTO_PUBLISH_WORKSPACE: storagePaths.contentLibrary || storagePaths.workspaceRoot || cwd,
+        AUTO_PUBLISH_ROOT_DIR: storagePaths.contentLibrary || storagePaths.workspaceRoot || cwd,
+        AUTO_PUBLISH_LOCAL_STATE: storagePaths.localState || "",
+        AUTO_PUBLISH_INPUT_DIR: storagePaths.input || "",
+        AUTO_PUBLISH_DATA_DIR: storagePaths.data || "",
+        AUTO_PUBLISH_PUBLISHED_DIR: storagePaths.published || "",
+        AUTO_PUBLISH_FAILED_DIR: storagePaths.failed || "",
+        AUTO_PUBLISH_TMP_DIR: storagePaths.tmp || "",
+        AUTO_PUBLISH_LOGS_DIR: storagePaths.logs || "",
+        AUTO_PUBLISH_PLAYWRIGHT_HOME: storagePaths.browser || "",
+        AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR: storagePaths.doubaoBrowser || "",
+        AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: storagePaths.browser ? path.join(storagePaths.browser, "state") : "",
         AUTO_PUBLISH_NODE_EXEC_PATH: process.env.AUTO_PUBLISH_NODE_EXEC_PATH || ''
       }),
       stdio: ["ignore", "ignore", "ignore", "ipc"]
@@ -90,7 +103,7 @@ function closeBrowserSessions() {
     var cliJs = require("../../scripts/config").PLAYWRIGHT_CLI_JS;
     // Use workspace root for sessions, same as pwSessionConfig
     var rootDir = require("../../scripts/config").DIRS.rootDir;
-    var workDir = require("path").join(rootDir, "work", "playwright-cli");
+    var workDir = storagePaths.browser || require("path").join(rootDir, "work", "playwright-cli");
 
     PLATFORM_SESSIONS.forEach(function(session) {
       var sessionDir = require("path").join(workDir, "sessions", session);

@@ -127,6 +127,37 @@ describe("client material store", function() {
     assert.equal(fs.readdirSync(path.join(workspaceRoot, "work", "client-material-cache"), { withFileTypes: true }).some(function(entry) { return entry.name.includes(".tmp-"); }), false);
   });
 
+  it("stores DOCX cache under injected local state instead of the content workspace", async function() {
+    const localStateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "client-material-local-state-"));
+    try {
+      const cacheRoot = path.join(localStateRoot, "cache", "client-material");
+      let conversions = 0;
+      const store = createClientMaterialStore({
+        workspaceRoot: workspaceRoot,
+        paths: {
+          clients: path.join(workspaceRoot, "clients"),
+          localState: localStateRoot,
+          clientMaterialCache: cacheRoot
+        },
+        converter: async function() {
+          conversions += 1;
+          return "cached outside workspace";
+        }
+      });
+
+      const first = await store.listMaterials("client-1");
+      const second = await store.listMaterials("client-1");
+
+      assert.equal(first.find(function(item) { return item.name === "menu.docx"; }).status, "ready");
+      assert.equal(second.find(function(item) { return item.name === "menu.docx"; }).cacheHit, true);
+      assert.equal(conversions, 1);
+      assert.equal(fs.existsSync(cacheRoot), true);
+      assert.equal(fs.existsSync(path.join(workspaceRoot, "work")), false);
+    } finally {
+      fs.rmSync(localStateRoot, { recursive: true, force: true });
+    }
+  });
+
   it("returns a safe failure DTO and retries only the failed DOCX", async function() {
     let attempts = 0;
     const store = createClientMaterialStore({

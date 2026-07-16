@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -81,6 +81,7 @@ interface DesktopConsoleContent {
   previewSubmissionBatch(input: ContentSubmissionBatchInput): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   previewCancelSubmissionBatch(input: { batchId: string }): Promise<IpcResponse<ContentSubmissionCancellationPreview>>;
   listSubmissionPlatforms(): Promise<IpcResponse<ContentSubmissionPlatform[]>>;
+  listSubmissionBatches(input: { clientId: string }): Promise<IpcResponse<ContentSubmissionBatchRecord[]>>;
   createSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   cancelSubmissionBatch(input: { batchId: string; confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   getSubmissionBatch(batchId: string): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
@@ -1102,6 +1103,13 @@ export async function listContentSubmissionPlatforms(): Promise<ContentSubmissio
   const result = await window.desktopConsole!.content.listSubmissionPlatforms();
   if (!result.ok) throw getIpcError(result.error, "submission platform discovery failed");
   return result.data || [];
+}
+
+export async function listContentSubmissionBatches(clientId: string): Promise<ContentSubmissionBatchRecord[]> {
+  if (!isElectron()) return [];
+  const result = await window.desktopConsole!.content.listSubmissionBatches({ clientId });
+  if (!result.ok) throw getIpcError(result.error, "submission batch history failed");
+  return (result.data || []) as ContentSubmissionBatchRecord[];
 }
 
 export async function createContentSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<ContentSubmissionBatchPreview> {

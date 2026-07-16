@@ -15,6 +15,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatBeijingTime } from '../time-format';
 
 interface OrdersViewProps {
   orders: RealOrder[];
@@ -172,13 +173,13 @@ export default function OrdersView({
                       {order.submittedAt && (
                         <span className="flex items-center space-x-1">
                           <Calendar className="w-3 h-3" />
-                          <span>提交: {order.submittedAt}</span>
+                          <span>提交: {formatBeijingTime(order.submittedAt)}</span>
                         </span>
                       )}
                       {order.publishedAt && (
                         <span className="flex items-center space-x-1 text-emerald-600">
                           <CheckCircle2 className="w-3 h-3" />
-                          <span>发布: {order.publishedAt}</span>
+                          <span>发布: {formatBeijingTime(order.publishedAt)}</span>
                         </span>
                       )}
                     </div>
@@ -252,11 +253,11 @@ export default function OrdersView({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">提交时间:</span>
-                              <span className="text-slate-300">{order.submittedAt || '-'}</span>
+                              <span className="text-slate-300">{order.submittedAt ? formatBeijingTime(order.submittedAt) : '-'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">发布时间:</span>
-                              <span className="text-emerald-400">{order.publishedAt || '-'}</span>
+                              <span className="text-emerald-400">{order.publishedAt ? formatBeijingTime(order.publishedAt) : '-'}</span>
                             </div>
                           </div>
                           {order.orderUrl && (

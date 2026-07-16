@@ -25,9 +25,12 @@ function pwSessionConfig(name, options) {
     profileError.code = "PLAYWRIGHT_PROFILE_ID_INVALID";
     throw profileError;
   }
-  var profileDir = path.join(PW.home, "profiles", session);
-  var daemonDir = path.join(PW.home, "sessions", session);
+  var profileDir = session === PW.session && PW.profileDir ? PW.profileDir : path.join(PW.home, "profiles", session);
+  var daemonDir = session === PW.session && PW.daemonDir ? PW.daemonDir : path.join(PW.home, "sessions", session);
   var stateFile = path.join(DIRS.stateDir, session + ".json");
+  if (input.profileDir !== undefined) profileDir = input.profileDir;
+  if (input.daemonDir !== undefined) daemonDir = input.daemonDir;
+  if (input.stateFile !== undefined) stateFile = input.stateFile;
   if (profileId !== "default") {
     profileDir = path.join(profileDir, profileId);
     daemonDir = path.join(daemonDir, profileId);

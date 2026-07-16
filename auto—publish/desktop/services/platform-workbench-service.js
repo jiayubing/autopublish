@@ -206,7 +206,7 @@ function createPlatformWorkbenchService(opts) {
   }
 
   return { scanQueue: scanQueue, buildSelectedPlan: buildSelectedPlan, submitSelectedPlanSerially: submitSelectedPlanSerially,
-    resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(rootDir, platforms, sourcePlatformId, filename); } };
+    resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename); } };
 }
 
 module.exports = { createPlatformWorkbenchService };

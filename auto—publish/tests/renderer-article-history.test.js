@@ -85,4 +85,14 @@ describe("article history grouping", async function() {
     assert.match(api, /preparePermanentDeleteArticle/);
     assert.match(api, /permanentlyDeleteArticle/);
   });
+
+  it("keeps saved articles selectable for submission queueing", function() {
+    const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
+    assert.match(view, /const selectedSaved = filtered\.filter/);
+    assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'saved'\)/);
+    assert.doesNotMatch(view, /reviewable\.some\(\(article\) => selectionKey\(article\) === key && article\.status === 'saved'\)/);
+    assert.match(view, /文章状态/);
+    assert.match(view, /撤销最近入队/);
+    assert.match(view, /listContentSubmissionBatches/);
+  });
 });
