@@ -28,6 +28,10 @@ const api = {
     getUsage: function() { return ipcRenderer.invoke("storage-maintenance:get-usage"); },
     cleanCaches: function() { return ipcRenderer.invoke("storage-maintenance:clean-caches"); }
   },
+  runtimeDiagnostics: {
+    get: function() { return ipcRenderer.invoke("runtime-diagnostics:get"); },
+    browserSmoke: function() { return ipcRenderer.invoke("runtime-diagnostics:browser-smoke"); }
+  },
   batch: {
     getState: function() { return ipcRenderer.invoke("desktop:get-state"); },
     refreshQueue: function(options) { return ipcRenderer.invoke("desktop:refresh-queue", options || {}); },

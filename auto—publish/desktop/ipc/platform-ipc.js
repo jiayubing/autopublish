@@ -3,6 +3,7 @@ const { loadPlatforms } = require("../../src/core/platforms");
 const { createPlatformWorkbenchService } = require("../services/platform-workbench-service");
 const { wrap } = require("../services/ipc-response");
 const { validatePlatformSubmission, inputError } = require("../services/submission-boundary");
+const { assertPlaywrightAvailable } = require("../services/playwright-capability");
 
 function registerPlatformIpc(deps) {
   var ipcMain = deps.ipcMain;
@@ -94,6 +95,7 @@ function registerPlatformIpc(deps) {
 
   ipcMain.handle("platforms:submit-selected-plan", function(event, input) {
     return wrap(async function() {
+      assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       var plan = Array.isArray(input) ? buildPlanFromSubmissions(input) : buildPlanFromSubmission(input);
       var workerResult = await taskService.startPlatformSubmit(plan, {
         onLog: function(entry) {

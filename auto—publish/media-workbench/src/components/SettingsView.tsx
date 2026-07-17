@@ -6,7 +6,10 @@ import {
   getCurrentWorkspace,
   openCurrentWorkspace,
   requestWorkspaceSwitch,
+  getRuntimeDiagnostics,
+  runBrowserSelfCheck,
 } from '../electron-api';
+import type { RuntimeDiagnostics } from '../electron-api';
 import {
   WorkspaceBootstrapState,
   WorkspaceConfirmationResult,
@@ -77,6 +80,10 @@ export default function SettingsView() {
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageCleaning, setStorageCleaning] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<RuntimeDiagnostics | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [runtimeChecking, setRuntimeChecking] = useState(false);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(null);
   const mountedRef = useRef(true);
 
@@ -109,6 +116,37 @@ export default function SettingsView() {
   useEffect(() => {
     void refreshStorageUsage();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    getRuntimeDiagnostics()
+      .then((value) => { if (active) setRuntimeDiagnostics(value); })
+      .catch((error) => { if (active) setRuntimeError(error instanceof Error ? error.message : '无法读取运行时状态'); })
+      .finally(() => { if (active) setRuntimeLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const handleRuntimeSelfCheck = async () => {
+    if (runtimeChecking) return;
+    setRuntimeChecking(true);
+    setRuntimeError(null);
+    try {
+      await runBrowserSelfCheck();
+      setRuntimeDiagnostics(await getRuntimeDiagnostics());
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : '浏览器自检失败');
+    } finally {
+      setRuntimeChecking(false);
+    }
+  };
+
+  const runtimeItems = runtimeDiagnostics ? [
+    ['Playwright Node', runtimeDiagnostics.tools.playwrightNode],
+    ['Playwright CLI', runtimeDiagnostics.tools.playwrightCli],
+    ['Edge/Chrome', runtimeDiagnostics.browserChannel ? { available: runtimeDiagnostics.browserChannel.available && runtimeDiagnostics.browserChannel.probed, source: runtimeDiagnostics.browserChannel.source } : { available: false, source: null }],
+    ['MarkItDown', runtimeDiagnostics.tools.markitdown],
+    ['Hepan Python', runtimeDiagnostics.tools.hepanPython],
+  ] : [];
 
   const handleCleanCaches = async () => {
     const api = getStorageMaintenanceApi();
@@ -234,6 +272,28 @@ export default function SettingsView() {
       <section className="flex gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs text-blue-800">
         <Info className="h-4 w-4 shrink-0" />
         <span>工作区切换不会复制、移动或删除原工作区数据；最终安全检查由主进程服务完成。投稿不会因文件新增或预检通过而自动投稿。</span>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">运行环境自检</h3>
+            <p className="mt-1 text-xs text-slate-500">Playwright 使用应用内置 Node/CLI；浏览器自检只访问临时 about:blank 并在完成后关闭。</p>
+          </div>
+          <button type="button" onClick={() => void handleRuntimeSelfCheck()} disabled={runtimeLoading || runtimeChecking} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {runtimeChecking ? '自检中…' : '运行浏览器自检'}
+          </button>
+        </div>
+        {runtimeError && <p className="text-xs text-red-700">{runtimeError}</p>}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {runtimeItems.map(([label, item]) => (
+            <div key={label} className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+              <span className="text-slate-700">{label}</span>
+              <span className={item.available ? 'text-emerald-700' : 'text-rose-700'}>{item.available ? '可用' : '不可用'}</span>
+            </div>
+          ))}
+        </div>
+        {runtimeDiagnostics?.browserChannel && !runtimeDiagnostics.browserChannel.probed && <p className="text-xs text-amber-700">浏览器通道已配置为 {runtimeDiagnostics.browserChannel.channel || '未配置'}，请运行自检确认 Edge/Chrome 可启动。</p>}
+        {runtimeDiagnostics?.errors.some((error) => error.code === 'PLAYWRIGHT_NODE_UNAVAILABLE' || error.code === 'PLAYWRIGHT_CLI_UNAVAILABLE' || error.code === 'BROWSER_CHANNEL_UNAVAILABLE') && <p className="text-xs text-amber-700">浏览器功能不可用时，请重新安装应用；若 Edge 缺失，请安装 Edge 或在应用级设置中选择可用的 Chrome channel。</p>}
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
         <div className="flex items-center justify-between gap-3">

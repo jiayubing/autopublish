@@ -1,0 +1,27 @@
+const assert = require("node:assert/strict");
+const { it } = require("node:test");
+const { registerRuntimeDiagnosticsIpc } = require("../desktop/ipc/runtime-diagnostics-ipc");
+
+it("exposes safe capability diagnostics and a browser self-check IPC boundary", async function() {
+  const handlers = new Map();
+  const service = {
+    safeDiagnostics: function() {
+      return { ok: false, tools: { playwrightNode: { available: false, source: null } }, errors: [{ code: "PLAYWRIGHT_NODE_UNAVAILABLE", message: "内置 Playwright Node 不可用，请重新安装应用。" }] };
+    },
+    probeBrowser: async function() {
+      const error = new Error("内置 Playwright CLI 不可用，请重新安装应用。");
+      error.code = "PLAYWRIGHT_CLI_UNAVAILABLE";
+      throw error;
+    }
+  };
+  registerRuntimeDiagnosticsIpc({ ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } }, runtimeDiagnosticsService: service });
+
+  const diagnostics = await handlers.get("runtime-diagnostics:get")();
+  assert.equal(diagnostics.ok, true);
+  assert.equal(diagnostics.data.errors[0].code, "PLAYWRIGHT_NODE_UNAVAILABLE");
+
+  const smoke = await handlers.get("runtime-diagnostics:browser-smoke")();
+  assert.equal(smoke.ok, false);
+  assert.equal(smoke.error.code, "PLAYWRIGHT_CLI_UNAVAILABLE");
+  assert.equal("stack" in smoke.error, false);
+});

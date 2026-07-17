@@ -1,4 +1,5 @@
 const { wrap } = require("../services/ipc-response");
+const { assertPlaywrightAvailable } = require("../services/playwright-capability");
 const { createDoubaoCollectionDesktopService } = require("../services/doubao-collection-service");
 
 function ipcError(message) {
@@ -112,15 +113,16 @@ function registerDoubaoCollectionIpc(deps) {
     return safeWrap(function() { return service.deleteQuestion(questionInput(input, ["clientId", "questionId"], "Delete question input")); });
   });
   ipcMain.handle("content:get-doubao-login-state", function(event, input) {
-    return safeWrap(function() { noInput(input, "Login state"); return service.getLoginState(); });
+    return safeWrap(function() { noInput(input, "Login state"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.getLoginState(); });
   });
   ipcMain.handle("content:open-doubao-login", function(event, input) {
-    return safeWrap(function() { noInput(input, "Open login"); return service.openLogin(); });
+    return safeWrap(function() { noInput(input, "Open login"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.openLogin(); });
   });
   ipcMain.handle("content:collect-doubao-one", function(event, input) {
     return safeWrap(function() {
       const value = questionInput(input, ["clientId", "questionId", "force"], "Collect input");
       optionalForce(value);
+      assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       return service.collectOne(value);
     });
   });
@@ -148,6 +150,7 @@ function registerDoubaoCollectionIpc(deps) {
         optionalForce(item);
         return { clientId: item.clientId, questionId: item.questionId, force: item.force };
       });
+      assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       return service.startBatch(tasks);
     });
   });
@@ -161,6 +164,7 @@ function registerDoubaoCollectionIpc(deps) {
         optionalForce(item);
         return { clientId: item.clientId, questionId: item.questionId, force: item.force };
       });
+      assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       return service.startPreparedBatch({ tasks: tasks });
     });
   });
@@ -168,13 +172,13 @@ function registerDoubaoCollectionIpc(deps) {
     return safeWrap(function() { noInput(input, "Pause batch"); return service.pauseBatch(); });
   });
   ipcMain.handle("content:resume-doubao-batch", function(event, input) {
-    return safeWrap(function() { noInput(input, "Resume batch"); return service.resumeBatch(); });
+    return safeWrap(function() { noInput(input, "Resume batch"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.resumeBatch(); });
   });
   ipcMain.handle("content:stop-doubao-batch", function(event, input) {
     return safeWrap(function() { noInput(input, "Stop batch"); return service.stopBatch(); });
   });
   ipcMain.handle("content:retry-failed-doubao", function(event, input) {
-    return safeWrap(function() { noInput(input, "Retry failed"); return service.retryFailed(); });
+    return safeWrap(function() { noInput(input, "Retry failed"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.retryFailed(); });
   });
   ipcMain.handle("content:get-doubao-queue-state", function(event, input) {
     return safeWrap(function() { noInput(input, "Queue state"); return service.getQueueState(); });

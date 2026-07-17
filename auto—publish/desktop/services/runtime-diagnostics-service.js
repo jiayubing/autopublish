@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const childProcess = require("node:child_process");
 
@@ -169,6 +170,33 @@ function safeDiagnostics(diagnostics) {
   };
 }
 
+function safeProbeError(code) {
+  const messages = {
+    PLAYWRIGHT_NODE_UNAVAILABLE: "内置 Playwright Node 不可用，请重新安装应用。",
+    PLAYWRIGHT_CLI_UNAVAILABLE: "内置 Playwright CLI 不可用，请重新安装应用。",
+    BROWSER_CHANNEL_UNAVAILABLE: "浏览器通道不可用，请安装 Edge 或在应用级设置中选择可用的 Chrome 通道。",
+    PLAYWRIGHT_TIMEOUT: "浏览器自检超时，请关闭占用中的浏览器后重试。",
+    PLAYWRIGHT_EXEC_FAILED: "浏览器自检失败，请检查 Edge/Chrome 是否可用。"
+  };
+  const error = new Error(messages[code] || messages.PLAYWRIGHT_EXEC_FAILED);
+  error.code = code;
+  return error;
+}
+
+function execFileAsync(file, args, options) {
+  return new Promise(function(resolve, reject) {
+    childProcess.execFile(file, args, options, function(error, stdout, stderr) {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+        return;
+      }
+      resolve({ stdout: stdout, stderr: stderr });
+    });
+  });
+}
+
 function createRuntimeDiagnosticsService(options) {
   const opts = options || {};
   const workspaceValue = opts.workspaceRoot || process.env.AUTO_PUBLISH_WORKSPACE;
@@ -184,7 +212,51 @@ function createRuntimeDiagnosticsService(options) {
     return { ok: errors.length === 0, workspaceRoot: workspaceRoot, appRoot: appRoot, tools: tools, errors: errors };
   }
 
-  return { diagnose: diagnose, resolvePlaywrightRuntime: function() { return resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot: appRoot })); }, safeDiagnostics: function() { return safeDiagnostics(diagnose()); } };
+  async function probeBrowser() {
+    const diagnostics = diagnose();
+    const node = diagnostics.tools.playwrightNode.command;
+    const cli = diagnostics.tools.playwrightCli.command;
+    const browser = diagnostics.tools.browserChannel.channel;
+    if (!node) throw safeProbeError("PLAYWRIGHT_NODE_UNAVAILABLE");
+    if (!cli) throw safeProbeError("PLAYWRIGHT_CLI_UNAVAILABLE");
+    if (!browser) throw safeProbeError("BROWSER_CHANNEL_UNAVAILABLE");
+    const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "autopublish-runtime-self-check-"));
+    const daemonDirectory = path.join(temporaryRoot, "daemon");
+    const profileDirectory = path.join(temporaryRoot, "profile");
+    const env = Object.assign({}, process.env, {
+      PATH: process.env.PATH || "",
+      PLAYWRIGHT_DAEMON_SESSION_DIR: daemonDirectory,
+      AUTO_PUBLISH_NODE_EXEC_PATH: node,
+      PLAYWRIGHT_CLI_JS: cli,
+      BROWSER_CHANNEL: browser
+    });
+    let opened = false;
+    async function invoke(args, timeout) {
+      try {
+        return await execFileAsync(node, [cli].concat(args), { encoding: "utf8", timeout: timeout || 30000, windowsHide: true, env: env });
+      } catch (error) {
+        const text = String(error && (error.stdout || "")) + "\n" + String(error && (error.stderr || ""));
+        if (error && (error.code === "ETIMEDOUT" || error.killed)) throw safeProbeError("PLAYWRIGHT_TIMEOUT");
+        if (/browser|channel|executable|msedge|chrome/i.test(text) && /not found|does not exist|unable|launch|executable/i.test(text)) throw safeProbeError("BROWSER_CHANNEL_UNAVAILABLE");
+        throw safeProbeError("PLAYWRIGHT_EXEC_FAILED");
+      }
+    }
+    try {
+      await invoke(["-s=runtime-self-check", "open", "about:blank", "--browser=" + browser, "--headed", "--persistent", "--profile=" + profileDirectory], 60000);
+      opened = true;
+      await invoke(["-s=runtime-self-check", "list"], 30000);
+      await invoke(["-s=runtime-self-check", "close"], 30000);
+      opened = false;
+      return { ok: true, browserChannel: browser, session: "runtime-self-check" };
+    } finally {
+      if (opened) {
+        try { await invoke(["-s=runtime-self-check", "close"], 10000); } catch (_) {}
+      }
+      fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  }
+
+  return { diagnose: diagnose, probeBrowser: probeBrowser, resolvePlaywrightRuntime: function() { return resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot: appRoot })); }, safeDiagnostics: function() { return safeDiagnostics(diagnose()); } };
 }
 
 module.exports = { createRuntimeDiagnosticsService, resolvePlaywrightRuntime, safeDiagnostics };

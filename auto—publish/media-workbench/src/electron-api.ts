@@ -118,6 +118,24 @@ interface DesktopConsoleWorkspace {
   requestSwitch(): Promise<IpcResponse<WorkspaceBootstrapState>>;
 }
 
+export interface RuntimeToolStatus { available: boolean; source: string | null; }
+export interface RuntimeDiagnostics {
+  ok: boolean;
+  browserChannel: { channel: string | null; source: string | null; available: boolean; probed: boolean } | null;
+  tools: {
+    playwrightNode: RuntimeToolStatus;
+    playwrightCli: RuntimeToolStatus;
+    markitdown: RuntimeToolStatus;
+    hepanPython: RuntimeToolStatus;
+  };
+  errors: Array<{ code: string; message: string }>;
+}
+
+interface DesktopConsoleRuntimeDiagnostics {
+  get(): Promise<IpcResponse<RuntimeDiagnostics>>;
+  browserSmoke(): Promise<IpcResponse<{ ok: boolean; browserChannel: string; session: string }>>;
+}
+
 export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: "media" | "lieju" | "toutiao" | "hepan"; confirmed: true; }
 export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
 export interface ArticleTrashRecord { version: 1; deletedAt: string; clientId: string; articleId: string; status: string; references: Array<{ type: string; id: string }>; }
@@ -128,6 +146,7 @@ export interface ArticlePermanentDeleteResult { clientId: string; articleId: str
 
 interface DesktopConsole {
   workspace: DesktopConsoleWorkspace;
+  runtimeDiagnostics: DesktopConsoleRuntimeDiagnostics;
   aiProvider: DesktopConsoleAiProvider;
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
@@ -250,6 +269,32 @@ export async function requestWorkspaceSwitch(): Promise<WorkspaceBootstrapState>
   const result = await window.desktopConsole!.workspace.requestSwitch();
   if (!result.ok) throw getIpcError(result.error, "Unable to switch workspace");
   return result.data || { state: "selection_required", workspacePath: null, envOverride: false };
+}
+
+const EMPTY_RUNTIME_DIAGNOSTICS: RuntimeDiagnostics = {
+  ok: false,
+  browserChannel: { channel: "msedge", source: "default", available: true, probed: false },
+  tools: {
+    playwrightNode: { available: false, source: null },
+    playwrightCli: { available: false, source: null },
+    markitdown: { available: false, source: null },
+    hepanPython: { available: false, source: null },
+  },
+  errors: [],
+};
+
+export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
+  if (!isElectron()) return EMPTY_RUNTIME_DIAGNOSTICS;
+  const result = await window.desktopConsole!.runtimeDiagnostics.get();
+  if (!result.ok) throw getIpcError(result.error, "Unable to read runtime diagnostics");
+  return result.data || EMPTY_RUNTIME_DIAGNOSTICS;
+}
+
+export async function runBrowserSelfCheck(): Promise<{ ok: boolean; browserChannel: string; session: string }> {
+  if (!isElectron()) throw new Error("Browser self-check requires the desktop app");
+  const result = await window.desktopConsole!.runtimeDiagnostics.browserSmoke();
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Browser self-check failed");
+  return result.data;
 }
 
 export async function listContentClients(): Promise<ContentClient[]> {

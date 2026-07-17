@@ -7,6 +7,7 @@
   require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(deps);
   require("./content-submission-ipc").registerContentSubmissionIpc(deps);
   require("./doubao-collection-ipc").registerDoubaoCollectionIpc(deps);
+  require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(deps);
 }
 
 module.exports = { registerIpc };

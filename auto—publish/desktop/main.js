@@ -219,7 +219,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     doubaoCollectionService: doubaoCollectionService,
     aiProviderService: aiProviderService,
     aiContentService: aiContentService,
-    contentGenerationBatchService: contentGenerationBatchService
+    contentGenerationBatchService: contentGenerationBatchService,
+    runtimeDiagnosticsService: runtime.diagnosticsService
   });
   if (storageMaintenanceService) {
     require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({

@@ -128,6 +128,8 @@ function configureRuntimeEnvironment(options) {
     storage: storage,
     paths: paths,
     runtimeConfigStore: runtimeConfigStore,
+    applicationValues: applicationValues,
+    diagnosticsService: diagnosticsService,
     configErrors: configErrors,
     diagnostics: diagnostics
   };

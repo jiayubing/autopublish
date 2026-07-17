@@ -11,6 +11,18 @@ describe("renderer storage settings contract", function() {
     assert.match(source, /storage-maintenance:clean-caches/);
   });
 
+  it("exposes independent runtime diagnostics and a safe browser self-check", function() {
+    const preload = fs.readFileSync(path.resolve(__dirname, "..", "desktop/preload.js"), "utf8");
+    const settings = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/SettingsView.tsx"), "utf8");
+    assert.match(preload, /runtimeDiagnostics/);
+    assert.match(preload, /runtime-diagnostics:get/);
+    assert.match(preload, /runtime-diagnostics:browser-smoke/);
+    assert.match(settings, /Playwright Node/);
+    assert.match(settings, /Playwright CLI/);
+    assert.match(settings, /运行浏览器自检/);
+    assert.match(settings, /about:blank/);
+  });
+
   it("exposes usage categories and a guarded cache cleanup command", function() {
     const source = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/SettingsView.tsx"), "utf8");
     assert.match(source, /storageMaintenance/);
