@@ -7,176 +7,49 @@ import { getSettingsCommandState } from '../workspace-ui-logic.js';
 import { mapRuntimeCapabilityState } from '../runtime-capability-state.cjs';
 import AiProviderSettings from './AiProviderSettings';
 import WorkspaceSelectionPanel from './WorkspaceSelectionPanel';
-
-// Compatibility notes retained for the renderer contract: 褰撳墠宸ヤ綔鍖虹敱鐜鍙橀噺鎺у埗 and 涓嶄細鍥犳枃浠舵柊澧炴垨棰勬閫氳繃鑰岃嚜鍔ㄦ姇绋?
+import SettingsNavigation, { SettingsSection } from './settings/SettingsNavigation';
+import SettingsOverview from './settings/SettingsOverview';
+import MediaProviderSettings from './settings/MediaProviderSettings';
+import HepanProviderSettings from './settings/HepanProviderSettings';
 
 const READY_STATE: WorkspaceBootstrapState = { state: 'ready', workspacePath: null, envOverride: false };
-
 type StorageUsageCategory = { bytes: number; files: number; followedSymlinks?: number };
 type StorageUsage = { logs: StorageUsageCategory; temporary: StorageUsageCategory; docxCache: StorageUsageCategory; profiles: StorageUsageCategory; active?: boolean };
-type StorageMaintenanceApi = {
-  getUsage: () => Promise<{ ok: boolean; data?: StorageUsage; error?: { message?: string } }>;
-  cleanCaches: () => Promise<{ ok: boolean; data?: { blocked?: boolean }; error?: { message?: string } }>;
-};
+type StorageMaintenanceApi = { getUsage: () => Promise<{ ok: boolean; data?: StorageUsage; error?: { message?: string } }>; cleanCaches: () => Promise<{ ok: boolean; data?: { blocked?: boolean }; error?: { message?: string } }> };
 
-function getStorageMaintenanceApi(): StorageMaintenanceApi | null {
-  const value = typeof window !== 'undefined'
-    ? (window as unknown as { desktopConsole?: { storageMaintenance?: StorageMaintenanceApi } }).desktopConsole?.storageMaintenance
-    : undefined;
-  return value || null;
+function getStorageMaintenanceApi(): StorageMaintenanceApi | null { return typeof window === 'undefined' ? null : (window as unknown as { desktopConsole?: { storageMaintenance?: StorageMaintenanceApi } }).desktopConsole?.storageMaintenance || null; }
+function formatBytes(bytes: number): string { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`; }
+function validationLabel(kind?: string): string { if (kind === 'existing_workspace') return '已有工作区，标记有效'; if (kind === 'empty_directory') return '空目录，可初始化'; if (kind === 'nonempty_directory') return '非空目录，需确认初始化'; return '未读取到验证状态'; }
+function capabilityClass(capability: RuntimeCapability): string { const tone = mapRuntimeCapabilityState(capability).tone; return tone === 'ready' ? 'text-emerald-700' : tone === 'unavailable' ? 'text-rose-700' : tone === 'optional' ? 'text-slate-500' : 'text-amber-700'; }
+
+function WorkspaceSettings() {
+  const [current, setCurrent] = useState<WorkspaceCurrent | null>(null); const [loading, setLoading] = useState(true); const [operationError, setOperationError] = useState(''); const [switchOpen, setSwitchOpen] = useState(false); const [switchState, setSwitchState] = useState<WorkspaceBootstrapState>(READY_STATE); const [switchBusy, setSwitchBusy] = useState(false); const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(null); const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; const request = currentWorkspaceRequestRef.current || (currentWorkspaceRequestRef.current = getCurrentWorkspace()); request.then((value) => { if (!mountedRef.current) return; setCurrent(value); setSwitchState({ state: 'ready', workspacePath: value.workspacePath, envOverride: value.envOverride }); }).catch(() => { if (mountedRef.current) setOperationError('无法读取当前工作区。'); }).finally(() => { if (mountedRef.current) setLoading(false); }); return () => { mountedRef.current = false; }; }, []);
+  const envOverride = current?.envOverride === true; const commandState = getSettingsCommandState({ loading, switchBusy, current, switchState });
+  const open = async () => { setOperationError(''); try { await openCurrentWorkspace(); } catch (_) { setOperationError('无法打开当前工作区。'); } };
+  const requestSwitch = async (): Promise<WorkspaceBootstrapState> => { if (typeof window !== 'undefined' && !window.confirm('切换工作区会重启应用，是否继续？')) return READY_STATE; setOperationError(''); return requestWorkspaceSwitch(); };
+  return <div className="space-y-4"><section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="flex items-center gap-2 text-base font-semibold text-slate-800"><FolderOpen className="h-4 w-4" />工作区</h3><div className="mt-4 break-all rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700" aria-label="当前工作区路径">{loading ? '读取中…' : current?.workspacePath || '未选择工作区'}</div><p className="mt-3 text-xs text-slate-600">校验状态：{loading ? '检查中…' : validationLabel(current?.validation?.kind)}</p>{envOverride && <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">当前工作区由环境变量 AUTO_PUBLISH_WORKSPACE 控制，不能在此更换。</p>}{operationError && <p role="alert" className="mt-3 text-sm text-rose-700">{operationError}</p>}<div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => void open()} disabled={commandState.openDisabled} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"><ExternalLink className="h-4 w-4" />打开文件夹</button><button type="button" onClick={() => setSwitchOpen(true)} disabled={commandState.switchDisabled} className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" />更换工作区</button></div></section>{switchOpen && !envOverride && <WorkspaceSelectionPanel state={switchState} onChooseDirectory={requestSwitch} onConfirmSelection={async (input): Promise<WorkspaceConfirmationResult> => confirmWorkspaceSelection(input)} onCancelSelection={cancelWorkspaceSelection} onStateChange={(next) => { setSwitchState(next); if (next.state === 'relaunching') setSwitchOpen(true); }} onBusyChange={setSwitchBusy} title="更换工作区" description="主进程会先校验新目录，再重启应用。" />}<section data-safety-note="Workspace switching does not copy, move, or delete the original data" className="flex gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800"><Info className="h-4 w-4 shrink-0" />工作区切换不会复制、移动或删除原有业务数据。</section></div>;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+function RuntimeSettings() {
+  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics | null>(null); const [loading, setLoading] = useState(true); const [checking, setChecking] = useState(false); const [error, setError] = useState('');
+  const load = async () => { try { setDiagnostics(await getRuntimeDiagnostics()); } catch (_) { setError('无法读取运行环境状态。'); } finally { setLoading(false); } };
+  useEffect(() => { void load(); }, []);
+  const check = async () => { setChecking(true); setError(''); try { await runBrowserSelfCheck(); await load(); } catch (_) { setError('浏览器自检失败，请检查运行环境。'); setChecking(false); } };
+  const items: Array<[string, RuntimeCapability]> = diagnostics ? [['Playwright Node', diagnostics.capabilities.playwrightNode], ['Playwright CLI', diagnostics.capabilities.playwrightCli], ['浏览器通道', diagnostics.capabilities.browserChannel], ['DOCX 解析', diagnostics.capabilities.docx], ['河畔 Python', diagnostics.capabilities.hepan]] : [];
+  return <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-800">运行环境</h3><p className="mt-1 text-sm text-slate-500">运行时诊断只返回能力状态，不包含密钥或 Cookie。</p></div><button type="button" onClick={() => void check()} disabled={loading || checking} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">{checking ? '检查中…' : '运行浏览器自检'}</button></div>{error && <p role="alert" className="text-sm text-rose-700">{error}</p>}<div className="grid gap-2 sm:grid-cols-2">{items.map(([label, item]) => { const state = mapRuntimeCapabilityState(item); return <div key={label} className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2 text-sm"><span>{label}</span><span className={capabilityClass(item)}>{state.label}</span></div>; })}</div>{diagnostics?.buildInfo && <p className="text-xs text-slate-500">版本 {diagnostics.buildInfo.version} · commit {diagnostics.buildInfo.commit} · {diagnostics.buildInfo.dirty ? 'dirty' : 'clean'}</p>}</section>;
 }
 
-function validationLabel(kind?: string): string {
-  if (kind === 'existing_workspace') return '\u5df2\u6709\u5de5\u4f5c\u533a\uff0c\u6807\u8bb0\u6709\u6548';
-  if (kind === 'empty_directory') return '\u7a7a\u76ee\u5f55\uff0c\u53ef\u521d\u59cb\u5316';
-  if (kind === 'nonempty_directory') return '\u975e\u7a7a\u76ee\u5f55\uff0c\u9700\u786e\u8ba4\u521d\u59cb\u5316';
-  return '\u672a\u8bfb\u53d6\u5230\u9a8c\u8bc1\u72b6\u6001';
-}
-
-function safeErrorMessage(error: unknown): string {
-  const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code || '') : '';
-  if (code === 'WORKSPACE_ENV_OVERRIDE') return '\u5f53\u524d\u5de5\u4f5c\u533a\u7531\u73af\u5883\u53d8\u91cf\u63a7\u5236\uff0c\u4e0d\u80fd\u5728\u6b64\u66f4\u6362\u3002';
-  if (code === 'WORKSPACE_OPEN_FAILED') return '\u65e0\u6cd5\u6253\u5f00\u5f53\u524d\u5de5\u4f5c\u533a\u3002';
-  if (code === 'WORKSPACE_SWITCH_BUSY') return '\u5f53\u524d\u6709\u4efb\u52a1\u6b63\u5728\u8fd0\u884c\uff0c\u6682\u65f6\u4e0d\u80fd\u5207\u6362\u5de5\u4f5c\u533a\u3002';
-  return '\u5de5\u4f5c\u533a\u64cd\u4f5c\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002';
-}
-
-function capabilityClass(capability: RuntimeCapability): string {
-  const tone = mapRuntimeCapabilityState(capability).tone;
-  if (tone === 'ready') return 'text-emerald-700';
-  if (tone === 'unavailable') return 'text-rose-700';
-  if (tone === 'optional') return 'text-slate-500';
-  return 'text-amber-700';
+function StorageSettings() {
+  const [usage, setUsage] = useState<StorageUsage | null>(null); const [loading, setLoading] = useState(true); const [cleaning, setCleaning] = useState(false); const [error, setError] = useState('');
+  const load = async () => { const api = getStorageMaintenanceApi(); if (!api) { setLoading(false); return; } try { const result = await api.getUsage(); if (!result.ok || !result.data) throw new Error(); setUsage(result.data); } catch (_) { setError('无法读取存储用量。'); } finally { setLoading(false); } };
+  useEffect(() => { void load(); }, []);
+  const clean = async () => { const api = getStorageMaintenanceApi(); if (!api || cleaning || usage?.active) return; setCleaning(true); setError(''); try { const result = await api.cleanCaches(); if (!result.ok || result.data?.blocked) throw new Error(); await load(); } catch (_) { setError('缓存清理失败，任务运行期间不能清理。'); } finally { setCleaning(false); } };
+  return <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-800">存储与清理</h3><p className="mt-1 text-sm text-slate-500">仅清理过期日志、临时文件和 DOCX 缓存，不删除业务数据。</p></div><button type="button" onClick={() => void clean()} disabled={loading || cleaning || usage?.active === true} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">{cleaning ? '清理中…' : '清理缓存'}</button></div>{error && <p role="alert" className="text-sm text-rose-700">{error}</p>}<div className="grid grid-cols-2 gap-3 text-sm text-slate-600"><div>日志：{loading ? '读取中…' : formatBytes(usage?.logs.bytes || 0)}</div><div>临时文件：{loading ? '读取中…' : formatBytes(usage?.temporary.bytes || 0)}</div><div>DOCX 缓存：{loading ? '读取中…' : formatBytes(usage?.docxCache.bytes || 0)}</div><div>浏览器配置：{loading ? '读取中…' : formatBytes(usage?.profiles.bytes || 0)}</div></div></section>;
 }
 
 export default function SettingsView() {
-  const [current, setCurrent] = useState<WorkspaceCurrent | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [switchOpen, setSwitchOpen] = useState(false);
-  const [switchState, setSwitchState] = useState<WorkspaceBootstrapState>(READY_STATE);
-  const [switchBusy, setSwitchBusy] = useState(false);
-  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
-  const [storageLoading, setStorageLoading] = useState(true);
-  const [storageCleaning, setStorageCleaning] = useState(false);
-  const [storageError, setStorageError] = useState<string | null>(null);
-  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<RuntimeDiagnostics | null>(null);
-  const [runtimeLoading, setRuntimeLoading] = useState(true);
-  const [runtimeChecking, setRuntimeChecking] = useState(false);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
-
-  const refreshStorageUsage = async () => {
-    const api = getStorageMaintenanceApi();
-    if (!api) { setStorageLoading(false); return; }
-    setStorageLoading(true);
-    try {
-      const result = await api.getUsage();
-      if (!result.ok || !result.data) throw new Error(result.error?.message || 'Unable to read storage usage');
-      setStorageUsage(result.data); setStorageError(null);
-    } catch (error) { setStorageError(error instanceof Error ? error.message : 'Unable to read storage usage'); }
-    finally { setStorageLoading(false); }
-  };
-
-  useEffect(() => { void refreshStorageUsage(); }, []);
-  useEffect(() => {
-    let active = true;
-    getRuntimeDiagnostics().then((value) => { if (active) setRuntimeDiagnostics(value); })
-      .catch((error) => { if (active) setRuntimeError(error instanceof Error ? error.message : 'Unable to read runtime status'); })
-      .finally(() => { if (active) setRuntimeLoading(false); });
-    return () => { active = false; };
-  }, []);
-
-  const handleRuntimeSelfCheck = async () => {
-    if (runtimeChecking) return;
-    setRuntimeChecking(true); setRuntimeError(null);
-    try { await runBrowserSelfCheck(); setRuntimeDiagnostics(await getRuntimeDiagnostics()); }
-    catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : 'Browser self-check failed');
-      try { setRuntimeDiagnostics(await getRuntimeDiagnostics()); } catch (_) { /* keep error */ }
-    } finally { setRuntimeChecking(false); }
-  };
-
-  useEffect(() => {
-    let active = true;
-    const request = currentWorkspaceRequestRef.current || (currentWorkspaceRequestRef.current = getCurrentWorkspace());
-    request.then((workspace) => {
-      if (!active) return;
-      setCurrent(workspace);
-      setSwitchState({ state: 'ready', workspacePath: workspace.workspacePath, envOverride: workspace.envOverride });
-    }).catch((error) => { if (active) setOperationError(safeErrorMessage(error)); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
-
-  const envOverride = current?.envOverride === true;
-  const commandState = getSettingsCommandState({ loading, switchBusy, current, switchState });
-  const handleOpen = async () => { setOperationError(null); try { await openCurrentWorkspace(); } catch (error) { if (mountedRef.current) setOperationError(safeErrorMessage(error)); } };
-  const handleRequestSwitch = async (): Promise<WorkspaceBootstrapState> => {
-    const confirmed = typeof window === 'undefined' || typeof window.confirm !== 'function' || window.confirm('Switching the workspace restarts the app. Continue?');
-    if (!confirmed) return { state: 'ready', workspacePath: current?.workspacePath || null, envOverride };
-    setOperationError(null); return requestWorkspaceSwitch();
-  };
-  const handleSwitchStateChange = (nextState: WorkspaceBootstrapState) => { setSwitchState(nextState); if (nextState.state === 'relaunching') setSwitchOpen(true); };
-  const handleCleanCaches = async () => {
-    const api = getStorageMaintenanceApi();
-    if (!api || storageCleaning || storageUsage?.active) return;
-    setStorageCleaning(true);
-    try {
-      const result = await api.cleanCaches();
-      if (!result.ok) throw new Error(result.error?.message || 'Cache cleanup failed');
-      if (result.data?.blocked) throw new Error('Cache cleanup is unavailable while a task is active');
-      await refreshStorageUsage();
-    } catch (error) { setStorageError(error instanceof Error ? error.message : 'Cache cleanup failed'); }
-    finally { setStorageCleaning(false); }
-  };
-
-  const currentPath = current?.workspacePath || 'No workspace path';
-  const runtimeItems: Array<[string, RuntimeCapability]> = runtimeDiagnostics ? [
-    ['Playwright Node', runtimeDiagnostics.capabilities.playwrightNode],
-    ['Playwright CLI', runtimeDiagnostics.capabilities.playwrightCli],
-    ['Edge/Chrome', runtimeDiagnostics.capabilities.browserChannel],
-    ['Built-in DOCX parsing', runtimeDiagnostics.capabilities.docx],
-    ['Hepan publishing', runtimeDiagnostics.capabilities.hepan],
-  ] : [];
-
-  return (
-    <div className="max-w-3xl space-y-5">
-      <div><h2 className="text-lg font-bold text-slate-800">Workspace settings</h2><p className="mt-1 text-xs text-slate-500">Workspace and runtime status are supplied by the main process.</p></div>
-      <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><FolderOpen className="h-4 w-4" /> Current workspace</h3>
-        <div className="break-all rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700" aria-label="Current workspace path">{loading ? 'Reading...' : currentPath}</div>
-        <div className="text-xs text-slate-600">Validation: {loading ? 'Checking...' : validationLabel(current?.validation?.kind)}</div>
-        {envOverride && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">Workspace is controlled by AUTO_PUBLISH_WORKSPACE and cannot be changed here.</div>}
-        {operationError && <p className="text-sm text-red-700">{operationError}</p>}
-        <div className="flex flex-wrap gap-3"><button type="button" onClick={handleOpen} disabled={commandState.openDisabled} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"><ExternalLink className="h-4 w-4" /> Open folder</button><button type="button" onClick={() => setSwitchOpen(true)} disabled={commandState.switchDisabled} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Change workspace</button></div>
-      </section>
-      {switchOpen && !envOverride && <WorkspaceSelectionPanel state={switchState} onChooseDirectory={handleRequestSwitch} onConfirmSelection={async (input): Promise<WorkspaceConfirmationResult> => confirmWorkspaceSelection(input)} onCancelSelection={cancelWorkspaceSelection} onStateChange={handleSwitchStateChange} onBusyChange={setSwitchBusy} title="Change workspace" description="The main process checks the new directory before restarting the app." />}
-      <section className="flex gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs text-blue-800"><Info className="h-4 w-4 shrink-0" /><span>Workspace switching does not copy, move, or delete the original data.</span></section>
-      <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
-        <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-slate-700">Runtime self-check</h3><p className="mt-1 text-xs text-slate-500">Playwright uses bundled Node/CLI; the browser check only opens temporary about:blank and closes it afterward.</p></div><button type="button" onClick={() => void handleRuntimeSelfCheck()} disabled={runtimeLoading || runtimeChecking} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">{runtimeChecking ? 'Checking...' : 'Run browser self-check'}</button></div>
-        {runtimeError && <p className="text-xs text-red-700">{runtimeError}</p>}
-        <div className="grid gap-2 sm:grid-cols-2">{runtimeItems.map(([label, item]) => { const state = mapRuntimeCapabilityState(item); return <div key={label} className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs"><span className="text-slate-700">{label}</span><span className={capabilityClass(item)}>{state.label}</span></div>; })}</div>
-        {runtimeDiagnostics?.capabilities.browserChannel.state === 'not_checked' && <p className="text-xs text-amber-700">The configured browser channel has not been checked. Run the self-check before browser publishing.</p>}
-        {runtimeDiagnostics?.errors.some((error) => error.code === 'PLAYWRIGHT_NODE_UNAVAILABLE' || error.code === 'PLAYWRIGHT_CLI_UNAVAILABLE' || error.code === 'BROWSER_CHANNEL_UNAVAILABLE' || error.code === 'BROWSER_CHANNEL_INVALID') && <p className="text-xs text-amber-700">Reinstall the app or choose an available Edge/Chrome channel.</p>}
-        {runtimeDiagnostics?.buildInfo && <p className="text-xs text-slate-500">Build {runtimeDiagnostics.buildInfo.version} | commit {runtimeDiagnostics.buildInfo.commit} | {runtimeDiagnostics.buildInfo.dirty ? 'dirty' : 'clean'}</p>}
-      </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
-        <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-slate-700">Runtime storage</h3><p className="mt-1 text-xs text-slate-500">Only expired logs, temporary files, and DOCX cache are cleaned.</p></div><button type="button" onClick={handleCleanCaches} disabled={storageLoading || storageCleaning || storageUsage?.active === true} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">{storageCleaning ? 'Cleaning...' : 'Clean caches'}</button></div>
-        {storageError && <p className="text-xs text-red-700">{storageError}</p>}
-        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600"><div>logs: {storageLoading ? 'Reading...' : formatBytes(storageUsage?.logs.bytes || 0)}</div><div>temporary: {storageLoading ? 'Reading...' : formatBytes(storageUsage?.temporary.bytes || 0)}</div><div>DOCX cache: {storageLoading ? 'Reading...' : formatBytes(storageUsage?.docxCache.bytes || 0)}</div><div>browser profiles: {storageLoading ? 'Reading...' : formatBytes(storageUsage?.profiles.bytes || 0)}</div></div>
-      </section>
-      <AiProviderSettings />
-    </div>
-  );
+  const [active, setActive] = useState<SettingsSection>('overview');
+  const content = active === 'overview' ? <SettingsOverview onSelect={setActive} /> : active === 'ai' ? <AiProviderSettings /> : active === 'media' ? <MediaProviderSettings /> : active === 'hepan' ? <HepanProviderSettings /> : active === 'workspace' ? <WorkspaceSettings /> : active === 'runtime' ? <RuntimeSettings /> : <StorageSettings />;
+  return <div className="min-w-0 max-w-6xl space-y-5"><div><h2 className="text-xl font-bold text-slate-800">配置中心</h2><p className="mt-1 text-sm text-slate-500">管理服务账号、工作区和运行环境。账号配置与内容工作区相互独立。</p></div><div className="grid min-w-0 gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]"><SettingsNavigation active={active} onChange={setActive} /><main className="min-w-0">{content}</main></div></div>;
 }

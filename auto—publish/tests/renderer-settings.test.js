@@ -20,8 +20,8 @@ describe("renderer settings contract", function() {
     assert.match(preload, /runtime-diagnostics:browser-smoke/);
     assert.match(settings, /Playwright Node/);
     assert.match(settings, /Playwright CLI/);
-    assert.match(settings, /about:blank/);
-    assert.match(settings, /Built-in DOCX parsing/);
+    assert.match(settings, /运行浏览器自检/);
+    assert.match(settings, /DOCX 解析/);
     assert.match(settings, /buildInfo|commit/);
     assert.doesNotMatch(settings, /MarkItDown/);
   });
@@ -37,5 +37,17 @@ describe("renderer settings contract", function() {
     assert.match(source, /profiles|profile/);
     assert.match(source, /disabled=.*(?:active|busy)|active.*disabled=/s);
     assert.doesNotMatch(source, /clearAll/i);
+  });
+
+  it("organizes provider and system settings behind responsive navigation", function() {
+    const settings = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/SettingsView.tsx"), "utf8");
+    assert.match(settings, /SettingsNavigation/);
+    assert.match(settings, /SettingsOverview/);
+    assert.match(settings, /MediaProviderSettings/);
+    assert.match(settings, /HepanProviderSettings/);
+    assert.match(settings, /max-w-6xl/);
+    assert.match(settings, /配置中心/);
+    assert.doesNotMatch(settings, /Workspace settings/);
+    assert.doesNotMatch(settings, /Open folder/);
   });
 });

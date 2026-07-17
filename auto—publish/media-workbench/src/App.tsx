@@ -432,7 +432,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -5 }}
                 transition={{ duration: 0.15 }}
-                className="max-w-3xl mx-auto h-full"
+                className="max-w-6xl mx-auto h-full w-full"
               >
                 <SettingsView />
               </motion.div>
