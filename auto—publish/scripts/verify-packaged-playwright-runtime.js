@@ -62,6 +62,10 @@ function staticEntries(appDir) {
         return;
       }
       if (lowerParts.includes("node_modules")) return;
+      // This verifier intentionally contains the forbidden-reference patterns
+      // that it searches for; do not mistake its own source code for packaged
+      // machine state.
+      if (rel === "scripts/verify-packaged-playwright-runtime.js") return;
       let content = "";
       try { content = fs.readFileSync(filename).toString("utf8"); } catch (_) {}
       const absoluteTokens = [
