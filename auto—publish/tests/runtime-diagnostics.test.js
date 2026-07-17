@@ -31,15 +31,89 @@ describe("runtime diagnostics", function() {
     return directory;
   }
 
-  it("prefers application tool configuration over environment and reports independent capability failures", function() {
+  function createBundledPlaywrightFiles() {
+    const node = path.join(appRoot, "tools", "node", "node.exe");
+    const cli = path.join(appRoot, "node_modules", "@playwright", "cli", "playwright-cli.js");
+    fs.mkdirSync(path.dirname(node), { recursive: true });
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    fs.writeFileSync(node, "bundled node", "utf8");
+    fs.writeFileSync(cli, "bundled cli", "utf8");
+  }
+
+  it("keeps a configured browser channel in not_checked and isolates optional Hepan", function() {
+    createBundledPlaywrightFiles();
+    const service = createRuntimeDiagnosticsService({
+      workspaceRoot: workspace,
+      appRoot: appRoot,
+      packaged: true,
+      env: { BROWSER_CHANNEL: "msedge" },
+      pathLookup: function() { return null; },
+      docxAvailable: true
+    });
+
+    const diagnostics = service.safeDiagnostics();
+    assert.equal(diagnostics.browserChannel.configured, true);
+    assert.equal(diagnostics.browserChannel.state, "not_checked");
+    assert.equal(diagnostics.ok, true);
+    assert.equal(diagnostics.errors.some(function(error) { return error.code === "HEPAN_PYTHON_UNAVAILABLE"; }), false);
+    assert.equal(diagnostics.warnings.some(function(warning) { return warning.code === "HEPAN_PYTHON_UNAVAILABLE"; }), true);
+  });
+
+  it("retains a successful browser smoke result for the next diagnostic read", async function() {
+    createBundledPlaywrightFiles();
+    const service = createRuntimeDiagnosticsService({
+      workspaceRoot: workspace,
+      appRoot: appRoot,
+      packaged: true,
+      env: { BROWSER_CHANNEL: "msedge" },
+      pathLookup: function() { return null; },
+      execFile: function(file, args, options, callback) { callback(null, "", ""); }
+    });
+
+    assert.equal(service.safeDiagnostics().browserChannel.state, "not_checked");
+    const smoke = await service.probeBrowser();
+    assert.equal(smoke.ok, true);
+    const after = service.safeDiagnostics();
+    assert.equal(after.browserChannel.state, "ready");
+    assert.equal(after.browserChannel.probed, true);
+  });
+
+  it("recovers from a failed browser smoke and resets when the channel changes", async function() {
+    createBundledPlaywrightFiles();
+    const env = { BROWSER_CHANNEL: "msedge" };
+    let shouldFail = true;
+    const service = createRuntimeDiagnosticsService({
+      workspaceRoot: workspace,
+      appRoot: appRoot,
+      packaged: true,
+      env: env,
+      pathLookup: function() { return null; },
+      docxAvailable: true,
+      execFile: function(file, args, options, callback) {
+        if (shouldFail) callback(Object.assign(new Error("failed"), { code: 2 }), "", "");
+        else callback(null, "", "");
+      }
+    });
+
+    await assert.rejects(service.probeBrowser(), function(error) { return error.code === "PLAYWRIGHT_EXEC_FAILED"; });
+    assert.equal(service.safeDiagnostics().browserChannel.state, "unavailable");
+    shouldFail = false;
+    await service.probeBrowser();
+    assert.equal(service.safeDiagnostics().browserChannel.state, "ready");
+    env.BROWSER_CHANNEL = "chrome";
+    const changed = service.safeDiagnostics();
+    assert.equal(changed.browserChannel.channel, "chrome");
+    assert.equal(changed.browserChannel.state, "not_checked");
+  });
+
+  it("prefers application browser configuration and reports independent capability failures", function() {
     fs.mkdirSync(path.join(appRoot, "config"), { recursive: true });
-    const configured = path.join(appRoot, "config", "markitdown.cmd");
-    fs.writeFileSync(configured, "", "utf8");
-    fs.writeFileSync(path.join(appRoot, "config", "runtime-tools.json"), JSON.stringify({ markitdownCmd: configured }), "utf8");
-    const diagnostics = createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appRoot, packaged: true, env: { MARKITDOWN_CMD: "from-env" }, pathLookup: function() { return null; } }).diagnose();
-    assert.equal(diagnostics.tools.markitdown.command, configured);
-    assert.equal(diagnostics.tools.markitdown.source, "application-config");
-    assert.deepStrictEqual(diagnostics.errors.map(function(error) { return error.code; }), ["PLAYWRIGHT_NODE_UNAVAILABLE", "PLAYWRIGHT_CLI_UNAVAILABLE", "HEPAN_PYTHON_UNAVAILABLE"]);
+    fs.writeFileSync(path.join(appRoot, "config", "runtime-tools.json"), JSON.stringify({ browserChannel: "chrome" }), "utf8");
+    const diagnostics = createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appRoot, packaged: true, env: { BROWSER_CHANNEL: "msedge" }, pathLookup: function() { return null; }, docxAvailable: true }).diagnose();
+    assert.equal(diagnostics.tools.browserChannel.channel, "chrome");
+    assert.equal(diagnostics.tools.browserChannel.source, "application-config");
+    assert.deepStrictEqual(diagnostics.errors.map(function(error) { return error.code; }), ["PLAYWRIGHT_NODE_UNAVAILABLE", "PLAYWRIGHT_CLI_UNAVAILABLE"]);
+    assert.equal(diagnostics.warnings.some(function(warning) { return warning.code === "HEPAN_PYTHON_UNAVAILABLE"; }), true);
     assert.ok(diagnostics.errors.every(function(error) { return !error.message.includes(workspace) && !error.message.includes(appRoot); }));
   });
 

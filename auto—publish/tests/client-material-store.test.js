@@ -6,7 +6,8 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createClientMaterialStore } = require("../src/content/client-material-store");
-const { convertDocxToText } = require("../src/core/markitdown");
+
+const DOCX_FIXTURE = path.resolve(__dirname, "fixtures", "docx", "customer-material.docx");
 
 const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
 
@@ -50,6 +51,28 @@ describe("client material store", function() {
     const items = await store.listMaterials("client-1");
 
     assert.deepEqual(items.map(function(item) { return item.name; }), ["brand.md", "menu.docx"]);
+  });
+
+  it("parses a real DOCX with the default converter when MarkItDown is unavailable", async function() {
+    const previous = process.env.MARKITDOWN_CMD;
+    const previousPath = process.env.PATH;
+    delete process.env.MARKITDOWN_CMD;
+    process.env.PATH = "";
+    try {
+      fs.copyFileSync(DOCX_FIXTURE, path.join(clientDirectory, "menu.docx"));
+      const store = createClientMaterialStore({ workspaceRoot: workspaceRoot });
+      const material = (await store.listMaterials("client-1")).find(function(item) { return item.name === "menu.docx"; });
+
+      assert.equal(material.status, "ready");
+      assert.match(material.content, /客户资料标题/);
+      assert.match(material.content, /English context paragraph\./);
+      assert.match(material.content, /第二段中文正文。/);
+      assert.ok(material.characterCount > 0);
+    } finally {
+      if (previous === undefined) delete process.env.MARKITDOWN_CMD;
+      else process.env.MARKITDOWN_CMD = previous;
+      process.env.PATH = previousPath;
+    }
   });
 
   it("reads, retries, and selects materials by logical client id when its directory has another name", async function() {
@@ -97,11 +120,11 @@ describe("client material store", function() {
     const calls = [];
     const store = createClientMaterialStore({
       workspaceRoot: workspaceRoot,
-      converter: async function(inputPath, outputPath) {
-        calls.push({ inputPath: inputPath, outputPath: outputPath });
+        converter: async function(inputBuffer, options) {
+        calls.push({ inputBuffer: inputBuffer, options: options });
         return "转换后的客户资料";
       },
-      cacheVersion: 1
+      cacheVersion: 2
     });
 
     const first = await store.listMaterials("client-1");
@@ -110,12 +133,12 @@ describe("client material store", function() {
     assert.equal(first[1].content, "转换后的客户资料");
     assert.equal(first[1].cacheHit, false);
     assert.equal(second[1].cacheHit, true);
-    assert.equal(path.dirname(calls[0].inputPath), clientDirectory);
-    assert.equal(calls[0].outputPath.startsWith(path.join(workspaceRoot, "work", "client-material-cache")), true);
+    assert.equal(Buffer.isBuffer(calls[0].inputBuffer), true);
+    assert.deepEqual(calls[0].options, { clientId: "client-1", name: "menu.docx", version: 2 });
     const cacheFiles = fs.readdirSync(path.join(workspaceRoot, "work", "client-material-cache", "Y2xpZW50LTE"));
     const cacheDocument = JSON.parse(fs.readFileSync(path.join(workspaceRoot, "work", "client-material-cache", "Y2xpZW50LTE", cacheFiles[0]), "utf8"));
     assert.deepEqual(Object.keys(cacheDocument).sort(), ["characterCount", "clientId", "content", "convertedAt", "name", "sourceHash", "version"]);
-    assert.equal(cacheDocument.version, 1);
+    assert.equal(cacheDocument.version, 2);
     assert.equal(cacheDocument.sourceHash, crypto.createHash("sha256").update("fixture-docx").digest("hex"));
     assert.equal(fs.readFileSync(path.join(clientDirectory, "menu.docx"), "utf8"), "fixture-docx");
 
@@ -215,31 +238,4 @@ describe("client material store", function() {
     }
   });
 
-  it("executes MarkItDown with an argument array and maps unavailable errors", function() {
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "markitdown-test-"));
-    const inputPath = path.join(temporary, "customer;name.docx");
-    const outputPath = path.join(temporary, "output.md");
-    const calls = [];
-    try {
-      fs.writeFileSync(inputPath, "fixture", "utf8");
-      assert.equal(convertDocxToText(inputPath, outputPath, {
-        command: "markitdown",
-        execFileSync: function(command, args, options) {
-          calls.push({ command: command, args: args, options: options });
-          fs.writeFileSync(outputPath, "# Converted\n\nSafe text", "utf8");
-        }
-      }), "Converted\n\nSafe text");
-      assert.deepEqual(calls[0].args, [inputPath, "-o", outputPath]);
-      assert.equal(calls[0].options.shell, undefined);
-
-      assert.throws(function() {
-        convertDocxToText(inputPath, outputPath, {
-          command: "missing-markitdown",
-          execFileSync: function() { throw Object.assign(new Error("not found"), { code: "ENOENT" }); }
-        });
-      }, function(error) { return error.code === "MATERIAL_MARKITDOWN_UNAVAILABLE" && error.message === "MarkItDown is unavailable"; });
-    } finally {
-      fs.rmSync(temporary, { recursive: true, force: true });
-    }
-  });
 });
