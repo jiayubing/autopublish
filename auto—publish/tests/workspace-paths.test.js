@@ -162,7 +162,7 @@ describe("runtime configuration", function() {
       assert.equal(runtime.paths.contentLibrary, path.resolve(root));
       assert.equal(runtime.paths.data, path.join(root, ".autopublish", "data"));
       assert.equal(runtime.paths.logs, path.join(localStateRoot, "logs"));
-      assert.equal(process.env.XQW_API_KEY, "workspace-secret");
+      assert.equal(process.env.XQW_API_KEY, undefined);
       assert.equal(process.env.AI_API_KEY, undefined);
       assert.equal(process.env.AI_BASE_URL, undefined);
       assert.equal(process.env.AI_MODEL, undefined);
@@ -180,7 +180,7 @@ describe("runtime configuration", function() {
     const { validateRuntimeConfiguration } = require("../desktop/runtime-config");
     const errors = validateRuntimeConfiguration({});
     assert.equal(errors.some(function(error) { return error.code === "AI_CONFIG_INVALID"; }), false);
-    assert.ok(errors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }));
+    assert.equal(errors.length, 0);
     errors.forEach(function(error) {
       assert.equal(error.message.includes("secret"), false);
       assert.equal(error.message.includes("API_KEY"), false);
@@ -206,7 +206,7 @@ describe("runtime configuration", function() {
         roamingConfigRoot: firstRoaming,
         localStateRoot: firstLocal
       });
-      assert.equal(process.env.XQW_API_KEY, "first-workspace-secret");
+      assert.equal(process.env.XQW_API_KEY, undefined);
 
       const runtime = configureRuntimeEnvironment({
         appRoot: secondApp,
@@ -215,7 +215,7 @@ describe("runtime configuration", function() {
         localStateRoot: secondLocal
       });
       assert.equal(process.env.XQW_API_KEY, undefined);
-      assert.ok(runtime.configErrors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }));
+      assert.equal(runtime.configErrors.some(function(error) { return error.code === "MEDIA_CONFIG_INVALID"; }), false);
       assert.equal(JSON.stringify(runtime.configErrors).includes("first-workspace-secret"), false);
     } finally {
       restoreRuntimeEnvironment(original);

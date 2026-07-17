@@ -10,6 +10,7 @@ let unsubscribeLogs = null;
 let unsubscribeDoubaoQueue = null;
 let doubaoCollectionService = null;
 let aiProviderService = null;
+let platformSettingsService = null;
 let contentGenerationBatchService = null;
 let taskService = null;
 let storageMaintenanceService = null;
@@ -107,11 +108,16 @@ async function disposeRuntime() {
     }
     const service = doubaoCollectionService;
     doubaoCollectionService = null;
+    const desktopService = taskService;
+    taskService = null;
     const generationService = contentGenerationBatchService;
     contentGenerationBatchService = null;
     aiProviderService = null;
-    taskService = null;
+    platformSettingsService = null;
     storageMaintenanceService = null;
+    try {
+      if (desktopService && typeof desktopService.dispose === "function") desktopService.dispose();
+    } catch (_) {}
     try {
       if (service && typeof service.dispose === "function") await service.dispose();
     } catch (_) {}
@@ -178,11 +184,32 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     });
   }
 
+  const createPlatformSettingsService = require("./services/platform-settings-service").createPlatformSettingsService;
+  const { createMediaSettingsAdapter } = require("./services/platform-settings/media-settings-adapter");
+  const { createHepanSettingsAdapter } = require("./services/platform-settings/hepan-settings-adapter");
+  platformSettingsService = createPlatformSettingsService({
+    userDataPath: userDataPath,
+    safeStorage: safeStorage,
+    env: process.env,
+    localStateRoot: runtime.paths && runtime.paths.localState,
+    adapters: [createMediaSettingsAdapter(), createHepanSettingsAdapter({ localStateRoot: runtime.paths && runtime.paths.localState })],
+    getTaskState: function() { return taskService && typeof taskService.getState === "function" ? taskService.getState() : {}; }
+  });
+  if (runtime.diagnosticsService && typeof runtime.diagnosticsService.setPlatformSettingsService === "function") runtime.diagnosticsService.setPlatformSettingsService(platformSettingsService);
+  const createLegacyProviderSettingsMigration = require("./runtime-config").createLegacyProviderSettingsMigration;
+  const legacyProviderSettings = createLegacyProviderSettingsMigration({
+    configRoot: userDataPath,
+    workspaceRoot: runtime.workspaceRoot,
+    runtimeConfigStore: runtime.runtimeConfigStore,
+    platformSettingsService: platformSettingsService
+  });
+
   const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
   taskService = createDesktopTaskService({
     cwd: runtime.workspaceRoot,
     paths: injectedPaths,
-    sendToRenderer: sendToRenderer
+    sendToRenderer: sendToRenderer,
+    platformSettingsService: platformSettingsService
   });
 
   const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
@@ -221,6 +248,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     paths: runtime.paths,
     doubaoCollectionService: doubaoCollectionService,
     aiProviderService: aiProviderService,
+    platformSettingsService: platformSettingsService,
+    legacyProviderSettings: legacyProviderSettings,
     aiContentService: aiContentService,
     contentGenerationBatchService: contentGenerationBatchService,
     runtimeDiagnosticsService: runtime.diagnosticsService

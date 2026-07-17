@@ -4,14 +4,19 @@ const crypto = require("node:crypto");
 
 const FILE_NAME = "runtime-config.json";
 const SUPPORTED_RUNTIME_CONFIG_KEYS = Object.freeze([
-  "XQW_API_KEY",
-  "XQW_BASE_URL",
   "PLAYWRIGHT_CLI_JS",
   "BROWSER_CHANNEL",
-  "HEPAN_COOKIE_PATH",
-  "HEPAN_VENDOR_DIR",
-  "HEPAN_PYTHON",
   "AUTO_PUBLISH_NODE_EXEC_PATH"
+]);
+const LEGACY_RUNTIME_CONFIG_KEYS = Object.freeze([
+  "XQW_API_KEY",
+  "XQW_BASE_URL",
+  "XQW_TIMEOUT_MS",
+  "XQW_ALLOW_INSECURE",
+  "HEPAN_COOKIE_PATH",
+  "HEPAN_PYTHON",
+  "HEPAN_VENDOR_DIR",
+  "HEPAN_CATEGORY_ID"
 ]);
 
 function configError(code, message) {
@@ -33,6 +38,21 @@ function normalizeRuntimeConfig(input) {
   }
   const result = {};
   SUPPORTED_RUNTIME_CONFIG_KEYS.forEach(function(key) {
+    if (input[key] === undefined || input[key] === null || input[key] === "") return;
+    if (typeof input[key] !== "string" || input[key].includes("\0")) {
+      throw configError("RUNTIME_CONFIG_INVALID", "Runtime configuration is invalid");
+    }
+    result[key] = input[key];
+  });
+  return result;
+}
+
+function normalizeLegacyRuntimeConfig(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw configError("RUNTIME_CONFIG_INVALID", "Runtime configuration is invalid");
+  }
+  const result = {};
+  LEGACY_RUNTIME_CONFIG_KEYS.forEach(function(key) {
     if (input[key] === undefined || input[key] === null || input[key] === "") return;
     if (typeof input[key] !== "string" || input[key].includes("\0")) {
       throw configError("RUNTIME_CONFIG_INVALID", "Runtime configuration is invalid");
@@ -73,6 +93,52 @@ function createRuntimeConfigStore(options) {
     return normalizeRuntimeConfig(parsed.values);
   }
 
+  function readLegacy() {
+    if (!assertSafeFile()) return {};
+    let parsed;
+    try { parsed = JSON.parse(io.readFileSync(filePath, "utf8")); } catch (_) {
+      throw configError("RUNTIME_CONFIG_STORAGE_INVALID", "Runtime configuration file is invalid");
+    }
+    if (!parsed || parsed.version !== 1 || !parsed.values || typeof parsed.values !== "object" || Array.isArray(parsed.values)) {
+      throw configError("RUNTIME_CONFIG_STORAGE_INVALID", "Runtime configuration file is invalid");
+    }
+    return Object.assign({}, normalizeRuntimeConfig(parsed.values), normalizeLegacyRuntimeConfig(parsed.values));
+  }
+
+  function removeKeys(keys) {
+    const remove = new Set(Array.isArray(keys) ? keys : []);
+    if (!remove.size || !assertSafeFile()) return { changed: false };
+    let parsed;
+    try { parsed = JSON.parse(io.readFileSync(filePath, "utf8")); } catch (_) {
+      throw configError("RUNTIME_CONFIG_STORAGE_INVALID", "Runtime configuration file is invalid");
+    }
+    if (!parsed || parsed.version !== 1 || !parsed.values || typeof parsed.values !== "object" || Array.isArray(parsed.values)) {
+      throw configError("RUNTIME_CONFIG_STORAGE_INVALID", "Runtime configuration file is invalid");
+    }
+    const values = Object.assign({}, parsed.values);
+    let changed = false;
+    remove.forEach(function(key) {
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        delete values[key];
+        changed = true;
+      }
+    });
+    if (!changed) return { changed: false };
+    try {
+      const temporaryPath = path.join(configRoot, "." + FILE_NAME + "." + crypto.randomUUID() + ".tmp");
+      try {
+        io.writeFileSync(temporaryPath, JSON.stringify({ version: 1, values: normalizeRuntimeConfig(values) }) + "\n", { encoding: "utf8", mode: 0o600 });
+        io.renameSync(temporaryPath, filePath);
+      } finally {
+        try { if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath); } catch (_) {}
+      }
+    } catch (error) {
+      if (error && error.code && error.code.startsWith("RUNTIME_CONFIG_")) throw error;
+      throw configError("RUNTIME_CONFIG_STORAGE_WRITE_FAILED", "Runtime configuration could not be saved");
+    }
+    return { changed: true };
+  }
+
   function write(input) {
     const normalized = normalizeRuntimeConfig(input);
     try {
@@ -102,12 +168,14 @@ function createRuntimeConfigStore(options) {
     }
   }
 
-  return { read, write, clear, filePath };
+  return { read, readLegacy, removeKeys, write, clear, filePath };
 }
 
 module.exports = {
   FILE_NAME,
   SUPPORTED_RUNTIME_CONFIG_KEYS,
+  LEGACY_RUNTIME_CONFIG_KEYS,
   normalizeRuntimeConfig,
+  normalizeLegacyRuntimeConfig,
   createRuntimeConfigStore
 };

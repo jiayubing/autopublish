@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const dotenv = require("dotenv");
 const { createStoragePaths } = require("./storage-paths");
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("./workspace-paths");
-const { createRuntimeConfigStore, SUPPORTED_RUNTIME_CONFIG_KEYS } = require("./runtime-config-store");
+const { createRuntimeConfigStore, SUPPORTED_RUNTIME_CONFIG_KEYS, LEGACY_RUNTIME_CONFIG_KEYS } = require("./runtime-config-store");
 const { createRuntimeDiagnosticsService } = require("./services/runtime-diagnostics-service");
 
 let loadedWorkspaceEnv;
@@ -48,8 +48,9 @@ function loadWorkspaceEnvironment(workspaceRoot) {
 
   const values = dotenv.parse(fs.readFileSync(envPath, "utf8"));
   Object.keys(values).forEach(function(key) {
-    // AI configuration is application-scoped and must never come from a content library.
-    if (!SUPPORTED_RUNTIME_CONFIG_KEYS.includes(key) || key.startsWith("AI_")) return;
+    // Tool paths are non-secret compatibility settings. Provider credentials and
+    // cookie paths are legacy-only and must never be loaded from a content library.
+    if (!SUPPORTED_RUNTIME_CONFIG_KEYS.includes(key)) return;
     if (process.env[key] !== undefined) return;
     process.env[key] = values[key];
     loadedWorkspaceValues[key] = { previous: undefined, value: values[key] };
@@ -59,11 +60,208 @@ function loadWorkspaceEnvironment(workspaceRoot) {
 function validateRuntimeConfiguration(environment) {
   const env = environment || process.env;
   const errors = [];
-  if (!env.XQW_API_KEY) errors.push({ code: "MEDIA_CONFIG_INVALID", message: "Media configuration is invalid" });
-    // Playwright and Hepan are diagnosed as independent capabilities.
-    // Built-in Playwright Node/CLI and the default browser
-  // channel must not require ordinary users to edit runtime-tools.json.
+  // Provider credentials are optional until configured in Settings. Playwright
+  // and Hepan remain independent capabilities reported by diagnostics.
+  void env;
   return errors;
+}
+
+function safeLegacyFile(filename, io) {
+  try {
+    const stat = io.lstatSync(filename);
+    if (stat.isSymbolicLink() || !stat.isFile()) return null;
+    return stat;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    return null;
+  }
+}
+
+function readLegacyEnvironmentFile(filename, io) {
+  if (!safeLegacyFile(filename, io)) return {};
+  try { return dotenv.parse(io.readFileSync(filename, "utf8")); } catch (_) { return {}; }
+}
+
+function readLegacyRuntimeValues(store) {
+  if (!store || typeof store.readLegacy !== "function") return {};
+  try { return store.readLegacy(); } catch (_) { return {}; }
+}
+
+function legacyCandidate(values, source) {
+  const value = values || {};
+  const media = typeof value.XQW_API_KEY === "string" && value.XQW_API_KEY.trim() !== "";
+  const hepan = typeof value.HEPAN_COOKIE_PATH === "string" && value.HEPAN_COOKIE_PATH.trim() !== "";
+  return {
+    source: source,
+    media: media ? {
+      apiKey: value.XQW_API_KEY,
+      baseUrl: value.XQW_BASE_URL,
+      timeoutMs: value.XQW_TIMEOUT_MS,
+      allowInsecure: value.XQW_ALLOW_INSECURE
+    } : null,
+    hepan: hepan ? {
+      cookiePath: value.HEPAN_COOKIE_PATH,
+      pythonPath: value.HEPAN_PYTHON,
+      vendorDir: value.HEPAN_VENDOR_DIR,
+      categoryId: value.HEPAN_CATEGORY_ID
+    } : null
+  };
+}
+
+function createLegacyProviderSettingsMigration(options) {
+  const values = options || {};
+  const io = values.fs || fs;
+  const pathApi = values.path || path;
+  const clock = values.clock || (() => new Date().toISOString());
+  const workspaceRoot = typeof values.workspaceRoot === "string" ? pathApi.resolve(values.workspaceRoot) : null;
+  const configRoot = typeof values.configRoot === "string" ? pathApi.resolve(values.configRoot) : null;
+  const runtimeConfigStore = values.runtimeConfigStore || (configRoot ? createRuntimeConfigStore({ configRoot }) : null);
+  const platformSettingsService = values.platformSettingsService;
+  const migrationFile = pathApi.join(configRoot || pathApi.resolve("."), "platform-settings-migration.json");
+
+  function candidates() {
+    const result = [];
+    const runtime = legacyCandidate(readLegacyRuntimeValues(runtimeConfigStore), "application-runtime-config");
+    if (runtime.media || runtime.hepan) result.push(runtime);
+    if (workspaceRoot) {
+      const workspace = legacyCandidate(readLegacyEnvironmentFile(pathApi.join(workspaceRoot, ".env"), io), "workspace-env");
+      if (workspace.media || workspace.hepan) result.push(workspace);
+    }
+    return result;
+  }
+
+  function publicReport() {
+    const sourceList = candidates();
+    const mediaSources = sourceList.filter((item) => item.media).map((item) => item.source);
+    const hepanSources = sourceList.filter((item) => item.hepan).map((item) => item.source);
+    return {
+      media: { available: mediaSources.length > 0, sources: mediaSources },
+      hepan: { available: hepanSources.length > 0, sources: hepanSources, cookiePathAvailable: hepanSources.length > 0 },
+      sources: sourceList.map((item) => item.source),
+      importable: mediaSources.length > 0 || hepanSources.length > 0
+    };
+  }
+
+  function readRecord() {
+    if (!safeLegacyFile(migrationFile, io)) return null;
+    try {
+      const record = JSON.parse(io.readFileSync(migrationFile, "utf8"));
+      if (!record || record.version !== 1 || !Array.isArray(record.entries)) return null;
+      return {
+        version: 1,
+        updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : null,
+        entries: record.entries.map((entry) => ({ platform: entry.platform, source: entry.source, status: entry.status, code: entry.code || null }))
+      };
+    } catch (_) { return null; }
+  }
+
+  function writeRecord(entries) {
+    const record = { version: 1, updatedAt: clock(), entries: entries.map((entry) => ({ platform: entry.platform, source: entry.source, status: entry.status, code: entry.code || null })) };
+    io.mkdirSync(pathApi.dirname(migrationFile), { recursive: true });
+    const temporary = migrationFile + ".tmp-" + process.pid + "-" + Date.now();
+    try {
+      io.writeFileSync(temporary, JSON.stringify(record, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+      io.renameSync(temporary, migrationFile);
+    } finally {
+      try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch (_) {}
+    }
+    return record;
+  }
+
+  function hasApplicationConfig(platformId) {
+    if (!platformSettingsService) return false;
+    if (typeof platformSettingsService.getApplicationConfig === "function") return Boolean(platformSettingsService.getApplicationConfig(platformId));
+    const status = platformSettingsService.getStatus(platformId);
+    return status && status.source === "application" && status.configured === true;
+  }
+
+  function isEnvironmentOverride(platformId) {
+    if (!platformSettingsService || typeof platformSettingsService.getStatus !== "function") return false;
+    return platformSettingsService.getStatus(platformId).source === "environment";
+  }
+
+  function readCookieFile(filename) {
+    if (typeof filename !== "string" || !pathApi.isAbsolute(filename) || !safeLegacyFile(filename, io)) {
+      const error = new Error("Legacy Hepan cookie file is unavailable");
+      error.code = "HEPAN_COOKIE_IMPORT_INVALID";
+      throw error;
+    }
+    const cookie = String(io.readFileSync(filename, "utf8")).trim();
+    if (!cookie || cookie.length > 2 * 1024 * 1024) {
+      const error = new Error("Legacy Hepan cookie file is unavailable");
+      error.code = "HEPAN_COOKIE_IMPORT_INVALID";
+      throw error;
+    }
+    return cookie;
+  }
+
+  function mergeSource(platform, sourceList) {
+    for (const item of sourceList) {
+      if (item[platform]) return { source: item.source, value: item[platform] };
+    }
+    return null;
+  }
+
+  async function importLegacy(input) {
+    if (!input || input.confirmed !== true) {
+      const error = new Error("Legacy provider settings import requires explicit confirmation");
+      error.code = "PLATFORM_CONFIG_MIGRATION_CONFIRMATION_REQUIRED";
+      throw error;
+    }
+    if (!platformSettingsService) {
+      const error = new Error("Platform settings service is required");
+      error.code = "PLATFORM_CONFIG_MIGRATION_UNAVAILABLE";
+      throw error;
+    }
+    const sourceList = candidates();
+    const entries = [];
+    const imported = [];
+    const media = mergeSource("media", sourceList);
+    if (media) {
+      if (hasApplicationConfig("media")) entries.push({ platform: "media", source: media.source, status: "skipped-existing" });
+      else if (isEnvironmentOverride("media")) entries.push({ platform: "media", source: media.source, status: "skipped-environment" });
+      else {
+        try {
+          platformSettingsService.save("media", {
+            apiKey: media.value.apiKey,
+            baseUrl: media.value.baseUrl,
+            timeoutMs: media.value.timeoutMs,
+            allowInsecure: media.value.allowInsecure === "1" || media.value.allowInsecure === "true"
+          });
+          entries.push({ platform: "media", source: media.source, status: "imported" });
+          imported.push("media");
+          if (runtimeConfigStore && media.source === "application-runtime-config" && typeof runtimeConfigStore.removeKeys === "function") runtimeConfigStore.removeKeys(["XQW_API_KEY", "XQW_BASE_URL", "XQW_TIMEOUT_MS", "XQW_ALLOW_INSECURE"]);
+        } catch (error) {
+          entries.push({ platform: "media", source: media.source, status: "failed", code: error && error.code || "PLATFORM_CONFIG_MIGRATION_FAILED" });
+        }
+      }
+    }
+    const hepan = mergeSource("hepan", sourceList);
+    if (hepan) {
+      if (hasApplicationConfig("hepan")) entries.push({ platform: "hepan", source: hepan.source, status: "skipped-existing" });
+      else if (isEnvironmentOverride("hepan")) entries.push({ platform: "hepan", source: hepan.source, status: "skipped-environment" });
+      else {
+        try {
+          const cookie = readCookieFile(hepan.value.cookiePath);
+          platformSettingsService.save("hepan", {
+            pythonPath: hepan.value.pythonPath,
+            cookie: cookie,
+            categoryId: hepan.value.categoryId,
+            vendorDir: hepan.value.vendorDir
+          });
+          entries.push({ platform: "hepan", source: hepan.source, status: "imported" });
+          imported.push("hepan");
+          if (runtimeConfigStore && hepan.source === "application-runtime-config" && typeof runtimeConfigStore.removeKeys === "function") runtimeConfigStore.removeKeys(["HEPAN_COOKIE_PATH", "HEPAN_PYTHON", "HEPAN_VENDOR_DIR", "HEPAN_CATEGORY_ID"]);
+        } catch (error) {
+          entries.push({ platform: "hepan", source: hepan.source, status: "failed", code: error && error.code || "PLATFORM_CONFIG_MIGRATION_FAILED" });
+        }
+      }
+    }
+    const record = writeRecord(entries);
+    return { imported, entries: record.entries, record: record, legacyCookieFilesRemain: entries.some((entry) => entry.platform === "hepan" && entry.status === "imported") };
+  }
+
+  return { discover: publicReport, getRecord: readRecord, importLegacy };
 }
 
 function requiredRoot(value, name) {
@@ -108,7 +306,6 @@ function configureRuntimeEnvironment(options) {
   const diagnostics = diagnosticsService.diagnose();
   if (!process.env.PLAYWRIGHT_CLI_JS && diagnostics.tools.playwrightCli.command) process.env.PLAYWRIGHT_CLI_JS = diagnostics.tools.playwrightCli.command;
   if (!process.env.AUTO_PUBLISH_NODE_EXEC_PATH && diagnostics.tools.playwrightNode.command) process.env.AUTO_PUBLISH_NODE_EXEC_PATH = diagnostics.tools.playwrightNode.command;
-  if (!process.env.HEPAN_PYTHON && diagnostics.tools.hepanPython.command) process.env.HEPAN_PYTHON = diagnostics.tools.hepanPython.command;
   if (!process.env.BROWSER_CHANNEL && diagnostics.tools.browserChannel.channel) process.env.BROWSER_CHANNEL = diagnostics.tools.browserChannel.channel;
   paths.playwrightNodeExecPath = diagnostics.tools.playwrightNode.command;
   paths.playwrightCliJs = diagnostics.tools.playwrightCli.command;
@@ -127,6 +324,7 @@ function configureRuntimeEnvironment(options) {
     storage: storage,
     paths: paths,
     runtimeConfigStore: runtimeConfigStore,
+    legacyProviderSettings: createLegacyProviderSettingsMigration({ configRoot: roamingConfig, workspaceRoot: contentLibrary, runtimeConfigStore: runtimeConfigStore }),
     applicationValues: applicationValues,
     diagnosticsService: diagnosticsService,
     configErrors: configErrors,
@@ -138,5 +336,7 @@ module.exports = {
   configureRuntimeEnvironment,
   loadWorkspaceEnvironment,
   unloadWorkspaceEnvironment,
-  validateRuntimeConfiguration
+  validateRuntimeConfiguration,
+  createLegacyProviderSettingsMigration,
+  LEGACY_RUNTIME_CONFIG_KEYS
 };

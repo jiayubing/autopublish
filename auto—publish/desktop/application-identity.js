@@ -5,6 +5,7 @@ const APPLICATION_NAME = "AutoPublish";
 const APPLICATION_ID = "com.autopublish.desktop";
 const LEGACY_PACKAGE_NAMES = Object.freeze(["auto-publish-desktop", "AutoPublish Desktop"]);
 const IMPORTABLE_FILES = Object.freeze(["workspace-location.json", "runtime-config.json", "ai-provider.json"]);
+const LEGACY_RUNTIME_SECRET_KEYS = new Set(["XQW_API_KEY", "XQW_BASE_URL", "XQW_TIMEOUT_MS", "XQW_ALLOW_INSECURE", "HEPAN_COOKIE_PATH", "HEPAN_PYTHON", "HEPAN_VENDOR_DIR", "HEPAN_CATEGORY_ID"]);
 
 function identityError(code, message) {
   const error = new Error(message);
@@ -42,7 +43,19 @@ function importLegacyApplicationConfig(options) {
       if (!fs.existsSync(source)) return;
       const stat = fs.lstatSync(source);
       if (stat.isSymbolicLink() || !stat.isFile()) throw identityError("APP_CONFIG_IMPORT_SOURCE_INVALID", "Legacy application configuration is invalid");
-      fs.copyFileSync(source, path.join(staging, filename));
+      if (filename === "runtime-config.json") {
+        let parsed;
+        try { parsed = JSON.parse(fs.readFileSync(source, "utf8")); } catch (_) { parsed = null; }
+        if (parsed && parsed.version === 1 && parsed.values && typeof parsed.values === "object" && !Array.isArray(parsed.values)) {
+          const values = Object.assign({}, parsed.values);
+          LEGACY_RUNTIME_SECRET_KEYS.forEach(function(key) { delete values[key]; });
+          fs.writeFileSync(path.join(staging, filename), JSON.stringify({ version: 1, values: values }) + "\n", { encoding: "utf8", mode: 0o600 });
+        } else {
+          fs.copyFileSync(source, path.join(staging, filename));
+        }
+      } else {
+        fs.copyFileSync(source, path.join(staging, filename));
+      }
       imported.push(filename);
     });
     if (!imported.length) throw identityError("APP_CONFIG_IMPORT_SOURCE_EMPTY", "No importable legacy application configuration was found");
@@ -59,4 +72,4 @@ function importLegacyApplicationConfig(options) {
   }
 }
 
-module.exports = { APPLICATION_NAME, APPLICATION_ID, LEGACY_PACKAGE_NAMES, IMPORTABLE_FILES, configureApplicationIdentity, legacyUserDataPaths, importLegacyApplicationConfig };
+module.exports = { APPLICATION_NAME, APPLICATION_ID, LEGACY_PACKAGE_NAMES, IMPORTABLE_FILES, LEGACY_RUNTIME_SECRET_KEYS, configureApplicationIdentity, legacyUserDataPaths, importLegacyApplicationConfig };

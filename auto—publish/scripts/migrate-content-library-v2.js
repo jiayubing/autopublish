@@ -35,17 +35,22 @@ const MAPPINGS = [
   { source: "tmp", target: "tmp", destination: "local", category: "local" }
 ];
 
-// AI provider settings are application-owned and are never imported from a
-// workspace .env. The platform settings below are written to the separately
-// supplied application configuration file, not to the migration log.
+// Only non-secret runtime tools may cross the content-library boundary. AI and
+// platform provider credentials are reported for the desktop's explicit,
+// safeStorage-backed import flow and are never written by this CLI migrator.
 const ALLOWED_ENV_KEYS = new Set([
+  "PLAYWRIGHT_CLI_JS",
+  "AUTO_PUBLISH_NODE_EXEC_PATH"
+]);
+const LEGACY_PROVIDER_ENV_KEYS = new Set([
   "HEPAN_PYTHON",
   "HEPAN_COOKIE_PATH",
   "HEPAN_VENDOR_DIR",
+  "HEPAN_CATEGORY_ID",
   "XQW_API_KEY",
   "XQW_BASE_URL",
-  "PLAYWRIGHT_CLI_JS",
-  "AUTO_PUBLISH_NODE_EXEC_PATH"
+  "XQW_TIMEOUT_MS",
+  "XQW_ALLOW_INSECURE"
 ]);
 
 function migrationError(code, message) {
@@ -267,11 +272,19 @@ function createContentLibraryMigrator(options) {
     const envValues = rejectSymlink(envPath) ? parseEnv(fs.readFileSync(envPath, "utf8")) : {};
     const platformRuntime = {};
     for (const key of ALLOWED_ENV_KEYS) if (Object.prototype.hasOwnProperty.call(envValues, key)) platformRuntime[key] = envValues[key];
+    const legacyProviderConfig = {
+      media: Object.keys(envValues).some((key) => LEGACY_PROVIDER_ENV_KEYS.has(key) && key.startsWith("XQW_")),
+      hepan: Object.keys(envValues).some((key) => LEGACY_PROVIDER_ENV_KEYS.has(key) && key.startsWith("HEPAN_")),
+      source: Object.keys(envValues).some((key) => LEGACY_PROVIDER_ENV_KEYS.has(key)) ? "workspace-env" : null
+    };
     const appConfig = { version: 1, values: platformRuntime };
     if (fs.existsSync(roots.appConfigPath) && inspected.conflicts.length === 0) {
       try {
         const existing = JSON.parse(fs.readFileSync(roots.appConfigPath, "utf8"));
-        if (JSON.stringify(existing.values || {}) !== JSON.stringify(platformRuntime)) inspected.conflicts.push({ code: "APP_CONFIG_CONFLICT", target: "appConfigPath" });
+        const existingValues = existing && existing.values && typeof existing.values === "object" ? existing.values : {};
+        const existingSafe = {};
+        for (const key of ALLOWED_ENV_KEYS) if (Object.prototype.hasOwnProperty.call(existingValues, key)) existingSafe[key] = existingValues[key];
+        if (JSON.stringify(existingSafe) !== JSON.stringify(platformRuntime)) inspected.conflicts.push({ code: "APP_CONFIG_CONFLICT", target: "appConfigPath" });
       } catch (_) {
         inspected.conflicts.push({ code: "APP_CONFIG_CONFLICT", target: "appConfigPath" });
       }
@@ -282,6 +295,7 @@ function createContentLibraryMigrator(options) {
       duplicates: inspected.duplicates,
       conflicts: inspected.conflicts,
       appConfig,
+      legacyProviderConfig,
       envPath,
       destinationNonEmpty: Boolean(roots.destinationNonEmpty),
       crossVolume: roots.crossVolume
@@ -309,6 +323,7 @@ function createContentLibraryMigrator(options) {
       duplicates: currentPlan.duplicates,
       destinationNonEmpty: currentPlan.destinationNonEmpty,
       crossVolume: currentPlan.crossVolume,
+      legacyProviderConfig: currentPlan.legacyProviderConfig,
       manifestPath,
       completionMarkerPath
     }, extra || {});
@@ -350,7 +365,10 @@ function createContentLibraryMigrator(options) {
         atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
       }
       const existingConfig = fs.existsSync(roots.appConfigPath) ? JSON.parse(fs.readFileSync(roots.appConfigPath, "utf8")) : {};
-      atomicWrite(roots.appConfigPath, JSON.stringify(Object.assign({}, existingConfig, currentPlan.appConfig), null, 2) + "\n");
+      const existingValues = existingConfig && existingConfig.values && typeof existingConfig.values === "object" ? existingConfig.values : {};
+      const safeExistingValues = {};
+      for (const key of ALLOWED_ENV_KEYS) if (Object.prototype.hasOwnProperty.call(existingValues, key)) safeExistingValues[key] = existingValues[key];
+      atomicWrite(roots.appConfigPath, JSON.stringify({ version: 1, values: Object.assign({}, safeExistingValues, currentPlan.appConfig.values) }, null, 2) + "\n");
       manifest.status = "complete";
       manifest.completedAt = clock();
       manifest.appConfigKeys = Object.keys(currentPlan.appConfig.values).sort();
