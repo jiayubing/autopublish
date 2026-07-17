@@ -295,7 +295,8 @@ describe("source assembly and packaging contract", function() {
     assert.match(verifier, /node_modules\/mammoth\/LICENSE/);
     assert.match(read("scripts/verify-packaged-docx-runtime.js"), /MARKITDOWN_CMD/);
     assert.match(read("scripts/verify.js"), /verify-packaged-docx-runtime/);
-    assert.match(read("electron-builder.alpha.yml"), /from: build\/build-info\.json/);
+    assert.match(read("scripts/prepare-runtime-tools.js"), /config.*build-info\.json/);
+    assert.match(read("scripts/verify-alpha-package.js"), /config\/build-info\.json/);
   });
 
   it("declares the bundled Playwright runtime and isolated verifier", function() {

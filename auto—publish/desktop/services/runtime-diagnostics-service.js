@@ -141,7 +141,9 @@ function hasBundledMammoth(appRoot, override) {
 function readBuildInfo(appRoot, environment) {
   const env = environment || process.env;
   let value = {};
-  try { value = JSON.parse(fs.readFileSync(path.join(appRoot, "build-info.json"), "utf8")); } catch (_) {}
+  try { value = JSON.parse(fs.readFileSync(path.join(appRoot, "config", "build-info.json"), "utf8")); } catch (_) {
+    try { value = JSON.parse(fs.readFileSync(path.join(appRoot, "build-info.json"), "utf8")); } catch (_) {}
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) value = {};
   let version = existing(value.version);
   if (!version) {

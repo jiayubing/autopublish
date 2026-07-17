@@ -26,6 +26,7 @@ const REQUIRED_FILES = [
   "src/content/article-review-service.js",
   "scripts/config.js",
   "config/platforms.json",
+  "config/build-info.json",
   "media-workbench/dist/index.html",
   "tools/node/node.exe",
   "tools/node/LICENSE",

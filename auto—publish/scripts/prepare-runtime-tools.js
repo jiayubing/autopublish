@@ -8,7 +8,7 @@ const { spawnSync } = require("node:child_process");
 const DEFAULT_MANIFEST = path.resolve(__dirname, "..", "build", "runtime-tools-manifest.json");
 const DEFAULT_OUTPUT = path.resolve(__dirname, "..", "build", "runtime-tools", "node");
 const DEFAULT_CACHE = path.resolve(__dirname, "..", "build", "runtime-tools-cache");
-const DEFAULT_BUILD_INFO = path.resolve(__dirname, "..", "build", "build-info.json");
+const DEFAULT_BUILD_INFO = path.resolve(__dirname, "..", "config", "build-info.json");
 
 function readBuildInfo() {
   const root = path.resolve(__dirname, "..");

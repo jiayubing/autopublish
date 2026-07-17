@@ -22,3 +22,4 @@ release-alpha/
 build/runtime-tools/
 build/runtime-tools-cache/
 /build/build-info.json
+/config/build-info.json
