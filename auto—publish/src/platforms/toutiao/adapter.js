@@ -7,7 +7,8 @@ const { DIRS, PW } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 const { ensureDir, sleep, quoteArg } = require("../../core/files");
 const { pwSessionConfig, pwEnv, pwCmd, pwRun, runCode } = require("../../core/playwright");
-const { convertDocxToMd, parseArticle } = require("../../core/markitdown");
+const { extractDocxArticle } = require("../../core/docx-text-extractor");
+const { parseArticle } = require("../../core/article-text");
 const { resolveInteractive, throwIfStopped, waitForCondition } = require("../../core/operator-flow");
 
 var SESSION = pwSessionConfig("toutiao");
@@ -422,16 +423,18 @@ function scanArticles(scanDir) {
   });
 }
 
-function parseArticleFiles(articles) {
+async function parseArticleFiles(articles) {
   var parsed = [];
 
   for (var i = 0; i < articles.length; i++) {
     var article = articles[i];
     try {
-      var mdPath = path.extname(article.file).toLowerCase() === ".docx"
-        ? convertDocxToMd(article.file)
-        : article.file;
-      var data = parseArticle(mdPath);
+      var data = path.extname(article.file).toLowerCase() === ".docx"
+        ? await extractDocxArticle({
+            buffer: fs.readFileSync(article.file),
+            fallbackTitle: article.fileBaseName
+          })
+        : parseArticle(article.file);
       var mdTitle = (data.title || "").trim();
       var fileTitle = (article.fileBaseName || "").trim();
       data.title = mdTitle || fileTitle;

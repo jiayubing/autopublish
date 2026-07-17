@@ -114,7 +114,7 @@ function isolatedEnvironment(tempRoot) {
     PLAYWRIGHT_DAEMON_SESSION_DIR: path.join(tempRoot, "daemon"),
     AUTO_PUBLISH_PACKAGED: "1"
   });
-  ["PLAYWRIGHT_CLI_JS", "AUTO_PUBLISH_NODE_EXEC_PATH", "MARKITDOWN_CMD", "HEPAN_PYTHON", "BROWSER_CHANNEL"].forEach(function(key) { delete env[key]; });
+  ["PLAYWRIGHT_CLI_JS", "AUTO_PUBLISH_NODE_EXEC_PATH", "HEPAN_PYTHON", "BROWSER_CHANNEL"].forEach(function(key) { delete env[key]; });
   return env;
 }
 

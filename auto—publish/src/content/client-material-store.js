@@ -2,14 +2,15 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { convertDocxToText } = require("../core/markitdown");
+const { extractDocxText } = require("../core/docx-text-extractor");
 const { createWorkspacePaths } = require("../../desktop/workspace-paths");
 const { getClient } = require("./client-knowledge");
 
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx"]);
 const EXCLUDED_NAMES = new Set(["questions.json", "client.json", "search_query.txt"]);
 const MATERIAL_ERROR_MESSAGES = {
-  MATERIAL_MARKITDOWN_UNAVAILABLE: "MarkItDown is unavailable",
+  MATERIAL_DOCX_INVALID: "DOCX input is invalid",
+  MATERIAL_DOCX_EMPTY: "DOCX does not contain readable text",
   MATERIAL_DOCX_ENCRYPTED: "DOCX is encrypted or damaged",
   MATERIAL_DOCX_CONVERSION_FAILED: "DOCX conversion failed",
   MATERIAL_READ_FAILED: "Client material could not be read"
@@ -83,9 +84,11 @@ function createClientMaterialStore(options) {
   const cacheBoundary = path.resolve(paths.localState || workspaceRoot);
   const cacheRoot = path.resolve(paths.clientMaterialCache || path.join(paths.work || path.join(workspaceRoot, "work"), "client-material-cache"));
   const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
-  const converter = typeof opts.converter === "function" ? opts.converter : convertDocxToText;
+  const converter = typeof opts.converter === "function"
+    ? opts.converter
+    : function(buffer) { return extractDocxText({ buffer: buffer }); };
   const hash = typeof opts.hash === "function" ? opts.hash : defaultHash;
-  const cacheVersion = opts.cacheVersion === undefined ? 1 : opts.cacheVersion;
+  const cacheVersion = opts.cacheVersion === undefined ? 2 : opts.cacheVersion;
 
   function getClientDirectory(clientId) {
     assertClientId(clientId);
@@ -232,13 +235,9 @@ function createClientMaterialStore(options) {
       };
     }
 
-    const temporaryDirectory = fs.mkdtempSync(path.join(getCacheDirectory(clientId), ".convert-"));
-    const outputPath = path.join(temporaryDirectory, "material.md");
     try {
-      let content = await converter(path.join(client.directory, entry.name), outputPath, { clientId: clientId, name: entry.name, version: cacheVersion });
-      if (typeof content !== "string") {
-        content = fs.readFileSync(outputPath, "utf8");
-      }
+      const content = await converter(source, { clientId: clientId, name: entry.name, version: cacheVersion });
+      if (typeof content !== "string") throw materialError("MATERIAL_DOCX_CONVERSION_FAILED", "DOCX conversion failed");
       const result = {
         version: cacheVersion,
         clientId: clientId,
@@ -252,8 +251,6 @@ function createClientMaterialStore(options) {
       return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: result.characterCount, contentHash: sourceHash, source: "docx", cacheHit: false };
     } catch (error) {
       return materialErrorDto(entry.name, extension, error);
-    } finally {
-      fs.rmSync(temporaryDirectory, { recursive: true, force: true });
     }
   }
 

@@ -40,7 +40,7 @@ function summarizeArticle(article) {
   };
 }
 
-function scanAndParseForPlatform(adapter, limit) {
+async function scanAndParseForPlatform(adapter, limit) {
   var hasOwnScan = typeof adapter.scanArticles === "function";
   var hasOwnParse = typeof adapter.parseArticleFiles === "function";
 
@@ -96,7 +96,7 @@ function buildJobsForPlatform(adapter, parsed) {
   return jobs;
 }
 
-function buildBatchPlan(options) {
+async function buildBatchPlan(options) {
   var opts = options || {};
   var totalLimit = normalizePositiveInt(opts.maxJobs);
   var perPlatformLimit = normalizePositiveInt(opts.limitPerPlatform);
@@ -128,7 +128,7 @@ function buildBatchPlan(options) {
       platformLimit = platformLimit === null ? totalRemaining : Math.min(platformLimit, totalRemaining);
     }
 
-    var parsed = scanAndParseForPlatform(adapter, platformLimit);
+    var parsed = await scanAndParseForPlatform(adapter, platformLimit);
     items.push({
       platformId: adapter.id,
       scanDir: adapter.scanDir,
@@ -228,7 +228,7 @@ function createQueueSnapshot(options) {
 async function runPublicationBatch(options) {
   var opts = options || {};
   var autoSubmit = opts.autoSubmit !== false;
-  var plan = buildBatchPlan(opts);
+  var plan = await buildBatchPlan(opts);
 
   log("Auto publish batch started [" + getModeName(autoSubmit) + "]", "INFO");
 

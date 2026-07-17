@@ -137,7 +137,7 @@ function createPlatformWorkbenchService(opts) {
           filename: task.filename, fileBaseName: path.basename(task.filename, path.extname(task.filename))
         };
         var parsed = adapter.parseArticleFiles
-          ? adapter.parseArticleFiles([sourceArticle])
+          ? await adapter.parseArticleFiles([sourceArticle])
           : await (async function() {
               var article = { sourceFile: sourceArticle.sourceFile, file: sourceArticle.file, filename: sourceArticle.filename, title: sourceArticle.title || sourceArticle.fileBaseName };
               var filePath = sourceArticle.filePath || sourceArticle.file || sourceArticle.sourceFile;

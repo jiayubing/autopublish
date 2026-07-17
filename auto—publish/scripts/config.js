@@ -44,7 +44,6 @@ const LIEJU = {
 
 // Runtime overrides are application-scoped and are injected before this
 // module is loaded. Never read executable paths from the customer workspace.
-const MARKITDOWN_CMD = process.env.MARKITDOWN_CMD || 'markitdown';
 const PLAYWRIGHT_CLI_JS = process.env.PLAYWRIGHT_CLI_JS || 'playwright-cli';
 
-module.exports = { DIRS, PW, LIEJU, MARKITDOWN_CMD, PLAYWRIGHT_CLI_JS };
+module.exports = { DIRS, PW, LIEJU, PLAYWRIGHT_CLI_JS };

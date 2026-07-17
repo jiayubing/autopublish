@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 
 describe("batch workspace scan", function() {
-  it("scans media only from AUTO_PUBLISH_WORKSPACE input", function() {
+  it("scans media only from AUTO_PUBLISH_WORKSPACE input", async function() {
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "batch-workspace-"));
     const oldWorkspace = process.env.AUTO_PUBLISH_WORKSPACE;
     const oldRoot = process.env.AUTO_PUBLISH_ROOT_DIR;
@@ -18,7 +18,7 @@ describe("batch workspace scan", function() {
       ["../scripts/config", "../src/core/platforms", "../src/platforms/media/adapter", "../src/app/publish-batch"].forEach(function(id) {
         delete require.cache[require.resolve(id)];
       });
-      const plan = require("../src/app/publish-batch").buildBatchPlan({ platformIds: ["media"] });
+      const plan = await require("../src/app/publish-batch").buildBatchPlan({ platformIds: ["media"] });
       assert.equal(plan.items[0].count, 1);
       assert.equal(plan.jobs[0].article.file, article);
     } finally {

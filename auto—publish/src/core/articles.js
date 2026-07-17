@@ -4,7 +4,8 @@ const path = require("path");
 const { DIRS } = require("../../scripts/config");
 const { log } = require("./logger");
 const { copyToFailed } = require("./files");
-const { convertDocxToMd, parseArticle } = require("./markitdown");
+const { extractDocxArticle } = require("./docx-text-extractor");
+const { parseArticle } = require("./article-text");
 
 function stripDuplicateMarker(text) {
   return String(text || "")
@@ -100,16 +101,21 @@ function scanArticles(scanDir) {
   });
 }
 
-function parseArticleFiles(articles) {
+async function parseArticleFiles(articles) {
   var parsed = [];
 
   for (var i = 0; i < articles.length; i++) {
     var article = articles[i];
     try {
-      var mdPath = path.extname(article.file).toLowerCase() === ".docx"
-        ? convertDocxToMd(article.file)
-        : article.file;
-      var data = parseArticle(mdPath);
+      var data;
+      if (path.extname(article.file).toLowerCase() === ".docx") {
+        data = await extractDocxArticle({
+          buffer: fs.readFileSync(article.file),
+          fallbackTitle: path.basename(article.file, path.extname(article.file))
+        });
+      } else {
+        data = parseArticle(article.file);
+      }
       data.city = article.city;
       data.phone = article.phone;
       data.contact = article.contact;

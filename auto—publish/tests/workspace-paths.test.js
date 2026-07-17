@@ -18,7 +18,6 @@ const RUNTIME_ENV_KEYS = [
   "AI_MODEL",
   "AI_TIMEOUT_MS",
   "XQW_API_KEY",
-  "MARKITDOWN_CMD",
   "PLAYWRIGHT_CLI_JS",
   "HEPAN_PYTHON"
 ];
@@ -93,28 +92,24 @@ describe("runtime configuration", function() {
     };
     try {
       fs.mkdirSync(path.join(values.roamingConfigRoot, "runtime"), { recursive: true });
-      const configuredMarkitdown = path.join(values.roamingConfigRoot, "runtime", "markitdown.cmd");
       const configuredPlaywright = path.join(values.roamingConfigRoot, "runtime", "playwright-cli.js");
-      fs.writeFileSync(configuredMarkitdown, "", "utf8");
       fs.writeFileSync(configuredPlaywright, "", "utf8");
       fs.writeFileSync(path.join(values.roamingConfigRoot, "runtime", "runtime-tools.json"), JSON.stringify({
-        markitdownCmd: configuredMarkitdown,
         playwrightCliJs: configuredPlaywright
       }), "utf8");
       const result = childProcess.spawnSync(process.execPath, ["-e", [
         "const input=JSON.parse(process.argv[1]);",
         "require('./desktop/runtime-config').configureRuntimeEnvironment(input);",
         "const config=require('./scripts/config');",
-        "process.stdout.write(JSON.stringify({markitdown:config.MARKITDOWN_CMD,playwright:config.PLAYWRIGHT_CLI_JS}));"
+        "process.stdout.write(JSON.stringify({playwright:config.PLAYWRIGHT_CLI_JS}));"
       ].join(""), JSON.stringify(values)], {
         cwd: path.resolve(__dirname, ".."),
-        env: Object.assign({}, process.env, { MARKITDOWN_CMD: "", PLAYWRIGHT_CLI_JS: "" }),
+        env: Object.assign({}, process.env, { PLAYWRIGHT_CLI_JS: "" }),
         encoding: "utf8"
       });
 
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), {
-        markitdown: configuredMarkitdown,
         playwright: configuredPlaywright
       });
     } finally {

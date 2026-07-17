@@ -60,8 +60,8 @@ function validateRuntimeConfiguration(environment) {
   const env = environment || process.env;
   const errors = [];
   if (!env.XQW_API_KEY) errors.push({ code: "MEDIA_CONFIG_INVALID", message: "Media configuration is invalid" });
-  // Playwright, MarkItDown, and Hepan are diagnosed as independent
-  // capabilities. Built-in Playwright Node/CLI and the default browser
+    // Playwright and Hepan are diagnosed as independent capabilities.
+    // Built-in Playwright Node/CLI and the default browser
   // channel must not require ordinary users to edit runtime-tools.json.
   return errors;
 }
@@ -106,7 +106,6 @@ function configureRuntimeEnvironment(options) {
     packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
   });
   const diagnostics = diagnosticsService.diagnose();
-  if (!process.env.MARKITDOWN_CMD && diagnostics.tools.markitdown.command) process.env.MARKITDOWN_CMD = diagnostics.tools.markitdown.command;
   if (!process.env.PLAYWRIGHT_CLI_JS && diagnostics.tools.playwrightCli.command) process.env.PLAYWRIGHT_CLI_JS = diagnostics.tools.playwrightCli.command;
   if (!process.env.AUTO_PUBLISH_NODE_EXEC_PATH && diagnostics.tools.playwrightNode.command) process.env.AUTO_PUBLISH_NODE_EXEC_PATH = diagnostics.tools.playwrightNode.command;
   if (!process.env.HEPAN_PYTHON && diagnostics.tools.hepanPython.command) process.env.HEPAN_PYTHON = diagnostics.tools.hepanPython.command;
