@@ -118,17 +118,23 @@ interface DesktopConsoleWorkspace {
   requestSwitch(): Promise<IpcResponse<WorkspaceBootstrapState>>;
 }
 
-export interface RuntimeToolStatus { available: boolean; source: string | null; }
+export type RuntimeCapabilityState = "ready" | "not_checked" | "optional_unconfigured" | "unavailable";
+export interface RuntimeCapability { state: RuntimeCapabilityState; source: string | null; errorCode: string | null; lastCheckedAt: string | null; available?: boolean; }
+export interface RuntimeBrowserCapability extends RuntimeCapability { channel: string | null; configured: boolean; probed: boolean; }
 export interface RuntimeDiagnostics {
   ok: boolean;
-  browserChannel: { channel: string | null; source: string | null; available: boolean; probed: boolean } | null;
-  tools: {
-    playwrightNode: RuntimeToolStatus;
-    playwrightCli: RuntimeToolStatus;
-    markitdown: RuntimeToolStatus;
-    hepanPython: RuntimeToolStatus;
+  buildInfo: { version: string; commit: string; dirty: boolean };
+  browserChannel: RuntimeBrowserCapability;
+  capabilities: {
+    playwrightNode: RuntimeCapability;
+    playwrightCli: RuntimeCapability;
+    browserChannel: RuntimeBrowserCapability;
+    docx: RuntimeCapability;
+    hepan: RuntimeCapability;
   };
+  tools?: { playwrightNode: RuntimeCapability; playwrightCli: RuntimeCapability; hepanPython: RuntimeCapability };
   errors: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
 }
 
 interface DesktopConsoleRuntimeDiagnostics {
@@ -273,14 +279,17 @@ export async function requestWorkspaceSwitch(): Promise<WorkspaceBootstrapState>
 
 const EMPTY_RUNTIME_DIAGNOSTICS: RuntimeDiagnostics = {
   ok: false,
-  browserChannel: { channel: "msedge", source: "default", available: true, probed: false },
-  tools: {
-    playwrightNode: { available: false, source: null },
-    playwrightCli: { available: false, source: null },
-    markitdown: { available: false, source: null },
-    hepanPython: { available: false, source: null },
+  buildInfo: { version: "unknown", commit: "unknown", dirty: false },
+  browserChannel: { channel: "msedge", configured: true, state: "not_checked", probed: false, source: "default", errorCode: null, lastCheckedAt: null },
+  capabilities: {
+    playwrightNode: { state: "unavailable", source: null, errorCode: "PLAYWRIGHT_NODE_UNAVAILABLE", lastCheckedAt: null },
+    playwrightCli: { state: "unavailable", source: null, errorCode: "PLAYWRIGHT_CLI_UNAVAILABLE", lastCheckedAt: null },
+    browserChannel: { channel: "msedge", configured: true, state: "not_checked", probed: false, source: "default", errorCode: null, lastCheckedAt: null },
+    docx: { state: "unavailable", source: "bundled", errorCode: "DOCX_RUNTIME_UNAVAILABLE", lastCheckedAt: null },
+    hepan: { state: "optional_unconfigured", source: "optional", errorCode: "HEPAN_PYTHON_UNAVAILABLE", lastCheckedAt: null }
   },
   errors: [],
+  warnings: []
 };
 
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
@@ -290,7 +299,7 @@ export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
   return result.data || EMPTY_RUNTIME_DIAGNOSTICS;
 }
 
-export async function runBrowserSelfCheck(): Promise<{ ok: boolean; browserChannel: string; session: string }> {
+export async function runBrowserSelfCheck(): Promise<{ ok: boolean; browserChannel: string; session: string; capability?: RuntimeBrowserCapability }> {
   if (!isElectron()) throw new Error("Browser self-check requires the desktop app");
   const result = await window.desktopConsole!.runtimeDiagnostics.browserSmoke();
   if (!result.ok || !result.data) throw getIpcError(result.error, "Browser self-check failed");
