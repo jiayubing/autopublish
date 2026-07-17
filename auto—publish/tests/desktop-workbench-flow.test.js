@@ -1,54 +1,41 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 function read(file) {
   return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
 }
 
 describe("desktop workbench flow", function() {
-  it("keeps workspace switching stateful", function() {
-    const source = read("desktop/renderer/app.js");
-    assert.ok(source.includes("var initialized ="), "missing workspace init guard");
-    assert.ok(source.includes('renderWorkspace("mediaWorkspace", true)'), "missing initial media render");
-    assert.ok(source.includes('renderWorkspace("platformWorkspace", true)'), "missing initial platform render");
-    assert.equal(source.includes("await renderWorkspace(id);"), false, "tab click still rerenders on every switch");
+  it("loads the React production renderer from the packaged dist entry", function() {
+    const main = read("desktop/main.js");
+    const packaging = read("electron-builder.alpha.yml");
+    assert.match(main, /media-workbench["\\']?, ["\\']dist["\\']?/);
+    assert.match(main, /rendererEntryPath/);
+    assert.match(packaging, /media-workbench\/dist/);
+    assert.doesNotMatch(packaging, /desktop[\\/]renderer/);
+    assert.doesNotMatch(main, /desktop[\\/]renderer/);
   });
 
-  it("keeps platform batch selection in the page until explicit submit or refresh", function() {
-    const source = read("desktop/renderer/platform-workbench.js");
-    assert.ok(source.includes("selectedArticles"), "missing article selection state");
-    assert.ok(source.includes("selectedPlatformIds"), "missing platform selection state");
-    assert.ok(source.includes("clearSelection"), "missing explicit reset path");
-    assert.ok(source.includes("applySelectionState"), "missing state reapply after rerender");
-    assert.ok(source.includes("window.platformBatchDrawer.open"), "missing batch drawer handoff");
+  it("keeps media, platform, order, and content workbenches on the React app surface", function() {
+    const app = read("media-workbench/src/App.tsx");
+    const platform = read("media-workbench/src/components/PlatformWorkbench.tsx");
+    const content = read("media-workbench/src/components/ContentWorkbench.tsx");
+    assert.match(app, /ResourceLibrary/);
+    assert.match(app, /ArticleEditor/);
+    assert.match(app, /OrdersView/);
+    assert.match(app, /PlatformWorkbench/);
+    assert.match(app, /ContentWorkbench/);
+    assert.match(platform, /selectedArticles/);
+    assert.match(content, /GeneratedArticlesView/);
   });
 
-  it("routes platform submission through the confirmation drawer and keeps the script order", function() {
-    const drawer = read("desktop/renderer/platform-batch-drawer.js");
-    const html = read("desktop/renderer/index.html");
-    const preload = read("desktop/preload.js");
-
-    assert.ok(drawer.includes("api.platforms.buildSelectedPlan"), "missing plan build call");
-    assert.ok(drawer.includes("api.platforms.submitSelectedPlan"), "missing submit call");
-    assert.ok(drawer.includes("window.drawer.open"), "missing confirmation drawer");
-    assert.ok(html.includes("platform-batch-drawer.js"), "missing batch drawer script");
-    assert.ok(
-      html.indexOf("platform-batch-drawer.js") < html.indexOf("platform-workbench.js"),
-      "batch drawer must load before platform workbench"
-    );
-    assert.equal(preload.includes("listResources"), false, "stale media preload alias still present");
-    assert.equal(preload.includes("getCachedResources"), false, "stale media preload alias still present");
-    assert.equal(preload.includes("searchResources"), false, "stale media preload alias still present");
-  });
-
-  it("exposes generation batches through preload and registers the main-process service", function() {
-    const preload = read("desktop/preload.js");
-    const register = read("desktop/ipc/register.js");
-    assert.ok(preload.includes("previewGenerationBatch"));
-    assert.ok(preload.includes("onGenerationBatchState"));
-    assert.ok(preload.includes("continueGenerationBatch"));
-    assert.ok(register.includes("content-generation-batch-ipc"));
+  it("keeps platform batch selection until explicit confirmation", function() {
+    const platform = read("media-workbench/src/components/PlatformWorkbench.tsx");
+    assert.match(platform, /selectedArticles/);
+    assert.match(platform, /selectedPlatformIds/);
+    assert.match(platform, /buildPlatformPlan|submitPlatformPlan/);
+    assert.match(platform, /isConfirming/);
   });
 });

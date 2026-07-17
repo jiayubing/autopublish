@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createAiProviderConfigStore } = require("../desktop/ai-provider-config-store");
+const { createAiProviderTestStatusStore } = require("../desktop/ai-provider-test-status-store");
 
 function createTempDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-ai-store-"));
@@ -31,12 +32,12 @@ describe("AI provider config store", function() {
     try {
       const store = createAiProviderConfigStore({ userDataPath: userDataPath, safeStorage: fakeSafeStorage() });
       assert.deepStrictEqual(store.write(config), {
-        baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: config.timeoutMs, lastTest: null
+        baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: config.timeoutMs
       });
       const disk = fs.readFileSync(path.join(userDataPath, "ai-provider.json"), "utf8");
       assert.equal(disk.includes(config.apiKey), false);
       assert.deepStrictEqual(store.read(), {
-        baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: config.timeoutMs, lastTest: null
+        baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: config.timeoutMs
       });
     } finally {
       fs.rmSync(userDataPath, { recursive: true, force: true });
@@ -93,6 +94,25 @@ describe("AI provider config store", function() {
     try {
       const store = createAiProviderConfigStore({ userDataPath: userDataPath, safeStorage: fakeSafeStorage() });
       assert.deepStrictEqual(store.clear(), { cleared: false });
+      assert.deepStrictEqual(store.clear(), { cleared: false });
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+    }
+  });
+
+  it("stores only a no-secret connection result outside formal provider configuration", function() {
+    const userDataPath = createTempDirectory();
+    try {
+      const store = createAiProviderTestStatusStore({ userDataPath: userDataPath });
+      const result = { testedAt: "2026-07-15T01:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" };
+      assert.deepStrictEqual(store.write(result), result);
+      assert.deepStrictEqual(store.read(), result);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(store.filePath, "utf8")), result);
+      assert.equal(fs.existsSync(path.join(userDataPath, "ai-provider.json")), false);
+      assert.throws(function() {
+        store.write({ testedAt: result.testedAt, ok: true, code: "AI_CONNECTION_OK", apiKey: "secret" });
+      }, function(error) { return error.code === "AI_TEST_STATUS_INVALID"; });
+      assert.deepStrictEqual(store.clear(), { cleared: true });
       assert.deepStrictEqual(store.clear(), { cleared: false });
     } finally {
       fs.rmSync(userDataPath, { recursive: true, force: true });

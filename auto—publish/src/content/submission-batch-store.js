@@ -27,7 +27,15 @@ function createSubmissionBatchStore(options) {
     return JSON.parse(fs.readFileSync(file, "utf8"));
   }
   function list() {
-    return fs.readdirSync(directory, { withFileTypes: true }).filter((entry) => /^batch-[A-Za-z0-9_-]+\.json$/.test(entry.name)).map((entry) => JSON.parse(fs.readFileSync(path.join(directory, entry.name), "utf8")));
+    return fs.readdirSync(directory, { withFileTypes: true }).filter((entry) => /^batch-[A-Za-z0-9_-]+\.json$/.test(entry.name)).map((entry) => JSON.parse(fs.readFileSync(path.join(directory, entry.name), "utf8"))).sort((left, right) => {
+      const leftTime = Date.parse(left.createdAt);
+      const rightTime = Date.parse(right.createdAt);
+      const leftValid = Number.isFinite(leftTime);
+      const rightValid = Number.isFinite(rightTime);
+      if (leftValid !== rightValid) return leftValid ? -1 : 1;
+      if (leftValid && leftTime !== rightTime) return rightTime - leftTime;
+      return String(right.id || "").localeCompare(String(left.id || ""));
+    });
   }
   return { createId, save, get, list };
 }

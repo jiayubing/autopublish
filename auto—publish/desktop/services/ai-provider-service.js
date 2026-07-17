@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const { createAiClient, validateAiConfig } = require("../../src/content/ai-client");
 const { createAiProviderConfigStore } = require("../ai-provider-config-store");
+const { createAiProviderTestStatusStore } = require("../ai-provider-test-status-store");
 
 function providerError(code, message) {
   const error = new Error(message);
@@ -14,6 +15,15 @@ function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
 
+function createMemoryTestStatusStore() {
+  let value = null;
+  return {
+    read: function() { return value; },
+    write: function(next) { value = Object.assign({}, next); return value; },
+    clear: function() { value = null; return { cleared: true }; }
+  };
+}
+
 function createAiProviderService(options) {
   const values = options || {};
   const configStore = values.configStore || createAiProviderConfigStore({
@@ -21,6 +31,9 @@ function createAiProviderService(options) {
     safeStorage: values.safeStorage,
     fs: values.fs
   });
+  const testStatusStore = values.testStatusStore || (values.userDataPath
+    ? createAiProviderTestStatusStore({ userDataPath: values.userDataPath, fs: values.fs })
+    : createMemoryTestStatusStore());
   const env = values.env || process.env;
   const aiClientFactory = values.aiClientFactory || createAiClient;
   const now = values.now || function() { return new Date().toISOString(); };
@@ -50,7 +63,7 @@ function createAiProviderService(options) {
   }
 
   function statusFor(config, source) {
-    const lastTest = lastTransientTest || (config && config.lastTest) || null;
+    const lastTest = lastTransientTest || testStatusStore.read() || null;
     if (!config) {
       return { source: "application", configured: false, baseUrl: "", model: "", timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: lastTest };
     }
@@ -100,7 +113,8 @@ function createAiProviderService(options) {
     const current = applicationConfig();
     if (draft.apiKey === "" && current && current.apiKey) draft.apiKey = current.apiKey;
     const config = validate(draft);
-    configStore.write({ baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: config.timeoutMs, lastTest: null });
+    configStore.write({ baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: config.timeoutMs });
+    testStatusStore.clear();
     lastTransientTest = null;
     return statusFor(Object.assign({}, config, { lastTest: null }), "application");
   }
@@ -112,30 +126,34 @@ function createAiProviderService(options) {
     const current = applicationConfig();
     if (draftInput.apiKey === "" && current && current.apiKey) draftInput.apiKey = current.apiKey;
     const config = validate(Object.keys(draftInput).length ? draftInput : (current || {}));
+    function recordTest(result) {
+      lastTransientTest = result;
+      try { testStatusStore.write(result); } catch (_) {}
+      return result;
+    }
+
     let client;
     try {
       client = aiClientFactory({ apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model, timeoutMs: config.timeoutMs });
     } catch (_) {
-      lastTransientTest = { testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" };
+      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" });
       return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
     }
     if (!client || typeof client.complete !== "function") {
-      lastTransientTest = { testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" };
+      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" });
       return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
     }
     return Promise.resolve().then(function() {
       return client.complete([
         { role: "system", content: "Connection test" },
         { role: "user", content: "Reply with OK only" }
-      ]);
+    ]);
     }).then(function() {
       const result = { testedAt: now(), ok: true, code: "AI_CONNECTION_OK" };
-      lastTransientTest = result;
-      const persisted = current || config;
-      configStore.write({ baseUrl: persisted.baseUrl, apiKey: persisted.apiKey, model: persisted.model, timeoutMs: persisted.timeoutMs, lastTest: result });
+      recordTest(result);
       return result;
     }, function() {
-      lastTransientTest = { testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" };
+      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" });
       throw providerError("AI_CONNECTION_FAILED", "AI connection test failed");
     });
   }
@@ -144,7 +162,9 @@ function createAiProviderService(options) {
     assertNotOverridden();
     assertNotBusy();
     lastTransientTest = null;
-    return configStore.clear();
+    const result = configStore.clear();
+    testStatusStore.clear();
+    return result;
   }
 
   function getStatus() {

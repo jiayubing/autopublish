@@ -21,6 +21,17 @@ function createStore(initial) {
   };
 }
 
+function createTestStatusStore(initial) {
+  let value = initial || null;
+  const writes = [];
+  return {
+    writes: writes,
+    read: function() { return value; },
+    write: function(next) { value = Object.assign({}, next); writes.push(value); return value; },
+    clear: function() { value = null; return { cleared: true }; }
+  };
+}
+
 describe("AI provider service", function() {
   it("reports an application configuration without exposing the API key", function() {
     const service = createAiProviderService({ configStore: createStore(Object.assign({}, config, { lastTest: null })) });
@@ -81,9 +92,11 @@ describe("AI provider service", function() {
   });
 
   it("exposes a safe transient failure without writing or replacing the saved configuration", async function() {
-    const store = createStore(Object.assign({}, config, { lastTest: { testedAt: "2026-07-14T00:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" } }));
+    const store = createStore(config);
+    const testStatusStore = createTestStatusStore({ testedAt: "2026-07-14T00:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" });
     const service = createAiProviderService({
       configStore: store,
+      testStatusStore: testStatusStore,
       now: function() { return "2026-07-15T02:00:00.000Z"; },
       aiClientFactory: function() { return { complete: async function() { throw new Error("provider-secret-key leaked"); } }; }
     });
@@ -95,16 +108,18 @@ describe("AI provider service", function() {
     assert.deepStrictEqual(service.getStatus().lastTest, {
       testedAt: "2026-07-15T02:00:00.000Z", ok: false, code: "AI_CONNECTION_FAILED"
     });
-    assert.deepStrictEqual(store.read().lastTest, {
-      testedAt: "2026-07-14T00:00:00.000Z", ok: true, code: "AI_CONNECTION_OK"
+    assert.deepStrictEqual(testStatusStore.read(), {
+      testedAt: "2026-07-15T02:00:00.000Z", ok: false, code: "AI_CONNECTION_FAILED"
     });
     assert.equal(JSON.stringify(service.getStatus()).includes("provider-secret-key"), false);
   });
 
   it("records only a safe successful test result, supports clear, and fingerprints settings", async function() {
     const store = createStore(config);
+    const testStatusStore = createTestStatusStore();
     const service = createAiProviderService({
       configStore: store,
+      testStatusStore: testStatusStore,
       now: function() { return "2026-07-15T00:00:00.000Z"; },
       aiClientFactory: function() { return { complete: async function() { return "OK"; } }; }
     });
@@ -112,16 +127,20 @@ describe("AI provider service", function() {
     const result = await service.testConnection(config);
     assert.deepStrictEqual(result, { testedAt: "2026-07-15T00:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" });
     assert.deepStrictEqual(service.getStatus().lastTest, result);
-    assert.equal(store.writes.some(function(value) { return Object.prototype.hasOwnProperty.call(value, "answer"); }), false);
+    assert.equal(store.writes.length, 0);
+    assert.equal(testStatusStore.writes.length, 1);
     assert.equal(service.getFingerprint(), before);
     assert.deepStrictEqual(service.clear(), { cleared: true });
+    assert.deepStrictEqual(testStatusStore.read(), null);
     assert.equal(service.getStatus().configured, false);
   });
 
-  it("persists a successful first connection test when no application config exists", async function() {
+  it("tests a first draft without creating formal application configuration", async function() {
     const store = createStore();
+    const testStatusStore = createTestStatusStore();
     const service = createAiProviderService({
       configStore: store,
+      testStatusStore: testStatusStore,
       now: function() { return "2026-07-15T01:00:00.000Z"; },
       aiClientFactory: function() { return { complete: async function() { return "OK"; } }; }
     });
@@ -130,12 +149,11 @@ describe("AI provider service", function() {
 
     assert.deepStrictEqual(result, { testedAt: "2026-07-15T01:00:00.000Z", ok: true, code: "AI_CONNECTION_OK" });
     assert.deepStrictEqual(service.getStatus(), {
-      source: "application", configured: true, baseUrl: config.baseUrl, model: config.model,
-      timeoutMs: 60000, hasApiKey: true, apiKeyMask: "••••••••", lastTest: result
+      source: "application", configured: false, baseUrl: "", model: "",
+      timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: result
     });
-    assert.deepStrictEqual(store.read(), {
-      baseUrl: config.baseUrl, apiKey: config.apiKey, model: config.model, timeoutMs: 60000, lastTest: result
-    });
+    assert.equal(store.writes.length, 0);
+    assert.deepStrictEqual(testStatusStore.read(), result);
   });
 
   it("blocks configuration mutations while a generation batch is running or stopping", function() {

@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 
 const { createContentSubmissionService } = require("../desktop/services/content-submission-service");
+const { createSubmissionBatchStore } = require("../src/content/submission-batch-store");
 
 function article(id, status = "saved", content = "Body") {
   return { id, clientId: "client-1", title: "Title " + id, content, status, createdAt: "2026-07-15T00:00:00.000Z" };
@@ -52,6 +53,13 @@ describe("content submission batch", function() {
       assert.equal(fs.existsSync(first.items[0].filePath), true);
       const second = service.createBatch(input);
       assert.equal(second.idempotentCount, 1);
+      const duplicatePreview = service.previewBatch({ clientId: "client-1", articleIds: ["saved"], targetPlatformIds: ["toutiao"] });
+      assert.equal(duplicatePreview.totalTaskCount, 1);
+      assert.equal(duplicatePreview.queueableTaskCount, 0);
+      assert.equal(duplicatePreview.idempotentCount, 1);
+      const batches = service.listBatches("client-1");
+      const duplicateBatch = batches.find((batch) => batch.status === "completed");
+      assert.equal(duplicateBatch.items[0].status, "skipped");
       fs.writeFileSync(first.items[0].filePath, "changed", "utf8");
       assert.equal(service.previewBatch(input).conflictCount, 1);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
@@ -88,6 +96,18 @@ describe("content submission batch", function() {
       assert.equal(cancelled.cancelledCount, 1);
       assert.equal(fs.existsSync(batch.items[0].filePath), false);
       assert.equal(service.cancelBatch({ batchId: batch.batchId, confirmed: true }).cancelledCount, 0);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("lists batches by created time and stable id instead of filesystem order", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-batch-order-"));
+    try {
+      const store = createSubmissionBatchStore({ workspaceRoot: root });
+      store.save({ id: "same-z", clientId: "client-1", createdAt: "2026-07-15T00:00:00.000Z", status: "queued", items: [] });
+      store.save({ id: "same-a", clientId: "client-1", createdAt: "2026-07-15T00:00:00.000Z", status: "queued", items: [] });
+      store.save({ id: "newer", clientId: "client-1", createdAt: "2026-07-16T00:00:00.000Z", status: "queued", items: [] });
+      fs.writeFileSync(path.join(root, ".autopublish", "submission-batches", "batch-damaged.json"), JSON.stringify({ id: "damaged", createdAt: "not-a-date", items: [] }), "utf8");
+      assert.deepStrictEqual(store.list().map((batch) => batch.id), ["newer", "same-z", "same-a", "damaged"]);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 });

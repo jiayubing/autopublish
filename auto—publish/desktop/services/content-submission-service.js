@@ -59,7 +59,7 @@ function createContentSubmissionService(opts) {
         items.push(item);
       });
     });
-    return { clientId: input.clientId, articleIds: input.articleIds.slice(), targetPlatformIds: input.targetPlatformIds.slice(), totalTaskCount: input.articleIds.length * input.targetPlatformIds.length, queueableTaskCount: items.filter((item) => item.status === "queueable" || item.status === "idempotent").length, idempotentCount: items.filter((item) => item.status === "idempotent").length, conflictCount: conflicts.length, unreviewedArticleIds: [...new Set(unreviewedArticleIds)], missingArticleIds, unsupportedPlatformIds, items };
+    return { clientId: input.clientId, articleIds: input.articleIds.slice(), targetPlatformIds: input.targetPlatformIds.slice(), totalTaskCount: input.articleIds.length * input.targetPlatformIds.length, queueableTaskCount: items.filter((item) => item.status === "queueable").length, idempotentCount: items.filter((item) => item.status === "idempotent").length, conflictCount: conflicts.length, unreviewedArticleIds: [...new Set(unreviewedArticleIds)], missingArticleIds, unsupportedPlatformIds, items };
   }
   function listPlatforms() {
     return availablePlatforms().map((platform) => ({ id: platform.id, displayName: platform.displayName || platform.id, scanDir: platform.scanDir || platform.id, contentQueueImport: platform.contentQueueImport === true }));
@@ -75,7 +75,7 @@ function createContentSubmissionService(opts) {
     try {
       preview.items.forEach((item) => {
         if (item.status !== "queueable" && item.status !== "idempotent") { batch.items.push(Object.assign({}, item)); return; }
-        if (item.status === "idempotent") { idempotentCount += 1; batch.items.push(Object.assign({}, item, { status: "queued", submissionBatchId: batchId })); return; }
+        if (item.status === "idempotent") { idempotentCount += 1; batch.items.push(Object.assign({}, item, { status: "skipped" })); return; }
         fs.mkdirSync(path.dirname(item.filePath), { recursive: true });
         const article = store.getArticle(input.clientId, item.articleId);
         const markdown = articleMarkdown(article);
@@ -87,6 +87,7 @@ function createContentSubmissionService(opts) {
       batch.items.filter((item) => item.submissionBatchId === batchId && item.status === "queued").forEach((item) => { try { removeSubmissionPair(item.filePath, item.sidecarPath); } catch (_) {} });
       throw error;
     }
+    batch.status = createdCount > 0 ? "queued" : "completed";
     batchStore.save(batch);
     return Object.assign({ batchId, createdCount, idempotentCount, items: batch.items }, preview);
   }

@@ -55,7 +55,7 @@ function createAiProviderConfigStore(options) {
     if (!parsed || parsed.version !== 1 || typeof parsed.baseUrl !== "string" ||
         typeof parsed.encryptedApiKey !== "string" || !parsed.encryptedApiKey ||
         typeof parsed.model !== "string" || !Number.isFinite(Number(parsed.timeoutMs)) ||
-        Number(parsed.timeoutMs) <= 0 || (parsed.lastTest !== null && typeof parsed.lastTest !== "object")) {
+        Number(parsed.timeoutMs) <= 0 || (parsed.lastTest !== undefined && parsed.lastTest !== null && typeof parsed.lastTest !== "object")) {
       throw storeError("AI_CONFIG_STORAGE_INVALID", "AI provider configuration file is invalid");
     }
     return parsed;
@@ -70,8 +70,7 @@ function createAiProviderConfigStore(options) {
         baseUrl: parsed.baseUrl,
         apiKey: apiKey,
         model: parsed.model,
-        timeoutMs: Number(parsed.timeoutMs),
-        lastTest: parsed.lastTest || null
+        timeoutMs: Number(parsed.timeoutMs)
       };
     } catch (_) {
       throw storeError("AI_CONFIG_STORAGE_INVALID", "AI provider configuration file is invalid");
@@ -102,8 +101,7 @@ function createAiProviderConfigStore(options) {
         encryptedApiKey: encrypted.toString("base64"),
         model: config.model,
         timeoutMs: Number(config.timeoutMs),
-        updatedAt: new Date().toISOString(),
-        lastTest: config.lastTest === undefined ? null : config.lastTest
+        updatedAt: new Date().toISOString()
       };
       const temporaryPath = path.join(userDataPath, "." + FILE_NAME + "." + crypto.randomUUID() + ".tmp");
       try {

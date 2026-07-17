@@ -108,13 +108,13 @@ describe("media-order-service", function() {
     }
   });
 
-  it("lets the drawer consume order view DTOs directly", function() {
-    const source = read("desktop/renderer/media-orders-drawer.js");
+  it("lets the React orders view consume order view DTOs directly", function() {
+    const source = read("media-workbench/src/components/OrdersView.tsx");
 
     [
       "order.title",
-      "order.statusLabel",
-      "order.publishedAt || order.submittedAt",
+      "statusInfo.label",
+      "order.publishedAt",
       "order.orderNid"
     ].forEach(function(snippet) {
       assert.ok(source.includes(snippet), "missing DTO usage: " + snippet);

@@ -1,24 +1,22 @@
-﻿const { describe, it } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 function read(file) {
   return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
 }
 
 describe("media resource ux", function() {
-  it("shows balance and price fields and keeps the resource search input stable", function() {
+  it("keeps normalized balance and resource paging on the service boundary", function() {
     const service = read("desktop/services/media-resource-service.js");
-    const library = read("desktop/renderer/media-resource-library.js");
-    const workbench = read("desktop/renderer/media-workbench.js");
-
-    assert.ok(service.includes("extractBalanceValue"), "missing normalized balance extraction");
-    assert.ok(service.includes("balance:"), "missing normalized balance dto");
-    assert.ok(library.includes("resource.price"), "missing pool/resource price rendering");
-    assert.ok(library.includes("setTimeout"), "missing search debounce");
-    assert.ok(library.includes("restoreSearchFocus"), "missing search focus restore state");
-    assert.ok(library.includes("setSelectionRange"), "missing search cursor restore");
-    assert.ok(workbench.includes("余额: "), "missing readable balance display");
+    const library = read("media-workbench/src/components/ResourceLibrary.tsx");
+    const app = read("media-workbench/src/App.tsx");
+    assert.match(service, /extractBalanceValue/);
+    assert.match(service, /balance:/);
+    assert.match(library, /resource\.price/);
+    assert.match(library, /setSearchQuery/);
+    assert.match(library, /setCurrentPage/);
+    assert.match(app, /getBalance/);
   });
 });

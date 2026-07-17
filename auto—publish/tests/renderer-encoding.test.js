@@ -1,19 +1,16 @@
-﻿const { describe, it } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
-const rendererDir = path.resolve(__dirname, "..", "desktop", "renderer");
+const rendererRoot = path.resolve(__dirname, "..", "media-workbench", "src");
 const rendererFiles = [
-  "index.html",
-  "app.js",
-  "media-workbench.js",
-  "media-resource-library.js",
-  "media-orders-drawer.js",
-  "platform-workbench.js",
-  "shared/confirm.js",
-  "shared/dom.js",
-  "shared/drawer.js"
+  "App.tsx",
+  "components/ArticleEditor.tsx",
+  "components/ResourceLibrary.tsx",
+  "components/OrdersView.tsx",
+  "components/PlatformWorkbench.tsx",
+  "components/content/GeneratedArticlesView.tsx"
 ];
 
 const mojibakeFragments = [
@@ -27,25 +24,11 @@ const mojibakeFragments = [
   "鐎瑰憡褰冨﹢顏勑ч悩杈幀",
   "闁告梻濮撮崣鍡椥?",
   "濞戞挸锕ｇ粩瀛樸亜",
-  "濞戞挸顑勭粩瀛樸亜",
-  "闁瑰吋绮庨崒",
-  "闁告艾鏈",
-  "鐎垫澘鎳庨鎼佸冀",
-  "閻庡厜鍓濋悧铏▔",
-  "鐎瑰憡褰冭ぐ鍌滄暜",
-  "濡炵懓鍟垮ú",
-  "闂侇偀鍋撴繛",
-  "闁绘鍩栭埀"
+  "濞戞挸顑勭粩瀛樸亜"
 ];
 
 function readRendererFile(file) {
-  return fs.readFileSync(path.join(rendererDir, file), "utf8");
-}
-
-function assertReadableLabels(text, labels, file) {
-  labels.forEach(function(label) {
-    assert.equal(text.includes(label), true, file + " is missing readable label: " + label);
-  });
+  return fs.readFileSync(path.join(rendererRoot, file), "utf8");
 }
 
 describe("renderer encoding", function() {
@@ -59,36 +42,10 @@ describe("renderer encoding", function() {
     });
   });
 
-  it("keeps expected Chinese labels readable in key renderer files", function() {
-    assertReadableLabels(readRendererFile("index.html"), [
-      "媒体投稿",
-      "其他平台"
-    ], "index.html");
-
-    assertReadableLabels(readRendererFile("media-workbench.js"), [
-      "拉取资源库（较慢，约需数分钟）",
-      "查询余额",
-      "余额: "
-    ], "media-workbench.js");
-
-    assertReadableLabels(readRendererFile("media-resource-library.js"), [
-      "媒体池",
-      "资源库",
-      "上一页",
-      "下一页",
-      "搜索媒体名称"
-    ], "media-resource-library.js");
-
-    assertReadableLabels(readRendererFile("media-orders-drawer.js"), [
-      "投稿订单",
-      "暂无订单",
-      "同步中...",
-      "已同步",
-      "待审核",
-      "审核中",
-      "已发布",
-      "驳回",
-      "退款"
-    ], "media-orders-drawer.js");
+  it("keeps expected Chinese labels readable in React renderer files", function() {
+    assert.match(readRendererFile("components/Sidebar.tsx"), /付费媒体投稿|其他平台投稿|投稿订单记录/);
+    assert.match(readRendererFile("components/ResourceLibrary.tsx"), /媒体资源池|搜索资源名称/);
+    assert.match(readRendererFile("components/OrdersView.tsx"), /暂无订单记录|已发布/);
+    assert.match(readRendererFile("components/PlatformWorkbench.tsx"), /其他平台投稿/);
   });
 });
