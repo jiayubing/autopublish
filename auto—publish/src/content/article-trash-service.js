@@ -86,11 +86,13 @@ function createArticleTrashService(options) {
 
   function preparePermanentDelete(input) {
     const item = selection(input);
-    const tombstone = articleStore.listTrashedArticles(item.clientId).find(function(value) { return value.articleId === item.articleId; });
+    const tombstone = typeof articleStore.getTrashedTombstone === "function"
+      ? articleStore.getTrashedTombstone(item.clientId, item.articleId)
+      : articleStore.listTrashedArticles(item.clientId).find(function(value) { return value.articleId === item.articleId; });
     if (!tombstone) throw trashError("ARTICLE_NOT_FOUND", "Trashed article was not found");
     const token = crypto.randomUUID();
     confirmations.set(token, item);
-    return { token: token, clientId: item.clientId, articleId: item.articleId, deletedAt: tombstone.deletedAt, status: tombstone.status };
+    return { token: token, clientId: item.clientId, articleId: item.articleId, deletedAt: tombstone.deletedAt, status: tombstone.status, permanentlyDeleted: tombstone.permanentlyDeleted === true };
   }
 
   function permanentlyDeleteArticle(input) {
@@ -102,7 +104,7 @@ function createArticleTrashService(options) {
     if (!confirmed || confirmed.clientId !== item.clientId || confirmed.articleId !== item.articleId) {
       throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_INVALID", "Permanent deletion confirmation is invalid");
     }
-    const tombstone = articleStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId);
+    const tombstone = articleStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId, now());
     confirmations.delete(input.token);
     return { clientId: item.clientId, articleId: item.articleId, deleted: true, deletedAt: tombstone.deletedAt };
   }

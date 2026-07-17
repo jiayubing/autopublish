@@ -94,6 +94,46 @@ describe("article trash service", function() {
     }, function(error) { return error.code === "ARTICLE_PERMANENT_DELETE_CONFIRMATION_INVALID"; });
   });
 
+  it("keeps only a terminal tombstone after permanent deletion and never restores the article", function() {
+    store.saveArticle(article("purged-article", { status: "saved", generationBatchId: "batch-1" }));
+    trash.trashArticles({ articles: [{ clientId: "client-1", articleId: "purged-article" }], confirmed: true });
+    const confirmation = trash.preparePermanentDelete({ clientId: "client-1", articleId: "purged-article" });
+    assert.deepStrictEqual(trash.permanentlyDeleteArticle({
+      clientId: "client-1", articleId: "purged-article", token: confirmation.token
+    }), {
+      clientId: "client-1", articleId: "purged-article", deleted: true, deletedAt: "2026-07-15T12:00:00.000Z"
+    });
+
+    const trashRoot = path.join(root, ".autopublish", "article-trash", "client-1");
+    const tombstonePath = path.join(trashRoot, "purged-article.tombstone.json");
+    assert.equal(fs.existsSync(path.join(trashRoot, "purged-article.json")), false);
+    assert.equal(fs.existsSync(path.join(trashRoot, "purged-article.md")), false);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(tombstonePath, "utf8")), {
+      version: 1,
+      deletedAt: "2026-07-15T12:00:00.000Z",
+      clientId: "client-1",
+      articleId: "purged-article",
+      status: "saved",
+      references: [{ type: "generation-batch", id: "batch-1" }],
+      permanentlyDeleted: true,
+      purgedAt: "2026-07-15T12:00:00.000Z"
+    });
+    assert.deepStrictEqual(trash.listTrashedArticles("client-1"), []);
+    assert.throws(function() {
+      trash.restoreArticle({ clientId: "client-1", articleId: "purged-article" });
+    }, function(error) { return error.code === "ARTICLE_PERMANENTLY_DELETED"; });
+
+    const repeatPreparation = trash.preparePermanentDelete({ clientId: "client-1", articleId: "purged-article" });
+    assert.equal(repeatPreparation.permanentlyDeleted, true);
+    assert.deepStrictEqual(trash.permanentlyDeleteArticle({
+      clientId: "client-1", articleId: "purged-article", token: repeatPreparation.token
+    }), {
+      clientId: "client-1", articleId: "purged-article", deleted: true, deletedAt: "2026-07-15T12:00:00.000Z"
+    });
+    assert.equal(fs.existsSync(path.join(root, "generated", "client-1", "purged-article.json")), false);
+    assert.equal(fs.existsSync(path.join(root, "generated", "client-1", "purged-article.md")), false);
+  });
+
   it("does not create a tombstone when the source article is damaged", function() {
     store.saveArticle(article("damaged"));
     fs.unlinkSync(path.join(root, "generated", "client-1", "damaged.md"));
