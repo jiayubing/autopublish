@@ -24,9 +24,18 @@ function makeFixture() {
   write(sourceRoot, "data/content-generation-batches/batch-1.json", '{"id":"batch-1"}\n');
   write(sourceRoot, "data/submission-queues/queue-1.json", '{"id":"queue-1"}\n');
   write(sourceRoot, "data/submission-records/record-1.json", '{"id":"record-1"}\n');
+  write(sourceRoot, "data/media-resources.json", '{"items":[]}\n');
+  write(sourceRoot, "data/media-pool.json", '{"items":[]}\n');
+  write(sourceRoot, "data/media-drafts.json", '{"items":[]}\n');
+  write(sourceRoot, "data/submission-orders.jsonl", '{"id":"order-1"}\n');
+  write(sourceRoot, "input/media/source.docx", "media input\n");
+  write(sourceRoot, "published/article.md", "published article\n");
   write(sourceRoot, "logs/app.log", "diagnostic log\n");
   write(sourceRoot, "work/client-material-cache/acme/material.json", '{"cached":true}\n');
   write(sourceRoot, "work/playwright-cli/profiles/doubao/session.json", '{"profile":true}\n');
+  write(sourceRoot, "work/playwright-cli/profiles/lieju/session.json", '{"lieju":true}\n');
+  write(sourceRoot, "work/playwright-cli/profiles/toutiao/session.json", '{"toutiao":true}\n');
+  write(sourceRoot, "work/playwright-cli/state/lieju.json", '{"state":true}\n');
   write(sourceRoot, ".env", [
     "HEPAN_PYTHON=python3",
     "HEPAN_VENDOR_DIR=C:\\vendor",
@@ -148,9 +157,15 @@ describe("content library v2 migration", function() {
       assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/research/acme/question-1.json"), "utf8"), '{"answer":"answer"}\n');
       assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/batches/batch-1.json"), "utf8"), '{"id":"batch-1"}\n');
       assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/queue/queue-1.json"), "utf8"), '{"id":"queue-1"}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/data/media-resources.json"), "utf8"), '{"items":[]}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/input/media/source.docx"), "utf8"), "media input\n");
+      assert.equal(fs.readFileSync(path.join(fixture.contentLibraryRoot, ".autopublish/published/article.md"), "utf8"), "published article\n");
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "logs/app.log"), "utf8"), "diagnostic log\n");
       assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "cache/client-material/acme/material.json"), "utf8"), '{"cached":true}\n');
-      assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser-profile/playwright-cli/profiles/doubao/session.json"), "utf8"), '{"profile":true}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser/doubao/session.json"), "utf8"), '{"profile":true}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser/profiles/lieju/session.json"), "utf8"), '{"lieju":true}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser/profiles/toutiao/session.json"), "utf8"), '{"toutiao":true}\n');
+      assert.equal(fs.readFileSync(path.join(fixture.localStateRoot, "browser/state/lieju.json"), "utf8"), '{"state":true}\n');
       const appConfig = JSON.parse(fs.readFileSync(fixture.appConfigPath, "utf8"));
       assert.equal(appConfig.values.HEPAN_PYTHON, "python3");
       assert.equal(appConfig.values.HEPAN_VENDOR_DIR, "C:\\vendor");
