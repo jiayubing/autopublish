@@ -2,18 +2,23 @@ function assertPlaywrightAvailable(runtimeDiagnosticsService) {
   if (!runtimeDiagnosticsService || typeof runtimeDiagnosticsService.diagnose !== "function") return;
   const diagnostics = runtimeDiagnosticsService.diagnose();
   if (!diagnostics.tools.playwrightNode.command) {
-    const error = new Error("内置 Playwright Node 不可用，请重新安装应用。");
+    const error = new Error("Bundled Playwright Node is unavailable");
     error.code = "PLAYWRIGHT_NODE_UNAVAILABLE";
     throw error;
   }
   if (!diagnostics.tools.playwrightCli.command) {
-    const error = new Error("内置 Playwright CLI 不可用，请重新安装应用。");
+    const error = new Error("Bundled Playwright CLI is unavailable");
     error.code = "PLAYWRIGHT_CLI_UNAVAILABLE";
     throw error;
   }
-  if (!diagnostics.tools.browserChannel.available) {
-    const error = new Error("浏览器通道不可用，请安装 Edge 或在应用级设置中选择可用的 Chrome 通道。");
-    error.code = "BROWSER_CHANNEL_UNAVAILABLE";
+  if (!diagnostics.tools.browserChannel.configured) {
+    const error = new Error("Browser channel configuration is invalid");
+    error.code = "BROWSER_CHANNEL_INVALID";
+    throw error;
+  }
+  if (diagnostics.capabilities && diagnostics.capabilities.browserChannel && diagnostics.capabilities.browserChannel.state === "unavailable") {
+    const error = new Error("Browser channel is unavailable");
+    error.code = diagnostics.capabilities.browserChannel.errorCode || "BROWSER_CHANNEL_UNAVAILABLE";
     throw error;
   }
 }
