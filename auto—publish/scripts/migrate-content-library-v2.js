@@ -184,13 +184,26 @@ function inspectDestination(records, roots) {
 
 function atomicWrite(filename, contents) {
   fs.mkdirSync(path.dirname(filename), { recursive: true });
-  const temp = filename + ".tmp-" + process.pid + "-" + crypto.randomBytes(6).toString("hex");
-  try {
-    fs.writeFileSync(temp, contents, "utf8");
-    fs.renameSync(temp, filename);
-  } finally {
-    try { fs.unlinkSync(temp); } catch (_) {}
+  const retryable = new Set(["EPERM", "EACCES", "EBUSY", "UNKNOWN"]);
+  let lastError;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const temp = filename + ".tmp-" + process.pid + "-" + crypto.randomBytes(6).toString("hex");
+    try {
+      fs.writeFileSync(temp, contents, "utf8");
+      // A locked destination may make Windows rename fail temporarily. Retry
+      // the atomic replacement, but never fall back to copy/write: both
+      // operations can truncate or overwrite the last valid migration proof.
+      fs.renameSync(temp, filename);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!retryable.has(error.code) || attempt === 19) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    } finally {
+      try { fs.unlinkSync(temp); } catch (_) {}
+    }
   }
+  throw lastError;
 }
 
 function parseArguments(argv) {

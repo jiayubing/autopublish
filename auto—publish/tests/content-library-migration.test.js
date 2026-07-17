@@ -197,6 +197,30 @@ describe("content library v2 migration", function() {
     }
   });
 
+  it("preserves the last valid manifest when Windows keeps the destination locked", function() {
+    const fixture = makeFixture();
+    const manifestPath = path.join(fixture.contentLibraryRoot, ".autopublish", migration.MANIFEST_NAME);
+    const previous = JSON.stringify({ version: 2, status: "complete", proof: "previous" }) + "\n";
+    write(fixture.contentLibraryRoot, path.join(".autopublish", migration.MANIFEST_NAME), previous);
+    const originalRename = fs.renameSync;
+    try {
+      fs.renameSync = function(source, target) {
+        if (path.resolve(target) === path.resolve(manifestPath)) {
+          const error = new Error("destination is locked");
+          error.code = "EBUSY";
+          throw error;
+        }
+        return originalRename(source, target);
+      };
+      assert.throws(() => createMigrator(fixture).migrate({ confirmed: true }), (error) => error.code === "EBUSY");
+      assert.equal(fs.readFileSync(manifestPath, "utf8"), previous);
+      assert.equal(fs.existsSync(path.join(fixture.contentLibraryRoot, "generated", "acme", "article.md")), false);
+    } finally {
+      fs.renameSync = originalRename;
+      fs.rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects symlinked source entries and does not follow them", function(t) {
     const fixture = makeFixture();
     const outside = path.join(fixture.root, "outside");
