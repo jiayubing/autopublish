@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
 import { cancelContentSubmissionBatch, createContentSubmissionBatch, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewContentSubmissionBatch, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashRecord } from '../../electron-api';
-import { groupArticlesByTemplate, summarizeTemplateSnapshot } from '../../article-history-logic';
+import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ContentSubmissionPlatform, GeneratedContentArticle } from '../../types';
 import { formatBeijingTime } from '../../time-format';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; onArticleSelect: (article: GeneratedContentArticle) => void; onRefresh?: () => void; }
 
-function selectionKey(article: GeneratedContentArticle) { return article.clientId + '\u0000' + article.id; }
+function selectionKey(article: GeneratedContentArticle) { return articleSelectionKey(article); }
 
 export default function GeneratedArticlesView({ clientId, refreshToken, onArticleSelect, onRefresh }: GeneratedArticlesViewProps) {
   const [articles, setArticles] = useState<GeneratedContentArticle[]>([]);
@@ -48,7 +48,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     });
   }, [articles, filter, statusFilter, queuedArticleIds]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
-  const reviewable = filtered.filter((article) => article.status === 'generated');
+  const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
+  const reviewable = operable.filter((article) => article.status === 'generated');
   const selectedReviewable = reviewable.filter((article) => selected.includes(selectionKey(article)));
   const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)));
   const latestQueuedBatch = submissionBatches.find((batch) => batch.status === 'queued');
@@ -60,7 +61,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   }
 
   function toggleGroup(groupArticles: GeneratedContentArticle[]) {
-    const ids = groupArticles.filter((article) => article.status === 'generated' || article.status === 'saved').map(selectionKey);
+    const ids = selectableArticles(groupArticles, clientId).map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
     setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
@@ -86,7 +87,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       const input = { clientId, articleIds: selectedSaved.map((article) => article.id), targetPlatformIds };
       const preview = await previewContentSubmissionBatch(input);
       if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有可入队的已审核文章');
-      if (!window.confirm(`确认将 ${preview.queueableTaskCount} 项内容加入投稿队列？`)) return;
+      if (!window.confirm(`新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，冲突 ${preview.conflictCount} 项。确认继续？`)) return;
       await createContentSubmissionBatch({ ...input, confirmed: true });
       setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefresh?.();
     } catch (value) { setError(value instanceof Error ? value.message : '批量入队失败'); }
@@ -139,7 +140,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   }
 
   function toggleAll() {
-    const ids = reviewable.map(selectionKey);
+    const ids = operable.map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
     setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
@@ -156,7 +157,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="筛选标题、平台或模板" aria-label="筛选历史文章" className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
       <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="文章状态" className="h-9 rounded-md border border-slate-300 px-2 text-xs"><option value="all">全部状态</option><option value="generated">待审核</option><option value="saved">已审核</option><option value="queued">已入队</option></select>
       <button type="button" onClick={() => setShowTrash(true)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">打开回收站</button>
-      <button type="button" onClick={toggleAll} disabled={!reviewable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
+      <button type="button" onClick={toggleAll} disabled={!operable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
       <button type="button" onClick={() => void reviewSelected()} disabled={!selectedReviewable.length || busy} className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">审核已选 ({selectedReviewable.length})</button>
       <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">删除历史文章 ({selectedArticles.length})</button>
       {latestQueuedBatch && <button type="button" onClick={() => void cancelLatestBatch()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销最近入队</button>}
@@ -166,14 +167,15 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     <div className="grid gap-3">
       {groups.map((group) => {
-        const groupReviewable = group.articles.filter((article) => article.status === 'generated');
-        const groupSelected = groupReviewable.length > 0 && groupReviewable.every((article) => selected.includes(selectionKey(article)));
+        const groupSelectable = selectableArticles(group.articles, clientId);
+        const groupSelection = selectionState(group.articles, selected, clientId);
+        const groupReviewable = groupSelectable.filter((article) => article.status === 'generated');
         const isCollapsed = collapsed[group.key] !== false;
         const templateSnapshot = group.templateSnapshot;
         const snapshotBody = summarizeTemplateSnapshot(templateSnapshot);
         return <section key={group.key} className="rounded-md border border-slate-200 bg-white">
           <div className="flex items-center gap-3 border-b border-slate-100 p-3">
-            <input type="checkbox" aria-label={`全选 ${group.label}`} checked={groupSelected} onChange={() => toggleGroup(group.articles)} disabled={!groupReviewable.length || busy} />
+            <input type="checkbox" aria-label={`全选 ${group.label}`} checked={groupSelection.checked} ref={(element) => { if (element) element.indeterminate = groupSelection.indeterminate; }} onChange={() => toggleGroup(group.articles)} disabled={groupSelection.disabled || busy} />
             <button type="button" onClick={() => setCollapsed((current) => ({ ...current, [group.key]: !isCollapsed }))} className="flex min-w-0 flex-1 items-center gap-2 text-left">
               <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.platform} · {group.label}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 待审核 {groupReviewable.length} · 最新 {formatBeijingTime(group.articles[0]?.createdAt)}</span>{templateSnapshot && <span className="mt-1 block truncate text-xs text-slate-400">场景：{templateSnapshot.scenario} · 正文解释：{snapshotBody}</span>}</span>
             </button>

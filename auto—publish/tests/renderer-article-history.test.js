@@ -6,6 +6,9 @@ const path = require("path");
 let groupArticlesByTemplate;
 let resolveAvailableTemplateId;
 let summarizeTemplateSnapshot;
+let articleSelectionKey;
+let selectableArticles;
+let selectionState;
 
 function item(id, platform, templateId, createdAt, overrides) {
   return Object.assign({
@@ -27,6 +30,9 @@ describe("article history grouping", async function() {
   groupArticlesByTemplate = historyLogic.groupArticlesByTemplate;
   resolveAvailableTemplateId = historyLogic.resolveAvailableTemplateId;
   summarizeTemplateSnapshot = historyLogic.summarizeTemplateSnapshot;
+  articleSelectionKey = historyLogic.articleSelectionKey;
+  selectableArticles = historyLogic.selectableArticles;
+  selectionState = historyLogic.selectionState;
   it("groups by platform and template snapshot, sorting groups and articles by createdAt", function() {
     const groups = groupArticlesByTemplate([
       item("old-a", "ctrip", "a", "2026-07-10T00:00:00.000Z", { reviewedAt: "2026-07-15T00:00:00.000Z" }),
@@ -94,5 +100,45 @@ describe("article history grouping", async function() {
     assert.match(view, /文章状态/);
     assert.match(view, /撤销最近入队/);
     assert.match(view, /listContentSubmissionBatches/);
+    assert.match(view, /queueableTaskCount/);
+    assert.match(view, /idempotentCount/);
+    assert.match(view, /conflictCount/);
+    assert.match(view, /新增/);
+    assert.match(view, /已存在跳过/);
+    assert.match(view, /冲突/);
+
+  });
+
+  it("selects a saved-only filtered result", function() {
+    const saved = item("saved", "ctrip", "guide", "2026-07-15T00:00:00.000Z", { status: "saved" });
+    assert.deepStrictEqual(selectableArticles([saved], "c1"), [saved]);
+    assert.deepStrictEqual(selectionState([saved], [articleSelectionKey(saved)], "c1"), {
+      total: 1, selected: 1, checked: true, indeterminate: false, disabled: false
+    });
+  });
+
+  it("keeps generated and saved articles in one mixed selection with indeterminate state", function() {
+    const generated = item("generated", "ctrip", "guide", "2026-07-15T00:00:00.000Z");
+    const saved = item("saved", "ctrip", "guide", "2026-07-14T00:00:00.000Z", { status: "saved" });
+    const foreign = item("foreign", "ctrip", "guide", "2026-07-13T00:00:00.000Z", { clientId: "other-client", status: "saved" });
+    const state = selectionState([generated, saved, foreign], [articleSelectionKey(generated)], "c1");
+    assert.deepStrictEqual(selectableArticles([generated, saved, foreign], "c1").map((article) => article.id), ["generated", "saved"]);
+    assert.equal(state.total, 2);
+    assert.equal(state.selected, 1);
+    assert.equal(state.checked, false);
+    assert.equal(state.indeterminate, true);
+    assert.equal(state.disabled, false);
+  });
+
+  it("scopes selection state to the currently filtered result", function() {
+    const generated = item("generated", "ctrip", "guide", "2026-07-15T00:00:00.000Z");
+    const saved = item("saved", "ctrip", "guide", "2026-07-14T00:00:00.000Z", { status: "saved" });
+    const selectedSaved = [articleSelectionKey(saved)];
+    assert.deepStrictEqual(selectionState([generated], selectedSaved, "c1"), {
+      total: 1, selected: 0, checked: false, indeterminate: false, disabled: false
+    });
+    assert.deepStrictEqual(selectionState([saved], selectedSaved, "c1"), {
+      total: 1, selected: 1, checked: true, indeterminate: false, disabled: false
+    });
   });
 });

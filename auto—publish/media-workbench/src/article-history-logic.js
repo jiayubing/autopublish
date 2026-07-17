@@ -27,6 +27,29 @@ function compareCreatedAt(left, right) {
   return time || String(right.id || "").localeCompare(String(left.id || ""));
 }
 
+export function articleSelectionKey(article) {
+  return String(article?.clientId || "") + "\u0000" + String(article?.id || "");
+}
+
+export function selectableArticles(articles, clientId) {
+  return (Array.isArray(articles) ? articles : []).filter(function(article) {
+    return (!clientId || article?.clientId === clientId) && (article?.status === "generated" || article?.status === "saved");
+  });
+}
+
+export function selectionState(articles, selectedKeys, clientId) {
+  const candidates = selectableArticles(articles, clientId);
+  const selected = new Set(Array.isArray(selectedKeys) ? selectedKeys : []);
+  const selectedCount = candidates.filter((article) => selected.has(articleSelectionKey(article))).length;
+  return {
+    total: candidates.length,
+    selected: selectedCount,
+    checked: candidates.length > 0 && selectedCount === candidates.length,
+    indeterminate: selectedCount > 0 && selectedCount < candidates.length,
+    disabled: candidates.length === 0
+  };
+}
+
 export function groupArticlesByTemplate(articles) {
   const groups = new Map();
   (Array.isArray(articles) ? articles : []).forEach(function(article) {
