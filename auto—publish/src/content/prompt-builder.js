@@ -87,9 +87,9 @@ function buildPrompt(input) {
   const client = Object.assign({}, input.client || {});
   const template = input.template || {};
   const platform = text(input.platform || template.platform);
-  const scenario = text(input.scenario || template.scenario);
-  if (!platform || !scenario || typeof template.body !== "string" || !template.body.trim()) {
-    throw promptError("PROMPT_TEMPLATE_REQUIRED", "Platform, scenario, and template body are required");
+  const scenario = text(input.scenario || template.scenario || template.displayName);
+  if (typeof template.body !== "string" || !template.body.trim()) {
+    throw promptError("PROMPT_TEMPLATE_REQUIRED", "Template body is required");
   }
 
   const researchGroups = researches.map(function(item, index) {

@@ -83,6 +83,13 @@ describe("prompt builder", function() {
     assert.doesNotMatch(prompt.user, /餐饮|住宿/);
   });
 
+  it("accepts a v2 body-only template and derives no required scenario metadata", function() {
+    const value = input({ template: { platform: "new-platform", body: "只写实用攻略正文。" } });
+    const prompt = buildPrompt(value);
+    assert.match(prompt.user, /只写实用攻略正文/);
+    assert.doesNotMatch(prompt.user, /undefined/);
+  });
+
   it("keeps multiple research question, answer, and reference groups in stable order", function() {
     const prompt = buildPrompt(input({
       researches: [

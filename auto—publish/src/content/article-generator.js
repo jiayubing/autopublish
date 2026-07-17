@@ -116,8 +116,8 @@ function snapshotTemplate(template, platform, templateId) {
   return {
     platform: platform,
     id: templateId,
-    name: typeof template.name === "string" ? template.name : "",
-    scenario: typeof template.scenario === "string" ? template.scenario : "",
+    name: typeof template.name === "string" && template.name ? template.name : (typeof template.displayName === "string" ? template.displayName : templateId),
+    scenario: typeof template.scenario === "string" && template.scenario ? template.scenario : (typeof template.displayName === "string" ? template.displayName : templateId),
     body: template.body,
     bodyHash: typeof template.bodyHash === "string" && template.bodyHash ? template.bodyHash : hashText(template.body)
   };
@@ -192,8 +192,10 @@ function createArticleGenerator(deps) {
       }
       return research;
     });
-    const template = deps.templateStore.getTemplate(input.platform, input.templateId);
-    const scenario = input.scenario || template.scenario;
+    const template = typeof deps.templateStore.getCatalogTemplate === "function"
+      ? deps.templateStore.getCatalogTemplate({ platformId: input.platform, templateId: input.templateId })
+      : deps.templateStore.getTemplate(input.platform, input.templateId);
+    const scenario = input.scenario || template.scenario || template.displayName || input.templateId;
     const templateSnapshot = snapshotTemplate(template, input.platform, input.templateId);
     const prompt = deps.buildPrompt({
       client: client,

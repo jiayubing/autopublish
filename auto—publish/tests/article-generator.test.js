@@ -241,4 +241,18 @@ describe("article generator", function() {
       assert.equal(deps.calls.includes("ai"), false);
     }
   });
+
+  it("uses the catalog seam for a body-only template and snapshots a derived display name", async function() {
+    const deps = dependencies({
+      templateStore: {
+        getTemplate: function() { throw new Error("legacy template lookup should not be used"); },
+        getCatalogTemplate: function() { return { platform: "new-platform", templateId: "first-template", id: "first-template", displayName: "first-template", body: "Body-only instruction", bodyHash: "body-hash" }; }
+      },
+      buildPrompt: function(value) { assert.equal(value.scenario, "first-template"); return { system: "System", user: "User" }; }
+    });
+    const article = await createArticleGenerator(deps).generateArticle({ clientId: "client-1", materialIds: ["brand.md"], researchQueryId: "query-1", platform: "new-platform", templateId: "first-template" });
+    assert.equal(article.scenario, "first-template");
+    assert.equal(article.templateSnapshot.name, "first-template");
+    assert.equal(article.templateSnapshot.bodyHash, "body-hash");
+  });
 });
