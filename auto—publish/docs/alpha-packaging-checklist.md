@@ -3,6 +3,10 @@
 ## Artifact
 
 - [ ] `release-alpha/` contains a portable exe or installer.
+- [ ] Build started from a clean commit and the commit SHA is recorded.
+- [ ] `resources/app/tools/node/node.exe --version` matches `runtime-tools-manifest.json`.
+- [ ] Package contains `@playwright/cli`, `playwright`, `playwright-core`, and their licenses.
+- [ ] `node scripts/verify-packaged-playwright-runtime.js release-alpha\win-unpacked\resources\app --browser-smoke` passes with isolated PATH.
 - [ ] App launches without white screen.
 - [ ] Window title is `Auto Publish Desktop Console` or approved alpha title.
 
@@ -10,6 +14,7 @@
 
 - [ ] Runtime workspace folders exist: `input`, `data`, `logs`, `published`, `failed`, `tmp`, `work`.
 - [ ] Private `.env` was not bundled into the package.
+- [ ] Package contains no input, data, published, logs, profile, state, cookie, or absolute developer-machine references.
 - [ ] Test articles can be placed into the runtime `input/media` folder.
 
 ## Paid Media Flow
@@ -32,6 +37,17 @@
 - [ ] `hepan` requires local Python and cookie configuration.
 - [ ] Code signing is not configured.
 - [ ] Auto-update is not configured.
+
+## Clean-machine acceptance
+
+- [ ] Test on Windows without Node.js, global `playwright-cli`, Codex cache, or
+      the development repository.
+- [ ] Settings shows independent Node, CLI, Edge/Chrome, MarkItDown, and Hepan
+      statuses.
+- [ ] Browser self-check opens and closes temporary `about:blank` without
+      leaving a daemon or package-directory profile.
+- [ ] Development and installed builds use the same `com.autopublish.desktop`
+      identity and canonical application configuration owner.
 ## Startup Verification (Alpha)
 
 - [ ] Installed package contains esources/app/scripts/config.js.

@@ -52,8 +52,12 @@ fixed. The migration manifest records completed files, so a retry resumes
 without repeating successful copies.
 
 Portable business data is placed in `clients`, `generated`, `templates`, and
-`.autopublish` under the content library. Logs, caches, browser profiles, and
-temporary files go to local state. Only the allow-listed platform runtime
+`.autopublish` under the content library. Media resources, input files,
+published copies, and submission orders are under `.autopublish`; logs, DOCX
+caches, browser profiles, and temporary files go to local state. Browser
+profiles are mapped individually to `browser/doubao`,
+`browser/profiles/lieju`, `browser/profiles/toutiao`, and `browser/state`;
+active `sessions` are not migrated. Only the allow-listed platform runtime
 settings from `.env` are written to the application configuration file. AI
 provider variables and unknown variables are ignored; secret values are not
 included in stdout, the manifest, or the completion marker.

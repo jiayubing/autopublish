@@ -9,9 +9,12 @@
         "test": "node --test tests/*.test.js",
         "build:renderer": "npm --prefix media-workbench run lint && npm --prefix media-workbench run build",
         "verify": "node scripts/verify.js",
+        "check:clean-build": "node scripts/check-clean-build.js",
         "prepare:runtime-tools": "node scripts/prepare-runtime-tools.js",
-        "pack:alpha": "npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win portable --config electron-builder.alpha.yml",
-        "dist:alpha": "npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win nsis --config electron-builder.alpha.yml"
+        "pack:alpha": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win portable --config electron-builder.alpha.yml",
+        "pack:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win portable --config electron-builder.alpha.yml",
+        "dist:alpha": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win nsis --config electron-builder.alpha.yml",
+        "dist:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win nsis --config electron-builder.alpha.yml"
     },
     "dependencies": {
         "@playwright/cli": "0.1.14",

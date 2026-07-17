@@ -8,3 +8,9 @@ data/media-list*.json
 data/media-list*.csv
 dist/
 .DS_Store
+/.playwright-cli/
+/auto—publish-app-config-v2-20260716/
+/auto—publish-content-v2-20260716/
+/auto—publish-local-state-v2-20260716/
+/backups/
+/auto-publish-app-config-v2-20260716/
