@@ -16,8 +16,9 @@ not relocate legacy files.
 Client materials are read only from the first level of a client directory:
 `.txt`, `.md`, `.markdown`, `.json`, and `.docx`. `questions.json`,
 `search_query.txt`, generated articles, and all subdirectories are excluded.
-DOCX files are converted without changing the source file. Successful
-conversions are cached under `work/client-material-cache/` using the source hash;
+DOCX files are converted by the bundled Mammoth parser without changing the
+source file. Users do not need to install Python or MarkItDown. Successful
+conversions are cached under the local-state client-material cache using the source hash;
 changed files invalidate the cache, and a failed file remains visible with a
 safe error and can be retried independently.
 

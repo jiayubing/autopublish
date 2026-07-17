@@ -15,6 +15,7 @@ npm test
 npm run verify
 npm run pack:alpha
 node scripts/verify-alpha-package.js release-alpha\win-unpacked\resources\app
+node scripts/verify-packaged-docx-runtime.js release-alpha\win-unpacked\resources\app
 node scripts/verify-packaged-playwright-runtime.js release-alpha\win-unpacked\resources\app --browser-smoke
 ```
 
@@ -38,8 +39,14 @@ code and resources.
 Open Settings and run “运行浏览器自检”. It opens only a temporary
 `about:blank` session and closes it immediately. If Edge is unavailable,
 install Edge or select an available Chrome channel in application-level
-configuration. MarkItDown and Hepan Python are independent capabilities and
-do not prevent ordinary Markdown or Doubao workflows when absent.
+configuration. Client DOCX files use the bundled Mammoth parser and do not
+require Python or MarkItDown. Capabilities use four states: ready, not_checked,
+optional_unconfigured, and unavailable. Not checked is not a failure, and an
+optional Hepan dependency only affects Hepan publishing; it does not block
+DOCX, Doubao, Edge, or ordinary Markdown workflows.
+Hepan publishing is an optional platform and currently requires a user-provided
+Python runtime with `requests`, `beautifulsoup4`, and a valid cookie. Configure
+it before entering a real Hepan publish operation.
 
 ## Recovery
 

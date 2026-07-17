@@ -6,6 +6,8 @@
 - [ ] Build started from a clean commit and the commit SHA is recorded.
 - [ ] `resources/app/tools/node/node.exe --version` matches `runtime-tools-manifest.json`.
 - [ ] Package contains `@playwright/cli`, `playwright`, `playwright-core`, and their licenses.
+- [ ] Package contains `mammoth` and its license.
+- [ ] `node scripts/verify-packaged-docx-runtime.js release-alpha\win-unpacked\resources\app` passes with isolated PATH.
 - [ ] `node scripts/verify-packaged-playwright-runtime.js release-alpha\win-unpacked\resources\app --browser-smoke` passes with isolated PATH.
 - [ ] App launches without white screen.
 - [ ] Window title is `Auto Publish Desktop Console` or approved alpha title.
@@ -34,7 +36,8 @@
 ## Known Alpha Limitations
 
 - [ ] Playwright/browser login state may need manual setup.
-- [ ] `hepan` requires local Python and cookie configuration.
+- [ ] `hepan` is optional and requires a configured Python runtime, `requests`,
+      `beautifulsoup4`, and a valid cookie. Missing it only blocks Hepan.
 - [ ] Code signing is not configured.
 - [ ] Auto-update is not configured.
 
@@ -42,8 +45,10 @@
 
 - [ ] Test on Windows without Node.js, global `playwright-cli`, Codex cache, or
       the development repository.
-- [ ] Settings shows independent Node, CLI, Edge/Chrome, MarkItDown, and Hepan
-      statuses.
+- [ ] Settings shows independent Node, CLI, Edge/Chrome, built-in DOCX, and
+      optional Hepan statuses.
+- [ ] `ready`, `not_checked`, `optional_unconfigured`, and `unavailable` have
+      distinct labels and colors; `not_checked` is not rendered as a failure.
 - [ ] Browser self-check opens and closes temporary `about:blank` without
       leaving a daemon or package-directory profile.
 - [ ] Development and installed builds use the same `com.autopublish.desktop`

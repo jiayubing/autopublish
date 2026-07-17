@@ -17,6 +17,7 @@ function resolveHepanRuntime(workspaceRoot, environment) {
 }
 
 var HEPAN = resolveHepanRuntime(DIRS.rootDir);
+Object.defineProperty(HEPAN, "configured", { value: Boolean(process.env.HEPAN_PYTHON || fs.existsSync(path.join(DIRS.rootDir, "config", "hepan.json"))), enumerable: false });
 
 function scriptPath() {
   return path.join(__dirname, "hepan_publish.py");
@@ -51,6 +52,11 @@ function parseJsonOutput(output) {
 }
 
 function runHepan(args) {
+  if (!HEPAN.configured) {
+    var unavailable = new Error("Hepan publishing is not configured");
+    unavailable.code = "HEPAN_RUNTIME_UNCONFIGURED";
+    throw unavailable;
+  }
   var result = spawnSync(HEPAN.pythonPath, [scriptPath()].concat(args), {
     cwd: DIRS.rootDir,
     encoding: "utf-8",
