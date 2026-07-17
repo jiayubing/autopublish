@@ -133,7 +133,20 @@ function createAiContentService(opts) {
 
   function listTemplates(platform) {
     if (platform !== undefined) assertId(platform, "Platform");
-    return templateStore.listTemplates(platform);
+    if (typeof templateStore.listCatalog === "function") {
+      const templates = templateStore.listCatalog().templates || [];
+      return platform === undefined ? templates : templates.filter(function(template) { return template.platform === platform || template.platformId === platform; });
+    }
+    return templateStore.listTemplates(platform).map(function(template) {
+      const safe = Object.assign({}, template);
+      delete safe.sourcePath;
+      return safe;
+    });
+  }
+
+  function listTemplateCatalog() {
+    if (!templateStore || typeof templateStore.listCatalog !== "function") throw contentError("TEMPLATE_CATALOG_UNAVAILABLE", "Template catalog is unavailable");
+    return templateStore.listCatalog();
   }
 
   function copyBuiltinTemplate(input) {
@@ -214,6 +227,7 @@ function createAiContentService(opts) {
     listResearch: listResearch,
     getResearch: getResearch,
     listTemplates: listTemplates,
+    listTemplateCatalog: listTemplateCatalog,
     copyBuiltinTemplate: copyBuiltinTemplate,
     saveCustomTemplate: saveCustomTemplate,
     generateArticle: generateArticle,

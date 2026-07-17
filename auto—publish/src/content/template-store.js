@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { getContentWorkspace } = require("../core/files");
+const { createTemplateCatalog } = require("./template-catalog");
 
 function templateError(code, message) {
   const error = new Error(message);
@@ -202,6 +203,7 @@ function createTemplateStore(workspaceRoot, options) {
   const builtinRoot = resolveBuiltinRoot(opts);
   const storeOptions = Object.assign({}, opts, { builtinRoot: builtinRoot });
   const createId = typeof opts.createId === "function" ? opts.createId : function() { return crypto.randomUUID(); };
+  const catalogStore = createTemplateCatalog(workspaceRoot, storeOptions);
 
   function catalog(platform) { return listTemplates(workspaceRoot, platform, storeOptions); }
   function get(platform, templateId) { return getTemplate(workspaceRoot, platform, templateId, storeOptions); }
@@ -237,6 +239,8 @@ function createTemplateStore(workspaceRoot, options) {
   return {
     listTemplates: catalog,
     getTemplate: get,
+    listCatalog: catalogStore.listCatalog,
+    getCatalogTemplate: catalogStore.getTemplate,
     loadTemplate: get,
     saveTemplate: saveTemplate,
     copyBuiltinTemplate: copyBuiltinTemplate
@@ -251,4 +255,5 @@ module.exports = {
   createTemplateStore,
   parseFrontMatter,
   resolveBuiltinRoot
+  ,createTemplateCatalog
 };

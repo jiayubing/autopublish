@@ -88,6 +88,14 @@ describe("ai content service", function() {
     assert.equal(setup.calls.includes("aiClientFactory"), false);
   });
 
+  it("exposes one file-driven template catalog for single and batch consumers", function() {
+    const setup = createService({ templateStore: {
+      listTemplates: function() { return []; },
+      listCatalog: function() { return { revision: "fixture-revision", platforms: [{ id: "new-platform", displayName: "新平台", description: "", order: 0 }], templates: [{ id: "first-template", templateId: "first-template", platform: "new-platform", displayName: "first-template", scenario: "first-template", body: "body" }], diagnostics: [] }; }
+    } });
+    assert.equal(setup.service.listTemplateCatalog().revision, "fixture-revision");
+  });
+
   it("creates the AI client only while generating and saves separately", async function() {
     const setup = createService();
     const generated = await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
