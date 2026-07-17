@@ -289,6 +289,23 @@ describe("source assembly and packaging contract", function() {
     }
   });
 
+  it("declares the bundled Playwright runtime and isolated verifier", function() {
+    const config = read("electron-builder.alpha.yml");
+    const verifier = read("scripts/verify-alpha-package.js");
+    const packageJson = JSON.parse(read("package.json"));
+    assert.match(config, /from: build\/runtime-tools\/node/);
+    assert.match(config, /to: tools\/node/);
+    for (const requiredRuntimeFile of [
+      "tools/node/node.exe",
+      "tools/node/runtime-tools-manifest.json",
+      "node_modules/@playwright/cli/playwright-cli.js",
+      "node_modules/playwright/LICENSE",
+      "node_modules/playwright-core/LICENSE"
+    ]) assert.match(verifier, new RegExp('"' + escapeRegExp(requiredRuntimeFile) + '"'), requiredRuntimeFile);
+    assert.equal(packageJson.scripts["prepare:runtime-tools"], "node scripts/prepare-runtime-tools.js");
+    assert.match(packageJson.scripts["pack:alpha"], /prepare:runtime-tools/);
+  });
+
   it("excludes every private content and application configuration boundary", function() {
     const config = read("electron-builder.alpha.yml");
     for (const pattern of [

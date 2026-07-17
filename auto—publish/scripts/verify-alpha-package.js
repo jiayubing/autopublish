@@ -26,6 +26,13 @@ const REQUIRED_FILES = [
   "scripts/config.js",
   "config/platforms.json",
   "media-workbench/dist/index.html",
+  "tools/node/node.exe",
+  "tools/node/LICENSE",
+  "tools/node/runtime-tools-manifest.json",
+  "node_modules/@playwright/cli/playwright-cli.js",
+  "node_modules/@playwright/cli/LICENSE",
+  "node_modules/playwright/LICENSE",
+  "node_modules/playwright-core/LICENSE",
 ];
 
 const REQUIRED_DIRS = [
@@ -170,9 +177,14 @@ function verifyRuntimeSmoke(appDir) {
   }
 }
 
+function verifyPackagedPlaywright(appDir) {
+  return require("./verify-packaged-playwright-runtime").verifyPackagedRuntime(appDir, { staticOnly: false });
+}
+
 if (require.main === module) {
   verifyPackage(process.argv[2]);
   verifyRuntimeSmoke(process.argv[2]);
+  verifyPackagedPlaywright(process.argv[2]);
 }
 
-module.exports = { verifyPackage, verifyRuntimeSmoke, findPrivateEntries };
+module.exports = { verifyPackage, verifyRuntimeSmoke, verifyPackagedPlaywright, findPrivateEntries };

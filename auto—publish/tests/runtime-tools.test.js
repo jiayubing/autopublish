@@ -53,6 +53,7 @@ it("prepares only regular node.exe and LICENSE files from a verified archive", a
     assert.equal(result.nodeVersion, "v24.18.0");
     assert.equal(fs.lstatSync(path.join(output, "node.exe")).isFile(), true);
     assert.equal(fs.readFileSync(path.join(output, "LICENSE"), "utf8"), "Node.js license\n");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(output, "runtime-tools-manifest.json"), "utf8")).nodeVersion, "v24.18.0");
     assert.equal(fs.existsSync(output + ".staging"), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

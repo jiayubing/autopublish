@@ -134,8 +134,10 @@ async function prepareRuntimeTools(options) {
     fs.mkdirSync(stagingDirectory, { recursive: true });
     fs.copyFileSync(nodeExecutable, path.join(stagingDirectory, "node.exe"));
     fs.copyFileSync(license, path.join(stagingDirectory, "LICENSE"));
+    fs.copyFileSync(opts.manifest || DEFAULT_MANIFEST, path.join(stagingDirectory, "runtime-tools-manifest.json"));
     assertRegularFile(path.join(stagingDirectory, "node.exe"), "RUNTIME_TOOL_NODE_INVALID");
     assertRegularFile(path.join(stagingDirectory, "LICENSE"), "RUNTIME_TOOL_LICENSE_INVALID");
+    assertRegularFile(path.join(stagingDirectory, "runtime-tools-manifest.json"), "RUNTIME_TOOL_MANIFEST_INVALID");
     fs.rmSync(output, { recursive: true, force: true });
     fs.renameSync(stagingDirectory, output);
     return { output, archive: archivePath, nodeVersion: manifest.nodeVersion, sha256: manifest.archive.sha256 };
