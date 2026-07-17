@@ -152,8 +152,11 @@ process.on("message", function(message) {
         });
 
         const loadedPlatforms = loadPlatforms();
-        const adapters = {};
-        loadedPlatforms.forEach(function(platform) { adapters[platform.id] = platform; });
+      const adapters = {};
+      loadedPlatforms.forEach(function(platform) { adapters[platform.id] = platform; });
+      if (adapters.hepan && typeof adapters.hepan.setRuntimeConfig === "function") {
+        adapters.hepan.setRuntimeConfig(options.hepanRuntime || null);
+      }
 
         var servicePlatforms = loadedPlatforms.map(function(platform) {
           return { id: platform.id, scanDir: platform.scanDir };
@@ -176,6 +179,7 @@ process.on("message", function(message) {
         try {
           const loadedPlatforms = require("../../src/core/platforms").loadPlatforms();
           loadedPlatforms.forEach(function(platform) {
+            if (platform.id === "hepan" && typeof platform.clearRuntimeConfig === "function") platform.clearRuntimeConfig();
             if (typeof platform.closeSession === "function") {
               try { platform.closeSession(); } catch (_) {}
             }

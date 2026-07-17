@@ -16,8 +16,33 @@ function resolveHepanRuntime(workspaceRoot, environment) {
   };
 }
 
-var HEPAN = resolveHepanRuntime(DIRS.rootDir);
-Object.defineProperty(HEPAN, "configured", { value: Boolean(process.env.HEPAN_PYTHON || fs.existsSync(path.join(DIRS.rootDir, "config", "hepan.json"))), enumerable: false });
+var batchRuntime = null;
+
+function currentRuntime() {
+  if (batchRuntime) return Object.assign({}, batchRuntime);
+  var resolved = resolveHepanRuntime(DIRS.rootDir, process.env);
+  return {
+    cookiePath: resolved.cookiePath,
+    pythonPath: resolved.pythonPath,
+    categoryId: Number(process.env.HEPAN_CATEGORY_ID || 121),
+    vendorDir: process.env.HEPAN_VENDOR_DIR || "",
+    siteOrigin: "https://www.hepan.com"
+  };
+}
+
+function setRuntimeConfig(runtime) {
+  if (!runtime || typeof runtime !== "object") {
+    batchRuntime = null;
+    return;
+  }
+  batchRuntime = {
+    cookiePath: runtime.cookiePath || "",
+    pythonPath: runtime.pythonPath || "",
+    categoryId: Number(runtime.categoryId || 121),
+    vendorDir: runtime.vendorDir || "",
+    siteOrigin: "https://www.hepan.com"
+  };
+}
 
 function scriptPath() {
   return path.join(__dirname, "hepan_publish.py");
@@ -52,17 +77,19 @@ function parseJsonOutput(output) {
 }
 
 function runHepan(args) {
-  if (!HEPAN.configured) {
+  var runtime = currentRuntime();
+  if (!runtime.pythonPath || !runtime.cookiePath) {
     var unavailable = new Error("Hepan publishing is not configured");
-    unavailable.code = "HEPAN_RUNTIME_UNCONFIGURED";
+    unavailable.code = "HEPAN_CONFIG_NOT_SET";
     throw unavailable;
   }
-  var result = spawnSync(HEPAN.pythonPath, [scriptPath()].concat(args), {
+  var result = spawnSync(runtime.pythonPath, [scriptPath()].concat(args), {
     cwd: DIRS.rootDir,
     encoding: "utf-8",
     timeout: 240000,
     env: Object.assign({}, process.env, {
-      PYTHONIOENCODING: "utf-8"
+      PYTHONIOENCODING: "utf-8",
+      PYTHONPATH: runtime.vendorDir || process.env.PYTHONPATH || ""
     })
   });
 
@@ -78,18 +105,19 @@ function runHepan(args) {
 }
 
 async function ensureLoggedIn() {
-  if (!fs.existsSync(HEPAN.cookiePath)) {
-    log("[hepan] Cookie file not found: " + HEPAN.cookiePath, "WARN");
+  var runtime = currentRuntime();
+  if (!runtime.pythonPath || !runtime.cookiePath || !fs.existsSync(runtime.cookiePath)) {
+    log("[hepan] Cookie configuration is unavailable", "WARN");
     return;
   }
 
-  var cookie = fs.readFileSync(HEPAN.cookiePath, "utf-8").trim();
+  var cookie = fs.readFileSync(runtime.cookiePath, "utf-8").trim();
   if (!cookie) {
-    log("[hepan] Cookie file is empty", "WARN");
+    log("[hepan] Cookie configuration is empty", "WARN");
     return;
   }
 
-  log("[hepan] Cookie file is ready", "INFO");
+  log("[hepan] Cookie configuration is ready", "INFO");
 }
 
 function closeSession() {}
@@ -128,11 +156,14 @@ function parseArticleFiles(articles) {
 }
 
 async function publishArticle(article) {
+  var runtime = currentRuntime();
   log("[hepan] Publishing via HTTP: " + article.filename, "INFO");
   var payload = runHepan([
     "--article", article.sourceFile,
     "--image-dir", imageDir(),
-    "--cookie-path", HEPAN.cookiePath
+    "--cookie-path", runtime.cookiePath,
+    "--category-id", String(runtime.categoryId),
+    ...(runtime.vendorDir ? ["--vendor-dir", runtime.vendorDir] : [])
   ]);
 
   if (payload.needsLogin) {
@@ -159,6 +190,8 @@ module.exports = {
   publishArticle: publishArticle,
   closeSession: closeSession,
   scanArticles: scanArticles,
-  parseArticleFiles: parseArticleFiles
-  ,resolveHepanRuntime: resolveHepanRuntime
+  parseArticleFiles: parseArticleFiles,
+  resolveHepanRuntime: resolveHepanRuntime,
+  setRuntimeConfig: setRuntimeConfig,
+  clearRuntimeConfig: function() { batchRuntime = null; }
 };

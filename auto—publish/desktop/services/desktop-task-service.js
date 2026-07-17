@@ -11,6 +11,8 @@ function createDesktopTaskService(opts) {
   var storagePaths = options.paths || {};
   var forkProcess = options.fork || fork;
   var execFileProcess = options.execFile || execFile;
+  var platformSettingsService = options.platformSettingsService || null;
+  var activeRuntimeCleanup = null;
 
   function stopSignalDirectory() {
     return storagePaths.tmp || path.join(cwd, "tmp");
@@ -165,13 +167,39 @@ function closeBrowserSessions() {
   async function startPlatformSubmit(plan, hooks) {
     if (isPlatformRunning) throw new Error("当前已有平台投稿任务正在运行。");
 
+    var hepanRuntime = null;
+    var hepanCleanup = null;
+    var hasHepanTask = Boolean(plan && Array.isArray(plan.tasks) && plan.tasks.some(function(task) { return task && task.targetPlatformId === "hepan"; }));
+    if (hasHepanTask) {
+      if (!platformSettingsService) {
+        var missingSettings = new Error("蓝色河畔配置未设置");
+        missingSettings.code = "HEPAN_CONFIG_NOT_SET";
+        throw missingSettings;
+      }
+      var runtime = platformSettingsService.getAdapterForRuntime("hepan");
+      if (!runtime.adapter || typeof runtime.adapter.createTemporaryCookie !== "function") {
+        var missingCookie = new Error("蓝色河畔配置未设置");
+        missingCookie.code = "HEPAN_CONFIG_NOT_SET";
+        throw missingCookie;
+      }
+      var temporaryCookie = runtime.adapter.createTemporaryCookie(runtime.config);
+      hepanCleanup = temporaryCookie.cleanup;
+      activeRuntimeCleanup = hepanCleanup;
+      hepanRuntime = {
+        pythonPath: runtime.config.pythonPath,
+        categoryId: runtime.config.categoryId,
+        vendorDir: runtime.config.vendorDir || "",
+        cookiePath: temporaryCookie.cookiePath
+      };
+    }
+
     clearStopSignal(stopSignalDirectory());
     isPlatformRunning = true;
     platformTaskCount = (plan && plan.tasks) ? plan.tasks.length : 0;
     emitPlatformState();
 
     try {
-      var payload = { plan: plan, submitOptions: { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 } };
+      var payload = { plan: plan, hepanRuntime: hepanRuntime, submitOptions: { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 } };
       var task = spawnDesktopTask("platform-submit", payload, { onLog: hooks && hooks.onLog ? hooks.onLog : function() {} });
       platformChild = task.child;
 
@@ -198,6 +226,10 @@ function closeBrowserSessions() {
 
       return result;
     } finally {
+      if (hepanCleanup) {
+        try { hepanCleanup(); } catch (_) {}
+        if (activeRuntimeCleanup === hepanCleanup) activeRuntimeCleanup = null;
+      }
       platformAbort = null;
       platformTaskCount = 0;
       platformChild = null;
@@ -240,13 +272,25 @@ function closeBrowserSessions() {
     return { alreadyRequested: false };
   }
 
+  function dispose() {
+    if (activeRuntimeCleanup) {
+      try { activeRuntimeCleanup(); } catch (_) {}
+      activeRuntimeCleanup = null;
+    }
+    [batchChild, platformChild].forEach(function(child) {
+      if (child) {
+        try { child.kill(); } catch (_) {}
+      }
+    });
+  }
+
   function getState() {
     return { isBatchRunning: isBatchRunning, isStopPending: isStopPending, isPlatformRunning: isPlatformRunning };
   }
 
   return {
     refreshQueueSnapshot, startBatch, stopBatch,
-    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState
+    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState, dispose
   };
 }
 

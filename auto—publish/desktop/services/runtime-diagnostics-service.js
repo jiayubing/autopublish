@@ -107,17 +107,26 @@ function resolvePlaywrightRuntime(options) {
     pathLookup: opts.pathLookup,
     packaged: packaged
   });
-  const hepanPython = resolveExecutable({
-    config: config,
-    applicationValues: opts.applicationValues,
-    configName: "hepanPython",
-    envName: "HEPAN_PYTHON",
-    env: env,
-    bundled: [path.join(appRoot, "tools", "python", "python.exe")],
-    pathCommand: "python",
-    pathLookup: opts.pathLookup,
-    packaged: packaged
-  });
+  let hepanPython;
+  if (typeof opts.hepanProvider === "function") {
+    let providerConfig = null;
+    try { providerConfig = opts.hepanProvider(); } catch (_) { providerConfig = null; }
+    hepanPython = providerConfig && providerConfig.pythonPath
+      ? resolveExecutable({ config: { hepanPython: providerConfig.pythonPath }, env: {}, configName: "hepanPython", envName: "HEPAN_PYTHON", bundled: [], packaged: true })
+      : { command: null, source: "provider" };
+  } else {
+    hepanPython = resolveExecutable({
+      config: config,
+      applicationValues: opts.applicationValues,
+      configName: "hepanPython",
+      envName: "HEPAN_PYTHON",
+      env: env,
+      bundled: [path.join(appRoot, "tools", "python", "python.exe")],
+      pathCommand: "python",
+      pathLookup: opts.pathLookup,
+      packaged: packaged
+    });
+  }
   return {
     appRoot: appRoot,
     packaged: packaged,
@@ -259,6 +268,7 @@ function createRuntimeDiagnosticsService(options) {
   const workspaceRoot = path.resolve(workspaceValue);
   const appRoot = path.resolve(appValue);
   const execFile = opts.execFile || childProcess.execFile;
+  let platformSettingsService = opts.platformSettingsService || null;
   let browserProbe = { channel: null, state: "not_checked", lastCheckedAt: null, errorCode: null };
 
   function currentBrowserCapability(browserChannel) {
@@ -273,7 +283,10 @@ function createRuntimeDiagnosticsService(options) {
   }
 
   function diagnose() {
-    const tools = resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot: appRoot }));
+    const tools = resolvePlaywrightRuntime(Object.assign({}, opts, {
+      appRoot: appRoot,
+      hepanProvider: platformSettingsService ? function() { return platformSettingsService.getRuntimeConfig("hepan"); } : opts.hepanProvider
+    }));
     const capabilities = {
       playwrightNode: capability(tools.playwrightNode.command ? "ready" : "unavailable", tools.playwrightNode.source, tools.playwrightNode.command ? null : "PLAYWRIGHT_NODE_UNAVAILABLE"),
       playwrightCli: capability(tools.playwrightCli.command ? "ready" : "unavailable", tools.playwrightCli.source, tools.playwrightCli.command ? null : "PLAYWRIGHT_CLI_UNAVAILABLE"),
@@ -339,7 +352,8 @@ function createRuntimeDiagnosticsService(options) {
     diagnose: diagnose,
     probeBrowser: probeBrowser,
     resolvePlaywrightRuntime: function() { return resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot: appRoot })); },
-    safeDiagnostics: function() { return safeDiagnostics(diagnose()); }
+    safeDiagnostics: function() { return safeDiagnostics(diagnose()); },
+    setPlatformSettingsService: function(service) { platformSettingsService = service || null; }
   };
 }
 

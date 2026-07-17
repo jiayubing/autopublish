@@ -16,8 +16,16 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
+def cli_vendor_dir() -> str:
+    try:
+        index = sys.argv.index("--vendor-dir")
+        return sys.argv[index + 1].strip()
+    except (ValueError, IndexError):
+        return ""
+
+
 def add_vendor_paths() -> None:
-    vendor_env = os.environ.get("HEPAN_VENDOR_DIR", "").strip()
+    vendor_env = cli_vendor_dir() or os.environ.get("HEPAN_VENDOR_DIR", "").strip()
     candidates = []
     if vendor_env:
         candidates.append(Path(vendor_env))
@@ -49,8 +57,9 @@ class NeedsLoginError(RuntimeError):
 
 
 class HepanPortalPublisher:
-    def __init__(self, cookie_value: str) -> None:
+    def __init__(self, cookie_value: str, category_id: int = CATID) -> None:
         self.cookie_value = cookie_value.strip()
+        self.category_id = category_id
         self.formhash = ""
         self.uid_value = ""
         self.hash_value = ""
@@ -83,7 +92,7 @@ class HepanPortalPublisher:
             "sec-fetch-user": "?1",
             "upgrade-insecure-requests": "1",
         }
-        response = requests.get(PORTAL_EDIT_URL, headers=headers, timeout=30)
+        response = requests.get(f"{SITE_ORIGIN}/portal.php?mod=portalcp&ac=article&catid={self.category_id}", headers=headers, timeout=30)
         if response.status_code in (401, 403):
             raise NeedsLoginError(f"hepan cookie rejected with HTTP {response.status_code}")
         response.raise_for_status()
@@ -116,7 +125,7 @@ class HepanPortalPublisher:
             "uid": self.uid_value,
             "hash": self.hash_value,
             "aid": 0,
-            "catid": str(CATID),
+            "catid": str(self.category_id),
             "id": "WU_FILE_0",
             "type": "image",
             "filetype": image_path.suffix,
@@ -134,7 +143,7 @@ class HepanPortalPublisher:
         }
         with image_path.open("rb") as f:
             response = requests.post(
-                UPLOAD_URL,
+                f"{SITE_ORIGIN}/misc.php?mod=swfupload&action=swfupload&operation=portal",
                 headers=headers,
                 data=payload,
                 files=[("Filedata", (image_path.name, f))],
@@ -161,7 +170,7 @@ class HepanPortalPublisher:
             "htmlname": "",
             "oldhtmlname": "",
             "pagetitle": "",
-            "catid": CATID,
+            "catid": self.category_id,
             "from": "",
             "fromurl": "",
             "dateline": "",
@@ -200,7 +209,7 @@ class HepanPortalPublisher:
             "upgrade-insecure-requests": "1",
         }
         response = requests.post(
-            PORTAL_SUBMIT_URL,
+            f"{SITE_ORIGIN}/portal.php?mod=portalcp&ac=article",
             headers=headers,
             data=payload,
             files=[("file", (None, None))],
@@ -304,12 +313,12 @@ def load_cookie(cookie_path: Path) -> str:
     return cookie
 
 
-def publish_one(article_path: Path, image_dir: Path, cookie_path: Path) -> dict:
+def publish_one(article_path: Path, image_dir: Path, cookie_path: Path, category_id: int) -> dict:
     if article_path.suffix.lower() != ".docx":
         raise RuntimeError("hepan only supports .docx articles")
 
     cookie_value = load_cookie(cookie_path)
-    publisher = HepanPortalPublisher(cookie_value)
+    publisher = HepanPortalPublisher(cookie_value, category_id)
     title, content_html = read_docx_article(article_path)
     if not title:
         raise RuntimeError("article title is empty")
@@ -332,9 +341,9 @@ def publish_one(article_path: Path, image_dir: Path, cookie_path: Path) -> dict:
     }
 
 
-def check_login(cookie_path: Path) -> dict:
+def check_login(cookie_path: Path, category_id: int) -> dict:
     cookie_value = load_cookie(cookie_path)
-    publisher = HepanPortalPublisher(cookie_value)
+    publisher = HepanPortalPublisher(cookie_value, category_id)
     publisher.load_publish_context()
     return {"ok": True}
 
@@ -349,18 +358,20 @@ def main() -> int:
     parser.add_argument("--image-dir", required=True)
     parser.add_argument("--cookie-path", required=True)
     parser.add_argument("--check-login", action="store_true")
+    parser.add_argument("--category-id", type=int, default=CATID)
+    parser.add_argument("--vendor-dir")
     args = parser.parse_args()
 
     try:
         cookie_path = Path(args.cookie_path)
         if args.check_login:
-            print_json(check_login(cookie_path))
+            print_json(check_login(cookie_path, args.category_id))
             return 0
 
         if not args.article:
             raise RuntimeError("--article is required")
 
-        result = publish_one(Path(args.article), Path(args.image_dir), cookie_path)
+        result = publish_one(Path(args.article), Path(args.image_dir), cookie_path, args.category_id)
         print_json(result)
         return 0
     except NeedsLoginError as exc:

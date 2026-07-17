@@ -1,0 +1,68 @@
+const { describe, it } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const { createHepanSettingsAdapter, HEPAN_SITE_ORIGIN } = require("../desktop/services/platform-settings/hepan-settings-adapter");
+const { createPlatformSettingsService } = require("../desktop/services/platform-settings-service");
+
+function tempDirectory() { return fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-hepan-settings-")); }
+function fakeStore(initial) {
+  let value = initial || null;
+  return { read: () => value, write: (next) => { value = Object.assign({}, next); return value; }, clear: () => { value = null; return { cleared: true }; } };
+}
+
+describe("Hepan provider settings", () => {
+  it("accepts only a real Python file, keeps the site fixed and defaults category 121", () => {
+    const root = tempDirectory();
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
+      const config = adapter.validate({ pythonPath, cookie: "fixture-cookie" });
+      assert.deepStrictEqual(config, { pythonPath, cookie: "fixture-cookie", categoryId: 121, vendorDir: "", siteOrigin: HEPAN_SITE_ORIGIN });
+      const status = adapter.status(config, { source: "application", lastTest: null });
+      assert.equal(status.siteOrigin, HEPAN_SITE_ORIGIN);
+      assert.equal(status.cookieConfigured, true);
+      assert.equal(JSON.stringify(status).includes("fixture-cookie"), false);
+      assert.throws(() => adapter.validate({ pythonPath: root, cookie: "fixture-cookie" }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("checks Python, imports, and login through a temporary cookie file that is always removed", async () => {
+    const root = tempDirectory();
+    const calls = [];
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({
+        localStateRoot: root,
+        runCommand: async (command, args) => {
+          calls.push({ command, args });
+          if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+          return { status: 0, stdout: "Python 3.12\n", stderr: "" };
+        }
+      });
+      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })], now: () => "2026-07-17T03:00:00.000Z" });
+      const result = await service.test("hepan", { pythonPath, cookie: "fixture-cookie", categoryId: 121 });
+      assert.deepStrictEqual(result, { testedAt: "2026-07-17T03:00:00.000Z", ok: true, code: "HEPAN_LOGIN_OK" });
+      assert.equal(calls.some((call) => call.args.includes("--version")), true);
+      assert.equal(calls.some((call) => call.args.includes("--check-login")), true);
+      assert.equal(calls.some((call) => call.args.includes("fixture-cookie")), false);
+      assert.equal(fs.existsSync(path.join(root, "tmp")) ? fs.readdirSync(path.join(root, "tmp"), { withFileTypes: true }).length : 0, 0);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("maps a failed login to a stable error without leaking cookie or temp path", async () => {
+    const root = tempDirectory();
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({ localStateRoot: root, runCommand: async () => ({ status: 0, stdout: '{"ok":false,"needsLogin":true,"error":"cookie rejected"}\n', stderr: "cookie rejected" }) });
+      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
+      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_LOGIN_INVALID" && !error.message.includes("fixture-cookie") && !error.message.includes(root));
+      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+});
