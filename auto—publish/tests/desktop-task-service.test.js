@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
 const childProcess = require("node:child_process");
 const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 const { createDesktopTaskService } = require("../desktop/services/desktop-task-service");
 
@@ -67,4 +69,50 @@ it("derives worker directories from explicit environment paths", function() {
     home: "C:\\local-state\\browser",
     profile: "C:\\local-state\\browser\\doubao"
   });
+});
+
+it("closes every platform session with the resolved bundled Node and CLI", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "autopublish-task-runtime-"));
+  const node = path.join(root, "tools", "node.exe");
+  const cli = path.join(root, "playwright-cli.js");
+  fs.mkdirSync(path.dirname(node), { recursive: true });
+  fs.writeFileSync(node, "node", "utf8");
+  fs.writeFileSync(cli, "cli", "utf8");
+  const paths = {
+    installation: root,
+    contentLibrary: path.join(root, "content"),
+    localState: path.join(root, "local"),
+    browser: path.join(root, "local", "browser"),
+    playwrightNodeExecPath: node,
+    playwrightCliJs: cli,
+    browserChannel: "msedge"
+  };
+  const calls = [];
+  let worker;
+  function fakeFork() {
+    worker = new EventEmitter();
+    worker.send = function() {};
+    worker.kill = function() {};
+    return worker;
+  }
+  function fakeExecFile(file, args, options, callback) {
+    calls.push({ file, args, options });
+    callback(null, "", "");
+  }
+  try {
+    const service = createDesktopTaskService({ cwd: paths.contentLibrary, paths, fork: fakeFork, execFile: fakeExecFile });
+    const pending = service.startPlatformSubmit({ tasks: [{ id: "task-1" }] });
+    await new Promise((resolve) => setImmediate(resolve));
+    service.pausePlatformSubmit();
+    await pending;
+    assert.equal(calls.length, 3);
+    calls.forEach(function(call) {
+      assert.equal(call.file, node);
+      assert.deepEqual(call.args.slice(0, 2), [cli, "-s=" + call.args[1].slice(3)]);
+      assert.equal(call.args[2], "close");
+      assert.match(call.options.env.PLAYWRIGHT_DAEMON_SESSION_DIR, /sessions[\\/]((lieju|toutiao|hepan))$/);
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

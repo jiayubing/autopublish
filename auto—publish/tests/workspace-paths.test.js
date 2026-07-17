@@ -93,9 +93,13 @@ describe("runtime configuration", function() {
     };
     try {
       fs.mkdirSync(path.join(values.roamingConfigRoot, "runtime"), { recursive: true });
+      const configuredMarkitdown = path.join(values.roamingConfigRoot, "runtime", "markitdown.cmd");
+      const configuredPlaywright = path.join(values.roamingConfigRoot, "runtime", "playwright-cli.js");
+      fs.writeFileSync(configuredMarkitdown, "", "utf8");
+      fs.writeFileSync(configuredPlaywright, "", "utf8");
       fs.writeFileSync(path.join(values.roamingConfigRoot, "runtime", "runtime-tools.json"), JSON.stringify({
-        markitdownCmd: "configured-markitdown",
-        playwrightCliJs: "configured-playwright-cli"
+        markitdownCmd: configuredMarkitdown,
+        playwrightCliJs: configuredPlaywright
       }), "utf8");
       const result = childProcess.spawnSync(process.execPath, ["-e", [
         "const input=JSON.parse(process.argv[1]);",
@@ -110,8 +114,8 @@ describe("runtime configuration", function() {
 
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), {
-        markitdown: "configured-markitdown",
-        playwright: "configured-playwright-cli"
+        markitdown: configuredMarkitdown,
+        playwright: configuredPlaywright
       });
     } finally {
       Object.keys(values).forEach(function(key) { fs.rmSync(values[key], { recursive: true, force: true }); });

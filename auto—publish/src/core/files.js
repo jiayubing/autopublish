@@ -54,6 +54,7 @@ function configureRuntimePaths(paths) {
   PW.home = paths.browser || path.join(paths.work, "playwright-cli");
   PW.profileDir = paths.doubaoBrowser || path.join(PW.home, "profiles", PW.session);
   PW.daemonDir = path.join(PW.home, "sessions", PW.session);
+  PW.browserChannel = paths.browserChannel || process.env.BROWSER_CHANNEL || "msedge";
   return paths;
 }
 

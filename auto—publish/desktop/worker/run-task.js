@@ -36,7 +36,12 @@ function configureWorkerEnvironment(paths) {
     AUTO_PUBLISH_LOGS_DIR: paths.logs,
     AUTO_PUBLISH_PLAYWRIGHT_HOME: paths.browser,
     AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR: paths.doubaoBrowser,
-    AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: paths.browser && require("path").join(paths.browser, "state")
+    AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: paths.browser && require("path").join(paths.browser, "state"),
+    AUTO_PUBLISH_NODE_EXEC_PATH: paths.playwrightNodeExecPath,
+    PLAYWRIGHT_CLI_JS: paths.playwrightCliJs,
+    BROWSER_CHANNEL: paths.browserChannel,
+    AUTO_PUBLISH_APP_ROOT: paths.installation,
+    AUTO_PUBLISH_PACKAGED: process.env.AUTO_PUBLISH_PACKAGED || "0"
   };
   Object.keys(values).forEach(function(key) { if (values[key]) process.env[key] = values[key]; });
 }

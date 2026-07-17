@@ -32,15 +32,38 @@ describe("runtime diagnostics", function() {
     return directory;
   }
 
-  it("prefers workspace tool configuration over environment and reports safe actionable missing tools", function() {
-    const configured = path.join(workspace, "config", "markitdown.cmd");
+  it("prefers application tool configuration over environment and reports independent capability failures", function() {
+    fs.mkdirSync(path.join(appRoot, "config"), { recursive: true });
+    const configured = path.join(appRoot, "config", "markitdown.cmd");
     fs.writeFileSync(configured, "", "utf8");
-    fs.writeFileSync(path.join(workspace, "config", "runtime-tools.json"), JSON.stringify({ markitdownCmd: configured }), "utf8");
-    const diagnostics = createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appRoot, env: { MARKITDOWN_CMD: "from-env" }, pathLookup: function() { return null; } }).diagnose();
+    fs.writeFileSync(path.join(appRoot, "config", "runtime-tools.json"), JSON.stringify({ markitdownCmd: configured }), "utf8");
+    const diagnostics = createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appRoot, packaged: true, env: { MARKITDOWN_CMD: "from-env" }, pathLookup: function() { return null; } }).diagnose();
     assert.equal(diagnostics.tools.markitdown.command, configured);
-    assert.equal(diagnostics.tools.markitdown.source, "workspace-config");
-    assert.deepStrictEqual(diagnostics.errors.map(function(error) { return error.code; }), ["PLAYWRIGHT_UNAVAILABLE", "HEPAN_PYTHON_UNAVAILABLE"]);
+    assert.equal(diagnostics.tools.markitdown.source, "application-config");
+    assert.deepStrictEqual(diagnostics.errors.map(function(error) { return error.code; }), ["PLAYWRIGHT_NODE_UNAVAILABLE", "PLAYWRIGHT_CLI_UNAVAILABLE", "HEPAN_PYTHON_UNAVAILABLE"]);
     assert.ok(diagnostics.errors.every(function(error) { return !error.message.includes(workspace) && !error.message.includes(appRoot); }));
+  });
+
+  it("resolves bundled Node and CLI without PATH or external overrides", function() {
+    const node = path.join(appRoot, "tools", "node", "node.exe");
+    const cli = path.join(appRoot, "node_modules", "@playwright", "cli", "playwright-cli.js");
+    fs.mkdirSync(path.dirname(node), { recursive: true });
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    fs.writeFileSync(node, "bundled node", "utf8");
+    fs.writeFileSync(cli, "bundled cli", "utf8");
+    const diagnostics = createRuntimeDiagnosticsService({
+      workspaceRoot: workspace,
+      appRoot: appRoot,
+      packaged: true,
+      env: { PLAYWRIGHT_CLI_JS: "missing-cli", AUTO_PUBLISH_NODE_EXEC_PATH: "missing-node" },
+      pathLookup: function() { throw new Error("PATH must not be consulted"); }
+    }).diagnose();
+    assert.equal(diagnostics.tools.playwrightNode.command, node);
+    assert.equal(diagnostics.tools.playwrightCli.command, cli);
+    assert.equal(diagnostics.tools.playwrightNode.source, "bundled");
+    assert.equal(diagnostics.tools.playwrightCli.source, "bundled");
+    assert.equal(diagnostics.errors.some(function(error) { return error.code === "PLAYWRIGHT_NODE_UNAVAILABLE"; }), false);
+    assert.equal(diagnostics.errors.some(function(error) { return error.code === "PLAYWRIGHT_CLI_UNAVAILABLE"; }), false);
   });
 
   it("exposes an async runtime while keeping Doubao on its own session paths", function() {

@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const { DIRS } = require("../../scripts/config");
+const { DIRS, PW } = require("../../scripts/config");
 const { createPlaywrightRuntime, pwSessionConfig } = require("../core/playwright");
 const {
   classifyPage,
@@ -217,7 +217,7 @@ function createDoubaoBrowserAdapter(options) {
     return runtime.open(Object.assign({
       url: DOUBAO_CHAT_URL,
       session: session,
-      browser: "msedge",
+      browser: PW.browserChannel,
       headed: mode === "visible",
       persistent: true,
       profileId: profileId,

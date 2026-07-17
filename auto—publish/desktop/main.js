@@ -278,6 +278,7 @@ function failStartup() {
 
 async function startApplication() {
   try {
+    process.env.AUTO_PUBLISH_PACKAGED = app.isPackaged ? "1" : "0";
     const workspace = initializeWorkspaceBootstrap();
     const bootstrapState = workspace.service.bootstrap();
     if (bootstrapState && bootstrapState.state === "ready" &&

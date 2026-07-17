@@ -1,5 +1,5 @@
 ﻿const path = require("path");
-const { fork, exec } = require("child_process");
+const { fork, execFile } = require("child_process");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
@@ -10,6 +10,7 @@ function createDesktopTaskService(opts) {
   var sendToRenderer = options.sendToRenderer || function() {};
   var storagePaths = options.paths || {};
   var forkProcess = options.fork || fork;
+  var execFileProcess = options.execFile || execFile;
 
   var isBatchRunning = false;
   var isStopPending = false;
@@ -54,7 +55,11 @@ function createDesktopTaskService(opts) {
         AUTO_PUBLISH_PLAYWRIGHT_HOME: storagePaths.browser || "",
         AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR: storagePaths.doubaoBrowser || "",
         AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: storagePaths.browser ? path.join(storagePaths.browser, "state") : "",
-        AUTO_PUBLISH_NODE_EXEC_PATH: process.env.AUTO_PUBLISH_NODE_EXEC_PATH || ''
+        AUTO_PUBLISH_NODE_EXEC_PATH: storagePaths.playwrightNodeExecPath || process.env.AUTO_PUBLISH_NODE_EXEC_PATH || "",
+        PLAYWRIGHT_CLI_JS: storagePaths.playwrightCliJs || process.env.PLAYWRIGHT_CLI_JS || "",
+        BROWSER_CHANNEL: storagePaths.browserChannel || process.env.BROWSER_CHANNEL || "msedge",
+        AUTO_PUBLISH_APP_ROOT: storagePaths.installation || process.env.AUTO_PUBLISH_APP_ROOT || "",
+        AUTO_PUBLISH_PACKAGED: process.env.AUTO_PUBLISH_PACKAGED || "0"
       }),
       stdio: ["ignore", "ignore", "ignore", "ipc"]
     });
@@ -91,24 +96,26 @@ function createDesktopTaskService(opts) {
   }
 
 function closeBrowserSessions() {
-    // Resolve real Node.js (not Electron EXE) to run playwright-cli correctly
-    var nodeExe = process.env.AUTO_PUBLISH_NODE_EXEC_PATH || "";
-    if (!nodeExe) {
-      try {
-        var whereResult = require("child_process").execSync("where node 2>nul", { encoding: "utf8", timeout: 5000 });
-        var lines = String(whereResult).trim().split(/\r?\n/).filter(Boolean);
-        nodeExe = lines[0] || process.execPath;
-      } catch (_) { nodeExe = process.execPath; }
-    }
-    var cliJs = require("../../scripts/config").PLAYWRIGHT_CLI_JS;
-    // Use workspace root for sessions, same as pwSessionConfig
-    var rootDir = require("../../scripts/config").DIRS.rootDir;
-    var workDir = storagePaths.browser || require("path").join(rootDir, "work", "playwright-cli");
+    var resolver = require("./runtime-diagnostics-service").resolvePlaywrightRuntime;
+    var resolved = resolver({
+      appRoot: storagePaths.installation || process.env.AUTO_PUBLISH_APP_ROOT || cwd,
+      paths: storagePaths,
+      applicationTools: {
+        nodeExecPath: storagePaths.playwrightNodeExecPath,
+        playwrightCliJs: storagePaths.playwrightCliJs
+      },
+      env: process.env,
+      packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
+    });
+    var nodeExe = resolved.playwrightNode.command;
+    var cliJs = resolved.playwrightCli.command;
+    if (!nodeExe || !cliJs) return;
+    var workDir = storagePaths.browser || path.join(cwd, "work", "playwright-cli");
 
     PLATFORM_SESSIONS.forEach(function(session) {
-      var sessionDir = require("path").join(workDir, "sessions", session);
-      var cmd = 'chcp 65001 > nul && set PLAYWRIGHT_DAEMON_SESSION_DIR=' + sessionDir + ' && "' + nodeExe + '" "' + cliJs + '" -s=' + session + ' close';
-      exec(cmd, { timeout: 5000 }, function() {});
+      var sessionDir = path.join(workDir, "sessions", session);
+      var env = Object.assign({}, process.env, { PLAYWRIGHT_DAEMON_SESSION_DIR: sessionDir });
+      execFileProcess(nodeExe, [cliJs, "-s=" + session, "close"], { timeout: 5000, windowsHide: true, env: env }, function() {});
     });
 }
 

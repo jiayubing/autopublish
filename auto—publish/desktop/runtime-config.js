@@ -60,10 +60,9 @@ function validateRuntimeConfiguration(environment) {
   const env = environment || process.env;
   const errors = [];
   if (!env.XQW_API_KEY) errors.push({ code: "MEDIA_CONFIG_INVALID", message: "Media configuration is invalid" });
-  if (!env.MARKITDOWN_CMD) errors.push({ code: "MARKITDOWN_CONFIG_INVALID", message: "MarkItDown configuration is invalid" });
-  if (!env.PLAYWRIGHT_CLI_JS) errors.push({ code: "PLAYWRIGHT_CONFIG_INVALID", message: "Playwright configuration is invalid" });
-  if (!env.BROWSER_CHANNEL) errors.push({ code: "BROWSER_CONFIG_INVALID", message: "Browser configuration is invalid" });
-  if (!env.HEPAN_COOKIE_PATH || !env.HEPAN_PYTHON) errors.push({ code: "HEPAN_CONFIG_INVALID", message: "Hepan configuration is invalid" });
+  // Playwright, MarkItDown, and Hepan are diagnosed as independent
+  // capabilities. Built-in Playwright Node/CLI and the default browser
+  // channel must not require ordinary users to edit runtime-tools.json.
   return errors;
 }
 
@@ -92,17 +91,29 @@ function configureRuntimeEnvironment(options) {
   process.env.AUTO_PUBLISH_LOCAL_STATE = localState;
 
   const runtimeConfigStore = createRuntimeConfigStore({ configRoot: roamingConfig });
-  loadApplicationEnvironment(roamingConfig, runtimeConfigStore);
+  const applicationValues = loadApplicationEnvironment(roamingConfig, runtimeConfigStore);
   loadWorkspaceEnvironment(contentLibrary);
   ensureWorkspaceDirectories(paths);
   [paths.logs, paths.cache, paths.tmp, paths.work, paths.browser].forEach(function(directory) {
     fs.mkdirSync(directory, { recursive: true });
   });
 
-  const diagnostics = createRuntimeDiagnosticsService({ workspaceRoot: contentLibrary, appRoot: appRoot, paths: paths }).diagnose();
+  const diagnosticsService = createRuntimeDiagnosticsService({
+    workspaceRoot: contentLibrary,
+    appRoot: appRoot,
+    paths: paths,
+    applicationValues: applicationValues,
+    packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
+  });
+  const diagnostics = diagnosticsService.diagnose();
   if (!process.env.MARKITDOWN_CMD && diagnostics.tools.markitdown.command) process.env.MARKITDOWN_CMD = diagnostics.tools.markitdown.command;
-  if (!process.env.PLAYWRIGHT_CLI_JS && diagnostics.tools.playwright.command) process.env.PLAYWRIGHT_CLI_JS = diagnostics.tools.playwright.command;
+  if (!process.env.PLAYWRIGHT_CLI_JS && diagnostics.tools.playwrightCli.command) process.env.PLAYWRIGHT_CLI_JS = diagnostics.tools.playwrightCli.command;
+  if (!process.env.AUTO_PUBLISH_NODE_EXEC_PATH && diagnostics.tools.playwrightNode.command) process.env.AUTO_PUBLISH_NODE_EXEC_PATH = diagnostics.tools.playwrightNode.command;
   if (!process.env.HEPAN_PYTHON && diagnostics.tools.hepanPython.command) process.env.HEPAN_PYTHON = diagnostics.tools.hepanPython.command;
+  if (!process.env.BROWSER_CHANNEL && diagnostics.tools.browserChannel.channel) process.env.BROWSER_CHANNEL = diagnostics.tools.browserChannel.channel;
+  paths.playwrightNodeExecPath = diagnostics.tools.playwrightNode.command;
+  paths.playwrightCliJs = diagnostics.tools.playwrightCli.command;
+  paths.browserChannel = diagnostics.tools.browserChannel.channel || "msedge";
   // src/core/files loads scripts/config.js at module evaluation time. Delay
   // that dependency until diagnostics has applied tool resolution so values
   // from runtime-tools.json are not frozen to development defaults.

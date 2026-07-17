@@ -2,12 +2,29 @@
 const path = require("path");
 const { execSync, execFile, execFileSync } = require("child_process");
 
-const { DIRS, PW, PLAYWRIGHT_CLI_JS } = require("../../scripts/config");
+const { DIRS, PW } = require("../../scripts/config");
+const { resolvePlaywrightRuntime } = require("../../desktop/services/runtime-diagnostics-service");
 const { log } = require("./logger");
 const { quoteArg } = require("./files");
 
+function unavailableError(code, message) {
+  var error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function runtimeResolution() {
+  return resolvePlaywrightRuntime({
+    appRoot: process.env.AUTO_PUBLISH_APP_ROOT || path.resolve(__dirname, "..", ".."),
+    env: process.env,
+    packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
+  });
+}
+
 function nodeExecPath() {
-  if (process.env.AUTO_PUBLISH_NODE_EXEC_PATH && process.env.AUTO_PUBLISH_NODE_EXEC_PATH.trim()) { return process.env.AUTO_PUBLISH_NODE_EXEC_PATH.trim(); } try { var r = require("child_process").execSync("where node 2>nul",{encoding:"utf8",timeout:5000}); var ls = String(r).trim().split(/\r?\n/).filter(Boolean); for (var i=0;i<ls.length;i++) { var c=ls[i].trim(); if (c&&require("fs").existsSync(c)&&c.toLowerCase().indexOf("electron")===-1) return c; } } catch(_){} return process.execPath;
+  var resolved = runtimeResolution();
+  if (!resolved.playwrightNode.command) throw unavailableError("PLAYWRIGHT_NODE_UNAVAILABLE", "Playwright Node is unavailable");
+  return resolved.playwrightNode.command;
 }
 
 // Each Platform Adapter owns its own Platform Session: an isolated daemon
@@ -46,15 +63,14 @@ function pwEnv(sessionCtx) {
   });
   var ctx = sessionCtx || pwSessionConfig();
   env.PLAYWRIGHT_DAEMON_SESSION_DIR = ctx.daemonDir;
+  env.BROWSER_CHANNEL = env.BROWSER_CHANNEL || PW.browserChannel || "msedge";
   return env;
 }
 
 function pwCmd(args, sessionCtx) {
   var ctx = sessionCtx || pwSessionConfig();
-  var cli = String(PLAYWRIGHT_CLI_JS || "");
-  var launch = /\.js$/i.test(cli) || fs.existsSync(cli)
-    ? `"${nodeExecPath()}" "${cli}"`
-    : `"${cli || "playwright-cli"}"`;
+  var executable = playwrightExecutable();
+  var launch = [executable.file].concat(executable.prefix).map(quoteArg).join(" ");
   return `chcp 65001 > nul && set PLAYWRIGHT_DAEMON_SESSION_DIR=${ctx.daemonDir} && ${launch} -s=${ctx.session} ${args}`;
 }
 
@@ -121,6 +137,13 @@ function execFileAsync(file, args, options, runner) {
 
 function mapRuntimeError(error) {
   var source = error instanceof Error ? error : new Error(String(error || "Playwright command failed"));
+  if (source.code === "PLAYWRIGHT_NODE_UNAVAILABLE" || source.code === "PLAYWRIGHT_CLI_UNAVAILABLE" || source.code === "BROWSER_CHANNEL_UNAVAILABLE") {
+    var unavailable = new Error(source.code === "PLAYWRIGHT_NODE_UNAVAILABLE" ? "Playwright Node is unavailable" :
+      source.code === "PLAYWRIGHT_CLI_UNAVAILABLE" ? "Playwright CLI is unavailable" : "Browser channel is unavailable");
+    unavailable.code = source.code;
+    Object.defineProperty(unavailable, "cause", { value: source, enumerable: false, writable: true, configurable: true });
+    return unavailable;
+  }
   var timedOut = source.code === "ETIMEDOUT" || (source.killed && (source.signal === "SIGTERM" || source.signal === "SIGKILL"));
   var stdout = source.stdout || "";
   var stderr = source.stderr || "";
@@ -177,10 +200,13 @@ function windowsNpmCliEntrypoint(cli) {
 }
 
 function playwrightExecutable(cliOverride) {
-  var cli = String(cliOverride || PLAYWRIGHT_CLI_JS || "");
-  if (/\.js$/i.test(cli)) return { file: nodeExecPath(), prefix: [cli] };
+  var resolved = runtimeResolution();
+  var cli = String(cliOverride || resolved.playwrightCli.command || "");
+  if (!cli) throw unavailableError("PLAYWRIGHT_CLI_UNAVAILABLE", "Playwright CLI is unavailable");
+  var node = nodeExecPath();
+  if (/\.js$/i.test(cli)) return { file: node, prefix: [cli] };
   var windowsEntrypoint = windowsNpmCliEntrypoint(cli);
-  if (windowsEntrypoint) return { file: nodeExecPath(), prefix: [windowsEntrypoint] };
+  if (windowsEntrypoint) return { file: node, prefix: [windowsEntrypoint] };
   return { file: cli || "playwright-cli", prefix: [] };
 }
 
@@ -192,13 +218,13 @@ function runtimeArgs(sessionCtx, commandArgs) {
 function createPlaywrightRuntime(options) {
   var opts = options || {};
   var sessionCtx = opts.session || pwSessionConfig();
-  var executable = playwrightExecutable(opts.playwrightCli);
   var execFileRunner = opts.execFile || execFile;
   var timeout = opts.timeout || 60000;
   var tempDir = opts.tempDir || DIRS.tmpDir;
 
   async function invoke(commandArgs, commandTimeout) {
     try {
+      var executable = playwrightExecutable(opts.playwrightCli);
       var result = await execFileAsync(
         executable.file,
         executable.prefix.concat(runtimeArgs(sessionCtx, commandArgs)),

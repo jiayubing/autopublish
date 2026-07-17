@@ -1,5 +1,4 @@
 const path = require('path');
-const fs = require('fs');
 
 // In packaged mode, AUTO_PUBLISH_ROOT_DIR is set by desktop/runtime-paths.js
 // to the writable workspace. In development it falls back to the project root.
@@ -23,7 +22,7 @@ const PW = {
   session: 'autopublish',
   profileDir: process.env.AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR || path.join(PLAYWRIGHT_HOME, 'profiles', 'autopublish'),
   daemonDir: path.join(PLAYWRIGHT_HOME, 'sessions', 'autopublish'),
-  browserChannel: 'msedge',
+  browserChannel: process.env.BROWSER_CHANNEL || 'msedge',
   headless: false,
 };
 
@@ -43,12 +42,9 @@ const LIEJU = {
   },
 };
 
-function workspaceTools() {
-  try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'runtime-tools.json'), 'utf8')); } catch (_) { return {}; }
-}
-
-const TOOLS = workspaceTools();
-const MARKITDOWN_CMD = TOOLS.markitdownCmd || process.env.MARKITDOWN_CMD || 'markitdown';
-const PLAYWRIGHT_CLI_JS = TOOLS.playwrightCliJs || process.env.PLAYWRIGHT_CLI_JS || 'playwright-cli';
+// Runtime overrides are application-scoped and are injected before this
+// module is loaded. Never read executable paths from the customer workspace.
+const MARKITDOWN_CMD = process.env.MARKITDOWN_CMD || 'markitdown';
+const PLAYWRIGHT_CLI_JS = process.env.PLAYWRIGHT_CLI_JS || 'playwright-cli';
 
 module.exports = { DIRS, PW, LIEJU, MARKITDOWN_CMD, PLAYWRIGHT_CLI_JS };
