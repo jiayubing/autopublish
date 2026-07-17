@@ -48,6 +48,15 @@ Hepan publishing is an optional platform and currently requires a user-provided
 Python runtime with `requests`, `beautifulsoup4`, and a valid cookie. Configure
 it before entering a real Hepan publish operation.
 
+Configure paid media and Hepan from the Settings center. `media-provider.json`
+and `hepan-provider.json` are application-local encrypted stores under
+`%APPDATA%\AutoPublish`; they are not workspace files and are never packaged.
+Do not copy a workspace `.env` containing `XQW_API_KEY` or
+`HEPAN_COOKIE_PATH` to a new computer. If the first launch reports legacy
+configuration, import it only after reviewing the source summary. The import
+does not show the Key or Cookie, does not persist environment overrides, and
+does not delete the old Cookie file.
+
 ## Recovery
 
 Stop AutoPublish and all Edge/Playwright daemons before restoring data. Keep

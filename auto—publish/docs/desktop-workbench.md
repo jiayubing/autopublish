@@ -83,7 +83,12 @@ The packaged app creates runtime folders under `%USERPROFILE%\Documents\AutoPubl
 Alpha packaged app uses %USERPROFILE%\\Documents\\AutoPublish by default.
 Put media articles in Documents\\AutoPublish\\input\\media.
 Put platform articles in Documents\\AutoPublish\\input\\lieju, input\\toutiao, or input\\hepan.
-Put .env containing XQW_API_KEY=... in Documents\\AutoPublish\\.env.
+Do not put `XQW_API_KEY` or `HEPAN_COOKIE_PATH` in the workspace `.env` for a
+new installation. Configure paid media and Hepan in the application Settings;
+the application-level stores use Electron `safeStorage` and are not part of
+the portable content library. An old workspace `.env` may be discovered as
+importable legacy configuration, but it is never loaded or displayed as a
+secret automatically.
 
 Create a smoke workspace:
 `powershell

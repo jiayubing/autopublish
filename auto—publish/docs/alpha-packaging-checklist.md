@@ -17,6 +17,7 @@
 - [ ] Runtime workspace folders exist: `input`, `data`, `logs`, `published`, `failed`, `tmp`, `work`.
 - [ ] Private `.env` was not bundled into the package.
 - [ ] Package contains no input, data, published, logs, profile, state, cookie, or absolute developer-machine references.
+- [ ] Package verifier rejects `media-provider.json`, `hepan-provider.json`, `platform-settings-migration.json`, provider test status, and Hepan Cookie temporary files.
 - [ ] Test articles can be placed into the runtime `input/media` folder.
 
 ## Paid Media Flow

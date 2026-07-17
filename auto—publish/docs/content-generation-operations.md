@@ -78,6 +78,14 @@ not contain the application configuration or any API key. Explicit operating
 system or launch-environment values may override the saved application
 configuration and are read-only in the UI.
 
+Paid media API keys and Hepan Cookies are application-level secrets stored in
+separate encrypted provider files under Electron `userData`. They must not be
+put in a workspace `.env`, content library, Git repository, logs, or package.
+Legacy `runtime-config.json` and workspace `.env` values are only reported as
+available for import. Import requires an explicit confirmation in Settings;
+the old Hepan Cookie file is not deleted automatically. Environment overrides
+remain read-only and are never persisted by the application.
+
 Saving, testing, or clearing configuration is local or uses the explicit test
 operation; a batch in `running` or `stopping` state blocks those changes.
 Provider errors returned through IPC contain only a stable code and safe
