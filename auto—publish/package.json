@@ -1,26 +1,28 @@
 {
-    "name":  "auto-publish",
-    "private":  true,
-    "version":  "1.0.0",
-    "description":  "Auto publish desktop console",
-    "scripts":  {
-                    "desktop":  "scripts\\desktop.cmd",
-                    "snapshot":  "scripts\\snapshot.cmd",
-                    "test":  "node --test tests/*.test.js",
-                    "build:renderer":  "npm --prefix media-workbench run lint \u0026\u0026 npm --prefix media-workbench run build",
-                    "verify": "node scripts/verify.js",
-                    "pack:alpha":  "npm run build:renderer \u0026\u0026 electron-builder --win portable --config electron-builder.alpha.yml",
-                    "dist:alpha":  "npm run build:renderer \u0026\u0026 electron-builder --win nsis --config electron-builder.alpha.yml"
-                },
-    "dependencies":  {
-                         "dotenv":  "^17.4.2",
-                         "form-data":  "^4.0.6",
-                         "mammoth":  "^1.12.0"
-                     },
-    "devDependencies":  {
-                            "electron-builder":  "^26.15.3",
-                            "electron":  "^33.4.11"
-                        },
-    "author":  "Auto Publish Team",
-    "main":  "desktop/main.js"
+    "name": "auto-publish",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Auto publish desktop console",
+    "scripts": {
+        "desktop": "scripts\\desktop.cmd",
+        "snapshot": "scripts\\snapshot.cmd",
+        "test": "node --test tests/*.test.js",
+        "build:renderer": "npm --prefix media-workbench run lint && npm --prefix media-workbench run build",
+        "verify": "node scripts/verify.js",
+        "prepare:runtime-tools": "node scripts/prepare-runtime-tools.js",
+        "pack:alpha": "npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win portable --config electron-builder.alpha.yml",
+        "dist:alpha": "npm run prepare:runtime-tools && npm run build:renderer && electron-builder --win nsis --config electron-builder.alpha.yml"
+    },
+    "dependencies": {
+        "@playwright/cli": "0.1.14",
+        "dotenv": "^17.4.2",
+        "form-data": "^4.0.6",
+        "mammoth": "^1.12.0"
+    },
+    "devDependencies": {
+        "electron": "^33.4.11",
+        "electron-builder": "^26.15.3"
+    },
+    "author": "Auto Publish Team",
+    "main": "desktop/main.js"
 }

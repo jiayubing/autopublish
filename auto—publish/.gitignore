@@ -17,3 +17,7 @@ data/*
 
 # Alpha packaging output
 release-alpha/
+
+# Downloaded/extracted runtime tools are reproducible build outputs.
+build/runtime-tools/
+build/runtime-tools-cache/
