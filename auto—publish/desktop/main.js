@@ -1,6 +1,9 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage } = require("electron");
 const { isAllowedRendererNavigation } = require("./security/navigation");
+const { configureApplicationIdentity } = require("./application-identity");
+
+configureApplicationIdentity(app);
 
 let mainWindow = null;
 let unsubscribeLogs = null;
