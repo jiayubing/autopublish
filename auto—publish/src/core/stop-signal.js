@@ -3,46 +3,54 @@ const path = require("path");
 
 const { DIRS } = require("../../scripts/config");
 
-function stopFilePath() {
-  return path.join(DIRS.tmpDir, "desktop-stop.json");
+function resolveTmpDir(tmpDir) {
+  return typeof tmpDir === "string" && tmpDir.trim() ? tmpDir : DIRS.tmpDir;
 }
 
-function pauseFilePath() {
-  return path.join(DIRS.tmpDir, "desktop-pause.json");
+function stopFilePath(tmpDir) {
+  return path.join(resolveTmpDir(tmpDir), "desktop-stop.json");
 }
 
-function clearStopSignal() {
+function pauseFilePath(tmpDir) {
+  return path.join(resolveTmpDir(tmpDir), "desktop-pause.json");
+}
+
+function clearStopSignal(tmpDir) {
   try {
-    fs.unlinkSync(stopFilePath());
+    fs.unlinkSync(stopFilePath(tmpDir));
   } catch (e) {}
 }
 
-function requestStopSignal(reason) {
-  fs.writeFileSync(stopFilePath(), JSON.stringify({
+function requestStopSignal(reason, tmpDir) {
+  var directory = resolveTmpDir(tmpDir);
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(stopFilePath(directory), JSON.stringify({
     requestedAt: new Date().toISOString(),
     reason: reason || "operator_stop"
   }), "utf8");
 }
 
-function isStopRequested() {
-  return fs.existsSync(stopFilePath());
+function isStopRequested(tmpDir) {
+  return fs.existsSync(stopFilePath(tmpDir));
 }
 
-function clearPauseSignal() {
+function clearPauseSignal(tmpDir) {
   try {
-    fs.unlinkSync(pauseFilePath());
+    fs.unlinkSync(pauseFilePath(tmpDir));
   } catch (e) {}
 }
 
-function requestPauseSignal(reason) {
-  fs.writeFileSync(pauseFilePath(), JSON.stringify({
+function requestPauseSignal(reason, tmpDir) {
+  var directory = resolveTmpDir(tmpDir);
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(pauseFilePath(directory), JSON.stringify({
     requestedAt: new Date().toISOString(),
     reason: reason || "operator_pause"
   }), "utf8");
 }
 
-function isPauseRequested() {
-  return fs.existsSync(pauseFilePath());
+function isPauseRequested(tmpDir) {
+  return fs.existsSync(pauseFilePath(tmpDir));
 }
 
 module.exports = {

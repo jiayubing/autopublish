@@ -6,7 +6,6 @@ const path = require("path");
 
 const { createRuntimeDiagnosticsService } = require("../desktop/services/runtime-diagnostics-service");
 const { createPlaywrightRuntime, pwSessionConfig, pwCmd, pwRun, runCode } = require("../src/core/playwright");
-const { PLAYWRIGHT_CLI_JS } = require("../scripts/config");
 
 describe("runtime diagnostics", function() {
   let workspace;
@@ -114,8 +113,7 @@ describe("runtime diagnostics", function() {
 
     assert.deepEqual(result, { opened: true });
     assert.equal(calls.length, 1);
-    if (process.platform === "win32" && !/\.js$/i.test(PLAYWRIGHT_CLI_JS)) assert.equal(calls[0].file, process.execPath);
-    else assert.equal(calls[0].file, PLAYWRIGHT_CLI_JS);
+    assert.match(calls[0].file, /[\\/]node\.exe$/i);
     const expectedArgs = [
       "-s=doubao",
       "open",
@@ -125,12 +123,8 @@ describe("runtime diagnostics", function() {
       "--persistent",
       "--profile=" + session.profileDir
     ];
-    if (calls[0].file === process.execPath) {
-      assert.match(calls[0].args[0], /[\\/]node_modules[\\/]@playwright[\\/]cli[\\/]playwright-cli\.js$/);
-      assert.deepEqual(calls[0].args.slice(1), expectedArgs);
-    } else {
-      assert.deepEqual(calls[0].args, expectedArgs);
-    }
+    assert.match(calls[0].args[0], /[\\/]node_modules[\\/]@playwright[\\/]cli[\\/]playwright-cli\.js$/);
+    assert.deepEqual(calls[0].args.slice(1), expectedArgs);
     assert.equal(calls[0].options.encoding, "utf8");
     assert.equal(calls[0].options.timeout, 3210);
     assert.equal(calls[0].options.env.PLAYWRIGHT_DAEMON_SESSION_DIR, session.daemonDir);
@@ -157,7 +151,7 @@ describe("runtime diagnostics", function() {
     await runtime.close();
 
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].file, process.execPath);
+    assert.match(calls[0].file, /[\\/]node\.exe$/i);
     assert.deepEqual(calls[0].args.slice(0, 2), [entrypoint, "-s=doubao"]);
   });
 

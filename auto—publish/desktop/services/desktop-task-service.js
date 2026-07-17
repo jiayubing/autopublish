@@ -12,6 +12,10 @@ function createDesktopTaskService(opts) {
   var forkProcess = options.fork || fork;
   var execFileProcess = options.execFile || execFile;
 
+  function stopSignalDirectory() {
+    return storagePaths.tmp || path.join(cwd, "tmp");
+  }
+
   var isBatchRunning = false;
   var isStopPending = false;
   var snapshotTask = null;
@@ -131,7 +135,7 @@ function closeBrowserSessions() {
 
   async function startBatch(options, hooks) {
     if (isBatchRunning) throw new Error("当前已有发文批次正在运行。");
-    clearStopSignal();
+    clearStopSignal(stopSignalDirectory());
     isBatchRunning = true;
     isStopPending = false;
     emitBatchState();
@@ -151,7 +155,7 @@ function closeBrowserSessions() {
   function stopBatch() {
     if (!isBatchRunning || !batchChild) throw new Error("当前没有正在运行的发文批次。");
     if (isStopPending) return { alreadyRequested: true };
-    requestStopSignal("desktop_stop_button");
+    requestStopSignal("desktop_stop_button", stopSignalDirectory());
     batchChild.send({ type: "stop" });
     isStopPending = true;
     emitBatchState();
@@ -161,7 +165,7 @@ function closeBrowserSessions() {
   async function startPlatformSubmit(plan, hooks) {
     if (isPlatformRunning) throw new Error("当前已有平台投稿任务正在运行。");
 
-    clearStopSignal();
+    clearStopSignal(stopSignalDirectory());
     isPlatformRunning = true;
     platformTaskCount = (plan && plan.tasks) ? plan.tasks.length : 0;
     emitPlatformState();
@@ -216,7 +220,7 @@ function closeBrowserSessions() {
     }
 
     closeBrowserSessions();
-    requestStopSignal("operator_pause");
+    requestStopSignal("operator_pause", stopSignalDirectory());
 
     isPlatformRunning = false;
     emitPlatformState();
@@ -227,7 +231,7 @@ function closeBrowserSessions() {
     if (!isPlatformRunning) return { alreadyStopped: true };
     if (platformAbort) { platformAbort(); platformAbort = null; }
     if (platformChild) {
-      requestStopSignal("desktop_stop_button");
+      requestStopSignal("desktop_stop_button", stopSignalDirectory());
       platformChild.send({ type: "stop" });
       setTimeout(function() { try { if (platformChild) platformChild.kill(); } catch (_) {} }, 3000);
     }
