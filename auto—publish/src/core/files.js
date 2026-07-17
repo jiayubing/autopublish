@@ -6,6 +6,8 @@ const { DIRS, PW } = require("../../scripts/config");
 const { log } = require("./logger");
 const { createWorkspacePaths } = require("../../desktop/workspace-paths");
 
+var archiveSequence = 0;
+
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -118,28 +120,106 @@ function copyToFailed(sourceFile, filename) {
 }
 
 function archivePublishedArticle(article) {
-  var target = path.join(DIRS.publishedDir, article.normalizedFilename || article.filename);
-  if (!fs.existsSync(article.sourceFile)) {
-    log("源文件不存在，跳过移动: " + article.filename, "WARN");
-    return;
+  var source = article && article.sourceFile;
+  var filename = article && (article.normalizedFilename || article.filename);
+  var target = path.join(DIRS.publishedDir, filename);
+  var sidecar = source + ".meta.json";
+  var sidecarTarget = target + ".meta.json";
+  var hasSidecar = false;
+  var sourceStage;
+  var sidecarStage;
+  var targetStage;
+  var sidecarTargetStage;
+  var sourceStaged = false;
+  var sidecarStaged = false;
+  var articleInTargetStage = false;
+  var sidecarInTargetStage = false;
+  var articleTargeted = false;
+  var sidecarTargeted = false;
+
+  if (!source || !filename || !fs.existsSync(source)) {
+    throw createArchiveError("PUBLISHED_ARCHIVE_FAILED", "Published article archive failed");
   }
 
-  var sidecar = article.sourceFile + ".meta.json";
-  var hasSidecar = fs.existsSync(sidecar);
-  var sidecarTarget = path.join(DIRS.publishedDir, path.basename(target) + ".meta.json");
-
-  if (fs.existsSync(target)) {
-    fs.unlinkSync(target);
+  ensureDir(DIRS.publishedDir);
+  hasSidecar = fs.existsSync(sidecar);
+  if (fs.existsSync(target) || fs.existsSync(sidecarTarget)) {
+    throw createArchiveError("PUBLISHED_ARCHIVE_CONFLICT", "Published article archive target already exists");
   }
-  fs.renameSync(article.sourceFile, target);
 
-  if (hasSidecar) {
-    if (fs.existsSync(sidecarTarget)) {
-      fs.unlinkSync(sidecarTarget);
+  archiveSequence += 1;
+  var token = process.pid + "-" + Date.now() + "-" + archiveSequence;
+  sourceStage = source + ".autopublish-archive-" + token + ".stage";
+  sidecarStage = sidecar + ".autopublish-archive-" + token + ".stage";
+  targetStage = target + ".autopublish-archive-" + token + ".stage";
+  sidecarTargetStage = sidecarTarget + ".autopublish-archive-" + token + ".stage";
+
+  try {
+    fs.renameSync(source, sourceStage);
+    sourceStaged = true;
+
+    if (hasSidecar) {
+      fs.renameSync(sidecar, sidecarStage);
+      sidecarStaged = true;
     }
-    fs.renameSync(sidecar, sidecarTarget);
+
+    fs.renameSync(sourceStage, targetStage);
+    articleInTargetStage = true;
+
+    if (hasSidecar) {
+      fs.renameSync(sidecarStage, sidecarTargetStage);
+      sidecarInTargetStage = true;
+    }
+
+    if (fs.existsSync(target) || fs.existsSync(sidecarTarget)) {
+      throw createArchiveError("PUBLISHED_ARCHIVE_CONFLICT", "Published article archive target already exists");
+    }
+
+    fs.renameSync(targetStage, target);
+    articleTargeted = true;
+
+    if (hasSidecar) {
+      fs.renameSync(sidecarTargetStage, sidecarTarget);
+      sidecarTargeted = true;
+    }
+  } catch (error) {
+    var rollbackError = null;
+    function rollback(from, to, shouldMove) {
+      if (!shouldMove || !fs.existsSync(from)) return;
+      try {
+        fs.renameSync(from, to);
+      } catch (rollbackFailure) {
+        rollbackError = rollbackError || rollbackFailure;
+      }
+    }
+
+    rollback(sidecarTarget, sidecarTargetStage, sidecarTargeted);
+    rollback(target, targetStage, articleTargeted);
+    rollback(sidecarTargetStage, sidecarStage, sidecarInTargetStage);
+    rollback(targetStage, sourceStage, articleInTargetStage);
+    rollback(sidecarStage, sidecar, sidecarStaged);
+    rollback(sourceStage, source, sourceStaged);
+
+    if (rollbackError) {
+      throw createArchiveError("PUBLISHED_ARCHIVE_FAILED", "Published article archive failed");
+    }
+    if (error && error.code === "PUBLISHED_ARCHIVE_CONFLICT") {
+      throw error;
+    }
+    if (error && error.code === "EEXIST" && (fs.existsSync(target) || fs.existsSync(sidecarTarget))) {
+      throw createArchiveError("PUBLISHED_ARCHIVE_CONFLICT", "Published article archive target already exists");
+    }
+    throw createArchiveError("PUBLISHED_ARCHIVE_FAILED", "Published article archive failed");
   }
+
   log("已移动到 published: " + path.basename(target), "INFO");
+  return { target: target, sidecar: hasSidecar ? sidecarTarget : null };
+}
+
+function createArchiveError(code, message) {
+  var error = new Error(message);
+  error.code = code;
+  return error;
 }
 
 module.exports = {

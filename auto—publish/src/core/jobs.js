@@ -6,6 +6,7 @@ var STATUSES = {
   PENDING: "pending",
   RUNNING: "running",
   SUCCEEDED: "succeeded",
+  PUBLISHED_ARCHIVE_FAILED: "published_archive_failed",
   SUBMITTED: "submitted",
   FAILED: "failed",
   NEEDS_LOGIN: "needs_login",
@@ -64,8 +65,14 @@ async function runJob(job, options) {
     job.status = statusForResult(result);
 
     if (job.status === STATUSES.SUCCEEDED) {
-      archivePublishedArticle(article);
-      log("[" + job.adapterId + "] OK: " + article.title, "INFO");
+      try {
+        archivePublishedArticle(article);
+        log("[" + job.adapterId + "] OK: " + article.title, "INFO");
+      } catch (archiveError) {
+        job.status = STATUSES.PUBLISHED_ARCHIVE_FAILED;
+        job.error = archiveError.code || "PUBLISHED_ARCHIVE_FAILED";
+        log("[" + job.adapterId + "] Remote publish succeeded but local archive failed [" + job.error + "]: " + article.title, "ERROR");
+      }
     } else if (job.status === STATUSES.SUBMITTED) {
       log("[" + job.adapterId + "] Submitted (pending review): " + article.title, "INFO");
     } else if (job.status === STATUSES.NEEDS_LOGIN) {
