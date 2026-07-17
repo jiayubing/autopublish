@@ -1,5 +1,4 @@
 ﻿const { MediaClient } = require("../../src/platforms/media/media-client");
-const { resolveApiKey } = require("../../src/platforms/media/config");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 
@@ -10,7 +9,19 @@ function createMediaResourceService(opts) {
   opts = opts || {};
   var resourceStore = opts.resourceStore || new MediaResourceStore({ filePath: opts.resourceStorePath });
   var poolStore = opts.poolStore || new MediaPoolStore({ filePath: opts.poolStorePath });
-  var client = opts.client || (hasApiConfig(opts) ? createClient(opts) : null);
+  var clientProvider = typeof opts.clientProvider === "function"
+    ? opts.clientProvider
+    : function() { return opts.client || (opts.apiKey ? createClient(opts) : null); };
+
+  function getClient() {
+    var client = clientProvider();
+    if (!client) {
+      var error = new Error("付费媒体配置未设置");
+      error.code = "MEDIA_CONFIG_NOT_SET";
+      throw error;
+    }
+    return client;
+  }
 
   function normalizeResource(resource) {
     var input = resource || {};
@@ -51,9 +62,7 @@ function createMediaResourceService(opts) {
   }
 
   async function refreshResources(opts) {
-    if (!client) {
-      throw new Error("媒体资源服务缺少 API 客户端配置");
-    }
+    var client = getClient();
 
     opts = opts || {};
     var fetchAll = !!opts.fetchAll;
@@ -102,9 +111,7 @@ function createMediaResourceService(opts) {
   }
 
   function getBalance() {
-    if (!client) {
-      throw new Error("媒体资源服务缺少 API 客户端配置");
-    }
+    var client = getClient();
     return client.getBalance().then(function(response) {
       return {
         balance: extractBalanceValue(response),
@@ -128,14 +135,10 @@ function createMediaResourceService(opts) {
 function createClient(opts) {
   var options = opts || {};
   return new MediaClient({
-    apiKey: resolveApiKey(options.apiKey),
+    apiKey: options.apiKey,
     baseUrl: options.baseUrl,
     timeoutMs: options.timeoutMs
   });
-}
-
-function hasApiConfig(opts) {
-  return !!(opts && (opts.client || opts.apiKey || process.env.XQW_API_KEY));
 }
 
 function readCachedResources(store) {

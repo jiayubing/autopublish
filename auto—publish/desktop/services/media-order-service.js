@@ -1,7 +1,5 @@
 ﻿const fs = require("fs");
 const path = require("path");
-const { MediaClient } = require("../../src/platforms/media/media-client");
-const { resolveApiKey } = require("../../src/platforms/media/config");
 const { resolveStorePath } = require("../../src/platforms/media/store-paths");
 
 var STATUS_LABELS = {
@@ -17,6 +15,7 @@ function createMediaOrderService(opts) {
   var storePath = options.storePath || (options.paths && options.paths.data
     ? path.join(options.paths.data, "submission-orders.jsonl")
     : resolveStorePath(options, "submission-orders.jsonl"));
+  var clientProvider = typeof options.clientProvider === "function" ? options.clientProvider : null;
 
   function listOrders() {
     var orders = [];
@@ -36,7 +35,12 @@ function createMediaOrderService(opts) {
   }
 
   async function syncOrder(orderNid) {
-    var client = new MediaClient({ apiKey: resolveApiKey(null) });
+    var client = clientProvider ? clientProvider() : null;
+    if (!client) {
+      var configError = new Error("付费媒体配置未设置");
+      configError.code = "MEDIA_CONFIG_NOT_SET";
+      throw configError;
+    }
     var response = await client.orderInfo(orderNid);
     updateLocalOrderRecord(storePath, orderNid, response);
     return response;

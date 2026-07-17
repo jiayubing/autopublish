@@ -2,8 +2,6 @@
 const path = require("path");
 const mammoth = require("mammoth");
 const { detectDocxImages, convertArticle } = require("../../src/platforms/media/article-converter");
-const { MediaClient } = require("../../src/platforms/media/media-client");
-const { resolveApiKey } = require("../../src/platforms/media/config");
 const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
 const { runPreflight } = require("../../src/platforms/media/preflight");
 
@@ -70,6 +68,7 @@ function createMediaWorkbenchService(opts) {
   var draftStore = options.draftStore || { get: function() { return null; } };
   var workspacePaths = options.paths;
   var configuredOrderStore = options.orderStore;
+  var clientProvider = typeof options.clientProvider === "function" ? options.clientProvider : null;
   var stopRequested = false;
 
   async function readAutoTitle(filePath) {
@@ -175,7 +174,12 @@ function createMediaWorkbenchService(opts) {
     var preflight = await runPreflight({ articles: articles || [], dryRun: true });
     if (!preflight.ok) return { ok: 0, fail: 0, skipped: 0, results: [], preflight: preflight };
     var deps = injected || {};
-    var client = deps.client || new MediaClient({ apiKey: resolveApiKey(null) });
+    var client = deps.client || (clientProvider ? clientProvider() : null);
+    if (!client) {
+      var configError = new Error("付费媒体配置未设置");
+      configError.code = "MEDIA_CONFIG_NOT_SET";
+      throw configError;
+    }
     var orderStore = deps.orderStore || configuredOrderStore || new SubmissionOrderStore({ paths: workspacePaths });
     var tasks = expandSubmissionTasks(articles);
     var results = [];

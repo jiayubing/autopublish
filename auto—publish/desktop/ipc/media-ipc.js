@@ -3,7 +3,6 @@ const { MediaResourceStore } = require("../../src/platforms/media/media-resource
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
 const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
-const { resolveApiKey } = require("../../src/platforms/media/config");
 const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 const { createMediaResourceService } = require("../services/media-resource-service");
@@ -21,17 +20,33 @@ function registerMediaIpc(deps) {
   var mediaPoolStore = new MediaPoolStore({ paths: deps.paths });
   var mediaDraftStore = new MediaDraftStore({ paths: deps.paths });
   var submissionOrderStore = deps.orderStore || new SubmissionOrderStore({ paths: deps.paths });
+  function clientProvider() {
+    if (typeof deps.mediaClientProvider === "function") return deps.mediaClientProvider();
+    if (deps.platformSettingsService) {
+      var runtime = deps.platformSettingsService.getAdapterForRuntime("media");
+      if (!runtime.adapter || typeof runtime.adapter.createClient !== "function") {
+        var adapterError = new Error("付费媒体配置未设置");
+        adapterError.code = "MEDIA_CONFIG_NOT_SET";
+        throw adapterError;
+      }
+      return runtime.adapter.createClient(runtime.config);
+    }
+    var adapterError = new Error("付费媒体配置未设置");
+    adapterError.code = "MEDIA_CONFIG_NOT_SET";
+    throw adapterError;
+  }
   var mediaResourceService = createMediaResourceService({
     resourceStore: mediaResourceStore,
     poolStore: mediaPoolStore,
-    apiKey: resolveApiKey(null)
+    clientProvider: clientProvider
   });
-  var mediaOrderService = createMediaOrderService({ paths: deps.paths });
+  var mediaOrderService = createMediaOrderService({ paths: deps.paths, clientProvider: clientProvider });
   var mediaWorkbenchService = createMediaWorkbenchService({
     inputDir: resolveMediaInputDir(deps),
     draftStore: mediaDraftStore,
     paths: deps.paths,
-    orderStore: submissionOrderStore
+    orderStore: submissionOrderStore,
+    clientProvider: clientProvider
   });
 
   ipcMain.handle("media:refresh-resources", function(event, opts) {
