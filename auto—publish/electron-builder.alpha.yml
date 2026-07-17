@@ -40,6 +40,12 @@ files:
   # ---- NEVER BUNDLE PRIVATE RUNTIME DATA ----
   - "!**/.env"
   - "!**/ai-provider.json"
+  - "!**/media-provider.json"
+  - "!**/hepan-provider.json"
+  - "!**/platform-settings-migration.json"
+  - "!**/provider-test-status.json"
+  - "!**/.hepan-cookie-*.tmp"
+  - "!**/.hepan-images-*.tmp"
   - "!**/workspace-location.json"
   - "!input/**"
   - "!data/**"

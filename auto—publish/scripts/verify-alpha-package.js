@@ -77,7 +77,11 @@ function findPrivateEntries(appDir) {
       // workspace content, so do not inspect any other node_modules subtree.
       if (entry.isDirectory() && lowerName === "node_modules") return;
 
-      if (lowerName === ".env" || lowerName === "questions.json" || lowerName === "ai-provider.json") {
+      if (lowerName === ".env" || lowerName === "questions.json" || lowerName === "ai-provider.json" ||
+          lowerName === "media-provider.json" || lowerName === "hepan-provider.json" ||
+          lowerName === "platform-settings-migration.json" || lowerName === "provider-test-status.json" ||
+          (lowerName.includes("hepan-cookie") && lowerName.endsWith(".tmp")) ||
+          (lowerName.includes("hepan-images") && lowerName.endsWith(".tmp"))) {
         found.push(relative);
       } else if (lowerName.endsWith(".json") && lowerSegments.slice(0, -1).includes("research")) {
         found.push(relative);

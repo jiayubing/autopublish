@@ -320,6 +320,9 @@ describe("source assembly and packaging contract", function() {
     const config = read("electron-builder.alpha.yml");
     for (const pattern of [
       "!**/ai-provider.json",
+      "!**/media-provider.json",
+      "!**/hepan-provider.json",
+      "!**/platform-settings-migration.json",
       "!**/content-generation-batches/**",
       "!**/client-material-cache/**",
       "!**/research/**",
@@ -638,6 +641,10 @@ describe("source assembly and packaging contract", function() {
     const verifier = path.resolve(__dirname, "..", "scripts", "verify-alpha-package.js");
     const cases = [
       ["nested/.env", ".env"],
+      ["config/media-provider.json", "config/media-provider.json"],
+      ["config/hepan-provider.json", "config/hepan-provider.json"],
+      ["config/platform-settings-migration.json", "config/platform-settings-migration.json"],
+      ["local-state/tmp/.hepan-cookie-test.tmp", "local-state/tmp/.hepan-cookie-test.tmp"],
       ["workspace-location.json", "workspace-location.json"],
       ["nested/.autopublish-workspace.json", "nested/.autopublish-workspace.json"],
       ["clients/client-1/questions.json", "questions.json"],
