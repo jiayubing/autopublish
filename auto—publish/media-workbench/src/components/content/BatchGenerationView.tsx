@@ -6,7 +6,7 @@ import {
   getGenerationBatch,
   getGenerationBatchState,
   listContentResearch,
-  listContentTemplates,
+  listContentTemplateCatalog,
   listGenerationBatches,
   pauseGenerationBatch,
   previewGenerationBatch,
@@ -109,10 +109,11 @@ export default function BatchGenerationView({ clients, refreshToken, onRefresh }
 
   useEffect(() => {
     let cancelled = false;
-    listContentTemplates().then((nextTemplates) => {
+    listContentTemplateCatalog().then((catalog) => {
       if (cancelled) return;
-      setTemplates(nextTemplates);
-      const availableTemplates = nextTemplates.map((item) => ({ platform: item.platform, templateId: item.id }));
+      setTemplates(catalog.templates);
+      if (catalog.diagnostics.length) setError(`模板目录有 ${catalog.diagnostics.length} 项诊断，请检查模板文件。`);
+      const availableTemplates = catalog.templates.map((item) => ({ platform: item.platform, templateId: item.id }));
       setSelectedTemplates((current) => preserveSelection(
         current,
         availableTemplates,

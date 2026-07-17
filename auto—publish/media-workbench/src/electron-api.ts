@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -66,6 +66,7 @@ interface DesktopConsoleContent {
   saveManualResearch(input: { clientId: string; questionId: string; answerText: string; references: ContentResearch["references"] }): Promise<IpcResponse<ContentResearch>>;
   onDoubaoQueueState(listener: (state: DoubaoQueueState) => void): () => void;
   listTemplates(platform?: string): Promise<IpcResponse<ContentTemplate[]>>;
+  listTemplateCatalog(): Promise<IpcResponse<ContentTemplateCatalog>>;
   retryMaterial(input: { clientId: string; materialId: string }): Promise<IpcResponse<ContentMaterial>>;
   generateArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
@@ -118,6 +119,15 @@ interface DesktopConsoleWorkspace {
   requestSwitch(): Promise<IpcResponse<WorkspaceBootstrapState>>;
 }
 
+interface DesktopConsolePlatformSettings {
+  getStatus(platformId: string): Promise<IpcResponse<PlatformProviderStatus>>;
+  save(platformId: string, draft: Record<string, unknown>): Promise<IpcResponse<PlatformProviderStatus>>;
+  test(platformId: string, draft?: Record<string, unknown>): Promise<IpcResponse<PlatformProviderTestResult>>;
+  clear(platformId: string): Promise<IpcResponse<{ cleared: boolean }>>;
+  getLegacyStatus(): Promise<IpcResponse<LegacyProviderSettingsStatus>>;
+  importLegacy(input: { confirmed: true }): Promise<IpcResponse<unknown>>;
+}
+
 export type RuntimeCapabilityState = "ready" | "not_checked" | "optional_unconfigured" | "unavailable";
 export interface RuntimeCapability { state: RuntimeCapabilityState; source: string | null; errorCode: string | null; lastCheckedAt: string | null; available?: boolean; }
 export interface RuntimeBrowserCapability extends RuntimeCapability { channel: string | null; configured: boolean; probed: boolean; }
@@ -142,7 +152,7 @@ interface DesktopConsoleRuntimeDiagnostics {
   browserSmoke(): Promise<IpcResponse<{ ok: boolean; browserChannel: string; session: string }>>;
 }
 
-export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: "media" | "lieju" | "toutiao" | "hepan"; confirmed: true; }
+export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: string; confirmed: true; }
 export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
 export interface ArticleTrashRecord { version: 1; deletedAt: string; clientId: string; articleId: string; status: string; references: Array<{ type: string; id: string }>; }
 export interface ArticleTrashResult { moved: ArticleTrashRecord[]; skipped: ArticleTrashRecord[]; rejected: Array<{ clientId: string; articleId: string; code: string }>; }
@@ -154,6 +164,7 @@ interface DesktopConsole {
   workspace: DesktopConsoleWorkspace;
   runtimeDiagnostics: DesktopConsoleRuntimeDiagnostics;
   aiProvider: DesktopConsoleAiProvider;
+  platformSettings: DesktopConsolePlatformSettings;
   media: DesktopConsoleMedia;
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
@@ -417,6 +428,48 @@ export async function clearAiProviderConfig(): Promise<AiProviderClearResult> {
   return result.data;
 }
 
+export async function getPlatformSettingsStatus<T extends PlatformProviderStatus = PlatformProviderStatus>(platformId: string): Promise<T> {
+  if (!isElectron()) return { source: 'application', configured: false, baseUrl: '', timeoutMs: 30000, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null } as T;
+  const result = await window.desktopConsole!.platformSettings.getStatus(platformId);
+  if (!result.ok) throw getIpcError(result.error, 'Unable to read platform settings');
+  return result.data as T;
+}
+
+export async function savePlatformSettings(platformId: string, draft: Record<string, unknown>): Promise<PlatformProviderStatus> {
+  if (!isElectron()) throw new Error('Platform settings require the desktop app');
+  const result = await window.desktopConsole!.platformSettings.save(platformId, draft);
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'Unable to save platform settings');
+  return result.data;
+}
+
+export async function testPlatformSettings(platformId: string, draft?: Record<string, unknown>): Promise<PlatformProviderTestResult> {
+  if (!isElectron()) throw new Error('Platform settings require the desktop app');
+  const result = await window.desktopConsole!.platformSettings.test(platformId, draft);
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'Platform connection test failed');
+  return result.data;
+}
+
+export async function clearPlatformSettings(platformId: string): Promise<{ cleared: boolean }> {
+  if (!isElectron()) throw new Error('Platform settings require the desktop app');
+  const result = await window.desktopConsole!.platformSettings.clear(platformId);
+  if (!result.ok) throw getIpcError(result.error, 'Unable to clear platform settings');
+  return result.data || { cleared: false };
+}
+
+export async function getLegacyPlatformSettingsStatus(): Promise<LegacyProviderSettingsStatus> {
+  if (!isElectron()) return { discover: { media: { available: false, sources: [] }, hepan: { available: false, sources: [], cookiePathAvailable: false }, sources: [], importable: false }, record: null };
+  const result = await window.desktopConsole!.platformSettings.getLegacyStatus();
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to read legacy platform settings");
+  return result.data;
+}
+
+export async function importLegacyPlatformSettings(): Promise<unknown> {
+  if (!isElectron()) throw new Error("Legacy platform settings import requires the desktop app");
+  const result = await window.desktopConsole!.platformSettings.importLegacy({ confirmed: true });
+  if (!result.ok) throw getIpcError(result.error, "Unable to import legacy platform settings");
+  return result.data;
+}
+
 export async function getGenerationBatchState(): Promise<GenerationBatchState> {
   if (!isElectron()) return { state: 'idle', status: 'idle' };
   const command = window.desktopConsole!.content?.getGenerationBatchState;
@@ -546,6 +599,13 @@ export async function listContentTemplates(platform?: string): Promise<ContentTe
   const result = await window.desktopConsole!.content.listTemplates(platform);
   if (!result.ok) throw getIpcError(result.error, "Unable to load templates");
   return result.data || [];
+}
+
+export async function listContentTemplateCatalog(): Promise<ContentTemplateCatalog> {
+  if (!isElectron()) return { revision: '', platforms: [], templates: [], diagnostics: [] };
+  const result = await window.desktopConsole!.content.listTemplateCatalog();
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to load template catalog");
+  return result.data;
 }
 
 export async function generateContentArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<GeneratedContentArticle> {

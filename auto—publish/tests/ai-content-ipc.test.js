@@ -19,7 +19,7 @@ describe("ai content ipc", function() {
       reviewArticles: function(value) { return { approved: value.map(function(item) { return item.articleId; }), rejected: [], skipped: [] }; }
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
-    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:review-articles"].forEach(function(channel) {
+    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:review-articles"].forEach(function(channel) {
       assert.equal(ipc.handlers.has(channel), true, "missing " + channel);
     });
     assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: [{ id: "client-1" }] });

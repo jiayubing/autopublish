@@ -25,6 +25,7 @@ function registerAiContentIpc(deps) {
     return wrap(function() { return service.getResearch(input && input.clientId, input && input.researchId); });
   });
   ipcMain.handle("content:list-templates", function(event, platform) { return wrap(function() { return service.listTemplates(platform); }); });
+  ipcMain.handle("content:list-template-catalog", function() { return wrap(function() { return service.listTemplateCatalog(); }); });
   ipcMain.handle("content:retry-material", function(event, input) {
     return wrap(function() { return service.retryMaterial(input && input.clientId, input && input.materialId); });
   });

@@ -39,6 +39,49 @@ export interface AiProviderClearResult {
   cleared: boolean;
 }
 
+export type PlatformProviderSource = 'application' | 'environment';
+export interface PlatformProviderTestResult {
+  testedAt: string;
+  ok: boolean;
+  code: string;
+}
+export interface MediaProviderStatus {
+  source: PlatformProviderSource;
+  configured: boolean;
+  baseUrl: string;
+  timeoutMs: number;
+  allowInsecure: boolean;
+  transport: string;
+  apiKeyMask: string;
+  lastTest: PlatformProviderTestResult | null;
+}
+export interface HepanProviderStatus {
+  source: PlatformProviderSource;
+  configured: boolean;
+  pythonConfigured: boolean;
+  cookieConfigured: boolean;
+  categoryId: number;
+  vendorConfigured: boolean;
+  siteOrigin: string;
+  lastTest: PlatformProviderTestResult | null;
+}
+export type PlatformProviderStatus = MediaProviderStatus | HepanProviderStatus;
+export interface LegacyProviderSettingsDiscovery {
+  media: { available: boolean; sources: string[] };
+  hepan: { available: boolean; sources: string[]; cookiePathAvailable: boolean };
+  sources: string[];
+  importable: boolean;
+}
+export interface LegacyProviderSettingsRecord {
+  version: 1;
+  updatedAt: string | null;
+  entries: Array<{ platform: string; source: string; status: string; code: string | null }>;
+}
+export interface LegacyProviderSettingsStatus {
+  discover: LegacyProviderSettingsDiscovery;
+  record: LegacyProviderSettingsRecord | null;
+}
+
 export interface GenerationBatchState {
   state?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
   status?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
@@ -223,7 +266,10 @@ export interface DoubaoTask { id: string; clientId: string; questionId: string; 
 export interface DoubaoQueueState { status: 'idle' | 'running' | 'paused' | 'stopping' | 'completed'; currentTaskId: string | null; completed: number; total: number; waitRemainingMs: number; tasks: DoubaoTask[]; }
 export interface DoubaoLoginState { status: DoubaoLoginStatus; errorText?: string; }
 export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; collectionMethod: 'automatic' | 'manual' | 'legacy'; collectedAt?: string; updatedAt?: string; createdAt?: string; isAnswerComplete?: boolean; }
-export interface ContentTemplate { id: string; platform: string; scenario: string; name: string; body: string; source?: 'builtin' | 'custom'; readOnly?: boolean; bodyHash?: string; }
+export interface ContentTemplate { id: string; templateId?: string; platform: string; platformId?: string; scenario: string; name: string; displayName?: string; description?: string; order?: number; enabled?: boolean; body: string; source?: 'builtin' | 'custom'; readOnly?: boolean; bodyHash?: string; revision?: string; sourceFileName?: string; }
+export interface ContentTemplatePlatform { id: string; displayName: string; description: string; order: number; source?: 'builtin' | 'custom'; }
+export interface ContentTemplateDiagnostic { code: string; message: string; platformId?: string; templateId?: string; source?: 'builtin' | 'custom'; }
+export interface ContentTemplateCatalog { revision: string; platforms: ContentTemplatePlatform[]; templates: ContentTemplate[]; diagnostics: ContentTemplateDiagnostic[]; }
 export interface GenerationBatchTemplateSelection { platform: string; templateId: string; }
 export interface GenerationBatchSourceSelection { clientId: string; materialIds: string[]; researchQueryIds: string[]; }
 export interface GenerationBatchExcludedClient { clientId: string; codes: string[]; }

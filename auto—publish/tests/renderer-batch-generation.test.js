@@ -117,7 +117,8 @@ describe("renderer content generation workflow", function() {
   it("discovers every returned template platform and counts all selected templates", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     assert.doesNotMatch(batch, /const PLATFORMS =/);
-    assert.match(batch, /listContentTemplates\(\)/);
+    assert.match(batch, /listContentTemplateCatalog\(\)/);
+    assert.match(batch, /catalog\.templates/);
     assert.match(batch, /Object\.entries\(templateGroups\)/);
     assert.match(batch, /selectedTemplates\.length/);
   });
