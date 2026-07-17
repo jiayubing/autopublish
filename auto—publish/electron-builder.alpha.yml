@@ -71,6 +71,8 @@ files:
 asar: false
 
 win:
+  # Alpha artifacts are intentionally unsigned; production signing is a release-pipeline concern.
+  signExecutable: false
   target:
     - target: portable
       arch:
