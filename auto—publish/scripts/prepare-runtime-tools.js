@@ -8,6 +8,18 @@ const { spawnSync } = require("node:child_process");
 const DEFAULT_MANIFEST = path.resolve(__dirname, "..", "build", "runtime-tools-manifest.json");
 const DEFAULT_OUTPUT = path.resolve(__dirname, "..", "build", "runtime-tools", "node");
 const DEFAULT_CACHE = path.resolve(__dirname, "..", "build", "runtime-tools-cache");
+const DEFAULT_BUILD_INFO = path.resolve(__dirname, "..", "build", "build-info.json");
+
+function readBuildInfo() {
+  const root = path.resolve(__dirname, "..");
+  let version = "unknown";
+  try { version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version || version; } catch (_) {}
+  let commit = "unknown";
+  let dirty = false;
+  try { commit = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim() || commit; } catch (_) {}
+  try { dirty = Boolean(spawnSync("git", ["status", "--porcelain=v1"], { cwd: root, encoding: "utf8" }).stdout.trim()); } catch (_) {}
+  return { version: version, commit: commit, dirty: dirty };
+}
 
 function toolError(code, message) {
   const error = new Error(message);
@@ -140,6 +152,10 @@ async function prepareRuntimeTools(options) {
     assertRegularFile(path.join(stagingDirectory, "runtime-tools-manifest.json"), "RUNTIME_TOOL_MANIFEST_INVALID");
     fs.rmSync(output, { recursive: true, force: true });
     fs.renameSync(stagingDirectory, output);
+    if (!opts.output || path.resolve(opts.output) === path.resolve(DEFAULT_OUTPUT)) {
+      fs.mkdirSync(path.dirname(DEFAULT_BUILD_INFO), { recursive: true });
+      fs.writeFileSync(DEFAULT_BUILD_INFO, JSON.stringify(readBuildInfo()) + "\n", "utf8");
+    }
     return { output, archive: archivePath, nodeVersion: manifest.nodeVersion, sha256: manifest.archive.sha256 };
   } catch (error) {
     try { fs.rmSync(stagingDirectory, { recursive: true, force: true }); } catch (_) {}

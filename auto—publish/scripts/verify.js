@@ -28,4 +28,8 @@ if (unpackedAppDir) {
     cwd: rootDir,
     stdio: "inherit"
   });
+  execFileSync(process.execPath, [path.join(__dirname, "verify-packaged-docx-runtime.js"), unpackedAppDir], {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
 }

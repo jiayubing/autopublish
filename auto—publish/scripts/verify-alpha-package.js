@@ -20,6 +20,7 @@ const REQUIRED_FILES = [
   "desktop/ipc/content-generation-batch-ipc.js",
   "src/core/logger.js",
   "src/content/client-material-store.js",
+  "src/core/docx-text-extractor.js",
   "src/content/generation-batch-store.js",
   "src/content/generation-batch-runner.js",
   "src/content/article-review-service.js",
@@ -33,6 +34,7 @@ const REQUIRED_FILES = [
   "node_modules/@playwright/cli/LICENSE",
   "node_modules/playwright/LICENSE",
   "node_modules/playwright-core/LICENSE",
+  "node_modules/mammoth/LICENSE",
 ];
 
 const REQUIRED_DIRS = [

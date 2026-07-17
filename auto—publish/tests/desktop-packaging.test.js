@@ -276,6 +276,7 @@ describe("source assembly and packaging contract", function() {
     const verifier = read("scripts/verify-alpha-package.js");
     for (const requiredSurface of [
       "src/content/client-material-store.js",
+      "src/core/docx-text-extractor.js",
       "src/content/generation-batch-store.js",
       "src/content/generation-batch-runner.js",
       "src/content/article-review-service.js",
@@ -287,6 +288,14 @@ describe("source assembly and packaging contract", function() {
     ]) {
       assert.match(verifier, new RegExp('"' + escapeRegExp(requiredSurface) + '"'), requiredSurface + " must be verified");
     }
+  });
+
+  it("declares the isolated packaged DOCX verifier and Mammoth license", function() {
+    const verifier = read("scripts/verify-alpha-package.js");
+    assert.match(verifier, /node_modules\/mammoth\/LICENSE/);
+    assert.match(read("scripts/verify-packaged-docx-runtime.js"), /MARKITDOWN_CMD/);
+    assert.match(read("scripts/verify.js"), /verify-packaged-docx-runtime/);
+    assert.match(read("electron-builder.alpha.yml"), /from: build\/build-info\.json/);
   });
 
   it("declares the bundled Playwright runtime and isolated verifier", function() {
