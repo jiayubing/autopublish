@@ -1,4 +1,4 @@
-const { describe, it } = require("node:test");
+const { describe, it, test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -11,6 +11,33 @@ const { createContentSubmissionService } = require("../desktop/services/content-
 const { createPlatformWorkbenchService } = require("../desktop/services/platform-workbench-service");
 const { createPublicationLedger } = require("../src/publication/publication-ledger");
 const { clearStopSignal, requestStopSignal } = require("../src/core/stop-signal");
+
+test("retries an active saved failed publication through the submission service", () => {
+  const value = harness({ status: "failed", errorCode: "REMOTE_REJECTED" });
+  try {
+    const first = createBatch(value);
+    const item = first.items.find((candidate) => candidate.publicationId);
+    const record = value.publicationLedger.get(item.publicationId);
+    value.publicationLedger.markSubmitting(record.publicationId, item.attemptId);
+    value.publicationLedger.recordOutcome(record.publicationId, item.attemptId, { status: "failed", errorCode: "REMOTE_REJECTED" });
+    const batchStore = createSubmissionBatchStore({ workspaceRoot: value.root, directory: value.paths.submissionRecords });
+    batchStore.updateItem(first.batchId, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: PLATFORM_ID }, { status: "failed", publicationStatus: "failed", errorCode: "REMOTE_REJECTED" });
+    [item.filePath, item.sidecarPath].forEach((filename) => { if (fs.existsSync(filename)) fs.unlinkSync(filename); });
+
+    const preview = value.submission.previewRetryFailedPublication({ publicationId: item.publicationId });
+    assert.equal(preview.requiresConfirmation, true);
+    assert.equal(preview.failureCount, 1);
+    assert.equal(preview.targetPlatformId, PLATFORM_ID);
+
+    const retried = value.submission.retryFailedPublication({ publicationId: item.publicationId, confirmed: true });
+    assert.ok(retried.batchId);
+    assert.equal(retried.publicationId, item.publicationId);
+    assert.notEqual(retried.attemptId, item.attemptId);
+    assert.equal(value.publicationLedger.get(item.publicationId).status, "queued");
+  } finally {
+    dispose(value);
+  }
+});
 
 const CLIENT_ID = "client-1";
 const ARTICLE_ID = "article-1";

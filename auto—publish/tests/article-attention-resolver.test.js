@@ -6,7 +6,7 @@ const { createArticleAttentionResolver } = require("../desktop/services/article-
 
 test("article attention resolver previews and delegates a safe missing-pair finalize", () => {
   const calls = [];
-  const query = createArticleAttentionQuery({ readers: { listResidues: () => ({ items: [{ clientId: "client-1", articleId: "article-1", batchId: "batch-1", publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan", status: "failed", pairState: "both_absent", repairAction: "cleanup" }] }) } });
+  const query = createArticleAttentionQuery({ contentSubmissionService: { cleanupArticleSubmissionItem: () => ({}) }, readers: { listResidues: () => ({ items: [{ clientId: "client-1", articleId: "article-1", batchId: "batch-1", publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan", status: "failed", pairState: "both_absent", repairAction: "cleanup" }] }) } });
   const invalidations = [];
   const resolver = createArticleAttentionResolver({
     query,
@@ -24,7 +24,7 @@ test("article attention resolver previews and delegates a safe missing-pair fina
 });
 
 test("article attention resolver rejects an old revision before writing", () => {
-  const query = createArticleAttentionQuery({ readers: { listResidues: () => ({ items: [{ clientId: "client-1", articleId: "article-1", batchId: "batch-1", publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan", status: "failed", pairState: "both_absent", repairAction: "cleanup" }] }) } });
+  const query = createArticleAttentionQuery({ contentSubmissionService: { cleanupArticleSubmissionItem: () => ({}) }, readers: { listResidues: () => ({ items: [{ clientId: "client-1", articleId: "article-1", batchId: "batch-1", publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan", status: "failed", pairState: "both_absent", repairAction: "cleanup" }] }) } });
   let called = false;
   const resolver = createArticleAttentionResolver({ query, contentSubmissionService: { cleanupArticleSubmissionItem: () => { called = true; } } });
   const item = query.list().items[0];

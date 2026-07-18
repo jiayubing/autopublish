@@ -3,8 +3,56 @@ const test = require("node:test");
 
 const { createArticleAttentionQuery } = require("../desktop/services/article-attention-query");
 
+test("publication-only failed fixture exposes only actions supported by its current facts", () => {
+  const query = createArticleAttentionQuery({
+    contentSubmissionService: {
+      previewRetryFailedPublication: () => ({}),
+      retryFailedPublication: () => ({}),
+      cleanupArticleSubmissionItem: () => ({})
+    },
+    readers: {
+      listResidues: () => ({ items: [] }),
+      listTransactions: () => [],
+      listPublications: () => [{
+        publicationId: "pub-failed",
+        clientId: "client-1",
+        articleId: "article-1",
+        platformId: "hepan",
+        status: "failed",
+        attempts: [{ attemptId: "attempt-failed", status: "failed", reasonCode: "REMOTE_REJECTED" }]
+      }],
+      getArticle: () => ({ status: "saved", title: "可重试文章" }),
+      platformCapabilities: () => ({ hepan: { contentQueueImport: true } })
+    },
+    getRevision: () => 7
+  });
+  const item = query.list({ clientId: "client-1" }).items[0];
+  assert.deepEqual(item.allowedActions, ["retry-publication", "open-publication"]);
+  assert.equal(item.allowedActions.includes("cleanup"), false);
+  assert.equal(item.allowedActions.includes("retry"), false);
+});
+
+test("removed failed publication is excluded from attention while remaining queryable as history", () => {
+  const query = createArticleAttentionQuery({
+    contentSubmissionService: {
+      previewRetryFailedPublication: () => ({}),
+      retryFailedPublication: () => ({}),
+      cleanupArticleSubmissionItem: () => ({})
+    },
+    readers: {
+      listResidues: () => ({ items: [] }),
+      listTransactions: () => [],
+      listPublications: () => [{ publicationId: "pub-removed", clientId: "client-1", articleId: "article-removed", platformId: "hepan", status: "failed", attempts: [{ attemptId: "attempt-removed", status: "failed" }] }],
+      getArticle: () => { const error = new Error("missing"); error.code = "ARTICLE_NOT_FOUND"; throw error; },
+      getTrashedArticle: () => ({ status: "saved", titleSnapshot: "已删除历史" })
+    }
+  });
+  assert.equal(query.list({ clientId: "client-1" }).items.some((item) => item.publicationId === "pub-removed"), false);
+});
+
 test("article attention query aggregates safe, actionable DTOs without filesystem paths", () => {
   const query = createArticleAttentionQuery({
+    contentSubmissionService: { cleanupArticleSubmissionItem: () => ({}) },
     readers: {
       listResidues: () => ({ items: [
         { clientId: "client-1", articleId: "article-1", batchId: "batch-1", publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan", status: "failed", pairState: "both_absent", repairAction: "cleanup", mainExists: false, sidecarExists: false, titleSnapshot: "残留文章" },
