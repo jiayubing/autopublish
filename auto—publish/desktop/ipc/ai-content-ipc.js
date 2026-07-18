@@ -68,6 +68,21 @@ function registerAiContentIpc(deps) {
   ipcMain.handle("content:recover-article-removals", function() {
     return wrap(function() { return service.recoverPendingArticleRemovals(); });
   });
+  ipcMain.handle("content:get-article-removal-transaction", function(event, input) {
+    return wrap(function() {
+      if (!input || typeof input.transactionId !== "string" || !input.transactionId.trim()) throw contentInputError("Removal transaction id is required");
+      return service.getArticleRemovalTransaction(input.transactionId);
+    });
+  });
+  ipcMain.handle("content:list-article-removal-transactions", function() {
+    return wrap(function() { return service.listArticleRemovalTransactions(); });
+  });
+  ipcMain.handle("content:retry-article-removal-transaction", function(event, input) {
+    return wrap(function() {
+      if (!input || typeof input.transactionId !== "string" || !input.transactionId.trim() || input.confirmed !== true) throw contentInputError("Removal transaction confirmation is required");
+      return service.retryArticleRemovalTransaction(input);
+    });
+  });
 }
 
 module.exports = { registerAiContentIpc };

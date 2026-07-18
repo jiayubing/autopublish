@@ -97,7 +97,8 @@ function createAiContentService(opts) {
     submissionService: contentSubmissionService,
     transactionStore: options.articleRemovalTransactionStore,
     now: options.now,
-    tokenTtlMs: options.articleRemovalTokenTtlMs
+    tokenTtlMs: options.articleRemovalTokenTtlMs,
+    onTransactionStatus: options.onArticleRemovalTransaction
   });
   const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
   const articleVersionService = options.articleVersionService || createArticleVersionService({
@@ -282,7 +283,10 @@ function createAiContentService(opts) {
     restoreArticle: articleTrashService.restoreArticle,
     preparePermanentDelete: articleTrashService.preparePermanentDelete,
     permanentlyDeleteArticle: articleTrashService.permanentlyDeleteArticle,
-    recoverPendingArticleRemovals: articleTrashService.recoverPendingRemovals
+    recoverPendingArticleRemovals: articleTrashService.recoverPendingRemovals,
+    getArticleRemovalTransaction: articleTrashService.getArticleRemovalTransaction,
+    listArticleRemovalTransactions: articleTrashService.listArticleRemovalTransactions,
+    retryArticleRemovalTransaction: articleTrashService.retryArticleRemovalTransaction
   };
 }
 

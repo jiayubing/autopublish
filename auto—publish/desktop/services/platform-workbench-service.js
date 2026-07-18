@@ -11,6 +11,7 @@ const { resolveArticleIdentity } = require("../../src/publication/article-identi
 const { resolvePublicationTarget } = require("../../src/publication/publication-targets");
 const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
 const { createArticleStore } = require("../../src/content/article-store");
+const { writeAtomic } = require("../../src/content/submission-export-service");
 
 const ARTICLE_EXTENSIONS = [".md", ".txt", ".docx"];
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -322,6 +323,34 @@ function createPlatformWorkbenchService(opts) {
     } catch (_) {}
   }
 
+  function rebindSubmissionPair(metadata, identity, target, previous, replacement) {
+    var sidecar = metadata && metadata.data;
+    var batchId = sidecar && sidecar.submissionBatchId;
+    if (!batchId || !metadata.path || !sidecar) throw submissionInputError("SUBMISSION_ATTEMPT_REBIND_REQUIRED", "Submission attempt cannot be rebound safely");
+    if (sidecar.publicationId !== previous.publicationId || sidecar.attemptId !== previous.attemptId || (identity.contentHash && sidecar.contentHash !== identity.contentHash)) {
+      throw submissionInputError("SUBMISSION_ATTEMPT_REBIND_CONFLICT", "Submission attempt identity changed");
+    }
+    var originalSidecar = fs.readFileSync(metadata.path, "utf8");
+    var updatedSidecar = Object.assign({}, sidecar, { attemptId: replacement.attemptId, status: "queued" });
+    try {
+      // The queue sidecar is replaced atomically and the old bytes remain
+      // recoverable until the batch identity update has succeeded.
+      writeAtomic(metadata.path, JSON.stringify(updatedSidecar, null, 2) + "\n");
+      submissionBatchStore.rebindAttempt(batchId, {
+        publicationId: previous.publicationId,
+        attemptId: previous.attemptId,
+        targetPlatformId: target.platformId
+      }, replacement, {
+        articleId: sidecar.generatedArticleId || sidecar.articleId,
+        targetPlatformId: target.platformId,
+        contentHash: sidecar.contentHash
+      });
+    } catch (error) {
+      try { writeAtomic(metadata.path, originalSidecar); } catch (_) {}
+      throw error;
+    }
+  }
+
   function reservePublication(identity, target, metadata) {
     var sidecar = metadata.data || {};
     var suppliedPublicationId = sidecar.publicationId;
@@ -336,8 +365,20 @@ function createPlatformWorkbenchService(opts) {
       } catch (_) {}
     }
 
+    var previous = null;
+    if (suppliedPublicationId && suppliedAttemptId) {
+      try { previous = ledger.get(suppliedPublicationId); } catch (_) {}
+    }
     try {
       var reserved = ledger.reserve(identity, target, { displayName: target.platformId });
+      if (previous && reserved.attemptId !== suppliedAttemptId && previous.publicationId === reserved.publicationId) {
+        try {
+          rebindSubmissionPair(metadata, identity, target, Object.assign({}, previous, { attemptId: suppliedAttemptId }), reserved);
+        } catch (error) {
+          try { cancelQueuedReservation(reserved); } catch (_) {}
+          throw submissionInputError(error && error.code || "SUBMISSION_ATTEMPT_REBIND_FAILED", "Submission attempt rebind failed");
+        }
+      }
       return { publicationId: reserved.publicationId, attemptId: reserved.attemptId, status: reserved.status, record: reserved };
     } catch (error) {
       if (error && (error.code === "PUBLICATION_DUPLICATE" || error.code === "PUBLICATION_UNCERTAIN")) {

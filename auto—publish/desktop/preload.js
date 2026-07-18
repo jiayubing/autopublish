@@ -127,6 +127,14 @@ const api = {
     previewTrashedArticleQueueResidue: function() { return ipcRenderer.invoke("content:preview-trashed-article-queue-residue"); },
     cleanupTrashedArticleQueueResidue: function(input) { return ipcRenderer.invoke("content:cleanup-trashed-article-queue-residue", input || {}); },
     getSubmissionBatch: function(batchId) { return ipcRenderer.invoke("content:get-submission-batch", { batchId: batchId }); },
+    getArticleRemovalTransaction: function(transactionId) { return ipcRenderer.invoke("content:get-article-removal-transaction", { transactionId: transactionId }); },
+    listArticleRemovalTransactions: function() { return ipcRenderer.invoke("content:list-article-removal-transactions"); },
+    retryArticleRemovalTransaction: function(input) { return ipcRenderer.invoke("content:retry-article-removal-transaction", input || {}); },
+    onArticleRemovalTransaction: function(listener) {
+      var handler = function(event, payload) { listener(payload); };
+      ipcRenderer.on("content:article-removal-transaction", handler);
+      return function() { ipcRenderer.removeListener("content:article-removal-transaction", handler); };
+    },
     listQuestions: function(clientId) { return ipcRenderer.invoke("content:list-questions", { clientId: clientId }); },
     createQuestion: function(input) { return ipcRenderer.invoke("content:create-question", input); },
     updateQuestion: function(input) { return ipcRenderer.invoke("content:update-question", input); },

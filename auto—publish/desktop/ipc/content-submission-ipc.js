@@ -21,6 +21,18 @@ function registerContentSubmissionIpc(deps) {
     });
     return result;
   }
+  function safeResidueResult(value) {
+    if (!value || typeof value !== "object") return value;
+    const result = JSON.parse(JSON.stringify(value));
+    [result.items, result.remainingItems, result.cleanableItems, result.reportedItems, result.failedItems].forEach(function(items) {
+      if (!Array.isArray(items)) return;
+      items.forEach(function(item) {
+        if (!item || typeof item !== "object") return;
+        ["filePath", "sidecarPath", "path", "sourceFile"].forEach(function(key) { delete item[key]; });
+      });
+    });
+    return result;
+  }
   deps.ipcMain.handle("content:preview-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.previewBatch(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:list-submission-platforms", function() { return wrap(function() { return service.listPlatforms(); }); });
   deps.ipcMain.handle("content:list-submission-batches", function(event, input) { return wrap(function() {
@@ -35,9 +47,9 @@ function registerContentSubmissionIpc(deps) {
   deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCleanupFailedItems(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.cleanupFailedItems(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:get-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.getBatch(batchInput(input, false).batchId)); }); });
-  deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return service.previewTrashedArticleQueueResidue(); }); });
+  deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return safeResidueResult(service.previewTrashedArticleQueueResidue()); }); });
   deps.ipcMain.handle("content:cleanup-trashed-article-queue-residue", function(event, input) {
-    return wrap(function() { return service.cleanupTrashedArticleQueueResidue(input); });
+    return wrap(function() { return safeResidueResult(service.cleanupTrashedArticleQueueResidue(input)); });
   });
 }
 module.exports = { registerContentSubmissionIpc };

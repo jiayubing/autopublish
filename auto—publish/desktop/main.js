@@ -235,6 +235,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
     contentSubmissionService: contentSubmissionService,
+    onArticleRemovalTransaction: function(transaction) { sendToRenderer("content:article-removal-transaction", transaction); },
     aiClientFactory: function() { return aiProviderService.createClient(); }
   });
   if (aiContentService && typeof aiContentService.recoverPendingArticleRemovals === "function") {

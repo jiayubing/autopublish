@@ -70,6 +70,14 @@ cannot be selected, and expose the independent repair flow. The repair flow
 can preview and confirm safe cancellation/failed cleanup but does not
 force-delete conflicts or infer uncertain remote results.
 
+Residue inspection and cleanup use an independent `repairingResidue` state.
+The UI always clears it in `finally`, reloads the queue after execution, and
+shows zero-item, partial-failure, and full-failure results with stable reason
+codes. Removal transactions are queried/subscribed by ID: only
+`pending_auto_recovery` promises automatic retry; `needs_repair` shows the
+reason and a repair action. An existing selection/action fingerprint is
+reused and duplicate confirmation is disabled while it remains open.
+
 ## States
 
 | State | Behavior |
@@ -82,4 +90,7 @@ force-delete conflicts or infer uncertain remote results.
 | Submitting | "提交中..." disabled all buttons |
 | Waiting interval | Shows the next Hepan article and remaining seconds; stop remains available |
 | Result | Overlay with success/fail/skipped breakdown |
+| Residue checking/cleaning | Independent check/cleanup feedback; failures remain retryable |
+| Removal pending | Shows last update while bounded automatic recovery runs |
+| Removal needs repair | Shows reason code and an explicit repair/retry action |
 

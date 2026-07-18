@@ -39,6 +39,13 @@ function removeSubmissionPair(filePath, sidecarPath) {
   try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
 }
 
+function removeSubmissionPairStrict(filePath, sidecarPath) {
+  [sidecarPath, filePath].forEach(function(file) {
+    if (!file || !fs.existsSync(file)) return;
+    fs.unlinkSync(file);
+  });
+}
+
 function createContentSubmissionService(opts) {
   const options = opts || {};
   const rootDir = path.resolve(options.workspaceRoot || process.cwd());
@@ -255,6 +262,8 @@ function createContentSubmissionService(opts) {
   function pairIsUnchanged(item, batch, sidecar) {
     if (!sidecar || sidecar.submissionBatchId !== batch.id || !item.filePath || !item.sidecarPath) return false;
     if (sidecar.contentHash !== item.contentHash || sidecar.targetPlatformId !== item.targetPlatformId) return false;
+    if (sidecar.clientId && sidecar.clientId !== batch.clientId) return false;
+    if (sidecar.generatedArticleId && sidecar.generatedArticleId !== item.articleId && sidecar.articleId !== item.articleId) return false;
     if (item.publicationId && sidecar.publicationId !== item.publicationId) return false;
     if (item.attemptId && sidecar.attemptId !== item.attemptId) return false;
     try { return fs.existsSync(item.filePath) && hash(fs.readFileSync(item.filePath, "utf8")) === item.contentHash; } catch (_) { return false; }
@@ -339,11 +348,17 @@ function createContentSubmissionService(opts) {
       if (["submitting", "submitted", "uncertain"].indexOf(value.status) !== -1) {
         blockedItems.push(Object.assign({}, value, { reasonCode: "ARTICLE_SUBMISSION_ACTIVE" }));
       } else if (value.status === "queued") {
-        if (value.unchanged && value.batchId && value.publicationId && value.attemptId) queuedToCancel.push(Object.assign({}, value, { action: "cancel" }));
-        else blockedItems.push(Object.assign({}, value, { reasonCode: value.batchId ? "SUBMISSION_QUEUE_CHANGED" : "PUBLICATION_RESERVATION_WITHOUT_QUEUE" }));
+        if (value.batchId && value.publicationId && value.attemptId) {
+          const checked = evaluateItemAction(Object.assign({}, value, { action: "cancel" }));
+          if (checked.allowed) queuedToCancel.push(Object.assign({}, value, { action: "cancel", evaluationFingerprint: checked.bindingFingerprint }));
+          else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
+        } else blockedItems.push(Object.assign({}, value, { reasonCode: "PUBLICATION_RESERVATION_WITHOUT_QUEUE" }));
       } else if (value.status === "failed") {
-        if (value.unchanged && value.batchId) failedToClean.push(Object.assign({}, value, { action: "cleanup" }));
-        else if (value.batchId) blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_QUEUE_CHANGED" }));
+        if (value.batchId && value.publicationId && value.attemptId) {
+          const checked = evaluateItemAction(Object.assign({}, value, { action: "cleanup" }));
+          if (checked.allowed) failedToClean.push(Object.assign({}, value, { action: "cleanup", evaluationFingerprint: checked.bindingFingerprint }));
+          else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
+        }
       } else if (value.status === "published" && value.batchId) {
         blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_QUEUE_STATUS_CONFLICT" }));
       }
@@ -369,20 +384,93 @@ function createContentSubmissionService(opts) {
     });
   }
 
-  function applyArticleSubmissionItem(action, expectedStatus, nextStatus, reasonCode) {
+  function actionBindingFingerprint(entry, action) {
+    const record = entry.record || {};
+    return hash(JSON.stringify({
+      action: action.action,
+      clientId: entry.safe.clientId,
+      articleId: entry.safe.articleId,
+      batchId: entry.safe.batchId,
+      targetPlatformId: entry.safe.targetPlatformId,
+      publicationId: entry.safe.publicationId,
+      attemptId: entry.safe.attemptId,
+      itemStatus: entry.item && entry.item.status,
+      publicationStatus: entry.safe.status,
+      contentHash: entry.safe.contentHash,
+      sidecarAttemptId: entry.sidecar && entry.sidecar.attemptId || null,
+      unchanged: entry.safe.unchanged,
+      recordStatus: record.status || null,
+      attempts: Array.isArray(record.attempts) ? record.attempts.map(function(attempt) { return { attemptId: attempt.attemptId, status: attempt.status }; }) : []
+    }));
+  }
+
+  function evaluation(action, entry, allowed, reasonCode, resolvedState) {
+    const safeState = Object.assign({}, entry && entry.safe || {}, { reasonCode: reasonCode || null });
+    return {
+      allowed: allowed === true,
+      action: action.action,
+      reasonCode: reasonCode || null,
+      resolvedState: resolvedState || safeState,
+      bindingFingerprint: entry ? actionBindingFingerprint(entry, action) : null,
+      entry: entry || null
+    };
+  }
+
+  function evaluateItemAction(action) {
+    if (!action || typeof action !== "object" || !["cancel", "cleanup"].includes(action.action)) {
+      return { allowed: false, action: action && action.action || null, reasonCode: "SUBMISSION_ACTION_INVALID", resolvedState: null, bindingFingerprint: null, entry: null };
+    }
+    const entry = locateArticleSubmissionItem(action);
+    if (!entry || !entry.item || !entry.batch) return { allowed: false, action: action.action, reasonCode: "SUBMISSION_QUEUE_ITEM_NOT_FOUND", resolvedState: null, bindingFingerprint: null, entry: null };
+    const currentFingerprint = actionBindingFingerprint(entry, action);
+    if (action.evaluationFingerprint && action.evaluationFingerprint !== currentFingerprint) {
+      return evaluation(action, entry, false, "SUBMISSION_ACTION_STALE");
+    }
+    if (["cancelled", "failed-cleaned"].includes(entry.safe.status)) return evaluation(action, entry, true, null);
+    if (!entry.safe.unchanged) return evaluation(action, entry, false, "SUBMISSION_QUEUE_CHANGED");
+
+    if (action.action === "cancel") {
+      if (entry.safe.status !== "queued") return evaluation(action, entry, false, entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_QUEUED" : "ARTICLE_SUBMISSION_ACTIVE");
+      if (entry.record && (entry.record.status !== "queued" || !entry.latest || entry.latest.attemptId !== action.attemptId)) {
+        return evaluation(action, entry, false, "PUBLICATION_ATTEMPT_MISMATCH");
+      }
+      return evaluation(action, entry, true, null);
+    }
+
+    if (entry.safe.status !== "failed") return evaluation(action, entry, false, ["queued", "submitting", "submitted", "uncertain"].includes(entry.safe.status) ? "ARTICLE_SUBMISSION_ACTIVE" : "PUBLICATION_STATUS_NOT_FAILED");
+    if (entry.record) {
+      if (entry.record.status !== "failed") return evaluation(action, entry, false, "PUBLICATION_STATUS_NOT_FAILED");
+      const historicalAttempt = Array.isArray(entry.record.attempts) && entry.record.attempts.find(function(attempt) { return attempt.attemptId === action.attemptId && attempt.status === "failed"; });
+      if (!historicalAttempt) return evaluation(action, entry, false, "PUBLICATION_ATTEMPT_NOT_FAILED");
+    }
+    return evaluation(action, entry, true, null);
+  }
+
+  function applyItemAction(action, nextStatus, reasonCode) {
     const entry = locateArticleSubmissionItem(action);
     if (!entry || !entry.item || !entry.batch) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item is unavailable");
-    if (entry.safe.status === nextStatus || entry.safe.status === "failed-cleaned" || entry.safe.status === "cancelled") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true };
-    if (entry.safe.status !== expectedStatus || !entry.safe.unchanged) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item changed");
-    if (entry.record && entry.latest && entry.latest.attemptId !== action.attemptId) throw batchError("PUBLICATION_ATTEMPT_MISMATCH", "Publication attempt is not current");
-    if (nextStatus === "cancelled" && entry.record) cancelReservation(publicationLedger, { publicationId: action.publicationId, attemptId: action.attemptId }, reasonCode);
-    removeSubmissionPair(entry.item.filePath, entry.item.sidecarPath);
-    batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? nextStatus === "failed-cleaned" ? "failed" : nextStatus : undefined, reasonCode: reasonCode });
+    if (entry.safe.status === nextStatus || entry.safe.status === "failed-cleaned" || entry.safe.status === "cancelled") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId };
+    const checked = evaluateItemAction(action);
+    if (!checked.allowed) throw batchError(checked.reasonCode || "SUBMISSION_QUEUE_CHANGED", "Submission item action is no longer valid");
+    if (action.evaluationFingerprint && checked.bindingFingerprint !== action.evaluationFingerprint) throw batchError("SUBMISSION_ACTION_STALE", "Submission item action is stale");
+    let originalFile = null;
+    let originalSidecar = null;
+    try { if (fs.existsSync(entry.item.filePath)) originalFile = fs.readFileSync(entry.item.filePath); } catch (_) {}
+    try { if (fs.existsSync(entry.item.sidecarPath)) originalSidecar = fs.readFileSync(entry.item.sidecarPath); } catch (_) {}
+    try {
+      if (action.action === "cancel" && entry.record) cancelReservation(publicationLedger, { publicationId: action.publicationId, attemptId: action.attemptId }, reasonCode);
+      removeSubmissionPairStrict(entry.item.filePath, entry.item.sidecarPath);
+      batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? nextStatus === "failed-cleaned" ? "failed" : nextStatus : undefined, reasonCode: reasonCode });
+    } catch (error) {
+      try { if (originalFile !== null && !fs.existsSync(entry.item.filePath)) { fs.mkdirSync(path.dirname(entry.item.filePath), { recursive: true }); fs.writeFileSync(entry.item.filePath, originalFile); } } catch (_) {}
+      try { if (originalSidecar !== null && !fs.existsSync(entry.item.sidecarPath)) { fs.mkdirSync(path.dirname(entry.item.sidecarPath), { recursive: true }); fs.writeFileSync(entry.item.sidecarPath, originalSidecar); } } catch (_) {}
+      throw error;
+    }
     return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId };
   }
 
-  function cancelArticleSubmissionItem(action) { return applyArticleSubmissionItem(action, "queued", "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
-  function cleanupArticleSubmissionItem(action) { return applyArticleSubmissionItem(action, "failed", "failed-cleaned", "ARTICLE_TRASHED_FAILED_QUEUE_CLEANUP"); }
+  function cancelArticleSubmissionItem(action) { return applyItemAction(action, "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
+  function cleanupArticleSubmissionItem(action) { return applyItemAction(action, "failed-cleaned", "ARTICLE_TRASHED_FAILED_QUEUE_CLEANUP"); }
 
   function isSubmissionItemExecutable(action) {
     const entry = locateArticleSubmissionItem(action);
@@ -396,6 +484,7 @@ function createContentSubmissionService(opts) {
     const items = [];
     batchStore.list().forEach(function(batch) {
       (batch.items || []).forEach(function(item) {
+        if (["failed-cleaned", "cancelled", "skipped"].includes(item.status)) return;
         var removed = typeof store.isArticleRemoved === "function"
           ? store.isArticleRemoved(batch.clientId, item.articleId)
           : typeof store.isArticleTrashed === "function" && store.isArticleTrashed(batch.clientId, item.articleId);
@@ -405,9 +494,15 @@ function createContentSubmissionService(opts) {
         });
         if (!entry) return;
         const safe = Object.assign({}, entry.safe, { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" });
-        if (entry.safe.status === "queued" && entry.safe.unchanged) safe.repairAction = "cancel";
-        else if (entry.safe.status === "failed" && entry.safe.unchanged) safe.repairAction = "cleanup";
-        else safe.repairAction = null;
+        const requestedAction = entry.safe.status === "queued" ? "cancel" : entry.safe.status === "failed" ? "cleanup" : null;
+        const checked = requestedAction ? evaluateItemAction(Object.assign({}, entry.safe, { action: requestedAction })) : { allowed: false, reasonCode: entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_FAILED" : "ARTICLE_SUBMISSION_ACTIVE" };
+        if (checked.allowed) {
+          safe.repairAction = requestedAction;
+          safe.evaluationFingerprint = checked.bindingFingerprint;
+        } else {
+          safe.repairAction = null;
+          safe.reasonCode = checked.reasonCode || safe.reasonCode;
+        }
         items.push(safe);
       });
     });
@@ -424,14 +519,36 @@ function createContentSubmissionService(opts) {
     if (!value || value.confirmed !== true) throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Queue residue confirmation is required");
     const preview = previewTrashedArticleQueueResidue();
     let cleanedCount = 0;
-    preview.cleanableItems.forEach(function(item) {
+    let failedCount = 0;
+    const results = [];
+    preview.items.forEach(function(item) {
+      if (!item.repairAction) {
+        results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: item.reasonCode || "RESIDUE_NOT_CLEANABLE" });
+        return;
+      }
       try {
-        if (item.repairAction === "cancel") cancelArticleSubmissionItem(Object.assign({}, item, { action: "cancel" }));
-        else cleanupArticleSubmissionItem(Object.assign({}, item, { action: "cleanup" }));
+        const action = Object.assign({}, item, { action: item.repairAction, evaluationFingerprint: item.evaluationFingerprint });
+        const result = item.repairAction === "cancel" ? cancelArticleSubmissionItem(action) : cleanupArticleSubmissionItem(action);
         cleanedCount += 1;
-      } catch (_) {}
+        results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: "cleaned", reasonCode: null, action: item.repairAction, resultStatus: result.status });
+      } catch (error) {
+        failedCount += 1;
+        results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: error && error.code || "SUBMISSION_RESIDUE_CLEANUP_FAILED", action: item.repairAction });
+      }
     });
-    return Object.assign(previewTrashedArticleQueueResidue(), { cleanedCount: cleanedCount });
+    const after = previewTrashedArticleQueueResidue();
+    return {
+      status: failedCount > 0 ? "failed" : cleanedCount > 0 ? "completed" : "no-op",
+      cleanedCount: cleanedCount,
+      failedCount: failedCount,
+      remainingCount: after.items.length,
+      cleanableCount: after.cleanableCount,
+      reportedCount: after.reportedCount,
+      items: results,
+      remainingItems: after.items.map(function(item) {
+        return { publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: item.reasonCode || null };
+      })
+    };
   }
 
   function reconcileBatch(batchId) {
@@ -447,9 +564,9 @@ function createContentSubmissionService(opts) {
       }
       const record = publicationForBatchItem(item);
       const latest = latestAttempt(record);
-      if (!record || !latest || latest.attemptId !== item.attemptId || record.platformId && record.platformId !== item.targetPlatformId) {
+      if (!record || !latest || record.platformId && record.platformId !== item.targetPlatformId) {
         copy.reconciledStatus = "conflict";
-        copy.reasonCode = "PUBLICATION_ATTEMPT_MISMATCH";
+        copy.reasonCode = !record ? "PUBLICATION_RECORD_MISSING" : "PUBLICATION_PLATFORM_MISMATCH";
         reconciled.push(copy);
         return;
       }
@@ -466,8 +583,13 @@ function createContentSubmissionService(opts) {
           copy.reasonCode = "SUBMISSION_STATUS_CONFLICT";
         }
       }
-      copy.canCancel = record.status === "queued" && copy.unchanged;
-      copy.canCleanup = record.status === "failed" && copy.unchanged;
+      const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId };
+      const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" })) : null;
+      const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" })) : null;
+      copy.canCancel = !!(cancelEvaluation && cancelEvaluation.allowed);
+      copy.canCleanup = !!(cleanupEvaluation && cleanupEvaluation.allowed);
+      copy.actionFingerprint = copy.canCancel ? cancelEvaluation.bindingFingerprint : copy.canCleanup ? cleanupEvaluation.bindingFingerprint : null;
+      if (!copy.canCancel && !copy.canCleanup && (cancelEvaluation || cleanupEvaluation)) copy.reasonCode = (cancelEvaluation || cleanupEvaluation).reasonCode;
       reconciled.push(copy);
     });
     const enrichedItems = batch.items.map((item) => {
@@ -495,7 +617,7 @@ function createContentSubmissionService(opts) {
       delete copy.filePath;
       delete copy.sidecarPath;
       const state = result.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
-      const cleanable = Boolean(state && state.reconciledStatus === "failed" && state.unchanged);
+      const cleanable = Boolean(state && state.reconciledStatus === "failed" && state.canCleanup);
       if (cleanable) cleanableCount += 1; else uncleanableCount += 1;
       return Object.assign(copy, { cleanable, reasonCode: cleanable ? null : (state && state.reasonCode) || (state && state.reconciledStatus === "failed" ? "SUBMISSION_QUEUE_CHANGED" : "SUBMISSION_NOT_FAILED") });
     });
@@ -509,19 +631,27 @@ function createContentSubmissionService(opts) {
     let skippedCount = 0;
     result.batch.items.forEach((item) => {
       const state = result.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
-      if (!state || state.reconciledStatus !== "failed" || !state.unchanged) { skippedCount += 1; return; }
+      if (!state || state.reconciledStatus !== "failed" || !state.canCleanup) { skippedCount += 1; return; }
       let originalFile = null;
       let originalSidecar = null;
       try { if (fs.existsSync(item.filePath)) originalFile = fs.readFileSync(item.filePath); } catch (_) {}
       try { if (fs.existsSync(item.sidecarPath)) originalSidecar = fs.readFileSync(item.sidecarPath); } catch (_) {}
-      removeSubmissionPair(item.filePath, item.sidecarPath);
       try {
-        batchStore.updateItem(result.batch.id, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId }, { status: "failed-cleaned", publicationStatus: "failed", errorCode: state.errorCode || item.errorCode || undefined });
+        cleanupArticleSubmissionItem({
+          clientId: result.batch.clientId,
+          articleId: item.articleId,
+          batchId: result.batch.id,
+          targetPlatformId: item.targetPlatformId,
+          publicationId: item.publicationId,
+          attemptId: item.attemptId,
+          action: "cleanup",
+          evaluationFingerprint: state.actionFingerprint
+        });
         cleanedCount += 1;
       } catch (_) {
         try {
-          if (originalFile !== null) { fs.mkdirSync(path.dirname(item.filePath), { recursive: true }); fs.writeFileSync(item.filePath, originalFile); }
-          if (originalSidecar !== null) { fs.mkdirSync(path.dirname(item.sidecarPath), { recursive: true }); fs.writeFileSync(item.sidecarPath, originalSidecar); }
+          if (originalFile !== null && !fs.existsSync(item.filePath)) { fs.mkdirSync(path.dirname(item.filePath), { recursive: true }); fs.writeFileSync(item.filePath, originalFile); }
+          if (originalSidecar !== null && !fs.existsSync(item.sidecarPath)) { fs.mkdirSync(path.dirname(item.sidecarPath), { recursive: true }); fs.writeFileSync(item.sidecarPath, originalSidecar); }
         } catch (restoreError) {
           if (typeof options.onCleanupRestoreError === "function") options.onCleanupRestoreError({ code: restoreError && restoreError.code || "SUBMISSION_QUEUE_RESTORE_FAILED", batchId: result.batch.id });
         }
@@ -540,19 +670,12 @@ function createContentSubmissionService(opts) {
     let skippedCount = 0;
     batch.items.forEach((item) => {
       if (item.status !== "queued" || !item.filePath) { skippedCount += 1; return; }
-      let sidecar;
-      try { sidecar = JSON.parse(fs.readFileSync(item.sidecarPath, "utf8")); } catch (_) { skippedCount += 1; return; }
-      if (!pairIsUnchanged(item, batch, sidecar)) { item.status = "conflict"; skippedCount += 1; return; }
-      const record = publicationForBatchItem(item);
-      if (record) {
-        const attempt = latestAttempt(record);
-        if (record.status !== "queued" || !attempt || attempt.attemptId !== item.attemptId) { skippedCount += 1; return; }
-        try { cancelReservation(publicationLedger, { publicationId: item.publicationId, attemptId: item.attemptId }, "QUEUE_CANCELLED"); } catch (_) { skippedCount += 1; return; }
-      }
-      removeSubmissionPair(item.filePath, item.sidecarPath);
-      item.status = "cancelled";
-      item.publicationStatus = record ? "cancelled" : null;
-      cancelledCount += 1;
+      const state = reconciled.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
+      if (!state || !state.canCancel) { skippedCount += 1; return; }
+      try {
+        cancelArticleSubmissionItem({ clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId, action: "cancel", evaluationFingerprint: state.actionFingerprint });
+        cancelledCount += 1;
+      } catch (_) { skippedCount += 1; }
     });
     batch.status = batch.items.some((item) => item.status === "queued") ? "queued" : "cancelled";
     batch.updatedAt = new Date().toISOString();
@@ -610,6 +733,7 @@ function createContentSubmissionService(opts) {
     previewArticleRemovalImpact,
     cancelArticleSubmissionItem,
     cleanupArticleSubmissionItem,
+    evaluateItemAction,
     isSubmissionItemExecutable,
     previewTrashedArticleQueueResidue,
     cleanupTrashedArticleQueueResidue

@@ -54,3 +54,18 @@ it("exposes reconciliation cleanup previews and keeps queue paths out of the ren
   assert.deepEqual(preview, { ok: true, data: { batchId: "batch-1", cleanableCount: 1, uncleanableCount: 0, items: [{ articleId: "article-1", status: "failed", cleanable: true }] } });
   assert.deepEqual(result, { ok: true, data: { batchId: "batch-1", cleanedCount: 1, skippedCount: 0, items: [{ articleId: "article-1", status: "failed-cleaned" }] } });
 });
+
+it("keeps residue cleanup counts and reason codes while stripping filesystem fields", async function() {
+  const handlers = new Map();
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    contentSubmissionService: {
+      previewTrashedArticleQueueResidue: () => ({ cleanableCount: 1, reportedCount: 0, items: [{ publicationId: "pub-1", status: "failed", filePath: "C:\\secret.md", sidecarPath: "C:\\secret.md.submission.json", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH" }] }),
+      cleanupTrashedArticleQueueResidue: () => ({ status: "failed", cleanedCount: 0, failedCount: 1, remainingCount: 1, items: [{ publicationId: "pub-1", status: "failed", path: "C:\\secret.md", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH" }] })
+    }
+  });
+  const preview = await handlers.get("content:preview-trashed-article-queue-residue")();
+  const result = await handlers.get("content:cleanup-trashed-article-queue-residue")(null, { confirmed: true });
+  assert.deepEqual(preview, { ok: true, data: { cleanableCount: 1, reportedCount: 0, items: [{ publicationId: "pub-1", status: "failed", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH" }] } });
+  assert.deepEqual(result, { ok: true, data: { status: "failed", cleanedCount: 0, failedCount: 1, remainingCount: 1, items: [{ publicationId: "pub-1", status: "failed", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH" }] } });
+});

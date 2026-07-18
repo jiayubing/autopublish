@@ -65,6 +65,7 @@ function createFixture(options) {
     localStateRoot: path.join(root, "local-state"),
     runCommand: async (command, args, commandOptions) => {
       commands.push({ command, args: Array.from(args), commandOptions: commandOptions || {} });
+      if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":20,"contentHtmlLength":20}\n', stderr: "" };
       if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
       if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
       if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };

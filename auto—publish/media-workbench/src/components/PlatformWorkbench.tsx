@@ -67,6 +67,9 @@ export default function PlatformWorkbench() {
   const [platformState, setPlatformState] = useState<PlatformStatus>({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false });
   const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(30);
   const [queueResidue, setQueueResidue] = useState<{ cleanableCount: number; reportedCount: number }>({ cleanableCount: 0, reportedCount: 0 });
+  const [repairingResidue, setRepairingResidue] = useState(false);
+  const [residuePhase, setResiduePhase] = useState<"idle" | "checking" | "cleaning">("idle");
+  const [residueFeedback, setResidueFeedback] = useState<{ kind: "status" | "error"; text: string } | null>(null);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set()
@@ -94,25 +97,50 @@ export default function PlatformWorkbench() {
     try {
       const report = await previewTrashedArticleQueueResidue();
       setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
-    } catch (_) {
-      setQueueResidue({ cleanableCount: 0, reportedCount: 0 });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "无法检查已删除文章队列残留");
     }
   }, []);
 
   useEffect(() => { void inspectQueueResidue(); }, [inspectQueueResidue, queue.length]);
 
   const repairQueueResidue = async () => {
-    const report = await previewTrashedArticleQueueResidue();
-    setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
-    if (!report.cleanableCount) {
-      setError(report.reportedCount ? `发现 ${report.reportedCount} 项已删除源文章残留，但它们正在投稿、结果待确认或存在冲突，需独立人工核对。` : "未发现已删除源文章的可修复队列残留。");
-      return;
+    if (repairingResidue) return;
+    setRepairingResidue(true);
+    setResiduePhase("checking");
+    setResidueFeedback(null);
+    try {
+      const report = await previewTrashedArticleQueueResidue();
+      setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
+      if (!report.cleanableCount) {
+        setResidueFeedback({ kind: "error", text: report.reportedCount ? `发现 ${report.reportedCount} 项已删除源文章残留，但它们正在投稿、结果待确认或存在冲突，需独立人工核对。` : "未发现已删除源文章的可修复队列残留。" });
+        return;
+      }
+      if (!window.confirm(`发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`)) return;
+      setResiduePhase("cleaning");
+      setResidueFeedback({ kind: "status", text: "清理中…" });
+      const result = await cleanupTrashedArticleQueueResidue();
+      const refreshed = await previewTrashedArticleQueueResidue();
+      setQueueResidue({ cleanableCount: refreshed.cleanableCount, reportedCount: refreshed.reportedCount });
+      await loadQueue();
+      const cleanedCount = Number(result.cleanedCount) || 0;
+      const failedCount = Number(result.failedCount ?? result.failedItems?.length ?? 0) || 0;
+      const remainingCount = Number(result.remainingCount ?? (refreshed.cleanableCount + refreshed.reportedCount)) || 0;
+      const reasons = [...new Set((result.failedItems || []).map((item) => item.reasonCode).filter((value): value is string => typeof value === "string" && Boolean(value.trim())))];
+      if (failedCount > 0 || cleanedCount === 0) {
+        const reason = reasons.length ? `原因：${reasons.join("、")}` : "原因：存在状态冲突或队列身份变化";
+        setResidueFeedback({ kind: "error", text: cleanedCount > 0 ? `部分清理：已清理 ${cleanedCount} 项，仍有 ${Math.max(failedCount, remainingCount)} 项未清理。${reason}` : `未清理任何残留项。仍有 ${Math.max(failedCount, remainingCount)} 项需要处理。${reason}` });
+      } else {
+        setResidueFeedback({ kind: "status", text: `已清理 ${cleanedCount} 项已删除源文章队列残留。` });
+      }
+    } catch (e: unknown) {
+      const value = e as { code?: unknown; reasonCode?: unknown; message?: unknown };
+      const reason = typeof value.code === "string" ? value.code : typeof value.reasonCode === "string" ? value.reasonCode : typeof value.message === "string" ? value.message : "清理服务返回失败";
+      setResidueFeedback({ kind: "error", text: `已删除文章队列残留清理失败。原因：${reason}` });
+    } finally {
+      setResiduePhase("idle");
+      setRepairingResidue(false);
     }
-    if (!window.confirm(`发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`)) return;
-    const result = await cleanupTrashedArticleQueueResidue();
-    setQueueResidue({ cleanableCount: result.cleanableCount, reportedCount: result.reportedCount });
-    await loadQueue();
-    setSubmitStatus(`已清理 ${result.cleanedCount} 项已删除源文章队列残留`);
   };
 
   useEffect(() => {
@@ -285,8 +313,10 @@ export default function PlatformWorkbench() {
           />
           <span>刷新队列</span>
         </button>
-        {(queueResidue.cleanableCount > 0 || queueResidue.reportedCount > 0) && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || isSubmitting} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">检查并清理已删除文章残留 ({queueResidue.cleanableCount}/{queueResidue.cleanableCount + queueResidue.reportedCount})</button>}
+        {(queueResidue.cleanableCount > 0 || queueResidue.reportedCount > 0) && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || isSubmitting || repairingResidue} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{repairingResidue ? (residuePhase === "checking" ? "检查中…" : "清理中…") : `检查并清理已删除文章残留 (${queueResidue.cleanableCount}/${queueResidue.cleanableCount + queueResidue.reportedCount})`}</button>}
       </div>
+
+      {residueFeedback && <div role={residueFeedback.kind === "error" ? "alert" : "status"} aria-live={residueFeedback.kind === "error" ? "assertive" : "polite"} className={`mb-3 rounded border p-3 text-xs ${residueFeedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>{residueFeedback.text}</div>}
 
       {error && (
         <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2 text-red-700 text-xs">

@@ -155,6 +155,39 @@ function createHepanAdapter(options) {
     log("[hepan] Cookie configuration is ready", "INFO");
   }
 
+  async function validatePayload(article) {
+    const config = runtime();
+    if (!config.pythonPath) return { ok: false, errorCode: "HEPAN_CONFIG_NOT_SET" };
+    const sourceFile = article && (article.sourceFile || article.file || article.filePath);
+    let temporaryPayload = null;
+    try {
+      const parsed = article && article.contentHtml ? article : parseArticle(sourceFile, { fs: io, path: pathApi });
+      temporaryPayload = createTemporaryPayload(parsed);
+      const result = commandRunner(config.pythonPath, [script, "--validate-payload", temporaryPayload.filename], {
+        cwd: DIRS.rootDir,
+        encoding: "utf8",
+        timeout: 120000,
+        env: Object.assign({}, process.env, {
+          PYTHONIOENCODING: "utf-8",
+          PYTHONPATH: config.vendorDir || process.env.PYTHONPATH || ""
+        })
+      });
+      if (result && result.error) throw result.error;
+      let payload;
+      try { payload = parseJsonOutput(result && result.stdout); } catch (_) { payload = null; }
+      const validLengths = payload && Number.isInteger(payload.titleLength) && Number.isInteger(payload.contentHtmlLength);
+      if (!payload || (result && result.status !== 0) || !payload.ok || !validLengths) {
+        return { ok: false, errorCode: payload && payload.errorCode || "HEPAN_PAYLOAD_RUNTIME_FAILED" };
+      }
+      return { ok: true, titleLength: payload.titleLength, contentHtmlLength: payload.contentHtmlLength };
+    } catch (error) {
+      if (error && /^HEPAN_/.test(error.code || "")) return { ok: false, errorCode: error.code };
+      return { ok: false, errorCode: "HEPAN_PAYLOAD_RUNTIME_FAILED" };
+    } finally {
+      if (temporaryPayload) temporaryPayload.cleanup();
+    }
+  }
+
   function parseArticleFiles(articles) {
     return (articles || []).map(function(article) {
       try {
@@ -226,6 +259,7 @@ function createHepanAdapter(options) {
     scanDir: "hepan",
     ensureSession,
     ensureLoggedIn,
+    validatePayload,
     publishArticle,
     closeSession: function() {},
     scanArticles: function() { return scanArticleSources(inputDirectory, { fs: io, path: pathApi }); },

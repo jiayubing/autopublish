@@ -96,6 +96,35 @@ function createSubmissionBatchStore(options) {
     batch.updatedAt = now();
     return save(batch);
   }
+  function rebindAttempt(batchId, identity, nextAttempt, expected) {
+    const batch = get(batchId);
+    const reference = identity || {};
+    const replacement = nextAttempt || {};
+    const index = batch.items.findIndex((item) => item.publicationId === reference.publicationId && item.attemptId === reference.attemptId);
+    if (index < 0) throw batchError("SUBMISSION_BATCH_ITEM_NOT_FOUND", "Submission batch item was not found");
+    const item = batch.items[index];
+    if (reference.targetPlatformId && item.targetPlatformId !== reference.targetPlatformId) throw batchError("SUBMISSION_BATCH_PLATFORM_MISMATCH", "Submission batch platform does not match");
+    const checks = expected || {};
+    ["articleId", "targetPlatformId", "contentHash"].forEach((field) => {
+      if (checks[field] !== undefined && item[field] !== checks[field]) throw batchError("SUBMISSION_BATCH_REBIND_CONFLICT", "Submission batch item identity changed");
+    });
+    if (typeof replacement.publicationId !== "string" || typeof replacement.attemptId !== "string" || replacement.publicationId !== item.publicationId) {
+      throw batchError("SUBMISSION_BATCH_REBIND_INVALID", "Submission batch replacement is invalid");
+    }
+    if (replacement.attemptId === item.attemptId) return clone(batch);
+    if (!["failed", "cancelled", "failed-cleaned", "queued"].includes(item.status)) throw batchError("SUBMISSION_BATCH_REBIND_STATE_INVALID", "Submission batch item cannot be rebound");
+    item.attemptId = replacement.attemptId;
+    item.status = "queued";
+    item.publicationStatus = "queued";
+    delete item.errorCode;
+    delete item.remoteId;
+    delete item.remoteUrl;
+    item.reasonCode = "SUBMISSION_ATTEMPT_REBOUND";
+    item.updatedAt = now();
+    batch.status = batchStatus(batch.items);
+    batch.updatedAt = now();
+    return save(batch);
+  }
   function reconcile(batchId, updates) {
     const batch = get(batchId);
     const changes = typeof updates === "function" ? updates(clone(batch)) : updates;
@@ -106,7 +135,7 @@ function createSubmissionBatchStore(options) {
     });
     return result;
   }
-  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, reconcile, batchStatus };
+  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, rebindAttempt, reconcile, batchStatus };
 }
 
 module.exports = { createSubmissionBatchStore };

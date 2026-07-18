@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -78,6 +78,10 @@ interface DesktopConsoleContent {
   previewArticleRemovalImpact?: (input: { selections: ArticleReviewSelection[]; articles?: ArticleReviewSelection[] }) => Promise<IpcResponse<ArticleTrashPreview>>;
   applyArticleRemovalImpact?: (input: ArticleTrashCommitInput) => Promise<IpcResponse<ArticleTrashResult>>;
   trashArticles(input: ArticleTrashCommitInput): Promise<IpcResponse<ArticleTrashResult>>;
+  getArticleRemovalTransaction?: (transactionId: string) => Promise<IpcResponse<ArticleRemovalTransaction | null>>;
+  listArticleRemovalTransactions?: () => Promise<IpcResponse<ArticleRemovalTransaction[]>>;
+  onArticleRemovalTransaction?: (listener: (transaction: ArticleRemovalTransaction) => void) => () => void;
+  retryArticleRemovalTransaction?: (input: { transactionId: string; confirmed: true }) => Promise<IpcResponse<ArticleRemovalTransaction>>;
   previewTrashedArticleQueueResidue?(): Promise<IpcResponse<TrashedArticleQueueResiduePreview>>;
   cleanupTrashedArticleQueueResidue?(input: { confirmed: true }): Promise<IpcResponse<TrashedArticleQueueResiduePreview & { cleanedCount: number }>>;
   restoreArticle(input: ArticleReviewSelection): Promise<IpcResponse<GeneratedContentArticle>>;
@@ -198,6 +202,10 @@ export interface ArticleTrashPreview {
   selections?: ArticleReviewSelection[];
   expiresAt?: string;
   legacy?: boolean;
+  transactionId?: string | null;
+  openTransactionId?: string | null;
+  transaction?: ArticleRemovalTransaction | null;
+  openTransaction?: ArticleRemovalTransaction | null;
 }
 export interface ArticleTrashCommitInput {
   articles?: ArticleReviewSelection[];
@@ -211,10 +219,13 @@ export interface ArticleTrashResult {
   skipped?: ArticleTrashRecord[];
   rejected?: Array<{ clientId: string; articleId: string; code: string }>;
   transactionId?: string;
-  status?: 'committed' | 'pending_recovery' | string;
+  status?: ArticleRemovalTransaction['status'];
   articleCount?: number;
   queueActions?: ArticleTrashImpactItem[];
   errorCode?: string;
+  reasonCode?: string | null;
+  phase?: string | null;
+  transaction?: ArticleRemovalTransaction | null;
 }
 export interface TrashedArticleQueueResidueItem extends ArticleTrashImpactItem {
   sourceArticleState: 'trashed';
@@ -226,6 +237,11 @@ export interface TrashedArticleQueueResiduePreview {
   reportedItems: TrashedArticleQueueResidueItem[];
   cleanableCount: number;
   reportedCount: number;
+  failedCount?: number;
+  remainingCount?: number;
+  failedItems?: TrashedArticleQueueResidueItem[];
+  status?: 'completed' | 'failed' | 'no-op' | string;
+  remainingItems?: TrashedArticleQueueResidueItem[];
 }
 export interface ArticlePermanentDeleteConfirmation { token: string; clientId: string; articleId: string; deletedAt: string; status: string; }
 export interface ArticlePermanentDeleteRequest { clientId: string; articleId: string; token: string; }
@@ -771,6 +787,36 @@ export async function cleanupTrashedArticleQueueResidue(): Promise<TrashedArticl
   }
   const result = await window.desktopConsole.content.cleanupTrashedArticleQueueResidue({ confirmed: true });
   if (!result.ok || !result.data) throw getIpcError(result.error, 'Unable to clean trashed article queue residue');
+  return result.data;
+}
+
+export async function getContentArticleRemovalTransaction(transactionId: string): Promise<ArticleRemovalTransaction | null> {
+  if (!isElectron() || typeof window.desktopConsole?.content?.getArticleRemovalTransaction !== 'function') return null;
+  const result = await window.desktopConsole.content.getArticleRemovalTransaction(transactionId);
+  if (!result.ok) throw getIpcError(result.error, 'Unable to read article removal transaction');
+  return result.data || null;
+}
+
+export async function listContentArticleRemovalTransactions(): Promise<ArticleRemovalTransaction[]> {
+  if (!isElectron() || typeof window.desktopConsole?.content?.listArticleRemovalTransactions !== 'function') return [];
+  const result = await window.desktopConsole.content.listArticleRemovalTransactions();
+  if (!result.ok) throw getIpcError(result.error, 'Unable to list article removal transactions');
+  return result.data || [];
+}
+
+export function onContentArticleRemovalTransaction(transactionId: string, listener: (transaction: ArticleRemovalTransaction) => void): () => void {
+  const subscribe = window.desktopConsole?.content?.onArticleRemovalTransaction;
+  if (!isElectron() || typeof subscribe !== 'function') return () => {};
+  return subscribe((transaction) => {
+    const id = transaction.transactionId || transaction.id;
+    if (id === transactionId) listener(transaction);
+  });
+}
+
+export async function retryContentArticleRemovalTransaction(transactionId: string): Promise<ArticleRemovalTransaction> {
+  if (!isElectron() || typeof window.desktopConsole?.content?.retryArticleRemovalTransaction !== 'function') throw new Error('Article removal repair is unavailable');
+  const result = await window.desktopConsole.content.retryArticleRemovalTransaction({ transactionId, confirmed: true });
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'Unable to repair article removal transaction');
   return result.data;
 }
 

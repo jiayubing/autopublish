@@ -70,6 +70,7 @@ describe("Hepan provider settings", () => {
         localStateRoot: root,
         runCommand: async (command, args) => {
           calls.push({ command, args });
+          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":24,"contentHtmlLength":25}\n', stderr: "" };
           if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
           return { status: 0, stdout: "Python 3.12\n", stderr: "" };
         }
@@ -77,6 +78,9 @@ describe("Hepan provider settings", () => {
       const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })], now: () => "2026-07-17T03:00:00.000Z" });
       const result = await service.test("hepan", { pythonPath, cookie: "fixture-cookie", categoryId: 121 });
       assert.deepStrictEqual(result, { testedAt: "2026-07-17T03:00:00.000Z", ok: true, code: "HEPAN_LOGIN_OK" });
+      assert.equal(calls[0].args.includes("--validate-payload"), true);
+      assert.equal(calls[0].args.includes("--cookie-path"), false);
+      assert.equal(calls[0].args.includes("--image-dir"), false);
       assert.equal(calls.some((call) => call.args.includes("--version")), true);
       assert.equal(calls.some((call) => call.args.includes("--check-login")), true);
       assert.equal(calls.some((call) => call.args.includes("fixture-cookie")), false);
@@ -89,9 +93,40 @@ describe("Hepan provider settings", () => {
     try {
       const pythonPath = path.join(root, "python.exe");
       fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({ localStateRoot: root, runCommand: async () => ({ status: 0, stdout: '{"ok":false,"needsLogin":true,"error":"cookie rejected"}\n', stderr: "cookie rejected" }) });
+      const adapter = createHepanSettingsAdapter({
+        localStateRoot: root,
+        runCommand: async (command, args) => {
+          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
+          if (args.includes("-c")) return { status: 0, stdout: "\n", stderr: "" };
+          return { status: 0, stdout: '{"ok":false,"needsLogin":true,"error":"cookie rejected"}\n', stderr: "cookie rejected" };
+        }
+      });
       const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
       await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_LOGIN_INVALID" && !error.message.includes("fixture-cookie") && !error.message.includes(root));
+      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("fails the payload self-test before dependency or login checks", async () => {
+    const root = tempDirectory();
+    const calls = [];
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({
+        localStateRoot: root,
+        runCommand: async (command, args) => {
+          calls.push(args.slice());
+          if (args.includes("--validate-payload")) return { status: 1, stdout: '{"ok":false,"errorCode":"HEPAN_PAYLOAD_JSON_INVALID"}\n', stderr: "" };
+          throw new Error("later checks must not run");
+        }
+      });
+      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
+
+      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_PAYLOAD_RUNTIME_FAILED");
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].includes("--validate-payload"), true);
       assert.equal(fs.existsSync(path.join(root, "tmp")), false);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });

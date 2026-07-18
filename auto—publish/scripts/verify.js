@@ -14,10 +14,15 @@ const focusedGenerationTests = [
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 const focusedPlanTests = [
+  "tests/submission-attempt-rebind.test.js",
+  "tests/article-removal-recovery-regression.test.js",
   "tests/article-trash-submission-lifecycle.test.js",
   "tests/hepan-article-source.test.js",
+  "tests/hepan-python-payload-runtime.test.js",
   "tests/hepan-publish-contract.test.js",
-  "tests/hepan-publish-interval.test.js"
+  "tests/hepan-publish-interval.test.js",
+  "tests/hepan-provider-settings.test.js",
+  "tests/renderer-residue-cleanup-flow.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 function runNpm(args) {

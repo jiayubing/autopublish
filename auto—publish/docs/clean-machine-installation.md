@@ -61,6 +61,9 @@ Python Markdown package is required. The default inter-article Hepan interval
 is 30 seconds and can be set from 0 to 3600 seconds in Settings. The
 `HEPAN_PUBLISH_INTERVAL_SECONDS` environment override is read-only; zero is
 allowed but shows a frequency-risk warning.
+The supported Hepan Python range is 3.10–3.13. Settings run a temporary,
+no-network payload self-test before checking imports or login; this test does
+not use the configured Cookie or send a publish request.
 
 Configure paid media and Hepan from the Settings center. `media-provider.json`
 and `hepan-provider.json` are application-local encrypted stores under
@@ -101,6 +104,13 @@ selection. The durable removal transaction resumes after a crash; it never
 recreates a cancelled queue item. Restoring an article does not restore its
 queue entry. The trash has no automatic expiry, and permanent deletion keeps
 immutable title snapshots and every publication attempt.
+
+`pending_auto_recovery` means a transient local failure is still scheduled for
+bounded automatic retry. `needs_repair` means a deterministic identity/hash or
+active-state conflict and requires the user to inspect the reason and retry the
+transaction explicitly. Use the read-only removal dry-run before any manual
+repair; residue cleanup still requires a fresh UI confirmation and is never
+silently performed during upgrade.
 
 For an installation that has been upgraded from the old development identity,
 legacy application configuration import is an explicit, one-time operation.

@@ -214,7 +214,7 @@ describe("article trash service", function() {
     const trashWithRecovery = createArticleTrashService({ articleStore: store, articleRemovalService: firstRemoval });
     submission.createBatch({ clientId: "client-1", articleIds: ["recoverable"], targetPlatformIds: ["toutiao"], confirmed: true });
     const preview = trashWithRecovery.previewTrashArticles({ articles: [{ clientId: "client-1", articleId: "recoverable" }] });
-    assert.equal(trashWithRecovery.trashArticles({ articles: preview.selections, token: preview.token, confirmed: true }).status, "pending_recovery");
+    assert.equal(trashWithRecovery.trashArticles({ articles: preview.selections, token: preview.token, confirmed: true }).status, "pending_auto_recovery");
     assert.equal(store.listTrashedArticles("client-1").length, 0);
     const recovered = firstRemoval.recoverPendingRemovals();
     assert.equal(recovered[0].phase, "committed");

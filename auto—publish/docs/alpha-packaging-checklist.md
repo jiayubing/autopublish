@@ -136,9 +136,24 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
       unselectable and the worker refuses it before any adapter call.
 - [ ] Confirm removal transaction recovery completes after an injected crash
       without recreating a cancelled attempt; restore does not requeue.
+- [ ] Confirm historical failed attempts can clean an unchanged queue pair even
+      when the batch sidecar points to an older failed attempt; all ledger
+      attempts remain intact.
+- [ ] Confirm retrying the same failed queue pair rebinds batch and sidecar to
+      the new attempt before any remote call; an injected rebind failure
+      cancels the new reservation and makes no remote call.
+- [ ] Confirm `pending_auto_recovery`, `needs_repair`, `committed`, and
+      `superseded` are distinct in the UI; repeated removal confirmation
+      reuses one open transaction.
+- [ ] Run `node scripts/repair-article-removal-regressions.js --workspace
+      <disposable-workspace> --dry-run`; output contains only counts, safe
+      identifiers, fingerprints, and reason codes.
 - [ ] Confirm Hepan `.md`, `.markdown`, and `.txt` fixtures produce safe,
       non-empty HTML while raw HTML and dangerous URL schemes are removed;
       existing DOCX behavior remains unchanged.
+- [ ] Run the real Python `--validate-payload` seam on Node-generated Markdown
+      and TXT payloads, including directory, symlink, missing, and invalid JSON
+      fixtures; no Cookie or network is used.
 - [ ] Confirm Hepan interval accepts 0–3600 seconds, defaults to 30, shows a
       zero-second warning, emits a cancellable countdown, and does not trigger
       a fixed whole-batch timeout.

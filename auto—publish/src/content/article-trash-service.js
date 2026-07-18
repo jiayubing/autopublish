@@ -39,7 +39,8 @@ function createArticleTrashService(options) {
       tokenTtlMs: opts.tokenTtlMs,
       tokenGenerator: opts.tokenGenerator,
       afterQueueAction: opts.afterQueueAction,
-      afterArticleMove: opts.afterArticleMove
+      afterArticleMove: opts.afterArticleMove,
+      onTransactionStatus: opts.onTransactionStatus
     }) : null);
 
   function buildTombstone(article) {
@@ -139,7 +140,19 @@ function createArticleTrashService(options) {
     return { clientId: item.clientId, articleId: item.articleId, deleted: true, deletedAt: tombstone.deletedAt };
   }
 
-  return { listTrashedArticles, trashArticles, previewTrashArticles, previewArticleRemovalImpact: previewTrashArticles, restoreArticle, preparePermanentDelete, permanentlyDeleteArticle, recoverPendingRemovals: removalService && removalService.recoverPendingRemovals };
+  return {
+    listTrashedArticles,
+    trashArticles,
+    previewTrashArticles,
+    previewArticleRemovalImpact: previewTrashArticles,
+    restoreArticle,
+    preparePermanentDelete,
+    permanentlyDeleteArticle,
+    recoverPendingRemovals: removalService && removalService.recoverPendingRemovals,
+    getArticleRemovalTransaction: removalService && removalService.getArticleRemovalTransaction,
+    listArticleRemovalTransactions: removalService && removalService.listArticleRemovalTransactions,
+    retryArticleRemovalTransaction: removalService && removalService.retryArticleRemovalTransaction
+  };
 }
 
 module.exports = { createArticleTrashService };

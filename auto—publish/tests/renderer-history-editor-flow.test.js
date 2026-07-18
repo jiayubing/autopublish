@@ -115,7 +115,10 @@ function installDesktopFixture(page, fixture) {
     const state = {
       articles: input.articles,
       publicationRecords: input.publicationRecords,
-      calls: { copyArticleVersion: [], saveArticle: [], submission: [] }
+      removalTransaction: null,
+      removalPolls: 0,
+      removalListeners: [],
+      calls: { copyArticleVersion: [], saveArticle: [], submission: [], removalRetries: 0 }
     };
     const ok = (data) => Promise.resolve({ ok: true, data });
     const client = { id: "history-editor-fixture", name: "历史文章编辑测试客户", knowledgeFiles: [] };
@@ -158,6 +161,29 @@ function installDesktopFixture(page, fixture) {
       },
       previewExport: () => ok({ filename: "fixture.md" }),
       exportArticle: () => { state.calls.submission.push("exportArticle"); return ok({ filename: "fixture.md" }); },
+      previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, queuedToCancel: [], failedToClean: [], blockedItems: [], canCommit: true, selections: input.selections }),
+      applyArticleRemovalImpact: (input) => {
+        const transaction = { transactionId: "removal-fixture-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH", updatedAt: "2026-07-18T00:30:00.000Z" };
+        state.removalTransaction = transaction;
+        return ok({ transactionId: transaction.transactionId, status: transaction.status, phase: transaction.phase, errorCode: transaction.errorCode, reasonCode: transaction.reasonCode, articleCount: input.selections.length });
+      },
+      getArticleRemovalTransaction: (transactionId) => {
+        if (state.removalTransaction?.transactionId === transactionId && state.removalTransaction.status === "pending_auto_recovery") {
+          state.removalPolls += 1;
+          if (state.removalPolls >= 2) {
+            state.removalTransaction = { ...state.removalTransaction, status: "committed", phase: "committed", errorCode: null, reasonCode: null, updatedAt: "2026-07-18T00:30:03.000Z" };
+            state.removalListeners.forEach((listener) => listener(state.removalTransaction));
+          }
+        }
+        return ok(state.removalTransaction);
+      },
+      onArticleRemovalTransaction: (listener) => { state.removalListeners.push(listener); return () => { state.removalListeners = state.removalListeners.filter((item) => item !== listener); }; },
+      retryArticleRemovalTransaction: (input) => {
+        state.calls.removalRetries += 1;
+        state.removalPolls = 0;
+        state.removalTransaction = { transactionId: input.transactionId, status: "pending_auto_recovery", phase: "queue-actions", updatedAt: "2026-07-18T00:30:01.000Z" };
+        return ok(state.removalTransaction);
+      },
       previewSubmissionBatch: () => ok({ queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0 }),
       createSubmissionBatch: () => { state.calls.submission.push("createSubmissionBatch"); return ok({}); },
       previewCancelSubmissionBatch: () => ok({ cancelableCount: 0 }),
@@ -322,5 +348,35 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     const source = fs.readFileSync(path.join(rootDir, "media-workbench", "src", "components", "ContentWorkbench.tsx"), "utf8");
     assert.doesNotMatch(source, /setTab\(["']generate["']\)/);
     assert.match(source, /GeneratedArticleEditorPanel/);
+  });
+
+  it("tracks a removal transaction by id from needs_repair through terminal recovery", async () => {
+    const { page, fixture } = await openHistory();
+    page.on("dialog", (dialog) => void dialog.accept());
+    try {
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
+      await page.getByRole("button", { name: /移入回收站 \(1\)/ }).click();
+      await page.getByRole("dialog", { name: "移入回收站预检" }).waitFor();
+      await page.getByRole("button", { name: "确认移入回收站" }).click();
+      await page.getByRole("alert").filter({ hasText: /^删除事务需要修复：PUBLICATION_ATTEMPT_MISMATCH$/ }).waitFor();
+      const retry = page.getByRole("button", { name: "重试修复删除事务" });
+      assert.equal(await retry.isDisabled(), false);
+      await retry.click();
+      await page.getByRole("status").filter({ hasText: "删除事务正在自动恢复" }).waitFor();
+      await page.getByRole("status").filter({ hasText: "删除事务已完成" }).waitFor({ timeout: 4000 });
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.removalRetries), 1);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("shows repairable removal transactions as manual repair instead of automatic recovery", () => {
+    const source = fs.readFileSync(path.join(rootDir, "media-workbench", "src", "components", "content", "GeneratedArticlesView.tsx"), "utf8");
+    assert.match(source, /pending_auto_recovery/);
+    assert.match(source, /needs_repair/);
+    assert.match(source, /删除事务需要修复/);
+    assert.match(source, /重试|修复/);
+    assert.match(source, /transactionId/);
   });
 });

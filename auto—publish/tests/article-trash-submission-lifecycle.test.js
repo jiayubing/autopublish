@@ -92,7 +92,7 @@ describe("article trash and submission lifecycle seam", () => {
       });
       const trash = createArticleTrashService({ articleStore: current.store, articleRemovalService: removal });
       const preview = trash.previewArticleRemovalImpact({ articles: [{ clientId: "client-1", articleId: "recoverable" }] });
-      assert.equal(trash.trashArticles({ articles: preview.selections, token: preview.token, confirmed: true }).status, "pending_recovery");
+      assert.equal(trash.trashArticles({ articles: preview.selections, token: preview.token, confirmed: true }).status, "pending_auto_recovery");
       assert.equal(current.submission.getBatch(batch.batchId).items[0].status, "cancelled");
       assert.equal(removal.recoverPendingRemovals()[0].phase, "committed");
       assert.equal(current.store.listTrashedArticles("client-1").length, 1);

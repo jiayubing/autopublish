@@ -371,6 +371,20 @@ export interface PublicationHistorySummary {
 
 export interface ArticleReviewSelection { clientId: string; articleId: string; }
 export interface ArticleReviewResult { approved: string[]; rejected: Array<{ articleId: string; code: string }>; skipped: string[]; }
+export type ArticleRemovalTransactionStatus = 'pending_auto_recovery' | 'needs_repair' | 'committed' | 'superseded' | 'pending_recovery' | string;
+export interface ArticleRemovalTransaction {
+  id?: string;
+  transactionId?: string;
+  status: ArticleRemovalTransactionStatus;
+  phase?: string | null;
+  errorCode?: string | null;
+  reasonCode?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  articleCount?: number;
+  queueCursor?: number;
+  articleCursor?: number;
+}
 export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
 export type ContentSubmissionItemStatus = 'excluded' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'failed-cleaned' | 'skipped' | 'cancelled' | string;
 export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: ContentSubmissionItemStatus; contentHash: string; filename?: string; filePath?: string; sidecarPath?: string; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; reasonCode?: string | null; reconciledStatus?: string; unchanged?: boolean; canCancel?: boolean; canCleanup?: boolean; submissionBatchId?: string; }

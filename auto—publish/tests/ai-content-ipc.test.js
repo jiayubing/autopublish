@@ -56,4 +56,18 @@ describe("ai content ipc", function() {
     const result = await ipc.handlers.get("content:generate-article")(null, []);
     assert.deepStrictEqual(result, { ok: false, error: { code: "CONTENT_INPUT_INVALID", message: "Generation input must be an object" } });
   });
+
+  it("exposes safe removal transaction query and retry handlers", async function() {
+    const ipc = createIpc();
+    const service = {
+      getArticleRemovalTransaction: (id) => ({ id, transactionId: id, status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH" }),
+      listArticleRemovalTransactions: () => [{ id: "tx-1", transactionId: "tx-1", status: "pending_auto_recovery", phase: "queue-actions" }],
+      retryArticleRemovalTransaction: (input) => ({ id: input.transactionId, transactionId: input.transactionId, status: "committed", phase: "committed" })
+    };
+    registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
+
+    assert.deepEqual(await ipc.handlers.get("content:get-article-removal-transaction")(null, { transactionId: "tx-1" }), { ok: true, data: { id: "tx-1", transactionId: "tx-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH" } });
+    assert.deepEqual(await ipc.handlers.get("content:list-article-removal-transactions")(), { ok: true, data: [{ id: "tx-1", transactionId: "tx-1", status: "pending_auto_recovery", phase: "queue-actions" }] });
+    assert.deepEqual(await ipc.handlers.get("content:retry-article-removal-transaction")(null, { transactionId: "tx-1", confirmed: true }), { ok: true, data: { id: "tx-1", transactionId: "tx-1", status: "committed", phase: "committed" } });
+  });
 });

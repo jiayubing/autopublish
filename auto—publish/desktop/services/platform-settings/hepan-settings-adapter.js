@@ -6,6 +6,11 @@ const { spawnSync } = require("node:child_process");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
 
 const HEPAN_SITE_ORIGIN = "https://www.hepan.com";
+const HEPAN_SELF_TEST_PAYLOAD = JSON.stringify({
+  title: "Hepan payload self-test",
+  contentHtml: "<p>payload self-test</p>",
+  sourceStem: "hepan-self-test"
+});
 
 function adapterError(code, message) {
   const error = new Error(message);
@@ -115,6 +120,21 @@ function createHepanSettingsAdapter(options) {
       };
     },
     async test(config) {
+      await withTemporaryPayload(async (payloadPath) => {
+        let selfTest;
+        try {
+          selfTest = await runCommand(config.pythonPath, [scriptPath, "--validate-payload", payloadPath], config.vendorDir ? { env: Object.assign({}, process.env, { PYTHONPATH: config.vendorDir }) } : {});
+        } catch (error) {
+          if (error && ["ENOENT", "EACCES", "ETIMEDOUT"].includes(error.code)) throw adapterError("HEPAN_PYTHON_UNAVAILABLE", "Hepan Python is unavailable");
+          throw adapterError("HEPAN_PAYLOAD_RUNTIME_FAILED", "Hepan payload self-test failed");
+        }
+        const payload = parseJsonOutput(selfTest && selfTest.stdout);
+        if (selfTest && selfTest.error) throw adapterError("HEPAN_PYTHON_UNAVAILABLE", "Hepan Python is unavailable");
+        if (!selfTest || selfTest.status !== 0 || !payload || payload.ok !== true) {
+          throw adapterError("HEPAN_PAYLOAD_RUNTIME_FAILED", "Hepan payload self-test failed");
+        }
+      }, io, path, localStateRoot);
+
       let version;
       try { version = await runCommand(config.pythonPath, ["--version"], {}); } catch (_) { throw adapterError("HEPAN_PYTHON_UNAVAILABLE", "Hepan Python is unavailable"); }
       if (version && (version.error || version.status !== 0)) throw adapterError("HEPAN_PYTHON_UNAVAILABLE", "Hepan Python is unavailable");
@@ -139,6 +159,22 @@ function createHepanSettingsAdapter(options) {
     siteOrigin: HEPAN_SITE_ORIGIN
   };
   return adapter;
+}
+
+async function withTemporaryPayload(callback, io, path, localStateRoot) {
+  const tmpRoot = path.join(localStateRoot, "tmp");
+  const payloadPath = path.join(tmpRoot, `.hepan-payload-self-test-${crypto.randomUUID()}.json`);
+  let createdRoot = false;
+  try {
+    if (!io.existsSync(tmpRoot)) { io.mkdirSync(tmpRoot, { recursive: true }); createdRoot = true; }
+    io.writeFileSync(payloadPath, HEPAN_SELF_TEST_PAYLOAD, { encoding: "utf8", mode: 0o600 });
+    return await callback(payloadPath);
+  } finally {
+    try { if (io.existsSync(payloadPath)) io.unlinkSync(payloadPath); } catch (_) {}
+    if (createdRoot) {
+      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
+    }
+  }
 }
 
 async function withTemporaryCookie(config, callback, io, path, localStateRoot) {

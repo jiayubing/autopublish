@@ -98,16 +98,59 @@ describe("Hepan publish payload contract", () => {
         inputDir,
         tempDir: path.join(root, "tmp"),
         runtime: configuredRuntime(root),
-        runCommand: () => ({ status: 1, stdout: JSON.stringify({ ok: false, errorCode: "HEPAN_PAYLOAD_INVALID", error: "Hepan payload is invalid" }), stderr: "secret body should not be logged" })
+        runCommand: () => ({ status: 1, stdout: JSON.stringify({ ok: false, errorCode: "HEPAN_PAYLOAD_JSON_INVALID", error: "Hepan payload JSON is invalid" }), stderr: "secret body should not be logged" })
       });
       const article = (await adapter.parseArticleFiles([{ file: sourceFile, filename: "bad.md", fileBaseName: "bad" }]))[0];
 
       const result = await adapter.publishArticle(article);
 
-      assert.deepEqual(result, { status: "failed", errorCode: "HEPAN_PAYLOAD_INVALID" });
+      assert.deepEqual(result, { status: "failed", errorCode: "HEPAN_PAYLOAD_JSON_INVALID" });
       assert.equal(fs.existsSync(path.join(root, "tmp")), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps local payload runtime, remote rejection, and uncertain outcomes distinct", async () => {
+    const scenarios = [
+      {
+        response: { status: 1, stdout: JSON.stringify({ ok: false, errorCode: "HEPAN_PAYLOAD_RUNTIME_FAILED", error: "Hepan payload runtime failed" }) },
+        expected: { status: "failed", errorCode: "HEPAN_PAYLOAD_RUNTIME_FAILED" }
+      },
+      {
+        response: { status: 1, stdout: JSON.stringify({ ok: false, errorCode: "HEPAN_REMOTE_REQUEST_FAILED", error: "Hepan remote request failed" }) },
+        expected: { status: "failed", errorCode: "HEPAN_REMOTE_REQUEST_FAILED" }
+      },
+      {
+        response: new Error("transport did not return a result"),
+        expected: { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" }
+      }
+    ];
+
+    for (const scenario of scenarios) {
+      const root = tempDirectory();
+      try {
+        const inputDir = path.join(root, "input");
+        const sourceFile = path.join(inputDir, "river.md");
+        const cookiePath = path.join(root, "cookie.txt");
+        fs.mkdirSync(inputDir, { recursive: true });
+        fs.writeFileSync(sourceFile, "# 标题\n\n正文", "utf8");
+        fs.writeFileSync(cookiePath, "fixture-cookie", "utf8");
+        const adapter = createHepanAdapter({
+          inputDir,
+          tempDir: path.join(root, "tmp"),
+          runtime: { pythonPath: "fixture-python", cookiePath, categoryId: 121, vendorDir: "" },
+          runCommand: () => {
+            if (scenario.response instanceof Error) throw scenario.response;
+            return scenario.response;
+          }
+        });
+        const article = (await adapter.parseArticleFiles([{ file: sourceFile, filename: "river.md", fileBaseName: "river" }]))[0];
+
+        assert.deepEqual(await adapter.publishArticle(article), scenario.expected);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     }
   });
 });

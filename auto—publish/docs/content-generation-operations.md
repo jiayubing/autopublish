@@ -242,8 +242,12 @@ The confirmed operation is recorded in a durable removal transaction. Queue
 actions are applied first, then all articles are moved, and only then is the
 transaction committed. If the application stops midway, startup resumes the
 transaction forward and never recreates an attempt already marked `cancelled`.
-Until recovery finishes, the UI reports `pending_recovery`; identity or hash
-conflicts stop at `needs_repair` and require the independent queue repair flow.
+Transient I/O or lock failures use `pending_auto_recovery` and are retried with
+bounded backoff. Identity, hash, active-state, or evaluator conflicts use
+`needs_repair`; they are not promised as automatic progress and require the
+visible retry/repair action. Legacy `pending_recovery` records are normalized
+on startup. Repeated confirmation of the same selection and queue action
+fingerprint reuses one open transaction rather than creating another journal.
 
 Status-specific behavior is: `queued` is cancelled when the pair is unchanged;
 `failed` is cleaned when the pair is unchanged while its failed ledger record
@@ -261,6 +265,14 @@ explicit repair flow can cancel unchanged `queued` pairs or clean clearly
 `failed` pairs; it does not guess about `submitting`, `submitted`, `uncertain`,
 or modified pairs.
 
+The residue repair action has its own busy state and returns `cleanedCount`,
+`failedCount`, `remainingCount`, and per-item stable reason codes. A zero-item
+or failed cleanup is shown as a diagnostic result, not as a false success.
+The dry-run command `node scripts/repair-article-removal-regressions.js
+--workspace <workspace> --dry-run` reports only safe identifiers, fingerprints,
+states, reason codes, and counts; it never deletes queue files or writes
+transactions.
+
 ### Hepan article formats and pacing
 
 The Hepan adapter accepts `.md`, `.markdown`, `.txt`, and `.docx`. Node parses
@@ -270,7 +282,12 @@ the first non-empty line. Raw HTML is disabled and links are restricted to safe
 HTTP(S), mailto, or fragment targets. DOCX keeps the existing Python-compatible
 path. Markdown/text content is passed through a short-lived, unpredictable
 local JSON payload and the payload is removed on success, failure, stop, and
-exception; it is never written to the content library or logs.
+exception; it is never written to the content library or logs. The configured
+Python runtime must be 3.10–3.13. Hepan settings first run the no-network
+`--validate-payload` self-test before dependency and login checks. Local
+payload failures use `HEPAN_PAYLOAD_*` or `HEPAN_PAYLOAD_RUNTIME_FAILED`;
+remote request failures use `HEPAN_REMOTE_REQUEST_FAILED`/`REMOTE_REJECTED`,
+and uncertain results remain `REMOTE_RESULT_UNKNOWN`.
 
 Hepan `publishIntervalSeconds` is an application setting from 0 through 3600,
 defaulting to 30. `HEPAN_PUBLISH_INTERVAL_SECONDS` may provide a read-only

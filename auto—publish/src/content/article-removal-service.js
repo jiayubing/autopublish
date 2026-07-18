@@ -35,6 +35,43 @@ function fingerprint(value) {
   return crypto.createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
 
+function actionIdentity(action) {
+  return {
+    clientId: action.clientId,
+    articleId: action.articleId,
+    batchId: action.batchId || null,
+    publicationId: action.publicationId || null,
+    targetPlatformId: action.targetPlatformId || null,
+    attemptId: action.attemptId || null,
+    action: action.action || null
+  };
+}
+
+function transactionFingerprint(selectionsValue, queueActions) {
+  const selectionKeys = selectionsValue.map(function(item) { return item.clientId + "\0" + item.articleId; }).sort();
+  const actionKeys = (queueActions || []).map(actionIdentity).sort(function(left, right) { return JSON.stringify(left).localeCompare(JSON.stringify(right)); });
+  return fingerprint({ selections: selectionKeys, actions: actionKeys });
+}
+
+function isOpenStatus(status) {
+  return ["pending_auto_recovery", "pending_recovery", "needs_repair"].includes(status);
+}
+
+function isRepairableError(error) {
+  return !!error && [
+    "SUBMISSION_QUEUE_CHANGED",
+    "SUBMISSION_QUEUE_ITEM_NOT_FOUND",
+    "SUBMISSION_ACTION_STALE",
+    "PUBLICATION_ATTEMPT_MISMATCH",
+    "PUBLICATION_ATTEMPT_NOT_FAILED",
+    "PUBLICATION_STATUS_NOT_FAILED",
+    "PUBLICATION_STATUS_NOT_QUEUED",
+    "SUBMISSION_STATUS_CONFLICT",
+    "SUBMISSION_BATCH_ITEM_NOT_FOUND",
+    "SUBMISSION_BATCH_REBIND_CONFLICT"
+  ].includes(error.code);
+}
+
 function titleSnapshot(article) {
   return typeof article.title === "string" && article.title.trim() ? article.title.trim().slice(0, 200) : null;
 }
@@ -63,6 +100,31 @@ function createArticleRemovalService(options) {
     return date.toISOString();
   }
 
+  function persist(transaction) {
+    const saved = transactionStore.save(transaction);
+    if (typeof opts.onTransactionStatus === "function") {
+      try { opts.onTransactionStatus(clone(saved)); } catch (_) {}
+    }
+    return saved;
+  }
+
+  function transactionDto(transaction) {
+    if (!transaction) return null;
+    return {
+      id: transaction.id,
+      transactionId: transaction.id,
+      status: transaction.status,
+      phase: transaction.phase || null,
+      errorCode: transaction.errorCode || null,
+      reasonCode: transaction.reasonCode || null,
+      createdAt: transaction.createdAt || null,
+      updatedAt: transaction.updatedAt || null,
+      articleCount: Array.isArray(transaction.articles) ? transaction.articles.length : Array.isArray(transaction.selections) ? transaction.selections.length : 0,
+      queueCursor: Number(transaction.queueCursor || 0),
+      articleCursor: Number(transaction.articleCursor || 0)
+    };
+  }
+
   function articleFor(item) {
     try { return articleStore.getArticle(item.clientId, item.articleId); }
     catch (error) {
@@ -73,6 +135,38 @@ function createArticleRemovalService(options) {
   function buildImpact(items) {
     const impact = submissionService.previewArticleRemovalImpact({ selections: items });
     return impact && typeof impact === "object" ? impact : { items: [], queuedToCancel: [], failedToClean: [], blockedItems: [] };
+  }
+
+  function canonicalizeOpenTransactions() {
+    const groups = new Map();
+    transactionStore.list().filter(function(transaction) { return isOpenStatus(transaction.status); }).forEach(function(transaction) {
+      const value = transaction.fingerprint || transactionFingerprint(transaction.selections || [], transaction.queueActions || []);
+      if (!transaction.fingerprint) {
+        transaction.fingerprint = value;
+        persist(transaction);
+      }
+      if (!groups.has(value)) groups.set(value, []);
+      groups.get(value).push(transaction);
+    });
+    groups.forEach(function(values) {
+      values.sort(function(left, right) { return String(left.createdAt || "").localeCompare(String(right.createdAt || "")) || String(left.id).localeCompare(String(right.id)); });
+      values.slice(1).forEach(function(transaction) {
+        transaction.status = "superseded";
+        transaction.phase = "superseded";
+        transaction.errorCode = "DUPLICATE_REMOVAL_TRANSACTION";
+        transaction.updatedAt = nowIso();
+        persist(transaction);
+        transactionStore.remove(transaction.id);
+      });
+    });
+    return transactionStore.list();
+  }
+
+  function findOpenTransaction(items, queueActions) {
+    const targetFingerprint = transactionFingerprint(items, queueActions);
+    return canonicalizeOpenTransactions().filter(function(transaction) {
+      return isOpenStatus(transaction.status) && transaction.fingerprint === targetFingerprint;
+    }).sort(function(left, right) { return String(left.createdAt || "").localeCompare(String(right.createdAt || "")); })[0] || null;
   }
 
   function previewArticleRemovalImpact(input) {
@@ -96,6 +190,9 @@ function createArticleRemovalService(options) {
     const token = String(makeToken());
     const createdAt = nowIso();
     tokens.set(token, { token, createdAt, expiresAt: Date.parse(createdAt) + ttlMs, fingerprint: fingerprint(binding), binding: binding });
+    const previewActions = clone((submissionImpact.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
+      .concat((submissionImpact.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })));
+    const openTransaction = findOpenTransaction(items, previewActions);
     const result = Object.assign({}, clone(submissionImpact), {
       token,
       createdAt,
@@ -106,6 +203,12 @@ function createArticleRemovalService(options) {
       blockedItems: blockedItems,
       canCommit: blockedItems.length === 0
     });
+    if (openTransaction) {
+      result.openTransactionId = openTransaction.id;
+      result.openTransaction = transactionDto(openTransaction);
+      result.transactionId = openTransaction.id;
+      result.transaction = transactionDto(openTransaction);
+    }
     result.selectionFingerprint = fingerprint(binding);
     return result;
   }
@@ -155,9 +258,20 @@ function createArticleRemovalService(options) {
   function perform(transaction) {
     let current = transaction;
     const actions = Array.isArray(current.queueActions) ? current.queueActions : [];
+    if (current.phase === "needs_repair") {
+      current.status = "pending_auto_recovery";
+      current.phase = "queue-actions";
+      current.errorCode = null;
+      current.updatedAt = nowIso();
+      persist(current);
+    } else if (current.status === "pending_recovery") {
+      current.status = "pending_auto_recovery";
+      persist(current);
+    }
     if (current.phase === "intent") {
       current.phase = "queue-actions";
-      transactionStore.save(current);
+      current.status = "pending_auto_recovery";
+      persist(current);
     }
     if (current.phase === "queue-actions") {
       for (let index = current.queueCursor || 0; index < actions.length; index += 1) {
@@ -169,20 +283,26 @@ function createArticleRemovalService(options) {
           current.queueResults = current.queueResults || [];
           current.queueResults[index] = clone(result);
           current.queueCursor = index + 1;
-          transactionStore.save(current);
+          persist(current);
           if (typeof opts.afterQueueAction === "function") opts.afterQueueAction(clone(action), index, clone(current));
         } catch (error) {
-          if (error && ["SUBMISSION_QUEUE_CHANGED", "PUBLICATION_ATTEMPT_MISMATCH", "SUBMISSION_STATUS_CONFLICT"].indexOf(error.code) !== -1) {
+          current.updatedAt = nowIso();
+          current.errorCode = error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
+          if (isRepairableError(error)) {
+            current.status = "needs_repair";
             current.phase = "needs_repair";
-            current.errorCode = error.code;
-            transactionStore.save(current);
-            throw error;
+          } else {
+            current.status = "pending_auto_recovery";
+            current.phase = "queue-actions";
+            current.retryCount = Number(current.retryCount || 0) + 1;
           }
+          persist(current);
           throw error;
         }
       }
       current.phase = "articles";
-      transactionStore.save(current);
+      current.status = "pending_auto_recovery";
+      persist(current);
     }
     if (current.phase === "articles") {
       for (let index = current.articleCursor || 0; index < current.articles.length; index += 1) {
@@ -192,20 +312,26 @@ function createArticleRemovalService(options) {
         catch (error) {
           if (error && error.code === "ARTICLE_NOT_FOUND" && articleStore.isArticleTrashed && articleStore.isArticleTrashed(item.clientId, item.articleId)) {
             current.articleCursor = index + 1;
-            transactionStore.save(current);
+            persist(current);
             continue;
           }
           throw error;
         }
         articleStore.moveArticleToTrash(item.clientId, item.articleId, tombstoneFor(article));
         current.articleCursor = index + 1;
-        transactionStore.save(current);
+        current.status = "pending_auto_recovery";
+        persist(current);
         if (typeof opts.afterArticleMove === "function") opts.afterArticleMove(clone(item), index, clone(current));
       }
       current.phase = "committed";
-      transactionStore.save(current);
+      persist(current);
     }
-    if (current.phase === "committed") transactionStore.remove(current.id);
+    if (current.phase === "committed") {
+      current.status = "committed";
+      current.updatedAt = nowIso();
+      persist(current);
+      transactionStore.remove(current.id);
+    }
     return current;
   }
 
@@ -223,20 +349,33 @@ function createArticleRemovalService(options) {
     if (!fresh.canCommit) throw removalError("ARTICLE_TRASH_BLOCKED", "Article trash is blocked by an active submission");
     tokens.delete(value.token);
     const createdAt = nowIso();
+    const queueActions = clone((fresh.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
+      .concat((fresh.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })));
+    const existing = findOpenTransaction(token.binding.selections, queueActions);
+    if (existing) {
+      return {
+        transactionId: existing.id,
+        status: existing.status === "pending_recovery" ? "pending_auto_recovery" : existing.status,
+        articleCount: existing.articles ? existing.articles.length : token.binding.selections.length,
+        queueActions: existing.queueResults || [],
+        reused: true,
+        errorCode: existing.errorCode || null
+      };
+    }
     const transaction = {
       version: 1,
       id: String(transactionStore.createId()),
       kind: "article-removal",
-      status: "pending_recovery",
+      status: "pending_auto_recovery",
       phase: "intent",
       createdAt,
       updatedAt: createdAt,
       selections: clone(token.binding.selections),
       articles: clone(token.binding.articles),
-      queueActions: clone((fresh.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
-        .concat((fresh.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })))
+      queueActions: queueActions,
+      fingerprint: transactionFingerprint(token.binding.selections, queueActions)
     };
-    transactionStore.save(transaction);
+    persist(transaction);
     try {
       const result = perform(transaction);
       return {
@@ -247,18 +386,48 @@ function createArticleRemovalService(options) {
       };
     } catch (error) {
       if (error && error.code === "ARTICLE_TRASH_PREVIEW_STALE") throw error;
-      return { transactionId: transaction.id, status: "pending_recovery", articleCount: transaction.articles.length, queueActions: transaction.queueResults || [], errorCode: error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED" };
+      const persisted = transactionStore.get(transaction.id);
+      return { transactionId: transaction.id, status: persisted.status, articleCount: transaction.articles.length, queueActions: persisted.queueResults || [], errorCode: persisted.errorCode || error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED" };
     }
   }
 
   function recoverPendingRemovals() {
-    return transactionStore.list().filter(function(transaction) { return transaction.phase !== "committed"; }).map(function(transaction) {
+    return canonicalizeOpenTransactions().filter(function(transaction) { return transaction.phase !== "committed" && transaction.phase !== "superseded"; }).map(function(transaction) {
       try { return perform(transaction); }
-      catch (error) { return Object.assign({}, transaction, { status: "pending_recovery", errorCode: error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED" }); }
+      catch (error) {
+        try { return transactionStore.get(transaction.id); }
+        catch (_) { return Object.assign({}, transaction, { status: isRepairableError(error) ? "needs_repair" : "pending_auto_recovery", errorCode: error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED" }); }
+      }
     });
   }
 
-  return { previewArticleRemovalImpact, applyArticleRemovalImpact, recoverPendingRemovals, recover: recoverPendingRemovals, transactionStore };
+  function getArticleRemovalTransaction(transactionId) {
+    return transactionDto(transactionStore.get(transactionId));
+  }
+
+  function listArticleRemovalTransactions() {
+    return canonicalizeOpenTransactions().map(transactionDto);
+  }
+
+  function retryArticleRemovalTransaction(input) {
+    if (!input || typeof input.transactionId !== "string" || !input.transactionId.trim()) throw removalError("ARTICLE_REMOVAL_TRANSACTION_ID_INVALID", "Removal transaction id is invalid");
+    if (input.confirmed !== true) throw removalError("ARTICLE_TRASH_CONFIRMATION_REQUIRED", "Article trash confirmation is required");
+    const transaction = transactionStore.get(input.transactionId);
+    if (transaction.status === "superseded" || transaction.phase === "superseded") return transactionDto(transaction);
+    try { return transactionDto(perform(transaction)); }
+    catch (_) { return transactionDto(transactionStore.get(transaction.id)); }
+  }
+
+  return {
+    previewArticleRemovalImpact,
+    applyArticleRemovalImpact,
+    recoverPendingRemovals,
+    recover: recoverPendingRemovals,
+    getArticleRemovalTransaction,
+    listArticleRemovalTransactions,
+    retryArticleRemovalTransaction,
+    transactionStore
+  };
 }
 
 module.exports = { createArticleRemovalService };
