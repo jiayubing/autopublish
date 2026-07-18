@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listArticleAttention, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, reviewContentArticles, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, reviewContentArticles, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ArticleAttentionItem, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
 import { deriveArticleWorkflow, type ArticleWorkflowStage } from '../../article-workflow';
@@ -8,6 +8,8 @@ import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import { PUBLICATION_STATUS_FILTERS, publicationSummaryMatchesFilter, summarizePublicationRecords, type PublicationHistoryFilter } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
+import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
+import { useArticleAttention } from '../../article-attention-store';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onRefreshArticles?: () => void; }
 
@@ -48,8 +50,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
-  const [attentionItems, setAttentionItems] = useState<ArticleAttentionItem[]>([]);
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
+  const [attentionDetail, setAttentionDetail] = useState<ArticleAttentionItem | null>(null);
   const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
   const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(null);
   const [trashFeedback, setTrashFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
@@ -59,6 +61,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removalUnsubscribeRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
+  const { snapshot: attentionSnapshot, refresh: refreshAttention } = useArticleAttention(clientId);
+  const attentionItems = attentionSnapshot.items;
 
   const stopRemovalTransactionWatch = useCallback(() => {
     if (removalTimerRef.current) {
@@ -97,7 +101,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       return listPublicationHistory(clientId, items.map((item) => item.id)).then((records) => { if (!cancelled) setPublicationRecords(records); });
     }).catch((value) => { if (!cancelled) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
     listContentSubmissionBatches(clientId).then((items) => { if (!cancelled) setSubmissionBatches(items); }).catch(() => { if (!cancelled) setSubmissionBatches([]); });
-    listArticleAttention(clientId).then((items) => { if (!cancelled) setAttentionItems(items); }).catch(() => { if (!cancelled) setAttentionItems([]); });
     return () => { cancelled = true; };
   }, [clientId, refreshToken]);
 
@@ -474,7 +477,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       </div>
     </div>
      {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
-     {selectedStage === 'attention' && <div className="mb-3"><ArticleAttentionPanel clientId={clientId} selectedAttentionId={selectedAttentionId} /></div>}
+     {selectedStage === 'attention' && <div className="mb-3"><ArticleAttentionPanel snapshot={attentionSnapshot} onRefresh={refreshAttention} selectedAttentionId={selectedAttentionId} onOpenPublication={(item) => { const article = articles.find((candidate) => candidate.id === item.articleId); if (article) setDrawerArticle(article); else setAttentionDetail(item); }} onInspect={(item) => setAttentionDetail(item)} onOpenArticle={(item) => { const article = articles.find((candidate) => candidate.id === item.articleId); if (article) onArticleSelect(article, null, false); else setAttentionDetail(item); }} /></div>}
     <div className="grid gap-3">
       {groups.map((group) => {
         const groupSelectable = selectableArticles(group.articles, clientId);
@@ -502,5 +505,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     </div>
     {trashPreview && <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">一次确认将移入回收站并联动全部发布目标；发布记录继续保留。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>按平台撤销 queued：{groupImpact(trashPreview.queuedToCancel).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{platform} {count}</span>)}{!trashPreview.queuedToCancel.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>按平台清理 failed：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div></div>{(trashPreview.openTransaction || trashPreview.transaction) && <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">已存在相同删除事务，已复用现有事务；请查看上方状态，不会重复创建。</div>}{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && !removalSubmitDisabled && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理明确 failed 队列副本，并将文章移入回收站；发布记录和失败记录继续保留。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{removalSubmitDisabled ? '已有开放删除事务' : '确认移入回收站'}</button></div></div></div>}
     <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={busy} />
+    <ArticleAttentionDetailDrawer item={attentionDetail} onClose={() => setAttentionDetail(null)} />
   </div>;
 }
