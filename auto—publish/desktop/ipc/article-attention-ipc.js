@@ -10,7 +10,18 @@ function registerArticleAttentionIpc(deps) {
     contentSubmissionService: options.contentSubmissionService,
     articleRemovalService: options.aiContentService,
     publicationLedger: publicationLedger,
-    readers: { listArchiveFailures: options.archiveIssueReader }
+    getRevision: options.getWorkspaceDataRevision,
+    readers: {
+      listArchiveFailures: options.archiveIssueReader,
+      listTransactions: options.aiContentService && options.aiContentService.listArticleRemovalTransactions,
+      getArticle: options.aiContentService && options.aiContentService.getGeneratedArticle,
+      platformCapabilities: options.contentSubmissionService && options.contentSubmissionService.listPlatforms,
+      getTrashedArticle: function(clientId, articleId) {
+        if (!options.aiContentService || typeof options.aiContentService.listTrashedArticles !== "function") return null;
+        const record = options.aiContentService.listTrashedArticles(clientId).find(function(item) { return item && item.articleId === articleId; });
+        return record || null;
+      }
+    }
   });
   const resolver = options.articleAttentionResolver || createArticleAttentionResolver({
     query,

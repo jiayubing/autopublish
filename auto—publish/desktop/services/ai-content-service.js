@@ -148,6 +148,11 @@ function createAiContentService(opts) {
     }
   }
 
+  function notifyAttentionChange(reasonCode) {
+    if (typeof options.onDataInvalidated !== "function") return;
+    try { options.onDataInvalidated(["articleAttention", "navigationSummary"], reasonCode); } catch (_) {}
+  }
+
   async function materializeClient(client) {
     const value = clientDto(client);
     if (materialStore && typeof materialStore.listMaterials === "function") {
@@ -255,7 +260,9 @@ function createAiContentService(opts) {
     if (!article || typeof article !== "object" || Array.isArray(article)) {
       throw contentError("CONTENT_INPUT_INVALID", "Article is required");
     }
-    return articleStore.saveArticle(article);
+    const saved = articleStore.saveArticle(article);
+    notifyAttentionChange("ARTICLE_SAVED");
+    return saved;
   }
 
   function listGeneratedArticles(clientId) {
@@ -280,7 +287,9 @@ function createAiContentService(opts) {
   }
 
   function reviewArticles(selections) {
-    return articleReviewService.reviewMany(selections);
+    const result = articleReviewService.reviewMany(selections);
+    notifyAttentionChange("ARTICLES_REVIEWED");
+    return result;
   }
 
   return {

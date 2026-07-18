@@ -103,10 +103,12 @@ function registerPublicationIpc(deps) {
   values.ipcMain.handle("publication:reconcile", function(event, input) {
     return wrap(function() {
       const request = validateReconcileInput(input);
-      return safeRecord(ledger.reconcile(request.publicationId, {
+      const record = ledger.reconcile(request.publicationId, {
         status: request.status,
         reasonCode: request.reasonCode
-      }));
+      });
+      if (typeof values.invalidateData === "function") values.invalidateData(["articleAttention", "platformQueue", "navigationSummary"], "PUBLICATION_RECONCILED");
+      return safeRecord(record);
     });
   });
 }

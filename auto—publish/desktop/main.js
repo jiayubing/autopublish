@@ -49,6 +49,10 @@ function invalidateWorkspaceData(scopes, reasonCode) {
   return workspaceDataRevision;
 }
 
+function getWorkspaceDataRevision() {
+  return workspaceDataRevision;
+}
+
 function createMainWindow() {
   var rendererEntryPath = path.join(__dirname, "..", "media-workbench", "dist", "index.html");
   mainWindow = new BrowserWindow({
@@ -245,7 +249,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
   const contentSubmissionService = createContentSubmissionService({
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
-    onDataInvalidated: invalidateWorkspaceData
+    onDataInvalidated: invalidateWorkspaceData,
+    getDataRevision: getWorkspaceDataRevision
   });
   const aiContentService = createAiContentService({
     workspaceRoot: runtime.workspaceRoot,
@@ -255,6 +260,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
       sendToRenderer("content:article-removal-transaction", transaction);
       invalidateWorkspaceData(["articleAttention", "platformQueue", "navigationSummary"], "ARTICLE_REMOVAL_TRANSACTION_CHANGED");
     },
+    onDataInvalidated: invalidateWorkspaceData,
     aiClientFactory: function() { return aiProviderService.createClient(); }
   });
   if (aiContentService && typeof aiContentService.recoverPendingArticleRemovals === "function") {
@@ -283,7 +289,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     contentSubmissionService: contentSubmissionService,
     contentGenerationBatchService: contentGenerationBatchService,
     runtimeDiagnosticsService: runtime.diagnosticsService,
-    invalidateData: invalidateWorkspaceData
+    invalidateData: invalidateWorkspaceData,
+    getWorkspaceDataRevision: getWorkspaceDataRevision
   });
   if (storageMaintenanceService) {
     require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
