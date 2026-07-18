@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -81,6 +81,11 @@ interface DesktopConsoleContent {
   getArticleRemovalTransaction?: (transactionId: string) => Promise<IpcResponse<ArticleRemovalTransaction | null>>;
   listArticleRemovalTransactions?: () => Promise<IpcResponse<ArticleRemovalTransaction[]>>;
   onArticleRemovalTransaction?: (listener: (transaction: ArticleRemovalTransaction) => void) => () => void;
+  /** Compatibility surface for preload builds that group attention under content. */
+  listArticleAttention?: (input?: { clientId?: string }) => Promise<IpcResponse<ArticleAttentionList>>;
+  getArticleAttention?: (input: { attentionId: string }) => Promise<IpcResponse<ArticleAttentionItem | null>>;
+  previewArticleAttention?: (input: { attentionId: string; action: string }) => Promise<IpcResponse<ArticleAttentionPreview>>;
+  resolveArticleAttention?: (input: { attentionId: string; action: string; expectedRevision: number; confirmed?: boolean }) => Promise<IpcResponse<ArticleAttentionResolution>>;
   retryArticleRemovalTransaction?: (input: { transactionId: string; confirmed: true }) => Promise<IpcResponse<ArticleRemovalTransaction>>;
   previewTrashedArticleQueueResidue?(): Promise<IpcResponse<TrashedArticleQueueResiduePreview>>;
   cleanupTrashedArticleQueueResidue?(input: { confirmed: true }): Promise<IpcResponse<TrashedArticleQueueResiduePreview & { cleanedCount: number }>>;
@@ -129,6 +134,17 @@ interface DesktopConsoleWorkspace {
   getCurrent(): Promise<IpcResponse<WorkspaceCurrent>>;
   openCurrent(): Promise<IpcResponse<void>>;
   requestSwitch(): Promise<IpcResponse<WorkspaceBootstrapState>>;
+}
+
+interface DesktopConsoleWorkspaceData {
+  onInvalidated?: (listener: (event: WorkspaceDataInvalidatedEvent) => void) => () => void;
+}
+
+interface DesktopConsoleArticleAttention {
+  list(input?: { clientId?: string }): Promise<IpcResponse<ArticleAttentionList>>;
+  get(input: { attentionId: string }): Promise<IpcResponse<ArticleAttentionItem | null>>;
+  preview(input: { attentionId: string; action: string }): Promise<IpcResponse<ArticleAttentionPreview>>;
+  resolve(input: { attentionId: string; action: string; expectedRevision: number; confirmed?: boolean }): Promise<IpcResponse<ArticleAttentionResolution>>;
 }
 
 interface DesktopConsolePublication {
@@ -257,6 +273,8 @@ interface DesktopConsole {
   platforms: DesktopConsolePlatforms;
   content: DesktopConsoleContent;
   publication?: DesktopConsolePublication;
+  workspaceData?: DesktopConsoleWorkspaceData;
+  articleAttention?: DesktopConsoleArticleAttention;
 }
 
 declare global {
@@ -1259,18 +1277,17 @@ export function getPlatformDisplayName(id: string): string {
   return PLATFORM_DISPLAY_NAMES[id] || id;
 }
 
-export async function getPlatformQueue(): Promise<{
-  platforms: PlatformTarget[];
-  queue: PlatformArticle[];
-}> {
+export async function getPlatformQueue(): Promise<PlatformQueueData> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.getQueue();
     if (!result.ok) throw getIpcError(result.error, 'getPlatformQueue failed');
     const data = result.data as {
+      revision?: number;
       platforms: Array<{ id: string; scanDir: string }>;
       queue: PlatformArticle[];
     };
     return {
+      revision: typeof data.revision === 'number' ? data.revision : undefined,
       platforms: data.platforms.map((p) => ({
         id: p.id,
         displayName: getPlatformDisplayName(p.id),
@@ -1387,6 +1404,59 @@ export async function listContentSubmissionBatches(clientId: string): Promise<Co
   const result = await window.desktopConsole!.content.listSubmissionBatches({ clientId });
   if (!result.ok) throw getIpcError(result.error, "submission batch history failed");
   return (result.data || []) as ContentSubmissionBatchRecord[];
+}
+
+export function onWorkspaceDataInvalidated(listener: (event: WorkspaceDataInvalidatedEvent) => void): () => void {
+  if (!isElectron() || typeof window.desktopConsole?.workspaceData?.onInvalidated !== 'function') return () => {};
+  return window.desktopConsole.workspaceData.onInvalidated(listener);
+}
+
+export async function listArticleAttention(clientId?: string): Promise<ArticleAttentionItem[]> {
+  if (!isElectron()) return [];
+  const attention = window.desktopConsole.articleAttention;
+  const list = typeof attention?.list === 'function'
+    ? attention.list.bind(attention)
+    : window.desktopConsole.content.listArticleAttention?.bind(window.desktopConsole.content);
+  if (!list) return [];
+  const result = await list(clientId ? { clientId } : undefined);
+  if (!result.ok) throw getIpcError(result.error, 'listArticleAttention failed');
+  return result.data?.items || [];
+}
+
+export async function getArticleAttention(attentionId: string): Promise<ArticleAttentionItem | null> {
+  if (!isElectron()) return null;
+  const attention = window.desktopConsole.articleAttention;
+  const get = typeof attention?.get === 'function'
+    ? attention.get.bind(attention)
+    : window.desktopConsole.content.getArticleAttention?.bind(window.desktopConsole.content);
+  if (!get) return null;
+  const result = await get({ attentionId });
+  if (!result.ok) throw getIpcError(result.error, 'getArticleAttention failed');
+  return result.data || null;
+}
+
+export async function previewArticleAttention(input: { attentionId: string; action: string }): Promise<ArticleAttentionPreview> {
+  if (!isElectron()) throw new Error('需处理中心不可用');
+  const attention = window.desktopConsole.articleAttention;
+  const preview = typeof attention?.preview === 'function'
+    ? attention.preview.bind(attention)
+    : window.desktopConsole.content.previewArticleAttention?.bind(window.desktopConsole.content);
+  if (!preview) throw new Error('需处理中心不可用');
+  const result = await preview(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'previewArticleAttention failed');
+  return result.data;
+}
+
+export async function resolveArticleAttention(input: { attentionId: string; action: string; expectedRevision: number; confirmed?: boolean }): Promise<ArticleAttentionResolution> {
+  if (!isElectron()) throw new Error('需处理中心不可用');
+  const attention = window.desktopConsole.articleAttention;
+  const resolve = typeof attention?.resolve === 'function'
+    ? attention.resolve.bind(attention)
+    : window.desktopConsole.content.resolveArticleAttention?.bind(window.desktopConsole.content);
+  if (!resolve) throw new Error('需处理中心不可用');
+  const result = await resolve(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'resolveArticleAttention failed');
+  return result.data;
 }
 
 export function onPlatformState(listener: (state: PlatformSubmitState) => void): () => void {

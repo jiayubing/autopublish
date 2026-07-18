@@ -112,6 +112,12 @@ transaction explicitly. Use the read-only removal dry-run before any manual
 repair; residue cleanup still requires a fresh UI confirmation and is never
 silently performed during upgrade.
 
+文章管理中的“需处理中心”是由队列、发布记录和删除事务派生的处理入口，
+不是新的数据仓库。副本验收时优先确认 `both_absent` 的失败 cleanup 可以幂等
+收尾；只有内容变化、身份冲突、uncertain 或不安全路径才应继续等待人工核对。
+投稿 terminal 后列表和导航徽标会从共享快照自动刷新，0 项徽标隐藏。远端
+成功而本地归档失败时不得重投远端，只能处理本地归档。
+
 For an installation that has been upgraded from the old development identity,
 legacy application configuration import is an explicit, one-time operation.
 It never overwrites a non-empty canonical configuration directory. Content

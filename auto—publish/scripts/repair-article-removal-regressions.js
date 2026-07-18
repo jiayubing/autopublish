@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { inspectSubmissionPair } = require("../src/content/submission-export-service");
 
 function fail(message) {
   const error = new Error(message);
@@ -92,23 +93,30 @@ function inspectResidue(workspace) {
       const latest = record && Array.isArray(record.attempts) ? record.attempts[record.attempts.length - 1] : null;
       const suppliedFile = typeof item.filePath === "string" && path.isAbsolute(item.filePath) && contained(workspace, item.filePath) ? item.filePath : null;
       const suppliedSidecar = typeof item.sidecarPath === "string" && path.isAbsolute(item.sidecarPath) && contained(workspace, item.sidecarPath) ? item.sidecarPath : null;
-      const queueFile = suppliedFile || path.join(inputRoot, item.targetPlatformId || "", item.filename || "");
+      const queueFilename = path.basename(typeof item.filename === "string" && item.filename ? item.filename : typeof item.filePath === "string" ? item.filePath : "");
+      const queueFile = suppliedFile || path.join(inputRoot, item.targetPlatformId || "", queueFilename);
       const sidecarFile = suppliedSidecar || queueFile + ".submission.json";
       const sidecar = readJson(sidecarFile);
-      let unchanged = false;
-      try {
-        unchanged = fs.existsSync(queueFile) && fs.readFileSync(queueFile, "utf8") && crypto.createHash("sha256").update(fs.readFileSync(queueFile, "utf8")).digest("hex") === item.contentHash && sidecar && sidecar.submissionBatchId === batch.id && sidecar.publicationId === item.publicationId && sidecar.attemptId === item.attemptId && sidecar.contentHash === item.contentHash;
-      } catch (_) {}
+      const pair = inspectSubmissionPair({
+        filePath: queueFile,
+        sidecarPath: sidecarFile,
+        articleId: item.articleId,
+        clientId: batch.clientId,
+        targetPlatformId: item.targetPlatformId,
+        publicationId: item.publicationId,
+        attemptId: item.attemptId,
+        contentHash: item.contentHash
+      }, batch, sidecar, { rootDir: workspace, record });
       let action = null;
       let reasonCode = null;
-      if (!unchanged) reasonCode = "SUBMISSION_QUEUE_CHANGED";
+      if (!["intact", "both_absent"].includes(pair.pairState)) reasonCode = pair.pairState === "unsafe_path" ? "QUEUE_UNSAFE_PATH" : pair.pairState === "identity_conflict" ? "SUBMISSION_IDENTITY_CONFLICT" : pair.pairState === "content_changed" ? "SUBMISSION_CONTENT_CHANGED" : "SUBMISSION_QUEUE_CHANGED";
       else if (!record) reasonCode = "PUBLICATION_RECORD_MISSING";
       else if (["submitting", "submitted", "uncertain"].includes(record.status)) reasonCode = "ARTICLE_SUBMISSION_ACTIVE";
-      else if (record.status === "queued") action = latest && latest.attemptId === item.attemptId ? "cancel" : null;
+      else if (record.status === "queued") action = latest && latest.attemptId === item.attemptId && latest.status === "queued" ? "cancel" : null;
       else if (record.status === "failed") action = attempt && attempt.status === "failed" ? "cleanup" : null;
       else reasonCode = "PUBLICATION_STATUS_NOT_REPAIRABLE";
       if (!action && !reasonCode) reasonCode = record.status === "queued" ? "PUBLICATION_ATTEMPT_MISMATCH" : "PUBLICATION_ATTEMPT_NOT_FAILED";
-      const safe = { publicationId: item.publicationId || null, targetPlatformId: item.targetPlatformId || null, status: record && record.status || item.status || "unknown", action, reasonCode };
+      const safe = { publicationId: item.publicationId || null, targetPlatformId: item.targetPlatformId || null, status: record && record.status || item.status || "unknown", pairState: pair.pairState, action, reasonCode };
       safe.actionFingerprint = hash(actionIdentity(Object.assign({}, item, { action })));
       items.push(safe);
     });

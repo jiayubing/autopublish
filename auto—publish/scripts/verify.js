@@ -22,7 +22,15 @@ const focusedPlanTests = [
   "tests/hepan-publish-contract.test.js",
   "tests/hepan-publish-interval.test.js",
   "tests/hepan-provider-settings.test.js",
-  "tests/renderer-residue-cleanup-flow.test.js"
+  "tests/renderer-residue-cleanup-flow.test.js",
+  "tests/submission-pair-state.test.js",
+  "tests/article-attention-query.test.js",
+  "tests/article-attention-resolver.test.js",
+  "tests/workspace-data-invalidation.test.js",
+  "tests/architecture-seams.test.js",
+  "tests/renderer-platform-queue-refresh.test.js",
+  "tests/article-workflow.test.js",
+  "tests/renderer-article-management-flow.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 function runNpm(args) {

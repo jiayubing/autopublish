@@ -7,6 +7,7 @@
   require("./ai-content-ipc").registerAiContentIpc(deps);
   require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(deps);
   require("./content-submission-ipc").registerContentSubmissionIpc(deps);
+  require("./article-attention-ipc").registerArticleAttentionIpc(deps);
   require("./publication-ipc").registerPublicationIpc(deps);
   require("./doubao-collection-ipc").registerDoubaoCollectionIpc(deps);
   require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(deps);

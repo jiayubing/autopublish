@@ -38,6 +38,10 @@ function createArticleRemovalTransactionStore(options) {
     if (!transaction || typeof transaction !== "object" || Array.isArray(transaction)) {
       throw removalError("ARTICLE_REMOVAL_TRANSACTION_INVALID", "Removal transaction is invalid");
     }
+    if (transaction.resolutionCode !== undefined &&
+        (typeof transaction.resolutionCode !== "string" || !/^[A-Z0-9_]{1,80}$/.test(transaction.resolutionCode))) {
+      throw removalError("ARTICLE_REMOVAL_RESOLUTION_INVALID", "Removal resolution code is invalid");
+    }
     const file = filename(transaction.id);
     const temporary = file + ".tmp-" + process.pid + "-" + crypto.randomUUID();
     try {
@@ -73,13 +77,23 @@ function createArticleRemovalTransactionStore(options) {
     return save(next);
   }
 
+  function recordResolution(id, resolutionCode) {
+    if (typeof resolutionCode !== "string" || !/^[A-Z0-9_]{1,80}$/.test(resolutionCode)) {
+      throw removalError("ARTICLE_REMOVAL_RESOLUTION_INVALID", "Removal resolution code is invalid");
+    }
+    return update(id, function(transaction) {
+      transaction.resolutionCode = resolutionCode;
+      return transaction;
+    });
+  }
+
   function remove(id) {
     const file = filename(id);
     if (fs.existsSync(file)) fs.unlinkSync(file);
     return true;
   }
 
-  return { directory, createId, now, save, create: save, get, read: get, list, update, remove, delete: remove };
+  return { directory, createId, now, save, create: save, get, read: get, list, update, recordResolution, remove, delete: remove };
 }
 
 module.exports = { createArticleRemovalTransactionStore };

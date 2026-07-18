@@ -18,6 +18,13 @@ const api = {
     openCurrent: function() { return ipcRenderer.invoke("workspace:open-current"); },
     requestSwitch: function() { return ipcRenderer.invoke("workspace:request-switch"); }
   },
+  workspaceData: {
+    onInvalidated: function(listener) {
+      var handler = function(event, payload) { listener(payload); };
+      ipcRenderer.on("workspace:data-invalidated", handler);
+      return function() { ipcRenderer.removeListener("workspace:data-invalidated", handler); };
+    }
+  },
   aiProvider: {
     getStatus: function() { return ipcRenderer.invoke("ai-provider:get-status"); },
     save: function(input) { return ipcRenderer.invoke("ai-provider:save", input || {}); },
@@ -130,6 +137,10 @@ const api = {
     getArticleRemovalTransaction: function(transactionId) { return ipcRenderer.invoke("content:get-article-removal-transaction", { transactionId: transactionId }); },
     listArticleRemovalTransactions: function() { return ipcRenderer.invoke("content:list-article-removal-transactions"); },
     retryArticleRemovalTransaction: function(input) { return ipcRenderer.invoke("content:retry-article-removal-transaction", input || {}); },
+    listArticleAttention: function(input) { return ipcRenderer.invoke("content:list-article-attention", input || {}); },
+    getArticleAttention: function(input) { return ipcRenderer.invoke("content:get-article-attention", input || {}); },
+    previewArticleAttention: function(input) { return ipcRenderer.invoke("content:preview-article-attention", input || {}); },
+    resolveArticleAttention: function(input) { return ipcRenderer.invoke("content:resolve-article-attention", input || {}); },
     onArticleRemovalTransaction: function(listener) {
       var handler = function(event, payload) { listener(payload); };
       ipcRenderer.on("content:article-removal-transaction", handler);
@@ -178,6 +189,12 @@ const api = {
   publication: {
     listForArticles: function(input) { return ipcRenderer.invoke("publication:list-for-articles", input); },
     reconcile: function(input) { return ipcRenderer.invoke("publication:reconcile", input); }
+  },
+  articleAttention: {
+    list: function(input) { return ipcRenderer.invoke("content:list-article-attention", input || {}); },
+    get: function(input) { return ipcRenderer.invoke("content:get-article-attention", input || {}); },
+    preview: function(input) { return ipcRenderer.invoke("content:preview-article-attention", input || {}); },
+    resolve: function(input) { return ipcRenderer.invoke("content:resolve-article-attention", input || {}); }
   },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },

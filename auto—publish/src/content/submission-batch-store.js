@@ -89,7 +89,7 @@ function createSubmissionBatchStore(options) {
     const nextStatus = transition.status;
     const allowed = transitions[item.status] || new Set();
     if (item.status !== nextStatus && !allowed.has(nextStatus)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid");
-    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt"];
+    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt", "pairState", "identityMatched", "contentMatched", "mainExists", "sidecarExists"];
     Object.keys(transition).forEach((key) => { if (!allowedFields.includes(key)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid"); });
     Object.assign(item, transition, { status: nextStatus, publicationStatus: transition.publicationStatus === undefined ? nextStatus : transition.publicationStatus, updatedAt: transition.updatedAt || now() });
     batch.status = batchStatus(batch.items);

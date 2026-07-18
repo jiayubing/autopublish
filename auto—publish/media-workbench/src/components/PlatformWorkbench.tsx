@@ -1,12 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   PlatformArticle,
-  PlatformTarget,
-  PlatformSubmitPlan,
   PlatformSubmitResult,
 } from "../types";
 import {
-  getPlatformQueue,
   buildPlatformPlan,
   submitPlatformPlan,
   stopPlatformSubmit,
@@ -17,6 +14,7 @@ import {
   previewTrashedArticleQueueResidue,
   cleanupTrashedArticleQueueResidue,
 } from "../electron-api";
+import { usePlatformQueue } from "../workspace-data-store";
 import type { HepanProviderStatus, PlatformStatus } from "../types";
 import {
   RefreshCw,
@@ -44,10 +42,16 @@ import { motion, AnimatePresence } from "motion/react";
 
 const PLATFORM_ORDER = ["lieju", "toutiao", "hepan"] as const;
 
-export default function PlatformWorkbench() {
-  const [queue, setQueue] = useState<PlatformArticle[]>([]);
-  const [platforms, setPlatforms] = useState<PlatformTarget[]>([]);
-  const [loading, setLoading] = useState(true);
+function archiveErrorText(value: PlatformArticle['archiveError'] | PlatformSubmitResult['results'][number]['archiveError']): string {
+  if (typeof value === 'string') return value;
+  return value?.message || value?.code || '本地归档失败';
+}
+
+export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenArticleManagement?: () => void } = {}) {
+  const { snapshot: queueSnapshot, refresh: refreshQueue } = usePlatformQueue();
+  const queue = queueSnapshot.queue;
+  const platforms = queueSnapshot.platforms;
+  const loading = queueSnapshot.loading;
   const [error, setError] = useState<string | null>(null);
 
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(
@@ -74,24 +78,31 @@ export default function PlatformWorkbench() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set()
   );
+  const terminalRefreshRef = useRef<string | null>(null);
+
+  const hasArchiveFailure = useCallback((article: PlatformArticle) => Boolean(article.archiveError), []);
+  const isSelectableArticle = useCallback((article: PlatformArticle) => article.sourceArticleState !== "trashed" && !hasArchiveFailure(article), [hasArchiveFailure]);
+  const displayError = error || queueSnapshot.error;
 
   const loadQueue = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
-      const data = await getPlatformQueue();
-      setQueue(data.queue);
-      setPlatforms(data.platforms);
+      setError(null);
+      await refreshQueue("manual");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load queue");
-    } finally {
-      setLoading(false);
     }
-  }, []);
+  }, [refreshQueue]);
 
   useEffect(() => {
-    loadQueue();
+    void loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    setSelectedArticles((current) => {
+      const next = new Set([...current].filter((filePath) => queue.some((article) => article.filePath === filePath && isSelectableArticle(article))));
+      return next.size === current.size ? current : next;
+    });
+  }, [isSelectableArticle, queue]);
 
   const inspectQueueResidue = useCallback(async () => {
     try {
@@ -113,7 +124,7 @@ export default function PlatformWorkbench() {
       const report = await previewTrashedArticleQueueResidue();
       setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
       if (!report.cleanableCount) {
-        setResidueFeedback({ kind: "error", text: report.reportedCount ? `发现 ${report.reportedCount} 项已删除源文章残留，但它们正在投稿、结果待确认或存在冲突，需独立人工核对。` : "未发现已删除源文章的可修复队列残留。" });
+        setResidueFeedback({ kind: "error", text: report.reportedCount ? `发现 ${report.reportedCount} 项需处理残留。请进入“文章管理”的“需处理”阶段查看原因和允许动作。` : "未发现已删除源文章的可修复队列残留。" });
         return;
       }
       if (!window.confirm(`发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`)) return;
@@ -156,9 +167,14 @@ export default function PlatformWorkbench() {
         setSubmitStatus("正在投稿…");
       } else if (phase === "stopping") {
         setSubmitStatus("正在停止投稿…");
-      } else if (phase === "completed" || phase === "idle" || phase === "failed") {
+      } else if (phase === "completed" || phase === "idle" || phase === "failed" || phase === "stopped") {
         setSubmitStatus("");
         setIsSubmitting(false);
+        const terminalKey = `${phase}:${state.queueRevision ?? ""}`;
+        if (terminalRefreshRef.current !== terminalKey) {
+          terminalRefreshRef.current = terminalKey;
+          void refreshQueue("submit-terminal").catch(() => {});
+        }
       }
     };
     getPlatformSettingsStatus<HepanProviderStatus>("hepan").then((status) => {
@@ -170,7 +186,7 @@ export default function PlatformWorkbench() {
       applyPlatformState(state);
     });
     return () => { active = false; unsubscribe(); };
-  }, []);
+  }, [refreshQueue]);
 
   const groupedArticles: Record<string, PlatformArticle[]> = {};
   for (const article of queue) {
@@ -183,7 +199,7 @@ export default function PlatformWorkbench() {
 
   const toggleArticle = (filePath: string) => {
     const article = queue.find((item) => item.filePath === filePath);
-    if (article?.sourceArticleState === "trashed") return;
+    if (!article || !isSelectableArticle(article)) return;
     setSelectedArticles((prev) => {
       const next = new Set(prev);
       if (next.has(filePath)) next.delete(filePath);
@@ -194,7 +210,7 @@ export default function PlatformWorkbench() {
 
   const toggleSelectAllInGroup = (platformId: string) => {
     const groupArticles = groupedArticles[platformId] || [];
-    const selectableGroup = groupArticles.filter((article) => article.sourceArticleState !== "trashed");
+    const selectableGroup = groupArticles.filter(isSelectableArticle);
     if (!selectableGroup.length) return;
     const allSelected = selectableGroup.every((a) =>
       selectedArticles.has(a.filePath)
@@ -227,7 +243,7 @@ export default function PlatformWorkbench() {
     });
   };
 
-  const selectedArticleList = queue.filter((a) => a.sourceArticleState !== "trashed" &&
+  const selectedArticleList = queue.filter((a) => isSelectableArticle(a) &&
     selectedArticles.has(a.filePath)
   );
   const selectedPlatformList = platforms.filter((p) =>
@@ -274,6 +290,7 @@ export default function PlatformWorkbench() {
       setSubmitStatus("");
       setError(e instanceof Error ? e.message : "Submission failed");
     } finally {
+      try { await refreshQueue("submit-terminal"); } catch (_) {}
       setIsSubmitting(false);
       setIsStopping(false);
     }
@@ -313,15 +330,16 @@ export default function PlatformWorkbench() {
           />
           <span>刷新队列</span>
         </button>
-        {(queueResidue.cleanableCount > 0 || queueResidue.reportedCount > 0) && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || isSubmitting || repairingResidue} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{repairingResidue ? (residuePhase === "checking" ? "检查中…" : "清理中…") : `检查并清理已删除文章残留 (${queueResidue.cleanableCount}/${queueResidue.cleanableCount + queueResidue.reportedCount})`}</button>}
+        {queueResidue.cleanableCount > 0 && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || isSubmitting || repairingResidue} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{repairingResidue ? (residuePhase === "checking" ? "检查中…" : "清理中…") : `检查并清理已删除文章残留 · 安全收尾 (${queueResidue.cleanableCount})`}</button>}
+        {queueResidue.reportedCount > 0 && <button type="button" onClick={onOpenArticleManagement} disabled={loading || isSubmitting} className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">查看需处理项 ({queueResidue.reportedCount})</button>}
       </div>
 
       {residueFeedback && <div role={residueFeedback.kind === "error" ? "alert" : "status"} aria-live={residueFeedback.kind === "error" ? "assertive" : "polite"} className={`mb-3 rounded border p-3 text-xs ${residueFeedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>{residueFeedback.text}</div>}
 
-      {error && (
+      {displayError && (
         <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2 text-red-700 text-xs">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{error}</span>
+          <span>{displayError}</span>
           <button
             onClick={() => setError(null)}
             className="ml-auto shrink-0 p-0.5 hover:bg-red-100 rounded"
@@ -345,7 +363,7 @@ export default function PlatformWorkbench() {
             {queue.length > 0 && (
               <button
                 onClick={() => {
-                  const selectableQueue = queue.filter((a) => a.sourceArticleState !== "trashed");
+                  const selectableQueue = queue.filter(isSelectableArticle);
                   const allSelected = selectableQueue.length > 0 && selectableQueue.every((a) =>
                     selectedArticles.has(a.filePath)
                   );
@@ -357,7 +375,7 @@ export default function PlatformWorkbench() {
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 font-medium"
               >
-                {queue.filter((a) => a.sourceArticleState !== "trashed").length > 0 && queue.filter((a) => a.sourceArticleState !== "trashed").every((a) => selectedArticles.has(a.filePath))
+                {queue.filter(isSelectableArticle).length > 0 && queue.filter(isSelectableArticle).every((a) => selectedArticles.has(a.filePath))
                   ? "取消全选"
                   : "全选"}
               </button>
@@ -383,7 +401,7 @@ export default function PlatformWorkbench() {
                 {sortedGroups.map((platformId) => {
                   const groupArticles = groupedArticles[platformId];
                   const isCollapsed = collapsedGroups.has(platformId);
-                  const selectableGroup = groupArticles.filter((a) => a.sourceArticleState !== "trashed");
+                  const selectableGroup = groupArticles.filter(isSelectableArticle);
                   const allInGroupSelected =
                     selectableGroup.length > 0 &&
                     selectableGroup.every((a) =>
@@ -443,15 +461,17 @@ export default function PlatformWorkbench() {
                               onClick={() =>
                                 toggleArticle(article.filePath)
                               }
-                              disabled={article.sourceArticleState === "trashed"}
-                              title={article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? `：${article.reasonCode}` : ""}` : undefined}
+                              disabled={!isSelectableArticle(article)}
+                              title={article.archiveError ? "远端已发布，本地归档待处理，禁止再次远端投稿" : article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? `：${article.reasonCode}` : ""}` : undefined}
                               className={`w-full flex items-center space-x-2.5 px-3.5 py-2 transition-colors text-left ${
                                 selectedArticles.has(article.filePath)
                                   ? "bg-blue-50/60"
-                                  : article.sourceArticleState === "trashed" ? "bg-rose-50/60" : "hover:bg-slate-50"
+                                  : article.archiveError ? "bg-amber-50/60" : article.sourceArticleState === "trashed" ? "bg-rose-50/60" : "hover:bg-slate-50"
                               }`}
                             >
-                              {article.sourceArticleState === "trashed" ? (
+                              {article.archiveError ? (
+                                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                              ) : article.sourceArticleState === "trashed" ? (
                                 <XCircle className="w-4 h-4 text-rose-500 shrink-0" />
                               ) : selectedArticles.has(
                                 article.filePath
@@ -466,7 +486,7 @@ export default function PlatformWorkbench() {
                                     article.filename}
                                 </p>
                                 <p className="text-xs text-slate-400 truncate">
-                                  {article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? ` · ${article.reasonCode}` : ""}` : article.filename}
+                                  {article.archiveError ? "远端已发布，本地归档待处理（禁止重投）" : article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? ` · ${article.reasonCode}` : ""}` : article.filename}
                                 </p>
                               </div>
                             </button>
@@ -767,6 +787,7 @@ export default function PlatformWorkbench() {
                     </p>
                   </div>
                 </div>
+                {submitResult.archiveSummary && submitResult.archiveSummary.failed > 0 && <div role="status" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">远端已发布，本地归档待处理：{submitResult.archiveSummary.failed} 项。队列中的这些文章已禁止再次远端投稿。</div>}
 
                 <div className="max-h-60 overflow-y-auto space-y-1.5">
                   {submitResult.results.map((r, i) => (
@@ -798,6 +819,7 @@ export default function PlatformWorkbench() {
                               - {r.error}
                             </span>
                           )}
+                          {r.archiveError && <span className="text-amber-600 ml-1">- 远端成功，本地归档待处理：{archiveErrorText(r.archiveError)}</span>}
                         </p>
                       </div>
                     </div>

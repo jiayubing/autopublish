@@ -161,6 +161,7 @@ function createPlatformWorkbenchService(opts) {
     directory: options.paths && options.paths.submissionRecords
   });
   var articleStore = options.articleStore || createArticleStore(rootDir, { paths: options.paths });
+  var archiveFailures = new Map();
 
   function sourceArticleState(metadata) {
     var data = metadata && metadata.data;
@@ -174,6 +175,18 @@ function createPlatformWorkbenchService(opts) {
       if (removed) return { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" };
     } catch (_) {}
     return { sourceArticleState: "active", reasonCode: null };
+  }
+
+  function listArchiveFailures() {
+    return [...archiveFailures.entries()].map(function(entry) {
+      var separator = entry[0].indexOf("\u0000");
+      return {
+        platformId: separator >= 0 ? entry[0].slice(0, separator) : entry[0],
+        filename: separator >= 0 ? entry[0].slice(separator + 1) : "",
+        status: "published",
+        reasonCode: entry[1]
+      };
+    });
   }
 
   function scanQueue() {
@@ -208,7 +221,8 @@ function createPlatformWorkbenchService(opts) {
             fileBaseName: path.basename(filename, path.extname(filename)),
             title: title,
             sourceArticleState: state.sourceArticleState,
-            reasonCode: state.reasonCode
+            reasonCode: state.reasonCode,
+            archiveError: archiveFailures.get(platformId + "\u0000" + filename) || null
           };
         });
       }
@@ -470,7 +484,7 @@ function createPlatformWorkbenchService(opts) {
       var metadata;
       var group = sourceGroups.get(task.sourcePlatformId + "\0" + task.filename);
       if (!group) {
-        group = { filePath: null, article: null, results: [] };
+        group = { sourcePlatformId: task.sourcePlatformId, filename: task.filename, filePath: null, article: null, results: [] };
         sourceGroups.set(task.sourcePlatformId + "\0" + task.filename, group);
       }
 
@@ -479,6 +493,7 @@ function createPlatformWorkbenchService(opts) {
         metadata = readSubmissionMetadata(filePath, true);
         var sourceState = sourceArticleState(metadata);
         group.filePath = filePath;
+        group.archiveKey = task.sourcePlatformId + "\u0000" + task.filename;
         if (!adapter) throw submissionInputError("SUBMISSION_ADAPTER_MISSING", "Missing adapter: " + task.targetPlatformId);
         var sourceArticle = {
           file: filePath,
@@ -643,17 +658,23 @@ function createPlatformWorkbenchService(opts) {
       }
     }
 
+    var archiveAttempted = 0;
+    var archiveFailed = 0;
     sourceGroups.forEach(function(group) {
       if (!group.filePath || !group.article || !group.results.length) return;
       var allPublished = group.results.every(function(result) {
         return result.publicationStatus === "published" || result.publicationStatus === "cancelled" && result.status === "skipped";
       });
       if (!allPublished) return;
+      archiveAttempted += 1;
       try {
         archivePublishedArticle(group.article, options.paths || { published: path.join(rootDir, "published") });
+        group.results.forEach(function(result) { archiveFailures.delete(group.archiveKey); });
       } catch (error) {
+        archiveFailed += 1;
         group.results.forEach(function(result) {
           result.archiveError = safeOutcomeError(error, "PUBLISHED_ARCHIVE_FAILED");
+          archiveFailures.set(group.archiveKey, result.archiveError);
         });
       }
     });
@@ -668,7 +689,8 @@ function createPlatformWorkbenchService(opts) {
       pending: results.filter(function(item) { return item.status === "pending"; }).length,
       uncertain: uncertain,
       skipped: skipped,
-      results: results
+      results: results,
+      archiveSummary: { attempted: archiveAttempted, succeeded: archiveAttempted - archiveFailed, failed: archiveFailed }
     };
   }
 
@@ -681,7 +703,8 @@ function createPlatformWorkbenchService(opts) {
     readSubmissionMetadata: function(sourcePlatformId, filename) {
       var filePath = resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false);
       return readSubmissionMetadata(filePath, true);
-    }
+    },
+    listArchiveFailures: listArchiveFailures
   };
 }
 

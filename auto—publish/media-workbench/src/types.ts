@@ -403,6 +403,73 @@ export interface PlatformArticle {
   sourcePlatformId: string;
   sourceArticleState?: 'active' | 'trashed' | 'missing' | string | null;
   reasonCode?: string | null;
+  archiveError?: string | { code?: string | null; message?: string | null } | null;
+  remoteStatus?: 'published' | 'failed' | 'uncertain' | string | null;
+}
+
+export interface PlatformQueueData {
+  revision?: number;
+  platforms: PlatformTarget[];
+  queue: PlatformArticle[];
+}
+
+export interface PlatformQueueSnapshot {
+  revision: number;
+  queue: PlatformArticle[];
+  platforms: PlatformTarget[];
+  counts: { actionable: number; attention: number; total: number };
+  loading: boolean;
+  error: string | null;
+}
+
+export type WorkspaceDataInvalidationScope = 'platformQueue' | 'navigationSummary' | 'articleAttention' | 'orders' | string;
+export interface WorkspaceDataInvalidatedEvent {
+  revision: number;
+  scopes: WorkspaceDataInvalidationScope[];
+  reasonCode?: string | null;
+}
+
+export interface ArticleAttentionItem {
+  attentionId: string;
+  kind: string;
+  articleId?: string | null;
+  titleSnapshot?: string | null;
+  clientId?: string | null;
+  platformId?: string | null;
+  displayName?: string | null;
+  batchId?: string | null;
+  publicationId?: string | null;
+  attemptId?: string | null;
+  transactionId?: string | null;
+  status?: string | null;
+  reasonCode?: string | null;
+  pairState?: string | null;
+  recommendedAction?: string | null;
+  allowedActions: string[];
+  updatedAt?: string | null;
+  message?: string | null;
+}
+
+export interface ArticleAttentionList {
+  revision: number;
+  items: ArticleAttentionItem[];
+  counts: { total: number; actionable: number };
+}
+
+export interface ArticleAttentionPreview {
+  attentionId: string;
+  revision: number;
+  action: string;
+  requiresConfirmation: boolean;
+  message: string;
+  changedScopes: string[];
+}
+
+export interface ArticleAttentionResolution {
+  outcome: string;
+  attentionId: string;
+  result?: unknown;
+  changedScopes: string[];
 }
 
 export interface PlatformTarget {
@@ -422,6 +489,7 @@ export interface PlatformStatus {
   task?: PlatformSubmitTask | null;
   targetPlatformId?: string | null;
   reasonCode?: string | null;
+  queueRevision?: number | null;
 }
 
 export interface PlatformSubmitState extends PlatformStatus {}
@@ -443,10 +511,16 @@ export interface PlatformSubmitResult {
   fail: number;
   skipped: number;
   results: PlatformTaskResult[];
+  archiveSummary?: {
+    attempted: number;
+    succeeded: number;
+    failed: number;
+  };
 }
 
 export interface PlatformTaskResult {
   task: PlatformSubmitTask;
   status: 'success' | 'failed' | 'pending';
   error?: string;
+  archiveError?: string | { code?: string | null; message?: string | null } | null;
 }

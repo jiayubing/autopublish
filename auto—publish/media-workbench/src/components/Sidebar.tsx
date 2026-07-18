@@ -15,6 +15,9 @@ import {
   PenLine
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { deriveNavigationSummary } from '../navigation-summary';
+import { usePlatformQueue } from '../workspace-data-store';
+import type { PlatformQueueSnapshot } from '../types';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -26,6 +29,7 @@ interface SidebarProps {
   totalResources: number;
   totalOrders: number;
   totalPlatformArticles?: number;
+  platformQueueSnapshot?: PlatformQueueSnapshot;
 }
 
 export default function Sidebar({
@@ -37,16 +41,20 @@ export default function Sidebar({
   totalArticles,
   totalResources,
   totalOrders,
-  totalPlatformArticles
+  totalPlatformArticles: _legacyPlatformArticles,
+  platformQueueSnapshot
 }: SidebarProps) {
   const [showWalletDetails, setShowWalletDetails] = useState(false);
+  const queueStore = usePlatformQueue();
+  const queueSnapshot = platformQueueSnapshot || queueStore.snapshot;
+  const navigationSummary = deriveNavigationSummary({ platformQueue: queueSnapshot, contentArticles: totalArticles, orders: totalOrders });
 
   const menuItems = [
-    { id: 'content' as ViewMode, label: 'AI内容生成', icon: PenLine },
-    { id: 'platforms' as ViewMode, label: '其他平台投稿', icon: Globe, badge: totalPlatformArticles },
-    { id: 'workbench' as ViewMode, label: '付费媒体投稿', icon: Files, badge: totalArticles },
-    { id: 'orders' as ViewMode, label: '投稿订单记录', icon: ClipboardList, badge: totalOrders },
-    { id: 'settings' as ViewMode, label: '配置中心', icon: Settings },
+    { id: 'content' as ViewMode, label: 'AI内容生成', icon: PenLine, badge: undefined, badgeTitle: undefined },
+    { id: 'platforms' as ViewMode, label: '其他平台投稿', icon: Globe, badge: navigationSummary.platformQueue.count, badgeTitle: navigationSummary.platformQueue.label },
+    { id: 'workbench' as ViewMode, label: '付费媒体投稿', icon: Files, badge: navigationSummary.contentArticles.count, badgeTitle: undefined },
+    { id: 'orders' as ViewMode, label: '投稿订单记录', icon: ClipboardList, badge: navigationSummary.orders.count, badgeTitle: undefined },
+    { id: 'settings' as ViewMode, label: '配置中心', icon: Settings, badge: undefined, badgeTitle: undefined },
   ];
 
   return (
@@ -85,12 +93,12 @@ export default function Sidebar({
                 <Icon className={`w-4.5 h-4.5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-blue-400' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
               </div>
-              {item.badge !== undefined && (
+              {item.badge !== undefined && item.badge > 0 && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-semibold transition-all ${
                   isActive 
                     ? 'bg-blue-500/20 text-blue-300' 
                     : 'bg-slate-800 text-slate-500 group-hover:bg-slate-700/80 group-hover:text-slate-300'
-                }`}>
+                }`} title={item.badgeTitle}>
                   {item.badge}
                 </span>
               )}

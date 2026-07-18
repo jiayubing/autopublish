@@ -98,7 +98,7 @@ function createAiContentService(opts) {
     transactionStore: options.articleRemovalTransactionStore,
     now: options.now,
     tokenTtlMs: options.articleRemovalTokenTtlMs,
-    onTransactionStatus: options.onArticleRemovalTransaction
+    onTransactionStatus: notifyArticleRemovalTransaction
   });
   const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
   const articleVersionService = options.articleVersionService || createArticleVersionService({
@@ -124,6 +124,29 @@ function createAiContentService(opts) {
   const promptBuilder = options.buildPrompt || buildPrompt;
   const createId = options.createId || function() { return crypto.randomUUID(); };
   const seenIds = options.seenIds || new Set();
+  let articleRemovalRevision = 0;
+
+  function notifyArticleRemovalTransaction(transaction) {
+    const event = Object.assign({}, transaction || {});
+    const terminal = event.status === "committed" || event.status === "superseded";
+    if (terminal) {
+      articleRemovalRevision += 1;
+      event.revision = articleRemovalRevision;
+      event.changedScopes = ["articleAttention", "platformQueue"];
+    }
+    if (typeof options.onArticleRemovalTransaction === "function") {
+      try { options.onArticleRemovalTransaction(event); } catch (_) {}
+    }
+    if (terminal && typeof options.onArticleRemovalInvalidation === "function") {
+      try {
+        options.onArticleRemovalInvalidation({
+          revision: event.revision,
+          scopes: event.changedScopes.slice(),
+          reasonCode: event.resolutionCode || "ARTICLE_REMOVAL_TERMINAL"
+        });
+      } catch (_) {}
+    }
+  }
 
   async function materializeClient(client) {
     const value = clientDto(client);

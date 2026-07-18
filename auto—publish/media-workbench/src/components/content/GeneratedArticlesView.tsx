@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, reviewContentArticles, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listArticleAttention, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, reviewContentArticles, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
-import { ArticleRemovalTransaction, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
+import { ArticleAttentionItem, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
+import { deriveArticleWorkflow, type ArticleWorkflowStage } from '../../article-workflow';
 import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import { PUBLICATION_STATUS_FILTERS, publicationSummaryMatchesFilter, summarizePublicationRecords, type PublicationHistoryFilter } from '../../publication-status';
+import ArticleAttentionPanel from './ArticleAttentionPanel';
 
-interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onRefreshArticles?: () => void; }
+interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onRefreshArticles?: () => void; }
 
 function selectionKey(article: GeneratedContentArticle) { return articleSelectionKey(article); }
 
@@ -30,12 +32,13 @@ function transactionReason(transaction: ArticleRemovalTransaction | null): strin
   return transaction?.reasonCode || transaction?.errorCode || '状态冲突';
 }
 
-export default function GeneratedArticlesView({ clientId, refreshToken, onArticleSelect, onRefreshArticles }: GeneratedArticlesViewProps) {
+export default function GeneratedArticlesView({ clientId, refreshToken, stageFilter = 'all', selectedAttentionId, onArticleSelect, onRefreshArticles }: GeneratedArticlesViewProps) {
   const [articles, setArticles] = useState<GeneratedContentArticle[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedStage, setSelectedStage] = useState<ArticleWorkflowStage | 'all'>(stageFilter);
   const [publicationFilter, setPublicationFilter] = useState<PublicationHistoryFilter>('all');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -43,8 +46,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
   const [showTrash, setShowTrash] = useState(false);
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
-  const [submissionBatches, setSubmissionBatches] = useState<Array<{ id: string; status: string; items: Array<{ articleId: string; status: string }> }>>([]);
+  const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
+  const [attentionItems, setAttentionItems] = useState<ArticleAttentionItem[]>([]);
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
   const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(null);
@@ -64,6 +68,10 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     removalUnsubscribeRef.current?.();
     removalUnsubscribeRef.current = null;
   }, []);
+
+  useEffect(() => {
+    setSelectedStage(stageFilter);
+  }, [stageFilter]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -89,6 +97,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       return listPublicationHistory(clientId, items.map((item) => item.id)).then((records) => { if (!cancelled) setPublicationRecords(records); });
     }).catch((value) => { if (!cancelled) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
     listContentSubmissionBatches(clientId).then((items) => { if (!cancelled) setSubmissionBatches(items); }).catch(() => { if (!cancelled) setSubmissionBatches([]); });
+    listArticleAttention(clientId).then((items) => { if (!cancelled) setAttentionItems(items); }).catch(() => { if (!cancelled) setAttentionItems([]); });
     return () => { cancelled = true; };
   }, [clientId, refreshToken]);
 
@@ -118,15 +127,17 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     });
     return summaries;
   }, [articles, publicationRecordsByArticle, queuedArticleIds]);
+  const workflowByArticle = useMemo(() => new Map(articles.map((article) => [article.id, deriveArticleWorkflow(article, publicationRecordsByArticle.get(article.id) || [], submissionBatches, [], attentionItems)])), [articles, attentionItems, publicationRecordsByArticle, submissionBatches]);
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
     return articles.filter((article) => {
       const statusMatches = statusFilter === 'all' || (statusFilter === 'queued' ? queuedArticleIds.has(article.id) : article.status === statusFilter);
       const publicationMatches = publicationSummaryMatchesFilter(publicationSummaries.get(article.id) || summarizePublicationRecords([]), publicationFilter);
+      const stageMatches = selectedStage === 'all' || workflowByArticle.get(article.id)?.stage === selectedStage;
       const textMatches = !query || `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query);
-      return statusMatches && publicationMatches && textMatches;
+      return statusMatches && publicationMatches && stageMatches && textMatches;
     });
-  }, [articles, filter, statusFilter, publicationFilter, publicationSummaries, queuedArticleIds]);
+  }, [articles, filter, statusFilter, publicationFilter, publicationSummaries, queuedArticleIds, selectedStage, workflowByArticle]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
   const reviewable = operable.filter((article) => article.status === 'generated');
@@ -419,18 +430,19 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
-  if (showTrash) return <div className="h-full overflow-y-auto p-4">
+  if (showTrash) return <div className="h-full w-full min-w-0 overflow-y-auto p-4">
     <div className="mb-4 flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-slate-800">文章回收站</h2><p className="mt-1 text-xs text-slate-500">回收站只保留最小引用；投稿队列副本和投稿记录不会联动删除。</p></div><button type="button" onClick={() => setShowTrash(false)} className="rounded border border-slate-300 px-3 py-2 text-xs">返回历史文章</button></div>
     {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     <div className="grid gap-3">{trash.map((entry) => <div key={entry.articleId} className="flex min-w-0 flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3"><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-slate-800">{entry.titleSnapshot || `已删除文章 · ${entry.articleId.slice(-6)}`}</div><div className="mt-1 break-all text-xs text-slate-500">文章 ID：{entry.articleId} · {entry.status} · 删除于 {formatBeijingTime(entry.deletedAt)}</div><div className="mt-1 text-xs text-slate-600">只读发布详情：{trashPublicationSummary(entry)}</div>{entry.references?.length > 0 && <div className="mt-1 text-xs text-slate-400">关联记录：{entry.references.map((reference) => `${reference.type}/${reference.id}`).join('、')}</div>}</div><button type="button" disabled={busy} onClick={() => void restoreOne(entry)} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">恢复（不恢复队列）</button><button type="button" disabled={busy} onClick={() => void permanentlyDeleteOne(entry)} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">永久删除正文</button></div>)}{!trash.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">回收站为空</div>}</div>
   </div>;
 
-  return <div className="h-full overflow-y-auto p-4">
+  return <div className="h-full w-full min-w-0 overflow-y-auto p-4">
     <div className="mb-4 grid min-w-0 gap-3">
       <div className="min-w-0">
-        <h2 className="text-base font-semibold text-slate-800">历史文章</h2>
-        <p className="mt-1 max-w-prose text-xs leading-5 text-slate-500">当前客户的文章按平台和生成时模板版本分组。</p>
+        <h2 aria-label="历史文章" className="text-base font-semibold text-slate-800">文章管理</h2>
+        <p className="mt-1 max-w-prose text-xs leading-5 text-slate-500">按文章当前阶段组织下一步操作；发布记录和队列状态仍分别保留。</p>
       </div>
+
 
       <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="筛选标题、平台或模板" aria-label="筛选历史文章" className="h-9 min-w-0 w-full rounded-md border border-slate-300 px-2 text-xs" />
@@ -453,7 +465,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
            {removalStatus === 'pending_auto_recovery' || removalStatus === 'pending_recovery' ? `删除事务正在自动恢复${removalTransaction.updatedAt ? ` · 最近更新：${formatBeijingTime(removalTransaction.updatedAt)}` : ''}` : removalStatus === 'needs_repair' ? <><span>删除事务需要修复：{transactionReason(removalTransaction)}</span><button type="button" onClick={() => void retryRemovalTransaction()} disabled={busy} className="ml-2 rounded border border-rose-300 px-2 py-1 text-xs disabled:opacity-40">重试修复删除事务</button></> : removalStatus === 'superseded' ? '删除事务已由现有事务复用并归档。' : '删除事务已完成。'}
          </div>}
 
-      <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+       <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
@@ -461,7 +473,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'saved') || !targetPlatformIds.length || busy} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
       </div>
     </div>
-    {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
+     {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
+     {selectedStage === 'attention' && <div className="mb-3"><ArticleAttentionPanel clientId={clientId} selectedAttentionId={selectedAttentionId} /></div>}
     <div className="grid gap-3">
       {groups.map((group) => {
         const groupSelectable = selectableArticles(group.articles, clientId);
@@ -481,7 +494,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
              <input type="checkbox" aria-label={`选择 ${article.title}`} checked={selected.includes(selectionKey(article))} onChange={() => toggleArticle(article)} disabled={(article.status !== 'generated' && article.status !== 'saved') || busy} className="mt-1" />
              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
              <button type="button" onClick={(event) => openArticle(article, event.currentTarget, publicationRecordsByArticle.get(article.id)?.some((record) => record.status === 'published') === true)} className="min-w-0 flex-[1_1_16rem] text-left hover:text-blue-700"><span className="block break-words text-sm font-semibold text-slate-800 sm:truncate">{article.title}</span><span className="mt-1 block break-words text-xs text-slate-500">审核：{article.status}{queuedArticleIds.has(article.id) ? ' · 已入队' : ''} · 版本：{article.version || 1} · {formatBeijingTime(article.createdAt)} · 发布：{publicationSummaries.get(article.id)?.label || '未投稿'}</span></button>
-             <button type="button" onClick={() => setDrawerArticle(article)} className="shrink-0 rounded border border-slate-300 px-2 py-2 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-700">发布详情</button>
+              <button type="button" onClick={() => setDrawerArticle(article)} className={`shrink-0 rounded border px-2 py-2 text-xs ${workflowByArticle.get(article.id)?.stage === 'attention' ? 'border-amber-300 text-amber-700 hover:border-amber-400' : 'border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-700'}`}>{workflowByArticle.get(article.id)?.stage === 'attention' ? '打开需处理' : '发布详情'}</button>
            </div>)}</div>}
         </section>;
       })}

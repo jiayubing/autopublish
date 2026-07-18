@@ -88,21 +88,106 @@ function sidecarMatchesPublication(sidecar, context, record) {
     sidecar.targetKey === context.target.targetKey;
 }
 
-function readSubmissionPair(filePath, sidecarPath, markdown, article, contentHash, targetPlatform, context, record) {
-  const fileExists = fs.existsSync(filePath);
-  const sidecarExists = fs.existsSync(sidecarPath);
-  let fileMatches = false;
-  let sidecar = null;
-  if (fileExists) {
-    try { fileMatches = fs.readFileSync(filePath, "utf8") === markdown; } catch (_) { fileMatches = false; }
+function isPathInside(rootDir, candidate) {
+  if (!rootDir || !candidate) return true;
+  const root = path.resolve(rootDir);
+  const resolved = path.resolve(candidate);
+  const relative = path.relative(root, resolved);
+  return relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
+}
+
+function regularFileState(filename) {
+  if (!filename || !fs.existsSync(filename)) return { exists: false, unsafe: false };
+  try {
+    const stat = fs.lstatSync(filename);
+    return { exists: true, unsafe: !stat.isFile() || stat.isSymbolicLink() };
+  } catch (_) {
+    return { exists: true, unsafe: true };
   }
-  if (sidecarExists) {
+}
+
+function itemIdentityMatches(item, batch, record) {
+  if (!item || !batch || batch.id === undefined || batch.clientId === undefined) return false;
+  if (item.articleId === undefined || item.targetPlatformId === undefined) return false;
+  if (item.clientId && item.clientId !== batch.clientId) return false;
+  if (record) {
+    if (item.publicationId && record.publicationId && item.publicationId !== record.publicationId) return false;
+    if (record.platformId && item.targetPlatformId && record.platformId !== item.targetPlatformId) return false;
+  }
+  return true;
+}
+
+function inspectSubmissionPair(item, batch, providedSidecar, options) {
+  const value = item || {};
+  const opts = options || {};
+  const filePath = value.filePath;
+  const sidecarPath = value.sidecarPath;
+  const file = regularFileState(filePath);
+  const sidecarFile = regularFileState(sidecarPath);
+  const unsafePath = !isPathInside(opts.rootDir, filePath) || !isPathInside(opts.rootDir, sidecarPath) || file.unsafe || sidecarFile.unsafe;
+  let sidecar = providedSidecar;
+  if (sidecar === undefined && sidecarFile.exists && !sidecarFile.unsafe) {
     try { sidecar = JSON.parse(fs.readFileSync(sidecarPath, "utf8")); } catch (_) { sidecar = null; }
   }
 
+  let contentMatched = null;
+  if (file.exists && !file.unsafe && typeof value.contentHash === "string") {
+    try { contentMatched = crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex") === value.contentHash; } catch (_) { contentMatched = false; }
+  }
+
+  const hasBatch = !!(batch && batch.id !== undefined);
+  let identityMatched = false;
+  if (!sidecarFile.exists && !file.exists) {
+    identityMatched = itemIdentityMatches(value, batch, opts.record);
+  } else if (sidecar && typeof sidecar === "object") {
+    identityMatched = (!hasBatch || sidecar.submissionBatchId === batch.id) &&
+      (!batch || !batch.clientId || sidecar.clientId === batch.clientId) &&
+      (sidecar.generatedArticleId === value.articleId || sidecar.articleId === value.articleId) &&
+      (sidecar.targetPlatformId === value.targetPlatformId || sidecar.targetPlatform === value.targetPlatformId) &&
+      (value.contentHash === undefined || sidecar.contentHash === value.contentHash) &&
+      (!value.publicationId || sidecar.publicationId === value.publicationId) &&
+      (!value.attemptId || sidecar.attemptId === value.attemptId);
+  }
+
+  let pairState;
+  if (unsafePath) pairState = "unsafe_path";
+  else if (!file.exists && !sidecarFile.exists) pairState = "both_absent";
+  else if (sidecarFile.exists && !identityMatched) pairState = "identity_conflict";
+  else if (!file.exists) pairState = "main_absent";
+  else if (!sidecarFile.exists) pairState = "sidecar_absent";
+  else if (contentMatched !== true) pairState = "content_changed";
+  else pairState = "intact";
+
+  return {
+    pairState,
+    identityMatched,
+    contentMatched,
+    mainExists: file.exists,
+    sidecarExists: sidecarFile.exists,
+    unsafePath,
+    sidecar: sidecar || null,
+    identity: {
+      batchId: hasBatch ? batch.id : null,
+      clientId: batch && batch.clientId || value.clientId || null,
+      articleId: value.articleId || null,
+      targetPlatformId: value.targetPlatformId || null,
+      publicationId: value.publicationId || null,
+      attemptId: value.attemptId || null
+    }
+  };
+}
+
+function readSubmissionPair(filePath, sidecarPath, markdown, article, contentHash, targetPlatform, context, record, rootDir) {
+  const inspected = inspectSubmissionPair({ filePath, sidecarPath, articleId: article.id, clientId: article.clientId, targetPlatformId: targetPlatform, contentHash }, null, undefined, { record, rootDir });
+  const fileExists = inspected.mainExists;
+  const sidecarExists = inspected.sidecarExists;
+  const fileMatches = inspected.contentMatched === true && (function() { try { return fs.readFileSync(filePath, "utf8") === markdown; } catch (_) { return false; } }());
+  const sidecar = inspected.sidecar;
+
   let queueStatus = "missing";
   let conflictCode = null;
-  if (fileExists || sidecarExists) {
+  if (inspected.pairState === "unsafe_path") conflictCode = "QUEUE_UNSAFE_PATH";
+  else if (fileExists || sidecarExists) {
     if (!fileExists) conflictCode = "QUEUE_SIDECAR_WITHOUT_FILE";
     else if (!fileMatches) conflictCode = "QUEUE_FILE_CONTENT_CONFLICT";
     else if (!sidecar || !sidecarMatchesArticle(sidecar, article, contentHash, targetPlatform)) conflictCode = "QUEUE_SIDECAR_CONFLICT";
@@ -131,6 +216,9 @@ function readSubmissionPair(filePath, sidecarPath, markdown, article, contentHas
     sidecar,
     queueStatus,
     conflictCode,
+    pairState: inspected.pairState,
+    identityMatched: inspected.identityMatched,
+    contentMatched: inspected.contentMatched,
     record
   };
 }
@@ -151,7 +239,7 @@ function classifyPublication(context, state) {
 }
 
 function inspectSubmission(options) {
-  const state = readSubmissionPair(options.filePath, options.sidecarPath, options.markdown, options.article, options.contentHash, options.targetPlatform, options.context, options.record);
+  const state = readSubmissionPair(options.filePath, options.sidecarPath, options.markdown, options.article, options.contentHash, options.targetPlatform, options.context, options.record, options.rootDir);
   state.status = classifyPublication(options.context, state);
   return state;
 }
@@ -256,7 +344,7 @@ function createSubmissionExportService(options) {
     const sidecarPath = filePath + ".submission.json";
     const context = publicationContext(article, input.targetPlatform, input.mediaResourceId);
     const record = publicationRecordFor(publicationLedger, context);
-    const state = inspectSubmission({ filePath, sidecarPath, markdown, article, contentHash, targetPlatform: input.targetPlatform, context, record });
+    const state = inspectSubmission({ filePath, sidecarPath, markdown, article, contentHash, targetPlatform: input.targetPlatform, context, record, rootDir: root });
     if (!context.tracked && state.fileExists && state.fileMatches) {
       // The legacy one-file export path historically rebuilt a missing or
       // malformed sidecar without treating the Markdown as a conflict.
@@ -274,6 +362,12 @@ function createSubmissionExportService(options) {
       contentHash: value.contentHash,
       markdown: value.markdown,
       status: value.state.status
+    }, {
+      pairState: value.state.pairState,
+      identityMatched: value.state.identityMatched,
+      contentMatched: value.state.contentMatched,
+      mainExists: value.state.mainExists,
+      sidecarExists: value.state.sidecarExists
     }, publicationFields(value.context, value.record));
   }
 
@@ -365,6 +459,7 @@ module.exports = {
   TARGETS,
   createSubmissionExportService,
   cancelReservation,
+  inspectSubmissionPair,
   inspectSubmission,
   makeSidecar,
   publicationContext,

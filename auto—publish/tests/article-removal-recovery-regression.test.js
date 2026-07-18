@@ -170,6 +170,47 @@ describe("article removal recovery regression", () => {
     }
   });
 
+  it("re-evaluates a stale needs_repair cleanup after both queue files disappear and consumes idempotent completion", () => {
+    const current = fixture();
+    try {
+      const initialPreview = current.submission.previewArticleRemovalImpact({ selections: [selection] });
+      const staleAction = Object.assign({}, initialPreview.failedToClean[0], { action: "cleanup" });
+      const item = current.batch.items[0];
+      fs.rmSync(item.filePath, { force: true });
+      fs.rmSync(item.sidecarPath, { force: true });
+      const transaction = {
+        version: 1,
+        id: "needs-repair-both-absent",
+        kind: "article-removal",
+        status: "needs_repair",
+        phase: "needs_repair",
+        errorCode: "SUBMISSION_QUEUE_CHANGED",
+        createdAt: "2026-07-18T00:00:00.000Z",
+        updatedAt: "2026-07-18T00:00:00.000Z",
+        selections: [selection],
+        articles: [{ clientId: selection.clientId, articleId: selection.articleId, titleSnapshot: article().title, state: "available" }],
+        queueActions: [staleAction],
+        queueCursor: 0,
+        articleCursor: 0,
+        queueResults: []
+      };
+      current.transactionStore.save(transaction);
+      const service = removal(current);
+      const result = service.retryArticleRemovalTransaction({ transactionId: transaction.id, confirmed: true });
+      assert.equal(result.status, "committed");
+      assert.equal(result.phase, "committed");
+      assert.equal(result.resolutionCode, "ARTICLE_REMOVAL_COMMITTED");
+      assert.equal(current.articleStore.listTrashedArticles(selection.clientId).length, 1);
+      assert.equal(current.transactionStore.list().length, 0);
+
+      const repeated = service.retryArticleRemovalTransaction({ transactionId: transaction.id, confirmed: true });
+      assert.equal(repeated.status, "committed");
+      assert.equal(repeated.transactionId, transaction.id);
+    } finally {
+      fs.rmSync(current.root, { recursive: true, force: true });
+    }
+  });
+
   it("reuses one open transaction for repeated identical removal confirmation", () => {
     const current = fixture();
     try {

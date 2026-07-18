@@ -60,6 +60,9 @@ function isOpenStatus(status) {
 function isRepairableError(error) {
   return !!error && [
     "SUBMISSION_QUEUE_CHANGED",
+    "SUBMISSION_IDENTITY_CONFLICT",
+    "SUBMISSION_CONTENT_CHANGED",
+    "PUBLICATION_REMOTE_STARTED",
     "SUBMISSION_QUEUE_ITEM_NOT_FOUND",
     "SUBMISSION_ACTION_STALE",
     "PUBLICATION_ATTEMPT_MISMATCH",
@@ -92,6 +95,7 @@ function createArticleRemovalService(options) {
   const ttlMs = Number.isFinite(opts.tokenTtlMs) ? Math.max(1000, opts.tokenTtlMs) : 5 * 60 * 1000;
   const makeToken = opts.tokenGenerator || function() { return crypto.randomUUID(); };
   const tokens = new Map();
+  const completedTransactions = new Map();
 
   function nowIso() {
     const value = typeof clock === "function" ? clock() : clock;
@@ -117,6 +121,7 @@ function createArticleRemovalService(options) {
       phase: transaction.phase || null,
       errorCode: transaction.errorCode || null,
       reasonCode: transaction.reasonCode || null,
+      resolutionCode: transaction.resolutionCode || null,
       createdAt: transaction.createdAt || null,
       updatedAt: transaction.updatedAt || null,
       articleCount: Array.isArray(transaction.articles) ? transaction.articles.length : Array.isArray(transaction.selections) ? transaction.selections.length : 0,
@@ -255,13 +260,42 @@ function createArticleRemovalService(options) {
     };
   }
 
+  function sameQueueAction(left, right) {
+    return left && right && left.clientId === right.clientId && left.articleId === right.articleId &&
+      left.batchId === right.batchId && left.publicationId === right.publicationId &&
+      left.targetPlatformId === right.targetPlatformId && left.attemptId === right.attemptId &&
+      left.action === right.action;
+  }
+
+  function refreshQueueActions(transaction) {
+    if (!transaction || !Array.isArray(transaction.selections) || typeof submissionService.previewArticleRemovalImpact !== "function") return transaction;
+    const impact = submissionService.previewArticleRemovalImpact({ selections: transaction.selections });
+    const fresh = (submissionServiceActions(impact));
+    transaction.queueActions = (Array.isArray(transaction.queueActions) ? transaction.queueActions : []).map(function(action) {
+      const replacement = fresh.find(function(candidate) { return sameQueueAction(candidate, action); });
+      if (replacement) return clone(replacement);
+      const copy = clone(action);
+      delete copy.evaluationFingerprint;
+      return copy;
+    });
+    return transaction;
+  }
+
+  function submissionServiceActions(impact) {
+    return clone((impact.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
+      .concat((impact.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })));
+  }
+
   function perform(transaction) {
     let current = transaction;
-    const actions = Array.isArray(current.queueActions) ? current.queueActions : [];
+    let actions = Array.isArray(current.queueActions) ? current.queueActions : [];
     if (current.phase === "needs_repair") {
+      current = refreshQueueActions(current);
+      actions = Array.isArray(current.queueActions) ? current.queueActions : [];
       current.status = "pending_auto_recovery";
       current.phase = "queue-actions";
       current.errorCode = null;
+      current.resolutionCode = "QUEUE_ACTIONS_REVALIDATED";
       current.updatedAt = nowIso();
       persist(current);
     } else if (current.status === "pending_recovery") {
@@ -282,12 +316,14 @@ function createArticleRemovalService(options) {
             : submissionService.cleanupArticleSubmissionItem(action);
           current.queueResults = current.queueResults || [];
           current.queueResults[index] = clone(result);
+          current.resolutionCode = result && result.idempotent ? "QUEUE_PAIR_ALREADY_RESOLVED" : action.action === "cancel" ? "QUEUE_RESERVATION_CANCELLED" : "QUEUE_ITEM_CLEANED";
           current.queueCursor = index + 1;
           persist(current);
           if (typeof opts.afterQueueAction === "function") opts.afterQueueAction(clone(action), index, clone(current));
         } catch (error) {
           current.updatedAt = nowIso();
           current.errorCode = error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
+          current.resolutionCode = "QUEUE_ACTION_RETRY_REQUIRED";
           if (isRepairableError(error)) {
             current.status = "needs_repair";
             current.phase = "needs_repair";
@@ -328,8 +364,10 @@ function createArticleRemovalService(options) {
     }
     if (current.phase === "committed") {
       current.status = "committed";
+      current.resolutionCode = "ARTICLE_REMOVAL_COMMITTED";
       current.updatedAt = nowIso();
       persist(current);
+      completedTransactions.set(current.id, clone(current));
       transactionStore.remove(current.id);
     }
     return current;
@@ -412,7 +450,13 @@ function createArticleRemovalService(options) {
   function retryArticleRemovalTransaction(input) {
     if (!input || typeof input.transactionId !== "string" || !input.transactionId.trim()) throw removalError("ARTICLE_REMOVAL_TRANSACTION_ID_INVALID", "Removal transaction id is invalid");
     if (input.confirmed !== true) throw removalError("ARTICLE_TRASH_CONFIRMATION_REQUIRED", "Article trash confirmation is required");
-    const transaction = transactionStore.get(input.transactionId);
+    let transaction;
+    try { transaction = transactionStore.get(input.transactionId); }
+    catch (error) {
+      const completed = completedTransactions.get(input.transactionId);
+      if (completed) return transactionDto(completed);
+      throw error;
+    }
     if (transaction.status === "superseded" || transaction.phase === "superseded") return transactionDto(transaction);
     try { return transactionDto(perform(transaction)); }
     catch (_) { return transactionDto(transactionStore.get(transaction.id)); }

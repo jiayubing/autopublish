@@ -19,6 +19,7 @@ let quitPromise = null;
 let quitReady = false;
 let startupStatus = "starting";
 let isQuitting = false;
+let workspaceDataRevision = 0;
 const EXTERNAL_LINK_HOSTS = new Set(["www.toutiao.com", "mp.weixin.qq.com", "www.lieju.com"]);
 const WORKSPACE_OPEN_FAILED_MESSAGE = "Could not open the current workspace";
 
@@ -33,6 +34,19 @@ function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
+}
+
+function invalidateWorkspaceData(scopes, reasonCode) {
+  workspaceDataRevision += 1;
+  const allowedScopes = Array.isArray(scopes) ? scopes.filter(function(scope) {
+    return ["platformQueue", "navigationSummary", "articleAttention", "orders"].includes(scope);
+  }) : [];
+  sendToRenderer("workspace:data-invalidated", {
+    revision: workspaceDataRevision,
+    scopes: [...new Set(allowedScopes)],
+    reasonCode: typeof reasonCode === "string" && /^[A-Z0-9_.:-]{1,128}$/.test(reasonCode) ? reasonCode : "WORKSPACE_DATA_CHANGED"
+  });
+  return workspaceDataRevision;
 }
 
 function createMainWindow() {
@@ -209,6 +223,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     cwd: runtime.workspaceRoot,
     paths: injectedPaths,
     sendToRenderer: sendToRenderer,
+    invalidateData: invalidateWorkspaceData,
     platformSettingsService: platformSettingsService
   });
 
@@ -229,13 +244,17 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
   const createContentSubmissionService = require("./services/content-submission-service").createContentSubmissionService;
   const contentSubmissionService = createContentSubmissionService({
     workspaceRoot: runtime.workspaceRoot,
-    paths: injectedPaths
+    paths: injectedPaths,
+    onDataInvalidated: invalidateWorkspaceData
   });
   const aiContentService = createAiContentService({
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
     contentSubmissionService: contentSubmissionService,
-    onArticleRemovalTransaction: function(transaction) { sendToRenderer("content:article-removal-transaction", transaction); },
+    onArticleRemovalTransaction: function(transaction) {
+      sendToRenderer("content:article-removal-transaction", transaction);
+      invalidateWorkspaceData(["articleAttention", "platformQueue", "navigationSummary"], "ARTICLE_REMOVAL_TRANSACTION_CHANGED");
+    },
     aiClientFactory: function() { return aiProviderService.createClient(); }
   });
   if (aiContentService && typeof aiContentService.recoverPendingArticleRemovals === "function") {
@@ -263,7 +282,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     aiContentService: aiContentService,
     contentSubmissionService: contentSubmissionService,
     contentGenerationBatchService: contentGenerationBatchService,
-    runtimeDiagnosticsService: runtime.diagnosticsService
+    runtimeDiagnosticsService: runtime.diagnosticsService,
+    invalidateData: invalidateWorkspaceData
   });
   if (storageMaintenanceService) {
     require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({

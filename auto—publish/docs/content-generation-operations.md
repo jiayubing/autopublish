@@ -296,3 +296,24 @@ and ends when the next Hepan call starts; the first and last item do not wait.
 Failed and uncertain calls still count. Waiting is cancellable and emits a
 countdown heartbeat, and mixed-platform batches throttle only adjacent Hepan
 calls. A zero-second setting is allowed but displays a frequency-risk warning.
+
+## 文章管理与需处理中心
+
+内容工作台的“文章管理”按派生的文章流程阶段组织下一步操作：`待审核`、
+`待投稿`、`投稿中`、`需处理`、`已完成`和`回收站`。阶段不是新的持久化发布
+状态，不会覆盖文章审核状态、批次项或逐目标发布记录。
+
+“需处理中心”从残留队列、删除事务、结果待确认、明确失败和本地归档失败实时
+派生。每项显示稳定业务身份、中文原因、建议动作和允许动作；页面不要求用户
+查找或编辑工作区文件。队列主文件和 sidecar 均不存在、且失败记录身份仍匹配
+时属于 `both_absent`，可安全完成元数据收尾并保留账本及全部尝试；内容变化、
+身份冲突、单文件缺失和不安全路径仍必须停下核对。
+
+“其他平台投稿”只负责执行监控。投稿任务终止后，主进程发布最小化的工作区
+失效事件，文章管理、侧栏徽标和投稿列表从同一只读快照重新读取。远端成功但
+本地归档失败的项目保留在队列中，显示“远端已发布，本地归档待处理”，只能
+重试本地归档，禁止再次发起远端投稿。副本预检命令保持只读：
+
+```powershell
+node scripts/repair-article-removal-regressions.js --workspace <副本目录> --dry-run
+```

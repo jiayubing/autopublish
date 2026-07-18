@@ -23,6 +23,7 @@ function registerPlatformIpc(deps) {
     }),
     adapters: adapters
   });
+  deps.archiveIssueReader = typeof service.listArchiveFailures === "function" ? service.listArchiveFailures : function() { return []; };
 
   function buildPlanFromSubmission(value) {
     var submission = validatePlatformSubmission(value);

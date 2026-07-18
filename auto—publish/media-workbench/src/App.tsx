@@ -12,7 +12,6 @@ import {
   refreshResources,
   getResourcePage,
   getDraft,
-  getPlatformQueue,
   buildConfirmation,
   submitSelected,
 } from "./electron-api";
@@ -25,6 +24,7 @@ import SettingsView from './components/SettingsView';
 import PlatformWorkbench from './components/PlatformWorkbench';
 import ContentWorkbench from './components/ContentWorkbench';
 import PreflightModal, { MediaPreflightSummary } from './components/PreflightModal';
+import { WorkspaceDataProvider, usePlatformQueue } from './workspace-data-store';
 import { 
   Database, 
   HelpCircle, 
@@ -41,7 +41,13 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
+  return <WorkspaceDataProvider><AppContent /></WorkspaceDataProvider>;
+}
+
+function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>('workbench');
+  const [articleAttentionIntent, setArticleAttentionIntent] = useState<{ attentionId?: string; clientId?: string } | null>(null);
+  const { snapshot: platformQueue } = usePlatformQueue();
   
   // Data State
   const [articles, setArticles] = useState<Article[]>([]);
@@ -53,8 +59,6 @@ export default function App() {
 
   const [balance, setBalance] = useState<number>(0);
 
-  const [platformArticles, setPlatformArticles] = useState<number>(0);
-
   // UI States
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -63,6 +67,11 @@ export default function App() {
   const [confirmation, setConfirmation] = useState<MediaPreflightSummary | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
+
+  const openArticleAttention = (intent: { attentionId?: string; clientId?: string } = {}) => {
+    setArticleAttentionIntent(intent);
+    setCurrentView('content');
+  };
 
   // Load data from API (or localStorage fallback) on mount
   useEffect(() => {
@@ -81,12 +90,6 @@ export default function App() {
         setBalance(balanceData);
         const pool = await getPool();
         setPoolResources(pool);
-        try {
-          const pq = await getPlatformQueue();
-          setPlatformArticles(pq.queue.length);
-        } catch {
-          // platform queue load non-critical
-        }
       } catch (e) {
         console.error("Failed to load initial data:", e);
       } finally {
@@ -269,7 +272,7 @@ export default function App() {
         totalArticles={articles.length}
         totalResources={resources.length}
         totalOrders={orders.length}
-        totalPlatformArticles={platformArticles}
+        platformQueueSnapshot={platformQueue}
       />
 
       {/* 2. Main Content Viewport */}
@@ -391,7 +394,7 @@ export default function App() {
                 transition={{ duration: 0.15 }}
                 className="h-full"
               >
-                <ContentWorkbench />
+                <ContentWorkbench attentionIntent={articleAttentionIntent} onAttentionIntentConsumed={() => setArticleAttentionIntent(null)} />
               </motion.div>
             )}
 
@@ -404,7 +407,7 @@ export default function App() {
                 transition={{ duration: 0.15 }}
                 className="h-full"
               >
-                <PlatformWorkbench />
+                <PlatformWorkbench onOpenArticleManagement={() => openArticleAttention({})} />
               </motion.div>
             )}
 

@@ -23,6 +23,7 @@ function createDesktopTaskService(opts) {
   var options = opts || {};
   var cwd = options.cwd || path.resolve(__dirname, "..", "..");
   var sendToRenderer = options.sendToRenderer || function() {};
+  var invalidateData = options.invalidateData || function() {};
   var storagePaths = options.paths || {};
   var forkProcess = options.fork || fork;
   var execFileProcess = options.execFile || execFile;
@@ -51,12 +52,12 @@ function createDesktopTaskService(opts) {
     });
   }
 
-  function emitPlatformState() {
-    sendToRenderer("platform-state", {
+  function emitPlatformState(extra) {
+    sendToRenderer("platform-state", Object.assign({
       isBatchRunning: isBatchRunning,
       isStopPending: isStopPending,
       isPlatformRunning: isPlatformRunning
-    });
+    }, extra || {}));
   }
 
   function spawnDesktopTask(taskName, payload, hooks) {
@@ -225,6 +226,7 @@ function closeBrowserSessions() {
     platformRemoteCallStarted = false;
     emitPlatformState();
 
+    var result = null;
     try {
       var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
       if (hepanRuntime) submitOptions.intervalByTargetMs = { hepan: hepanRuntime.publishIntervalSeconds * 1000 };
@@ -264,7 +266,7 @@ function closeBrowserSessions() {
         };
       });
 
-      var result = await Promise.race([task.promise, abortPromise, watchdogPromise]);
+      result = await Promise.race([task.promise, abortPromise, watchdogPromise]);
       clearTimeout(watchdogId);
 
       if (result && result.errorCode === "PLATFORM_WORKER_WATCHDOG_TIMEOUT") {
@@ -286,7 +288,10 @@ function closeBrowserSessions() {
       platformRemoteCallStarted = false;
       platformChild = null;
       isPlatformRunning = false;
-      emitPlatformState();
+      var terminalPhase = result && result.errorCode === "STOP_REQUESTED" ? "stopped"
+        : result && result.ok && result.data && Number(result.data.fail || 0) === 0 && Number(result.data.uncertain || 0) === 0 ? "completed"
+        : "failed";
+      emitPlatformState({ phase: terminalPhase, status: terminalPhase, queueRevision: invalidateData(["platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_SUBMIT_" + terminalPhase.toUpperCase()) });
     }
   }
 
