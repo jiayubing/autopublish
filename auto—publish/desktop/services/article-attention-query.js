@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { deriveAttentionPolicy, MESSAGES } = require("./article-attention-policy");
 
 const ATTENTION_KINDS = Object.freeze({
   MISSING_PAIR_FINALIZE: "missing_pair_finalize",
@@ -7,39 +8,6 @@ const ATTENTION_KINDS = Object.freeze({
   PUBLICATION_UNCERTAIN: "publication_uncertain",
   PUBLISHED_ARCHIVE_FAILED: "published_archive_failed",
   FAILED_SUBMISSION: "failed_submission"
-});
-
-const COPY = Object.freeze({
-  missing_pair_finalize: {
-    message: "队列文件已不存在，只差完成记录收尾",
-    recommendedAction: "finalize",
-    allowedActions: ["finalize"]
-  },
-  queue_pair_conflict: {
-    message: "队列文件与原投稿记录不一致",
-    recommendedAction: "inspect",
-    allowedActions: ["inspect"]
-  },
-  removal_needs_repair: {
-    message: "删除事务未完成，需要重新预检并继续",
-    recommendedAction: "retry",
-    allowedActions: ["retry"]
-  },
-  publication_uncertain: {
-    message: "远端结果待确认，请先核对发布详情",
-    recommendedAction: "open-publication",
-    allowedActions: ["open-publication", "reconcile-published", "reconcile-failed"]
-  },
-  published_archive_failed: {
-    message: "远端已发布，但本地归档待处理",
-    recommendedAction: "retry-archive",
-    allowedActions: ["retry-archive"]
-  },
-  failed_submission: {
-    message: "投稿明确失败，可查看原因或清理旧队列",
-    recommendedAction: "cleanup",
-    allowedActions: ["cleanup", "retry", "inspect"]
-  }
 });
 
 function clone(value) {
@@ -76,7 +44,8 @@ function normalizeRevision(value, fallback) {
 function createArticleAttentionQuery(options) {
   const opts = options || {};
   const readers = opts.readers || {};
-  let localRevision = 1;
+  const hasAuthoritativeRevision = typeof opts.getRevision === "function";
+  let fallbackRevision = 1;
 
   function reader(name, fallback) {
     return typeof readers[name] === "function" ? readers[name] : fallback;
@@ -115,26 +84,82 @@ function createArticleAttentionQuery(options) {
     return Array.isArray(value) ? value : [];
   }
 
-  function titleFor(item) {
-    const snapshot = safeText(item && (item.titleSnapshot || item.title), 200);
-    if (snapshot) return snapshot;
+  function articleLookup(item) {
+    const value = item || {};
     const getArticle = reader("getArticle", null);
-    if (getArticle && item && item.clientId && item.articleId) {
+    if (getArticle && value.clientId && value.articleId) {
       try {
-        const article = getArticle(item.clientId, item.articleId);
-        return safeText(article && article.title, 200);
+        const article = getArticle(value.clientId, value.articleId);
+        if (article && typeof article === "object") return { exists: true, status: article.status || null, title: article.title || null };
       } catch (_) {}
     }
-    return null;
+    const getTrashedArticle = reader("getTrashedArticle", null);
+    if (getTrashedArticle && value.clientId && value.articleId) {
+      try {
+        const trashed = getTrashedArticle(value.clientId, value.articleId);
+        const tombstone = trashed && trashed.tombstone ? trashed.tombstone : trashed;
+        return { exists: false, removed: true, status: "removed", title: tombstone && (tombstone.titleSnapshot || tombstone.title) || null };
+      } catch (_) {}
+    }
+    const getTrashedTombstone = reader("getTrashedTombstone", null);
+    if (getTrashedTombstone && value.clientId && value.articleId) {
+      try {
+        const tombstone = getTrashedTombstone(value.clientId, value.articleId);
+        return { exists: false, removed: true, status: "removed", title: tombstone && (tombstone.titleSnapshot || tombstone.title) || null };
+      } catch (_) {}
+    }
+    return { exists: value.articleExists === true, status: value.articleStatus || null, title: null };
   }
 
-  function baseDto(kind, item) {
+  function titleFor(item, articleState) {
+    const snapshot = safeText(item && (item.titleSnapshot || item.title), 200);
+    return snapshot || safeText(articleState && articleState.title, 200);
+  }
+
+  function platformCapabilities() {
+    let value = null;
+    try { value = reader("platformCapabilities", function() { return null; })(); } catch (_) { value = null; }
+    if (!value && opts.contentSubmissionService && typeof opts.contentSubmissionService.listPlatforms === "function") {
+      try { value = opts.contentSubmissionService.listPlatforms(); } catch (_) { value = null; }
+    }
+    const result = new Map();
+    if (Array.isArray(value)) value.forEach(function(platform) { if (platform && platform.id) result.set(platform.id, platform); });
+    else if (value && typeof value === "object") Object.keys(value).forEach(function(id) { result.set(id, value[id]); });
+    return result;
+  }
+
+  function domainCapabilities(kind) {
+    const service = opts.contentSubmissionService;
+    const removal = opts.articleRemovalService;
+    const archive = opts.archiveService;
+    return Object.assign({
+      canCleanup: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
+      canFinalize: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
+      canRetryRemoval: !!(removal && typeof removal.retryArticleRemovalTransaction === "function"),
+      canRetryFailedPublication: !!(service && typeof service.previewRetryFailedPublication === "function" && typeof service.retryFailedPublication === "function"),
+      canReconcile: !!(opts.publicationLedger && typeof opts.publicationLedger.reconcile === "function"),
+      canRetryArchive: !!(archive && typeof archive.retry === "function"),
+      canOpenPublication: true,
+      canInspect: true,
+      canOpenArticle: true
+    }, opts.capabilities && opts.capabilities[kind] || {});
+  }
+
+  function makeEntry(kind, item, facts) {
     const value = item || {};
+    const articleState = facts.articleState || articleLookup(value);
+    const normalizedFacts = Object.assign({}, facts, {
+      kind,
+      articleStatus: facts.articleStatus || articleState.status || null,
+      articleExists: facts.articleExists !== undefined ? facts.articleExists : articleState.exists,
+      articleState
+    });
+    const policy = deriveAttentionPolicy(normalizedFacts, domainCapabilities(kind));
     const copy = {
       kind,
       attentionId: stableId(kind, value),
       articleId: safeText(value.articleId, 200),
-      titleSnapshot: titleFor(value),
+      titleSnapshot: titleFor(value, articleState),
       clientId: safeText(value.clientId, 100),
       platformId: safeText(value.platformId || value.targetPlatformId, 100),
       displayName: safeText(value.displayName || value.platformName, 100),
@@ -145,16 +170,15 @@ function createArticleAttentionQuery(options) {
       status: safeText(value.status, 80),
       reasonCode: safeText(value.reasonCode || value.errorCode, 128),
       pairState: safeText(value.pairState, 64),
-      updatedAt: safeText(value.updatedAt, 64)
+      updatedAt: safeText(value.updatedAt, 64),
+      message: policy.message || MESSAGES[kind] || "需处理项需要进一步核对",
+      recommendedAction: policy.recommendedAction,
+      allowedActions: policy.allowedActions.slice()
     };
-    const copyText = COPY[kind] || COPY.queue_pair_conflict;
-    copy.message = copyText.message;
-    copy.recommendedAction = copyText.recommendedAction;
-    copy.allowedActions = copyText.allowedActions.slice();
-    return copy;
+    return { item: copy, policy: policy, facts: normalizedFacts };
   }
 
-  function residueItems() {
+  function residueEntries() {
     const report = readResidue();
     const items = Array.isArray(report.items) ? report.items : [];
     return items.map(function(item) {
@@ -164,60 +188,94 @@ function createArticleAttentionQuery(options) {
         : item.status === "failed" && item.repairAction && pairState === "intact"
           ? ATTENTION_KINDS.FAILED_SUBMISSION
           : ATTENTION_KINDS.QUEUE_PAIR_CONFLICT;
-      return baseDto(kind, Object.assign({}, item, {
-        pairState: pairState,
-        updatedAt: item.updatedAt || item.checkedAt
-      }));
+      const hasBinding = Boolean(item.batchId && item.publicationId && item.attemptId && (item.targetPlatformId || item.platformId));
+      const canCleanup = hasBinding && item.repairAction === "cleanup" && ["intact", "both_absent"].includes(pairState) && item.canCleanup !== false;
+      return makeEntry(kind, Object.assign({}, item, { pairState: pairState, updatedAt: item.updatedAt || item.checkedAt }), {
+        articleStatus: item.articleStatus || (item.sourceArticleState === "removed" ? "removed" : null),
+        articleExists: item.articleExists,
+        articleState: item.articleState,
+        hasQueueBinding: hasBinding,
+        hasResidue: true,
+        canCleanup: canCleanup,
+        canFinalize: kind === ATTENTION_KINDS.MISSING_PAIR_FINALIZE,
+        targetSupportsContentQueueImport: true
+      });
     });
   }
 
-  function transactionItems() {
+  function transactionEntries() {
     return readTransactions().filter(function(item) {
       return item && ["pending_auto_recovery", "pending_recovery", "needs_repair"].includes(item.status);
     }).map(function(item) {
-      return baseDto(ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR, item);
+      return makeEntry(ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR, item, {
+        hasRemovalTransaction: true,
+        canRetryRemoval: true
+      });
     });
   }
 
-  function publicationItems() {
+  function publicationEntries() {
+    const platforms = platformCapabilities();
     return readPublications().filter(function(item) {
       return item && ["uncertain", "failed"].includes(item.status);
     }).map(function(item) {
-      const kind = item.status === "uncertain" ? ATTENTION_KINDS.PUBLICATION_UNCERTAIN : ATTENTION_KINDS.FAILED_SUBMISSION;
       const latest = Array.isArray(item.attempts) && item.attempts.length ? item.attempts[item.attempts.length - 1] : null;
-      return baseDto(kind, Object.assign({}, item, {
+      const articleState = articleLookup(item);
+      const platform = platforms.get(item.platformId);
+      const kind = item.status === "uncertain" ? ATTENTION_KINDS.PUBLICATION_UNCERTAIN : ATTENTION_KINDS.FAILED_SUBMISSION;
+      return makeEntry(kind, Object.assign({}, item, {
         platformId: item.platformId,
         targetPlatformId: item.platformId,
         attemptId: item.attemptId || latest && latest.attemptId,
         reasonCode: item.reasonCode || latest && (latest.reasonCode || latest.errorCode),
         updatedAt: item.updatedAt || latest && latest.updatedAt
-      }));
+      }), {
+        articleState: articleState,
+        articleExists: articleState.exists,
+        articleStatus: articleState.status,
+        hasQueueBinding: false,
+        hasResidue: false,
+        hasRemovalTransaction: false,
+        targetSupportsContentQueueImport: platform ? platform.contentQueueImport === true : item.contentQueueImport === true,
+        canRetryFailedPublication: item.status === "failed",
+        canReconcile: item.status === "uncertain"
+      });
     });
   }
 
-  function archiveItems() {
+  function archiveEntries() {
     return readArchiveFailures().map(function(item) {
-      return baseDto(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item);
+      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { canRetryArchive: true });
     });
+  }
+
+  function entries() {
+    const residues = residueEntries();
+    const transactions = transactionEntries();
+    const concretePublicationIds = new Set(residues.concat(transactions).map(function(entry) { return entry.item.publicationId; }).filter(Boolean));
+    const publications = publicationEntries().filter(function(entry) { return !concretePublicationIds.has(entry.item.publicationId); });
+    const all = residues.concat(transactions, publications, archiveEntries());
+    const unique = new Map();
+    all.forEach(function(entry) {
+      if (!entry.policy.included || unique.has(entry.item.attentionId)) return;
+      unique.set(entry.item.attentionId, entry);
+    });
+    return [...unique.values()];
   }
 
   function currentRevision() {
-    const external = typeof opts.getRevision === "function" ? opts.getRevision() : null;
-    return normalizeRevision(external, localRevision);
+    return normalizeRevision(opts.getRevision ? opts.getRevision() : null, hasAuthoritativeRevision ? 0 : fallbackRevision);
   }
 
   function list(input) {
     const value = input || {};
-    const all = residueItems().concat(transactionItems(), publicationItems(), archiveItems());
-    const filtered = value.clientId ? all.filter(function(item) { return item.clientId === value.clientId; }) : all;
-    const unique = new Map();
-    filtered.forEach(function(item) { if (!unique.has(item.attentionId)) unique.set(item.attentionId, item); });
+    const filtered = entries().filter(function(entry) { return !value.clientId || entry.item.clientId === value.clientId; });
     return {
       revision: currentRevision(),
-      items: [...unique.values()],
+      items: filtered.map(function(entry) { return entry.item; }),
       counts: {
-        total: unique.size,
-        actionable: [...unique.values()].filter(function(item) { return item.allowedActions.some(function(action) { return action !== "inspect" && action !== "open-publication"; }); }).length
+        total: filtered.length,
+        actionable: filtered.filter(function(entry) { return entry.item.allowedActions.some(function(action) { return action !== "inspect" && action !== "open-publication" && action !== "open-article"; }); }).length
       }
     };
   }
@@ -225,12 +283,23 @@ function createArticleAttentionQuery(options) {
   function get(input) {
     const attentionId = input && input.attentionId;
     if (typeof attentionId !== "string" || !attentionId.trim()) return null;
-    return list({ clientId: input.clientId }).items.find(function(item) { return item.attentionId === attentionId; }) || null;
+    const entry = entries().find(function(candidate) { return candidate.item.attentionId === attentionId && (!input.clientId || candidate.item.clientId === input.clientId); });
+    return entry ? entry.item : null;
   }
 
-  function invalidate() { localRevision += 1; return localRevision; }
+  function getPolicy(input) {
+    const attentionId = input && input.attentionId;
+    if (typeof attentionId !== "string" || !attentionId.trim()) return null;
+    const entry = entries().find(function(candidate) { return candidate.item.attentionId === attentionId && (!input.clientId || candidate.item.clientId === input.clientId); });
+    return entry ? entry.policy : null;
+  }
 
-  return { list, get, getRevision: currentRevision, invalidate, kinds: ATTENTION_KINDS };
+  function invalidate() {
+    if (!hasAuthoritativeRevision) fallbackRevision += 1;
+    return currentRevision();
+  }
+
+  return { list, get, getPolicy, getRevision: currentRevision, invalidate, kinds: ATTENTION_KINDS };
 }
 
-module.exports = { createArticleAttentionQuery, ATTENTION_KINDS, COPY };
+module.exports = { createArticleAttentionQuery, ATTENTION_KINDS };
