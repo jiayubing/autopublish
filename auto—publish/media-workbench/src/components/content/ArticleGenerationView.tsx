@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Eye, Save, Sparkles } from 'lucide-react';
+import { Download, Eye, Sparkles } from 'lucide-react';
 import {
   exportToSubmissionQueue,
   generateContentArticle,
@@ -15,6 +15,7 @@ import { resolveAvailableTemplateId } from '../../article-history-logic';
 import { templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import BatchGenerationView from './BatchGenerationView';
+import GeneratedArticleEditorPanel from './GeneratedArticleEditorPanel';
 
 interface ArticleGenerationViewProps {
   clientId: string;
@@ -57,7 +58,6 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   const [platform, setPlatform] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [exportTarget, setExportTarget] = useState('');
-  const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [exportPreviewText, setExportPreviewText] = useState('');
   const [error, setError] = useState('');
@@ -179,16 +179,6 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
     catch (value) { setError(value instanceof Error ? value.message : '生成文章失败'); }
     finally { setGenerating(false); }
   }
-  async function save() {
-    if (!selectedArticle) return;
-    setSaving(true); setError('');
-    try {
-      const resolvedTemplateId = resolveAvailableTemplateId({ ...selectedArticle, templateId }, templates) || selectedArticle.templateId;
-      onArticleChange(await saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, materialIds, status: 'saved', reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
-      onRefreshArticles();
-    } catch (value) { setError(value instanceof Error ? value.message : '保存文章失败'); }
-    finally { setSaving(false); }
-  }
   async function preview() {
     if (!selectedArticle || !exportTarget) return;
     try { const result = await previewExport({ clientId, generatedArticleId: selectedArticle.id, targetPlatform: exportTarget, confirmed: true }); setExportPreviewText(result.filename); }
@@ -209,7 +199,10 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
         <div className="mt-3 grid gap-2">{materials.map((item) => <CollapsibleSourceItem key={item.id || item.name} id={`material-${item.id || item.name}`} title={item.name} summary={`${item.extension || '资料'} · ${item.characterCount || 0} 字${item.status === 'error' ? ' · 错误' : ''}`} selected={materialIds.includes(item.id || item.name)} onSelectedChange={(selected) => setMaterialSelection((current) => selected ? [...new Set([...current, item.id || item.name])] : current.filter((value) => value !== (item.id || item.name)))} defaultExpanded={false} actions={<button type="button" onClick={() => void retryMaterialItem(item.id || item.name)} title="预览或刷新资料" className="text-xs text-slate-500 underline">{item.status === 'error' ? '重试' : '预览'}</button>}>{item.content || '资料转换失败，请点击重试。'}</CollapsibleSourceItem>)}{validResearch.map((item) => <CollapsibleSourceItem key={item.id} id={`research-${item.id}`} title={item.question || item.id} summary={`${item.answerText?.length || 0} 字 · GEO 调研回答`} selected={selectedIds.includes(item.id)} onSelectedChange={(selected) => setResearchSelection((current) => selected ? [...new Set([...current, item.id])] : current.filter((value) => value !== item.id))} defaultExpanded={false} actions={<span className="text-xs text-slate-400">预览</span>}>{item.answerText}</CollapsibleSourceItem>)}</div>
         <button type="button" onClick={generate} disabled={!materialIds.length || !selectedIds.length || !clientId || !templateId || generating} className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40"><Sparkles className="h-4 w-4" />{generating ? '生成中…' : '生成文章'}</button>
       </section>
-      <section className="flex min-h-[360px] flex-1 flex-col rounded-md border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold">文章编辑</h2><button type="button" onClick={save} disabled={!selectedArticle || saving} title="保存文章" className="task-icon-button"><Save className="h-4 w-4" /></button></div>{selectedArticle ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4"><input value={selectedArticle.title} onChange={(event) => onArticleChange({ ...selectedArticle, title: event.target.value })} className="h-10 rounded-md border border-slate-300 px-2 text-base font-semibold" /><textarea value={selectedArticle.content} onChange={(event) => onArticleChange({ ...selectedArticle, content: event.target.value })} className="min-h-64 flex-1 resize-none rounded-md border border-slate-300 p-3 text-sm leading-6" /><div className="flex flex-wrap items-center gap-2"><select value={exportTarget} onChange={(event) => setExportTarget(event.target.value)} className="h-8 rounded border border-slate-300 px-2 text-xs">{submissionPlatforms.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select><button type="button" onClick={() => void preview()} disabled={!exportTarget} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><Eye className="h-3.5 w-3.5" />导出预览</button><button type="button" onClick={() => void exportArticle()} disabled={selectedArticle.status !== 'saved' || !exportTarget} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><Download className="h-3.5 w-3.5" />加入待投稿队列</button>{exportPreviewText && <span className="text-xs text-slate-500">{exportPreviewText}</span>}</div></div> : <div className="flex flex-1 items-center justify-center text-sm text-slate-400">选择资料与回答并生成文章，或从历史标签页打开文章</div>}</section>{error && <div role="alert" className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
+      <section className="min-h-[360px] flex-1 rounded-md">{selectedArticle ? <GeneratedArticleEditorPanel embedded sourceLabel="文章生成" article={selectedArticle} onSaved={(saved) => { onArticleChange(saved); onRefreshArticles(); }} onClose={() => onArticleChange(null)} onSaveArticle={async (draft) => {
+        const resolvedTemplateId = resolveAvailableTemplateId({ ...draft, templateId }, templates) || draft.templateId;
+        return saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, title: draft.title, content: draft.content, materialIds, status: 'saved', reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      }} footer={<div className="flex flex-wrap items-center gap-2"><select aria-label="导出平台" value={exportTarget} onChange={(event) => setExportTarget(event.target.value)} className="h-8 min-w-0 rounded border border-slate-300 px-2 text-xs">{submissionPlatforms.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select><button type="button" onClick={() => void preview()} disabled={!exportTarget} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><Eye className="h-3.5 w-3.5" />导出预览</button><button type="button" onClick={() => void exportArticle()} disabled={selectedArticle.status !== 'saved' || !exportTarget} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><Download className="h-3.5 w-3.5" />加入待投稿队列</button>{exportPreviewText && <span className="text-xs text-slate-500">{exportPreviewText}</span>}</div>} /> : <div className="flex h-full min-h-[360px] items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-400">选择资料与回答并生成文章，或从历史标签页打开文章</div>}</section>{error && <div role="alert" className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     </div>}
   </div>;
 }
