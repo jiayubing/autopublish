@@ -101,6 +101,34 @@ not reorder them. A template rename or deletion does not rewrite the template
 snapshot used to explain an older article. Only reviewed/saved articles can be
 exported into the existing media or platform submission queues.
 
+### History editing and submission recovery
+
+History editing opens an in-place editor beside the list. The list remains
+mounted, so filters, expanded groups, selection, scroll position, and the
+source-row focus are preserved. Closing, changing articles, changing clients,
+switching tabs, and closing the window guard unsaved title/body edits. A
+published article is read-only; use `复制为新版本` to create a new generated
+article while keeping the original article and publication ledger unchanged.
+
+Submission batches are reconciled against the publication ledger by
+`publicationId + attemptId`. `queued` means the remote call has not started and
+can be cancelled only when the Markdown and sidecar still match their hashes.
+`failed` means the remote call has a definite failure and is not an undo; use
+`清理失败队列项` only after the same unchanged-file check. Cleanup removes the
+queue copy but keeps the `failed` publication record. `submitting`, `submitted`,
+`published`, and `uncertain` are protected; `uncertain` requires existing manual
+remote-result reconciliation. Old batches are reconciled lazily and
+idempotently. Missing identities, changed files, and sidecar/hash conflicts are
+reported for manual handling and are never guessed or deleted automatically.
+
+Platform settings use a patch contract. An omitted field preserves the stored
+value; a non-empty replacement changes only that field; an empty optional text
+field does not clear an existing value. `clearVendorDir: true` is the explicit
+operation that restores the system Python environment. Safe status never
+returns Python paths, Cookie values, vendor paths, or temporary Cookie files.
+Environment-variable configuration is read-only and is never copied into the
+application configuration.
+
 ## AI provider configuration
 
 Provider settings are application-level and shared across workspaces. The

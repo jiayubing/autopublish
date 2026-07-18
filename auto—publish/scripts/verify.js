@@ -7,7 +7,10 @@ const fs = require("fs");
 
 const focusedGenerationTests = [
   "tests/template-generation-contract.test.js",
-  "tests/renderer-content-refresh-lifecycle.test.js"
+  "tests/renderer-content-refresh-lifecycle.test.js",
+  "tests/hepan-settings-patch-contract.test.js",
+  "tests/submission-batch-worker-integration.test.js",
+  "tests/renderer-history-editor-flow.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 function runNpm(args) {

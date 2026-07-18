@@ -112,6 +112,25 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
       do not use real AI, credentials, customer data, or network calls.
 - [ ] Repeat the manual alpha paths for transient refresh feedback, custom-first
       visibility / `显示内置模板`, and batch count plus cost confirmation.
+
+## Hepan, submission batch, and history remediation
+
+- [ ] In a disposable workspace, save only a Hepan category ID with existing
+      Python/Cookie/vendor and confirm omitted fields are preserved.
+- [ ] Test only a replacement Python or Cookie; blank sensitive inputs remain
+      preserve-only and `clearVendorDir` is the only vendor clear operation.
+- [ ] Confirm environment-backed Hepan settings are visibly read-only and safe
+      status contains no complete path or Cookie.
+- [ ] Run a fake-adapter batch through the real worker and confirm ledger and
+      batch item states agree for failed, published, uncertain, and cancelled
+      outcomes.
+- [ ] Confirm a stale `queued` batch with a `failed` ledger reconciles without
+      deleting records; ordinary cancellation is unavailable and failed-item
+      cleanup removes only an unchanged queue pair.
+- [ ] Open, edit, save, close, and copy a history article version in the same
+      history view. Confirm unsaved protection and focus restoration.
+- [ ] At `1128×527` and `1424×861`, expand long-title groups and confirm no
+      page-level horizontal overflow or off-viewport row action.
 # Runtime workspace check
 
 Verify that the packaged app creates `%USERPROFILE%\Documents\AutoPublish` and its input/data/config folders. Confirm diagnostics before adding credentials or submitting work. The package must not contain user `.env`, input, data, logs, or backup files.
