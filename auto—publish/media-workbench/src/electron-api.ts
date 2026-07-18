@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -69,6 +69,7 @@ interface DesktopConsoleContent {
   listTemplateCatalog(): Promise<IpcResponse<ContentTemplateCatalog>>;
   retryMaterial(input: { clientId: string; materialId: string }): Promise<IpcResponse<ContentMaterial>>;
   generateArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
+  copyArticleVersion(input: { clientId: string; sourceArticleId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
   reviewArticles(articles: ArticleReviewSelection[]): Promise<IpcResponse<ArticleReviewResult>>;
@@ -119,6 +120,11 @@ interface DesktopConsoleWorkspace {
   requestSwitch(): Promise<IpcResponse<WorkspaceBootstrapState>>;
 }
 
+interface DesktopConsolePublication {
+  listForArticles(input: { clientId: string; articleIds: string[] }): Promise<IpcResponse<PublicationHistoryRecord[]>>;
+  reconcile(input: { publicationId: string; status: 'published' | 'failed'; reasonCode: string; confirmed: true }): Promise<IpcResponse<PublicationHistoryRecord>>;
+}
+
 interface DesktopConsolePlatformSettings {
   getStatus(platformId: string): Promise<IpcResponse<PlatformProviderStatus>>;
   save(platformId: string, draft: Record<string, unknown>): Promise<IpcResponse<PlatformProviderStatus>>;
@@ -152,8 +158,8 @@ interface DesktopConsoleRuntimeDiagnostics {
   browserSmoke(): Promise<IpcResponse<{ ok: boolean; browserChannel: string; session: string }>>;
 }
 
-export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: string; confirmed: true; }
-export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued"; }
+export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: string; mediaResourceId?: string; confirmed: true; }
+export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued" | "queueable" | "idempotent" | "blockedPublished" | "blockedUncertain" | "conflict"; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; }
 export interface ArticleTrashRecord { version: 1; deletedAt: string; clientId: string; articleId: string; status: string; references: Array<{ type: string; id: string }>; }
 export interface ArticleTrashResult { moved: ArticleTrashRecord[]; skipped: ArticleTrashRecord[]; rejected: Array<{ clientId: string; articleId: string; code: string }>; }
 export interface ArticlePermanentDeleteConfirmation { token: string; clientId: string; articleId: string; deletedAt: string; status: string; }
@@ -169,6 +175,7 @@ interface DesktopConsole {
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
   content: DesktopConsoleContent;
+  publication?: DesktopConsolePublication;
 }
 
 declare global {
@@ -1224,6 +1231,27 @@ export async function listContentSubmissionBatches(clientId: string): Promise<Co
   const result = await window.desktopConsole!.content.listSubmissionBatches({ clientId });
   if (!result.ok) throw getIpcError(result.error, "submission batch history failed");
   return (result.data || []) as ContentSubmissionBatchRecord[];
+}
+
+export async function copyContentArticleVersion(input: { clientId: string; sourceArticleId: string }): Promise<GeneratedContentArticle> {
+  if (!isElectron()) throw new Error("Copying an article version requires the desktop app");
+  const result = await window.desktopConsole!.content.copyArticleVersion(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to copy article version");
+  return result.data;
+}
+
+export async function listPublicationHistory(clientId: string, articleIds: string[]): Promise<PublicationHistoryRecord[]> {
+  if (!isElectron() || typeof window.desktopConsole?.publication?.listForArticles !== "function") return [];
+  const result = await window.desktopConsole.publication.listForArticles({ clientId, articleIds });
+  if (!result.ok) throw getIpcError(result.error, "publication history failed");
+  return result.data || [];
+}
+
+export async function reconcilePublicationHistory(input: { publicationId: string; status: 'published' | 'failed'; reasonCode: string }): Promise<PublicationHistoryRecord> {
+  if (!isElectron() || typeof window.desktopConsole?.publication?.reconcile !== "function") throw new Error("Publication reconciliation requires the desktop app");
+  const result = await window.desktopConsole.publication.reconcile({ ...input, confirmed: true });
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to reconcile publication result");
+  return result.data;
 }
 
 export async function createContentSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<ContentSubmissionBatchPreview> {

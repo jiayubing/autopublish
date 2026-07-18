@@ -17,7 +17,7 @@ import {
   stopGenerationBatch,
   subscribeGenerationBatchState,
 } from '../../electron-api';
-import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types';
+import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import GenerationBatchDetail from './GenerationBatchDetail';
 import { BATCH_GENERATION_STEPS, countGenerationTasks, getMaterialId, groupTemplatesByPlatform, isExecutableSource, isUsableMaterial, isUsableResearch, preserveSelection, reconcileSourceSelection, sourceCharacterCount } from '../../content-generation-ui-logic';
@@ -25,6 +25,7 @@ import { BATCH_GENERATION_STEPS, countGenerationTasks, getMaterialId, groupTempl
 interface BatchGenerationViewProps {
   clients: ContentClient[];
   refreshToken: number;
+  templateCatalog?: ContentTemplateCatalog;
   onRefresh: () => void;
 }
 
@@ -59,7 +60,7 @@ function templateSourceLabel(template: ContentTemplate) {
   return template.source === 'builtin' || template.readOnly ? '内置模板 · 只读，可复制' : '自定义模板 · 可编辑';
 }
 
-export default function BatchGenerationView({ clients, refreshToken, onRefresh }: BatchGenerationViewProps) {
+export default function BatchGenerationView({ clients, refreshToken, templateCatalog, onRefresh }: BatchGenerationViewProps) {
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
@@ -109,7 +110,7 @@ export default function BatchGenerationView({ clients, refreshToken, onRefresh }
 
   useEffect(() => {
     let cancelled = false;
-    listContentTemplateCatalog().then((catalog) => {
+    (templateCatalog ? Promise.resolve(templateCatalog) : listContentTemplateCatalog()).then((catalog) => {
       if (cancelled) return;
       setTemplates(catalog.templates);
       if (catalog.diagnostics.length) setError(`模板目录有 ${catalog.diagnostics.length} 项诊断，请检查模板文件。`);

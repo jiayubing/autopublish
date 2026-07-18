@@ -176,6 +176,7 @@ var draftStore = new MediaDraftStore();
 
 module.exports = {
   id: 'media',
+  publicationTarget: { kind: 'resource', granularity: 'resource' },
   contentQueueImport: true,
   scanDir: 'media',
 

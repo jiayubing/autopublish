@@ -4,7 +4,7 @@ const { createStoragePaths, validateStoragePaths } = require("./storage-paths");
 
 const CONTENT_DIRECTORY_KEYS = Object.freeze([
   "clients", "generated", "templates", "autopublish", "input", "data", "research",
-  "generationBatches", "queue", "submissionRecords", "published", "failed",
+  "generationBatches", "queue", "submissionRecords", "publications", "published", "failed",
   "mediaInput", "liejuInput", "toutiaoInput", "hepanInput"
 ]);
 
@@ -29,6 +29,7 @@ function createPortableContentPaths(contentLibrary) {
     generationBatches: path.join(autopublish, "batches"),
     queue: path.join(autopublish, "queue"),
     submissionRecords: path.join(autopublish, "submission-records"),
+    publications: path.join(autopublish, "submission-records", "publications"),
     submissions: path.join(autopublish, "submission-records"),
     published: path.join(autopublish, "published"),
     failed: path.join(autopublish, "failed")

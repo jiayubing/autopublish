@@ -11,6 +11,7 @@ const { SubmissionOrderStore } = require("../src/platforms/media/submission-orde
 const { createMediaOrderService } = require("../desktop/services/media-order-service");
 const { registerMediaIpc } = require("../desktop/ipc/media-ipc");
 const { createMediaWorkbenchService } = require("../desktop/services/media-workbench-service");
+const { createPublicationLedger } = require("../src/publication/publication-ledger");
 
 describe("media runtime workspace", function() {
   it("writes media state exclusively to an explicit workspace paths data directory", async function() {
@@ -117,6 +118,35 @@ describe("media order runtime workspace", function() {
       const orders = createMediaOrderService({ paths }).listOrders();
       assert.equal(orders.length, 1);
       assert.equal(orders[0].params.title, "Workspace order");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps media publication records in the same injected workspace", async function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-media-publication-runtime-"));
+    try {
+      const paths = ensureWorkspaceDirectories(createWorkspacePaths(root));
+      const ledger = createPublicationLedger({ workspaceRoot: paths.root, paths: paths });
+      const service = createMediaWorkbenchService({ inputDir: paths.mediaInput, paths: paths, publicationLedger: ledger });
+      const filePath = path.join(paths.mediaInput, "ledger.txt");
+      fs.writeFileSync(filePath, "Workspace ledger\n\nBody", "utf8");
+      const orders = [];
+      await service.submitTasksSerially([{
+        filename: "ledger.txt",
+        filePath: filePath,
+        title: "Workspace ledger",
+        content: "Workspace ledger\n\nBody",
+        selectedResources: [{ resourceId: "1", name: "Media", price: 10 }]
+      }], {
+        client: { sendArticle: async function() { return { data: { order_nid: "workspace-order" } }; } },
+        orderStore: { record: async function(entry) { orders.push(entry); } }
+      });
+
+      assert.equal(ledger.list().length, 1);
+      assert.equal(ledger.list()[0].status, "submitted");
+      assert.equal(orders[0].publicationId, ledger.list()[0].publicationId);
+      assert.ok(fs.existsSync(paths.publications));
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

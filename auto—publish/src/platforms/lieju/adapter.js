@@ -269,39 +269,60 @@ async function publishArticle(article, options) {
   var opts = options || {};
   var autoSubmit = opts.autoSubmit !== false;
   var interactive = resolveInteractive(opts);
+  var remoteCallStarted = false;
 
-  throwIfStopped();
-  pwRun("goto " + LIEJU.publishUrl, { timeout: 20000, session: SESSION });
-  waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
-  throwIfStopped();
-
-  if (!checkLoginInCurrentPage()) {
-    log("Lieju publish page requires login", "WARN");
-    var relogged = await doLogin({ interactive: interactive, timeoutMs: opts.timeoutMs });
-    if (!relogged || !checkLogin()) {
-      throw new Error("Login did not complete");
-    }
+  try {
     throwIfStopped();
-    saveCurrentState();
     pwRun("goto " + LIEJU.publishUrl, { timeout: 20000, session: SESSION });
     waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
     throwIfStopped();
+
+    if (!checkLoginInCurrentPage()) {
+      log("Lieju publish page requires login", "WARN");
+      var relogged = await doLogin({ interactive: interactive, timeoutMs: opts.timeoutMs });
+      if (!relogged || !checkLogin()) {
+        return { status: "failed", errorCode: "LOGIN_FAILED" };
+      }
+      throwIfStopped();
+      saveCurrentState();
+      pwRun("goto " + LIEJU.publishUrl, { timeout: 20000, session: SESSION });
+      waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
+      throwIfStopped();
+    }
+
+    switchCity(article.city);
+    throwIfStopped();
+    runCode(buildFillScript(article), SESSION_OPTS);
+    log("Form filled", "INFO");
+
+    if (!autoSubmit) {
+      log("Form filled; waiting for manual submission", "INFO");
+      return { status: "submitted", legacyStatus: "pending" };
+    }
+
+    throwIfStopped();
+    log("Submitting automatically...", "INFO");
+    remoteCallStarted = true;
+    try {
+      pwRun("click " + LIEJU.selectors.submitBtn, { timeout: 20000, session: SESSION });
+      if (waitForPublishSuccess(25000)) {
+        var url = "";
+        try { url = getCurrentPageUrl(); } catch (_) {}
+        return { status: "published", remoteUrl: url || undefined };
+      }
+      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    } catch (remoteError) {
+      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    }
+  } catch (error) {
+    if (remoteCallStarted) return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    if (isStopError(error)) return { status: "failed", errorCode: "STOP_REQUESTED" };
+    return { status: "failed", errorCode: "ADAPTER_FAILED" };
   }
+}
 
-  switchCity(article.city);
-  throwIfStopped();
-  runCode(buildFillScript(article), SESSION_OPTS);
-  log("Form filled", "INFO");
-
-  if (!autoSubmit) {
-    log("Form filled; waiting for manual submission", "INFO");
-    return "pending";
-  }
-
-  throwIfStopped();
-  log("Submitting automatically...", "INFO");
-  pwRun("click " + LIEJU.selectors.submitBtn, { timeout: 20000, session: SESSION });
-  return waitForPublishSuccess(25000);
+function isStopError(error) {
+  return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
 }
 
 async function ensureLoggedIn(options) {
@@ -331,6 +352,7 @@ async function ensureLoggedIn(options) {
 
 module.exports = {
   id: "lieju",
+  publicationTarget: { kind: "platform", granularity: "platform" },
   contentQueueImport: true,
   scanDir: LIEJU.selectors.articleDir,
   ensureSession: ensureDaemon,

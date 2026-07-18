@@ -65,6 +65,7 @@ function createStoragePaths(input) {
     generationBatches: path.join(autopublish, "batches"),
     queue: path.join(autopublish, "queue"),
     submissionRecords: path.join(autopublish, "submission-records"),
+    publications: path.join(autopublish, "submission-records", "publications"),
     submissions: path.join(autopublish, "submission-records"),
     published: path.join(autopublish, "published"),
     failed: path.join(autopublish, "failed"),
@@ -111,7 +112,7 @@ function ensureContentLibrary(paths) {
   const storage = validateStoragePaths(paths);
   [storage.contentLibrary, storage.clients, storage.generated, storage.templates, storage.autopublish,
     storage.input, storage.data, storage.research, storage.generationBatches, storage.queue,
-    storage.submissionRecords, storage.published, storage.failed].forEach(mkdirSafe);
+    storage.submissionRecords, storage.publications, storage.published, storage.failed].forEach(mkdirSafe);
   if (!fs.existsSync(storage.marker)) {
     fs.writeFileSync(storage.marker, JSON.stringify({ version: 1, createdAt: new Date().toISOString() }) + "\n", { encoding: "utf8", flag: "wx" });
   }

@@ -24,6 +24,7 @@ import OrdersView from './components/OrdersView';
 import SettingsView from './components/SettingsView';
 import PlatformWorkbench from './components/PlatformWorkbench';
 import ContentWorkbench from './components/ContentWorkbench';
+import PreflightModal, { MediaPreflightSummary } from './components/PreflightModal';
 import { 
   Database, 
   HelpCircle, 
@@ -59,7 +60,7 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ blockers?: string[] } | null>(null);
+  const [confirmation, setConfirmation] = useState<MediaPreflightSummary | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
 
@@ -249,7 +250,7 @@ export default function App() {
   const handleRealSubmit = async () => {
     if (!readyForSubmit || isSubmitting) return;
     setIsSubmitting(true);
-    try { const preflight = await buildConfirmation(articles) as { blockers?: string[] }; if (preflight.blockers?.length) return; setConfirmation(preflight); }
+    try { const preflight = await buildConfirmation(articles) as MediaPreflightSummary; setConfirmation(preflight); }
     catch (e) { console.error('media submit failed', e); }
     finally { setIsSubmitting(false); }
   };
@@ -440,7 +441,7 @@ export default function App() {
 
           </AnimatePresence>
         </main>
-        {confirmation && <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"><div className="bg-white rounded-lg p-5"><h3>确认真实投稿</h3><p>预检已通过。确认后才会提交。</p><button onClick={() => setConfirmation(null)}>取消</button><button onClick={confirmRealSubmit} disabled={isSubmitting}>确认提交</button></div></div>}
+        <PreflightModal isOpen={Boolean(confirmation)} onClose={() => setConfirmation(null)} articles={articles} balance={balance} summary={confirmation || {}} isSubmitting={isSubmitting} onSubmit={confirmRealSubmit} />
       </div>
 
     </div>

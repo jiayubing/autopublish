@@ -4,6 +4,21 @@ const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-sign
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
 
+function sanitizePlatformPlan(plan) {
+  var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
+  return {
+    taskCount: tasks.length,
+    tasks: tasks.map(function(task) {
+      task = task || {};
+      return {
+        sourcePlatformId: typeof task.sourcePlatformId === "string" ? task.sourcePlatformId : "",
+        filename: typeof task.filename === "string" ? task.filename : "",
+        targetPlatformId: typeof task.targetPlatformId === "string" ? task.targetPlatformId : ""
+      };
+    })
+  };
+}
+
 function createDesktopTaskService(opts) {
   var options = opts || {};
   var cwd = options.cwd || path.resolve(__dirname, "..", "..");
@@ -27,6 +42,7 @@ function createDesktopTaskService(opts) {
   var isPlatformRunning = false;
   var platformAbort = null;
   var platformTaskCount = 0;
+  var platformRemoteCallStarted = false;
 
   function emitBatchState() {
     sendToRenderer("batch-state", {
@@ -77,6 +93,12 @@ function createDesktopTaskService(opts) {
         if (!message) return;
         if (message.type === "log" && hooks && typeof hooks.onLog === "function") {
           hooks.onLog(message.payload);
+          return;
+        }
+        if (message.type === "state" && message.payload) {
+          if (message.payload.phase === "remote-started") platformRemoteCallStarted = true;
+          if (message.payload.phase === "before-remote" || message.payload.phase === "remote-finished") platformRemoteCallStarted = false;
+          if (hooks && typeof hooks.onState === "function") hooks.onState(message.payload);
           return;
         }
         if (message.type === "result") {
@@ -166,10 +188,11 @@ function closeBrowserSessions() {
 
   async function startPlatformSubmit(plan, hooks) {
     if (isPlatformRunning) throw new Error("当前已有平台投稿任务正在运行。");
+    var workerPlan = sanitizePlatformPlan(plan);
 
     var hepanRuntime = null;
     var hepanCleanup = null;
-    var hasHepanTask = Boolean(plan && Array.isArray(plan.tasks) && plan.tasks.some(function(task) { return task && task.targetPlatformId === "hepan"; }));
+    var hasHepanTask = Boolean(workerPlan.tasks.some(function(task) { return task && task.targetPlatformId === "hepan"; }));
     if (hasHepanTask) {
       if (!platformSettingsService) {
         var missingSettings = new Error("蓝色河畔配置未设置");
@@ -195,11 +218,12 @@ function closeBrowserSessions() {
 
     clearStopSignal(stopSignalDirectory());
     isPlatformRunning = true;
-    platformTaskCount = (plan && plan.tasks) ? plan.tasks.length : 0;
+    platformTaskCount = workerPlan.tasks.length;
+    platformRemoteCallStarted = false;
     emitPlatformState();
 
     try {
-      var payload = { plan: plan, hepanRuntime: hepanRuntime, submitOptions: { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 } };
+      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 } };
       var task = spawnDesktopTask("platform-submit", payload, { onLog: hooks && hooks.onLog ? hooks.onLog : function() {} });
       platformChild = task.child;
 
@@ -221,7 +245,9 @@ function closeBrowserSessions() {
       clearTimeout(timeoutId);
 
       if (result && ((!result.ok && result.error && result.error.indexOf("timed out") !== -1) || result && result.data && result.data.skipped === platformTaskCount)) {
-        try { platformChild.kill(); } catch (_) {}
+        if (!platformRemoteCallStarted) {
+          try { platformChild.kill(); } catch (_) {}
+        }
       }
 
       return result;
@@ -232,6 +258,7 @@ function closeBrowserSessions() {
       }
       platformAbort = null;
       platformTaskCount = 0;
+      platformRemoteCallStarted = false;
       platformChild = null;
       isPlatformRunning = false;
       emitPlatformState();
@@ -241,14 +268,16 @@ function closeBrowserSessions() {
   function pausePlatformSubmit() {
     if (!isPlatformRunning) return { ok: true };
 
-    if (platformAbort) { platformAbort(); platformAbort = null; }
+    if (platformAbort && !platformRemoteCallStarted) { platformAbort(); platformAbort = null; }
 
     // Kill the worker immediately to prevent ensureDaemon from reopening browser.
     // The main promise already resolved via platformAbort.
     if (platformChild) {
       try { platformChild.send({ type: "pause" }); } catch (_) {}
-      var dyingChild = platformChild;
-      setTimeout(function() { try { dyingChild.kill("SIGKILL"); } catch (_) {} }, 500);
+      if (!platformRemoteCallStarted) {
+        var dyingChild = platformChild;
+        setTimeout(function() { try { dyingChild.kill("SIGKILL"); } catch (_) {} }, 500);
+      }
     }
 
     closeBrowserSessions();
@@ -261,11 +290,13 @@ function closeBrowserSessions() {
 
   function stopPlatformSubmit() {
     if (!isPlatformRunning) return { alreadyStopped: true };
-    if (platformAbort) { platformAbort(); platformAbort = null; }
+    if (platformAbort && !platformRemoteCallStarted) { platformAbort(); platformAbort = null; }
     if (platformChild) {
       requestStopSignal("desktop_stop_button", stopSignalDirectory());
-      platformChild.send({ type: "stop" });
-      setTimeout(function() { try { if (platformChild) platformChild.kill(); } catch (_) {} }, 3000);
+      try { platformChild.send({ type: "stop" }); } catch (_) {}
+      if (!platformRemoteCallStarted) {
+        setTimeout(function() { try { if (platformChild) platformChild.kill(); } catch (_) {} }, 3000);
+      }
     }
     isPlatformRunning = false;
     emitPlatformState();

@@ -24,6 +24,33 @@ npm run snapshot
 - Media article editing happens in a drawer with explicit save/apply.
 - Other platform submission uses a batch selector on the page and a confirmation drawer before real submit.
 
+## Operator lifecycle and target-level safety
+
+审核、入队、提交、发布和待确认是不同阶段：
+
+- **审核** only accepts the local article (`saved`); it does not contact a
+  platform or media provider.
+- **入队** creates a local snapshot for a selected target after explicit
+  confirmation; it is not a remote submission.
+- **提交** records evidence that the remote destination received or accepted a
+  request. It is not the same as proof of final publication.
+- **发布** is recorded only when the remote result proves publication, and it
+  is recorded separately for each ordinary platform or paid media resource.
+- **待确认** means the remote call may have succeeded but the local result is
+  inconclusive. It requires reconciliation and must not be directly retried.
+
+The duplicate guard uses article × platform for ordinary platforms and article ×
+media resource for paid media. A published or uncertain target blocks another
+attempt, while an independent target for the same article can continue. A
+remote success followed by local queue/archive failure is still a successful
+publication for safety purposes; operators must reconcile it and must not assume
+that retrying is safe.
+
+Use the explicit refresh action in the content workbench after adding or editing
+clients or templates. An empty client workspace still displays discoverable
+templates, but generation remains disabled until a client and valid inputs are
+available.
+
 ## Safety
 
 - Media submission requires a final confirmation drawer before any API submission.
@@ -41,6 +68,12 @@ npm run snapshot
 ## Resource Cache
 
 The Media Submission workspace reads from the local media resource cache by default. Refreshing resources updates `data/media-resources.json`, and the renderer requests 20-row pages from the service layer. Search also runs against the cached resource set.
+
+Publication history is kept with the portable content workspace under
+`.autopublish/submission-records/publications/`. It is content-library history,
+not installer data or application-level secret configuration. The installer
+must not contain publication records, queue snapshots, media orders, client
+content, credentials, or browser state.
 
 ## Service Boundaries
 

@@ -284,6 +284,10 @@ describe("source assembly and packaging contract", function() {
       "desktop/services/ai-provider-service.js",
       "desktop/services/content-generation-batch-service.js",
       "desktop/ipc/content-generation-batch-ipc.js",
+      "desktop/ipc/publication-ipc.js",
+      "src/content/article-version-service.js",
+      "src/publication/publication-ledger.js",
+      "src/publication/publication-ledger-store.js",
       "media-workbench/dist/index.html"
     ]) {
       assert.match(verifier, new RegExp('"' + escapeRegExp(requiredSurface) + '"'), requiredSurface + " must be verified");
@@ -325,6 +329,9 @@ describe("source assembly and packaging contract", function() {
       "!**/platform-settings-migration.json",
       "!**/content-generation-batches/**",
       "!**/client-material-cache/**",
+      "!**/.autopublish/**",
+      "!**/submission-records/**",
+      "!**/publications/**",
       "!**/research/**",
       "!**/generated/**",
       "!**/browser/**",
@@ -652,7 +659,8 @@ describe("source assembly and packaging contract", function() {
       ["browser/doubao/profile/marker", "browser/doubao"],
       ["work/playwright-cli/profiles/doubao/marker", "work/playwright-cli/profiles/doubao"],
       ["logs/doubao-diagnostics/marker.json", "doubao-diagnostics"],
-      ["tests/fixtures/marker.json", "tests/fixtures"]
+      ["tests/fixtures/marker.json", "tests/fixtures"],
+      ["nested/.autopublish/submission-records/publications/publication.json", "nested/.autopublish"]
     ];
 
     for (const [relativePath, reportedPath] of cases) {
@@ -703,6 +711,12 @@ describe("source assembly and packaging contract", function() {
       false,
       "electron-builder config must not exclude the scripts directory"
     );
+  });
+
+  it("keeps the publication ledger migration as an operator-only script", function() {
+    const config = read("electron-builder.alpha.yml");
+    assert.match(config, /^\s*-\s+["']?!scripts\/migrate-publication-ledger-v1\.js["']?\s*$/m);
+    assert.equal(config.includes("!scripts/**"), false, "the scripts directory must remain available to runtime code");
   });
 
   it("initializes runtime environment before loading config-dependent services", function() {

@@ -6,6 +6,7 @@ const { SubmissionOrderStore } = require("../../src/platforms/media/submission-o
 const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 const { createMediaResourceService } = require("../services/media-resource-service");
+const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 const { wrap } = require("../services/ipc-response");
 const { validateMediaSubmission, validateDraft, inputError } = require("../services/submission-boundary");
 
@@ -20,6 +21,10 @@ function registerMediaIpc(deps) {
   var mediaPoolStore = new MediaPoolStore({ paths: deps.paths });
   var mediaDraftStore = new MediaDraftStore({ paths: deps.paths });
   var submissionOrderStore = deps.orderStore || new SubmissionOrderStore({ paths: deps.paths });
+  var workspaceRoot = deps.workspaceRoot || deps.paths && (deps.paths.workspaceRoot || deps.paths.contentLibrary || deps.paths.root);
+  var publicationLedger = deps.publicationLedger || (workspaceRoot
+    ? createPublicationLedger({ workspaceRoot: workspaceRoot, paths: deps.paths })
+    : null);
   function clientProvider() {
     if (typeof deps.mediaClientProvider === "function") return deps.mediaClientProvider();
     if (deps.platformSettingsService) {
@@ -40,12 +45,13 @@ function registerMediaIpc(deps) {
     poolStore: mediaPoolStore,
     clientProvider: clientProvider
   });
-  var mediaOrderService = createMediaOrderService({ paths: deps.paths, clientProvider: clientProvider });
+  var mediaOrderService = createMediaOrderService({ paths: deps.paths, clientProvider: clientProvider, publicationLedger: publicationLedger });
   var mediaWorkbenchService = createMediaWorkbenchService({
     inputDir: resolveMediaInputDir(deps),
     draftStore: mediaDraftStore,
     paths: deps.paths,
     orderStore: submissionOrderStore,
+    publicationLedger: publicationLedger,
     clientProvider: clientProvider
   });
 

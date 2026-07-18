@@ -113,76 +113,88 @@ function copyToFailed(sourceFile, filename) {
   try {
     ensureDir(DIRS.failedDir);
     fs.copyFileSync(sourceFile, path.join(DIRS.failedDir, filename));
-    var sidecar = sourceFile + ".meta.json";
-    if (fs.existsSync(sidecar)) {
-      fs.copyFileSync(sidecar, path.join(DIRS.failedDir, filename + ".meta.json"));
-    }
+    [".meta.json", ".submission.json"].forEach(function(suffix) {
+      var sidecar = sourceFile + suffix;
+      if (fs.existsSync(sidecar)) {
+        fs.copyFileSync(sidecar, path.join(DIRS.failedDir, filename + suffix));
+      }
+    });
   } catch (e) {}
 }
 
-function archivePublishedArticle(article) {
+function archivePublishedArticle(article, suppliedPaths) {
   var source = article && article.sourceFile;
   var filename = article && (article.normalizedFilename || article.filename);
-  var target = path.join(DIRS.publishedDir, filename);
-  var sidecar = source + ".meta.json";
-  var sidecarTarget = target + ".meta.json";
-  var hasSidecar = false;
-  var sourceStage;
-  var sidecarStage;
+  var archivePaths = suppliedPaths || {};
+  var publishedDir = archivePaths.published || DIRS.publishedDir;
+  var target = path.join(publishedDir, filename);
+  var sidecars = [".meta.json", ".submission.json"].map(function(suffix) {
+    return {
+      suffix: suffix,
+      source: source + suffix,
+      target: target + suffix,
+      hasSource: false,
+      sourceStage: null,
+      targetStage: null,
+      sourceStaged: false,
+      inTargetStage: false,
+      targeted: false
+    };
+  });
   var targetStage;
-  var sidecarTargetStage;
   var sourceStaged = false;
-  var sidecarStaged = false;
   var articleInTargetStage = false;
-  var sidecarInTargetStage = false;
   var articleTargeted = false;
-  var sidecarTargeted = false;
 
   if (!source || !filename || !fs.existsSync(source)) {
     throw createArchiveError("PUBLISHED_ARCHIVE_FAILED", "Published article archive failed");
   }
 
-  ensureDir(DIRS.publishedDir);
-  hasSidecar = fs.existsSync(sidecar);
-  if (fs.existsSync(target) || fs.existsSync(sidecarTarget)) {
+  ensureDir(publishedDir);
+  sidecars.forEach(function(sidecar) {
+    sidecar.hasSource = fs.existsSync(sidecar.source);
+  });
+  if (fs.existsSync(target) || sidecars.some(function(sidecar) { return fs.existsSync(sidecar.target); })) {
     throw createArchiveError("PUBLISHED_ARCHIVE_CONFLICT", "Published article archive target already exists");
   }
 
   archiveSequence += 1;
   var token = process.pid + "-" + Date.now() + "-" + archiveSequence;
   sourceStage = source + ".autopublish-archive-" + token + ".stage";
-  sidecarStage = sidecar + ".autopublish-archive-" + token + ".stage";
   targetStage = target + ".autopublish-archive-" + token + ".stage";
-  sidecarTargetStage = sidecarTarget + ".autopublish-archive-" + token + ".stage";
+  sidecars.forEach(function(sidecar) {
+    sidecar.sourceStage = sidecar.source + ".autopublish-archive-" + token + ".stage";
+    sidecar.targetStage = sidecar.target + ".autopublish-archive-" + token + ".stage";
+  });
 
   try {
     fs.renameSync(source, sourceStage);
     sourceStaged = true;
 
-    if (hasSidecar) {
-      fs.renameSync(sidecar, sidecarStage);
-      sidecarStaged = true;
-    }
+    sidecars.filter(function(sidecar) { return sidecar.hasSource; }).forEach(function(sidecar) {
+      fs.renameSync(sidecar.source, sidecar.sourceStage);
+      sidecar.sourceStaged = true;
+    });
 
     fs.renameSync(sourceStage, targetStage);
     articleInTargetStage = true;
 
-    if (hasSidecar) {
-      fs.renameSync(sidecarStage, sidecarTargetStage);
-      sidecarInTargetStage = true;
-    }
+    sidecars.filter(function(sidecar) { return sidecar.hasSource; }).forEach(function(sidecar) {
+      fs.renameSync(sidecar.sourceStage, sidecar.targetStage);
+      sidecar.inTargetStage = true;
+    });
 
-    if (fs.existsSync(target) || fs.existsSync(sidecarTarget)) {
+    if (fs.existsSync(target) || sidecars.some(function(sidecar) { return fs.existsSync(sidecar.target); })) {
       throw createArchiveError("PUBLISHED_ARCHIVE_CONFLICT", "Published article archive target already exists");
     }
 
     fs.renameSync(targetStage, target);
     articleTargeted = true;
 
-    if (hasSidecar) {
-      fs.renameSync(sidecarTargetStage, sidecarTarget);
-      sidecarTargeted = true;
-    }
+    sidecars.filter(function(sidecar) { return sidecar.hasSource; }).forEach(function(sidecar) {
+      fs.renameSync(sidecar.targetStage, sidecar.target);
+      sidecar.targeted = true;
+    });
   } catch (error) {
     var rollbackError = null;
     function rollback(from, to, shouldMove) {
@@ -194,11 +206,17 @@ function archivePublishedArticle(article) {
       }
     }
 
-    rollback(sidecarTarget, sidecarTargetStage, sidecarTargeted);
+    sidecars.slice().reverse().forEach(function(sidecar) {
+      rollback(sidecar.target, sidecar.targetStage, sidecar.targeted);
+    });
     rollback(target, targetStage, articleTargeted);
-    rollback(sidecarTargetStage, sidecarStage, sidecarInTargetStage);
+    sidecars.slice().reverse().forEach(function(sidecar) {
+      rollback(sidecar.targetStage, sidecar.sourceStage, sidecar.inTargetStage);
+    });
     rollback(targetStage, sourceStage, articleInTargetStage);
-    rollback(sidecarStage, sidecar, sidecarStaged);
+    sidecars.slice().reverse().forEach(function(sidecar) {
+      rollback(sidecar.sourceStage, sidecar.source, sidecar.sourceStaged);
+    });
     rollback(sourceStage, source, sourceStaged);
 
     if (rollbackError) {
@@ -207,14 +225,18 @@ function archivePublishedArticle(article) {
     if (error && error.code === "PUBLISHED_ARCHIVE_CONFLICT") {
       throw error;
     }
-    if (error && error.code === "EEXIST" && (fs.existsSync(target) || fs.existsSync(sidecarTarget))) {
+    if (error && error.code === "EEXIST" && (fs.existsSync(target) || sidecars.some(function(sidecar) { return fs.existsSync(sidecar.target); }))) {
       throw createArchiveError("PUBLISHED_ARCHIVE_CONFLICT", "Published article archive target already exists");
     }
     throw createArchiveError("PUBLISHED_ARCHIVE_FAILED", "Published article archive failed");
   }
 
   log("已移动到 published: " + path.basename(target), "INFO");
-  return { target: target, sidecar: hasSidecar ? sidecarTarget : null };
+  return {
+    target: target,
+    sidecar: sidecars.filter(function(sidecar) { return sidecar.hasSource; }).map(function(sidecar) { return sidecar.target; })[0] || null,
+    sidecars: sidecars.filter(function(sidecar) { return sidecar.hasSource; }).map(function(sidecar) { return sidecar.target; })
+  };
 }
 
 function createArchiveError(code, message) {

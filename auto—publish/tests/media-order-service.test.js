@@ -5,6 +5,10 @@ const os = require("os");
 const path = require("path");
 
 const { createMediaOrderService } = require("../desktop/services/media-order-service");
+const { SubmissionOrderStore } = require("../src/platforms/media/submission-order-store");
+const { createPublicationLedger } = require("../src/publication/publication-ledger");
+const { resolveArticleIdentity } = require("../src/publication/article-identity");
+const { resolvePublicationTarget } = require("../src/publication/publication-targets");
 
 function read(file) {
   return fs.readFileSync(path.resolve(__dirname, "..", file), "utf-8");
@@ -127,5 +131,82 @@ describe("media-order-service", function() {
     ].forEach(function(snippet) {
       assert.equal(source.includes(snippet), false, "drawer still parses raw order shape: " + snippet);
     });
+  });
+
+  it("syncs an accepted order to published through its publicationId", async function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "media-order-ledger-"));
+    try {
+      const storePath = path.join(root, "submission-orders.jsonl");
+      const ledger = createPublicationLedger({ workspaceRoot: root });
+      const article = resolveArticleIdentity({ clientId: "media", title: "Sync title", content: "Body" });
+      const publication = ledger.reserve(article, resolvePublicationTarget({ mediaResourceId: "9001" }));
+      ledger.markSubmitting(publication.publicationId, publication.attemptId);
+      ledger.recordOutcome(publication.publicationId, publication.attemptId, { status: "submitted", remoteId: "order-9001" });
+      await new SubmissionOrderStore({ storePath }).record({
+        publicationId: publication.publicationId,
+        attemptId: publication.attemptId,
+        command: "submit",
+        dryRun: false,
+        params: { resource_id: "9001", title: "Sync title", order_nid: "order-9001" },
+        result: { success: true, data: { publicationId: publication.publicationId, attemptId: publication.attemptId, result: { data: { order_nid: "order-9001" } } } }
+      });
+
+      const service = createMediaOrderService({
+        storePath: storePath,
+        publicationLedger: ledger,
+        clientProvider: function() {
+          return { orderInfo: async function() {
+            return { data: [{ order_nid: "order-9001", resource_id: "9001", status: 2, order_url: "https://example.test/published" }] };
+          } };
+        }
+      });
+
+      await service.syncOrder("order-9001");
+
+      assert.equal(ledger.get(publication.publicationId).status, "published");
+      assert.equal(service.listOrderViews()[0].publicationId, publication.publicationId);
+      assert.equal(service.listOrderViews()[0].publicationStatus, "published");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("automatically reconciles an uncertain order when a later sync proves publication", async function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "media-order-uncertain-"));
+    try {
+      const storePath = path.join(root, "submission-orders.jsonl");
+      const ledger = createPublicationLedger({ workspaceRoot: root });
+      const article = resolveArticleIdentity({ clientId: "media", title: "Uncertain title", content: "Body" });
+      const publication = ledger.reserve(article, resolvePublicationTarget({ mediaResourceId: "9002" }));
+      ledger.markSubmitting(publication.publicationId, publication.attemptId);
+      ledger.recordOutcome(publication.publicationId, publication.attemptId, { status: "uncertain", errorCode: "MEDIA_RESULT_UNKNOWN" });
+      await new SubmissionOrderStore({ storePath }).record({
+        publicationId: publication.publicationId,
+        attemptId: publication.attemptId,
+        command: "submit",
+        dryRun: false,
+        params: { resource_id: "9002", title: "Uncertain title", order_nid: "order-9002" },
+        result: { success: true, data: { publicationId: publication.publicationId, attemptId: publication.attemptId } }
+      });
+
+      const service = createMediaOrderService({
+        storePath,
+        publicationLedger: ledger,
+        clientProvider: function() {
+          return { orderInfo: async function() {
+            return { data: [{ order_nid: "order-9002", resource_id: "9002", status: 2, order_url: "https://example.test/uncertain-published" }] };
+          } };
+        }
+      });
+      await service.syncOrder("order-9002");
+
+      const reconciled = ledger.get(publication.publicationId);
+      assert.equal(reconciled.status, "published");
+      assert.equal(reconciled.attempts[0].reasonCode, "MEDIA_ORDER_CONFIRMED_PUBLISHED");
+      assert.equal(reconciled.attempts[0].remoteId, "order-9002");
+      assert.equal(reconciled.attempts[0].remoteUrl, "https://example.test/uncertain-published");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

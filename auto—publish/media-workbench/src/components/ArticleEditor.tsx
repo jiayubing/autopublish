@@ -23,13 +23,15 @@ interface ArticleEditorProps {
   onSaveDraft: (draft: Draft) => Promise<void>;
   onCloseArticle: () => void;
   onRemoveSelectedResource: (resourceId: string) => void;
+  resourceStates?: Record<string, { status?: string; reasonCode?: string }>;
 }
 
 export default function ArticleEditor({
   activeArticle,
   onSaveDraft,
   onCloseArticle,
-  onRemoveSelectedResource
+  onRemoveSelectedResource,
+  resourceStates = {}
 }: ArticleEditorProps) {
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   const [title, setTitle] = useState('');
@@ -108,7 +110,10 @@ export default function ArticleEditor({
     }
   };
 
-  const totalMediaPrice = activeArticle.selectedResources.reduce((sum, item) => sum + item.price, 0);
+  const totalMediaPrice = activeArticle.selectedResources.reduce((sum, item) => {
+    const status = resourceStates[item.resourceId]?.status;
+    return status && status !== 'available' ? sum : sum + Number(item.price || 0);
+  }, 0);
 
   return (
     <motion.div
@@ -281,6 +286,10 @@ export default function ArticleEditor({
                   ) : (
                     <div className="space-y-2 flex-1 overflow-y-auto max-h-[260px] pr-1">
                       {activeArticle.selectedResources.map((resource) => (
+                        (() => {
+                          const publicationState = resourceStates[resource.resourceId];
+                          const isBlocked = publicationState && publicationState.status && publicationState.status !== 'available';
+                          return (
                         <div
                           key={resource.resourceId}
                           className="flex items-center justify-between p-2.5 bg-white border border-slate-100 rounded-lg shadow-2xs hover:border-slate-200 transition-all group"
@@ -312,9 +321,10 @@ export default function ArticleEditor({
                           </div>
 
                           <div className="flex items-center space-x-2 flex-shrink-0">
-                            <span className="font-mono text-xs font-bold text-slate-700">
-                              ¥{resource.price.toFixed(1)}
+                            <span className={`font-mono text-xs font-bold ${isBlocked ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                              ¥{Number(resource.price || 0).toFixed(1)}
                             </span>
+                            {isBlocked && <span className="text-[10px] font-semibold text-amber-700">{publicationState?.status === 'uncertain' ? '待确认' : '已阻止'}</span>}
                             <button
                               data-remove-selected-resource={resource.resourceId}
                               onClick={() => onRemoveSelectedResource(resource.resourceId)}
@@ -325,6 +335,8 @@ export default function ArticleEditor({
                             </button>
                           </div>
                         </div>
+                          );
+                        })()
                       ))}
 
                       {/* Summary calculations */}

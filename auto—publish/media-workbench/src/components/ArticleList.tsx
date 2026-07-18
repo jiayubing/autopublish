@@ -20,6 +20,7 @@ interface ArticleListProps {
   onOpenArticle: (article: Article) => void;
   onScanArticles: () => void;
   isScanning: boolean;
+  resourceStates?: Record<string, { status?: string }>;
 }
 
 export default function ArticleList({
@@ -28,6 +29,7 @@ export default function ArticleList({
   onOpenArticle,
   onScanArticles,
   isScanning,
+  resourceStates = {},
 }: ArticleListProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -35,7 +37,7 @@ export default function ArticleList({
   const filteredArticles = articles.filter(article => 
     article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     article.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    article.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+    (article.tags || []).some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -96,6 +98,10 @@ export default function ArticleList({
               {filteredArticles.map((article) => {
                 const isActive = activeArticle?.filename === article.filename;
                 const mediaCount = article.selectedResources.length;
+                const blockedCount = article.selectedResources.filter(resource => {
+                  const status = resourceStates[resource.resourceId]?.status;
+                  return status && status !== 'available';
+                }).length;
 
                 return (
                   <motion.div
@@ -139,7 +145,7 @@ export default function ArticleList({
 
                       {/* Tags */}
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {article.tags.map(tag => (
+                        {(article.tags || []).map(tag => (
                           <span key={tag} className="inline-flex items-center px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-medium border border-slate-200/20">
                             <Tag className="w-2.5 h-2.5 mr-1" />
                             {tag}
@@ -158,6 +164,11 @@ export default function ArticleList({
                         <Paperclip className={`w-3 h-3 ${mediaCount > 0 ? 'text-emerald-500' : 'text-slate-400'}`} />
                         <span>{mediaCount} 个媒体</span>
                       </span>
+                      {blockedCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200" title="已有发布记录的资源不会重复提交">
+                          {blockedCount} 个已阻止
+                        </span>
+                      )}
 
                       <button
                         data-open-article={article.filename}

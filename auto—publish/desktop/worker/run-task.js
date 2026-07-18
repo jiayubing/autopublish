@@ -169,7 +169,11 @@ process.on("message", function(message) {
           adapters: adapters
         });
 
-        const result = await service.submitSelectedPlanSerially(plan, submitOptions);
+        const result = await service.submitSelectedPlanSerially(plan, Object.assign({}, submitOptions, {
+          onTaskState: function(state) {
+            send("state", state);
+          }
+        }));
         result.skipped = result.skipped || result.pending || 0;
         send("result", { ok: true, data: result });
       } catch (error) {

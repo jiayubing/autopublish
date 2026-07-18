@@ -98,3 +98,56 @@ Automated compatibility, packaging, verifier, lint, and build checks cover the
 contract. Real AI calls, online Doubao collection, and real customer data are
 outside automated verification and must be performed only in an isolated
 manual environment with disposable credentials and fixture content.
+
+## Template discovery and empty-client behavior
+
+The template catalog and the client research list are separate inputs. If
+`clients/` is empty, the application still loads and displays valid template
+platforms, templates, source labels, revision, and safe diagnostics. It shows
+that the workspace has no clients and disables generation; it must not hide the
+catalog or pretend that an article can be generated without client material and
+research.
+
+After adding or changing a client or template, use the explicit “刷新客户与模板”
+action. It rereads clients, catalog, and the selected client's material without
+calling AI or the network. The same catalog revision is used by single and batch
+generation. A selected template deleted before refresh is cleared with a
+message, not silently replaced. A正文-only template derives its name from the
+filename stem; optional metadata uses `---` and a half-width colon, for example:
+
+```markdown
+---
+displayName: 体验笔记
+---
+
+正文-only模板的写作指令。
+```
+
+`displayName：体验笔记` with a full-width colon is正文, not metadata. Custom
+templates and bundled read-only templates are labelled separately. Generation
+template platforms are not the same thing as later submission target platforms.
+
+## Review and publication lifecycle
+
+The following stages describe different business boundaries and must not be
+collapsed into one global `published` flag:
+
+| Stage | Meaning | Remote call? |
+| --- | --- | --- |
+| 审核 | An operator accepts the local article; the article becomes `saved`. | No |
+| 入队 | A reviewed article is snapshotted for a selected article—target and reserved for execution. | No |
+| 提交 | A remote adapter call has evidence that the destination received or accepted the submission; it is `submitted`, not automatically `published`. | Yes |
+| 发布 | Remote evidence confirms the selected ordinary platform or media resource published the article; it is recorded per target. | Yes |
+| 待确认 | The remote result may exist but cannot be proven locally (`uncertain`), for example after timeout or browser crash. | May have happened |
+
+`queued`, `submitting`, `submitted`, `published`, and `uncertain` block another
+attempt for the same article and target. Only a clearly failed remote call may
+be retried with another attempt. A remote success followed by a local queue or
+archive write failure is not a safe retry: preserve the successful publication
+result or require reconciliation before any further action.
+
+Ordinary platform targets are article × platform. Paid media targets are
+article × media resource, so one article can proceed for resource A while
+resource B remains available. History and duplicate protection use the
+target-level publication record; queue files, order JSONL, and `published`
+archives are supporting runtime evidence.

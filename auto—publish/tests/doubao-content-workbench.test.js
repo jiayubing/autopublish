@@ -200,16 +200,16 @@ describe("Doubao content workbench renderer contracts", function() {
     const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
     const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     assert.match(workbench, /setClientId\(nextClientId\)[\s\S]*setArticle\(null\)/);
-    assert.match(generation, /useEffect\(\(\) => \{[\s\S]*setSelectedIds\(\[\]\)[\s\S]*\[clientId, platform, refreshToken\]/);
+    assert.match(generation, /useEffect\(\(\) => \{[\s\S]*setSelectedIds\(\[\]\)[\s\S]*\[clientId\]\)/);
   });
 
   it("resets platform templates and ignores stale template requests", function() {
     const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    const platformEffect = generation.slice(generation.indexOf("let cancelled"), generation.indexOf("}, [clientId, platform, refreshToken]"));
+    const platformEffect = generation.slice(generation.indexOf("let cancelled"), generation.indexOf("}, [refreshToken]"));
     assert.doesNotMatch(platformEffect, /setSelectedIds/);
     assert.match(generation, /useEffect\(\(\) => \{[\s\S]*setSelectedIds\(\[\]\)[\s\S]*\[clientId\]\)/);
     assert.match(generation, /selectedArticleRef\.current[\s\S]*templateId/);
-    assert.match(generation, /current \|\| nextTemplates\[0\]/);
+    assert.match(generation, /nextTemplates\.some/);
     assert.match(generation, /cancelled/);
     assert.match(generation, /if \(cancelled\) return/);
     assert.match(generation, /return \(\) => \{ cancelled = true; \}/);
@@ -218,7 +218,7 @@ describe("Doubao content workbench renderer contracts", function() {
   it("preserves a history article template when template loading completes", function() {
     const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     assert.match(generation, /setTemplateId\(resolvedTemplateId\)/);
-    assert.match(generation, /setTemplateId\(\(current\) => current \|\| nextTemplates\[0\]\?\.id/);
+    assert.match(generation, /setTemplateId\(\(current\) => nextTemplates\.some/);
     assert.match(generation, /selectedArticleRef\.current\?\.platform === platform/);
   });
 

@@ -346,59 +346,79 @@ async function publishArticle(article, options) {
   var sidecar = article.sidecar || {};
   var coverMode = sidecar.coverMode || "none";
   var adEnabled = !!sidecar.adEnabled;
+  var remoteCallStarted = false;
 
-  throwIfStopped();
-  pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
-  waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
-  throwIfStopped();
-
-  if (!checkLoginInCurrentPage()) {
-    log("Toutiao publish page requires login", "WARN");
-    var relogged = await doLogin({ interactive: interactive, timeoutMs: opts.timeoutMs });
-    if (!relogged || !checkLogin()) {
-      throw new Error("Login did not complete");
-    }
+  try {
     throwIfStopped();
-    saveCurrentState();
     pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
     waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
     throwIfStopped();
+
+    if (!checkLoginInCurrentPage()) {
+      log("Toutiao publish page requires login", "WARN");
+      var relogged = await doLogin({ interactive: interactive, timeoutMs: opts.timeoutMs });
+      if (!relogged || !checkLogin()) {
+        return { status: "failed", errorCode: "LOGIN_FAILED" };
+      }
+      throwIfStopped();
+      saveCurrentState();
+      pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
+      waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
+      throwIfStopped();
+    }
+
+    dismissAssistantDrawer();
+    throwIfStopped();
+    fillTitle(article.title);
+    throwIfStopped();
+    fillBody(article.body);
+    throwIfStopped();
+    selectCoverMode(coverMode);
+    throwIfStopped();
+    selectAdEnabled(adEnabled);
+    log("Form filled", "INFO");
+
+    if (!autoSubmit) {
+      log("Form filled; waiting for manual submission", "INFO");
+      return { status: "submitted", legacyStatus: "pending" };
+    }
+
+    throwIfStopped();
+    log("Submitting automatically...", "INFO");
+    remoteCallStarted = true;
+    try {
+      clickPreviewAndPublish();
+      throwIfStopped();
+      confirmAdDialog();
+      throwIfStopped();
+      clickConfirmPublish();
+      throwIfStopped();
+
+      if (await waitForPublishSuccess(10000)) {
+        var url = "";
+        try { url = getCurrentPageUrl(); } catch (_) {}
+        return { status: "published", remoteUrl: url || undefined };
+      }
+
+      if (await verifyPublishFromArticleList(article.title, 15000)) {
+        var verifiedUrl = "";
+        try { verifiedUrl = getCurrentPageUrl(); } catch (_) {}
+        return { status: "published", remoteUrl: verifiedUrl || undefined };
+      }
+
+      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    } catch (remoteError) {
+      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    }
+  } catch (error) {
+    if (remoteCallStarted) return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    if (isStopError(error)) return { status: "failed", errorCode: "STOP_REQUESTED" };
+    return { status: "failed", errorCode: "ADAPTER_FAILED" };
   }
+}
 
-  dismissAssistantDrawer();
-  throwIfStopped();
-  fillTitle(article.title);
-  throwIfStopped();
-  fillBody(article.body);
-  throwIfStopped();
-  selectCoverMode(coverMode);
-  throwIfStopped();
-  selectAdEnabled(adEnabled);
-  log("Form filled", "INFO");
-
-  if (!autoSubmit) {
-    log("Form filled; waiting for manual submission", "INFO");
-    return "pending";
-  }
-
-  throwIfStopped();
-  log("Submitting automatically...", "INFO");
-  clickPreviewAndPublish();
-  throwIfStopped();
-  confirmAdDialog();
-  throwIfStopped();
-  clickConfirmPublish();
-  throwIfStopped();
-
-  if (await waitForPublishSuccess(10000)) {
-    return true;
-  }
-
-  if (await verifyPublishFromArticleList(article.title, 15000)) {
-    return true;
-  }
-
-  return false;
+function isStopError(error) {
+  return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
 }
 
 function scanArticles(scanDir) {
@@ -468,6 +488,7 @@ function loadSidecar(articleFile) {
 
 module.exports = {
   id: "toutiao",
+  publicationTarget: { kind: "platform", granularity: "platform" },
   contentQueueImport: true,
   scanDir: "toutiao",
   ensureSession: ensureDaemon,

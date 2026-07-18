@@ -15,15 +15,16 @@ describe("ai content ipc", function() {
       listClients: function() { return [{ id: "client-1" }]; }, getClient: function() { return {}; }, retryMaterial: function(clientId, materialId) { return { clientId: clientId, materialId: materialId, status: "ready" }; },
       listResearch: function() { return []; }, getResearch: function() { return {}; }, listTemplates: function() { return []; },
       generateArticle: async function() { return { id: "article-1" }; }, saveArticle: function(value) { return value; },
-      listGeneratedArticles: function() { return []; }, getGeneratedArticle: function() { return {}; },
+      listGeneratedArticles: function() { return []; }, getGeneratedArticle: function() { return {}; }, copyArticleVersion: function(input) { return { id: "article-copy", sourceArticleId: input.sourceArticleId, version: 2 }; },
       reviewArticles: function(value) { return { approved: value.map(function(item) { return item.articleId; }), rejected: [], skipped: [] }; }
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
-    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:review-articles"].forEach(function(channel) {
+    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:copy-article-version", "content:review-articles"].forEach(function(channel) {
       assert.equal(ipc.handlers.has(channel), true, "missing " + channel);
     });
     assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: [{ id: "client-1" }] });
     assert.deepStrictEqual(await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1" }), { ok: true, data: { id: "article-1" } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:copy-article-version")(null, { clientId: "client-1", sourceArticleId: "article-1" }), { ok: true, data: { id: "article-copy", sourceArticleId: "article-1", version: 2 } });
     assert.deepStrictEqual(await ipc.handlers.get("content:review-articles")(null, { articles: [{ clientId: "c1", articleId: "a1" }] }), { ok: true, data: { approved: ["a1"], rejected: [], skipped: [] } });
     assert.deepStrictEqual(await ipc.handlers.get("content:retry-material")(null, { clientId: "client-1", materialId: "material-1" }), { ok: true, data: { clientId: "client-1", materialId: "material-1", status: "ready" } });
   });

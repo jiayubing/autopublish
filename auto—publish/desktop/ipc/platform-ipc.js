@@ -97,7 +97,11 @@ function registerPlatformIpc(deps) {
     return wrap(async function() {
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       var plan = Array.isArray(input) ? buildPlanFromSubmissions(input) : buildPlanFromSubmission(input);
-      var workerResult = await taskService.startPlatformSubmit(plan, {
+      // Renderer selections are resolved and validated in the main process.
+      // The worker receives only source/target references; never forward the
+      // resolved absolute path or parsed article content.
+      var workerPlan = service.toWorkerPlan(plan);
+      var workerResult = await taskService.startPlatformSubmit(workerPlan, {
         onLog: function(entry) {
           sendToRenderer("publish-log", entry);
         }

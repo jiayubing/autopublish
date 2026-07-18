@@ -158,31 +158,42 @@ function parseArticleFiles(articles) {
 async function publishArticle(article) {
   var runtime = currentRuntime();
   log("[hepan] Publishing via HTTP: " + article.filename, "INFO");
-  var payload = runHepan([
-    "--article", article.sourceFile,
-    "--image-dir", imageDir(),
-    "--cookie-path", runtime.cookiePath,
-    "--category-id", String(runtime.categoryId),
-    ...(runtime.vendorDir ? ["--vendor-dir", runtime.vendorDir] : [])
-  ]);
-
-  if (payload.needsLogin) {
-    log("[hepan] Cookie needs update: " + payload.error, "WARN");
-    return "pending";
+  if (!runtime.pythonPath || !runtime.cookiePath) {
+    return { status: "failed", errorCode: "HEPAN_CONFIG_NOT_SET" };
   }
 
-  if (!payload.ok) {
-    throw new Error(payload.error || "Hepan publish failed");
-  }
+  var remoteCallStarted = true;
+  try {
+    var payload = runHepan([
+      "--article", article.sourceFile,
+      "--image-dir", imageDir(),
+      "--cookie-path", runtime.cookiePath,
+      "--category-id", String(runtime.categoryId),
+      ...(runtime.vendorDir ? ["--vendor-dir", runtime.vendorDir] : [])
+    ]);
 
-  article.title = payload.title || article.title;
-  article.publishUrl = payload.url;
-  log("[hepan] Published: " + payload.url, "INFO");
-  return true;
+    if (payload.needsLogin) {
+      log("[hepan] Cookie needs update: " + payload.error, "WARN");
+      return { status: "submitted", legacyStatus: "pending", errorCode: "LOGIN_REQUIRED" };
+    }
+
+    if (!payload.ok) {
+      return { status: "failed", errorCode: "REMOTE_REJECTED" };
+    }
+
+    article.title = payload.title || article.title;
+    article.publishUrl = payload.url;
+    log("[hepan] Published: " + payload.url, "INFO");
+    return { status: "published", remoteUrl: payload.url || undefined };
+  } catch (error) {
+    if (remoteCallStarted) return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    return { status: "failed", errorCode: "ADAPTER_FAILED" };
+  }
 }
 
 module.exports = {
   id: "hepan",
+  publicationTarget: { kind: "platform", granularity: "platform" },
   contentQueueImport: true,
   scanDir: "hepan",
   ensureSession: ensureSession,

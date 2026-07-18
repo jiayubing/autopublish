@@ -41,6 +41,9 @@ class SubmissionOrderStore {
       ts: new Date().toISOString(),
       command: entry.command,
       dryRun: entry.dryRun,
+      ...(entry.publicationId ? { publicationId: String(entry.publicationId) } : {}),
+      ...(entry.attemptId ? { attemptId: String(entry.attemptId) } : {}),
+      ...(entry.orderNid ? { orderNid: String(entry.orderNid) } : {}),
       params: sanitizeParams(entry.params),
       result: Object.assign(
         { success: entry.result && entry.result.success !== undefined ? entry.result.success : false },

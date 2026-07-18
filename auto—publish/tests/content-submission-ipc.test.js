@@ -20,3 +20,21 @@ it("exposes current-client submission batch history without renderer paths", asy
 
   assert.deepEqual(result, { ok: true, data: [{ id: "batch-1", clientId: "client-1", items: [{ status: "queued" }] }] });
 });
+
+it("passes an optional media resource id but continues rejecting renderer paths", async function() {
+  const handlers = new Map();
+  let received;
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    contentSubmissionService: { previewExport: (input) => { received = input; return { status: "queueable" }; } }
+  });
+  const result = await handlers.get("content:preview-export")(null, {
+    clientId: "client-1",
+    generatedArticleId: "article-1",
+    targetPlatform: "media",
+    mediaResourceId: "1001",
+    confirmed: true
+  });
+  assert.deepEqual(result, { ok: true, data: { status: "queueable" } });
+  assert.equal(received.mediaResourceId, "1001");
+});

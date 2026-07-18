@@ -182,7 +182,7 @@ hard-coded as the template taxonomy.
 | `templateId` | string | yes | The `Template.id` used for generation. |
 | `title` | string | yes | Generated article title. |
 | `content` | string | yes | Generated article body. Empty content is invalid. |
-| `status` | string | yes | Generation state, such as `generated`, `draft`, or `published`. |
+| `status` | string | yes | Article review state, such as `generated`, `draft`, or `saved`; target publication state is stored separately in publication records. |
 | `source` | object | yes | Participation flags for generation inputs. |
 | `createdAt` | string | yes | ISO 8601 generation time. |
 | `updatedAt` | string | no | ISO 8601 last update time. |
@@ -232,6 +232,30 @@ boundary. New stores add data beside those paths and do not move old files.
   so that provenance can be displayed and audited.
 - The existing publishing workflow consumes generated article content; it does
   not own research or template storage.
+
+## Publication records
+
+Publication records add a durable content-library location:
+
+```text
+.autopublish/
+  submission-records/
+    publications/
+```
+
+The publication ledger is part of the portable content library. Backups and
+workspace migrations carry it with the articles so target-level history and
+duplicate protection survive a machine change. It is not application
+configuration, an installer resource, or a secret store. It may contain only
+minimal non-sensitive references such as article identity, content hash, target
+identity, status, attempt history, remote ID/URL, and safe error code; it must
+not contain credentials, cookies, prompts, customer material, article body,
+browser profiles, or complete remote responses.
+
+The ledger is authoritative for article publication history and duplicate
+decisions. Queue files, `published` archives, media order JSONL, and logs remain
+runtime or compatibility evidence and do not replace the ledger. Removing an
+article file must not erase the minimal target-level publication history.
 # Generated article export lifecycle
 
 Saved generated articles may be exported only to the `media`, `lieju`, `toutiao`, or `hepan` input queue after explicit manual confirmation. Export is queue creation only: it never publishes or opens a browser. Operators must still confirm the queued article in the submission workbench.

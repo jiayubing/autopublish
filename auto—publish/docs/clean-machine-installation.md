@@ -6,6 +6,14 @@ runtime at `resources/app/tools/node/`. The application defaults to the system
 Edge channel (`msedge`) and does not package browser profiles, cookies, logs,
 content, or credentials.
 
+The content workspace is separate from the source-code directory. On a clean
+machine, select or create the portable workspace explicitly; do not copy the
+development repository as the runtime content location. The workspace includes
+the template catalog, article data, queue material, orders, and the
+`.autopublish/submission-records/publications/` publication ledger. The ledger
+is migratable content history and must move with the workspace, while it must
+never be embedded in the installer.
+
 ## Build and verify
 
 ```powershell
@@ -57,6 +65,12 @@ configuration, import it only after reviewing the source summary. The import
 does not show the Key or Cookie, does not persist environment overrides, and
 does not delete the old Cookie file.
 
+After selecting a new workspace, verify that a template-only workspace still
+discovers its valid templates even when `clients/` is empty. The UI must explain
+that generation is disabled until a client with valid material and research is
+available. Add a fixture client or template, use the explicit refresh action,
+and confirm that the new item appears without restarting the application.
+
 ## Recovery
 
 Stop AutoPublish and all Edge/Playwright daemons before restoring data. Keep
@@ -64,6 +78,14 @@ the migration manifest and backup together. The manifest records source,
 target, bytes, SHA-256, execution version, and commit evidence, but never
 stores secret values. Re-run migration in dry-run mode first; conflicts must be
 resolved before `--execute`.
+
+During clean-machine acceptance, check target-level duplicate protection for a
+normal platform and for two distinct paid-media resources, and check that an
+order sync can move the corresponding publication record to published. A
+timeout or browser crash must become待确认 and must not offer a direct safe
+retry. If the remote operation succeeded but local archiving failed, keep the
+publication as successful or require reconciliation; never classify it as a
+safe-to-retry failure.
 
 For an installation that has been upgraded from the old development identity,
 legacy application configuration import is an explicit, one-time operation.

@@ -31,6 +31,11 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string; bor
 };
 
 function getStatusInfo(statusCode: string) {
+  if (statusCode === 'queued') return { label: '已入队', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', icon: <Clock className="w-3.5 h-3.5" /> };
+  if (statusCode === 'submitting') return { label: '投稿中', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" /> };
+  if (statusCode === 'submitted') return { label: '已提交', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: <Clock className="w-3.5 h-3.5" /> };
+  if (statusCode === 'uncertain') return { label: '待确认', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> };
+  if (statusCode === 'failed') return { label: '失败', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: <XCircle className="w-3.5 h-3.5" /> };
   return STATUS_MAP[statusCode] || { label: statusCode ? `状态:${statusCode}` : '未知', color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> };
 }
 
@@ -164,6 +169,8 @@ export default function OrdersView({
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                      {order.publicationStatus && <span className={`flex items-center space-x-1 ${order.publicationStatus === 'uncertain' ? 'text-rose-600' : 'text-blue-600'}`}><AlertTriangle className="w-3 h-3" /><span>发布记录: {getStatusInfo(order.publicationStatus).label}</span></span>}
+                      {order.publicationId && <span className="font-mono text-[10px] text-slate-400">记录 {order.publicationId.slice(0, 8)}</span>}
                       {order.resourceName && (
                         <span className="flex items-center space-x-1">
                           <Globe className="w-3 h-3" />

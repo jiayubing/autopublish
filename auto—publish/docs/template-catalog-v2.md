@@ -54,3 +54,39 @@ the submission queue. The latter is discovered from
 `listContentSubmissionPlatforms()` and is not a fixed `EXPORT_TARGETS` list.
 Adding a template does not make a submission adapter available, and adding an
 adapter does not require a generation template.
+
+## 正文-only 模板与显示名称
+
+下面是合法的正文-only 模板：整个文件都是写作指令，名称由 Markdown
+文件名 stem 派生；例如 `templates/xiaohongshu/custom.md` 显示为
+`custom`。正文-only 模板无需 front matter，但正文必须非空。
+
+需要覆盖派生名称时，使用 `---` 包裹的 front matter，并在 `displayName`
+后使用半角冒号：
+
+```markdown
+---
+displayName: 体验笔记
+---
+
+请将以下素材整理为一篇体验笔记。
+```
+
+`displayName：体验笔记` 中的冒号是全角字符，不是元数据语法，会被当作
+正文；此时显示名仍来自文件名。只有语法和值都有效时，`displayName` 才
+覆盖派生名称。
+
+## 空客户与显式刷新
+
+模板目录发现与客户资料加载相互独立。即使 `clients/` 为空，仍显示有效的
+内置和自定义模板、平台、来源标记、revision 及安全 diagnostics；但由于
+生成仍需要客户、第一层有效资料和研究答案，生成按钮必须禁用，不能因空客
+户而隐藏模板目录。
+
+界面应提示操作员在 `clients/<客户名称>/` 第一层添加资料，然后点击“刷新
+客户与模板”。刷新会在不重启应用的情况下重新读取客户、模板和当前客户资
+料，不调用 AI 或外网；单篇和批量生成使用同一 catalog revision。删除当前
+模板后清空选择并提示，不静默换选。第一版使用显式刷新，不使用文件 watcher。
+
+界面标签中，“写作模板平台”和“写作模板”表示生成指令；“投稿目标平台”
+表示后续投稿 adapter。自定义模板标记“自定义”，内置模板标记“内置只读”。

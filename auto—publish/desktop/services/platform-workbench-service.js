@@ -1,7 +1,17 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const mammoth = require("mammoth");
+
 const { throwIfStopped } = require("../../src/core/operator-flow");
+const { archivePublishedArticle } = require("../../src/core/files");
+const { normalizePublicationOutcome } = require("../../src/core/jobs");
+const { createPublicationLedger } = require("../../src/publication/publication-ledger");
+const { resolveArticleIdentity } = require("../../src/publication/article-identity");
+const { resolvePublicationTarget } = require("../../src/publication/publication-targets");
+
+const ARTICLE_EXTENSIONS = [".md", ".txt", ".docx"];
+const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
 
 function firstTitle(raw, fallback) {
   var lines = String(raw || "").split(/\n/);
@@ -12,29 +22,126 @@ function firstTitle(raw, fallback) {
   return fallback;
 }
 
-function submissionInputError() {
-  var error = new Error("Invalid submission input");
-  error.code = "SUBMISSION_INPUT_INVALID";
+function submissionInputError(code, message) {
+  var error = new Error(message || "Invalid submission input");
+  error.code = code || "SUBMISSION_INPUT_INVALID";
   return error;
 }
 
-function resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename) {
+function isSafeToken(value) {
+  return typeof value === "string" && value.trim() !== "" && value.trim() !== "." && value.trim() !== ".." && SAFE_ID.test(value.trim());
+}
+
+function isTemporaryQueueArtifact(name) {
+  return name === ".gitkeep" || name.indexOf("~$") === 0 ||
+    /\.meta\.json$/i.test(name) || /\.submission\.json$/i.test(name) ||
+    /(?:\.tmp-|\.stage(?:$|\.)|\.deleting-|\.autopublish-archive-)/i.test(name);
+}
+
+function isPrimaryArticle(name) {
+  return ARTICLE_EXTENSIONS.indexOf(path.extname(name).toLowerCase()) !== -1;
+}
+
+function readJsonFile(filename) {
+  try {
+    var stat = fs.lstatSync(filename);
+    if (stat.isSymbolicLink() || !stat.isFile()) return null;
+    return JSON.parse(fs.readFileSync(filename, "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+
+function hashFile(filename) {
+  return crypto.createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
+}
+
+function readSubmissionMetadata(filePath, strict) {
+  var sidecarPath = filePath + ".submission.json";
+  if (!fs.existsSync(sidecarPath)) return { path: null, data: null, valid: true };
+
+  var data;
+  try {
+    var stat = fs.lstatSync(sidecarPath);
+    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error("sidecar is not a file");
+    data = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
+  } catch (_) {
+    return { path: sidecarPath, data: null, valid: false, reason: "SUBMISSION_SIDECAR_INVALID" };
+  }
+
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_INVALID" };
+  }
+
+  // Legacy sidecars remain readable. Once a version is declared, it must be v2
+  // and the sidecar must prove that it belongs to the scanned main file.
+  if (data.version === undefined) return { path: sidecarPath, data: data, valid: true, legacy: true };
+  if (data.version !== 2 || typeof data.contentHash !== "string" || !/^[a-f0-9]{64}$/.test(data.contentHash)) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_VERSION_INVALID" };
+  }
+  if (data.filename !== undefined && data.filename !== path.basename(filePath)) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_FILE_MISMATCH" };
+  }
+  if (data.contentHash !== hashFile(filePath)) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_CONTENT_MISMATCH" };
+  }
+  if (!isSafeToken(data.clientId) ||
+      (!isSafeToken(data.generatedArticleId) && !isSafeToken(data.articleId) && !isSafeToken(data.articleKey))) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_IDENTITY_INVALID" };
+  }
+  if ((data.publicationId !== undefined && !isSafeToken(data.publicationId)) ||
+      (data.attemptId !== undefined && !isSafeToken(data.attemptId))) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_PUBLICATION_INVALID" };
+  }
+  if ((data.publicationId === undefined) !== (data.attemptId === undefined)) {
+    return { path: sidecarPath, data: data, valid: false, reason: "SUBMISSION_SIDECAR_PUBLICATION_INVALID" };
+  }
+  return { path: sidecarPath, data: data, valid: true, version: 2 };
+}
+
+function resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, validateSidecar) {
   if (typeof sourcePlatformId !== "string" || !sourcePlatformId || typeof filename !== "string" ||
       !filename || filename.trim() !== filename || path.basename(filename) !== filename ||
-      path.isAbsolute(filename) || filename.indexOf("/") !== -1 || filename.indexOf("\\") !== -1) {
+      path.isAbsolute(filename) || filename.indexOf("/") !== -1 || filename.indexOf("\\") !== -1 ||
+      !isPrimaryArticle(filename) || isTemporaryQueueArtifact(filename)) {
     throw submissionInputError();
   }
   var source = platforms.filter(function(platform) { return platform.id === sourcePlatformId; })[0];
   if (!source) throw submissionInputError();
-  var ext = path.extname(filename).toLowerCase();
-  if ([".md", ".txt", ".docx"].indexOf(ext) === -1) throw submissionInputError();
   var inputDir = path.resolve(inputRoot, source.scanDir || source.id);
   var filePath = path.resolve(inputDir, filename);
   if (path.dirname(filePath) !== inputDir) throw submissionInputError();
   var stat;
   try { stat = fs.lstatSync(filePath); } catch (_) { throw submissionInputError(); }
   if (!stat.isFile() || stat.isSymbolicLink()) throw submissionInputError();
+  if (validateSidecar) {
+    var metadata = readSubmissionMetadata(filePath, true);
+    if (!metadata.valid) throw submissionInputError(metadata.reason, "Submission sidecar is invalid");
+  }
   return filePath;
+}
+
+function safeTask(task) {
+  if (!task || typeof task !== "object") throw submissionInputError();
+  if (!isSafeToken(task.sourcePlatformId) || !isSafeToken(task.filename) || !isSafeToken(task.targetPlatformId) ||
+      path.basename(task.filename) !== task.filename || path.isAbsolute(task.filename) ||
+      task.filename.indexOf("/") !== -1 || task.filename.indexOf("\\") !== -1) {
+    throw submissionInputError();
+  }
+  return {
+    sourcePlatformId: task.sourcePlatformId,
+    filename: task.filename,
+    targetPlatformId: task.targetPlatformId
+  };
+}
+
+function isStopError(error) {
+  return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
+}
+
+function safeOutcomeError(error, fallback) {
+  var code = error && typeof error.code === "string" ? error.code : fallback;
+  return /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(code || "") ? code : fallback;
 }
 
 function createPlatformWorkbenchService(opts) {
@@ -45,6 +152,7 @@ function createPlatformWorkbenchService(opts) {
     : path.join(rootDir, "input");
   var platforms = options.platforms || [];
   var adapters = options.adapters || {};
+  var ledger = options.publicationLedger || createPublicationLedger({ workspaceRoot: rootDir, paths: options.paths });
 
   function scanQueue() {
     return platforms.filter(function(platform) {
@@ -56,13 +164,12 @@ function createPlatformWorkbenchService(opts) {
       var articles = [];
       if (fs.existsSync(inputDir)) {
         articles = fs.readdirSync(inputDir).filter(function(name) {
-          if (name === ".gitkeep" || name.indexOf("~$") === 0) return false;
-          var stat = fs.statSync(path.join(inputDir, name));
-          if (stat.isDirectory()) return false;
-          var ext = path.extname(name).toLowerCase();
-          var imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico'];
-          if (imageExts.indexOf(ext) !== -1) return false;
-          return true;
+          if (isTemporaryQueueArtifact(name) || !isPrimaryArticle(name)) return false;
+          var stat;
+          try { stat = fs.lstatSync(path.join(inputDir, name)); } catch (_) { return false; }
+          if (!stat.isFile() || stat.isSymbolicLink()) return false;
+          var metadata = readSubmissionMetadata(path.join(inputDir, name), true);
+          return metadata.valid;
         }).map(function(filename) {
           var filePath = path.join(inputDir, filename);
           var title = path.basename(filename, path.extname(filename));
@@ -83,8 +190,8 @@ function createPlatformWorkbenchService(opts) {
     });
   }
 
-  function resolveSelectedFilePath(article) {
-    return resolvePlatformSubmissionFile(inputRoot, platforms, article.sourcePlatformId, article.filename);
+  function resolveSelectedFilePath(article, validateSidecar) {
+    return resolvePlatformSubmissionFile(inputRoot, platforms, article.sourcePlatformId, article.filename, validateSidecar !== false);
   }
 
   function buildSelectedPlan(input) {
@@ -97,16 +204,18 @@ function createPlatformWorkbenchService(opts) {
     }
     var tasks = [];
     for (var i = 0; i < selectedArticles.length; i++) {
+      var selected = safeTask({ sourcePlatformId: selectedArticles[i].sourcePlatformId, filename: selectedArticles[i].filename, targetPlatformId: targetPlatformIds[0] });
       var filePath = resolveSelectedFilePath(selectedArticles[i]);
       for (var j = 0; j < targetPlatformIds.length; j++) {
         tasks.push({
-          sourcePlatformId: selectedArticles[i].sourcePlatformId,
-          filename: selectedArticles[i].filename,
+          sourcePlatformId: selected.sourcePlatformId,
+          filename: selected.filename,
           filePath: filePath,
           sourceArticle: Object.assign({}, selectedArticles[i], {
             file: filePath,
+            filePath: filePath,
             sourceFile: filePath,
-            fileBaseName: path.basename(selectedArticles[i].filename, path.extname(selectedArticles[i].filename))
+            fileBaseName: path.basename(selected.filename, path.extname(selected.filename))
           }),
           targetPlatformId: targetPlatformIds[j]
         });
@@ -115,98 +224,319 @@ function createPlatformWorkbenchService(opts) {
     return { taskCount: tasks.length, tasks: tasks };
   }
 
+  function toWorkerPlan(plan) {
+    var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
+    return { taskCount: tasks.length, tasks: tasks.map(safeTask) };
+  }
+
+  function fallbackParseArticle(sourceArticle, filePath) {
+    var article = {
+      sourceFile: filePath,
+      file: filePath,
+      filePath: filePath,
+      filename: sourceArticle.filename,
+      title: sourceArticle.title || sourceArticle.fileBaseName || path.basename(filePath, path.extname(filePath))
+    };
+    var ext = path.extname(filePath).toLowerCase();
+    if (ext === ".txt" || ext === ".md") {
+      var raw = fs.readFileSync(filePath, "utf8");
+      var lines = raw.split(/\n/);
+      var first = 0;
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].replace(/^#+\s*/, "").trim()) { first = i; break; }
+      }
+      article.title = article.title || lines[first].replace(/^#+\s*/, "").trim();
+      article.body = lines.slice(first + 1).join("\n").trim();
+    } else if (ext === ".docx") {
+      return mammoth.extractRawText({ buffer: fs.readFileSync(filePath) }).then(function(result) {
+        var fullText = String(result && result.value || "");
+        var breakAt = fullText.indexOf("\n\n");
+        article.body = breakAt > 0 ? fullText.substring(breakAt + 2).trim() : fullText;
+        article.title = article.title || firstTitle(fullText, article.title);
+        return article;
+      });
+    }
+    return article;
+  }
+
+  function articleIdentity(article, metadata, filePath) {
+    var sidecar = metadata.data || {};
+    var clientId = sidecar.clientId || article.clientId || "legacy-platform-queue";
+    var generatedArticleId = sidecar.generatedArticleId || sidecar.articleId || article.articleId;
+    if (generatedArticleId) {
+      return resolveArticleIdentity({ clientId: clientId, articleId: generatedArticleId });
+    }
+    var content = typeof article.body === "string" ? article.body : "";
+    if (!content) {
+      content = fs.readFileSync(filePath, "utf8");
+    }
+    return resolveArticleIdentity({
+      clientId: clientId,
+      title: article.title || path.basename(filePath, path.extname(filePath)),
+      content: content
+    });
+  }
+
+  function cancelQueuedReservation(reference) {
+    if (!reference || !reference.publicationId || !ledger.store || typeof ledger.store.update !== "function") return;
+    try {
+      ledger.store.update(reference.publicationId, function(record) {
+        if (record.status !== "queued") return record;
+        var timestamp = new Date().toISOString();
+        var attempt = record.attempts[record.attempts.length - 1];
+        record.status = "cancelled";
+        attempt.status = "cancelled";
+        attempt.updatedAt = timestamp;
+        attempt.finishedAt = timestamp;
+        record.updatedAt = timestamp;
+        return record;
+      });
+    } catch (_) {}
+  }
+
+  function reservePublication(identity, target, metadata) {
+    var sidecar = metadata.data || {};
+    var suppliedPublicationId = sidecar.publicationId;
+    var suppliedAttemptId = sidecar.attemptId;
+    if (suppliedPublicationId && suppliedAttemptId) {
+      try {
+        var existing = ledger.get(suppliedPublicationId);
+        if (existing.articleKey === identity.articleKey && existing.targetKey === target.targetKey &&
+            existing.status === "queued" && existing.attempts[existing.attempts.length - 1].attemptId === suppliedAttemptId) {
+          return { publicationId: existing.publicationId, attemptId: suppliedAttemptId, status: existing.status, record: existing };
+        }
+      } catch (_) {}
+    }
+
+    try {
+      var reserved = ledger.reserve(identity, target, { displayName: target.platformId });
+      return { publicationId: reserved.publicationId, attemptId: reserved.attemptId, status: reserved.status, record: reserved };
+    } catch (error) {
+      if (error && (error.code === "PUBLICATION_DUPLICATE" || error.code === "PUBLICATION_UNCERTAIN")) {
+        if (suppliedPublicationId && suppliedAttemptId) {
+          try {
+            var current = ledger.get(suppliedPublicationId);
+            if (current.articleKey === identity.articleKey && current.targetKey === target.targetKey &&
+                current.status === "queued" && current.attempts[current.attempts.length - 1].attemptId === suppliedAttemptId) {
+              return { publicationId: current.publicationId, attemptId: suppliedAttemptId, status: current.status, record: current };
+            }
+          } catch (_) {}
+        }
+      }
+      throw error;
+    }
+  }
+
+  function updateSubmissionBatch(metadata, filePath, targetPlatformId, outcome) {
+    var sidecar = metadata.data || {};
+    var batchId = sidecar.submissionBatchId;
+    if (!batchId) return;
+    var recordsDir = options.paths && options.paths.submissionRecords || path.join(rootDir, ".autopublish", "submission-records");
+    if (!fs.existsSync(recordsDir)) return;
+    var filenames;
+    try { filenames = fs.readdirSync(recordsDir).filter(function(name) { return /^batch-[A-Za-z0-9_-]+\.json$/.test(name); }); } catch (_) { return; }
+    for (var i = 0; i < filenames.length; i++) {
+      var filename = path.join(recordsDir, filenames[i]);
+      var batch = readJsonFile(filename);
+      if (!batch || batch.id !== batchId || !Array.isArray(batch.items)) continue;
+      var changed = false;
+      batch.items.forEach(function(item) {
+        if (item.filename !== path.basename(filePath) || item.targetPlatformId !== targetPlatformId) return;
+        item.status = outcome.status;
+        if (outcome.errorCode) item.errorCode = outcome.errorCode;
+        if (outcome.remoteId) item.remoteId = outcome.remoteId;
+        if (outcome.remoteUrl) item.remoteUrl = outcome.remoteUrl;
+        item.updatedAt = new Date().toISOString();
+        changed = true;
+      });
+      if (!changed) continue;
+      if (batch.items.some(function(item) { return ["queued", "submitting"].indexOf(item.status) !== -1; })) batch.status = "queued";
+      else if (batch.items.some(function(item) { return item.status === "uncertain"; })) batch.status = "uncertain";
+      else if (batch.items.some(function(item) { return item.status === "failed"; })) batch.status = "failed";
+      else batch.status = "completed";
+      batch.updatedAt = new Date().toISOString();
+      var temporary = filename + ".tmp-" + process.pid + "-" + Date.now();
+      try {
+        fs.writeFileSync(temporary, JSON.stringify(batch, null, 2) + "\n", "utf8");
+        fs.renameSync(temporary, filename);
+      } finally {
+        try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+      }
+      return;
+    }
+  }
+
   async function submitSelectedPlanSerially(plan, submitOptions) {
     var opts = submitOptions || {};
-    var tasks = plan.tasks || [];
+    var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
     var results = [];
+    var sourceGroups = new Map();
+
     for (var i = 0; i < tasks.length; i++) {
-      throwIfStopped();
-      var task = tasks[i];
-      var adapter = adapters[task.targetPlatformId];
-      if (!adapter) {
-        results.push({ task: task, status: "failed", error: "Missing adapter: " + task.targetPlatformId });
+      var task;
+      try { task = safeTask(tasks[i]); } catch (error) {
+        results.push({ task: {}, status: "failed", error: error.code || "SUBMISSION_INPUT_INVALID" });
         continue;
       }
-      try {
-        adapter.ensureSession();
-        await adapter.ensureLoggedIn({ interactive: opts.interactive, timeoutMs: opts.timeoutMs });
-        throwIfStopped();
+      var adapter = adapters[task.targetPlatformId];
+      var filePath;
+      var metadata;
+      var group = sourceGroups.get(task.sourcePlatformId + "\0" + task.filename);
+      if (!group) {
+        group = { filePath: null, article: null, results: [] };
+        sourceGroups.set(task.sourcePlatformId + "\0" + task.filename, group);
+      }
 
-        var sourceArticle = task.sourceArticle || {
-          file: task.filePath, filePath: task.filePath, sourceFile: task.filePath,
-          filename: task.filename, fileBaseName: path.basename(task.filename, path.extname(task.filename))
+      try {
+        filePath = resolveSelectedFilePath(task, true);
+        metadata = readSubmissionMetadata(filePath, true);
+        group.filePath = filePath;
+        if (!adapter) throw submissionInputError("SUBMISSION_ADAPTER_MISSING", "Missing adapter: " + task.targetPlatformId);
+        var sourceArticle = {
+          file: filePath,
+          filePath: filePath,
+          sourceFile: filePath,
+          filename: task.filename,
+          fileBaseName: path.basename(task.filename, path.extname(task.filename))
         };
         var parsed = adapter.parseArticleFiles
           ? await adapter.parseArticleFiles([sourceArticle])
-          : await (async function() {
-              var article = { sourceFile: sourceArticle.sourceFile, file: sourceArticle.file, filename: sourceArticle.filename, title: sourceArticle.title || sourceArticle.fileBaseName };
-              var filePath = sourceArticle.filePath || sourceArticle.file || sourceArticle.sourceFile;
-              if (filePath) {
-                try {
-                  var ext = require("path").extname(filePath).toLowerCase();
-                  if (ext === ".txt" || ext === ".md") {
-                    var raw = require("fs").readFileSync(filePath, "utf-8");
-                    var rawLines = raw.split(/\n/);
-                    var bodyStart = 0;
-                    for (var li = 0; li < rawLines.length; li++) {
-                      if (rawLines[li].replace(/^#+\s*/, "").trim()) {
-                        bodyStart = li + 1;
-                        break;
-                      }
-                    }
-                    article.body = rawLines.slice(bodyStart).join("\n").trim();
-                  } else if (ext === ".docx") {
-                    var docxResult = await mammoth.extractRawText({ buffer: require("fs").readFileSync(filePath) });
-                    var fullText = String(docxResult && docxResult.value || "");
-                    var paraBreak = fullText.indexOf("\n\n");
-                    if (paraBreak > 0) {
-                      article.body = fullText.substring(paraBreak + 2).trim();
-                    } else {
-                      var titleLen = Math.min(String(article.title || "").length, 60);
-                      article.body = fullText.substring(titleLen).trim();
-                    }
-                  }
-                } catch (_) {}
-              }
-              var baseName = require("path").basename(article.filename, require("path").extname(article.filename));
-              var metaMatch = baseName.match(/^([\u4e00-\u9fa5]+)(\d+)(.+)$/);
-              if (metaMatch) {
-                article.city = metaMatch[1];
-                article.phone = metaMatch[2];
-                article.contact = metaMatch[3];
-              }
-              return [article];
-            })();
+          : [await fallbackParseArticle(sourceArticle, filePath)];
         if (!parsed.length) throw new Error("Article parse returned no publishable article");
-        throwIfStopped();
+        var article = parsed[0];
+        article.sourceFile = article.sourceFile || filePath;
+        article.file = article.file || filePath;
+        article.filePath = filePath;
+        article.filename = article.filename || task.filename;
+        article.normalizedFilename = article.normalizedFilename || task.filename;
+        if (!article.title) article.title = firstTitle(fs.readFileSync(filePath, "utf8"), path.basename(task.filename, path.extname(task.filename)));
+        group.article = article;
 
-        var publishResult = await adapter.publishArticle(parsed[0], {
-          autoSubmit: opts.autoSubmit !== false,
-          interactive: opts.interactive,
-          timeoutMs: opts.timeoutMs
-        });
-        results.push({ task: task, status: publishResult === "pending" ? "pending" : "success", result: publishResult });
+        var identity = articleIdentity(article, metadata, filePath);
+        var target = resolvePublicationTarget({ platformId: task.targetPlatformId });
+        var reference = reservePublication(identity, target, metadata);
+        var result = { task: task, publicationId: reference.publicationId, attemptId: reference.attemptId, articleKey: identity.articleKey, targetKey: target.targetKey };
+
+        try {
+          throwIfStopped();
+        } catch (stopError) {
+          cancelQueuedReservation(reference);
+          result.status = "skipped";
+          result.publicationStatus = "cancelled";
+          result.error = "STOP_REQUESTED";
+          results.push(result);
+          group.results.push(result);
+          break;
+        }
+
+        try {
+          adapter.ensureSession();
+          await adapter.ensureLoggedIn({ interactive: opts.interactive, timeoutMs: opts.timeoutMs });
+          throwIfStopped();
+        } catch (error) {
+          if (isStopError(error)) {
+            cancelQueuedReservation(reference);
+            result.status = "skipped";
+            result.publicationStatus = "cancelled";
+            result.error = "STOP_REQUESTED";
+          } else {
+            var loginOutcome = { status: "failed", errorCode: safeOutcomeError(error, "ADAPTER_PREPARE_FAILED") };
+            try { ledger.markSubmitting(reference.publicationId, reference.attemptId); } catch (_) {}
+            try { ledger.recordOutcome(reference.publicationId, reference.attemptId, loginOutcome); } catch (_) {}
+            result.status = "failed";
+            result.publicationStatus = "failed";
+            result.error = loginOutcome.errorCode;
+            updateSubmissionBatch(metadata, filePath, task.targetPlatformId, loginOutcome);
+          }
+          results.push(result);
+          group.results.push(result);
+          if (adapter.closeSession && opts.closeAfterEach !== false) { try { adapter.closeSession(); } catch (_) {} }
+          continue;
+        }
+
+        if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "before-remote", task: task });
+        var submitting = ledger.markSubmitting(reference.publicationId, reference.attemptId);
+        if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "remote-started", task: task, publicationId: reference.publicationId, attemptId: reference.attemptId });
+        var rawOutcome;
+        try {
+          rawOutcome = await adapter.publishArticle(article, {
+            autoSubmit: opts.autoSubmit !== false,
+            interactive: opts.interactive,
+            timeoutMs: opts.timeoutMs,
+            publication: { publicationId: reference.publicationId, attemptId: reference.attemptId, articleKey: identity.articleKey, targetKey: target.targetKey }
+          });
+        } catch (error) {
+          error.remoteCallStarted = true;
+          rawOutcome = error;
+        }
+        var outcome = normalizePublicationOutcome(rawOutcome, rawOutcome && rawOutcome.message ? rawOutcome : null);
+        try { ledger.recordOutcome(reference.publicationId, reference.attemptId, outcome); } catch (ledgerError) {
+          // A remote result is already known. Keep it in the task result and do
+          // not manufacture a retryable failure when the local ledger is busy.
+          result.ledgerError = safeOutcomeError(ledgerError, "PUBLICATION_RECORD_FAILED");
+        }
+        updateSubmissionBatch(metadata, filePath, task.targetPlatformId, outcome);
+        result.status = outcome.status === "published" ? "success" : outcome.status === "submitted" ? (outcome.legacyStatus === "pending" ? "pending" : "submitted") : outcome.status;
+        result.publicationStatus = outcome.status;
+        if (outcome.errorCode) result.error = outcome.errorCode;
+        if (outcome.remoteId) result.remoteId = outcome.remoteId;
+        if (outcome.remoteUrl) result.remoteUrl = outcome.remoteUrl;
+        result.publicationId = submitting.publicationId;
+        result.attemptId = submitting.attemptId;
+        results.push(result);
+        group.results.push(result);
       } catch (error) {
-        var isStopError = error && error.message && error.message.indexOf("Stop requested") !== -1;
-        results.push({ task: task, status: isStopError ? "skipped" : "failed", error: error.message });
-        if (isStopError) break;
+        var failed = { task: task, status: isStopError(error) ? "skipped" : "failed", error: safeOutcomeError(error, "PLATFORM_SUBMISSION_FAILED"), publicationStatus: isStopError(error) ? "cancelled" : "failed" };
+        if (isStopError(error)) break;
+        results.push(failed);
+        group.results.push(failed);
       } finally {
-        if (adapter.closeSession && opts.closeAfterEach !== false) {
+        if (adapter && adapter.closeSession && opts.closeAfterEach !== false) {
           try { adapter.closeSession(); } catch (_) {}
         }
       }
     }
+
+    sourceGroups.forEach(function(group) {
+      if (!group.filePath || !group.article || !group.results.length) return;
+      var allPublished = group.results.every(function(result) {
+        return result.publicationStatus === "published" || result.publicationStatus === "cancelled" && result.status === "skipped";
+      });
+      if (!allPublished) return;
+      try {
+        archivePublishedArticle(group.article, options.paths || { published: path.join(rootDir, "published") });
+      } catch (error) {
+        group.results.forEach(function(result) {
+          result.archiveError = safeOutcomeError(error, "PUBLISHED_ARCHIVE_FAILED");
+        });
+      }
+    });
+
+    var published = results.filter(function(item) { return item.publicationStatus === "published"; }).length;
+    var submitted = results.filter(function(item) { return item.publicationStatus === "submitted"; }).length;
+    var uncertain = results.filter(function(item) { return item.publicationStatus === "uncertain"; }).length;
+    var skipped = results.filter(function(item) { return item.status === "skipped"; }).length;
     return {
-      ok: results.filter(function(item) { return item.status === "success"; }).length,
-      fail: results.filter(function(item) { return item.status === "failed"; }).length,
+      ok: published + submitted,
+      fail: results.filter(function(item) { return item.publicationStatus === "failed"; }).length,
       pending: results.filter(function(item) { return item.status === "pending"; }).length,
-      skipped: results.filter(function(item) { return item.status === "skipped"; }).length,
+      uncertain: uncertain,
+      skipped: skipped,
       results: results
     };
   }
 
-  return { scanQueue: scanQueue, buildSelectedPlan: buildSelectedPlan, submitSelectedPlanSerially: submitSelectedPlanSerially,
-    resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename); } };
+  return {
+    scanQueue: scanQueue,
+    buildSelectedPlan: buildSelectedPlan,
+    toWorkerPlan: toWorkerPlan,
+    submitSelectedPlanSerially: submitSelectedPlanSerially,
+    resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false); },
+    readSubmissionMetadata: function(sourcePlatformId, filename) {
+      var filePath = resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false);
+      return readSubmissionMetadata(filePath, true);
+    }
+  };
 }
 
-module.exports = { createPlatformWorkbenchService };
+module.exports = { createPlatformWorkbenchService, readSubmissionMetadata, resolvePlatformSubmissionFile };

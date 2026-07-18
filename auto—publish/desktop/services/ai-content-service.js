@@ -6,6 +6,7 @@ const { createArticleTrashService } = require("../../src/content/article-trash-s
 const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
+const { createArticleVersionService } = require("../../src/content/article-version-service");
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const crypto = require("crypto");
@@ -83,6 +84,11 @@ function createAiContentService(opts) {
   const articleStore = options.articleStore || createArticleStore(workspaceRoot, { paths: paths });
   const articleTrashService = options.articleTrashService || createArticleTrashService({ articleStore: articleStore });
   const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
+  const articleVersionService = options.articleVersionService || createArticleVersionService({
+    articleStore: articleStore,
+    createId: options.createId,
+    now: options.now
+  });
   const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths }) : {
     getSelectedMaterials: async function(clientId, materialIds) {
       const client = clientKnowledge.getClient(clientId);
@@ -216,6 +222,16 @@ function createAiContentService(opts) {
     return articleStore.getArticle(clientId, articleId);
   }
 
+  function copyArticleVersion(input) {
+    const request = input || {};
+    assertId(request.clientId, "Client id");
+    assertId(request.sourceArticleId, "Source article id");
+    return articleVersionService.copyArticleVersion({
+      clientId: request.clientId,
+      sourceArticleId: request.sourceArticleId
+    });
+  }
+
   function reviewArticles(selections) {
     return articleReviewService.reviewMany(selections);
   }
@@ -234,6 +250,7 @@ function createAiContentService(opts) {
     saveArticle: saveArticle,
     listGeneratedArticles: listGeneratedArticles,
     getGeneratedArticle: getGeneratedArticle,
+    copyArticleVersion: copyArticleVersion,
     reviewArticles: reviewArticles,
     listTrashedArticles: articleTrashService.listTrashedArticles,
     trashArticles: articleTrashService.trashArticles,

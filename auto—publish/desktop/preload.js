@@ -104,6 +104,7 @@ const api = {
     saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
     getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); },
+    copyArticleVersion: function(input) { return ipcRenderer.invoke("content:copy-article-version", input); },
     reviewArticles: function(articles) { return ipcRenderer.invoke("content:review-articles", { articles: articles }); },
     listArticleTrash: function(clientId) { return ipcRenderer.invoke("content:list-article-trash", clientId); },
     trashArticles: function(input) { return ipcRenderer.invoke("content:trash-articles", input); },
@@ -158,6 +159,10 @@ const api = {
       ipcRenderer.on("content:doubao-queue-state", handler);
       return function() { ipcRenderer.removeListener("content:doubao-queue-state", handler); };
     }
+  },
+  publication: {
+    listForArticles: function(input) { return ipcRenderer.invoke("publication:list-for-articles", input); },
+    reconcile: function(input) { return ipcRenderer.invoke("publication:reconcile", input); }
   },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },

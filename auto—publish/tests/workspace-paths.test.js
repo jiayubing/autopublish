@@ -45,7 +45,7 @@ describe("workspace paths", function() {
 
       [
         "clients", "generated", "templates", "autopublish", "research",
-        "generationBatches", "queue", "submissionRecords"
+        "generationBatches", "queue", "submissionRecords", "publications"
       ].forEach(function(key) {
         assert.ok(fs.statSync(paths[key]).isDirectory(), key + " was not created");
       });

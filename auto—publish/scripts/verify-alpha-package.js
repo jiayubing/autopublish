@@ -18,12 +18,16 @@ const REQUIRED_FILES = [
   "desktop/services/content-generation-batch-service.js",
   "desktop/ai-provider-config-store.js",
   "desktop/ipc/content-generation-batch-ipc.js",
+  "desktop/ipc/publication-ipc.js",
   "src/core/logger.js",
   "src/content/client-material-store.js",
   "src/core/docx-text-extractor.js",
   "src/content/generation-batch-store.js",
   "src/content/generation-batch-runner.js",
   "src/content/article-review-service.js",
+  "src/content/article-version-service.js",
+  "src/publication/publication-ledger.js",
+  "src/publication/publication-ledger-store.js",
   "scripts/config.js",
   "config/platforms.json",
   "config/build-info.json",
@@ -46,6 +50,7 @@ const REQUIRED_DIRS = [
   "src",
   "src/core",
   "src/platforms",
+  "src/publication",
   "scripts",
   "media-workbench/dist",
   "node_modules",
@@ -93,7 +98,8 @@ function findPrivateEntries(appDir) {
       } else if (lowerName === "doubao-diagnostics") {
         found.push(relative);
       } else if (lowerName === "content-generation-batches" || lowerName === "client-material-cache" ||
-                 lowerName === "generated") {
+                 lowerName === "generated" || lowerName === ".autopublish" ||
+                 lowerName === "submission-records" || lowerName === "publications") {
         found.push(relative);
       } else if (lowerSegments.length >= 2 && lowerSegments[lowerSegments.length - 2] === "tests" &&
                  lowerName === "fixtures") {
@@ -142,6 +148,7 @@ function verifyPackage(appDir) {
     "data/media-resources.json",
     "data/media-drafts.json",
     "logs",
+    ".autopublish",
   ];
 
   for (var k = 0; k < shouldNotExist.length; k++) {

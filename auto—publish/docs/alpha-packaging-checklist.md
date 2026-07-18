@@ -18,6 +18,7 @@
 - [ ] Private `.env` was not bundled into the package.
 - [ ] Package contains no input, data, published, logs, profile, state, cookie, or absolute developer-machine references.
 - [ ] Package verifier rejects `media-provider.json`, `hepan-provider.json`, `platform-settings-migration.json`, provider test status, and Hepan Cookie temporary files.
+- [ ] Package contains no `.autopublish/submission-records/publications/` publication ledger, queue snapshot, order JSONL, client data, article content, or publication history.
 - [ ] Test articles can be placed into the runtime `input/media` folder.
 
 ## Paid Media Flow
@@ -33,6 +34,27 @@
 - [ ] 鍏朵粬骞冲彴鎶曠 page opens if that feature branch has been merged.
 - [ ] Queue refresh works for `lieju`, `toutiao`, and `hepan`.
 - [ ] Submit confirmation appears before real submission.
+
+## Template and publication safety acceptance
+
+- [ ] With templates present and `clients/` empty, the generation UI still shows
+      the template platform and template; generation is disabled with a clear
+      empty-client explanation.
+- [ ] Adding or changing a client or正文-only template becomes visible after
+      the explicit refresh action without restarting the app.
+- [ ] `displayName` examples use `---` and a half-width colon; a full-width
+      colon is treated as正文 rather than metadata.
+- [ ] Review, queue, remote submission, publication, and待确认 are displayed
+      as distinct stages.
+- [ ] A normal-platform article × platform duplicate is blocked, while a
+      different platform remains available.
+- [ ] A paid-media article × resource duplicate is blocked, while another
+      selected resource remains available and is priced independently.
+- [ ] `uncertain` is visible as待确认 and cannot be directly retried.
+- [ ] Remote success followed by local archive failure remains protected from
+      duplicate retry and requires reconciliation.
+- [ ] Publication records remain in the selected content workspace for backup
+      and migration; they are absent from the installer.
 
 ## Known Alpha Limitations
 

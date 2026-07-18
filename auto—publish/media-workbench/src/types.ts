@@ -230,6 +230,10 @@ export interface RealOrder {
   resourceName: string;
   price: string;
   orderUrl: string;
+  publicationId?: string;
+  attemptId?: string;
+  publicationStatus?: 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'cancelled' | string;
+  errorCode?: string;
 }
 
 // Backward-compatible alias for PreflightModal and mockData
@@ -315,13 +319,57 @@ export interface GeneratedContentArticle {
   materialSnapshots?: Array<{ id: string; name: string; extension: string; content: string; contentHash: string; source: string }>;
   templateSnapshot?: { platform: string; id: string; name: string; scenario: string; body: string; bodyHash: string; source?: 'builtin' | 'custom' };
   generationBatchId?: string | null; generationTaskId?: string | null;
+  sourceArticleId?: string | null; version?: number;
+}
+
+export type PublicationRecordStatus = 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'cancelled' | string;
+export type PublicationHistorySummaryStatus = 'not_submitted' | 'queued' | 'submitting' | 'reviewing' | 'partial' | 'published' | 'uncertain' | 'failed';
+export interface PublicationHistoryAttempt {
+  attemptId: string | null;
+  status: PublicationRecordStatus | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  remoteId: string | null;
+  remoteUrl: string | null;
+  errorCode: string | null;
+  reasonCode: string | null;
+}
+export interface PublicationHistoryRecord {
+  version?: number;
+  publicationId: string;
+  clientId: string;
+  articleId: string | null;
+  articleKey: string;
+  targetKey: string;
+  platformId: string | null;
+  mediaResourceId: string | null;
+  displayName: string | null;
+  status: PublicationRecordStatus;
+  createdAt: string;
+  updatedAt: string;
+  attempts: PublicationHistoryAttempt[];
+  attemptId: string | null;
+  remoteId: string | null;
+  remoteUrl: string | null;
+  errorCode: string | null;
+  reasonCode: string | null;
+}
+export interface PublicationHistorySummary {
+  status: PublicationHistorySummaryStatus;
+  label: string;
+  records: number;
+  published: number;
+  uncertain: boolean;
 }
 
 export interface ArticleReviewSelection { clientId: string; articleId: string; }
 export interface ArticleReviewResult { approved: string[]; rejected: Array<{ articleId: string; code: string }>; skipped: string[]; }
 export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
-export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: string; contentHash: string; filePath?: string; sidecarPath?: string; }
-export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; conflictCount: number; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
+export type ContentSubmissionItemStatus = 'excluded' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'skipped' | 'cancelled' | string;
+export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: ContentSubmissionItemStatus; contentHash: string; filePath?: string; sidecarPath?: string; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; reasonCode?: string; submissionBatchId?: string; }
+export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; alreadyQueuedCount?: number; blockedPublishedCount?: number; blockedUncertainCount?: number; conflictCount: number; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
 export interface ContentSubmissionCancellationPreview { batchId: string; cancelableCount: number; uncancelableCount: number; items: Array<ContentSubmissionBatchItem & { cancelable: boolean }>; }

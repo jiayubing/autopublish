@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, createContentSubmissionBatch, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewContentSubmissionBatch, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, copyContentArticleVersion, createContentSubmissionBatch, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashRecord } from '../../electron-api';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
-import { ContentSubmissionPlatform, GeneratedContentArticle } from '../../types';
+import { ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
 import { formatBeijingTime } from '../../time-format';
+import PublicationHistoryDrawer from './PublicationHistoryDrawer';
+import { PUBLICATION_STATUS_FILTERS, publicationSummaryMatchesFilter, summarizePublicationRecords, type PublicationHistoryFilter } from '../../publication-status';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; onArticleSelect: (article: GeneratedContentArticle) => void; onRefresh?: () => void; }
 
@@ -15,6 +17,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [publicationFilter, setPublicationFilter] = useState<PublicationHistoryFilter>('all');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [submissionPlatforms, setSubmissionPlatforms] = useState<ContentSubmissionPlatform[]>([]);
@@ -22,11 +25,19 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   const [showTrash, setShowTrash] = useState(false);
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<Array<{ id: string; status: string; items: Array<{ articleId: string; status: string }> }>>([]);
+  const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
+  const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
 
   useEffect(() => {
-    if (!clientId) { setArticles([]); setSelected([]); setSubmissionBatches([]); return; }
-    listContentArticles(clientId).then(setArticles).catch((value) => setError(value instanceof Error ? value.message : '无法加载历史文章'));
-    listContentSubmissionBatches(clientId).then(setSubmissionBatches).catch(() => setSubmissionBatches([]));
+    let cancelled = false;
+    if (!clientId) { setArticles([]); setSelected([]); setSubmissionBatches([]); setPublicationRecords([]); return () => { cancelled = true; }; }
+    listContentArticles(clientId).then((items) => {
+      if (cancelled) return;
+      setArticles(items);
+      return listPublicationHistory(clientId, items.map((item) => item.id)).then((records) => { if (!cancelled) setPublicationRecords(records); });
+    }).catch((value) => { if (!cancelled) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
+    listContentSubmissionBatches(clientId).then((items) => { if (!cancelled) setSubmissionBatches(items); }).catch(() => { if (!cancelled) setSubmissionBatches([]); });
+    return () => { cancelled = true; };
   }, [clientId, refreshToken]);
 
   useEffect(() => {
@@ -39,14 +50,31 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   }, [clientId, refreshToken, showTrash]);
 
   const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
+  const publicationRecordsByArticle = useMemo(() => {
+    const grouped = new Map<string, PublicationHistoryRecord[]>();
+    publicationRecords.forEach((record) => {
+      if (!record.articleId) return;
+      grouped.set(record.articleId, [...(grouped.get(record.articleId) || []), record]);
+    });
+    return grouped;
+  }, [publicationRecords]);
+  const publicationSummaries = useMemo(() => {
+    const summaries = new Map<string, ReturnType<typeof summarizePublicationRecords>>();
+    articles.forEach((article) => {
+      const records = publicationRecordsByArticle.get(article.id) || [];
+      summaries.set(article.id, records.length ? summarizePublicationRecords(records) : queuedArticleIds.has(article.id) ? { status: 'queued', label: '已入队', records: 0, published: 0, uncertain: false } : summarizePublicationRecords([]));
+    });
+    return summaries;
+  }, [articles, publicationRecordsByArticle, queuedArticleIds]);
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
     return articles.filter((article) => {
       const statusMatches = statusFilter === 'all' || (statusFilter === 'queued' ? queuedArticleIds.has(article.id) : article.status === statusFilter);
+      const publicationMatches = publicationSummaryMatchesFilter(publicationSummaries.get(article.id) || summarizePublicationRecords([]), publicationFilter);
       const textMatches = !query || `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query);
-      return statusMatches && textMatches;
+      return statusMatches && publicationMatches && textMatches;
     });
-  }, [articles, filter, statusFilter, queuedArticleIds]);
+  }, [articles, filter, statusFilter, publicationFilter, publicationSummaries, queuedArticleIds]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
   const reviewable = operable.filter((article) => article.status === 'generated');
@@ -91,6 +119,34 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       await createContentSubmissionBatch({ ...input, confirmed: true });
       setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefresh?.();
     } catch (value) { setError(value instanceof Error ? value.message : '批量入队失败'); }
+    finally { setBusy(false); }
+  }
+
+  async function copyPublishedVersion() {
+    if (!drawerArticle || !publicationRecordsByArticle.get(drawerArticle.id)?.some((record) => record.status === 'published')) return;
+    if (!window.confirm(`确认复制“${drawerArticle.title}”为新版本？原文章和发布记录不会修改。`)) return;
+    if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新审核和投稿。')) return;
+    setBusy(true); setError('');
+    try {
+      const nextArticle = await copyContentArticleVersion({ clientId, sourceArticleId: drawerArticle.id });
+      setDrawerArticle(null);
+      setArticles(await listContentArticles(clientId));
+      onArticleSelect(nextArticle);
+      onRefresh?.();
+    } catch (value) { setError(value instanceof Error ? value.message : '复制文章新版本失败'); }
+    finally { setBusy(false); }
+  }
+
+  async function reconcilePublication(record: PublicationHistoryRecord, status: 'published' | 'failed') {
+    if (record.status !== 'uncertain') return;
+    const label = status === 'published' ? '确认远端已发布' : '确认远端未发布';
+    if (!window.confirm(`${label}？这会写入发布账本，并影响后续投稿防重。`)) return;
+    if (!window.confirm('请再次确认：已在远端核对过该目标，且不包含正文、密钥或完整响应。')) return;
+    setBusy(true); setError('');
+    try {
+      await reconcilePublicationHistory({ publicationId: record.publicationId, status, reasonCode: status === 'published' ? 'CONFIRMED_PUBLISHED' : 'CONFIRMED_NOT_PUBLISHED' });
+      setPublicationRecords(await listPublicationHistory(clientId, articles.map((item) => item.id)));
+    } catch (value) { setError(value instanceof Error ? value.message : '核对发布结果失败'); }
     finally { setBusy(false); }
   }
 
@@ -158,9 +214,10 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
         <p className="mt-1 max-w-prose text-xs leading-5 text-slate-500">当前客户的文章按平台和生成时模板版本分组。</p>
       </div>
 
-      <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="筛选标题、平台或模板" aria-label="筛选历史文章" className="h-9 min-w-0 w-full rounded-md border border-slate-300 px-2 text-xs" />
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="文章状态" className="h-9 min-w-0 rounded-md border border-slate-300 px-2 text-xs"><option value="all">全部状态</option><option value="generated">待审核</option><option value="saved">已审核</option><option value="queued">已入队</option></select>
+        <select value={publicationFilter} onChange={(event) => setPublicationFilter(event.target.value as PublicationHistoryFilter)} aria-label="发布状态" className="h-9 min-w-0 rounded-md border border-slate-300 px-2 text-xs">{PUBLICATION_STATUS_FILTERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
         <button type="button" onClick={() => setShowTrash(true)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">打开回收站</button>
       </div>
 
@@ -198,11 +255,13 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
           {!isCollapsed && <div className="divide-y divide-slate-100">{group.articles.map((article) => <div key={article.id} className="flex items-start gap-3 p-3">
             <input type="checkbox" aria-label={`选择 ${article.title}`} checked={selected.includes(selectionKey(article))} onChange={() => toggleArticle(article)} disabled={(article.status !== 'generated' && article.status !== 'saved') || busy} className="mt-1" />
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <button type="button" onClick={() => onArticleSelect(article)} className="min-w-0 flex-1 text-left hover:text-blue-700"><span className="block truncate text-sm font-semibold text-slate-800">{article.title}</span><span className="mt-1 block text-xs text-slate-500">{article.status}{queuedArticleIds.has(article.id) ? ' · 已入队' : ''} · {formatBeijingTime(article.createdAt)}</span></button>
+            <button type="button" onClick={() => onArticleSelect(article)} className="min-w-0 flex-1 text-left hover:text-blue-700"><span className="block truncate text-sm font-semibold text-slate-800">{article.title}</span><span className="mt-1 block flex-wrap text-xs text-slate-500">审核：{article.status}{queuedArticleIds.has(article.id) ? ' · 已入队' : ''} · 版本：{article.version || 1} · {formatBeijingTime(article.createdAt)} · 发布：{publicationSummaries.get(article.id)?.label || '未投稿'}</span></button>
+            <button type="button" onClick={() => setDrawerArticle(article)} className="shrink-0 rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-700">发布详情</button>
           </div>)}</div>}
         </section>;
       })}
       {!groups.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">暂无历史文章</div>}
     </div>
+    <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={busy} />
   </div>;
 }

@@ -31,7 +31,7 @@ describe("storage paths", function() {
       assert.equal(paths.clients, path.join(paths.contentLibrary, "clients"));
       assert.equal(paths.generated, path.join(paths.contentLibrary, "generated"));
       assert.equal(paths.templates, path.join(paths.contentLibrary, "templates"));
-      [paths.research, paths.generationBatches, paths.queue, paths.submissionRecords].forEach(function(value) {
+      [paths.research, paths.generationBatches, paths.queue, paths.submissionRecords, paths.publications].forEach(function(value) {
         assert.equal(value === paths.contentLibrary || value.startsWith(paths.contentLibrary + path.sep), true);
         assert.equal(value.startsWith(paths.contentLibrary + path.sep + ".autopublish"), true);
       });
@@ -67,7 +67,7 @@ describe("storage paths", function() {
       ensureContentLibrary(paths);
       assert.ok(fs.lstatSync(paths.marker).isFile());
       [paths.clients, paths.generated, paths.templates, paths.autopublish, paths.research,
-        paths.generationBatches, paths.queue, paths.submissionRecords].forEach(function(directory) {
+        paths.generationBatches, paths.queue, paths.submissionRecords, paths.publications].forEach(function(directory) {
         assert.ok(fs.lstatSync(directory).isDirectory(), directory);
       });
       assert.equal(fs.existsSync(paths.logs), false);
