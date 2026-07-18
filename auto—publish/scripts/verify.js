@@ -29,8 +29,12 @@ const focusedPlanTests = [
   "tests/workspace-data-invalidation.test.js",
   "tests/architecture-seams.test.js",
   "tests/renderer-platform-queue-refresh.test.js",
+  "tests/renderer-platform-queue-refresh-lifecycle.test.js",
   "tests/article-workflow.test.js",
-  "tests/renderer-article-management-flow.test.js"
+  "tests/renderer-article-management-flow.test.js",
+  "tests/article-attention-policy.test.js",
+  "tests/article-attention-invalidation.test.js",
+  "tests/renderer-article-attention-actions.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 function runNpm(args) {
