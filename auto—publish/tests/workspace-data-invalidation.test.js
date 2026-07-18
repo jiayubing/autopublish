@@ -1,6 +1,5 @@
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
-const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { describe, it } = require('node:test');
@@ -40,17 +39,32 @@ describe('workspace data invalidation and shared snapshot', () => {
     `);
   });
 
-  it('keeps the invalidation event payload minimal and uses one shared provider seam', () => {
-    const source = fs.readFileSync(path.join(root, 'media-workbench/src/workspace-data-store.tsx'), 'utf8');
-    const api = fs.readFileSync(path.join(root, 'media-workbench/src/electron-api.ts'), 'utf8');
-    assert.match(source, /getSnapshot\(scope/);
-    assert.match(source, /refresh\(scope/);
-    assert.match(source, /subscribe\(scope/);
-    assert.match(source, /onWorkspaceDataInvalidated/);
-    assert.match(api, /revision/);
-    const types = fs.readFileSync(path.join(root, 'media-workbench/src/types.ts'), 'utf8');
-    assert.match(types, /WorkspaceDataInvalidatedEvent/);
-    assert.match(types, /scopes/);
-    assert.match(api, /articleAttention/);
+  it('preserves loading, error, and explicit manual refresh behavior', () => {
+    runTs(`
+      import assert from 'node:assert/strict';
+      import { createWorkspaceDataStore, PLATFORM_QUEUE_SCOPE } from './media-workbench/src/workspace-data-store.tsx';
+      let calls = 0;
+      let rejectFirst;
+      const store = createWorkspaceDataStore({ loadPlatformQueue: () => {
+        calls += 1;
+        if (calls === 1) return new Promise((_, reject) => { rejectFirst = reject; });
+        return Promise.resolve({ revision: 2, platforms: [], queue: [] });
+      }});
+
+      const first = store.refresh(PLATFORM_QUEUE_SCOPE, 'initial');
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).loading, true);
+      rejectFirst(new Error('fixture unavailable'));
+      await assert.rejects(first, /fixture unavailable/);
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).loading, false);
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).error, 'fixture unavailable');
+
+      const manual = store.refresh(PLATFORM_QUEUE_SCOPE, 'manual');
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).loading, true);
+      await manual;
+      assert.equal(calls, 2);
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).loading, false);
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).error, null);
+      assert.equal(store.getSnapshot(PLATFORM_QUEUE_SCOPE).revision, 2);
+    `);
   });
 });

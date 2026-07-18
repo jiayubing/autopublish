@@ -78,7 +78,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set()
   );
-  const terminalRefreshRef = useRef<string | null>(null);
+  const hasObservedRunningRef = useRef(false);
+  const terminalQueueRevisionRef = useRef<number | null>(null);
 
   const hasArchiveFailure = useCallback((article: PlatformArticle) => Boolean(article.archiveError), []);
   const isSelectableArticle = useCallback((article: PlatformArticle) => article.sourceArticleState !== "trashed" && !hasArchiveFailure(article), [hasArchiveFailure]);
@@ -92,10 +93,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       setError(e instanceof Error ? e.message : "Failed to load queue");
     }
   }, [refreshQueue]);
-
-  useEffect(() => {
-    void loadQueue();
-  }, [loadQueue]);
 
   useEffect(() => {
     setSelectedArticles((current) => {
@@ -160,19 +157,22 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       setPlatformState(state);
       const phase = state.phase || state.status || "";
       const waiting = phase === "waiting-interval" || phase === "waiting_interval";
-      setIsSubmitting(phase === "running" || waiting || phase === "stopping" || state.isPlatformRunning === true);
+      const running = phase === "running" || waiting || phase === "stopping" || state.isPlatformRunning === true;
+      if (running) hasObservedRunningRef.current = true;
+      setIsSubmitting(running);
       if (waiting) {
         setSubmitStatus("等待下一篇河畔文章…");
       } else if (phase === "running") {
         setSubmitStatus("正在投稿…");
       } else if (phase === "stopping") {
         setSubmitStatus("正在停止投稿…");
-      } else if (phase === "completed" || phase === "idle" || phase === "failed" || phase === "stopped") {
+      } else if ((phase === "completed" || phase === "idle" || phase === "failed" || phase === "stopped") && !running) {
         setSubmitStatus("");
         setIsSubmitting(false);
-        const terminalKey = `${phase}:${state.queueRevision ?? ""}`;
-        if (terminalRefreshRef.current !== terminalKey) {
-          terminalRefreshRef.current = terminalKey;
+        const queueRevision = state.queueRevision;
+        if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision) && terminalQueueRevisionRef.current !== queueRevision) {
+          terminalQueueRevisionRef.current = queueRevision;
+          hasObservedRunningRef.current = false;
           void refreshQueue("submit-terminal").catch(() => {});
         }
       }

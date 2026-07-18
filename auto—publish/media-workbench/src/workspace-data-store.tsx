@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { getPlatformQueue, onWorkspaceDataInvalidated } from './electron-api';
 import type { PlatformArticle, PlatformQueueData, PlatformQueueSnapshot } from './types';
@@ -114,11 +114,18 @@ const WorkspaceDataStoreContext = createContext<WorkspaceDataStore>(defaultStore
 
 export function WorkspaceDataProvider({ children, store = defaultStore }: { children: ReactNode; store?: WorkspaceDataStore }) {
   const lastInvalidationRevision = useRef(0);
-  useEffect(() => onWorkspaceDataInvalidated((event) => {
-    if (!event.scopes.includes(PLATFORM_QUEUE_SCOPE) || event.revision <= lastInvalidationRevision.current) return;
-    lastInvalidationRevision.current = event.revision;
-    void store.refresh(PLATFORM_QUEUE_SCOPE, event.reasonCode || 'workspace-invalidated').catch(() => {});
-  }), [store]);
+  useEffect(() => {
+    const unsubscribe = onWorkspaceDataInvalidated((event) => {
+      if (!event.scopes.includes(PLATFORM_QUEUE_SCOPE) || event.revision <= lastInvalidationRevision.current) return;
+      lastInvalidationRevision.current = event.revision;
+      void store.refresh(PLATFORM_QUEUE_SCOPE, event.reasonCode || 'workspace-invalidated').catch(() => {});
+    });
+    const currentSnapshot = store.getSnapshot(PLATFORM_QUEUE_SCOPE);
+    if (!currentSnapshot.revision && !currentSnapshot.loading) {
+      void store.refresh(PLATFORM_QUEUE_SCOPE, 'initial').catch(() => {});
+    }
+    return unsubscribe;
+  }, [store]);
   return <WorkspaceDataStoreContext.Provider value={store}>{children}</WorkspaceDataStoreContext.Provider>;
 }
 
@@ -128,18 +135,10 @@ export function useWorkspaceDataStore(): WorkspaceDataStore {
 
 export function usePlatformQueue() {
   const store = useWorkspaceDataStore();
-  const subscribe = useMemo(() => (listener: WorkspaceDataListener) => store.subscribe(PLATFORM_QUEUE_SCOPE, listener), [store]);
-  const getSnapshot = useMemo(() => () => store.getSnapshot(PLATFORM_QUEUE_SCOPE), [store]);
+  const subscribe = useCallback((listener: WorkspaceDataListener) => store.subscribe(PLATFORM_QUEUE_SCOPE, listener), [store]);
+  const getSnapshot = useCallback(() => store.getSnapshot(PLATFORM_QUEUE_SCOPE), [store]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const refresh = useCallback((reason = 'manual') => store.refresh(PLATFORM_QUEUE_SCOPE, reason), [store]);
 
-  useEffect(() => {
-    if (!snapshot.revision && !snapshot.loading) {
-      void store.refresh(PLATFORM_QUEUE_SCOPE, 'mount').catch(() => {});
-    }
-  }, [snapshot.loading, snapshot.revision, store]);
-
-  return {
-    snapshot,
-    refresh: (reason = 'manual') => store.refresh(PLATFORM_QUEUE_SCOPE, reason),
-  };
+  return useMemo(() => ({ snapshot, refresh }), [refresh, snapshot]);
 }
