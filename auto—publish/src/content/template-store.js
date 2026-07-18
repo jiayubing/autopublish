@@ -168,7 +168,7 @@ function listTemplates(workspaceRoot, platform, options) {
 
 function resolveBuiltinRoot(options) {
   const opts = options || {};
-  if (opts.builtinRoot === false) return null;
+  if (opts.builtinRoot === false || opts.builtinRoot === null) return null;
   if (typeof opts.builtinRoot === "string") return path.resolve(opts.builtinRoot);
   const candidates = [];
   if (typeof opts.appRoot === "string") candidates.push(path.join(opts.appRoot, "resources", "content-templates"));
@@ -205,18 +205,42 @@ function createTemplateStore(workspaceRoot, options) {
   const createId = typeof opts.createId === "function" ? opts.createId : function() { return crypto.randomUUID(); };
   const catalogStore = createTemplateCatalog(workspaceRoot, storeOptions);
 
-  function catalog(platform) { return listTemplates(workspaceRoot, platform, storeOptions); }
-  function get(platform, templateId) { return getTemplate(workspaceRoot, platform, templateId, storeOptions); }
+  function listCatalog() { return catalogStore.listCatalog(); }
+  function catalog(platform) {
+    const result = listCatalog();
+    const conflict = result.diagnostics.find(function(item) {
+      return item.code === "TEMPLATE_ID_CONFLICT" && (platform === undefined || item.platformId === platform);
+    });
+    if (conflict) throw templateError("TEMPLATE_ID_CONFLICT", "Builtin and custom templates cannot share an id");
+    const templates = result.templates;
+    return platform === undefined ? templates : templates.filter(function(template) {
+      return template.platformId === platform || template.platform === platform;
+    });
+  }
+  function get(selection) {
+    const legacyTemplateId = arguments[1];
+    const input = selection && typeof selection === "object"
+      ? selection
+      : { platformId: selection, templateId: legacyTemplateId };
+    return catalogStore.getTemplate({ platformId: input.platformId, templateId: input.templateId });
+  }
 
   function saveTemplate(template) {
     const value = Object.assign({}, template, { source: "custom", readOnly: false });
-    const builtin = builtinRoot && listTemplatesFromDirectory(getBuiltinTemplateDirectory(builtinRoot, value.platform), value.platform, "builtin").find(function(item) { return item.id === value.id; });
-    if (builtin) throw templateError("TEMPLATE_ID_CONFLICT", "Builtin and custom templates cannot share an id");
+    const builtin = builtinRoot && listCatalog().templates.find(function(item) {
+      return item.source === "builtin" && item.platformId === value.platform && item.templateId === value.id;
+    });
+    const collision = listCatalog().diagnostics.some(function(item) {
+      return item.code === "TEMPLATE_ID_CONFLICT" && item.platformId === value.platform && item.templateId === value.id;
+    });
+    if (builtin || collision) throw templateError("TEMPLATE_ID_CONFLICT", "Builtin and custom templates cannot share an id");
     return writeCustomTemplate(workspaceRoot, value, storeOptions);
   }
 
   function copyBuiltinTemplate(platform, templateId, copyOptions) {
-    const builtin = builtinRoot && listTemplatesFromDirectory(getBuiltinTemplateDirectory(builtinRoot, platform), platform, "builtin").find(function(item) { return item.id === templateId; });
+    const builtin = builtinRoot && listCatalog().templates.find(function(item) {
+      return item.source === "builtin" && item.platformId === platform && item.templateId === templateId;
+    });
     if (!builtin) throw templateError("TEMPLATE_NOT_FOUND", "Builtin template was not found");
     const optionsForCopy = copyOptions || {};
     let id = optionsForCopy.id || (builtin.id + "-custom-" + createId());
@@ -228,7 +252,7 @@ function createTemplateStore(workspaceRoot, options) {
       source: builtin.source,
       platform: builtin.platform,
       id: builtin.id,
-      name: builtin.name,
+      name: builtin.id,
       scenario: builtin.scenario,
       body: builtin.body,
       bodyHash: builtin.bodyHash
@@ -239,8 +263,8 @@ function createTemplateStore(workspaceRoot, options) {
   return {
     listTemplates: catalog,
     getTemplate: get,
-    listCatalog: catalogStore.listCatalog,
-    getCatalogTemplate: catalogStore.getTemplate,
+    listCatalog: listCatalog,
+    getCatalogTemplate: get,
     loadTemplate: get,
     saveTemplate: saveTemplate,
     copyBuiltinTemplate: copyBuiltinTemplate

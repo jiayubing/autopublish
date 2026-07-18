@@ -105,7 +105,9 @@ function createTemplateCatalog(workspaceRoot, options) {
   const opts = options || {};
   const workspace = getContentWorkspace(workspaceRoot, opts.paths);
   const customRoot = path.resolve(workspace.templates);
-  const builtinRoot = opts.builtinRoot === false ? null : path.resolve(typeof opts.builtinRoot === "string" ? opts.builtinRoot : path.resolve(__dirname, "../../resources/content-templates"));
+  const builtinRoot = opts.builtinRoot === false || opts.builtinRoot === null
+    ? null
+    : path.resolve(typeof opts.builtinRoot === "string" ? opts.builtinRoot : path.resolve(__dirname, "../../resources/content-templates"));
 
   function listCatalog() {
     const platformIds = new Set(sourcePlatforms(customRoot));
@@ -143,7 +145,17 @@ function createTemplateCatalog(workspaceRoot, options) {
       });
     });
     const templates = Array.from(byIdentity.values()).filter((template) => template.enabled !== false).sort((a, b) => a.platform.localeCompare(b.platform) || a.order - b.order || a.displayName.localeCompare(b.displayName) || a.templateId.localeCompare(b.templateId));
-    const platforms = Array.from(new Set(templates.map((template) => template.platform))).map((id) => platformMetadata.get(id) || { displayName: id, description: "", order: 0, source: "custom" }).sort((a, b) => a.order - b.order || a.displayName.localeCompare(b.displayName) || a.source.localeCompare(b.source)).map((metadata) => ({ id: metadata.id || Array.from(platformMetadata.entries()).find(([, item]) => item === metadata)?.[0] || metadata.displayName, displayName: metadata.displayName, description: metadata.description, order: metadata.order, source: metadata.source }));
+    const platformIdsWithTemplates = Array.from(new Set(templates.map((template) => template.platform)));
+    const platforms = platformIdsWithTemplates.map((id) => {
+      const metadata = platformMetadata.get(id) || { displayName: id, description: "", order: 0, source: "custom" };
+      return { id, displayName: metadata.displayName, description: metadata.description, order: metadata.order, source: metadata.source };
+    }).sort((a, b) => a.order - b.order || a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id));
+    const displayNames = new Map();
+    platforms.forEach((platform) => {
+      const previous = displayNames.get(platform.displayName);
+      if (previous && previous !== platform.id) diagnostics.push({ code: "TEMPLATE_PLATFORM_DISPLAY_NAME_DUPLICATE", message: "Platform display name is shared by multiple platform ids", platformId: platform.id, source: platform.source });
+      else displayNames.set(platform.displayName, platform.id);
+    });
     const revision = hashText(JSON.stringify({ platforms, templates: templates.map((template) => ({ platformId: template.platformId, templateId: template.templateId, bodyHash: template.bodyHash, displayName: template.displayName, description: template.description, order: template.order, enabled: template.enabled, source: template.source })) }));
     return { revision, platforms, templates, diagnostics };
   }
@@ -152,9 +164,21 @@ function createTemplateCatalog(workspaceRoot, options) {
     if (!isObject(input)) throw catalogError("TEMPLATE_INPUT_INVALID", "Template selection is invalid");
     assertSegment(input.platformId, "TEMPLATE_INVALID_PLATFORM", "platform");
     assertSegment(input.templateId, "TEMPLATE_INVALID_ID", "id");
-    const template = listCatalog().templates.find((item) => item.platformId === input.platformId && item.templateId === input.templateId);
-    if (!template) throw catalogError("TEMPLATE_NOT_FOUND", "Template was not found");
-    return template;
+    const catalog = listCatalog();
+    const template = catalog.templates.find((item) => item.platformId === input.platformId && item.templateId === input.templateId);
+    if (template) return template;
+    const diagnostic = catalog.diagnostics.find((item) => item.platformId === input.platformId && item.templateId === input.templateId);
+    if (diagnostic) {
+      const error = catalogError("TEMPLATE_INVALID", "Template is invalid");
+      error.platformId = input.platformId;
+      error.templateId = input.templateId;
+      error.diagnosticCode = diagnostic.code;
+      throw error;
+    }
+    const error = catalogError("TEMPLATE_NOT_FOUND", "Template was not found");
+    error.platformId = input.platformId;
+    error.templateId = input.templateId;
+    throw error;
   }
   return { listCatalog, getTemplate };
 }

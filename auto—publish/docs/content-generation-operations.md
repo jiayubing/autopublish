@@ -32,6 +32,22 @@ safe error and can be retried independently.
    material/research/template snapshots and is readable even if live sources
    later change.
 
+### Template selection
+
+Both single and batch selectors consume the same `listCatalog()` result and
+`revision`; neither may call a legacy template reader. A selection is resolved
+only with `getTemplate({ platformId, templateId })`, so正文-only, v2 optional
+metadata, and legacy front matter remain compatible at preflight and execution.
+
+If at least one valid custom template exists, only custom templates are shown
+by default. The selector then exposes the default-off `显示内置模板` switch;
+when enabled, builtin templates are added with `内置只读` labels. With no valid
+custom template, builtin templates are the fallback. This rule and visibility
+function are shared by single and batch generation. Platform IDs are stable
+technical keys (for example `xiaohongshu`); `platform.json` supplies the
+human-facing `displayName` (for example `小红书`). Do not use display names as
+lookup keys or silently merge directories with different IDs.
+
 ## Batch generation
 
 The batch wizard selects batch customers and cross-platform writing templates.
@@ -41,6 +57,23 @@ per customer/template pair:
 ```text
 task count = executable customer count × selected template count
 ```
+
+The initial batch selection is conservative: select only the current executable
+customer when one exists; otherwise select no customer. Templates start empty
+and must be explicitly selected. “全选客户” and “全选模板” are explicit
+actions, not implicit defaults. Each customer shows ready / missing-material /
+missing-research status before template confirmation, and excluded customers
+include a reason.
+
+Keep the live calculation visible from the customer/template steps:
+`executable customer count × selected template count = potential AI calls`.
+Before preflight, show the same count and require explicit confirmation. A
+configurable threshold (建议 10) triggers a clear cost-risk warning; the
+warning does not authorize the run. No template selection means no continuation
+to source inspection or provider calls. Preflight and execution must resolve
+every selected ID through the catalog interface and reject stale revisions
+before any AI request. Error messages should identify the platform/template
+IDs without exposing paths, prompts, credentials, or customer content.
 
 Customers missing either input gate are shown as excluded with a reason and do
 not block other customers. Batch state is persisted under
@@ -126,6 +159,16 @@ displayName: 体验笔记
 `displayName：体验笔记` with a full-width colon is正文, not metadata. Custom
 templates and bundled read-only templates are labelled separately. Generation
 template platforms are not the same thing as later submission target platforms.
+
+### Refresh feedback lifecycle
+
+The explicit “刷新客户与模板” action refreshes workspace sources only. Saving,
+reviewing, and completing a batch use separate article or batch-state refreshes
+and must not rescan the catalog or show a catalog-refresh success message.
+Automatic initial loading does not show a success banner. A manual success
+message is transient (2–3 seconds), accessible as status text, and returns to
+idle; a new refresh cancels the old timer and unmount cleanup cancels it too.
+Failures remain visible and actionable until retry, close, or a later success.
 
 ## Review and publication lifecycle
 

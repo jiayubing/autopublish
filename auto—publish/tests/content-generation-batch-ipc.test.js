@@ -34,6 +34,34 @@ describe("content generation batch IPC", function() {
     assert.equal(JSON.stringify(result).includes(secret), false);
   });
 
+  it("returns safe template identity details for invalid batch templates", async function() {
+    const { ipcMain, handlers } = fakeIpc();
+    registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: {
+      preview: function() {
+        throw Object.assign(new Error("internal template path and body"), {
+          code: "GENERATION_TEMPLATE_INVALID",
+          platformId: "xiaohongshu",
+          templateId: "body-only",
+          diagnosticCode: "TEMPLATE_FRONT_MATTER_INVALID",
+          sourcePath: "C:\\private\\template.md",
+          body: "private body",
+        });
+      },
+    } });
+    const result = await handlers.get("content:preview-generation-batch")({}, {});
+    assert.deepStrictEqual(result, {
+      ok: false,
+      error: {
+        code: "GENERATION_TEMPLATE_INVALID",
+        message: "写作模板格式无效，请检查具体模板诊断",
+        platformId: "xiaohongshu",
+        templateId: "body-only",
+        diagnosticCode: "TEMPLATE_FRONT_MATTER_INVALID",
+      },
+    });
+    assert.equal(JSON.stringify(result).includes("private"), false);
+  });
+
   it("subscribes and unsubscribes renderer state listeners", function() {
     const { ipcMain } = fakeIpc();
     const sent = [];

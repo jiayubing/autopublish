@@ -12,6 +12,7 @@ import {
 } from '../../electron-api';
 import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, GeneratedContentArticle } from '../../types';
 import { resolveAvailableTemplateId } from '../../article-history-logic';
+import { templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import BatchGenerationView from './BatchGenerationView';
 
@@ -20,10 +21,12 @@ interface ArticleGenerationViewProps {
   client?: ContentClient;
   clients?: ContentClient[];
   refreshToken: number;
+  batchRefreshToken: number;
   templateCatalog?: ContentTemplateCatalog;
   selectedArticle: GeneratedContentArticle | null;
   onArticleChange: (article: GeneratedContentArticle | null) => void;
-  onRefresh: () => void;
+  onRefreshArticles: () => void;
+  onRefreshBatchState: () => void;
 }
 type SubmissionChoice = { id: string; displayName: string };
 const SELECTION_CONTROL_TYPE = 'checkbox';
@@ -38,11 +41,13 @@ function toMaterials(client?: ContentClient): ContentMaterial[] {
   }));
 }
 
-export default function ArticleGenerationView({ clientId, client, clients = [], refreshToken, templateCatalog, selectedArticle, onArticleChange, onRefresh }: ArticleGenerationViewProps) {
+export default function ArticleGenerationView({ clientId, client, clients = [], refreshToken, batchRefreshToken, templateCatalog, selectedArticle, onArticleChange, onRefreshArticles, onRefreshBatchState }: ArticleGenerationViewProps) {
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [research, setResearch] = useState<ContentResearch[]>([]);
   const [templates, setTemplates] = useState<ContentTemplate[]>([]);
   const [catalogTemplates, setCatalogTemplates] = useState<ContentTemplate[]>([]);
+  const [allTemplatePlatforms, setAllTemplatePlatforms] = useState<SubmissionChoice[]>([]);
+  const [showBuiltinTemplates, setShowBuiltinTemplates] = useState(false);
   const [templateRevision, setTemplateRevision] = useState('');
   const [templatePlatforms, setTemplatePlatforms] = useState<SubmissionChoice[]>([]);
   const [submissionPlatforms, setSubmissionPlatforms] = useState<SubmissionChoice[]>([]);
@@ -66,6 +71,8 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   const validResearch = useMemo(() => research.filter((item) => Boolean(item.answerText?.trim()) && item.isAnswerComplete !== false), [research]);
   const totalAnswerCharacters = useMemo(() => selectedIds.reduce((total, id) => total + (research.find((item) => item.id === id)?.answerText?.length || 0), 0), [research, selectedIds]);
   const totalMaterialCharacters = useMemo(() => materialIds.reduce((total, id) => total + (materials.find((item) => (item.id || item.name) === id)?.content?.length || 0), 0), [materials, materialIds]);
+  const customTemplateCount = useMemo(() => catalogTemplates.filter((item) => item.source === 'custom').length, [catalogTemplates]);
+  const visibleCatalogTemplates = useMemo(() => visibleGenerationTemplates({ templates: catalogTemplates }, showBuiltinTemplates), [catalogTemplates, showBuiltinTemplates]);
 
   useEffect(() => { setMaterialItems(toMaterials(client)); }, [client]);
   useEffect(() => {
@@ -88,8 +95,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
       if (cancelled) return;
       setCatalogTemplates(catalog.templates);
       setTemplateRevision(catalog.revision);
-      setTemplatePlatforms(catalog.platforms.map((item) => ({ id: item.id, displayName: item.displayName || item.id })));
-      setPlatform((current) => current || selectedArticleRef.current?.platform || catalog.platforms[0]?.id || '');
+      setAllTemplatePlatforms(catalog.platforms.map((item) => ({ id: item.id, displayName: item.displayName || item.id })));
       if (catalog.diagnostics.length) setError(`模板目录有 ${catalog.diagnostics.length} 项诊断，请检查模板文件。`);
     }).catch((value) => { if (!cancelled) setError(value instanceof Error ? value.message : '无法加载写作模板'); });
     listContentSubmissionPlatforms().then((targets) => {
@@ -101,6 +107,15 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
     return () => { cancelled = true; };
   }, [refreshToken]);
 
+  useEffect(() => {
+    const visiblePlatformIds = new Set(visibleCatalogTemplates.map((item) => item.platform));
+    const currentArticlePlatform = selectedArticleRef.current?.platform;
+    setTemplatePlatforms(allTemplatePlatforms.filter((item) => visiblePlatformIds.has(item.id) || item.id === currentArticlePlatform));
+    setPlatform((current) => current && (visiblePlatformIds.has(current) || current === currentArticlePlatform)
+      ? current
+      : (currentArticlePlatform || visibleCatalogTemplates[0]?.platform || ''));
+  }, [allTemplatePlatforms, visibleCatalogTemplates]);
+
   // Research is client-scoped; stale requests are ignored when the operator changes clients.
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +126,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
 
   useEffect(() => {
     const currentArticle = selectedArticleRef.current?.platform === platform ? selectedArticleRef.current : null;
-    let nextTemplates = catalogTemplates.filter((item) => item.platform === platform);
+    let nextTemplates = visibleGenerationTemplates({ templates: catalogTemplates }, showBuiltinTemplates).filter((item) => item.platform === platform);
     if (currentArticle && !nextTemplates.some((item) => item.id === currentArticle.templateId) && currentArticle.templateSnapshot) {
       nextTemplates = [...nextTemplates, {
         id: currentArticle.templateId,
@@ -120,7 +135,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
         name: currentArticle.templateSnapshot.name || '历史模板（已删除）',
         body: currentArticle.templateSnapshot.body || '',
         bodyHash: currentArticle.templateSnapshot.bodyHash,
-        source: 'custom',
+        source: currentArticle.templateSnapshot.source || 'builtin',
         readOnly: true,
       }];
     }
@@ -130,9 +145,13 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
       setTemplateId(resolvedTemplateId);
       if (resolvedTemplateId && resolvedTemplateId !== currentArticle.templateId) onArticleChange({ ...currentArticle, templateId: resolvedTemplateId });
     } else {
-      setTemplateId((current) => nextTemplates.some((item) => item.id === current) ? current : (nextTemplates[0]?.id || ''));
+      setTemplateId((current) => {
+        if (!current || nextTemplates.some((item) => item.id === current)) return current;
+        setError('当前模板已被隐藏，请打开“显示内置模板”后重新选择。');
+        return '';
+      });
     }
-  }, [catalogTemplates, platform, selectedArticle, onArticleChange]);
+  }, [catalogTemplates, platform, selectedArticle, onArticleChange, showBuiltinTemplates]);
 
   useEffect(() => {
     if (!selectedArticle) return;
@@ -156,7 +175,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   async function generate() {
     if (SELECTION_CONTROL_TYPE !== 'checkbox' || !clientId || !materialIds.length || !selectedIds.length || !templateId || generating) return;
     setGenerating(true); setError('');
-    try { onArticleChange(await generateContentArticle({ clientId, materialIds, researchQueryIds: selectedIds, platform, templateId })); }
+      try { onArticleChange(await generateContentArticle({ clientId, materialIds, researchQueryIds: selectedIds, platform, templateId, templateCatalogRevision: templateRevision })); }
     catch (value) { setError(value instanceof Error ? value.message : '生成文章失败'); }
     finally { setGenerating(false); }
   }
@@ -166,7 +185,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
     try {
       const resolvedTemplateId = resolveAvailableTemplateId({ ...selectedArticle, templateId }, templates) || selectedArticle.templateId;
       onArticleChange(await saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, materialIds, status: 'saved', reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
-      onRefresh();
+      onRefreshArticles();
     } catch (value) { setError(value instanceof Error ? value.message : '保存文章失败'); }
     finally { setSaving(false); }
   }
@@ -183,9 +202,9 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
 
   return <div className="flex h-full min-h-0 flex-col overflow-hidden">
     <div className="generation-mode-control shrink-0 border-b border-slate-200 bg-white px-4 py-3"><div className="segmented-control" role="tablist" aria-label="文章生成模式"><button type="button" role="tab" aria-selected={mode === 'single'} onClick={() => setMode('single')} className={mode === 'single' ? 'is-active' : ''}>单篇生成</button><button type="button" role="tab" aria-selected={mode === 'batch'} onClick={() => setMode('batch')} className={mode === 'batch' ? 'is-active' : ''}>批量生成</button></div></div>
-    {mode === 'batch' ? <BatchGenerationView clients={clients} refreshToken={refreshToken} templateCatalog={templateCatalog} onRefresh={onRefresh} /> : <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
+    {mode === 'batch' ? <BatchGenerationView clients={clients} currentClientId={clientId} refreshToken={refreshToken} batchRefreshToken={batchRefreshToken} templateCatalog={templateCatalog} onRefreshBatchState={onRefreshBatchState} onRefreshArticles={onRefreshArticles} /> : <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
       <section className="rounded-md border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">选择客户资料与有效回答</h2><p className="mt-1 text-xs text-slate-500">资料 {materialIds.length} 份 · 回答 {selectedIds.length} 条 · 预计输入字符数 {totalMaterialCharacters + totalAnswerCharacters} · 模板目录 {templateRevision ? '已加载' : '未加载'}</p>{!clientId && <p className="mt-1 text-xs text-amber-700">模板目录已加载；当前工作区还没有客户。请在 clients/&lt;客户名称&gt;/ 第一层添加资料，然后刷新客户与模板。</p>}</div><div className="flex min-w-0 flex-wrap items-center gap-2"><label className="text-xs text-slate-500">写作模板平台</label><select aria-label="写作模板平台" value={platform} onChange={(event) => { setPlatform(event.target.value); setTemplateId(''); }} className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs">{templatePlatforms.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select><label className="text-xs text-slate-500">写作模板</label><select aria-label="写作模板" value={templateId} onChange={(event) => setTemplateId(event.target.value)} className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs">{templates.map((item) => <option key={item.id} value={item.id}>{item.displayName || item.name || item.scenario} · {item.source === 'builtin' || item.readOnly ? '内置只读' : '自定义'}</option>)}</select></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">选择客户资料与有效回答</h2><p className="mt-1 text-xs text-slate-500">资料 {materialIds.length} 份 · 回答 {selectedIds.length} 条 · 预计输入字符数 {totalMaterialCharacters + totalAnswerCharacters} · 模板目录 {templateRevision ? '已加载' : '未加载'}</p>{!clientId && <p className="mt-1 text-xs text-amber-700">模板目录已加载；当前工作区还没有客户。请在 clients/&lt;客户名称&gt;/ 第一层添加资料，然后刷新客户与模板。</p>}</div><div className="flex min-w-0 flex-wrap items-center gap-2"><label className="text-xs text-slate-500">写作模板平台</label><select aria-label="写作模板平台" value={platform} onChange={(event) => { setPlatform(event.target.value); setTemplateId(''); }} className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs">{templatePlatforms.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select><label className="text-xs text-slate-500">写作模板</label><select aria-label="写作模板" value={templateId} onChange={(event) => setTemplateId(event.target.value)} className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs">{templates.map((item) => <option key={item.id} value={item.id}>{templateTitle(item)}{templateScenarioLabel(item) ? ` · ${templateScenarioLabel(item)}` : ''} · {templateSourceLabel(item)}</option>)}</select>{customTemplateCount > 0 && <label className="inline-flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" aria-label="显示内置模板" checked={showBuiltinTemplates} onChange={(event) => setShowBuiltinTemplates(event.target.checked)} />显示内置模板</label>}</div></div>
         <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setMaterialSelection(validMaterials.map((item) => item.id || item.name))} className="rounded border border-slate-300 px-2 py-1 text-xs">全选资料</button><button type="button" onClick={() => setMaterialSelection([])} className="rounded border border-slate-300 px-2 py-1 text-xs">取消资料全选</button><button type="button" onClick={() => setResearchSelection(validResearch.map((item) => item.id))} className="rounded border border-slate-300 px-2 py-1 text-xs">全选回答</button><button type="button" onClick={() => setResearchSelection([])} className="rounded border border-slate-300 px-2 py-1 text-xs">取消回答全选</button></div>
         <div className="mt-3 grid gap-2">{materials.map((item) => <CollapsibleSourceItem key={item.id || item.name} id={`material-${item.id || item.name}`} title={item.name} summary={`${item.extension || '资料'} · ${item.characterCount || 0} 字${item.status === 'error' ? ' · 错误' : ''}`} selected={materialIds.includes(item.id || item.name)} onSelectedChange={(selected) => setMaterialSelection((current) => selected ? [...new Set([...current, item.id || item.name])] : current.filter((value) => value !== (item.id || item.name)))} defaultExpanded={false} actions={<button type="button" onClick={() => void retryMaterialItem(item.id || item.name)} title="预览或刷新资料" className="text-xs text-slate-500 underline">{item.status === 'error' ? '重试' : '预览'}</button>}>{item.content || '资料转换失败，请点击重试。'}</CollapsibleSourceItem>)}{validResearch.map((item) => <CollapsibleSourceItem key={item.id} id={`research-${item.id}`} title={item.question || item.id} summary={`${item.answerText?.length || 0} 字 · GEO 调研回答`} selected={selectedIds.includes(item.id)} onSelectedChange={(selected) => setResearchSelection((current) => selected ? [...new Set([...current, item.id])] : current.filter((value) => value !== item.id))} defaultExpanded={false} actions={<span className="text-xs text-slate-400">预览</span>}>{item.answerText}</CollapsibleSourceItem>)}</div>
         <button type="button" onClick={generate} disabled={!materialIds.length || !selectedIds.length || !clientId || !templateId || generating} className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40"><Sparkles className="h-4 w-4" />{generating ? '生成中…' : '生成文章'}</button>

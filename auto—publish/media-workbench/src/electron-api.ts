@@ -68,7 +68,7 @@ interface DesktopConsoleContent {
   listTemplates(platform?: string): Promise<IpcResponse<ContentTemplate[]>>;
   listTemplateCatalog(): Promise<IpcResponse<ContentTemplateCatalog>>;
   retryMaterial(input: { clientId: string; materialId: string }): Promise<IpcResponse<ContentMaterial>>;
-  generateArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
+  generateArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string; templateCatalogRevision?: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   copyArticleVersion(input: { clientId: string; sourceArticleId: string }): Promise<IpcResponse<GeneratedContentArticle>>;
   saveArticle(article: GeneratedContentArticle): Promise<IpcResponse<GeneratedContentArticle>>;
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
@@ -87,8 +87,8 @@ interface DesktopConsoleContent {
   createSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   cancelSubmissionBatch(input: { batchId: string; confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   getSubmissionBatch(batchId: string): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
-  previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<IpcResponse<GenerationBatchPreview>>;
-  createGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<IpcResponse<GenerationBatch>>;
+  previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[]; templateCatalogRevision?: string }): Promise<IpcResponse<GenerationBatchPreview>>;
+  createGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[]; templateCatalogRevision?: string }): Promise<IpcResponse<GenerationBatch>>;
   listGenerationBatches(): Promise<IpcResponse<GenerationBatch[]>>;
   getGenerationBatch(batchId: string): Promise<IpcResponse<GenerationBatch>>;
   startGenerationBatch(input: { batchId?: string; clientIds?: string[]; templates?: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<IpcResponse<GenerationBatch>>;
@@ -243,6 +243,14 @@ function getIpcError(value: unknown, fallback: string): Error {
   const error = new Error(message);
   if (value && typeof value === "object" && "code" in value && typeof (value as { code?: unknown }).code === "string") {
     (error as Error & { code?: string }).code = (value as { code: string }).code;
+  }
+  if (value && typeof value === "object") {
+    ["platformId", "templateId", "diagnosticCode"].forEach((key) => {
+      const next = (value as Record<string, unknown>)[key];
+      if (typeof next === "string" && next.length <= 200 && !/[\\/\u0000-\u001F]/.test(next)) {
+        (error as Error & Record<string, string>)[key] = next;
+      }
+    });
   }
   return error;
 }
@@ -486,14 +494,14 @@ export async function getGenerationBatchState(): Promise<GenerationBatchState> {
   return result.data || { state: 'idle', status: 'idle' };
 }
 
-export async function previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<GenerationBatchPreview> {
+export async function previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[]; templateCatalogRevision?: string }): Promise<GenerationBatchPreview> {
   if (!isElectron()) return { clientCount: input.clientIds.length, executableClientCount: 0, taskCount: 0, executableTaskCount: 0, excludedTaskCount: 0, excludedClients: [], templates: input.templates, clientSources: [] };
   const result = await window.desktopConsole!.content.previewGenerationBatch(input);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to preview generation batch");
   return result.data;
 }
 
-export async function createGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[] }): Promise<GenerationBatch> {
+export async function createGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[]; templateCatalogRevision?: string }): Promise<GenerationBatch> {
   if (!isElectron()) throw new Error("Batch generation requires the desktop app");
   const result = await window.desktopConsole!.content.createGenerationBatch(input);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to create generation batch");
@@ -615,7 +623,7 @@ export async function listContentTemplateCatalog(): Promise<ContentTemplateCatal
   return result.data;
 }
 
-export async function generateContentArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string }): Promise<GeneratedContentArticle> {
+export async function generateContentArticle(input: { clientId: string; materialIds: string[]; researchQueryIds: string[]; platform: string; templateId: string; templateCatalogRevision?: string }): Promise<GeneratedContentArticle> {
   if (!isElectron()) throw new Error("AI content generation requires the desktop app");
   const result = await window.desktopConsole!.content.generateArticle(input);
   if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to generate article");

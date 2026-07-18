@@ -191,6 +191,13 @@ function createAiContentService(opts) {
     const researchQueryIds = normalizeResearchQueryIds(request);
     assertId(request.platform, "Platform");
     assertId(request.templateId, "Template id");
+    if (request.templateCatalogRevision !== undefined && typeof templateStore.listCatalog === "function") {
+      assertId(request.templateCatalogRevision, "Template catalog revision");
+      const catalog = templateStore.listCatalog();
+      if (catalog && catalog.revision && catalog.revision !== request.templateCatalogRevision) {
+        throw contentError("TEMPLATE_CATALOG_STALE", "模板目录已变化，请刷新后重新选择模板");
+      }
+    }
     const generator = articleGeneratorFactory({
       getClient: function(id) { return clientKnowledge.getClient(id); },
       researchStore: researchStore,

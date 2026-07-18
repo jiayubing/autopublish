@@ -18,8 +18,8 @@ describe("renderer content generation contract", function() {
     const source = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     assert.match(source, /写作模板平台/);
     assert.match(source, /写作模板/);
-    assert.match(source, /内置只读/);
-    assert.match(source, /自定义/);
+    assert.match(source, /templateSourceLabel/);
+    assert.match(source, /显示内置模板/);
     assert.match(source, /displayName/);
   });
 

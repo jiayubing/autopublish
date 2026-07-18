@@ -218,7 +218,8 @@ describe("Doubao content workbench renderer contracts", function() {
   it("preserves a history article template when template loading completes", function() {
     const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     assert.match(generation, /setTemplateId\(resolvedTemplateId\)/);
-    assert.match(generation, /setTemplateId\(\(current\) => nextTemplates\.some/);
+    assert.match(generation, /setTemplateId\(\(current\) => \{/);
+    assert.match(generation, /nextTemplates\.some/);
     assert.match(generation, /selectedArticleRef\.current\?\.platform === platform/);
   });
 

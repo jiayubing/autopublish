@@ -7,11 +7,11 @@ import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import { PUBLICATION_STATUS_FILTERS, publicationSummaryMatchesFilter, summarizePublicationRecords, type PublicationHistoryFilter } from '../../publication-status';
 
-interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; onArticleSelect: (article: GeneratedContentArticle) => void; onRefresh?: () => void; }
+interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; onArticleSelect: (article: GeneratedContentArticle) => void; onRefreshArticles?: () => void; }
 
 function selectionKey(article: GeneratedContentArticle) { return articleSelectionKey(article); }
 
-export default function GeneratedArticlesView({ clientId, refreshToken, onArticleSelect, onRefresh }: GeneratedArticlesViewProps) {
+export default function GeneratedArticlesView({ clientId, refreshToken, onArticleSelect, onRefreshArticles }: GeneratedArticlesViewProps) {
   const [articles, setArticles] = useState<GeneratedContentArticle[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -102,7 +102,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       if (result.rejected.length) setError(`有 ${result.rejected.length} 篇文章未通过审核：${result.rejected.map((item) => item.code).join(', ')}`);
       setSelected([]);
       setArticles(await listContentArticles(clientId));
-      onRefresh?.();
+      onRefreshArticles?.();
     } catch (value) { setError(value instanceof Error ? value.message : '审核文章失败'); }
     finally { setBusy(false); }
   }
@@ -117,7 +117,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有可入队的已审核文章');
       if (!window.confirm(`新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，冲突 ${preview.conflictCount} 项。确认继续？`)) return;
       await createContentSubmissionBatch({ ...input, confirmed: true });
-      setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefresh?.();
+      setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefreshArticles?.();
     } catch (value) { setError(value instanceof Error ? value.message : '批量入队失败'); }
     finally { setBusy(false); }
   }
@@ -132,7 +132,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       setDrawerArticle(null);
       setArticles(await listContentArticles(clientId));
       onArticleSelect(nextArticle);
-      onRefresh?.();
+      onRefreshArticles?.();
     } catch (value) { setError(value instanceof Error ? value.message : '复制文章新版本失败'); }
     finally { setBusy(false); }
   }
@@ -170,7 +170,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     try {
       const result = await trashContentArticles({ articles: selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id })), confirmed: true });
       if (result.rejected.length) setError(`有 ${result.rejected.length} 篇文章未能移入回收站`);
-      setSelected([]); setArticles(await listContentArticles(clientId)); onRefresh?.();
+      setSelected([]); setArticles(await listContentArticles(clientId)); onRefreshArticles?.();
     } catch (value) { setError(value instanceof Error ? value.message : '删除历史文章失败'); }
     finally { setBusy(false); }
   }
@@ -179,7 +179,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
     setBusy(true); setError('');
     try {
       await restoreContentArticle({ clientId: entry.clientId, articleId: entry.articleId });
-      setTrash(await listContentTrash(clientId)); setArticles(await listContentArticles(clientId)); onRefresh?.();
+      setTrash(await listContentTrash(clientId)); setArticles(await listContentArticles(clientId)); onRefreshArticles?.();
     } catch (value) { setError(value instanceof Error ? value.message : '恢复文章失败'); }
     finally { setBusy(false); }
   }

@@ -20,6 +20,25 @@ The catalog derives `platformId = new-platform` and
 Refresh templates in the single or batch generation view after adding or
 editing a file.
 
+## One catalog interface
+
+The catalog is the only template-reading seam used by the renderer, single
+generation, batch preflight, batch execution, template copy, and tests. Callers
+must not use the legacy store reader or parse template files themselves. The
+contract is:
+
+```text
+listCatalog() -> { revision, platforms, templates, diagnostics }
+getTemplate({ platformId, templateId }) -> normalizedTemplate
+```
+
+`platformId` and `templateId` are stable technical identifiers. A normalized
+template also carries its source (`custom` or `builtin`), `displayName`, body,
+body hash, and catalog revision used to select it. Missing and invalid templates
+have different safe diagnostic codes; diagnostics never include absolute paths,
+secrets, or template bodies. The same catalog revision and lookup contract must
+be used again immediately before a batch starts.
+
 ## Optional metadata
 
 Front matter is optional. When present, it may contain only approved scalar
@@ -41,10 +60,48 @@ client material, and one valid research answer remain required. The catalog
 returns a revision derived from template identity, body hashes, and platform
 metadata.
 
+正文-only files, v2 files with optional front matter, and legacy files with
+`platform/scenario/name` front matter are all normalized by the catalog
+implementation. Callers must treat them identically and must not require old
+metadata for a正文-only or v2 template. A malformed file is isolated in
+`diagnostics`; it must not make valid templates unavailable or be reported as
+“template not found”.
+
 Generated articles save the complete template snapshot and body hash. Updating
 or deleting a live template therefore never rewrites a historical article. If
 the selected template was deleted, history displays it as a read-only
 “历史模板（已删除）” entry and continues to use the saved snapshot.
+
+## Custom-first visibility
+
+Generation selectors use one shared visibility rule for single and batch views:
+
+```text
+valid custom templates exist -> show custom templates by default
+no valid custom templates   -> show builtin templates as fallback
+```
+
+When custom templates exist, the selector provides a secondary, default-off
+`显示内置模板` switch. Turning it on adds valid builtin templates and keeps the
+`自定义` / `内置只读` source labels. This only changes new-generation
+visibility; it does not delete builtins, rewrite history, or change saved
+template snapshots. If filtering makes the current selection invisible, clear
+it and explain why rather than silently selecting another template.
+
+## Platform IDs and display names
+
+Keep a stable `platformId` for storage, lookup, diagnostics, and adapters; use
+`displayName` only for human-facing labels. For example:
+
+```text
+templates/xiaohongshu/platform.json -> { "displayName": "小红书" }
+platformId: xiaohongshu; displayName: 小红书
+```
+
+Do not infer or silently migrate a technical ID from an arbitrary directory
+name. If no valid platform metadata exists, the directory name is the display
+name. Suspected duplicate display names are diagnostics, not automatic merges.
+When `template.name` equals `template.scenario`, display the name once.
 
 ## Generation versus submission
 
@@ -87,6 +144,12 @@ displayName: 体验笔记
 客户与模板”。刷新会在不重启应用的情况下重新读取客户、模板和当前客户资
 料，不调用 AI 或外网；单篇和批量生成使用同一 catalog revision。删除当前
 模板后清空选择并提示，不静默换选。第一版使用显式刷新，不使用文件 watcher。
+
+首次自动加载只显示 loading，成功后回到 `idle`，不能显示“客户与模板已
+刷新”。手动刷新成功后显示 2–3 秒的可访问 `role=status` / `aria-live=polite`
+提示，然后自动回到 `idle`；开始下一次刷新或页面卸载时必须清理旧 timer。
+失败提示使用 `role=alert`，保持到重试、关闭或下一次成功。保存文章、审核
+文章和批次状态更新使用各自的刷新动作，不得借此显示客户与模板刷新提示。
 
 界面标签中，“写作模板平台”和“写作模板”表示生成指令；“投稿目标平台”
 表示后续投稿 adapter。自定义模板标记“自定义”，内置模板标记“内置只读”。

@@ -121,6 +121,11 @@ describe("template store", function() {
     ].sort(function(a, b) { return a.id.localeCompare(b.id); }));
   });
 
+  it("keeps an explicit null builtin root disabled", function() {
+    const store = createTemplateStore(root, { builtinRoot: null });
+    assert.ok(store.listCatalog().templates.every(function(template) { return template.source === "custom"; }));
+  });
+
   it("rejects a custom template that collides with a builtin id", function() {
     const builtinRoot = path.join(root, "builtin-content-templates");
     fs.mkdirSync(path.join(builtinRoot, "ctrip"), { recursive: true });

@@ -3,7 +3,11 @@ const { createContentGenerationBatchService, SAFE_MESSAGES } = require("../servi
 
 function safeFailure(error) {
   const code = error && typeof error.code === "string" && SAFE_MESSAGES[error.code] ? error.code : "GENERATION_INPUT_INVALID";
-  return { ok: false, error: { code: code, message: SAFE_MESSAGES[code] || "Generation batch request failed" } };
+  const safeError = { code: code, message: SAFE_MESSAGES[code] || "Generation batch request failed" };
+  ["platformId", "templateId", "diagnosticCode"].forEach(function(key) {
+    if (error && typeof error[key] === "string" && error[key].length <= 200 && !/[\\/\u0000-\u001F]/.test(error[key])) safeError[key] = error[key];
+  });
+  return { ok: false, error: safeError };
 }
 
 function invoke(handler) {

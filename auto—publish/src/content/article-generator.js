@@ -147,7 +147,7 @@ function snapshotResearch(queryId, research) {
 function createArticleGenerator(deps) {
   if (!deps || typeof deps.getClient !== "function" || !deps.researchStore ||
       typeof deps.researchStore.getResearch !== "function" || !deps.templateStore ||
-      typeof deps.templateStore.getTemplate !== "function" || typeof deps.buildPrompt !== "function" ||
+      (typeof deps.templateStore.getTemplate !== "function" && typeof deps.templateStore.getCatalogTemplate !== "function") || typeof deps.buildPrompt !== "function" ||
       !deps.aiClient || typeof deps.aiClient.complete !== "function" || typeof deps.createId !== "function" ||
       !deps.materialStore || typeof deps.materialStore.getSelectedMaterials !== "function") {
     throw generatorError("ARTICLE_GENERATOR_INVALID", "Article generator dependencies are invalid");
@@ -192,9 +192,15 @@ function createArticleGenerator(deps) {
       }
       return research;
     });
-    const template = typeof deps.templateStore.getCatalogTemplate === "function"
-      ? deps.templateStore.getCatalogTemplate({ platformId: input.platform, templateId: input.templateId })
-      : deps.templateStore.getTemplate(input.platform, input.templateId);
+    let template;
+    if (typeof deps.templateStore.getTemplate === "function" && deps.templateStore.getTemplate.length <= 1 &&
+        (typeof deps.templateStore.getCatalogTemplate !== "function" || deps.templateStore.getCatalogTemplate === deps.templateStore.getTemplate)) {
+      template = deps.templateStore.getTemplate({ platformId: input.platform, templateId: input.templateId });
+    } else if (typeof deps.templateStore.getCatalogTemplate === "function") {
+      template = deps.templateStore.getCatalogTemplate({ platformId: input.platform, templateId: input.templateId });
+    } else {
+      template = deps.templateStore.getTemplate(input.platform, input.templateId);
+    }
     const scenario = input.scenario || template.scenario || template.displayName || input.templateId;
     const templateSnapshot = snapshotTemplate(template, input.platform, input.templateId);
     const prompt = deps.buildPrompt({

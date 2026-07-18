@@ -10,16 +10,32 @@ function read(file) {
 }
 
 describe("renderer content generation workflow", function() {
-  it("preserves explicit empty client and template selections across async refresh", async function() {
+  it("does not turn untouched selections into implicit full selections during async refresh", async function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const { preserveSelection } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
 
-    assert.deepEqual(preserveSelection([], ["client-1", "client-2"], false), ["client-1", "client-2"]);
+    assert.deepEqual(preserveSelection([], ["client-1", "client-2"], false), []);
     assert.deepEqual(preserveSelection([], ["client-1", "client-2"], true), []);
     assert.deepEqual(preserveSelection(["client-1", "removed"], ["client-1", "client-2"], true), ["client-1"]);
     assert.match(batch, /clientSelectionTouchedRef/);
     assert.match(batch, /templateSelectionTouchedRef/);
     assert.match(batch, /preserveSelection\(/);
+  });
+
+  it("uses one custom-first visibility function for single and batch selectors", async function() {
+    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const { visibleGenerationTemplates } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
+    const catalog = { templates: [
+      { id: "custom", platform: "xhs", source: "custom", enabled: true },
+      { id: "builtin", platform: "xhs", source: "builtin", enabled: true },
+    ] };
+    assert.deepEqual(visibleGenerationTemplates(catalog).map((item) => item.id), ["custom"]);
+    assert.deepEqual(visibleGenerationTemplates(catalog, true).map((item) => item.id), ["custom", "builtin"]);
+    assert.match(article, /visibleGenerationTemplates/);
+    assert.match(batch, /visibleGenerationTemplates/);
+    assert.match(article, /显示内置模板/);
+    assert.match(batch, /显示内置模板/);
   });
 
   it("offers one-material retry in the batch source step and updates only that client material", function() {
@@ -123,14 +139,14 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /selectedTemplates\.length/);
   });
 
-  it("labels builtin templates as read-only and custom templates as editable", function() {
+  it("labels builtin and custom templates with accurate source wording", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const types = read("media-workbench/src/types.ts");
     assert.match(types, /source\?: 'builtin' \| 'custom'/);
     assert.match(types, /readOnly\?: boolean/);
-    assert.match(batch, /template\.source/);
-    assert.match(batch, /只读|readOnly/);
-    assert.match(batch, /可复制|copy/);
+    assert.match(batch, /templateSourceLabel/);
+    assert.match(read("media-workbench/src/content-generation-ui-logic.js"), /内置模板 · 只读/);
+    assert.doesNotMatch(batch, /可复制|可编辑/);
   });
 
   it("renders the batch client, platform template, source and confirmation contracts", function() {

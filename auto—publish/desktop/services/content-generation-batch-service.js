@@ -23,7 +23,9 @@ const SAFE_MESSAGES = {
   CLIENT_MATERIAL_INVALID: "Selected client material is invalid",
   GEO_RESEARCH_REQUIRED: "At least one valid GEO research answer is required",
   GEO_RESEARCH_INVALID: "Selected GEO research answer is invalid",
-  GENERATION_TEMPLATE_NOT_FOUND: "Writing template was not found",
+  GENERATION_TEMPLATE_NOT_FOUND: "写作模板不存在",
+  GENERATION_TEMPLATE_INVALID: "写作模板格式无效，请检查具体模板诊断",
+  GENERATION_TEMPLATE_STALE: "模板目录已变化，请刷新后重新选择模板",
   GENERATION_NO_EXECUTABLE_TASKS: "No executable generation tasks are available",
   GENERATION_BATCH_BUSY: "Generation batch is already running",
   GENERATION_BATCH_NOT_FOUND: "Generation batch was not found",
@@ -242,7 +244,17 @@ function createContentGenerationBatchService(options) {
   async function validateTemplates(templates) {
     return Promise.all(templates.map(function(item) {
       try {
-        const template = templateStore.getTemplate(item.platform, item.templateId);
+        let template;
+        if (typeof templateStore.getTemplate === "function" && templateStore.getTemplate.length <= 1 &&
+            (typeof templateStore.getCatalogTemplate !== "function" || templateStore.getCatalogTemplate === templateStore.getTemplate)) {
+          template = templateStore.getTemplate({ platformId: item.platform, templateId: item.templateId });
+        } else if (typeof templateStore.getCatalogTemplate === "function") {
+          template = templateStore.getCatalogTemplate({ platformId: item.platform, templateId: item.templateId });
+        } else if (typeof templateStore.getTemplate === "function") {
+          // Compatibility adapter for older injected test doubles. The real store
+          // above only exposes the catalog interface to business callers.
+          template = templateStore.getTemplate(item.platform, item.templateId);
+        }
         if (!template || typeof template.body !== "string" || !template.body.trim()) throw generationError("GENERATION_TEMPLATE_NOT_FOUND");
         const selection = { platform: item.platform, templateId: item.templateId };
         if (template.source === "builtin" || template.source === "custom") selection.source = template.source;
@@ -250,9 +262,31 @@ function createContentGenerationBatchService(options) {
         return selection;
       } catch (error) {
         if (error && error.code === "GENERATION_TEMPLATE_NOT_FOUND") throw error;
-        throw generationError("GENERATION_TEMPLATE_NOT_FOUND", SAFE_MESSAGES.GENERATION_TEMPLATE_NOT_FOUND, error);
+        if (error && error.code === "TEMPLATE_NOT_FOUND") {
+          const missing = generationError("GENERATION_TEMPLATE_NOT_FOUND");
+          missing.platformId = item.platform;
+          missing.templateId = item.templateId;
+          throw missing;
+        }
+        const invalid = generationError("GENERATION_TEMPLATE_INVALID");
+        invalid.platformId = item.platform;
+        invalid.templateId = item.templateId;
+        if (error && typeof error.diagnosticCode === "string") invalid.diagnosticCode = error.diagnosticCode;
+        throw invalid;
       }
     }));
+  }
+
+  function validateCatalogRevision(value) {
+    if (value.templateCatalogRevision === undefined) return;
+    const requestedRevision = assertId(value.templateCatalogRevision, "template catalog revision");
+    if (!templateStore || typeof templateStore.listCatalog !== "function") return;
+    const catalog = templateStore.listCatalog();
+    if (catalog && catalog.revision && catalog.revision !== requestedRevision) {
+      const error = generationError("GENERATION_TEMPLATE_STALE");
+      error.diagnosticCode = "TEMPLATE_CATALOG_REVISION_CHANGED";
+      throw error;
+    }
   }
 
   async function preview(input) {
@@ -261,6 +295,7 @@ function createContentGenerationBatchService(options) {
       ? value.clientSources.map(function(source) { return source && source.clientId; })
       : value.clientIds;
     const clientIds = uniqueIds(arrayInput(clientInput, "GENERATION_CLIENTS_REQUIRED", "Client ids", true), "client id");
+    validateCatalogRevision(value);
     const templates = await validateTemplates(normalizeTemplates(value.templates));
     const resolved = await resolveSources(value, clientIds);
     const tasks = [];

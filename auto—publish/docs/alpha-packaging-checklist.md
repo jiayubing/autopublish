@@ -42,8 +42,27 @@
       empty-client explanation.
 - [ ] Adding or changing a client or正文-only template becomes visible after
       the explicit refresh action without restarting the app.
+- [ ] Renderer, single generation, batch preflight, and batch execution all use
+      the catalog `listCatalog()` / `getTemplate({ platformId, templateId })`
+      interface; no legacy reader is used by a caller.
+- [ ]正文-only, v2 optional-metadata, and legacy front-matter templates can
+      all pass the same batch preflight; malformed templates are isolated in
+      diagnostics and are not reported as missing.
+- [ ] With a valid custom template present, single and batch selectors default
+      to custom templates only; `显示内置模板` is explicit, off by default, and
+      restores builtin read-only entries with source labels.
+- [ ] `platformId` remains the stable technical lookup key and `displayName`
+      is the human-facing label (for example `xiaohongshu` / `小红书`); duplicate
+      display names are diagnosed, not silently merged.
 - [ ] `displayName` examples use `---` and a half-width colon; a full-width
       colon is treated as正文 rather than metadata.
+- [ ] Initial loading does not show “客户与模板已刷新”; manual success is an
+      accessible 2–3 second status and timers are cleaned on refresh/unmount.
+- [ ] Batch entry does not implicitly select all customers/templates; templates
+      require explicit selection, the potential AI-call count stays visible,
+      and counts above the configured threshold require cost-risk confirmation.
+- [ ] Batch preflight confirms selected customer readiness, template IDs,
+      catalog revision, and safety constraints before any AI request.
 - [ ] Review, queue, remote submission, publication, and待确认 are displayed
       as distinct stages.
 - [ ] A normal-platform article × platform duplicate is blocked, while a
@@ -82,6 +101,17 @@
 - [ ] Installed app opens without Cannot find module '../../scripts/config'.
 - [ ] Run 
 ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package contents.
+
+## Generation verification
+
+- [ ] Run `npm run verify`; it includes the focused generation seam tests when
+      they are present, then the full test suite, renderer lint/build, and any
+      requested packaged-app checks.
+- [ ] In an isolated fixture workspace, verify catalog discovery -> normalized
+      lookup -> batch preflight for正文-only, v2, legacy, and malformed files;
+      do not use real AI, credentials, customer data, or network calls.
+- [ ] Repeat the manual alpha paths for transient refresh feedback, custom-first
+      visibility / `显示内置模板`, and batch count plus cost confirmation.
 # Runtime workspace check
 
 Verify that the packaged app creates `%USERPROFILE%\Documents\AutoPublish` and its input/data/config folders. Confirm diagnostics before adding credentials or submitting work. The package must not contain user `.env`, input, data, logs, or backup files.

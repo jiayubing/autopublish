@@ -79,4 +79,17 @@ describe("template catalog", () => {
       assert.notEqual(first.templates[0].bodyHash, second.templates[0].bodyHash);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
+
+  it("diagnoses duplicate platform display names without merging ids", () => {
+    const root = tempDirectory();
+    try {
+      write(root, "templates/xhs/platform.json", JSON.stringify({ displayName: "小红书" }));
+      write(root, "templates/xhs/guide.md", "小红书正文\n");
+      write(root, "templates/xiaohongshu/platform.json", JSON.stringify({ displayName: "小红书" }));
+      write(root, "templates/xiaohongshu/guide.md", "另一平台正文\n");
+      const result = createTemplateCatalog(root, { builtinRoot: false }).listCatalog();
+      assert.deepStrictEqual(result.platforms.map((item) => item.id).sort(), ["xhs", "xiaohongshu"]);
+      assert.equal(result.diagnostics.some((item) => item.code === "TEMPLATE_PLATFORM_DISPLAY_NAME_DUPLICATE"), true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
 });

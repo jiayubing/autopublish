@@ -3,6 +3,9 @@ export type MediaType = 'image' | 'video' | 'audio' | 'document';
 export interface IpcError {
   code: string;
   message: string;
+  platformId?: string;
+  templateId?: string;
+  diagnosticCode?: string;
 }
 
 export type IpcResponse<T> =

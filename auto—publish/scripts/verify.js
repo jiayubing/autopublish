@@ -3,6 +3,12 @@ const path = require("path");
 
 const rootDir = path.resolve(__dirname, "..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const fs = require("fs");
+
+const focusedGenerationTests = [
+  "tests/template-generation-contract.test.js",
+  "tests/renderer-content-refresh-lifecycle.test.js"
+].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 function runNpm(args) {
   if (process.platform === "win32") {
@@ -13,6 +19,13 @@ function runNpm(args) {
     return;
   }
   execFileSync(npm, args, {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
+}
+
+if (focusedGenerationTests.length > 0) {
+  execFileSync(process.execPath, ["--test", ...focusedGenerationTests], {
     cwd: rootDir,
     stdio: "inherit"
   });
