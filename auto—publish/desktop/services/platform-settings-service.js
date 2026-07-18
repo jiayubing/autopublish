@@ -10,6 +10,63 @@ function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function settingsPatchError(message) {
+  return settingsError("PLATFORM_CONFIG_INVALID", message || "Platform provider configuration patch is invalid");
+}
+
+function clearFlagField(key) {
+  if (typeof key !== "string" || !key.startsWith("clear") || key.length <= 5) return null;
+  return key.charAt(5).toLowerCase() + key.slice(6);
+}
+
+function clearableFields(adapter) {
+  const schema = isObject(adapter && adapter.schema) ? adapter.schema : {};
+  const fields = Array.isArray(adapter && adapter.clearableFields) ? adapter.clearableFields : [];
+  Object.keys(schema).forEach((field) => {
+    if (schema[field] && schema[field].clearable === true) fields.push(field);
+  });
+  return new Set(fields);
+}
+
+function mergePatch(adapter, current, input) {
+  const patch = input === undefined || input === null ? {} : input;
+  if (!isObject(patch)) throw settingsPatchError();
+
+  const schema = isObject(adapter && adapter.schema) ? adapter.schema : null;
+  const allowed = schema ? new Set(Object.keys(schema)) : null;
+  const clearable = clearableFields(adapter);
+  const values = {};
+  const clear = [];
+
+  Object.keys(patch).forEach((key) => {
+    const clearField = clearFlagField(key);
+    if (clearField) {
+      if (!clearable.has(clearField) || typeof patch[key] !== "boolean") throw settingsPatchError();
+      if (patch[key]) clear.push(clearField);
+      return;
+    }
+    if (allowed && !allowed.has(key)) throw settingsPatchError();
+    // IPC callers and legacy migration can materialize optional fields as
+    // `undefined`; treat those exactly like omitted patch keys.
+    if (patch[key] === undefined) return;
+    values[key] = patch[key];
+  });
+
+  const merged = Object.assign({}, isObject(current) ? current : {});
+  Object.keys(values).forEach((field) => {
+    const value = values[field];
+    // Empty text is a preserve operation for an already-configured field.
+    // Explicit clear flags are the only way to clear optional text values.
+    if (typeof value === "string" && value.trim() === "" && merged[field]) return;
+    merged[field] = value;
+  });
+  clear.forEach((field) => {
+    const definition = schema && schema[field];
+    merged[field] = definition && Object.prototype.hasOwnProperty.call(definition, "clearValue") ? definition.clearValue : "";
+  });
+  return merged;
+}
+
 function createPlatformSettingsService(options) {
   const values = options || {};
   const adapterList = Array.isArray(values.adapters) ? values.adapters : values.adapters && typeof values.adapters === "object" ? Object.keys(values.adapters).map((key) => values.adapters[key]) : [];
@@ -90,14 +147,10 @@ function createPlatformSettingsService(options) {
   function validateDraft(adapter, input, current) {
     if (typeof adapter.validate !== "function") return input || current || {};
     try {
-      const draft = Object.assign({}, current || {}, input || {});
-      (adapter.secretFields || []).forEach((field) => {
-        if (!input || !Object.prototype.hasOwnProperty.call(input, field)) return;
-        if (typeof input[field] === "string" && input[field].trim() === "" && current && current[field]) draft[field] = current[field];
-      });
+      const draft = mergePatch(adapter, current, input);
       return adapter.validate(draft, current || null);
     } catch (error) {
-      if (error && error.code === "PLATFORM_CONFIG_INVALID") throw error;
+      if (error && (error.code === "PLATFORM_CONFIG_INVALID" || /^HEPAN_/.test(error.code || ""))) throw error;
       throw settingsError("PLATFORM_CONFIG_INVALID", "Platform provider configuration is invalid");
     }
   }
@@ -169,4 +222,4 @@ function createPlatformSettingsService(options) {
   return { getStatus, getApplicationConfig, save, test, clear, getRuntimeConfig, getAdapterForRuntime };
 }
 
-module.exports = { createPlatformSettingsService };
+module.exports = { createPlatformSettingsService, mergePatch };

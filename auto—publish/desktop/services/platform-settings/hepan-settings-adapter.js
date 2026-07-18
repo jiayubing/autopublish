@@ -54,10 +54,11 @@ function createHepanSettingsAdapter(options) {
       pythonPath: { type: "string", required: true, nonEmpty: true },
       cookie: { type: "string", required: true, nonEmpty: true },
       categoryId: { type: "integer", required: true, min: 1, default: 121 },
-      vendorDir: { type: "string", required: false },
+      vendorDir: { type: "string", required: false, clearable: true, clearValue: "" },
       siteOrigin: { type: "string", required: true, default: HEPAN_SITE_ORIGIN }
     },
     secretFields: ["cookie"],
+    clearableFields: ["vendorDir"],
     createStore: (storeOptions) => createPlatformProviderConfigStore({ ...storeOptions, fileName: "hepan-provider.json", schema: adapter.schema, secretFields: adapter.secretFields }),
     validate(input) {
       const value = input || {};
