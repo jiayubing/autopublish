@@ -60,6 +60,59 @@ function createContentSubmissionService(opts) {
     try { options.onDataInvalidated(["platformQueue", "navigationSummary", "articleAttention"], reasonCode); } catch (_) {}
   }
 
+  function previewRetryFailedPublication(value) {
+    const publicationId = value && value.publicationId;
+    if (typeof publicationId !== "string" || !publicationId.trim()) throw batchError("CONTENT_SUBMISSION_PUBLICATION_REQUIRED", "Publication id is required");
+    const record = typeof publicationLedger.get === "function" ? publicationLedger.get(publicationId) : null;
+    if (!record) throw batchError("PUBLICATION_RECORD_MISSING", "Publication record was not found");
+    if (record.status !== "failed") throw batchError("PUBLICATION_STATUS_NOT_FAILED", "Only failed publications can be retried");
+    const latest = latestAttempt(record);
+    if (!latest || latest.status !== "failed") throw batchError("PUBLICATION_ATTEMPT_NOT_FAILED", "The latest publication attempt is not failed");
+    let article;
+    try { article = store.getArticle(record.clientId, record.articleId); }
+    catch (_) { throw batchError("ARTICLE_NOT_FOUND", "The source article is no longer available"); }
+    if (!article || article.status !== "saved") throw batchError("ARTICLE_NOT_RETRYABLE", "Only reviewed saved articles can be retried");
+    const platform = availablePlatforms().find(function(candidate) { return candidate.id === record.platformId; });
+    if (!platform || platform.contentQueueImport !== true) throw batchError("CONTENT_SUBMISSION_TARGET_UNSUPPORTED", "The publication target does not support content queue import");
+    const preview = previewBatch({ clientId: record.clientId, articleIds: [record.articleId], targetPlatformIds: [record.platformId] });
+    const retryableItem = preview.items.find(function(item) { return item.articleId === record.articleId && item.targetPlatformId === record.platformId; });
+    if (!retryableItem || !["queueable", "idempotent"].includes(retryableItem.status)) {
+      throw batchError(retryableItem && retryableItem.reasonCode || "SUBMISSION_QUEUE_CHANGED", "The publication queue changed and must be reviewed again");
+    }
+    const failureCount = Array.isArray(record.attempts) ? record.attempts.filter(function(attempt) { return attempt.status === "failed"; }).length : 1;
+    return {
+      publicationId: record.publicationId,
+      clientId: record.clientId,
+      articleId: record.articleId,
+      targetPlatformId: record.platformId,
+      titleSnapshot: record.titleSnapshot || article.title,
+      failureCount: failureCount,
+      requiresConfirmation: true,
+      message: `确认将“${(record.titleSnapshot || article.title || "文章").slice(0, 80)}”重新投稿到 ${record.platformId}？历史失败 ${failureCount} 次。`,
+      details: { titleSnapshot: record.titleSnapshot || article.title, targetPlatformId: record.platformId, failureCount },
+      preview: { queueableTaskCount: preview.queueableTaskCount, idempotentCount: preview.idempotentCount, conflictCount: preview.conflictCount }
+    };
+  }
+
+  function retryFailedPublication(value) {
+    if (!value || value.confirmed !== true || typeof value.publicationId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Publication retry confirmation is required");
+    if (typeof options.getDataRevision === "function" && value.expectedRevision !== undefined && Number(value.expectedRevision) !== Number(options.getDataRevision())) {
+      throw batchError("ARTICLE_ATTENTION_STALE", "Publication state changed; review the retry again");
+    }
+    const preview = previewRetryFailedPublication(value);
+    const created = createBatch({ clientId: preview.clientId, articleIds: [preview.articleId], targetPlatformIds: [preview.targetPlatformId], confirmed: true });
+    const item = (created.items || []).find(function(candidate) { return candidate.publicationId === preview.publicationId; }) || (created.items || [])[0] || {};
+    return {
+      batchId: created.batchId,
+      publicationId: item.publicationId || preview.publicationId,
+      attemptId: item.attemptId || null,
+      clientId: preview.clientId,
+      articleId: preview.articleId,
+      targetPlatformId: preview.targetPlatformId,
+      changedScopes: ["articleAttention", "platformQueue", "navigationSummary"]
+    };
+  }
+
   function availablePlatforms() {
     if (Array.isArray(options.platforms)) return options.platforms.slice();
     const { loadPlatforms } = require("../../src/core/platforms");
@@ -471,7 +524,7 @@ function createContentSubmissionService(opts) {
   function applyItemAction(action, nextStatus, reasonCode) {
     const entry = locateArticleSubmissionItem(action);
     if (!entry || !entry.item || !entry.batch) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item is unavailable");
-    if (entry.safe.status === nextStatus || entry.safe.status === "failed-cleaned" || entry.safe.status === "cancelled") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId };
+    if (entry.safe.status === nextStatus || entry.safe.status === "failed-cleaned" || entry.safe.status === "cancelled") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: [], domainHandled: true };
     const checked = evaluateItemAction(action);
     if (!checked.allowed) throw batchError(checked.reasonCode || "SUBMISSION_QUEUE_CHANGED", "Submission item action is no longer valid");
     if (action.evaluationFingerprint && checked.bindingFingerprint !== action.evaluationFingerprint) throw batchError("SUBMISSION_ACTION_STALE", "Submission item action is stale");
@@ -486,7 +539,7 @@ function createContentSubmissionService(opts) {
       batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? nextStatus === "failed-cleaned" ? "failed" : nextStatus : undefined, reasonCode: reasonCode });
       if (physicalFilesAlreadyAbsent) {
         notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-        return { action: action.action || nextStatus, status: nextStatus, idempotent: true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId };
+        return { action: action.action || nextStatus, status: nextStatus, idempotent: true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
       }
     } catch (error) {
       try { if (originalFile !== null && !fs.existsSync(entry.item.filePath)) { fs.mkdirSync(path.dirname(entry.item.filePath), { recursive: true }); fs.writeFileSync(entry.item.filePath, originalFile); } } catch (_) {}
@@ -494,7 +547,7 @@ function createContentSubmissionService(opts) {
       throw error;
     }
     notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-    return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId };
+    return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
   }
 
   function cancelArticleSubmissionItem(action) { return applyItemAction(action, "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
@@ -791,7 +844,9 @@ function createContentSubmissionService(opts) {
     evaluateItemAction,
     isSubmissionItemExecutable,
     previewTrashedArticleQueueResidue,
-    cleanupTrashedArticleQueueResidue
+    cleanupTrashedArticleQueueResidue,
+    previewRetryFailedPublication,
+    retryFailedPublication
   };
 }
 

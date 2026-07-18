@@ -472,6 +472,28 @@ export interface ArticleAttentionResolution {
   changedScopes: string[];
 }
 
+export interface FailedPublicationRetryPreview {
+  publicationId: string;
+  clientId: string;
+  articleId: string;
+  targetPlatformId: string;
+  titleSnapshot?: string | null;
+  failureCount: number;
+  requiresConfirmation: boolean;
+  message: string;
+  details?: { titleSnapshot?: string | null; targetPlatformId: string; failureCount: number };
+}
+
+export interface FailedPublicationRetryResult {
+  batchId?: string;
+  publicationId: string;
+  attemptId?: string | null;
+  clientId: string;
+  articleId: string;
+  targetPlatformId: string;
+  changedScopes: string[];
+}
+
 export interface PlatformTarget {
   id: string;
   displayName: string;

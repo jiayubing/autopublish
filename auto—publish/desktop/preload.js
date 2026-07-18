@@ -131,6 +131,8 @@ const api = {
     cancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:cancel-submission-batch", input); },
     previewCleanupFailedSubmissionItems: function(input) { return ipcRenderer.invoke("content:preview-cleanup-failed-submission-items", input); },
     cleanupFailedSubmissionItems: function(input) { return ipcRenderer.invoke("content:cleanup-failed-submission-items", input); },
+    previewRetryFailedPublication: function(input) { return ipcRenderer.invoke("content:preview-retry-failed-publication", input || {}); },
+    retryFailedPublication: function(input) { return ipcRenderer.invoke("content:retry-failed-publication", input || {}); },
     previewTrashedArticleQueueResidue: function() { return ipcRenderer.invoke("content:preview-trashed-article-queue-residue"); },
     cleanupTrashedArticleQueueResidue: function(input) { return ipcRenderer.invoke("content:cleanup-trashed-article-queue-residue", input || {}); },
     getSubmissionBatch: function(batchId) { return ipcRenderer.invoke("content:get-submission-batch", { batchId: batchId }); },

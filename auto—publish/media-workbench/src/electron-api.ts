@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, FailedPublicationRetryPreview, FailedPublicationRetryResult, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -98,6 +98,8 @@ interface DesktopConsoleContent {
   previewCancelSubmissionBatch(input: { batchId: string }): Promise<IpcResponse<ContentSubmissionCancellationPreview>>;
   previewCleanupFailedSubmissionItems(input: { batchId: string }): Promise<IpcResponse<ContentSubmissionCleanupPreview>>;
   cleanupFailedSubmissionItems(input: { batchId: string; confirmed: true }): Promise<IpcResponse<ContentSubmissionCleanupResult>>;
+  previewRetryFailedPublication(input: { publicationId: string }): Promise<IpcResponse<FailedPublicationRetryPreview>>;
+  retryFailedPublication(input: { publicationId: string; expectedRevision?: number; confirmed: true }): Promise<IpcResponse<FailedPublicationRetryResult>>;
   listSubmissionPlatforms(): Promise<IpcResponse<ContentSubmissionPlatform[]>>;
   listSubmissionBatches(input: { clientId: string }): Promise<IpcResponse<ContentSubmissionBatchRecord[]>>;
   createSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
@@ -1406,6 +1408,20 @@ export async function listContentSubmissionBatches(clientId: string): Promise<Co
   return (result.data || []) as ContentSubmissionBatchRecord[];
 }
 
+export async function previewRetryFailedPublication(input: { publicationId: string }): Promise<FailedPublicationRetryPreview> {
+  if (!isElectron()) throw new Error("失败投稿重试需要桌面应用");
+  const result = await window.desktopConsole!.content.previewRetryFailedPublication(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "failed publication retry preview failed");
+  return result.data;
+}
+
+export async function retryFailedPublication(input: { publicationId: string; expectedRevision?: number; confirmed: true }): Promise<FailedPublicationRetryResult> {
+  if (!isElectron()) throw new Error("失败投稿重试需要桌面应用");
+  const result = await window.desktopConsole!.content.retryFailedPublication(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "failed publication retry failed");
+  return result.data;
+}
+
 export function onWorkspaceDataInvalidated(listener: (event: WorkspaceDataInvalidatedEvent) => void): () => void {
   if (!isElectron() || typeof window.desktopConsole?.workspaceData?.onInvalidated !== 'function') return () => {};
   return window.desktopConsole.workspaceData.onInvalidated(listener);
@@ -1421,6 +1437,18 @@ export async function listArticleAttention(clientId?: string): Promise<ArticleAt
   const result = await list(clientId ? { clientId } : undefined);
   if (!result.ok) throw getIpcError(result.error, 'listArticleAttention failed');
   return result.data?.items || [];
+}
+
+export async function listArticleAttentionSnapshot(clientId?: string): Promise<ArticleAttentionList> {
+  if (!isElectron()) return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
+  const attention = window.desktopConsole.articleAttention;
+  const list = typeof attention?.list === 'function'
+    ? attention.list.bind(attention)
+    : window.desktopConsole.content.listArticleAttention?.bind(window.desktopConsole.content);
+  if (!list) return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
+  const result = await list(clientId ? { clientId } : undefined);
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'listArticleAttention failed');
+  return result.data;
 }
 
 export async function getArticleAttention(attentionId: string): Promise<ArticleAttentionItem | null> {

@@ -46,6 +46,18 @@ function registerContentSubmissionIpc(deps) {
   deps.ipcMain.handle("content:cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.cancelBatch(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCleanupFailedItems(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.cleanupFailedItems(batchInput(input, true))); }); });
+  deps.ipcMain.handle("content:preview-retry-failed-publication", function(event, input) { return wrap(function() {
+    if (!input || typeof input !== "object" || typeof input.publicationId !== "string" || Object.keys(input).some(function(key) { return key !== "publicationId"; })) {
+      const error = new Error("Invalid failed publication retry input"); error.code = "CONTENT_SUBMISSION_INPUT_INVALID"; throw error;
+    }
+    return safeBatchResult(service.previewRetryFailedPublication(input));
+  }); });
+  deps.ipcMain.handle("content:retry-failed-publication", function(event, input) { return wrap(function() {
+    if (!input || typeof input !== "object" || typeof input.publicationId !== "string" || input.confirmed !== true || Object.keys(input).some(function(key) { return !["publicationId", "expectedRevision", "confirmed"].includes(key); })) {
+      const error = new Error("Failed publication retry confirmation is required"); error.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED"; throw error;
+    }
+    return safeBatchResult(service.retryFailedPublication(input));
+  }); });
   deps.ipcMain.handle("content:get-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.getBatch(batchInput(input, false).batchId)); }); });
   deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return safeResidueResult(service.previewTrashedArticleQueueResidue()); }); });
   deps.ipcMain.handle("content:cleanup-trashed-article-queue-residue", function(event, input) {
