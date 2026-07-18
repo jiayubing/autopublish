@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -39,7 +39,7 @@ interface DesktopConsolePlatforms {
   pauseSubmit(): Promise<IpcResponse<unknown>>;
   stopSubmit(): Promise<IpcResponse<unknown>>;
   getState(): Promise<IpcResponse<PlatformStatus>>;
-  onState(listener: (state: PlatformStatus) => void): () => void;
+  onState?: (listener: (state: PlatformSubmitState) => void) => () => void;
 }
 
 interface MediaSubmission { filename: string; resourceIds: string[]; draftRevision?: string; }
@@ -74,7 +74,12 @@ interface DesktopConsoleContent {
   listGeneratedArticles(clientId: string): Promise<IpcResponse<GeneratedContentArticle[]>>;
   reviewArticles(articles: ArticleReviewSelection[]): Promise<IpcResponse<ArticleReviewResult>>;
   listArticleTrash(clientId: string): Promise<IpcResponse<ArticleTrashRecord[]>>;
-  trashArticles(input: { articles: ArticleReviewSelection[]; confirmed: true }): Promise<IpcResponse<ArticleTrashResult>>;
+  previewTrashArticles?: (input: { selections: ArticleReviewSelection[]; articles?: ArticleReviewSelection[] }) => Promise<IpcResponse<ArticleTrashPreview>>;
+  previewArticleRemovalImpact?: (input: { selections: ArticleReviewSelection[]; articles?: ArticleReviewSelection[] }) => Promise<IpcResponse<ArticleTrashPreview>>;
+  applyArticleRemovalImpact?: (input: ArticleTrashCommitInput) => Promise<IpcResponse<ArticleTrashResult>>;
+  trashArticles(input: ArticleTrashCommitInput): Promise<IpcResponse<ArticleTrashResult>>;
+  previewTrashedArticleQueueResidue?(): Promise<IpcResponse<TrashedArticleQueueResiduePreview>>;
+  cleanupTrashedArticleQueueResidue?(input: { confirmed: true }): Promise<IpcResponse<TrashedArticleQueueResiduePreview & { cleanedCount: number }>>;
   restoreArticle(input: ArticleReviewSelection): Promise<IpcResponse<GeneratedContentArticle>>;
   preparePermanentDeleteArticle(input: ArticleReviewSelection): Promise<IpcResponse<ArticlePermanentDeleteConfirmation>>;
   permanentlyDeleteArticle(input: ArticlePermanentDeleteRequest): Promise<IpcResponse<ArticlePermanentDeleteResult>>;
@@ -162,8 +167,66 @@ interface DesktopConsoleRuntimeDiagnostics {
 
 export interface ContentExportInput { clientId: string; generatedArticleId: string; targetPlatform: string; mediaResourceId?: string; confirmed: true; }
 export interface ContentExportPreview { filename: string; targetPlatform: string; contentHash: string; markdown: string; status: "queued" | "queueable" | "idempotent" | "blockedPublished" | "blockedUncertain" | "conflict"; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; }
-export interface ArticleTrashRecord { version: 1; deletedAt: string; clientId: string; articleId: string; status: string; references: Array<{ type: string; id: string }>; }
-export interface ArticleTrashResult { moved: ArticleTrashRecord[]; skipped: ArticleTrashRecord[]; rejected: Array<{ clientId: string; articleId: string; code: string }>; }
+export interface ArticleTrashRecord {
+  version: 1;
+  deletedAt: string;
+  clientId: string;
+  articleId: string;
+  status: string;
+  references: Array<{ type: string; id: string }>;
+  titleSnapshot?: string | null;
+  publicationSummary?: PublicationHistorySummary | Record<string, unknown> | null;
+  publicationRecords?: PublicationHistoryRecord[];
+}
+export interface ArticleTrashImpactItem {
+  clientId?: string;
+  articleId?: string;
+  platformId?: string | null;
+  targetPlatformId?: string | null;
+  displayName?: string | null;
+  reasonCode?: string | null;
+  status?: string | null;
+  [key: string]: unknown;
+}
+export interface ArticleTrashPreview {
+  token?: string;
+  articleCount: number;
+  queuedToCancel: ArticleTrashImpactItem[];
+  failedToClean: ArticleTrashImpactItem[];
+  blockedItems: ArticleTrashImpactItem[];
+  canCommit: boolean;
+  selections?: ArticleReviewSelection[];
+  expiresAt?: string;
+  legacy?: boolean;
+}
+export interface ArticleTrashCommitInput {
+  articles?: ArticleReviewSelection[];
+  selections?: ArticleReviewSelection[];
+  token?: string;
+  legacy?: boolean;
+  confirmed: true;
+}
+export interface ArticleTrashResult {
+  moved?: ArticleTrashRecord[];
+  skipped?: ArticleTrashRecord[];
+  rejected?: Array<{ clientId: string; articleId: string; code: string }>;
+  transactionId?: string;
+  status?: 'committed' | 'pending_recovery' | string;
+  articleCount?: number;
+  queueActions?: ArticleTrashImpactItem[];
+  errorCode?: string;
+}
+export interface TrashedArticleQueueResidueItem extends ArticleTrashImpactItem {
+  sourceArticleState: 'trashed';
+  repairAction?: 'cancel' | 'cleanup' | null;
+}
+export interface TrashedArticleQueueResiduePreview {
+  items: TrashedArticleQueueResidueItem[];
+  cleanableItems: TrashedArticleQueueResidueItem[];
+  reportedItems: TrashedArticleQueueResidueItem[];
+  cleanableCount: number;
+  reportedCount: number;
+}
 export interface ArticlePermanentDeleteConfirmation { token: string; clientId: string; articleId: string; deletedAt: string; status: string; }
 export interface ArticlePermanentDeleteRequest { clientId: string; articleId: string; token: string; }
 export interface ArticlePermanentDeleteResult { clientId: string; articleId: string; deleted: true; deletedAt: string; }
@@ -667,12 +730,49 @@ export async function retryContentMaterial(input: { clientId: string; materialId
     return result.data || [];
   }
 
-  export async function trashContentArticles(input: { articles: ArticleReviewSelection[]; confirmed: true }): Promise<ArticleTrashResult> {
-    if (!isElectron()) throw new Error("Article trash requires the desktop app");
-    const result = await window.desktopConsole!.content.trashArticles(input);
-    if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to move articles to trash");
-    return result.data;
+export async function trashContentArticles(input: ArticleTrashCommitInput & { articles: ArticleReviewSelection[] }): Promise<ArticleTrashResult> {
+  if (!isElectron()) throw new Error("Article trash requires the desktop app");
+  const request: ArticleTrashCommitInput = input.legacy
+    ? { articles: input.articles, confirmed: true }
+    : { ...input, selections: input.articles };
+  const handler = window.desktopConsole!.content.applyArticleRemovalImpact || window.desktopConsole!.content.trashArticles;
+  const result = await handler(request);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to move articles to trash");
+  return result.data;
+}
+
+export async function previewContentArticleRemoval(articles: ArticleReviewSelection[]): Promise<ArticleTrashPreview> {
+  if (!isElectron()) throw new Error("Article trash preview requires the desktop app");
+  const content = window.desktopConsole!.content;
+  const input = { selections: articles, articles };
+  const handler = content.previewTrashArticles || content.previewArticleRemovalImpact;
+  if (!handler) {
+    // Old preload/mocks only expose trashArticles. Keep the renderer usable while
+    // newer desktops provide the all-target transactional preview.
+    return { articleCount: articles.length, queuedToCancel: [], failedToClean: [], blockedItems: [], canCommit: true, selections: articles, legacy: true };
   }
+  const result = await handler(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to preview moving articles to trash");
+  return result.data;
+}
+
+export async function previewTrashedArticleQueueResidue(): Promise<TrashedArticleQueueResiduePreview> {
+  if (!isElectron() || typeof window.desktopConsole?.content?.previewTrashedArticleQueueResidue !== 'function') {
+    return { items: [], cleanableItems: [], reportedItems: [], cleanableCount: 0, reportedCount: 0 };
+  }
+  const result = await window.desktopConsole.content.previewTrashedArticleQueueResidue();
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'Unable to inspect trashed article queue residue');
+  return result.data;
+}
+
+export async function cleanupTrashedArticleQueueResidue(): Promise<TrashedArticleQueueResiduePreview & { cleanedCount: number }> {
+  if (!isElectron() || typeof window.desktopConsole?.content?.cleanupTrashedArticleQueueResidue !== 'function') {
+    return { items: [], cleanableItems: [], reportedItems: [], cleanableCount: 0, reportedCount: 0, cleanedCount: 0 };
+  }
+  const result = await window.desktopConsole.content.cleanupTrashedArticleQueueResidue({ confirmed: true });
+  if (!result.ok || !result.data) throw getIpcError(result.error, 'Unable to clean trashed article queue residue');
+  return result.data;
+}
 
   export async function restoreContentArticle(input: ArticleReviewSelection): Promise<GeneratedContentArticle> {
     if (!isElectron()) throw new Error("Article restore requires the desktop app");
@@ -1241,6 +1341,11 @@ export async function listContentSubmissionBatches(clientId: string): Promise<Co
   const result = await window.desktopConsole!.content.listSubmissionBatches({ clientId });
   if (!result.ok) throw getIpcError(result.error, "submission batch history failed");
   return (result.data || []) as ContentSubmissionBatchRecord[];
+}
+
+export function onPlatformState(listener: (state: PlatformSubmitState) => void): () => void {
+  if (!isElectron() || typeof window.desktopConsole?.platforms?.onState !== 'function') return () => {};
+  return window.desktopConsole.platforms.onState(listener);
 }
 
 export async function copyContentArticleVersion(input: { clientId: string; sourceArticleId: string }): Promise<GeneratedContentArticle> {

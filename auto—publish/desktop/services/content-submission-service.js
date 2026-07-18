@@ -173,7 +173,7 @@ function createContentSubmissionService(opts) {
         const needsReservation = context.tracked && (!record || ["failed", "cancelled"].indexOf(record.status) !== -1);
         try {
           if (needsReservation) {
-            reservation = publicationLedger.reserve(context.identity, context.target, { displayName: previewItem.targetPlatformId });
+            reservation = publicationLedger.reserve(context.identity, context.target, { displayName: previewItem.targetPlatformId, titleSnapshot: context.titleSnapshot });
             createdReservations.push({ reservation, item: previewItem });
             record = reservation;
           }
@@ -262,6 +262,176 @@ function createContentSubmissionService(opts) {
 
   function readSidecar(item) {
     try { return JSON.parse(fs.readFileSync(item.sidecarPath, "utf8")); } catch (_) { return null; }
+  }
+
+  function articleSelectionKey(item) { return item.clientId + "\0" + item.articleId; }
+
+  function articleSubmissionItems(selections) {
+    const requested = new Set(selections.map(articleSelectionKey));
+    const found = [];
+    const seen = new Set();
+    batchStore.list().forEach(function(batch) {
+      (batch.items || []).forEach(function(item) {
+        const key = batch.clientId + "\0" + item.articleId;
+        if (!requested.has(key)) return;
+        const identityKey = (item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || "");
+        if (seen.has(identityKey)) return;
+        seen.add(identityKey);
+        const record = publicationForBatchItem(item);
+        const latest = latestAttempt(record);
+        const sidecar = readSidecar(item);
+        const unchanged = pairIsUnchanged(item, batch, sidecar);
+        const status = record ? record.status : item.publicationStatus || item.status;
+        if (record && (record.titleSnapshot === undefined || record.titleSnapshot === null) && typeof publicationLedger.ensureTitleSnapshot === "function") {
+          try {
+            const sourceArticle = store.getArticle(batch.clientId, item.articleId);
+            publicationLedger.ensureTitleSnapshot(record.publicationId, sourceArticle.title);
+          } catch (_) {}
+        }
+        const safe = {
+          clientId: batch.clientId,
+          articleId: item.articleId,
+          batchId: batch.id,
+          targetPlatformId: item.targetPlatformId,
+          publicationId: item.publicationId || null,
+          attemptId: item.attemptId || null,
+          contentHash: item.contentHash || (sidecar && sidecar.contentHash) || null,
+          status: status,
+          unchanged: unchanged
+        };
+        found.push({ safe: safe, item: item, batch: batch, record: record, sidecar: sidecar, latest: latest });
+      });
+    });
+    return found;
+  }
+
+  function previewArticleRemovalImpact(value) {
+    const selections = value && (value.selections || value.articles);
+    if (!Array.isArray(selections) || !selections.length) throw batchError("CONTENT_INPUT_INVALID", "At least one article is required");
+    const normalized = selections.map(function(item) {
+      if (!item || typeof item.clientId !== "string" || !item.clientId.trim() || typeof item.articleId !== "string" || !item.articleId.trim()) throw batchError("CONTENT_INPUT_INVALID", "Article selection is invalid");
+      return { clientId: item.clientId, articleId: item.articleId };
+    });
+    const entries = articleSubmissionItems(normalized);
+    const byKey = new Set(entries.map(function(entry) { return entry.safe.publicationId + "\0" + entry.safe.attemptId; }));
+    if (typeof publicationLedger.listForArticles === "function") {
+      normalized.forEach(function(selection) {
+        let records = [];
+        try { records = publicationLedger.listForArticles(selection.clientId, [selection.articleId]); } catch (_) {}
+        records.forEach(function(record) {
+          const latest = latestAttempt(record);
+          const key = record.publicationId + "\0" + (latest && latest.attemptId || "");
+          if (byKey.has(key)) return;
+          entries.push({ safe: {
+            clientId: selection.clientId, articleId: selection.articleId, batchId: null,
+            targetPlatformId: record.platformId || null, publicationId: record.publicationId,
+            attemptId: latest && latest.attemptId || null, contentHash: record.contentHash || null,
+            status: record.status, unchanged: false
+          }, item: null, batch: null, record: record, sidecar: null, latest: latest });
+        });
+      });
+    }
+    const queuedToCancel = [];
+    const failedToClean = [];
+    const blockedItems = [];
+    const publicItems = entries.map(function(entry) {
+      const value = entry.safe;
+      if (["submitting", "submitted", "uncertain"].indexOf(value.status) !== -1) {
+        blockedItems.push(Object.assign({}, value, { reasonCode: "ARTICLE_SUBMISSION_ACTIVE" }));
+      } else if (value.status === "queued") {
+        if (value.unchanged && value.batchId && value.publicationId && value.attemptId) queuedToCancel.push(Object.assign({}, value, { action: "cancel" }));
+        else blockedItems.push(Object.assign({}, value, { reasonCode: value.batchId ? "SUBMISSION_QUEUE_CHANGED" : "PUBLICATION_RESERVATION_WITHOUT_QUEUE" }));
+      } else if (value.status === "failed") {
+        if (value.unchanged && value.batchId) failedToClean.push(Object.assign({}, value, { action: "cleanup" }));
+        else if (value.batchId) blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_QUEUE_CHANGED" }));
+      } else if (value.status === "published" && value.batchId) {
+        blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_QUEUE_STATUS_CONFLICT" }));
+      }
+      return Object.assign({}, value, { sourceArticleState: "active" });
+    });
+    return {
+      selections: normalized,
+      articleCount: normalized.length,
+      items: publicItems,
+      queuedToCancel: queuedToCancel,
+      failedToClean: failedToClean,
+      blockedItems: blockedItems,
+      queuedToCancelCount: queuedToCancel.length,
+      failedToCleanCount: failedToClean.length,
+      canCommit: blockedItems.length === 0
+    };
+  }
+
+  function locateArticleSubmissionItem(action) {
+    const entries = articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }]);
+    return entries.find(function(entry) {
+      return entry.safe.batchId === action.batchId && entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId && entry.safe.targetPlatformId === action.targetPlatformId;
+    });
+  }
+
+  function applyArticleSubmissionItem(action, expectedStatus, nextStatus, reasonCode) {
+    const entry = locateArticleSubmissionItem(action);
+    if (!entry || !entry.item || !entry.batch) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item is unavailable");
+    if (entry.safe.status === nextStatus || entry.safe.status === "failed-cleaned" || entry.safe.status === "cancelled") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true };
+    if (entry.safe.status !== expectedStatus || !entry.safe.unchanged) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item changed");
+    if (entry.record && entry.latest && entry.latest.attemptId !== action.attemptId) throw batchError("PUBLICATION_ATTEMPT_MISMATCH", "Publication attempt is not current");
+    if (nextStatus === "cancelled" && entry.record) cancelReservation(publicationLedger, { publicationId: action.publicationId, attemptId: action.attemptId }, reasonCode);
+    removeSubmissionPair(entry.item.filePath, entry.item.sidecarPath);
+    batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? nextStatus === "failed-cleaned" ? "failed" : nextStatus : undefined, reasonCode: reasonCode });
+    return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId };
+  }
+
+  function cancelArticleSubmissionItem(action) { return applyArticleSubmissionItem(action, "queued", "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
+  function cleanupArticleSubmissionItem(action) { return applyArticleSubmissionItem(action, "failed", "failed-cleaned", "ARTICLE_TRASHED_FAILED_QUEUE_CLEANUP"); }
+
+  function isSubmissionItemExecutable(action) {
+    const entry = locateArticleSubmissionItem(action);
+    if (!entry) return false;
+    if (typeof store.isArticleRemoved === "function" && store.isArticleRemoved(action.clientId, action.articleId) ||
+        typeof store.isArticleTrashed === "function" && store.isArticleTrashed(action.clientId, action.articleId)) return false;
+    return entry.safe.status === "queued" && entry.safe.unchanged;
+  }
+
+  function previewTrashedArticleQueueResidue() {
+    const items = [];
+    batchStore.list().forEach(function(batch) {
+      (batch.items || []).forEach(function(item) {
+        var removed = typeof store.isArticleRemoved === "function"
+          ? store.isArticleRemoved(batch.clientId, item.articleId)
+          : typeof store.isArticleTrashed === "function" && store.isArticleTrashed(batch.clientId, item.articleId);
+        if (!removed) return;
+        const entry = articleSubmissionItems([{ clientId: batch.clientId, articleId: item.articleId }]).find(function(candidate) {
+          return candidate.safe.batchId === batch.id && candidate.safe.publicationId === item.publicationId && candidate.safe.attemptId === item.attemptId;
+        });
+        if (!entry) return;
+        const safe = Object.assign({}, entry.safe, { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" });
+        if (entry.safe.status === "queued" && entry.safe.unchanged) safe.repairAction = "cancel";
+        else if (entry.safe.status === "failed" && entry.safe.unchanged) safe.repairAction = "cleanup";
+        else safe.repairAction = null;
+        items.push(safe);
+      });
+    });
+    return {
+      items: items,
+      cleanableItems: items.filter(function(item) { return !!item.repairAction; }),
+      reportedItems: items.filter(function(item) { return !item.repairAction; }),
+      cleanableCount: items.filter(function(item) { return !!item.repairAction; }).length,
+      reportedCount: items.filter(function(item) { return !item.repairAction; }).length
+    };
+  }
+
+  function cleanupTrashedArticleQueueResidue(value) {
+    if (!value || value.confirmed !== true) throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Queue residue confirmation is required");
+    const preview = previewTrashedArticleQueueResidue();
+    let cleanedCount = 0;
+    preview.cleanableItems.forEach(function(item) {
+      try {
+        if (item.repairAction === "cancel") cancelArticleSubmissionItem(Object.assign({}, item, { action: "cancel" }));
+        else cleanupArticleSubmissionItem(Object.assign({}, item, { action: "cleanup" }));
+        cleanedCount += 1;
+      } catch (_) {}
+    });
+    return Object.assign(previewTrashedArticleQueueResidue(), { cleanedCount: cleanedCount });
   }
 
   function reconcileBatch(batchId) {
@@ -436,7 +606,13 @@ function createContentSubmissionService(opts) {
     listBatches: function(clientId) { return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) { return reconcileBatch(batch.id).batch; }); },
     reconcileBatch,
     previewCleanupFailedItems,
-    cleanupFailedItems
+    cleanupFailedItems,
+    previewArticleRemovalImpact,
+    cancelArticleSubmissionItem,
+    cleanupArticleSubmissionItem,
+    isSubmissionItemExecutable,
+    previewTrashedArticleQueueResidue,
+    cleanupTrashedArticleQueueResidue
   };
 }
 

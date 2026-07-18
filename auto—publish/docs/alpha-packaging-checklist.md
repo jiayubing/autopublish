@@ -127,6 +127,21 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
 - [ ] Confirm a stale `queued` batch with a `failed` ledger reconciles without
       deleting records; ordinary cancellation is unavailable and failed-item
       cleanup removes only an unchanged queue pair.
+- [ ] Confirm history uses one all-target trash preview/confirmation, cancels
+      safe queued pairs, cleans safe failed pairs, and retains all publication
+      records and attempts.
+- [ ] Confirm a `submitting`, `submitted`, `uncertain`, modified-pair, or
+      identity conflict blocks the entire selected trash operation.
+- [ ] Confirm a queued pair whose sidecar source article is trashed is marked
+      unselectable and the worker refuses it before any adapter call.
+- [ ] Confirm removal transaction recovery completes after an injected crash
+      without recreating a cancelled attempt; restore does not requeue.
+- [ ] Confirm Hepan `.md`, `.markdown`, and `.txt` fixtures produce safe,
+      non-empty HTML while raw HTML and dangerous URL schemes are removed;
+      existing DOCX behavior remains unchanged.
+- [ ] Confirm Hepan interval accepts 0–3600 seconds, defaults to 30, shows a
+      zero-second warning, emits a cancellable countdown, and does not trigger
+      a fixed whole-batch timeout.
 - [ ] Open, edit, save, close, and copy a history article version in the same
       history view. Confirm unsaved protection and focus restoration.
 - [ ] At `1128×527` and `1424×861`, expand long-title groups and confirm no

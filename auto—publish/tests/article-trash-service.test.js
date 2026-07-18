@@ -6,6 +6,9 @@ const path = require("node:path");
 
 const { createArticleStore } = require("../src/content/article-store");
 const { createArticleTrashService } = require("../src/content/article-trash-service");
+const { createArticleRemovalService } = require("../src/content/article-removal-service");
+const { createContentSubmissionService } = require("../desktop/services/content-submission-service");
+const { createPublicationLedger } = require("../src/publication/publication-ledger");
 const { createAiContentService } = require("../desktop/services/ai-content-service");
 const { registerAiContentIpc } = require("../desktop/ipc/ai-content-ipc");
 
@@ -58,6 +61,7 @@ describe("article trash service", function() {
         clientId: "client-1",
         articleId: "saved-article",
         status: "saved",
+        titleSnapshot: "A private title",
         references: [
           { type: "generation-batch", id: "batch-1" },
           { type: "generation-task", id: "task-1" }
@@ -115,6 +119,7 @@ describe("article trash service", function() {
       articleId: "purged-article",
       status: "saved",
       references: [{ type: "generation-batch", id: "batch-1" }],
+      titleSnapshot: "A private title",
       permanentlyDeleted: true,
       purgedAt: "2026-07-15T12:00:00.000Z"
     });
@@ -142,6 +147,78 @@ describe("article trash service", function() {
     });
     assert.deepStrictEqual(trash.listTrashedArticles("client-1"), []);
     assert.equal(fs.existsSync(path.join(root, ".autopublish", "article-trash", "client-1", "damaged.tombstone.json")), false);
+  });
+
+  it("previews and commits one coordinated removal, cancelling only its queued attempt", function() {
+    const value = article("coordinated", { status: "saved", title: "Immutable headline" });
+    store.saveArticle(value);
+    const submission = createContentSubmissionService({
+      workspaceRoot: root,
+      articleStore: store,
+      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }]
+    });
+    const coordinatedTrash = createArticleTrashService({
+      workspaceRoot: root,
+      articleStore: store,
+      submissionService: submission,
+      now: function() { return "2026-07-15T12:00:00.000Z"; }
+    });
+    const batch = submission.createBatch({ clientId: "client-1", articleIds: ["coordinated"], targetPlatformIds: ["toutiao"], confirmed: true });
+    const preview = coordinatedTrash.previewTrashArticles({ selections: [{ clientId: "client-1", articleId: "coordinated" }] });
+    assert.equal(preview.canCommit, true);
+    assert.equal(preview.queuedToCancelCount, 1);
+    assert.equal(preview.items[0].filePath, undefined);
+    const result = coordinatedTrash.trashArticles({ selections: preview.selections, token: preview.token, confirmed: true });
+    assert.equal(result.status, "committed");
+    assert.equal(fs.existsSync(batch.items[0].filePath), false);
+    assert.equal(createPublicationLedger({ workspaceRoot: root }).get(batch.items[0].publicationId).status, "cancelled");
+    assert.equal(store.listTrashedArticles("client-1")[0].titleSnapshot, "Immutable headline");
+  });
+
+  it("blocks an entire selection when one publication is active and leaves every side effect untouched", function() {
+    store.saveArticle(article("safe", { status: "saved" }));
+    store.saveArticle(article("active", { status: "saved" }));
+    const submission = createContentSubmissionService({
+      workspaceRoot: root,
+      articleStore: store,
+      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }]
+    });
+    const ledger = createPublicationLedger({ workspaceRoot: root });
+    const trashWithSubmission = createArticleTrashService({ workspaceRoot: root, articleStore: store, submissionService: submission });
+    const safeBatch = submission.createBatch({ clientId: "client-1", articleIds: ["safe"], targetPlatformIds: ["toutiao"], confirmed: true });
+    const activeBatch = submission.createBatch({ clientId: "client-1", articleIds: ["active"], targetPlatformIds: ["toutiao"], confirmed: true });
+    ledger.markSubmitting(activeBatch.items[0].publicationId, activeBatch.items[0].attemptId);
+    const preview = trashWithSubmission.previewTrashArticles({ articles: [
+      { clientId: "client-1", articleId: "safe" }, { clientId: "client-1", articleId: "active" }
+    ] });
+    assert.equal(preview.canCommit, false);
+    assert.equal(fs.existsSync(safeBatch.items[0].filePath), true);
+    assert.equal(fs.existsSync(activeBatch.items[0].filePath), true);
+    assert.equal(store.listTrashedArticles("client-1").length, 0);
+  });
+
+  it("resumes a confirmed removal from the durable transaction after an interruption", function() {
+    store.saveArticle(article("recoverable", { status: "saved" }));
+    const submission = createContentSubmissionService({
+      workspaceRoot: root,
+      articleStore: store,
+      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }]
+    });
+    let interrupted = true;
+    const firstRemoval = createArticleRemovalService({
+      workspaceRoot: root,
+      articleStore: store,
+      submissionService: submission,
+      afterQueueAction: function() { if (interrupted) { interrupted = false; throw new Error("simulated interruption"); } }
+    });
+    const trashWithRecovery = createArticleTrashService({ articleStore: store, articleRemovalService: firstRemoval });
+    submission.createBatch({ clientId: "client-1", articleIds: ["recoverable"], targetPlatformIds: ["toutiao"], confirmed: true });
+    const preview = trashWithRecovery.previewTrashArticles({ articles: [{ clientId: "client-1", articleId: "recoverable" }] });
+    assert.equal(trashWithRecovery.trashArticles({ articles: preview.selections, token: preview.token, confirmed: true }).status, "pending_recovery");
+    assert.equal(store.listTrashedArticles("client-1").length, 0);
+    const recovered = firstRemoval.recoverPendingRemovals();
+    assert.equal(recovered[0].phase, "committed");
+    assert.equal(store.listTrashedArticles("client-1").length, 1);
   });
 
   it("exposes deletion, restore, trash listing, and confirmation IPC without external calls", async function() {

@@ -13,6 +13,13 @@ const focusedGenerationTests = [
   "tests/renderer-history-editor-flow.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
+const focusedPlanTests = [
+  "tests/article-trash-submission-lifecycle.test.js",
+  "tests/hepan-article-source.test.js",
+  "tests/hepan-publish-contract.test.js",
+  "tests/hepan-publish-interval.test.js"
+].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
+
 function runNpm(args) {
   if (process.platform === "win32") {
     execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", [npm].concat(args).join(" ")], {
@@ -29,6 +36,13 @@ function runNpm(args) {
 
 if (focusedGenerationTests.length > 0) {
   execFileSync(process.execPath, ["--test", ...focusedGenerationTests], {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
+}
+
+if (focusedPlanTests.length > 0) {
+  execFileSync(process.execPath, ["--test", ...focusedPlanTests], {
     cwd: rootDir,
     stdio: "inherit"
   });

@@ -58,6 +58,18 @@ Returns `PlatformSubmitResult`. Calls `desktopConsole.platforms.submitSelectedPl
 - `platforms:build-selected-plan` — builds article × platform task matrix
 - `platforms:submit-selected-plan` — submits tasks serially, continues after failures
 
+The workbench also receives target-level runtime state. For Hepan, the batch
+startup snapshot contains `publishIntervalSeconds`; it is not re-read while a
+batch is running. A batch with multiple Hepan tasks displays the configured
+interval and minimum waiting time before confirmation. The first Hepan call is
+immediate; subsequent calls show `waiting-interval` and a live remaining
+countdown. Stop is honored during the wait and no next remote call is started.
+
+Queue items with `sourceArticleState: trashed` are visibly marked “源文章已删除，禁止投稿”,
+cannot be selected, and expose the independent repair flow. The repair flow
+can preview and confirm safe cancellation/failed cleanup but does not
+force-delete conflicts or infer uncertain remote results.
+
 ## States
 
 | State | Behavior |
@@ -68,5 +80,6 @@ Returns `PlatformSubmitResult`. Calls `desktopConsole.platforms.submitSelectedPl
 | Selecting | Click articles/platforms to toggle selection |
 | Confirming | Modal with article/platform summary |
 | Submitting | "提交中..." disabled all buttons |
+| Waiting interval | Shows the next Hepan article and remaining seconds; stop remains available |
 | Result | Overlay with success/fail/skipped breakdown |
 

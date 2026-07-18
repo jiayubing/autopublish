@@ -3,6 +3,7 @@ const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleStore } = require("../../src/content/article-store");
 const { createArticleTrashService } = require("../../src/content/article-trash-service");
+const { createContentSubmissionService } = require("./content-submission-service");
 const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
@@ -82,7 +83,22 @@ function createAiContentService(opts) {
   const researchStore = options.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
   const articleStore = options.articleStore || createArticleStore(workspaceRoot, { paths: paths });
-  const articleTrashService = options.articleTrashService || createArticleTrashService({ articleStore: articleStore });
+  const contentSubmissionService = options.contentSubmissionService || (workspaceRoot ? createContentSubmissionService({
+    workspaceRoot: workspaceRoot,
+    paths: paths,
+    articleStore: articleStore,
+    publicationLedger: options.publicationLedger,
+    batchStore: options.batchStore,
+    platforms: options.platforms
+  }) : null);
+  const articleTrashService = options.articleTrashService || createArticleTrashService({
+    articleStore: articleStore,
+    workspaceRoot: workspaceRoot,
+    submissionService: contentSubmissionService,
+    transactionStore: options.articleRemovalTransactionStore,
+    now: options.now,
+    tokenTtlMs: options.articleRemovalTokenTtlMs
+  });
   const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
   const articleVersionService = options.articleVersionService || createArticleVersionService({
     articleStore: articleStore,
@@ -260,10 +276,13 @@ function createAiContentService(opts) {
     copyArticleVersion: copyArticleVersion,
     reviewArticles: reviewArticles,
     listTrashedArticles: articleTrashService.listTrashedArticles,
+    previewTrashArticles: articleTrashService.previewTrashArticles,
+    previewArticleRemovalImpact: articleTrashService.previewArticleRemovalImpact,
     trashArticles: articleTrashService.trashArticles,
     restoreArticle: articleTrashService.restoreArticle,
     preparePermanentDelete: articleTrashService.preparePermanentDelete,
-    permanentlyDeleteArticle: articleTrashService.permanentlyDeleteArticle
+    permanentlyDeleteArticle: articleTrashService.permanentlyDeleteArticle,
+    recoverPendingArticleRemovals: articleTrashService.recoverPendingRemovals
   };
 }
 

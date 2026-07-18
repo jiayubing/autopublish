@@ -169,13 +169,23 @@ process.on("message", function(message) {
           adapters: adapters
         });
 
-        const result = await service.submitSelectedPlanSerially(plan, Object.assign({}, submitOptions, {
-          onTaskState: function(state) {
-            send("state", state);
-          }
-        }));
-        result.skipped = result.skipped || result.pending || 0;
-        send("result", { ok: true, data: result });
+        var activeTask = null;
+        var heartbeat = setInterval(function() {
+          send("state", { phase: "heartbeat", task: activeTask || undefined });
+        }, 250);
+        try {
+          const result = await service.submitSelectedPlanSerially(plan, Object.assign({}, submitOptions, {
+            shouldStop: function() { return stopRequested; },
+            onTaskState: function(state) {
+              if (state && state.task) activeTask = state.task;
+              send("state", state);
+            }
+          }));
+          result.skipped = result.skipped || result.pending || 0;
+          send("result", { ok: true, data: result });
+        } finally {
+          clearInterval(heartbeat);
+        }
       } catch (error) {
         send("result", { ok: false, error: error.message });
       } finally {

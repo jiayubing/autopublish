@@ -55,6 +55,12 @@ DOCX, Doubao, Edge, or ordinary Markdown workflows.
 Hepan publishing is an optional platform and currently requires a user-provided
 Python runtime with `requests`, `beautifulsoup4`, and a valid cookie. Configure
 it before entering a real Hepan publish operation.
+Hepan accepts application-generated `.md`, `.markdown`, `.txt`, and `.docx`.
+Markdown is converted to safe HTML locally with raw HTML disabled; no extra
+Python Markdown package is required. The default inter-article Hepan interval
+is 30 seconds and can be set from 0 to 3600 seconds in Settings. The
+`HEPAN_PUBLISH_INTERVAL_SECONDS` environment override is read-only; zero is
+allowed but shows a frequency-risk warning.
 
 Configure paid media and Hepan from the Settings center. `media-provider.json`
 and `hepan-provider.json` are application-local encrypted stores under
@@ -86,6 +92,15 @@ timeout or browser crash must become待确认 and must not offer a direct safe
 retry. If the remote operation succeeded but local archiving failed, keep the
 publication as successful or require reconciliation; never classify it as a
 safe-to-retry failure.
+
+Moving history articles to the trash is a confirmed, all-or-nothing operation
+across every publication target. Safe queued attempts are cancelled and
+unchanged failed pairs are cleaned while their publication records remain.
+Submitting, submitted, uncertain, and conflicting pairs block the whole
+selection. The durable removal transaction resumes after a crash; it never
+recreates a cancelled queue item. Restoring an article does not restore its
+queue entry. The trash has no automatic expiry, and permanent deletion keeps
+immutable title snapshots and every publication attempt.
 
 For an installation that has been upgraded from the old development identity,
 legacy application configuration import is an explicit, one-time operation.

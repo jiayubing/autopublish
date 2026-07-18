@@ -86,7 +86,7 @@ describe("article history grouping", async function() {
     assert.match(view, /restoreContentArticle/);
     assert.match(view, /preparePermanentDeleteContentArticle/);
     assert.match(view, /permanentlyDeleteContentArticle/);
-    assert.match(view, /删除历史文章/);
+    assert.match(view, /移入回收站/);
     assert.match(view, /永久删除/);
     assert.match(api, /preparePermanentDeleteArticle/);
     assert.match(api, /permanentlyDeleteArticle/);

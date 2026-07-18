@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { createArticleRemovalService } = require("./article-removal-service");
 
 function trashError(code, message) {
   const error = new Error(message);
@@ -27,6 +28,19 @@ function createArticleTrashService(options) {
   const articleStore = opts.articleStore;
   const now = opts.now || function() { return new Date().toISOString(); };
   const confirmations = new Map();
+  const removalService = opts.articleRemovalService || (opts.submissionService && opts.workspaceRoot
+    ? createArticleRemovalService({
+      workspaceRoot: opts.workspaceRoot,
+      articleStore: articleStore,
+      submissionService: opts.submissionService,
+      transactionStore: opts.transactionStore,
+      transactionDirectory: opts.transactionDirectory,
+      now: opts.now,
+      tokenTtlMs: opts.tokenTtlMs,
+      tokenGenerator: opts.tokenGenerator,
+      afterQueueAction: opts.afterQueueAction,
+      afterArticleMove: opts.afterArticleMove
+    }) : null);
 
   function buildTombstone(article) {
     const references = [];
@@ -42,7 +56,8 @@ function createArticleTrashService(options) {
       clientId: article.clientId,
       articleId: article.id,
       status: article.status,
-      references: references
+      references: references,
+      titleSnapshot: typeof article.title === "string" && article.title.trim() ? article.title.trim().slice(0, 200) : null
     };
   }
 
@@ -52,8 +67,17 @@ function createArticleTrashService(options) {
   }
 
   function trashArticles(input) {
-    if (!input || typeof input !== "object" || Array.isArray(input) || !Array.isArray(input.articles) || input.articles.length < 1) {
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+        (!removalService && (!Array.isArray(input.articles) || input.articles.length < 1)) ||
+        (removalService && (!Array.isArray(input.selections || input.articles) || !(input.selections || input.articles).length))) {
       throw trashError("CONTENT_INPUT_INVALID", "At least one article is required");
+    }
+    if (removalService) {
+      return removalService.applyArticleRemovalImpact({
+        selections: input.selections || input.articles,
+        token: input.token,
+        confirmed: input.confirmed
+      });
     }
     if (input.confirmed !== true) throw trashError("ARTICLE_TRASH_CONFIRMATION_REQUIRED", "Article trash confirmation is required");
     const moved = [];
@@ -79,9 +103,15 @@ function createArticleTrashService(options) {
     return { moved: moved, skipped: skipped, rejected: rejected };
   }
 
+  function previewTrashArticles(input) {
+    if (!removalService) throw trashError("ARTICLE_REMOVAL_UNAVAILABLE", "Article removal preview is unavailable");
+    return removalService.previewArticleRemovalImpact(input);
+  }
+
   function restoreArticle(input) {
     const item = selection(input);
-    return articleStore.restoreTrashedArticle(item.clientId, item.articleId);
+    const restored = articleStore.restoreTrashedArticle(item.clientId, item.articleId);
+    return removalService ? { article: restored, restored: true, queueRestored: false, message: "文章已恢复，投稿队列不会自动恢复" } : restored;
   }
 
   function preparePermanentDelete(input) {
@@ -109,7 +139,7 @@ function createArticleTrashService(options) {
     return { clientId: item.clientId, articleId: item.articleId, deleted: true, deletedAt: tombstone.deletedAt };
   }
 
-  return { listTrashedArticles, trashArticles, restoreArticle, preparePermanentDelete, permanentlyDeleteArticle };
+  return { listTrashedArticles, trashArticles, previewTrashArticles, previewArticleRemovalImpact: previewTrashArticles, restoreArticle, preparePermanentDelete, permanentlyDeleteArticle, recoverPendingRemovals: removalService && removalService.recoverPendingRemovals };
 }
 
 module.exports = { createArticleTrashService };

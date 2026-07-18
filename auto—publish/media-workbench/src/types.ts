@@ -66,6 +66,7 @@ export interface HepanProviderStatus {
   categoryId: number;
   vendorConfigured: boolean;
   siteOrigin: string;
+  publishIntervalSeconds: number;
   lastTest: PlatformProviderTestResult | null;
 }
 export type PlatformProviderStatus = MediaProviderStatus | HepanProviderStatus;
@@ -349,6 +350,7 @@ export interface PublicationHistoryRecord {
   platformId: string | null;
   mediaResourceId: string | null;
   displayName: string | null;
+  titleSnapshot?: string | null;
   status: PublicationRecordStatus;
   createdAt: string;
   updatedAt: string;
@@ -385,6 +387,8 @@ export interface PlatformArticle {
   title: string;
   platformId: string;
   sourcePlatformId: string;
+  sourceArticleState?: 'active' | 'trashed' | 'missing' | string | null;
+  reasonCode?: string | null;
 }
 
 export interface PlatformTarget {
@@ -397,7 +401,16 @@ export interface PlatformStatus {
   isBatchRunning: boolean;
   isStopPending: boolean;
   isPlatformRunning: boolean;
+  phase?: 'idle' | 'running' | 'waiting-interval' | 'stopping' | 'completed' | 'failed' | string;
+  status?: string;
+  waitRemainingMs?: number;
+  nextTask?: PlatformSubmitTask | null;
+  task?: PlatformSubmitTask | null;
+  targetPlatformId?: string | null;
+  reasonCode?: string | null;
 }
+
+export interface PlatformSubmitState extends PlatformStatus {}
 
 export interface PlatformSubmitPlan {
   taskCount: number;

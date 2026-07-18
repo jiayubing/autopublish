@@ -481,7 +481,7 @@ function createArticleStore(workspaceRoot, options) {
   }
 
   function assertTombstone(tombstone, clientId, articleId) {
-    const allowedFields = ["version", "deletedAt", "clientId", "articleId", "status", "references", "permanentlyDeleted", "purgedAt"];
+    const allowedFields = ["version", "deletedAt", "clientId", "articleId", "status", "references", "titleSnapshot", "permanentlyDeleted", "purgedAt"];
     if (!tombstone || typeof tombstone !== "object" || Array.isArray(tombstone) ||
         Object.keys(tombstone).some(function(field) { return !allowedFields.includes(field); }) ||
         tombstone.version !== 1 ||
@@ -490,7 +490,9 @@ function createArticleStore(workspaceRoot, options) {
         (tombstone.status !== "generated" && tombstone.status !== "saved") || !Array.isArray(tombstone.references) ||
         (tombstone.permanentlyDeleted === true && (typeof tombstone.purgedAt !== "string" || Number.isNaN(Date.parse(tombstone.purgedAt)))) ||
         (tombstone.permanentlyDeleted !== undefined && tombstone.permanentlyDeleted !== true) ||
-        (tombstone.purgedAt !== undefined && tombstone.permanentlyDeleted !== true)) {
+        (tombstone.purgedAt !== undefined && tombstone.permanentlyDeleted !== true) ||
+        (tombstone.titleSnapshot !== undefined && tombstone.titleSnapshot !== null &&
+          (typeof tombstone.titleSnapshot !== "string" || !tombstone.titleSnapshot.trim() || tombstone.titleSnapshot.length > 200))) {
       throw storeError("ARTICLE_INVALID", "Article tombstone is invalid");
     }
     tombstone.references.forEach(function(reference) {
@@ -664,7 +666,27 @@ function createArticleStore(workspaceRoot, options) {
     }
   }
 
-  return { saveArticle, getArticle, listArticles, reviewArticle, moveArticleToTrash, restoreTrashedArticle, listTrashedArticles, getTrashedTombstone, permanentlyDeleteTrashedArticle };
+  function isArticleTrashed(clientId, articleId) {
+    try {
+      const tombstone = getTrashedTombstone(clientId, articleId);
+      return tombstone.permanentlyDeleted !== true;
+    } catch (error) {
+      if (error && error.code === "ARTICLE_NOT_FOUND") return false;
+      throw error;
+    }
+  }
+
+  function isArticleRemoved(clientId, articleId) {
+    try {
+      getTrashedTombstone(clientId, articleId);
+      return true;
+    } catch (error) {
+      if (error && error.code === "ARTICLE_NOT_FOUND") return false;
+      throw error;
+    }
+  }
+
+  return { saveArticle, getArticle, listArticles, reviewArticle, moveArticleToTrash, restoreTrashedArticle, listTrashedArticles, getTrashedTombstone, permanentlyDeleteTrashedArticle, isArticleTrashed, isArticleRemoved };
 }
 
 module.exports = { createArticleStore };

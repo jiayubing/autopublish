@@ -116,3 +116,57 @@ it("closes every platform session with the resolved bundled Node and CLI", async
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+it("snapshots the Hepan interval once when a platform batch starts", async function() {
+  const paths = { contentLibrary: "C:\\portable-content", tmp: "C:\\local-state\\tmp" };
+  const calls = [];
+  let cleaned = false;
+  function fakeFork(script, args) {
+    calls.push({ script, args });
+    const child = new EventEmitter();
+    child.send = function() {};
+    child.kill = function() {};
+    process.nextTick(function() {
+      child.emit("message", { type: "state", payload: { phase: "heartbeat" } });
+      child.emit("message", { type: "result", payload: { ok: true, data: {} } });
+      child.emit("exit", 0);
+    });
+    return child;
+  }
+  const service = createDesktopTaskService({
+    cwd: paths.contentLibrary,
+    paths,
+    fork: fakeFork,
+    platformSettingsService: {
+      getAdapterForRuntime: function() {
+        return {
+          config: { pythonPath: "C:\\python.exe", categoryId: 121, vendorDir: "", publishIntervalSeconds: 17 },
+          adapter: { createTemporaryCookie: function() { return { cookiePath: "C:\\cookie.tmp", cleanup: function() { cleaned = true; } }; } }
+        };
+      }
+    }
+  });
+
+  await service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "source", filename: "article.txt", targetPlatformId: "hepan" }] });
+  const payload = JSON.parse(calls[0].args[1]);
+  assert.equal(payload.hepanRuntime.publishIntervalSeconds, 17);
+  assert.equal(payload.submitOptions.intervalByTargetMs.hepan, 17000);
+  assert.equal(cleaned, true);
+});
+
+it("returns a distinct progress watchdog error instead of a fixed batch timeout", async function() {
+  const child = new EventEmitter();
+  child.send = function() {};
+  let killed = false;
+  child.kill = function() { killed = true; };
+  const service = createDesktopTaskService({
+    cwd: "C:\\portable-content",
+    paths: { contentLibrary: "C:\\portable-content", tmp: "C:\\local-state\\tmp" },
+    fork: function() { return child; },
+    platformWatchdogMs: 1000
+  });
+
+  const result = await service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "source", filename: "article.txt", targetPlatformId: "lieju" }] }, { platformWatchdogMs: 10 });
+  assert.equal(result.errorCode, "PLATFORM_WORKER_WATCHDOG_TIMEOUT");
+  assert.equal(killed, true);
+});

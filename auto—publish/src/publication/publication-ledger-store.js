@@ -19,6 +19,7 @@ const RECORD_FIELDS = Object.freeze([
   "mediaResourceId",
   "displayName",
   "accountFingerprint",
+  "titleSnapshot",
   "status",
   "attempts",
   "createdAt",
@@ -137,7 +138,10 @@ function validatePublicationRecord(record) {
   }
   const keys = Object.keys(record).sort();
   const allowed = RECORD_FIELDS.slice().sort();
-  if (keys.length !== allowed.length || keys.some((key, index) => key !== allowed[index])) {
+  const legacyAllowed = allowed.filter(function(key) { return key !== "titleSnapshot"; });
+  const matchesCurrent = keys.length === allowed.length && keys.every(function(key, index) { return key === allowed[index]; });
+  const matchesLegacy = keys.length === legacyAllowed.length && keys.every(function(key, index) { return key === legacyAllowed[index]; });
+  if (!matchesCurrent && !matchesLegacy) {
     throw storeError("PUBLICATION_RECORD_CORRUPT", "Publication record is invalid");
   }
   if (record.version !== PUBLICATION_RECORD_VERSION) {
@@ -156,6 +160,7 @@ function validatePublicationRecord(record) {
   if (record.mediaResourceId !== null) safeToken(record.mediaResourceId, "mediaResourceId");
   validateOptionalSafeField(record.displayName, 256);
   validateFingerprint(record.accountFingerprint);
+  if (record.titleSnapshot !== undefined) validateOptionalSafeField(record.titleSnapshot, 200);
   if (PUBLICATION_STATUSES.indexOf(record.status) === -1) {
     throw storeError("PUBLICATION_RECORD_CORRUPT", "Publication record is invalid");
   }

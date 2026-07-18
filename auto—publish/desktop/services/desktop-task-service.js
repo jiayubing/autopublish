@@ -212,6 +212,9 @@ function closeBrowserSessions() {
         pythonPath: runtime.config.pythonPath,
         categoryId: runtime.config.categoryId,
         vendorDir: runtime.config.vendorDir || "",
+        publishIntervalSeconds: Number.isInteger(runtime.config.publishIntervalSeconds) && runtime.config.publishIntervalSeconds >= 0 && runtime.config.publishIntervalSeconds <= 3600
+          ? runtime.config.publishIntervalSeconds
+          : 30,
         cookiePath: temporaryCookie.cookiePath
       };
     }
@@ -223,28 +226,50 @@ function closeBrowserSessions() {
     emitPlatformState();
 
     try {
-      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 } };
-      var task = spawnDesktopTask("platform-submit", payload, { onLog: hooks && hooks.onLog ? hooks.onLog : function() {} });
+      var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
+      if (hepanRuntime) submitOptions.intervalByTargetMs = { hepan: hepanRuntime.publishIntervalSeconds * 1000 };
+      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions };
+      var watchdogMs = Number.isInteger(hooks && hooks.platformWatchdogMs) && hooks.platformWatchdogMs > 0
+        ? hooks.platformWatchdogMs
+        : (Number.isInteger(options.platformWatchdogMs) && options.platformWatchdogMs > 0
+          ? options.platformWatchdogMs
+          : Math.max(submitOptions.timeoutMs + 5000, 15000));
+      var watchdogId;
+      var watchdogResolve;
+      var watchdogPromise = new Promise(function(resolve) { watchdogResolve = resolve; });
+      function armWatchdog() {
+        clearTimeout(watchdogId);
+        watchdogId = setTimeout(function() {
+          watchdogResolve({ ok: false, errorCode: "PLATFORM_WORKER_WATCHDOG_TIMEOUT", error: "Platform publish worker stopped making progress." });
+        }, watchdogMs);
+      }
+      var task = spawnDesktopTask("platform-submit", payload, {
+        onLog: hooks && hooks.onLog ? hooks.onLog : function() {},
+        onState: function(state) {
+          armWatchdog();
+          sendToRenderer("platform-state", Object.assign({
+            isBatchRunning: isBatchRunning,
+            isStopPending: isStopPending,
+            isPlatformRunning: true
+          }, state || {}));
+          if (hooks && typeof hooks.onState === "function") hooks.onState(state);
+        }
+      });
       platformChild = task.child;
+      armWatchdog();
 
       var abortPromise = new Promise(function(resolve) {
         platformAbort = function() {
-          resolve({ ok: true, data: { ok: 0, fail: 0, skipped: platformTaskCount, pending: 0, results: [] } });
+          resolve({ ok: true, errorCode: "STOP_REQUESTED", data: { ok: 0, fail: 0, skipped: platformTaskCount, pending: 0, results: [] } });
         };
       });
 
-      var timeoutMs = 120000;
-      var timeoutId;
-      var timeoutPromise = new Promise(function(resolve) {
-        timeoutId = setTimeout(function() {
-          resolve({ ok: false, error: "Platform publish timed out after " + (timeoutMs / 1000) + "s" });
-        }, timeoutMs);
-      });
+      var result = await Promise.race([task.promise, abortPromise, watchdogPromise]);
+      clearTimeout(watchdogId);
 
-      var result = await Promise.race([task.promise, abortPromise, timeoutPromise]);
-      clearTimeout(timeoutId);
-
-      if (result && ((!result.ok && result.error && result.error.indexOf("timed out") !== -1) || result && result.data && result.data.skipped === platformTaskCount)) {
+      if (result && result.errorCode === "PLATFORM_WORKER_WATCHDOG_TIMEOUT") {
+        try { platformChild.kill(); } catch (_) {}
+      } else if (result && result.data && result.data.skipped === platformTaskCount) {
         if (!platformRemoteCallStarted) {
           try { platformChild.kill(); } catch (_) {}
         }

@@ -66,6 +66,18 @@ function createSubmissionBatchStore(options) {
       return String(right.id || "").localeCompare(String(left.id || ""));
     });
   }
+  function listItemsByArticle(clientId, articleId) {
+    if (typeof clientId !== "string" || !clientId.trim() || typeof articleId !== "string" || !articleId.trim()) {
+      throw batchError("SUBMISSION_BATCH_ARTICLE_INVALID", "Article identity is invalid");
+    }
+    const result = [];
+    list().forEach(function(batch) {
+      (batch.items || []).forEach(function(item) {
+        if (batch.clientId === clientId && item.articleId === articleId) result.push({ batch: clone(batch), item: clone(item) });
+      });
+    });
+    return result;
+  }
   function updateItem(batchId, identity, transition) {
     const batch = get(batchId);
     const reference = identity || {};
@@ -94,7 +106,7 @@ function createSubmissionBatchStore(options) {
     });
     return result;
   }
-  return { createId, save, get, list, updateItem, reconcile, batchStatus };
+  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, reconcile, batchStatus };
 }
 
 module.exports = { createSubmissionBatchStore };

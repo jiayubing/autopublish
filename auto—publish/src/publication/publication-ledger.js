@@ -104,7 +104,12 @@ function contextFields(context) {
     }
     accountFingerprint = crypto.createHash("sha256").update(String(accountValue), "utf8").digest("hex");
   }
-  return { displayName, accountFingerprint };
+  let titleSnapshot = null;
+  if (values.titleSnapshot !== undefined && values.titleSnapshot !== null) {
+    if (typeof values.titleSnapshot !== "string" || !values.titleSnapshot.trim()) throw ledgerError("PUBLICATION_CONTEXT_INVALID", "Publication title snapshot is invalid");
+    titleSnapshot = values.titleSnapshot.trim().slice(0, 200);
+  }
+  return { displayName, accountFingerprint, titleSnapshot };
 }
 
 function outcomeFields(outcome) {
@@ -163,6 +168,7 @@ function createPublicationLedger(options) {
       mediaResourceId: target.mediaResourceId,
       displayName: contextValues.displayName,
       accountFingerprint: contextValues.accountFingerprint,
+      titleSnapshot: contextValues.titleSnapshot,
       status: "queued",
       attempts: [attemptRecord(makeId(idFactory, "attempt"), "queued", createdAt)],
       createdAt: createdAt,
@@ -205,6 +211,7 @@ function createPublicationLedger(options) {
       current.updatedAt = timestamp;
       if (contextValues.displayName !== null) current.displayName = contextValues.displayName;
       if (contextValues.accountFingerprint !== null) current.accountFingerprint = contextValues.accountFingerprint;
+      if ((current.titleSnapshot === undefined || current.titleSnapshot === null) && contextValues.titleSnapshot !== null) current.titleSnapshot = contextValues.titleSnapshot;
       return current;
     });
     return publicResult(updated);
@@ -301,11 +308,22 @@ function createPublicationLedger(options) {
       .map(clone);
   }
 
+  function ensureTitleSnapshot(publicationId, title) {
+    if (typeof title !== "string" || !title.trim()) return null;
+    const snapshot = title.trim().slice(0, 200);
+    const result = store.update(publicationId, function(record) {
+      if (record.titleSnapshot === undefined || record.titleSnapshot === null) record.titleSnapshot = snapshot;
+      return record;
+    });
+    return publicResult(result);
+  }
+
   return {
     reserve: reserve,
     markSubmitting: markSubmitting,
     recordOutcome: recordOutcome,
     reconcile: reconcile,
+    ensureTitleSnapshot: ensureTitleSnapshot,
     listForArticles: listForArticles,
     get: function(publicationId) { return store.get(publicationId); },
     list: function() { return store.list(); },

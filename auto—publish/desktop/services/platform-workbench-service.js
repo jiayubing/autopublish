@@ -10,6 +10,7 @@ const { createPublicationLedger } = require("../../src/publication/publication-l
 const { resolveArticleIdentity } = require("../../src/publication/article-identity");
 const { resolvePublicationTarget } = require("../../src/publication/publication-targets");
 const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
+const { createArticleStore } = require("../../src/content/article-store");
 
 const ARTICLE_EXTENSIONS = [".md", ".txt", ".docx"];
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -130,6 +131,16 @@ function isStopError(error) {
   return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
 }
 
+function isStopRequested(options) {
+  if (options && typeof options.shouldStop === "function" && options.shouldStop()) return true;
+  try {
+    throwIfStopped();
+    return false;
+  } catch (_) {
+    return true;
+  }
+}
+
 function safeOutcomeError(error, fallback) {
   var code = error && typeof error.code === "string" ? error.code : fallback;
   return /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(code || "") ? code : fallback;
@@ -148,6 +159,21 @@ function createPlatformWorkbenchService(opts) {
     workspaceRoot: rootDir,
     directory: options.paths && options.paths.submissionRecords
   });
+  var articleStore = options.articleStore || createArticleStore(rootDir, { paths: options.paths });
+
+  function sourceArticleState(metadata) {
+    var data = metadata && metadata.data;
+    var clientId = data && data.clientId;
+    var articleId = data && (data.generatedArticleId || data.articleId);
+    if (!clientId || !articleId || !articleStore || (typeof articleStore.isArticleTrashed !== "function" && typeof articleStore.isArticleRemoved !== "function")) return { sourceArticleState: "active", reasonCode: null };
+    try {
+      var removed = typeof articleStore.isArticleRemoved === "function"
+        ? articleStore.isArticleRemoved(clientId, articleId)
+        : articleStore.isArticleTrashed(clientId, articleId);
+      if (removed) return { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" };
+    } catch (_) {}
+    return { sourceArticleState: "active", reasonCode: null };
+  }
 
   function scanQueue() {
     return platforms.filter(function(platform) {
@@ -167,6 +193,8 @@ function createPlatformWorkbenchService(opts) {
           return metadata.valid;
         }).map(function(filename) {
           var filePath = path.join(inputDir, filename);
+          var metadata = readSubmissionMetadata(filePath, true);
+          var state = sourceArticleState(metadata);
           var title = path.basename(filename, path.extname(filename));
           if (filename.endsWith(".txt") || filename.endsWith(".md")) {
             title = firstTitle(fs.readFileSync(filePath, "utf-8"), title);
@@ -177,7 +205,9 @@ function createPlatformWorkbenchService(opts) {
             file: filePath,
             sourceFile: filePath,
             fileBaseName: path.basename(filename, path.extname(filename)),
-            title: title
+            title: title,
+            sourceArticleState: state.sourceArticleState,
+            reasonCode: state.reasonCode
           };
         });
       }
@@ -201,6 +231,9 @@ function createPlatformWorkbenchService(opts) {
     for (var i = 0; i < selectedArticles.length; i++) {
       var selected = safeTask({ sourcePlatformId: selectedArticles[i].sourcePlatformId, filename: selectedArticles[i].filename, targetPlatformId: targetPlatformIds[0] });
       var filePath = resolveSelectedFilePath(selectedArticles[i]);
+      var sourceMetadata = readSubmissionMetadata(filePath, true);
+      var state = sourceArticleState(sourceMetadata);
+      if (state.sourceArticleState === "trashed") throw submissionInputError(state.reasonCode, "Source article is in the trash");
       for (var j = 0; j < targetPlatformIds.length; j++) {
         tasks.push({
           sourcePlatformId: selected.sourcePlatformId,
@@ -345,6 +378,45 @@ function createPlatformWorkbenchService(opts) {
     var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
     var results = [];
     var sourceGroups = new Map();
+    var lastRemoteEndedAt = new Map();
+    var now = typeof opts.now === "function" ? opts.now : function() { return Date.now(); };
+    var wait = typeof opts.wait === "function" ? opts.wait : function(ms) {
+      return new Promise(function(resolve) { setTimeout(resolve, ms); });
+    };
+
+    function intervalFor(targetPlatformId) {
+      var intervals = opts.intervalByTargetMs && typeof opts.intervalByTargetMs === "object" ? opts.intervalByTargetMs : {};
+      var value = Number(intervals[targetPlatformId]);
+      return Number.isFinite(value) && value > 0 ? value : 0;
+    }
+
+    async function waitForTargetInterval(task) {
+      var intervalMs = intervalFor(task.targetPlatformId);
+      var previousEnd = lastRemoteEndedAt.get(task.targetPlatformId);
+      if (!intervalMs || previousEnd === undefined) return !isStopRequested(opts);
+
+      var remaining = Math.max(0, intervalMs - (Number(now()) - Number(previousEnd)));
+      while (remaining > 0) {
+        if (isStopRequested(opts)) return false;
+        if (typeof opts.onTaskState === "function") {
+          opts.onTaskState({
+            phase: "waiting-interval",
+            task: task,
+            nextTask: task,
+            targetPlatformId: task.targetPlatformId,
+            waitRemainingMs: remaining
+          });
+        }
+        await wait(Math.min(remaining, 250), {
+          phase: "waiting-interval",
+          task: task,
+          shouldStop: function() { return isStopRequested(opts); }
+        });
+        if (isStopRequested(opts)) return false;
+        remaining = Math.max(0, intervalMs - (Number(now()) - Number(previousEnd)));
+      }
+      return true;
+    }
 
     for (var i = 0; i < tasks.length; i++) {
       var task;
@@ -364,6 +436,7 @@ function createPlatformWorkbenchService(opts) {
       try {
         filePath = resolveSelectedFilePath(task, true);
         metadata = readSubmissionMetadata(filePath, true);
+        var sourceState = sourceArticleState(metadata);
         group.filePath = filePath;
         if (!adapter) throw submissionInputError("SUBMISSION_ADAPTER_MISSING", "Missing adapter: " + task.targetPlatformId);
         var sourceArticle = {
@@ -391,8 +464,18 @@ function createPlatformWorkbenchService(opts) {
         var reference = reservePublication(identity, target, metadata);
         var result = { task: task, publicationId: reference.publicationId, attemptId: reference.attemptId, articleKey: identity.articleKey, targetKey: target.targetKey };
 
+        if (sourceState.sourceArticleState === "trashed") {
+          result.status = "skipped";
+          result.publicationStatus = reference.status || "queued";
+          result.error = sourceState.reasonCode;
+          result.reasonCode = sourceState.reasonCode;
+          results.push(result);
+          group.results.push(result);
+          continue;
+        }
+
         try {
-          throwIfStopped();
+          if (isStopRequested(opts)) throw new Error("Stop requested");
         } catch (stopError) {
           cancelQueuedReservation(reference);
           updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
@@ -407,7 +490,7 @@ function createPlatformWorkbenchService(opts) {
         try {
           adapter.ensureSession();
           await adapter.ensureLoggedIn({ interactive: opts.interactive, timeoutMs: opts.timeoutMs });
-          throwIfStopped();
+          if (isStopRequested(opts)) throw new Error("Stop requested");
         } catch (error) {
           if (isStopError(error)) {
             cancelQueuedReservation(reference);
@@ -430,6 +513,40 @@ function createPlatformWorkbenchService(opts) {
           continue;
         }
 
+        if (!(await waitForTargetInterval(task))) {
+          cancelQueuedReservation(reference);
+          updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
+          result.status = "skipped";
+          result.publicationStatus = "cancelled";
+          result.error = "STOP_REQUESTED";
+          results.push(result);
+          group.results.push(result);
+          break;
+        }
+        if (isStopRequested(opts)) {
+          cancelQueuedReservation(reference);
+          updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
+          result.status = "skipped";
+          result.publicationStatus = "cancelled";
+          result.error = "STOP_REQUESTED";
+          results.push(result);
+          group.results.push(result);
+          break;
+        }
+
+        // Re-check the source article immediately before reserving/submitting.
+        // A history removal may have completed after queue scanning.
+        var latestSourceState = sourceArticleState(readSubmissionMetadata(filePath, true));
+        if (latestSourceState.sourceArticleState === "trashed") {
+          result.status = "skipped";
+          result.publicationStatus = reference.status || "queued";
+          result.error = latestSourceState.reasonCode;
+          result.reasonCode = latestSourceState.reasonCode;
+          results.push(result);
+          group.results.push(result);
+          continue;
+        }
+
         if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "before-remote", task: task });
         var submitting = ledger.markSubmitting(reference.publicationId, reference.attemptId);
         updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "submitting" });
@@ -446,7 +563,18 @@ function createPlatformWorkbenchService(opts) {
           error.remoteCallStarted = true;
           rawOutcome = error;
         }
+        var remoteEndedAt = Number(now());
+        lastRemoteEndedAt.set(task.targetPlatformId, remoteEndedAt);
         var outcome = normalizePublicationOutcome(rawOutcome, rawOutcome && rawOutcome.message ? rawOutcome : null);
+        if (typeof opts.onTaskState === "function") opts.onTaskState({
+          phase: "remote-finished",
+          task: task,
+          targetPlatformId: task.targetPlatformId,
+          publicationId: reference.publicationId,
+          attemptId: reference.attemptId,
+          status: outcome.status,
+          errorCode: outcome.errorCode
+        });
         try { ledger.recordOutcome(reference.publicationId, reference.attemptId, outcome); } catch (ledgerError) {
           // A remote result is already known. Keep it in the task result and do
           // not manufacture a retryable failure when the local ledger is busy.

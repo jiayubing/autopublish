@@ -222,3 +222,60 @@ article × media resource, so one article can proceed for resource A while
 resource B remains available. History and duplicate protection use the
 target-level publication record; queue files, order JSONL, and `published`
 archives are supporting runtime evidence.
+
+### Moving an article to the trash
+
+The history action is **移入回收站**, not permanent deletion. It performs one
+impact preview and one confirmation for all selected articles and all ordinary
+platform and paid-media targets. The confirmation summarizes queued attempts
+that will be cancelled, unchanged failed queue pairs that will be cleaned, and
+the fact that publication records remain as audit history.
+
+The operation is all-or-nothing. A `submitting`, `submitted`, `uncertain`,
+modified-pair, or identity/hash conflict blocks the whole selection; the
+history view does not offer a force-delete escape hatch. A queued attempt may
+be cancelled while a batch is running only when its remote call has not begun.
+The worker checks the ledger and source article again immediately before the
+remote call, so a concurrently trashed article is skipped safely.
+
+The confirmed operation is recorded in a durable removal transaction. Queue
+actions are applied first, then all articles are moved, and only then is the
+transaction committed. If the application stops midway, startup resumes the
+transaction forward and never recreates an attempt already marked `cancelled`.
+Until recovery finishes, the UI reports `pending_recovery`; identity or hash
+conflicts stop at `needs_repair` and require the independent queue repair flow.
+
+Status-specific behavior is: `queued` is cancelled when the pair is unchanged;
+`failed` is cleaned when the pair is unchanged while its failed ledger record
+is retained; `cancelled` and `failed-cleaned` need no queue action; `published`
+keeps its evidence; and `submitting`, `submitted`, and `uncertain` are blocked.
+Restoring an article never restores a cancelled queue item. The trash has no
+automatic expiry. Permanent deletion removes article body/recoverable copies
+only; immutable title snapshots, identities, target records, remote links, and
+all attempts remain available as read-only publication history.
+
+Queue scanning also marks old pairs whose sidecar source article is already in
+the trash as `sourceArticleState: trashed` with a stable reason code. They are
+not selectable and the worker refuses them before any adapter call. The
+explicit repair flow can cancel unchanged `queued` pairs or clean clearly
+`failed` pairs; it does not guess about `submitting`, `submitted`, `uncertain`,
+or modified pairs.
+
+### Hepan article formats and pacing
+
+The Hepan adapter accepts `.md`, `.markdown`, `.txt`, and `.docx`. Node parses
+Markdown and text into a title and safe HTML before invoking the Python POST
+script. The first H1 (or first non-empty line) is the Markdown title; text uses
+the first non-empty line. Raw HTML is disabled and links are restricted to safe
+HTTP(S), mailto, or fragment targets. DOCX keeps the existing Python-compatible
+path. Markdown/text content is passed through a short-lived, unpredictable
+local JSON payload and the payload is removed on success, failure, stop, and
+exception; it is never written to the content library or logs.
+
+Hepan `publishIntervalSeconds` is an application setting from 0 through 3600,
+defaulting to 30. `HEPAN_PUBLISH_INTERVAL_SECONDS` may provide a read-only
+environment override. The interval starts when one Hepan remote call finishes
+and ends when the next Hepan call starts; the first and last item do not wait.
+Failed and uncertain calls still count. Waiting is cancellable and emits a
+countdown heartbeat, and mixed-platform batches throttle only adjacent Hepan
+calls. A zero-second setting is allowed but displays a frequency-risk warning.

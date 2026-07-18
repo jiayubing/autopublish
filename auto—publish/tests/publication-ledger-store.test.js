@@ -38,4 +38,19 @@ describe("publication ledger store", function() {
       fs.rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  it("captures a bounded immutable title snapshot on first reservation and preserves it across retries", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "publication-title-snapshot-"));
+    try {
+      const ledger = createPublicationLedger({ workspaceRoot: root });
+      const identity = resolveArticleIdentity({ clientId: "client-1", articleId: "article-1" });
+      const first = ledger.reserve(identity, resolvePublicationTarget({ platformId: "toutiao" }), { titleSnapshot: "First headline" });
+      assert.equal(first.titleSnapshot, "First headline");
+      ledger.markSubmitting(first.publicationId, first.attemptId);
+      ledger.recordOutcome(first.publicationId, first.attemptId, { status: "failed", errorCode: "TEST_FAILED" });
+      const retry = ledger.reserve(identity, resolvePublicationTarget({ platformId: "toutiao" }), { titleSnapshot: "Renamed headline" });
+      assert.equal(retry.titleSnapshot, "First headline");
+      assert.deepEqual(ledger.get(retry.publicationId).attempts.map(function(attempt) { return attempt.status; }), ["failed", "queued"]);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
 });

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, reviewContentArticles, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
 import { formatBeijingTime } from '../../time-format';
@@ -28,6 +28,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
+  const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(null);
+  const [trashFeedback, setTrashFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +86,39 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   const latestBatch = submissionBatches[0];
   const latestBatchCancelableCount = latestBatch?.items.filter((item) => item.status === 'queued' && item.canCancel === true).length || 0;
   const latestBatchCleanupCount = latestBatch?.items.filter((item) => item.status === 'failed' && item.canCleanup === true).length || 0;
+
+  function impactPlatform(item: ArticleTrashImpactItem): string {
+    return item.displayName || item.targetPlatformId || item.platformId || '未知平台';
+  }
+
+  function groupImpact(items: ArticleTrashImpactItem[]): Array<[string, number]> {
+    const counts = new Map<string, number>();
+    items.forEach((item) => counts.set(impactPlatform(item), (counts.get(impactPlatform(item)) || 0) + 1));
+    return [...counts.entries()];
+  }
+
+  function trashPublicationSummary(entry: ArticleTrashRecord): string {
+    const summary = entry.publicationSummary;
+    if (!summary || typeof summary !== 'object') return '发布详情保留在发布账本中';
+    const value = summary as { label?: unknown; status?: unknown; records?: unknown; published?: unknown };
+    const label = typeof value.label === 'string' ? value.label : typeof value.status === 'string' ? value.status : '已保留';
+    const records = typeof value.records === 'number' ? ` · ${value.records} 条记录` : '';
+    const published = typeof value.published === 'number' ? ` · 已发布 ${value.published}` : '';
+    return `${label}${records}${published}`;
+  }
+
+  async function refreshHistoryData() {
+    const [nextArticles, nextBatches] = await Promise.all([
+      listContentArticles(clientId),
+      listContentSubmissionBatches(clientId)
+    ]);
+    const nextRecords = await listPublicationHistory(clientId, nextArticles.map((item) => item.id));
+    setArticles(nextArticles);
+    setSubmissionBatches(nextBatches);
+    setPublicationRecords(nextRecords);
+    onRefreshArticles?.();
+    return nextArticles;
+  }
 
   function toggleArticle(article: GeneratedContentArticle) {
     if (article.status !== 'generated' && article.status !== 'saved') return;
@@ -159,10 +194,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   }
 
   async function refreshBatchAffectedArticles() {
-    setSubmissionBatches(await listContentSubmissionBatches(clientId));
-    setArticles(await listContentArticles(clientId));
-    setPublicationRecords(await listPublicationHistory(clientId, articles.map((item) => item.id)));
-    onRefreshArticles?.();
+    await refreshHistoryData();
   }
 
   async function cancelLatestBatch() {
@@ -202,18 +234,35 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   }
 
   async function trashSelected() {
-    if (!selectedArticles.length || !window.confirm(`确认删除历史文章 ${selectedArticles.length} 篇？文章会进入回收站，投稿队列副本和记录不会删除。`)) return;
-    if (selectedArticles.some((article) => article.status === 'saved') && !window.confirm('其中包含已审核文章，可能已经进入投稿队列。请再次确认删除原文？')) return;
-    setBusy(true); setError('');
+    if (!selectedArticles.length) return;
+    setBusy(true); setError(''); setTrashFeedback(null);
     try {
-      const result = await trashContentArticles({ articles: selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id })), confirmed: true });
-      if (result.rejected.length) setError(`有 ${result.rejected.length} 篇文章未能移入回收站`);
-      setSelected([]); setArticles(await listContentArticles(clientId)); onRefreshArticles?.();
-    } catch (value) { setError(value instanceof Error ? value.message : '删除历史文章失败'); }
+      const preview = await previewContentArticleRemoval(selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id })));
+      setTrashPreview(preview);
+    } catch (value) { setError(value instanceof Error ? value.message : '回收站预检失败'); }
     finally { setBusy(false); }
   }
 
+  async function commitTrash() {
+    if (!trashPreview || !trashPreview.canCommit || !selectedArticles.length) return;
+    setBusy(true); setError('');
+    try {
+      const selections = trashPreview.selections || selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id }));
+      const result = await trashContentArticles({ articles: selections, selections, token: trashPreview.token, legacy: trashPreview.legacy, confirmed: true });
+      setTrashPreview(null);
+      setSelected([]);
+      await refreshHistoryData();
+      const status = result.status === 'pending_recovery' ? 'pending_recovery' : 'committed';
+      setTrashFeedback(status === 'pending_recovery'
+        ? { kind: 'status', text: `已确认移入回收站 ${result.articleCount || selections.length} 篇，正在恢复删除事务；队列和文章状态会继续自动推进。` }
+        : { kind: 'status', text: `已将 ${result.articleCount || selections.length} 篇文章移入回收站；发布记录继续保留，恢复文章不会重新加入投稿队列。` });
+    } catch (value) {
+      setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '移入回收站失败；未完成的事务可稍后恢复' });
+    } finally { setBusy(false); }
+  }
+
   async function restoreOne(entry: ArticleTrashRecord) {
+    if (!window.confirm(`确认恢复“${entry.titleSnapshot || entry.articleId}”？恢复文章不会重新加入投稿队列。`)) return;
     setBusy(true); setError('');
     try {
       await restoreContentArticle({ clientId: entry.clientId, articleId: entry.articleId });
@@ -242,7 +291,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
   if (showTrash) return <div className="h-full overflow-y-auto p-4">
     <div className="mb-4 flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-slate-800">文章回收站</h2><p className="mt-1 text-xs text-slate-500">回收站只保留最小引用；投稿队列副本和投稿记录不会联动删除。</p></div><button type="button" onClick={() => setShowTrash(false)} className="rounded border border-slate-300 px-3 py-2 text-xs">返回历史文章</button></div>
     {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
-    <div className="grid gap-3">{trash.map((entry) => <div key={entry.articleId} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3"><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-800">{entry.articleId}</div><div className="mt-1 text-xs text-slate-500">{entry.status} · 删除于 {formatBeijingTime(entry.deletedAt)}</div></div><button type="button" disabled={busy} onClick={() => void restoreOne(entry)} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">恢复</button><button type="button" disabled={busy} onClick={() => void permanentlyDeleteOne(entry)} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">永久删除</button></div>)}{!trash.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">回收站为空</div>}</div>
+    <div className="grid gap-3">{trash.map((entry) => <div key={entry.articleId} className="flex min-w-0 flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3"><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-slate-800">{entry.titleSnapshot || `已删除文章 · ${entry.articleId.slice(-6)}`}</div><div className="mt-1 break-all text-xs text-slate-500">文章 ID：{entry.articleId} · {entry.status} · 删除于 {formatBeijingTime(entry.deletedAt)}</div><div className="mt-1 text-xs text-slate-600">只读发布详情：{trashPublicationSummary(entry)}</div>{entry.references?.length > 0 && <div className="mt-1 text-xs text-slate-400">关联记录：{entry.references.map((reference) => `${reference.type}/${reference.id}`).join('、')}</div>}</div><button type="button" disabled={busy} onClick={() => void restoreOne(entry)} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">恢复（不恢复队列）</button><button type="button" disabled={busy} onClick={() => void permanentlyDeleteOne(entry)} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">永久删除正文</button></div>)}{!trash.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">回收站为空</div>}</div>
   </div>;
 
   return <div className="h-full overflow-y-auto p-4">
@@ -262,12 +311,13 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
        <div className="flex min-w-0 flex-wrap items-center gap-2">
          <button type="button" onClick={toggleAll} disabled={!operable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
          <button type="button" onClick={() => void reviewSelected()} disabled={!selectedReviewable.length || busy} className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">审核已选 ({selectedReviewable.length})</button>
-         <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">删除历史文章 ({selectedArticles.length})</button>
+          <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedArticles.length})</button>
          {latestBatch && latestBatchCancelableCount > 0 && <button type="button" title="撤销最近入队（仅未开始投稿）" onClick={() => void cancelLatestBatch()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销未开始投稿 ({latestBatchCancelableCount})</button>}
          {latestBatch && latestBatchCleanupCount > 0 && <button type="button" onClick={() => void cleanupLatestBatch()} disabled={busy} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({latestBatchCleanupCount})</button>}
          {latestBatch && !latestBatchCancelableCount && !latestBatchCleanupCount && <span role="status" className="text-xs text-slate-500">最近批次当前没有可撤销或可清理项。</span>}
        </div>
-       {batchFeedback && <div role={batchFeedback.kind === 'error' ? 'alert' : 'status'} aria-live={batchFeedback.kind === 'error' ? 'assertive' : 'polite'} tabIndex={batchFeedback.kind === 'error' ? -1 : undefined} className={`min-w-0 rounded border p-2 text-xs ${batchFeedback.kind === 'error' ? 'border-rose-100 bg-rose-50 text-rose-700' : 'border-blue-100 bg-blue-50 text-blue-700'}`}>{batchFeedback.text}</div>}
+        {batchFeedback && <div role={batchFeedback.kind === 'error' ? 'alert' : 'status'} aria-live={batchFeedback.kind === 'error' ? 'assertive' : 'polite'} tabIndex={batchFeedback.kind === 'error' ? -1 : undefined} className={`min-w-0 rounded border p-2 text-xs ${batchFeedback.kind === 'error' ? 'border-rose-100 bg-rose-50 text-rose-700' : 'border-blue-100 bg-blue-50 text-blue-700'}`}>{batchFeedback.text}</div>}
+        {trashFeedback && <div role={trashFeedback.kind === 'error' ? 'alert' : 'status'} aria-live="polite" className={`min-w-0 rounded border p-2 text-xs ${trashFeedback.kind === 'error' ? 'border-rose-100 bg-rose-50 text-rose-700' : 'border-blue-100 bg-blue-50 text-blue-700'}`}>{trashFeedback.text}</div>}
 
       <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -303,6 +353,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, onArticl
       })}
       {!groups.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">暂无历史文章</div>}
     </div>
+    {trashPreview && <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">一次确认将移入回收站并联动全部发布目标；发布记录继续保留。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>按平台撤销 queued：{groupImpact(trashPreview.queuedToCancel).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{platform} {count}</span>)}{!trashPreview.queuedToCancel.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>按平台清理 failed：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div></div>{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理明确 failed 队列副本，并将文章移入回收站；发布记录和失败记录继续保留。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || busy} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">确认移入回收站</button></div></div></div>}
     <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={busy} />
   </div>;
 }

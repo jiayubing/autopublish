@@ -35,5 +35,9 @@ function registerContentSubmissionIpc(deps) {
   deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCleanupFailedItems(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.cleanupFailedItems(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:get-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.getBatch(batchInput(input, false).batchId)); }); });
+  deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return service.previewTrashedArticleQueueResidue(); }); });
+  deps.ipcMain.handle("content:cleanup-trashed-article-queue-residue", function(event, input) {
+    return wrap(function() { return service.cleanupTrashedArticleQueueResidue(input); });
+  });
 }
 module.exports = { registerContentSubmissionIpc };

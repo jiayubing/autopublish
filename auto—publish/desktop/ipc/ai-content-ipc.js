@@ -47,6 +47,12 @@ function registerAiContentIpc(deps) {
   ipcMain.handle("content:list-article-trash", function(event, clientId) {
     return wrap(function() { return service.listTrashedArticles(clientId); });
   });
+  ipcMain.handle("content:preview-trash-articles", function(event, input) {
+    return wrap(function() { return service.previewTrashArticles(input); });
+  });
+  ipcMain.handle("content:preview-article-removal-impact", function(event, input) {
+    return wrap(function() { return service.previewArticleRemovalImpact(input); });
+  });
   ipcMain.handle("content:trash-articles", function(event, input) {
     return wrap(function() { return service.trashArticles(input); });
   });
@@ -58,6 +64,9 @@ function registerAiContentIpc(deps) {
   });
   ipcMain.handle("content:permanently-delete-article", function(event, input) {
     return wrap(function() { return service.permanentlyDeleteArticle(input); });
+  });
+  ipcMain.handle("content:recover-article-removals", function() {
+    return wrap(function() { return service.recoverPendingArticleRemovals(); });
   });
 }
 

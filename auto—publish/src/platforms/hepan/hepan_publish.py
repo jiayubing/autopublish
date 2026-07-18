@@ -50,10 +50,70 @@ UPLOAD_URL = f"{SITE_ORIGIN}/misc.php?mod=swfupload&action=swfupload&operation=p
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
 DOCX_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+MAX_PAYLOAD_BYTES = 5 * 1024 * 1024
+MAX_TITLE_LENGTH = 200
+MAX_CONTENT_HTML_LENGTH = 2 * 1024 * 1024
+MAX_SOURCE_STEM_LENGTH = 255
 
 
 class NeedsLoginError(RuntimeError):
     pass
+
+
+class PayloadError(RuntimeError):
+    def __init__(self, code: str, message: str = "Hepan payload is invalid") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+PAYLOAD_MESSAGES = {
+    "HEPAN_PAYLOAD_NOT_FILE": "Hepan payload file is invalid",
+    "HEPAN_PAYLOAD_TOO_LARGE": "Hepan payload is too large",
+    "HEPAN_PAYLOAD_ENCODING_INVALID": "Hepan payload encoding is invalid",
+    "HEPAN_PAYLOAD_JSON_INVALID": "Hepan payload JSON is invalid",
+    "HEPAN_PAYLOAD_SHAPE_INVALID": "Hepan payload shape is invalid",
+    "HEPAN_PAYLOAD_VALUE_INVALID": "Hepan payload value is invalid",
+    "HEPAN_PAYLOAD_HTML_UNSAFE": "Hepan payload HTML is unsafe",
+}
+
+
+def read_payload(payload_path: Path) -> tuple[str, str, str]:
+    try:
+        stat = payload_path.lstat()
+    except OSError:
+        raise PayloadError("HEPAN_PAYLOAD_NOT_FILE", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_NOT_FILE"])
+    if not stat.is_file() or payload_path.is_symlink():
+        raise PayloadError("HEPAN_PAYLOAD_NOT_FILE", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_NOT_FILE"])
+    if stat.st_size > MAX_PAYLOAD_BYTES:
+        raise PayloadError("HEPAN_PAYLOAD_TOO_LARGE", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_TOO_LARGE"])
+
+    try:
+        raw = payload_path.read_bytes()
+        text = raw.decode("utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        raise PayloadError("HEPAN_PAYLOAD_ENCODING_INVALID", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_ENCODING_INVALID"])
+    try:
+        payload = json.loads(text, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise PayloadError("HEPAN_PAYLOAD_JSON_INVALID", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_JSON_INVALID"])
+    if not isinstance(payload, dict) or set(payload) != {"title", "contentHtml", "sourceStem"}:
+        raise PayloadError("HEPAN_PAYLOAD_SHAPE_INVALID", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_SHAPE_INVALID"])
+
+    title = payload["title"]
+    content_html = payload["contentHtml"]
+    source_stem = payload["sourceStem"]
+    if not isinstance(title, str) or not isinstance(content_html, str) or not isinstance(source_stem, str):
+        raise PayloadError("HEPAN_PAYLOAD_VALUE_INVALID", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_VALUE_INVALID"])
+    title = title.strip()
+    content_html = content_html.strip()
+    source_stem = source_stem.strip()
+    if not title or len(title) > MAX_TITLE_LENGTH or not content_html or len(content_html) > MAX_CONTENT_HTML_LENGTH:
+        raise PayloadError("HEPAN_PAYLOAD_VALUE_INVALID", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_VALUE_INVALID"])
+    if not source_stem or len(source_stem) > MAX_SOURCE_STEM_LENGTH or source_stem in {".", ".."} or "/" in source_stem or "\\" in source_stem or "\x00" in source_stem:
+        raise PayloadError("HEPAN_PAYLOAD_VALUE_INVALID", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_VALUE_INVALID"])
+    if re.search(r"(?is)<\s*(?:script|iframe|object|embed|style)\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*['\"]?\s*(?:javascript|data|vbscript):", content_html):
+        raise PayloadError("HEPAN_PAYLOAD_HTML_UNSAFE", PAYLOAD_MESSAGES["HEPAN_PAYLOAD_HTML_UNSAFE"])
+    return title, content_html, source_stem
 
 
 class HepanPortalPublisher:
@@ -306,26 +366,33 @@ def insert_image_between_paragraphs(content_html: str, image_url: str) -> str:
 
 def load_cookie(cookie_path: Path) -> str:
     if not cookie_path.exists():
-        raise NeedsLoginError(f"cookie file not found: {cookie_path}")
-    cookie = cookie_path.read_text(encoding="utf-8").strip()
+        raise NeedsLoginError("hepan cookie file not found")
+    try:
+        cookie = cookie_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        raise NeedsLoginError("hepan cookie file is invalid")
     if not cookie:
         raise NeedsLoginError("cookie file is empty")
     return cookie
 
 
-def publish_one(article_path: Path, image_dir: Path, cookie_path: Path, category_id: int) -> dict:
-    if article_path.suffix.lower() != ".docx":
-        raise RuntimeError("hepan only supports .docx articles")
+def publish_one(article_path: Path | None, image_dir: Path, cookie_path: Path, category_id: int, payload_path: Path | None = None) -> dict:
+    if payload_path is not None:
+        title, content_html, source_stem = read_payload(payload_path)
+    else:
+        if article_path is None or article_path.suffix.lower() != ".docx":
+            raise PayloadError("HEPAN_ARTICLE_INVALID", "Hepan article input is invalid")
+        title, content_html = read_docx_article(article_path)
+        source_stem = article_path.stem
+        if not title:
+            raise PayloadError("HEPAN_ARTICLE_EMPTY_TITLE", "Hepan article title is empty")
+        if not content_html:
+            raise PayloadError("HEPAN_ARTICLE_EMPTY_BODY", "Hepan article body is empty")
 
     cookie_value = load_cookie(cookie_path)
     publisher = HepanPortalPublisher(cookie_value, category_id)
-    title, content_html = read_docx_article(article_path)
-    if not title:
-        raise RuntimeError("article title is empty")
-    if not content_html:
-        raise RuntimeError("article body is empty")
 
-    cover_image = find_cover_image(image_dir, article_path.stem)
+    cover_image = find_cover_image(image_dir, source_stem)
     image_url = ""
     if cover_image:
         image_url = publisher.upload_image(cover_image)
@@ -355,6 +422,7 @@ def print_json(payload: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--article")
+    parser.add_argument("--payload-path")
     parser.add_argument("--image-dir", required=True)
     parser.add_argument("--cookie-path", required=True)
     parser.add_argument("--check-login", action="store_true")
@@ -365,20 +433,25 @@ def main() -> int:
     try:
         cookie_path = Path(args.cookie_path)
         if args.check_login:
+            if args.article or args.payload_path:
+                raise PayloadError("HEPAN_ARGUMENT_INVALID", "Hepan arguments are invalid")
             print_json(check_login(cookie_path, args.category_id))
             return 0
 
-        if not args.article:
-            raise RuntimeError("--article is required")
+        if bool(args.article) == bool(args.payload_path):
+            raise PayloadError("HEPAN_ARGUMENT_INVALID", "Hepan article input is required")
 
-        result = publish_one(Path(args.article), Path(args.image_dir), cookie_path, args.category_id)
+        result = publish_one(Path(args.article) if args.article else None, Path(args.image_dir), cookie_path, args.category_id, Path(args.payload_path) if args.payload_path else None)
         print_json(result)
         return 0
     except NeedsLoginError as exc:
         print_json({"ok": False, "needsLogin": True, "error": str(exc)})
         return 0
+    except PayloadError as exc:
+        print_json({"ok": False, "errorCode": exc.code, "error": str(exc)})
+        return 1
     except Exception as exc:
-        print_json({"ok": False, "error": str(exc)})
+        print_json({"ok": False, "errorCode": "HEPAN_PUBLISH_FAILED", "error": "Hepan publish failed"})
         return 1
 
 

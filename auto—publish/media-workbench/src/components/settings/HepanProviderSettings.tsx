@@ -10,6 +10,7 @@ const EMPTY: HepanProviderStatus = {
   categoryId: 121,
   vendorConfigured: false,
   siteOrigin: 'https://www.hepan.com',
+  publishIntervalSeconds: 30,
   lastTest: null,
 };
 
@@ -33,6 +34,7 @@ type HepanPatch = {
   categoryId: number;
   vendorDir?: string;
   clearVendorDir?: true;
+  publishIntervalSeconds: number;
 };
 
 export default function HepanProviderSettings() {
@@ -41,6 +43,7 @@ export default function HepanProviderSettings() {
   const [cookie, setCookie] = useState('');
   const [categoryId, setCategoryId] = useState(121);
   const [vendorDir, setVendorDir] = useState('');
+  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(30);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -51,6 +54,7 @@ export default function HepanProviderSettings() {
       const next = await getPlatformSettingsStatus<HepanProviderStatus>('hepan');
       setStatus(next);
       setCategoryId(next.categoryId || 121);
+      setPublishIntervalSeconds(Number.isInteger(next.publishIntervalSeconds) ? next.publishIntervalSeconds : 30);
     } catch (value) {
       setError(message(value));
     } finally {
@@ -61,16 +65,26 @@ export default function HepanProviderSettings() {
   useEffect(() => { void load(); }, []);
 
   function draft(): HepanPatch {
-    const patch: HepanPatch = { categoryId: Number(categoryId) };
+    const patch: HepanPatch = { categoryId: Number(categoryId), publishIntervalSeconds: Number(publishIntervalSeconds) };
     if (pythonPath.trim()) patch.pythonPath = pythonPath.trim();
     if (cookie.trim()) patch.cookie = cookie;
     if (vendorDir.trim()) patch.vendorDir = vendorDir.trim();
     return patch;
   }
 
+  function testDraft(): Omit<HepanPatch, 'publishIntervalSeconds'> {
+    const value = draft();
+    const { publishIntervalSeconds: _interval, ...withoutInterval } = value;
+    return withoutInterval;
+  }
+
   function validate(): boolean {
     if (!Number.isInteger(categoryId) || categoryId < 1) {
       setError('栏目 ID 必须是大于 0 的整数。');
+      return false;
+    }
+    if (!Number.isInteger(publishIntervalSeconds) || publishIntervalSeconds < 0 || publishIntervalSeconds > 3600) {
+      setError('发布间隔必须是 0–3600 秒的整数。');
       return false;
     }
     if (!pythonPath.trim() && !status.pythonConfigured) {
@@ -110,7 +124,7 @@ export default function HepanProviderSettings() {
     if (typeof window !== 'undefined' && !window.confirm('测试会检查 Python、依赖和 Cookie 登录，不会发布文章。是否继续？')) return;
     setBusy(true);
     try {
-      await testPlatformSettings('hepan', draft());
+      await testPlatformSettings('hepan', testDraft());
       setPythonPath('');
       setCookie('');
       setVendorDir('');
@@ -155,6 +169,7 @@ export default function HepanProviderSettings() {
       setCookie('');
       setVendorDir('');
       setCategoryId(121);
+      setPublishIntervalSeconds(30);
       setNotice('蓝色河畔配置已清除。');
     } catch (value) {
       setError(message(value));
@@ -176,6 +191,16 @@ export default function HepanProviderSettings() {
       <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">Python 可执行文件
         <input aria-label="Python 可执行文件" value={pythonPath} onChange={(event) => setPythonPath(event.target.value)} placeholder={status.pythonConfigured ? '已配置（留空保留）' : 'C:\\Python312\\python.exe'} disabled={disabled} className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm" />
       </label>
+      <div className="grid min-w-0 gap-2 rounded-md border border-slate-200 p-3">
+        <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">发布间隔（秒）
+          <input aria-label="发布间隔（秒）" type="number" min={0} max={3600} step={1} value={publishIntervalSeconds} onChange={(event) => setPublishIntervalSeconds(Number(event.target.value))} disabled={disabled} className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <label className="grid min-w-0 gap-1 text-xs text-slate-600">常用预设
+          <select aria-label="河畔发布间隔预设" value={[10, 30, 60].includes(publishIntervalSeconds) ? String(publishIntervalSeconds) : 'custom'} onChange={(event) => { if (event.target.value !== 'custom') setPublishIntervalSeconds(Number(event.target.value)); }} disabled={disabled} className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="10">10 秒</option><option value="30">30 秒</option><option value="60">60 秒</option><option value="custom">自定义</option></select>
+        </label>
+        {publishIntervalSeconds === 0 && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-800">0 秒不会增加等待，但可能触发河畔频率限制，请确认账号和远端策略允许。</p>}
+        <p className="text-xs text-slate-500">范围 0–3600 秒；默认 30 秒。测试登录不会按此间隔等待或投稿。</p>
+      </div>
       <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">河畔 Cookie
         <input aria-label="河畔 Cookie" type="password" value={cookie} onChange={(event) => setCookie(event.target.value)} placeholder={status.cookieConfigured ? '已配置（留空保留）' : '请输入 Cookie'} autoComplete="new-password" disabled={disabled} className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm" />
       </label>

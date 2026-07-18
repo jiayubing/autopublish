@@ -40,7 +40,7 @@ function publicationContext(article, targetPlatform, mediaResourceId) {
       "PUBLICATION_TARGET_REQUIRED"
     ].indexOf(caught.code) === -1) throw caught;
   }
-  return { identity, target, targetError, tracked: !!target };
+  return { identity, target, targetError, tracked: !!target, titleSnapshot: typeof article.title === "string" ? article.title.trim().slice(0, 200) : null };
 }
 
 function publicationRecordFor(ledger, context) {
@@ -285,7 +285,7 @@ function createSubmissionExportService(options) {
     let reservation = null;
     const shouldReserve = value.context.tracked && (!value.record || ["failed", "cancelled"].indexOf(value.record.status) !== -1);
     try {
-      if (shouldReserve) reservation = publicationLedger.reserve(value.context.identity, value.context.target, { displayName: input.targetPlatform });
+      if (shouldReserve) reservation = publicationLedger.reserve(value.context.identity, value.context.target, { displayName: input.targetPlatform, titleSnapshot: value.context.titleSnapshot });
       const effectiveRecord = reservation || value.record;
       const sidecar = makeSidecar({
         article: value.article,

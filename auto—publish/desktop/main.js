@@ -226,11 +226,20 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     }
   });
   const createAiContentService = require("./services/ai-content-service").createAiContentService;
+  const createContentSubmissionService = require("./services/content-submission-service").createContentSubmissionService;
+  const contentSubmissionService = createContentSubmissionService({
+    workspaceRoot: runtime.workspaceRoot,
+    paths: injectedPaths
+  });
   const aiContentService = createAiContentService({
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
+    contentSubmissionService: contentSubmissionService,
     aiClientFactory: function() { return aiProviderService.createClient(); }
   });
+  if (aiContentService && typeof aiContentService.recoverPendingArticleRemovals === "function") {
+    try { aiContentService.recoverPendingArticleRemovals(); } catch (_) {}
+  }
   const createContentGenerationBatchService = require("./services/content-generation-batch-service").createContentGenerationBatchService;
   contentGenerationBatchService = createContentGenerationBatchService({
     workspaceRoot: runtime.workspaceRoot,
@@ -251,6 +260,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     platformSettingsService: platformSettingsService,
     legacyProviderSettings: legacyProviderSettings,
     aiContentService: aiContentService,
+    contentSubmissionService: contentSubmissionService,
     contentGenerationBatchService: contentGenerationBatchService,
     runtimeDiagnosticsService: runtime.diagnosticsService
   });

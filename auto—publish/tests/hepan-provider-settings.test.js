@@ -21,12 +21,42 @@ describe("Hepan provider settings", () => {
       fs.writeFileSync(pythonPath, "fixture python", "utf8");
       const adapter = createHepanSettingsAdapter({ localStateRoot: root });
       const config = adapter.validate({ pythonPath, cookie: "fixture-cookie" });
-      assert.deepStrictEqual(config, { pythonPath, cookie: "fixture-cookie", categoryId: 121, vendorDir: "", siteOrigin: HEPAN_SITE_ORIGIN });
+      assert.deepStrictEqual(config, { pythonPath, cookie: "fixture-cookie", categoryId: 121, vendorDir: "", publishIntervalSeconds: 30, siteOrigin: HEPAN_SITE_ORIGIN });
       const status = adapter.status(config, { source: "application", lastTest: null });
       assert.equal(status.siteOrigin, HEPAN_SITE_ORIGIN);
       assert.equal(status.cookieConfigured, true);
       assert.equal(JSON.stringify(status).includes("fixture-cookie"), false);
       assert.throws(() => adapter.validate({ pythonPath: root, cookie: "fixture-cookie" }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("validates the publish interval and exposes the safe default", () => {
+    const root = tempDirectory();
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
+      assert.equal(adapter.validate({ pythonPath, cookie: "fixture-cookie" }).publishIntervalSeconds, 30);
+      assert.equal(adapter.validate({ pythonPath, cookie: "fixture-cookie", publishIntervalSeconds: 0 }).publishIntervalSeconds, 0);
+      assert.equal(adapter.validate({ pythonPath, cookie: "fixture-cookie", publishIntervalSeconds: 3600 }).publishIntervalSeconds, 3600);
+      assert.throws(() => adapter.validate({ pythonPath, cookie: "fixture-cookie", publishIntervalSeconds: -1 }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
+      assert.throws(() => adapter.validate({ pythonPath, cookie: "fixture-cookie", publishIntervalSeconds: 3601 }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
+      assert.equal(adapter.status({ pythonPath, cookie: "fixture-cookie" }, { source: "application", lastTest: null }).publishIntervalSeconds, 30);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("reads a valid interval from the environment without exposing secrets", () => {
+    const root = tempDirectory();
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      const cookiePath = path.join(root, "cookie.txt");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      fs.writeFileSync(cookiePath, "fixture cookie", "utf8");
+      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
+      const config = adapter.environment({ HEPAN_PYTHON: pythonPath, HEPAN_COOKIE_PATH: cookiePath, HEPAN_PUBLISH_INTERVAL_SECONDS: "45" });
+      assert.equal(config.publishIntervalSeconds, 45);
+      assert.equal(adapter.status(config, { source: "environment", lastTest: null }).publishIntervalSeconds, 45);
+      assert.throws(() => adapter.environment({ HEPAN_PYTHON: pythonPath, HEPAN_COOKIE_PATH: cookiePath, HEPAN_PUBLISH_INTERVAL_SECONDS: "45.5" }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 

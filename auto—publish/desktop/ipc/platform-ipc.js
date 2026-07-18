@@ -74,6 +74,8 @@ function registerPlatformIpc(deps) {
             title: title,
             platformId: group.platformId,
             sourcePlatformId: group.platformId,
+            sourceArticleState: article.sourceArticleState || "active",
+            reasonCode: article.reasonCode || null,
             sourceArticle: article
           });
         }
@@ -107,7 +109,9 @@ function registerPlatformIpc(deps) {
         }
       });
       if (!workerResult || !workerResult.ok) {
-        throw new Error(workerResult && workerResult.error ? workerResult.error : "Platform publish failed");
+        var failure = new Error(workerResult && workerResult.error ? workerResult.error : "Platform publish failed");
+        failure.code = workerResult && workerResult.errorCode || "PLATFORM_SUBMIT_FAILED";
+        throw failure;
       }
       var data = workerResult.data || { ok: 0, fail: 0, skipped: 0, results: [] };
       data.skipped = data.skipped || data.pending || 0;
