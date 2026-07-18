@@ -32,6 +32,8 @@ function registerContentSubmissionIpc(deps) {
   deps.ipcMain.handle("content:create-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.createBatch(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:preview-cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCancelBatch(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.cancelBatch(batchInput(input, true))); }); });
+  deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCleanupFailedItems(batchInput(input, false))); }); });
+  deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.cleanupFailedItems(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:get-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.getBatch(batchInput(input, false).batchId)); }); });
 }
 module.exports = { registerContentSubmissionIpc };

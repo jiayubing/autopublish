@@ -38,3 +38,19 @@ it("passes an optional media resource id but continues rejecting renderer paths"
   assert.deepEqual(result, { ok: true, data: { status: "queueable" } });
   assert.equal(received.mediaResourceId, "1001");
 });
+
+it("exposes reconciliation cleanup previews and keeps queue paths out of the renderer response", async function() {
+  const handlers = new Map();
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    contentSubmissionService: {
+      previewCleanupFailedItems: () => ({ batchId: "batch-1", cleanableCount: 1, uncleanableCount: 0, items: [{ articleId: "article-1", status: "failed", filePath: "C:\\secret.md", sidecarPath: "C:\\secret.md.submission.json", cleanable: true }] }),
+      cleanupFailedItems: () => ({ batchId: "batch-1", cleanedCount: 1, skippedCount: 0, items: [{ articleId: "article-1", status: "failed-cleaned", filePath: "C:\\secret.md" }] })
+    }
+  });
+
+  const preview = await handlers.get("content:preview-cleanup-failed-submission-items")(null, { batchId: "batch-1" });
+  const result = await handlers.get("content:cleanup-failed-submission-items")(null, { batchId: "batch-1", confirmed: true });
+  assert.deepEqual(preview, { ok: true, data: { batchId: "batch-1", cleanableCount: 1, uncleanableCount: 0, items: [{ articleId: "article-1", status: "failed", cleanable: true }] } });
+  assert.deepEqual(result, { ok: true, data: { batchId: "batch-1", cleanedCount: 1, skippedCount: 0, items: [{ articleId: "article-1", status: "failed-cleaned" }] } });
+});

@@ -119,6 +119,8 @@ const api = {
     createSubmissionBatch: function(input) { return ipcRenderer.invoke("content:create-submission-batch", input); },
     previewCancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:preview-cancel-submission-batch", input); },
     cancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:cancel-submission-batch", input); },
+    previewCleanupFailedSubmissionItems: function(input) { return ipcRenderer.invoke("content:preview-cleanup-failed-submission-items", input); },
+    cleanupFailedSubmissionItems: function(input) { return ipcRenderer.invoke("content:cleanup-failed-submission-items", input); },
     getSubmissionBatch: function(batchId) { return ipcRenderer.invoke("content:get-submission-batch", { batchId: batchId }); },
     listQuestions: function(clientId) { return ipcRenderer.invoke("content:list-questions", { clientId: clientId }); },
     createQuestion: function(input) { return ipcRenderer.invoke("content:create-question", input); },

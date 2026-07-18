@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformStatus, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -82,6 +82,8 @@ interface DesktopConsoleContent {
   exportArticle(input: ContentExportInput): Promise<IpcResponse<ContentExportPreview>>;
   previewSubmissionBatch(input: ContentSubmissionBatchInput): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   previewCancelSubmissionBatch(input: { batchId: string }): Promise<IpcResponse<ContentSubmissionCancellationPreview>>;
+  previewCleanupFailedSubmissionItems(input: { batchId: string }): Promise<IpcResponse<ContentSubmissionCleanupPreview>>;
+  cleanupFailedSubmissionItems(input: { batchId: string; confirmed: true }): Promise<IpcResponse<ContentSubmissionCleanupResult>>;
   listSubmissionPlatforms(): Promise<IpcResponse<ContentSubmissionPlatform[]>>;
   listSubmissionBatches(input: { clientId: string }): Promise<IpcResponse<ContentSubmissionBatchRecord[]>>;
   createSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
@@ -1280,5 +1282,19 @@ export async function previewCancelContentSubmissionBatch(batchId: string): Prom
   if (!isElectron()) throw new Error("Batch submission cancellation requires the desktop app");
   const result = await window.desktopConsole!.content.previewCancelSubmissionBatch({ batchId });
   if (!result.ok || !result.data) throw getIpcError(result.error, "submission batch cancellation preview failed");
+  return result.data;
+}
+
+export async function previewCleanupFailedContentSubmissionItems(batchId: string): Promise<ContentSubmissionCleanupPreview> {
+  if (!isElectron()) throw new Error("Batch cleanup requires the desktop app");
+  const result = await window.desktopConsole!.content.previewCleanupFailedSubmissionItems({ batchId });
+  if (!result.ok || !result.data) throw getIpcError(result.error, "failed submission cleanup preview failed");
+  return result.data;
+}
+
+export async function cleanupFailedContentSubmissionItems(batchId: string): Promise<ContentSubmissionCleanupResult> {
+  if (!isElectron()) throw new Error("Batch cleanup requires the desktop app");
+  const result = await window.desktopConsole!.content.cleanupFailedSubmissionItems({ batchId, confirmed: true });
+  if (!result.ok || !result.data) throw getIpcError(result.error, "failed submission cleanup failed");
   return result.data;
 }
