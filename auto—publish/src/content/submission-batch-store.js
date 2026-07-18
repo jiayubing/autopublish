@@ -10,16 +10,45 @@ function createSubmissionBatchStore(options) {
   const directory = path.resolve(opts.directory || path.join(opts.workspaceRoot, ".autopublish", "submission-batches"));
   fs.mkdirSync(directory, { recursive: true });
   const createId = opts.createId || (() => crypto.randomUUID());
+  const now = opts.now || (() => new Date().toISOString());
   function filename(id) {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]+$/.test(id)) throw batchError("SUBMISSION_BATCH_ID_INVALID", "Batch id is invalid");
     return path.join(directory, "batch-" + id + ".json");
   }
+  function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  function batchStatus(items) {
+    const values = Array.isArray(items) ? items.map((item) => item.status) : [];
+    if (values.some((status) => ["queued", "reserving"].includes(status))) return "queued";
+    if (values.some((status) => status === "submitting")) return "submitting";
+    if (values.some((status) => status === "uncertain")) return "uncertain";
+    if (values.some((status) => status === "failed")) return "failed";
+    if (values.length && values.every((status) => status === "cancelled")) return "cancelled";
+    if (values.some((status) => status === "submitted")) return "completed";
+    if (values.length && values.every((status) => ["published", "cancelled", "failed-cleaned", "skipped", "excluded"].includes(status))) return "completed";
+    return "queued";
+  }
+  const transitions = {
+    queued: new Set(["reserving", "submitting", "submitted", "published", "uncertain", "cancelled", "failed", "failed-cleaned", "skipped"]),
+    reserving: new Set(["queued", "submitting", "cancelled", "failed", "failed-cleaned", "skipped"]),
+    submitting: new Set(["submitted", "published", "failed", "uncertain"]),
+    submitted: new Set(["published", "failed", "uncertain"]),
+    published: new Set([]),
+    failed: new Set(["failed-cleaned"]),
+    uncertain: new Set([]),
+    cancelled: new Set([]),
+    skipped: new Set([]),
+    "failed-cleaned": new Set([])
+  };
   function save(batch) {
     const file = filename(batch.id);
-    const temp = file + ".tmp";
-    fs.writeFileSync(temp, JSON.stringify(batch, null, 2) + "\n", "utf8");
-    fs.renameSync(temp, file);
-    return JSON.parse(JSON.stringify(batch));
+    const temp = `${file}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+      fs.writeFileSync(temp, JSON.stringify(batch, null, 2) + "\n", "utf8");
+      fs.renameSync(temp, file);
+    } finally {
+      try { if (fs.existsSync(temp)) fs.unlinkSync(temp); } catch (_) {}
+    }
+    return clone(batch);
   }
   function get(id) {
     const file = filename(id);
@@ -37,7 +66,35 @@ function createSubmissionBatchStore(options) {
       return String(right.id || "").localeCompare(String(left.id || ""));
     });
   }
-  return { createId, save, get, list };
+  function updateItem(batchId, identity, transition) {
+    const batch = get(batchId);
+    const reference = identity || {};
+    const index = batch.items.findIndex((item) => item.publicationId === reference.publicationId && item.attemptId === reference.attemptId);
+    if (index < 0) throw batchError("SUBMISSION_BATCH_ITEM_NOT_FOUND", "Submission batch item was not found");
+    const item = batch.items[index];
+    if (reference.targetPlatformId && item.targetPlatformId !== reference.targetPlatformId) throw batchError("SUBMISSION_BATCH_PLATFORM_MISMATCH", "Submission batch platform does not match");
+    if (!transition || typeof transition !== "object" || Array.isArray(transition) || typeof transition.status !== "string") throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid");
+    const nextStatus = transition.status;
+    const allowed = transitions[item.status] || new Set();
+    if (item.status !== nextStatus && !allowed.has(nextStatus)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid");
+    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt"];
+    Object.keys(transition).forEach((key) => { if (!allowedFields.includes(key)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid"); });
+    Object.assign(item, transition, { status: nextStatus, publicationStatus: transition.publicationStatus === undefined ? nextStatus : transition.publicationStatus, updatedAt: transition.updatedAt || now() });
+    batch.status = batchStatus(batch.items);
+    batch.updatedAt = now();
+    return save(batch);
+  }
+  function reconcile(batchId, updates) {
+    const batch = get(batchId);
+    const changes = typeof updates === "function" ? updates(clone(batch)) : updates;
+    if (!Array.isArray(changes)) throw batchError("SUBMISSION_BATCH_RECONCILE_INVALID", "Submission batch reconciliation is invalid");
+    let result = batch;
+    changes.forEach((change) => {
+      result = updateItem(batchId, change.identity, change.transition);
+    });
+    return result;
+  }
+  return { createId, save, get, list, updateItem, reconcile, batchStatus };
 }
 
 module.exports = { createSubmissionBatchStore };

@@ -9,6 +9,7 @@ const { normalizePublicationOutcome } = require("../../src/core/jobs");
 const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 const { resolveArticleIdentity } = require("../../src/publication/article-identity");
 const { resolvePublicationTarget } = require("../../src/publication/publication-targets");
+const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
 
 const ARTICLE_EXTENSIONS = [".md", ".txt", ".docx"];
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -40,16 +41,6 @@ function isTemporaryQueueArtifact(name) {
 
 function isPrimaryArticle(name) {
   return ARTICLE_EXTENSIONS.indexOf(path.extname(name).toLowerCase()) !== -1;
-}
-
-function readJsonFile(filename) {
-  try {
-    var stat = fs.lstatSync(filename);
-    if (stat.isSymbolicLink() || !stat.isFile()) return null;
-    return JSON.parse(fs.readFileSync(filename, "utf8"));
-  } catch (_) {
-    return null;
-  }
 }
 
 function hashFile(filename) {
@@ -153,6 +144,10 @@ function createPlatformWorkbenchService(opts) {
   var platforms = options.platforms || [];
   var adapters = options.adapters || {};
   var ledger = options.publicationLedger || createPublicationLedger({ workspaceRoot: rootDir, paths: options.paths });
+  var submissionBatchStore = options.submissionBatchStore || createSubmissionBatchStore({
+    workspaceRoot: rootDir,
+    directory: options.paths && options.paths.submissionRecords
+  });
 
   function scanQueue() {
     return platforms.filter(function(platform) {
@@ -327,42 +322,21 @@ function createPlatformWorkbenchService(opts) {
     }
   }
 
-  function updateSubmissionBatch(metadata, filePath, targetPlatformId, outcome) {
+  function updateSubmissionBatch(metadata, reference, targetPlatformId, outcome) {
     var sidecar = metadata.data || {};
     var batchId = sidecar.submissionBatchId;
-    if (!batchId) return;
-    var recordsDir = options.paths && options.paths.submissionRecords || path.join(rootDir, ".autopublish", "submission-records");
-    if (!fs.existsSync(recordsDir)) return;
-    var filenames;
-    try { filenames = fs.readdirSync(recordsDir).filter(function(name) { return /^batch-[A-Za-z0-9_-]+\.json$/.test(name); }); } catch (_) { return; }
-    for (var i = 0; i < filenames.length; i++) {
-      var filename = path.join(recordsDir, filenames[i]);
-      var batch = readJsonFile(filename);
-      if (!batch || batch.id !== batchId || !Array.isArray(batch.items)) continue;
-      var changed = false;
-      batch.items.forEach(function(item) {
-        if (item.filename !== path.basename(filePath) || item.targetPlatformId !== targetPlatformId) return;
-        item.status = outcome.status;
-        if (outcome.errorCode) item.errorCode = outcome.errorCode;
-        if (outcome.remoteId) item.remoteId = outcome.remoteId;
-        if (outcome.remoteUrl) item.remoteUrl = outcome.remoteUrl;
-        item.updatedAt = new Date().toISOString();
-        changed = true;
+    if (!batchId || !reference || !reference.publicationId || !reference.attemptId) return;
+    try {
+      submissionBatchStore.updateItem(batchId, { publicationId: reference.publicationId, attemptId: reference.attemptId, targetPlatformId: targetPlatformId }, {
+        status: outcome.status,
+        publicationStatus: outcome.status,
+        errorCode: outcome.errorCode,
+        remoteId: outcome.remoteId,
+        remoteUrl: outcome.remoteUrl,
+        reasonCode: outcome.reasonCode
       });
-      if (!changed) continue;
-      if (batch.items.some(function(item) { return ["queued", "submitting"].indexOf(item.status) !== -1; })) batch.status = "queued";
-      else if (batch.items.some(function(item) { return item.status === "uncertain"; })) batch.status = "uncertain";
-      else if (batch.items.some(function(item) { return item.status === "failed"; })) batch.status = "failed";
-      else batch.status = "completed";
-      batch.updatedAt = new Date().toISOString();
-      var temporary = filename + ".tmp-" + process.pid + "-" + Date.now();
-      try {
-        fs.writeFileSync(temporary, JSON.stringify(batch, null, 2) + "\n", "utf8");
-        fs.renameSync(temporary, filename);
-      } finally {
-        try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
-      }
-      return;
+    } catch (error) {
+      if (typeof options.onBatchSyncError === "function") options.onBatchSyncError({ code: error && error.code || "SUBMISSION_BATCH_SYNC_FAILED", batchId: batchId });
     }
   }
 
@@ -421,6 +395,7 @@ function createPlatformWorkbenchService(opts) {
           throwIfStopped();
         } catch (stopError) {
           cancelQueuedReservation(reference);
+          updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
           result.status = "skipped";
           result.publicationStatus = "cancelled";
           result.error = "STOP_REQUESTED";
@@ -436,6 +411,7 @@ function createPlatformWorkbenchService(opts) {
         } catch (error) {
           if (isStopError(error)) {
             cancelQueuedReservation(reference);
+            updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
             result.status = "skipped";
             result.publicationStatus = "cancelled";
             result.error = "STOP_REQUESTED";
@@ -443,10 +419,10 @@ function createPlatformWorkbenchService(opts) {
             var loginOutcome = { status: "failed", errorCode: safeOutcomeError(error, "ADAPTER_PREPARE_FAILED") };
             try { ledger.markSubmitting(reference.publicationId, reference.attemptId); } catch (_) {}
             try { ledger.recordOutcome(reference.publicationId, reference.attemptId, loginOutcome); } catch (_) {}
+            updateSubmissionBatch(metadata, reference, task.targetPlatformId, loginOutcome);
             result.status = "failed";
             result.publicationStatus = "failed";
             result.error = loginOutcome.errorCode;
-            updateSubmissionBatch(metadata, filePath, task.targetPlatformId, loginOutcome);
           }
           results.push(result);
           group.results.push(result);
@@ -456,6 +432,7 @@ function createPlatformWorkbenchService(opts) {
 
         if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "before-remote", task: task });
         var submitting = ledger.markSubmitting(reference.publicationId, reference.attemptId);
+        updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "submitting" });
         if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "remote-started", task: task, publicationId: reference.publicationId, attemptId: reference.attemptId });
         var rawOutcome;
         try {
@@ -475,7 +452,7 @@ function createPlatformWorkbenchService(opts) {
           // not manufacture a retryable failure when the local ledger is busy.
           result.ledgerError = safeOutcomeError(ledgerError, "PUBLICATION_RECORD_FAILED");
         }
-        updateSubmissionBatch(metadata, filePath, task.targetPlatformId, outcome);
+        updateSubmissionBatch(metadata, reference, task.targetPlatformId, outcome);
         result.status = outcome.status === "published" ? "success" : outcome.status === "submitted" ? (outcome.legacyStatus === "pending" ? "pending" : "submitted") : outcome.status;
         result.publicationStatus = outcome.status;
         if (outcome.errorCode) result.error = outcome.errorCode;

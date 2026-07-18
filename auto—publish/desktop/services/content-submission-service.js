@@ -79,6 +79,7 @@ function createContentSubmissionService(opts) {
     return Object.assign({
       articleId: article.id,
       targetPlatformId: platformId,
+      filename: path.basename(paths.filePath),
       contentHash,
       filePath: paths.filePath,
       sidecarPath: paths.sidecarPath,
@@ -252,12 +253,119 @@ function createContentSubmissionService(opts) {
   }
 
   function pairIsUnchanged(item, batch, sidecar) {
-    return sidecar && sidecar.submissionBatchId === batch.id && fs.existsSync(item.filePath) && hash(fs.readFileSync(item.filePath, "utf8")) === item.contentHash;
+    if (!sidecar || sidecar.submissionBatchId !== batch.id || !item.filePath || !item.sidecarPath) return false;
+    if (sidecar.contentHash !== item.contentHash || sidecar.targetPlatformId !== item.targetPlatformId) return false;
+    if (item.publicationId && sidecar.publicationId !== item.publicationId) return false;
+    if (item.attemptId && sidecar.attemptId !== item.attemptId) return false;
+    try { return fs.existsSync(item.filePath) && hash(fs.readFileSync(item.filePath, "utf8")) === item.contentHash; } catch (_) { return false; }
+  }
+
+  function readSidecar(item) {
+    try { return JSON.parse(fs.readFileSync(item.sidecarPath, "utf8")); } catch (_) { return null; }
+  }
+
+  function reconcileBatch(batchId) {
+    let batch = batchStore.get(batchId);
+    const reconciled = [];
+    (batch.items || []).forEach((item) => {
+      const copy = Object.assign({}, item);
+      if (!item.publicationId || !item.attemptId) {
+        copy.reconciledStatus = "conflict";
+        copy.reasonCode = copy.reasonCode || "SUBMISSION_IDENTITY_MISSING";
+        reconciled.push(copy);
+        return;
+      }
+      const record = publicationForBatchItem(item);
+      const latest = latestAttempt(record);
+      if (!record || !latest || latest.attemptId !== item.attemptId || record.platformId && record.platformId !== item.targetPlatformId) {
+        copy.reconciledStatus = "conflict";
+        copy.reasonCode = "PUBLICATION_ATTEMPT_MISMATCH";
+        reconciled.push(copy);
+        return;
+      }
+      const sidecar = readSidecar(item);
+      copy.unchanged = pairIsUnchanged(item, batch, sidecar);
+      copy.reconciledStatus = record.status;
+      copy.publicationStatus = record.status;
+      copy.errorCode = latest.errorCode || item.errorCode || null;
+      if (item.status !== record.status && item.status !== "failed-cleaned") {
+        try {
+          batch = batchStore.updateItem(batch.id, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId }, { status: record.status, publicationStatus: record.status, errorCode: latest.errorCode || undefined, remoteId: latest.remoteId || undefined, remoteUrl: latest.remoteUrl || undefined, reasonCode: latest.reasonCode || undefined });
+        } catch (_) {
+          copy.reconciledStatus = "conflict";
+          copy.reasonCode = "SUBMISSION_STATUS_CONFLICT";
+        }
+      }
+      copy.canCancel = record.status === "queued" && copy.unchanged;
+      copy.canCleanup = record.status === "failed" && copy.unchanged;
+      reconciled.push(copy);
+    });
+    const enrichedItems = batch.items.map((item) => {
+      const state = reconciled.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
+      return state ? Object.assign({}, item, {
+        reconciledStatus: state.reconciledStatus,
+        unchanged: state.unchanged,
+        canCancel: state.canCancel,
+        canCleanup: state.canCleanup,
+        reasonCode: state.reasonCode,
+        publicationStatus: state.publicationStatus || item.publicationStatus,
+        errorCode: state.errorCode || item.errorCode || null
+      }) : item;
+    });
+    return { batch: Object.assign({}, batch, { items: enrichedItems }), items: reconciled };
+  }
+
+  function previewCleanupFailedItems(value) {
+    if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
+    const result = reconcileBatch(value.batchId);
+    let cleanableCount = 0;
+    let uncleanableCount = 0;
+    const items = result.batch.items.map((item) => {
+      const copy = Object.assign({}, item);
+      delete copy.filePath;
+      delete copy.sidecarPath;
+      const state = result.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
+      const cleanable = Boolean(state && state.reconciledStatus === "failed" && state.unchanged);
+      if (cleanable) cleanableCount += 1; else uncleanableCount += 1;
+      return Object.assign(copy, { cleanable, reasonCode: cleanable ? null : (state && state.reasonCode) || (state && state.reconciledStatus === "failed" ? "SUBMISSION_QUEUE_CHANGED" : "SUBMISSION_NOT_FAILED") });
+    });
+    return { batchId: result.batch.id, cleanableCount, uncleanableCount, items };
+  }
+
+  function cleanupFailedItems(value) {
+    if (!value || value.confirmed !== true || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation is required");
+    const result = reconcileBatch(value.batchId);
+    let cleanedCount = 0;
+    let skippedCount = 0;
+    result.batch.items.forEach((item) => {
+      const state = result.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
+      if (!state || state.reconciledStatus !== "failed" || !state.unchanged) { skippedCount += 1; return; }
+      let originalFile = null;
+      let originalSidecar = null;
+      try { if (fs.existsSync(item.filePath)) originalFile = fs.readFileSync(item.filePath); } catch (_) {}
+      try { if (fs.existsSync(item.sidecarPath)) originalSidecar = fs.readFileSync(item.sidecarPath); } catch (_) {}
+      removeSubmissionPair(item.filePath, item.sidecarPath);
+      try {
+        batchStore.updateItem(result.batch.id, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId }, { status: "failed-cleaned", publicationStatus: "failed", errorCode: state.errorCode || item.errorCode || undefined });
+        cleanedCount += 1;
+      } catch (_) {
+        try {
+          if (originalFile !== null) { fs.mkdirSync(path.dirname(item.filePath), { recursive: true }); fs.writeFileSync(item.filePath, originalFile); }
+          if (originalSidecar !== null) { fs.mkdirSync(path.dirname(item.sidecarPath), { recursive: true }); fs.writeFileSync(item.sidecarPath, originalSidecar); }
+        } catch (restoreError) {
+          if (typeof options.onCleanupRestoreError === "function") options.onCleanupRestoreError({ code: restoreError && restoreError.code || "SUBMISSION_QUEUE_RESTORE_FAILED", batchId: result.batch.id });
+        }
+        skippedCount += 1;
+      }
+    });
+    const batch = batchStore.get(result.batch.id);
+    return { batchId: batch.id, cleanedCount, skippedCount, items: batch.items };
   }
 
   function cancelBatch(value) {
     if (!value || value.confirmed !== true || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation is required");
-    const batch = batchStore.get(value.batchId);
+    const reconciled = reconcileBatch(value.batchId);
+    const batch = reconciled.batch;
     let cancelledCount = 0;
     let skippedCount = 0;
     batch.items.forEach((item) => {
@@ -284,7 +392,8 @@ function createContentSubmissionService(opts) {
 
   function previewCancelBatch(value) {
     if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
-    const batch = batchStore.get(value.batchId);
+    const reconciled = reconcileBatch(value.batchId);
+    const batch = reconciled.batch;
     let cancelableCount = 0;
     let uncancelableCount = 0;
     const items = batch.items.map((item) => {
@@ -323,8 +432,11 @@ function createContentSubmissionService(opts) {
     createBatch,
     previewCancelBatch,
     cancelBatch,
-    getBatch: function(batchId) { return batchStore.get(batchId); },
-    listBatches: function(clientId) { return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }); }
+    getBatch: function(batchId) { return reconcileBatch(batchId).batch; },
+    listBatches: function(clientId) { return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) { return reconcileBatch(batch.id).batch; }); },
+    reconcileBatch,
+    previewCleanupFailedItems,
+    cleanupFailedItems
   };
 }
 
