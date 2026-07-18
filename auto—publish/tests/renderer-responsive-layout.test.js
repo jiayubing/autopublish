@@ -207,4 +207,82 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       await page.close();
     }
   });
+
+  it("keeps expanded long-title history rows and row-end actions inside narrow viewports", async () => {
+    const longTitle = "窄宽度长标题回归：这是一段足够长的历史文章标题，用来验证行尾发布详情动作不会越过 viewport";
+    const articles = Array.from({ length: 8 }, (_, index) => ({
+      id: `responsive-history-${index}`,
+      clientId: "layout-smoke",
+      researchQueryIds: [],
+      platform: "fixture-responsive-platform",
+      scenario: "响应式历史编辑",
+      templateId: "fixture-responsive-template",
+      title: `${longTitle} ${index}`,
+      content: "responsive history fixture",
+      status: "generated",
+      source: { client_material: true, doubao_answer: true, references: false, template: true },
+      createdAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
+      updatedAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
+      reviewedAt: null,
+      version: 1,
+      templateSnapshot: {
+        platform: "fixture-responsive-platform",
+        id: "fixture-responsive-template",
+        name: "超长模板名称用于响应式历史列表边界回归",
+        scenario: "响应式历史编辑",
+        body: "responsive template body",
+        bodyHash: "responsive-template-hash",
+        source: "custom"
+      }
+    }));
+
+    for (const [width, height] of [[1128, 527], [1424, 861]]) {
+      const page = await openRenderer(width, height);
+      try {
+        await page.evaluate((items) => {
+          const response = (data) => Promise.resolve({ ok: true, data });
+          window.desktopConsole.content.listGeneratedArticles = () => response(items);
+          window.desktopConsole.content.listTemplateCatalog = () => response({ revision: "responsive-fixture", platforms: [{ id: "fixture-responsive-platform", displayName: "响应式测试平台", description: "", order: 1 }], templates: [{ id: "fixture-responsive-template", platform: "fixture-responsive-platform", scenario: "响应式历史编辑", name: "超长模板名称用于响应式历史列表边界回归", body: "responsive template body", bodyHash: "responsive-template-hash", source: "custom" }], diagnostics: [] });
+          window.desktopConsole.publication = { listForArticles: () => response([]) };
+        }, articles);
+        await page.getByRole("button", { name: "刷新客户与模板" }).click();
+        await page.waitForFunction(() => document.querySelector("select[aria-label='当前客户（单篇/问题/历史）']")?.value === "layout-smoke");
+        await page.getByRole("button", { name: "文章生成" }).click();
+        await page.getByRole("button", { name: "历史文章" }).click();
+        await page.getByRole("heading", { name: "历史文章" }).waitFor();
+        assert.match(await page.locator("body").innerText(), /超长模板名称用于响应式历史列表边界回归/);
+        await page.getByRole("button", { name: /fixture-responsive-platform.*超长模板名称/ }).click();
+        await page.getByText(`${longTitle} 7`, { exact: true }).waitFor();
+
+        const measured = await page.evaluate(() => {
+          const visible = (element) => {
+            const box = element.getBoundingClientRect();
+            return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== "hidden";
+          };
+          const actionButtons = Array.from(document.querySelectorAll("button")).filter((button) => button.textContent?.includes("发布详情") && visible(button));
+          return {
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            documentScrollWidth: document.documentElement.scrollWidth,
+            actions: actionButtons.map((button) => ({ box: button.getBoundingClientRect().toJSON(), row: button.parentElement?.getBoundingClientRect().toJSON() })),
+            controls: Array.from(document.querySelectorAll("input, select, button, textarea")).filter(visible).map((element) => ({ text: element.textContent, box: element.getBoundingClientRect().toJSON() }))
+          };
+        });
+        assert.equal(measured.viewport.width, width);
+        assert.equal(measured.viewport.height, height);
+        assert.ok(measured.documentScrollWidth <= width + 1, `HISTORY_PAGE_OVERFLOW_RED ${JSON.stringify(measured)}`);
+        assert.ok(measured.actions.length > 0, `expected visible row-end actions ${JSON.stringify(measured)}`);
+        measured.actions.forEach(({ box, row }) => {
+          assertInsideViewport(box, measured.viewport);
+          assertInsideViewport(row, measured.viewport);
+          assert.ok(row.x + row.width <= measured.viewport.width + 1, `history row overflows right edge: ${JSON.stringify(row)}`);
+        });
+        measured.controls.forEach((control) => assertInsideViewport(control.box, measured.viewport));
+      } finally {
+        await page.close();
+      }
+    }
+
+    const historySource = fs.readFileSync(path.join(rootDir, "media-workbench", "src", "components", "content", "GeneratedArticlesView.tsx"), "utf8");
+    assert.match(historySource, /<div key=\{article\.id\} className="[^\"]*min-w-0[^\"]*flex-wrap[^\"]*items-start/);
+  });
 });
