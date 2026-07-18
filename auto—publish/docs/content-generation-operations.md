@@ -317,3 +317,15 @@ calls. A zero-second setting is allowed but displays a frequency-risk warning.
 ```powershell
 node scripts/repair-article-removal-regressions.js --workspace <副本目录> --dry-run
 ```
+
+需处理动作由当前事实和领域能力共同计算，不再按 `failed_submission` 类型固定
+显示按钮：有合法 batch/pair 的失败项才显示“清理旧队列”；仍存在且已审核的
+文章才显示“重新投稿”；已删除且没有残留或开放删除事务的失败记录只保留在发布
+历史中。生成态文章只能打开文章或发布详情。点击重新投稿先执行预检，确认后由
+ContentSubmissionService 创建新的 batch 和 attempt，不直接拼写队列文件。
+
+需处理快照与工作区使用同一 authoritative revision。投稿、审核、删除事务、队列
+清理和发布核对完成后广播失效事件；Renderer 按 scope 合并刷新请求，旧 revision
+响应不得覆盖新快照。初始 `idle` 不是投稿任务完成事件，进入“其他平台投稿”也
+不会额外启动队列刷新；只有显式手动刷新或带新 `queueRevision` 的 terminal 事件
+才刷新一次。
