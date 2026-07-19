@@ -39,7 +39,7 @@ function sendToRenderer(channel, payload) {
 function invalidateWorkspaceData(scopes, reasonCode) {
   workspaceDataRevision += 1;
   const allowedScopes = Array.isArray(scopes) ? scopes.filter(function(scope) {
-    return ["platformQueue", "navigationSummary", "articleAttention", "orders"].includes(scope);
+    return ["platformQueue", "navigationSummary", "articleAttention", "orders", "contentSources"].includes(scope);
   }) : [];
   sendToRenderer("workspace:data-invalidated", {
     revision: workspaceDataRevision,
@@ -232,7 +232,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
   });
 
   const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
-  doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot, paths: injectedPaths });
+  doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot, paths: injectedPaths, onDataInvalidated: invalidateWorkspaceData });
 
   const createAiProviderService = require("./services/ai-provider-service").createAiProviderService;
   aiProviderService = createAiProviderService({

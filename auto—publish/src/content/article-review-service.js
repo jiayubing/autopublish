@@ -8,19 +8,7 @@ function hasText(value) {
   return typeof value === "string" && Boolean(value.trim());
 }
 
-function isCompleteSource(article) {
-  const source = article && article.source;
-  if (!source || typeof source !== "object" || Array.isArray(source)) return false;
-  if (!["client_material", "doubao_answer", "references", "template"].every(function(field) {
-    return typeof source[field] === "boolean";
-  })) return false;
-  if (!Array.isArray(article.materialSnapshots) || article.materialSnapshots.length < 1) return false;
-  if (!Array.isArray(article.researchSnapshots) || article.researchSnapshots.length < 1) return false;
-  const template = article.templateSnapshot;
-  return Boolean(template && typeof template === "object" && !Array.isArray(template) &&
-    hasText(template.platform) && hasText(template.id) && hasText(template.name) &&
-    hasText(template.scenario) && hasText(template.body) && hasText(template.bodyHash));
-}
+const { evaluateArticleSubmissionEligibility, REASON_CODES } = require("./article-submission-eligibility");
 
 function validateSelection(selection) {
   if (!selection || typeof selection !== "object" || Array.isArray(selection) ||
@@ -82,16 +70,13 @@ function createArticleReviewService(options) {
         rejected.push(rejection(article.id, "ARTICLE_NOT_GENERATED"));
         return;
       }
-      if (!hasText(article.title)) {
-        rejected.push(rejection(article.id, "ARTICLE_TITLE_INVALID"));
-        return;
-      }
-      if (!hasText(article.content)) {
-        rejected.push(rejection(article.id, "ARTICLE_CONTENT_INVALID"));
-        return;
-      }
-      if (!isCompleteSource(article)) {
-        rejected.push(rejection(article.id, "ARTICLE_SOURCE_INCOMPLETE"));
+      const eligibility = evaluateArticleSubmissionEligibility(article);
+      if (!eligibility.eligible) {
+        const code = eligibility.reasonCodes[0];
+        const legacyCode = code === REASON_CODES.ARTICLE_TITLE_EMPTY ? "ARTICLE_TITLE_INVALID"
+          : code === REASON_CODES.ARTICLE_CONTENT_EMPTY ? "ARTICLE_CONTENT_INVALID"
+            : code === REASON_CODES.ARTICLE_PROVENANCE_INCOMPLETE ? "ARTICLE_SOURCE_INCOMPLETE" : code;
+        rejected.push(rejection(article.id, legacyCode));
         return;
       }
       persistReviewed(article, now());

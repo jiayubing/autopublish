@@ -10,7 +10,13 @@ const { createPublicationLedger } = require("../src/publication/publication-ledg
 const { resolveArticleIdentity } = require("../src/publication/article-identity");
 
 function article(id, status = "saved", content = "Body") {
-  return { id, clientId: "client-1", title: "Title " + id, content, status, createdAt: "2026-07-15T00:00:00.000Z" };
+  return {
+    id, clientId: "client-1", title: "Title " + id, content, status, createdAt: "2026-07-15T00:00:00.000Z",
+    source: { client_material: true, doubao_answer: true, references: false, template: true },
+    materialSnapshots: [{ id: "material-1", name: "资料", extension: ".md", content: "资料", contentHash: "hash", source: "text" }],
+    researchSnapshots: [{ questionId: "question-1", answerText: "回答", references: [], collectionMethod: "manual" }],
+    templateSnapshot: { platform: "fixture", id: "template-1", name: "模板", scenario: "场景", body: "模板正文", bodyHash: "template-hash" }
+  };
 }
 
 function makeService(root, values = {}) {
@@ -35,13 +41,13 @@ function makeService(root, values = {}) {
 }
 
 describe("content submission batch", function() {
-  it("previews only saved articles and only platforms declaring queue import", function() {
+  it("previews generated and saved articles and only platforms declaring queue import", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-batch-"));
     try {
       const result = makeService(root).previewBatch({ clientId: "client-1", articleIds: ["saved", "generated"], targetPlatformIds: ["toutiao", "unsupported"] });
       assert.equal(result.totalTaskCount, 4);
-      assert.equal(result.queueableTaskCount, 1);
-      assert.deepEqual(result.unreviewedArticleIds, ["generated"]);
+      assert.equal(result.queueableTaskCount, 2);
+      assert.deepEqual(result.unreviewedArticleIds, []);
       assert.deepEqual(result.unsupportedPlatformIds, ["unsupported"]);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
@@ -100,6 +106,23 @@ describe("content submission batch", function() {
       assert.equal(fs.existsSync(batch.items[0].filePath), false);
       assert.equal(createPublicationLedger({ workspaceRoot: root }).get(batch.items[0].publicationId).status, "cancelled");
       assert.equal(service.cancelBatch({ batchId: batch.batchId, confirmed: true }).cancelledCount, 0);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("previews a complete generated article as immediately queueable", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-generated-"));
+    try {
+      const generated = {
+        id: "generated-complete", clientId: "client-1", title: "完整生成文章", content: "完整正文", status: "generated",
+        source: { client_material: true, doubao_answer: true, references: true, template: true },
+        materialSnapshots: [{ id: "m", name: "资料", extension: ".md", content: "资料", contentHash: "hash", source: "text" }],
+        researchSnapshots: [{ questionId: "q", answerText: "回答", references: [], collectionMethod: "manual" }],
+        templateSnapshot: { platform: "writer", id: "template", name: "模板", scenario: "场景", body: "模板", bodyHash: "hash" },
+        createdAt: "2026-07-19T00:00:00.000Z"
+      };
+      const result = makeService(root, { articles: [generated] }).previewBatch({ clientId: "client-1", articleIds: [generated.id], targetPlatformIds: ["toutiao"] });
+      assert.equal(result.queueableTaskCount, 1);
+      assert.deepEqual(result.unreviewedArticleIds, []);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 

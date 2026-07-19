@@ -5,8 +5,8 @@ import type {
   PublicationHistoryRecord,
 } from './types';
 
-export type ArticleWorkflowStage = 'pending_review' | 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
-export type ArticleWorkflowAction = 'review' | 'queue' | 'view_progress' | 'open_attention' | 'view_publication' | 'trash' | 'restore';
+export type ArticleWorkflowStage = 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
+export type ArticleWorkflowAction = 'queue' | 'view_progress' | 'open_attention' | 'view_publication' | 'trash' | 'restore';
 
 export interface ArticleWorkflowAttention {
   articleId?: string | null;
@@ -18,7 +18,6 @@ export interface ArticleWorkflowAttention {
 
 export interface ArticleWorkflowLocks {
   canEdit: boolean;
-  canReview: boolean;
   canQueue: boolean;
   canCancel: boolean;
   canTrash: boolean;
@@ -70,7 +69,6 @@ function managementFacts(
   else if (hasFailure) stage = 'failed';
   else if (hasActive) stage = 'queued';
   else if (hasPublished && allPublicationTargetsTerminal) stage = 'published';
-  else if (articleStatus === 'generated') stage = 'pending_review';
   else stage = 'pending_submission';
   return { articleStatus, publicationStatuses, batchStatuses, isTrash, hasActive, hasFailure, hasUncertain, hasPublished, stage };
 }
@@ -98,7 +96,7 @@ export function deriveArticleWorkflow(
       stage: 'trash',
       primaryAction: 'restore',
       allowedBulkActions: ['restore'],
-      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: false },
+      locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: false },
     };
   }
   if (facts.stage === 'failed') {
@@ -106,7 +104,7 @@ export function deriveArticleWorkflow(
       stage: 'failed',
       primaryAction: 'open_attention',
       allowedBulkActions: facts.hasUncertain ? ['open_attention'] : ['open_attention', 'trash'],
-      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: !facts.hasActive && !facts.hasUncertain },
+      locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: !facts.hasActive && !facts.hasUncertain },
     };
   }
   if (facts.stage === 'queued') {
@@ -114,7 +112,7 @@ export function deriveArticleWorkflow(
       stage: 'queued',
       primaryAction: 'view_progress',
       allowedBulkActions: ['view_progress'],
-      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: facts.batchStatuses.includes('queued'), canTrash: false },
+      locks: { canEdit: false, canQueue: false, canCancel: facts.batchStatuses.includes('queued'), canTrash: false },
     };
   }
   if (facts.stage === 'published') {
@@ -122,27 +120,18 @@ export function deriveArticleWorkflow(
       stage: 'published',
       primaryAction: 'view_publication',
       allowedBulkActions: ['view_publication', 'trash'],
-      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: true },
-    };
-  }
-  if (facts.stage === 'pending_review') {
-    return {
-      stage: 'pending_review',
-      primaryAction: 'review',
-      allowedBulkActions: ['review'],
-      locks: { canEdit: true, canReview: true, canQueue: false, canCancel: false, canTrash: true },
+      locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: true },
     };
   }
   return {
     stage: 'pending_submission',
     primaryAction: 'queue',
     allowedBulkActions: ['queue'],
-    locks: { canEdit: true, canReview: false, canQueue: true, canCancel: false, canTrash: true },
+    locks: { canEdit: true, canQueue: true, canCancel: false, canTrash: true },
   };
 }
 
 export const ARTICLE_WORKFLOW_STAGES: Array<{ id: ArticleWorkflowStage; label: string }> = [
-  { id: 'pending_review', label: '待审核' },
   { id: 'pending_submission', label: '待投稿' },
   { id: 'queued', label: '已入队' },
   { id: 'published', label: '已发布' },

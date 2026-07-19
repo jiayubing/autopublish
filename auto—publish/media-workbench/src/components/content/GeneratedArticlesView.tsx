@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, reviewContentArticles, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ArticleAttentionItem, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
 import { deriveArticleManagementStatus, deriveArticleWorkflow, type ArticleWorkflowStage } from '../../article-workflow';
@@ -140,8 +140,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   }, [articles, attentionItems, filter, publicationRecordsByArticle, selectedStage, submissionBatches]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
-  const reviewable = operable.filter((article) => article.status === 'generated');
-  const selectedReviewable = reviewable.filter((article) => selected.includes(selectionKey(article)));
   const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)));
   const latestBatch = submissionBatches[0];
   const latestBatchCancelableCount = latestBatch?.items.filter((item) => item.status === 'queued' && item.canCancel === true).length || 0;
@@ -235,28 +233,15 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
-  async function reviewSelected() {
-    if (!selectedReviewable.length || !window.confirm(`确认审核 ${selectedReviewable.length} 篇文章？审核不会自动投稿。`)) return;
-    setBusy(true); setError('');
-    try {
-      const result = await reviewContentArticles(selectedReviewable.map((article) => ({ clientId: article.clientId, articleId: article.id })));
-      if (result.rejected.length) setError(`有 ${result.rejected.length} 篇文章未通过审核：${result.rejected.map((item) => item.code).join(', ')}`);
-      setSelected([]);
-      setArticles(await listContentArticles(clientId));
-      onRefreshArticles?.();
-    } catch (value) { setError(value instanceof Error ? value.message : '审核文章失败'); }
-    finally { setBusy(false); }
-  }
-
   async function queueSelected() {
-    const selectedSaved = filtered.filter((article) => selected.includes(selectionKey(article)) && article.status === 'saved');
-    if (!selectedSaved.length || !targetPlatformIds.length) return;
+    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && (article.status === 'generated' || article.status === 'saved'));
+    if (!selectedQueueable.length || !targetPlatformIds.length) return;
     setBusy(true); setError('');
     try {
-      const input = { clientId, articleIds: selectedSaved.map((article) => article.id), targetPlatformIds };
+      const input = { clientId, articleIds: selectedQueueable.map((article) => article.id), targetPlatformIds };
       const preview = await previewContentSubmissionBatch(input);
-      if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有可入队的已审核文章');
-      if (!window.confirm(`新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，冲突 ${preview.conflictCount} 项。确认继续？`)) return;
+      if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有符合投稿就绪规则的文章');
+      if (!window.confirm(`新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，阻断 ${preview.blockedContentCount || 0} 项，冲突 ${preview.conflictCount} 项。确认继续？`)) return;
       await createContentSubmissionBatch({ ...input, confirmed: true });
       setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefreshArticles?.();
     } catch (value) { setError(value instanceof Error ? value.message : '批量入队失败'); }
@@ -271,7 +256,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   async function copyPublishedVersion() {
     if (!drawerArticle || !publicationRecordsByArticle.get(drawerArticle.id)?.some((record) => record.status === 'published')) return;
     if (!window.confirm(`确认复制“${drawerArticle.title}”为新版本？原文章和发布记录不会修改。`)) return;
-    if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新审核和投稿。')) return;
+    if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新选择目标并投稿。')) return;
     setBusy(true); setError('');
     try {
       const nextArticle = await copyContentArticleVersion({ clientId, sourceArticleId: drawerArticle.id });
@@ -458,7 +443,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
 
        <div className="flex min-w-0 flex-wrap items-center gap-2">
          <button type="button" onClick={toggleAll} disabled={!operable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
-         <button type="button" onClick={() => void reviewSelected()} disabled={!selectedReviewable.length || busy} className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">审核已选 ({selectedReviewable.length})</button>
          <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedArticles.length})</button>
          {latestBatch && latestBatchCancelableCount > 0 && <button type="button" title="撤销最近入队（仅未开始投稿）" onClick={() => void cancelLatestBatch()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销未开始投稿 ({latestBatchCancelableCount})</button>}
          {latestBatch && latestBatchCleanupCount > 0 && <button type="button" onClick={() => void cleanupLatestBatch()} disabled={busy} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({latestBatchCleanupCount})</button>}
@@ -475,7 +459,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
           <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
         </div>
-        <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'saved') || !targetPlatformIds.length || busy} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'generated' || article.status === 'saved') || !targetPlatformIds.length || busy} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
       </div>
     </div>
      {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
@@ -484,7 +468,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       {groups.map((group) => {
         const groupSelectable = selectableArticles(group.articles, clientId);
         const groupSelection = selectionState(group.articles, selected, clientId);
-        const groupReviewable = groupSelectable.filter((article) => article.status === 'generated');
         const isCollapsed = collapsed[group.key] !== false;
         const templateSnapshot = group.templateSnapshot;
         const snapshotBody = summarizeTemplateSnapshot(templateSnapshot);
@@ -492,13 +475,13 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
           <div className="flex items-center gap-3 border-b border-slate-100 p-3">
             <input type="checkbox" aria-label={`全选 ${group.label}`} checked={groupSelection.checked} ref={(element) => { if (element) element.indeterminate = groupSelection.indeterminate; }} onChange={() => toggleGroup(group.articles)} disabled={groupSelection.disabled || busy} />
             <button type="button" onClick={() => setCollapsed((current) => ({ ...current, [group.key]: !isCollapsed }))} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.platform} · {group.label}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 待审核 {groupReviewable.length} · 最新 {formatBeijingTime(group.articles[0]?.createdAt)}</span>{templateSnapshot && <span className="mt-1 block truncate text-xs text-slate-400">场景：{templateSnapshot.scenario} · 正文解释：{snapshotBody}</span>}</span>
+             <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.platform} · {group.label}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 待投稿 {groupSelectable.length} · 最新 {formatBeijingTime(group.articles[0]?.createdAt)}</span>{templateSnapshot && <span className="mt-1 block truncate text-xs text-slate-400">场景：{templateSnapshot.scenario} · 正文解释：{snapshotBody}</span>}</span>
             </button>
           </div>
           {!isCollapsed && <div className="min-w-0 divide-y divide-slate-100">{group.articles.map((article) => <div key={article.id} className="flex min-w-0 flex-wrap items-start gap-3 p-3">
              <input type="checkbox" aria-label={`选择 ${article.title}`} checked={selected.includes(selectionKey(article))} onChange={() => toggleArticle(article)} disabled={(article.status !== 'generated' && article.status !== 'saved') || busy} className="mt-1" />
              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-             <button type="button" onClick={(event) => openArticle(article, event.currentTarget, publicationRecordsByArticle.get(article.id)?.some((record) => record.status === 'published') === true)} className="min-w-0 flex-[1_1_16rem] text-left hover:text-blue-700"><span className="block break-words text-sm font-semibold text-slate-800 sm:truncate">{article.title}</span><span className="mt-1 block break-words text-xs text-slate-500">审核：{article.status}{queuedArticleIds.has(article.id) ? ' · 已入队' : ''} · 版本：{article.version || 1} · {formatBeijingTime(article.createdAt)} · 发布：{publicationSummaries.get(article.id)?.label || '未投稿'}</span></button>
+              <button type="button" onClick={(event) => openArticle(article, event.currentTarget, publicationRecordsByArticle.get(article.id)?.some((record) => record.status === 'published') === true)} className="min-w-0 flex-[1_1_16rem] text-left hover:text-blue-700"><span className="block break-words text-sm font-semibold text-slate-800 sm:truncate">{article.title}</span><span className="mt-1 block break-words text-xs text-slate-500">状态：{article.status}{queuedArticleIds.has(article.id) ? ' · 已入队' : ''} · 版本：{article.version || 1} · {formatBeijingTime(article.createdAt)} · 发布：{publicationSummaries.get(article.id)?.label || '未投稿'}</span></button>
               <button type="button" onClick={() => setDrawerArticle(article)} className={`shrink-0 rounded border px-2 py-2 text-xs ${workflowByArticle.get(article.id)?.stage === 'failed' ? 'border-amber-300 text-amber-700 hover:border-amber-400' : 'border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-700'}`}>{workflowByArticle.get(article.id)?.stage === 'failed' ? '打开需处理' : '发布详情'}</button>
               {workflowByArticle.get(article.id)?.stage === 'published' && <button type="button" onClick={() => void trashPublishedArticle(article)} disabled={busy || removalSubmitDisabled} className="shrink-0 rounded border border-rose-300 px-2 py-2 text-xs text-rose-700 disabled:opacity-40">移入回收站</button>}
            </div>)}</div>}

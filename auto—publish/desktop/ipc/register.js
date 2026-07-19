@@ -6,6 +6,7 @@
   require("./platform-settings-ipc").registerPlatformSettingsIpc(deps);
   require("./ai-content-ipc").registerAiContentIpc(deps);
   require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(deps);
+  require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(deps);
   require("./content-submission-ipc").registerContentSubmissionIpc(deps);
   require("./article-attention-ipc").registerArticleAttentionIpc(deps);
   require("./publication-ipc").registerPublicationIpc(deps);

@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Check, MessageSquareText, Pencil, Save, Trash2 } from 'lucide-react';
 import { collectDoubaoQuestion, createContentQuestion, deleteContentQuestion, getCachedDoubaoLoginState, getDoubaoLoginStatus, getDoubaoQueueState, listContentQuestions, listContentResearch, openDoubaoLogin, pauseDoubaoBatch, previewDoubaoBatch, rememberDoubaoLoginState, retryFailedDoubao, resumeDoubaoBatch, saveManualResearch, startPreparedDoubaoBatch, stopDoubaoBatch, subscribeDoubaoQueue, updateContentQuestion } from '../../electron-api';
 import { ContentClient, ContentQuestion, ContentResearch, DoubaoBatchMode, DoubaoBatchPreview, DoubaoLoginState, DoubaoQueueState } from '../../types';
 import { formatBeijingTime } from '../../time-format';
 import CollapsibleSourceItem from './CollapsibleSourceItem';
 import CollectionTaskBar from './CollectionTaskBar';
+import ManualResearchEditorPanel from './ManualResearchEditorPanel';
+import { createManualAnswerSession, manualAnswerDraftDirty, ManualAnswerDraft, ManualAnswerSession, sameManualAnswerSession } from '../../content-question-editor-session';
 
 interface QuestionCollectionViewProps {
   clients: ContentClient[];
   clientId: string;
   refreshToken: number;
-  onRefresh: () => void;
+  onContentSourcesChanged: () => void;
   [key: string]: unknown;
 }
 
@@ -32,16 +34,16 @@ export function getBatchSelectionState(clientIds: string[], selectedClientIds: s
 
 const emptyQueue: DoubaoQueueState = { status: 'idle', currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] };
 
-export default function QuestionCollectionView({ clients, clientId, refreshToken, onRefresh }: QuestionCollectionViewProps) {
+export default function QuestionCollectionView({ clients, clientId, refreshToken, onContentSourcesChanged }: QuestionCollectionViewProps) {
   const [questions, setQuestions] = useState<ContentQuestion[]>([]);
   const [research, setResearch] = useState<ContentResearch[]>([]);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>(clientId ? [clientId] : []);
   const [batchPreview, setBatchPreview] = useState<DoubaoBatchPreview | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftText, setDraftText] = useState('');
-  const [answerText, setAnswerText] = useState('');
-  const [referenceTitle, setReferenceTitle] = useState('');
-  const [referenceUrl, setReferenceUrl] = useState('');
+  const [questionDraftId, setQuestionDraftId] = useState<string | null>(null);
+  const [questionDraftText, setQuestionDraftText] = useState('');
+  const [manualAnswerSession, setManualAnswerSession] = useState<ManualAnswerSession | null>(null);
+  const [manualDraft, setManualDraft] = useState<ManualAnswerDraft>({ answerText: '', referenceTitle: '', referenceUrl: '' });
+  const [manualSaving, setManualSaving] = useState(false);
   const [login, setLogin] = useState<DoubaoLoginState>(() => getCachedDoubaoLoginState());
   const [queue, setQueue] = useState<DoubaoQueueState>(emptyQueue);
   const [error, setError] = useState('');
@@ -50,15 +52,20 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
   const refreshClientId = useRef<string | null>(null);
   const previousQueueStatus = useRef<DoubaoQueueState['status']>('idle');
   const clientIdRef = useRef(clientId);
-  const onRefreshRef = useRef(onRefresh);
+  const onContentSourcesChangedRef = useRef(onContentSourcesChanged);
   const loadSequence = useRef(0);
   const collectionPendingRef = useRef(false);
   const collectionTokenSequence = useRef(0);
   const pendingCollectionToken = useRef<string | null>(null);
   const refreshedCollectionToken = useRef<string | null>(null);
+  const manualSessionRef = useRef<ManualAnswerSession | null>(null);
+  const manualBaseDraftRef = useRef<ManualAnswerDraft>({ answerText: '', referenceTitle: '', referenceUrl: '' });
+  const manualSourceRef = useRef<HTMLButtonElement | null>(null);
+  const sessionTokenSequence = useRef(0);
 
   clientIdRef.current = clientId;
-  onRefreshRef.current = onRefresh;
+  onContentSourcesChangedRef.current = onContentSourcesChanged;
+  manualSessionRef.current = manualAnswerSession;
 
   const researchById = useMemo(() => new Map(research.map((item) => [item.id, item])), [research]);
   const selectedQuestions = questions.filter((item) => item.enabled);
@@ -87,7 +94,7 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
     if (refreshPromise.current && refreshClientId.current === targetClientId) return refreshPromise.current;
     const promise = (async () => {
       await loadQuestions(targetClientId);
-      if (clientIdRef.current === targetClientId) onRefreshRef.current();
+      if (clientIdRef.current === targetClientId) onContentSourcesChangedRef.current();
     })();
     refreshPromise.current = promise;
     refreshClientId.current = targetClientId;
@@ -144,6 +151,17 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
     return () => { cancelled = true; };
   }, [clientId, refreshToken]);
   useEffect(() => {
+    manualSessionRef.current = null;
+    setManualAnswerSession(null);
+    setManualDraft({ answerText: '', referenceTitle: '', referenceUrl: '' });
+    setManualSaving(false);
+    manualBaseDraftRef.current = { answerText: '', referenceTitle: '', referenceUrl: '' };
+    manualSourceRef.current = null;
+    setQuestionDraftId(null);
+    setQuestionDraftText('');
+  }, [clientId]);
+  useEffect(() => () => { manualSessionRef.current = null; }, []);
+  useEffect(() => {
     let disposed = false;
     let queueEventReceived = false;
     const unsubscribe = subscribeDoubaoQueue((state) => {
@@ -174,22 +192,22 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
   }, []);
 
   async function saveQuestion() {
-    if (!clientId || !draftText.trim()) return;
+    if (!clientId || !questionDraftText.trim()) return;
     try {
-      if (editingId) await updateContentQuestion({ clientId, questionId: editingId, text: draftText });
-      else await createContentQuestion({ clientId, text: draftText, enabled: true });
-      setDraftText(''); setEditingId(null); await loadQuestions(); onRefresh();
+      if (questionDraftId) await updateContentQuestion({ clientId, questionId: questionDraftId, text: questionDraftText });
+      else await createContentQuestion({ clientId, text: questionDraftText, enabled: true });
+      setQuestionDraftText(''); setQuestionDraftId(null); await loadQuestions(); onContentSourcesChangedRef.current();
     } catch (value) { setError(value instanceof Error ? value.message : '保存问题失败'); }
   }
 
   async function toggleQuestion(question: ContentQuestion) {
-    try { await updateContentQuestion({ clientId, questionId: question.id, enabled: !question.enabled }); await loadQuestions(); onRefresh(); }
+    try { await updateContentQuestion({ clientId, questionId: question.id, enabled: !question.enabled }); await loadQuestions(); onContentSourcesChangedRef.current(); }
     catch (value) { setError(value instanceof Error ? value.message : '更新问题状态失败'); }
   }
 
   async function deleteQuestion(question: ContentQuestion) {
     if (!confirm('删除这个问题及其当前回答？删除当前回答，但不会修改已保存文章。')) return;
-    try { await deleteContentQuestion({ clientId, questionId: question.id }); await loadQuestions(); onRefresh(); }
+    try { await deleteContentQuestion({ clientId, questionId: question.id }); await loadQuestions(); onContentSourcesChangedRef.current(); }
     catch (value) { setError(value instanceof Error ? value.message : '删除问题失败'); }
   }
 
@@ -243,12 +261,60 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
     finally { finishCollection(); }
   }
 
+  function openQuestionEditor(question: ContentQuestion) {
+    setQuestionDraftId(question.id);
+    setQuestionDraftText(question.text);
+  }
+
+  function closeManualAnswerSession(force = false) {
+    if (!manualAnswerSession) return true;
+    if (!force && manualAnswerDraftDirty(manualBaseDraftRef.current, manualDraft) && !window.confirm('人工回答有未保存修改，确认关闭并放弃这些修改吗？')) return false;
+    manualSessionRef.current = null;
+    setManualAnswerSession(null);
+    setManualDraft({ answerText: '', referenceTitle: '', referenceUrl: '' });
+    setManualSaving(false);
+    manualBaseDraftRef.current = { answerText: '', referenceTitle: '', referenceUrl: '' };
+    const source = manualSourceRef.current;
+    manualSourceRef.current = null;
+    source?.focus();
+    requestAnimationFrame(() => source?.focus());
+    return true;
+  }
+
+  function openManualAnswer(question: ContentQuestion, researchItem: ContentResearch | undefined, source: HTMLButtonElement) {
+    if (manualAnswerSession && !closeManualAnswerSession()) return;
+    const nextDraft: ManualAnswerDraft = {
+      answerText: researchItem?.answerText || '',
+      referenceTitle: researchItem?.references?.[0]?.title || '',
+      referenceUrl: researchItem?.references?.[0]?.url || ''
+    };
+    const nextSession = createManualAnswerSession(clientId, question.id, `manual:${++sessionTokenSequence.current}`);
+    manualSourceRef.current = source;
+    manualBaseDraftRef.current = nextDraft;
+    manualSessionRef.current = nextSession;
+    setManualSaving(false);
+    setManualDraft(nextDraft);
+    setManualAnswerSession(nextSession);
+    setError('');
+  }
+
   async function saveManual() {
-    const references = referenceTitle.trim() && referenceUrl.trim() ? [{ title: referenceTitle.trim(), url: referenceUrl.trim() }] : [];
-    const question = questions.find((item) => item.id === editingId);
-    if (!question || !answerText.trim()) return;
-    try { await saveManualResearch({ clientId, questionId: question.id, answerText, references }); await loadQuestions(); onRefresh(); }
-    catch (value) { setError(value instanceof Error ? value.message : '保存人工回答失败'); }
+    const session = manualAnswerSession;
+    if (!session || session.clientId !== clientId || !manualDraft.answerText.trim()) return;
+    const references = manualDraft.referenceTitle.trim() && manualDraft.referenceUrl.trim() ? [{ title: manualDraft.referenceTitle.trim(), url: manualDraft.referenceUrl.trim() }] : [];
+    setManualSaving(true);
+    try {
+      await saveManualResearch({ clientId: session.clientId, questionId: session.questionId, answerText: manualDraft.answerText, references });
+      if (!sameManualAnswerSession(manualSessionRef.current, session)) return;
+      await loadQuestions(session.clientId);
+      if (!sameManualAnswerSession(manualSessionRef.current, session)) return;
+      onContentSourcesChangedRef.current();
+      closeManualAnswerSession(true);
+    } catch (value) {
+      if (sameManualAnswerSession(manualSessionRef.current, session)) setError(value instanceof Error ? value.message : '保存人工回答失败');
+    } finally {
+      if (sameManualAnswerSession(manualSessionRef.current, session)) setManualSaving(false);
+    }
   }
 
   async function refreshLogin() {
@@ -284,11 +350,14 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
     }
   }
 
+  const manualQuestion = manualAnswerSession ? questions.find((item) => item.id === manualAnswerSession.questionId) : null;
+  const manualClient = clients.find((item) => item.id === clientId);
   return <div className="content-panel flex h-full min-h-0 flex-col overflow-hidden">
     <div className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-200 bg-white px-4 py-3">
       <div className="flex items-center gap-2 text-xs"><span className="text-slate-500">豆包登录：{login.status}</span><button type="button" onClick={refreshLogin} className="text-slate-500 underline">刷新</button><button type="button" onClick={loginNow} className="rounded-md bg-slate-900 px-3 py-2 text-white">打开登录</button></div>
     </div>
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+    <div className="flex min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4">
       <section className="rounded-md border border-slate-200 bg-white p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="text-sm font-semibold">批次客户</h2><p className="mt-1 text-xs text-slate-500">批次客户独立于当前客户：已选 {batchSelection.selectedCount} 个</p></div>
@@ -306,19 +375,20 @@ export default function QuestionCollectionView({ clients, clientId, refreshToken
         {batchPreview && <p className="mt-2 text-xs text-slate-500">预览：{batchPreview.clientCount} 个客户 · {batchPreview.taskCount} 个问题进入队列 · 跳过 {batchPreview.skippedExisting} 个已有回答 · 排除 {batchPreview.disabledQuestions} 个停用问题</p>}
       </section>
       <section className="rounded-md border border-slate-200 bg-white p-3">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">问题与采集</h2><span className="text-xs text-slate-500">当前客户 · 启用问题 {selectedQuestions.length}</span></div>
-        <div className="mb-3 flex gap-2"><input value={draftText} onChange={(event) => setDraftText(event.target.value)} placeholder="新增或编辑问题" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm" /><button type="button" onClick={saveQuestion} title="保存问题" className="task-icon-button"><Save className="h-4 w-4" /></button><button type="button" onClick={() => { setDraftText(''); setEditingId(null); }} title="新增问题" className="task-icon-button"><Plus className="h-4 w-4" /></button></div>
+        <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-semibold">问题与采集</h2>{questionDraftId && <p className="mt-1 text-xs text-blue-700">正在编辑：{questions.find((item) => item.id === questionDraftId)?.text || '问题'}</p>}</div><span className="text-xs text-slate-500">当前客户 · 启用问题 {selectedQuestions.length}</span></div>
+        <div className="mb-3 flex gap-2"><input aria-label="问题草稿" value={questionDraftText} onChange={(event) => setQuestionDraftText(event.target.value)} placeholder="新增或编辑问题" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm" /><button type="button" onClick={() => void saveQuestion()} title="保存问题" className="task-icon-button"><Save className="h-4 w-4" /></button>{questionDraftId && <button type="button" onClick={() => { setQuestionDraftText(''); setQuestionDraftId(null); }} className="rounded border border-slate-300 px-2 text-xs text-slate-600">取消编辑</button>}</div>
         <div className="space-y-2">{questions.map((question) => {
           const item = researchById.get(question.id);
           const summary = item ? `${item.isAnswerComplete === false ? '未完成' : '已完成'} · ${item.answerText?.length || 0} 字 · ${item.collectionMethod} · ${formatBeijingTime(item.collectedAt || item.updatedAt)}` : '尚未采集';
-          const actions = <><button type="button" onClick={() => { setEditingId(question.id); setDraftText(question.text); setAnswerText(item?.answerText || ''); }} title="编辑问题或回答" className="task-icon-button"><Pencil className="h-4 w-4" /></button><button type="button" disabled={isCollecting} onClick={() => collect(question, false)} title="单条采集" className="task-icon-button"><Check className="h-4 w-4" /></button><button type="button" disabled={isCollecting} onClick={() => recollect(question)} title="明确重新采集" className="task-icon-button"><span className="text-xs">重采</span></button><button type="button" onClick={() => deleteQuestion(question)} title="删除问题" className="task-icon-button text-rose-600"><Trash2 className="h-4 w-4" /></button></>;
+          const actions = <><button type="button" onClick={() => openQuestionEditor(question)} title="编辑问题" className="task-icon-button"><Pencil className="h-4 w-4" /></button><button type="button" aria-label={`人工回答：${question.text}`} ref={(element) => { if (element && manualAnswerSession?.questionId === question.id) manualSourceRef.current = element; }} onClick={(event) => openManualAnswer(question, item, event.currentTarget)} title="人工回答" className="task-icon-button"><MessageSquareText className="h-4 w-4" /></button><button type="button" disabled={isCollecting} onClick={() => void collect(question, false)} title="单条采集" className="task-icon-button"><Check className="h-4 w-4" /></button><button type="button" disabled={isCollecting} onClick={() => void recollect(question)} title="明确重新采集" className="task-icon-button"><span className="text-xs">重采</span></button><button type="button" onClick={() => void deleteQuestion(question)} title="删除问题" className="task-icon-button text-rose-600"><Trash2 className="h-4 w-4" /></button></>;
           return <div key={question.id}><CollapsibleSourceItem id={question.id} title={question.text} summary={summary} selected={question.enabled} onSelectedChange={() => void toggleQuestion(question)} defaultExpanded={false} actions={actions}>
             {item ? <div className="grid gap-2"><div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-slate-50 p-2">{item.answerText}</div><div>{item.references.map((reference) => <a key={reference.url} href={reference.url} target="_blank" rel="noreferrer" className="mr-2 text-blue-600 underline">{reference.title}</a>)}</div></div> : <div className="text-slate-400">尚未采集回答</div>}
           </CollapsibleSourceItem></div>;
         })}</div>
       </section>
-      {editingId && <div className="rounded-md border border-blue-200 bg-blue-50 p-3"><h2 className="mb-2 text-sm font-semibold">人工编辑回答</h2><textarea value={answerText} onChange={(event) => setAnswerText(event.target.value)} className="min-h-28 w-full rounded-md border border-slate-300 p-2 text-sm" placeholder="回答正文（至少 10 个字符）" /><div className="mt-2 grid grid-cols-2 gap-2"><input value={referenceTitle} onChange={(event) => setReferenceTitle(event.target.value)} placeholder="引用标题" className="h-9 rounded-md border border-slate-300 px-2 text-sm" /><input value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https:// 引用 URL" className="h-9 rounded-md border border-slate-300 px-2 text-sm" /></div><button type="button" onClick={saveManual} className="mt-2 inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white"><Save className="h-4 w-4" />保存人工回答</button></div>}
       {error && <div className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
+      </div>
+      {manualAnswerSession && manualQuestion && <ManualResearchEditorPanel session={manualAnswerSession} draft={manualDraft} questionText={manualQuestion.text} clientName={manualClient?.name || clientId} saving={manualSaving} onDraftChange={setManualDraft} onSave={() => void saveManual()} onClose={() => { closeManualAnswerSession(); }} />}
     </div>
     <CollectionTaskBar queue={queue} busy={collectionPending} onPause={() => void pauseDoubaoBatch()} onResume={() => void resumeDoubaoBatch()} onStop={() => void stopDoubaoBatch()} onRetry={retryFailed} />
   </div>;

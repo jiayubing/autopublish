@@ -23,6 +23,8 @@ function article(id) {
     content: `Body ${id}`,
     status: "saved",
     source: { client_material: true, doubao_answer: true, references: false, template: true },
+    materialSnapshots: [{ id: "material-1", name: "资料", extension: ".md", content: "资料", contentHash: "material-hash", source: "text" }],
+    templateSnapshot: { platform: "hepan", id: "template-1", name: "模板", scenario: "guide", body: "模板正文", bodyHash: "template-hash" },
     createdAt: "2026-07-18T00:00:00.000Z",
     updatedAt: "2026-07-18T00:00:00.000Z"
   };

@@ -48,6 +48,11 @@ function createDoubaoCollectionDesktopService(options) {
   let disposePromise = null;
   let lastCloseError = null;
 
+  function notifyContentSources(reasonCode) {
+    if (typeof opts.onDataInvalidated !== "function") return;
+    try { opts.onDataInvalidated(["contentSources"], reasonCode); } catch (_) {}
+  }
+
   function clientIdOf(input) {
     return typeof input === "string" ? input : input && input.clientId;
   }
@@ -57,21 +62,27 @@ function createDoubaoCollectionDesktopService(options) {
   }
 
   function createQuestion(input) {
-    return questionStore.createQuestion(input.clientId, {
+    const result = questionStore.createQuestion(input.clientId, {
       text: input.text,
       enabled: input.enabled
     });
+    notifyContentSources("CONTENT_QUESTION_CREATED");
+    return result;
   }
 
   function updateQuestion(input) {
-    return questionStore.updateQuestion(input.clientId, input.questionId, {
+    const result = questionStore.updateQuestion(input.clientId, input.questionId, {
       text: input.text,
       enabled: input.enabled
     });
+    notifyContentSources("CONTENT_QUESTION_UPDATED");
+    return result;
   }
 
   function deleteQuestion(input) {
-    return collectionService.deleteQuestionAndResearch(input);
+    const result = collectionService.deleteQuestionAndResearch(input);
+    notifyContentSources("CONTENT_QUESTION_DELETED");
+    return result;
   }
 
   function hasPendingWork(state) {
@@ -145,6 +156,7 @@ function createDoubaoCollectionDesktopService(options) {
         if (!record || typeof record !== "object" || Array.isArray(record)) {
           throw serviceError("DOUBAO_COLLECTION_FAILED", "Doubao collection did not produce a research record");
         }
+        notifyContentSources("CONTENT_RESEARCH_COLLECTED");
         return record;
       });
     } catch (error) {
@@ -171,7 +183,7 @@ function createDoubaoCollectionDesktopService(options) {
     getLoginState: function() { return collectionService.getLoginState(); },
     openLogin: function() { return collectionService.openLogin(); },
     collectOne: collectOne,
-    saveManual: function(input) { return collectionService.saveManual(input); },
+    saveManual: function(input) { const result = collectionService.saveManual(input); notifyContentSources("CONTENT_RESEARCH_MANUAL_SAVED"); return result; },
     previewBatch: previewBatch,
     startBatch: startBatch,
     startPreparedBatch: startPreparedBatch,

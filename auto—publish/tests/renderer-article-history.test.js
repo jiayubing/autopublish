@@ -68,9 +68,9 @@ describe("article history grouping", async function() {
     assert.deepStrictEqual(groups.map((group) => group.articles.map((article) => article.id)), [["toutiao-legacy"], ["ctrip-legacy"]]);
   });
 
-  it("keeps article opening separate from explicit review selection", function() {
+  it("keeps article opening separate from queue selection", function() {
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    assert.match(view, /reviewContentArticles/);
+    assert.doesNotMatch(view, /reviewContentArticles|审核已选|待审核/);
     assert.match(view, /window\.confirm/);
     assert.match(view, /article\.status !== 'generated'/);
     assert.match(view, /onArticleSelect\(article\)/);
@@ -94,10 +94,9 @@ describe("article history grouping", async function() {
 
   it("keeps saved articles selectable for submission queueing", function() {
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    assert.match(view, /const selectedSaved = filtered\.filter/);
-    assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'saved'\)/);
-    assert.doesNotMatch(view, /reviewable\.some\(\(article\) => selectionKey\(article\) === key && article\.status === 'saved'\)/);
-    assert.doesNotMatch(view, /文章状态/);
+    assert.match(view, /const selectedQueueable = filtered\.filter/);
+    assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'generated' \|\| article\.status === 'saved'\)/);
+    assert.match(view, /状态：/);
     assert.match(view, /撤销最近入队/);
     assert.match(view, /listContentSubmissionBatches/);
     assert.match(view, /queueableTaskCount/);

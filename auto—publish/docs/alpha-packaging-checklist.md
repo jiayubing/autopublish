@@ -112,6 +112,16 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
       do not use real AI, credentials, customer data, or network calls.
 - [ ] Repeat the manual alpha paths for transient refresh feedback, custom-first
       visibility / `显示内置模板`, and batch count plus cost confirmation.
+- [ ] In a disposable synthetic workspace, create two clients with 25 successful
+      generated articles each and verify one target selection, one preflight,
+      one confirmation, two client-scoped submission batches, and 50 queue
+      tasks; do not use real customer articles or credentials.
+- [ ] Verify incomplete provenance, duplicate article identities, changed batch
+      revision, and renderer path-like IPC input are blocked with safe reason
+      codes and no queue writes.
+- [ ] Verify a client-group failure leaves completed groups intact and a retry
+      submits only unfinished groups; repeated confirmation does not create a
+      second article-target attempt.
 
 ## Hepan, submission batch, and history remediation
 
@@ -159,6 +169,9 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
       a fixed whole-batch timeout.
 - [ ] Open, edit, save, close, and copy a history article version in the same
       history view. Confirm unsaved protection and focus restoration.
+- [ ] Open and close manual research answer editing, press Escape with and
+      without dirty input, switch clients, and confirm answer/reference state
+      and focus do not cross session boundaries.
 - [ ] At `1128×527` and `1424×861`, expand long-title groups and confirm no
       page-level horizontal overflow or off-viewport row action.
 # Runtime workspace check

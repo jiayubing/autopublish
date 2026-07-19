@@ -3,6 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const { createPublicationLedger } = require("../publication/publication-ledger");
+const { evaluateArticleSubmissionEligibility } = require("./article-submission-eligibility");
 const { resolveArticleIdentity } = require("../publication/article-identity");
 const { resolvePublicationTarget } = require("../publication/publication-targets");
 
@@ -335,7 +336,12 @@ function createSubmissionExportService(options) {
     const platform = platformMap.get(input.targetPlatform);
     if (!platform || platform.contentQueueImport !== true) throw error("CONTENT_EXPORT_TARGET_INVALID", "Invalid export target");
     const article = getArticle(input.generatedArticleId);
-    if (!article || article.status !== "saved") throw error("CONTENT_EXPORT_NOT_SAVED", "Only saved generated articles can be exported");
+    const eligibility = evaluateArticleSubmissionEligibility(article, { targetPlatform: platform });
+    if (!eligibility.eligible) {
+      const notReady = error("CONTENT_EXPORT_NOT_READY", eligibility.reasons.join("、"));
+      notReady.reasonCodes = eligibility.reasonCodes.slice();
+      throw notReady;
+    }
     const markdown = articleMarkdown(article);
     const contentHash = crypto.createHash("sha256").update(markdown).digest("hex");
     const filename = safeFilename(article.title, article.id);

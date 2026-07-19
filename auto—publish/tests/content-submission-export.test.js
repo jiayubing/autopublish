@@ -3,11 +3,21 @@ const assert = require("node:assert/strict");
 const fs = require("fs"); const os = require("os"); const path = require("path");
 const { createSubmissionExportService } = require("../src/content/submission-export-service");
 
+function readyArticle(overrides) {
+  return Object.assign({
+    id: "saved", clientId: "client", title: "Title", content: "Body", status: "saved",
+    source: { client_material: true, doubao_answer: true, references: false, template: true },
+    materialSnapshots: [{ id: "material-1", name: "资料", extension: ".md", content: "资料", contentHash: "hash", source: "text" }],
+    researchSnapshots: [{ questionId: "question-1", answerText: "回答", references: [], collectionMethod: "manual" }],
+    templateSnapshot: { platform: "fixture", id: "template-1", name: "模板", scenario: "场景", body: "模板", bodyHash: "template-hash" }
+  }, overrides || {});
+}
+
 it("exports only saved generated articles as idempotent queued Markdown with safe provenance", function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-export-"));
   try {
     const service = createSubmissionExportService({ rootDir: root, getArticle: function(id) {
-      return id === "saved" ? { id: "saved", clientId: "client", title: "标题", content: "正文", status: "saved" } : { id: id, status: "draft" };
+      return id === "saved" ? readyArticle({ title: "标题", content: "正文" }) : readyArticle({ id: id, status: "draft" });
     } });
     const result = service.exportArticle({ generatedArticleId: "saved", targetPlatform: "media", confirmed: true });
     assert.equal(result.status, "queued");
@@ -17,7 +27,7 @@ it("exports only saved generated articles as idempotent queued Markdown with saf
     fs.unlinkSync(result.sidecarPath);
     assert.equal(service.exportArticle({ generatedArticleId: "saved", targetPlatform: "media", confirmed: true }).idempotent, true);
     assert.ok(fs.existsSync(result.sidecarPath));
-    assert.throws(function() { service.exportArticle({ generatedArticleId: "draft", targetPlatform: "media", confirmed: true }); }, { code: "CONTENT_EXPORT_NOT_SAVED" });
+    assert.throws(function() { service.exportArticle({ generatedArticleId: "draft", targetPlatform: "media", confirmed: true }); }, { code: "CONTENT_EXPORT_NOT_READY" });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -30,7 +40,7 @@ it("uses the injected portable input root and accepts declared dynamic platforms
       paths: { input: inputRoot },
       platforms: [{ id: "new-platform", scanDir: "new-platform", contentQueueImport: true }],
       getArticle: function() {
-        return { id: "saved", clientId: "client", title: "Title", content: "Body", status: "saved" };
+        return readyArticle();
       }
     });
 
@@ -47,7 +57,7 @@ it("reserves a declared publication target and records v2 sidecar identity", fun
   try {
     const service = createSubmissionExportService({
       rootDir: root,
-      getArticle: function() { return { id: "saved", clientId: "client", title: "Title", content: "Body", status: "saved" }; }
+      getArticle: function() { return readyArticle(); }
     });
     const preview = service.previewExport({ generatedArticleId: "saved", targetPlatform: "toutiao", confirmed: true });
     assert.equal(preview.status, "queueable");
@@ -66,7 +76,7 @@ it("uses a media resource as the publication target when one is supplied", funct
   try {
     const service = createSubmissionExportService({
       rootDir: root,
-      getArticle: function() { return { id: "saved", clientId: "client", title: "Title", content: "Body", status: "saved" }; }
+      getArticle: function() { return readyArticle(); }
     });
     const result = service.exportArticle({ generatedArticleId: "saved", targetPlatform: "media", mediaResourceId: "1001", confirmed: true });
     const sidecar = JSON.parse(fs.readFileSync(result.sidecarPath, "utf8"));
@@ -81,7 +91,7 @@ it("cancels an unsubmitted reservation when writing the queue pair fails", funct
   try {
     const service = createSubmissionExportService({
       rootDir: root,
-      getArticle: function() { return { id: "saved", clientId: "client", title: "Title", content: "Body", status: "saved" }; }
+      getArticle: function() { return readyArticle(); }
     });
     fs.renameSync = function(source, target) {
       if (String(target).endsWith(".submission.json")) throw new Error("simulated sidecar write failure");

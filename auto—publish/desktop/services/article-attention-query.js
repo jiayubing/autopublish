@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const { deriveAttentionPolicy, MESSAGES } = require("./article-attention-policy");
+const { evaluateArticleSubmissionEligibility } = require("../../src/content/article-submission-eligibility");
 
 const ATTENTION_KINDS = Object.freeze({
   MISSING_PAIR_FINALIZE: "missing_pair_finalize",
@@ -90,7 +91,7 @@ function createArticleAttentionQuery(options) {
     if (getArticle && value.clientId && value.articleId) {
       try {
         const article = getArticle(value.clientId, value.articleId);
-        if (article && typeof article === "object") return { exists: true, status: article.status || null, title: article.title || null };
+        if (article && typeof article === "object") return { exists: true, status: article.status || null, title: article.title || null, submissionEligible: evaluateArticleSubmissionEligibility(article).eligible };
       } catch (_) {}
     }
     const getTrashedArticle = reader("getTrashedArticle", null);
@@ -152,6 +153,7 @@ function createArticleAttentionQuery(options) {
       kind,
       articleStatus: facts.articleStatus || articleState.status || null,
       articleExists: facts.articleExists !== undefined ? facts.articleExists : articleState.exists,
+      articleSubmissionEligible: facts.articleSubmissionEligible !== undefined ? facts.articleSubmissionEligible : articleState.submissionEligible,
       articleState
     });
     const policy = deriveAttentionPolicy(normalizedFacts, domainCapabilities(kind));

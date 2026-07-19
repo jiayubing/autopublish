@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, FailedPublicationRetryPreview, FailedPublicationRetryResult, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, FailedPublicationRetryPreview, FailedPublicationRetryResult, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, GenerationSubmissionHandoffPreview, GenerationSubmissionHandoffResult, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -117,6 +117,8 @@ interface DesktopConsoleContent {
   retryFailedGenerationBatch(input: { batchId: string }): Promise<IpcResponse<GenerationBatch>>;
   previewCancelPendingGenerationBatch(input: { batchId: string }): Promise<IpcResponse<GenerationBatchCancelPreview>>;
   cancelPendingGenerationBatch(input: { batchId: string; confirmed: true }): Promise<IpcResponse<GenerationBatch>>;
+  previewGenerationSubmissionHandoff(input: { generationBatchId: string; targetPlatformIds: string[] }): Promise<IpcResponse<GenerationSubmissionHandoffPreview>>;
+  commitGenerationSubmissionHandoff(input: { generationBatchId: string; targetPlatformIds: string[]; previewToken: string; confirmed: true }): Promise<IpcResponse<GenerationSubmissionHandoffResult>>;
   getGenerationBatchState?: () => Promise<IpcResponse<GenerationBatchState>>;
   onGenerationBatchState?: (listener: (state: GenerationBatchState) => void) => () => void;
 }
@@ -1410,6 +1412,20 @@ export async function listContentSubmissionBatches(clientId: string): Promise<Co
   const result = await window.desktopConsole!.content.listSubmissionBatches({ clientId });
   if (!result.ok) throw getIpcError(result.error, "submission batch history failed");
   return (result.data || []) as ContentSubmissionBatchRecord[];
+}
+
+export async function previewGenerationSubmissionHandoff(input: { generationBatchId: string; targetPlatformIds: string[] }): Promise<GenerationSubmissionHandoffPreview> {
+  if (!isElectron()) throw new Error("Generation submission handoff requires the desktop app");
+  const result = await window.desktopConsole!.content.previewGenerationSubmissionHandoff(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to preview generation submission handoff");
+  return result.data;
+}
+
+export async function commitGenerationSubmissionHandoff(input: { generationBatchId: string; targetPlatformIds: string[]; previewToken: string; confirmed: true }): Promise<GenerationSubmissionHandoffResult> {
+  if (!isElectron()) throw new Error("Generation submission handoff requires the desktop app");
+  const result = await window.desktopConsole!.content.commitGenerationSubmissionHandoff(input);
+  if (!result.ok || !result.data) throw getIpcError(result.error, "Unable to commit generation submission handoff");
+  return result.data;
 }
 
 export async function previewRetryFailedPublication(input: { publicationId: string }): Promise<FailedPublicationRetryPreview> {

@@ -17,6 +17,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
+const { evaluateArticleSubmissionEligibility } = require("../../src/content/article-submission-eligibility");
 
 function batchError(code, message) { const error = new Error(message); error.code = code; return error; }
 function hash(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
@@ -71,13 +72,14 @@ function createContentSubmissionService(opts) {
     let article;
     try { article = store.getArticle(record.clientId, record.articleId); }
     catch (_) { throw batchError("ARTICLE_NOT_FOUND", "The source article is no longer available"); }
-    if (!article || article.status !== "saved") throw batchError("ARTICLE_NOT_RETRYABLE", "Only reviewed saved articles can be retried");
+    const eligibility = evaluateArticleSubmissionEligibility(article, { targetPlatform: { id: record.platformId, contentQueueImport: true } });
+    if (!eligibility.eligible) throw batchError("ARTICLE_NOT_RETRYABLE", eligibility.reasons.join("、"));
     const platform = availablePlatforms().find(function(candidate) { return candidate.id === record.platformId; });
     if (!platform || platform.contentQueueImport !== true) throw batchError("CONTENT_SUBMISSION_TARGET_UNSUPPORTED", "The publication target does not support content queue import");
     const preview = previewBatch({ clientId: record.clientId, articleIds: [record.articleId], targetPlatformIds: [record.platformId] });
     const retryableItem = preview.items.find(function(item) { return item.articleId === record.articleId && item.targetPlatformId === record.platformId; });
     if (!retryableItem || !["queueable", "idempotent"].includes(retryableItem.status)) {
-      throw batchError(retryableItem && retryableItem.reasonCode || "SUBMISSION_QUEUE_CHANGED", "The publication queue changed and must be reviewed again");
+      throw batchError(retryableItem && retryableItem.reasonCode || "SUBMISSION_QUEUE_CHANGED", "投稿队列已变化，请重新预检");
     }
     const failureCount = Array.isArray(record.attempts) ? record.attempts.filter(function(attempt) { return attempt.status === "failed"; }).length : 1;
     return {
@@ -165,17 +167,23 @@ function createContentSubmissionService(opts) {
     const platformMap = new Map(platforms.map((platform) => [platform.id, platform]));
     const unsupportedPlatformIds = input.targetPlatformIds.filter((id) => !platformMap.has(id) || platformMap.get(id).contentQueueImport !== true);
     const items = [];
-    const unreviewedArticleIds = [];
+    const ineligibleArticleIds = [];
     const missingArticleIds = [];
     const conflicts = [];
     input.articleIds.forEach((articleId) => {
       let article;
       try { article = store.getArticle(input.clientId, articleId); } catch (_) { missingArticleIds.push(articleId); return; }
-      if (article.status !== "saved") unreviewedArticleIds.push(articleId);
       input.targetPlatformIds.forEach((platformId) => {
         const platform = platformMap.get(platformId);
         const item = { articleId, targetPlatformId: platformId, contentHash: hash(articleMarkdown(article)), status: "excluded" };
-        if (article.status === "saved" && platform && platform.contentQueueImport === true) {
+        if (platform && platform.contentQueueImport === true) {
+          const eligibility = evaluateArticleSubmissionEligibility(article, { targetPlatform: platform });
+          if (!eligibility.eligible) {
+            if (!ineligibleArticleIds.includes(articleId)) ineligibleArticleIds.push(articleId);
+            Object.assign(item, { status: "blocked", reasonCode: eligibility.reasonCodes[0], reasonCodes: eligibility.reasonCodes, reasons: eligibility.reasons });
+            items.push(item);
+            return;
+          }
           const classified = itemForArticle(article, platform, platformId);
           Object.assign(item, classified);
           if (item.status === "conflict") conflicts.push(item);
@@ -194,8 +202,10 @@ function createContentSubmissionService(opts) {
       alreadyQueuedCount: count("idempotent"),
       blockedPublishedCount: count("blockedPublished"),
       blockedUncertainCount: count("blockedUncertain"),
+      blockedContentCount: count("blocked"),
       conflictCount: conflicts.length,
-      unreviewedArticleIds: [...new Set(unreviewedArticleIds)],
+      ineligibleArticleIds: [...new Set(ineligibleArticleIds)],
+      unreviewedArticleIds: [...new Set(ineligibleArticleIds)],
       missingArticleIds,
       unsupportedPlatformIds,
       items

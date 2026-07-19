@@ -27,3 +27,10 @@ body { background-color: #f6f7f4; }
 .batch-step.is-active { color: #0f172a; }
 .batch-step.is-active span, .batch-step.is-complete span { background: #2563eb; color: #fff; }
 .generation-batch-task-list { scrollbar-gutter: stable; }
+
+.manual-research-editor-panel { position: relative; z-index: 20; display: flex; width: min(42%, 34rem); min-width: 320px; flex: 0 0 min(42%, 34rem); flex-direction: column; overflow: hidden; border-left: 1px solid #cbd5e1; background: #fff; box-shadow: -8px 0 24px rgba(15, 23, 42, .08); }
+.manual-research-editor-backdrop { display: none; }
+@media (max-width: 767px) {
+  .manual-research-editor-backdrop { position: fixed; inset: 0; z-index: 30; display: block; border: 0; background: rgba(15, 23, 42, .35); }
+  .manual-research-editor-panel { position: fixed; inset: 0; z-index: 31; width: 100%; min-width: 0; flex: none; border: 0; box-shadow: none; }
+}

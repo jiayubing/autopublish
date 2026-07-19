@@ -240,6 +240,37 @@ export interface RealOrder {
   errorCode?: string;
 }
 
+export interface GenerationSubmissionHandoffPreview {
+  generationBatchId: string;
+  batchRevision?: string | number;
+  previewToken: string;
+  articleCount: number;
+  clientCount: number;
+  targetPlatformIds: string[];
+  estimatedTaskCount: number;
+  queueableTaskCount: number;
+  idempotentCount: number;
+  blockedPublishedCount: number;
+  blockedUncertainCount: number;
+  blockedContentCount: number;
+  conflictCount: number;
+  unavailableArticleCount: number;
+  invalidArticles: Array<{ clientId: string; articleId?: string | null; taskId: string; reasonCode: string }>;
+  clientGroups: Array<{ clientId: string; articleCount: number; queueableTaskCount: number; idempotentCount: number; blockedPublishedCount: number; blockedUncertainCount: number; blockedContentCount: number; conflictCount: number; items: Array<{ articleId: string; targetPlatformId: string; status: string; reasonCode?: string | null }> }>;
+}
+
+export interface GenerationSubmissionHandoffResult {
+  generationBatchId: string;
+  createdCount: number;
+  idempotentCount: number;
+  blockedCount: number;
+  conflictCount: number;
+  failedClientGroups: Array<{ clientId: string; code: string }>;
+  completedClientGroups: string[];
+  clientGroups: Array<{ clientId: string; articleCount: number; queueableTaskCount: number; idempotentCount: number }>;
+  changedScopes?: string[];
+}
+
 // Backward-compatible alias for PreflightModal and mockData
 export type Order = SubmissionOrder;
 
@@ -386,9 +417,9 @@ export interface ArticleRemovalTransaction {
   articleCursor?: number;
 }
 export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
-export type ContentSubmissionItemStatus = 'excluded' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'failed-cleaned' | 'published-cleaned' | 'cancelled' | 'cancelled-cleaned' | 'skipped' | string;
-export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: ContentSubmissionItemStatus; contentHash: string; filename?: string; filePath?: string; sidecarPath?: string; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; reasonCode?: string | null; reconciledStatus?: string; unchanged?: boolean; canCancel?: boolean; canCleanup?: boolean; submissionBatchId?: string; }
-export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; alreadyQueuedCount?: number; blockedPublishedCount?: number; blockedUncertainCount?: number; conflictCount: number; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
+export type ContentSubmissionItemStatus = 'excluded' | 'blocked' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'failed-cleaned' | 'published-cleaned' | 'cancelled' | 'cancelled-cleaned' | 'skipped' | string;
+export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: ContentSubmissionItemStatus; contentHash: string; filename?: string; filePath?: string; sidecarPath?: string; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; reasonCode?: string | null; reasonCodes?: string[]; reasons?: string[]; reconciledStatus?: string; unchanged?: boolean; canCancel?: boolean; canCleanup?: boolean; submissionBatchId?: string; }
+export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; alreadyQueuedCount?: number; blockedPublishedCount?: number; blockedUncertainCount?: number; blockedContentCount?: number; conflictCount: number; ineligibleArticleIds?: string[]; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
 export interface ContentSubmissionCancellationPreview { batchId: string; cancelableCount: number; uncancelableCount: number; items: Array<ContentSubmissionBatchItem & { cancelable: boolean }>; }
@@ -422,7 +453,7 @@ export interface PlatformQueueSnapshot {
   error: string | null;
 }
 
-export type WorkspaceDataInvalidationScope = 'platformQueue' | 'navigationSummary' | 'articleAttention' | 'orders' | string;
+export type WorkspaceDataInvalidationScope = 'platformQueue' | 'navigationSummary' | 'articleAttention' | 'orders' | 'contentSources' | string;
 export interface WorkspaceDataInvalidatedEvent {
   revision: number;
   scopes: WorkspaceDataInvalidationScope[];

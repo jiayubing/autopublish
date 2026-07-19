@@ -181,6 +181,8 @@ const api = {
       ipcRenderer.on("content:generation-batch-state", handler);
       return function() { ipcRenderer.removeListener("content:generation-batch-state", handler); };
     },
+    previewGenerationSubmissionHandoff: function(input) { return ipcRenderer.invoke("content:preview-generation-submission-handoff", input || {}); },
+    commitGenerationSubmissionHandoff: function(input) { return ipcRenderer.invoke("content:commit-generation-submission-handoff", input || {}); },
     saveManualResearch: function(input) { return ipcRenderer.invoke("content:save-manual-research", input); },
     onDoubaoQueueState: function(listener) {
       const handler = function(event, payload) { listener(payload); };

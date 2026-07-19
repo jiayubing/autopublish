@@ -28,7 +28,7 @@ function actionError(value: unknown): string {
     ARTICLE_ATTENTION_ACTION_NOT_ALLOWED: '当前状态不允许这个动作。',
     ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE: '对应处理服务当前不可用。',
     CONTENT_SUBMISSION_TARGET_UNSUPPORTED: '当前平台不支持重新投稿。',
-    ARTICLE_NOT_RETRYABLE: '只有已审核且仍存在的文章可以重新投稿。'
+    ARTICLE_NOT_RETRYABLE: '只有内容完整且仍存在的文章可以重新投稿。'
   };
   if (typeof error.code === 'string' && labels[error.code]) return labels[error.code];
   return typeof error.message === 'string' ? error.message : '处理需处理项失败。';

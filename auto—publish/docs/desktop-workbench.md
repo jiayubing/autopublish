@@ -23,13 +23,14 @@ npm run snapshot
 - Switching between workspaces keeps each workspace stateful.
 - Media article editing happens in a drawer with explicit save/apply.
 - Other platform submission uses a batch selector on the page and a confirmation drawer before real submit.
+- Generation results expose a separate batch-level “将成功文章加入投稿队列” handoff. It selects targets once, preflights once, and confirms once across clients; it creates local queue work only and never starts remote publishing.
 
 ## Operator lifecycle and target-level safety
 
 审核、入队、提交、发布和待确认是不同阶段：
 
-- **审核** only accepts the local article (`saved`); it does not contact a
-  platform or media provider.
+- **审核** records local confirmation (`saved`); it does not contact a
+  platform or media provider and is not required for queue eligibility.
 - **入队** creates a local snapshot for a selected target after explicit
   confirmation; it is not a remote submission.
 - **提交** records evidence that the remote destination received or accepted a
@@ -38,6 +39,15 @@ npm run snapshot
   is recorded separately for each ordinary platform or paid media resource.
 - **待确认** means the remote call may have succeeded but the local result is
   inconclusive. It requires reconciliation and must not be directly retried.
+
+Before **入队**, the application rechecks shared submission readiness: valid
+identity, `generated`/`saved` status, non-empty title/body, complete source and
+template snapshots, and a target that supports queue import. A missing or
+conflicting fact is shown as a safe reason code. Generation-batch handoff
+groups successful articles by client and delegates queue creation to the
+existing submission service; it does not write queue files or call adapters.
+Duplicate article-target records remain idempotent, while published or
+uncertain records stay blocked.
 
 The duplicate guard uses article × platform for ordinary platforms and article ×
 media resource for paid media. A published or uncertain target blocks another
@@ -50,6 +60,13 @@ Use the explicit refresh action in the content workbench after adding or editing
 clients or templates. An empty client workspace still displays discoverable
 templates, but generation remains disabled until a client and valid inputs are
 available.
+
+Question maintenance keeps the question draft separate from the manual answer
+editor. The answer panel is scoped to one client/question/session, has explicit
+close/cancel and Escape handling, asks before discarding dirty input, and
+restores focus to the originating question action. Switching clients or
+questions clears the old answer and references; saving the answer refreshes
+content sources without rescanning clients or templates.
 
 ## Safety
 
@@ -64,6 +81,10 @@ available.
 - **Services:** `desktop/services/ipc-response.js`, `media-workbench-service.js`, `platform-workbench-service.js`, `media-order-service.js`, `desktop-task-service.js`
 - **Renderer:** React source under `media-workbench/src`; production loads only the packaged `media-workbench/dist` bundle.
 - **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
+- **Content handoff API:** `desktopConsole.content.previewGenerationSubmissionHandoff` and
+  `desktopConsole.content.commitGenerationSubmissionHandoff` return only safe
+  IDs, counts, statuses, and reason codes; renderer paths, article bodies,
+  source material, prompts, and credentials never cross IPC.
 
 ## Resource Cache
 

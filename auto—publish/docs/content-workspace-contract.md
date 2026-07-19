@@ -91,6 +91,16 @@ import is then written atomically to `questions.json` and the legacy file is
 not used for later edits. Deleting a question requires confirmation when it
 has research attached; existing article source snapshots are not rewritten.
 
+## Manual research answer editor session
+
+The manual answer editor is a temporary renderer session identified by
+`clientId + questionId + sessionId`. It owns only an in-memory answer draft and
+optional reference fields; `saveManualResearch` remains the sole persistence
+boundary. The panel has explicit save, cancel, close, and Escape behavior.
+Closing a dirty session requires confirmation, restores focus to the source
+question action, and clears the draft. Changing client or question ends the
+session and prevents an older asynchronous save from updating the new context.
+
 ## Client
 
 `Client` identifies a customer and its local knowledge directory.
@@ -168,7 +178,9 @@ hard-coded as the template taxonomy.
 
 ## GeneratedArticle
 
-`GeneratedArticle` records an AI generation result and its provenance.
+`GeneratedArticle` records an AI generation result and its provenance. The
+review status remains a compatibility field for history and manual review;
+submission readiness is evaluated separately.
 
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
@@ -182,7 +194,7 @@ hard-coded as the template taxonomy.
 | `templateId` | string | yes | The `Template.id` used for generation. |
 | `title` | string | yes | Generated article title. |
 | `content` | string | yes | Generated article body. Empty content is invalid. |
-| `status` | string | yes | Article review state, such as `generated`, `draft`, or `saved`; target publication state is stored separately in publication records. |
+| `status` | string | yes | Local compatibility state, such as `generated`, `draft`, or `saved`; it is not the submission-readiness decision and target publication state is stored separately in publication records. |
 | `source` | object | yes | Participation flags for generation inputs. |
 | `createdAt` | string | yes | ISO 8601 generation time. |
 | `updatedAt` | string | no | ISO 8601 last update time. |
@@ -212,12 +224,43 @@ single `researchQueryId` field and remain readable.
 
 New articles also store the selected client-material snapshots, the complete
 template snapshot, and their generation batch/task IDs. A generated article is
-initially `generated` (待审核); it becomes `saved` (已审核) only after an
+initially `generated` (待投稿准备); it may become `saved` (已审核) after an
 explicit single-article save or batch review. Review does not submit or export
-the article automatically. The review status is part of the article contract.
-Legacy articles without these new snapshots remain
-readable in an ungrouped legacy history group, but they cannot pass batch review
-until their required provenance is present.
+the article automatically and is not required for queue creation. Legacy
+articles without these new snapshots remain readable in an ungrouped legacy
+history group, but they cannot pass submission-readiness validation until
+their required provenance is present.
+
+## Submission readiness
+
+`evaluateArticleSubmissionEligibility(article, { targetPlatform })` is the
+shared policy used by preview, queue creation, attention actions, retry, and
+generation-batch handoff. An article is eligible only when its identity,
+title, body, status (`generated` or `saved`), and source snapshots are
+complete, and the selected target declares `contentQueueImport: true`.
+The source object must explicitly contain boolean `client_material`,
+`doubao_answer`, `references`, and `template` fields; at least one material
+snapshot, one research snapshot, and a complete template snapshot are required.
+The function returns stable `reasonCodes` and safe Chinese reasons instead of
+silently filling gaps. The same rule applies to single and batch-generated
+articles; review is never substituted for provenance.
+
+## Generation-batch submission handoff
+
+Only terminal or stopped generation batches are eligible for handoff, and only
+`succeeded` tasks are considered. The handoff locates exactly one article by
+`generationTaskId`, rejects missing or duplicate client/article identities,
+groups ready articles by client, and delegates each client group to the
+existing submission service. It creates local queue work only after one target
+selection, one preflight, and one confirmation; it does not publish remotely.
+The preview token is tied to the batch revision, target set, article
+fingerprints, and article identities. A changed preview is stale, and a retry
+after a partial failure resumes only unfinished client groups while existing
+article-target entries remain idempotent.
+
+The renderer/IPC DTO contains only safe article and client IDs, target IDs,
+counts, statuses, and reason codes. It excludes article body, source material,
+prompts, credentials, absolute queue paths, and complete remote responses.
 
 The existing `research/`, legacy article, workspace-selection, media
 submission, platform submission, and export paths remain the compatibility
@@ -258,4 +301,10 @@ runtime or compatibility evidence and do not replace the ledger. Removing an
 article file must not erase the minimal target-level publication history.
 # Generated article export lifecycle
 
-Saved generated articles may be exported only to the `media`, `lieju`, `toutiao`, or `hepan` input queue after explicit manual confirmation. Export is queue creation only: it never publishes or opens a browser. Operators must still confirm the queued article in the submission workbench.
+Submission-ready `generated` and `saved` articles may be exported to the
+`media`, `lieju`, `toutiao`, or `hepan` input queue after explicit manual
+confirmation. Export is queue creation only: it never publishes or opens a
+browser. Operators must still confirm the queued article in the submission
+workbench. The shared readiness check validates identity, title, body,
+provenance snapshots, target capability, and article-target duplicate state;
+manual review is not a hard prerequisite.

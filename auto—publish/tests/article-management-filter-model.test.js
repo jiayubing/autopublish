@@ -13,11 +13,11 @@ function run(source) {
 }
 
 describe("article management filter model", () => {
-  it("exposes exactly six mutually exclusive stages", () => {
+  it("exposes exactly five mutually exclusive stages", () => {
     run(`
       import assert from 'node:assert/strict';
       import { ARTICLE_WORKFLOW_STAGES, deriveArticleManagementStatus } from './media-workbench/src/article-workflow.ts';
-      assert.deepEqual(ARTICLE_WORKFLOW_STAGES.map((item) => item.id), ['pending_review', 'pending_submission', 'queued', 'published', 'failed', 'trash']);
+      assert.deepEqual(ARTICLE_WORKFLOW_STAGES.map((item) => item.id), ['pending_submission', 'queued', 'published', 'failed', 'trash']);
       const values = [
         deriveArticleManagementStatus({ ...${JSON.stringify(article("generated"))} }),
         deriveArticleManagementStatus({ ...${JSON.stringify(article())} }),
@@ -26,8 +26,8 @@ describe("article management filter model", () => {
         deriveArticleManagementStatus(${JSON.stringify(article())}, [{ articleId: 'article-1', status: 'uncertain' }]),
         deriveArticleManagementStatus({ ...${JSON.stringify(article())}, status: 'trashed' })
       ];
-      assert.deepEqual(values, ['pending_review', 'pending_submission', 'queued', 'published', 'failed', 'trash']);
-      assert.equal(new Set(values).size, values.length);
+      assert.deepEqual(values, ['pending_submission', 'pending_submission', 'queued', 'published', 'failed', 'trash']);
+      assert.equal(new Set(values).size, 5);
     `);
   });
 

@@ -15,6 +15,7 @@ test("failed active saved publication exposes retry and publication navigation o
     articleStatus: "saved",
     articleExists: true,
     hasQueueBinding: false,
+    articleSubmissionEligible: true,
     targetSupportsContentQueueImport: true
   }, retryCapabilities);
 
@@ -76,7 +77,7 @@ test("missing capabilities hide actions", () => {
     articleExists: true,
     hasQueueBinding: false,
     targetSupportsContentQueueImport: true
-  }, { targetSupportsContentQueueImport: false });
+  }, { targetSupportsContentQueueImport: false, canInspect: false });
 
   assert.deepEqual(policy.allowedActions, ["open-publication"]);
 });

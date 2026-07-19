@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
-import { copyContentArticleVersion, listContentClients, listContentTemplateCatalog } from '../electron-api';
+import { copyContentArticleVersion, listContentClients, listContentTemplateCatalog, onWorkspaceDataInvalidated } from '../electron-api';
 import { ContentClient, ContentTemplateCatalog, GeneratedContentArticle } from '../types';
 import ArticleGenerationView from './content/ArticleGenerationView';
 import GeneratedArticleEditorPanel from './content/GeneratedArticleEditorPanel';
@@ -27,6 +27,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
   const [tab, setTab] = useState<'questions' | 'generate' | 'history'>('questions');
   const [articleStageFilter, setArticleStageFilter] = useState<ArticleWorkflowStage | 'all'>('all');
   const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
+  const [contentSourcesRefreshToken, setContentSourcesRefreshToken] = useState(0);
   const [articleRefreshToken, setArticleRefreshToken] = useState(0);
   const [batchRefreshToken, setBatchRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -54,6 +55,10 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     };
   }, []);
 
+  useEffect(() => onWorkspaceDataInvalidated((event) => {
+    if (event.scopes.includes('contentSources')) setContentSourcesRefreshToken((value) => value + 1);
+  }), []);
+
   useEffect(() => {
     function guardWindowClose(event: BeforeUnloadEvent) {
       if (!historyDirtyRef.current) return;
@@ -78,6 +83,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
       setClientId((current) => items.some((item) => item.id === current) ? current : (items[0]?.id || ''));
       setArticle((current) => current && items.some((item) => item.id === current.clientId) ? current : null);
       setWorkspaceRefreshToken((value) => value + 1);
+      setContentSourcesRefreshToken((value) => value + 1);
       if (initial) {
         setRefreshState('idle');
       } else {
@@ -126,7 +132,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
   async function copyHistoryVersion() {
     if (!historyEditingArticle || !historyEditingPublished) return;
     if (!window.confirm(`确认复制“${historyEditingArticle.title}”为新版本？原文章和发布记录不会修改。`)) return;
-    if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新审核和投稿。')) return;
+    if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新选择目标并投稿。')) return;
     try {
       const copied = await copyContentArticleVersion({ clientId, sourceArticleId: historyEditingArticle.id });
       setHistoryEditingPublished(false);
@@ -162,8 +168,8 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     {refreshState === 'success' && <div role="status" aria-live="polite" className="mx-3 mt-3 rounded border border-emerald-100 bg-emerald-50 p-2 text-xs text-emerald-700">客户与模板已刷新。</div>}
     {error && <div role="alert" aria-live="assertive" className="m-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     <div className="min-h-0 flex-1">
-      {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} refreshToken={workspaceRefreshToken} onClientChange={handleClientChange} onRefresh={() => void refreshWorkspaceSources()} />}
-      {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} refreshToken={workspaceRefreshToken} batchRefreshToken={batchRefreshToken} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={setArticle} onRefreshArticles={refreshArticles} onRefreshBatchState={refreshBatchState} />}
+      {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} refreshToken={contentSourcesRefreshToken} onContentSourcesChanged={() => setContentSourcesRefreshToken((value) => value + 1)} />}
+      {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} refreshToken={contentSourcesRefreshToken} batchRefreshToken={batchRefreshToken} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={setArticle} onRefreshArticles={refreshArticles} onRefreshBatchState={refreshBatchState} />}
       {tab === 'history' && <ArticleAttentionProvider clientId={clientId}><div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} /><div className="flex min-h-0 min-w-0 flex-1 gap-3"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} refreshToken={articleRefreshToken} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onRefreshArticles={refreshArticles} onStageFilterChange={setArticleStageFilter} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} onSaved={(saved) => { setHistoryEditingArticle(saved); refreshArticles(); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div></ArticleAttentionProvider>}
     </div>
   </div>;

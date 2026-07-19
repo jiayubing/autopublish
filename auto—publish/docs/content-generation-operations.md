@@ -80,7 +80,7 @@ not block other customers. Batch state is persisted under
 `data/content-generation-batches/`; the first implementation runs with
 `concurrency = 1` and never depends on the renderer staying mounted.
 
-Successful tasks are saved immediately as `generated` (待审核). Failed tasks
+Successful tasks are saved immediately as `generated` (待投稿准备). Failed tasks
 can be retried, while successful tasks are never called again. Stop marks the
 active task interrupted and leaves not-yet-started work pending. After restart,
 the operator explicitly continues pending/failed/interrupted tasks; succeeded
@@ -89,17 +89,44 @@ stopped batch continues.
 
 ## Review, history, and export
 
-Single save or explicit batch review changes an eligible generated article to
-`saved` (已审核). Batch review accepts only checked generated articles with a
-non-empty title/body and complete provenance; legacy articles without the
-required snapshots remain readable in the legacy ungrouped history but are not
-batch-reviewable. Review never submits or exports automatically.
+Single save or explicit batch review may change an eligible generated article to
+`saved` (已审核). Review is a compatibility record and is not a submission
+gate. Legacy articles without the required snapshots remain readable in the
+legacy ungrouped history, but are not submission-ready until their provenance
+is repaired. Review never submits or exports automatically.
 
 History is scoped to the current client and grouped by `platform + templateId`.
 Groups and articles sort by `createdAt` descending; editing or reviewing does
 not reorder them. A template rename or deletion does not rewrite the template
-snapshot used to explain an older article. Only reviewed/saved articles can be
-exported into the existing media or platform submission queues.
+snapshot used to explain an older article. Both complete `generated` and
+`saved` articles can be placed into an existing media or platform queue when
+the shared submission-readiness check passes.
+
+### Submission readiness and generation-batch handoff
+
+Submission readiness is evaluated again immediately before queue creation. It
+requires a valid article/client identity, a supported `generated` or `saved`
+status, a non-empty title and body, complete material/research/template
+snapshots, and a target that supports queue import. It is independent of the
+review flag. Stable reason codes block incomplete provenance, empty content,
+identity conflicts, unsupported targets, and other unsafe inputs; the service
+must never manufacture missing snapshots.
+
+The generation result view can hand off all successful, ready articles from a
+terminal or stopped generation batch. The operator chooses targets once,
+reviews one cross-client preflight, and confirms once. The handoff groups
+articles by client and delegates queue creation to `ContentSubmissionService`;
+it never writes queue files, sidecars, publication records, or calls a remote
+publisher. Existing article-target duplicate protection reports queued,
+published, uncertain, blocked, and idempotent items. If one client group fails,
+retrying the handoff only retries unfinished groups.
+
+The handoff preview is bound to the generation-batch revision, successful-task
+article identities, article fingerprints, selected targets, and preview
+summary. A changed article, batch, target set, or duplicate identity causes a
+stable stale/conflict result and requires a new preflight. IPC returns only
+safe identities, counts, statuses, and reason codes; it never returns article
+body, source material, prompts, credentials, or queue paths.
 
 ### History editing and submission recovery
 
@@ -190,9 +217,11 @@ template platforms are not the same thing as later submission target platforms.
 
 ### Refresh feedback lifecycle
 
-The explicit “刷新客户与模板” action refreshes workspace sources only. Saving,
-reviewing, and completing a batch use separate article or batch-state refreshes
-and must not rescan the catalog or show a catalog-refresh success message.
+The explicit “刷新客户与模板” action refreshes workspace sources only. Saving
+an article or manual answer, reviewing, completing a batch, and committing a
+submission handoff use separate article, content-source, batch, or queue-state
+refreshes and must not rescan the catalog or show a catalog-refresh success
+message.
 Automatic initial loading does not show a success banner. A manual success
 message is transient (2–3 seconds), accessible as status text, and returns to
 idle; a new refresh cancels the old timer and unmount cleanup cancels it too.
@@ -205,8 +234,8 @@ collapsed into one global `published` flag:
 
 | Stage | Meaning | Remote call? |
 | --- | --- | --- |
-| 审核 | An operator accepts the local article; the article becomes `saved`. | No |
-| 入队 | A reviewed article is snapshotted for a selected article—target and reserved for execution. | No |
+| 审核 | An operator records local confirmation; the article may become `saved`. | No |
+| 入队 | A submission-ready article is snapshotted for a selected article—target and reserved for execution. | No |
 | 提交 | A remote adapter call has evidence that the destination received or accepted the submission; it is `submitted`, not automatically `published`. | Yes |
 | 发布 | Remote evidence confirms the selected ordinary platform or media resource published the article; it is recorded per target. | Yes |
 | 待确认 | The remote result may exist but cannot be proven locally (`uncertain`), for example after timeout or browser crash. | May have happened |
@@ -299,9 +328,9 @@ calls. A zero-second setting is allowed but displays a frequency-risk warning.
 
 ## 文章管理与需处理中心
 
-内容工作台的“文章管理”只保留六个互斥的派生阶段：`待审核`、`待投稿`、
-`已入队`、`已发布`、`失败`和`回收站`。阶段不是新的持久化发布状态，不会覆盖
-文章审核状态、批次项或逐目标发布记录。同一篇文章只进入一个阶段；失败阶段可
+内容工作台的“文章管理”只保留五个互斥的派生阶段：`待投稿`、`已入队`、
+`已发布`、`失败`和`回收站`。阶段不是新的持久化发布状态，不会覆盖
+文章兼容状态、批次项或逐目标发布记录。同一篇文章只进入一个阶段；失败阶段可
 包含待确认或部分发布，但详情中仍显示每个目标的真实状态。
 
 已发布文章可以确认移入回收站：远端已发布内容不会撤回，发布记录、标题快照和
@@ -325,9 +354,9 @@ node scripts/repair-article-removal-regressions.js --workspace <副本目录> --
 ```
 
 需处理动作由当前事实和领域能力共同计算，不再按 `failed_submission` 类型固定
-显示按钮：有合法 batch/pair 的失败项才显示“清理旧队列”；仍存在且已审核的
+显示按钮：有合法 batch/pair 的失败项才显示“清理旧队列”；仍存在且投稿就绪的
 文章才显示“重新投稿”；已删除且没有残留或开放删除事务的失败记录只保留在发布
-历史中。生成态文章只能打开文章或发布详情。点击重新投稿先执行预检，确认后由
+历史中。生成态但来源不完整的文章只能打开文章或发布详情。点击重新投稿先执行预检，确认后由
 ContentSubmissionService 创建新的 batch 和 attempt，不直接拼写队列文件。
 
 需处理快照与工作区使用同一 authoritative revision。投稿、审核、删除事务、队列

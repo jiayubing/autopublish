@@ -70,7 +70,7 @@ function deriveAttentionPolicy(input, capabilities) {
     if (facts.hasQueueBinding === true && facts.canCleanup === true) {
       return policy(kind, facts, caps, [ACTIONS.CLEANUP, ACTIONS.OPEN_PUBLICATION], ACTIONS.CLEANUP);
     }
-    if (facts.articleExists === true && facts.articleStatus === "saved" && facts.targetSupportsContentQueueImport === true && facts.canRetryFailedPublication !== false) {
+    if (facts.articleExists === true && ["generated", "saved"].includes(facts.articleStatus) && facts.articleSubmissionEligible === true && facts.targetSupportsContentQueueImport === true && facts.canRetryFailedPublication !== false) {
       return policy(kind, facts, caps, [ACTIONS.RETRY_PUBLICATION, ACTIONS.OPEN_PUBLICATION], ACTIONS.RETRY_PUBLICATION);
     }
     if (facts.articleExists === true && facts.articleStatus === "generated") {

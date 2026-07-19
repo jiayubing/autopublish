@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Ban, Pause, Play, RotateCcw, Square } from 'lucide-react';
-import { cancelPendingGenerationBatch, previewCancelPendingGenerationBatch, reviewContentArticles } from '../../electron-api';
+import { cancelPendingGenerationBatch, previewCancelPendingGenerationBatch } from '../../electron-api';
 import { GenerationBatch, GenerationBatchState } from '../../types';
+import GenerationSubmissionHandoffDrawer from './GenerationSubmissionHandoffDrawer';
 
 interface GenerationBatchDetailProps {
   batch: GenerationBatch;
@@ -12,13 +13,12 @@ interface GenerationBatchDetailProps {
   onContinue: () => void;
   onStop: () => void;
   onRetry: () => void;
-  onReview?: () => void;
+  onRefreshArticles?: () => void;
   onStartNew?: () => void;
 }
 
-export default function GenerationBatchDetail({ batch, state, busy, onPause, onResume, onContinue, onStop, onRetry, onReview, onStartNew }: GenerationBatchDetailProps) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [reviewError, setReviewError] = useState('');
+export default function GenerationBatchDetail({ batch, state, busy, onPause, onResume, onContinue, onStop, onRetry, onRefreshArticles, onStartNew }: GenerationBatchDetailProps) {
+  const [handoffOpen, setHandoffOpen] = useState(false);
   const [cancelledBatch, setCancelledBatch] = useState<GenerationBatch | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState('');
@@ -31,20 +31,6 @@ export default function GenerationBatchDetail({ batch, state, busy, onPause, onR
   const showCostWarning = active || (batch.status === 'stopped' && unfinished);
   const failed = counts.failed > 0;
   const terminal = displayedBatch.status === 'completed' || displayedBatch.status === 'stopped';
-  const reviewable = useMemo(() => displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId), [displayedBatch.tasks]);
-  const selectedTasks = reviewable.filter((task) => selected.includes(task.id));
-
-  async function reviewSelected() {
-    if (!selectedTasks.length || !window.confirm(`确认审核 ${selectedTasks.length} 篇文章？审核不会自动投稿。`)) return;
-    setReviewError('');
-    try {
-      const result = await reviewContentArticles(selectedTasks.map((task) => ({ clientId: task.clientId, articleId: task.articleId as string })));
-      if (result.rejected.length) setReviewError(result.rejected.map((item) => `${item.articleId}: ${item.code}`).join(', '));
-      setSelected([]);
-      onReview?.();
-    } catch (value) { setReviewError(value instanceof Error ? value.message : '审核文章失败'); }
-  }
-
   async function cancelPending() {
     setCancelError('');
     setCancelBusy(true);
@@ -66,8 +52,8 @@ export default function GenerationBatchDetail({ batch, state, busy, onPause, onR
     {cancelError && <div role="alert" className="mt-2 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{cancelError}</div>}
     {unfinished && !active && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-amber-100 bg-amber-50 p-2 text-xs text-amber-800"><span>批次尚有未完成任务，确认后继续执行。</span><button type="button" onClick={onContinue} disabled={busy} className="rounded bg-amber-700 px-2 py-1 text-white">继续未完成</button></div>}
     {terminal && onStartNew && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"><span>该批次已结束，可以开始新的批量生成。</span><button type="button" onClick={onStartNew} disabled={busy} className="rounded bg-slate-900 px-2 py-1 text-white">新建批量生成</button></div>}
-    {reviewable.length > 0 && <div className="mt-4 flex items-center justify-between rounded border border-emerald-100 bg-emerald-50 p-2 text-xs"><span>已选待审核文章：{selectedTasks.length}</span><button type="button" onClick={() => void reviewSelected()} disabled={busy || !selectedTasks.length} className="rounded bg-emerald-700 px-2 py-1 text-white disabled:opacity-40">审核已选</button></div>}
-    {reviewError && <div role="alert" className="mt-2 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{reviewError}</div>}
-    <div className="generation-batch-task-list mt-4 max-h-56 space-y-1 overflow-y-auto">{displayedBatch.tasks.map((task) => <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-100 px-2 py-2 text-xs"><span className="flex min-w-0 items-center gap-2 truncate">{task.status === 'succeeded' && task.articleId && <input type="checkbox" aria-label={`选择 ${task.clientId} ${task.articleId}`} checked={selected.includes(task.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, task.id] : current.filter((id) => id !== task.id))} disabled={busy} />}<span className="truncate">{task.clientId} · {task.platform} · {task.templateId}</span></span><span className={task.status === 'failed' ? 'text-rose-600' : task.status === 'succeeded' ? 'text-emerald-600' : task.status === 'cancelled' ? 'text-slate-400' : 'text-slate-500'}>{task.status}{task.error?.message ? ` · ${task.error.message}` : ''}</span></div>)}</div>
+    {terminal && displayedBatch.tasks.some((task) => task.status === 'succeeded' && task.articleId) && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"><span>成功 {counts.succeeded} 篇，可按客户分组一次性交接。</span><button type="button" onClick={() => setHandoffOpen(true)} disabled={busy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">将成功文章加入投稿队列</button></div>}
+    <div className="generation-batch-task-list mt-4 max-h-56 space-y-1 overflow-y-auto">{displayedBatch.tasks.map((task) => <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-100 px-2 py-2 text-xs"><span className="flex min-w-0 items-center gap-2 truncate"><span className="truncate">{task.clientId} · {task.platform} · {task.templateId}</span></span><span className={task.status === 'failed' ? 'text-rose-600' : task.status === 'succeeded' ? 'text-emerald-600' : task.status === 'cancelled' ? 'text-slate-400' : 'text-slate-500'}>{task.status}{task.error?.message ? ` · ${task.error.message}` : ''}</span></div>)}</div>
+    {handoffOpen && <GenerationSubmissionHandoffDrawer batch={displayedBatch} onClose={() => setHandoffOpen(false)} onCommitted={() => onRefreshArticles?.()} />}
   </section>;
 }

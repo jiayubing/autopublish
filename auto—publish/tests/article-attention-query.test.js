@@ -21,7 +21,7 @@ test("publication-only failed fixture exposes only actions supported by its curr
         status: "failed",
         attempts: [{ attemptId: "attempt-failed", status: "failed", reasonCode: "REMOTE_REJECTED" }]
       }],
-      getArticle: () => ({ status: "saved", title: "可重试文章" }),
+      getArticle: () => ({ id: "article-1", clientId: "client-1", status: "saved", title: "可重试文章", content: "正文", source: { client_material: true, doubao_answer: true, references: false, template: true }, materialSnapshots: [{}], researchSnapshots: [{}], templateSnapshot: { platform: "hepan", id: "template-1", name: "模板", scenario: "guide", body: "正文", bodyHash: "hash" } }),
       platformCapabilities: () => ({ hepan: { contentQueueImport: true } })
     },
     getRevision: () => 7

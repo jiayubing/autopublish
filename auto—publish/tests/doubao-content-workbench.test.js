@@ -136,7 +136,7 @@ describe("Doubao content workbench renderer contracts", function() {
     const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
     assert.match(questions, /useRef<Promise<void> \| null>/);
     assert.match(questions, /activeQueueStatus[\s\S]*completed/);
-    assert.match(questions, /loadQuestions\(\)[\s\S]*onRefresh\(\)/);
+    assert.match(questions, /loadQuestions\(\)[\s\S]*onContentSourcesChangedRef\.current/);
     assert.match(questions, /isCollecting/);
     assert.match(questions, /disabled=\{isCollecting\}/);
     assert.match(taskBar, /disabled=\{busy\}/);
@@ -145,13 +145,13 @@ describe("Doubao content workbench renderer contracts", function() {
   it("uses current client refs and request cancellation guards for queue refreshes", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
     assert.match(questions, /clientIdRef = useRef\(clientId\)/);
-    assert.match(questions, /onRefreshRef = useRef\(onRefresh\)/);
+    assert.match(questions, /onContentSourcesChangedRef = useRef\(onContentSourcesChanged\)/);
     assert.match(questions, /clientIdRef\.current/);
     assert.match(questions, /loadQuestions\(targetClientId/);
     assert.match(questions, /loadSequence/);
     assert.match(questions, /cancelled/);
     assert.match(questions, /sequence !== loadSequence\.current/);
-    assert.match(questions, /onRefreshRef\.current/);
+    assert.match(questions, /onContentSourcesChangedRef\.current/);
   });
 
   it("uses a synchronous collection lock and clears it on every exit", function() {
