@@ -298,6 +298,7 @@ describe("source assembly and packaging contract", function() {
       "desktop/ai-provider-config-store.js",
       "desktop/services/ai-provider-service.js",
       "desktop/services/content-generation-batch-service.js",
+      "desktop/device-identity-store.js",
       "desktop/ipc/content-generation-batch-ipc.js",
       "desktop/ipc/publication-ipc.js",
       "src/content/article-version-service.js",
@@ -358,6 +359,8 @@ describe("source assembly and packaging contract", function() {
     assert.match(config, /!\*\*\/\.env/);
     assert.match(config, /- src\/\*\*\//);
     assert.match(config, /- media-workbench\/dist\/\*\*\//);
+    assert.match(read("scripts/verify-alpha-package.js"), /auth\.db/);
+    assert.match(read("scripts/verify-alpha-package.js"), /device-identity\.json/);
   });
 
   it("does not package the one-shot content library migration tool", function() {
@@ -377,7 +380,8 @@ describe("source assembly and packaging contract", function() {
         "research/client-1/question.json",
         "browser/doubao/profile/marker",
         "logs/doubao-diagnostics/summary.json",
-        "tests/fixtures/marker.json"
+        "tests/fixtures/marker.json",
+        "auth.db"
       ]) {
         const filename = path.join(appDir, relativePath);
         fs.mkdirSync(path.dirname(filename), { recursive: true });

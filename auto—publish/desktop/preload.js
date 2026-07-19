@@ -12,6 +12,7 @@ const api = {
   auth: {
     getState: function() { return ipcRenderer.invoke("auth:get-state"); },
     login: function(loginName, password) { return ipcRenderer.invoke("auth:login", { loginName: loginName, password: password }); },
+    changePassword: function(loginName, currentPassword, newPassword) { return ipcRenderer.invoke("auth:change-password", { loginName: loginName, currentPassword: currentPassword, newPassword: newPassword }); },
     refresh: function() { return ipcRenderer.invoke("auth:refresh"); },
     logout: function() { return ipcRenderer.invoke("auth:logout"); },
     onStateChanged: function(listener) {

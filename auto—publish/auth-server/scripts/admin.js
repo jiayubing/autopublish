@@ -1,26 +1,18 @@
-const readline = require("readline");
-const { createAuthStore } = require("../src/auth-store");
+// Kept as a compatibility wrapper for the old npm admin scripts. All real
+// command parsing and hidden password input live in authctl.js.
+const authctl = require("./authctl");
 
-const store = createAuthStore({ filePath: process.env.AUTH_DB_PATH });
 const command = process.argv[2];
 const loginName = process.env.AUTH_ADMIN_LOGIN || "admin";
+const args = command === "create"
+  ? ["admin", "create", "--login-name", loginName, "--permanent"]
+  : command === "disable"
+    ? ["user", "disable", "--login-name", loginName]
+    : command === "revoke-sessions"
+      ? ["session", "revoke-all", "--login-name", loginName]
+      : [];
 
-function ask(prompt) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => rl.question(prompt, (answer) => { rl.close(); resolve(answer); }));
-}
-
-(async () => {
-  if (command === "create") {
-    const password = await ask("Admin password: ");
-    if (!password) throw new Error("password is required");
-    store.createAdmin(loginName, password);
-  } else if (command === "disable") {
-    store.setEnabled(loginName, false);
-  } else if (command === "revoke-sessions") {
-    const user = store.findUser(loginName);
-    if (user) store.revokeAllSessions(user.id);
-  } else {
-    throw new Error("unsupported admin command");
-  }
-})().catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+authctl.run(args, {}).catch((error) => {
+  process.stderr.write(`${error.code || "AUTH_ADMIN_FAILED"}: admin command failed\n`);
+  process.exitCode = 1;
+});

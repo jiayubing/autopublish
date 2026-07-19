@@ -6,11 +6,21 @@ services:
       - .env
     volumes:
       - ./data:/data
+    ports:
+      - "127.0.0.1:3180:3180"
     expose:
       - "3180"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    cpus: 1.0
     networks:
       - autopublish-internal
 
 networks:
   autopublish-internal:
-    internal: true

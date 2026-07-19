@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { getAuthState, login, logout, onAuthStateChanged } from "./electron-api";
+import { changeAuthPassword, getAuthState, login, logout, onAuthStateChanged } from "./electron-api";
 import type { AuthState } from "./types";
 
 export interface AuthClientStore {
@@ -7,6 +7,7 @@ export interface AuthClientStore {
   initialize(): Promise<void>;
   subscribe(listener: () => void): () => void;
   login(loginName: string, password: string): Promise<AuthState>;
+  changePassword(loginName: string, currentPassword: string, newPassword: string): Promise<AuthState>;
   logout(): Promise<AuthState>;
   dispose(): void;
 }
@@ -25,6 +26,7 @@ export function createAuthClientStore(): AuthClientStore {
     },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async login(loginName, password) { return setState(await login(loginName, password)); },
+    async changePassword(loginName, currentPassword, newPassword) { return setState(await changeAuthPassword(loginName, currentPassword, newPassword)); },
     async logout() { return setState(await logout()); },
     dispose() { if (unsubscribe) unsubscribe(); unsubscribe = null; listeners.clear(); },
   };

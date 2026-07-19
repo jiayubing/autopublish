@@ -185,7 +185,14 @@ Keep workspace tool settings in `config/runtime-tools.json` and Hepan settings i
 - [ ] Cold start shows only the J4125 login gate; it does not inspect a workspace,
       load customer data, or initialize business services before authentication.
 - [ ] `auth.jiayubing.xyz` is displayed as a fixed HTTPS product endpoint. The
-      package contains no password, token, private key, server database, or Cookie.
+      package contains no password, token, private key, server database, SQLite
+      auth data, or Cookie.
+- [ ] A clean install creates one random device identity in userData and does
+      not put the identity, workspace path, customer data, or articles in an
+      auth request.
+- [ ] License expiry, disabled account, device quota, device revocation, and
+      first-login password replacement show fixed safe messages and do not
+      remove local workspace files.
 - [ ] Direct unauthenticated calls to every registered business IPC return the
       fixed `AUTH_REQUIRED` response without invoking the service handler.
 - [ ] After login, selecting a workspace and entering the workbench still works.

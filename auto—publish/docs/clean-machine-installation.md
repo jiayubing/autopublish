@@ -137,3 +137,10 @@ active and return to confirm the same `runId`, latest processed count, controls,
 interval countdown, and terminal summary. On process exit, verify the next
 launch reports `interrupted` or a ledger-derived safe state instead of claiming
 that the previous Worker is still running.
+
+The application installation identity is a random value stored atomically under
+Electron `userData`, separate from the workspace. Restarting the app must reuse
+that identity so a one-device license does not consume a second slot. A disabled
+or expired account, a revoked device, or an unavailable auth service must leave
+the local workspace, credentials, articles, queues, and publication history
+untouched.

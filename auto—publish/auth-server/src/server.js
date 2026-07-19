@@ -1,33 +1,62 @@
-const http = require("http");
-const { createAuthStore } = require("./auth-store");
+const http = require("node:http");
+const path = require("node:path");
+const { AuthDomain, AuthError } = require("./auth-domain");
+const { AuthAdministration } = require("./auth-administration");
+const { SqliteAuthRepository } = require("./repositories/sqlite-auth-repository");
 
 const SAFE_ERRORS = {
-  INVALID_CREDENTIALS: [401, "AUTH_INVALID_CREDENTIALS", "登录名或密码错误"],
-  ACCOUNT_DISABLED: [403, "AUTH_ACCOUNT_DISABLED", "账号已禁用"],
-  SESSION_EXPIRED: [401, "AUTH_SESSION_EXPIRED", "认证会话已失效"],
-  NOT_ENTITLED: [403, "AUTH_NOT_ENTITLED", "当前账号没有产品授权"],
-  INPUT: [400, "AUTH_INPUT_INVALID", "认证请求无效"],
-  NOT_FOUND: [404, "AUTH_NOT_FOUND", "认证接口不存在"],
-  INTERNAL: [500, "AUTH_SERVER_ERROR", "认证服务暂时不可用"],
+  AUTH_INVALID_CREDENTIALS: [401, "AUTH_INVALID_CREDENTIALS", "登录名或密码错误"],
+  AUTH_ACCOUNT_DISABLED: [403, "AUTH_ACCOUNT_DISABLED", "账号已禁用"],
+  AUTH_ACCOUNT_LOCKED: [423, "AUTH_ACCOUNT_LOCKED", "账号暂时锁定"],
+  AUTH_LICENSE_EXPIRED: [403, "AUTH_LICENSE_EXPIRED", "产品授权已到期"],
+  AUTH_NOT_ENTITLED: [403, "AUTH_NOT_ENTITLED", "当前账号没有产品授权"],
+  AUTH_DEVICE_LIMIT_REACHED: [403, "AUTH_DEVICE_LIMIT_REACHED", "已达到设备名额，请联系管理员释放旧设备"],
+  AUTH_DEVICE_REVOKED: [403, "AUTH_DEVICE_REVOKED", "设备已被撤销"],
+  AUTH_PASSWORD_CHANGE_REQUIRED: [403, "AUTH_PASSWORD_CHANGE_REQUIRED", "首次登录必须修改密码"],
+  AUTH_SESSION_EXPIRED: [401, "AUTH_SESSION_EXPIRED", "认证会话已失效"],
+  AUTH_TOKEN_REUSE_DETECTED: [401, "AUTH_TOKEN_REUSE_DETECTED", "检测到会话凭证重复使用，请重新登录"],
+  AUTH_RATE_LIMITED: [429, "AUTH_RATE_LIMITED", "请求过于频繁，请稍后再试"],
+  AUTH_INPUT_INVALID: [400, "AUTH_INPUT_INVALID", "认证请求无效"],
+  AUTH_NOT_FOUND: [404, "AUTH_NOT_FOUND", "认证接口不存在"],
+  AUTH_SERVICE_UNAVAILABLE: [503, "AUTH_SERVICE_UNAVAILABLE", "认证服务暂时不可用"],
+  AUTH_SERVER_ERROR: [500, "AUTH_SERVICE_UNAVAILABLE", "认证服务暂时不可用"],
 };
 
 function json(response, statusCode, body) {
   const payload = JSON.stringify(body);
-  response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "content-length": Buffer.byteLength(payload) });
+  response.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "content-length": Buffer.byteLength(payload),
+  });
   response.end(payload);
 }
 
-function errorResponse(response, key) {
-  const [status, code, message] = SAFE_ERRORS[key] || SAFE_ERRORS.INTERNAL;
-  return json(response, status, { ok: false, error: { code, message } });
+function errorResponse(response, errorOrCode) {
+  const code = typeof errorOrCode === "string" ? errorOrCode : (errorOrCode && errorOrCode.code);
+  const [status, stableCode, message] = SAFE_ERRORS[code] || SAFE_ERRORS.AUTH_SERVICE_UNAVAILABLE;
+  const body = { ok: false, error: { code: stableCode, message } };
+  if (code === "AUTH_PASSWORD_CHANGE_REQUIRED" && errorOrCode && errorOrCode.details && errorOrCode.details.user) body.data = { user: errorOrCode.details.user };
+  return json(response, status, body);
 }
 
 function readBody(request) {
   return new Promise((resolve, reject) => {
     let body = "";
-    request.on("data", (chunk) => { body += chunk; if (body.length > 32768) reject(new Error("body too large")); });
-    request.on("end", () => { try { resolve(body ? JSON.parse(body) : {}); } catch (_) { reject(new Error("invalid json")); } });
-    request.on("error", reject);
+    let settled = false;
+    const fail = (error) => { if (!settled) { settled = true; reject(error); } };
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (Buffer.byteLength(body) > 32768) {
+        request.resume();
+        fail(new AuthError("AUTH_INPUT_INVALID"));
+      }
+    });
+    request.on("end", () => {
+      if (settled) return;
+      try { settled = true; resolve(body ? JSON.parse(body) : {}); } catch (_) { fail(new AuthError("AUTH_INPUT_INVALID")); }
+    });
+    request.on("error", fail);
   });
 }
 
@@ -36,75 +65,97 @@ function bearer(request) {
   return value.startsWith("Bearer ") ? value.slice(7).trim() : "";
 }
 
-function productEntitled(entitlements) {
-  return Array.isArray(entitlements) && entitlements.some((item) => item.product === "AutoPublish" && item.enabled === true && (!item.expiresAt || Date.parse(item.expiresAt) > Date.now()));
+function assertPlainObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AuthError("AUTH_INPUT_INVALID");
+  return value;
+}
+
+function allowFields(input, fields) {
+  assertPlainObject(input);
+  const allowed = new Set(fields);
+  if (Object.keys(input).some((key) => !allowed.has(key))) throw new AuthError("AUTH_INPUT_INVALID");
+  return input;
+}
+
+function sourceAddress(request, trustProxy) {
+  if (trustProxy && typeof request.headers["cf-connecting-ip"] === "string") return request.headers["cf-connecting-ip"].slice(0, 128);
+  return request.socket && request.socket.remoteAddress ? request.socket.remoteAddress : "unknown";
 }
 
 function createAuthServer(options) {
   const opts = options || {};
-  const store = opts.store || createAuthStore({ filePath: process.env.AUTH_DB_PATH });
+  const compatibilityStore = opts.store && opts.store.domain ? opts.store : null;
+  const repository = opts.repository || (compatibilityStore && compatibilityStore.repository) || new SqliteAuthRepository({ filePath: opts.filePath || process.env.AUTH_DB_PATH || path.join(process.cwd(), "data", "auth.db") });
+  const domain = opts.domain || (compatibilityStore && compatibilityStore.domain) || new AuthDomain({
+    repository,
+    now: opts.now,
+    accessTtlMs: opts.accessTtlMs,
+    refreshTtlMs: opts.refreshTtlMs,
+    maxConcurrentPasswordComputations: opts.maxConcurrentPasswordComputations,
+    loginFailureThreshold: opts.loginFailureThreshold,
+    loginLockMs: opts.loginLockMs,
+    rateLimitWindowMs: opts.rateLimitWindowMs,
+    rateLimitMaxAttempts: opts.rateLimitMaxAttempts,
+  });
+  const administration = opts.administration || new AuthAdministration({ repository, domain });
   const logger = typeof opts.logger === "function" ? opts.logger : () => {};
-  const attempts = new Map();
-
-  function publicSession(session) {
-    return { accessToken: session.accessToken, refreshToken: session.refreshToken, accessExpiresAt: session.accessExpiresAt, refreshExpiresAt: session.refreshExpiresAt, user: session.user, entitlements: session.entitlements };
-  }
+  const trustProxy = opts.trustProxy === true;
 
   async function handle(request, response) {
     const url = new URL(request.url, "http://127.0.0.1");
+    const sourceFingerprint = sourceAddress(request, trustProxy);
     try {
-      if (request.method === "GET" && url.pathname === "/healthz") return json(response, 200, { ok: true, service: "autopublish-auth" });
+      if (request.method === "GET" && url.pathname === "/healthz") {
+        if (!domain.healthCheck()) return errorResponse(response, "AUTH_SERVICE_UNAVAILABLE");
+        return json(response, 200, { ok: true, service: "autopublish-auth" });
+      }
       if (request.method === "POST" && url.pathname === "/v1/auth/login") {
-        const input = await readBody(request);
-        if (typeof input.loginName !== "string" || typeof input.password !== "string" || !input.loginName || !input.password) return errorResponse(response, "INPUT");
-        const key = input.loginName.slice(0, 128);
-        const lastAttempt = attempts.get(key) || 0;
-        if (Date.now() - lastAttempt < 250) return errorResponse(response, "INVALID_CREDENTIALS");
-        attempts.set(key, Date.now());
-        const authenticated = store.authenticate(input.loginName, input.password);
-        if (!authenticated) {
-          const user = store.findUser(input.loginName);
-          return errorResponse(response, user && !user.enabled ? "ACCOUNT_DISABLED" : "INVALID_CREDENTIALS");
-        }
-        if (!productEntitled(authenticated.entitlements)) return errorResponse(response, "NOT_ENTITLED");
-        return json(response, 200, { ok: true, data: publicSession(Object.assign(store.createSession(authenticated.user.id, input.deviceId), authenticated)) });
+        const input = allowFields(await readBody(request), ["loginName", "password", "deviceId", "deviceName", "appVersion"]);
+        const session = await domain.login(Object.assign({}, input, { sourceFingerprint }));
+        return json(response, 200, { ok: true, data: session });
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/refresh") {
-        const input = await readBody(request);
-        if (typeof input.refreshToken !== "string" || !input.refreshToken) return errorResponse(response, "INPUT");
-        const session = store.rotateRefreshToken(input.refreshToken, input.deviceId);
-        if (!session || !productEntitled(session.entitlements)) return errorResponse(response, "SESSION_EXPIRED");
-        return json(response, 200, { ok: true, data: publicSession(session) });
+        const input = allowFields(await readBody(request), ["refreshToken", "deviceId", "appVersion"]);
+        const session = await domain.refresh(Object.assign({}, input, { sourceFingerprint }));
+        return json(response, 200, { ok: true, data: session });
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/logout") {
-        const input = await readBody(request);
-        const token = bearer(request) || input.refreshToken;
-        if (token) { store.revokeByAccessToken(token); store.revokeByRefreshToken(token); }
-        return json(response, 200, { ok: true, data: { loggedOut: true } });
+        const input = allowFields(await readBody(request), ["refreshToken"]);
+        const result = await domain.logout({ accessToken: bearer(request), refreshToken: input.refreshToken, sourceFingerprint });
+        return json(response, 200, { ok: true, data: result });
       }
-      if ((request.method === "GET" && (url.pathname === "/v1/auth/session" || url.pathname === "/v1/auth/entitlements"))) {
-        const current = store.getSessionByAccessToken(bearer(request));
-        if (!current) return errorResponse(response, "SESSION_EXPIRED");
-        const entitlements = current.user.entitlements || [];
-        if (!productEntitled(entitlements)) return errorResponse(response, "NOT_ENTITLED");
-        const data = url.pathname.endsWith("entitlements") ? { entitlements } : { user: { id: current.user.id, loginName: current.user.loginName }, entitlements };
+      if (request.method === "POST" && url.pathname === "/v1/auth/change-password") {
+        const input = allowFields(await readBody(request), ["loginName", "currentPassword", "newPassword", "deviceId", "deviceName", "appVersion"]);
+        const session = await domain.changePassword(Object.assign({}, input, { accessToken: bearer(request) || undefined, sourceFingerprint }));
+        return json(response, 200, { ok: true, data: session });
+      }
+      if (request.method === "GET" && (url.pathname === "/v1/auth/session" || url.pathname === "/v1/auth/entitlements")) {
+        const current = await domain.inspect(bearer(request));
+        const data = url.pathname.endsWith("entitlements") ? { entitlements: current.entitlements } : { user: current.user, entitlements: current.entitlements, device: current.device };
         return json(response, 200, { ok: true, data });
       }
-      return errorResponse(response, "NOT_FOUND");
+      return errorResponse(response, "AUTH_NOT_FOUND");
     } catch (error) {
+      if (error instanceof AuthError || (error && typeof error.code === "string" && SAFE_ERRORS[error.code])) return errorResponse(response, error);
       logger({ code: "AUTH_REQUEST_FAILED", method: request.method, path: url.pathname });
-      return errorResponse(response, "INTERNAL");
+      return errorResponse(response, "AUTH_SERVICE_UNAVAILABLE");
     }
   }
 
   const server = http.createServer((request, response) => { void handle(request, response); });
-  return { server, store, handle };
+  return { server, repository, domain, administration, handle };
 }
 
 if (require.main === module) {
   const port = Number(process.env.PORT || 3180);
-  const app = createAuthServer();
-  app.server.listen(port, "127.0.0.1", () => { process.stdout.write(`auth-server listening on 127.0.0.1:${port}\n`); });
+  const host = process.env.HOST || "127.0.0.1";
+  try {
+    const app = createAuthServer();
+    app.server.listen(port, host, () => { process.stdout.write(`auth-server listening on ${host}:${port}\n`); });
+  } catch (_) {
+    process.stderr.write("AUTH_SERVICE_UNAVAILABLE: authentication database initialization failed\n");
+    process.exitCode = 1;
+  }
 }
 
-module.exports = { createAuthServer, SAFE_ERRORS };
+module.exports = { createAuthServer, SAFE_ERRORS, allowFields, errorResponse };

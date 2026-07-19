@@ -14,14 +14,17 @@
 
 - [ ] 复制 `auth-server/.env.example` 为服务器 secret 文件；管理员密码、数据库密钥和签名密钥不进入 Git、镜像、客户端或日志。
 - [ ] 使用独立目录和独立数据卷部署 `auth-server/docker-compose.yml`。
-- [ ] 使用 SSH 管理命令创建唯一 `admin` 账号；不开放公开注册、不创建网页后台、不启用多角色。
+- [ ] 使用 SSH 管理命令创建 `admin` 账号和普通 `user` 账号；不开放公开注册、不创建网页后台、不引入复杂 RBAC。
+- [ ] 通过 `authctl user create|list|enable|disable|reset-password|set-expiry|set-device-limit|set-note` 管理账号，通过 `authctl device list|revoke` 和 `authctl session revoke-all` 管理设备与会话；密码只使用隐藏交互输入。
 - [ ] 为 `auth.jiayubing.xyz` 配置现有 Tunnel 的 HTTPS ingress，并确认没有新增公网监听。
 - [ ] 配置数据库和密钥备份；恢复演练只恢复认证数据，不包含客户内容。
+- [ ] SQLite 使用独立 `/data` 卷和在线 backup/checkpoint；schema 升级前保存可恢复快照，数据库损坏或未知 schema 时服务失败关闭。
 
 ## 受控验收
 
 - [ ] `GET https://auth.jiayubing.xyz/healthz` 只返回服务健康状态。
 - [ ] 临时测试账号验证正确密码、错误密码、禁用账号、refresh 轮换、重复 refresh、退出和会话撤销。
+- [ ] 临时测试账号验证授权到期/续期、设备名额、设备撤销、首次改密和 token family 重放检测。
 - [ ] 确认日志不含密码、access/refresh token、完整请求体、内网地址、文章标题或 Cookie。
 - [ ] 客户端断网、认证服务不可达、授权过期时只显示固定安全错误，并拒绝业务 IPC。
 - [ ] 认证期间已有投稿任务不被强杀；任务完成后进入安全终态，重新登录前不允许新业务操作。

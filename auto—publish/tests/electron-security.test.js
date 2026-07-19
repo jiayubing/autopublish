@@ -31,6 +31,9 @@ describe("Electron security boundary", function() {
     assert.match(preload, /auth:get-state/);
     assert.doesNotMatch(preload, /accessToken|refreshToken/);
     assert.match(gate, /authenticated/);
+    assert.match(read("desktop/device-identity-store.js"), /randomUUID/);
+    assert.doesNotMatch(read("desktop/device-identity-store.js"), /mac|serial|motherboard|cpu/i);
+    assert.match(read("desktop/services/auth-service.js"), /deviceName/);
   });
 
   it("ships a restrictive CSP for the file-rendered React bundle", function() {

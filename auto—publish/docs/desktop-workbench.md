@@ -160,7 +160,20 @@ Application login is separate from each remote platform's browser/Cookie login.
 The main process authenticates against the fixed `https://auth.jiayubing.xyz`
 service and keeps the access token in memory; the encrypted refresh token is
 stored only through Electron `safeStorage`. The Renderer never receives either
-token and cannot replace the server URL.
+token and cannot replace the server URL. The service supports separately
+managed `admin` and `user` accounts, explicit enable/disable state, product
+授权期限, first-login password replacement, and a server-enforced device
+quota. A device quota is a lightweight stable-installation control, not
+hardware DRM.
+The compatibility password floor is six characters; production accounts should
+still use a stronger mixed password.
+
+The authentication service stores only account, entitlement, device, session,
+and minimal security-audit data. Customer profiles, articles, templates,
+prompts, queues, publication records, platform cookies, API keys, and the
+workspace path remain in the selected local workspace and never enter an
+authentication request. Account disablement or license expiry locks the local
+application surface; it does not delete or upload local files.
 
 On a cold start the login screen is the only mounted product surface. Workspace
 bootstrap, customer directories, articles, queues, platform settings, AI

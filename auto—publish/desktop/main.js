@@ -365,10 +365,16 @@ async function activateAuthenticatedRuntime() {
 
 function initializeAuth() {
   const createAuthService = require("./services/auth-service").createAuthService;
+  const createDeviceIdentityStore = require("./device-identity-store").createDeviceIdentityStore;
   const registerAuthIpc = require("./ipc/auth-ipc").registerAuthIpc;
+  const userDataPath = app.getPath("userData");
+  const deviceIdentity = createDeviceIdentityStore({ userDataPath: userDataPath });
   authService = createAuthService({
     safeStorage: safeStorage,
-    userDataPath: app.getPath("userData")
+    userDataPath: userDataPath,
+    deviceIdentity: deviceIdentity,
+    deviceName: process.platform === "win32" ? "Windows device" : `${process.platform} device`,
+    appVersion: typeof app.getVersion === "function" ? app.getVersion() : "unknown"
   });
   registerAuthIpc({
     ipcMain: ipcMain,
@@ -395,7 +401,10 @@ async function startApplication() {
     initializeAuth();
     startupStatus = "ready";
     createMainWindow();
-  } catch (_) {
+  } catch (error) {
+    if (error && error.code === "AUTH_DEVICE_ID_CORRUPTED" && dialog && typeof dialog.showErrorBox === "function") {
+      dialog.showErrorBox("设备身份异常", "本机设备身份文件损坏。请先备份并确认后重新启动应用。");
+    }
     await failStartup();
   }
 }

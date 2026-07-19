@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+exec docker compose -p autopublish-auth-v2-stage \
+  -f "$ROOT_DIR/auth-server/docker-compose.stage.yml" \
+  exec autopublish-auth node scripts/apctl.js "$@"

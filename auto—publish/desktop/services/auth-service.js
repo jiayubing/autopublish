@@ -8,8 +8,15 @@ const AUTH_ERRORS = {
   AUTH_REQUIRED: "请先登录",
   AUTH_INVALID_CREDENTIALS: "登录名或密码错误",
   AUTH_ACCOUNT_DISABLED: "账号已禁用",
+  AUTH_ACCOUNT_LOCKED: "登录失败次数过多，请稍后重试",
+  AUTH_LICENSE_EXPIRED: "AutoPublish 授权已到期，请联系管理员续期",
   AUTH_SESSION_EXPIRED: "登录已失效，请重新登录",
   AUTH_NOT_ENTITLED: "当前账号没有 AutoPublish 使用授权",
+  AUTH_DEVICE_LIMIT_REACHED: "设备名额已用满，请联系管理员释放旧设备",
+  AUTH_DEVICE_REVOKED: "当前设备已被撤销，请联系管理员重新授权",
+  AUTH_PASSWORD_CHANGE_REQUIRED: "首次登录需要先修改密码",
+  AUTH_TOKEN_REUSE_DETECTED: "检测到异常会话，请重新登录",
+  AUTH_RATE_LIMITED: "请求过于频繁，请稍后重试",
   AUTH_SERVICE_UNAVAILABLE: "认证服务暂时不可达，请检查网络后重试",
   AUTH_SERVER_ERROR: "认证服务暂时不可用，请稍后重试",
   AUTH_INPUT_INVALID: "登录信息无效",
@@ -56,11 +63,14 @@ function createAuthService(options) {
   const safeStorage = opts.safeStorage || null;
   const userDataPath = opts.userDataPath || null;
   const sessionFile = userDataPath ? path.join(userDataPath, "auth-session.json") : null;
-  const deviceId = opts.deviceId || crypto.randomUUID();
+  const deviceIdentity = opts.deviceIdentity || null;
+  const deviceId = opts.deviceId || (deviceIdentity && typeof deviceIdentity.getDeviceId === "function" ? deviceIdentity.getDeviceId() : crypto.randomUUID());
+  const deviceName = typeof opts.deviceName === "string" && opts.deviceName.trim() ? opts.deviceName.trim().slice(0, 80) : `${process.platform} device`;
+  const appVersion = typeof opts.appVersion === "string" ? opts.appVersion.slice(0, 64) : "unknown";
   let accessToken = null;
   let refreshToken = null;
   let accessExpiresAt = 0;
-  let state = { authenticated: false, user: null, entitlements: [], errorCode: null };
+  let state = { authenticated: false, user: null, entitlements: [], device: null, errorCode: null, passwordChangeRequired: false, pendingLoginName: null };
   const listeners = new Set();
 
   function getState() { return JSON.parse(JSON.stringify(state)); }
@@ -99,17 +109,17 @@ function createAuthService(options) {
     accessToken = data.accessToken || null;
     refreshToken = data.refreshToken || refreshToken;
     accessExpiresAt = data.accessExpiresAt ? Date.parse(data.accessExpiresAt) : Date.now() + 10 * 60 * 1000;
-    state = { authenticated: true, user: data.user || null, entitlements: Array.isArray(data.entitlements) ? data.entitlements : [], errorCode: null };
+    state = { authenticated: true, user: data.user || null, entitlements: Array.isArray(data.entitlements) ? data.entitlements : [], device: data.device || null, errorCode: null, passwordChangeRequired: false, pendingLoginName: null };
     if (refreshToken) saveRefreshToken(refreshToken);
     notify();
     return getState();
   }
 
-  function clearSession(errorCode) {
+  function clearSession(errorCode, pendingLoginName) {
     accessToken = null;
     refreshToken = null;
     accessExpiresAt = 0;
-    state = { authenticated: false, user: null, entitlements: [], errorCode: errorCode || null };
+    state = { authenticated: false, user: null, entitlements: [], device: null, errorCode: errorCode || null, passwordChangeRequired: errorCode === "AUTH_PASSWORD_CHANGE_REQUIRED", pendingLoginName: pendingLoginName || null };
     clearStoredRefreshToken();
     notify();
     return getState();
@@ -118,9 +128,12 @@ function createAuthService(options) {
   function mapResponse(response, route) {
     const body = response && response.body && response.body.data ? response.body.data : response && response.body;
     if (response && response.statusCode >= 200 && response.statusCode < 300 && body && body.accessToken) return body;
-    const code = response && response.statusCode === 401 ? ((response.body && response.body.error && response.body.error.code) || (route === "/v1/auth/refresh" || route === "/v1/auth/session" || route === "/v1/auth/entitlements" ? "AUTH_SESSION_EXPIRED" : "AUTH_INVALID_CREDENTIALS"))
-      : response && response.statusCode === 403 ? ((response.body && response.body.error && response.body.error.code) || "AUTH_NOT_ENTITLED")
-      : response && response.statusCode === 400 ? "AUTH_INPUT_INVALID" : "AUTH_SERVER_ERROR";
+    const serverCode = response && response.body && response.body.error && response.body.error.code;
+    const fallbackCode = response && response.statusCode === 401
+      ? (route === "/v1/auth/refresh" || route === "/v1/auth/session" || route === "/v1/auth/entitlements" ? "AUTH_SESSION_EXPIRED" : "AUTH_INVALID_CREDENTIALS")
+      : response && response.statusCode === 403 ? "AUTH_NOT_ENTITLED"
+        : response && response.statusCode === 400 ? "AUTH_INPUT_INVALID" : "AUTH_SERVER_ERROR";
+    const code = typeof serverCode === "string" && AUTH_ERRORS[serverCode] ? serverCode : fallbackCode;
     throw authError(code);
   }
 
@@ -136,18 +149,26 @@ function createAuthService(options) {
   async function login(loginName, password) {
     if (typeof loginName !== "string" || !loginName.trim() || typeof password !== "string" || !password) throw authError("AUTH_INPUT_INVALID");
     try {
-      return setAuthenticated(await call("POST", "/v1/auth/login", { loginName: loginName.trim(), password, deviceId }));
+      return setAuthenticated(await call("POST", "/v1/auth/login", { loginName: loginName.trim(), password, deviceId, deviceName, appVersion }));
     } catch (error) {
-      clearSession(error.code === "AUTH_SESSION_EXPIRED" ? "AUTH_INVALID_CREDENTIALS" : error.code);
+      clearSession(error.code === "AUTH_SESSION_EXPIRED" ? "AUTH_INVALID_CREDENTIALS" : error.code, error.code === "AUTH_PASSWORD_CHANGE_REQUIRED" ? loginName.trim() : null);
       throw error;
     }
+  }
+
+  async function changePassword(loginName, currentPassword, newPassword) {
+    if (typeof loginName !== "string" || !loginName.trim() || typeof currentPassword !== "string" || !currentPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+      throw authError("AUTH_INPUT_INVALID");
+    }
+    const result = await call("POST", "/v1/auth/change-password", { loginName: loginName.trim(), currentPassword, newPassword, deviceId, deviceName, appVersion });
+    return setAuthenticated(result);
   }
 
   async function refresh() {
     const token = refreshToken || loadRefreshToken();
     if (!token) throw authError("AUTH_REQUIRED");
     try {
-      const result = await call("POST", "/v1/auth/refresh", { refreshToken: token, deviceId });
+      const result = await call("POST", "/v1/auth/refresh", { refreshToken: token, deviceId, appVersion });
       return setAuthenticated(result);
     } catch (error) {
       clearSession(error.code === "AUTH_SESSION_EXPIRED" ? "AUTH_SESSION_EXPIRED" : error.code);
@@ -177,6 +198,7 @@ function createAuthService(options) {
     getState,
     getAccessToken: () => accessToken,
     login,
+    changePassword,
     refresh,
     initialize,
     logout,

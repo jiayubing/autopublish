@@ -242,9 +242,12 @@ export interface RealOrder {
 
 export interface AuthState {
   authenticated: boolean;
-  user: { id?: string; loginName: string; enabled?: boolean } | null;
+  user: { id?: string; loginName: string; role?: 'admin' | 'user'; enabled?: boolean; mustChangePassword?: boolean } | null;
   entitlements: Array<{ product: string; enabled: boolean; expiresAt?: string | null }>;
+  device?: { displayName?: string | null; registered?: boolean; deviceCount?: number; maxDevices?: number } | null;
   errorCode?: string | null;
+  passwordChangeRequired?: boolean;
+  pendingLoginName?: string | null;
 }
 
 export interface GenerationSubmissionHandoffPreview {

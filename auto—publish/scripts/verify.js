@@ -54,8 +54,16 @@ const focusedAuthTests = [
   "tests/auth-ipc-boundary.test.js",
   "tests/auth-gate.test.js",
   "tests/auth-protected-ipc.test.js",
+  "tests/device-identity-store.test.js",
+  "tests/auth-local-data-boundary.test.js",
   "tests/j4125-auth-contract.test.js",
-  "auth-server/tests/auth-api.test.js"
+  "auth-server/tests/auth-api.test.js",
+  "auth-server/tests/multi-user-auth.test.js",
+  "auth-server/tests/device-limit.test.js",
+  "auth-server/tests/session-family.test.js",
+  "auth-server/tests/admin-cli.test.js",
+  "auth-server/tests/sqlite-repository.test.js",
+  "auth-server/tests/concurrent-login.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
 function runNpm(args) {

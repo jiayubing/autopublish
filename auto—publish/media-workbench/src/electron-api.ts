@@ -147,6 +147,7 @@ interface DesktopConsoleWorkspaceData {
 interface DesktopConsoleAuth {
   getState(): Promise<IpcResponse<AuthState>>;
   login(loginName: string, password: string): Promise<IpcResponse<AuthState>>;
+  changePassword(loginName: string, currentPassword: string, newPassword: string): Promise<IpcResponse<AuthState>>;
   refresh(): Promise<IpcResponse<AuthState>>;
   logout(): Promise<IpcResponse<AuthState>>;
   onStateChanged?: (listener: (state: AuthState) => void) => () => void;
@@ -384,6 +385,13 @@ export async function login(loginName: string, password: string): Promise<AuthSt
   if (!isElectron() || !window.desktopConsole?.auth) throw new Error("桌面认证不可用");
   const result = await window.desktopConsole.auth.login(loginName, password);
   if (!result.ok || !result.data) throw Object.assign(new Error(result.error?.message || "登录失败"), { code: result.error?.code || "AUTH_SERVER_ERROR" });
+  return result.data;
+}
+
+export async function changeAuthPassword(loginName: string, currentPassword: string, newPassword: string): Promise<AuthState> {
+  if (!isElectron() || !window.desktopConsole?.auth) throw new Error("桌面认证不可用");
+  const result = await window.desktopConsole.auth.changePassword(loginName, currentPassword, newPassword);
+  if (!result.ok || !result.data) throw Object.assign(new Error(result.error?.message || "修改密码失败"), { code: result.error?.code || "AUTH_SERVER_ERROR" });
   return result.data;
 }
 

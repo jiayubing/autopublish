@@ -21,4 +21,17 @@ describe("J4125 auth service client", function() {
     const service = createAuthService({ request: async () => ({ statusCode: 401, body: { error: "password hash details C:\\private\\db" } }) });
     await assert.rejects(() => service.login("admin", "bad"), (error) => error.code === "AUTH_INVALID_CREDENTIALS" && !error.message.includes("private"));
   });
+
+  it("preserves stable lock and rate-limit codes regardless of HTTP status", async function() {
+    const locked = createAuthService({ request: async () => ({ statusCode: 423, body: { error: { code: "AUTH_ACCOUNT_LOCKED", message: "internal detail" } } }) });
+    await assert.rejects(() => locked.login("admin", "password"), (error) => error.code === "AUTH_ACCOUNT_LOCKED");
+    const limited = createAuthService({ request: async () => ({ statusCode: 429, body: { error: { code: "AUTH_RATE_LIMITED" } } }) });
+    await assert.rejects(() => limited.login("admin", "password"), (error) => error.code === "AUTH_RATE_LIMITED");
+  });
+
+  it("allows the six-character password floor for password replacement", async function() {
+    const service = createAuthService({ request: async () => ({ statusCode: 200, body: { accessToken: "access", refreshToken: "refresh", user: { loginName: "admin" }, entitlements: [] } }) });
+    await service.changePassword("admin", "old-password", "abc123");
+    assert.equal(service.getState().authenticated, true);
+  });
 });

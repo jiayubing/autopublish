@@ -11,10 +11,10 @@ describe("isolated auth API", () => {
   let server;
   let baseUrl;
   let root;
-  before(() => {
+  before(async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "autopublish-auth-"));
     const store = createAuthStore({ filePath: path.join(root, "auth.json") });
-    store.createAdmin("admin", "correct horse battery staple");
+    await store.createAdmin("admin", "correct horse battery staple");
     const app = createAuthServer({ store });
     server = app.server;
     server.listen(0, "127.0.0.1");
@@ -39,14 +39,13 @@ describe("isolated auth API", () => {
   it("supports login, refresh rotation, session and revoke without sensitive errors", async () => {
     assert.equal((await request("GET", "/healthz")).status, 200);
     assert.equal((await request("POST", "/v1/auth/login", { loginName: "admin", password: "wrong" })).data.error.code, "AUTH_INVALID_CREDENTIALS");
-    await new Promise((resolve) => setTimeout(resolve, 300));
     const login = await request("POST", "/v1/auth/login", { loginName: "admin", password: "correct horse battery staple", deviceId: "test" });
     assert.equal(login.status, 200);
     const session = await request("GET", "/v1/auth/session", null, login.data.data.accessToken);
     assert.equal(session.data.data.user.loginName, "admin");
     const refresh = await request("POST", "/v1/auth/refresh", { refreshToken: login.data.data.refreshToken, deviceId: "test" });
     assert.equal(refresh.status, 200);
-    assert.equal((await request("POST", "/v1/auth/refresh", { refreshToken: login.data.data.refreshToken })).data.error.code, "AUTH_SESSION_EXPIRED");
+    assert.equal((await request("POST", "/v1/auth/refresh", { refreshToken: login.data.data.refreshToken })).data.error.code, "AUTH_TOKEN_REUSE_DETECTED");
     assert.equal((await request("POST", "/v1/auth/logout", null, refresh.data.data.accessToken)).status, 200);
   });
 });

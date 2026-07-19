@@ -10,6 +10,7 @@ const REQUIRED_FILES = [
   "package.json",
   "desktop/main.js",
   "desktop/preload.js",
+  "desktop/device-identity-store.js",
   "desktop/ipc/auth-ipc.js",
   "desktop/services/auth-service.js",
   "desktop/services/platform-task-state-store.js",
@@ -88,6 +89,10 @@ function findPrivateEntries(appDir) {
       if (lowerName === ".env" || lowerName === "questions.json" || lowerName === "ai-provider.json" ||
           lowerName === "media-provider.json" || lowerName === "hepan-provider.json" ||
           lowerName === "platform-settings-migration.json" || lowerName === "provider-test-status.json" ||
+          lowerName === "auth.json" || lowerName === "auth.db" || lowerName === "auth.sqlite" ||
+          lowerName === "auth.sqlite3" || lowerName === "auth-session.json" || lowerName === "device-identity.json" ||
+          lowerName.endsWith(".sqlite") || lowerName.endsWith(".sqlite3") ||
+          lowerName.endsWith(".db-wal") || lowerName.endsWith(".db-shm") ||
           (lowerName.includes("hepan-cookie") && lowerName.endsWith(".tmp")) ||
           (lowerName.includes("hepan-images") && lowerName.endsWith(".tmp"))) {
         found.push(relative);

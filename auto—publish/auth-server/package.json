@@ -7,8 +7,13 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test tests/*.test.js",
-    "admin:create": "node scripts/admin.js create",
-    "admin:disable": "node scripts/admin.js disable",
-    "admin:revoke": "node scripts/admin.js revoke-sessions"
+    "migrate": "node scripts/migrate.js",
+    "backup": "node scripts/backup.js",
+    "restore-check": "node scripts/restore-check.js",
+    "authctl": "node scripts/authctl.js",
+    "apctl": "node scripts/apctl.js",
+    "admin:create": "node scripts/authctl.js admin create",
+    "admin:disable": "node scripts/authctl.js user disable",
+    "admin:revoke": "node scripts/authctl.js session revoke-all"
   }
 }

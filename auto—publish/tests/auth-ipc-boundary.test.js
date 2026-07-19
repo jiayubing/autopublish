@@ -13,11 +13,12 @@ describe("auth IPC boundary", function() {
       authService: {
         getState: () => ({ authenticated: false }),
         login: async () => ({ authenticated: true, user: { loginName: "admin" } }),
+        changePassword: async () => ({ authenticated: true, user: { loginName: "admin" } }),
         refresh: async () => ({ authenticated: true }),
         logout: async () => ({ authenticated: false }),
       },
     });
-    assert.deepEqual([...handlers.keys()].sort(), ["auth:get-state", "auth:login", "auth:logout", "auth:refresh"]);
+    assert.deepEqual([...handlers.keys()].sort(), ["auth:change-password", "auth:get-state", "auth:login", "auth:logout", "auth:refresh"]);
     const result = await handlers.get("auth:login")(null, { loginName: "admin", password: "password" });
     assert.equal(result.ok, true);
     assert.equal(events[0][0], "auth-state-changed");
