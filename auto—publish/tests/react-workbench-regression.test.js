@@ -58,6 +58,8 @@ describe("react workbench regression", function() {
     const taskService = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "services", "desktop-task-service.js"), "utf8");
     assert.ok(types.includes("interface PlatformStatus") && types.includes("isBatchRunning: boolean") && types.includes("isStopPending: boolean") && types.includes("isPlatformRunning: boolean"));
     assert.ok(taskService.includes("isBatchRunning: isBatchRunning") && taskService.includes("isStopPending: isStopPending") && taskService.includes("isPlatformRunning: isPlatformRunning"));
+    assert.match(taskService, /platformTaskStateStore/);
+    assert.match(taskService, /activePlatformRunId/);
     assert.equal(types.includes("isPlatformPaused"), false);
     assert.equal(api.includes("isPlatformPaused"), false);
   });

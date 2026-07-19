@@ -25,6 +25,7 @@ import PlatformWorkbench from './components/PlatformWorkbench';
 import ContentWorkbench from './components/ContentWorkbench';
 import PreflightModal, { MediaPreflightSummary } from './components/PreflightModal';
 import { WorkspaceDataProvider, usePlatformQueue } from './workspace-data-store';
+import { PlatformTaskProvider } from './platform-task-store';
 import { 
   Database, 
   HelpCircle, 
@@ -41,7 +42,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
-  return <WorkspaceDataProvider><AppContent /></WorkspaceDataProvider>;
+  return <PlatformTaskProvider><WorkspaceDataProvider><AppContent /></WorkspaceDataProvider></PlatformTaskProvider>;
 }
 
 function AppContent() {

@@ -170,3 +170,40 @@ it("returns a distinct progress watchdog error instead of a fixed batch timeout"
   assert.equal(result.errorCode, "PLATFORM_WORKER_WATCHDOG_TIMEOUT");
   assert.equal(killed, true);
 });
+
+it("keeps a safe run snapshot available while the renderer is absent", async function() {
+  let worker;
+  function fakeFork() {
+    worker = new EventEmitter();
+    worker.send = function() {};
+    worker.kill = function() {};
+    return worker;
+  }
+  const service = createDesktopTaskService({
+    cwd: "C:\\portable-content",
+    paths: { contentLibrary: "C:\\portable-content", localState: fs.mkdtempSync(path.join(os.tmpdir(), "platform-snapshot-state-")) },
+    fork: fakeFork,
+    invalidateData: function() { return 7; }
+  });
+  try {
+    const pending = service.startPlatformSubmit({ tasks: [
+      { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju" },
+      { sourcePlatformId: "hepan", filename: "two.md", targetPlatformId: "lieju" }
+    ] });
+    await new Promise((resolve) => setImmediate(resolve));
+    const started = service.getState();
+    assert.equal(started.total, 2);
+    assert.equal(typeof started.runId, "string");
+    assert.equal(started.isPlatformRunning, true);
+    worker.emit("message", { type: "state", payload: { phase: "remote-finished", task: { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju", filePath: "C:\\private\\one.md" }, status: "published", runId: started.runId } });
+    assert.equal(service.getState().processed, 1);
+    worker.emit("message", { type: "result", payload: { ok: true, data: { ok: 2, fail: 0, skipped: 0, uncertain: 0, results: [{ task: { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju" }, status: "success", publicationStatus: "published" }, { task: { sourcePlatformId: "hepan", filename: "two.md", targetPlatformId: "lieju" }, status: "success", publicationStatus: "published" }] } } });
+    await pending;
+    const completed = service.getState();
+    assert.equal(completed.phase, "completed");
+    assert.equal(completed.processed, 2);
+    assert.equal(completed.currentTask.filePath, undefined);
+  } finally {
+    service.dispose();
+  }
+});

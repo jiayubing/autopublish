@@ -136,6 +136,14 @@ process.on("message", function(message) {
       const rootDir = options.paths && (options.paths.contentLibrary || options.paths.workspaceRoot) || process.env.AUTO_PUBLISH_WORKSPACE || require("path").resolve(__dirname, "..", "..");
       const plan = options.plan || { tasks: [] };
       const submitOptions = options.submitOptions || { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
+      const runId = typeof options.runId === "string" ? options.runId : null;
+
+      function sendPlatformState(state) {
+        send("state", Object.assign({}, state || {}, {
+          runId: runId,
+          updatedAt: new Date().toISOString()
+        }));
+      }
 
       clearStopSignal();
 
@@ -171,14 +179,14 @@ process.on("message", function(message) {
 
         var activeTask = null;
         var heartbeat = setInterval(function() {
-          send("state", { phase: "heartbeat", task: activeTask || undefined });
+          sendPlatformState({ phase: "heartbeat", task: activeTask || undefined });
         }, 250);
         try {
           const result = await service.submitSelectedPlanSerially(plan, Object.assign({}, submitOptions, {
             shouldStop: function() { return stopRequested; },
             onTaskState: function(state) {
               if (state && state.task) activeTask = state.task;
-              send("state", state);
+              sendPlatformState(state);
             }
           }));
           result.skipped = result.skipped || result.pending || 0;

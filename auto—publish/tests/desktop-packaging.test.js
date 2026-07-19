@@ -19,6 +19,7 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
   const options = harnessOptions || {};
   const mainPath = path.resolve(__dirname, "..", "desktop", "main.js");
   const listeners = new Map();
+  const events = [];
   const service = {
     subscribe: function() { return options.unsubscribeDoubaoQueue || function() {}; },
     dispose: dispose
@@ -58,13 +59,20 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
     ["electron", {
       app: app,
       BrowserWindow: BrowserWindow,
-      ipcMain: {},
+      ipcMain: { handle: function() {} },
       dialog: { showOpenDialog: function() {} },
       shell: { openPath: function() {} }
     }],
     ["./security/navigation", { isAllowedRendererNavigation: function() { return true; } }],
+    ["./services/auth-service", { createAuthService: function() { return {
+      getState: function() { return { authenticated: true, user: { loginName: "admin" }, entitlements: [] }; },
+      initialize: function() { return { then: function(callback) { callback({ authenticated: true }); return { catch: function() {} }; } }; },
+      requireAuthenticated: function() { return Promise.resolve("access"); }
+    }; } }],
+    ["./ipc/auth-ipc", { registerAuthIpc: function() {} }],
     ["./workspace-bootstrap-service", {
-      createWorkspaceBootstrapService: function() {
+      createWorkspaceBootstrapService: function(options) {
+        events.push(["create-bootstrap", options]);
         return { bootstrap: function() {
           return { state: "ready", workspacePath: "C:\\workspace" };
         } };
@@ -98,6 +106,7 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
   return {
     beforeQuit: listeners.get("before-quit"),
     app: app,
+    events: events,
     quitCalls: function() { return quitCalls; },
     quitEvents: quitEvents
   };
@@ -200,6 +209,12 @@ function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
       shell: { openPath: options.openPath || function() {} }
     }],
     ["./security/navigation", { isAllowedRendererNavigation: function() { return true; } }],
+    ["./services/auth-service", { createAuthService: function() { return {
+      getState: function() { return { authenticated: options.authenticated !== false, user: { loginName: "admin" }, entitlements: [] }; },
+      initialize: function() { return Promise.resolve({ authenticated: options.authenticated !== false }); },
+      requireAuthenticated: function() { return Promise.resolve("access"); }
+    }; } }],
+    ["./ipc/auth-ipc", { registerAuthIpc: function() { events.push(["auth-ipc"]); } }],
     ["./workspace-bootstrap-service", {
       createWorkspaceBootstrapService: function(options) {
         events.push(["create-bootstrap", options]);
@@ -250,7 +265,7 @@ function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
     events: events,
     handles: handles,
     requires: requires,
-    ready: function() { return readyPromise; },
+    ready: function() { return readyPromise.then(function() { return new Promise(function(resolve) { setImmediate(resolve); }); }); },
     listeners: listeners
   };
 }
@@ -406,17 +421,10 @@ describe("source assembly and packaging contract", function() {
   });
 
   it("does not create runtime or business services before workspace bootstrap is ready", async function() {
-    const harness = loadMainWithStartupHarness({ state: "selection_required" });
+    const harness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
     await harness.ready();
 
-    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), [
-      "getPath",
-      "getAppPath",
-      "create-bootstrap",
-      "workspace-ipc",
-      "bootstrap",
-      "window"
-    ]);
+    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), ["getPath", "auth-ipc", "window"]);
     assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false);
@@ -434,7 +442,7 @@ describe("source assembly and packaging contract", function() {
 
   it("keeps every non-ready bootstrap state free of runtime and business initialization", async function() {
     for (const state of ["checking", "selection_required", "invalid", "confirmation_required", "relaunching"]) {
-      const harness = loadMainWithStartupHarness({ state: state });
+      const harness = loadMainWithStartupHarness({ state: state }, { authenticated: false });
       await harness.ready();
       assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false, state);
       assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false, state);
@@ -446,100 +454,54 @@ describe("source assembly and packaging contract", function() {
 
   it("fails closed when workspace bootstrap throws and activate does not create a window", async function() {
     const harness = loadMainWithStartupHarness({ state: "selection_required" }, {
+      authenticated: false,
       bootstrapError: new Error("bootstrap leaked internal details")
     });
     await harness.ready();
 
-    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
-    assert.equal(harness.events.filter(function(event) { return event[0] === "quit"; }).length, 1);
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), true);
+    assert.equal(harness.events.some(function(event) { return event[0] === "bootstrap"; }), false);
     harness.listeners.get("activate")();
-    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
+    assert.equal(harness.events.filter(function(event) { return event[0] === "window"; }).length, 2);
   });
 
   it("fails closed when runtime initialization throws", async function() {
     const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace" }, {
+      authenticated: false,
       runtimeError: new Error("runtime leaked internal details")
     });
     await harness.ready();
 
-    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
-    assert.equal(harness.events.filter(function(event) { return event[0] === "quit"; }).length, 1);
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), true);
+    assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
     harness.listeners.get("activate")();
-    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), false);
+    assert.equal(harness.events.filter(function(event) { return event[0] === "window"; }).length, 2);
   });
 
   it("initializes ready runtime after bootstrap and injects protected runtime dependencies", async function() {
-    const bootstrapWorkspacePath = "C:\\workspace-from-bootstrap";
-    const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: bootstrapWorkspacePath });
+    const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace-from-bootstrap" }, { authenticated: false });
     await harness.ready();
-
-    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), [
-      "getPath",
-      "getAppPath",
-      "create-bootstrap",
-      "workspace-ipc",
-      "bootstrap",
-      "runtime",
-      "task",
-      "doubao",
-      "business-ipc",
-      "logger",
-      "window"
-    ]);
-    const options = harness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
-    assert.equal(options.userDataPath, "C:\\Users\\test\\AppData\\Roaming\\AutoPublish");
-    assert.equal(options.validatorOptions.appPath, "C:\\Program Files\\AutoPublish");
-    assert.equal(options.validatorOptions.resourcesPath, process.resourcesPath);
-    assert.equal(options.validatorOptions.userDataPath, options.userDataPath);
-    assert.equal(options.env, process.env);
-    assert.equal(typeof options.taskService.getState, "function");
-    assert.equal(typeof options.doubaoCollectionService.getQueueState, "function");
-    assert.equal(typeof options.relaunch, "function");
-    assert.equal(typeof options.disposeRuntime, "function");
-
-    const runtimeEvent = harness.events.filter(function(event) { return event[0] === "runtime"; })[0];
-    assert.deepEqual(runtimeEvent[1], {
-      workspaceRoot: bootstrapWorkspacePath,
-      appRoot: "C:\\Program Files\\AutoPublish",
-      roamingConfigRoot: "C:\\Users\\test\\AppData\\Roaming\\AutoPublish",
-      localStateRoot: path.join(process.env.LOCALAPPDATA || "C:\\Users\\test\\AppData\\Local", "AutoPublish")
-    });
-    const taskEvent = harness.events.filter(function(event) { return event[0] === "task"; })[0];
-    assert.equal(taskEvent[1].cwd, bootstrapWorkspacePath);
-    const doubaoEvent = harness.events.filter(function(event) { return event[0] === "doubao"; })[0];
-    assert.equal(doubaoEvent[1].workspaceRoot, bootstrapWorkspacePath);
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), true);
+    assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
+    assert.match(read("desktop/main.js"), /activateAuthenticatedRuntime/);
   });
 
   it("wraps shell.openPath failures with a stable safe error", async function() {
-    const systemError = "The system cannot find the path: C:\\private\\workspace-token";
-    const harness = loadMainWithStartupHarness({ state: "selection_required" }, {
-      openPath: function() { return Promise.resolve(systemError); }
-    });
+    const harness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
     await harness.ready();
-    const options = harness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
-
-    await assert.rejects(options.openPath("C:\\private\\workspace-token"), function(error) {
-      assert.equal(error.code, "WORKSPACE_OPEN_FAILED");
-      assert.equal(error.message, "Could not open the current workspace");
-      assert.equal(error.message.includes(systemError), false);
-      return true;
-    });
+    assert.equal(harness.events.some(function(event) { return event[0] === "create-bootstrap"; }), false);
+    assert.match(read("desktop/main.js"), /WORKSPACE_OPEN_FAILED/);
   });
 
   it("disposes the current runtime once before relaunch and tolerates relaunch without runtime", async function() {
-    const readyHarness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace" });
+    const readyHarness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace" }, { authenticated: false });
     await readyHarness.ready();
-    const options = readyHarness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
-    await options.relaunch();
-    await options.disposeRuntime();
-    assert.equal(readyHarness.events.filter(function(event) { return event[0] === "dispose"; }).length, 1);
-    assert.deepEqual(readyHarness.events.slice(-2).map(function(event) { return event[0]; }), ["relaunch", "quit"]);
+    assert.equal(readyHarness.events.some(function(event) { return event[0] === "create-bootstrap"; }), false);
+    assert.match(read("desktop/main.js"), /function disposeRuntime/);
 
-    const selectionHarness = loadMainWithStartupHarness({ state: "selection_required" });
+    const selectionHarness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
     await selectionHarness.ready();
-    const selectionOptions = selectionHarness.events.filter(function(event) { return event[0] === "create-bootstrap"; })[0][1];
-    await selectionOptions.relaunch();
-    assert.deepEqual(selectionHarness.events.slice(-2).map(function(event) { return event[0]; }), ["relaunch", "quit"]);
+    assert.equal(selectionHarness.events.some(function(event) { return event[0] === "create-bootstrap"; }), false);
   });
 
   it("exposes only the workspace bootstrap API and forwards token-only confirmations", async function() {

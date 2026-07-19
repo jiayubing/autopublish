@@ -1,17 +1,45 @@
-﻿function registerIpc(deps) {
-  require("./batch-ipc").registerBatchIpc(deps);
-  require("./media-ipc").registerMediaIpc(deps);
-  require("./platform-ipc").registerPlatformIpc(deps);
-  require("./ai-provider-ipc").registerAiProviderIpc(deps);
-  require("./platform-settings-ipc").registerPlatformSettingsIpc(deps);
-  require("./ai-content-ipc").registerAiContentIpc(deps);
-  require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(deps);
-  require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(deps);
-  require("./content-submission-ipc").registerContentSubmissionIpc(deps);
-  require("./article-attention-ipc").registerArticleAttentionIpc(deps);
-  require("./publication-ipc").registerPublicationIpc(deps);
-  require("./doubao-collection-ipc").registerDoubaoCollectionIpc(deps);
-  require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(deps);
+const { fail } = require("../services/ipc-response");
+
+function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
+  const proxy = {
+    lastHandler: null,
+    handle(channel, handler) {
+      const wrapped = async function(event, ...args) {
+        if (typeof requireAuthenticated === "function") {
+          try { await requireAuthenticated(); }
+          catch (_) {
+            const authError = new Error("请先登录");
+            authError.code = "AUTH_REQUIRED";
+            return fail(authError);
+          }
+        }
+        return handler(event, ...args);
+      };
+      proxy.lastHandler = wrapped;
+      return ipcMain.handle(channel, wrapped);
+    }
+  };
+  return proxy;
 }
 
-module.exports = { registerIpc };
+function registerIpc(deps) {
+  const values = deps || {};
+  const guarded = Object.assign({}, values, {
+    ipcMain: createAuthenticatedIpcMain(values.ipcMain, values.requireAuthenticated || (values.authService && values.authService.requireAuthenticated))
+  });
+  require("./batch-ipc").registerBatchIpc(guarded);
+  require("./media-ipc").registerMediaIpc(guarded);
+  require("./platform-ipc").registerPlatformIpc(guarded);
+  require("./ai-provider-ipc").registerAiProviderIpc(guarded);
+  require("./platform-settings-ipc").registerPlatformSettingsIpc(guarded);
+  require("./ai-content-ipc").registerAiContentIpc(guarded);
+  require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(guarded);
+  require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(guarded);
+  require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
+  require("./article-attention-ipc").registerArticleAttentionIpc(guarded);
+  require("./publication-ipc").registerPublicationIpc(guarded);
+  require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);
+  require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(guarded);
+}
+
+module.exports = { registerIpc, createAuthenticatedIpcMain };

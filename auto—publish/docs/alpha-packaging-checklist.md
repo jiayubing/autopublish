@@ -179,3 +179,20 @@ ode scripts/verify-alpha-package.js <path-to-resources/app> to validate package 
 Verify that the packaged app creates `%USERPROFILE%\Documents\AutoPublish` and its input/data/config folders. Confirm diagnostics before adding credentials or submitting work. The package must not contain user `.env`, input, data, logs, or backup files.
 
 Keep workspace tool settings in `config/runtime-tools.json` and Hepan settings in `config/hepan.json`; these workspace files are created outside the package.
+
+## Authentication gate and task progress
+
+- [ ] Cold start shows only the J4125 login gate; it does not inspect a workspace,
+      load customer data, or initialize business services before authentication.
+- [ ] `auth.jiayubing.xyz` is displayed as a fixed HTTPS product endpoint. The
+      package contains no password, token, private key, server database, or Cookie.
+- [ ] Direct unauthenticated calls to every registered business IPC return the
+      fixed `AUTH_REQUIRED` response without invoking the service handler.
+- [ ] After login, selecting a workspace and entering the workbench still works.
+- [ ] Platform submission displays `runId`, total/processed/result counters,
+      current task, phase, interval countdown, and a retained terminal summary.
+- [ ] Switching away from and back to “其他平台投稿” restores the same snapshot;
+      it does not start a second worker or duplicate queue refresh.
+- [ ] Stop/pause commands use the active run ID. A stale run ID is rejected.
+- [ ] Closing the app does not pretend a worker continues; the next start shows
+      `interrupted` or a status derived from the queue and publication ledger.

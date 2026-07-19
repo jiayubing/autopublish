@@ -122,3 +122,18 @@ For an installation that has been upgraded from the old development identity,
 legacy application configuration import is an explicit, one-time operation.
 It never overwrites a non-empty canonical configuration directory. Content
 library data and browser profiles are not silently copied during this import.
+
+## Login-first acceptance
+
+The first launch must show the fixed HTTPS application login before workspace
+selection. An unavailable or revoked authentication session must not reveal
+customer names, article titles, queue counts, local paths, platform settings, or
+browser state. Use the local auth mock tests for development; do not put a real
+J4125 password or token in a fixture.
+
+After login, verify workspace selection, existing article flows, platform login,
+and a synthetic multi-task platform run. Switch to another page while the run is
+active and return to confirm the same `runId`, latest processed count, controls,
+interval countdown, and terminal summary. On process exit, verify the next
+launch reports `interrupted` or a ledger-derived safe state instead of claiming
+that the previous Worker is still running.

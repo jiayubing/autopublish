@@ -8,14 +8,14 @@ import {
   submitPlatformPlan,
   stopPlatformSubmit,
   pausePlatformSubmit,
-  getPlatformState,
   getPlatformSettingsStatus,
-  onPlatformState,
   previewTrashedArticleQueueResidue,
   cleanupTrashedArticleQueueResidue,
 } from "../electron-api";
 import { usePlatformQueue } from "../workspace-data-store";
-import type { HepanProviderStatus, PlatformStatus } from "../types";
+import { usePlatformTask } from "../platform-task-store";
+import type { HepanProviderStatus } from "../types";
+import PlatformTaskIndicator from "./PlatformTaskIndicator";
 import {
   RefreshCw,
   Send,
@@ -49,6 +49,7 @@ function archiveErrorText(value: PlatformArticle['archiveError'] | PlatformSubmi
 
 export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenArticleManagement?: () => void } = {}) {
   const { snapshot: queueSnapshot, refresh: refreshQueue } = usePlatformQueue();
+  const platformState = usePlatformTask();
   const queue = queueSnapshot.queue;
   const platforms = queueSnapshot.platforms;
   const loading = queueSnapshot.loading;
@@ -71,7 +72,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     useState<PlatformSubmitResult | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string>("");
-  const [platformState, setPlatformState] = useState<PlatformStatus>({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false });
   const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(30);
   const [queueResidue, setQueueResidue] = useState<{ cleanableCount: number; reportedCount: number }>({ cleanableCount: 0, reportedCount: 0 });
   const [repairingResidue, setRepairingResidue] = useState(false);
@@ -91,6 +91,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const hasArchiveFailure = useCallback((article: PlatformArticle) => Boolean(article.archiveError), []);
   const isSelectableArticle = useCallback((article: PlatformArticle) => article.sourceArticleState !== "trashed" && !hasArchiveFailure(article), [hasArchiveFailure]);
   const displayError = error || queueSnapshot.error;
+  const taskIsActive = platformState.isPlatformRunning || ["running", "waiting-interval", "stopping"].includes(platformState.phase);
+  const taskBusy = isSubmitting || taskIsActive;
 
   const loadQueue = useCallback(async () => {
     try {
@@ -160,40 +162,30 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   useEffect(() => {
     let active = true;
-    const applyPlatformState = (state: PlatformStatus) => {
-      setPlatformState(state);
-      const phase = state.phase || state.status || "";
-      const waiting = phase === "waiting-interval" || phase === "waiting_interval";
-      const running = phase === "running" || waiting || phase === "stopping" || state.isPlatformRunning === true;
-      if (running) hasObservedRunningRef.current = true;
-      setIsSubmitting(running);
-      if (waiting) {
-        setSubmitStatus("等待下一篇河畔文章…");
-      } else if (phase === "running") {
-        setSubmitStatus("正在投稿…");
-      } else if (phase === "stopping") {
-        setSubmitStatus("正在停止投稿…");
-      } else if ((phase === "completed" || phase === "idle" || phase === "failed" || phase === "stopped") && !running) {
-        setSubmitStatus("");
-        setIsSubmitting(false);
-        const queueRevision = state.queueRevision;
-        if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision) && terminalQueueRevisionRef.current !== queueRevision) {
-          terminalQueueRevisionRef.current = queueRevision;
-          hasObservedRunningRef.current = false;
-          void refreshQueue("submit-terminal").catch(() => {});
-        }
-      }
-    };
     getPlatformSettingsStatus<HepanProviderStatus>("hepan").then((status) => {
       if (active && Number.isInteger(status.publishIntervalSeconds)) setPublishIntervalSeconds(status.publishIntervalSeconds);
     }).catch(() => { /* Settings may be unavailable for non-desktop fixtures. */ });
-    getPlatformState().then((state) => { if (active) applyPlatformState(state); }).catch(() => {});
-    const unsubscribe = onPlatformState((state) => {
-      if (!active) return;
-      applyPlatformState(state);
-    });
-    return () => { active = false; unsubscribe(); };
-  }, [refreshQueue]);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const phase = platformState.phase || platformState.status || "";
+    const waiting = phase === "waiting-interval" || phase === "waiting_interval";
+    const running = phase === "running" || waiting || phase === "stopping" || platformState.isPlatformRunning === true;
+    if (running) hasObservedRunningRef.current = true;
+    if (waiting) setSubmitStatus("等待下一篇河畔文章…");
+    else if (phase === "running") setSubmitStatus("正在投稿…");
+    else if (phase === "stopping") setSubmitStatus("正在停止投稿…");
+    else if (["completed", "idle", "failed", "stopped", "interrupted"].includes(phase) && !running) {
+      if (!isSubmitting) setSubmitStatus("");
+      const queueRevision = platformState.queueRevision;
+      if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision) && terminalQueueRevisionRef.current !== queueRevision) {
+        terminalQueueRevisionRef.current = queueRevision;
+        hasObservedRunningRef.current = false;
+        void refreshQueue("submit-terminal").catch(() => {});
+      }
+    }
+  }, [platformState, refreshQueue, isSubmitting]);
 
   const groupedArticles: Record<string, PlatformArticle[]> = {};
   for (const article of queue) {
@@ -267,18 +259,17 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   const handlePause = async () => {
     setSubmitStatus("已暂停 — 正在关闭浏览器...");
-    try { await pausePlatformSubmit(); } catch (_) {}
+    try { await pausePlatformSubmit(platformState.runId); } catch (_) {}
     setSubmitStatus("");
-    setIsSubmitting(false);
   };
 
   const handleStop = async () => {
     setIsStopping(true);
-    try { await stopPlatformSubmit(); } catch (_) {}
+    try { await stopPlatformSubmit(platformState.runId); } catch (_) {}
   };
 
   const handleSubmit = async () => {
-    if (!canSubmit || isSubmitting) return;
+    if (!canSubmit || taskBusy) return;
     setIsConfirming(false);
     setIsSubmitting(true);
     setError(null);
@@ -303,9 +294,10 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     }
   };
 
-  const resultOk = submitResult?.ok ?? 0;
-  const resultFail = submitResult?.fail ?? 0;
-  const resultSkipped = submitResult?.skipped ?? 0;
+  const terminalResult = submitResult || platformState.terminalResult;
+  const resultOk = terminalResult?.ok ?? 0;
+  const resultFail = terminalResult?.fail ?? 0;
+  const resultSkipped = terminalResult?.skipped ?? 0;
   const waitingSeconds = Math.max(0, Math.ceil((platformState.waitRemainingMs || 0) / 1000));
   const nextTaskLabel = platformState.nextTask?.filename || platformState.task?.filename || "下一篇";
   const platformPhase = platformState.phase || platformState.status || "";
@@ -319,6 +311,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   return (
     <div className="flex flex-col h-full">
+      <PlatformTaskIndicator snapshot={platformState} /><span className="sr-only">已处理 {platformState.processed} / {platformState.total}</span>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2.5">
@@ -329,7 +322,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
         </div>
         <button
           onClick={loadQueue}
-          disabled={loading || isSubmitting}
+          disabled={loading || taskBusy}
           className="flex items-center space-x-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 text-xs font-semibold rounded-lg shadow-2xs transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
         >
           <RefreshCw
@@ -337,8 +330,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
           />
           <span>刷新队列</span>
         </button>
-        {queueResidue.cleanableCount > 0 && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || isSubmitting || repairingResidue} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{repairingResidue ? (residuePhase === "checking" ? "检查中…" : "清理中…") : `检查并清理已删除文章残留 · 安全收尾 (${queueResidue.cleanableCount})`}</button>}
-        {queueResidue.reportedCount > 0 && <button type="button" onClick={onOpenArticleManagement} disabled={loading || isSubmitting} className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">查看需处理项 ({queueResidue.reportedCount})</button>}
+        {queueResidue.cleanableCount > 0 && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || taskBusy || repairingResidue} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{repairingResidue ? (residuePhase === "checking" ? "检查中…" : "清理中…") : `检查并清理已删除文章残留 · 安全收尾 (${queueResidue.cleanableCount})`}</button>}
+        {queueResidue.reportedCount > 0 && <button type="button" onClick={onOpenArticleManagement} disabled={loading || taskBusy} className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">查看需处理项 ({queueResidue.reportedCount})</button>}
       </div>
 
       {residueFeedback && <div role={residueFeedback.kind === "error" ? "alert" : "status"} aria-live={residueFeedback.kind === "error" ? "assertive" : "polite"} className={`mb-3 rounded border p-3 text-xs ${residueFeedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>{residueFeedback.text}</div>}
@@ -578,11 +571,11 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       </div>
 
       {/* Status banner */}
-      {submitStatus && (
+      {(submitStatus || taskIsActive) && (
         <div className="mt-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             {isWaitingInterval ? <Clock className="w-4 h-4 text-blue-500 shrink-0" /> : <Loader2 className="w-4 h-4 animate-spin text-blue-500 shrink-0" />}
-            <span>{isWaitingInterval ? `等待下一篇河畔文章：${waitingSeconds} 秒（${nextTaskLabel}）` : submitStatus}</span>
+            <span>{isWaitingInterval ? `等待下一篇河畔文章：${waitingSeconds} 秒（${nextTaskLabel}）` : (submitStatus || "正在投稿…")}</span>
           </div>
           <div className="flex items-center space-x-1.5">
             <button
@@ -613,12 +606,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
         </div>
         <button
           onClick={() => setIsConfirming(true)}
-          disabled={!canSubmit || isSubmitting}
+          disabled={!canSubmit || taskBusy}
           className="flex items-center space-x-1.5 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95 disabled:pointer-events-none disabled:shadow-none"
         >
           <Send className="w-4 h-4" />
           <span>
-            {isSubmitting ? "提交中..." : `确认提交 (${taskCount} 任务)`}
+            {taskBusy ? "提交中..." : `确认提交 (${taskCount} 任务)`}
           </span>
         </button>
       </div>
@@ -641,7 +634,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                 </h3>
                 <button
                   onClick={() => setIsConfirming(false)}
-                  disabled={isSubmitting}
+                  disabled={taskBusy}
                   className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
                 >
                   <X className="w-4.5 h-4.5 text-slate-400" />
@@ -703,7 +696,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                 </div>
 
                 <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                  <input type="checkbox" checked={autoTrashRequested} onChange={(event) => setAutoTrashRequested(event.target.checked)} disabled={isSubmitting} className="mt-0.5" />
+                  <input type="checkbox" checked={autoTrashRequested} onChange={(event) => setAutoTrashRequested(event.target.checked)} disabled={taskBusy} className="mt-0.5" />
                   <span><strong>全部目标发布成功后自动移入回收站</strong><span className="mt-1 block text-slate-500">默认关闭；远端已发布内容不会撤回，发布记录和标题快照会保留。失败、待确认或本地归档失败时不会自动回收。</span></span>
                 </label>
 
@@ -720,17 +713,17 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-end space-x-2">
                 <button
                   onClick={() => setIsConfirming(false)}
-                  disabled={isSubmitting}
+                  disabled={taskBusy}
                   className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg shadow-2xs transition-all active:scale-95 disabled:opacity-50"
                 >
                   取消
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={!canSubmit || isSubmitting}
+                  disabled={!canSubmit || taskBusy}
                   className="flex items-center space-x-1.5 px-4.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg shadow-sm transition-all active:scale-95 disabled:pointer-events-none"
                 >
-                  {isSubmitting ? (
+                  {taskBusy ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>提交中...</span>
@@ -805,7 +798,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                 {submitResult.trashDisposition === "auto_trash_requested" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布目标全部满足条件，文章本地副本已按确认策略移入回收站；发布记录继续保留。</div>}
 
                 <div className="max-h-60 overflow-y-auto space-y-1.5">
-                  {submitResult.results.map((r, i) => (
+                  {(terminalResult?.results || []).map((r, i) => (
                     <div
                       key={i}
                       className={`flex items-center space-x-2.5 p-2.5 rounded-lg text-xs ${

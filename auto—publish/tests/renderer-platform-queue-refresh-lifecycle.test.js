@@ -23,6 +23,7 @@ function installDesktopFixture(page) {
       phase: 'idle',
       invalidationListeners: [],
       platformStateListeners: [],
+      authStateListeners: [],
     };
     const queueData = () => ({
       revision: state.queueRevision,
@@ -36,6 +37,14 @@ function installDesktopFixture(page) {
       phase: state.phase,
     });
     const response = (data) => Promise.resolve({ ok: true, data });
+    const authState = { authenticated: true, user: { id: 'fixture-admin', loginName: 'admin' }, entitlements: [{ product: 'AutoPublish', enabled: true, expiresAt: null }], errorCode: null };
+    const auth = {
+      getState: () => response(authState),
+      login: () => response(authState),
+      refresh: () => response(authState),
+      logout: () => response({ authenticated: false, user: null, entitlements: [], errorCode: null }),
+      onStateChanged: (listener) => { state.authStateListeners.push(listener); return () => {}; },
+    };
 
     const workspace = {
       getBootstrapState: () => response({ state: 'ready', workspacePath: 'fixture', envOverride: false }),
@@ -116,6 +125,7 @@ function installDesktopFixture(page) {
       },
     };
     window.desktopConsole = {
+      auth,
       workspace,
       workspaceData,
       aiProvider,
@@ -215,6 +225,23 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 43 }));
     await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), afterUnmount, 'unmounted page no longer reacts to terminal state');
+
+    await page.locator('#nav-item-platforms').click();
+    await page.getByRole('heading', { name: '其他平台投稿' }).waitFor();
+    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({
+      runId: 'cross-page-run-2', phase: 'running', total: 20, processed: 7, succeeded: 6, failed: 1, skipped: 0, uncertain: 0,
+      currentTask: { sourcePlatformId: 'hepan', filename: 'article-08.md', targetPlatformId: 'hepan' },
+      updatedAt: new Date(Date.now() + 1000).toISOString(),
+    }));
+    await page.getByText('7 / 20').first().waitFor();
+    await page.locator('#nav-item-workbench').click();
+    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({
+      runId: 'cross-page-run-2', phase: 'running', total: 20, processed: 8, succeeded: 7, failed: 1, skipped: 0, uncertain: 0,
+      currentTask: { sourcePlatformId: 'hepan', filename: 'article-09.md', targetPlatformId: 'hepan' },
+      updatedAt: new Date(Date.now() + 2000).toISOString(),
+    }));
+    await page.locator('#nav-item-platforms').click();
+    await page.getByText('8 / 20').first().waitFor();
     await page.close();
   });
 });

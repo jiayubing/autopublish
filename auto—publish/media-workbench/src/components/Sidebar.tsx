@@ -17,6 +17,8 @@ import {
 import { motion } from 'motion/react';
 import { deriveNavigationSummary } from '../navigation-summary';
 import { usePlatformQueue } from '../workspace-data-store';
+import { usePlatformTask } from '../platform-task-store';
+import PlatformTaskIndicator from './PlatformTaskIndicator';
 import type { PlatformQueueSnapshot } from '../types';
 
 interface SidebarProps {
@@ -46,6 +48,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const [showWalletDetails, setShowWalletDetails] = useState(false);
   const queueStore = usePlatformQueue();
+  const platformTask = usePlatformTask();
   const queueSnapshot = platformQueueSnapshot || queueStore.snapshot;
   const navigationSummary = deriveNavigationSummary({ platformQueue: queueSnapshot, contentArticles: totalArticles, orders: totalOrders });
 
@@ -111,6 +114,8 @@ export default function Sidebar({
             </button>
           );
         })}
+
+        <PlatformTaskIndicator snapshot={platformTask} compact onClick={() => onViewChange('platforms')} />
 
         {/* Dynamic Status Dashboard */}
         <div className="pt-6">

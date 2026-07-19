@@ -86,6 +86,7 @@ function installQuestionFixture(page) {
       listArticleAttention: () => result({ items: [], counts: { total: 0, actionable: 0 } })
     };
     window.desktopConsole = {
+      auth: { getState: () => result({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => result({ authenticated: true }), refresh: () => result({ authenticated: true }), logout: () => result({ authenticated: false }), onStateChanged: () => () => {} },
       workspace: { getBootstrapState: () => result({ state: "ready" }), getCurrent: () => result({ workspacePath: "fixture", envOverride: false, validation: { ok: true, errors: [], warnings: [] } }) },
       workspaceData: { onInvalidated: () => () => {} },
       runtimeDiagnostics: { get: () => result({ ok: true, buildInfo: { version: "fixture", commit: "fixture", dirty: false }, browserChannel: { channel: "chromium", configured: true, state: "ready", probed: true }, capabilities: {}, errors: [], warnings: [] }) },

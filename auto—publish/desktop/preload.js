@@ -9,6 +9,17 @@ function confirmWorkspaceSelection(input) {
 }
 
 const api = {
+  auth: {
+    getState: function() { return ipcRenderer.invoke("auth:get-state"); },
+    login: function(loginName, password) { return ipcRenderer.invoke("auth:login", { loginName: loginName, password: password }); },
+    refresh: function() { return ipcRenderer.invoke("auth:refresh"); },
+    logout: function() { return ipcRenderer.invoke("auth:logout"); },
+    onStateChanged: function(listener) {
+      var handler = function(event, payload) { listener(payload); };
+      ipcRenderer.on("auth-state-changed", handler);
+      return function() { ipcRenderer.removeListener("auth-state-changed", handler); };
+    }
+  },
   workspace: {
     getBootstrapState: function() { return ipcRenderer.invoke("workspace:get-bootstrap-state"); },
     chooseDirectory: function() { return ipcRenderer.invoke("workspace:choose-directory"); },
@@ -90,8 +101,8 @@ const api = {
     getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
     buildSelectedPlan: function(input) { return ipcRenderer.invoke("platforms:build-selected-plan", input); },
     submitSelectedPlan: function(plan) { return ipcRenderer.invoke("platforms:submit-selected-plan", plan); },
-    pauseSubmit: function() { return ipcRenderer.invoke("platforms:pause-submit"); },
-    stopSubmit: function() { return ipcRenderer.invoke("platforms:stop-submit"); },
+    pauseSubmit: function(runId) { return ipcRenderer.invoke("platforms:pause-submit", runId ? { runId: runId } : undefined); },
+    stopSubmit: function(runId) { return ipcRenderer.invoke("platforms:stop-submit", runId ? { runId: runId } : undefined); },
     getState: function() { return ipcRenderer.invoke("platforms:get-state"); },
     onState: function(listener) {
       var handler = function(event, payload) { listener(payload); };

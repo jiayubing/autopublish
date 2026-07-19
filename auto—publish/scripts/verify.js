@@ -46,6 +46,18 @@ const focusedPlanTests = [
   "tests/renderer-article-attention-actions.test.js"
 ].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
 
+const focusedAuthTests = [
+  "tests/platform-task-progress.test.js",
+  "tests/renderer-platform-task-store.test.js",
+  "tests/renderer-platform-cross-page-progress.test.js",
+  "tests/auth-service.test.js",
+  "tests/auth-ipc-boundary.test.js",
+  "tests/auth-gate.test.js",
+  "tests/auth-protected-ipc.test.js",
+  "tests/j4125-auth-contract.test.js",
+  "auth-server/tests/auth-api.test.js"
+].filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
+
 function runNpm(args) {
   if (process.platform === "win32") {
     execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", [npm].concat(args).join(" ")], {
@@ -69,6 +81,13 @@ if (focusedGenerationTests.length > 0) {
 
 if (focusedPlanTests.length > 0) {
   execFileSync(process.execPath, ["--test", ...focusedPlanTests], {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
+}
+
+if (focusedAuthTests.length > 0) {
+  execFileSync(process.execPath, ["--test", ...focusedAuthTests], {
     cwd: rootDir,
     stdio: "inherit"
   });

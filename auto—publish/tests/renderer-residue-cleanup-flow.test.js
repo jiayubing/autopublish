@@ -87,7 +87,7 @@ function installDesktopFixture(page, scenario) {
     const platformSettings = { getStatus: () => ok({ configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null }), save: () => ok({}), test: () => ok({ testedAt: "", ok: true, code: "OK" }), clear: () => ok({ cleared: true }) };
     const storageMaintenance = { getUsage: () => ok({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }), cleanCaches: () => ok({ blocked: false }) };
     window.__residueFlow = state;
-    window.desktopConsole = { workspace, runtimeDiagnostics: { get: () => ok(runtimeDiagnostics()) }, aiProvider, platformSettings, storageMaintenance, media, orders, platforms, content };
+    window.desktopConsole = { auth: { getState: () => ok({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} }, workspace, runtimeDiagnostics: { get: () => ok(runtimeDiagnostics()) }, aiProvider, platformSettings, storageMaintenance, media, orders, platforms, content };
     window.confirm = () => true;
   }, { scenario });
 }

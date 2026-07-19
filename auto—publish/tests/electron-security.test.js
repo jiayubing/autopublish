@@ -22,6 +22,17 @@ describe("Electron security boundary", function() {
     assert.match(main, /setPermissionRequestHandler/);
   });
 
+  it("keeps authentication in the main process and gates the business tree", function() {
+    const main = read("desktop/main.js");
+    const preload = read("desktop/preload.js");
+    const gate = read("media-workbench/src/components/AuthGate.tsx");
+    assert.match(main, /initializeAuth/);
+    assert.match(main, /createAuthenticatedIpcMain/);
+    assert.match(preload, /auth:get-state/);
+    assert.doesNotMatch(preload, /accessToken|refreshToken/);
+    assert.match(gate, /authenticated/);
+  });
+
   it("ships a restrictive CSP for the file-rendered React bundle", function() {
     const html = read("media-workbench/index.html");
     assert.match(html, /http-equiv=["']Content-Security-Policy["']/);

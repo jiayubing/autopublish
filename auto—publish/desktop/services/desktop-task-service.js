@@ -1,5 +1,6 @@
 ﻿const path = require("path");
 const { fork, execFile } = require("child_process");
+const { createPlatformTaskStateStore, createRunId } = require("./platform-task-state-store");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
@@ -44,6 +45,10 @@ function createDesktopTaskService(opts) {
   var platformAbort = null;
   var platformTaskCount = 0;
   var platformRemoteCallStarted = false;
+  var activePlatformRunId = null;
+  var platformTaskStateStore = createPlatformTaskStateStore({
+    persistedSnapshotPath: storagePaths.localState ? path.join(storagePaths.localState, "platform-task-snapshot.json") : null
+  });
 
   function emitBatchState() {
     sendToRenderer("batch-state", {
@@ -53,6 +58,15 @@ function createDesktopTaskService(opts) {
   }
 
   function emitPlatformState(extra) {
+    if (platformTaskStateStore.getSnapshot().runId) {
+      platformTaskStateStore.setControls(Object.assign({
+        isBatchRunning: isBatchRunning,
+        isStopPending: isStopPending,
+        isPlatformRunning: isPlatformRunning
+      }, extra || {}));
+      sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
+      return;
+    }
     sendToRenderer("platform-state", Object.assign({
       isBatchRunning: isBatchRunning,
       isStopPending: isStopPending,
@@ -224,13 +238,15 @@ function closeBrowserSessions() {
     isPlatformRunning = true;
     platformTaskCount = workerPlan.tasks.length;
     platformRemoteCallStarted = false;
-    emitPlatformState();
+    activePlatformRunId = createRunId();
+    platformTaskStateStore.start({ runId: activePlatformRunId, tasks: workerPlan.tasks });
+    sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
 
     var result = null;
     try {
       var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
       if (hepanRuntime) submitOptions.intervalByTargetMs = { hepan: hepanRuntime.publishIntervalSeconds * 1000 };
-      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions };
+      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions, runId: activePlatformRunId };
       var watchdogMs = Number.isInteger(hooks && hooks.platformWatchdogMs) && hooks.platformWatchdogMs > 0
         ? hooks.platformWatchdogMs
         : (Number.isInteger(options.platformWatchdogMs) && options.platformWatchdogMs > 0
@@ -249,12 +265,9 @@ function closeBrowserSessions() {
         onLog: hooks && hooks.onLog ? hooks.onLog : function() {},
         onState: function(state) {
           armWatchdog();
-          sendToRenderer("platform-state", Object.assign({
-            isBatchRunning: isBatchRunning,
-            isStopPending: isStopPending,
-            isPlatformRunning: true
-          }, state || {}));
-          if (hooks && typeof hooks.onState === "function") hooks.onState(state);
+          var snapshot = platformTaskStateStore.applyWorkerState(Object.assign({}, state || {}, { runId: activePlatformRunId }));
+          sendToRenderer("platform-state", snapshot);
+          if (hooks && typeof hooks.onState === "function") hooks.onState(snapshot);
         }
       });
       platformChild = task.child;
@@ -291,11 +304,24 @@ function closeBrowserSessions() {
       var terminalPhase = result && result.errorCode === "STOP_REQUESTED" ? "stopped"
         : result && result.ok && result.data && Number(result.data.fail || 0) === 0 && Number(result.data.uncertain || 0) === 0 ? "completed"
         : "failed";
-      emitPlatformState({ phase: terminalPhase, status: terminalPhase, queueRevision: invalidateData(["platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_SUBMIT_" + terminalPhase.toUpperCase()) });
+      var queueRevision = invalidateData(["platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_SUBMIT_" + terminalPhase.toUpperCase());
+      var terminalSnapshot = platformTaskStateStore.finish(result || { errorCode: "PLATFORM_SUBMIT_FAILED" }, terminalPhase, { queueRevision: queueRevision });
+      activePlatformRunId = null;
+      sendToRenderer("platform-state", terminalSnapshot);
+      if (hooks && typeof hooks.onState === "function") hooks.onState(terminalSnapshot);
     }
   }
 
-  function pausePlatformSubmit() {
+  function assertActivePlatformRun(runId) {
+    if (runId !== undefined && runId !== null && runId !== activePlatformRunId) {
+      var error = new Error("The platform task run is no longer active.");
+      error.code = "PLATFORM_RUN_MISMATCH";
+      throw error;
+    }
+  }
+
+  function pausePlatformSubmit(runId) {
+    assertActivePlatformRun(runId);
     if (!isPlatformRunning) return { ok: true };
 
     if (platformAbort && !platformRemoteCallStarted) { platformAbort(); platformAbort = null; }
@@ -318,7 +344,8 @@ function closeBrowserSessions() {
     return { ok: true };
   }
 
-  function stopPlatformSubmit() {
+  function stopPlatformSubmit(runId) {
+    assertActivePlatformRun(runId);
     if (!isPlatformRunning) return { alreadyStopped: true };
     if (platformAbort && !platformRemoteCallStarted) { platformAbort(); platformAbort = null; }
     if (platformChild) {
@@ -338,6 +365,7 @@ function closeBrowserSessions() {
       try { activeRuntimeCleanup(); } catch (_) {}
       activeRuntimeCleanup = null;
     }
+    if (isPlatformRunning) platformTaskStateStore.markInterrupted();
     [batchChild, platformChild].forEach(function(child) {
       if (child) {
         try { child.kill(); } catch (_) {}
@@ -346,7 +374,12 @@ function closeBrowserSessions() {
   }
 
   function getState() {
-    return { isBatchRunning: isBatchRunning, isStopPending: isStopPending, isPlatformRunning: isPlatformRunning };
+    var snapshot = platformTaskStateStore.getSnapshot();
+    return Object.assign(snapshot, {
+      isBatchRunning: isBatchRunning,
+      isStopPending: isStopPending || snapshot.isStopPending,
+      isPlatformRunning: isPlatformRunning || snapshot.isPlatformRunning
+    });
   }
 
   return {

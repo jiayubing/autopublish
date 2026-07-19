@@ -240,6 +240,13 @@ export interface RealOrder {
   errorCode?: string;
 }
 
+export interface AuthState {
+  authenticated: boolean;
+  user: { id?: string; loginName: string; enabled?: boolean } | null;
+  entitlements: Array<{ product: string; enabled: boolean; expiresAt?: string | null }>;
+  errorCode?: string | null;
+}
+
 export interface GenerationSubmissionHandoffPreview {
   generationBatchId: string;
   batchRevision?: string | number;
@@ -535,17 +542,62 @@ export interface PlatformStatus {
   isBatchRunning: boolean;
   isStopPending: boolean;
   isPlatformRunning: boolean;
+  runId?: string | null;
+  total?: number;
+  processed?: number;
+  succeeded?: number;
+  failed?: number;
+  skipped?: number;
+  uncertain?: number;
+  currentTask?: PlatformTaskReference | null;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+  terminalResult?: PlatformTerminalResult | null;
   phase?: 'idle' | 'running' | 'waiting-interval' | 'stopping' | 'completed' | 'failed' | string;
   status?: string;
   waitRemainingMs?: number;
-  nextTask?: PlatformSubmitTask | null;
-  task?: PlatformSubmitTask | null;
+  nextTask?: PlatformTaskReference | PlatformSubmitTask | null;
+  task?: PlatformTaskReference | PlatformSubmitTask | null;
   targetPlatformId?: string | null;
   reasonCode?: string | null;
   queueRevision?: number | null;
 }
 
 export interface PlatformSubmitState extends PlatformStatus {}
+
+export interface PlatformTaskReference {
+  sourcePlatformId: string;
+  filename: string;
+  targetPlatformId: string;
+}
+
+export interface PlatformTerminalResult {
+  ok: number;
+  fail: number;
+  skipped: number;
+  uncertain: number;
+  results: Array<{
+    task: PlatformTaskReference;
+    status: string;
+    publicationStatus?: string | null;
+    error?: string | null;
+  }>;
+}
+
+export interface PlatformTaskSnapshot extends PlatformStatus {
+  runId: string | null;
+  phase: string;
+  total: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  uncertain: number;
+  currentTask: PlatformTaskReference | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  terminalResult: PlatformTerminalResult | null;
+}
 
 export interface PlatformSubmitPlan {
   taskCount: number;

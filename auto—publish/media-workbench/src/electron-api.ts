@@ -1,4 +1,4 @@
-import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, FailedPublicationRetryPreview, FailedPublicationRetryResult, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, GenerationSubmissionHandoffPreview, GenerationSubmissionHandoffResult, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
+import { AiProviderClearResult, AiProviderConfigInput, AiProviderStatus, AiProviderTestResult, Article, ArticleAttentionItem, ArticleAttentionList, ArticleAttentionPreview, ArticleAttentionResolution, ArticleRemovalTransaction, ArticleReviewResult, ArticleReviewSelection, AuthState, ContentClient, ContentMaterial, ContentQuestion, ContentResearch, ContentTemplate, ContentTemplateCatalog, ContentSubmissionBatchInput, ContentSubmissionBatchPreview, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionCleanupPreview, ContentSubmissionCleanupResult, ContentSubmissionPlatform, Draft, DoubaoBatchMode, DoubaoBatchPreview, DoubaoBatchTask, DoubaoLoginState, DoubaoQueueState, FailedPublicationRetryPreview, FailedPublicationRetryResult, GeneratedContentArticle, GenerationBatch, GenerationBatchCancelPreview, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState, GenerationBatchTemplateSelection, GenerationSubmissionHandoffPreview, GenerationSubmissionHandoffResult, IpcResponse, MediaProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, PlatformProviderStatus, PlatformProviderTestResult, MediaResource, PlatformArticle, PlatformQueueData, PlatformStatus, PlatformSubmitState, PlatformTarget, PlatformSubmitPlan, PlatformSubmitResult, PlatformTaskSnapshot, PublicationHistoryRecord, PublicationHistorySummary, RealOrder, WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent, WorkspaceDataInvalidatedEvent, WorkspaceSelectionToken } from "./types";
 import { formatBeijingTime } from "./time-format";
 
 
@@ -36,9 +36,9 @@ interface DesktopConsolePlatforms {
   getQueue(): Promise<IpcResponse<unknown>>;
   buildSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
   submitSelectedPlan(input: PlatformSubmission | PlatformSubmission[] | { submissions: PlatformSubmission[]; autoTrash?: boolean }): Promise<IpcResponse<unknown>>;
-  pauseSubmit(): Promise<IpcResponse<unknown>>;
-  stopSubmit(): Promise<IpcResponse<unknown>>;
-  getState(): Promise<IpcResponse<PlatformStatus>>;
+  pauseSubmit(runId?: string | null): Promise<IpcResponse<unknown>>;
+  stopSubmit(runId?: string | null): Promise<IpcResponse<unknown>>;
+  getState(): Promise<IpcResponse<PlatformTaskSnapshot>>;
   onState?: (listener: (state: PlatformSubmitState) => void) => () => void;
 }
 
@@ -142,6 +142,14 @@ interface DesktopConsoleWorkspace {
 
 interface DesktopConsoleWorkspaceData {
   onInvalidated?: (listener: (event: WorkspaceDataInvalidatedEvent) => void) => () => void;
+}
+
+interface DesktopConsoleAuth {
+  getState(): Promise<IpcResponse<AuthState>>;
+  login(loginName: string, password: string): Promise<IpcResponse<AuthState>>;
+  refresh(): Promise<IpcResponse<AuthState>>;
+  logout(): Promise<IpcResponse<AuthState>>;
+  onStateChanged?: (listener: (state: AuthState) => void) => () => void;
 }
 
 interface DesktopConsoleArticleAttention {
@@ -279,6 +287,7 @@ interface DesktopConsole {
   orders: DesktopConsoleOrders;
   platforms: DesktopConsolePlatforms;
   content: DesktopConsoleContent;
+  auth: DesktopConsoleAuth;
   publication?: DesktopConsolePublication;
   workspaceData?: DesktopConsoleWorkspaceData;
   articleAttention?: DesktopConsoleArticleAttention;
@@ -359,6 +368,40 @@ function getIpcError(value: unknown, fallback: string): Error {
     });
   }
   return error;
+}
+
+export function createUnauthenticatedState(): AuthState {
+  return { authenticated: false, user: null, entitlements: [], errorCode: null };
+}
+
+export async function getAuthState(): Promise<AuthState> {
+  if (!isElectron() || !window.desktopConsole?.auth) return createUnauthenticatedState();
+  const result = await window.desktopConsole.auth.getState();
+  return result.ok && result.data ? result.data : { ...createUnauthenticatedState(), errorCode: result.error?.code || "AUTH_SERVICE_UNAVAILABLE" };
+}
+
+export async function login(loginName: string, password: string): Promise<AuthState> {
+  if (!isElectron() || !window.desktopConsole?.auth) throw new Error("桌面认证不可用");
+  const result = await window.desktopConsole.auth.login(loginName, password);
+  if (!result.ok || !result.data) throw Object.assign(new Error(result.error?.message || "登录失败"), { code: result.error?.code || "AUTH_SERVER_ERROR" });
+  return result.data;
+}
+
+export async function refreshAuth(): Promise<AuthState> {
+  if (!isElectron() || !window.desktopConsole?.auth) return createUnauthenticatedState();
+  const result = await window.desktopConsole.auth.refresh();
+  return result.ok && result.data ? result.data : createUnauthenticatedState();
+}
+
+export async function logout(): Promise<AuthState> {
+  if (!isElectron() || !window.desktopConsole?.auth) return createUnauthenticatedState();
+  const result = await window.desktopConsole.auth.logout();
+  return result.ok && result.data ? result.data : createUnauthenticatedState();
+}
+
+export function onAuthStateChanged(listener: (state: AuthState) => void): () => void {
+  if (!isElectron() || typeof window.desktopConsole?.auth?.onStateChanged !== "function") return () => {};
+  return window.desktopConsole.auth.onStateChanged(listener);
 }
 
 export async function getWorkspaceBootstrapState(): Promise<WorkspaceBootstrapState> {
@@ -1340,29 +1383,37 @@ export async function submitPlatformPlan(
   return { ok: 0, fail: 0, skipped: 0, results: [] };
 }
 
-export async function pausePlatformSubmit(): Promise<void> {
+export async function pausePlatformSubmit(runId?: string | null): Promise<void> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.platforms.pauseSubmit();
+    const result = await window.desktopConsole!.platforms.pauseSubmit(runId);
     if (!result.ok) throw getIpcError(result.error, "pausePlatformSubmit failed");
     return;
   }
 }
 
-export async function stopPlatformSubmit(): Promise<void> {
+export async function stopPlatformSubmit(runId?: string | null): Promise<void> {
   if (isElectron()) {
-    const result = await window.desktopConsole!.platforms.stopSubmit();
+    const result = await window.desktopConsole!.platforms.stopSubmit(runId);
     if (!result.ok) throw getIpcError(result.error, "stopPlatformSubmit failed");
     return;
   }
 }
 
-export async function getPlatformState(): Promise<PlatformStatus> {
+export async function getPlatformState(): Promise<PlatformTaskSnapshot> {
   if (isElectron()) {
     const result = await window.desktopConsole!.platforms.getState();
-    if (!result.ok) return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
-    return result.data || { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+    if (!result.ok) return createIdlePlatformTaskSnapshot();
+    return result.data || createIdlePlatformTaskSnapshot();
   }
-  return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
+  return createIdlePlatformTaskSnapshot();
+}
+
+function createIdlePlatformTaskSnapshot(): PlatformTaskSnapshot {
+  return {
+    runId: null, phase: "idle", total: 0, processed: 0, succeeded: 0, failed: 0, skipped: 0, uncertain: 0,
+    currentTask: null, startedAt: null, updatedAt: null, terminalResult: null,
+    isBatchRunning: false, isStopPending: false, isPlatformRunning: false, waitRemainingMs: 0,
+  };
 }
 
 export async function previewExport(input: ContentExportInput): Promise<ContentExportPreview> {

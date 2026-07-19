@@ -153,3 +153,24 @@ powershell -ExecutionPolicy Bypass -File scripts/create-alpha-smoke-workspace.ps
 The production renderer is the React build. Runtime files belong in `%USERPROFILE%\Documents\AutoPublish` (or the explicit workspace override). Queue scanning, preflight, and submission remain operator-confirmed actions; no exported GEO article is published automatically.
 
 The production renderer is the React build under `media-workbench/dist`. It runs preflight first, then shows a final confirmation; only that explicit confirmation invokes submission.
+
+## Application authentication and platform progress
+
+Application login is separate from each remote platform's browser/Cookie login.
+The main process authenticates against the fixed `https://auth.jiayubing.xyz`
+service and keeps the access token in memory; the encrypted refresh token is
+stored only through Electron `safeStorage`. The Renderer never receives either
+token and cannot replace the server URL.
+
+On a cold start the login screen is the only mounted product surface. Workspace
+bootstrap, customer directories, articles, queues, platform settings, AI
+configuration, and Worker services initialize only after authentication. The
+main-process business IPC boundary independently returns `AUTH_REQUIRED` when
+there is no valid session; hiding a button is not the security boundary.
+
+Platform submissions expose a main-process task snapshot rather than treating
+heartbeats as publish evidence. The snapshot contains `runId`, total/processed
+counts, result counters, current safe task reference, phase, wait countdown,
+timestamps, and a safe terminal summary. It never contains an absolute path,
+article body, Cookie, prompt, or complete remote response. The snapshot belongs
+to the execution UI and does not replace the publication ledger.

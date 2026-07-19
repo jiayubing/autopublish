@@ -1,0 +1,16 @@
+services:
+  autopublish-auth:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    expose:
+      - "3180"
+    networks:
+      - autopublish-internal
+
+networks:
+  autopublish-internal:
+    internal: true

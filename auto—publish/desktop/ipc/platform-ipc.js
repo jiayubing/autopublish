@@ -168,15 +168,15 @@ function registerPlatformIpc(deps) {
     });
   });
 
-  ipcMain.handle("platforms:pause-submit", function() {
+  ipcMain.handle("platforms:pause-submit", function(event, input) {
     return wrap(function() {
-      return taskService.pausePlatformSubmit();
+      return taskService.pausePlatformSubmit(input && input.runId);
     });
   });
 
-  ipcMain.handle("platforms:stop-submit", function() {
+  ipcMain.handle("platforms:stop-submit", function(event, input) {
     return wrap(function() {
-      return taskService.stopPlatformSubmit();
+      return taskService.stopPlatformSubmit(input && input.runId);
     });
   });
 

@@ -439,6 +439,20 @@ function createPlatformWorkbenchService(opts) {
       return new Promise(function(resolve) { setTimeout(resolve, ms); });
     };
 
+    function recordTaskResult(result, group) {
+      results.push(result);
+      if (group) group.results.push(result);
+      if (typeof opts.onTaskState === "function") {
+        opts.onTaskState({
+          phase: "task-finished",
+          task: safeTask(result && result.task),
+          status: result && result.status,
+          publicationStatus: result && result.publicationStatus,
+          errorCode: result && result.error
+        });
+      }
+    }
+
     function intervalFor(targetPlatformId) {
       var intervals = opts.intervalByTargetMs && typeof opts.intervalByTargetMs === "object" ? opts.intervalByTargetMs : {};
       var value = Number(intervals[targetPlatformId]);
@@ -476,7 +490,7 @@ function createPlatformWorkbenchService(opts) {
     for (var i = 0; i < tasks.length; i++) {
       var task;
       try { task = safeTask(tasks[i]); } catch (error) {
-        results.push({ task: {}, status: "failed", error: error.code || "SUBMISSION_INPUT_INVALID" });
+        recordTaskResult({ task: {}, status: "failed", error: error.code || "SUBMISSION_INPUT_INVALID" });
         continue;
       }
       var adapter = adapters[task.targetPlatformId];
@@ -525,8 +539,7 @@ function createPlatformWorkbenchService(opts) {
           result.publicationStatus = reference.status || "queued";
           result.error = sourceState.reasonCode;
           result.reasonCode = sourceState.reasonCode;
-          results.push(result);
-          group.results.push(result);
+          recordTaskResult(result, group);
           continue;
         }
 
@@ -538,8 +551,7 @@ function createPlatformWorkbenchService(opts) {
           result.status = "skipped";
           result.publicationStatus = "cancelled";
           result.error = "STOP_REQUESTED";
-          results.push(result);
-          group.results.push(result);
+          recordTaskResult(result, group);
           break;
         }
 
@@ -563,8 +575,7 @@ function createPlatformWorkbenchService(opts) {
             result.publicationStatus = "failed";
             result.error = loginOutcome.errorCode;
           }
-          results.push(result);
-          group.results.push(result);
+          recordTaskResult(result, group);
           if (adapter.closeSession && opts.closeAfterEach !== false) { try { adapter.closeSession(); } catch (_) {} }
           continue;
         }
@@ -575,8 +586,7 @@ function createPlatformWorkbenchService(opts) {
           result.status = "skipped";
           result.publicationStatus = "cancelled";
           result.error = "STOP_REQUESTED";
-          results.push(result);
-          group.results.push(result);
+          recordTaskResult(result, group);
           break;
         }
         if (isStopRequested(opts)) {
@@ -585,8 +595,7 @@ function createPlatformWorkbenchService(opts) {
           result.status = "skipped";
           result.publicationStatus = "cancelled";
           result.error = "STOP_REQUESTED";
-          results.push(result);
-          group.results.push(result);
+          recordTaskResult(result, group);
           break;
         }
 
@@ -598,8 +607,7 @@ function createPlatformWorkbenchService(opts) {
           result.publicationStatus = reference.status || "queued";
           result.error = latestSourceState.reasonCode;
           result.reasonCode = latestSourceState.reasonCode;
-          results.push(result);
-          group.results.push(result);
+          recordTaskResult(result, group);
           continue;
         }
 
@@ -644,13 +652,11 @@ function createPlatformWorkbenchService(opts) {
         if (outcome.remoteUrl) result.remoteUrl = outcome.remoteUrl;
         result.publicationId = submitting.publicationId;
         result.attemptId = submitting.attemptId;
-        results.push(result);
-        group.results.push(result);
+        recordTaskResult(result, group);
       } catch (error) {
         var failed = { task: task, status: isStopError(error) ? "skipped" : "failed", error: safeOutcomeError(error, "PLATFORM_SUBMISSION_FAILED"), publicationStatus: isStopError(error) ? "cancelled" : "failed" };
         if (isStopError(error)) break;
-        results.push(failed);
-        group.results.push(failed);
+        recordTaskResult(failed, group);
       } finally {
         if (adapter && adapter.closeSession && opts.closeAfterEach !== false) {
           try { adapter.closeSession(); } catch (_) {}

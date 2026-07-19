@@ -14,6 +14,9 @@ let platformSettingsService = null;
 let contentGenerationBatchService = null;
 let taskService = null;
 let storageMaintenanceService = null;
+let authService = null;
+let workspaceBootstrap = null;
+let authenticatedRuntimeReady = false;
 let runtimeDisposePromise = null;
 let quitPromise = null;
 let quitReady = false;
@@ -290,11 +293,12 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     contentGenerationBatchService: contentGenerationBatchService,
     runtimeDiagnosticsService: runtime.diagnosticsService,
     invalidateData: invalidateWorkspaceData,
-    getWorkspaceDataRevision: getWorkspaceDataRevision
+    getWorkspaceDataRevision: getWorkspaceDataRevision,
+    authService: authService
   });
   if (storageMaintenanceService) {
     require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
-      ipcMain: ipcMain,
+      ipcMain: createAuthenticatedIpcMain(),
       storageMaintenanceService: storageMaintenanceService
     });
   }
@@ -333,11 +337,49 @@ function initializeWorkspaceBootstrap() {
 
   const registerWorkspaceBootstrapIpc = require("./ipc/workspace-bootstrap-ipc").registerWorkspaceBootstrapIpc;
   registerWorkspaceBootstrapIpc({
-    ipcMain: ipcMain,
+    ipcMain: createAuthenticatedIpcMain(),
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService
   });
   return { service: workspaceBootstrapService, appRoot: appRoot, userDataPath: userDataPath, sessionDataPath: sessionDataPath };
+}
+
+function createAuthenticatedIpcMain() {
+  const registration = require("./ipc/register");
+  return typeof registration.createAuthenticatedIpcMain === "function"
+    ? registration.createAuthenticatedIpcMain(ipcMain, authService && authService.requireAuthenticated)
+    : ipcMain;
+}
+
+async function activateAuthenticatedRuntime() {
+  if (authenticatedRuntimeReady) return;
+  const workspace = initializeWorkspaceBootstrap();
+  workspaceBootstrap = workspace;
+  const bootstrapState = workspace.service.bootstrap();
+  if (bootstrapState && bootstrapState.state === "ready" &&
+    typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
+    initializeRuntime(bootstrapState, workspace.appRoot, workspace.userDataPath, workspace.sessionDataPath);
+    authenticatedRuntimeReady = true;
+  }
+}
+
+function initializeAuth() {
+  const createAuthService = require("./services/auth-service").createAuthService;
+  const registerAuthIpc = require("./ipc/auth-ipc").registerAuthIpc;
+  authService = createAuthService({
+    safeStorage: safeStorage,
+    userDataPath: app.getPath("userData")
+  });
+  registerAuthIpc({
+    ipcMain: ipcMain,
+    authService: authService,
+    sendToRenderer: sendToRenderer,
+    onAuthenticated: activateAuthenticatedRuntime
+  });
+  void authService.initialize().then(function(state) {
+    if (state && state.authenticated) return activateAuthenticatedRuntime();
+    return undefined;
+  }).catch(function() {});
 }
 
 function failStartup() {
@@ -350,12 +392,7 @@ function failStartup() {
 async function startApplication() {
   try {
     process.env.AUTO_PUBLISH_PACKAGED = app.isPackaged ? "1" : "0";
-    const workspace = initializeWorkspaceBootstrap();
-    const bootstrapState = workspace.service.bootstrap();
-    if (bootstrapState && bootstrapState.state === "ready" &&
-      typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
-      initializeRuntime(bootstrapState, workspace.appRoot, workspace.userDataPath, workspace.sessionDataPath);
-    }
+    initializeAuth();
     startupStatus = "ready";
     createMainWindow();
   } catch (_) {
