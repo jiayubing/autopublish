@@ -67,7 +67,7 @@ test('article attention actions produce visible publication/detail results', asy
     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'AI内容生成' }).click();
     await page.getByRole('button', { name: '历史文章' }).click();
-    await page.getByRole('tab', { name: '需处理' }).click();
+    await page.getByRole('tab', { name: '失败' }).click();
     await page.getByRole('button', { name: '打开发布详情' }).click();
     await page.getByRole('dialog', { name: '文章 失败后可重新投稿 的发布详情' }).waitFor({ state: 'visible' });
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);

@@ -6,7 +6,8 @@ import ArticleGenerationView from './content/ArticleGenerationView';
 import GeneratedArticleEditorPanel from './content/GeneratedArticleEditorPanel';
 import GeneratedArticlesView from './content/GeneratedArticlesView';
 import QuestionCollectionView from './content/QuestionCollectionView';
-import { ARTICLE_WORKFLOW_STAGES, type ArticleWorkflowStage } from '../article-workflow';
+import { type ArticleWorkflowStage } from '../article-workflow';
+import ArticleStageTabs from './content/ArticleStageTabs';
 import { ArticleAttentionProvider } from '../article-attention-store';
 
 type RefreshState = 'idle' | 'refreshing' | 'success' | 'error';
@@ -40,7 +41,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
   useEffect(() => {
     if (!attentionIntent) return;
     setTab('history');
-    setArticleStageFilter('attention');
+    setArticleStageFilter('failed');
     if (attentionIntent.clientId) setClientId(attentionIntent.clientId);
     onAttentionIntentConsumed?.();
   }, [attentionIntent, onAttentionIntentConsumed]);
@@ -163,7 +164,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     <div className="min-h-0 flex-1">
       {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} refreshToken={workspaceRefreshToken} onClientChange={handleClientChange} onRefresh={() => void refreshWorkspaceSources()} />}
       {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} refreshToken={workspaceRefreshToken} batchRefreshToken={batchRefreshToken} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={setArticle} onRefreshArticles={refreshArticles} onRefreshBatchState={refreshBatchState} />}
-      {tab === 'history' && <ArticleAttentionProvider clientId={clientId}><div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3"><div role="tablist" aria-label="文章流程阶段" className="flex shrink-0 flex-wrap gap-1 rounded-md border border-slate-200 bg-white p-1">{ARTICLE_WORKFLOW_STAGES.map((stage) => <button key={stage.id} type="button" role="tab" aria-selected={articleStageFilter === stage.id} onClick={() => setArticleStageFilter(stage.id)} className={`rounded px-2.5 py-1.5 text-xs font-semibold ${articleStageFilter === stage.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{stage.label}</button>)}</div><div className="flex min-h-0 min-w-0 flex-1 gap-3"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} refreshToken={articleRefreshToken} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onRefreshArticles={refreshArticles} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} onSaved={(saved) => { setHistoryEditingArticle(saved); refreshArticles(); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div></ArticleAttentionProvider>}
+      {tab === 'history' && <ArticleAttentionProvider clientId={clientId}><div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} /><div className="flex min-h-0 min-w-0 flex-1 gap-3"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} refreshToken={articleRefreshToken} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onRefreshArticles={refreshArticles} onStageFilterChange={setArticleStageFilter} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} onSaved={(saved) => { setHistoryEditingArticle(saved); refreshArticles(); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div></ArticleAttentionProvider>}
     </div>
   </div>;
 }

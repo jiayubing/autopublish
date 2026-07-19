@@ -32,6 +32,10 @@ const focusedPlanTests = [
   "tests/renderer-platform-queue-refresh-lifecycle.test.js",
   "tests/article-workflow.test.js",
   "tests/renderer-article-management-flow.test.js",
+  "tests/published-article-trash.test.js",
+  "tests/article-management-filter-model.test.js",
+  "tests/renderer-article-management-filters.test.js",
+  "tests/renderer-published-trash-flow.test.js",
   "tests/article-attention-policy.test.js",
   "tests/article-attention-invalidation.test.js",
   "tests/renderer-article-attention-actions.test.js"

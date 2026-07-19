@@ -5,8 +5,8 @@ import type {
   PublicationHistoryRecord,
 } from './types';
 
-export type ArticleWorkflowStage = 'pending_review' | 'pending_submission' | 'submitting' | 'attention' | 'completed' | 'trash';
-export type ArticleWorkflowAction = 'review' | 'queue' | 'view_progress' | 'open_attention' | 'view_publication' | 'restore';
+export type ArticleWorkflowStage = 'pending_review' | 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
+export type ArticleWorkflowAction = 'review' | 'queue' | 'view_progress' | 'open_attention' | 'view_publication' | 'trash' | 'restore';
 
 export interface ArticleWorkflowAttention {
   articleId?: string | null;
@@ -32,16 +32,57 @@ export interface ArticleWorkflow {
 }
 
 const ACTIVE_PUBLICATION_STATUSES = new Set(['queued', 'submitting', 'submitted']);
-const ATTENTION_PUBLICATION_STATUSES = new Set(['failed', 'uncertain']);
+const FAILURE_PUBLICATION_STATUSES = new Set(['failed', 'uncertain']);
 const ACTIVE_BATCH_STATUSES = new Set(['queued', 'submitting', 'submitted', 'reserving']);
-const ATTENTION_BATCH_STATUSES = new Set(['failed', 'conflict', 'uncertain']);
+const FAILURE_BATCH_STATUSES = new Set(['failed', 'conflict', 'uncertain']);
+const TERMINAL_PUBLICATION_STATUSES = new Set(['published', 'cancelled']);
 
 function hasArticleAttention(articleId: string, attention: ArticleWorkflowAttention[]): boolean {
   return attention.some((item) => item.articleId === articleId || item.archiveError != null);
 }
 
 function articleBatchStatuses(articleId: string, batches: ContentSubmissionBatchRecord[]): string[] {
-  return batches.flatMap((batch) => batch.items.filter((item) => item.articleId === articleId).map((item) => item.status));
+  return batches.flatMap((batch) => batch.items.filter((item) => item.articleId === articleId).map((item) => String(item.status)));
+}
+
+function managementFacts(
+  article: GeneratedContentArticle,
+  publications: PublicationHistoryRecord[],
+  batches: ContentSubmissionBatchRecord[],
+  transactions: ArticleRemovalTransaction[],
+  attention: ArticleWorkflowAttention[],
+) {
+  const articleId = article.id;
+  const articleStatus = String(article.status || '');
+  const publicationStatuses = publications.filter((record) => record.articleId === articleId).map((record) => String(record.status));
+  const batchStatuses = articleBatchStatuses(articleId, batches);
+  const isTrash = articleStatus === 'trashed' || articleStatus === 'trash';
+  const hasActive = publicationStatuses.some((status) => ACTIVE_PUBLICATION_STATUSES.has(status)) || batchStatuses.some((status) => ACTIVE_BATCH_STATUSES.has(status));
+  const hasFailure = articleStatus === 'failed' || articleStatus === 'uncertain' || hasArticleAttention(articleId, attention) ||
+    transactions.some((transaction) => transaction.status === 'needs_repair' || transaction.phase === 'needs_repair') ||
+    publicationStatuses.some((status) => FAILURE_PUBLICATION_STATUSES.has(status)) || batchStatuses.some((status) => FAILURE_BATCH_STATUSES.has(status));
+  const hasUncertain = publicationStatuses.includes('uncertain') || batchStatuses.includes('uncertain');
+  const combinedStatuses = [...publicationStatuses, ...batchStatuses.filter((status) => ['published', 'cancelled'].includes(status))];
+  const hasPublished = combinedStatuses.includes('published');
+  const allPublicationTargetsTerminal = combinedStatuses.length > 0 && combinedStatuses.every((status) => TERMINAL_PUBLICATION_STATUSES.has(status));
+  let stage: ArticleWorkflowStage;
+  if (isTrash) stage = 'trash';
+  else if (hasFailure) stage = 'failed';
+  else if (hasActive) stage = 'queued';
+  else if (hasPublished && allPublicationTargetsTerminal) stage = 'published';
+  else if (articleStatus === 'generated') stage = 'pending_review';
+  else stage = 'pending_submission';
+  return { articleStatus, publicationStatuses, batchStatuses, isTrash, hasActive, hasFailure, hasUncertain, hasPublished, stage };
+}
+
+export function deriveArticleManagementStatus(
+  article: GeneratedContentArticle,
+  publications: PublicationHistoryRecord[] = [],
+  batches: ContentSubmissionBatchRecord[] = [],
+  transactions: ArticleRemovalTransaction[] = [],
+  attention: ArticleWorkflowAttention[] = [],
+): ArticleWorkflowStage {
+  return managementFacts(article, publications, batches, transactions, attention).stage;
 }
 
 export function deriveArticleWorkflow(
@@ -51,18 +92,8 @@ export function deriveArticleWorkflow(
   transactions: ArticleRemovalTransaction[] = [],
   attention: ArticleWorkflowAttention[] = [],
 ): ArticleWorkflow {
-  const articleId = article.id;
-  const articleStatus = String(article.status || '');
-  const publicationStatuses = publications.filter((record) => record.articleId === articleId).map((record) => String(record.status));
-  const batchStatuses = articleBatchStatuses(articleId, batches);
-  const hasRepairTransaction = transactions.some((transaction) => transaction.status === 'needs_repair' || transaction.phase === 'needs_repair');
-  const hasAttention = articleStatus === 'failed' || articleStatus === 'uncertain' || hasArticleAttention(articleId, attention) ||
-    hasRepairTransaction || publicationStatuses.some((status) => ATTENTION_PUBLICATION_STATUSES.has(status)) || batchStatuses.some((status) => ATTENTION_BATCH_STATUSES.has(status));
-  const isActive = publicationStatuses.some((status) => ACTIVE_PUBLICATION_STATUSES.has(status)) || batchStatuses.some((status) => ACTIVE_BATCH_STATUSES.has(status));
-  const hasPublished = publicationStatuses.includes('published');
-  const isTrash = articleStatus === 'trashed' || articleStatus === 'trash';
-
-  if (isTrash) {
+  const facts = managementFacts(article, publications, batches, transactions, attention);
+  if (facts.stage === 'trash') {
     return {
       stage: 'trash',
       primaryAction: 'restore',
@@ -70,23 +101,31 @@ export function deriveArticleWorkflow(
       locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: false },
     };
   }
-  if (hasAttention) {
+  if (facts.stage === 'failed') {
     return {
-      stage: 'attention',
+      stage: 'failed',
       primaryAction: 'open_attention',
-      allowedBulkActions: ['open_attention'],
-      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: false },
+      allowedBulkActions: facts.hasUncertain ? ['open_attention'] : ['open_attention', 'trash'],
+      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: !facts.hasActive && !facts.hasUncertain },
     };
   }
-  if (isActive) {
+  if (facts.stage === 'queued') {
     return {
-      stage: 'submitting',
+      stage: 'queued',
       primaryAction: 'view_progress',
-      allowedBulkActions: batchStatuses.includes('queued') ? ['view_progress'] : [],
-      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: batchStatuses.includes('queued'), canTrash: false },
+      allowedBulkActions: ['view_progress'],
+      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: facts.batchStatuses.includes('queued'), canTrash: false },
     };
   }
-  if (articleStatus === 'generated') {
+  if (facts.stage === 'published') {
+    return {
+      stage: 'published',
+      primaryAction: 'view_publication',
+      allowedBulkActions: ['view_publication', 'trash'],
+      locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: true },
+    };
+  }
+  if (facts.stage === 'pending_review') {
     return {
       stage: 'pending_review',
       primaryAction: 'review',
@@ -94,29 +133,19 @@ export function deriveArticleWorkflow(
       locks: { canEdit: true, canReview: true, canQueue: false, canCancel: false, canTrash: true },
     };
   }
-  if (!hasPublished && (articleStatus === 'saved' || articleStatus === '')) {
-    return {
-      stage: 'pending_submission',
-      primaryAction: 'queue',
-      allowedBulkActions: ['queue'],
-      locks: { canEdit: true, canReview: false, canQueue: true, canCancel: false, canTrash: true },
-    };
-  }
   return {
-    stage: 'completed',
-    primaryAction: 'view_publication',
-    allowedBulkActions: ['view_publication'],
-    locks: { canEdit: false, canReview: false, canQueue: false, canCancel: false, canTrash: false },
+    stage: 'pending_submission',
+    primaryAction: 'queue',
+    allowedBulkActions: ['queue'],
+    locks: { canEdit: true, canReview: false, canQueue: true, canCancel: false, canTrash: true },
   };
 }
 
-export const ARTICLE_WORKFLOW_STAGES: Array<{ id: ArticleWorkflowStage | 'all'; label: string }> = [
-  { id: 'all', label: '全部' },
+export const ARTICLE_WORKFLOW_STAGES: Array<{ id: ArticleWorkflowStage; label: string }> = [
   { id: 'pending_review', label: '待审核' },
   { id: 'pending_submission', label: '待投稿' },
-  { id: 'submitting', label: '投稿中' },
-  { id: 'attention', label: '需处理' },
-  { id: 'completed', label: '已完成' },
+  { id: 'queued', label: '已入队' },
+  { id: 'published', label: '已发布' },
+  { id: 'failed', label: '失败' },
   { id: 'trash', label: '回收站' },
 ];
-

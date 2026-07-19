@@ -35,7 +35,7 @@ interface DesktopConsoleOrders {
 interface DesktopConsolePlatforms {
   getQueue(): Promise<IpcResponse<unknown>>;
   buildSelectedPlan(input: PlatformSubmission): Promise<IpcResponse<unknown>>;
-  submitSelectedPlan(input: PlatformSubmission | PlatformSubmission[]): Promise<IpcResponse<unknown>>;
+  submitSelectedPlan(input: PlatformSubmission | PlatformSubmission[] | { submissions: PlatformSubmission[]; autoTrash?: boolean }): Promise<IpcResponse<unknown>>;
   pauseSubmit(): Promise<IpcResponse<unknown>>;
   stopSubmit(): Promise<IpcResponse<unknown>>;
   getState(): Promise<IpcResponse<PlatformStatus>>;
@@ -215,6 +215,9 @@ export interface ArticleTrashPreview {
   articleCount: number;
   queuedToCancel: ArticleTrashImpactItem[];
   failedToClean: ArticleTrashImpactItem[];
+  publishedToClean?: ArticleTrashImpactItem[];
+  cancelledToClean?: ArticleTrashImpactItem[];
+  terminalCleanupCount?: number;
   blockedItems: ArticleTrashImpactItem[];
   canCommit: boolean;
   selections?: ArticleReviewSelection[];
@@ -247,7 +250,7 @@ export interface ArticleTrashResult {
 }
 export interface TrashedArticleQueueResidueItem extends ArticleTrashImpactItem {
   sourceArticleState: 'trashed';
-  repairAction?: 'cancel' | 'cleanup' | null;
+  repairAction?: 'cancel' | 'cleanup' | 'cleanupPublishedLocal' | 'cleanupCancelledLocal' | null;
 }
 export interface TrashedArticleQueueResiduePreview {
   items: TrashedArticleQueueResidueItem[];
@@ -1317,7 +1320,8 @@ export async function buildPlatformPlan(input: {
 }
 
 export async function submitPlatformPlan(
-  plan: PlatformSubmitPlan
+  plan: PlatformSubmitPlan,
+  options: { autoTrash?: boolean } = {}
 ): Promise<PlatformSubmitResult> {
   if (isElectron()) {
     const submissions = new Map<string, PlatformSubmission>();
@@ -1327,7 +1331,7 @@ export async function submitPlatformPlan(
       if (!submission.targetPlatformIds.includes(task.targetPlatformId)) submission.targetPlatformIds.push(task.targetPlatformId);
       submissions.set(key, submission);
     });
-    const result = await window.desktopConsole!.platforms.submitSelectedPlan([...submissions.values()]);
+    const result = await window.desktopConsole!.platforms.submitSelectedPlan({ submissions: [...submissions.values()], autoTrash: options.autoTrash === true });
     if (!result.ok) throw getIpcError(result.error, 'submitPlatformPlan failed');
     return result.data as PlatformSubmitResult;
   }

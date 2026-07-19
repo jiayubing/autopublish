@@ -24,20 +24,22 @@ function createSubmissionBatchStore(options) {
     if (values.some((status) => status === "failed")) return "failed";
     if (values.length && values.every((status) => status === "cancelled")) return "cancelled";
     if (values.some((status) => status === "submitted")) return "completed";
-    if (values.length && values.every((status) => ["published", "cancelled", "failed-cleaned", "skipped", "excluded"].includes(status))) return "completed";
+    if (values.length && values.every((status) => ["published", "published-cleaned", "cancelled", "cancelled-cleaned", "failed-cleaned", "skipped", "excluded"].includes(status))) return "completed";
     return "queued";
   }
   const transitions = {
-    queued: new Set(["reserving", "submitting", "submitted", "published", "uncertain", "cancelled", "failed", "failed-cleaned", "skipped"]),
-    reserving: new Set(["queued", "submitting", "cancelled", "failed", "failed-cleaned", "skipped"]),
+    queued: new Set(["reserving", "submitting", "submitted", "published", "uncertain", "cancelled", "failed", "skipped"]),
+    reserving: new Set(["queued", "submitting", "cancelled", "failed", "skipped"]),
     submitting: new Set(["submitted", "published", "failed", "uncertain"]),
     submitted: new Set(["published", "failed", "uncertain"]),
-    published: new Set([]),
+    published: new Set(["published-cleaned"]),
     failed: new Set(["failed-cleaned"]),
     uncertain: new Set([]),
-    cancelled: new Set([]),
+    cancelled: new Set(["cancelled-cleaned"]),
     skipped: new Set([]),
-    "failed-cleaned": new Set([])
+    "failed-cleaned": new Set([]),
+    "published-cleaned": new Set([]),
+    "cancelled-cleaned": new Set([])
   };
   function save(batch) {
     const file = filename(batch.id);

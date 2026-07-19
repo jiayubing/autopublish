@@ -7,11 +7,12 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, 'media-workbench/src', file), 'utf8');
 
 describe('renderer article management workflow seam', () => {
-  it('exposes visible stage tabs and an attention entry without replacing the existing editor flow', () => {
+  it('exposes visible stage tabs and a failure entry without replacing the existing editor flow', () => {
     const content = read('components/ContentWorkbench.tsx');
     const list = read('components/content/GeneratedArticlesView.tsx');
-    assert.match(content, /文章流程阶段/);
-    assert.match(content, /role="tab"/);
+    const tabs = read('components/content/ArticleStageTabs.tsx');
+    assert.match(tabs, /文章流程阶段/);
+    assert.match(tabs, /role="tab"/);
     assert.match(content, /articleStageFilter/);
     assert.match(list, /deriveArticleWorkflow/);
     assert.match(list, /打开需处理/);

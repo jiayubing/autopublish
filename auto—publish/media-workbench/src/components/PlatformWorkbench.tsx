@@ -62,6 +62,9 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   );
 
   const [isConfirming, setIsConfirming] = useState(false);
+  const [autoTrashRequested, setAutoTrashRequested] = useState(() => {
+    try { return window.localStorage.getItem("auto-publish:auto-trash-after-publish") === "true"; } catch (_) { return false; }
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [submitResult, setSubmitResult] =
@@ -74,6 +77,10 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const [repairingResidue, setRepairingResidue] = useState(false);
   const [residuePhase, setResiduePhase] = useState<"idle" | "checking" | "cleaning">("idle");
   const [residueFeedback, setResidueFeedback] = useState<{ kind: "status" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("auto-publish:auto-trash-after-publish", String(autoTrashRequested)); } catch (_) {}
+  }, [autoTrashRequested]);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set()
@@ -282,7 +289,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
         platformIds: [...selectedPlatformIds],
       });
       setSubmitStatus(`正在提交 ${plan.taskCount} 个任务，请稍候...`);
-      const result = await submitPlatformPlan(plan);
+      const result = await submitPlatformPlan(plan, { autoTrash: autoTrashRequested });
       setSubmitStatus("");
       setSubmitResult(result);
       setShowResult(true);
@@ -695,6 +702,11 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                   {selectedHepan && publishIntervalSeconds === 0 && <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">0 秒不增加等待，但存在河畔频率限制风险。</p>}
                 </div>
 
+                <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                  <input type="checkbox" checked={autoTrashRequested} onChange={(event) => setAutoTrashRequested(event.target.checked)} disabled={isSubmitting} className="mt-0.5" />
+                  <span><strong>全部目标发布成功后自动移入回收站</strong><span className="mt-1 block text-slate-500">默认关闭；远端已发布内容不会撤回，发布记录和标题快照会保留。失败、待确认或本地归档失败时不会自动回收。</span></span>
+                </label>
+
                 {!canSubmit && (
                   <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 flex items-start space-x-2">
                     <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -788,6 +800,9 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                   </div>
                 </div>
                 {submitResult.archiveSummary && submitResult.archiveSummary.failed > 0 && <div role="status" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">远端已发布，本地归档待处理：{submitResult.archiveSummary.failed} 项。队列中的这些文章已禁止再次远端投稿。</div>}
+                {submitResult.trashDisposition === "offer_trash" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布 {submitResult.trashSummary?.offeredCount || resultOk} 篇，可移入回收站。<button type="button" onClick={onOpenArticleManagement} className="ml-2 rounded border border-emerald-300 px-2 py-1 font-semibold">打开文章管理</button></div>}
+                {submitResult.trashDisposition === "auto_trash_blocked" && <div role="alert" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">自动回收未执行：存在失败、待确认、活动投稿或本地归档待处理项。远端已发布结果保持不变，可稍后从文章管理手动回收。</div>}
+                {submitResult.trashDisposition === "auto_trash_requested" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布目标全部满足条件，文章本地副本已按确认策略移入回收站；发布记录继续保留。</div>}
 
                 <div className="max-h-60 overflow-y-auto space-y-1.5">
                   {submitResult.results.map((r, i) => (

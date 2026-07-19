@@ -386,7 +386,7 @@ export interface ArticleRemovalTransaction {
   articleCursor?: number;
 }
 export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
-export type ContentSubmissionItemStatus = 'excluded' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'failed-cleaned' | 'skipped' | 'cancelled' | string;
+export type ContentSubmissionItemStatus = 'excluded' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'failed-cleaned' | 'published-cleaned' | 'cancelled' | 'cancelled-cleaned' | 'skipped' | string;
 export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: ContentSubmissionItemStatus; contentHash: string; filename?: string; filePath?: string; sidecarPath?: string; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; reasonCode?: string | null; reconciledStatus?: string; unchanged?: boolean; canCancel?: boolean; canCleanup?: boolean; submissionBatchId?: string; }
 export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; alreadyQueuedCount?: number; blockedPublishedCount?: number; blockedUncertainCount?: number; conflictCount: number; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
@@ -538,6 +538,8 @@ export interface PlatformSubmitResult {
     succeeded: number;
     failed: number;
   };
+  trashDisposition?: 'keep_local' | 'offer_trash' | 'auto_trash_requested' | 'auto_trash_blocked' | string;
+  trashSummary?: { offeredCount?: number; requestedCount?: number; movedCount?: number; blockedCount?: number; failedCount?: number };
 }
 
 export interface PlatformTaskResult {

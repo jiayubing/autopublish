@@ -42,6 +42,53 @@ function registerPlatformIpc(deps) {
     return { taskCount: tasks.length, tasks: tasks };
   }
 
+  function submissionValues(input) {
+    if (Array.isArray(input)) return input;
+    if (input && Array.isArray(input.submissions)) return input.submissions;
+    return [input];
+  }
+
+  async function applyPostPublishDisposition(data, plan, requested) {
+    var results = data && Array.isArray(data.results) ? data.results : [];
+    var summary = { offeredCount: 0, requestedCount: 0, movedCount: 0, blockedCount: 0, failedCount: 0 };
+    if (!results.length) return Object.assign(data, { trashDisposition: "keep_local", trashSummary: summary });
+    if (!deps.aiContentService || typeof deps.aiContentService.previewArticleRemovalImpact !== "function" || typeof deps.aiContentService.trashArticles !== "function") {
+      return Object.assign(data, { trashDisposition: "auto_trash_blocked", trashSummary: Object.assign(summary, { blockedCount: published.length }) });
+    }
+    var groups = new Map();
+    results.forEach(function(item) {
+      var task = item.task || {};
+      var key = task.sourcePlatformId + "\0" + task.filename;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    for (var groupItems of groups.values()) {
+      var task = groupItems[0].task || {};
+      var hasPublished = groupItems.some(function(item) { return item.publicationStatus === "published"; });
+      var complete = groupItems.length > 0 && groupItems.every(function(item) { return item.publicationStatus === "published" && !item.archiveError; });
+      if (!hasPublished) continue;
+      if (!complete) { if (requested) summary.blockedCount += 1; continue; }
+      summary.offeredCount += 1;
+      if (!requested) continue;
+      summary.requestedCount += 1;
+      var metadata;
+      try { metadata = service.readSubmissionMetadata(task.sourcePlatformId, task.filename); } catch (_) { metadata = null; }
+      var source = metadata && metadata.data;
+      var selection = source && source.clientId && (source.generatedArticleId || source.articleId)
+        ? { clientId: source.clientId, articleId: source.generatedArticleId || source.articleId }
+        : null;
+      if (!selection) { summary.blockedCount += 1; continue; }
+      try {
+        var preview = deps.aiContentService.previewArticleRemovalImpact({ selections: [selection] });
+        if (!preview || preview.canCommit !== true) { summary.blockedCount += 1; continue; }
+        var committed = deps.aiContentService.trashArticles({ selections: [selection], token: preview.token, confirmed: true });
+        if (committed && committed.status === "committed") summary.movedCount += 1;
+        else summary.blockedCount += 1;
+      } catch (_) { summary.failedCount += 1; }
+    }
+    return Object.assign(data, { trashDisposition: summary.requestedCount > 0 && summary.movedCount === summary.requestedCount && summary.blockedCount === 0 && summary.failedCount === 0 ? "auto_trash_requested" : "auto_trash_blocked", trashSummary: summary });
+  }
+
   ipcMain.handle("platforms:get-queue", function() {
     return wrap(async function() {
       var nonMedia = loadedPlatforms.filter(function(platform) {
@@ -99,7 +146,8 @@ function registerPlatformIpc(deps) {
   ipcMain.handle("platforms:submit-selected-plan", function(event, input) {
     return wrap(async function() {
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
-      var plan = Array.isArray(input) ? buildPlanFromSubmissions(input) : buildPlanFromSubmission(input);
+      var plan = buildPlanFromSubmissions(submissionValues(input));
+      var autoTrashRequested = !Array.isArray(input) && input && input.autoTrash === true;
       // Renderer selections are resolved and validated in the main process.
       // The worker receives only source/target references; never forward the
       // resolved absolute path or parsed article content.
@@ -116,7 +164,7 @@ function registerPlatformIpc(deps) {
       }
       var data = workerResult.data || { ok: 0, fail: 0, skipped: 0, results: [] };
       data.skipped = data.skipped || data.pending || 0;
-      return data;
+      return applyPostPublishDisposition(data, plan, autoTrashRequested);
     });
   });
 

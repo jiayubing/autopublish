@@ -347,7 +347,8 @@ function createContentSubmissionService(opts) {
         const latest = latestAttempt(record);
         const sidecar = readSidecar(item);
         const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
-        const status = record ? record.status : item.publicationStatus || item.status;
+        const cleanedStatuses = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"];
+        const status = cleanedStatuses.includes(item.status) ? item.status : record ? record.status : item.publicationStatus || item.status;
         if (record && (record.titleSnapshot === undefined || record.titleSnapshot === null) && typeof publicationLedger.ensureTitleSnapshot === "function") {
           try {
             const sourceArticle = store.getArticle(batch.clientId, item.articleId);
@@ -404,6 +405,8 @@ function createContentSubmissionService(opts) {
     }
     const queuedToCancel = [];
     const failedToClean = [];
+    const publishedToClean = [];
+    const cancelledToClean = [];
     const blockedItems = [];
     const publicItems = entries.map(function(entry) {
       const value = entry.safe;
@@ -421,8 +424,15 @@ function createContentSubmissionService(opts) {
           if (checked.allowed) failedToClean.push(Object.assign({}, value, { action: "cleanup", evaluationFingerprint: checked.bindingFingerprint }));
           else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
         }
-      } else if (value.status === "published" && value.batchId) {
-        blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_QUEUE_STATUS_CONFLICT" }));
+      } else if (["published", "cancelled"].includes(value.status) && value.batchId) {
+        const action = value.status === "published" ? "cleanupPublishedLocal" : "cleanupCancelledLocal";
+        if (value.publicationId && value.attemptId) {
+          const checked = evaluateItemAction(Object.assign({}, value, { action: action }));
+          if (checked.allowed) {
+            const target = Object.assign({}, value, { action: action, evaluationFingerprint: checked.bindingFingerprint });
+            (value.status === "published" ? publishedToClean : cancelledToClean).push(target);
+          } else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
+        } else blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_IDENTITY_CONFLICT" }));
       }
       return Object.assign({}, value, { sourceArticleState: "active" });
     });
@@ -432,9 +442,14 @@ function createContentSubmissionService(opts) {
       items: publicItems,
       queuedToCancel: queuedToCancel,
       failedToClean: failedToClean,
+      publishedToClean: publishedToClean,
+      cancelledToClean: cancelledToClean,
       blockedItems: blockedItems,
       queuedToCancelCount: queuedToCancel.length,
       failedToCleanCount: failedToClean.length,
+      publishedToCleanCount: publishedToClean.length,
+      cancelledToCleanCount: cancelledToClean.length,
+      terminalCleanupCount: failedToClean.length + publishedToClean.length + cancelledToClean.length,
       canCommit: blockedItems.length === 0
     };
   }
@@ -482,7 +497,7 @@ function createContentSubmissionService(opts) {
   }
 
   function evaluateItemAction(action) {
-    if (!action || typeof action !== "object" || !["cancel", "cleanup"].includes(action.action)) {
+    if (!action || typeof action !== "object" || !["cancel", "cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action)) {
       return { allowed: false, action: action && action.action || null, reasonCode: "SUBMISSION_ACTION_INVALID", resolvedState: null, bindingFingerprint: null, entry: null };
     }
     const entry = locateArticleSubmissionItem(action);
@@ -491,7 +506,7 @@ function createContentSubmissionService(opts) {
     if (action.evaluationFingerprint && action.evaluationFingerprint !== currentFingerprint) {
       return evaluation(action, entry, false, "SUBMISSION_ACTION_STALE");
     }
-    if (!["cancelled", "failed-cleaned"].includes(entry.safe.status) && !["intact", "both_absent"].includes(entry.safe.pairState)) {
+    if (!["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) && !["intact", "both_absent", "main_absent", "sidecar_absent"].includes(entry.safe.pairState)) {
       const reason = entry.safe.pairState === "identity_conflict" ? "SUBMISSION_IDENTITY_CONFLICT"
         : entry.safe.pairState === "content_changed" ? "SUBMISSION_CONTENT_CHANGED" : "SUBMISSION_QUEUE_CHANGED";
       return evaluation(action, entry, false, reason);
@@ -499,7 +514,10 @@ function createContentSubmissionService(opts) {
     if (entry.safe.pairState === "both_absent" && entry.safe.identityMatched !== true) {
       return evaluation(action, entry, false, "SUBMISSION_IDENTITY_CONFLICT");
     }
-    if (["cancelled", "failed-cleaned"].includes(entry.safe.status)) return evaluation(action, entry, true, null);
+    if (["main_absent", "sidecar_absent"].includes(entry.safe.pairState) && entry.safe.identityMatched !== true) {
+      return evaluation(action, entry, false, "SUBMISSION_IDENTITY_CONFLICT");
+    }
+    if (["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) || entry.safe.status === "cancelled" && action.action === "cancel") return evaluation(action, entry, true, null);
 
     if (action.action === "cancel") {
       if (entry.safe.status !== "queued") return evaluation(action, entry, false, entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_QUEUED" : "ARTICLE_SUBMISSION_ACTIVE");
@@ -510,11 +528,14 @@ function createContentSubmissionService(opts) {
       return evaluation(action, entry, true, null);
     }
 
-    if (entry.safe.status !== "failed") return evaluation(action, entry, false, ["queued", "submitting", "submitted", "uncertain"].includes(entry.safe.status) ? "ARTICLE_SUBMISSION_ACTIVE" : "PUBLICATION_STATUS_NOT_FAILED");
+    const localCleanupAction = ["cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action);
+    if (!localCleanupAction) return evaluation(action, entry, false, "SUBMISSION_ACTION_INVALID");
+    const expectedStatus = action.action === "cleanup" ? "failed" : action.action === "cleanupPublishedLocal" ? "published" : "cancelled";
+    if (entry.safe.status !== expectedStatus) return evaluation(action, entry, false, ["queued", "submitting", "submitted", "uncertain"].includes(entry.safe.status) ? "ARTICLE_SUBMISSION_ACTIVE" : "PUBLICATION_STATUS_NOT_FAILED");
     if (entry.record) {
-      if (entry.record.status !== "failed") return evaluation(action, entry, false, "PUBLICATION_STATUS_NOT_FAILED");
-      const historicalAttempt = Array.isArray(entry.record.attempts) && entry.record.attempts.find(function(attempt) { return attempt.attemptId === action.attemptId && attempt.status === "failed"; });
-      if (!historicalAttempt) return evaluation(action, entry, false, "PUBLICATION_ATTEMPT_NOT_FAILED");
+      if (entry.record.status !== expectedStatus) return evaluation(action, entry, false, action.action === "cleanup" ? "PUBLICATION_STATUS_NOT_FAILED" : "PUBLICATION_ATTEMPT_MISMATCH");
+      const historicalAttempt = Array.isArray(entry.record.attempts) && entry.record.attempts.find(function(attempt) { return attempt.attemptId === action.attemptId && attempt.status === expectedStatus; });
+      if (!historicalAttempt) return evaluation(action, entry, false, "PUBLICATION_ATTEMPT_MISMATCH");
     } else if (entry.safe.publicationId) {
       return evaluation(action, entry, false, "PUBLICATION_RECORD_MISSING");
     }
@@ -524,7 +545,7 @@ function createContentSubmissionService(opts) {
   function applyItemAction(action, nextStatus, reasonCode) {
     const entry = locateArticleSubmissionItem(action);
     if (!entry || !entry.item || !entry.batch) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item is unavailable");
-    if (entry.safe.status === nextStatus || entry.safe.status === "failed-cleaned" || entry.safe.status === "cancelled") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: [], domainHandled: true };
+    if (entry.safe.status === nextStatus || ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) || entry.safe.status === "cancelled" && action.action === "cancel") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: [], domainHandled: true };
     const checked = evaluateItemAction(action);
     if (!checked.allowed) throw batchError(checked.reasonCode || "SUBMISSION_QUEUE_CHANGED", "Submission item action is no longer valid");
     if (action.evaluationFingerprint && checked.bindingFingerprint !== action.evaluationFingerprint) throw batchError("SUBMISSION_ACTION_STALE", "Submission item action is stale");
@@ -534,9 +555,12 @@ function createContentSubmissionService(opts) {
     try { if (fs.existsSync(entry.item.sidecarPath)) originalSidecar = fs.readFileSync(entry.item.sidecarPath); } catch (_) {}
     try {
       if (action.action === "cancel" && entry.record) cancelReservation(publicationLedger, { publicationId: action.publicationId, attemptId: action.attemptId }, reasonCode);
+      if (["cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action) && entry.record && entry.item.status !== entry.record.status) {
+        batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: entry.record.status, publicationStatus: entry.record.status, reasonCode: "SUBMISSION_STATUS_RECONCILED" });
+      }
       const physicalFilesAlreadyAbsent = entry.safe.pairState === "both_absent";
       if (!physicalFilesAlreadyAbsent) removeSubmissionPairStrict(entry.item.filePath, entry.item.sidecarPath);
-      batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? nextStatus === "failed-cleaned" ? "failed" : nextStatus : undefined, reasonCode: reasonCode });
+      batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? entry.record.status : undefined, reasonCode: reasonCode });
       if (physicalFilesAlreadyAbsent) {
         notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
         return { action: action.action || nextStatus, status: nextStatus, idempotent: true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
@@ -552,6 +576,8 @@ function createContentSubmissionService(opts) {
 
   function cancelArticleSubmissionItem(action) { return applyItemAction(action, "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
   function cleanupArticleSubmissionItem(action) { return applyItemAction(action, "failed-cleaned", "ARTICLE_TRASHED_FAILED_QUEUE_CLEANUP"); }
+  function cleanupPublishedArticleLocal(action) { return applyItemAction(action, "published-cleaned", "ARTICLE_TRASHED_PUBLISHED_LOCAL_CLEANUP"); }
+  function cleanupCancelledArticleLocal(action) { return applyItemAction(action, "cancelled-cleaned", "ARTICLE_TRASHED_CANCELLED_LOCAL_CLEANUP"); }
 
   function isSubmissionItemExecutable(action) {
     const entry = locateArticleSubmissionItem(action);
@@ -565,7 +591,7 @@ function createContentSubmissionService(opts) {
     const items = [];
     batchStore.list().forEach(function(batch) {
       (batch.items || []).forEach(function(item) {
-        if (["failed-cleaned", "cancelled", "skipped"].includes(item.status)) return;
+        if (["failed-cleaned", "published-cleaned", "cancelled-cleaned", "skipped"].includes(item.status)) return;
         var removed = typeof store.isArticleRemoved === "function"
           ? store.isArticleRemoved(batch.clientId, item.articleId)
           : typeof store.isArticleTrashed === "function" && store.isArticleTrashed(batch.clientId, item.articleId);
@@ -575,7 +601,7 @@ function createContentSubmissionService(opts) {
         });
         if (!entry) return;
         const safe = Object.assign({}, entry.safe, { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" });
-        const requestedAction = entry.safe.status === "queued" ? "cancel" : entry.safe.status === "failed" ? "cleanup" : null;
+        const requestedAction = entry.safe.status === "queued" ? "cancel" : entry.safe.status === "failed" ? "cleanup" : entry.safe.status === "published" ? "cleanupPublishedLocal" : entry.safe.status === "cancelled" ? "cleanupCancelledLocal" : null;
         const checked = requestedAction ? evaluateItemAction(Object.assign({}, entry.safe, { action: requestedAction })) : { allowed: false, reasonCode: entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_FAILED" : "ARTICLE_SUBMISSION_ACTIVE" };
         if (checked.allowed) {
           safe.repairAction = requestedAction;
@@ -609,7 +635,7 @@ function createContentSubmissionService(opts) {
       }
       try {
         const action = Object.assign({}, item, { action: item.repairAction, evaluationFingerprint: item.evaluationFingerprint });
-        const result = item.repairAction === "cancel" ? cancelArticleSubmissionItem(action) : cleanupArticleSubmissionItem(action);
+        const result = item.repairAction === "cancel" ? cancelArticleSubmissionItem(action) : item.repairAction === "cleanupPublishedLocal" ? cleanupPublishedArticleLocal(action) : item.repairAction === "cleanupCancelledLocal" ? cleanupCancelledArticleLocal(action) : cleanupArticleSubmissionItem(action);
         cleanedCount += 1;
         results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: "cleaned", reasonCode: null, action: item.repairAction, resultStatus: result.status });
       } catch (error) {
@@ -664,7 +690,8 @@ function createContentSubmissionService(opts) {
       copy.reconciledStatus = record.status;
       copy.publicationStatus = record.status;
       copy.errorCode = latest.errorCode || item.errorCode || null;
-      if (item.status !== record.status && item.status !== "failed-cleaned") {
+      const locallyCleaned = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(item.status);
+      if (item.status !== record.status && !locallyCleaned) {
         try {
           batch = batchStore.updateItem(batch.id, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId }, { status: record.status, publicationStatus: record.status, errorCode: latest.errorCode || undefined, remoteId: latest.remoteId || undefined, remoteUrl: latest.remoteUrl || undefined, reasonCode: latest.reasonCode || undefined });
         } catch (_) {
@@ -675,10 +702,14 @@ function createContentSubmissionService(opts) {
       const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId };
       const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" })) : null;
       const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" })) : null;
+      const publishedCleanupEvaluation = record.status === "published" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupPublishedLocal" })) : null;
+      const cancelledCleanupEvaluation = record.status === "cancelled" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupCancelledLocal" })) : null;
       copy.canCancel = !!(cancelEvaluation && cancelEvaluation.allowed);
       copy.canCleanup = !!(cleanupEvaluation && cleanupEvaluation.allowed);
-      copy.actionFingerprint = copy.canCancel ? cancelEvaluation.bindingFingerprint : copy.canCleanup ? cleanupEvaluation.bindingFingerprint : null;
-      if (!copy.canCancel && !copy.canCleanup && (cancelEvaluation || cleanupEvaluation)) copy.reasonCode = (cancelEvaluation || cleanupEvaluation).reasonCode;
+      copy.canCleanupPublished = !!(publishedCleanupEvaluation && publishedCleanupEvaluation.allowed);
+      copy.canCleanupCancelled = !!(cancelledCleanupEvaluation && cancelledCleanupEvaluation.allowed);
+      copy.actionFingerprint = copy.canCancel ? cancelEvaluation.bindingFingerprint : copy.canCleanup ? cleanupEvaluation.bindingFingerprint : copy.canCleanupPublished ? publishedCleanupEvaluation.bindingFingerprint : copy.canCleanupCancelled ? cancelledCleanupEvaluation.bindingFingerprint : null;
+      if (!copy.canCancel && !copy.canCleanup && !copy.canCleanupPublished && !copy.canCleanupCancelled && (cancelEvaluation || cleanupEvaluation || publishedCleanupEvaluation || cancelledCleanupEvaluation)) copy.reasonCode = (cancelEvaluation || cleanupEvaluation || publishedCleanupEvaluation || cancelledCleanupEvaluation).reasonCode;
       reconciled.push(copy);
     });
     const enrichedItems = batch.items.map((item) => {
@@ -693,6 +724,8 @@ function createContentSubmissionService(opts) {
         sidecarExists: state.sidecarExists,
         canCancel: state.canCancel,
         canCleanup: state.canCleanup,
+        canCleanupPublished: state.canCleanupPublished,
+        canCleanupCancelled: state.canCleanupCancelled,
         reasonCode: state.reasonCode,
         publicationStatus: state.publicationStatus || item.publicationStatus,
         errorCode: state.errorCode || item.errorCode || null
@@ -840,6 +873,8 @@ function createContentSubmissionService(opts) {
     previewArticleRemovalImpact,
     cancelArticleSubmissionItem,
     cleanupArticleSubmissionItem,
+    cleanupPublishedArticleLocal,
+    cleanupCancelledArticleLocal,
     inspectSubmissionPair: inspectPair,
     evaluateItemAction,
     isSubmissionItemExecutable,

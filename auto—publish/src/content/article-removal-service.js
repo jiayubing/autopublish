@@ -139,7 +139,7 @@ function createArticleRemovalService(options) {
 
   function buildImpact(items) {
     const impact = submissionService.previewArticleRemovalImpact({ selections: items });
-    return impact && typeof impact === "object" ? impact : { items: [], queuedToCancel: [], failedToClean: [], blockedItems: [] };
+    return impact && typeof impact === "object" ? impact : { items: [], queuedToCancel: [], failedToClean: [], publishedToClean: [], cancelledToClean: [], blockedItems: [] };
   }
 
   function canonicalizeOpenTransactions() {
@@ -195,8 +195,7 @@ function createArticleRemovalService(options) {
     const token = String(makeToken());
     const createdAt = nowIso();
     tokens.set(token, { token, createdAt, expiresAt: Date.parse(createdAt) + ttlMs, fingerprint: fingerprint(binding), binding: binding });
-    const previewActions = clone((submissionImpact.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
-      .concat((submissionImpact.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })));
+    const previewActions = submissionServiceActions(submissionImpact);
     const openTransaction = findOpenTransaction(items, previewActions);
     const result = Object.assign({}, clone(submissionImpact), {
       token,
@@ -283,7 +282,9 @@ function createArticleRemovalService(options) {
 
   function submissionServiceActions(impact) {
     return clone((impact.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
-      .concat((impact.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })));
+      .concat((impact.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); }))
+      .concat((impact.publishedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanupPublishedLocal" }); }))
+      .concat((impact.cancelledToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanupCancelledLocal" }); })));
   }
 
   function perform(transaction) {
@@ -313,10 +314,14 @@ function createArticleRemovalService(options) {
         try {
           const result = action.action === "cancel"
             ? submissionService.cancelArticleSubmissionItem(action)
-            : submissionService.cleanupArticleSubmissionItem(action);
+            : action.action === "cleanupPublishedLocal"
+              ? submissionService.cleanupPublishedArticleLocal(action)
+              : action.action === "cleanupCancelledLocal"
+                ? submissionService.cleanupCancelledArticleLocal(action)
+                : submissionService.cleanupArticleSubmissionItem(action);
           current.queueResults = current.queueResults || [];
           current.queueResults[index] = clone(result);
-          current.resolutionCode = result && result.idempotent ? "QUEUE_PAIR_ALREADY_RESOLVED" : action.action === "cancel" ? "QUEUE_RESERVATION_CANCELLED" : "QUEUE_ITEM_CLEANED";
+          current.resolutionCode = result && result.idempotent ? "QUEUE_PAIR_ALREADY_RESOLVED" : action.action === "cancel" ? "QUEUE_RESERVATION_CANCELLED" : action.action === "cleanupPublishedLocal" ? "PUBLISHED_LOCAL_COPY_CLEANED" : action.action === "cleanupCancelledLocal" ? "CANCELLED_LOCAL_COPY_CLEANED" : "QUEUE_ITEM_CLEANED";
           current.queueCursor = index + 1;
           persist(current);
           if (typeof opts.afterQueueAction === "function") opts.afterQueueAction(clone(action), index, clone(current));
@@ -387,8 +392,7 @@ function createArticleRemovalService(options) {
     if (!fresh.canCommit) throw removalError("ARTICLE_TRASH_BLOCKED", "Article trash is blocked by an active submission");
     tokens.delete(value.token);
     const createdAt = nowIso();
-    const queueActions = clone((fresh.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
-      .concat((fresh.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); })));
+    const queueActions = submissionServiceActions(fresh);
     const existing = findOpenTransaction(token.binding.selections, queueActions);
     if (existing) {
       return {
