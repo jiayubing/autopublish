@@ -530,7 +530,10 @@ function createContentSubmissionService(opts) {
     if (["main_absent", "sidecar_absent"].includes(entry.safe.pairState) && entry.safe.identityMatched !== true) {
       return evaluation(action, entry, false, "SUBMISSION_IDENTITY_CONFLICT");
     }
-    if (["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) || entry.safe.status === "cancelled" && action.action === "cancel") return evaluation(action, entry, true, null);
+    if (action.action === "cancel" && entry.safe.status === "cancelled") {
+      return evaluation(action, entry, false, "SUBMISSION_ALREADY_CANCELLED");
+    }
+    if (["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status)) return evaluation(action, entry, true, null);
 
     if (action.action === "cancel") {
       if (entry.safe.status !== "queued") return evaluation(action, entry, false, entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_QUEUED" : "ARTICLE_SUBMISSION_ACTIVE");
@@ -573,17 +576,19 @@ function createContentSubmissionService(opts) {
       }
       const physicalFilesAlreadyAbsent = entry.safe.pairState === "both_absent";
       if (!physicalFilesAlreadyAbsent) removeSubmissionPairStrict(entry.item.filePath, entry.item.sidecarPath);
-      batchStore.updateItem(entry.batch.id, { articleId: action.articleId, publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? entry.record.status : undefined, reasonCode: reasonCode });
+      if (!action.deferBatchUpdate) {
+        batchStore.updateItem(entry.batch.id, { articleId: action.articleId, publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? entry.record.status : undefined, reasonCode: reasonCode });
+      }
       if (physicalFilesAlreadyAbsent) {
-        notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-        return { action: action.action || nextStatus, status: nextStatus, idempotent: true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
+        if (!action.suppressNotification) notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
+        return { action: action.action || nextStatus, status: nextStatus, idempotent: action.action === "cancel" ? false : true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
       }
     } catch (error) {
       try { if (originalFile !== null && !fs.existsSync(entry.item.filePath)) { fs.mkdirSync(path.dirname(entry.item.filePath), { recursive: true }); fs.writeFileSync(entry.item.filePath, originalFile); } } catch (_) {}
       try { if (originalSidecar !== null && !fs.existsSync(entry.item.sidecarPath)) { fs.mkdirSync(path.dirname(entry.item.sidecarPath), { recursive: true }); fs.writeFileSync(entry.item.sidecarPath, originalSidecar); } } catch (_) {}
       throw error;
     }
-    notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
+    if (!action.suppressNotification) notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
     return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
   }
 
@@ -845,7 +850,8 @@ function createContentSubmissionService(opts) {
       SUBMISSION_CONTENT_CHANGED: "队列文件内容已变化。",
       SUBMISSION_QUEUE_CHANGED: "队列文件状态已变化。",
       PUBLICATION_REMOTE_STARTED: "投稿已经开始，不能撤销。",
-      ARTICLE_SUBMISSION_ACTIVE: "投稿正在进行，不能撤销。"
+      ARTICLE_SUBMISSION_ACTIVE: "投稿正在进行，不能撤销。",
+      SUBMISSION_ALREADY_CANCELLED: "该项目已经撤销。"
     };
     return messages[reasonCode] || "当前项目不能执行该操作。";
   }
@@ -896,25 +902,45 @@ function createContentSubmissionService(opts) {
     const plan = buildSubmissionActionPlan(value.batchId, "cancel");
     if (plan.planId !== value.planId) throw batchError("SUBMISSION_ACTION_STALE", "Submission action plan is stale");
     let cancelledCount = 0;
-    const blockedItems = plan.items.filter(function(item) { return !item.allowed; });
+    let idempotentCount = 0;
+    const blockedItems = plan.items.filter(function(item) { return !item.allowed && item.reasonCode !== "SUBMISSION_ALREADY_CANCELLED"; });
+    const transitions = [];
     plan.items.filter(function(item) { return item.allowed; }).forEach(function(item) {
       const result = cancelArticleSubmissionItem({
         clientId: plan.clientId, articleId: item.articleId, batchId: plan.batchId,
         targetPlatformId: item.targetPlatformId, publicationId: item.publicationId || undefined,
-        attemptId: item.attemptId || undefined, action: "cancel", evaluationFingerprint: item.fingerprint
+        attemptId: item.attemptId || undefined, action: "cancel", evaluationFingerprint: item.fingerprint,
+        deferBatchUpdate: true, suppressNotification: true
       });
-      if (!result.idempotent) cancelledCount += 1;
+      if (result.idempotent) idempotentCount += 1;
+      else {
+        cancelledCount += 1;
+        transitions.push({
+          identity: { articleId: item.articleId, publicationId: item.publicationId || undefined, attemptId: item.attemptId || undefined, targetPlatformId: item.targetPlatformId },
+          transition: { status: "cancelled", publicationStatus: "cancelled", reasonCode: "ARTICLE_TRASHED_BEFORE_SUBMISSION" }
+        });
+      }
     });
-    const batch = batchStore.get(plan.batchId);
-    return { batchId: batch.id, planId: plan.planId, cancelledCount: cancelledCount, skippedCount: blockedItems.length, blockedItems: blockedItems, items: batch.items };
+    const alreadyCancelled = plan.items.filter(function(item) { return item.reasonCode === "SUBMISSION_ALREADY_CANCELLED"; });
+    idempotentCount += alreadyCancelled.length;
+    const batch = transitions.length ? batchStore.reconcile(plan.batchId, transitions) : batchStore.get(plan.batchId);
+    if (cancelledCount > 0 || idempotentCount > 0) notifyData("SUBMISSION_BATCH_CANCELLED");
+    return {
+      batchId: batch.id,
+      planId: plan.planId,
+      cancelledCount: cancelledCount,
+      idempotentCount: idempotentCount,
+      skippedCount: blockedItems.length,
+      blockedItems: blockedItems,
+      batchStatus: batch.status,
+      changedScopes: cancelledCount > 0 || idempotentCount > 0 ? ["articleAttention", "platformQueue", "navigationSummary"] : [],
+      items: batch.items
+    };
   }
 
   function previewCancelBatch(value) {
     if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
-    const plan = buildSubmissionActionPlan(value.batchId, "cancel");
-    // Keep the count aliases temporarily so older callers can render a safe
-    // disabled state while they migrate to the action-plan DTO.
-    return Object.assign({}, plan, { cancelableCount: plan.allowedCount, uncancelableCount: plan.blockedCount });
+    return buildSubmissionActionPlan(value.batchId, "cancel");
   }
 
   function input(value) { if (!value || value.confirmed !== true || !value.clientId) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return value; }

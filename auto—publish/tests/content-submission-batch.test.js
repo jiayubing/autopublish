@@ -36,7 +36,8 @@ function makeService(root, values = {}) {
       { id: "toutiao", scanDir: "toutiao", contentQueueImport: true },
       { id: "hepan", scanDir: "hepan", contentQueueImport: true },
       { id: "unsupported", scanDir: "unsupported", contentQueueImport: false }
-    ]
+    ],
+    onDataInvalidated: values.onDataInvalidated
   });
 }
 
@@ -95,11 +96,13 @@ describe("content submission batch", function() {
     }
   });
 
-  it("cancels only unchanged queued pairs and is idempotent", function() {
+  it("closes cancelled batches, removes their cancel plan, and reports repeat cancellation as idempotent", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-batch-"));
     try {
-      const service = makeService(root);
+      const invalidations = [];
+      const service = makeService(root, { onDataInvalidated(scopes, reasonCode) { invalidations.push({ scopes, reasonCode }); } });
       const batch = service.createBatch({ clientId: "client-1", articleIds: ["saved"], targetPlatformIds: ["toutiao"], confirmed: true });
+      invalidations.length = 0;
       assert.equal(service.listBatches("client-1").length, 1);
       const preview = service.previewCancelBatch({ batchId: batch.batchId });
       const cancelled = service.cancelBatch({ batchId: batch.batchId, planId: preview.planId, confirmed: true });
@@ -107,7 +110,21 @@ describe("content submission batch", function() {
       assert.equal(fs.existsSync(batch.items[0].filePath), false);
       assert.equal(createPublicationLedger({ workspaceRoot: root }).get(batch.items[0].publicationId).status, "cancelled");
       const repeatPreview = service.previewCancelBatch({ batchId: batch.batchId });
-      assert.equal(service.cancelBatch({ batchId: batch.batchId, planId: repeatPreview.planId, confirmed: true }).cancelledCount, 0);
+      assert.equal(repeatPreview.allowedCount, 0);
+      assert.equal(repeatPreview.items[0].reasonCode, "SUBMISSION_ALREADY_CANCELLED");
+      const listed = service.listBatches("client-1").find((candidate) => candidate.id === batch.batchId);
+      assert.equal(listed.status, "cancelled");
+      assert.equal(listed.items[0].status, "cancelled");
+      assert.equal(listed.items[0].canCancel, false);
+      const repeated = service.cancelBatch({ batchId: batch.batchId, planId: repeatPreview.planId, confirmed: true });
+      assert.equal(repeated.cancelledCount, 0);
+      assert.equal(repeated.idempotentCount, 1);
+      assert.equal(repeated.batchStatus, "cancelled");
+      assert.deepEqual(repeated.changedScopes, ["articleAttention", "platformQueue", "navigationSummary"]);
+      assert.deepEqual(invalidations, [
+        { scopes: ["platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" },
+        { scopes: ["platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" }
+      ]);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
@@ -207,7 +224,7 @@ describe("content submission batch", function() {
       const ledger = createPublicationLedger({ workspaceRoot: root });
       ledger.markSubmitting(batch.items[0].publicationId, batch.items[0].attemptId);
       const preview = service.previewCancelBatch({ batchId: batch.batchId });
-      assert.equal(preview.cancelableCount, 0);
+      assert.equal(preview.allowedCount, 0);
       const result = service.cancelBatch({ batchId: batch.batchId, planId: preview.planId, confirmed: true });
       assert.equal(result.cancelledCount, 0);
       assert.equal(ledger.get(batch.items[0].publicationId).status, "submitting");
@@ -232,7 +249,7 @@ describe("content submission batch", function() {
       });
       const service = makeService(root, { platforms: [{ id: "media", scanDir: "media", contentQueueImport: true }] });
       assert.equal(service.listBatches("client-1").find((batch) => batch.id === "media-old").items[0].canCancel, true);
-      assert.equal(service.previewCancelBatch({ batchId: "media-old" }).cancelableCount, 1);
+      assert.equal(service.previewCancelBatch({ batchId: "media-old" }).allowedCount, 1);
       const preview = service.previewCancelBatch({ batchId: "media-old" });
       assert.equal(preview.allowedCount, 1);
       assert.equal(service.cancelBatch({ batchId: "media-old", planId: preview.planId, confirmed: true }).cancelledCount, 1);

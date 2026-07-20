@@ -103,6 +103,9 @@ describe("renderer content client switching", function() {
         batches: { "client-a": [] },
         queueCalls: [],
         resolveQueue: null,
+        cancellationCalls: [],
+        resolveCancellation: null,
+        cancelPreviewCalls: [],
       };
       const generationBatch = {
         id: "generation-batch-a", status: "completed",
@@ -116,7 +119,7 @@ describe("renderer content client switching", function() {
         listClients: () => ok(clients),
         listGeneratedArticles: (clientId) => ok(state.articles[clientId] || []),
         listSubmissionPlatforms: () => ok(platforms),
-        listSubmissionBatches: (clientId) => ok(state.batches[clientId] || []),
+        listSubmissionBatches: ({ clientId }) => ok(state.batches[clientId] || []),
         listArticleTrash: () => ok([]),
         listResearch: () => ok([]),
         listQuestions: () => ok([]),
@@ -133,6 +136,24 @@ describe("renderer content client switching", function() {
           state.queueCalls.push(input);
           state.batches[input.clientId] = [{ id: "batch-a", clientId: input.clientId, status: "queued", createdAt: "2026-07-20T00:00:01.000Z", updatedAt: "2026-07-20T00:00:01.000Z", items: input.articleIds.map((articleId) => ({ articleId, targetPlatformId: input.targetPlatformIds[0], status: "queued", canCancel: true })) }];
           return new Promise((resolve) => { state.resolveQueue = () => resolve({ ok: true, data: state.batches[input.clientId][0] }); });
+        },
+        previewCancelSubmissionBatch: ({ batchId }) => {
+          state.cancelPreviewCalls.push(batchId);
+          const batch = Object.values(state.batches).flat().find((item) => item.id === batchId);
+          const items = (batch?.items || []).map((item) => ({ articleId: item.articleId, targetPlatformId: item.targetPlatformId, action: "cancel", allowed: item.status === "queued" }));
+          return ok({ batchId, clientId: batch?.clientId || "", action: "cancel", planId: `plan-${batchId}-${batch?.status}`, fingerprint: batch?.status || "missing", allowedCount: items.filter((item) => item.allowed).length, blockedCount: items.filter((item) => !item.allowed).length, items });
+        },
+        cancelSubmissionBatch: ({ batchId, planId }) => {
+          const batch = Object.values(state.batches).flat().find((item) => item.id === batchId);
+          state.cancellationCalls.push({ batchId, planId });
+          return new Promise((resolve) => {
+            state.resolveCancellation = () => {
+              batch.status = "cancelled";
+              batch.updatedAt = "2026-07-20T00:00:02.000Z";
+              batch.items.forEach((item) => { item.status = "cancelled"; item.canCancel = false; });
+              resolve(ok({ batchId, planId, cancelledCount: 1, idempotentCount: 0, blockedItems: [], batchStatus: "cancelled", changedScopes: [], items: batch.items }));
+            };
+          });
         },
         getDoubaoLoginState: () => ok({ status: "unknown" }),
         getDoubaoQueueState: () => ok({ status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }),
@@ -156,7 +177,6 @@ describe("renderer content client switching", function() {
       };
     });
     try {
-      page.on("dialog", (dialog) => void dialog.accept());
       await page.goto("http://127.0.0.1:4179/", { waitUntil: "domcontentloaded" });
       await page.locator("#nav-item-content").click();
       const clientSelect = page.getByRole("combobox", { name: "当前客户（单篇/问题/历史）" });
@@ -167,6 +187,9 @@ describe("renderer content client switching", function() {
       await page.locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]').check();
       await page.getByRole("button", { name: "测试投稿平台" }).click();
       await page.getByRole("button", { name: "加入投稿队列" }).click();
+      await page.getByRole("dialog", { name: "确认加入投稿队列" }).waitFor();
+      assert.equal(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.length), 0);
+      await page.getByRole("button", { name: "确认加入投稿队列" }).click();
       await page.waitForFunction(() => window.__clientSwitchFlow.queueCalls.length === 1);
       await changeClientByPointer(page, clientSelect, "ArrowDown");
       assert.equal(await clientSelect.inputValue(), "client-b");
@@ -176,6 +199,23 @@ describe("renderer content client switching", function() {
       assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.map((item) => item.clientId)), ["client-a"]);
       assert.equal(await page.getByRole("button", { name: "加入投稿队列" }).isDisabled(), true);
       await changeClientByPointer(page, clientSelect, "ArrowUp");
+      assert.equal(await clientSelect.inputValue(), "client-a");
+      await page.waitForFunction(() => window.__clientSwitchFlow.cancelPreviewCalls.includes("batch-a"));
+      await page.getByRole("button", { name: /撤销未开始投稿/ }).waitFor();
+      await page.getByRole("button", { name: /撤销未开始投稿/ }).click();
+      await page.getByRole("dialog", { name: "确认撤销未开始投稿" }).waitFor();
+      assert.equal(await page.evaluate(() => window.__clientSwitchFlow.cancellationCalls.length), 0);
+      await page.getByRole("button", { name: "确认撤销" }).click();
+      await page.waitForFunction(() => window.__clientSwitchFlow.cancellationCalls.length === 1);
+      assert.equal(await page.getByRole("button", { name: /正在撤销/ }).isDisabled(), true);
+      await changeClientByPointer(page, clientSelect, "ArrowDown");
+      assert.equal(await clientSelect.inputValue(), "client-b");
+      await page.evaluate(() => window.__clientSwitchFlow.resolveCancellation());
+      await changeClientByPointer(page, clientSelect, "ArrowUp");
+      await page.waitForFunction(() => !document.body.innerText.includes("正在撤销"));
+      assert.equal(await page.getByRole("button", { name: /撤销未开始投稿/ }).count(), 0);
+      assert.equal(await page.getByRole("button", { name: /正在撤销/ }).count(), 0);
+      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.cancellationCalls.map((item) => item.batchId)), ["batch-a"]);
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByRole("tab", { name: "批量生成" }).click();
       await page.getByRole("button", { name: "将成功文章加入投稿队列" }).waitFor();

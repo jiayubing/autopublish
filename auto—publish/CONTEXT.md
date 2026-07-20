@@ -128,7 +128,7 @@
 
 ## 撤销本地投稿入队
 
-取消入队只撤销尚未开始的本地队列项，不删除文章、发布记录或标题快照。文章管理应对当前客户的全部批次聚合可撤销/可清理项，不能让较新的完成批次遮蔽较旧的 queued 批次。`media` 在 staged queue 阶段没有远端 `publicationId`/`attemptId` 是正常事实；只要本地文章、媒体目标和未变更的队列 pair 能够匹配，就可安全撤销。`submitting`、`submitted`、`uncertain` 和身份/内容冲突仍必须阻断并保留记录供人工处理。
+取消入队只撤销尚未开始的本地队列项，不删除文章、发布记录或标题快照。`cancelled` 是终态：重复执行接口可以明确返回幂等结果，但新的动作计划绝不能再将它统计为可撤销。一次批次撤销完成后，服务层以 `SUBMISSION_BATCH_CANCELLED` 使 `platformQueue`、`navigationSummary` 和 `articleAttention` 失效。文章管理应对当前客户的全部批次聚合可撤销/可清理项，不能让较新的完成批次遮蔽较旧的 queued 批次。`media` 在 staged queue 阶段没有远端 `publicationId`/`attemptId` 是正常事实；只要本地文章、媒体目标和未变更的队列 pair 能够匹配，就可安全撤销。`submitting`、`submitted`、`uncertain` 和身份/内容冲突仍必须阻断并保留记录供人工处理。
 
 ## 投稿动作计划与媒体工作台刷新
 

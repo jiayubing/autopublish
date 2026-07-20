@@ -295,7 +295,7 @@ describe("submission batch and platform worker integration", function() {
       assert.equal(reconciled.items[0].status, "failed");
 
       const cancelPreview = value.submission.previewCancelBatch({ batchId: batch.batchId });
-      assert.equal(cancelPreview.cancelableCount, 0);
+      assert.equal(cancelPreview.allowedCount, 0);
       const cancelPlan = value.submission.previewCancelBatch({ batchId: batch.batchId });
       const cancelResult = value.submission.cancelBatch({ batchId: batch.batchId, planId: cancelPlan.planId, confirmed: true });
       assert.equal(cancelResult.cancelledCount, 0);

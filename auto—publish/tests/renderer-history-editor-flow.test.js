@@ -183,7 +183,7 @@ function installDesktopFixture(page, fixture) {
       },
       previewSubmissionBatch: () => ok({ queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0 }),
       createSubmissionBatch: () => { state.calls.submission.push("createSubmissionBatch"); return ok({}); },
-      previewCancelSubmissionBatch: () => ok({ cancelableCount: 0 }),
+      previewCancelSubmissionBatch: () => ok({ allowedCount: 0, blockedCount: 0, items: [] }),
       cancelSubmissionBatch: () => { state.calls.submission.push("cancelSubmissionBatch"); return ok({}); },
       restoreArticle: () => ok({}),
       trashArticles: () => ok({ moved: [], skipped: [], rejected: [] }),

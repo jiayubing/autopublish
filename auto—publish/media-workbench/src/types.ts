@@ -438,7 +438,7 @@ export interface ContentSubmissionBatchPreview { batchId?: string; clientId: str
 export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
 export interface ContentSubmissionActionPlanItem { articleId: string; targetPlatformId: string; publicationId?: string | null; attemptId?: string | null; action: 'cancel'; allowed: boolean; reasonCode?: string | null; reasonMessage?: string | null; fingerprint?: string | null; }
-export interface ContentSubmissionCancellationPreview { batchId: string; clientId: string; action: 'cancel'; planId: string; fingerprint: string; allowedCount: number; blockedCount: number; items: ContentSubmissionActionPlanItem[]; cancelableCount?: number; uncancelableCount?: number; }
+export interface ContentSubmissionCancellationPreview { batchId: string; clientId: string; action: 'cancel'; planId: string; fingerprint: string; allowedCount: number; blockedCount: number; items: ContentSubmissionActionPlanItem[]; }
 export interface ContentSubmissionCleanupPreview { batchId: string; cleanableCount: number; uncleanableCount: number; items: Array<ContentSubmissionBatchItem & { cleanable: boolean }>; }
 export interface ContentSubmissionCleanupResult { batchId: string; cleanedCount: number; skippedCount: number; items: ContentSubmissionBatchItem[]; }
 

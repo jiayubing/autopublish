@@ -10,6 +10,7 @@ import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
 import { useArticleAttention } from '../../article-attention-store';
+import ActionConfirmationModal, { type ActionConfirmation } from './ActionConfirmationModal';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
 
@@ -47,6 +48,10 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
   const [cancellationPlans, setCancellationPlans] = useState<ContentSubmissionCancellationPreview[]>([]);
+  const [cancellationPending, setCancellationPending] = useState<{ clientId: string; count: number } | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<ActionConfirmation | null>(null);
+  const confirmationActionRef = useRef<(() => Promise<void>) | null>(null);
+  const confirmationIdRef = useRef(0);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] = useState<ArticleAttentionItem | null>(null);
@@ -59,6 +64,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removalUnsubscribeRef = useRef<(() => void) | null>(null);
   const clientRequestIdRef = useRef(0);
+  const cancellationRequestIdRef = useRef(0);
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | 'all'>(stageFilter === 'trash' ? 'all' : stageFilter);
@@ -105,6 +111,10 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setAttentionDetail(null);
     setTrash([]);
     setCancellationPlans([]);
+    cancellationRequestIdRef.current += 1;
+    setCancellationPending(null);
+    confirmationActionRef.current = null;
+    setPendingConfirmation(null);
     setBusy(false);
     stopRemovalTransactionWatch();
   }, [clientId, stopRemovalTransactionWatch]);
@@ -181,6 +191,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     count: batch.items.filter((item) => item.canCleanup === true).length,
   })).filter((entry) => entry.count > 0), [submissionBatches]);
   const cancelableCount = cancelableBatches.reduce((total, entry) => total + entry.count, 0);
+  const cancellationIsPending = cancellationPending?.clientId === clientId;
   const cleanableCount = cleanableBatches.reduce((total, entry) => total + entry.count, 0);
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen = removalStatus === 'pending_auto_recovery' || removalStatus === 'pending_recovery' || removalStatus === 'needs_repair';
@@ -281,19 +292,24 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     const requestedClientId = clientId;
     const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && (article.status === 'generated' || article.status === 'saved'));
     if (!selectedQueueable.length || !targetPlatformIds.length) return;
-    setBusy(true); setError('');
+    setError('');
     try {
       const input = { clientId, articleIds: selectedQueueable.map((article) => article.id), targetPlatformIds };
       const preview = await previewContentSubmissionBatch(input);
       if (!isCurrentClient(requestedClientId)) return;
       if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有符合投稿就绪规则的文章');
-      if (!window.confirm(`新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，阻断 ${preview.blockedContentCount || 0} 项，冲突 ${preview.conflictCount} 项。确认继续？`)) return;
-      await createContentSubmissionBatch({ ...input, confirmed: true });
-      if (!isCurrentClient(requestedClientId)) return;
-      setSelected([]);
-      await refreshHistoryData();
+      confirmationActionRef.current = async () => {
+        setBusy(true); setError('');
+        try {
+          await createContentSubmissionBatch({ ...input, confirmed: true });
+          if (!isCurrentClient(requestedClientId)) return;
+          setSelected([]);
+          await refreshHistoryData();
+        } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
+        finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
+      };
+      setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'queue', title: '确认加入投稿队列', message: `新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，阻断 ${preview.blockedContentCount || 0} 项，冲突 ${preview.conflictCount} 项。`, confirmLabel: '确认加入投稿队列' });
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
-    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   function openArticle(article: GeneratedContentArticle, source: HTMLElement | null, published: boolean) {
@@ -303,32 +319,27 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
 
   async function copyPublishedVersion() {
     if (!drawerArticle || !publicationRecordsByArticle.get(drawerArticle.id)?.some((record) => record.status === 'published')) return;
-    if (!window.confirm(`确认复制“${drawerArticle.title}”为新版本？原文章和发布记录不会修改。`)) return;
-    if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新选择目标并投稿。')) return;
-    setBusy(true); setError('');
-    try {
-      const requestedClientId = clientId;
-      const nextArticle = await copyContentArticleVersion({ clientId: requestedClientId, sourceArticleId: drawerArticle.id });
+    const source = drawerArticle; const requestedClientId = clientId;
+    confirmationActionRef.current = async () => { setBusy(true); setError(''); try {
+      const nextArticle = await copyContentArticleVersion({ clientId: requestedClientId, sourceArticleId: source.id });
       const refreshedArticles = await refreshHistoryData();
       if (requestedClientId !== clientIdRef.current || !refreshedArticles.some((article) => article.id === nextArticle.id)) return;
-      setDrawerArticle(null);
-      onArticleSelect(nextArticle, null, false);
-    } catch (value) { if (isCurrentClient(clientId)) setError(value instanceof Error ? value.message : '复制文章新版本失败'); }
-    finally { if (isCurrentClient(clientId)) setBusy(false); }
+      setDrawerArticle(null); onArticleSelect(nextArticle, null, false);
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '复制文章新版本失败'); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); } };
+    setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'copy-version', title: '确认复制文章新版本', message: `确认复制“${source.title}”为新版本？原文章和发布记录不会修改。新版本会生成新的 articleId，必须重新选择目标并投稿。`, confirmLabel: '确认复制' });
   }
 
   async function reconcilePublication(record: PublicationHistoryRecord, status: 'published' | 'failed') {
     const requestedClientId = clientId;
     if (record.status !== 'uncertain') return;
     const label = status === 'published' ? '确认远端已发布' : '确认远端未发布';
-    if (!window.confirm(`${label}？这会写入发布账本，并影响后续投稿防重。`)) return;
-    if (!window.confirm('请再次确认：已在远端核对过该目标，且不包含正文、密钥或完整响应。')) return;
-    setBusy(true); setError('');
-    try {
+    confirmationActionRef.current = async () => { setBusy(true); setError(''); try {
       await reconcilePublicationHistory({ publicationId: record.publicationId, status, reasonCode: status === 'published' ? 'CONFIRMED_PUBLISHED' : 'CONFIRMED_NOT_PUBLISHED' });
       await refreshHistoryData();
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '核对发布结果失败'); }
-    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); } };
+    setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'reconcile-publication', title: label, message: `${label}会写入发布账本，并影响后续投稿防重。请确认已在远端核对该目标，且不包含正文、密钥或完整响应。`, confirmLabel: label });
   }
 
   async function refreshBatchAffectedArticles() {
@@ -337,22 +348,58 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
 
   async function cancelCancelableBatches() {
     const requestedClientId = clientId;
+    let requestId = 0;
+    const isCurrentCancellationRequest = () => requestId !== 0 && isCurrentClient(requestedClientId) && cancellationRequestIdRef.current === requestId;
     if (!cancelableBatches.length) return;
-    setBusy(true); setError('');
+    setError('');
     try {
       const previews = cancellationPlans.filter((preview) => preview.allowedCount > 0);
       const total = previews.reduce((count, preview) => count + preview.allowedCount, 0);
       if (!total) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: '当前客户全部批次均无可撤销项；明确失败项请使用“清理失败队列项”。' }); return; }
       if (!isCurrentClient(requestedClientId)) return;
-      if (!window.confirm(`确认撤销当前客户 ${previews.length} 个批次中的 ${total} 项未开始投稿内容？`)) return;
-      const results = [];
-      for (const preview of previews) {
-        if (preview.allowedCount) results.push(await cancelContentSubmissionBatch(preview.batchId, preview.planId));
+      confirmationActionRef.current = async () => {
+        requestId = ++cancellationRequestIdRef.current;
+        setBusy(true); setCancellationPending({ clientId: requestedClientId, count: total });
+        setCancellationPlans([]); setBatchFeedback(null);
+        try {
+          const results = [];
+          for (const preview of previews) if (preview.allowedCount) results.push(await cancelContentSubmissionBatch(preview.batchId, preview.planId));
+          await refreshBatchAffectedArticles();
+          if (!isCurrentCancellationRequest()) return;
+        const cancelledCount = results.reduce((count, result) => count + (result.cancelledCount || 0), 0);
+        const idempotentCount = results.reduce((count, result) => count + (result.idempotentCount || 0), 0);
+        const blockedCount = results.reduce((count, result) => count + (result.blockedItems?.length || 0), 0);
+        const details = [
+          `已撤销 ${cancelledCount} 项未开始投稿内容`,
+          idempotentCount ? `已确认 ${idempotentCount} 项此前撤销结果` : '',
+          blockedCount ? `阻断 ${blockedCount} 项` : '',
+        ].filter(Boolean).join('；');
+          setBatchFeedback({ kind: blockedCount || (!cancelledCount && blockedCount) ? 'error' : 'status', text: `${details || '队列已刷新'}。` });
+        } catch (value) {
+      const code = value && typeof value === 'object' && 'code' in value ? String(value.code) : '';
+      if (code === 'SUBMISSION_ACTION_STALE') {
+        try {
+          await refreshBatchAffectedArticles();
+          if (isCurrentCancellationRequest()) setBatchFeedback({ kind: 'error', text: '队列已变化，请重新检查。' });
+        } catch (refreshError) {
+          if (isCurrentCancellationRequest()) setBatchFeedback({ kind: 'error', text: refreshError instanceof Error ? refreshError.message : '队列已变化，请重新检查。' });
+        }
+      } else if (isCurrentCancellationRequest()) {
+        setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '撤销投稿批次失败' });
       }
-      await refreshBatchAffectedArticles();
-      if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: `已撤销 ${results.reduce((count, result) => count + (result.cancelledCount || 0), 0)} 项未开始投稿内容。` });
-    } catch (value) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '撤销投稿批次失败' }); }
-    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
+        } finally {
+      // A late completion from client A must not clear the busy state of a
+      // newer request (including one started after switching back to A).
+      if (isCurrentCancellationRequest()) {
+        setCancellationPending(null);
+        setBusy(false);
+      }
+        }
+      };
+      setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'cancel', title: '确认撤销未开始投稿', message: `将撤销当前客户 ${previews.length} 个批次中的 ${total} 项未开始投稿内容。`, confirmLabel: '确认撤销' });
+    } catch (value) {
+      if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '读取撤销计划失败' });
+    }
   }
 
   async function cleanupFailedBatches() {
@@ -364,13 +411,15 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       const total = previews.reduce((count, preview) => count + preview.cleanableCount, 0);
       if (!total) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: '当前客户全部批次均无可清理的明确失败队列项。' }); return; }
       if (!isCurrentClient(requestedClientId)) return;
-      if (!window.confirm(`确认清理当前客户 ${previews.length} 个批次中的 ${total} 项明确失败队列副本？发布失败记录会保留。`)) return;
-      const results = [];
-      for (const preview of previews) {
-        if (preview.cleanableCount) results.push(await cleanupFailedContentSubmissionItems(preview.batchId));
-      }
-      await refreshBatchAffectedArticles();
-      if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: `已清理 ${results.reduce((count, result) => count + (result.cleanedCount || 0), 0)} 项失败队列副本；发布失败记录仍保留。` });
+      confirmationActionRef.current = async () => { setBusy(true); try {
+        const results = []; for (const preview of previews) if (preview.cleanableCount) results.push(await cleanupFailedContentSubmissionItems(preview.batchId));
+        await refreshBatchAffectedArticles();
+        if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: `已清理 ${results.reduce((count, result) => count + (result.cleanedCount || 0), 0)} 项失败队列副本；发布失败记录仍保留。` });
+      } catch (value) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '清理失败队列项失败' }); }
+      finally { if (isCurrentClient(requestedClientId)) setBusy(false); } };
+      setBusy(false);
+      setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'cleanup-failed', title: '确认清理失败队列项', message: `确认清理当前客户 ${previews.length} 个批次中的 ${total} 项明确失败队列副本？发布失败记录会保留。`, confirmLabel: '确认清理' });
+      return;
     } catch (value) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '清理失败队列项失败' }); }
     finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
@@ -457,26 +506,25 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   }
 
   async function restoreOne(entry: ArticleTrashRecord) {
-    if (!window.confirm(`确认恢复“${entry.titleSnapshot || entry.articleId}”？恢复文章不会重新加入投稿队列。`)) return;
     const requestedClientId = clientId;
-    setBusy(true); setError('');
-    try {
+    confirmationActionRef.current = async () => { setBusy(true); setError(''); try {
       await restoreContentArticle({ clientId: entry.clientId, articleId: entry.articleId });
       await refreshHistoryData();
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '恢复文章失败'); }
-    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); } };
+    setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'restore-article', title: '确认恢复文章', message: `确认恢复“${entry.titleSnapshot || entry.articleId}”？恢复文章不会重新加入投稿队列。`, confirmLabel: '确认恢复' });
   }
 
   async function permanentlyDeleteOne(entry: ArticleTrashRecord) {
     const confirmation = await preparePermanentDeleteContentArticle({ clientId: entry.clientId, articleId: entry.articleId });
-    if (!window.confirm(`永久删除“${entry.articleId}”？正文和 Markdown 将不可恢复。`)) return;
     const requestedClientId = clientId;
-    setBusy(true); setError('');
-    try {
+    if (!isCurrentClient(requestedClientId)) return;
+    confirmationActionRef.current = async () => { setBusy(true); setError(''); try {
       await permanentlyDeleteContentArticle({ clientId: entry.clientId, articleId: entry.articleId, token: confirmation.token });
       await refreshHistoryData();
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '永久删除文章失败'); }
-    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); } };
+    setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'permanent-delete', title: '确认永久删除文章', message: `永久删除“${entry.articleId}”？正文和 Markdown 将不可恢复。`, confirmLabel: '永久删除' });
   }
 
   function toggleAll() {
@@ -485,13 +533,14 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
-  if (selectedStage === 'trash') return <div className="h-full w-full min-w-0 overflow-y-auto p-4">
+  if (selectedStage === 'trash') return <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">
     <div className="mb-4 flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-slate-800">文章回收站</h2><p className="mt-1 text-xs text-slate-500">回收站只保留标题快照、删除时间和发布记录摘要；正文恢复不会自动恢复投稿队列。</p></div><button type="button" onClick={() => { const next = lastNonTrashStageRef.current; setSelectedStage(next); onStageFilterChange?.(next); }} className="rounded border border-slate-300 px-3 py-2 text-xs">返回文章管理</button></div>
     {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     <div className="grid gap-3">{trash.map((entry) => <div key={entry.articleId} className="flex min-w-0 flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3"><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-slate-800">{entry.titleSnapshot || `已删除文章 · ${entry.articleId.slice(-6)}`}</div><div className="mt-1 break-all text-xs text-slate-500">文章 ID：{entry.articleId} · {entry.status} · 删除于 {formatBeijingTime(entry.deletedAt)}</div><div className="mt-1 text-xs text-slate-600">只读发布详情：{trashPublicationSummary(entry)}</div>{entry.references?.length > 0 && <div className="mt-1 text-xs text-slate-400">关联记录：{entry.references.map((reference) => `${reference.type}/${reference.id}`).join('、')}</div>}</div><button type="button" disabled={busy} onClick={() => void restoreOne(entry)} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">恢复（不恢复队列）</button><button type="button" disabled={busy} onClick={() => void permanentlyDeleteOne(entry)} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">永久删除正文</button></div>)}{!trash.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">回收站为空</div>}</div>
+    <ActionConfirmationModal pending={pendingConfirmation} submitting={busy} onCancel={() => { confirmationActionRef.current = null; setPendingConfirmation(null); }} onConfirm={() => { const action = confirmationActionRef.current; confirmationActionRef.current = null; setPendingConfirmation(null); if (action) void action(); }} />
   </div>;
 
-  return <div className="h-full w-full min-w-0 overflow-y-auto p-4">
+  return <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">
     <div className="mb-4 grid min-w-0 gap-3">
       <div className="min-w-0">
         <h2 aria-label="历史文章" className="text-base font-semibold text-slate-800">文章管理</h2>
@@ -506,7 +555,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
        <div className="flex min-w-0 flex-wrap items-center gap-2">
          <button type="button" onClick={toggleAll} disabled={!operable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
          <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedArticles.length})</button>
-         {cancelableCount > 0 && <button type="button" title={`覆盖当前客户全部可撤销批次：${cancelableBatches.map(({ batch, count }) => `${batch.items.find((item) => item.canCancel)?.targetPlatformId || '未知目标'} ${formatBeijingTime(batch.createdAt)} (${count})`).join('；')}`} onClick={() => void cancelCancelableBatches()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销未开始投稿 ({cancelableCount})</button>}
+         {(cancelableCount > 0 || cancellationIsPending) && <button type="button" title={cancellationIsPending ? '正在撤销当前客户的未开始投稿内容' : `覆盖当前客户全部可撤销批次：${cancelableBatches.map(({ plan, batch, count }) => `${plan.items.find((item) => item.allowed)?.targetPlatformId || '未知目标'} ${formatBeijingTime(batch.createdAt)} (${count})`).join('；')}`} onClick={() => void cancelCancelableBatches()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">{cancellationIsPending ? `正在撤销… (${cancellationPending.count})` : `撤销未开始投稿 (${cancelableCount})`}</button>}
          {cleanableCount > 0 && <button type="button" onClick={() => void cleanupFailedBatches()} disabled={busy} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({cleanableCount})</button>}
          {submissionBatches.length > 0 && !cancelableCount && !cleanableCount && <span role="status" className="text-xs text-slate-500">当前客户全部批次均无可撤销或可清理项。</span>}
        </div>
@@ -552,6 +601,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       {!groups.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">暂无历史文章</div>}
     </div>
     {trashPreview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">远端已发布内容不会撤回；发布记录和标题快照会保留。本地文章正文和投稿队列副本会进入回收站/被清理，恢复文章不会自动恢复投稿队列。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>已发布本地副本：{groupImpact(trashPreview.publishedToClean || []).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">{platform} {count}</span>)}{!(trashPreview.publishedToClean || []).length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>失败本地副本：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>仍在投稿/待确认：{trashPreview.blockedItems.length}</div><div>发布记录：保留</div></div>{(trashPreview.openTransaction || trashPreview.transaction) && <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">已存在相同删除事务，已复用现有事务；请查看上方状态，不会重复创建。</div>}{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && !removalSubmitDisabled && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理终结的 failed/published/cancelled 本地副本，并将文章移入回收站；远端已发布内容不会撤回。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{removalSubmitDisabled ? '已有开放删除事务' : '确认移入回收站'}</button></div></div></div>}
+    <ActionConfirmationModal pending={pendingConfirmation} submitting={busy} onCancel={() => { confirmationActionRef.current = null; setPendingConfirmation(null); }} onConfirm={() => { const action = confirmationActionRef.current; confirmationActionRef.current = null; setPendingConfirmation(null); if (action) void action(); }} />
     <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={busy} />
     <ArticleAttentionDetailDrawer item={attentionDetail} onClose={() => setAttentionDetail(null)} />
   </div>;

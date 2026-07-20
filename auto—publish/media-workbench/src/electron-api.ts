@@ -103,7 +103,7 @@ interface DesktopConsoleContent {
   listSubmissionPlatforms(): Promise<IpcResponse<ContentSubmissionPlatform[]>>;
   listSubmissionBatches(input: { clientId: string }): Promise<IpcResponse<ContentSubmissionBatchRecord[]>>;
   createSubmissionBatch(input: ContentSubmissionBatchInput & { confirmed: true }): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
-  cancelSubmissionBatch(input: { batchId: string; planId: string; confirmed: true }): Promise<IpcResponse<{ batchId: string; planId: string; cancelledCount: number; skippedCount: number; blockedItems: ContentSubmissionActionPlanItem[]; items: ContentSubmissionBatchItem[] }>>;
+  cancelSubmissionBatch(input: { batchId: string; planId: string; confirmed: true }): Promise<IpcResponse<{ batchId: string; planId: string; cancelledCount: number; idempotentCount: number; blockedItems: ContentSubmissionActionPlanItem[]; batchStatus: string; changedScopes: string[]; items: ContentSubmissionBatchItem[] }>>;
   getSubmissionBatch(batchId: string): Promise<IpcResponse<ContentSubmissionBatchPreview>>;
   previewGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[]; templateCatalogRevision?: string }): Promise<IpcResponse<GenerationBatchPreview>>;
   createGenerationBatch(input: { clientIds: string[]; templates: GenerationBatchTemplateSelection[]; clientSources?: GenerationBatchSourceSelection[]; templateCatalogRevision?: string }): Promise<IpcResponse<GenerationBatch>>;
@@ -1599,7 +1599,7 @@ export async function createContentSubmissionBatch(input: ContentSubmissionBatch
   return result.data;
 }
 
-export async function cancelContentSubmissionBatch(batchId: string, planId: string): Promise<{ batchId: string; planId: string; cancelledCount: number; skippedCount: number; blockedItems: ContentSubmissionActionPlanItem[]; items: ContentSubmissionBatchItem[] }> {
+export async function cancelContentSubmissionBatch(batchId: string, planId: string): Promise<{ batchId: string; planId: string; cancelledCount: number; idempotentCount: number; blockedItems: ContentSubmissionActionPlanItem[]; batchStatus: string; changedScopes: string[]; items: ContentSubmissionBatchItem[] }> {
   if (!isElectron()) throw new Error("Batch submission cancellation requires the desktop app");
   const result = await window.desktopConsole!.content.cancelSubmissionBatch({ batchId, planId, confirmed: true });
   if (!result.ok || !result.data) throw getIpcError(result.error, "submission batch cancellation failed");

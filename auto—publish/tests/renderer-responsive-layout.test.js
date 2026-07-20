@@ -72,7 +72,7 @@ function installDesktopFixture(page) {
       getGenerationBatchState: () => result({ state: "idle", currentBatchId: null, completed: 0, total: 0, tasks: [] }),
       previewGenerationBatch: () => result({}),
       previewSubmissionBatch: () => result({ queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0 }),
-      previewCancelSubmissionBatch: () => result({ cancelableCount: 0 }),
+      previewCancelSubmissionBatch: () => result({ allowedCount: 0, blockedCount: 0, items: [] }),
       getPlatformQueue: () => result({ platforms: [], queue: [] })
     };
     const mediaArticle = {
