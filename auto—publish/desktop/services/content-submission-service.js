@@ -467,7 +467,10 @@ function createContentSubmissionService(opts) {
   function locateArticleSubmissionItem(action) {
     const entries = articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }]);
     return entries.find(function(entry) {
-      return entry.safe.batchId === action.batchId && entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId && entry.safe.targetPlatformId === action.targetPlatformId;
+      return entry.safe.batchId === action.batchId && entry.safe.targetPlatformId === action.targetPlatformId &&
+        (action.publicationId && action.attemptId
+          ? entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId
+          : entry.safe.articleId === action.articleId);
     });
   }
 
@@ -570,7 +573,7 @@ function createContentSubmissionService(opts) {
       }
       const physicalFilesAlreadyAbsent = entry.safe.pairState === "both_absent";
       if (!physicalFilesAlreadyAbsent) removeSubmissionPairStrict(entry.item.filePath, entry.item.sidecarPath);
-      batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? entry.record.status : undefined, reasonCode: reasonCode });
+      batchStore.updateItem(entry.batch.id, { articleId: action.articleId, publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? entry.record.status : undefined, reasonCode: reasonCode });
       if (physicalFilesAlreadyAbsent) {
         notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
         return { action: action.action || nextStatus, status: nextStatus, idempotent: true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
@@ -673,11 +676,29 @@ function createContentSubmissionService(opts) {
   function reconcileBatch(batchId) {
     let batch = batchStore.get(batchId);
     const reconciled = [];
+    const transitions = [];
     (batch.items || []).forEach((item) => {
       const copy = Object.assign({}, item);
+      // A queue item may be staged before a remote reservation exists.  Its
+      // local batch/article/platform identity is sufficient for local actions;
+      // this is intentionally platform-agnostic.
       if (!item.publicationId || !item.attemptId) {
-        copy.reconciledStatus = "conflict";
-        copy.reasonCode = copy.reasonCode || "SUBMISSION_IDENTITY_MISSING";
+        const sidecar = readSidecar(item);
+        const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: null });
+        const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, action: "cancel" };
+        const cancelEvaluation = evaluateItemAction(actionInput);
+        copy.unchanged = pair.pairState === "intact";
+        copy.pairState = pair.pairState;
+        copy.identityMatched = pair.identityMatched;
+        copy.contentMatched = pair.contentMatched;
+        copy.mainExists = pair.mainExists;
+        copy.sidecarExists = pair.sidecarExists;
+        copy.reconciledStatus = item.status;
+        copy.publicationStatus = item.status;
+        copy.canCancel = Boolean(cancelEvaluation.allowed);
+        copy.canCleanup = false;
+        copy.actionFingerprint = cancelEvaluation.bindingFingerprint;
+        if (!copy.canCancel) copy.reasonCode = cancelEvaluation.reasonCode || "SUBMISSION_QUEUE_CHANGED";
         reconciled.push(copy);
         return;
       }
@@ -702,12 +723,10 @@ function createContentSubmissionService(opts) {
       copy.errorCode = latest.errorCode || item.errorCode || null;
       const locallyCleaned = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(item.status);
       if (item.status !== record.status && !locallyCleaned) {
-        try {
-          batch = batchStore.updateItem(batch.id, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId }, { status: record.status, publicationStatus: record.status, errorCode: latest.errorCode || undefined, remoteId: latest.remoteId || undefined, remoteUrl: latest.remoteUrl || undefined, reasonCode: latest.reasonCode || undefined });
-        } catch (_) {
-          copy.reconciledStatus = "conflict";
-          copy.reasonCode = "SUBMISSION_STATUS_CONFLICT";
-        }
+        transitions.push({
+          identity: { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId },
+          transition: { status: record.status, publicationStatus: record.status, errorCode: latest.errorCode || undefined, remoteId: latest.remoteId || undefined, remoteUrl: latest.remoteUrl || undefined, reasonCode: latest.reasonCode || undefined }
+        });
       }
       const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId };
       const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" })) : null;
@@ -722,8 +741,26 @@ function createContentSubmissionService(opts) {
       if (!copy.canCancel && !copy.canCleanup && !copy.canCleanupPublished && !copy.canCleanupCancelled && (cancelEvaluation || cleanupEvaluation || publishedCleanupEvaluation || cancelledCleanupEvaluation)) copy.reasonCode = (cancelEvaluation || cleanupEvaluation || publishedCleanupEvaluation || cancelledCleanupEvaluation).reasonCode;
       reconciled.push(copy);
     });
+    if (transitions.length) {
+      try {
+        // Reconcile all observations in memory and commit the batch once. This
+        // preserves the batch's atomic boundary when several queue items move
+        // together after a platform result is observed.
+        batch = batchStore.reconcile(batch.id, transitions);
+      } catch (_) {
+        transitions.forEach(function(change) {
+          const conflict = reconciled.find(function(candidate) {
+            return candidate.publicationId === change.identity.publicationId && candidate.attemptId === change.identity.attemptId && candidate.targetPlatformId === change.identity.targetPlatformId;
+          });
+          if (conflict) {
+            conflict.reconciledStatus = "conflict";
+            conflict.reasonCode = "SUBMISSION_STATUS_CONFLICT";
+          }
+        });
+      }
+    }
     const enrichedItems = batch.items.map((item) => {
-      const state = reconciled.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
+      const state = reconciled.find((candidate) => candidate.articleId === item.articleId && candidate.targetPlatformId === item.targetPlatformId && candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId);
       return state ? Object.assign({}, item, {
         reconciledStatus: state.reconciledStatus,
         unchanged: state.unchanged,
@@ -801,51 +838,83 @@ function createContentSubmissionService(opts) {
     return cleanupResult;
   }
 
-  function cancelBatch(value) {
-    if (!value || value.confirmed !== true || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation is required");
-    const reconciled = reconcileBatch(value.batchId);
+  function actionReasonMessage(reasonCode) {
+    const messages = {
+      SUBMISSION_ACTION_STALE: "动作计划已过期，请重新预览。",
+      SUBMISSION_IDENTITY_CONFLICT: "本地队列身份不完整或不匹配。",
+      SUBMISSION_CONTENT_CHANGED: "队列文件内容已变化。",
+      SUBMISSION_QUEUE_CHANGED: "队列文件状态已变化。",
+      PUBLICATION_REMOTE_STARTED: "投稿已经开始，不能撤销。",
+      ARTICLE_SUBMISSION_ACTIVE: "投稿正在进行，不能撤销。"
+    };
+    return messages[reasonCode] || "当前项目不能执行该操作。";
+  }
+
+  // This is the sole action resolver for preview, list summaries and execute.
+  // `planId` binds the complete batch revision and every item fingerprint.
+  function buildSubmissionActionPlan(batchId, action) {
+    if (typeof batchId !== "string" || !batchId) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
+    if (action !== "cancel") throw batchError("SUBMISSION_ACTION_INVALID", "Submission action is invalid");
+    const reconciled = reconcileBatch(batchId);
     const batch = reconciled.batch;
-    let cancelledCount = 0;
-    let skippedCount = 0;
-    batch.items.forEach((item) => {
-      if (item.status !== "queued" || !item.filePath) { skippedCount += 1; return; }
-      const state = reconciled.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
-      if (!state || !state.canCancel) { skippedCount += 1; return; }
-      try {
-        cancelArticleSubmissionItem({ clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId, action: "cancel", evaluationFingerprint: state.actionFingerprint });
-        cancelledCount += 1;
-      } catch (_) { skippedCount += 1; }
+    const items = batch.items.map(function(item) {
+      const request = {
+        clientId: batch.clientId, articleId: item.articleId, batchId: batch.id,
+        targetPlatformId: item.targetPlatformId, publicationId: item.publicationId,
+        attemptId: item.attemptId, action: action
+      };
+      const checked = evaluateItemAction(request);
+      return {
+        articleId: item.articleId,
+        targetPlatformId: item.targetPlatformId,
+        publicationId: item.publicationId || null,
+        attemptId: item.attemptId || null,
+        action: action,
+        allowed: checked.allowed,
+        reasonCode: checked.reasonCode || null,
+        reasonMessage: checked.allowed ? null : actionReasonMessage(checked.reasonCode),
+        fingerprint: checked.bindingFingerprint || null
+      };
     });
-    batch.status = batch.items.some((item) => item.status === "queued") ? "queued" : "cancelled";
-    batch.updatedAt = new Date().toISOString();
-    saveBatch(batch);
-    const cancelResult = { batchId: batch.id, cancelledCount, skippedCount, items: batch.items };
-    if (cancelledCount > 0) notifyData("SUBMISSION_BATCH_CANCELLED");
-    return cancelResult;
+    const revision = hash(JSON.stringify({ id: batch.id, clientId: batch.clientId, updatedAt: batch.updatedAt || null, status: batch.status, items: batch.items }));
+    const planId = hash(JSON.stringify({ batchId: batch.id, action: action, revision: revision, items: items.map(function(item) { return [item.articleId, item.targetPlatformId, item.publicationId, item.attemptId, item.fingerprint, item.allowed]; }) }));
+    return {
+      batchId: batch.id,
+      clientId: batch.clientId,
+      action: action,
+      revision: revision,
+      planId: planId,
+      fingerprint: planId,
+      items: items,
+      allowedCount: items.filter(function(item) { return item.allowed; }).length,
+      blockedCount: items.filter(function(item) { return !item.allowed; }).length
+    };
+  }
+
+  function cancelBatch(value) {
+    if (!value || value.confirmed !== true || typeof value.batchId !== "string" || typeof value.planId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation and action plan are required");
+    const plan = buildSubmissionActionPlan(value.batchId, "cancel");
+    if (plan.planId !== value.planId) throw batchError("SUBMISSION_ACTION_STALE", "Submission action plan is stale");
+    let cancelledCount = 0;
+    const blockedItems = plan.items.filter(function(item) { return !item.allowed; });
+    plan.items.filter(function(item) { return item.allowed; }).forEach(function(item) {
+      const result = cancelArticleSubmissionItem({
+        clientId: plan.clientId, articleId: item.articleId, batchId: plan.batchId,
+        targetPlatformId: item.targetPlatformId, publicationId: item.publicationId || undefined,
+        attemptId: item.attemptId || undefined, action: "cancel", evaluationFingerprint: item.fingerprint
+      });
+      if (!result.idempotent) cancelledCount += 1;
+    });
+    const batch = batchStore.get(plan.batchId);
+    return { batchId: batch.id, planId: plan.planId, cancelledCount: cancelledCount, skippedCount: blockedItems.length, blockedItems: blockedItems, items: batch.items };
   }
 
   function previewCancelBatch(value) {
     if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
-    const reconciled = reconcileBatch(value.batchId);
-    const batch = reconciled.batch;
-    let cancelableCount = 0;
-    let uncancelableCount = 0;
-    const items = batch.items.map((item) => {
-      const copy = Object.assign({}, item);
-      delete copy.filePath;
-      delete copy.sidecarPath;
-      if (item.status !== "queued") { uncancelableCount += 1; return Object.assign(copy, { cancelable: false }); }
-      try {
-        const record = publicationForBatchItem(item);
-        const sidecar = readSidecar(item);
-        const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
-        const publicationCancelable = !record || (record.status === "queued" && latestAttempt(record) && latestAttempt(record).attemptId === item.attemptId && latestAttempt(record).status === "queued");
-        const valid = ["intact", "both_absent"].includes(pair.pairState) && publicationCancelable;
-        if (valid) cancelableCount += 1; else uncancelableCount += 1;
-        return Object.assign(copy, { cancelable: valid, pairState: pair.pairState, identityMatched: pair.identityMatched, contentMatched: pair.contentMatched });
-      } catch (_) { uncancelableCount += 1; return Object.assign(copy, { cancelable: false }); }
-    });
-    return { batchId: batch.id, cancelableCount, uncancelableCount, items };
+    const plan = buildSubmissionActionPlan(value.batchId, "cancel");
+    // Keep the count aliases temporarily so older callers can render a safe
+    // disabled state while they migrate to the action-plan DTO.
+    return Object.assign({}, plan, { cancelableCount: plan.allowedCount, uncancelableCount: plan.blockedCount });
   }
 
   function input(value) { if (!value || value.confirmed !== true || !value.clientId) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return value; }
@@ -873,10 +942,23 @@ function createContentSubmissionService(opts) {
     listPlatforms,
     previewBatch,
     createBatch,
+    buildSubmissionActionPlan,
     previewCancelBatch,
     cancelBatch,
     getBatch: function(batchId) { return reconcileBatch(batchId).batch; },
-    listBatches: function(clientId) { return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) { return reconcileBatch(batch.id).batch; }); },
+    listBatches: function(clientId) {
+      return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) {
+        const reconciled = reconcileBatch(batch.id).batch;
+        const plan = buildSubmissionActionPlan(batch.id, "cancel");
+        return Object.assign({}, reconciled, {
+          actionPlan: plan,
+          items: reconciled.items.map(function(item) {
+            const planned = plan.items.find(function(candidate) { return candidate.articleId === item.articleId && candidate.targetPlatformId === item.targetPlatformId && candidate.publicationId === (item.publicationId || null) && candidate.attemptId === (item.attemptId || null); });
+            return Object.assign({}, item, { canCancel: !!(planned && planned.allowed), actionFingerprint: planned && planned.fingerprint || null, reasonCode: planned && !planned.allowed ? planned.reasonCode : item.reasonCode });
+          })
+        });
+      });
+    },
     reconcileBatch,
     previewCleanupFailedItems,
     cleanupFailedItems,

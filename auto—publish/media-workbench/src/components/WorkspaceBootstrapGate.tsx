@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import App from '../App';
-import { getWorkspaceBootstrapState } from '../electron-api';
+import { getWorkspaceBootstrapState } from '../bridge/workspace';
 import { WorkspaceBootstrapState } from '../types';
 import { createBootstrapGateController, getBootstrapView } from '../workspace-ui-logic.js';
 import WorkspaceWelcome from './WorkspaceWelcome';

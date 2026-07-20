@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Article } from '../types';
 import { AlertTriangle, CheckCircle2, DollarSign, Loader2, ShieldCheck, X } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -32,7 +33,12 @@ interface PreflightModalProps {
   balance: number;
   summary: MediaPreflightSummary;
   isSubmitting: boolean;
+  submissionError?: string | null;
   onSubmit: () => Promise<void>;
+}
+
+function ModalHost({ children }: { children: React.ReactNode }) {
+  return createPortal(<div data-modal-host="true" className="fixed inset-0 z-50">{children}</div>, document.body);
 }
 
 function statusText(item: ResourcePreflightItem) {
@@ -49,8 +55,28 @@ export default function PreflightModal({
   balance,
   summary,
   isSubmitting,
+  submissionError,
   onSubmit
 }: PreflightModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmitting) onClose();
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    dialogRef.current?.focus();
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, isSubmitting, onClose]);
+
   if (!isOpen) return null;
 
   const blocked = summary.blockedResources || [];
@@ -59,18 +85,23 @@ export default function PreflightModal({
   const blockers = summary.blockers || [];
   const canSubmit = !isSubmitting && blockers.length === 0 && submitable.length > 0 && balance >= actualPrice;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+  return <ModalHost>
+    <div className="flex h-full items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs" role="presentation">
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="media-preflight-title"
+        tabIndex={-1}
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+        className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col max-h-[calc(100vh-2rem)] overflow-hidden"
       >
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-blue-600" />
             <div>
-              <h2 className="text-base font-bold text-slate-800">付费媒体资源级预检</h2>
+              <h2 id="media-preflight-title" className="text-base font-bold text-slate-800">付费媒体资源级预检</h2>
               <p className="text-xs text-slate-400 mt-0.5">每个文章 × resourceId 独立判断发布记录和订单</p>
             </div>
           </div>
@@ -126,16 +157,17 @@ export default function PreflightModal({
             <span className="font-mono text-lg font-bold text-blue-700">¥{actualPrice.toFixed(2)}</span>
           </div>
           {balance < actualPrice && <p className="text-xs text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" />余额不足，无法提交可提交资源。</p>}
+          {submissionError && <p role="alert" className="text-xs text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" />{submissionError}</p>}
         </div>
 
         <div className="p-5 border-t border-slate-100 bg-slate-50/60 flex justify-end gap-2">
           <button onClick={onClose} disabled={isSubmitting} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg disabled:opacity-50">取消</button>
-          <button onClick={onSubmit} disabled={!canSubmit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
+          <button data-preflight-confirm="true" onClick={onSubmit} disabled={!canSubmit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
             {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             <span>{isSubmitting ? '提交中...' : `确认提交 ${submitable.length} 个资源`}</span>
           </button>
         </div>
       </motion.div>
     </div>
-  );
+  </ModalHost>;
 }

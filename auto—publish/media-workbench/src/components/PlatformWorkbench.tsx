@@ -11,7 +11,7 @@ import {
   getPlatformSettingsStatus,
   previewTrashedArticleQueueResidue,
   cleanupTrashedArticleQueueResidue,
-} from "../electron-api";
+} from "../bridge/platform";
 import { usePlatformQueue } from "../workspace-data-store";
 import { usePlatformTask } from "../platform-task-store";
 import type { HepanProviderStatus } from "../types";
@@ -72,7 +72,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     useState<PlatformSubmitResult | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string>("");
-  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(30);
+  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState<number | null>(null);
   const [queueResidue, setQueueResidue] = useState<{ cleanableCount: number; reportedCount: number }>({ cleanableCount: 0, reportedCount: 0 });
   const [repairingResidue, setRepairingResidue] = useState(false);
   const [residuePhase, setResiduePhase] = useState<"idle" | "checking" | "cleaning">("idle");
@@ -253,7 +253,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     selectedArticleList.length * selectedPlatformIds.size;
   const selectedHepan = selectedPlatformIds.has("hepan");
   const hepanArticleCount = selectedHepan ? selectedArticleList.length : 0;
-  const minimumHepanWaitSeconds = Math.max(0, hepanArticleCount - 1) * publishIntervalSeconds;
+  const effectivePublishIntervalSeconds = publishIntervalSeconds ?? 0;
+  const minimumHepanWaitSeconds = Math.max(0, hepanArticleCount - 1) * effectivePublishIntervalSeconds;
   const canSubmit =
     selectedArticleList.length > 0 && selectedPlatformIds.size > 0;
 
@@ -302,6 +303,9 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const nextTaskLabel = platformState.nextTask?.filename || platformState.task?.filename || "下一篇";
   const platformPhase = platformState.phase || platformState.status || "";
   const isWaitingInterval = platformPhase === "waiting-interval" || platformPhase === "waiting_interval";
+  const trashReasonText = submitResult?.trashSummary?.reasonCodes?.length
+    ? `原因：${submitResult.trashSummary.reasonCodes.join("、")}`
+    : "";
 
   const dismissResult = () => {
     setShowResult(false);
@@ -619,7 +623,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       {/* Confirmation overlay */}
       <AnimatePresence>
         {isConfirming && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -691,7 +695,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                   <p className="text-sm font-bold text-indigo-700">
                     共 {taskCount} 个发布任务
                   </p>
-                  {selectedHepan && <p className="mt-1 text-xs text-indigo-700">河畔文章：{hepanArticleCount} 篇 · 配置间隔：{publishIntervalSeconds} 秒 · 最少等待：{minimumHepanWaitSeconds} 秒（第一篇立即执行）</p>}
+                  {selectedHepan && <p className="mt-1 text-xs text-indigo-700">河畔文章：{hepanArticleCount} 篇 · 配置间隔：{publishIntervalSeconds === null ? '读取中' : `${publishIntervalSeconds} 秒`} · 最少等待：{minimumHepanWaitSeconds} 秒（第一篇立即执行）</p>}
                   {selectedHepan && publishIntervalSeconds === 0 && <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">0 秒不增加等待，但存在河畔频率限制风险。</p>}
                 </div>
 
@@ -744,7 +748,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       {/* Result overlay */}
       <AnimatePresence>
         {showResult && submitResult && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -794,8 +798,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                 </div>
                 {submitResult.archiveSummary && submitResult.archiveSummary.failed > 0 && <div role="status" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">远端已发布，本地归档待处理：{submitResult.archiveSummary.failed} 项。队列中的这些文章已禁止再次远端投稿。</div>}
                 {submitResult.trashDisposition === "offer_trash" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布 {submitResult.trashSummary?.offeredCount || resultOk} 篇，可移入回收站。<button type="button" onClick={onOpenArticleManagement} className="ml-2 rounded border border-emerald-300 px-2 py-1 font-semibold">打开文章管理</button></div>}
-                {submitResult.trashDisposition === "auto_trash_blocked" && <div role="alert" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">自动回收未执行：存在失败、待确认、活动投稿或本地归档待处理项。远端已发布结果保持不变，可稍后从文章管理手动回收。</div>}
-                {submitResult.trashDisposition === "auto_trash_requested" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布目标全部满足条件，文章本地副本已按确认策略移入回收站；发布记录继续保留。</div>}
+                {submitResult.trashDisposition === "auto_trash_blocked" && <div role="alert" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">自动回收未执行：存在失败、待确认、活动投稿或本地归档待处理项。远端已发布结果保持不变，可稍后从文章管理手动回收。{trashReasonText && <span className="mt-1 block">{trashReasonText}</span>}</div>}
+                {submitResult.trashDisposition === "auto_trash_requested" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布目标全部满足条件，文章本地副本已按确认策略移入回收站；发布记录继续保留。{(submitResult.trashSummary?.recoveryCount || 0) > 0 && <span className="mt-1 block">部分回收已进入恢复事务，系统会继续刷新处理状态。</span>}</div>}
 
                 <div className="max-h-60 overflow-y-auto space-y-1.5">
                   {(terminalResult?.results || []).map((r, i) => (

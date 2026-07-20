@@ -3,7 +3,7 @@ import {
   cancelWorkspaceSelection,
   chooseWorkspaceDirectory,
   confirmWorkspaceSelection,
-} from '../electron-api';
+} from '../bridge/workspace';
 import { WorkspaceBootstrapState } from '../types';
 import WorkspaceSelectionPanel from './WorkspaceSelectionPanel';
 

@@ -1,11 +1,9 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const { after, before } = require("node:test");
-const { execFileSync, spawn } = require("node:child_process");
 const fs = require("node:fs");
-const http = require("node:http");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
 function read(file) { return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8"); }
 
@@ -46,24 +44,9 @@ describe("renderer question editor session", function() {
 
 const rootDir = path.resolve(__dirname, "..");
 const rendererUrl = "http://127.0.0.1:4174/";
-let viteProcess;
 let browser;
 
 function ok(data) { return Promise.resolve({ ok: true, data }); }
-
-async function waitForServer(url) {
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      await new Promise((resolve, reject) => {
-        const request = http.get(url, (response) => { response.resume(); response.statusCode >= 200 && response.statusCode < 500 ? resolve() : reject(new Error("server not ready")); });
-        request.on("error", reject);
-      });
-      return;
-    } catch (_) { await new Promise((resolve) => setTimeout(resolve, 100)); }
-  }
-  throw new Error("Vite renderer server did not start");
-}
 
 function installQuestionFixture(page) {
   return page.addInitScript(() => {
@@ -100,13 +83,9 @@ function installQuestionFixture(page) {
 
 describe("real renderer question editor interaction", { concurrency: false }, function() {
   before(async function() {
-    if (process.platform === "win32") execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm --prefix media-workbench run build"], { cwd: rootDir, stdio: "inherit" });
-    else execFileSync("npm", ["--prefix", "media-workbench", "run", "build"], { cwd: rootDir, stdio: "inherit" });
-    viteProcess = spawn(process.execPath, [path.join(rootDir, "media-workbench", "node_modules", "vite", "bin", "vite.js"), "preview", "--host", "127.0.0.1", "--port", "4174"], { cwd: path.join(rootDir, "media-workbench"), stdio: ["ignore", "pipe", "pipe"] });
-    await waitForServer(rendererUrl);
-    browser = await chromium.launch({ headless: true });
+    ({ browser } = await startRenderer({ port: 4174 }));
   });
-  after(async function() { if (browser) await browser.close(); if (viteProcess && !viteProcess.killed) viteProcess.kill(); });
+  after(closeRenderer);
 
   it("opens, closes, restores focus, resets references, and survives client switching", async function() {
     const page = await browser.newPage({ viewport: { width: 1024, height: 800 } });

@@ -128,6 +128,11 @@ function safeTask(task) {
   };
 }
 
+function taskKey(task) {
+  var value = safeTask(task);
+  return value.sourcePlatformId + "\u0000" + value.filename + "\u0000" + value.targetPlatformId;
+}
+
 function isStopError(error) {
   return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
 }
@@ -270,6 +275,29 @@ function createPlatformWorkbenchService(opts) {
   function toWorkerPlan(plan) {
     var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
     return { taskCount: tasks.length, tasks: tasks.map(safeTask) };
+  }
+
+  function captureTaskIdentities(plan) {
+    var identities = new Map();
+    var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
+    tasks.forEach(function(rawTask) {
+      var task = safeTask(rawTask);
+      var identity = { clientId: null, articleId: null, reasonCode: "IDENTITY_MISSING" };
+      try {
+        var filePath = resolveSelectedFilePath(task, true);
+        var metadata = readSubmissionMetadata(filePath, true);
+        var data = metadata && metadata.data;
+        var articleId = data && (data.generatedArticleId || data.articleId);
+        if (metadata && metadata.valid === true && isSafeToken(data && data.clientId) && isSafeToken(articleId)) {
+          identity = Object.freeze({ clientId: data.clientId, articleId: articleId });
+        }
+      } catch (_) {
+        // A publish can still be reported as successful when the local identity
+        // is unavailable. Only the post-publish local removal is blocked.
+      }
+      identities.set(taskKey(task), identity);
+    });
+    return identities;
   }
 
   function fallbackParseArticle(sourceArticle, filePath) {
@@ -704,6 +732,8 @@ function createPlatformWorkbenchService(opts) {
     scanQueue: scanQueue,
     buildSelectedPlan: buildSelectedPlan,
     toWorkerPlan: toWorkerPlan,
+    captureTaskIdentities: captureTaskIdentities,
+    taskKey: taskKey,
     submitSelectedPlanSerially: submitSelectedPlanSerially,
     resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false); },
     readSubmissionMetadata: function(sourcePlatformId, filename) {
@@ -714,4 +744,4 @@ function createPlatformWorkbenchService(opts) {
   };
 }
 
-module.exports = { createPlatformWorkbenchService, readSubmissionMetadata, resolvePlatformSubmissionFile };
+module.exports = { createPlatformWorkbenchService, readSubmissionMetadata, resolvePlatformSubmissionFile, taskKey };

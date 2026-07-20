@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { ViewMode, Article, MediaResource, Draft, Order } from './types';
 import {
   scanArticles,
@@ -14,15 +14,10 @@ import {
   getDraft,
   buildConfirmation,
   submitSelected,
-} from "./electron-api";
+} from "./bridge/media";
 import Sidebar from './components/Sidebar';
 import ArticleList from './components/ArticleList';
 import ArticleEditor from './components/ArticleEditor';
-import ResourceLibrary from './components/ResourceLibrary';
-import OrdersView from './components/OrdersView';
-import SettingsView from './components/SettingsView';
-import PlatformWorkbench from './components/PlatformWorkbench';
-import ContentWorkbench from './components/ContentWorkbench';
 import PreflightModal, { MediaPreflightSummary } from './components/PreflightModal';
 import { WorkspaceDataProvider, usePlatformQueue } from './workspace-data-store';
 import { PlatformTaskProvider } from './platform-task-store';
@@ -40,6 +35,12 @@ import {
   ListFilter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+const ResourceLibrary = lazy(() => import('./components/ResourceLibrary'));
+const OrdersView = lazy(() => import('./components/OrdersView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const PlatformWorkbench = lazy(() => import('./components/PlatformWorkbench'));
+const ContentWorkbench = lazy(() => import('./components/ContentWorkbench'));
 
 export default function App() {
   return <PlatformTaskProvider><WorkspaceDataProvider><AppContent /></WorkspaceDataProvider></PlatformTaskProvider>;
@@ -68,6 +69,8 @@ function AppContent() {
   const [confirmation, setConfirmation] = useState<MediaPreflightSummary | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const mediaRefreshRequestId = useRef(0);
 
   const openArticleAttention = (intent: { attentionId?: string; clientId?: string } = {}) => {
     setArticleAttentionIntent(intent);
@@ -238,15 +241,6 @@ function AppContent() {
   };
 
   // Order & submission handling
-  const handleRefreshOrders = async () => {
-    try {
-      const ordersData = await getOrders();
-      setOrders(ordersData);
-    } catch (e) {
-      console.error('refreshOrders failed:', e);
-    }
-  };
-
   const handleClearOrders = () => {
     setOrders([]);
   };
@@ -254,15 +248,44 @@ function AppContent() {
   const handleRealSubmit = async () => {
     if (!readyForSubmit || isSubmitting) return;
     setIsSubmitting(true);
+    setSubmissionError(null);
     try { const preflight = await buildConfirmation(articles) as MediaPreflightSummary; setConfirmation(preflight); }
     catch (e) { console.error('media submit failed', e); }
     finally { setIsSubmitting(false); }
   };
-  const confirmRealSubmit = async () => { setIsSubmitting(true); try { await submitSelected(articles); await handleRefreshOrders(); setConfirmation(null); } finally { setIsSubmitting(false); } };
+
+  // The media workbench owns this snapshot.  A submission may consume files,
+  // so refresh articles before orders and ignore responses superseded by a
+  // newer refresh.
+  const refreshMediaWorkbenchData = useCallback(async () => {
+    const requestId = ++mediaRefreshRequestId.current;
+    const freshArticles = await scanArticles();
+    if (requestId !== mediaRefreshRequestId.current) return;
+    setArticles(freshArticles);
+    setActiveArticle((current) => current && !freshArticles.some((article) => article.filename === current.filename) ? null : current);
+
+    const freshOrders = await getOrders();
+    if (requestId !== mediaRefreshRequestId.current) return;
+    setOrders(freshOrders);
+  }, []);
+  const confirmRealSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmissionError(null);
+    try {
+      await submitSelected(articles);
+      await refreshMediaWorkbenchData();
+      setConfirmation(null);
+    } catch (error) {
+      console.error('media submit failed', error);
+      setSubmissionError(error instanceof Error ? error.message : '提交失败，请稍后重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Clear all local order records
     return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+    <div className="flex h-full w-full overflow-hidden bg-slate-50">
       {/* 1. Fixed Left Sidebar */}
       <Sidebar
         currentView={currentView}
@@ -309,6 +332,7 @@ function AppContent() {
         </header>
 {/* Scrollable Main Viewport */}
         <main className="flex-1 overflow-y-auto p-6 min-h-0 relative select-none">
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-500">正在加载工作台…</div>}>
           <AnimatePresence mode="wait">
             
             {/* View 1: Workbench Workspace */}
@@ -444,8 +468,9 @@ function AppContent() {
             )}
 
           </AnimatePresence>
+          </Suspense>
         </main>
-        <PreflightModal isOpen={Boolean(confirmation)} onClose={() => setConfirmation(null)} articles={articles} balance={balance} summary={confirmation || {}} isSubmitting={isSubmitting} onSubmit={confirmRealSubmit} />
+        <PreflightModal isOpen={Boolean(confirmation)} onClose={() => { setSubmissionError(null); setConfirmation(null); }} articles={articles} balance={balance} summary={confirmation || {}} isSubmitting={isSubmitting} submissionError={submissionError} onSubmit={confirmRealSubmit} />
       </div>
 
     </div>

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { clearPlatformSettings, getPlatformSettingsStatus, savePlatformSettings, testPlatformSettings } from '../../electron-api';
+import { clearPlatformSettings, getPlatformSettingsStatus, savePlatformSettings, testPlatformSettings } from '../../bridge/settings';
 import type { MediaProviderStatus } from '../../types';
 
-const EMPTY: MediaProviderStatus = { source: 'application', configured: false, baseUrl: 'http://8.138.187.158:8082', timeoutMs: 30000, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null };
+const EMPTY: MediaProviderStatus = { source: 'application', configured: false, baseUrl: '', timeoutMs: 0, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null };
 function message(error: unknown): string { const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code || '') : ''; return ({ PLATFORM_CONFIG_INVALID: '配置无效，请检查输入项。', PLATFORM_CONFIG_BUSY: '付费媒体投稿运行中，暂时不能修改配置。', PLATFORM_CONFIG_ENV_OVERRIDE: '配置由环境变量覆盖，当前页面只能查看。', PLATFORM_CONFIG_NOT_SET: '尚未配置付费媒体。', MEDIA_CONNECTION_FAILED: '连接测试失败，请检查地址和 API Key。' } as Record<string, string>)[code] || '付费媒体配置操作失败。'; }
 
 export default function MediaProviderSettings() {
-  const [status, setStatus] = useState(EMPTY); const [apiKey, setApiKey] = useState(''); const [baseUrl, setBaseUrl] = useState(EMPTY.baseUrl); const [timeoutMs, setTimeoutMs] = useState(30000); const [allowInsecure, setAllowInsecure] = useState(false); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
-  const load = async () => { try { const next = await getPlatformSettingsStatus<MediaProviderStatus>('media'); setStatus(next); setBaseUrl(next.baseUrl || EMPTY.baseUrl); setTimeoutMs(next.timeoutMs || 30000); setAllowInsecure(next.allowInsecure); } catch (value) { setError(message(value)); } finally { setLoading(false); } };
+  const [status, setStatus] = useState(EMPTY); const [apiKey, setApiKey] = useState(''); const [baseUrl, setBaseUrl] = useState(EMPTY.baseUrl); const [timeoutMs, setTimeoutMs] = useState(EMPTY.timeoutMs); const [allowInsecure, setAllowInsecure] = useState(false); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
+  const load = async () => { try { const next = await getPlatformSettingsStatus<MediaProviderStatus>('media'); setStatus(next); setBaseUrl(next.baseUrl || EMPTY.baseUrl); setTimeoutMs(next.timeoutMs || EMPTY.timeoutMs); setAllowInsecure(next.allowInsecure); } catch (value) { setError(message(value)); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, []);
   const draft = () => ({ apiKey, baseUrl: baseUrl.trim(), timeoutMs: Number(timeoutMs), allowInsecure });
   const save = async () => { setError(''); setNotice(''); if (!apiKey.trim() && !status.configured) { setError('请输入 API Key。'); return; } setBusy(true); try { const next = await savePlatformSettings('media', draft()); setStatus(next); setApiKey(''); setNotice('付费媒体配置已保存，下一次操作立即生效。'); } catch (value) { setError(message(value)); } finally { setBusy(false); } };

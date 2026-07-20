@@ -296,7 +296,8 @@ describe("submission batch and platform worker integration", function() {
 
       const cancelPreview = value.submission.previewCancelBatch({ batchId: batch.batchId });
       assert.equal(cancelPreview.cancelableCount, 0);
-      const cancelResult = value.submission.cancelBatch({ batchId: batch.batchId, confirmed: true });
+      const cancelPlan = value.submission.previewCancelBatch({ batchId: batch.batchId });
+      const cancelResult = value.submission.cancelBatch({ batchId: batch.batchId, planId: cancelPlan.planId, confirmed: true });
       assert.equal(cancelResult.cancelledCount, 0);
       assert.equal(fs.existsSync(batch.items[0].filePath), true);
 

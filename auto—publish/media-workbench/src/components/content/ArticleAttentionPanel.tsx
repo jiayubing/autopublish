@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { previewArticleAttention, resolveArticleAttention } from '../../electron-api';
+import { previewArticleAttention, resolveArticleAttention } from '../../bridge/content';
 import type { ArticleAttentionItem } from '../../types';
 import type { ArticleAttentionSnapshot } from '../../article-attention-store';
 

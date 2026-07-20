@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { changeAuthPassword, getAuthState, login, logout, onAuthStateChanged } from "./electron-api";
+import { changeAuthPassword, getAuthState, login, logout, onAuthStateChanged } from "./bridge/auth";
 import type { AuthState } from "./types";
 
 export interface AuthClientStore {
@@ -13,22 +13,34 @@ export interface AuthClientStore {
 }
 
 export function createAuthClientStore(): AuthClientStore {
-  let state: AuthState = { authenticated: false, user: null, entitlements: [], errorCode: null };
+  let state: AuthState = { authenticated: false, user: null, entitlements: [], errorCode: null, sessionStatus: "signed_out" };
   let unsubscribe: (() => void) | null = null;
+  let initializePromise: Promise<void> | null = null;
+  let lifecycle = 0;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   const setState = (next: AuthState) => { state = next; notify(); return state; };
   return {
     getState: () => state,
     async initialize() {
-      setState(await getAuthState());
-      unsubscribe = onAuthStateChanged((next) => setState(next));
+      if (initializePromise) return initializePromise;
+      const currentLifecycle = lifecycle;
+      initializePromise = (async () => {
+        const next = await getAuthState();
+        if (currentLifecycle !== lifecycle) return;
+        setState(next);
+        if (!unsubscribe) unsubscribe = onAuthStateChanged((changed) => {
+          if (currentLifecycle === lifecycle) setState(changed);
+        });
+      })();
+      try { await initializePromise; }
+      finally { initializePromise = null; }
     },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async login(loginName, password) { return setState(await login(loginName, password)); },
     async changePassword(loginName, currentPassword, newPassword) { return setState(await changeAuthPassword(loginName, currentPassword, newPassword)); },
     async logout() { return setState(await logout()); },
-    dispose() { if (unsubscribe) unsubscribe(); unsubscribe = null; listeners.clear(); },
+    dispose() { lifecycle += 1; if (unsubscribe) unsubscribe(); unsubscribe = null; initializePromise = null; listeners.clear(); },
   };
 }
 

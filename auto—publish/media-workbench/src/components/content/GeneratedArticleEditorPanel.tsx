@@ -1,6 +1,6 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { Save, X } from 'lucide-react';
-import { saveContentArticle } from '../../electron-api';
+import { saveContentArticle } from '../../bridge/content';
 import { GeneratedContentArticle } from '../../types';
 
 interface GeneratedArticleEditorPanelProps {
@@ -22,7 +22,6 @@ export default function GeneratedArticleEditorPanel({ article, published = false
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const titleRef = useRef<HTMLInputElement | null>(null);
-  const panelRef = useRef<HTMLElement | null>(null);
   const dirty = draft.title !== base.title || draft.content !== base.content;
 
   useEffect(() => {
@@ -44,22 +43,10 @@ export default function GeneratedArticleEditorPanel({ article, published = false
         close();
         return;
       }
-      if (embedded || event.key !== 'Tab' || !panelRef.current) return;
-      const focusable: HTMLElement[] = Array.from(panelRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'));
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [dirty, embedded]);
+  }, [dirty]);
 
   function close() {
     if (dirty && !window.confirm('文章有未保存修改，确认关闭并放弃这些修改吗？')) return;
@@ -86,7 +73,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
     }
   }
 
-  return <section ref={panelRef} role={embedded ? undefined : 'dialog'} aria-modal={embedded ? undefined : true} aria-labelledby="generated-article-editor-title" className={`generated-article-editor-panel flex min-h-0 min-w-0 flex-col overflow-hidden bg-white shadow-xl ${embedded ? 'h-full w-full rounded-md border border-slate-200' : 'fixed inset-0 z-30 h-full sm:static sm:w-[min(42%,34rem)] sm:shrink-0 sm:rounded-md sm:border sm:border-slate-200'}`}>
+  return <section aria-labelledby="generated-article-editor-title" className={`generated-article-editor-panel flex min-h-0 min-w-0 flex-col overflow-hidden bg-white shadow-xl ${embedded ? 'h-full w-full rounded-md border border-slate-200' : 'h-[min(70vh,42rem)] w-full shrink-0 rounded-md border border-slate-200 lg:h-full lg:w-[min(42%,34rem)]'}`}>
     <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-4 py-3">
       <div className="min-w-0 flex-1">
         <h2 id="generated-article-editor-title" className="truncate text-sm font-semibold text-slate-800">编辑文章</h2>

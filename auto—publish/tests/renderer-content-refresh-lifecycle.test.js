@@ -29,9 +29,10 @@ describe("renderer content refresh lifecycle", function() {
     assert.match(workbench, /refreshBatchState/);
     assert.match(article, /onRefreshArticles/);
     assert.match(article, /onRefreshBatchState/);
-    assert.match(history, /onRefreshArticles/);
+    assert.doesNotMatch(history, /onRefreshArticles/);
     assert.match(batch, /onRefreshBatchState/);
     assert.doesNotMatch(article, /onRefresh\(\)/);
+    assert.match(history, /const refreshHistoryData/);
     assert.doesNotMatch(history, /onRefresh\?\.\(\)/);
   });
 

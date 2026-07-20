@@ -10,6 +10,7 @@ const { pwSessionConfig, pwEnv, pwCmd, pwRun, runCode } = require("../../core/pl
 const { extractDocxArticle } = require("../../core/docx-text-extractor");
 const { parseArticle } = require("../../core/article-text");
 const { resolveInteractive, throwIfStopped, waitForCondition } = require("../../core/operator-flow");
+const { createBrowserSessionLifecycle } = require("../shared/browser-session-lifecycle");
 
 var SESSION = pwSessionConfig("toutiao");
 var SESSION_OPTS = { session: SESSION };
@@ -26,79 +27,23 @@ var TOUTIAO = {
   successUrlPattern: /\/profile_v4\/graphic\/articles(?:[/?#]|$)/
 };
 
-function daemonAlive() {
-  try {
-    return pwRun("list", { timeout: 8000, session: SESSION }).indexOf(SESSION.session) !== -1;
-  } catch (e) {
-    return false;
+var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
+  session: SESSION,
+  stateDir: DIRS.stateDir,
+  pwRun: pwRun,
+  quoteArg: quoteArg,
+  ensureDir: ensureDir,
+  sleep: sleep,
+  log: log,
+  start: function() {
+    execSync(pwCmd("open " + TOUTIAO.base + " --browser=" + PW.browserChannel + " --headed --persistent --profile=" + quoteArg(SESSION.profileDir), SESSION), { encoding: "utf-8", timeout: 20000, env: pwEnv(SESSION) });
   }
-}
-
-function ensureDaemon() {
-  if (daemonAlive()) {
-    log("Daemon already running", "INFO");
-    return;
-  }
-
-  log("Starting daemon...", "WARN");
-  try {
-    execSync(
-      pwCmd(
-        "open " + TOUTIAO.base +
-        " --browser=" + PW.browserChannel +
-        " --headed --persistent --profile=" + quoteArg(SESSION.profileDir),
-        SESSION
-      ),
-      {
-        encoding: "utf-8",
-        timeout: 20000,
-        env: pwEnv(SESSION)
-      }
-    );
-  } catch (e) {
-    log("Daemon start command returned: " + e.message, "WARN");
-  }
-
-  for (var i = 0; i < 20; i++) {
-    sleep(1500);
-    if (daemonAlive()) {
-      log("Daemon ready", "INFO");
-      return;
-    }
-  }
-
-  throw new Error("Failed to start daemon");
-}
-
-function loadSavedState() {
-  if (!fs.existsSync(SESSION.stateFile)) {
-    return false;
-  }
-  pwRun("state-load " + quoteArg(SESSION.stateFile), { timeout: 20000, session: SESSION });
-  log("Loaded saved login state", "INFO");
-  return true;
-}
-
-function saveCurrentState() {
-  ensureDir(DIRS.stateDir);
-  pwRun("state-save " + quoteArg(SESSION.stateFile), { timeout: 20000, session: SESSION });
-  log("Saved login state", "INFO");
-}
-
-function closeBrowserSession() {
-  try {
-    saveCurrentState();
-  } catch (e) {
-    log("Failed to save login state before close: " + e.message, "WARN");
-  }
-
-  try {
-    pwRun("close", { timeout: 15000, session: SESSION });
-    log("Browser session closed", "INFO");
-  } catch (e) {
-    log("Failed to close browser session: " + e.message, "WARN");
-  }
-}
+});
+function daemonAlive() { return SESSION_LIFECYCLE.isAlive(); }
+function ensureDaemon() { return SESSION_LIFECYCLE.ensureStarted(); }
+function loadSavedState() { return SESSION_LIFECYCLE.loadSavedState(); }
+function saveCurrentState() { return SESSION_LIFECYCLE.saveState(); }
+function closeBrowserSession() { return SESSION_LIFECYCLE.close(); }
 
 function getCurrentPageUrl() {
   return runCode("  return page.url();\n", SESSION_OPTS).trim();

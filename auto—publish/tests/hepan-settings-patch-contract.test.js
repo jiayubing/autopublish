@@ -232,10 +232,11 @@ describe("Hepan settings patch contract", () => {
     try {
       const result = await fixture.service.test("hepan", { categoryId: 707, clearVendorDir: true });
       const loginCall = fixture.commands.find((call) => call.args.includes("--check-login"));
+      const bundledVendorDir = path.resolve(__dirname, "..", "resources", "hepan", "vendor-pure");
 
       assert.deepStrictEqual(result, { testedAt: "2026-07-18T00:00:00.000Z", ok: true, code: "HEPAN_LOGIN_OK" });
-      assert.equal(loginCall.args.includes("--vendor-dir"), false);
-      assert.equal(loginCall.commandOptions.env, undefined);
+      assert.equal(loginCall.args[loginCall.args.indexOf("--vendor-dir") + 1], bundledVendorDir);
+      assert.equal(loginCall.commandOptions.env.PYTHONPATH, bundledVendorDir);
       assert.deepStrictEqual(fixture.store.read(), fixture.initial);
       assert.equal(fs.existsSync(path.join(fixture.root, "local-state", "tmp")), false);
     } finally {

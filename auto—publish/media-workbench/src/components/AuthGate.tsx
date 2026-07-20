@@ -1,17 +1,9 @@
 import React, { FormEvent, useState } from "react";
 import { AuthProvider, useAuth } from "../auth-store";
+import authContract from "../../../src/contracts/auth-contract.json";
 // getAuthState is called by auth-store before any workspace component mounts.
 
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  AUTH_ACCOUNT_DISABLED: "账号已禁用",
-  AUTH_ACCOUNT_LOCKED: "登录失败次数过多，请稍后重试",
-  AUTH_LICENSE_EXPIRED: "AutoPublish 授权已到期，请联系管理员续期",
-  AUTH_NOT_ENTITLED: "当前账号没有 AutoPublish 使用授权",
-  AUTH_DEVICE_LIMIT_REACHED: "设备名额已用满，请联系管理员释放旧设备",
-  AUTH_DEVICE_REVOKED: "当前设备已被撤销，请联系管理员重新授权",
-  AUTH_RATE_LIMITED: "请求过于频繁，请稍后重试",
-  AUTH_SERVICE_UNAVAILABLE: "认证服务暂时不可达，请检查网络后重试",
-};
+const AUTH_ERROR_MESSAGES: Record<string, string> = authContract.messages;
 
 function LoginView() {
   const auth = useAuth();
@@ -77,16 +69,20 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   const state = auth.getState();
   if (!state || (!state.authenticated && state.errorCode === undefined)) return <div className="min-h-screen flex items-center justify-center text-slate-600">正在验证登录状态…</div>;
-  if (!state.authenticated) return <LoginView />;
+  const recoverable = state.sessionStatus === "recovering" && Boolean(state.user);
+  if (!state.authenticated && !recoverable) return <LoginView />;
   const entitlement = state.entitlements.find((item) => item.product === "AutoPublish");
   const expiry = entitlement?.expiresAt ? new Date(entitlement.expiresAt).toLocaleDateString("zh-CN") : "永久";
   const device = state.device;
-  return <>
-    <div aria-label="授权状态" className="pointer-events-none fixed right-4 top-3 z-50 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm backdrop-blur">
-      授权：{expiry} · 设备：{device?.deviceCount ?? 0}/{device?.maxDevices ?? "-"}
+  return <div className="flex h-screen min-h-0 flex-col overflow-hidden">
+    <div aria-label="授权状态" className="shrink-0 border-b border-slate-200 bg-white px-4 py-1.5 text-[11px] text-slate-600">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <span>授权：{expiry} · 设备：{device?.deviceCount ?? 0}/{device?.maxDevices ?? "-"}</span>
+        {state.sessionStatus === "recovering" && <span role="status" className="text-amber-800">授权连接恢复中：{state.errorCode ? (AUTH_ERROR_MESSAGES[state.errorCode] || state.errorCode) : "网络恢复后将自动续期，无需重新登录"}</span>}
+      </div>
     </div>
-    {children}
-  </>;
+    <div className="min-h-0 flex-1">{children}</div>
+  </div>;
 }
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {

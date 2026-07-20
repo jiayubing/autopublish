@@ -47,6 +47,7 @@ function createArticleAttentionQuery(options) {
   const readers = opts.readers || {};
   const hasAuthoritativeRevision = typeof opts.getRevision === "function";
   let fallbackRevision = 1;
+  let cachedSnapshot = null;
 
   function reader(name, fallback) {
     return typeof readers[name] === "function" ? readers[name] : fallback;
@@ -269,11 +270,20 @@ function createArticleAttentionQuery(options) {
     return normalizeRevision(opts.getRevision ? opts.getRevision() : null, hasAuthoritativeRevision ? 0 : fallbackRevision);
   }
 
+  function snapshot() {
+    const revision = currentRevision();
+    if (!cachedSnapshot || cachedSnapshot.revision !== revision) {
+      cachedSnapshot = { revision: revision, entries: entries() };
+    }
+    return cachedSnapshot;
+  }
+
   function list(input) {
     const value = input || {};
-    const filtered = entries().filter(function(entry) { return !value.clientId || entry.item.clientId === value.clientId; });
+    const current = snapshot();
+    const filtered = current.entries.filter(function(entry) { return !value.clientId || entry.item.clientId === value.clientId; });
     return {
-      revision: currentRevision(),
+      revision: current.revision,
       items: filtered.map(function(entry) { return entry.item; }),
       counts: {
         total: filtered.length,
@@ -285,19 +295,20 @@ function createArticleAttentionQuery(options) {
   function get(input) {
     const attentionId = input && input.attentionId;
     if (typeof attentionId !== "string" || !attentionId.trim()) return null;
-    const entry = entries().find(function(candidate) { return candidate.item.attentionId === attentionId && (!input.clientId || candidate.item.clientId === input.clientId); });
+    const entry = snapshot().entries.find(function(candidate) { return candidate.item.attentionId === attentionId && (!input.clientId || candidate.item.clientId === input.clientId); });
     return entry ? entry.item : null;
   }
 
   function getPolicy(input) {
     const attentionId = input && input.attentionId;
     if (typeof attentionId !== "string" || !attentionId.trim()) return null;
-    const entry = entries().find(function(candidate) { return candidate.item.attentionId === attentionId && (!input.clientId || candidate.item.clientId === input.clientId); });
+    const entry = snapshot().entries.find(function(candidate) { return candidate.item.attentionId === attentionId && (!input.clientId || candidate.item.clientId === input.clientId); });
     return entry ? entry.policy : null;
   }
 
   function invalidate() {
     if (!hasAuthoritativeRevision) fallbackRevision += 1;
+    cachedSnapshot = null;
     return currentRevision();
   }
 

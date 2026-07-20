@@ -144,6 +144,10 @@ function safeEvent(event) {
   ["batchId", "taskId", "clientId", "platform", "templateId", "status", "counts", "error", "updatedAt"].forEach(function(key) {
     if (value[key] !== undefined) result[key] = clone(value[key]);
   });
+  if (result.batchId === undefined) result.batchId = null;
+  if (result.status === undefined) result.status = "idle";
+  if (result.counts === undefined) result.counts = null;
+  if (result.updatedAt === undefined) result.updatedAt = new Date().toISOString();
   if (result.error) result.error = {
     code: typeof result.error.code === "string" ? result.error.code.slice(0, 100) : "GENERATION_TASK_FAILED",
     message: typeof result.error.message === "string" ? result.error.message.slice(0, 200) : "Generation task failed"
@@ -174,7 +178,9 @@ function createContentGenerationBatchService(options) {
   let disposed = false;
   let activeStatus = "idle";
   let activeBatchId = null;
+  let activeRun = null;
   let runner;
+  const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
 
   function fingerprint() {
     const value = typeof provider.getFingerprint === "function" ? provider.getFingerprint() : opts.aiConfigFingerprint;
@@ -189,8 +195,17 @@ function createContentGenerationBatchService(options) {
     });
   }
 
-  function emitBatch(batch) {
-    if (batch) emit({ batchId: batch.id, status: batch.status, counts: batch.counts, updatedAt: batch.updatedAt });
+  function emitBatch(batch, status, error) {
+    if (batch) emit({ batchId: batch.id, status: status || batch.status, counts: batch.counts, updatedAt: now(), error: error });
+  }
+
+  function runtimeBatch(batch, status, error) {
+    if (!batch) return null;
+    const result = clone(batch);
+    result.status = status || result.status;
+    result.updatedAt = now();
+    if (error) result.error = { code: error.code || "GENERATION_BATCH_FAILED", message: error.message || "Generation batch failed" };
+    return result;
   }
 
   async function listMaterials(clientId) {
@@ -329,14 +344,24 @@ function createContentGenerationBatchService(options) {
 
   function assertAvailable() {
     if (disposed) throw generationError("GENERATION_RUNNER_DISPOSED");
-    if (activeStatus === "running" || activeStatus === "stopping") throw generationError("GENERATION_BATCH_BUSY");
+    if (activeRun || activeStatus === "running" || activeStatus === "pausing" || activeStatus === "stopping") throw generationError("GENERATION_BATCH_BUSY");
   }
 
   function currentState() {
     const runnerState = runner && typeof runner.getState === "function" ? runner.getState() : {};
     const status = activeStatus !== "idle" ? activeStatus : (runnerState.status || "idle");
-    return { status: status, batchId: activeBatchId || runnerState.batchId || null,
-      concurrency: 1, isBatchRunning: status === "running", isStopPending: status === "stopping" };
+    let counts = null;
+    let updatedAt = runnerState.updatedAt || now();
+    const batchId = activeBatchId || runnerState.batchId || null;
+    if (batchId) {
+      try {
+        const batch = batchStore.getBatch(batchId);
+        counts = batch.counts || runnerState.counts || null;
+        updatedAt = status === batch.status ? (batch.updatedAt || updatedAt) : updatedAt;
+      } catch (_) {}
+    }
+    return { state: status, status: status, batchId: batchId, counts: clone(counts), updatedAt: updatedAt,
+      concurrency: 1, isBatchRunning: ["running", "pausing", "stopping"].includes(status), isStopPending: status === "stopping" };
   }
 
   async function findExistingArticle(task) {
@@ -400,20 +425,51 @@ function createContentGenerationBatchService(options) {
     assertAvailable();
     const batch = batchStore.getBatch(batchId);
     if (!batch) throw generationError("GENERATION_BATCH_NOT_FOUND");
-    const currentFingerprint = await fingerprint();
-    if (selection === "unfinished" && currentFingerprint !== batch.aiConfigFingerprint && confirmConfigChange !== true) {
-      throw generationError("GENERATION_AI_CONFIG_CHANGED");
-    }
+    const reservation = { batchId: batchId, selection: selection, promise: null };
+    activeRun = reservation;
     activeBatchId = batchId;
-    activeStatus = "running";
-    emitBatch(batch);
     try {
-      const result = await ensureRunner().run(batchId, selection);
-      emitBatch(result);
-      return clone(result);
-    } finally {
-      activeStatus = "idle";
-      activeBatchId = null;
+      const currentFingerprint = await fingerprint();
+      if (selection === "unfinished" && currentFingerprint !== batch.aiConfigFingerprint && confirmConfigChange !== true) {
+        throw generationError("GENERATION_AI_CONFIG_CHANGED");
+      }
+      const activeRunner = ensureRunner();
+      activeStatus = "running";
+      emitBatch(batch, "running");
+      const runnerPromise = activeRunner.run(batchId, selection);
+      const work = Promise.resolve(runnerPromise)
+        .then(function(result) {
+          emitBatch(result, result && result.status);
+          return clone(result);
+        })
+        .catch(function(error) {
+          let failedBatch = null;
+          try {
+            failedBatch = batchStore.getBatch(batchId);
+            if (["pending", "running", "stopping", "interrupted"].includes(failedBatch.status) && typeof batchStore.updateBatchStatus === "function") {
+              failedBatch = batchStore.updateBatchStatus(batchId, "failed");
+            }
+          } catch (_) {}
+          if (failedBatch) emitBatch(failedBatch, "failed", error);
+          else emit({ batchId: batchId, status: "failed", counts: null, updatedAt: now(), error: error });
+          return runtimeBatch(failedBatch || batch, "failed", error);
+        })
+        .finally(function() {
+          if (activeRun === reservation) {
+            activeRun = null;
+            activeStatus = "idle";
+            activeBatchId = null;
+          }
+        });
+      reservation.promise = work;
+      return runtimeBatch(batch, "running");
+    } catch (error) {
+      if (activeRun === reservation) {
+        activeRun = null;
+        activeStatus = "idle";
+        activeBatchId = null;
+      }
+      throw error;
     }
   }
 
@@ -461,18 +517,26 @@ function createContentGenerationBatchService(options) {
     return clone(batch);
   }
 
-  async function stopBatch() {
-    if (!runner || activeStatus === "idle") return activeBatchId ? clone(batchStore.getBatch(activeBatchId)) : null;
-    activeStatus = "stopping";
-    const result = await runner.stop();
-    activeStatus = "idle";
-    if (result) emitBatch(result);
-    return clone(result);
+  async function requestStop(input, commandStatus) {
+    if (input !== undefined) {
+      const value = assertObject(input);
+      if (value.batchId !== undefined && value.batchId !== activeBatchId) throw generationError("GENERATION_BATCH_BUSY");
+    }
+    if (!runner || !activeRun || activeStatus === "idle") return null;
+    activeStatus = commandStatus;
+    const batch = batchStore.getBatch(activeBatchId);
+    emitBatch(batch, commandStatus);
+    Promise.resolve().then(function() { return typeof runner[commandStatus === "pausing" ? "pause" : "stop"] === "function" ? runner[commandStatus === "pausing" ? "pause" : "stop"]() : runner.stop(); })
+      .catch(function() { return undefined; });
+    return runtimeBatch(batch, commandStatus);
   }
 
-  async function pauseBatch() {
-    if (runner && typeof runner.pause === "function") return runner.pause();
-    return stopBatch();
+  async function stopBatch(input) {
+    return requestStop(input, "stopping");
+  }
+
+  async function pauseBatch(input) {
+    return requestStop(input, "pausing");
   }
 
   function get(batchId) { return clone(batchStore.getBatch(assertId(batchId, "batch id"))); }
@@ -482,7 +546,7 @@ function createContentGenerationBatchService(options) {
     listeners.add(listener);
     return function() { listeners.delete(listener); };
   }
-  async function dispose() { if (disposed) return; disposed = true; if (runner && typeof runner.dispose === "function") await runner.dispose(); listeners.clear(); }
+  async function dispose() { if (disposed) return; disposed = true; if (runner && typeof runner.dispose === "function") await runner.dispose(); if (activeRun && activeRun.promise) await activeRun.promise.catch(function() { return undefined; }); listeners.clear(); }
 
   return {
     preview: preview, previewBatch: preview, prepare: prepareBatch, prepareBatch: prepareBatch, revalidate: revalidateBatch, revalidateBatch: revalidateBatch,

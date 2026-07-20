@@ -1,12 +1,14 @@
 const { createContentSubmissionService } = require("../services/content-submission-service");
+const { createSubmissionWorkflow } = require("../services/submission-workflow");
 const { wrap } = require("../services/ipc-response");
 function registerContentSubmissionIpc(deps) {
   const service = deps.contentSubmissionService || createContentSubmissionService({ workspaceRoot: deps.rootDir, paths: deps.paths, platforms: deps.platforms });
+  const workflow = deps.submissionWorkflow || createSubmissionWorkflow(service);
   function checked(input) { if (!input || input.confirmed !== true || Object.keys(input).some(function(key) { return ["clientId", "generatedArticleId", "targetPlatform", "mediaResourceId", "confirmed"].indexOf(key) === -1; })) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return input; }
-  deps.ipcMain.handle("content:preview-export", function(event, input) { return wrap(function() { return service.previewExport(checked(input)); }); });
-  deps.ipcMain.handle("content:export-article", function(event, input) { return wrap(function() { return service.exportArticle(checked(input)); }); });
+  deps.ipcMain.handle("content:preview-export", function(event, input) { return wrap(function() { return workflow.preparation.previewExport(checked(input)); }); });
+  deps.ipcMain.handle("content:export-article", function(event, input) { return wrap(function() { return workflow.preparation.exportArticle(checked(input)); }); });
   function batchInput(input, confirmed) {
-    if (!input || typeof input !== "object" || Object.keys(input).some(function(key) { return ["clientId", "articleIds", "targetPlatformIds", "confirmed", "batchId"].indexOf(key) === -1; })) {
+    if (!input || typeof input !== "object" || Object.keys(input).some(function(key) { return ["clientId", "articleIds", "targetPlatformIds", "confirmed", "batchId", "planId"].indexOf(key) === -1; })) {
       const e = new Error("Invalid content submission batch input"); e.code = "CONTENT_SUBMISSION_BATCH_INPUT_INVALID"; throw e;
     }
     if (confirmed && input.confirmed !== true) { const e = new Error("Batch confirmation is required"); e.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED"; throw e; }
@@ -33,35 +35,35 @@ function registerContentSubmissionIpc(deps) {
     });
     return result;
   }
-  deps.ipcMain.handle("content:preview-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.previewBatch(batchInput(input, false))); }); });
-  deps.ipcMain.handle("content:list-submission-platforms", function() { return wrap(function() { return service.listPlatforms(); }); });
+  deps.ipcMain.handle("content:preview-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(workflow.preparation.previewBatch(batchInput(input, false))); }); });
+  deps.ipcMain.handle("content:list-submission-platforms", function() { return wrap(function() { return workflow.preparation.listPlatforms(); }); });
   deps.ipcMain.handle("content:list-submission-batches", function(event, input) { return wrap(function() {
     if (input !== undefined && (!input || typeof input !== "object" || Array.isArray(input) || typeof input.clientId !== "string" || !input.clientId.trim() || Object.keys(input).some(function(key) { return key !== "clientId"; }))) {
       const error = new Error("Invalid content submission batch input"); error.code = "CONTENT_SUBMISSION_BATCH_INPUT_INVALID"; throw error;
     }
-    return safeBatchResult(service.listBatches(input && input.clientId));
+    return safeBatchResult(workflow.batch.list(input && input.clientId));
   }); });
-  deps.ipcMain.handle("content:create-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.createBatch(batchInput(input, true))); }); });
-  deps.ipcMain.handle("content:preview-cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCancelBatch(batchInput(input, false))); }); });
-  deps.ipcMain.handle("content:cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.cancelBatch(batchInput(input, true))); }); });
-  deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.previewCleanupFailedItems(batchInput(input, false))); }); });
-  deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(service.cleanupFailedItems(batchInput(input, true))); }); });
+  deps.ipcMain.handle("content:create-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(workflow.preparation.createBatch(batchInput(input, true))); }); });
+  deps.ipcMain.handle("content:preview-cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(workflow.batch.previewCancel(batchInput(input, false))); }); });
+  deps.ipcMain.handle("content:cancel-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(workflow.batch.cancel(batchInput(input, true))); }); });
+  deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(workflow.cleanup.previewFailed(batchInput(input, false))); }); });
+  deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return safeBatchResult(workflow.cleanup.cleanupFailed(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:preview-retry-failed-publication", function(event, input) { return wrap(function() {
     if (!input || typeof input !== "object" || typeof input.publicationId !== "string" || Object.keys(input).some(function(key) { return key !== "publicationId"; })) {
       const error = new Error("Invalid failed publication retry input"); error.code = "CONTENT_SUBMISSION_INPUT_INVALID"; throw error;
     }
-    return safeBatchResult(service.previewRetryFailedPublication(input));
+    return safeBatchResult(workflow.retry.previewFailedPublication(input));
   }); });
   deps.ipcMain.handle("content:retry-failed-publication", function(event, input) { return wrap(function() {
     if (!input || typeof input !== "object" || typeof input.publicationId !== "string" || input.confirmed !== true || Object.keys(input).some(function(key) { return !["publicationId", "expectedRevision", "confirmed"].includes(key); })) {
       const error = new Error("Failed publication retry confirmation is required"); error.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED"; throw error;
     }
-    return safeBatchResult(service.retryFailedPublication(input));
+    return safeBatchResult(workflow.retry.failedPublication(input));
   }); });
-  deps.ipcMain.handle("content:get-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(service.getBatch(batchInput(input, false).batchId)); }); });
-  deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return safeResidueResult(service.previewTrashedArticleQueueResidue()); }); });
+  deps.ipcMain.handle("content:get-submission-batch", function(event, input) { return wrap(function() { return safeBatchResult(workflow.batch.get(batchInput(input, false).batchId)); }); });
+  deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return safeResidueResult(workflow.cleanup.previewResidue()); }); });
   deps.ipcMain.handle("content:cleanup-trashed-article-queue-residue", function(event, input) {
-    return wrap(function() { return safeResidueResult(service.cleanupTrashedArticleQueueResidue(input)); });
+    return wrap(function() { return safeResidueResult(workflow.cleanup.cleanupResidue(input)); });
   });
 }
 module.exports = { registerContentSubmissionIpc };

@@ -3,11 +3,10 @@ import { AlertTriangle, CheckCircle2, KeyRound, Save, ShieldCheck, TestTube2, Tr
 import {
   clearAiProviderConfig,
   getAiProviderStatus,
-  getGenerationBatchState,
   saveAiProviderConfig,
-  subscribeGenerationBatchState,
   testAiProviderConnection,
-} from '../electron-api';
+} from '../bridge/settings';
+import { getGenerationBatchState, subscribeGenerationBatchState } from '../bridge/content';
 import {
   AiProviderConfigInput,
   AiProviderStatus,

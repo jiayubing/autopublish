@@ -26,13 +26,16 @@ describe("Hepan publish payload contract", () => {
       fs.mkdirSync(inputDir, { recursive: true });
       const sourceFile = path.join(inputDir, "river.md");
       fs.writeFileSync(sourceFile, "# 河畔标题\n\n正文", "utf8");
+      const bundledVendorDir = path.resolve(__dirname, "..", "resources", "hepan", "vendor-pure");
       const adapter = createHepanAdapter({
         inputDir,
         imageDir: path.join(root, "images"),
         tempDir,
         runtime: configuredRuntime(root),
-        runCommand: (command, args) => {
+        runCommand: (command, args, options) => {
           calls.push({ command, args: args.slice() });
+          assert.equal(options.env.PYTHONPATH, bundledVendorDir);
+          assert.equal(args[args.indexOf("--vendor-dir") + 1], bundledVendorDir);
           const payloadPath = args[args.indexOf("--payload-path") + 1];
           assert.equal(path.dirname(payloadPath), tempDir);
           assert.equal(fs.lstatSync(payloadPath).isFile(), true);

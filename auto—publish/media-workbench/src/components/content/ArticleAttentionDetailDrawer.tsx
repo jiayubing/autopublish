@@ -23,7 +23,7 @@ export default function ArticleAttentionDetailDrawer({ item, onClose }: ArticleA
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   useEffect(() => { if (item) headingRef.current?.focus(); }, [item]);
   if (!item) return null;
-  return <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="需处理详情">
+  return <div className="fixed inset-0 z-[100] flex justify-end" role="dialog" aria-modal="true" aria-label="需处理详情">
     <button type="button" aria-label="关闭需处理详情" onClick={onClose} className="absolute inset-0 cursor-default bg-slate-900/20" />
     <aside className="relative flex h-full w-full max-w-md min-w-0 flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl">
       <div className="flex items-start gap-3 border-b border-slate-200 p-4">

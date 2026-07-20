@@ -27,7 +27,7 @@ export default function PublicationHistoryDrawer({ article, records, onClose, on
   if (!article) return null;
   const summary = summarizePublicationRecords(records);
   const canCopyVersion = records.some((record) => record.status === 'published');
-  return <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label={`文章 ${article.title} 的发布详情`}>
+  return <div className="fixed inset-0 z-[100] flex justify-end" role="dialog" aria-modal="true" aria-label={`文章 ${article.title} 的发布详情`}>
     <button type="button" aria-label="关闭发布详情" onClick={onClose} className="absolute inset-0 cursor-default bg-slate-900/20" />
     <aside className="relative flex h-full w-full max-w-md min-w-0 flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl">
       <div className="flex min-w-0 items-start gap-3 border-b border-slate-200 p-4">

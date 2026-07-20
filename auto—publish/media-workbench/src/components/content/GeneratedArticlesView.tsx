@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../electron-api';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../bridge/content';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
-import { ArticleAttentionItem, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
+import { ArticleAttentionItem, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
 import { deriveArticleManagementStatus, deriveArticleWorkflow, type ArticleWorkflowStage } from '../../article-workflow';
 import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
@@ -11,7 +11,7 @@ import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
 import { useArticleAttention } from '../../article-attention-store';
 
-interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onRefreshArticles?: () => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
+interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
 
 function selectionKey(article: GeneratedContentArticle) { return articleSelectionKey(article); }
 
@@ -30,11 +30,11 @@ function isTerminalRemovalTransaction(status: string): boolean {
   return status === 'committed' || status === 'superseded' || status === 'needs_repair';
 }
 
-function transactionReason(transaction: ArticleRemovalTransaction | null): string {
+  function transactionReason(transaction: ArticleRemovalTransaction | null): string {
   return transaction?.reasonCode || transaction?.errorCode || '状态冲突';
 }
 
-export default function GeneratedArticlesView({ clientId, refreshToken, stageFilter = 'all', selectedAttentionId, onArticleSelect, onRefreshArticles, onStageFilterChange }: GeneratedArticlesViewProps) {
+export default function GeneratedArticlesView({ clientId, refreshToken, stageFilter = 'all', selectedAttentionId, onArticleSelect, onStageFilterChange }: GeneratedArticlesViewProps) {
   const [articles, setArticles] = useState<GeneratedContentArticle[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -46,6 +46,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
+  const [cancellationPlans, setCancellationPlans] = useState<ContentSubmissionCancellationPreview[]>([]);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] = useState<ArticleAttentionItem | null>(null);
@@ -57,10 +58,17 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [removalWatchVersion, setRemovalWatchVersion] = useState(0);
   const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removalUnsubscribeRef = useRef<(() => void) | null>(null);
+  const clientRequestIdRef = useRef(0);
+  const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | 'all'>(stageFilter === 'trash' ? 'all' : stageFilter);
   const { snapshot: attentionSnapshot, refresh: refreshAttention } = useArticleAttention(clientId);
   const attentionItems = attentionSnapshot.items;
+  clientIdRef.current = clientId;
+
+  function isCurrentClient(requestedClientId: string): boolean {
+    return mountedRef.current && clientIdRef.current === requestedClientId;
+  }
 
   const stopRemovalTransactionWatch = useCallback(() => {
     if (removalTimerRef.current) {
@@ -88,29 +96,48 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setRemovalTransaction(null);
     setRemovalTransactionId(null);
     setRemovalWatchVersion(0);
+    setSelected([]);
+    setError('');
+    setBatchFeedback(null);
+    setTrashFeedback(null);
+    setTrashPreview(null);
+    setDrawerArticle(null);
+    setAttentionDetail(null);
+    setTrash([]);
+    setCancellationPlans([]);
+    setBusy(false);
     stopRemovalTransactionWatch();
   }, [clientId, stopRemovalTransactionWatch]);
 
   useEffect(() => {
+    const requestId = ++clientRequestIdRef.current;
     let cancelled = false;
-    if (!clientId) { setArticles([]); setSelected([]); setSubmissionBatches([]); setPublicationRecords([]); return () => { cancelled = true; }; }
-    listContentArticles(clientId).then((items) => {
-      if (cancelled) return;
-      setArticles(items);
-      return listPublicationHistory(clientId, items.map((item) => item.id)).then((records) => { if (!cancelled) setPublicationRecords(records); });
-    }).catch((value) => { if (!cancelled) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
-    listContentSubmissionBatches(clientId).then((items) => { if (!cancelled) setSubmissionBatches(items); }).catch(() => { if (!cancelled) setSubmissionBatches([]); });
+    const isCurrent = () => !cancelled && mountedRef.current && clientIdRef.current === clientId && requestId === clientRequestIdRef.current;
+    if (!clientId) {
+      setArticles([]);
+      setSubmissionBatches([]);
+      setPublicationRecords([]);
+      return () => { cancelled = true; };
+    }
+    Promise.all([listContentArticles(clientId), listContentSubmissionBatches(clientId), listContentTrash(clientId)])
+      .then(async ([nextArticles, nextBatches, nextTrash]) => {
+        const nextRecords = await listPublicationHistory(clientId, nextArticles.map((item) => item.id));
+        if (!isCurrent()) return;
+        setArticles(nextArticles);
+        setSubmissionBatches(nextBatches);
+        const nextPlans = (await Promise.all(nextBatches.map((batch) => previewCancelContentSubmissionBatch(batch.id).catch(() => null)))).filter((plan): plan is ContentSubmissionCancellationPreview => Boolean(plan));
+        if (!isCurrent()) return;
+        setCancellationPlans(nextPlans);
+        setTrash(nextTrash);
+        setPublicationRecords(nextRecords);
+      })
+      .catch((value) => { if (isCurrent()) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
     return () => { cancelled = true; };
   }, [clientId, refreshToken]);
 
   useEffect(() => {
     listContentSubmissionPlatforms().then((platforms) => setSubmissionPlatforms(platforms.filter((platform) => platform.contentQueueImport))).catch(() => setSubmissionPlatforms([]));
   }, []);
-
-  useEffect(() => {
-    if (!clientId || selectedStage !== 'trash') return;
-    listContentTrash(clientId).then(setTrash).catch((value) => setError(value instanceof Error ? value.message : '无法加载回收站'));
-  }, [clientId, refreshToken, selectedStage]);
 
   const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const publicationRecordsByArticle = useMemo(() => {
@@ -141,9 +168,20 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
   const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)));
-  const latestBatch = submissionBatches[0];
-  const latestBatchCancelableCount = latestBatch?.items.filter((item) => item.status === 'queued' && item.canCancel === true).length || 0;
-  const latestBatchCleanupCount = latestBatch?.items.filter((item) => item.status === 'failed' && item.canCleanup === true).length || 0;
+  // Batch order is an implementation detail.  Actions must cover every safe
+  // item for this client so a newer completed batch cannot hide an older media
+  // batch that is still staged locally.
+  const cancelableBatches = useMemo(() => cancellationPlans.map((plan) => ({
+    plan,
+    batch: submissionBatches.find((batch) => batch.id === plan.batchId),
+    count: plan.allowedCount,
+  })).filter((entry) => entry.batch && entry.count > 0), [cancellationPlans, submissionBatches]);
+  const cleanableBatches = useMemo(() => submissionBatches.map((batch) => ({
+    batch,
+    count: batch.items.filter((item) => item.canCleanup === true).length,
+  })).filter((entry) => entry.count > 0), [submissionBatches]);
+  const cancelableCount = cancelableBatches.reduce((total, entry) => total + entry.count, 0);
+  const cleanableCount = cleanableBatches.reduce((total, entry) => total + entry.count, 0);
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen = removalStatus === 'pending_auto_recovery' || removalStatus === 'pending_recovery' || removalStatus === 'needs_repair';
   const removalSubmitDisabled = Boolean(removalTransactionId && (!removalTransaction || removalTransactionOpen));
@@ -169,19 +207,25 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   }
 
   const refreshHistoryData = useCallback(async () => {
+    const requestedClientId = clientId;
+    if (!mountedRef.current || requestedClientId !== clientIdRef.current) return [];
+    const requestId = ++clientRequestIdRef.current;
     const [nextArticles, nextBatches, nextTrash] = await Promise.all([
-      listContentArticles(clientId),
-      listContentSubmissionBatches(clientId),
-      listContentTrash(clientId)
+      listContentArticles(requestedClientId),
+      listContentSubmissionBatches(requestedClientId),
+      listContentTrash(requestedClientId)
     ]);
-    const nextRecords = await listPublicationHistory(clientId, nextArticles.map((item) => item.id));
+    const nextRecords = await listPublicationHistory(requestedClientId, nextArticles.map((item) => item.id));
+    if (!mountedRef.current || requestedClientId !== clientIdRef.current || requestId !== clientRequestIdRef.current) return [];
     setArticles(nextArticles);
     setSubmissionBatches(nextBatches);
+    const nextPlans = (await Promise.all(nextBatches.map((batch) => previewCancelContentSubmissionBatch(batch.id).catch(() => null)))).filter((plan): plan is ContentSubmissionCancellationPreview => Boolean(plan));
+    if (!mountedRef.current || requestedClientId !== clientIdRef.current || requestId !== clientRequestIdRef.current) return [];
+    setCancellationPlans(nextPlans);
     setTrash(nextTrash);
     setPublicationRecords(nextRecords);
-    onRefreshArticles?.();
     return nextArticles;
-  }, [clientId, onRefreshArticles]);
+  }, [clientId]);
 
   useEffect(() => {
     stopRemovalTransactionWatch();
@@ -234,18 +278,22 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   }
 
   async function queueSelected() {
+    const requestedClientId = clientId;
     const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && (article.status === 'generated' || article.status === 'saved'));
     if (!selectedQueueable.length || !targetPlatformIds.length) return;
     setBusy(true); setError('');
     try {
       const input = { clientId, articleIds: selectedQueueable.map((article) => article.id), targetPlatformIds };
       const preview = await previewContentSubmissionBatch(input);
+      if (!isCurrentClient(requestedClientId)) return;
       if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有符合投稿就绪规则的文章');
       if (!window.confirm(`新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，阻断 ${preview.blockedContentCount || 0} 项，冲突 ${preview.conflictCount} 项。确认继续？`)) return;
       await createContentSubmissionBatch({ ...input, confirmed: true });
-      setSelected([]); setArticles(await listContentArticles(clientId)); setSubmissionBatches(await listContentSubmissionBatches(clientId)); onRefreshArticles?.();
-    } catch (value) { setError(value instanceof Error ? value.message : '批量入队失败'); }
-    finally { setBusy(false); }
+      if (!isCurrentClient(requestedClientId)) return;
+      setSelected([]);
+      await refreshHistoryData();
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   function openArticle(article: GeneratedContentArticle, source: HTMLElement | null, published: boolean) {
@@ -259,16 +307,18 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     if (!window.confirm('再次确认：新版本会生成新的 articleId，必须重新选择目标并投稿。')) return;
     setBusy(true); setError('');
     try {
-      const nextArticle = await copyContentArticleVersion({ clientId, sourceArticleId: drawerArticle.id });
+      const requestedClientId = clientId;
+      const nextArticle = await copyContentArticleVersion({ clientId: requestedClientId, sourceArticleId: drawerArticle.id });
+      const refreshedArticles = await refreshHistoryData();
+      if (requestedClientId !== clientIdRef.current || !refreshedArticles.some((article) => article.id === nextArticle.id)) return;
       setDrawerArticle(null);
-      setArticles(await listContentArticles(clientId));
-       onArticleSelect(nextArticle, null, false);
-      onRefreshArticles?.();
-    } catch (value) { setError(value instanceof Error ? value.message : '复制文章新版本失败'); }
-    finally { setBusy(false); }
+      onArticleSelect(nextArticle, null, false);
+    } catch (value) { if (isCurrentClient(clientId)) setError(value instanceof Error ? value.message : '复制文章新版本失败'); }
+    finally { if (isCurrentClient(clientId)) setBusy(false); }
   }
 
   async function reconcilePublication(record: PublicationHistoryRecord, status: 'published' | 'failed') {
+    const requestedClientId = clientId;
     if (record.status !== 'uncertain') return;
     const label = status === 'published' ? '确认远端已发布' : '确认远端未发布';
     if (!window.confirm(`${label}？这会写入发布账本，并影响后续投稿防重。`)) return;
@@ -276,64 +326,70 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setBusy(true); setError('');
     try {
       await reconcilePublicationHistory({ publicationId: record.publicationId, status, reasonCode: status === 'published' ? 'CONFIRMED_PUBLISHED' : 'CONFIRMED_NOT_PUBLISHED' });
-      setPublicationRecords(await listPublicationHistory(clientId, articles.map((item) => item.id)));
-    } catch (value) { setError(value instanceof Error ? value.message : '核对发布结果失败'); }
-    finally { setBusy(false); }
+      await refreshHistoryData();
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '核对发布结果失败'); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   async function refreshBatchAffectedArticles() {
     await refreshHistoryData();
   }
 
-  async function cancelLatestBatch() {
-    if (!latestBatch) return;
+  async function cancelCancelableBatches() {
+    const requestedClientId = clientId;
+    if (!cancelableBatches.length) return;
     setBusy(true); setError('');
     try {
-      const preview = await previewCancelContentSubmissionBatch(latestBatch.id);
-      if (!preview.cancelableCount) {
-        setBatchFeedback({ kind: 'status', text: `最近批次没有可撤销项；不可处理 ${preview.uncancelableCount} 项。明确失败项请使用“清理失败队列项”。` });
-        return;
+      const previews = cancellationPlans.filter((preview) => preview.allowedCount > 0);
+      const total = previews.reduce((count, preview) => count + preview.allowedCount, 0);
+      if (!total) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: '当前客户全部批次均无可撤销项；明确失败项请使用“清理失败队列项”。' }); return; }
+      if (!isCurrentClient(requestedClientId)) return;
+      if (!window.confirm(`确认撤销当前客户 ${previews.length} 个批次中的 ${total} 项未开始投稿内容？`)) return;
+      const results = [];
+      for (const preview of previews) {
+        if (preview.allowedCount) results.push(await cancelContentSubmissionBatch(preview.batchId, preview.planId));
       }
-      setBatchFeedback({ kind: 'status', text: `撤销预检：可处理 ${preview.cancelableCount} 项，不可处理 ${preview.uncancelableCount} 项。` });
-      if (!window.confirm(`确认撤销最近投稿批次的 ${preview.cancelableCount} 项内容？`)) return;
-      await cancelContentSubmissionBatch(latestBatch.id);
       await refreshBatchAffectedArticles();
-      setBatchFeedback({ kind: 'status', text: `已撤销 ${preview.cancelableCount} 项未开始投稿内容。` });
-    } catch (value) { setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '撤销投稿批次失败' }); }
-    finally { setBusy(false); }
+      if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: `已撤销 ${results.reduce((count, result) => count + (result.cancelledCount || 0), 0)} 项未开始投稿内容。` });
+    } catch (value) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '撤销投稿批次失败' }); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
-  async function cleanupLatestBatch() {
-    if (!latestBatch) return;
+  async function cleanupFailedBatches() {
+    const requestedClientId = clientId;
+    if (!cleanableBatches.length) return;
     setBusy(true); setError('');
     try {
-      const preview = await previewCleanupFailedContentSubmissionItems(latestBatch.id);
-      if (!preview.cleanableCount) {
-        setBatchFeedback({ kind: 'status', text: `最近批次没有可清理的明确失败队列项；不可处理 ${preview.uncleanableCount} 项。` });
-        return;
+      const previews = await Promise.all(cleanableBatches.map(({ batch }) => previewCleanupFailedContentSubmissionItems(batch.id)));
+      const total = previews.reduce((count, preview) => count + preview.cleanableCount, 0);
+      if (!total) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: '当前客户全部批次均无可清理的明确失败队列项。' }); return; }
+      if (!isCurrentClient(requestedClientId)) return;
+      if (!window.confirm(`确认清理当前客户 ${previews.length} 个批次中的 ${total} 项明确失败队列副本？发布失败记录会保留。`)) return;
+      const results = [];
+      for (const preview of previews) {
+        if (preview.cleanableCount) results.push(await cleanupFailedContentSubmissionItems(preview.batchId));
       }
-      setBatchFeedback({ kind: 'status', text: `清理预检：可处理 ${preview.cleanableCount} 项，不可处理 ${preview.uncleanableCount} 项。` });
-      if (!window.confirm(`确认清理 ${preview.cleanableCount} 项明确失败且未被修改的队列副本？发布失败记录会保留。`)) return;
-      await cleanupFailedContentSubmissionItems(latestBatch.id);
       await refreshBatchAffectedArticles();
-      setBatchFeedback({ kind: 'status', text: `已清理 ${preview.cleanableCount} 项失败队列副本；发布失败记录仍保留。` });
-    } catch (value) { setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '清理失败队列项失败' }); }
-    finally { setBusy(false); }
+      if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'status', text: `已清理 ${results.reduce((count, result) => count + (result.cleanedCount || 0), 0)} 项失败队列副本；发布失败记录仍保留。` });
+    } catch (value) { if (isCurrentClient(requestedClientId)) setBatchFeedback({ kind: 'error', text: value instanceof Error ? value.message : '清理失败队列项失败' }); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   async function previewTrashSelections(selections: Array<{ clientId: string; articleId: string }>) {
     if (!selections.length) return;
+    const requestedClientId = clientId;
     setBusy(true); setError(''); setTrashFeedback(null);
     try {
       const preview = await previewContentArticleRemoval(selections);
+      if (!isCurrentClient(requestedClientId)) return;
       const existingTransaction = preview.openTransaction || preview.transaction || null;
       const existingTransactionId = preview.openTransactionId || preview.transactionId || transactionIdOf(existingTransaction);
       if (existingTransaction) setRemovalTransaction(existingTransaction);
       if (existingTransactionId) setRemovalTransactionId(existingTransactionId);
       if (existingTransactionId) setTrashFeedback({ kind: 'status', text: '已存在相同删除事务，正在复用并读取其状态；不会重复创建。' });
       setTrashPreview(preview);
-    } catch (value) { setError(value instanceof Error ? value.message : '回收站预检失败'); }
-    finally { setBusy(false); }
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '回收站预检失败'); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   async function trashSelected() {
@@ -346,10 +402,12 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
 
   async function commitTrash() {
     if (!trashPreview || !trashPreview.canCommit || removalSubmitDisabled) return;
+    const requestedClientId = clientId;
     setBusy(true); setError('');
     try {
       const selections = trashPreview.selections || selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id }));
       const result = await trashContentArticles({ articles: selections, selections, token: trashPreview.token, legacy: trashPreview.legacy, confirmed: true });
+      if (!isCurrentClient(requestedClientId)) return;
       const resultTransaction = result.transaction || (result.transactionId ? {
         transactionId: result.transactionId,
         status: result.status || 'committed',
@@ -373,16 +431,18 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
         setTrashFeedback({ kind: 'status', text: `已将 ${result.articleCount || selections.length} 篇文章移入回收站；发布记录继续保留，恢复文章不会重新加入投稿队列。` });
       }
     } catch (value) {
-      setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '移入回收站失败；未完成的事务可稍后恢复' });
-    } finally { setBusy(false); }
+      if (isCurrentClient(requestedClientId)) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '移入回收站失败；未完成的事务可稍后恢复' });
+    } finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   async function retryRemovalTransaction() {
     if (!removalTransactionId) return;
+    const requestedClientId = clientId;
     setBusy(true);
     setTrashFeedback(null);
     try {
       const next = await retryContentArticleRemovalTransaction(removalTransactionId);
+      if (!isCurrentClient(requestedClientId)) return;
       setRemovalTransaction(next);
       setRemovalWatchVersion((current) => current + 1);
       const status = transactionStatusOf(next);
@@ -390,31 +450,33 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
         ? { kind: 'error', text: `删除事务需要修复：${transactionReason(next)}` }
         : { kind: 'status', text: '已提交删除事务修复，正在读取最新状态。' });
     } catch (value) {
-      setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '删除事务修复失败' });
+      if (isCurrentClient(requestedClientId)) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '删除事务修复失败' });
     } finally {
-      setBusy(false);
+      if (isCurrentClient(requestedClientId)) setBusy(false);
     }
   }
 
   async function restoreOne(entry: ArticleTrashRecord) {
     if (!window.confirm(`确认恢复“${entry.titleSnapshot || entry.articleId}”？恢复文章不会重新加入投稿队列。`)) return;
+    const requestedClientId = clientId;
     setBusy(true); setError('');
     try {
       await restoreContentArticle({ clientId: entry.clientId, articleId: entry.articleId });
-      setTrash(await listContentTrash(clientId)); setArticles(await listContentArticles(clientId)); onRefreshArticles?.();
-    } catch (value) { setError(value instanceof Error ? value.message : '恢复文章失败'); }
-    finally { setBusy(false); }
+      await refreshHistoryData();
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '恢复文章失败'); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   async function permanentlyDeleteOne(entry: ArticleTrashRecord) {
     const confirmation = await preparePermanentDeleteContentArticle({ clientId: entry.clientId, articleId: entry.articleId });
     if (!window.confirm(`永久删除“${entry.articleId}”？正文和 Markdown 将不可恢复。`)) return;
+    const requestedClientId = clientId;
     setBusy(true); setError('');
     try {
       await permanentlyDeleteContentArticle({ clientId: entry.clientId, articleId: entry.articleId, token: confirmation.token });
-      setTrash(await listContentTrash(clientId));
-    } catch (value) { setError(value instanceof Error ? value.message : '永久删除文章失败'); }
-    finally { setBusy(false); }
+      await refreshHistoryData();
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '永久删除文章失败'); }
+    finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
   }
 
   function toggleAll() {
@@ -444,9 +506,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
        <div className="flex min-w-0 flex-wrap items-center gap-2">
          <button type="button" onClick={toggleAll} disabled={!operable.length || busy} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
          <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedArticles.length})</button>
-         {latestBatch && latestBatchCancelableCount > 0 && <button type="button" title="撤销最近入队（仅未开始投稿）" onClick={() => void cancelLatestBatch()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销未开始投稿 ({latestBatchCancelableCount})</button>}
-         {latestBatch && latestBatchCleanupCount > 0 && <button type="button" onClick={() => void cleanupLatestBatch()} disabled={busy} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({latestBatchCleanupCount})</button>}
-         {latestBatch && !latestBatchCancelableCount && !latestBatchCleanupCount && <span role="status" className="text-xs text-slate-500">最近批次当前没有可撤销或可清理项。</span>}
+         {cancelableCount > 0 && <button type="button" title={`覆盖当前客户全部可撤销批次：${cancelableBatches.map(({ batch, count }) => `${batch.items.find((item) => item.canCancel)?.targetPlatformId || '未知目标'} ${formatBeijingTime(batch.createdAt)} (${count})`).join('；')}`} onClick={() => void cancelCancelableBatches()} disabled={busy} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">撤销未开始投稿 ({cancelableCount})</button>}
+         {cleanableCount > 0 && <button type="button" onClick={() => void cleanupFailedBatches()} disabled={busy} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({cleanableCount})</button>}
+         {submissionBatches.length > 0 && !cancelableCount && !cleanableCount && <span role="status" className="text-xs text-slate-500">当前客户全部批次均无可撤销或可清理项。</span>}
        </div>
          {batchFeedback && <div role={batchFeedback.kind === 'error' ? 'alert' : 'status'} aria-live={batchFeedback.kind === 'error' ? 'assertive' : 'polite'} tabIndex={batchFeedback.kind === 'error' ? -1 : undefined} className={`min-w-0 rounded border p-2 text-xs ${batchFeedback.kind === 'error' ? 'border-rose-100 bg-rose-50 text-rose-700' : 'border-blue-100 bg-blue-50 text-blue-700'}`}>{batchFeedback.text}</div>}
          {trashFeedback && <div role={trashFeedback.kind === 'error' ? 'alert' : 'status'} aria-live="polite" className={`min-w-0 rounded border p-2 text-xs ${trashFeedback.kind === 'error' ? 'border-rose-100 bg-rose-50 text-rose-700' : 'border-blue-100 bg-blue-50 text-blue-700'}`}>{trashFeedback.text}</div>}
@@ -489,7 +551,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       })}
       {!groups.length && !error && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">暂无历史文章</div>}
     </div>
-    {trashPreview && <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">远端已发布内容不会撤回；发布记录和标题快照会保留。本地文章正文和投稿队列副本会进入回收站/被清理，恢复文章不会自动恢复投稿队列。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>已发布本地副本：{groupImpact(trashPreview.publishedToClean || []).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">{platform} {count}</span>)}{!(trashPreview.publishedToClean || []).length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>失败本地副本：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>仍在投稿/待确认：{trashPreview.blockedItems.length}</div><div>发布记录：保留</div></div>{(trashPreview.openTransaction || trashPreview.transaction) && <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">已存在相同删除事务，已复用现有事务；请查看上方状态，不会重复创建。</div>}{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && !removalSubmitDisabled && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理终结的 failed/published/cancelled 本地副本，并将文章移入回收站；远端已发布内容不会撤回。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{removalSubmitDisabled ? '已有开放删除事务' : '确认移入回收站'}</button></div></div></div>}
+    {trashPreview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">远端已发布内容不会撤回；发布记录和标题快照会保留。本地文章正文和投稿队列副本会进入回收站/被清理，恢复文章不会自动恢复投稿队列。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>已发布本地副本：{groupImpact(trashPreview.publishedToClean || []).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">{platform} {count}</span>)}{!(trashPreview.publishedToClean || []).length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>失败本地副本：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>仍在投稿/待确认：{trashPreview.blockedItems.length}</div><div>发布记录：保留</div></div>{(trashPreview.openTransaction || trashPreview.transaction) && <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">已存在相同删除事务，已复用现有事务；请查看上方状态，不会重复创建。</div>}{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && !removalSubmitDisabled && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理终结的 failed/published/cancelled 本地副本，并将文章移入回收站；远端已发布内容不会撤回。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={busy} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || busy || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{removalSubmitDisabled ? '已有开放删除事务' : '确认移入回收站'}</button></div></div></div>}
     <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={busy} />
     <ArticleAttentionDetailDrawer item={attentionDetail} onClose={() => setAttentionDetail(null)} />
   </div>;

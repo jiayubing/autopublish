@@ -9,7 +9,7 @@ import {
   previewExport,
   retryContentMaterial,
   saveContentArticle,
-} from '../../electron-api';
+} from '../../bridge/content';
 import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, GeneratedContentArticle } from '../../types';
 import { resolveAvailableTemplateId } from '../../article-history-logic';
 import { templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';

@@ -84,17 +84,15 @@ describe("content generation batch IPC", function() {
 
     assert.deepStrictEqual(
       await handlers.get("content:continue-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: true }),
-      { ok: true, data: { id: "batch-7", status: "refreshed" } },
+      { ok: true, data: { id: "batch-7", status: "running" } },
     );
     assert.deepStrictEqual(
       await handlers.get("content:resume-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: false }),
-      { ok: true, data: { id: "batch-7", status: "refreshed" } },
+      { ok: true, data: { id: "batch-7", status: "running" } },
     );
     assert.deepStrictEqual(calls, [
       ["continue", { batchId: "batch-7", confirmConfigChange: true }],
-      ["get", "batch-7"],
       ["resume", { batchId: "batch-7", confirmConfigChange: false }],
-      ["get", "batch-7"],
     ]);
   });
 });

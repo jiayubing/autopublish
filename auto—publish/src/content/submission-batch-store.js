@@ -80,10 +80,11 @@ function createSubmissionBatchStore(options) {
     });
     return result;
   }
-  function updateItem(batchId, identity, transition) {
-    const batch = get(batchId);
+  function applyItemTransition(batch, identity, transition) {
     const reference = identity || {};
-    const index = batch.items.findIndex((item) => item.publicationId === reference.publicationId && item.attemptId === reference.attemptId);
+    const index = batch.items.findIndex((item) => reference.publicationId && reference.attemptId
+      ? item.publicationId === reference.publicationId && item.attemptId === reference.attemptId
+      : item.articleId === reference.articleId && item.targetPlatformId === reference.targetPlatformId);
     if (index < 0) throw batchError("SUBMISSION_BATCH_ITEM_NOT_FOUND", "Submission batch item was not found");
     const item = batch.items[index];
     if (reference.targetPlatformId && item.targetPlatformId !== reference.targetPlatformId) throw batchError("SUBMISSION_BATCH_PLATFORM_MISMATCH", "Submission batch platform does not match");
@@ -94,6 +95,11 @@ function createSubmissionBatchStore(options) {
     const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt", "pairState", "identityMatched", "contentMatched", "mainExists", "sidecarExists"];
     Object.keys(transition).forEach((key) => { if (!allowedFields.includes(key)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid"); });
     Object.assign(item, transition, { status: nextStatus, publicationStatus: transition.publicationStatus === undefined ? nextStatus : transition.publicationStatus, updatedAt: transition.updatedAt || now() });
+    return item;
+  }
+  function updateItem(batchId, identity, transition) {
+    const batch = get(batchId);
+    applyItemTransition(batch, identity, transition);
     batch.status = batchStatus(batch.items);
     batch.updatedAt = now();
     return save(batch);
@@ -131,11 +137,12 @@ function createSubmissionBatchStore(options) {
     const batch = get(batchId);
     const changes = typeof updates === "function" ? updates(clone(batch)) : updates;
     if (!Array.isArray(changes)) throw batchError("SUBMISSION_BATCH_RECONCILE_INVALID", "Submission batch reconciliation is invalid");
-    let result = batch;
     changes.forEach((change) => {
-      result = updateItem(batchId, change.identity, change.transition);
+      applyItemTransition(batch, change.identity, change.transition);
     });
-    return result;
+    batch.status = batchStatus(batch.items);
+    batch.updatedAt = now();
+    return save(batch);
   }
   return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, rebindAttempt, reconcile, batchStatus };
 }

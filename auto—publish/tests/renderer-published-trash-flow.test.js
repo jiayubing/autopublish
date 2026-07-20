@@ -16,6 +16,8 @@ describe("renderer published article trash flow", () => {
     assert.match(view, /恢复文章不会自动恢复投稿队列/);
     assert.match(view, /移入回收站/);
     assert.match(types, /keep_local.*offer_trash.*auto_trash_requested.*auto_trash_blocked/s);
+    assert.match(types, /IDENTITY_MISSING.*REMOVAL_BLOCKED.*REMOVAL_NEEDS_REPAIR/s);
     assert.match(platform, /可移入回收站/);
+    assert.match(platform, /reasonCodes/);
   });
 });

@@ -48,45 +48,131 @@ function registerPlatformIpc(deps) {
     return [input];
   }
 
-  async function applyPostPublishDisposition(data, plan, requested) {
+  function removalReasonCode(value, fallback) {
+    var code = value && (value.reasonCode || value.code || value.errorCode);
+    if (typeof code !== "string") return fallback;
+    if (code === "IDENTITY_MISSING") return code;
+    if (code.indexOf("REPAIR") !== -1 || code.indexOf("STALE") !== -1 || code.indexOf("RECOVERY") !== -1) return "REMOVAL_NEEDS_REPAIR";
+    return "REMOVAL_BLOCKED";
+  }
+
+  function addRemovalReason(summary, reasonCode) {
+    if (!Array.isArray(summary.reasonCodes)) summary.reasonCodes = [];
+    if (summary.reasonCodes.indexOf(reasonCode) === -1) summary.reasonCodes.push(reasonCode);
+  }
+
+  function identityForGroup(group, identities) {
+    var values = group.tasks.map(function(task) { return identities && identities.get(service.taskKey(task)); });
+    if (!values.length || values.some(function(value) { return !value || !value.clientId || !value.articleId; })) return null;
+    var first = values[0];
+    if (values.some(function(value) { return value.clientId !== first.clientId || value.articleId !== first.articleId; })) return null;
+    return { clientId: first.clientId, articleId: first.articleId };
+  }
+
+  async function applyPostPublishDisposition(data, plan, requested, identities) {
     var results = data && Array.isArray(data.results) ? data.results : [];
-    var summary = { offeredCount: 0, requestedCount: 0, movedCount: 0, blockedCount: 0, failedCount: 0 };
+    var summary = { offeredCount: 0, requestedCount: 0, movedCount: 0, recoveryCount: 0, blockedCount: 0, failedCount: 0, reasonCodes: [] };
     if (!results.length) return Object.assign(data, { trashDisposition: "keep_local", trashSummary: summary });
-    if (!deps.aiContentService || typeof deps.aiContentService.previewArticleRemovalImpact !== "function" || typeof deps.aiContentService.trashArticles !== "function") {
-      return Object.assign(data, { trashDisposition: "auto_trash_blocked", trashSummary: Object.assign(summary, { blockedCount: published.length }) });
-    }
+
     var groups = new Map();
-    results.forEach(function(item) {
-      var task = item.task || {};
+    var plannedTasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
+    plannedTasks.forEach(function(rawTask) {
+      var task = rawTask;
       var key = task.sourcePlatformId + "\0" + task.filename;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(item);
+      if (!groups.has(key)) groups.set(key, { tasks: [], results: [] });
+      groups.get(key).tasks.push(task);
     });
-    for (var groupItems of groups.values()) {
-      var task = groupItems[0].task || {};
-      var hasPublished = groupItems.some(function(item) { return item.publicationStatus === "published"; });
-      var complete = groupItems.length > 0 && groupItems.every(function(item) { return item.publicationStatus === "published" && !item.archiveError; });
-      if (!hasPublished) continue;
-      if (!complete) { if (requested) summary.blockedCount += 1; continue; }
+    results.forEach(function(item) {
+      var task = item && item.task || {};
+      var key = task.sourcePlatformId + "\0" + task.filename;
+      if (!groups.has(key)) groups.set(key, { tasks: [], results: [] });
+      groups.get(key).results.push(item);
+    });
+
+    var eligibleGroups = [];
+    groups.forEach(function(group) {
+      if (!group.tasks.length) return;
+      var hasPublished = group.results.some(function(item) { return item.publicationStatus === "published"; });
+      if (!hasPublished) return;
+      var complete = group.results.length === group.tasks.length && group.tasks.every(function(task) {
+        var matches = group.results.filter(function(item) {
+          var resultTask = item && item.task || {};
+          return resultTask.targetPlatformId === task.targetPlatformId;
+        });
+        return matches.length === 1 && matches[0].publicationStatus === "published" && !matches[0].archiveError;
+      });
+      if (!complete) {
+        if (requested) { summary.blockedCount += 1; addRemovalReason(summary, "REMOVAL_BLOCKED"); }
+        return;
+      }
       summary.offeredCount += 1;
-      if (!requested) continue;
+      eligibleGroups.push(group);
+    });
+
+    if (!requested) {
+      delete summary.reasonCodes;
+      return Object.assign(data, {
+        trashDisposition: summary.offeredCount ? "offer_trash" : "keep_local",
+        trashSummary: summary
+      });
+    }
+
+    if (!eligibleGroups.length) {
+      addRemovalReason(summary, "REMOVAL_BLOCKED");
+      return Object.assign(data, { trashDisposition: "auto_trash_blocked", trashSummary: summary });
+    }
+
+    var removalAvailable = deps.aiContentService && typeof deps.aiContentService.previewArticleRemovalImpact === "function" && typeof deps.aiContentService.trashArticles === "function";
+    var refreshNeeded = false;
+    for (var group of eligibleGroups) {
       summary.requestedCount += 1;
-      var metadata;
-      try { metadata = service.readSubmissionMetadata(task.sourcePlatformId, task.filename); } catch (_) { metadata = null; }
-      var source = metadata && metadata.data;
-      var selection = source && source.clientId && (source.generatedArticleId || source.articleId)
-        ? { clientId: source.clientId, articleId: source.generatedArticleId || source.articleId }
-        : null;
-      if (!selection) { summary.blockedCount += 1; continue; }
+      var selection = identityForGroup(group, identities);
+      if (!selection) {
+        summary.blockedCount += 1;
+        addRemovalReason(summary, "IDENTITY_MISSING");
+        continue;
+      }
+      if (!removalAvailable) {
+        summary.blockedCount += 1;
+        addRemovalReason(summary, "REMOVAL_BLOCKED");
+        continue;
+      }
       try {
         var preview = deps.aiContentService.previewArticleRemovalImpact({ selections: [selection] });
-        if (!preview || preview.canCommit !== true) { summary.blockedCount += 1; continue; }
+        if (!preview || preview.canCommit !== true) {
+          summary.blockedCount += 1;
+          addRemovalReason(summary, removalReasonCode(preview, "REMOVAL_BLOCKED"));
+          continue;
+        }
         var committed = deps.aiContentService.trashArticles({ selections: [selection], token: preview.token, confirmed: true });
-        if (committed && committed.status === "committed") summary.movedCount += 1;
-        else summary.blockedCount += 1;
-      } catch (_) { summary.failedCount += 1; }
+        if (committed && committed.status === "committed") {
+          summary.movedCount += 1;
+          refreshNeeded = true;
+        } else if (committed && (committed.status === "pending_auto_recovery" || committed.status === "pending_recovery")) {
+          summary.recoveryCount += 1;
+          refreshNeeded = true;
+        } else if (committed && committed.status === "needs_repair") {
+          summary.blockedCount += 1;
+          refreshNeeded = true;
+          addRemovalReason(summary, "REMOVAL_NEEDS_REPAIR");
+        } else {
+          summary.blockedCount += 1;
+          addRemovalReason(summary, "REMOVAL_BLOCKED");
+        }
+      } catch (error) {
+        summary.failedCount += 1;
+        addRemovalReason(summary, removalReasonCode(error, "REMOVAL_NEEDS_REPAIR"));
+      }
     }
-    return Object.assign(data, { trashDisposition: summary.requestedCount > 0 && summary.movedCount === summary.requestedCount && summary.blockedCount === 0 && summary.failedCount === 0 ? "auto_trash_requested" : "auto_trash_blocked", trashSummary: summary });
+
+    if (refreshNeeded && typeof deps.invalidateData === "function") {
+      try { deps.invalidateData(["platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
+    }
+    var accepted = summary.movedCount + summary.recoveryCount === summary.requestedCount && summary.blockedCount === 0 && summary.failedCount === 0;
+    return Object.assign(data, {
+      trashDisposition: accepted ? "auto_trash_requested" : "auto_trash_blocked",
+      trashSummary: summary
+    });
   }
 
   ipcMain.handle("platforms:get-queue", function() {
@@ -151,6 +237,7 @@ function registerPlatformIpc(deps) {
       // Renderer selections are resolved and validated in the main process.
       // The worker receives only source/target references; never forward the
       // resolved absolute path or parsed article content.
+      var identities = service.captureTaskIdentities(plan);
       var workerPlan = service.toWorkerPlan(plan);
       var workerResult = await taskService.startPlatformSubmit(workerPlan, {
         onLog: function(entry) {
@@ -164,7 +251,7 @@ function registerPlatformIpc(deps) {
       }
       var data = workerResult.data || { ok: 0, fail: 0, skipped: 0, results: [] };
       data.skipped = data.skipped || data.pending || 0;
-      return applyPostPublishDisposition(data, plan, autoTrashRequested);
+      return applyPostPublishDisposition(data, plan, autoTrashRequested, identities);
     });
   });
 

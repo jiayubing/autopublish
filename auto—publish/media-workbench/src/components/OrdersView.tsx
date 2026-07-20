@@ -1,6 +1,6 @@
 ﻿import React, { useState } from 'react';
 import { RealOrder } from '../types';
-import { syncOrder } from '../electron-api';
+import { syncOrder } from '../bridge/media';
 import { 
   ClipboardList, 
   CheckCircle2, 

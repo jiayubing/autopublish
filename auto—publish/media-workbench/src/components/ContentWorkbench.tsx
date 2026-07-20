@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
-import { copyContentArticleVersion, listContentClients, listContentTemplateCatalog, onWorkspaceDataInvalidated } from '../electron-api';
+import { copyContentArticleVersion, listContentClients, listContentTemplateCatalog } from '../bridge/content';
+import { onWorkspaceDataInvalidated } from '../electron-api';
 import { ContentClient, ContentTemplateCatalog, GeneratedContentArticle } from '../types';
 import ArticleGenerationView from './content/ArticleGenerationView';
 import GeneratedArticleEditorPanel from './content/GeneratedArticleEditorPanel';
@@ -150,6 +151,10 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     closeHistoryEditor(true);
     setClientId(nextClientId);
     setArticle(null);
+    setError('');
+    // A client switch starts a new workbench session.  Land on the actionable
+    // queue rather than retaining the previous client's broad history filter.
+    setArticleStageFilter('pending_submission');
   }
 
   function changeTab(nextTab: 'questions' | 'generate' | 'history') {
@@ -170,7 +175,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     <div className="min-h-0 flex-1">
       {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} refreshToken={contentSourcesRefreshToken} onContentSourcesChanged={() => setContentSourcesRefreshToken((value) => value + 1)} />}
       {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} refreshToken={contentSourcesRefreshToken} batchRefreshToken={batchRefreshToken} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={setArticle} onRefreshArticles={refreshArticles} onRefreshBatchState={refreshBatchState} />}
-      {tab === 'history' && <ArticleAttentionProvider clientId={clientId}><div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} /><div className="flex min-h-0 min-w-0 flex-1 gap-3"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} refreshToken={articleRefreshToken} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onRefreshArticles={refreshArticles} onStageFilterChange={setArticleStageFilter} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} onSaved={(saved) => { setHistoryEditingArticle(saved); refreshArticles(); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div></ArticleAttentionProvider>}
+      {tab === 'history' && <ArticleAttentionProvider clientId={clientId}><div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} refreshToken={articleRefreshToken} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} onSaved={(saved) => { setHistoryEditingArticle(saved); refreshArticles(); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div></ArticleAttentionProvider>}
     </div>
   </div>;
 }

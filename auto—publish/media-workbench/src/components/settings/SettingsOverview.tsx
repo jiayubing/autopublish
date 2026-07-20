@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { getAiProviderStatus, getLegacyPlatformSettingsStatus, getPlatformSettingsStatus, importLegacyPlatformSettings } from '../../electron-api';
+import { getAiProviderStatus, getLegacyPlatformSettingsStatus, getPlatformSettingsStatus, importLegacyPlatformSettings } from '../../bridge/settings';
 import type { AiProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, MediaProviderStatus } from '../../types';
 import type { SettingsSection } from './SettingsNavigation';
 
 const EMPTY_AI: AiProviderStatus = { source: 'application', configured: false, baseUrl: '', model: '', timeoutMs: 60000, hasApiKey: false, apiKeyMask: '', lastTest: null };
-const EMPTY_MEDIA: MediaProviderStatus = { source: 'application', configured: false, baseUrl: '', timeoutMs: 30000, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null };
-const EMPTY_HEPAN: HepanProviderStatus = { source: 'application', configured: false, pythonConfigured: false, cookieConfigured: false, categoryId: 121, vendorConfigured: false, siteOrigin: 'https://www.hepan.com', publishIntervalSeconds: 30, lastTest: null };
+const EMPTY_MEDIA: MediaProviderStatus = { source: 'application', configured: false, baseUrl: '', timeoutMs: 0, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null };
+const EMPTY_HEPAN: HepanProviderStatus = { source: 'application', configured: false, pythonConfigured: false, cookieConfigured: false, categoryId: 0, vendorConfigured: false, bundledVendorAvailable: false, siteOrigin: '', publishIntervalSeconds: 0, lastTest: null };
 
 export default function SettingsOverview({ onSelect }: { onSelect: (section: SettingsSection) => void }) {
   const [ai, setAi] = useState(EMPTY_AI);

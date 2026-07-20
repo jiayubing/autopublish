@@ -36,7 +36,8 @@ type SourceState = Record<string, { materialIds: string[]; researchQueryIds: str
 type BatchViewMode = 'wizard' | 'monitoring';
 const EMPTY_STATE: GenerationBatchState = { status: 'idle', state: 'idle', batchId: null };
 const TERMINAL_BATCH_STATUSES = new Set(['completed', 'stopped']);
-const RESUMABLE_BATCH_STATUSES = new Set(['pending', 'failed', 'interrupted']);
+const RESUMABLE_BATCH_STATUSES = new Set(['pending', 'failed', 'interrupted', 'paused']);
+const ACTIVE_BATCH_STATUSES = new Set(['running', 'pausing', 'stopping']);
 const CollapsibleSourceItem = BaseCollapsibleSourceItem as React.ComponentType<CollapsibleSourceItemProps & React.Attributes>;
 
 function materialForClient(client: ContentClient, overrides: Record<string, ContentMaterial> = {}): ContentMaterial[] {
@@ -74,6 +75,7 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
   const [batch, setBatch] = useState<GenerationBatch | null>(null);
   const [batchState, setBatchState] = useState<GenerationBatchState>(EMPTY_STATE);
   const [loading, setLoading] = useState(false);
+  const [commandPending, setCommandPending] = useState(false);
   const [error, setError] = useState('');
   const [materialOverrides, setMaterialOverrides] = useState<Record<string, Record<string, ContentMaterial>>>({});
   const [retryingMaterialKey, setRetryingMaterialKey] = useState('');
@@ -82,6 +84,7 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
   const templateSelectionTouchedRef = useRef(false);
   const clientSelectionInitializedRef = useRef(false);
   const operationBusyRef = useRef(false);
+  const batchStateRef = useRef<GenerationBatchState>(EMPTY_STATE);
 
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
   const templates = useMemo(() => visibleGenerationTemplates(catalog, showBuiltinTemplates), [catalog, showBuiltinTemplates]);
@@ -105,6 +108,22 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
   });
   const executableTaskCount = previewResult?.executableTaskCount ?? executableClients.length * selectedTemplates.length;
   const riskWarning = potentialTaskCount > GENERATION_BATCH_RISK_THRESHOLD;
+  const batchRunning = Boolean(batch && ((batchState.batchId === batch.id && ACTIVE_BATCH_STATUSES.has(batchState.status || 'idle')) || batch.status === 'running'));
+
+  function applyBatchState(nextState: GenerationBatchState) {
+    batchStateRef.current = nextState;
+    setBatchState(nextState);
+  }
+
+  function mergeRuntimeSnapshot(nextBatch: GenerationBatch, runtime = batchStateRef.current): GenerationBatch {
+    if (runtime.batchId !== nextBatch.id || runtime.status === 'idle') return nextBatch;
+    return {
+      ...nextBatch,
+      status: runtime.status || nextBatch.status,
+      counts: runtime.counts || nextBatch.counts,
+      updatedAt: runtime.updatedAt || nextBatch.updatedAt,
+    };
+  }
 
   useEffect(() => {
     if (!error) return;
@@ -180,10 +199,10 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
     let disposed = false;
     const unsubscribe = subscribeGenerationBatchState((nextState) => {
       if (disposed) return;
-      setBatchState(nextState);
+      applyBatchState(nextState);
       if (nextState.batchId) void getGenerationBatch(nextState.batchId).then((nextBatch) => {
         if (disposed) return;
-        setBatch(nextBatch);
+        setBatch(mergeRuntimeSnapshot(nextBatch, batchStateRef.current));
         setViewMode('monitoring');
       }).catch(() => undefined);
     });
@@ -192,9 +211,9 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
       const persistedBatch = batches.find((item) => RESUMABLE_BATCH_STATUSES.has(item.status) || !TERMINAL_BATCH_STATUSES.has(item.status))
         || batches[batches.length - 1]
         || null;
-      if (state.batchId === persistedBatch?.id && state.status !== 'idle') setBatchState(state);
+      if (state.batchId === persistedBatch?.id && state.status !== 'idle') applyBatchState(state);
       if (persistedBatch) {
-        setBatch(persistedBatch);
+        setBatch(mergeRuntimeSnapshot(persistedBatch, state));
         setViewMode('monitoring');
       }
     }).catch(() => undefined);
@@ -248,34 +267,31 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
     if (!previewResult?.executableTaskCount || operationBusyRef.current) return;
     if (riskWarning && !window.confirm(`当前批量任务数为 ${potentialTaskCount}，可能产生较多 AI 调用费用。确认继续？`)) return;
     operationBusyRef.current = true;
-    setLoading(true); setError('');
+    setCommandPending(true); setLoading(true); setError('');
     try {
       const created = await createGenerationBatch({ clientIds: selectedClientIds, templates: selectedTemplates, clientSources: currentSources, templateCatalogRevision: catalog.revision });
       setBatch(created);
       setViewMode('monitoring');
-      setBatch(await startGenerationBatch({ batchId: created.id }));
+      const accepted = await startGenerationBatch({ batchId: created.id });
+      setBatch(mergeRuntimeSnapshot(accepted));
       onRefreshBatchState();
     } catch (value) { setError(value instanceof Error ? value.message : '无法启动批量生成'); }
-    finally { operationBusyRef.current = false; setLoading(false); }
+    finally { operationBusyRef.current = false; setCommandPending(false); setLoading(false); }
   }
 
   async function command(action: () => Promise<GenerationBatch | null | undefined>) {
     if (!batch || operationBusyRef.current) return;
-    const batchId = batch.id;
     operationBusyRef.current = true;
     setViewMode('monitoring');
-    setLoading(true); setError('');
-    setBatchState((current) => ({ ...current, batchId, state: 'running', status: 'running', error: null }));
+    setCommandPending(true); setError('');
     try {
       const next = await action();
-      if (next) setBatch(next);
-      setBatch(await getGenerationBatch(batchId));
+      if (next) setBatch(mergeRuntimeSnapshot(next, batchStateRef.current));
     }
     catch (value) {
-      setBatchState({ status: 'idle', state: 'idle', batchId });
       setError(value instanceof Error ? value.message : '批量任务操作失败');
     }
-    finally { operationBusyRef.current = false; setLoading(false); }
+    finally { operationBusyRef.current = false; setCommandPending(false); }
   }
 
   function startNewBatch() {
@@ -305,7 +321,7 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
   const allSelected = selectedCount > 0 && selectedCount === clients.length;
   const stepTitles = ['选择批次客户', '选择跨平台模板', '检查生成来源', '确认任务并启动'];
 
-  return <div className="batch-generation-view flex h-full min-h-0 flex-col overflow-hidden" aria-label="四步批量生成" data-view-mode={viewMode}>
+  return <div className="batch-generation-view flex h-full min-h-0 flex-col overflow-hidden" aria-label="四步批量生成" data-view-mode={viewMode} data-batch-running={batchRunning}>
     {viewMode === 'wizard' && <>
     <div className="batch-stepper shrink-0 border-b border-slate-200 bg-white px-4 py-3"><div className="grid grid-cols-4 gap-2">{BATCH_GENERATION_STEPS.map((id, index) => <button type="button" key={id} onClick={() => index <= step && setStep(index)} className={`batch-step ${index === step ? 'is-active' : ''} ${index < step ? 'is-complete' : ''}`}><span>{index < step ? <Check className="h-3.5 w-3.5" /> : index + 1}</span>{stepTitles[index]}</button>)}</div></div>
     </>}
@@ -317,7 +333,7 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
       {step === 3 && <section className="rounded-md border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold">确认任务并启动</h2><p className="mt-1 text-xs text-slate-500">客户数 × 模板数 = AI 调用任务数</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded bg-slate-50 p-3 text-sm">{selectedCount} × {selectedTemplates.length} = {previewResult?.taskCount ?? potentialTaskCount}</div><div className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">可执行任务数：{executableTaskCount}</div><div className="rounded bg-rose-50 p-3 text-sm text-rose-700">排除客户/任务：{previewResult?.excludedClients.length ?? Math.max(0, selectedCount - executableClients.length)} / {previewResult?.excludedTaskCount ?? Math.max(0, potentialTaskCount - executableTaskCount)}</div></div>{riskWarning && <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">费用风险提示：任务数较多，启动前请再次确认。</div>}{previewResult?.excludedClients.length ? <div className="mt-4 rounded border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"><p className="font-semibold">被排除客户与原因</p>{previewResult.excludedClients.map((item) => <p key={item.clientId} className="mt-1">{clientMap.get(item.clientId)?.name || item.clientId}：{item.codes.map(errorReason).join('、')}</p>)}</div> : <p className="mt-4 text-xs text-emerald-700">没有被排除的客户。</p>}<button type="button" onClick={() => void start()} disabled={loading || !previewResult?.executableTaskCount} className="mt-4 h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40">{loading ? '启动中…' : '确认并启动批量生成'}</button></section>}
       </>}
       {viewMode === 'monitoring' && batch && <div className="generation-batch-control-area">
-        <GenerationBatchDetail batch={batch} state={batchState} busy={loading} onPause={() => void command(pauseGenerationBatch)} onResume={() => void command(() => resumeGenerationBatch({ batchId: batch.id }))} onContinue={() => { if (window.confirm('AI 配置可能已变化，确认继续未完成任务？')) void command(() => continueGenerationBatch({ batchId: batch.id, confirmConfigChange: true })); }} onStop={() => void command(stopGenerationBatch)} onRetry={() => void command(() => retryFailedGenerationBatch({ batchId: batch.id }))} onRefreshArticles={onRefreshArticles} onStartNew={startNewBatch} />
+         <GenerationBatchDetail batch={batch} state={batchState} busy={commandPending} onPause={() => void command(() => pauseGenerationBatch({ batchId: batch.id }))} onResume={() => void command(() => resumeGenerationBatch({ batchId: batch.id }))} onContinue={() => { if (window.confirm('AI 配置可能已变化，确认继续未完成任务？')) void command(() => continueGenerationBatch({ batchId: batch.id, confirmConfigChange: true })); }} onStop={() => void command(() => stopGenerationBatch({ batchId: batch.id }))} onRetry={() => void command(() => retryFailedGenerationBatch({ batchId: batch.id }))} onRefreshArticles={onRefreshArticles} onStartNew={startNewBatch} />
         {error && <div role="alert" aria-live="polite" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
       </div>}
       {!batch && error && <div ref={preflightErrorRef} tabIndex={-1} role="alert" aria-live="assertive" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}

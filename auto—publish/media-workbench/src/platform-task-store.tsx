@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { getPlatformState, onPlatformState } from "./electron-api";
+import { getPlatformState, onPlatformState } from "./bridge/platform";
 import type { PlatformTaskSnapshot, PlatformSubmitState } from "./types";
 
 export const IDLE_PLATFORM_TASK_SNAPSHOT: PlatformTaskSnapshot = {

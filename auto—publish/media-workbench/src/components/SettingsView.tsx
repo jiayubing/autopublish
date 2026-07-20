@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink, FolderOpen, Info, RefreshCw } from 'lucide-react';
-import { cancelWorkspaceSelection, confirmWorkspaceSelection, getCurrentWorkspace, getRuntimeDiagnostics, openCurrentWorkspace, requestWorkspaceSwitch, runBrowserSelfCheck } from '../electron-api';
-import type { RuntimeCapability, RuntimeDiagnostics } from '../electron-api';
+import { cancelWorkspaceSelection, confirmWorkspaceSelection, getCurrentWorkspace, openCurrentWorkspace, requestWorkspaceSwitch } from '../bridge/workspace';
+import { getRuntimeDiagnostics, runBrowserSelfCheck } from '../bridge/workspace';
+import type { RuntimeCapability, RuntimeDiagnostics } from '../bridge/workspace';
 import { WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent } from '../types';
 import { getSettingsCommandState } from '../workspace-ui-logic.js';
 import { mapRuntimeCapabilityState } from '../runtime-capability-state.cjs';

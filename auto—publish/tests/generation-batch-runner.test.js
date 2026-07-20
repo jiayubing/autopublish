@@ -403,4 +403,65 @@ describe("generation batch runner", function() {
     assert.equal(result.counts.cancelled, 2);
     assert.equal(result.status, "completed");
   });
+
+  it("publishes live status separately from persisted batch status in every snapshot", async function() {
+    const batch = makeBatch([{}]);
+    const store = fakeStore(batch);
+    const events = [];
+    const runner = createGenerationBatchRunner({
+      batchStore: store,
+      executeTask: async function() { return { id: "article-1" }; },
+      now: function() { return "2026-07-20T00:00:00.000Z"; }
+    });
+    runner.subscribe(function(event) { events.push(event); });
+
+    await runner.run(batch.id);
+
+    assert.ok(events.length >= 2);
+    assert.ok(events.every(function(event) {
+      return event.batchId === batch.id && event.status && event.updatedAt && event.counts;
+    }));
+    assert.equal(events[0].status, "running");
+  });
+
+  it("handles a controllable fifty-task run without duplicate execution after stop and continue", async function() {
+    const batch = makeBatch(Array.from({ length: 50 }, function() { return {}; }));
+    const store = fakeStore(batch);
+    const calls = [];
+    let firstStarted;
+    const firstStartedPromise = new Promise(function(resolve) { firstStarted = resolve; });
+    let stopped = false;
+    const runner = createGenerationBatchRunner({
+      batchStore: store,
+      executeTask: function(task, options) {
+        calls.push(task.id);
+        if (calls.length === 1) {
+          firstStarted();
+          return new Promise(function(resolve, reject) {
+            const timer = setTimeout(function() { resolve({ id: "article-1" }); }, 20);
+            options.signal.addEventListener("abort", function() {
+              stopped = true;
+              clearTimeout(timer);
+              const error = new Error("aborted");
+              error.name = "AbortError";
+              reject(error);
+            }, { once: true });
+          });
+        }
+        return Promise.resolve({ id: "article-" + task.id });
+      }
+    });
+
+    const running = runner.run(batch.id);
+    await firstStartedPromise;
+    await runner.stop();
+    await running;
+    assert.equal(stopped, true);
+    assert.equal(store.getBatch(batch.id).tasks.filter(function(task) { return task.status === "succeeded"; }).length, 0);
+
+    await runner.run(batch.id, "unfinished");
+    assert.equal(calls.length, 51);
+    assert.equal(new Set(calls).size, 50);
+    assert.equal(store.getBatch(batch.id).tasks.filter(function(task) { return task.status === "succeeded"; }).length, 50);
+  });
 });

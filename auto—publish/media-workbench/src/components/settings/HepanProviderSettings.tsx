@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { clearPlatformSettings, getPlatformSettingsStatus, savePlatformSettings, testPlatformSettings } from '../../electron-api';
+import { clearPlatformSettings, getPlatformSettingsStatus, savePlatformSettings, testPlatformSettings } from '../../bridge/settings';
 import type { HepanProviderStatus } from '../../types';
 
 const EMPTY: HepanProviderStatus = {
@@ -7,10 +7,10 @@ const EMPTY: HepanProviderStatus = {
   configured: false,
   pythonConfigured: false,
   cookieConfigured: false,
-  categoryId: 121,
+  categoryId: 0,
   vendorConfigured: false,
-  siteOrigin: 'https://www.hepan.com',
-  publishIntervalSeconds: 30,
+  siteOrigin: '',
+  publishIntervalSeconds: 0,
   lastTest: null,
 };
 
@@ -23,7 +23,7 @@ function message(error: unknown): string {
     PLATFORM_CONFIG_BUSY: '蓝色河畔投稿运行中，暂时不能修改配置。',
     PLATFORM_CONFIG_ENV_OVERRIDE: '配置由环境变量覆盖，当前页面只能查看。',
     HEPAN_PYTHON_UNAVAILABLE: 'Python 不可用，请检查可执行文件。',
-    HEPAN_DEPENDENCY_MISSING: 'Python 依赖缺失，请检查 vendor 目录或系统环境。',
+    HEPAN_DEPENDENCY_MISSING: 'Python 依赖缺失，请检查内置依赖、vendor 目录或系统环境。',
     HEPAN_LOGIN_INVALID: 'Cookie 登录检查失败，请更新 Cookie。',
   } as Record<string, string>)[code] || '蓝色河畔配置操作失败。';
 }
@@ -41,9 +41,9 @@ export default function HepanProviderSettings() {
   const [status, setStatus] = useState<HepanProviderStatus>(EMPTY);
   const [pythonPath, setPythonPath] = useState('');
   const [cookie, setCookie] = useState('');
-  const [categoryId, setCategoryId] = useState(121);
+  const [categoryId, setCategoryId] = useState(EMPTY.categoryId);
   const [vendorDir, setVendorDir] = useState('');
-  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(30);
+  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(EMPTY.publishIntervalSeconds);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -53,8 +53,8 @@ export default function HepanProviderSettings() {
     try {
       const next = await getPlatformSettingsStatus<HepanProviderStatus>('hepan');
       setStatus(next);
-      setCategoryId(next.categoryId || 121);
-      setPublishIntervalSeconds(Number.isInteger(next.publishIntervalSeconds) ? next.publishIntervalSeconds : 30);
+      setCategoryId(Number.isInteger(next.categoryId) ? next.categoryId : EMPTY.categoryId);
+      setPublishIntervalSeconds(Number.isInteger(next.publishIntervalSeconds) ? next.publishIntervalSeconds : EMPTY.publishIntervalSeconds);
     } catch (value) {
       setError(message(value));
     } finally {
@@ -180,6 +180,7 @@ export default function HepanProviderSettings() {
 
   const readOnly = status.source === 'environment';
   const disabled = busy || loading || readOnly;
+  const vendorLabel = status.vendorConfigured ? '自定义目录' : status.bundledVendorAvailable ? '内置依赖' : '系统环境';
 
   return <section aria-labelledby="hepan-provider-settings-title" className="min-w-0 space-y-4 rounded-lg border border-slate-200 bg-white p-5">
     <div>
@@ -213,13 +214,13 @@ export default function HepanProviderSettings() {
         </label>
         <div className="min-w-0">
           <label className="grid min-w-0 gap-1 text-sm text-slate-600">Python vendor/依赖目录
-            <input aria-label="Python vendor/依赖目录" value={vendorDir} onChange={(event) => setVendorDir(event.target.value)} placeholder={status.vendorConfigured ? '已配置（留空保留）' : '留空表示使用系统环境'} disabled={disabled} className="min-w-0 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            <input aria-label="Python vendor/依赖目录" value={vendorDir} onChange={(event) => setVendorDir(event.target.value)} placeholder={status.vendorConfigured ? '已配置（留空保留）' : status.bundledVendorAvailable ? '留空表示使用内置依赖' : '留空表示使用系统环境'} disabled={disabled} className="min-w-0 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </label>
           {status.vendorConfigured && <button type="button" onClick={() => void clearVendor()} disabled={disabled} className="mt-2 rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 disabled:opacity-40">清除自定义目录并恢复系统环境</button>}
         </div>
       </div>
     </details>
-    <p className="text-xs text-slate-500">Python：{status.pythonConfigured ? '已配置' : '未配置'} · Cookie：{status.cookieConfigured ? '已配置' : '未配置'} · vendor：{status.vendorConfigured ? '已配置' : '系统环境'} · 最近测试：{status.lastTest ? (status.lastTest.ok ? '成功' : '失败') : '尚未测试'}</p>
+    <p className="text-xs text-slate-500">Python：{status.pythonConfigured ? '已配置' : '未配置'} · Cookie：{status.cookieConfigured ? '已配置' : '未配置'} · vendor：{vendorLabel} · 最近测试：{status.lastTest ? (status.lastTest.ok ? '成功' : '失败') : '尚未测试'}</p>
     {error && <p role="alert" aria-live="assertive" className="text-sm text-rose-700">{error}</p>}
     {notice && <p role="status" aria-live="polite" className="text-sm text-emerald-700">{notice}</p>}
     <div className="flex min-w-0 flex-wrap gap-2">

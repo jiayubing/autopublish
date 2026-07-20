@@ -2,6 +2,7 @@ const path = require("path");
 const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage } = require("electron");
 const { isAllowedRendererNavigation } = require("./security/navigation");
 const { configureApplicationIdentity } = require("./application-identity");
+const { createAuthenticatedRuntime } = require("./services/authenticated-runtime");
 
 configureApplicationIdentity(app);
 
@@ -16,7 +17,8 @@ let taskService = null;
 let storageMaintenanceService = null;
 let authService = null;
 let workspaceBootstrap = null;
-let authenticatedRuntimeReady = false;
+let runtimeContext = null;
+let authenticatedRuntime = null;
 let runtimeDisposePromise = null;
 let quitPromise = null;
 let quitReady = false;
@@ -116,7 +118,7 @@ function createDeferredGenerationBatchService() {
   };
 }
 
-async function disposeRuntime() {
+async function disposeRuntimeServices() {
   if (runtimeDisposePromise) return runtimeDisposePromise;
   runtimeDisposePromise = (async function() {
     if (unsubscribeDoubaoQueue) {
@@ -145,8 +147,16 @@ async function disposeRuntime() {
     try {
       if (generationService && typeof generationService.dispose === "function") await generationService.dispose();
     } catch (_) {}
+    try {
+      if (authService && typeof authService.dispose === "function") authService.dispose();
+    } catch (_) {}
   })();
   return runtimeDisposePromise;
+}
+
+async function disposeRuntime() {
+  if (!authenticatedRuntime || authenticatedRuntime.getState().phase === "idle") return disposeRuntimeServices();
+  return authenticatedRuntime.dispose();
 }
 
 async function relaunchApplication() {
@@ -311,6 +321,14 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
   unsubscribeLogs = subscribe(function(entry) { sendToRenderer("publish-log", entry); });
 }
 
+authenticatedRuntime = createAuthenticatedRuntime({
+  start: function(bootstrapState) {
+    if (!runtimeContext) throw new Error("Authenticated runtime context is unavailable");
+    initializeRuntime(bootstrapState, runtimeContext.appRoot, runtimeContext.userDataPath, runtimeContext.sessionDataPath);
+  },
+  dispose: disposeRuntimeServices
+});
+
 function initializeWorkspaceBootstrap() {
   const userDataPath = app.getPath("userData");
   const localAppData = process.env.LOCALAPPDATA;
@@ -352,14 +370,15 @@ function createAuthenticatedIpcMain() {
 }
 
 async function activateAuthenticatedRuntime() {
-  if (authenticatedRuntimeReady) return;
+  const runtimeState = authenticatedRuntime.getState();
+  if (runtimeState.phase === "running" || runtimeState.phase === "starting") return;
   const workspace = initializeWorkspaceBootstrap();
   workspaceBootstrap = workspace;
+  runtimeContext = workspace;
   const bootstrapState = workspace.service.bootstrap();
   if (bootstrapState && bootstrapState.state === "ready" &&
     typeof bootstrapState.workspacePath === "string" && bootstrapState.workspacePath.trim() !== "") {
-    initializeRuntime(bootstrapState, workspace.appRoot, workspace.userDataPath, workspace.sessionDataPath);
-    authenticatedRuntimeReady = true;
+    await authenticatedRuntime.start(bootstrapState);
   }
 }
 

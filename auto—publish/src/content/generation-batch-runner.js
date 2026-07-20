@@ -66,17 +66,18 @@ function createGenerationBatchRunner(options) {
   const activeTasks = new Map();
   let activeRun = null;
   let disposed = false;
-  let state = { status: "idle", batchId: null, concurrency: concurrency };
+  let state = { status: "idle", batchId: null, counts: null, concurrency: concurrency, updatedAt: now() };
 
-  function emit(batch, task, error) {
+  function emit(batch, status, task, error, updatedAt) {
     const event = {
-      batchId: batch && batch.id,
+      batchId: batch && batch.id ? batch.id : null,
       taskId: task && task.id,
       clientId: task && task.clientId,
       platform: task && task.platform,
       templateId: task && task.templateId,
       counts: batch && batch.counts ? clone(batch.counts) : undefined,
-      status: batch && batch.status,
+      status: status || (batch && batch.status) || "idle",
+      updatedAt: updatedAt || now(),
       error: error ? safeError(error) : undefined
     };
     Object.keys(event).forEach(function(key) {
@@ -88,13 +89,16 @@ function createGenerationBatchRunner(options) {
   }
 
   function setState(batch, status) {
+    const liveStatus = status || (batch && batch.status) || "idle";
+    const updatedAt = now();
     state = {
-      status: status || (batch && batch.status) || "idle",
+      status: liveStatus,
       batchId: batch ? batch.id : null,
+      counts: batch && batch.counts ? clone(batch.counts) : null,
       concurrency: concurrency,
-      updatedAt: now()
+      updatedAt: updatedAt
     };
-    if (batch) emit(batch);
+    emit(batch, liveStatus, undefined, undefined, updatedAt);
   }
 
   function selected(task, selection) {
@@ -252,7 +256,9 @@ function createGenerationBatchRunner(options) {
             return;
           }
           batch = deps.batchStore.getBatch(batchId);
-          emit(batch, task);
+          const taskUpdatedAt = now();
+          state = Object.assign({}, state, { counts: batch && batch.counts ? clone(batch.counts) : state.counts, updatedAt: taskUpdatedAt });
+          emit(batch, state.status, task, undefined, taskUpdatedAt);
           if (batch.status === "paused_configuration") {
             configurationPaused = true;
             stopController.abort();
@@ -280,6 +286,10 @@ function createGenerationBatchRunner(options) {
     return activeRun.promise;
   }
 
+  async function pause() {
+    return stop();
+  }
+
   function getState() { return clone(state); }
 
   function subscribe(listener) {
@@ -295,7 +305,7 @@ function createGenerationBatchRunner(options) {
     listeners.clear();
   }
 
-  return { run: run, stop: stop, getState: getState, subscribe: subscribe, dispose: dispose };
+  return { run: run, stop: stop, pause: pause, getState: getState, subscribe: subscribe, dispose: dispose };
 }
 
 module.exports = { createGenerationBatchRunner };

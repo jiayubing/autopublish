@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "allowJs": false,
+    "noImplicitAny": false
+  },
+  "include": [
+    "src/bridge/**/*.ts",
+    "src/types.ts",
+    "src/contracts/**/*.ts"
+  ]
+}

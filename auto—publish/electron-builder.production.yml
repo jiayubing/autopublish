@@ -1,0 +1,36 @@
+# Production inherits the audited file boundary from alpha, then turns on
+# integrity properties that must never be silently weakened for a release.
+extends: ./electron-builder.alpha.yml
+
+directories:
+  output: release
+
+asar: true
+asarUnpack:
+  - tools/node/**/*
+  - src/platforms/hepan/hepan_publish.py
+  - resources/hepan/vendor-pure/**/*
+
+win:
+  signAndEditExecutable: true
+  forceCodeSigning: true
+  certificateFile: "${env.WIN_CSC_LINK}"
+  certificatePassword: "${env.WIN_CSC_KEY_PASSWORD}"
+  target:
+    - target: portable
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AutoPublish
+
+portable:
+  artifactName: "${productName}-${version}-portable.${ext}"

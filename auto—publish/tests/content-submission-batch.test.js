@@ -101,11 +101,13 @@ describe("content submission batch", function() {
       const service = makeService(root);
       const batch = service.createBatch({ clientId: "client-1", articleIds: ["saved"], targetPlatformIds: ["toutiao"], confirmed: true });
       assert.equal(service.listBatches("client-1").length, 1);
-      const cancelled = service.cancelBatch({ batchId: batch.batchId, confirmed: true });
+      const preview = service.previewCancelBatch({ batchId: batch.batchId });
+      const cancelled = service.cancelBatch({ batchId: batch.batchId, planId: preview.planId, confirmed: true });
       assert.equal(cancelled.cancelledCount, 1);
       assert.equal(fs.existsSync(batch.items[0].filePath), false);
       assert.equal(createPublicationLedger({ workspaceRoot: root }).get(batch.items[0].publicationId).status, "cancelled");
-      assert.equal(service.cancelBatch({ batchId: batch.batchId, confirmed: true }).cancelledCount, 0);
+      const repeatPreview = service.previewCancelBatch({ batchId: batch.batchId });
+      assert.equal(service.cancelBatch({ batchId: batch.batchId, planId: repeatPreview.planId, confirmed: true }).cancelledCount, 0);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
@@ -206,10 +208,48 @@ describe("content submission batch", function() {
       ledger.markSubmitting(batch.items[0].publicationId, batch.items[0].attemptId);
       const preview = service.previewCancelBatch({ batchId: batch.batchId });
       assert.equal(preview.cancelableCount, 0);
-      const result = service.cancelBatch({ batchId: batch.batchId, confirmed: true });
+      const result = service.cancelBatch({ batchId: batch.batchId, planId: preview.planId, confirmed: true });
       assert.equal(result.cancelledCount, 0);
       assert.equal(ledger.get(batch.items[0].publicationId).status, "submitting");
       assert.equal(fs.existsSync(batch.items[0].filePath), true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("keeps a staged media queue item cancellable without a remote publication id", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-media-staged-"));
+    try {
+      const filePath = path.join(root, ".autopublish", "input", "media", "Title-saved.md");
+      const content = "staged media queue";
+      const contentHash = require("crypto").createHash("sha256").update(content).digest("hex");
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content, "utf8");
+      fs.writeFileSync(filePath + ".submission.json", JSON.stringify({ submissionBatchId: "media-old", clientId: "client-1", generatedArticleId: "saved", targetPlatformId: "media", contentHash }), "utf8");
+      createSubmissionBatchStore({ workspaceRoot: root }).save({
+        id: "media-old", clientId: "client-1", status: "queued", createdAt: "2026-07-18T00:00:00.000Z", items: [{ articleId: "saved", targetPlatformId: "media", status: "queued", contentHash, filePath, sidecarPath: filePath + ".submission.json" }]
+      });
+      createSubmissionBatchStore({ workspaceRoot: root }).save({
+        id: "media-new", clientId: "client-1", status: "completed", createdAt: "2026-07-19T00:00:00.000Z", items: [{ articleId: "saved", targetPlatformId: "media", status: "skipped", contentHash }]
+      });
+      const service = makeService(root, { platforms: [{ id: "media", scanDir: "media", contentQueueImport: true }] });
+      assert.equal(service.listBatches("client-1").find((batch) => batch.id === "media-old").items[0].canCancel, true);
+      assert.equal(service.previewCancelBatch({ batchId: "media-old" }).cancelableCount, 1);
+      const preview = service.previewCancelBatch({ batchId: "media-old" });
+      assert.equal(preview.allowedCount, 1);
+      assert.equal(service.cancelBatch({ batchId: "media-old", planId: preview.planId, confirmed: true }).cancelledCount, 1);
+      assert.equal(fs.existsSync(filePath), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("binds execution to the preview plan and does not reuse media item fingerprints", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-action-plan-"));
+    try {
+      const service = makeService(root, { platforms: [{ id: "media", scanDir: "media", contentQueueImport: true }] });
+      const batch = service.createBatch({ clientId: "client-1", articleIds: ["saved", "generated"], targetPlatformIds: ["media"], confirmed: true });
+      const preview = service.previewCancelBatch({ batchId: batch.batchId });
+      assert.equal(preview.allowedCount, 2);
+      assert.notEqual(preview.items[0].fingerprint, preview.items[1].fingerprint);
+      fs.writeFileSync(batch.items[0].filePath, "changed", "utf8");
+      assert.throws(() => service.cancelBatch({ batchId: batch.batchId, planId: preview.planId, confirmed: true }), { code: "SUBMISSION_ACTION_STALE" });
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 });

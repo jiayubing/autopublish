@@ -2,6 +2,15 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
+const { pathToFileURL } = require("node:url");
+
+const root = path.resolve(__dirname, "..");
+const tsxLoader = pathToFileURL(path.join(root, "media-workbench", "node_modules", "tsx", "dist", "loader.mjs")).href;
+
+function runStatusModule(source) {
+  return JSON.parse(execFileSync(process.execPath, ["--import", tsxLoader, "--input-type=module", "-e", source], { cwd: root, encoding: "utf8" }));
+}
 
 function record(status, overrides) {
   return Object.assign({
@@ -26,20 +35,33 @@ function record(status, overrides) {
 }
 
 describe("publication history renderer boundary", async function() {
-  const status = await import("../media-workbench/src/publication-status.js");
+  const status = runStatusModule(`
+    import { summarizePublicationRecords, publicationSummaryMatchesFilter } from './media-workbench/src/publication-status.ts';
+    const record = (status) => ({ status, attempts: [], createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' });
+    const summary = (records) => summarizePublicationRecords(records);
+    console.log(JSON.stringify({
+      empty: summary([]),
+      queued: summary([record('queued')]),
+      partial: summary([record('published'), record('queued')]),
+      uncertain: summary([record('published'), record('uncertain')]),
+      failed: summary([record('failed')]),
+      reviewing: summary([record('submitted')]),
+      matches: publicationSummaryMatchesFilter(summary([record('published')]), 'published')
+    }));
+  `);
 
   it("keeps no publication separate from the article review status", function() {
-    assert.equal(status.summarizePublicationRecords([]).status, "not_submitted");
-    assert.equal(status.summarizePublicationRecords([]).label, "未投稿");
-    assert.equal(status.summarizePublicationRecords([record("queued")]).label, "已入队");
+    assert.equal(status.empty.status, "not_submitted");
+    assert.equal(status.empty.label, "未投稿");
+    assert.equal(status.queued.label, "已入队");
   });
 
   it("summarizes independent targets without hiding partial or uncertain results", function() {
-    assert.equal(status.summarizePublicationRecords([record("published"), record("queued")]).status, "partial");
-    assert.equal(status.summarizePublicationRecords([record("published"), record("uncertain")]).status, "uncertain");
-    assert.equal(status.summarizePublicationRecords([record("failed")]).status, "failed");
-    assert.equal(status.summarizePublicationRecords([record("submitted")]).status, "reviewing");
-    assert.equal(status.publicationSummaryMatchesFilter(status.summarizePublicationRecords([record("published")]), "published"), true);
+    assert.equal(status.partial.status, "partial");
+    assert.equal(status.uncertain.status, "uncertain");
+    assert.equal(status.failed.status, "failed");
+    assert.equal(status.reviewing.status, "reviewing");
+    assert.equal(status.matches, true);
   });
 
   it("keeps the history detail target-oriented and visibly blocks uncertain direct retry", function() {

@@ -60,6 +60,31 @@ describe("Hepan provider settings", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("uses bundled vendor dependencies when no custom vendor directory is configured", async () => {
+    const root = tempDirectory();
+    const vendorDir = path.resolve(__dirname, "..", "resources", "hepan", "vendor-pure");
+    let importEnvironment;
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({
+        localStateRoot: root,
+        runCommand: async (command, args, options) => {
+          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":24,"contentHtmlLength":25}\n', stderr: "" };
+          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
+          if (args.includes("-c")) {
+            importEnvironment = options && options.env && options.env.PYTHONPATH;
+            return { status: 0, stdout: "", stderr: "" };
+          }
+          return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+        }
+      });
+      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
+      await service.test("hepan", { pythonPath, cookie: "fixture-cookie" });
+      assert.equal(importEnvironment, vendorDir);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   it("checks Python, imports, and login through a temporary cookie file that is always removed", async () => {
     const root = tempDirectory();
     const calls = [];

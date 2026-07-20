@@ -293,11 +293,31 @@ function createPublicationLedgerStore(options) {
   );
   safeDirectory(io, workspaceRoot, directory);
 
+  // The publication directory is the durable index boundary.  Keep the
+  // expensive directory walk in one place and refresh it when another
+  // writer changes the directory.  Reads still validate the file itself so
+  // tampering or a replaced file remains fail-closed.
+  let index = null;
+  let indexRevision = null;
+
   function filenameFor(record) {
     return path.join(directory, aggregateFilename(record.articleKey, record.targetKey));
   }
 
-  function listFiles() {
+  function directoryRevision() {
+    try {
+      const stat = io.lstatSync(directory);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        throw storeError("PUBLICATION_STORAGE_INVALID", "Publication storage is invalid");
+      }
+      return [stat.dev, stat.ino, stat.mtimeMs, stat.ctimeMs, stat.size].join(":");
+    } catch (error) {
+      if (error && error.code && error.code.indexOf("PUBLICATION_") === 0) throw error;
+      throw storeError("PUBLICATION_STORAGE_INVALID", "Publication storage is invalid");
+    }
+  }
+
+  function scanFiles() {
     safeDirectory(io, workspaceRoot, directory);
     let entries;
     try {
@@ -320,23 +340,72 @@ function createPublicationLedgerStore(options) {
     return files.sort();
   }
 
+  function buildIndex(revision) {
+    const files = scanFiles();
+    const byPublicationId = new Map();
+    const byAggregate = new Map();
+    files.forEach(function(filename) {
+      const record = readRecordFile(io, filename);
+      if (byPublicationId.has(record.publicationId)) {
+        throw storeError("PUBLICATION_RECORD_CORRUPT", "Publication record is invalid");
+      }
+      byPublicationId.set(record.publicationId, filename);
+      byAggregate.set(record.articleKey + "\u0000" + record.targetKey, filename);
+    });
+    index = { files: files, byPublicationId: byPublicationId, byAggregate: byAggregate };
+    indexRevision = revision || directoryRevision();
+    return index;
+  }
+
+  function ensureIndex() {
+    const revision = directoryRevision();
+    if (!index || indexRevision !== revision) return buildIndex(revision);
+    return index;
+  }
+
+  function registerRecord(record, filename) {
+    if (!index) return;
+    if (index.byPublicationId.has(record.publicationId) && index.byPublicationId.get(record.publicationId) !== filename) {
+      throw storeError("PUBLICATION_RECORD_CORRUPT", "Publication record is invalid");
+    }
+    const aggregate = record.articleKey + "\u0000" + record.targetKey;
+    index.byPublicationId.set(record.publicationId, filename);
+    index.byAggregate.set(aggregate, filename);
+    if (!index.files.includes(filename)) {
+      index.files.push(filename);
+      index.files.sort();
+    }
+    indexRevision = directoryRevision();
+  }
+
+  // Initialize the cache once so the first lookup does not pay a separate
+  // scan and subsequent get() calls can use the publication id index.
+  buildIndex(directoryRevision());
+
   function findWithPath(publicationId) {
     safeToken(publicationId, "publicationId");
-    const files = listFiles();
-    for (let index = 0; index < files.length; index += 1) {
-      const record = readRecordFile(io, files[index]);
-      if (record.publicationId === publicationId) return { record: record, filename: files[index] };
+    const cached = ensureIndex();
+    const filename = cached.byPublicationId.get(publicationId);
+    if (filename) {
+      const record = readRecordFile(io, filename);
+      if (record.publicationId === publicationId) return { record: record, filename: filename };
+      // A file can be replaced without changing the containing directory's
+      // revision. Rebuild before returning a potentially stale result.
+      index = null;
+      return findWithPath(publicationId);
     }
     throw storeError("PUBLICATION_RECORD_NOT_FOUND", "Publication record was not found");
   }
 
   function findByAggregate(articleKey, targetKey) {
-    const filename = path.join(directory, aggregateFilename(articleKey, targetKey));
+    const cached = ensureIndex();
+    const filename = cached.byAggregate.get(articleKey + "\u0000" + targetKey) || path.join(directory, aggregateFilename(articleKey, targetKey));
     if (!io.existsSync(filename)) return null;
     const record = readRecordFile(io, filename);
     if (record.articleKey !== articleKey || record.targetKey !== targetKey) {
       throw storeError("PUBLICATION_RECORD_CORRUPT", "Publication record is invalid");
     }
+    registerRecord(record, filename);
     return { record: record, filename: filename };
   }
 
@@ -355,6 +424,7 @@ function createPublicationLedgerStore(options) {
       } catch (_) {}
       throw writeError(error);
     }
+    registerRecord(record, filename);
     return clone(record);
   }
 
@@ -392,6 +462,7 @@ function createPublicationLedgerStore(options) {
         try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch (_) {}
       }
     }
+    registerRecord(record, filename);
     return clone(record);
   }
 
@@ -416,7 +487,8 @@ function createPublicationLedgerStore(options) {
   }
 
   function list() {
-    return listFiles().map(function(filename) { return readRecordFile(io, filename); });
+    const cached = ensureIndex();
+    return cached.files.map(function(filename) { return readRecordFile(io, filename); });
   }
 
   return {

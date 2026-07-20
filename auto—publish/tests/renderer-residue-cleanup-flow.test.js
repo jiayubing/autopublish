@@ -1,15 +1,12 @@
 const { after, before, describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { execFileSync, spawn } = require("node:child_process");
 const fs = require("node:fs");
-const http = require("node:http");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
 const rootDir = path.resolve(__dirname, "..");
 const rendererUrl = "http://127.0.0.1:4175/";
 
-let viteProcess;
 let browser;
 
 function result(data) {
@@ -92,22 +89,6 @@ function installDesktopFixture(page, scenario) {
   }, { scenario });
 }
 
-async function waitForServer(url) {
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      await new Promise((resolve, reject) => {
-        const request = http.get(url, (response) => { response.resume(); response.statusCode >= 200 && response.statusCode < 500 ? resolve() : reject(new Error("server not ready")); });
-        request.on("error", reject);
-      });
-      return;
-    } catch (_) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  throw new Error("Vite renderer server did not start");
-}
-
 async function openPlatformPage(scenario) {
   const page = await browser.newPage({ viewport: { width: 1128, height: 700 } });
   page.setDefaultTimeout(5000);
@@ -122,16 +103,9 @@ async function openPlatformPage(scenario) {
 
 describe("renderer residue cleanup flow", { concurrency: false }, () => {
   before(async () => {
-    execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm --prefix media-workbench run build"], { cwd: rootDir, stdio: "inherit" });
-    viteProcess = spawn(process.execPath, [path.join(rootDir, "media-workbench", "node_modules", "vite", "bin", "vite.js"), "preview", "--host", "127.0.0.1", "--port", "4175"], { cwd: path.join(rootDir, "media-workbench"), stdio: ["ignore", "pipe", "pipe"] });
-    await waitForServer(rendererUrl);
-    browser = await chromium.launch({ headless: true });
+    ({ browser } = await startRenderer({ port: 4175 }));
   });
-
-  after(async () => {
-    if (browser) await browser.close();
-    if (viteProcess && !viteProcess.killed) viteProcess.kill();
-  });
+  after(closeRenderer);
 
   for (const scenario of ["zero", "reject", "partial", "success"]) {
     it(`reports ${scenario} cleanup without leaving the residue action busy`, async () => {

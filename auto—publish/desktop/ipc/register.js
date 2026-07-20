@@ -7,11 +7,7 @@ function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
       const wrapped = async function(event, ...args) {
         if (typeof requireAuthenticated === "function") {
           try { await requireAuthenticated(); }
-          catch (_) {
-            const authError = new Error("请先登录");
-            authError.code = "AUTH_REQUIRED";
-            return fail(authError);
-          }
+          catch (error) { return fail(error); }
         }
         return handler(event, ...args);
       };

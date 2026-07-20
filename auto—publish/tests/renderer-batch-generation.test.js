@@ -127,7 +127,7 @@ describe("renderer content generation workflow", function() {
 
   it("retains the cost warning for a stopped batch with unfinished tasks", function() {
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(detail, /active \|\| \(batch\.status === 'stopped' && unfinished\)/);
+    assert.match(detail, /active \|\| \(\['paused', 'stopped'\]\.includes\(batch\.status\) && unfinished\)/);
   });
 
   it("discovers every returned template platform and counts all selected templates", function() {
@@ -210,7 +210,7 @@ describe("renderer content generation workflow", function() {
   it("rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(batch, /setBatch\(persistedBatch\)/);
+    assert.match(batch, /setBatch\(mergeRuntimeSnapshot\(persistedBatch, state\)\)/);
     assert.match(batch, /setViewMode\('monitoring'\)/);
     assert.match(batch, /onStartNew/);
     assert.match(detail, /onStartNew/);
@@ -232,14 +232,37 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /state\.status !== 'idle'/);
   });
 
-  it("clears the optimistic running state when a batch command fails", function() {
+  it("keeps command pending separate from the live batch run and does not optimistically mark every command running", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /catch \(value\)[\s\S]*setBatchState\(\{ status: 'idle', state: 'idle', batchId \}\)/);
+    assert.match(batch, /commandPending/);
+    assert.match(batch, /setCommandPending\(true\)/);
+    assert.match(batch, /setCommandPending\(false\)/);
+    assert.match(batch, /const batchRunning/);
+    assert.doesNotMatch(batch, /setBatchState\(\(current\) => \(\{ \...current, batchId, state: 'running', status: 'running'/);
   });
 
   it("offers continuation when failed tasks are the only unfinished work", function() {
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
     assert.match(detail, /const unfinished = counts\.pending > 0 \|\| counts\.failed > 0 \|\| counts\.interrupted > 0/);
+  });
+
+  it("keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
+    assert.match(batch, /pauseGenerationBatch\(\{ batchId: batch\.id \}\)/);
+    assert.match(batch, /stopGenerationBatch\(\{ batchId: batch\.id \}\)/);
+    assert.match(detail, /disabled=\{busy \|\| !running\}/);
+    assert.match(detail, /disabled=\{busy \|\| active \|\| !unfinished\}/);
+    assert.match(detail, /const canContinue = !active && unfinished/);
+  });
+
+  it("rehydrates the same live counts and status after returning to the page", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const types = read("media-workbench/src/types.ts");
+    assert.match(batch, /batchStateRef/);
+    assert.match(batch, /counts: runtime\.counts \|\| nextBatch\.counts/);
+    assert.match(types, /updatedAt\?: string/);
+    assert.match(types, /'pausing'/);
   });
 
   it("exposes cancelled counts and a preview-confirmed pending cancellation action", function() {

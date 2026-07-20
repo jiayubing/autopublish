@@ -4,6 +4,7 @@ const defaultOs = require("node:os");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
+const { resolveHepanVendorDir, withHepanVendorEnvironment } = require("../../../src/platforms/hepan/runtime-paths");
 
 const HEPAN_SITE_ORIGIN = "https://www.hepan.com";
 const HEPAN_SELF_TEST_PAYLOAD = JSON.stringify({
@@ -114,16 +115,18 @@ function createHepanSettingsAdapter(options) {
         cookieConfigured: Boolean(value.cookie || value.cookiePath),
         categoryId: value.categoryId || 121,
         vendorConfigured: Boolean(value.vendorDir),
+        bundledVendorAvailable: Boolean(bundledVendorDir),
         publishIntervalSeconds: normalizePublishIntervalSeconds(value.publishIntervalSeconds),
         siteOrigin: HEPAN_SITE_ORIGIN,
         lastTest: context.lastTest || null
       };
     },
     async test(config) {
+      const vendorDir = config.vendorDir || bundledVendorDir;
       await withTemporaryPayload(async (payloadPath) => {
         let selfTest;
         try {
-          selfTest = await runCommand(config.pythonPath, [scriptPath, "--validate-payload", payloadPath], config.vendorDir ? { env: Object.assign({}, process.env, { PYTHONPATH: config.vendorDir }) } : {});
+          selfTest = await runCommand(config.pythonPath, [scriptPath, "--validate-payload", payloadPath], withHepanVendorEnvironment({}, vendorDir));
         } catch (error) {
           if (error && ["ENOENT", "EACCES", "ETIMEDOUT"].includes(error.code)) throw adapterError("HEPAN_PYTHON_UNAVAILABLE", "Hepan Python is unavailable");
           throw adapterError("HEPAN_PAYLOAD_RUNTIME_FAILED", "Hepan payload self-test failed");
@@ -140,13 +143,13 @@ function createHepanSettingsAdapter(options) {
       if (version && (version.error || version.status !== 0)) throw adapterError("HEPAN_PYTHON_UNAVAILABLE", "Hepan Python is unavailable");
 
       let imports;
-      try { imports = await runCommand(config.pythonPath, ["-c", "import requests; import bs4"], config.vendorDir ? { env: Object.assign({}, process.env, { PYTHONPATH: config.vendorDir }) } : {}); } catch (_) { throw adapterError("HEPAN_DEPENDENCY_MISSING", "Hepan Python dependencies are missing"); }
+      try { imports = await runCommand(config.pythonPath, ["-c", "import requests; import bs4"], withHepanVendorEnvironment({}, vendorDir)); } catch (_) { throw adapterError("HEPAN_DEPENDENCY_MISSING", "Hepan Python dependencies are missing"); }
       if (imports && (imports.error || imports.status !== 0)) throw adapterError("HEPAN_DEPENDENCY_MISSING", "Hepan Python dependencies are missing");
 
       return withTemporaryCookie(config, async (cookiePath, imageDir) => {
         let login;
         try {
-          login = await runCommand(config.pythonPath, [scriptPath, "--image-dir", imageDir, "--cookie-path", cookiePath, "--check-login", "--category-id", String(config.categoryId), ...(config.vendorDir ? ["--vendor-dir", config.vendorDir] : [])], config.vendorDir ? { env: Object.assign({}, process.env, { PYTHONPATH: config.vendorDir }) } : {});
+          login = await runCommand(config.pythonPath, [scriptPath, "--image-dir", imageDir, "--cookie-path", cookiePath, "--check-login", "--category-id", String(config.categoryId), ...(vendorDir ? ["--vendor-dir", vendorDir] : [])], withHepanVendorEnvironment({}, vendorDir));
         } catch (_) { throw adapterError("HEPAN_LOGIN_INVALID", "Hepan login test failed"); }
         const payload = parseJsonOutput(login && login.stdout);
         if (!login || login.error || login.status !== 0 || !payload || payload.ok !== true) throw adapterError("HEPAN_LOGIN_INVALID", "Hepan login test failed");
@@ -158,6 +161,7 @@ function createHepanSettingsAdapter(options) {
     createTemporaryCookie: (config) => createTemporaryCookie(config, io, path, localStateRoot),
     siteOrigin: HEPAN_SITE_ORIGIN
   };
+  const bundledVendorDir = resolveHepanVendorDir({ fs: io, path, scriptPath, explicit: values.bundledVendorDir });
   return adapter;
 }
 

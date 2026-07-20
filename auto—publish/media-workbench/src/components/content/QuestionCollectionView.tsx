@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, MessageSquareText, Pencil, Save, Trash2 } from 'lucide-react';
-import { collectDoubaoQuestion, createContentQuestion, deleteContentQuestion, getCachedDoubaoLoginState, getDoubaoLoginStatus, getDoubaoQueueState, listContentQuestions, listContentResearch, openDoubaoLogin, pauseDoubaoBatch, previewDoubaoBatch, rememberDoubaoLoginState, retryFailedDoubao, resumeDoubaoBatch, saveManualResearch, startPreparedDoubaoBatch, stopDoubaoBatch, subscribeDoubaoQueue, updateContentQuestion } from '../../electron-api';
+import { collectDoubaoQuestion, createContentQuestion, deleteContentQuestion, getCachedDoubaoLoginState, getDoubaoLoginStatus, getDoubaoQueueState, listContentQuestions, listContentResearch, openDoubaoLogin, pauseDoubaoBatch, previewDoubaoBatch, rememberDoubaoLoginState, retryFailedDoubao, resumeDoubaoBatch, saveManualResearch, startPreparedDoubaoBatch, stopDoubaoBatch, subscribeDoubaoQueue, updateContentQuestion } from '../../bridge/content';
 import { ContentClient, ContentQuestion, ContentResearch, DoubaoBatchMode, DoubaoBatchPreview, DoubaoLoginState, DoubaoQueueState } from '../../types';
 import { formatBeijingTime } from '../../time-format';
 import CollapsibleSourceItem from './CollapsibleSourceItem';

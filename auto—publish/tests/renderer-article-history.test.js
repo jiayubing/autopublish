@@ -97,7 +97,7 @@ describe("article history grouping", async function() {
     assert.match(view, /const selectedQueueable = filtered\.filter/);
     assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'generated' \|\| article\.status === 'saved'\)/);
     assert.match(view, /状态：/);
-    assert.match(view, /撤销最近入队/);
+    assert.match(view, /撤销未开始投稿/);
     assert.match(view, /listContentSubmissionBatches/);
     assert.match(view, /queueableTaskCount/);
     assert.match(view, /idempotentCount/);

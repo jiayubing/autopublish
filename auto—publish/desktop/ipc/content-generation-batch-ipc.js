@@ -26,10 +26,7 @@ function input(value) {
 function invokeBatchCommand(service, method, value) {
   return invoke(async function() {
     const commandInput = input(value);
-    const result = await service[method](commandInput);
-    const batchId = commandInput.batchId || (result && result.id);
-    if (batchId && typeof service.get === "function") return service.get(batchId);
-    return result;
+    return service[method](commandInput);
   });
 }
 
@@ -43,8 +40,8 @@ function registerContentGenerationBatchIpc(deps) {
   ipcMain.handle("content:list-generation-batches", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.list(); }); });
   ipcMain.handle("content:get-generation-batch", function(event, value) { return invoke(function() { return service.get(input(value).batchId); }); });
   ipcMain.handle("content:start-generation-batch", function(event, value) { return invoke(function() { return service.startBatch(input(value)); }); });
-  ipcMain.handle("content:stop-generation-batch", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.stopBatch(); }); });
-  ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.pauseBatch(); }); });
+  ipcMain.handle("content:stop-generation-batch", function(event, value) { return invoke(function() { return service.stopBatch(value === undefined ? undefined : input(value)); }); });
+  ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(function() { return service.pauseBatch(value === undefined ? undefined : input(value)); }); });
   ipcMain.handle("content:continue-generation-batch", function(event, value) { return invokeBatchCommand(service, "continueBatch", value); });
   ipcMain.handle("content:resume-generation-batch", function(event, value) { return invokeBatchCommand(service, "resumeBatch", value); });
   ipcMain.handle("content:retry-failed-generation-batch", function(event, value) { return invoke(function() { return service.retryFailed(input(value)); }); });

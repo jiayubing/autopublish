@@ -1,17 +1,13 @@
 const { after, before, describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { execFileSync } = require("node:child_process");
-const { spawn } = require("node:child_process");
 const fs = require("node:fs");
-const http = require("node:http");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
 const rootDir = path.resolve(__dirname, "..");
 const fixtureWorkspace = path.join(__dirname, "fixtures", "workspaces", "layout-smoke");
 const rendererUrl = "http://127.0.0.1:4173/";
 
-let viteProcess;
 let browser;
 
 function ok(data) {
@@ -79,34 +75,26 @@ function installDesktopFixture(page) {
       previewCancelSubmissionBatch: () => result({ cancelableCount: 0 }),
       getPlatformQueue: () => result({ platforms: [], queue: [] })
     };
+    const mediaArticle = {
+      filename: "preflight-fixture.md", title: "预检交互稿件", content: "fixture", words: 7, hasImages: false,
+      selectedResources: [{ resourceId: "preflight-resource", name: "预检资源", type: "image", price: 1 }]
+    };
+    const mediaSubmissionState = { submitted: false, scanCalls: 0 };
+    window.__mediaSubmissionState = mediaSubmissionState;
     const media = {
-      scanArticles: () => result([]),
+      scanArticles: () => { mediaSubmissionState.scanCalls += 1; return result(mediaSubmissionState.submitted ? [] : [mediaArticle]); },
       getResourcePage: () => result({ items: [], total: 0, page: 1, pageSize: 100 }),
       getPool: () => result([]),
-      getBalance: () => result({ balance: "0" })
+      getBalance: () => result({ balance: "100" }),
+      buildConfirmation: () => result({ submitableResources: [{ filename: mediaArticle.filename, title: mediaArticle.title, resourceId: "preflight-resource", resourceName: "预检资源", price: 1 }], actualPrice: 1 }),
+      submitSelected: () => { mediaSubmissionState.submitted = true; return result({}); }
     };
-    const orders = { getOrders: () => result([]) };
+    const orders = { getOrders: () => result(mediaSubmissionState.submitted ? [{ id: "preflight-order", status: "submitted" }] : []) };
     const aiProvider = { getStatus: () => result({ configured: false, source: "application", apiKeyMask: "", lastTest: null }), save: () => result({}), testConnection: () => result({}), clear: () => result({ cleared: true }) };
     const platformSettings = { getStatus: (platformId) => result(platformId === "media" ? { configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null } : { configured: false, source: "application", pythonConfigured: false, cookieConfigured: false, categoryId: 121, vendorConfigured: false, siteOrigin: "https://www.hepan.com", lastTest: null }), save: () => result({}), test: () => result({ testedAt: "", ok: true, code: "OK" }), clear: () => result({ cleared: true }) };
     const storageMaintenance = { getUsage: () => result({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }), cleanCaches: () => result({ blocked: false }) };
     window.desktopConsole = { auth: { getState: () => result({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => result({ authenticated: true }), refresh: () => result({ authenticated: true }), logout: () => result({ authenticated: false }), onStateChanged: () => () => {} }, workspace, runtimeDiagnostics: runtime, aiProvider, platformSettings, storageMaintenance, media, orders, platforms: { getQueue: () => result({ platforms: [], queue: [] }), getState: () => result({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} }, content };
   }, fixtureWorkspace);
-}
-
-async function waitForServer(url) {
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      await new Promise((resolve, reject) => {
-        const request = http.get(url, (response) => { response.resume(); response.statusCode >= 200 && response.statusCode < 500 ? resolve() : reject(new Error("server not ready")); });
-        request.on("error", reject);
-      });
-      return;
-    } catch (_) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  throw new Error("Vite renderer server did not start");
 }
 
 async function openRenderer(width, height) {
@@ -158,19 +146,63 @@ async function assertHistoryLayout(width, height) {
 describe("real renderer responsive layout", { concurrency: false }, () => {
   before(async () => {
     assert.ok(fs.existsSync(path.join(fixtureWorkspace, "clients", "layout-smoke", "profile.md")));
-    if (process.platform === "win32") {
-      execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm --prefix media-workbench run build"], { cwd: rootDir, stdio: "inherit" });
-    } else {
-      execFileSync("npm", ["--prefix", "media-workbench", "run", "build"], { cwd: rootDir, stdio: "inherit" });
+    ({ browser } = await startRenderer({ port: 4173 }));
+  });
+  after(closeRenderer);
+
+  it("keeps the preflight confirmation button clickable beside the normal authorization status bar", async () => {
+    for (const [width, height] of [[1280, 720], [1180, 760], [900, 640]]) {
+      const page = await browser.newPage({ viewport: { width, height } });
+      try {
+        page.setDefaultTimeout(5000);
+        await installDesktopFixture(page);
+        await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "预检并提交" }).click();
+        const confirm = page.locator("[data-preflight-confirm='true']");
+        await confirm.waitFor();
+        const hit = await page.evaluate(() => {
+          const button = document.querySelector("[data-preflight-confirm='true']");
+          const status = document.querySelector("[aria-label='授权状态']");
+          const modal = document.querySelector("[data-modal-host='true']");
+          if (!button || !status || !modal) return null;
+          const box = button.getBoundingClientRect();
+          const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+          return {
+            targetIsButton: target === button || Boolean(target?.closest("[data-preflight-confirm='true']")),
+            statusContainsButton: status.contains(button),
+            modalIsBodyChild: modal.parentElement === document.body,
+            box: box.toJSON()
+          };
+        });
+        assert.ok(hit, "expected preflight modal DOM");
+        assert.equal(hit.targetIsButton, true, JSON.stringify(hit));
+        assert.equal(hit.statusContainsButton, false, JSON.stringify(hit));
+        assert.equal(hit.modalIsBodyChild, true, JSON.stringify(hit));
+        assertInsideViewport(hit.box, { width, height });
+      } finally {
+        await page.close();
+      }
     }
-    viteProcess = spawn(process.execPath, [path.join(rootDir, "media-workbench", "node_modules", "vite", "bin", "vite.js"), "preview", "--host", "127.0.0.1", "--port", "4173"], { cwd: path.join(rootDir, "media-workbench"), stdio: ["ignore", "pipe", "pipe"] });
-    await waitForServer(rendererUrl);
-    browser = await chromium.launch({ headless: true });
   });
 
-  after(async () => {
-    if (browser) await browser.close();
-    if (viteProcess && !viteProcess.killed) viteProcess.kill();
+  it("rescans media articles and refreshes orders after a successful paid submission", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "打开" }).click();
+      await page.getByText("当前编辑", { exact: true }).waitFor();
+      const initialScanCalls = await page.evaluate(() => window.__mediaSubmissionState.scanCalls);
+      await page.getByRole("button", { name: "预检并提交" }).click();
+      await page.locator("[data-preflight-confirm='true']").click();
+      await page.waitForFunction(() => window.__mediaSubmissionState.scanCalls > 1 && !document.body.innerText.includes("预检交互稿件"));
+      const refreshed = await page.evaluate(() => ({ scanCalls: window.__mediaSubmissionState.scanCalls, body: document.body.innerText }));
+      assert.ok(refreshed.scanCalls > initialScanCalls, JSON.stringify(refreshed));
+      assert.match(refreshed.body, /暂无打开的稿件/);
+    } finally {
+      await page.close();
+    }
   });
 
   it("measures the history toolbar at the medium viewport", async () => {

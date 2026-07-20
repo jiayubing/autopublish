@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { Article, Draft, MediaResource } from '../types';
-import { getDraft } from '../electron-api';
+import { getDraft } from '../bridge/media';
 import { 
   FileText, 
   Trash2, 

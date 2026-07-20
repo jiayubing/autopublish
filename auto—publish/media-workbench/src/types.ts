@@ -65,6 +65,7 @@ export interface HepanProviderStatus {
   cookieConfigured: boolean;
   categoryId: number;
   vendorConfigured: boolean;
+  bundledVendorAvailable?: boolean;
   siteOrigin: string;
   publishIntervalSeconds: number;
   lastTest: PlatformProviderTestResult | null;
@@ -87,12 +88,13 @@ export interface LegacyProviderSettingsStatus {
 }
 
 export interface GenerationBatchState {
-  state?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
-  status?: 'idle' | 'running' | 'stopping' | 'stopped' | 'completed';
+  state?: GenerationBatchLiveStatus;
+  status?: GenerationBatchLiveStatus;
   isBatchRunning?: boolean;
   isStopPending?: boolean;
   batchId?: string | null;
   counts?: GenerationBatchCounts;
+  updatedAt?: string;
   taskId?: string | null;
   error?: { code?: string; message?: string } | null;
 }
@@ -240,12 +242,15 @@ export interface RealOrder {
   errorCode?: string;
 }
 
+export type GenerationBatchLiveStatus = 'idle' | 'pending' | 'starting' | 'running' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'interrupted' | 'paused_configuration' | 'failed' | 'completed';
+
 export interface AuthState {
   authenticated: boolean;
   user: { id?: string; loginName: string; role?: 'admin' | 'user'; enabled?: boolean; mustChangePassword?: boolean } | null;
   entitlements: Array<{ product: string; enabled: boolean; expiresAt?: string | null }>;
   device?: { displayName?: string | null; registered?: boolean; deviceCount?: number; maxDevices?: number } | null;
   errorCode?: string | null;
+  sessionStatus?: 'signed_out' | 'authenticated' | 'recovering';
   passwordChangeRequired?: boolean;
   pendingLoginName?: string | null;
 }
@@ -432,7 +437,8 @@ export interface ContentSubmissionBatchItem { articleId: string; targetPlatformI
 export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; alreadyQueuedCount?: number; blockedPublishedCount?: number; blockedUncertainCount?: number; blockedContentCount?: number; conflictCount: number; ineligibleArticleIds?: string[]; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
 export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
-export interface ContentSubmissionCancellationPreview { batchId: string; cancelableCount: number; uncancelableCount: number; items: Array<ContentSubmissionBatchItem & { cancelable: boolean }>; }
+export interface ContentSubmissionActionPlanItem { articleId: string; targetPlatformId: string; publicationId?: string | null; attemptId?: string | null; action: 'cancel'; allowed: boolean; reasonCode?: string | null; reasonMessage?: string | null; fingerprint?: string | null; }
+export interface ContentSubmissionCancellationPreview { batchId: string; clientId: string; action: 'cancel'; planId: string; fingerprint: string; allowedCount: number; blockedCount: number; items: ContentSubmissionActionPlanItem[]; cancelableCount?: number; uncancelableCount?: number; }
 export interface ContentSubmissionCleanupPreview { batchId: string; cleanableCount: number; uncleanableCount: number; items: Array<ContentSubmissionBatchItem & { cleanable: boolean }>; }
 export interface ContentSubmissionCleanupResult { batchId: string; cleanedCount: number; skippedCount: number; items: ContentSubmissionBatchItem[]; }
 
@@ -610,7 +616,7 @@ export interface PlatformSubmitPlan {
 export interface PlatformSubmitTask {
   sourcePlatformId: string;
   filename: string;
-  filePath: string;
+  filePath?: string;
   targetPlatformId: string;
 }
 
@@ -625,12 +631,21 @@ export interface PlatformSubmitResult {
     failed: number;
   };
   trashDisposition?: 'keep_local' | 'offer_trash' | 'auto_trash_requested' | 'auto_trash_blocked' | string;
-  trashSummary?: { offeredCount?: number; requestedCount?: number; movedCount?: number; blockedCount?: number; failedCount?: number };
+  trashSummary?: {
+    offeredCount?: number;
+    requestedCount?: number;
+    movedCount?: number;
+    recoveryCount?: number;
+    blockedCount?: number;
+    failedCount?: number;
+    reasonCodes?: Array<'IDENTITY_MISSING' | 'REMOVAL_BLOCKED' | 'REMOVAL_NEEDS_REPAIR' | string>;
+  };
 }
 
 export interface PlatformTaskResult {
   task: PlatformSubmitTask;
   status: 'success' | 'failed' | 'pending';
+  publicationStatus?: PublicationRecordStatus | null;
   error?: string;
   archiveError?: string | { code?: string | null; message?: string | null } | null;
 }

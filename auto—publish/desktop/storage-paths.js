@@ -4,6 +4,36 @@ const path = require("node:path");
 const STORAGE_ROOTS = Object.freeze(["installation", "roamingConfig", "localState", "contentLibrary"]);
 const CONTENT_MARKER = ".autopublish-workspace.json";
 
+function createPortableContentPaths(contentLibrary) {
+  const root = path.resolve(contentLibrary);
+  const autopublish = path.join(root, ".autopublish");
+  const input = path.join(autopublish, "input");
+  return {
+    root: root,
+    contentLibrary: root,
+    clients: path.join(root, "clients"),
+    generated: path.join(root, "generated"),
+    templates: path.join(root, "templates"),
+    autopublish: autopublish,
+    privateContent: autopublish,
+    input: input,
+    inputRoot: input,
+    mediaInput: path.join(input, "media"),
+    liejuInput: path.join(input, "lieju"),
+    toutiaoInput: path.join(input, "toutiao"),
+    hepanInput: path.join(input, "hepan"),
+    data: path.join(autopublish, "data"),
+    research: path.join(autopublish, "research"),
+    generationBatches: path.join(autopublish, "batches"),
+    queue: path.join(autopublish, "queue"),
+    submissionRecords: path.join(autopublish, "submission-records"),
+    publications: path.join(autopublish, "submission-records", "publications"),
+    submissions: path.join(autopublish, "submission-records"),
+    published: path.join(autopublish, "published"),
+    failed: path.join(autopublish, "failed")
+  };
+}
+
 function storagePathError(message) {
   const error = new Error(message);
   error.code = "STORAGE_PATHS_INVALID";
@@ -44,7 +74,7 @@ function createStoragePaths(input) {
   };
   assertDistinctRoots(roots);
 
-  const autopublish = path.join(roots.contentLibrary, ".autopublish");
+  const content = createPortableContentPaths(roots.contentLibrary);
   const localCache = path.join(roots.localState, "cache");
   const browser = path.join(roots.localState, "browser");
   const paths = Object.assign({}, roots, {
@@ -54,21 +84,6 @@ function createStoragePaths(input) {
     workspaceRoot: roots.contentLibrary,
 
     marker: path.join(roots.contentLibrary, CONTENT_MARKER),
-    clients: path.join(roots.contentLibrary, "clients"),
-    generated: path.join(roots.contentLibrary, "generated"),
-    templates: path.join(roots.contentLibrary, "templates"),
-    autopublish: autopublish,
-    privateContent: autopublish,
-    input: path.join(autopublish, "input"),
-    data: path.join(autopublish, "data"),
-    research: path.join(autopublish, "research"),
-    generationBatches: path.join(autopublish, "batches"),
-    queue: path.join(autopublish, "queue"),
-    submissionRecords: path.join(autopublish, "submission-records"),
-    publications: path.join(autopublish, "submission-records", "publications"),
-    submissions: path.join(autopublish, "submission-records"),
-    published: path.join(autopublish, "published"),
-    failed: path.join(autopublish, "failed"),
 
     config: path.join(roots.roamingConfig, "runtime"),
     runtimeConfig: path.join(roots.roamingConfig, "runtime-config.json"),
@@ -82,12 +97,7 @@ function createStoragePaths(input) {
     browser: browser,
     doubaoBrowser: path.join(browser, "doubao"),
     doubaoDiagnostics: path.join(roots.localState, "logs", "doubao-diagnostics")
-  });
-  paths.inputRoot = paths.input;
-  paths.mediaInput = path.join(paths.input, "media");
-  paths.liejuInput = path.join(paths.input, "lieju");
-  paths.toutiaoInput = path.join(paths.input, "toutiao");
-  paths.hepanInput = path.join(paths.input, "hepan");
+  }, content);
   return paths;
 }
 
@@ -122,6 +132,7 @@ function ensureContentLibrary(paths) {
 module.exports = {
   STORAGE_ROOTS,
   CONTENT_MARKER,
+  createPortableContentPaths,
   createStoragePaths,
   validateStoragePaths,
   ensureContentLibrary

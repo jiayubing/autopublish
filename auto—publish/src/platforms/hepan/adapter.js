@@ -6,6 +6,7 @@ const { spawnSync } = require("node:child_process");
 const { DIRS } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 const { parseArticle, scanArticles: scanArticleSources } = require("./article-source");
+const { resolveHepanVendorDir, withHepanVendorEnvironment } = require("./runtime-paths");
 
 function resolveHepanRuntime(workspaceRoot, environment) {
   const root = workspaceRoot || DIRS.rootDir;
@@ -74,6 +75,7 @@ function createHepanAdapter(options) {
     return spawnSync(command, args, Object.assign({ encoding: "utf8", timeout: 240000, windowsHide: true }, commandOptions || {}));
   };
   const script = values.scriptPath || scriptPath();
+  const bundledVendorDir = resolveHepanVendorDir({ fs: io, path: pathApi, scriptPath: script, explicit: values.bundledVendorDir });
 
   function runtime() {
     const value = getRuntime() || {};
@@ -81,7 +83,7 @@ function createHepanAdapter(options) {
       cookiePath: value.cookiePath || "",
       pythonPath: value.pythonPath || "",
       categoryId: Number(value.categoryId || 121),
-      vendorDir: value.vendorDir || "",
+      vendorDir: value.vendorDir || bundledVendorDir,
       siteOrigin: "https://www.hepan.com"
     };
   }
@@ -101,10 +103,7 @@ function createHepanAdapter(options) {
       cwd: DIRS.rootDir,
       encoding: "utf8",
       timeout: 240000,
-      env: Object.assign({}, process.env, {
-        PYTHONIOENCODING: "utf-8",
-        PYTHONPATH: config.vendorDir || process.env.PYTHONPATH || ""
-      })
+      ...withHepanVendorEnvironment({ env: Object.assign({}, process.env, { PYTHONIOENCODING: "utf-8" }) }, config.vendorDir)
     });
     if (result && result.error) throw result.error;
     const payload = parseJsonOutput(result && result.stdout);
@@ -167,10 +166,7 @@ function createHepanAdapter(options) {
         cwd: DIRS.rootDir,
         encoding: "utf8",
         timeout: 120000,
-        env: Object.assign({}, process.env, {
-          PYTHONIOENCODING: "utf-8",
-          PYTHONPATH: config.vendorDir || process.env.PYTHONPATH || ""
-        })
+        ...withHepanVendorEnvironment({ env: Object.assign({}, process.env, { PYTHONIOENCODING: "utf-8" }) }, config.vendorDir)
       });
       if (result && result.error) throw result.error;
       let payload;
