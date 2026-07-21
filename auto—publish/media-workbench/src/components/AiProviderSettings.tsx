@@ -14,6 +14,7 @@ import {
   GenerationBatchState,
 } from '../types';
 import { formatBeijingTime } from '../time-format';
+import { useConfirmation } from '../confirmation';
 
 const DEFAULT_TIMEOUT_MS = 60000;
 const GENERATION_BATCH_STATE_EVENT = 'content:generation-batch-state';
@@ -96,6 +97,7 @@ function formatTestResult(result: AiProviderTestResult | null): string {
 }
 
 export default function AiProviderSettings() {
+  const { confirm } = useConfirmation();
   const [status, setStatus] = useState<AiProviderStatus>(EMPTY_STATUS);
   const [form, setForm] = useState<AiProviderConfigInput>(initialForm(EMPTY_STATUS));
   const [loading, setLoading] = useState(true);
@@ -186,9 +188,7 @@ export default function AiProviderSettings() {
     setError(null);
     setNotice(null);
     if (!validateForm()) return;
-    const confirmed = typeof window === 'undefined' || typeof window.confirm !== 'function'
-      || window.confirm('测试连接会发送最小 completion，可能产生少量费用。是否继续？');
-    if (!confirmed) return;
+    if (!await confirm({ title: '测试 AI 连接', message: '测试会发送最小 completion，可能产生少量费用。', confirmLabel: '开始测试', tone: 'warning' })) return;
     setTesting(true);
     try {
       const result = await testAiProviderConnection(currentInput());
@@ -210,9 +210,7 @@ export default function AiProviderSettings() {
   const handleClear = async () => {
     setError(null);
     setNotice(null);
-    const confirmed = typeof window === 'undefined' || typeof window.confirm !== 'function'
-      || window.confirm('清除后将删除应用级 AI 配置和测试状态。是否继续？');
-    if (!confirmed) return;
+    if (!await confirm({ title: '清除 AI 配置', message: '清除后将删除应用级 AI 配置和测试状态。', confirmLabel: '清除配置', tone: 'danger' })) return;
     setClearing(true);
     try {
       await clearAiProviderConfig();

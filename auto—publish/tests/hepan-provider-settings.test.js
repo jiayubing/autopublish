@@ -76,7 +76,7 @@ describe("Hepan provider settings", () => {
             importEnvironment = options && options.env && options.env.PYTHONPATH;
             return { status: 0, stdout: "", stderr: "" };
           }
-          return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+          return { status: 0, stdout: '{"ok":true,"code":"HEPAN_AUTH_OK","authenticated":true,"publishAccess":true,"uploadContext":"not_checked","stage":"publish_access"}\n', stderr: "" };
         }
       });
       const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
@@ -96,13 +96,13 @@ describe("Hepan provider settings", () => {
         runCommand: async (command, args) => {
           calls.push({ command, args });
           if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":24,"contentHtmlLength":25}\n', stderr: "" };
-          if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+          if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true,"code":"HEPAN_AUTH_OK","authenticated":true,"publishAccess":true,"uploadContext":"not_checked","stage":"publish_access"}\n', stderr: "" };
           return { status: 0, stdout: "Python 3.12\n", stderr: "" };
         }
       });
       const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })], now: () => "2026-07-17T03:00:00.000Z" });
       const result = await service.test("hepan", { pythonPath, cookie: "fixture-cookie", categoryId: 121 });
-      assert.deepStrictEqual(result, { testedAt: "2026-07-17T03:00:00.000Z", ok: true, code: "HEPAN_LOGIN_OK" });
+      assert.deepStrictEqual(result, { testedAt: "2026-07-17T03:00:00.000Z", ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "not_checked", stage: "publish_access" });
       assert.equal(calls[0].args.includes("--validate-payload"), true);
       assert.equal(calls[0].args.includes("--cookie-path"), false);
       assert.equal(calls[0].args.includes("--image-dir"), false);
@@ -128,7 +128,60 @@ describe("Hepan provider settings", () => {
         }
       });
       const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
-      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_LOGIN_INVALID" && !error.message.includes("fixture-cookie") && !error.message.includes(root));
+      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_CHECK_RUNTIME_FAILED" && !error.message.includes("fixture-cookie") && !error.message.includes(root));
+      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("preserves safe warnings and account identity without carrying an error code on success", async () => {
+    const root = tempDirectory();
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({
+        localStateRoot: root,
+        runCommand: async (command, args) => {
+          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
+          if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
+          return { status: 0, stdout: JSON.stringify({ ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "changed", stage: "upload_context", warnings: ["HEPAN_UPLOAD_CONTEXT_CHANGED"], errorCode: "HEPAN_UPLOAD_CONTEXT_CHANGED", account: { displayName: "\u0001fixture-user", uid: "2093208" } }), stderr: "" };
+        }
+      });
+      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })], now: () => "2026-07-17T04:00:00.000Z" });
+      const result = await service.test("hepan", { pythonPath, cookie: "fixture-cookie" });
+      assert.deepStrictEqual(result, {
+        testedAt: "2026-07-17T04:00:00.000Z",
+        ok: true,
+        code: "HEPAN_AUTH_OK",
+        authenticated: true,
+        publishAccess: true,
+        uploadContext: "changed",
+        stage: "upload_context",
+        warnings: ["HEPAN_UPLOAD_CONTEXT_CHANGED"],
+        account: { displayName: "fixture-user", uid: "2093208" }
+      });
+      assert.equal("errorCode" in result, false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("uses a safe Python error code when the login command exits non-zero", async () => {
+    const root = tempDirectory();
+    try {
+      const pythonPath = path.join(root, "python.exe");
+      fs.writeFileSync(pythonPath, "fixture python", "utf8");
+      const adapter = createHepanSettingsAdapter({
+        localStateRoot: root,
+        runCommand: async (command, args) => {
+          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
+          if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
+          return { status: 1, stdout: '{"ok":false,"authenticated":true,"publishAccess":false,"stage":"publish_access","errorCode":"HEPAN_CATEGORY_ACCESS_DENIED"}\n', stderr: "remote details omitted" };
+        }
+      });
+      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
+      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_CATEGORY_ACCESS_DENIED");
+      assert.equal(service.getStatus("hepan").lastTest.code, "HEPAN_CATEGORY_ACCESS_DENIED");
+      assert.equal(service.getStatus("hepan").lastTest.publishAccess, false);
       assert.equal(fs.existsSync(path.join(root, "tmp")), false);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });

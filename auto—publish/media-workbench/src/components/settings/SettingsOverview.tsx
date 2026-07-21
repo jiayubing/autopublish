@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { getAiProviderStatus, getLegacyPlatformSettingsStatus, getPlatformSettingsStatus, importLegacyPlatformSettings } from '../../bridge/settings';
 import type { AiProviderStatus, HepanProviderStatus, LegacyProviderSettingsStatus, MediaProviderStatus } from '../../types';
 import type { SettingsSection } from './SettingsNavigation';
+import { useConfirmation } from '../../confirmation';
 
 const EMPTY_AI: AiProviderStatus = { source: 'application', configured: false, baseUrl: '', model: '', timeoutMs: 60000, hasApiKey: false, apiKeyMask: '', lastTest: null };
 const EMPTY_MEDIA: MediaProviderStatus = { source: 'application', configured: false, baseUrl: '', timeoutMs: 0, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null };
 const EMPTY_HEPAN: HepanProviderStatus = { source: 'application', configured: false, pythonConfigured: false, cookieConfigured: false, categoryId: 0, vendorConfigured: false, bundledVendorAvailable: false, siteOrigin: '', publishIntervalSeconds: 0, lastTest: null };
 
 export default function SettingsOverview({ onSelect }: { onSelect: (section: SettingsSection) => void }) {
+  const { confirm } = useConfirmation();
   const [ai, setAi] = useState(EMPTY_AI);
   const [media, setMedia] = useState(EMPTY_MEDIA);
   const [hepan, setHepan] = useState(EMPTY_HEPAN);
@@ -33,7 +35,7 @@ export default function SettingsOverview({ onSelect }: { onSelect: (section: Set
   }, []);
 
   const importLegacy = async () => {
-    if (typeof window !== 'undefined' && !window.confirm('将把发现的旧媒体 Key 或河畔 Cookie 加密导入应用配置；不会自动删除旧 Cookie 文件。是否继续？')) return;
+    if (!await confirm({ title: '导入旧配置', message: '将发现的旧媒体 Key 或河畔 Cookie 加密导入应用配置，不会自动删除旧 Cookie 文件。', confirmLabel: '导入配置', tone: 'warning' })) return;
     setLegacyBusy(true); setError(''); setLegacyNotice('');
     try { await importLegacyPlatformSettings(); await load(); setLegacyNotice('旧配置已处理。请按提示手工清理旧 Cookie 文件。'); }
     catch (value) { setError(value instanceof Error ? value.message : '旧配置导入失败。'); }

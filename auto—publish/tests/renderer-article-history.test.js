@@ -71,7 +71,7 @@ describe("article history grouping", async function() {
   it("keeps article opening separate from queue selection", function() {
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
     assert.doesNotMatch(view, /reviewContentArticles|审核已选|待审核/);
-    assert.match(view, /window\.confirm/);
+    assert.match(view, /ActionConfirmationModal/);
     assert.match(view, /article\.status !== 'generated'/);
     assert.match(view, /onArticleSelect\(article\)/);
     assert.match(view, /全选当前结果/);

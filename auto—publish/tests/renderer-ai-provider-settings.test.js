@@ -44,16 +44,17 @@ describe("renderer AI provider settings", function() {
     assert.doesNotMatch(settings, /\bfetch\s*\(/);
   });
 
-  it("confirms only connection tests and clearing, not saving", function() {
+  it("confirms only connection tests and clearing through the renderer host", function() {
     const settings = readSource("components/AiProviderSettings.tsx");
     const save = readFunction(settings, "handleSave");
     const test = readFunction(settings, "handleTest");
     const clear = readFunction(settings, "handleClear");
 
     assert.match(settings, /source/);
-    assert.match(test, /window\.confirm/);
-    assert.match(clear, /window\.confirm/);
-    assert.doesNotMatch(save, /window\.confirm/);
+    assert.match(test, /useConfirmation|confirm\(\{/);
+    assert.match(clear, /useConfirmation|confirm\(\{/);
+    assert.doesNotMatch(settings, /window\.confirm/);
+    assert.doesNotMatch(save, /confirm\(\{/);
     assert.match(settings, /completion/);
   });
 

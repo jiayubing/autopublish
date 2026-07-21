@@ -68,7 +68,7 @@ function createFixture(options) {
       if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":20,"contentHtmlLength":20}\n', stderr: "" };
       if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
       if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
-      if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
+      if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true,"code":"HEPAN_AUTH_OK","authenticated":true,"publishAccess":true,"uploadContext":"not_checked","stage":"publish_access"}\n', stderr: "" };
       return { status: 0, stdout: "", stderr: "" };
     }
   });
@@ -214,7 +214,7 @@ describe("Hepan settings patch contract", () => {
       const result = await fixture.service.test("hepan", { categoryId: 910 });
       const loginCall = fixture.commands.find((call) => call.args.includes("--check-login"));
 
-      assert.deepStrictEqual(result, { testedAt: "2026-07-18T00:00:00.000Z", ok: true, code: "HEPAN_LOGIN_OK" });
+      assert.deepStrictEqual(result, { testedAt: "2026-07-18T00:00:00.000Z", ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "not_checked", stage: "publish_access" });
       assert.equal(loginCall.command, fixture.paths.existingPython);
       assert.equal(loginCall.args[loginCall.args.indexOf("--category-id") + 1], "910");
       assert.equal(loginCall.args[loginCall.args.indexOf("--vendor-dir") + 1], fixture.vendorDir);
@@ -234,7 +234,7 @@ describe("Hepan settings patch contract", () => {
       const loginCall = fixture.commands.find((call) => call.args.includes("--check-login"));
       const bundledVendorDir = path.resolve(__dirname, "..", "resources", "hepan", "vendor-pure");
 
-      assert.deepStrictEqual(result, { testedAt: "2026-07-18T00:00:00.000Z", ok: true, code: "HEPAN_LOGIN_OK" });
+      assert.deepStrictEqual(result, { testedAt: "2026-07-18T00:00:00.000Z", ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "not_checked", stage: "publish_access" });
       assert.equal(loginCall.args[loginCall.args.indexOf("--vendor-dir") + 1], bundledVendorDir);
       assert.equal(loginCall.commandOptions.env.PYTHONPATH, bundledVendorDir);
       assert.deepStrictEqual(fixture.store.read(), fixture.initial);

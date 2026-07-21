@@ -8,6 +8,8 @@ import random
 import re
 import stat as stat_module
 import sys
+import unicodedata
+from urllib.parse import parse_qs, urlparse
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -54,6 +56,12 @@ SITE_ORIGIN = "https://www.hepan.com"
 PORTAL_EDIT_URL = f"{SITE_ORIGIN}/portal.php?mod=portalcp&ac=article&catid={CATID}"
 PORTAL_SUBMIT_URL = f"{SITE_ORIGIN}/portal.php?mod=portalcp&ac=article"
 UPLOAD_URL = f"{SITE_ORIGIN}/misc.php?mod=swfupload&action=swfupload&operation=portal"
+ACCOUNT_IDENTITY_SELECTORS = (
+    "#um .vwmy a[href*='uid=']",
+    ".vwmy a[href*='uid=']",
+    "#toptb .yonghuming a[href*='uid=']",
+    ".yonghuming a[href*='uid=']",
+)
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
 DOCX_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
@@ -75,6 +83,14 @@ class PayloadError(RuntimeError):
 
 class DependencyError(RuntimeError):
     pass
+
+
+class HepanCheckError(RuntimeError):
+    """A safe, user-actionable failure from a read-only capability check."""
+    def __init__(self, code: str, stage: str) -> None:
+        super().__init__(code)
+        self.code = code
+        self.stage = stage
 
 
 PAYLOAD_MESSAGES = {
@@ -143,7 +159,7 @@ def read_payload(payload_path: Path) -> tuple[str, str, str]:
 
 class HepanPortalPublisher:
     def __init__(self, cookie_value: str, category_id: int = CATID) -> None:
-        self.cookie_value = cookie_value.strip()
+        self.cookie_value = normalize_cookie(cookie_value)
         self.category_id = category_id
         self.formhash = ""
         self.uid_value = ""
@@ -160,7 +176,7 @@ class HepanPortalPublisher:
             ),
         }
 
-    def load_publish_context(self) -> None:
+    def _publish_page(self):
         headers = {
             **self._base_headers(),
             "accept": (
@@ -177,30 +193,21 @@ class HepanPortalPublisher:
             "sec-fetch-user": "?1",
             "upgrade-insecure-requests": "1",
         }
-        response = requests.get(f"{SITE_ORIGIN}/portal.php?mod=portalcp&ac=article&catid={self.category_id}", headers=headers, timeout=30)
-        if response.status_code in (401, 403):
-            raise NeedsLoginError(f"hepan cookie rejected with HTTP {response.status_code}")
-        response.raise_for_status()
+        return requests.get(f"{SITE_ORIGIN}/portal.php?mod=portalcp&ac=article&catid={self.category_id}", headers=headers, timeout=30)
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        formhash_tag = soup.find("input", {"name": "formhash"})
-        if not formhash_tag or not formhash_tag.get("value"):
-            raise NeedsLoginError("formhash not found; hepan cookie may be expired")
-        self.formhash = formhash_tag["value"]
-
-        pattern = re.compile(r'"uid"\s*:\s*"(\d+)"\s*,\s*"hash"\s*:\s*"([a-f0-9]+)"')
-        uid_value = None
-        hash_value = None
-        for script in soup.find_all("script"):
-            if script.string:
-                match = pattern.search(script.string)
-                if match:
-                    uid_value, hash_value = match.group(1), match.group(2)
-                    break
-        if not uid_value or not hash_value:
-            raise RuntimeError("image upload uid/hash not found")
-        self.uid_value = uid_value
-        self.hash_value = hash_value
+    def load_publish_context(self) -> None:
+        result = check_capabilities_from_cookie(self.cookie_value, self.category_id, include_upload=True)
+        if not result["authenticated"]:
+            if result["errorCode"] in {"HEPAN_COOKIE_REJECTED", "HEPAN_AUTH_REDIRECTED"}:
+                raise NeedsLoginError("hepan cookie rejected")
+            raise HepanCheckError(result["errorCode"], result["stage"])
+        if not result["publishAccess"]:
+            raise HepanCheckError(result["errorCode"], "publish_access")
+        self.formhash = result["formhash"]
+        if result["uploadContext"] != "available":
+            raise HepanCheckError("HEPAN_UPLOAD_CONTEXT_CHANGED", "upload_context")
+        self.uid_value = result["uid"]
+        self.hash_value = result["hash"]
 
     def upload_image(self, image_path: Path) -> str:
         if not self.uid_value or not self.hash_value:
@@ -389,6 +396,16 @@ def insert_image_between_paragraphs(content_html: str, image_url: str) -> str:
     return str(soup)
 
 
+def normalize_cookie(value: str) -> str:
+    """Normalize browser copied Cookie headers without changing cookie values."""
+    cookie = str(value or "").strip()
+    if cookie.lower().startswith("cookie:"):
+        cookie = cookie[7:].strip()
+    if not cookie or "\x00" in cookie or "\r" in cookie or "\n" in cookie:
+        raise HepanCheckError("HEPAN_COOKIE_REJECTED", "authentication")
+    return cookie
+
+
 def load_cookie(cookie_path: Path) -> str:
     if not cookie_path.exists():
         raise NeedsLoginError("hepan cookie file not found")
@@ -398,7 +415,203 @@ def load_cookie(cookie_path: Path) -> str:
         raise NeedsLoginError("hepan cookie file is invalid")
     if not cookie:
         raise NeedsLoginError("cookie file is empty")
-    return cookie
+    return normalize_cookie(cookie)
+
+
+def _is_explicit_login_url(value: str) -> bool:
+    parsed = urlparse(str(value or ""))
+    path = parsed.path.lower()
+    query = {key.lower(): [item.lower() for item in values] for key, values in parse_qs(parsed.query).items()}
+    if path.endswith("/member.php"):
+        return "logging" in query.get("mod", []) or "login" in query.get("action", [])
+    return path.rstrip("/").endswith("/login") or path.rstrip("/").endswith("/logging")
+
+
+def _has_login_form(soup) -> bool:
+    for form in soup.find_all("form"):
+        action = str(form.get("action", ""))
+        if not _is_explicit_login_url(action) and not re.search(r"(?:logging|login)", action, re.I):
+            continue
+        password = form.find("input", {"type": re.compile(r"^password$", re.I)})
+        submit = form.find(["button", "input"], {"type": re.compile(r"^(submit|button)$", re.I)})
+        if password is not None and submit is not None:
+            return True
+    return False
+
+
+def is_login_page(response, soup) -> bool:
+    """Use only explicit HTTP/URL/DOM login evidence; generic page text is ignored."""
+    history = getattr(response, "history", ()) or ()
+    if any(_is_explicit_login_url(getattr(item, "url", "")) for item in history):
+        return True
+    if _is_explicit_login_url(getattr(response, "url", "")):
+        return True
+    return _has_login_form(soup)
+
+
+def _parse_account_identity_candidate(node) -> dict | None:
+    display_name = "".join(
+        char
+        for char in node.get_text(" ", strip=True)
+        if not unicodedata.category(char).startswith("C")
+    ).strip()
+    if not 1 <= len(display_name) <= 80:
+        return None
+
+    query = parse_qs(urlparse(str(node.get("href", ""))).query)
+    uid_values = query.get("uid", [])
+    uid = str(uid_values[0]).strip() if uid_values else ""
+    if not re.fullmatch(r"\d{1,20}", uid):
+        return None
+    return {"displayName": display_name, "uid": uid}
+
+
+def extract_account_identity(soup) -> dict | None:
+    """Extract the signed-in identity from Discuz's structured account node."""
+
+    for selector in ACCOUNT_IDENTITY_SELECTORS:
+        for node in soup.select(selector):
+            identity = _parse_account_identity_candidate(node)
+            if identity:
+                return identity
+    return None
+
+
+def upload_context_from_soup(soup) -> tuple[str, str] | None:
+    def find_context(value):
+        if isinstance(value, dict):
+            uid = str(value.get("uid", "")).strip()
+            token = str(value.get("hash", "")).strip()
+            if re.fullmatch(r"\d{1,20}", uid) and re.fullmatch(r"[a-fA-F0-9]+", token):
+                return uid, token
+            for child in value.values():
+                found = find_context(child)
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = find_context(child)
+                if found:
+                    return found
+        return None
+
+    def parse_script_json(source):
+        decoder = json.JSONDecoder()
+        for index, character in enumerate(source):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(source[index:])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            found = find_context(value)
+            if found:
+                return found
+        return None
+
+    # Accept structured data attributes and JSON objects regardless of field order.
+    for node in soup.select("[data-uid][data-hash]"):
+        uid = str(node.get("data-uid", "")).strip()
+        token = str(node.get("data-hash", "")).strip()
+        if re.fullmatch(r"\d{1,20}", uid) and re.fullmatch(r"[a-fA-F0-9]+", token):
+            return uid, token
+    for script in soup.find_all("script"):
+        source = script.string or script.get_text() or ""
+        found = parse_script_json(source)
+        if found:
+            return found
+    return None
+
+
+def _check_capabilities_from_response(response, category_id: int, include_upload: bool) -> dict:
+    if response.status_code in (401, 403):
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_COOKIE_REJECTED"}
+    if response.status_code >= 500 or response.status_code >= 400:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_REMOTE_HTTP_ERROR"}
+    try:
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+    except Exception:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_CHECK_RUNTIME_FAILED"}
+    if is_login_page(response, soup):
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_AUTH_REDIRECTED"}
+
+    identity = extract_account_identity(soup)
+    result = {
+        "ok": True,
+        "code": "HEPAN_AUTH_OK",
+        "authenticated": True,
+        "publishAccess": False,
+        "uploadContext": "not_checked",
+        "stage": "authentication",
+    }
+    if identity:
+        result["account"] = identity
+
+    formhash_tag = soup.find("input", {"name": "formhash"})
+    if not formhash_tag or not formhash_tag.get("value"):
+        page_text = soup.get_text(" ", strip=True).lower()
+        code = "HEPAN_CATEGORY_ACCESS_DENIED" if "权限" in page_text or "无权" in page_text or "denied" in page_text else "HEPAN_PUBLISH_FORM_CHANGED"
+        result.pop("code", None)
+        result.update({"ok": False, "stage": "publish_access", "errorCode": code})
+        return result
+
+    result.update({"publishAccess": True, "stage": "publish_access", "formhash": str(formhash_tag["value"])})
+    if include_upload:
+        upload = upload_context_from_soup(soup)
+        if upload:
+            result.update({"uploadContext": "available", "uid": upload[0], "hash": upload[1]})
+        else:
+            result.update({"uploadContext": "changed", "stage": "upload_context", "warnings": ["HEPAN_UPLOAD_CONTEXT_CHANGED"]})
+    return result
+
+
+def check_capabilities_from_cookie(cookie_value: str, category_id: int, include_upload: bool = True) -> dict:
+    """Read-only, staged capability check. It never uploads or publishes."""
+    try:
+        ensure_dependencies()
+        publisher = HepanPortalPublisher(cookie_value, category_id)
+        response = publisher._publish_page()
+        return _check_capabilities_from_response(response, category_id, include_upload)
+    except HepanCheckError as exc:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": exc.stage, "errorCode": exc.code}
+    except requests.Timeout:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_REMOTE_TIMEOUT"}
+    except requests.RequestException:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_REMOTE_HTTP_ERROR"}
+    except DependencyError:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "dependency", "errorCode": "HEPAN_DEPENDENCY_MISSING"}
+    except Exception:
+        return {"ok": False, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_CHECK_RUNTIME_FAILED"}
+
+
+def check_authentication(cookie_value: str, category_id: int = CATID) -> dict:
+    """Return the authentication evidence without requiring upload metadata."""
+    result = check_capabilities_from_cookie(cookie_value, category_id, include_upload=False)
+    if result.get("authenticated") is True:
+        return {
+            "ok": True,
+            "code": "HEPAN_AUTH_OK",
+            "authenticated": True,
+            "stage": "authentication",
+            **({"account": result["account"]} if result.get("account") else {}),
+        }
+    keys = ("ok", "code", "authenticated", "stage", "account", "errorCode")
+    return {key: result[key] for key in keys if key in result}
+
+
+def check_publish_access(cookie_value: str, category_id: int) -> dict:
+    """Return authentication and the specified category's form capability."""
+    result = check_capabilities_from_cookie(cookie_value, category_id, include_upload=False)
+    keys = ("ok", "code", "authenticated", "publishAccess", "stage", "account", "errorCode", "formhash")
+    return {key: result[key] for key in keys if key in result}
+
+
+def check_upload_context(cookie_value: str, category_id: int) -> dict:
+    """Return upload metadata compatibility; it never performs an upload."""
+    result = check_capabilities_from_cookie(cookie_value, category_id, include_upload=True)
+    keys = ("ok", "code", "authenticated", "publishAccess", "uploadContext", "stage", "account", "warnings", "errorCode")
+    return {key: result[key] for key in keys if key in result}
 
 
 def publish_one(article_path: Path | None, image_dir: Path, cookie_path: Path, category_id: int, payload_path: Path | None = None) -> dict:
@@ -441,11 +654,9 @@ def publish_one(article_path: Path | None, image_dir: Path, cookie_path: Path, c
 
 
 def check_login(cookie_path: Path, category_id: int) -> dict:
-    ensure_dependencies()
-    cookie_value = load_cookie(cookie_path)
-    publisher = HepanPortalPublisher(cookie_value, category_id)
-    publisher.load_publish_context()
-    return {"ok": True}
+    result = check_capabilities_from_cookie(load_cookie(cookie_path), category_id, include_upload=True)
+    keys = ("ok", "code", "authenticated", "publishAccess", "uploadContext", "stage", "account", "warnings", "errorCode")
+    return {key: result[key] for key in keys if key in result}
 
 
 def validate_payload(payload_path: Path) -> dict:
@@ -500,8 +711,11 @@ def main() -> int:
         print_json(result)
         return 0
     except NeedsLoginError as exc:
-        print_json({"ok": False, "needsLogin": True, "error": str(exc)})
+        print_json({"ok": False, "needsLogin": True, "authenticated": False, "publishAccess": False, "uploadContext": "not_checked", "stage": "authentication", "errorCode": "HEPAN_COOKIE_REJECTED", "error": "Hepan authentication failed"})
         return 0
+    except HepanCheckError as exc:
+        print_json({"ok": False, "errorCode": exc.code, "stage": exc.stage, "error": "Hepan capability check failed"})
+        return 1
     except PayloadError as exc:
         print_json({"ok": False, "errorCode": exc.code, "error": str(exc)})
         return 1

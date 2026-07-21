@@ -68,7 +68,14 @@ export interface HepanProviderStatus {
   bundledVendorAvailable?: boolean;
   siteOrigin: string;
   publishIntervalSeconds: number;
-  lastTest: PlatformProviderTestResult | null;
+  lastTest: (PlatformProviderTestResult & {
+    authenticated?: boolean;
+    publishAccess?: boolean;
+    uploadContext?: 'available' | 'changed' | 'not_checked';
+    stage?: 'authentication' | 'publish_access' | 'upload_context' | 'dependency' | string;
+    warnings?: string[];
+    account?: { displayName: string; uid: string };
+  }) | null;
 }
 export type PlatformProviderStatus = MediaProviderStatus | HepanProviderStatus;
 export interface LegacyProviderSettingsDiscovery {

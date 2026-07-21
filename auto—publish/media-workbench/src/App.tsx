@@ -381,6 +381,7 @@ function AppContent() {
                     onAddResource={handleAddResource}
                   />
                 </div>
+                <PreflightModal isOpen={Boolean(confirmation)} onClose={() => { setSubmissionError(null); setConfirmation(null); }} articles={articles} balance={balance} summary={confirmation || {}} isSubmitting={isSubmitting} submissionError={submissionError} onSubmit={confirmRealSubmit} />
               </motion.div>
             )}
 
@@ -470,7 +471,6 @@ function AppContent() {
           </AnimatePresence>
           </Suspense>
         </main>
-        <PreflightModal isOpen={Boolean(confirmation)} onClose={() => { setSubmissionError(null); setConfirmation(null); }} articles={articles} balance={balance} summary={confirmation || {}} isSubmitting={isSubmitting} submissionError={submissionError} onSubmit={confirmRealSubmit} />
       </div>
 
     </div>

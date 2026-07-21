@@ -1,5 +1,17 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const HEPAN_SITE_ORIGIN = "https://www.hepan.com";
+
+function normalizeHepanCookie(value) {
+  let cookie = String(value == null ? "" : value).trim();
+  if (/^cookie\s*:/i.test(cookie)) cookie = cookie.replace(/^cookie\s*:/i, "").trim();
+  if (!cookie || /[\0\r\n]/.test(cookie)) {
+    const error = new Error("Hepan cookie is invalid");
+    error.code = "HEPAN_COOKIE_REJECTED";
+    throw error;
+  }
+  return cookie;
+}
 
 function resolveHepanVendorDir(options) {
   const values = options || {};
@@ -18,6 +30,12 @@ function resolveHepanVendorDir(options) {
   }) || "";
 }
 
+function resolveHepanScriptPath(options) {
+  const values = options || {};
+  const pathApi = values.path || path;
+  return values.scriptPath || pathApi.join(__dirname, "hepan_publish.py");
+}
+
 function withHepanVendorEnvironment(options, vendorDir) {
   if (!vendorDir) return options || {};
   return Object.assign({}, options || {}, {
@@ -25,4 +43,4 @@ function withHepanVendorEnvironment(options, vendorDir) {
   });
 }
 
-module.exports = { resolveHepanVendorDir, withHepanVendorEnvironment };
+module.exports = { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie };

@@ -10,6 +10,25 @@ function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function safeTestDiagnostics(value) {
+  if (!isObject(value)) return {};
+  const output = {};
+  if (typeof value.authenticated === "boolean") output.authenticated = value.authenticated;
+  if (typeof value.publishAccess === "boolean") output.publishAccess = value.publishAccess;
+  if (["available", "changed", "not_checked"].includes(value.uploadContext)) output.uploadContext = value.uploadContext;
+  if (["authentication", "publish_access", "upload_context", "dependency"].includes(value.stage)) output.stage = value.stage;
+  if (Array.isArray(value.warnings)) {
+    const warnings = value.warnings.filter((item) => typeof item === "string" && /^HEPAN_[A-Z0-9_]{1,80}$/.test(item)).slice(0, 8);
+    if (warnings.length) output.warnings = warnings;
+  }
+  if (isObject(value.account)) {
+    const displayName = String(value.account.displayName == null ? "" : value.account.displayName).trim().replace(/\p{C}/gu, "");
+    const uid = String(value.account.uid == null ? "" : value.account.uid).trim();
+    if (displayName && Array.from(displayName).length <= 80 && /^\d{1,20}$/.test(uid)) output.account = { displayName, uid };
+  }
+  return output;
+}
+
 function settingsPatchError(message) {
   return settingsError("PLATFORM_CONFIG_INVALID", message || "Platform provider configuration patch is invalid");
 }
@@ -182,12 +201,12 @@ function createPlatformSettingsService(options) {
       const result = await adapter.test(normalized);
       const success = result === undefined || result === true || !result || result.ok !== false;
       if (!success) throw settingsError((result && result.code) || "PLATFORM_CONNECTION_FAILED", "Platform connection test failed");
-      const record = { testedAt: now(), ok: true, code: (result && result.code) || "PLATFORM_CONNECTION_OK" };
+      const record = Object.assign({ testedAt: now(), ok: true, code: (result && result.code) || "PLATFORM_CONNECTION_OK" }, safeTestDiagnostics(result));
       tests.set(adapter.id, record);
       return record;
     } catch (error) {
       const code = typeof adapter.errorCode === "function" ? adapter.errorCode(error) : error && error.code;
-      const record = { testedAt: now(), ok: false, code: code || "PLATFORM_CONNECTION_FAILED" };
+      const record = Object.assign({ testedAt: now(), ok: false, code: code || "PLATFORM_CONNECTION_FAILED" }, safeTestDiagnostics(error && error.diagnostics));
       tests.set(adapter.id, record);
       throw settingsError(record.code, "Platform connection test failed");
     }

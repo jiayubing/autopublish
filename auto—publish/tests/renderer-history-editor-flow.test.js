@@ -278,29 +278,25 @@ describe("renderer history editor flow", { concurrency: false }, () => {
 
   it("guards unsaved edits and copies a published article as a new version", async () => {
     const { page, fixture } = await openHistory();
-    const dialogMessages = [];
-    const dialogResponses = ["dismiss", "accept", "accept", "accept"];
-    page.on("dialog", async (dialog) => {
-      dialogMessages.push(dialog.message());
-      const response = dialogResponses.shift() || "accept";
-      if (response === "dismiss") await dialog.dismiss();
-      else await dialog.accept();
-    });
     try {
       const filter = page.getByRole("textbox", { name: "筛选历史文章" });
       await filter.fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
-       const editorTitle = page.getByLabel("文章标题", { exact: true });
+      const editorTitle = page.getByLabel("文章标题", { exact: true });
       await editorTitle.fill("尚未保存的标题");
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
-      assert.match(dialogMessages[0], /未保存/);
+      await page.getByRole("dialog").filter({ hasText: "未保存" }).waitFor();
+      await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
       assert.equal(await editorTitle.inputValue(), "尚未保存的标题");
       assert.equal(await editorTitle.isVisible(), true, "dismissing the unsaved warning keeps the editor open");
 
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "放弃修改" }).click();
       await page.getByText(fixture.publishedArticle.title, { exact: true }).locator("..").locator("..").getByRole("button", { name: "发布详情" }).click();
       await page.getByRole("button", { name: "复制为新版本" }).click();
+      await page.getByRole("button", { name: "关闭发布详情" }).last().click({ force: true });
+      await page.getByRole("dialog").getByRole("button", { name: "确认复制" }).click();
       await page.waitForFunction(() => window.__historyEditorFlow.calls.copyArticleVersion.length === 1);
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.copyArticleVersion[0]), { clientId, sourceArticleId: publishedArticleId });
       assert.equal(await page.getByRole("heading", { name: "历史文章" }).isVisible(), true, "copying a published article keeps the history list mounted");

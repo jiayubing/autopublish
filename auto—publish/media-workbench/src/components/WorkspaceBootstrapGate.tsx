@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import App from '../App';
+import ConfirmationHost from './ConfirmationHost';
 import { getWorkspaceBootstrapState } from '../bridge/workspace';
 import { WorkspaceBootstrapState } from '../types';
 import { createBootstrapGateController, getBootstrapView } from '../workspace-ui-logic.js';
@@ -28,7 +29,7 @@ export default function WorkspaceBootstrapGate() {
     return <div className="min-h-screen flex items-center justify-center text-slate-600">{view.text}</div>;
   }
 
-  if (view.kind === 'app') return <App />;
+  if (view.kind === 'app') return <ConfirmationHost><App /></ConfirmationHost>;
 
   return <WorkspaceWelcome state={state} onStateChange={setState} />;
 }

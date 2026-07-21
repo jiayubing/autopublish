@@ -6,7 +6,7 @@ const { spawnSync } = require("node:child_process");
 const { DIRS } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 const { parseArticle, scanArticles: scanArticleSources } = require("./article-source");
-const { resolveHepanVendorDir, withHepanVendorEnvironment } = require("./runtime-paths");
+const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("./runtime-paths");
 
 function resolveHepanRuntime(workspaceRoot, environment) {
   const root = workspaceRoot || DIRS.rootDir;
@@ -29,7 +29,7 @@ function currentRuntime() {
     pythonPath: resolved.pythonPath,
     categoryId: Number(process.env.HEPAN_CATEGORY_ID || 121),
     vendorDir: process.env.HEPAN_VENDOR_DIR || "",
-    siteOrigin: "https://www.hepan.com"
+    siteOrigin: HEPAN_SITE_ORIGIN
   };
 }
 
@@ -43,12 +43,12 @@ function setRuntimeConfig(runtime) {
     pythonPath: runtime.pythonPath || "",
     categoryId: Number(runtime.categoryId || 121),
     vendorDir: runtime.vendorDir || "",
-    siteOrigin: "https://www.hepan.com"
+    siteOrigin: HEPAN_SITE_ORIGIN
   };
 }
 
 function scriptPath() {
-  return path.join(__dirname, "hepan_publish.py");
+  return resolveHepanScriptPath({ path });
 }
 
 function parseJsonOutput(output) {
@@ -84,7 +84,7 @@ function createHepanAdapter(options) {
       pythonPath: value.pythonPath || "",
       categoryId: Number(value.categoryId || 121),
       vendorDir: value.vendorDir || bundledVendorDir,
-      siteOrigin: "https://www.hepan.com"
+      siteOrigin: HEPAN_SITE_ORIGIN
     };
   }
 
@@ -146,8 +146,7 @@ function createHepanAdapter(options) {
       log("[hepan] Cookie configuration is unavailable", "WARN");
       return;
     }
-    const cookie = io.readFileSync(config.cookiePath, "utf8").trim();
-    if (!cookie) {
+    try { normalizeHepanCookie(io.readFileSync(config.cookiePath, "utf8")); } catch (_) {
       log("[hepan] Cookie configuration is empty", "WARN");
       return;
     }

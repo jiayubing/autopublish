@@ -45,7 +45,8 @@ describe("renderer workspace bootstrap contract", function() {
 
   it("lets Settings show and operate on the current workspace", function() {
     const settings = readSource("components/SettingsView.tsx");
-    ["getCurrentWorkspace", "openCurrentWorkspace", "requestWorkspaceSwitch", "workspacePath", "validation", "envOverride", "AUTO_PUBLISH_WORKSPACE", "window.confirm"].forEach((value) => assert.match(settings, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))));
+    ["getCurrentWorkspace", "openCurrentWorkspace", "requestWorkspaceSwitch", "workspacePath", "validation", "envOverride", "AUTO_PUBLISH_WORKSPACE", "useConfirmation", "confirm({"].forEach((value) => assert.match(settings, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))));
+    assert.doesNotMatch(settings, /window\.confirm/);
   });
 
   it("guards selection awaits after unmount and exposes parent busy cleanup", function() {

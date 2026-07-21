@@ -4,19 +4,62 @@ const defaultOs = require("node:os");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
-const { resolveHepanVendorDir, withHepanVendorEnvironment } = require("../../../src/platforms/hepan/runtime-paths");
+const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("../../../src/platforms/hepan/runtime-paths");
 
-const HEPAN_SITE_ORIGIN = "https://www.hepan.com";
 const HEPAN_SELF_TEST_PAYLOAD = JSON.stringify({
   title: "Hepan payload self-test",
   contentHtml: "<p>payload self-test</p>",
   sourceStem: "hepan-self-test"
 });
+const HEPAN_CHECK_STAGES = new Set(["authentication", "publish_access", "upload_context", "dependency"]);
+const HEPAN_UPLOAD_CONTEXTS = new Set(["available", "changed", "not_checked"]);
 
 function adapterError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+function safeAccount(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const displayName = String(value.displayName == null ? "" : value.displayName)
+    .trim()
+    .replace(/\p{C}/gu, "");
+  const uid = String(value.uid == null ? "" : value.uid).trim();
+  if (!displayName || Array.from(displayName).length > 80 || !/^\d{1,20}$/.test(uid)) return undefined;
+  return { displayName, uid };
+}
+
+function safeCheckPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const errorCode = typeof payload.errorCode === "string" && /^HEPAN_[A-Z0-9_]{1,80}$/.test(payload.errorCode) ? payload.errorCode : "";
+  const stage = typeof payload.stage === "string" && HEPAN_CHECK_STAGES.has(payload.stage) ? payload.stage : undefined;
+  const uploadContext = typeof payload.uploadContext === "string" && HEPAN_UPLOAD_CONTEXTS.has(payload.uploadContext) ? payload.uploadContext : "not_checked";
+  const diagnostics = {
+    authenticated: payload.authenticated === true,
+    publishAccess: payload.publishAccess === true,
+    uploadContext,
+    ...(stage ? { stage } : {}),
+    ...(safeAccount(payload.account) ? { account: safeAccount(payload.account) } : {})
+  };
+  const warnings = Array.isArray(payload.warnings)
+    ? payload.warnings.filter((value) => typeof value === "string" && /^HEPAN_[A-Z0-9_]{1,80}$/.test(value)).slice(0, 8)
+    : [];
+  if (payload.ok === true && diagnostics.authenticated && diagnostics.publishAccess) {
+    if (uploadContext === "changed" && !warnings.includes("HEPAN_UPLOAD_CONTEXT_CHANGED")) warnings.push("HEPAN_UPLOAD_CONTEXT_CHANGED");
+    return {
+      ok: true,
+      code: "HEPAN_AUTH_OK",
+      authenticated: true,
+      publishAccess: true,
+      uploadContext,
+      ...(stage ? { stage } : {}),
+      ...(warnings.length ? { warnings } : {}),
+      ...(diagnostics.account ? { account: diagnostics.account } : {})
+    };
+  }
+  if (errorCode) return { ok: false, errorCode, ...diagnostics, ...(warnings.length ? { warnings } : {}) };
+  return null;
 }
 
 function assertPythonPath(value, io, path) {
@@ -56,7 +99,7 @@ function createHepanSettingsAdapter(options) {
   const io = values.fs || defaultFs;
   const path = values.path || defaultPath;
   const localStateRoot = values.localStateRoot || path.join(defaultOs.tmpdir(), "auto-publish-hepan-runtime");
-  const scriptPath = values.scriptPath || path.resolve(__dirname, "../../../src/platforms/hepan/hepan_publish.py");
+  const scriptPath = values.scriptPath || resolveHepanScriptPath({ path });
   const runCommand = values.runCommand || (async (command, args, commandOptions) => {
     const result = spawnSync(command, args, Object.assign({ encoding: "utf8", timeout: 120000, windowsHide: true }, commandOptions || {}));
     return { status: result.status, stdout: result.stdout || "", stderr: result.stderr || "", error: result.error || null };
@@ -78,8 +121,8 @@ function createHepanSettingsAdapter(options) {
     validate(input) {
       const value = input || {};
       const pythonPath = assertPythonPath(value.pythonPath, io, path);
-      const cookie = String(value.cookie == null ? "" : value.cookie).trim();
-      if (!cookie) throw adapterError("PLATFORM_CONFIG_INVALID", "Hepan cookie is invalid");
+      let cookie;
+      try { cookie = normalizeHepanCookie(value.cookie); } catch (_) { throw adapterError("PLATFORM_CONFIG_INVALID", "Hepan cookie is invalid"); }
       const vendorDir = value.vendorDir == null || value.vendorDir === "" ? "" : String(value.vendorDir).trim();
       if (vendorDir && (!path.isAbsolute(vendorDir) || vendorDir.includes("\0"))) throw adapterError("PLATFORM_CONFIG_INVALID", "Hepan vendor directory is invalid");
       return {
@@ -146,14 +189,20 @@ function createHepanSettingsAdapter(options) {
       try { imports = await runCommand(config.pythonPath, ["-c", "import requests; import bs4"], withHepanVendorEnvironment({}, vendorDir)); } catch (_) { throw adapterError("HEPAN_DEPENDENCY_MISSING", "Hepan Python dependencies are missing"); }
       if (imports && (imports.error || imports.status !== 0)) throw adapterError("HEPAN_DEPENDENCY_MISSING", "Hepan Python dependencies are missing");
 
-      return withTemporaryCookie(config, async (cookiePath, imageDir) => {
+      return withTemporaryCookie(config, async (cookiePath) => {
         let login;
         try {
-          login = await runCommand(config.pythonPath, [scriptPath, "--image-dir", imageDir, "--cookie-path", cookiePath, "--check-login", "--category-id", String(config.categoryId), ...(vendorDir ? ["--vendor-dir", vendorDir] : [])], withHepanVendorEnvironment({}, vendorDir));
-        } catch (_) { throw adapterError("HEPAN_LOGIN_INVALID", "Hepan login test failed"); }
-        const payload = parseJsonOutput(login && login.stdout);
-        if (!login || login.error || login.status !== 0 || !payload || payload.ok !== true) throw adapterError("HEPAN_LOGIN_INVALID", "Hepan login test failed");
-        return { ok: true, code: "HEPAN_LOGIN_OK" };
+          login = await runCommand(config.pythonPath, [scriptPath, "--cookie-path", cookiePath, "--check-login", "--category-id", String(config.categoryId), ...(vendorDir ? ["--vendor-dir", vendorDir] : [])], withHepanVendorEnvironment({}, vendorDir));
+        } catch (_) { throw adapterError("HEPAN_CHECK_RUNTIME_FAILED", "Hepan login test failed"); }
+        const payload = safeCheckPayload(parseJsonOutput(login && login.stdout));
+        if (payload && payload.ok === true) return payload;
+        if (payload && payload.errorCode) {
+          const error = adapterError(payload.errorCode, "Hepan capability check failed");
+          error.diagnostics = payload;
+          throw error;
+        }
+        if (login && login.error) throw adapterError("HEPAN_CHECK_RUNTIME_FAILED", "Hepan login test failed");
+        throw adapterError("HEPAN_CHECK_RUNTIME_FAILED", "Hepan login test failed");
       }, io, path, localStateRoot);
     },
     errorCode(error) { return error && error.code && /^HEPAN_/.test(error.code) ? error.code : "HEPAN_CONNECTION_FAILED"; },
@@ -184,16 +233,13 @@ async function withTemporaryPayload(callback, io, path, localStateRoot) {
 async function withTemporaryCookie(config, callback, io, path, localStateRoot) {
   const tmpRoot = path.join(localStateRoot, "tmp");
   const cookiePath = path.join(tmpRoot, `.hepan-cookie-${crypto.randomUUID()}.tmp`);
-  const imageDir = path.join(tmpRoot, `.hepan-images-${crypto.randomUUID()}`);
   let createdRoot = false;
   try {
     if (!io.existsSync(tmpRoot)) { io.mkdirSync(tmpRoot, { recursive: true }); createdRoot = true; }
-    io.mkdirSync(imageDir, { recursive: true });
-    io.writeFileSync(cookiePath, String(config.cookie || ""), { encoding: "utf8", mode: 0o600 });
-    return await callback(cookiePath, imageDir);
+    io.writeFileSync(cookiePath, normalizeHepanCookie(config.cookie || ""), { encoding: "utf8", mode: 0o600 });
+    return await callback(cookiePath);
   } finally {
     try { if (io.existsSync(cookiePath)) io.unlinkSync(cookiePath); } catch (_) {}
-    try { if (io.existsSync(imageDir)) io.rmSync(imageDir, { recursive: true, force: true }); } catch (_) {}
     if (createdRoot) {
       try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
     }
@@ -203,13 +249,19 @@ async function withTemporaryCookie(config, callback, io, path, localStateRoot) {
 function createTemporaryCookie(config, io, path, localStateRoot) {
   const tmpRoot = path.join(localStateRoot, "tmp");
   const cookiePath = path.join(tmpRoot, `.hepan-cookie-${crypto.randomUUID()}.tmp`);
+  const existed = io.existsSync(tmpRoot);
   io.mkdirSync(tmpRoot, { recursive: true });
-  let cookie = String(config.cookie || "");
-  if (!cookie && config.cookiePath) {
-    try { cookie = io.readFileSync(config.cookiePath, "utf8").trim(); } catch (_) { throw adapterError("HEPAN_LOGIN_INVALID", "Hepan cookie is unavailable"); }
+  try {
+    let cookie = String(config.cookie || "");
+    if (!cookie && config.cookiePath) {
+      try { cookie = io.readFileSync(config.cookiePath, "utf8").trim(); } catch (_) { throw adapterError("HEPAN_COOKIE_REJECTED", "Hepan cookie is unavailable"); }
+    }
+    cookie = normalizeHepanCookie(cookie);
+    io.writeFileSync(cookiePath, cookie, { encoding: "utf8", mode: 0o600 });
+  } catch (error) {
+    try { if (!existed && io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
+    throw error;
   }
-  if (!cookie) throw adapterError("HEPAN_LOGIN_INVALID", "Hepan cookie is unavailable");
-  io.writeFileSync(cookiePath, cookie, { encoding: "utf8", mode: 0o600 });
   let cleaned = false;
   return {
     cookiePath,
