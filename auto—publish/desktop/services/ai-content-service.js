@@ -132,7 +132,7 @@ function createAiContentService(opts) {
     if (terminal) {
       articleRemovalRevision += 1;
       event.revision = articleRemovalRevision;
-      event.changedScopes = ["articleAttention", "platformQueue"];
+      event.changedScopes = ["articleManagement", "articleAttention", "platformQueue"];
     }
     if (typeof options.onArticleRemovalTransaction === "function") {
       try { options.onArticleRemovalTransaction(event); } catch (_) {}
@@ -150,7 +150,7 @@ function createAiContentService(opts) {
 
   function notifyAttentionChange(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
-    try { options.onDataInvalidated(["articleAttention", "navigationSummary"], reasonCode); } catch (_) {}
+    try { options.onDataInvalidated(["articleManagement", "articleAttention", "navigationSummary"], reasonCode); } catch (_) {}
   }
 
   async function materializeClient(client) {

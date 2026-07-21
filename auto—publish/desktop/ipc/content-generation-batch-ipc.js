@@ -48,6 +48,10 @@ function registerContentGenerationBatchIpc(deps) {
   ipcMain.handle("content:preview-cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.previewCancelPending(input(value)); }); });
   ipcMain.handle("content:cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.cancelPending(input(value)); }); });
   ipcMain.handle("content:get-generation-batch-state", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.getState(); }); });
+  ipcMain.handle("content:get-generation-runtime-snapshot", function() { return invoke(function() {
+    if (typeof service.getRuntimeSnapshot === "function") return service.getRuntimeSnapshot();
+    return { runtime: service.getState(), batch: null, capabilities: {} };
+  }); });
   const sendToRenderer = values.sendToRenderer;
   const unsubscribe = typeof service.subscribe === "function" ? service.subscribe(function(state) {
     if (typeof sendToRenderer === "function") sendToRenderer("content:generation-batch-state", state);

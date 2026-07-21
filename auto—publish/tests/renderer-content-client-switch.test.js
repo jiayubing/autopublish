@@ -42,8 +42,9 @@ describe("renderer content client switching", function() {
     const view = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
     assert.match(view, /clientRequestIdRef/);
     assert.match(view, /requestId === clientRequestIdRef\.current/);
-    assert.match(view, /listContentArticles\(clientId\).*listContentSubmissionBatches\(clientId\).*listContentTrash\(clientId\)/s);
-    assert.match(view, /listPublicationHistory\(clientId, nextArticles\.map/);
+    assert.match(view, /getArticleManagementSnapshot\(clientId\)/);
+    assert.match(view, /requestId === clientRequestIdRef\.current/);
+    assert.doesNotMatch(view, /listContentArticles\(clientId\)/);
   });
 
   it("uses one-way history refreshes and keeps the editor inside the content host", function() {
@@ -118,6 +119,10 @@ describe("renderer content client switching", function() {
       const content = {
         listClients: () => ok(clients),
         listGeneratedArticles: (clientId) => ok(state.articles[clientId] || []),
+        getArticleManagementSnapshot: ({ clientId }) => {
+          const batches = state.batches[clientId] || [];
+          return ok({ clientId, revision: 1, articles: state.articles[clientId] || [], trash: [], submissionBatches: batches, cancellationPlans: batches.filter((batch) => batch.status === "queued").map((batch) => ({ batchId: batch.id, clientId, action: "cancel", planId: `plan-${batch.id}-${batch.status}`, fingerprint: batch.status, allowedCount: batch.items.length, blockedCount: 0, items: batch.items.map((item) => ({ articleId: item.articleId, targetPlatformId: item.targetPlatformId, action: "cancel", allowed: true })) })), publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: platforms, workflowByArticle: {}, publicationSummaries: {} });
+        },
         listSubmissionPlatforms: () => ok(platforms),
         listSubmissionBatches: ({ clientId }) => ok(state.batches[clientId] || []),
         listArticleTrash: () => ok([]),
@@ -128,6 +133,7 @@ describe("renderer content client switching", function() {
         listGenerationBatches: () => ok([generationBatch]),
         getGenerationBatch: () => ok(generationBatch),
         getGenerationBatchState: () => ok({ status: "idle", state: "idle", batchId: null }),
+        getGenerationRuntimeSnapshot: () => ok({ runtimeId: "fixture-runtime", sequence: 0, runtime: { status: "idle", state: "idle", batchId: null }, batch: generationBatch, capabilities: {} }),
         onGenerationBatchState: () => () => {},
         previewGenerationSubmissionHandoff: () => ok({ generationBatchId: generationBatch.id, previewToken: "handoff-preview", articleCount: 1, clientCount: 1, targetPlatformIds: ["fixture-platform"], estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }),
         commitGenerationSubmissionHandoff: () => ok({ generationBatchId: generationBatch.id, createdCount: 1, idempotentCount: 0, blockedCount: 0, conflictCount: 0, failedClientGroups: [], completedClientGroups: ["client-a"], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }] }),
@@ -200,8 +206,8 @@ describe("renderer content client switching", function() {
       assert.equal(await page.getByRole("button", { name: "加入投稿队列" }).isDisabled(), true);
       await changeClientByPointer(page, clientSelect, "ArrowUp");
       assert.equal(await clientSelect.inputValue(), "client-a");
-      await page.waitForFunction(() => window.__clientSwitchFlow.cancelPreviewCalls.includes("batch-a"));
       await page.getByRole("button", { name: /撤销未开始投稿/ }).waitFor();
+      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.cancelPreviewCalls), []);
       await page.getByRole("button", { name: /撤销未开始投稿/ }).click();
       await page.getByRole("dialog", { name: "确认撤销未开始投稿" }).waitFor();
       assert.equal(await page.evaluate(() => window.__clientSwitchFlow.cancellationCalls.length), 0);

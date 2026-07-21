@@ -58,7 +58,7 @@ function createContentSubmissionService(opts) {
 
   function notifyData(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
-    try { options.onDataInvalidated(["platformQueue", "navigationSummary", "articleAttention"], reasonCode); } catch (_) {}
+    try { options.onDataInvalidated(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode); } catch (_) {}
   }
 
   function previewRetryFailedPublication(value) {
@@ -111,7 +111,7 @@ function createContentSubmissionService(opts) {
       clientId: preview.clientId,
       articleId: preview.articleId,
       targetPlatformId: preview.targetPlatformId,
-      changedScopes: ["articleAttention", "platformQueue", "navigationSummary"]
+      changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]
     };
   }
 
@@ -581,7 +581,7 @@ function createContentSubmissionService(opts) {
       }
       if (physicalFilesAlreadyAbsent) {
         if (!action.suppressNotification) notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-        return { action: action.action || nextStatus, status: nextStatus, idempotent: action.action === "cancel" ? false : true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
+        return { action: action.action || nextStatus, status: nextStatus, idempotent: action.action === "cancel" ? false : true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
       }
     } catch (error) {
       try { if (originalFile !== null && !fs.existsSync(entry.item.filePath)) { fs.mkdirSync(path.dirname(entry.item.filePath), { recursive: true }); fs.writeFileSync(entry.item.filePath, originalFile); } } catch (_) {}
@@ -589,7 +589,7 @@ function createContentSubmissionService(opts) {
       throw error;
     }
     if (!action.suppressNotification) notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-    return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
+    return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
   }
 
   function cancelArticleSubmissionItem(action) { return applyItemAction(action, "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
@@ -933,7 +933,7 @@ function createContentSubmissionService(opts) {
       skippedCount: blockedItems.length,
       blockedItems: blockedItems,
       batchStatus: batch.status,
-      changedScopes: cancelledCount > 0 || idempotentCount > 0 ? ["articleAttention", "platformQueue", "navigationSummary"] : [],
+      changedScopes: cancelledCount > 0 || idempotentCount > 0 ? ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"] : [],
       items: batch.items
     };
   }

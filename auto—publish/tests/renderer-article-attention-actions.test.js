@@ -48,6 +48,7 @@ test('article attention actions produce visible publication/detail results', asy
       const content = {
         listClients: () => ok([{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }]),
         listGeneratedArticles: () => ok([article]),
+        getArticleManagementSnapshot: () => ok({ clientId: article.clientId, revision: 1, articles: [article], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [publication], attention: { revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }, submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }], workflowByArticle: {}, publicationSummaries: {} }),
         listArticleAttention: () => ok({ revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }),
         getArticleAttention: ({ attentionId }) => ok(attentionId === conflict.attentionId ? conflict : attention), previewArticleAttention: ({ action }) => ok({ attentionId: attention.attentionId, revision: 1, action, requiresConfirmation: false, message: '投稿明确失败', changedScopes: [] }),
         resolveArticleAttention: ({ action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId: attention.attentionId, changedScopes: [] }); },

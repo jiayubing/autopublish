@@ -59,6 +59,7 @@ function installDesktopFixture(page) {
     const content = {
       listClients: () => result([client]),
       listGeneratedArticles: () => result([]),
+      getArticleManagementSnapshot: ({ clientId }) => result({ clientId, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms, workflowByArticle: {}, publicationSummaries: {} }),
       listSubmissionPlatforms: () => result(submissionPlatforms),
       listSubmissionBatches: () => result([]),
       listArticleTrash: () => result([]),
@@ -274,6 +275,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
         await page.evaluate((items) => {
           const response = (data) => Promise.resolve({ ok: true, data });
           window.desktopConsole.content.listGeneratedArticles = () => response(items);
+          window.desktopConsole.content.getArticleManagementSnapshot = ({ clientId }) => response({ clientId, revision: Date.now(), articles: items, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowByArticle: {}, publicationSummaries: {} });
           window.desktopConsole.content.listTemplateCatalog = () => response({ revision: "responsive-fixture", platforms: [{ id: "fixture-responsive-platform", displayName: "响应式测试平台", description: "", order: 1 }], templates: [{ id: "fixture-responsive-template", platform: "fixture-responsive-platform", scenario: "响应式历史编辑", name: "超长模板名称用于响应式历史列表边界回归", body: "responsive template body", bodyHash: "responsive-template-hash", source: "custom" }], diagnostics: [] });
           window.desktopConsole.publication = { listForArticles: () => response([]) };
         }, articles);

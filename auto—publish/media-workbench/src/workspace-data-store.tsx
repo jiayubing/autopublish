@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { getPlatformQueue, onWorkspaceDataInvalidated } from './electron-api';
+import { getPlatformQueue } from './bridge/platform';
+import { onWorkspaceDataInvalidated } from './bridge/workspace';
 import type { PlatformArticle, PlatformQueueData, PlatformQueueSnapshot } from './types';
 
 export const PLATFORM_QUEUE_SCOPE = 'platformQueue' as const;

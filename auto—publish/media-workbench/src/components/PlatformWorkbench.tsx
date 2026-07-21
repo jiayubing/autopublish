@@ -4,8 +4,7 @@ import {
   PlatformSubmitResult,
 } from "../types";
 import {
-  buildPlatformPlan,
-  submitPlatformPlan,
+  submitPlatformSelection,
   stopPlatformSubmit,
   pausePlatformSubmit,
   getPlatformSettingsStatus,
@@ -37,14 +36,17 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 
 // hepan is the technical ID for 蓝色河畔. We keep this mapping and do NOT
-// create a separate "lanse" adapter. The display name is resolved via
-// getPlatformQueue which uses PLATFORM_DISPLAY_NAMES in electron-api.ts.
+// Platform display names and submission adaptation belong to the platform bridge.
 
 const PLATFORM_ORDER = ["lieju", "toutiao", "hepan"] as const;
 
 function archiveErrorText(value: PlatformArticle['archiveError'] | PlatformSubmitResult['results'][number]['archiveError']): string {
   if (typeof value === 'string') return value;
   return value?.message || value?.code || '本地归档失败';
+}
+
+function articleSelectionKey(article: PlatformArticle): string {
+  return `${article.sourcePlatformId}\u0000${article.filename}`;
 }
 
 export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenArticleManagement?: () => void } = {}) {
@@ -105,7 +107,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   useEffect(() => {
     setSelectedArticles((current) => {
-      const next = new Set([...current].filter((filePath) => queue.some((article) => article.filePath === filePath && isSelectableArticle(article))));
+      const next = new Set([...current].filter((key) => queue.some((article) => articleSelectionKey(article) === key && isSelectableArticle(article))));
       return next.size === current.size ? current : next;
     });
   }, [isSelectableArticle, queue]);
@@ -196,13 +198,13 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   const sortedGroups = PLATFORM_ORDER.filter((id) => groupedArticles[id]);
 
-  const toggleArticle = (filePath: string) => {
-    const article = queue.find((item) => item.filePath === filePath);
+  const toggleArticle = (key: string) => {
+    const article = queue.find((item) => articleSelectionKey(item) === key);
     if (!article || !isSelectableArticle(article)) return;
     setSelectedArticles((prev) => {
       const next = new Set(prev);
-      if (next.has(filePath)) next.delete(filePath);
-      else next.add(filePath);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -212,13 +214,13 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     const selectableGroup = groupArticles.filter(isSelectableArticle);
     if (!selectableGroup.length) return;
     const allSelected = selectableGroup.every((a) =>
-      selectedArticles.has(a.filePath)
+      selectedArticles.has(articleSelectionKey(a))
     );
     setSelectedArticles((prev) => {
       const next = new Set(prev);
       for (const a of selectableGroup) {
-        if (allSelected) next.delete(a.filePath);
-        else next.add(a.filePath);
+        if (allSelected) next.delete(articleSelectionKey(a));
+        else next.add(articleSelectionKey(a));
       }
       return next;
     });
@@ -243,7 +245,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   };
 
   const selectedArticleList = queue.filter((a) => isSelectableArticle(a) &&
-    selectedArticles.has(a.filePath)
+    selectedArticles.has(articleSelectionKey(a))
   );
   const selectedPlatformList = platforms.filter((p) =>
     selectedPlatformIds.has(p.id)
@@ -274,14 +276,16 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     setIsConfirming(false);
     setIsSubmitting(true);
     setError(null);
-      setSubmitStatus("正在构建提交计划...");
+      setSubmitStatus(`正在提交 ${taskCount} 个任务，请稍候...`);
     try {
-      const plan = await buildPlatformPlan({
-        articles: selectedArticleList,
-        platformIds: [...selectedPlatformIds],
+      const result = await submitPlatformSelection({
+        submissions: selectedArticleList.map((article) => ({
+          sourcePlatformId: article.sourcePlatformId,
+          filename: article.filename,
+          targetPlatformIds: [...selectedPlatformIds],
+        })),
+        autoTrash: autoTrashRequested,
       });
-      setSubmitStatus(`正在提交 ${plan.taskCount} 个任务，请稍候...`);
-      const result = await submitPlatformPlan(plan, { autoTrash: autoTrashRequested });
       setSubmitStatus("");
       setSubmitResult(result);
       setShowResult(true);
@@ -369,17 +373,17 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                 onClick={() => {
                   const selectableQueue = queue.filter(isSelectableArticle);
                   const allSelected = selectableQueue.length > 0 && selectableQueue.every((a) =>
-                    selectedArticles.has(a.filePath)
+                    selectedArticles.has(articleSelectionKey(a))
                   );
                   if (allSelected) {
                     setSelectedArticles(new Set());
                   } else {
-                      setSelectedArticles(new Set(selectableQueue.map((a) => a.filePath)));
+                      setSelectedArticles(new Set(selectableQueue.map(articleSelectionKey)));
                   }
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 font-medium"
               >
-                {queue.filter(isSelectableArticle).length > 0 && queue.filter(isSelectableArticle).every((a) => selectedArticles.has(a.filePath))
+                {queue.filter(isSelectableArticle).length > 0 && queue.filter(isSelectableArticle).every((a) => selectedArticles.has(articleSelectionKey(a)))
                   ? "取消全选"
                   : "全选"}
               </button>
@@ -409,10 +413,10 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                   const allInGroupSelected =
                     selectableGroup.length > 0 &&
                     selectableGroup.every((a) =>
-                      selectedArticles.has(a.filePath)
+                      selectedArticles.has(articleSelectionKey(a))
                     );
                   const someInGroupSelected = selectableGroup.some((a) =>
-                    selectedArticles.has(a.filePath)
+                    selectedArticles.has(articleSelectionKey(a))
                   );
 
                   const displayName =
@@ -461,14 +465,14 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                         <div>
                            {groupArticles.map((article) => (
                             <button
-                              key={article.filePath}
+                              key={articleSelectionKey(article)}
                               onClick={() =>
-                                toggleArticle(article.filePath)
+                                toggleArticle(articleSelectionKey(article))
                               }
                               disabled={!isSelectableArticle(article)}
                               title={article.archiveError ? "远端已发布，本地归档待处理，禁止再次远端投稿" : article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? `：${article.reasonCode}` : ""}` : undefined}
                               className={`w-full flex items-center space-x-2.5 px-3.5 py-2 transition-colors text-left ${
-                                selectedArticles.has(article.filePath)
+                                selectedArticles.has(articleSelectionKey(article))
                                   ? "bg-blue-50/60"
                                   : article.archiveError ? "bg-amber-50/60" : article.sourceArticleState === "trashed" ? "bg-rose-50/60" : "hover:bg-slate-50"
                               }`}
@@ -478,7 +482,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                               ) : article.sourceArticleState === "trashed" ? (
                                 <XCircle className="w-4 h-4 text-rose-500 shrink-0" />
                               ) : selectedArticles.has(
-                                article.filePath
+                                articleSelectionKey(article)
                               ) ? (
                                 <CheckSquare className="w-4 h-4 text-blue-500 shrink-0" />
                               ) : (
@@ -653,7 +657,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                   <div className="max-h-32 overflow-y-auto space-y-1">
                     {selectedArticleList.map((a) => (
                       <div
-                        key={a.filePath}
+                        key={articleSelectionKey(a)}
                         className="flex items-center space-x-2 text-xs text-slate-600 py-1"
                       >
                         <FileText className="w-3 h-3 text-slate-400 shrink-0" />

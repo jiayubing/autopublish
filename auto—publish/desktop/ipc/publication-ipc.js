@@ -107,7 +107,7 @@ function registerPublicationIpc(deps) {
         status: request.status,
         reasonCode: request.reasonCode
       });
-      if (typeof values.invalidateData === "function") values.invalidateData(["articleAttention", "platformQueue", "navigationSummary"], "PUBLICATION_RECONCILED");
+      if (typeof values.invalidateData === "function") values.invalidateData(["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], "PUBLICATION_RECONCILED");
       return safeRecord(record);
     });
   });

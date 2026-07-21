@@ -79,7 +79,7 @@ describe("renderer content generation workflow", function() {
 
   it("retries one material through the material store API", function() {
     const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     const preload = read("desktop/preload.js");
     const ipc = read("desktop/ipc/ai-content-ipc.js");
     assert.match(article, /retryContentMaterial/);
@@ -164,7 +164,7 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /确认.*启动|启动.*确认/);
     assert.match(batch, /previewGenerationBatch/);
     assert.match(batch, /startGenerationBatch/);
-    assert.match(batch, /getGenerationBatchState/);
+    assert.match(batch, /getGenerationRuntimeSnapshot/);
     assert.match(batch, /pauseGenerationBatch/);
     assert.match(batch, /resumeGenerationBatch/);
     assert.match(batch, /stopGenerationBatch/);
@@ -172,7 +172,7 @@ describe("renderer content generation workflow", function() {
   });
 
   it("exposes renderer-only generation batch wrappers through preload", function() {
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     const preload = read("desktop/preload.js");
     [
       "previewGenerationBatch",
@@ -183,6 +183,7 @@ describe("renderer content generation workflow", function() {
       "stopGenerationBatch",
       "retryFailedGenerationBatch",
       "getGenerationBatchState",
+      "getGenerationRuntimeSnapshot",
       "subscribeGenerationBatchState"
     ].forEach(function(name) { assert.match(api, new RegExp(name)); });
     assert.match(preload, /previewGenerationBatch/);
@@ -204,13 +205,13 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /setViewMode\('monitoring'\)/);
     assert.match(batch, /viewMode === 'wizard'/);
     assert.match(batch, /data-view-mode=\{viewMode\}/);
-    assert.match(batch, /pending.*failed.*interrupted/);
+    assert.match(batch, /runtimeCursorRef/);
   });
 
   it("rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(batch, /setBatch\(mergeRuntimeSnapshot\(persistedBatch, state\)\)/);
+    assert.match(batch, /setBatch\(mergeRuntimeSnapshot\(snapshot\.batch, snapshot\.runtime\)\)/);
     assert.match(batch, /setViewMode\('monitoring'\)/);
     assert.match(batch, /onStartNew/);
     assert.match(detail, /onStartNew/);
@@ -228,8 +229,11 @@ describe("renderer content generation workflow", function() {
 
   it("does not let initial idle hydration overwrite a matching runtime batch state", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /state\.batchId === persistedBatch\?\.id/);
-    assert.match(batch, /state\.status !== 'idle'/);
+    const ordering = read("media-workbench/src/generation-runtime-snapshot-logic.js");
+    assert.match(batch, /runtimeCursorRef/);
+    assert.match(batch, /runtimeCursorRef\.current\.bootstrap\(snapshot\)/);
+    assert.match(ordering, /snapshot\.runtimeId === runtimeId/);
+    assert.match(ordering, /event\.sequence <= sequence/);
   });
 
   it("keeps command pending separate from the live batch run and does not optimistically mark every command running", function() {
@@ -266,7 +270,7 @@ describe("renderer content generation workflow", function() {
   });
 
   it("exposes cancelled counts and a preview-confirmed pending cancellation action", function() {
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     const preload = read("desktop/preload.js");
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
     assert.match(api, /previewCancelPendingGenerationBatch/);

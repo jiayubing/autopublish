@@ -9,9 +9,9 @@ const readComponent = (file) => fs.readFileSync(path.join(MW, "components", file
 
 describe("react workbench regression", function() {
   it("gates renderer localStorage fixtures behind an explicit development flag", function() {
-    const source = readApp("electron-api.ts");
-    assert.ok(source.includes("VITE_ENABLE_FIXTURES === \"true\""));
-    assert.ok(source.includes("import.meta as unknown"));
+    const source = readApp("bridge/media.ts");
+    assert.equal(source.includes("localStorage"), false);
+    assert.equal(source.includes("VITE_ENABLE_FIXTURES"), false);
   });
 
   it("keeps Settings limited to manual workflow features", function() {
@@ -27,15 +27,17 @@ describe("react workbench regression", function() {
   });
 
   it("keeps renderer APIs free of mock article persistence", function() {
-    const api = readApp("electron-api.ts");
+    const api = readApp("bridge/platform.ts");
+    const media = readApp("bridge/media.ts");
+    const sharedApi = readApp("bridge/transport.ts");
     const app = readApp("App.tsx");
-    assert.equal(api.includes("mockData"), false);
-    assert.equal(api.includes("INITIAL_ARTICLES"), false);
+    assert.equal(sharedApi.includes("mockData"), false);
+    assert.equal(sharedApi.includes("INITIAL_ARTICLES"), false);
     assert.equal(app.includes("handleAddNewMockArticle"), false);
     assert.equal(app.includes("persistArticles"), false);
     assert.equal(app.includes("INITIAL_ARTICLES"), false);
-    assert.ok(api.includes("getPlatformQueue") && api.includes("submitPlatformPlan"));
-    assert.ok(api.includes("Number(") && api.includes(".balance"));
+    assert.ok(api.includes("getPlatformQueue") && api.includes("submitPlatformSelection"));
+    assert.ok(media.includes("Number(") && media.includes("balance"));
   });
 
   it("exposes platform commands through preload", function() {
@@ -45,7 +47,7 @@ describe("react workbench regression", function() {
 
   it("shares the structured IPC response envelope", function() {
     const types = readApp("types.ts");
-    const api = readApp("electron-api.ts");
+    const api = readApp("bridge/content.ts");
     const response = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "services", "ipc-response.js"), "utf8");
     assert.ok(types.includes("interface IpcError") && types.includes("IpcResponse<T>"));
     assert.ok(api.includes("IpcResponse<"));
@@ -54,7 +56,7 @@ describe("react workbench regression", function() {
 
   it("uses the complete main-process platform status shape", function() {
     const types = readApp("types.ts");
-    const api = readApp("electron-api.ts");
+    const api = readApp("bridge/platform.ts");
     const taskService = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "services", "desktop-task-service.js"), "utf8");
     assert.ok(types.includes("interface PlatformStatus") && types.includes("isBatchRunning: boolean") && types.includes("isStopPending: boolean") && types.includes("isPlatformRunning: boolean"));
     assert.ok(taskService.includes("isBatchRunning: isBatchRunning") && taskService.includes("isStopPending: isStopPending") && taskService.includes("isPlatformRunning: isPlatformRunning"));

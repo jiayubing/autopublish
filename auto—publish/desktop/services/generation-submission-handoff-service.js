@@ -208,7 +208,7 @@ function createGenerationSubmissionHandoffService(options) {
       failedClientGroups,
       completedClientGroups: [...completed],
       clientGroups: current.clientGroups.map((group) => ({ clientId: group.clientId, articleCount: group.articleCount, queueableTaskCount: group.queueableTaskCount, idempotentCount: group.idempotentCount })),
-      changedScopes: ["platformQueue", "navigationSummary", "articleAttention"]
+      changedScopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"]
     };
   }
 

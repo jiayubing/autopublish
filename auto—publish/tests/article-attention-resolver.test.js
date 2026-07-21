@@ -20,7 +20,7 @@ test("article attention resolver previews and delegates a safe missing-pair fina
   const result = resolver.resolve({ attentionId: item.attentionId, action: "finalize", expectedRevision: query.getRevision(), confirmed: true });
   assert.equal(result.outcome, "resolved");
   assert.equal(calls[0].action, "cleanup");
-  assert.deepEqual(invalidations[0].scopes, ["articleAttention", "platformQueue", "navigationSummary"]);
+  assert.deepEqual(invalidations[0].scopes, ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]);
 });
 
 test("article attention resolver rejects an old revision before writing", () => {

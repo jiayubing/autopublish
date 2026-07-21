@@ -54,7 +54,7 @@ function createArticleAttentionResolver(options) {
       requiresConfirmation: retry && retry.requiresConfirmation !== undefined ? retry.requiresConfirmation === true : !["inspect", "open-publication", "open-article"].includes(action),
       message: retry && retry.message || entry.item.message,
       details: retry && retry.details || undefined,
-      changedScopes: ["inspect", "open-publication", "open-article"].includes(action) ? [] : ["articleAttention", "platformQueue", "navigationSummary"]
+      changedScopes: ["inspect", "open-publication", "open-article"].includes(action) ? [] : ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]
     };
   }
 
@@ -102,7 +102,7 @@ function createArticleAttentionResolver(options) {
       throw attentionError("ARTICLE_ATTENTION_ACTION_INVALID", "需处理动作无效");
     }
 
-    const changedScopes = ["articleAttention", "platformQueue", "navigationSummary"];
+    const changedScopes = ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"];
     if (!result || result.domainHandled !== true && (!Array.isArray(result.changedScopes) || result.changedScopes.length === 0)) invalidate(changedScopes, "ARTICLE_ATTENTION_RESOLVED");
     if (typeof opts.getRevision !== "function" && query && typeof query.invalidate === "function") query.invalidate();
     return { outcome: "resolved", attentionId: entry.item.attentionId, result: result || null, changedScopes };

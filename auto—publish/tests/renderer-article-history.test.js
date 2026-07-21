@@ -81,15 +81,15 @@ describe("article history grouping", async function() {
 
   it("offers a current-client trash view with restore and confirmed permanent deletion", function() {
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    const api = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/electron-api.ts"), "utf8");
-    assert.match(view, /listContentTrash/);
+    const api = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/bridge/content.ts"), "utf8");
+    assert.match(view, /getArticleManagementSnapshot|setTrash/);
     assert.match(view, /restoreContentArticle/);
     assert.match(view, /preparePermanentDeleteContentArticle/);
     assert.match(view, /permanentlyDeleteContentArticle/);
     assert.match(view, /移入回收站/);
     assert.match(view, /永久删除/);
-    assert.match(api, /preparePermanentDeleteArticle/);
-    assert.match(api, /permanentlyDeleteArticle/);
+    assert.match(api, /preparePermanentDeleteContentArticle/);
+    assert.match(api, /permanentlyDeleteContentArticle/);
   });
 
   it("keeps saved articles selectable for submission queueing", function() {
@@ -98,7 +98,7 @@ describe("article history grouping", async function() {
     assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'generated' \|\| article\.status === 'saved'\)/);
     assert.match(view, /状态：/);
     assert.match(view, /撤销未开始投稿/);
-    assert.match(view, /listContentSubmissionBatches/);
+    assert.match(view, /getArticleManagementSnapshot/);
     assert.match(view, /queueableTaskCount/);
     assert.match(view, /idempotentCount/);
     assert.match(view, /conflictCount/);

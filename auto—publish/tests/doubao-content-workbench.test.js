@@ -50,7 +50,7 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("keeps one current-client selector and exposes independent batch commands", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     assert.equal((questions.match(/onClientChange/g) || []).length, 0);
     ["全选客户", "取消全选", "采集选中客户", "重新采集选中客户"].forEach(function(value) {
       assert.match(questions, new RegExp(value));
@@ -123,12 +123,12 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("restores the last stable login state when a passive session is unavailable", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     assert.match(questions, /getCachedDoubaoLoginState/);
     assert.match(questions, /useState<DoubaoLoginState>\(\(\) => getCachedDoubaoLoginState\(\)\)/);
     assert.match(questions, /rememberDoubaoLoginState/);
     assert.match(questions, /PLAYWRIGHT_SESSION_NOT_OPEN/);
-    assert.match(api, /\.code =/);
+    assert.match(api, /ipcError/);
   });
 
   it("refreshes once after collection completion and prevents duplicate submissions", function() {

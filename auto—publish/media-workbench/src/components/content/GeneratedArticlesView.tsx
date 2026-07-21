@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getContentArticleRemovalTransaction, listContentArticles, listContentSubmissionBatches, listContentSubmissionPlatforms, listPublicationHistory, listContentTrash, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCancelContentSubmissionBatch, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, reconcilePublicationHistory, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../bridge/content';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getArticleManagementSnapshot, getContentArticleRemovalTransaction, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../bridge/content';
+import { reconcilePublicationHistory } from '../../bridge/publication';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
-import { ArticleAttentionItem, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
+import { ArticleAttentionItem, ArticleAttentionList, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
 import { deriveArticleManagementStatus, deriveArticleWorkflow, type ArticleWorkflowStage } from '../../article-workflow';
 import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
-import { useArticleAttention } from '../../article-attention-store';
 import ActionConfirmationModal, { type ActionConfirmation } from './ActionConfirmationModal';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
@@ -68,7 +68,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | 'all'>(stageFilter === 'trash' ? 'all' : stageFilter);
-  const { snapshot: attentionSnapshot, refresh: refreshAttention } = useArticleAttention(clientId);
+  const [attentionSnapshot, setAttentionSnapshot] = useState<ArticleAttentionList & { loading: boolean; error: string | null }>({ revision: 0, items: [], counts: { total: 0, actionable: 0 }, loading: false, error: null });
   const attentionItems = attentionSnapshot.items;
   clientIdRef.current = clientId;
 
@@ -111,6 +111,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setAttentionDetail(null);
     setTrash([]);
     setCancellationPlans([]);
+    setAttentionSnapshot({ revision: 0, items: [], counts: { total: 0, actionable: 0 }, loading: false, error: null });
     cancellationRequestIdRef.current += 1;
     setCancellationPending(null);
     confirmationActionRef.current = null;
@@ -118,6 +119,17 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setBusy(false);
     stopRemovalTransactionWatch();
   }, [clientId, stopRemovalTransactionWatch]);
+
+  const applyManagementSnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getArticleManagementSnapshot>>) => {
+    setArticles(snapshot.articles || []);
+    setSubmissionBatches(snapshot.submissionBatches || []);
+    setCancellationPlans(snapshot.cancellationPlans || []);
+    setTrash(snapshot.trash || []);
+    setPublicationRecords(snapshot.publicationRecords || []);
+    setSubmissionPlatforms((snapshot.submissionPlatforms || []).filter((platform) => platform.contentQueueImport));
+    setAttentionSnapshot({ ...(snapshot.attention || { revision: snapshot.revision, items: [], counts: { total: 0, actionable: 0 } }), loading: false, error: null });
+    return snapshot.articles || [];
+  }, []);
 
   useEffect(() => {
     const requestId = ++clientRequestIdRef.current;
@@ -129,25 +141,11 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       setPublicationRecords([]);
       return () => { cancelled = true; };
     }
-    Promise.all([listContentArticles(clientId), listContentSubmissionBatches(clientId), listContentTrash(clientId)])
-      .then(async ([nextArticles, nextBatches, nextTrash]) => {
-        const nextRecords = await listPublicationHistory(clientId, nextArticles.map((item) => item.id));
-        if (!isCurrent()) return;
-        setArticles(nextArticles);
-        setSubmissionBatches(nextBatches);
-        const nextPlans = (await Promise.all(nextBatches.map((batch) => previewCancelContentSubmissionBatch(batch.id).catch(() => null)))).filter((plan): plan is ContentSubmissionCancellationPreview => Boolean(plan));
-        if (!isCurrent()) return;
-        setCancellationPlans(nextPlans);
-        setTrash(nextTrash);
-        setPublicationRecords(nextRecords);
-      })
+    getArticleManagementSnapshot(clientId)
+      .then((snapshot) => { if (isCurrent()) applyManagementSnapshot(snapshot); })
       .catch((value) => { if (isCurrent()) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
     return () => { cancelled = true; };
-  }, [clientId, refreshToken]);
-
-  useEffect(() => {
-    listContentSubmissionPlatforms().then((platforms) => setSubmissionPlatforms(platforms.filter((platform) => platform.contentQueueImport))).catch(() => setSubmissionPlatforms([]));
-  }, []);
+  }, [applyManagementSnapshot, clientId, refreshToken]);
 
   const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const publicationRecordsByArticle = useMemo(() => {
@@ -221,22 +219,16 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     const requestedClientId = clientId;
     if (!mountedRef.current || requestedClientId !== clientIdRef.current) return [];
     const requestId = ++clientRequestIdRef.current;
-    const [nextArticles, nextBatches, nextTrash] = await Promise.all([
-      listContentArticles(requestedClientId),
-      listContentSubmissionBatches(requestedClientId),
-      listContentTrash(requestedClientId)
-    ]);
-    const nextRecords = await listPublicationHistory(requestedClientId, nextArticles.map((item) => item.id));
+    const snapshot = await getArticleManagementSnapshot(requestedClientId);
     if (!mountedRef.current || requestedClientId !== clientIdRef.current || requestId !== clientRequestIdRef.current) return [];
-    setArticles(nextArticles);
-    setSubmissionBatches(nextBatches);
-    const nextPlans = (await Promise.all(nextBatches.map((batch) => previewCancelContentSubmissionBatch(batch.id).catch(() => null)))).filter((plan): plan is ContentSubmissionCancellationPreview => Boolean(plan));
-    if (!mountedRef.current || requestedClientId !== clientIdRef.current || requestId !== clientRequestIdRef.current) return [];
-    setCancellationPlans(nextPlans);
-    setTrash(nextTrash);
-    setPublicationRecords(nextRecords);
-    return nextArticles;
-  }, [clientId]);
+    return applyManagementSnapshot(snapshot);
+  }, [applyManagementSnapshot, clientId]);
+
+  const refreshAttention = useCallback(async () => {
+    const snapshot = await getArticleManagementSnapshot(clientId);
+    if (mountedRef.current && clientIdRef.current === clientId) applyManagementSnapshot(snapshot);
+    return attentionSnapshot;
+  }, [applyManagementSnapshot, attentionSnapshot, clientId]);
 
   useEffect(() => {
     stopRemovalTransactionWatch();

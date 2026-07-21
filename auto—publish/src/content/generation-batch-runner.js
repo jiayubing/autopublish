@@ -75,6 +75,7 @@ function createGenerationBatchRunner(options) {
       clientId: task && task.clientId,
       platform: task && task.platform,
       templateId: task && task.templateId,
+      batch: batch ? clone(batch) : null,
       counts: batch && batch.counts ? clone(batch.counts) : undefined,
       status: status || (batch && batch.status) || "idle",
       updatedAt: updatedAt || now(),

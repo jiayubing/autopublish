@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { previewArticleAttention, resolveArticleAttention } from '../../bridge/content';
+import { previewArticleAttention, resolveArticleAttention } from '../../bridge/publication';
 import type { ArticleAttentionItem } from '../../types';
 import type { ArticleAttentionSnapshot } from '../../article-attention-store';
 

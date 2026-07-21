@@ -61,7 +61,7 @@ function installQuestionFixture(page) {
     };
     const result = (data) => Promise.resolve({ ok: true, data });
     const content = {
-      listClients: () => result(clients), listGeneratedArticles: () => result([]), listSubmissionPlatforms: () => result([]), listSubmissionBatches: () => result([]), listArticleTrash: () => result([]),
+      listClients: () => result(clients), listGeneratedArticles: () => result([]), getArticleManagementSnapshot: ({ clientId }) => result({ clientId, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowByArticle: {}, publicationSummaries: {} }), listSubmissionPlatforms: () => result([]), listSubmissionBatches: () => result([]), listArticleTrash: () => result([]),
       listResearch: (clientId) => result(research[clientId] || []), listQuestions: (clientId) => result(questions[clientId] || []), listTemplates: () => result([]), listTemplateCatalog: () => result({ revision: "fixture", platforms: [], templates: [], diagnostics: [] }),
       getDoubaoLoginState: () => result({ status: "unknown" }), getDoubaoQueueState: () => result({ status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }), onDoubaoQueueState: () => () => {}, listGenerationBatches: () => result([]), getGenerationBatchState: () => result({ state: "idle", status: "idle" }),
       previewGenerationBatch: () => result({}), previewSubmissionBatch: () => result({ queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0 }), previewCancelSubmissionBatch: () => result({ allowedCount: 0, blockedCount: 0, items: [] }),

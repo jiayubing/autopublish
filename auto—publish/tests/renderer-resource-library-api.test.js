@@ -10,7 +10,7 @@ function read(file) {
 describe("React renderer resource library api", function() {
   it("uses the paged media service methods directly", function() {
     const app = read("media-workbench/src/App.tsx");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/media.ts");
     assert.match(app, /refreshResources\(\{ fetchAll: true \}\)/);
     assert.match(app, /getResourcePage\(\{ page: 1, pageSize: 99999 \}\)/);
     assert.match(api, /getResourcePage/);

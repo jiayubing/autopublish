@@ -120,10 +120,10 @@ describe("content submission batch", function() {
       assert.equal(repeated.cancelledCount, 0);
       assert.equal(repeated.idempotentCount, 1);
       assert.equal(repeated.batchStatus, "cancelled");
-      assert.deepEqual(repeated.changedScopes, ["articleAttention", "platformQueue", "navigationSummary"]);
+      assert.deepEqual(repeated.changedScopes, ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]);
       assert.deepEqual(invalidations, [
-        { scopes: ["platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" },
-        { scopes: ["platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" }
+        { scopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" },
+        { scopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" }
       ]);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });

@@ -44,7 +44,7 @@ function sendToRenderer(channel, payload) {
 function invalidateWorkspaceData(scopes, reasonCode) {
   workspaceDataRevision += 1;
   const allowedScopes = Array.isArray(scopes) ? scopes.filter(function(scope) {
-    return ["platformQueue", "navigationSummary", "articleAttention", "orders", "contentSources"].includes(scope);
+    return ["platformQueue", "navigationSummary", "articleAttention", "articleManagement", "orders", "contentSources"].includes(scope);
   }) : [];
   sendToRenderer("workspace:data-invalidated", {
     revision: workspaceDataRevision,
@@ -271,7 +271,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     contentSubmissionService: contentSubmissionService,
     onArticleRemovalTransaction: function(transaction) {
       sendToRenderer("content:article-removal-transaction", transaction);
-      invalidateWorkspaceData(["articleAttention", "platformQueue", "navigationSummary"], "ARTICLE_REMOVAL_TRANSACTION_CHANGED");
+      invalidateWorkspaceData(["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], "ARTICLE_REMOVAL_TRANSACTION_CHANGED");
     },
     onDataInvalidated: invalidateWorkspaceData,
     aiClientFactory: function() { return aiProviderService.createClient(); }
@@ -283,7 +283,8 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
   contentGenerationBatchService = createContentGenerationBatchService({
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
-    aiProviderService: aiProviderService
+    aiProviderService: aiProviderService,
+    onDataInvalidated: invalidateWorkspaceData
   });
 
   const registerIpc = require("./ipc/register").registerIpc;

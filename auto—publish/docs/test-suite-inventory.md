@@ -1,21 +1,21 @@
-# 测试套件清单（Phase 0）
+# 测试套件清单（Phase 0-5）
 
 > 自动生成文件。重新运行 `node scripts/test-inventory.js` 会重新扫描 `tests/*.test.js` 并覆盖本清单。
 
 ## 范围与证据边界
 
-- 生成时间：`2026-07-20T13:22:13.098Z`（仅是清单生成时间，不是测试运行时间）。
-- 扫描范围：根目录 `tests/*.test.js`，共 **151 个文件**；静态解析出 **867 个测试声明**。
+- 生成时间：`2026-07-21T16:29:07.360Z`（仅是清单生成时间，不是测试运行时间）。
+- 扫描范围：根目录 `tests/*.test.js`，共 **161 个文件**；静态解析出 **909 个测试声明**。
 - 本脚本只使用 Node 内置 `fs`、`path` 和字符串扫描；不会 `require` 测试文件，不启动 Node test runner，不启动浏览器、Vite、Electron、Python 或任何外部服务，也不发起网络请求。
 - `Renderer build`、`启动浏览器`、`读取生产源码` 均为静态证据标签，不代表本次执行过这些行为；未检测到证据时只表示“未见静态证据”。
-- 运行时间、通过/失败/跳过、认证测试、lint/typecheck、Renderer build、audit 和包体积均未在本次清单生成中实际采集，不伪造基线。
+- 本文件主体是静态清单；下方“受控执行记录”单独记录本次实际运行结果，不把静态声明数当作通过数。
 
 ## 基线记录
 
 | 项目 | 状态 | 证据/采集命令 |
 | --- | --- | --- |
-| 根测试文件 | 已静态扫描：151 个 | `tests/*.test.js` |
-| 根测试声明数 | 已静态解析：867 个 | 不是实际运行结果；需用 `npm test` 采集 |
+| 根测试文件 | 已静态扫描：161 个 | `tests/*.test.js` |
+| 根测试声明数 | 已静态解析：909 个 | 不是实际运行结果；需用 `npm test` 采集 |
 | 根测试运行时间与通过/失败/跳过 | 待采集 | `npm test` |
 | 认证服务测试 | 待采集 | `npm --prefix auth-server test` |
 | Renderer lint/typecheck | 待采集 | `npm --prefix media-workbench run lint`（计划命令） |
@@ -27,24 +27,24 @@
 
 | 指标 | 数值 |
 | --- | ---: |
-| 测试文件 | 151 |
-| 静态测试声明 | 867 |
+| 测试文件 | 161 |
+| 静态测试声明 | 909 |
 | 检测到 Renderer build 静态证据的文件 | 7 |
-| 检测到浏览器启动静态证据的文件 | 9 |
-| 检测到读取生产源码静态证据的文件 | 36 |
+| 检测到浏览器启动静态证据的文件 | 10 |
+| 检测到读取生产源码静态证据的文件 | 40 |
 | 未提取出明确不变量、需人工确认的测试声明 | 0 |
 
 ### 按主层级的静态测试声明数
 
 | 主层级 | 测试声明数 |
 | --- | ---: |
-| `domain` | 144 |
-| `ipc` | 77 |
+| `domain` | 157 |
+| `ipc` | 79 |
 | `migration` | 34 |
 | `packaging` | 54 |
-| `renderer` | 177 |
+| `renderer` | 200 |
 | `security` | 35 |
-| `store` | 346 |
+| `store` | 350 |
 
 ## 文件清单
 
@@ -59,13 +59,15 @@
 | `tests/ai-provider-service.test.js` | 8 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7581 | `2026-07-16T15:29:05.397Z` |
 | `tests/alpha-smoke-verifier.test.js` | 1 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 397 | `2026-07-12T02:33:02.224Z` |
 | `tests/application-identity.test.js` | 2 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2085 | `2026-07-17T01:23:14.055Z` |
-| `tests/architecture-seams.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1647 | `2026-07-18T17:58:11.673Z` |
+| `tests/architecture-seams.test.js` | 4 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4466 | `2026-07-21T15:58:47.500Z` |
 | `tests/article-attention-invalidation.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2585 | `2026-07-18T22:30:02.060Z` |
 | `tests/article-attention-policy.test.js` | 5 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2756 | `2026-07-19T06:58:00.860Z` |
 | `tests/article-attention-query.test.js` | 4 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5403 | `2026-07-19T06:58:00.861Z` |
-| `tests/article-attention-resolver.test.js` | 2 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2806 | `2026-07-18T22:16:30.981Z` |
+| `tests/article-attention-resolver.test.js` | 2 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2827 | `2026-07-21T15:49:16.936Z` |
 | `tests/article-generator.test.js` | 16 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 16633 | `2026-07-17T16:09:36.091Z` |
 | `tests/article-management-filter-model.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2722 | `2026-07-19T06:35:04.229Z` |
+| `tests/article-management-snapshot-benchmark.test.js` | 2 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8029 | `2026-07-21T16:18:53.384Z` |
+| `tests/article-management-snapshot.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4172 | `2026-07-21T15:20:15.991Z` |
 | `tests/article-removal-recovery-regression.test.js` | 5 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 13185 | `2026-07-19T06:57:22.813Z` |
 | `tests/article-review-service.test.js` | 4 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5651 | `2026-07-15T11:19:56.408Z` |
 | `tests/article-store.test.js` | 23 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 20300 | `2026-07-16T14:14:14.752Z` |
@@ -84,37 +86,40 @@
 | `tests/batch-workspace-scan.test.js` | 1 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1613 | `2026-07-17T03:52:00.540Z` |
 | `tests/client-knowledge.test.js` | 23 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 15330 | `2026-07-15T11:19:56.409Z` |
 | `tests/client-material-store.test.js` | 9 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 11902 | `2026-07-17T03:52:34.142Z` |
-| `tests/content-generation-batch-ipc.test.js` | 5 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6377 | `2026-07-20T12:53:14.330Z` |
-| `tests/content-generation-batch-service.test.js` | 10 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 21545 | `2026-07-20T12:58:42.721Z` |
+| `tests/content-generation-batch-ipc.test.js` | 5 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6419 | `2026-07-21T15:07:37.995Z` |
+| `tests/content-generation-batch-service.test.js` | 11 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 22525 | `2026-07-21T15:09:10.297Z` |
 | `tests/content-library-migration.test.js` | 9 | `migration` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 15292 | `2026-07-17T16:24:19.283Z` |
-| `tests/content-submission-batch.test.js` | 10 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 13740 | `2026-07-19T06:29:57.102Z` |
+| `tests/content-submission-batch.test.js` | 12 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 18254 | `2026-07-21T15:49:56.109Z` |
 | `tests/content-submission-export.test.js` | 5 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6570 | `2026-07-19T06:47:18.358Z` |
-| `tests/content-submission-ipc.test.js` | 5 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4891 | `2026-07-18T16:12:17.647Z` |
-| `tests/content-workbench-regression.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 5864 | `2026-07-15T11:19:56.411Z` |
+| `tests/content-submission-ipc.test.js` | 6 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6182 | `2026-07-20T14:55:31.229Z` |
+| `tests/content-workbench-regression.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 5930 | `2026-07-21T15:59:51.855Z` |
 | `tests/content-workspace.test.js` | 7 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 3665 | `2026-07-12T02:33:02.226Z` |
 | `tests/desktop-ipc-response.test.js` | 5 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1281 | `2026-07-12T02:33:02.227Z` |
 | `tests/desktop-packaging.test.js` | 32 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 35838 | `2026-07-19T14:08:03.838Z` |
 | `tests/desktop-task-service.test.js` | 6 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 9112 | `2026-07-19T10:42:24.413Z` |
-| `tests/desktop-workbench-flow.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1794 | `2026-07-16T15:58:24.169Z` |
+| `tests/desktop-workbench-flow.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1781 | `2026-07-21T15:02:31.553Z` |
 | `tests/device-identity-store.test.js` | 2 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1555 | `2026-07-19T13:56:52.081Z` |
 | `tests/docx-text-extractor.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1914 | `2026-07-17T03:48:23.042Z` |
 | `tests/doubao-browser-adapter.test.js` | 28 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 30720 | `2026-07-16T14:14:14.754Z` |
 | `tests/doubao-collection-ipc.test.js` | 12 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 16683 | `2026-07-15T11:19:56.413Z` |
 | `tests/doubao-collection-queue.test.js` | 13 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 14836 | `2026-07-14T00:29:57.762Z` |
 | `tests/doubao-collection-service.test.js` | 17 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 17065 | `2026-07-15T11:19:56.413Z` |
-| `tests/doubao-content-workbench.test.js` | 22 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 14351 | `2026-07-19T06:52:12.178Z` |
+| `tests/doubao-content-workbench.test.js` | 22 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 14352 | `2026-07-21T15:59:51.856Z` |
 | `tests/doubao-page-parser.test.js` | 11 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6134 | `2026-07-14T00:29:57.763Z` |
 | `tests/electron-security.test.js` | 4 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2233 | `2026-07-19T14:02:58.080Z` |
 | `tests/generation-batch-runner.test.js` | 14 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 17660 | `2026-07-20T12:54:53.254Z` |
 | `tests/generation-batch-store.test.js` | 5 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8699 | `2026-07-16T14:14:14.755Z` |
+| `tests/generation-snapshot-event.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6198 | `2026-07-21T16:27:44.228Z` |
+| `tests/generation-snapshot-order.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1925 | `2026-07-21T15:42:43.095Z` |
 | `tests/generation-submission-handoff-ipc.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2295 | `2026-07-19T07:00:21.302Z` |
 | `tests/generation-submission-handoff.test.js` | 5 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7631 | `2026-07-19T07:13:25.757Z` |
 | `tests/hepan-article-source.test.js` | 4 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 3741 | `2026-07-18T14:22:14.460Z` |
-| `tests/hepan-provider-settings.test.js` | 8 | `store` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 10511 | `2026-07-20T01:28:37.250Z` |
+| `tests/hepan-login-check.test.js` | 8 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 11076 | `2026-07-21T13:29:28.368Z` |
+| `tests/hepan-provider-settings.test.js` | 10 | `store` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 14175 | `2026-07-21T12:32:37.119Z` |
 | `tests/hepan-publish-contract.test.js` | 4 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7148 | `2026-07-20T01:29:43.266Z` |
 | `tests/hepan-publish-interval.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4382 | `2026-07-18T14:25:00.009Z` |
 | `tests/hepan-python-payload-runtime.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6495 | `2026-07-18T16:05:11.565Z` |
-| `tests/hepan-settings-patch-contract.test.js` | 10 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 11858 | `2026-07-20T02:11:44.086Z` |
+| `tests/hepan-settings-patch-contract.test.js` | 10 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 12170 | `2026-07-21T12:26:54.296Z` |
 | `tests/ipc-submission-boundary.test.js` | 6 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5880 | `2026-07-12T02:33:02.227Z` |
 | `tests/j4125-auth-contract.test.js` | 1 | `security` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 992 | `2026-07-19T14:11:14.850Z` |
 | `tests/legacy-migration.test.js` | 16 | `migration` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 17669 | `2026-07-14T00:29:57.764Z` |
@@ -134,9 +139,10 @@
 | `tests/packaged-docx-runtime.test.js` | 2 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 849 | `2026-07-17T04:13:49.522Z` |
 | `tests/packaged-playwright-runtime.test.js` | 3 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2694 | `2026-07-17T01:16:13.118Z` |
 | `tests/platform-browser-session-lifecycle.test.js` | 1 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1555 | `2026-07-19T18:22:37.782Z` |
-| `tests/platform-ipc-boundary.test.js` | 4 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8890 | `2026-07-20T12:51:44.074Z` |
+| `tests/platform-ipc-boundary.test.js` | 4 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8904 | `2026-07-21T15:39:45.282Z` |
 | `tests/platform-provider-config-store.test.js` | 4 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5152 | `2026-07-17T15:38:18.981Z` |
 | `tests/platform-settings-service.test.js` | 5 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5068 | `2026-07-17T15:38:18.981Z` |
+| `tests/platform-submission-invocation-count.test.js` | 2 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8197 | `2026-07-21T16:28:24.919Z` |
 | `tests/platform-task-progress.test.js` | 3 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 3647 | `2026-07-19T10:23:50.866Z` |
 | `tests/platform-workbench-service.test.js` | 4 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4959 | `2026-07-16T14:14:14.756Z` |
 | `tests/production-packaging.test.js` | 1 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 902 | `2026-07-20T01:27:39.871Z` |
@@ -152,34 +158,39 @@
 | `tests/published-archive.test.js` | 3 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4683 | `2026-07-16T15:16:25.061Z` |
 | `tests/published-article-trash.test.js` | 3 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6622 | `2026-07-19T06:57:22.811Z` |
 | `tests/question-store.test.js` | 12 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 16350 | `2026-07-14T00:29:57.765Z` |
-| `tests/react-workbench-regression.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4529 | `2026-07-19T10:47:00.647Z` |
-| `tests/renderer-ai-provider-settings.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4265 | `2026-07-15T11:19:56.414Z` |
-| `tests/renderer-article-attention-actions.test.js` | 1 | `renderer` | 否（未见静态证据） | 是（检测到 chromium/firefox/webkit/electron launch 调用） | 否（未见静态证据） | 7608 | `2026-07-19T10:44:54.922Z` |
-| `tests/renderer-article-history.test.js` | 9 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 7657 | `2026-07-19T06:47:41.621Z` |
+| `tests/react-workbench-regression.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4654 | `2026-07-21T16:00:22.076Z` |
+| `tests/renderer-ai-provider-settings.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4332 | `2026-07-21T15:59:51.858Z` |
+| `tests/renderer-article-attention-actions.test.js` | 1 | `renderer` | 否（未见静态证据） | 是（检测到 chromium/firefox/webkit/electron launch 调用） | 否（未见静态证据） | 8053 | `2026-07-21T16:11:47.918Z` |
+| `tests/renderer-article-history.test.js` | 9 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 7699 | `2026-07-21T15:35:58.419Z` |
 | `tests/renderer-article-management-filters.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1131 | `2026-07-19T06:22:12.290Z` |
 | `tests/renderer-article-management-flow.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 958 | `2026-07-19T02:46:12.415Z` |
-| `tests/renderer-batch-generation.test.js` | 25 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 15363 | `2026-07-20T13:16:12.990Z` |
-| `tests/renderer-content-client-switch.test.js` | 5 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 13319 | `2026-07-20T13:09:19.488Z` |
+| `tests/renderer-batch-generation.test.js` | 25 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 15614 | `2026-07-21T15:57:39.736Z` |
+| `tests/renderer-confirmation-host.test.js` | 4 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2541 | `2026-07-21T12:33:54.120Z` |
+| `tests/renderer-content-client-switch.test.js` | 7 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 19672 | `2026-07-21T16:15:05.222Z` |
+| `tests/renderer-content-confirmation-flow.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1559 | `2026-07-20T16:38:14.928Z` |
 | `tests/renderer-content-generation.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1609 | `2026-07-18T10:03:11.311Z` |
-| `tests/renderer-content-refresh-lifecycle.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2492 | `2026-07-19T06:52:29.118Z` |
+| `tests/renderer-content-refresh-lifecycle.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2554 | `2026-07-20T14:53:50.674Z` |
+| `tests/renderer-content-submission-batch-actions.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2101 | `2026-07-21T16:05:58.431Z` |
 | `tests/renderer-encoding.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1943 | `2026-07-16T15:57:39.222Z` |
-| `tests/renderer-generation-submission-handoff.test.js` | 1 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 否（未见静态证据） | 6800 | `2026-07-20T13:13:13.945Z` |
-| `tests/renderer-history-editor-flow.test.js` | 5 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 否（未见静态证据） | 20719 | `2026-07-19T18:03:07.299Z` |
+| `tests/renderer-generation-submission-handoff.test.js` | 1 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 否（未见静态证据） | 7381 | `2026-07-21T16:15:05.223Z` |
+| `tests/renderer-hepan-settings.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1281 | `2026-07-21T12:34:29.512Z` |
+| `tests/renderer-history-editor-flow.test.js` | 5 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 否（未见静态证据） | 21243 | `2026-07-21T16:16:43.415Z` |
 | `tests/renderer-platform-cross-page-progress.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 754 | `2026-07-19T10:01:33.349Z` |
-| `tests/renderer-platform-queue-refresh-lifecycle.test.js` | 1 | `renderer` | 否（未见静态证据） | 是（检测到 chromium/firefox/webkit/electron launch 调用） | 否（未见静态证据） | 12172 | `2026-07-19T10:43:04.368Z` |
+| `tests/renderer-platform-queue-refresh-lifecycle.test.js` | 1 | `renderer` | 否（未见静态证据） | 是（检测到 chromium/firefox/webkit/electron launch 调用） | 否（未见静态证据） | 12098 | `2026-07-21T15:02:31.552Z` |
 | `tests/renderer-platform-queue-refresh.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1040 | `2026-07-18T17:54:37.975Z` |
 | `tests/renderer-platform-task-store.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 735 | `2026-07-19T10:01:33.349Z` |
-| `tests/renderer-publication-history.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 3779 | `2026-07-19T17:50:09.993Z` |
+| `tests/renderer-publication-history.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 3908 | `2026-07-21T16:06:18.890Z` |
 | `tests/renderer-published-trash-flow.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1133 | `2026-07-20T12:49:58.673Z` |
-| `tests/renderer-question-editor-session.test.js` | 5 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 10387 | `2026-07-19T18:03:07.302Z` |
-| `tests/renderer-residue-cleanup-flow.test.js` | 2 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 9393 | `2026-07-19T18:03:07.301Z` |
-| `tests/renderer-resource-library-api.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 902 | `2026-07-16T15:53:25.960Z` |
-| `tests/renderer-responsive-layout.test.js` | 4 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 否（未见静态证据） | 15755 | `2026-07-19T18:03:07.302Z` |
+| `tests/renderer-question-editor-session.test.js` | 5 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 10740 | `2026-07-21T16:13:01.810Z` |
+| `tests/renderer-residue-cleanup-flow.test.js` | 2 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 9739 | `2026-07-21T16:13:14.002Z` |
+| `tests/renderer-resource-library-api.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 902 | `2026-07-21T15:31:29.652Z` |
+| `tests/renderer-responsive-layout.test.js` | 6 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 否（未见静态证据） | 20407 | `2026-07-21T16:13:27.507Z` |
+| `tests/renderer-settings-window-focus.electron.test.js` | 1 | `renderer` | 否（未见静态证据） | 是（检测到 chromium/firefox/webkit/electron launch 调用） | 否（未见静态证据） | 9094 | `2026-07-21T12:48:58.334Z` |
 | `tests/renderer-settings.test.js` | 4 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 3002 | `2026-07-17T15:57:34.942Z` |
 | `tests/renderer-template-discovery-empty-client.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2344 | `2026-07-18T04:39:41.478Z` |
 | `tests/renderer-time-format.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1521 | `2026-07-16T14:14:14.756Z` |
 | `tests/renderer-workspace-behavior.test.js` | 7 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7348 | `2026-07-14T15:32:26.385Z` |
-| `tests/renderer-workspace-contract.test.js` | 7 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4224 | `2026-07-17T04:33:18.333Z` |
+| `tests/renderer-workspace-contract.test.js` | 7 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4227 | `2026-07-21T15:59:51.859Z` |
 | `tests/research-store.test.js` | 9 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7193 | `2026-07-14T00:29:57.765Z` |
 | `tests/runtime-diagnostics-ipc.test.js` | 2 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2435 | `2026-07-17T04:18:37.353Z` |
 | `tests/runtime-diagnostics.test.js` | 15 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 16030 | `2026-07-17T03:59:38.089Z` |
@@ -188,10 +199,9 @@
 | `tests/storage-paths.test.js` | 4 | `security` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4546 | `2026-07-18T04:50:22.569Z` |
 | `tests/submission-attempt-rebind.test.js` | 2 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6991 | `2026-07-19T06:57:22.812Z` |
 | `tests/submission-batch-reconcile-write.test.js` | 1 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2332 | `2026-07-19T18:22:37.795Z` |
-| `tests/submission-batch-worker-integration.test.js` | 7 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 12900 | `2026-07-19T06:57:22.813Z` |
+| `tests/submission-batch-worker-integration.test.js` | 7 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 13014 | `2026-07-20T16:15:29.281Z` |
 | `tests/submission-pair-state.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8840 | `2026-07-19T06:57:22.814Z` |
 | `tests/submission-preflight-integration.test.js` | 1 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 749 | `2026-07-12T02:33:02.230Z` |
-| `tests/submission-workflow.test.js` | 1 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1294 | `2026-07-19T18:22:37.800Z` |
 | `tests/template-catalog.test.js` | 6 | `security` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6119 | `2026-07-18T09:55:58.113Z` |
 | `tests/template-generation-contract.test.js` | 1 | `migration` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4600 | `2026-07-20T13:17:29.442Z` |
 | `tests/template-store.test.js` | 13 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 9940 | `2026-07-18T10:14:12.074Z` |
@@ -336,13 +346,16 @@
 
 ### `tests/architecture-seams.test.js`
 
-- 测试声明数：**1**。
+- 测试声明数：**4**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
 | 9 | `attention and workspace seams keep ownership and dependency direction explicit` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 文件 fixture: writeFileSync :: match |
+| 36 | `business views use domain bridges instead of Electron transport or main-process files` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | IPC stub: ipcRenderer :: match |
+| 52 | `article management owns one revisioned snapshot seam` | — | `renderer` | 工作区数据、文件事务与内容生命周期保持完整 | — |
+| 65 | `electron transport facade is gone and domains own their bridge seams` | — | `renderer` | 内容生成来源、模板与输入选择保持可追溯<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | — |
 
 ### `tests/article-attention-invalidation.test.js`
 
@@ -428,6 +441,29 @@
 | ---: | --- | --- | --- | --- | --- |
 | 16 | `exposes exactly five mutually exclusive stages` | — | `renderer` | 安全边界与敏感信息不泄露<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 34 | `allows local cleanup only for terminal publication results` | — | `renderer` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+
+### `tests/article-management-snapshot-benchmark.test.js`
+
+- 测试声明数：**2**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 163 | `records current p50/p95 time, logical scans, and IPC reads for each fixture size` | — | `ipc` | 工作区数据、文件事务与内容生命周期保持完整<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | — |
+| 189 | `records one snapshot IPC and one logical read per storage category` | — | `ipc` | 工作区数据、文件事务与内容生命周期保持完整<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | — |
+
+### `tests/article-management-snapshot.test.js`
+
+- 测试声明数：**3**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 28 | `combines one client read into a revisioned snapshot and reuses it` | — | `domain` | 客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 42 | `isolates clients and invalidates only after the workspace revision changes` | — | `store` | 客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 58 | `exposes only the client-scoped snapshot seam through IPC` | — | `ipc` | 安全边界与敏感信息不泄露<br>客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 工作区 fixture: workspaceRoot + IPC stub: handlers :: equal |
 
 ### `tests/article-removal-recovery-regression.test.js`
 
@@ -708,7 +744,7 @@
 
 ### `tests/content-generation-batch-service.test.js`
 
-- 测试声明数：**10**。
+- 测试声明数：**11**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
 
@@ -723,7 +759,8 @@
 | 264 | `treats only article-not-found reads as missing and never generates after a corrupt read` | — | `store` | 内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 306 | `does not auto-run persisted work after service construction and requires confirmation for config changes` | — | `store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 317 | `persists safe state events and exposes pause, resume, stop, retry, get, and list operations` | — | `store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 338 | `previews and confirms permanent cancellation of pending tasks` | — | `store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 340 | `returns one ordered runtime snapshot with the selected persisted batch` | — | `store` | 内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 353 | `previews and confirms permanent cancellation of pending tasks` | — | `store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 
 ### `tests/content-library-migration.test.js`
 
@@ -745,22 +782,24 @@
 
 ### `tests/content-submission-batch.test.js`
 
-- 测试声明数：**10**。
+- 测试声明数：**12**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
-| 44 | `previews generated and saved articles and only platforms declaring queue import` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | 临时目录: mkdtempSync :: equal + deep-equal |
-| 55 | `creates an auditable batch idempotently and reports content conflicts` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 文件 fixture: writeFileSync :: equal |
-| 77 | `writes queued content under the injected portable input root` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync :: equal |
-| 98 | `cancels only unchanged queued pairs and is idempotent` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
-| 112 | `previews a complete generated article as immediately queueable` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync :: equal + deep-equal |
-| 129 | `lists batches by created time and stable id instead of filesystem order` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + store/service stub: createSubmissionBatchStore + 文件 fixture: writeFileSync :: deep-equal |
-| 141 | `reserves publication targets and writes v2 provenance into the queue sidecar` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + 文件 fixture: readFileSync :: equal |
-| 162 | `returns published and uncertain guards without hiding other targets` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
-| 189 | `exposes a queued reservation without a queue file as a conflict` | — | `store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
-| 200 | `does not cancel a reservation after submission has started` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
+| 45 | `previews generated and saved articles and only platforms declaring queue import` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | 临时目录: mkdtempSync :: equal + deep-equal |
+| 56 | `creates an auditable batch idempotently and reports content conflicts` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 文件 fixture: writeFileSync :: equal |
+| 78 | `writes queued content under the injected portable input root` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync :: equal |
+| 99 | `closes cancelled batches, removes their cancel plan, and reports repeat cancellation as idempotent` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal + deep-equal |
+| 131 | `previews a complete generated article as immediately queueable` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync :: equal + deep-equal |
+| 148 | `lists batches by created time and stable id instead of filesystem order` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + store/service stub: createSubmissionBatchStore + 文件 fixture: writeFileSync :: deep-equal |
+| 160 | `reserves publication targets and writes v2 provenance into the queue sidecar` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + 文件 fixture: readFileSync :: equal |
+| 181 | `returns published and uncertain guards without hiding other targets` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
+| 208 | `exposes a queued reservation without a queue file as a conflict` | — | `store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
+| 219 | `does not cancel a reservation after submission has started` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal |
+| 235 | `keeps a staged media queue item cancellable without a remote publication id` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + store/service stub: createSubmissionBatchStore + 文件 fixture: writeFileSync :: equal |
+| 260 | `binds execution to the preview plan and does not reuse media item fingerprints` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 临时目录: mkdtempSync + 文件 fixture: writeFileSync :: equal + throws/rejects |
 
 ### `tests/content-submission-export.test.js`
 
@@ -778,7 +817,7 @@
 
 ### `tests/content-submission-ipc.test.js`
 
-- 测试声明数：**5**。
+- 测试声明数：**6**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
 
@@ -786,9 +825,10 @@
 | ---: | --- | --- | --- | --- | --- |
 | 3 | `requires confirmed true and never accepts renderer paths` | — | `renderer`、`ipc` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: deep-equal |
 | 10 | `exposes current-client submission batch history without renderer paths` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: deep-equal |
-| 24 | `passes an optional media resource id but continues rejecting renderer paths` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: equal + deep-equal |
-| 42 | `exposes reconciliation cleanup previews and keeps queue paths out of the renderer response` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: deep-equal |
-| 58 | `keeps residue cleanup counts and reason codes while stripping filesystem fields` | — | `ipc` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | IPC stub: handlers :: deep-equal |
+| 24 | `forwards only the preview action plan token for batch cancellation` | — | `ipc`、`security`、`store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: deep-equal |
+| 41 | `passes an optional media resource id but continues rejecting renderer paths` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: equal + deep-equal |
+| 59 | `exposes reconciliation cleanup previews and keeps queue paths out of the renderer response` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | IPC stub: handlers :: deep-equal |
+| 75 | `keeps residue cleanup counts and reason codes while stripping filesystem fields` | — | `ipc` | 发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | IPC stub: handlers :: deep-equal |
 
 ### `tests/content-workbench-regression.test.js`
 
@@ -803,9 +843,9 @@
 | 38 | `keeps existing renderer IPC errors readable after structured responses` | — | `renderer`、`ipc` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | — |
 | 44 | `defines the three content workbench tabs and shared refresh boundary` | — | `renderer`、`security` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 52 | `exposes the collection API and multi-research generation contract` | — | `renderer` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 75 | `exposes the Task 1 batch preview and prepared-start renderer API` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | IPC stub: ipcRenderer :: match |
-| 85 | `keeps batch selection and answer expansion as independent controls` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 97 | `keeps Task 10 single and batch generation workflows on renderer APIs` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | 文件 fixture: readFileSync :: equal + match |
+| 76 | `exposes the Task 1 batch preview and prepared-start renderer API` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | IPC stub: ipcRenderer :: match |
+| 86 | `keeps batch selection and answer expansion as independent controls` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 98 | `keeps Task 10 single and batch generation workflows on renderer APIs` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | 文件 fixture: readFileSync :: equal + match |
 
 ### `tests/content-workspace.test.js`
 
@@ -1135,6 +1175,28 @@
 | 118 | `only returns resumable tasks and reports corrupt batches without hiding valid batches` | — | `store` | 内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | 工作区 fixture: workspaceRoot + store/service stub: createGenerationBatchStore + 文件 fixture: writeFileSync :: deep-equal + throws/rejects |
 | 133 | `reads old batches without a cancelled count as zero and permanently cancels only pending tasks` | — | `store` | 内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | 工作区 fixture: workspaceRoot + store/service stub: createGenerationBatchStore + 文件 fixture: readFileSync :: equal + deep-equal |
 
+### `tests/generation-snapshot-event.test.js`
+
+- 测试声明数：**2**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 84 | `records one current renderer follow-up IPC and batch read for every state event` | — | `renderer`、`ipc`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | store/service stub: createEventFixture :: equal + truthiness |
+| 119 | `consumes complete snapshot events without renderer follow-up IPC or batch reads` | — | `renderer`、`ipc`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | store/service stub: createEventFixture :: equal + truthiness |
+
+### `tests/generation-snapshot-order.test.js`
+
+- 测试声明数：**2**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 9 | `accepts only newer events from the bootstrapped runtime` | — | `renderer` | 内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 22 | `switches runtime only through a newer bootstrap snapshot` | — | `renderer` | 内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+
 ### `tests/generation-submission-handoff-ipc.test.js`
 
 - 测试声明数：**2**。
@@ -1173,9 +1235,26 @@
 | 55 | `scans supported ordinary files while excluding sidecars, temporary files, and symlinks` | — | `security` | 安全边界与敏感信息不泄露<br>平台适配、配置隔离与远端结果分类保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 文件 fixture: writeFileSync :: deep-equal |
 | 68 | `returns stable article errors for invalid extension, empty values, invalid UTF-8, and oversized input` | — | `domain` | 平台适配、配置隔离与远端结果分类保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 文件 fixture: writeFileSync :: throws/rejects |
 
-### `tests/hepan-provider-settings.test.js`
+### `tests/hepan-login-check.test.js`
 
 - 测试声明数：**8**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 9 | `extracts the account from the current yonghuming theme container` | — | `domain` | 平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 41 | `accepts an authenticated publish page with generic login words and no upload token` | — | `security` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | — |
+| 76 | `rejects a real login form and explicit login route` | — | `domain` | 平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 101 | `reports authentication independently of a missing publish form` | — | `security` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 126 | `ignores avatar and navigation space links without a trusted account container` | — | `domain` | 平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 145 | `rejects invalid trusted account candidates and ordinary space links` | — | `domain` | 平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 174 | `keeps a successful capability check when account identity is unavailable` | — | `domain` | 平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 202 | `keeps category denial and changed publish forms distinct from cookie rejection` | — | `domain` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+
+### `tests/hepan-provider-settings.test.js`
+
+- 测试声明数：**10**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
 
@@ -1187,8 +1266,10 @@
 | 63 | `uses bundled vendor dependencies when no custom vendor directory is configured` | — | `store` | 平台适配、配置隔离与远端结果分类保持稳定<br>配置持久化、默认值与环境来源保持明确 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal |
 | 88 | `checks Python, imports, and login through a temporary cookie file that is always removed` | — | `store` | 安全边界与敏感信息不泄露<br>迁移兼容、幂等与恢复语义保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + deep-equal |
 | 116 | `maps a failed login to a stable error without leaking cookie or temp path` | — | `security`、`store` | 安全边界与敏感信息不泄露<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + throws/rejects |
-| 136 | `fails the payload self-test before dependency or login checks` | — | `store` | 平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>配置持久化、默认值与环境来源保持明确 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + throws/rejects |
-| 159 | `renders configured paths as safe status and submits only changed setting fields` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>平台适配、配置隔离与远端结果分类保持稳定<br>配置持久化、默认值与环境来源保持明确 | 文件 fixture: readFileSync :: match |
+| 136 | `preserves safe warnings and account identity without carrying an error code on success` | — | `store` | 安全边界与敏感信息不泄露<br>平台适配、配置隔离与远端结果分类保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + deep-equal |
+| 167 | `uses a safe Python error code when the login command exits non-zero` | — | `store` | 安全边界与敏感信息不泄露<br>平台适配、配置隔离与远端结果分类保持稳定<br>配置持久化、默认值与环境来源保持明确 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + throws/rejects |
+| 189 | `fails the payload self-test before dependency or login checks` | — | `store` | 平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>配置持久化、默认值与环境来源保持明确 | 工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + throws/rejects |
+| 212 | `renders configured paths as safe status and submits only changed setting fields` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>平台适配、配置隔离与远端结果分类保持稳定<br>配置持久化、默认值与环境来源保持明确 | 文件 fixture: readFileSync :: match |
 
 ### `tests/hepan-publish-contract.test.js`
 
@@ -1531,6 +1612,17 @@
 | 68 | `blocks mutations while platform tasks are running but keeps status readable` | — | `store` | 平台适配、配置隔离与远端结果分类保持稳定<br>配置持久化、默认值与环境来源保持明确 | store/service stub: createPlatformSettingsService :: equal + throws/rejects |
 | 77 | `returns a runtime snapshot only through the main-process interface` | — | `store` | 平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | store/service stub: createPlatformSettingsService :: deep-equal |
 
+### `tests/platform-submission-invocation-count.test.js`
+
+- 测试声明数：**2**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 191 | `records the current N-preparation-plus-one-submission flow without remote adapters` | — | `domain` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 212 | `records one main-owned submission IPC and one batch plan build` | — | `ipc`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+
 ### `tests/platform-task-progress.test.js`
 
 - 测试声明数：**3**。
@@ -1740,10 +1832,10 @@
 | 17 | `keeps Settings limited to manual workflow features` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>配置持久化、默认值与环境来源保持明确 | — |
 | 23 | `keeps the platforms workbench reachable` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
 | 29 | `keeps renderer APIs free of mock article persistence` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | store/service stub: mockData :: equal + truthiness |
-| 41 | `exposes platform commands through preload` | — | `renderer`、`ipc` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 文件 fixture: readFileSync :: truthiness |
-| 46 | `shares the structured IPC response envelope` | — | `renderer`、`ipc` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | 文件 fixture: readFileSync :: truthiness |
-| 55 | `uses the complete main-process platform status shape` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 文件 fixture: readFileSync :: equal + match + truthiness |
-| 67 | `type-checks before building the renderer` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | 文件 fixture: readFileSync :: equal + truthiness |
+| 43 | `exposes platform commands through preload` | — | `renderer`、`ipc` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 文件 fixture: readFileSync :: truthiness |
+| 48 | `shares the structured IPC response envelope` | — | `renderer`、`ipc` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | 文件 fixture: readFileSync :: truthiness |
+| 57 | `uses the complete main-process platform status shape` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 文件 fixture: readFileSync :: equal + match + truthiness |
+| 69 | `type-checks before building the renderer` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | 文件 fixture: readFileSync :: equal + truthiness |
 
 ### `tests/renderer-ai-provider-settings.test.js`
 
@@ -1755,12 +1847,12 @@
 | ---: | --- | --- | --- | --- | --- |
 | 20 | `exposes the Task 5 provider IPC through typed renderer helpers` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
 | 33 | `keeps the provider UI on safe status fields and validates the URL locally` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
-| 47 | `confirms only connection tests and clearing, not saving` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 60 | `refreshes safe status after a rejected connection test while retaining the UI error` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
-| 69 | `guards generation state to the content channel` | — | `renderer`、`ipc`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 82 | `keeps long provider URLs inside the settings layout` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 88 | `mounts provider settings as an independent Settings section` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 94 | `declares the optional content generation state channel` | — | `renderer`、`ipc`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 47 | `confirms only connection tests and clearing through the renderer host` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 61 | `refreshes safe status after a rejected connection test while retaining the UI error` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 70 | `guards generation state to the content channel` | — | `renderer`、`ipc`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 83 | `keeps long provider URLs inside the settings layout` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 89 | `mounts provider settings as an independent Settings section` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 95 | `declares the optional content generation state channel` | — | `renderer`、`ipc`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
 
 ### `tests/renderer-article-attention-actions.test.js`
 
@@ -1833,30 +1925,56 @@
 | 142 | `labels builtin and custom templates with accurate source wording` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
 | 152 | `renders the batch client, platform template, source and confirmation contracts` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
 | 174 | `exposes renderer-only generation batch wrappers through preload` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 文件 fixture: readFileSync :: match |
-| 192 | `provides a single and batch segmented control without losing the article editor` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 200 | `separates the new-batch wizard from persisted batch monitoring` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 210 | `rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 221 | `uses runtime state only when it belongs to the displayed batch` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
-| 229 | `does not let initial idle hydration overwrite a matching runtime batch state` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
-| 235 | `keeps command pending separate from the live batch run and does not optimistically mark every command running` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 244 | `offers continuation when failed tasks are the only unfinished work` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 249 | `keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 259 | `rehydrates the same live counts and status after returning to the page` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 268 | `exposes cancelled counts and a preview-confirmed pending cancellation action` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 193 | `provides a single and batch segmented control without losing the article editor` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 201 | `separates the new-batch wizard from persisted batch monitoring` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 211 | `rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 222 | `uses runtime state only when it belongs to the displayed batch` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 230 | `does not let initial idle hydration overwrite a matching runtime batch state` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 239 | `keeps command pending separate from the live batch run and does not optimistically mark every command running` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 248 | `offers continuation when failed tasks are the only unfinished work` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 253 | `keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 263 | `rehydrates the same live counts and status after returning to the page` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 272 | `exposes cancelled counts and a preview-confirmed pending cancellation action` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+
+### `tests/renderer-confirmation-host.test.js`
+
+- 测试声明数：**4**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 11 | `implements a renderer-owned, focus-safe confirmation lifecycle` | — | `renderer` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | — |
+| 24 | `keeps the public confirmation API small and portal based` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | — |
+| 32 | `installs one host only after authentication and removes settings native confirms` | — | `renderer`、`security`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 46 | `keeps media preflight owned by the workbench view` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | — |
 
 ### `tests/renderer-content-client-switch.test.js`
 
-- 测试声明数：**5**。
+- 测试声明数：**7**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=是；浏览器启动=是；读取生产源码=是。
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
-| 19 | `keeps ordinary queueing scoped to the current client` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | — |
-| 28 | `guards client-scoped article, queue, trash, and publication responses` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | — |
-| 36 | `clears client-local UI state while retaining workspace preferences` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>客户端知识、问题查询与来源数据保持稳定 | — |
-| 46 | `does not use client changes as a signal to stop generation work` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>客户端知识、问题查询与来源数据保持稳定 | — |
-| 53 | `switches from a queued client to another client through the real Renderer` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | 工作区 fixture: workspacePath + 浏览器/Renderer fixture: browser.newPage :: equal + deep-equal |
+| 32 | `keeps ordinary queueing scoped to the current client` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | — |
+| 41 | `guards client-scoped article, queue, trash, and publication responses` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | — |
+| 50 | `uses one-way history refreshes and keeps the editor inside the content host` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 61 | `clears client-local UI state while retaining workspace preferences` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>客户端知识、问题查询与来源数据保持稳定 | — |
+| 71 | `does not use client changes as a signal to stop generation work` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>客户端知识、问题查询与来源数据保持稳定 | — |
+| 78 | `resets a real client switch to the pending-submission stage` | — | `renderer` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | — |
+| 85 | `switches from a queued client to another client through the real Renderer` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | 工作区 fixture: workspacePath + 浏览器/Renderer fixture: browser.newPage :: equal + deep-equal |
+
+### `tests/renderer-content-confirmation-flow.test.js`
+
+- 测试声明数：**2**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 10 | `uses an observable in-app dialog for queue and cancel, never a native dialog` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 21 | `does not auto-accept native dialogs in content queue regression tests` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 
 ### `tests/renderer-content-generation.test.js`
 
@@ -1880,7 +1998,19 @@
 | ---: | --- | --- | --- | --- | --- |
 | 9 | `keeps initial loading silent and makes manual refresh feedback transient` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 22 | `separates workspace, article, and batch refresh intents` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 38 | `keeps content-source invalidation separate from customer and template rescans` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 39 | `keeps content-source invalidation separate from customer and template rescans` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+
+### `tests/renderer-content-submission-batch-actions.test.js`
+
+- 测试声明数：**3**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 10 | `renders only service-issued cancel action plans and executes their plan ids` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 24 | `clears old plans while cancellation is pending and handles stale plans with one refresh` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 34 | `labels an empty action state as applying to all current-client batches` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>客户端知识、问题查询与来源数据保持稳定 | — |
 
 ### `tests/renderer-encoding.test.js`
 
@@ -1903,6 +2033,16 @@
 | ---: | --- | --- | --- | --- | --- |
 | 15 | `closes the modal after a successful handoff and leaves a non-modal summary` | — | `renderer` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 工作区 fixture: workspacePath + 浏览器/Renderer fixture: browser.newPage :: equal + match |
 
+### `tests/renderer-hepan-settings.test.js`
+
+- 测试声明数：**1**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 7 | `renders independent safe capability guidance and never renders the Cookie` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 文件 fixture: readFileSync :: match |
+
 ### `tests/renderer-history-editor-flow.test.js`
 
 - 测试声明数：**5**。
@@ -1911,11 +2051,11 @@
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
-| 241 | `keeps history mounted and restores filter, expansion, selection, scroll, and focus` | — | `renderer`、`store` | 迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 279 | `guards unsaved edits and copies a published article as a new version` | — | `renderer` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
-| 318 | `locks the history selection seam to an in-place editor instead of the generate tab` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | 文件 fixture: readFileSync :: match |
-| 324 | `tracks a removal transaction by id from needs_repair through terminal recovery` | — | `renderer` | 迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 345 | `shows repairable removal transactions as manual repair instead of automatic recovery` | — | `renderer` | 迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 文件 fixture: readFileSync :: match |
+| 242 | `keeps history mounted and restores filter, expansion, selection, scroll, and focus` | — | `renderer`、`store` | 迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 280 | `guards unsaved edits and copies a published article as a new version` | — | `renderer` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 315 | `locks the history selection seam to an in-place editor instead of the generate tab` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | 文件 fixture: readFileSync :: match |
+| 321 | `tracks a removal transaction by id from needs_repair through terminal recovery` | — | `renderer` | 迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 342 | `shows repairable removal transactions as manual repair instead of automatic recovery` | — | `renderer` | 迁移兼容、幂等与恢复语义保持稳定<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 文件 fixture: readFileSync :: match |
 
 ### `tests/renderer-platform-cross-page-progress.test.js`
 
@@ -1935,7 +2075,7 @@
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
-| 180 | `loads once, stays idle, refreshes manually, and deduplicates terminal revisions` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 浏览器/Renderer fixture: browser.newPage :: equal |
+| 179 | `loads once, stays idle, refreshes manually, and deduplicates terminal revisions` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 浏览器/Renderer fixture: browser.newPage :: equal |
 
 ### `tests/renderer-platform-queue-refresh.test.js`
 
@@ -2001,8 +2141,8 @@
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
-| 111 | `(动态测试名，需人工确认)` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | — |
-| 135 | `declares the transaction lifecycle contract at the renderer boundary` | — | `renderer`、`security` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | 文件 fixture: readFileSync :: match |
+| 112 | `(动态测试名，需人工确认)` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | — |
+| 136 | `declares the transaction lifecycle contract at the renderer boundary` | — | `renderer`、`security` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | 文件 fixture: readFileSync :: match |
 
 ### `tests/renderer-resource-library-api.test.js`
 
@@ -2016,16 +2156,28 @@
 
 ### `tests/renderer-responsive-layout.test.js`
 
-- 测试声明数：**4**。
+- 测试声明数：**6**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=是；浏览器启动=是；读取生产源码=否。
 
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
-| 145 | `measures the history toolbar at the medium viewport` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | — |
-| 149 | `measures the history toolbar at the desktop viewport` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>IPC 契约、DTO 过滤与主进程边界保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | — |
-| 153 | `exposes the settings page content at the desktop viewport` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 浏览器/Renderer fixture: browser.newPage :: match + truthiness |
-| 180 | `keeps expanded long-title history rows and row-end actions inside narrow viewports` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | 文件 fixture: readFileSync :: equal + match + truthiness |
+| 154 | `keeps the preflight confirmation button clickable beside the normal authorization status bar` | — | `renderer`、`security` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定 | 浏览器/Renderer fixture: browser.newPage :: equal + truthiness |
+| 189 | `rescans media articles and refreshes orders after a successful paid submission` | — | `renderer` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 浏览器/Renderer fixture: browser.newPage :: match + truthiness |
+| 209 | `measures the history toolbar at the medium viewport` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 213 | `measures the history toolbar at the desktop viewport` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>IPC 契约、DTO 过滤与主进程边界保持稳定<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 217 | `exposes the settings page content at the desktop viewport` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 浏览器/Renderer fixture: browser.newPage :: match + truthiness |
+| 244 | `keeps expanded long-title history rows and row-end actions inside narrow viewports` | — | `renderer` | Renderer 用户流程、状态刷新与布局行为保持稳定 | 文件 fixture: readFileSync :: equal + match + truthiness |
+
+### `tests/renderer-settings-window-focus.electron.test.js`
+
+- 测试声明数：**1**。
+- 未采集运行时间：**待采集**（本脚本未执行该文件）。
+- 静态信号：Renderer build=否；浏览器启动=是；读取生产源码=否。
+
+| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
+| ---: | --- | --- | --- | --- | --- |
+| 59 | `keeps first save, confirmation cancel, success, failure, and clear immediately interactive` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>IPC 契约、DTO 过滤与主进程边界保持稳定 | 临时目录: mkdtempSync :: equal |
 
 ### `tests/renderer-settings.test.js`
 
@@ -2091,10 +2243,10 @@
 | 10 | `mounts App only through WorkspaceBootstrapGate` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 21 | `keeps the welcome flow isolated from business APIs and default paths` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 28 | `declares a token-only confirmation wrapper and exactly seven workspace methods` | — | `renderer`、`security`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 39 | `keeps key renderer files UTF-8 readable without known mojibake markers` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 46 | `lets Settings show and operate on the current workspace` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整<br>配置持久化、默认值与环境来源保持明确 | 工作区 fixture: workspacePath :: match |
-| 51 | `guards selection awaits after unmount and exposes parent busy cleanup` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 56 | `deduplicates Settings bootstrap reads and blocks top-level commands while switching` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 37 | `keeps key renderer files UTF-8 readable without known mojibake markers` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 44 | `lets Settings show and operate on the current workspace` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整<br>配置持久化、默认值与环境来源保持明确 | 工作区 fixture: workspacePath :: match |
+| 50 | `guards selection awaits after unmount and exposes parent busy cleanup` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 55 | `deduplicates Settings bootstrap reads and blocks top-level commands while switching` | — | `renderer`、`store` | 发布状态、重复保护与尝试历史保持一致<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 
 ### `tests/research-store.test.js`
 
@@ -2246,16 +2398,6 @@
 | 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
 | ---: | --- | --- | --- | --- | --- |
 | 3 | `preflight failure makes no media request and no submission order` | — | `domain` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | store/service stub: createMediaWorkbenchService :: equal |
-
-### `tests/submission-workflow.test.js`
-
-- 测试声明数：**1**。
-- 未采集运行时间：**待采集**（本脚本未执行该文件）。
-- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
-
-| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
-| ---: | --- | --- | --- | --- | --- |
-| 9 | `exposes preparation, batch, cleanup, and retry commands without leaking stores` | — | `store` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 
 ### `tests/template-catalog.test.js`
 
@@ -2442,10 +2584,10 @@
 
 以下分组只比较静态命中的 fixture 与断言类别。它们是保守的人工审查入口，不等同于重复覆盖：必须进一步核对输入、分支、依赖替身和可观察结果后，才能决定合并或删除。
 
-### `文件 fixture: readFileSync :: match`（17 项）
+### `文件 fixture: readFileSync :: match`（18 项）
 
 - `tests/content-library-migration.test.js:284` — excludes the one-shot migration script from the desktop package
-- `tests/hepan-provider-settings.test.js:159` — renders configured paths as safe status and submits only changed setting fields
+- `tests/hepan-provider-settings.test.js:212` — renders configured paths as safe status and submits only changed setting fields
 - `tests/j4125-auth-contract.test.js:7` — contains an isolated HTTPS auth service contract without business data
 - `tests/production-packaging.test.js:7` — inherits alpha boundaries while requiring signed ASAR production artifacts
 - `tests/renderer-article-history.test.js:71` — keeps article opening separate from queue selection
@@ -2453,10 +2595,11 @@
 - `tests/renderer-article-history.test.js:95` — keeps saved articles selectable for submission queueing
 - `tests/renderer-batch-generation.test.js:41` — offers one-material retry in the batch source step and updates only that client material
 - `tests/renderer-batch-generation.test.js:174` — exposes renderer-only generation batch wrappers through preload
-- `tests/renderer-history-editor-flow.test.js:318` — locks the history selection seam to an in-place editor instead of the generate tab
-- `tests/renderer-history-editor-flow.test.js:345` — shows repairable removal transactions as manual repair instead of automatic recovery
+- `tests/renderer-hepan-settings.test.js:7` — renders independent safe capability guidance and never renders the Cookie
+- `tests/renderer-history-editor-flow.test.js:315` — locks the history selection seam to an in-place editor instead of the generate tab
+- `tests/renderer-history-editor-flow.test.js:342` — shows repairable removal transactions as manual repair instead of automatic recovery
 - `tests/renderer-publication-history.test.js:67` — keeps the history detail target-oriented and visibly blocks uncertain direct retry
-- `tests/renderer-residue-cleanup-flow.test.js:135` — declares the transaction lifecycle contract at the renderer boundary
+- `tests/renderer-residue-cleanup-flow.test.js:136` — declares the transaction lifecycle contract at the renderer boundary
 - `tests/renderer-settings.test.js:15` — exposes storage maintenance and the safe browser self-check bridge
 - `tests/renderer-settings.test.js:29` — keeps cache cleanup guarded while exposing usage categories
 - `tests/renderer-settings.test.js:42` — organizes provider and system settings behind responsive navigation
@@ -2496,6 +2639,19 @@
 - `tests/template-store.test.js:55` — rejects unsafe front matter template names
 - `tests/template-store.test.js:63` — rejects missing front matter, required fields, platform mismatches, and empty bodies
 
+### `IPC stub: handlers :: deep-equal`（10 项）
+
+- `tests/ai-content-ipc.test.js:60` — exposes safe removal transaction query and retry handlers
+- `tests/content-submission-ipc.test.js:3` — requires confirmed true and never accepts renderer paths
+- `tests/content-submission-ipc.test.js:10` — exposes current-client submission batch history without renderer paths
+- `tests/content-submission-ipc.test.js:24` — forwards only the preview action plan token for batch cancellation
+- `tests/content-submission-ipc.test.js:59` — exposes reconciliation cleanup previews and keeps queue paths out of the renderer response
+- `tests/content-submission-ipc.test.js:75` — keeps residue cleanup counts and reason codes while stripping filesystem fields
+- `tests/desktop-ipc-response.test.js:15` — wraps async handlers
+- `tests/doubao-collection-ipc.test.js:57` — registers the complete public channel surface
+- `tests/doubao-collection-ipc.test.js:62` — routes batch preview and prepared start through validated public inputs
+- `tests/publication-ipc.test.js:45` — rejects renderer path-like publication history input
+
 ### `store/service stub: fakeStore :: equal + deep-equal`（10 项）
 
 - `tests/article-review-service.test.js:58` — reviews a cross-client selection and reports incomplete source provenance
@@ -2508,18 +2664,6 @@
 - `tests/generation-batch-runner.test.js:294` — repairs a saved article without another AI call and retries failed tasks only
 - `tests/generation-batch-runner.test.js:324` — runs each task once with a validated future concurrency greater than one
 - `tests/generation-batch-runner.test.js:379` — keeps the running task alive while cancelling later pending tasks
-
-### `IPC stub: handlers :: deep-equal`（9 项）
-
-- `tests/ai-content-ipc.test.js:60` — exposes safe removal transaction query and retry handlers
-- `tests/content-submission-ipc.test.js:3` — requires confirmed true and never accepts renderer paths
-- `tests/content-submission-ipc.test.js:10` — exposes current-client submission batch history without renderer paths
-- `tests/content-submission-ipc.test.js:42` — exposes reconciliation cleanup previews and keeps queue paths out of the renderer response
-- `tests/content-submission-ipc.test.js:58` — keeps residue cleanup counts and reason codes while stripping filesystem fields
-- `tests/desktop-ipc-response.test.js:15` — wraps async handlers
-- `tests/doubao-collection-ipc.test.js:57` — registers the complete public channel surface
-- `tests/doubao-collection-ipc.test.js:62` — routes batch preview and prepared start through validated public inputs
-- `tests/publication-ipc.test.js:45` — rejects renderer path-like publication history input
 
 ### `文件 fixture: writeFileSync :: equal`（8 项）
 
@@ -2554,7 +2698,7 @@
 ### `IPC stub: handlers :: equal + deep-equal`（5 项）
 
 - `tests/auth-ipc-boundary.test.js:7` — exposes only auth operations and broadcasts state changes
-- `tests/content-submission-ipc.test.js:24` — passes an optional media resource id but continues rejecting renderer paths
+- `tests/content-submission-ipc.test.js:41` — passes an optional media resource id but continues rejecting renderer paths
 - `tests/publication-ipc.test.js:5` — lists publication history for many articles in one ledger query and strips sensitive aggregate fields
 - `tests/publication-ipc.test.js:55` — requires a second-confirmation marker and exposes only safe reconciliation fields
 - `tests/storage-maintenance-service.test.js:37` — registers safe usage and cache cleanup IPC commands
@@ -2603,13 +2747,6 @@
 - `tests/question-store.test.js:342` — rejects a clients root symlink escaping workspace
 - `tests/research-store.test.js:90` — rejects unsafe research path segments and linked client directories
 
-### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal`（4 项）
-
-- `tests/content-submission-batch.test.js:98` — cancels only unchanged queued pairs and is idempotent
-- `tests/content-submission-batch.test.js:162` — returns published and uncertain guards without hiding other targets
-- `tests/content-submission-batch.test.js:189` — exposes a queued reservation without a queue file as a conflict
-- `tests/content-submission-batch.test.js:200` — does not cancel a reservation after submission has started
-
 ### `IPC stub: createIpc :: equal + deep-equal`（4 项）
 
 - `tests/ai-content-ipc.test.js:12` — registers the complete thin content IPC surface
@@ -2623,6 +2760,12 @@
 - `tests/doubao-browser-adapter.test.js:347` — checks login state without opening a visible page
 - `tests/doubao-browser-adapter.test.js:416` — reuses a ready session for collection and reopens after close
 - `tests/doubao-browser-adapter.test.js:494` — detects login wording even when the page exposes an input
+
+### `工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + throws/rejects`（3 项）
+
+- `tests/hepan-provider-settings.test.js:116` — maps a failed login to a stable error without leaking cookie or temp path
+- `tests/hepan-provider-settings.test.js:167` — uses a safe Python error code when the login command exits non-zero
+- `tests/hepan-provider-settings.test.js:189` — fails the payload self-test before dependency or login checks
 
 ### `工作区 fixture: workspaceRoot :: equal`（3 项）
 
@@ -2654,6 +2797,18 @@
 - `tests/doubao-browser-adapter.test.js:647` — stops on a page error and does not send a question
 - `tests/doubao-browser-adapter.test.js:662` — keeps at most 20 diagnostic file groups
 
+### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal`（3 项）
+
+- `tests/content-submission-batch.test.js:181` — returns published and uncertain guards without hiding other targets
+- `tests/content-submission-batch.test.js:208` — exposes a queued reservation without a queue file as a conflict
+- `tests/content-submission-batch.test.js:219` — does not cancel a reservation after submission has started
+
+### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal + deep-equal`（3 项）
+
+- `tests/content-submission-batch.test.js:99` — closes cancelled batches, removes their cancel plan, and reports repeat cancellation as idempotent
+- `tests/publication-ledger-index.test.js:15` — does not rescan the publication directory for repeated id lookups
+- `tests/publication-ledger-store.test.js:42` — captures a bounded immutable title snapshot on first reservation and preserves it across retries
+
 ### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal + throws/rejects`（3 项）
 
 - `tests/legacy-migration.test.js:151` — rejects a linked workspace client target before copying legacy files
@@ -2663,7 +2818,7 @@
 ### `临时目录: mkdtempSync + 文件 fixture: writeFileSync :: equal`（3 项）
 
 - `tests/batch-workspace-scan.test.js:8` — scans media only from AUTO_PUBLISH_WORKSPACE input
-- `tests/content-submission-batch.test.js:55` — creates an auditable batch idempotently and reports content conflicts
+- `tests/content-submission-batch.test.js:56` — creates an auditable batch idempotently and reports content conflicts
 - `tests/runtime-tools.test.js:30` — prepares only regular node.exe and LICENSE files from a verified archive
 
 ### `临时目录: mkdtempSync + IPC stub: handlers + 文件 fixture: writeFileSync :: equal + deep-equal`（3 项）
@@ -2675,7 +2830,7 @@
 ### `浏览器/Renderer fixture: browser.newPage :: equal`（3 项）
 
 - `tests/auth-gate.test.js:15` — does not mount the workspace before authentication
-- `tests/renderer-platform-queue-refresh-lifecycle.test.js:180` — loads once, stays idle, refreshes manually, and deduplicates terminal revisions
+- `tests/renderer-platform-queue-refresh-lifecycle.test.js:179` — loads once, stays idle, refreshes manually, and deduplicates terminal revisions
 - `tests/renderer-question-editor-session.test.js:90` — opens, closes, restores focus, resets references, and survives client switching
 
 ### `文件 fixture: readFileSync :: deep-equal + match`（3 项）
@@ -2683,6 +2838,12 @@
 - `tests/application-identity.test.js:9` — uses one stable application name and app id for development and packaging
 - `tests/article-store.test.js:44` — writes editable markdown alongside full JSON metadata
 - `tests/article-store.test.js:55` — replaces both files when saving an updated article id
+
+### `IPC stub: ipcRenderer :: match`（3 项）
+
+- `tests/architecture-seams.test.js:36` — business views use domain bridges instead of Electron transport or main-process files
+- `tests/content-workbench-regression.test.js:76` — exposes the Task 1 batch preview and prepared-start renderer API
+- `tests/doubao-content-workbench.test.js:27` — keeps privileged and browser-only implementation out of React files
 
 ### `IPC stub: registerWorkspaceBootstrapIpc + store/service stub: fakeIpc :: equal`（3 项）
 
@@ -2719,10 +2880,10 @@
 - `tests/hepan-provider-settings.test.js:33` — validates the publish interval and exposes the safe default
 - `tests/hepan-provider-settings.test.js:48` — reads a valid interval from the environment without exposing secrets
 
-### `工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + throws/rejects`（2 项）
+### `工作区 fixture: localStateRoot + store/service stub: createPlatformSettingsService + 文件 fixture: writeFileSync :: equal + deep-equal`（2 项）
 
-- `tests/hepan-provider-settings.test.js:116` — maps a failed login to a stable error without leaking cookie or temp path
-- `tests/hepan-provider-settings.test.js:136` — fails the payload self-test before dependency or login checks
+- `tests/hepan-provider-settings.test.js:88` — checks Python, imports, and login through a temporary cookie file that is always removed
+- `tests/hepan-provider-settings.test.js:136` — preserves safe warnings and account identity without carrying an error code on success
 
 ### `工作区 fixture: workspacePath :: equal + match`（2 项）
 
@@ -2789,24 +2950,24 @@
 - `tests/workspace-validator.test.js:33` — classifies writable empty and nonempty directories without initializing them
 - `tests/workspace-validator.test.js:69` — validates a marker through a fixed path when its filename uses Windows casing
 
+### `临时目录: mkdtempSync :: equal`（2 项）
+
+- `tests/content-submission-batch.test.js:78` — writes queued content under the injected portable input root
+- `tests/renderer-settings-window-focus.electron.test.js:59` — keeps first save, confirmation cancel, success, failure, and clear immediately interactive
+
 ### `临时目录: mkdtempSync :: equal + deep-equal`（2 项）
 
-- `tests/content-submission-batch.test.js:44` — previews generated and saved articles and only platforms declaring queue import
-- `tests/content-submission-batch.test.js:112` — previews a complete generated article as immediately queueable
+- `tests/content-submission-batch.test.js:45` — previews generated and saved articles and only platforms declaring queue import
+- `tests/content-submission-batch.test.js:131` — previews a complete generated article as immediately queueable
 
 ### `临时目录: mkdtempSync :: equal + truthiness`（2 项）
 
 - `tests/workspace-paths.test.js:40` — keeps the selected content library limited to portable content paths
 - `tests/workspace-paths.test.js:65` — initializes a content library without creating local or installation state
 
-### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot :: equal + deep-equal`（2 项）
-
-- `tests/publication-ledger-index.test.js:15` — does not rescan the publication directory for repeated id lookups
-- `tests/publication-ledger-store.test.js:42` — captures a bounded immutable title snapshot on first reservation and preserves it across retries
-
 ### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + 文件 fixture: readFileSync :: equal`（2 项）
 
-- `tests/content-submission-batch.test.js:141` — reserves publication targets and writes v2 provenance into the queue sidecar
+- `tests/content-submission-batch.test.js:160` — reserves publication targets and writes v2 provenance into the queue sidecar
 - `tests/publication-ledger-store.test.js:12` — uses the portable publication directory and versioned JSON records
 
 ### `临时目录: mkdtempSync + 工作区 fixture: workspaceRoot + store/service stub: createContentGenerationBatchService :: equal`（2 项）
@@ -2844,6 +3005,16 @@
 - `tests/content-submission-export.test.js:55` — reserves a declared publication target and records v2 sidecar identity
 - `tests/content-submission-export.test.js:74` — uses a media resource as the publication target when one is supplied
 
+### `浏览器/Renderer fixture: browser.newPage :: equal + truthiness`（2 项）
+
+- `tests/renderer-question-editor-session.test.js:121` — keeps the desktop panel non-blocking and uses a full-screen narrow panel
+- `tests/renderer-responsive-layout.test.js:154` — keeps the preflight confirmation button clickable beside the normal authorization status bar
+
+### `浏览器/Renderer fixture: browser.newPage :: match + truthiness`（2 项）
+
+- `tests/renderer-responsive-layout.test.js:189` — rescans media articles and refreshes orders after a successful paid submission
+- `tests/renderer-responsive-layout.test.js:217` — exposes the settings page content at the desktop viewport
+
 ### `文件 fixture: readFileSync :: equal`（2 项）
 
 - `tests/submission-attempt-rebind.test.js:113` — cancels a new reservation and skips the remote call when rebind cannot persist
@@ -2856,8 +3027,8 @@
 
 ### `文件 fixture: readFileSync :: equal + match + truthiness`（2 项）
 
-- `tests/react-workbench-regression.test.js:55` — uses the complete main-process platform status shape
-- `tests/renderer-responsive-layout.test.js:180` — keeps expanded long-title history rows and row-end actions inside narrow viewports
+- `tests/react-workbench-regression.test.js:57` — uses the complete main-process platform status shape
+- `tests/renderer-responsive-layout.test.js:244` — keeps expanded long-title history rows and row-end actions inside narrow viewports
 
 ### `文件 fixture: readFileSync :: equal + throws/rejects`（2 项）
 
@@ -2867,12 +3038,12 @@
 ### `文件 fixture: readFileSync :: equal + truthiness`（2 项）
 
 - `tests/publication-ledger-migration.test.js:100` — defaults to a write-free dry-run and classifies queue, order, and orphan archive safely
-- `tests/react-workbench-regression.test.js:67` — type-checks before building the renderer
+- `tests/react-workbench-regression.test.js:69` — type-checks before building the renderer
 
 ### `文件 fixture: readFileSync :: truthiness`（2 项）
 
-- `tests/react-workbench-regression.test.js:41` — exposes platform commands through preload
-- `tests/react-workbench-regression.test.js:46` — shares the structured IPC response envelope
+- `tests/react-workbench-regression.test.js:43` — exposes platform commands through preload
+- `tests/react-workbench-regression.test.js:48` — shares the structured IPC response envelope
 
 ### `文件 fixture: writeFileSync :: equal + throws/rejects`（2 项）
 
@@ -2894,11 +3065,6 @@
 - `tests/doubao-collection-ipc.test.js:334` — rejects unsafe ids, paths, renderer scripts and profile paths at the boundary
 - `tests/doubao-collection-ipc.test.js:351` — rejects batches larger than 500 tasks and batch task fields outside the API
 
-### `IPC stub: ipcRenderer :: match`（2 项）
-
-- `tests/content-workbench-regression.test.js:75` — exposes the Task 1 batch preview and prepared-start renderer API
-- `tests/doubao-content-workbench.test.js:27` — keeps privileged and browser-only implementation out of React files
-
 ### `IPC stub: registerWorkspaceBootstrapIpc + store/service stub: fakeIpc :: deep-equal`（2 项）
 
 - `tests/workspace-bootstrap-ipc.test.js:25` — registers exactly the seven workspace bootstrap channels
@@ -2908,6 +3074,11 @@
 
 - `tests/auth-service.test.js:42` — maps server failures to fixed non-sensitive error codes
 - `tests/auth-service.test.js:47` — preserves stable lock and rate-limit codes regardless of HTTP status
+
+### `store/service stub: createEventFixture :: equal + truthiness`（2 项）
+
+- `tests/generation-snapshot-event.test.js:84` — records one current renderer follow-up IPC and batch read for every state event
+- `tests/generation-snapshot-event.test.js:119` — consumes complete snapshot events without renderer follow-up IPC or batch reads
 
 ### `store/service stub: createGenerationSubmissionHandoffService :: equal + deep-equal`（2 项）
 
@@ -2964,16 +3135,30 @@
 - `tests/generation-batch-runner.test.js:186` — aborts the active task and leaves later tasks pending when stopped
 - `tests/generation-batch-runner.test.js:427` — handles a controllable fifty-task run without duplicate execution after stop and continue
 
+## 受控执行记录
+
+以下结果来自隔离 fixture 或本地构建，不连接真实 AI、浏览器远端投稿服务或客户工作区：
+
+| 命令/分组 | 结果 |
+| --- | --- |
+| `npm run typecheck:bridge` | 通过 |
+| `npm run typecheck:renderer` | 通过 |
+| Renderer 静态分组 | 94/94 通过 |
+| 非 Renderer 受控分组 | 732 通过、7 跳过、0 失败；7 项因 Windows 文件 symlink 权限跳过 |
+| 文章 attention、客户切换、generation handoff、history/question editor、residue cleanup、responsive layout、platform queue browser 分组 | 通过 |
+| `npm run build:renderer` | 通过；当前唯一 JS/首屏 chunk `index-CR-EwY9J.js` 为 704,499 bytes，gzip 196.40 kB |
+| `npm test` | 已尝试 2 次；每次在 124 秒执行器上限超时，未获得完整汇总；遗留 Node 进程已清理 |
+
+`electron-api.ts`、`transport-legacy.ts`、`submission-workflow.js` 及其测试已删除。`tests/architecture-seams.test.js` 继续保护业务 view 不直接依赖 `window.desktopConsole`、`ipcRenderer`、IPC channel 字符串或主进程文件，并保护领域 bridge 不回退到兼容 facade。
+
+### 快照 benchmark
+
+在最终重点验证中的 `node --test tests/article-management-snapshot-benchmark.test.js` 运行里，1000 篇文章/100 个批次的旧路径 p95 为 0.297 ms，新快照路径 p95 为 11.13 ms；IPC 从 104 降为 1，逻辑文件扫描从 104 降为 6。墙钟 p95 会受本机调度噪声影响；新路径还包含安全 DTO clone、attention、transaction 等派生，而旧 fixture 未计入等价成本，因此该数据用于记录预算和架构收益，不宣称达到 25% 时间下降目标。平台调用和生成事件 benchmark 详见对应测试输出及实施计划。
+
 ## 后续采集与人工复核
 
-## 文章管理回归
-
-- `tests/renderer-content-client-switch.test.js` — 客户切换保持本地队列事实，并在切换后回到“待投稿”。
-- `tests/renderer-content-submission-batch-actions.test.js` 与 `tests/content-submission-batch.test.js` — 聚合当前客户全部批次；旧的 staged `media` 队列即使没有远端 publication id 也可安全撤销。
-- `tests/renderer-responsive-layout.test.js` — 授权状态层级低于付费媒体预检模态。
-
-- [ ] 在隔离且不连接真实客户/投稿服务的环境执行 `npm test`，记录实际总时长、通过/失败/跳过，并与本清单的静态声明数对照。
-- [ ] 单独执行 `npm --prefix auth-server test`、`npm --prefix media-workbench run lint` 和 `npm run build:renderer`，记录实际结果、耗时和产物体积。
+- [ ] 重新执行不受执行器 124 秒上限影响的完整 `npm test`，记录实际总时长、通过/失败/跳过，并与本清单的静态声明数对照。
+- [ ] 单独执行 `npm --prefix auth-server test` 并记录实际结果；Renderer lint/build 已在受控执行记录中完成。
 - [ ] 运行 `npm audit` 并记录报告时间、范围和已知接受项。
-- [ ] 对重复名称和 fixture/断言组合逐项确认替代覆盖位置；只有满足计划删除门槛的测试才进入后续 Phase 6。
+- [x] 对 `submission-workflow.test.js` 的删除完成替代覆盖核对：平台投稿 IPC/调用计数、platform service 和完整投稿生命周期测试覆盖原 owner 行为。
 - [ ] 对检测到的四个 Renderer build/browser 流程人工确认是否可在共享 harness 中复用；本清单不改变任何测试执行方式。

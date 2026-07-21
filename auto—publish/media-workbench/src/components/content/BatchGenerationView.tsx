@@ -3,11 +3,9 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   continueGenerationBatch,
   createGenerationBatch,
-  getGenerationBatch,
-  getGenerationBatchState,
+  getGenerationRuntimeSnapshot,
   listContentResearch,
   listContentTemplateCatalog,
-  listGenerationBatches,
   pauseGenerationBatch,
   previewGenerationBatch,
   retryContentMaterial,
@@ -16,10 +14,11 @@ import {
   startGenerationBatch,
   stopGenerationBatch,
   subscribeGenerationBatchState,
-} from '../../electron-api';
+} from '../../bridge/content';
 import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import GenerationBatchDetail from './GenerationBatchDetail';
+import { createGenerationRuntimeCursor } from '../../generation-runtime-snapshot-logic.js';
 import { BATCH_GENERATION_STEPS, countGenerationTasks, formatGenerationPreflightError, GENERATION_BATCH_RISK_THRESHOLD, getMaterialId, groupTemplatesByPlatform, isExecutableSource, isUsableMaterial, isUsableResearch, preserveSelection, reconcileSourceSelection, sourceCharacterCount, templatePlatformDisplayName, templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';
 
 interface BatchGenerationViewProps {
@@ -35,8 +34,6 @@ interface BatchGenerationViewProps {
 type SourceState = Record<string, { materialIds: string[]; researchQueryIds: string[] }>;
 type BatchViewMode = 'wizard' | 'monitoring';
 const EMPTY_STATE: GenerationBatchState = { status: 'idle', state: 'idle', batchId: null };
-const TERMINAL_BATCH_STATUSES = new Set(['completed', 'stopped']);
-const RESUMABLE_BATCH_STATUSES = new Set(['pending', 'failed', 'interrupted', 'paused']);
 const ACTIVE_BATCH_STATUSES = new Set(['running', 'pausing', 'stopping']);
 const CollapsibleSourceItem = BaseCollapsibleSourceItem as React.ComponentType<CollapsibleSourceItemProps & React.Attributes>;
 
@@ -85,6 +82,7 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
   const clientSelectionInitializedRef = useRef(false);
   const operationBusyRef = useRef(false);
   const batchStateRef = useRef<GenerationBatchState>(EMPTY_STATE);
+  const runtimeCursorRef = useRef(createGenerationRuntimeCursor());
 
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
   const templates = useMemo(() => visibleGenerationTemplates(catalog, showBuiltinTemplates), [catalog, showBuiltinTemplates]);
@@ -113,6 +111,16 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
   function applyBatchState(nextState: GenerationBatchState) {
     batchStateRef.current = nextState;
     setBatchState(nextState);
+  }
+
+  function acceptRuntimeState(nextState: GenerationBatchState) {
+    if (!runtimeCursorRef.current.accept(nextState)) return false;
+    applyBatchState(nextState);
+    if (nextState.batch) {
+      setBatch(mergeRuntimeSnapshot(nextState.batch, nextState));
+      setViewMode('monitoring');
+    }
+    return true;
   }
 
   function mergeRuntimeSnapshot(nextBatch: GenerationBatch, runtime = batchStateRef.current): GenerationBatch {
@@ -199,21 +207,14 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
     let disposed = false;
     const unsubscribe = subscribeGenerationBatchState((nextState) => {
       if (disposed) return;
-      applyBatchState(nextState);
-      if (nextState.batchId) void getGenerationBatch(nextState.batchId).then((nextBatch) => {
-        if (disposed) return;
-        setBatch(mergeRuntimeSnapshot(nextBatch, batchStateRef.current));
-        setViewMode('monitoring');
-      }).catch(() => undefined);
+      acceptRuntimeState(nextState);
     });
-    Promise.all([getGenerationBatchState(), listGenerationBatches()]).then(([state, batches]) => {
+    getGenerationRuntimeSnapshot().then((snapshot) => {
       if (disposed) return;
-      const persistedBatch = batches.find((item) => RESUMABLE_BATCH_STATUSES.has(item.status) || !TERMINAL_BATCH_STATUSES.has(item.status))
-        || batches[batches.length - 1]
-        || null;
-      if (state.batchId === persistedBatch?.id && state.status !== 'idle') applyBatchState(state);
-      if (persistedBatch) {
-        setBatch(mergeRuntimeSnapshot(persistedBatch, state));
+      if (!runtimeCursorRef.current.bootstrap(snapshot)) return;
+      applyBatchState(snapshot.runtime);
+      if (snapshot.batch) {
+        setBatch(mergeRuntimeSnapshot(snapshot.batch, snapshot.runtime));
         setViewMode('monitoring');
       }
     }).catch(() => undefined);

@@ -1,9 +1,33 @@
 const { createContentSubmissionService } = require("../services/content-submission-service");
-const { createSubmissionWorkflow } = require("../services/submission-workflow");
 const { wrap } = require("../services/ipc-response");
+
+function bind(service, name) {
+  if (!service || typeof service[name] !== "function") {
+    const error = new Error("Submission operation is unavailable: " + name);
+    error.code = "CONTENT_SUBMISSION_OPERATION_UNAVAILABLE";
+    return function() { throw error; };
+  }
+  return service[name].bind(service);
+}
+
+function createSubmissionInterface(service) {
+  return Object.freeze({
+    preparation: {
+      previewExport: bind(service, "previewExport"), exportArticle: bind(service, "exportArticle"), previewBatch: bind(service, "previewBatch"), createBatch: bind(service, "createBatch"), listPlatforms: bind(service, "listPlatforms")
+    },
+    batch: {
+      buildActionPlan: bind(service, "buildSubmissionActionPlan"), previewCancel: bind(service, "previewCancelBatch"), cancel: bind(service, "cancelBatch"), get: bind(service, "getBatch"), list: bind(service, "listBatches"), reconcile: bind(service, "reconcileBatch")
+    },
+    cleanup: {
+      previewFailed: bind(service, "previewCleanupFailedItems"), cleanupFailed: bind(service, "cleanupFailedItems"), previewResidue: bind(service, "previewTrashedArticleQueueResidue"), cleanupResidue: bind(service, "cleanupTrashedArticleQueueResidue")
+    },
+    retry: { previewFailedPublication: bind(service, "previewRetryFailedPublication"), failedPublication: bind(service, "retryFailedPublication") }
+  });
+}
+
 function registerContentSubmissionIpc(deps) {
   const service = deps.contentSubmissionService || createContentSubmissionService({ workspaceRoot: deps.rootDir, paths: deps.paths, platforms: deps.platforms });
-  const workflow = deps.submissionWorkflow || createSubmissionWorkflow(service);
+  const workflow = deps.submissionWorkflow || createSubmissionInterface(service);
   function checked(input) { if (!input || input.confirmed !== true || Object.keys(input).some(function(key) { return ["clientId", "generatedArticleId", "targetPlatform", "mediaResourceId", "confirmed"].indexOf(key) === -1; })) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return input; }
   deps.ipcMain.handle("content:preview-export", function(event, input) { return wrap(function() { return workflow.preparation.previewExport(checked(input)); }); });
   deps.ipcMain.handle("content:export-article", function(event, input) { return wrap(function() { return workflow.preparation.exportArticle(checked(input)); }); });

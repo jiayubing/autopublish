@@ -32,3 +32,50 @@ test('attention and workspace seams keep ownership and dependency direction expl
   assert.match(main, /scopes:/);
   assert.match(main, /reasonCode:/);
 });
+
+test('business views use domain bridges instead of Electron transport or main-process files', () => {
+  const businessViews = [
+    'media-workbench/src/components/PlatformWorkbench.tsx',
+    'media-workbench/src/components/content/GeneratedArticlesView.tsx',
+    'media-workbench/src/components/content/BatchGenerationView.tsx',
+  ];
+  const directTransport = /window\.desktopConsole|ipcRenderer|desktop[\\/]main\.js|desktop[\\/]ipc[\\/]|desktop[\\/]services[\\/]/;
+  const directChannel = /(?:auth|content|media|platforms|publication|workspace|orders):[a-z0-9-]+/;
+
+  for (const relative of businessViews) {
+    const source = read(relative);
+    assert.doesNotMatch(source, directTransport, relative);
+    assert.doesNotMatch(source, directChannel, relative);
+  }
+});
+
+test('article management owns one revisioned snapshot seam', () => {
+  const snapshot = read('desktop/services/article-management-snapshot.js');
+  const ipc = read('desktop/ipc/article-management-ipc.js');
+  const view = read('media-workbench/src/components/content/GeneratedArticlesView.tsx');
+
+  assert.match(snapshot, /clientId.*revision/);
+  assert.match(snapshot, /cancellationPlans/);
+  assert.match(snapshot, /workflowByArticle/);
+  assert.match(ipc, /content:get-article-management-snapshot/);
+  assert.match(view, /getArticleManagementSnapshot/);
+  assert.doesNotMatch(view, /listContentArticles\(|listContentSubmissionBatches\(|listContentTrash\(|listPublicationHistory\(|previewCancelContentSubmissionBatch\(/);
+});
+
+test('electron transport facade is gone and domains own their bridge seams', () => {
+  assert.equal(fs.existsSync(path.join(root, 'media-workbench/src/electron-api.ts')), false);
+  assert.equal(fs.existsSync(path.join(root, 'media-workbench/src/bridge/transport-legacy.ts')), false);
+  for (const file of fs.readdirSync(path.join(root, 'media-workbench/src/bridge'))) {
+    if (!file.endsWith('.ts')) continue;
+    assert.doesNotMatch(read(`media-workbench/src/bridge/${file}`), /electron-api/);
+  }
+  assert.match(read('media-workbench/src/bridge/platform.ts'), /submitPlatformSelection/);
+  assert.match(read('media-workbench/src/bridge/workspace.ts'), /getWorkspaceBootstrapState/);
+  assert.match(read('media-workbench/src/bridge/auth.ts'), /onAuthStateChanged/);
+  assert.match(read('media-workbench/src/bridge/settings.ts'), /saveAiProviderConfig/);
+  assert.match(read('media-workbench/src/bridge/publication.ts'), /reconcilePublicationHistory/);
+  assert.doesNotMatch(read('media-workbench/src/bridge/content.ts'), /transport-legacy/);
+  assert.doesNotMatch(read('media-workbench/src/bridge/media.ts'), /transport-legacy/);
+  assert.match(read('media-workbench/src/bridge/content.ts'), /async function callContent/);
+  assert.match(read('media-workbench/src/bridge/media.ts'), /async function callMedia/);
+});

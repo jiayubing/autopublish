@@ -239,35 +239,58 @@ function createPlatformWorkbenchService(opts) {
     return resolvePlatformSubmissionFile(inputRoot, platforms, article.sourcePlatformId, article.filename, validateSidecar !== false);
   }
 
-  function buildSelectedPlan(input) {
-    var selectedArticles = input.selectedArticles || [];
-    var targetPlatformIds = input.targetPlatformIds || [];
-    if (!Array.isArray(selectedArticles) || !Array.isArray(targetPlatformIds) || targetPlatformIds.length === 0) throw submissionInputError();
+  function validateTargetPlatformIds(targetPlatformIds) {
+    if (!Array.isArray(targetPlatformIds) || targetPlatformIds.length === 0) throw submissionInputError();
     for (var targetIndex = 0; targetIndex < targetPlatformIds.length; targetIndex++) {
       if (typeof targetPlatformIds[targetIndex] !== "string" || !targetPlatformIds[targetIndex] ||
           (!platforms.some(function(platform) { return platform.id === targetPlatformIds[targetIndex] && platform.id !== "media"; }) && !adapters[targetPlatformIds[targetIndex]])) throw submissionInputError();
     }
+    return targetPlatformIds.slice();
+  }
+
+  function buildSelectedArticleTasks(selectedArticle, targetPlatformIds) {
+    var selected = safeTask({ sourcePlatformId: selectedArticle.sourcePlatformId, filename: selectedArticle.filename, targetPlatformId: targetPlatformIds[0] });
+    var filePath = resolveSelectedFilePath(selectedArticle);
+    var sourceMetadata = readSubmissionMetadata(filePath, true);
+    var state = sourceArticleState(sourceMetadata);
+    if (state.sourceArticleState === "trashed") throw submissionInputError(state.reasonCode, "Source article is in the trash");
+    var tasks = [];
+    for (var j = 0; j < targetPlatformIds.length; j++) {
+      tasks.push({
+        sourcePlatformId: selected.sourcePlatformId,
+        filename: selected.filename,
+        filePath: filePath,
+        sourceArticle: Object.assign({}, selectedArticle, {
+          file: filePath,
+          filePath: filePath,
+          sourceFile: filePath,
+          fileBaseName: path.basename(selected.filename, path.extname(selected.filename))
+        }),
+        targetPlatformId: targetPlatformIds[j]
+      });
+    }
+    return tasks;
+  }
+
+  function buildSelectedPlan(input) {
+    var selectedArticles = input.selectedArticles || [];
+    if (!Array.isArray(selectedArticles)) throw submissionInputError();
+    var targetPlatformIds = validateTargetPlatformIds(input.targetPlatformIds || []);
     var tasks = [];
     for (var i = 0; i < selectedArticles.length; i++) {
-      var selected = safeTask({ sourcePlatformId: selectedArticles[i].sourcePlatformId, filename: selectedArticles[i].filename, targetPlatformId: targetPlatformIds[0] });
-      var filePath = resolveSelectedFilePath(selectedArticles[i]);
-      var sourceMetadata = readSubmissionMetadata(filePath, true);
-      var state = sourceArticleState(sourceMetadata);
-      if (state.sourceArticleState === "trashed") throw submissionInputError(state.reasonCode, "Source article is in the trash");
-      for (var j = 0; j < targetPlatformIds.length; j++) {
-        tasks.push({
-          sourcePlatformId: selected.sourcePlatformId,
-          filename: selected.filename,
-          filePath: filePath,
-          sourceArticle: Object.assign({}, selectedArticles[i], {
-            file: filePath,
-            filePath: filePath,
-            sourceFile: filePath,
-            fileBaseName: path.basename(selected.filename, path.extname(selected.filename))
-          }),
-          targetPlatformId: targetPlatformIds[j]
-        });
-      }
+      tasks = tasks.concat(buildSelectedArticleTasks(selectedArticles[i], targetPlatformIds));
+    }
+    return { taskCount: tasks.length, tasks: tasks };
+  }
+
+  function buildSelectedSubmissionsPlan(submissions) {
+    if (!Array.isArray(submissions) || !submissions.length) throw submissionInputError();
+    var tasks = [];
+    for (var i = 0; i < submissions.length; i++) {
+      var submission = submissions[i];
+      if (!submission || typeof submission !== "object" || Array.isArray(submission)) throw submissionInputError();
+      var targetPlatformIds = validateTargetPlatformIds(submission.targetPlatformIds || []);
+      tasks = tasks.concat(buildSelectedArticleTasks(submission, targetPlatformIds));
     }
     return { taskCount: tasks.length, tasks: tasks };
   }
@@ -731,6 +754,7 @@ function createPlatformWorkbenchService(opts) {
   return {
     scanQueue: scanQueue,
     buildSelectedPlan: buildSelectedPlan,
+    buildSelectedSubmissionsPlan: buildSelectedSubmissionsPlan,
     toWorkerPlan: toWorkerPlan,
     captureTaskIdentities: captureTaskIdentities,
     taskKey: taskKey,

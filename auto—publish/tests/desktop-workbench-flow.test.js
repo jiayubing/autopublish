@@ -35,7 +35,7 @@ describe("desktop workbench flow", function() {
     const platform = read("media-workbench/src/components/PlatformWorkbench.tsx");
     assert.match(platform, /selectedArticles/);
     assert.match(platform, /selectedPlatformIds/);
-    assert.match(platform, /buildPlatformPlan|submitPlatformPlan/);
+    assert.match(platform, /submitPlatformSelection/);
     assert.match(platform, /isConfirming/);
   });
 });

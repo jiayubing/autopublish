@@ -10,7 +10,8 @@ describe("renderer content submission batch actions", () => {
   it("renders only service-issued cancel action plans and executes their plan ids", () => {
     const view = source();
     assert.match(view, /const \[cancellationPlans, setCancellationPlans\]/);
-    assert.match(view, /previewCancelContentSubmissionBatch\(batch\.id\)/);
+    assert.doesNotMatch(view, /previewCancelContentSubmissionBatch\(batch\.id\)/);
+    assert.match(view, /snapshot\.cancellationPlans|cancellationPlans/);
     assert.match(view, /const cancelableBatches = useMemo\(\(\) => cancellationPlans\.map/);
     assert.match(view, /const cleanableBatches = useMemo\(\(\) => submissionBatches\.map/);
     assert.doesNotMatch(view, /submissionBatches\[0\]/);

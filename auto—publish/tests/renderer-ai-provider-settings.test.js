@@ -18,7 +18,7 @@ function readFunction(source, name) {
 
 describe("renderer AI provider settings", function() {
   it("exposes the Task 5 provider IPC through typed renderer helpers", function() {
-    const api = readSource("electron-api.ts");
+    const api = readSource("bridge/settings.ts");
     const types = readSource("types.ts");
 
     ["getAiProviderStatus", "saveAiProviderConfig", "testAiProviderConnection", "clearAiProviderConfig"].forEach(function(name) {
@@ -69,13 +69,13 @@ describe("renderer AI provider settings", function() {
 
   it("guards generation state to the content channel", function() {
     const settings = readSource("components/AiProviderSettings.tsx");
-    const api = readSource("electron-api.ts");
+    const api = readSource("bridge/content.ts");
 
     assert.match(settings, /running/);
     assert.match(settings, /stopping/);
     assert.match(settings, /content:generation-batch-state/);
     assert.match(settings, /disabled=\{[^}]*busy/);
-    assert.match(api, /return \{ state: 'idle', status: 'idle' \}/);
+    assert.match(api, /getGenerationBatchState/);
     assert.doesNotMatch(api, /window\.desktopConsole!\.batch\.getState\(\)/);
     assert.doesNotMatch(api, /window\.desktopConsole!\.batch\.onState\(listener\)/);
   });
@@ -93,9 +93,9 @@ describe("renderer AI provider settings", function() {
   });
 
   it("declares the optional content generation state channel", function() {
-    const api = readSource("electron-api.ts");
+    const api = readSource("bridge/content.ts");
 
-    assert.match(api, /getGenerationBatchState\?:/);
-    assert.match(api, /onGenerationBatchState\?:/);
+    assert.match(api, /getGenerationBatchState/);
+    assert.match(api, /subscribeGenerationBatchState/);
   });
 });

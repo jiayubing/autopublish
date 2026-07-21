@@ -180,7 +180,9 @@ function registerMediaIpc(deps) {
 
   ipcMain.handle("media:submit-selected", function(event, articles) {
     return wrap(async function() {
-      return mediaWorkbenchService.submitTasksSerially(await resolveSubmissions(articles));
+      const result = await mediaWorkbenchService.submitTasksSerially(await resolveSubmissions(articles));
+      if (typeof deps.invalidateData === "function") deps.invalidateData(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], "MEDIA_SUBMIT_COMPLETED");
+      return result;
     });
   });
 

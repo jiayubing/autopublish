@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { listArticleAttentionSnapshot, onWorkspaceDataInvalidated } from './electron-api';
+import { listArticleAttentionSnapshot } from './bridge/publication';
+import { onWorkspaceDataInvalidated } from './bridge/workspace';
 import type { ArticleAttentionItem, ArticleAttentionList, WorkspaceDataInvalidatedEvent } from './types';
 
 export interface ArticleAttentionSnapshot {

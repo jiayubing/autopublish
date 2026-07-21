@@ -100,8 +100,7 @@ const api = {
   },
   platforms: {
     getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
-    buildSelectedPlan: function(input) { return ipcRenderer.invoke("platforms:build-selected-plan", input); },
-    submitSelectedPlan: function(plan) { return ipcRenderer.invoke("platforms:submit-selected-plan", plan); },
+    submitSelected: function(input) { return ipcRenderer.invoke("platforms:submit-selected", input); },
     pauseSubmit: function(runId) { return ipcRenderer.invoke("platforms:pause-submit", runId ? { runId: runId } : undefined); },
     stopSubmit: function(runId) { return ipcRenderer.invoke("platforms:stop-submit", runId ? { runId: runId } : undefined); },
     getState: function() { return ipcRenderer.invoke("platforms:get-state"); },
@@ -122,6 +121,7 @@ const api = {
     generateArticle: function(input) { return ipcRenderer.invoke("content:generate-article", input); },
     saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
+    getArticleManagementSnapshot: function(input) { return ipcRenderer.invoke("content:get-article-management-snapshot", input); },
     getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); },
     copyArticleVersion: function(input) { return ipcRenderer.invoke("content:copy-article-version", input); },
     reviewArticles: function(articles) { return ipcRenderer.invoke("content:review-articles", { articles: articles }); },
@@ -188,6 +188,7 @@ const api = {
     previewCancelPendingGenerationBatch: function(input) { return ipcRenderer.invoke("content:preview-cancel-pending-generation-batch", input || {}); },
     cancelPendingGenerationBatch: function(input) { return ipcRenderer.invoke("content:cancel-pending-generation-batch", input || {}); },
     getGenerationBatchState: function() { return ipcRenderer.invoke("content:get-generation-batch-state"); },
+    getGenerationRuntimeSnapshot: function() { return ipcRenderer.invoke("content:get-generation-runtime-snapshot"); },
     onGenerationBatchState: function(listener) {
       const handler = function(event, payload) { listener(payload); };
       ipcRenderer.on("content:generation-batch-state", handler);

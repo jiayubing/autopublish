@@ -104,6 +104,10 @@ export interface GenerationBatchState {
   updatedAt?: string;
   taskId?: string | null;
   error?: { code?: string; message?: string } | null;
+  runtimeId?: string | null;
+  sequence?: number;
+  batch?: GenerationBatch | null;
+  capabilities?: { canResume?: boolean; canContinue?: boolean; canRetry?: boolean; canCancel?: boolean };
 }
 
 export interface GenerationBatchCounts {
@@ -247,6 +251,19 @@ export interface RealOrder {
   attemptId?: string;
   publicationStatus?: 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'cancelled' | string;
   errorCode?: string;
+}
+
+export type RuntimeCapabilityState = "ready" | "not_checked" | "optional_unconfigured" | "unavailable";
+export interface RuntimeCapability { state: RuntimeCapabilityState; source: string | null; errorCode: string | null; lastCheckedAt: string | null; available?: boolean; }
+export interface RuntimeBrowserCapability extends RuntimeCapability { channel: string | null; configured: boolean; probed: boolean; }
+export interface RuntimeDiagnostics {
+  ok: boolean;
+  buildInfo: { version: string; commit: string; dirty: boolean };
+  browserChannel: RuntimeBrowserCapability;
+  capabilities: { playwrightNode: RuntimeCapability; playwrightCli: RuntimeCapability; browserChannel: RuntimeBrowserCapability; docx: RuntimeCapability; hepan: RuntimeCapability };
+  tools?: { playwrightNode: RuntimeCapability; playwrightCli: RuntimeCapability; hepanPython: RuntimeCapability };
+  errors: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
 }
 
 export type GenerationBatchLiveStatus = 'idle' | 'pending' | 'starting' | 'running' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'interrupted' | 'paused_configuration' | 'failed' | 'completed';
@@ -451,7 +468,6 @@ export interface ContentSubmissionCleanupResult { batchId: string; cleanedCount:
 
 export interface PlatformArticle {
   filename: string;
-  filePath: string;
   title: string;
   platformId: string;
   sourcePlatformId: string;
@@ -476,7 +492,7 @@ export interface PlatformQueueSnapshot {
   error: string | null;
 }
 
-export type WorkspaceDataInvalidationScope = 'platformQueue' | 'navigationSummary' | 'articleAttention' | 'orders' | 'contentSources' | string;
+export type WorkspaceDataInvalidationScope = 'platformQueue' | 'navigationSummary' | 'articleAttention' | 'articleManagement' | 'orders' | 'contentSources' | string;
 export interface WorkspaceDataInvalidatedEvent {
   revision: number;
   scopes: WorkspaceDataInvalidationScope[];
@@ -508,6 +524,38 @@ export interface ArticleAttentionList {
   revision: number;
   items: ArticleAttentionItem[];
   counts: { total: number; actionable: number };
+}
+
+export interface ArticleTrashRecord {
+  version: 1;
+  deletedAt: string;
+  clientId: string;
+  articleId: string;
+  status: string;
+  references: Array<{ type: string; id: string }>;
+  titleSnapshot?: string | null;
+  publicationSummary?: PublicationHistorySummary | Record<string, unknown> | null;
+  publicationRecords?: PublicationHistoryRecord[];
+}
+
+export interface ArticleManagementSnapshot {
+  clientId: string;
+  revision: number;
+  articles: GeneratedContentArticle[];
+  trash: ArticleTrashRecord[];
+  submissionBatches: ContentSubmissionBatchRecord[];
+  cancellationPlans: ContentSubmissionCancellationPreview[];
+  publicationRecords: PublicationHistoryRecord[];
+  attention: ArticleAttentionList;
+  submissionPlatforms: ContentSubmissionPlatform[];
+  workflowByArticle: Record<string, {
+    stage: 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
+    primaryAction: string;
+    allowedBulkActions: string[];
+    locks: { canEdit: boolean; canQueue: boolean; canCancel: boolean; canTrash: boolean };
+    publicationSummary: PublicationHistorySummary;
+  }>;
+  publicationSummaries: Record<string, PublicationHistorySummary>;
 }
 
 export interface ArticleAttentionPreview {

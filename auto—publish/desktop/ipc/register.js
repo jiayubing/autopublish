@@ -32,7 +32,8 @@ function registerIpc(deps) {
   require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(guarded);
   require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(guarded);
   require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
-  require("./article-attention-ipc").registerArticleAttentionIpc(guarded);
+  const attention = require("./article-attention-ipc").registerArticleAttentionIpc(guarded);
+  require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, { articleAttentionQuery: attention.query }));
   require("./publication-ipc").registerPublicationIpc(guarded);
   require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);
   require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(guarded);

@@ -26,10 +26,10 @@ describe("platform IPC submission boundary", function() {
           pausePlatformSubmit: function() {}, stopPlatformSubmit: function() {}, getState: function() { return {}; }
         }
       });
-      const response = await handlers.get("platforms:submit-selected-plan")(null, [
+      const response = await handlers.get("platforms:submit-selected")(null, { submissions: [
         { sourcePlatformId: "lieju", filename: "one.txt", targetPlatformIds: ["toutiao"] },
         { sourcePlatformId: "lieju", filename: "two.txt", targetPlatformIds: ["toutiao"] }
-      ]);
+      ] });
       assert.equal(response.ok, true);
       assert.equal(plans.length, 1);
       assert.deepStrictEqual(plans[0].tasks.map(function(task) { return task.filename; }), ["one.txt", "two.txt"]);
@@ -67,12 +67,12 @@ describe("platform IPC submission boundary", function() {
           pausePlatformSubmit: function() {}, stopPlatformSubmit: function() {}, getState: function() { return {}; }
         }
       });
-      const response = await handlers.get("platforms:submit-selected-plan")(null, { submissions: [{ sourcePlatformId: "lieju", filename: "published.txt", targetPlatformIds: ["toutiao"] }], autoTrash: true });
+      const response = await handlers.get("platforms:submit-selected")(null, { submissions: [{ sourcePlatformId: "lieju", filename: "published.txt", targetPlatformIds: ["toutiao"] }], autoTrash: true });
       assert.equal(response.ok, true);
       assert.equal(response.data.trashDisposition, "auto_trash_requested");
       assert.equal(previewCalls, 1);
       assert.equal(trashCalls, 1);
-      assert.deepEqual(invalidations, [{ scopes: ["platformQueue", "navigationSummary", "articleAttention"], reasonCode: "PLATFORM_AUTO_TRASH_APPLIED" }]);
+      assert.deepEqual(invalidations, [{ scopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode: "PLATFORM_AUTO_TRASH_APPLIED" }]);
       assert.equal(workerPlan.tasks[0].filePath, undefined);
       assert.equal(workerPlan.tasks[0].clientId, undefined);
       assert.equal(workerPlan.tasks[0].articleId, undefined);
@@ -106,7 +106,7 @@ describe("platform IPC submission boundary", function() {
           pausePlatformSubmit: function() {}, stopPlatformSubmit: function() {}, getState: function() { return {}; }
         }
       });
-      const response = await handlers.get("platforms:submit-selected-plan")(null, { submissions: [{ sourcePlatformId: "lieju", filename: "partial.txt", targetPlatformIds: ["toutiao", "hepan"] }], autoTrash: true });
+      const response = await handlers.get("platforms:submit-selected")(null, { submissions: [{ sourcePlatformId: "lieju", filename: "partial.txt", targetPlatformIds: ["toutiao", "hepan"] }], autoTrash: true });
       assert.equal(response.ok, true);
       assert.equal(response.data.trashDisposition, "auto_trash_blocked");
       assert.equal(response.data.trashSummary.blockedCount, 1);
@@ -138,7 +138,7 @@ describe("platform IPC submission boundary", function() {
           pausePlatformSubmit: function() {}, stopPlatformSubmit: function() {}, getState: function() { return {}; }
         }
       });
-      const response = await handlers.get("platforms:submit-selected-plan")(null, { submissions: [{ sourcePlatformId: "lieju", filename: "error.txt", targetPlatformIds: ["toutiao"] }], autoTrash: true });
+      const response = await handlers.get("platforms:submit-selected")(null, { submissions: [{ sourcePlatformId: "lieju", filename: "error.txt", targetPlatformIds: ["toutiao"] }], autoTrash: true });
       assert.equal(response.ok, true);
       assert.equal(response.data.ok, 1);
       assert.equal(response.data.trashDisposition, "auto_trash_blocked");

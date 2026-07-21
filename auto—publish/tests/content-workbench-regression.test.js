@@ -10,7 +10,7 @@ function read(file) {
 describe("content workbench regression", function() {
   it("exposes the content IPC API to the React renderer", function() {
     const preload = read("desktop/preload.js");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     [
       'ipcRenderer.invoke("content:list-clients")',
       'ipcRenderer.invoke("content:generate-article", input)',
@@ -36,8 +36,8 @@ describe("content workbench regression", function() {
   });
 
   it("keeps existing renderer IPC errors readable after structured responses", function() {
-    const api = read("media-workbench/src/electron-api.ts");
-    assert.equal(api.includes("function getIpcError"), true);
+    const api = read("media-workbench/src/bridge/content.ts");
+    assert.equal(api.includes("ipcError"), true);
     assert.equal(api.includes("new Error(result.error ||"), false);
   });
 
@@ -50,7 +50,8 @@ describe("content workbench regression", function() {
   });
 
   it("exposes the collection API and multi-research generation contract", function() {
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
+    const types = read("media-workbench/src/types.ts");
     [
       "listContentQuestions",
       "createContentQuestion",
@@ -68,17 +69,17 @@ describe("content workbench regression", function() {
       "subscribeDoubaoQueue",
       "saveManualResearch",
       "researchQueryIds: string[]"
-    ].forEach(function(value) { assert.equal(api.includes(value), true, "missing " + value); });
-    assert.match(api, /subscribeDoubaoQueue[\s\S]*\(\) => void/);
+    ].forEach(function(value) { assert.equal((api + types).includes(value), true, "missing " + value); });
+    assert.match(read("media-workbench/src/bridge/content.ts"), /subscribeDoubaoQueue[\s\S]*\(\) => void/);
   });
 
   it("exposes the Task 1 batch preview and prepared-start renderer API", function() {
     const preload = read("desktop/preload.js");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     assert.match(preload, /previewDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:preview-doubao-batch", input\); \}/);
     assert.match(preload, /startPreparedDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:start-prepared-doubao-batch", input\); \}/);
-    assert.match(api, /export async function previewDoubaoBatch[\s\S]*window\.desktopConsole!\.content\.previewDoubaoBatch\(input\)/);
-    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*window\.desktopConsole!\.content\.startPreparedDoubaoBatch\(\{ tasks \}\)/);
+    assert.match(api, /export async function previewDoubaoBatch[\s\S]*callContent\("previewDoubaoBatch", \[input\]/);
+    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*callContent\("startPreparedDoubaoBatch", \[\{ tasks \}\]/);
     assert.doesNotMatch(api, /export function startPreparedDoubaoBatch[\s\S]*return startDoubaoBatch\(tasks\)/);
   });
 
@@ -97,11 +98,11 @@ describe("content workbench regression", function() {
   it("keeps Task 10 single and batch generation workflows on renderer APIs", function() {
     const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const api = read("media-workbench/src/electron-api.ts");
+    const api = read("media-workbench/src/bridge/content.ts");
     ["单篇生成", "批量生成", "CollapsibleSourceItem", "materialIds", "researchQueryIds"].forEach(function(value) {
       assert.equal(article.includes(value), true, "missing " + value);
     });
-    ["previewGenerationBatch", "startGenerationBatch", "getGenerationBatchState", "pauseGenerationBatch", "resumeGenerationBatch", "stopGenerationBatch", "retryFailedGenerationBatch"].forEach(function(value) {
+    ["previewGenerationBatch", "startGenerationBatch", "getGenerationRuntimeSnapshot", "pauseGenerationBatch", "resumeGenerationBatch", "stopGenerationBatch", "retryFailedGenerationBatch"].forEach(function(value) {
       assert.equal(batch.includes(value) && api.includes(value), true, "missing " + value);
     });
     assert.doesNotMatch(batch, /safeStorage|readFileSync|Playwright|playwright|fetch\(/i);

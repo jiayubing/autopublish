@@ -56,6 +56,7 @@ function installDesktopFixture(page, scenario) {
         return ok({ ...residue(0, 0), cleanedCount: 1, failedCount: 0, remainingCount: 0, failedItems: [] });
       },
       listContentArticles: () => ok([]),
+      getArticleManagementSnapshot: ({ clientId }) => ok({ clientId, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowByArticle: {}, publicationSummaries: {} }),
       listSubmissionPlatforms: () => ok([]),
       listSubmissionBatches: () => ok([]),
       listArticleTrash: () => ok([]),
@@ -135,7 +136,7 @@ describe("renderer residue cleanup flow", { concurrency: false }, () => {
   it("declares the transaction lifecycle contract at the renderer boundary", () => {
     const platform = fs.readFileSync(path.join(rootDir, "media-workbench/src/components/PlatformWorkbench.tsx"), "utf8");
     const history = fs.readFileSync(path.join(rootDir, "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    const api = fs.readFileSync(path.join(rootDir, "media-workbench/src/electron-api.ts"), "utf8");
+    const api = fs.readFileSync(path.join(rootDir, "media-workbench/src/bridge/content.ts"), "utf8");
     const types = fs.readFileSync(path.join(rootDir, "media-workbench/src/types.ts"), "utf8");
     assert.match(platform, /repairingResidue/);
     assert.match(platform, /finally/);
@@ -145,8 +146,8 @@ describe("renderer residue cleanup flow", { concurrency: false }, () => {
     assert.match(history, /openTransaction/);
     assert.match(history, /removalSubmitDisabled/);
     assert.match(history, /clearTimeout/);
-    assert.match(api, /getArticleRemovalTransaction/);
-    assert.match(api, /onArticleRemovalTransaction/);
+    assert.match(api, /getContentArticleRemovalTransaction/);
+    assert.match(api, /onContentArticleRemovalTransaction/);
     assert.match(types, /ArticleRemovalTransaction/);
   });
 });

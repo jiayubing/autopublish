@@ -332,7 +332,22 @@ describe("content generation batch service", function() {
     unsubscribe();
     assert.ok(events.every(function(event) { return event.batchId && !event.prompt && !event.materials && !event.apiKey; }));
     assert.ok(events.every(function(event) { return event.status && event.updatedAt && event.counts !== undefined; }));
+    assert.ok(events.every(function(event) { return typeof event.runtimeId === "string" && Number.isInteger(event.sequence) && event.batch && event.batch.id === event.batchId; }));
+    assert.ok(events.every(function(event, index) { return index === 0 || event.sequence > events[index - 1].sequence; }));
     assert.ok(calls.run.length >= 2);
+  });
+
+  it("returns one ordered runtime snapshot with the selected persisted batch", async function() {
+    const { service } = makeHarness();
+    const batch = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    const snapshot = service.getRuntimeSnapshot();
+    assert.equal(typeof snapshot.runtimeId, "string");
+    assert.equal(snapshot.sequence, 1);
+    assert.equal(snapshot.batch.id, batch.id);
+    assert.equal(snapshot.runtime.runtimeId, snapshot.runtimeId);
+    assert.equal(snapshot.runtime.sequence, snapshot.sequence);
+    assert.equal(snapshot.capabilities.canCancel, true);
+    await service.dispose();
   });
 
   it("previews and confirms permanent cancellation of pending tasks", async function() {

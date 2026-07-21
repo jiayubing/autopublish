@@ -15,7 +15,7 @@ function registerPlatformIpc(deps) {
   loadedPlatforms.forEach(function(platform) {
     adapters[platform.id] = platform;
   });
-  var service = createPlatformWorkbenchService({
+  var service = deps.platformWorkbenchService || createPlatformWorkbenchService({
     rootDir: rootDir,
     paths: deps.paths,
     platforms: loadedPlatforms.map(function(platform) {
@@ -25,21 +25,10 @@ function registerPlatformIpc(deps) {
   });
   deps.archiveIssueReader = typeof service.listArchiveFailures === "function" ? service.listArchiveFailures : function() { return []; };
 
-  function buildPlanFromSubmission(value) {
-    var submission = validatePlatformSubmission(value);
-    return service.buildSelectedPlan({
-      selectedArticles: [{ sourcePlatformId: submission.sourcePlatformId, filename: submission.filename }],
-      targetPlatformIds: submission.targetPlatformIds
-    });
-  }
-
   function buildPlanFromSubmissions(values) {
     if (!Array.isArray(values) || !values.length) throw inputError();
-    var tasks = [];
-    values.forEach(function(value) {
-      tasks = tasks.concat(buildPlanFromSubmission(value).tasks);
-    });
-    return { taskCount: tasks.length, tasks: tasks };
+    var submissions = values.map(validatePlatformSubmission);
+    return service.buildSelectedSubmissionsPlan(submissions);
   }
 
   function submissionValues(input) {
@@ -166,7 +155,7 @@ function registerPlatformIpc(deps) {
     }
 
     if (refreshNeeded && typeof deps.invalidateData === "function") {
-      try { deps.invalidateData(["platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
+      try { deps.invalidateData(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
     }
     var accepted = summary.movedCount + summary.recoveryCount === summary.requestedCount && summary.blockedCount === 0 && summary.failedCount === 0;
     return Object.assign(data, {
@@ -204,13 +193,13 @@ function registerPlatformIpc(deps) {
           }
           flat.push({
             filename: article.filename,
-            filePath: article.filePath || article.file,
             title: title,
             platformId: group.platformId,
             sourcePlatformId: group.platformId,
             sourceArticleState: article.sourceArticleState || "active",
             reasonCode: article.reasonCode || null,
-            sourceArticle: article
+            archiveError: article.archiveError || null,
+            remoteStatus: article.remoteStatus || null
           });
         }
       }
@@ -223,13 +212,7 @@ function registerPlatformIpc(deps) {
     });
   });
 
-  ipcMain.handle("platforms:build-selected-plan", function(event, input) {
-    return wrap(function() {
-      return buildPlanFromSubmission(input);
-    });
-  });
-
-  ipcMain.handle("platforms:submit-selected-plan", function(event, input) {
+  ipcMain.handle("platforms:submit-selected", function(event, input) {
     return wrap(async function() {
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       var plan = buildPlanFromSubmissions(submissionValues(input));

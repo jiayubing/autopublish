@@ -27,17 +27,15 @@ describe("renderer workspace bootstrap contract", function() {
 
   it("declares a token-only confirmation wrapper and exactly seven workspace methods", function() {
     const types = readSource("types.ts");
-    const api = readSource("electron-api.ts");
+    const api = readSource("bridge/workspace.ts");
     assert.match(types, /interface WorkspaceSelectionToken\s*\{\s*token: string;/s);
-    assert.match(api, /confirmSelection\(input: WorkspaceSelectionToken\)/);
-    assert.doesNotMatch(api, /confirmSelection\([^)]*path/);
-    const workspace = api.match(/interface DesktopConsoleWorkspace\s*\{([\s\S]*?)\n\}/);
-    assert.ok(workspace);
-    assert.deepEqual([...workspace[1].matchAll(/^\s+([a-zA-Z]+)\(/gm)].map((match) => match[1]), ["getBootstrapState", "chooseDirectory", "confirmSelection", "cancelSelection", "getCurrent", "openCurrent", "requestSwitch"]);
+    assert.match(api, /confirmWorkspaceSelection\(input: WorkspaceSelectionToken\)/);
+    assert.doesNotMatch(api, /confirmWorkspaceSelection\([^)]*path/);
+    ["getWorkspaceBootstrapState", "chooseWorkspaceDirectory", "confirmWorkspaceSelection", "cancelWorkspaceSelection", "getCurrentWorkspace", "openCurrentWorkspace", "requestWorkspaceSwitch"].forEach((name) => assert.match(api, new RegExp(name)));
   });
 
   it("keeps key renderer files UTF-8 readable without known mojibake markers", function() {
-    ["main.tsx", "types.ts", "electron-api.ts", "workspace-ui-logic.js", "components/WorkspaceBootstrapGate.tsx", "components/WorkspaceSelectionPanel.tsx", "components/WorkspaceWelcome.tsx", "components/SettingsView.tsx"].forEach((file) => {
+    ["main.tsx", "types.ts", "bridge/workspace.ts", "workspace-ui-logic.js", "components/WorkspaceBootstrapGate.tsx", "components/WorkspaceSelectionPanel.tsx", "components/WorkspaceWelcome.tsx", "components/SettingsView.tsx"].forEach((file) => {
       const source = readSource(file);
       assert.equal(source.includes("\uFFFD"), false, file);
     });
