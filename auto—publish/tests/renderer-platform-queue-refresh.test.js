@@ -9,10 +9,11 @@ const read = (file) => fs.readFileSync(path.join(root, 'media-workbench/src', fi
 describe('renderer platform queue refresh seam', () => {
   it('uses the shared snapshot and refreshes after terminal submission states', () => {
     const platform = read('components/PlatformWorkbench.tsx');
+    const controller = read('hooks/use-platform-workbench-controller.ts');
     const app = read('App.tsx');
     const sidebar = read('components/Sidebar.tsx');
     assert.match(platform, /usePlatformQueue/);
-    assert.match(platform, /refreshQueue\("submit-terminal"\)/);
+    assert.match(controller, /refreshQueue\('submit-terminal'\)/);
     assert.doesNotMatch(platform, /getPlatformQueue\(/);
     assert.doesNotMatch(platform, /setQueue\(/);
     assert.match(app, /WorkspaceDataProvider/);
