@@ -6,6 +6,43 @@ const { it } = require("node:test");
 const { createWorkspaceDataInvalidation, scopesForReason } = require("../desktop/workspace-data-invalidation");
 const { createWorkspaceRuntime } = require("../desktop/workspace-runtime");
 
+function replaceModules(replacements) {
+  const originals = replacements.map(function(replacement) {
+    const resolved = require.resolve(replacement.request);
+    const original = require.cache[resolved];
+    require.cache[resolved] = {
+      id: resolved,
+      filename: resolved,
+      loaded: true,
+      exports: replacement.exports
+    };
+    return { resolved: resolved, original: original };
+  });
+  return function restore() {
+    originals.forEach(function(item) {
+      if (item.original) require.cache[item.resolved] = item.original;
+      else delete require.cache[item.resolved];
+    });
+  };
+}
+
+function lifecycleService(name, events, extra) {
+  return Object.assign({
+    dispose: function() { events.push(name); }
+  }, extra || {});
+}
+
+function workspaceRuntimeOptions(root) {
+  return {
+    ipcMain: {},
+    sendToRenderer: function() {},
+    safeStorage: { isEncryptionAvailable: function() { return false; } },
+    appRoot: path.resolve(__dirname, ".."),
+    userDataPath: path.join(root, "user-data"),
+    sessionDataPath: path.join(root, "session-data")
+  };
+}
+
 it("workspace invalidation owns reason-to-scope policy and emits safe monotonic payloads", function() {
   const sent = [];
   const invalidation = createWorkspaceDataInvalidation({ sendToRenderer: function(channel, payload) { sent.push([channel, payload]); } });
@@ -27,7 +64,6 @@ it("maps every production workspace mutation reason explicitly without a broad f
     "SUBMISSION_BATCH_CREATED",
     "SUBMISSION_QUEUE_CANCELLED",
     "SUBMISSION_QUEUE_CLEANED",
-    "CONTENT_EXPORT_QUEUED",
     "PUBLICATION_RECONCILED",
     "PLATFORM_AUTO_TRASH_APPLIED",
     "PLATFORM_SUBMIT_COMPLETED",
@@ -41,6 +77,7 @@ it("maps every production workspace mutation reason explicitly without a broad f
   ].forEach(function(reasonCode) {
     assert.deepEqual(scopesForReason(reasonCode), submissionScopes, reasonCode);
   });
+  assert.deepEqual(scopesForReason("CONTENT_EXPORT_QUEUED"), [...submissionScopes, "mediaWorkbench"]);
   assert.deepEqual(scopesForReason("MEDIA_SUBMIT_COMPLETED"), [...submissionScopes, "orders"]);
   [
     "CONTENT_SOURCE_CHANGED",
@@ -108,6 +145,54 @@ it("workspace runtime gives the Hepan task service its configured platform setti
     else process.env.HEPAN_PYTHON = originalPython;
     if (originalCookie === undefined) delete process.env.HEPAN_COOKIE_PATH;
     else process.env.HEPAN_COOKIE_PATH = originalCookie;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("disposes services already created when a middle workspace factory fails", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-factory-failure-"));
+  const events = [];
+  const restore = replaceModules([
+    { request: "../desktop/services/desktop-task-service", exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
+    { request: "../desktop/services/doubao-collection-service", exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); }; } }); } } },
+    { request: "../desktop/services/ai-provider-service", exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
+    { request: "../desktop/services/content-submission-service", exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
+    { request: "../desktop/services/ai-content-service", exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
+    { request: "../desktop/services/content-generation-batch-service", exports: { createContentGenerationBatchService: function() { throw new Error("generation factory failed"); } } }
+  ]);
+  try {
+    const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
+    await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /generation factory failed/);
+    assert.deepEqual(events, ["content", "submission", "provider", "doubao", "task"]);
+    assert.equal(runtime.getState().phase, "stopped");
+    assert.throws(function() { runtime.registerIpc(); }, /not started/);
+  } finally {
+    restore();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("unsubscribes and disposes all started workspace resources when subscription setup fails", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-subscription-failure-"));
+  const events = [];
+  const restore = replaceModules([
+    { request: "../desktop/services/desktop-task-service", exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
+    { request: "../desktop/services/doubao-collection-service", exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); }; } }); } } },
+    { request: "../desktop/services/ai-provider-service", exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
+    { request: "../desktop/services/content-submission-service", exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
+    { request: "../desktop/services/ai-content-service", exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
+    { request: "../desktop/services/content-generation-batch-service", exports: { createContentGenerationBatchService: function() { return lifecycleService("generation", events, { getState: function() { return {}; } }); } } },
+    { request: "../desktop/services/platform-workbench-service", exports: { createPlatformWorkbenchService: function() { return lifecycleService("workbench", events); } } },
+    { request: "../src/core/logger", exports: { subscribe: function() { throw new Error("log subscription failed"); } } }
+  ]);
+  try {
+    const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
+    await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /log subscription failed/);
+    assert.deepEqual(events, ["collection-unsubscribe", "workbench", "generation", "content", "submission", "provider", "doubao", "task"]);
+    assert.equal(runtime.getState().phase, "stopped");
+    assert.throws(function() { runtime.registerIpc(); }, /not started/);
+  } finally {
+    restore();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

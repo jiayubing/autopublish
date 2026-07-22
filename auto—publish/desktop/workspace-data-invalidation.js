@@ -12,7 +12,7 @@ const SCOPES_BY_REASON = Object.freeze({
   SUBMISSION_BATCH_CREATED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
   SUBMISSION_QUEUE_CANCELLED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
   SUBMISSION_QUEUE_CLEANED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  CONTENT_EXPORT_QUEUED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
+  CONTENT_EXPORT_QUEUED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary", "mediaWorkbench"],
   PUBLICATION_RECONCILED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
   MEDIA_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary", "orders"],
   PLATFORM_AUTO_TRASH_APPLIED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
