@@ -280,7 +280,7 @@ function createContentSubmissionService(opts) {
           return;
         }
 
-        const item = Object.assign({}, previewItem, { status: previewItem.status, submissionBatchId: batchId });
+        const item = Object.assign({}, previewItem, { status: previewItem.status, submissionBatchId: batchId, localArchive: { status: "pending" } });
         Object.assign(item, publicationFields(context, record, reservation));
         batch.items.push(item);
         // Persist the reservation before touching queue files. A crash here is

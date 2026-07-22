@@ -16,6 +16,21 @@ function createSubmissionBatchStore(options) {
     return path.join(directory, "batch-" + id + ".json");
   }
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  // Archive handling is local bookkeeping.  It must never replace the remote
+  // publication outcome (which remains in item.status/publicationStatus).
+  function normalizeLocalArchive(value) {
+    if (!value || typeof value !== "object") return { status: "pending" };
+    const result = { status: value.status };
+    if (!["pending", "archived", "failed"].includes(result.status)) result.status = "pending";
+    if (typeof value.errorCode === "string") result.errorCode = value.errorCode;
+    if (typeof value.updatedAt === "string") result.updatedAt = value.updatedAt;
+    return result;
+  }
+  function normalizeBatch(batch) {
+    if (!batch || !Array.isArray(batch.items)) return batch;
+    batch.items.forEach((item) => { item.localArchive = normalizeLocalArchive(item.localArchive); });
+    return batch;
+  }
   function batchStatus(items) {
     const values = Array.isArray(items) ? items.map((item) => item.status) : [];
     if (values.some((status) => ["queued", "reserving"].includes(status))) return "queued";
@@ -50,15 +65,15 @@ function createSubmissionBatchStore(options) {
     } finally {
       try { if (fs.existsSync(temp)) fs.unlinkSync(temp); } catch (_) {}
     }
-    return clone(batch);
+    return clone(normalizeBatch(batch));
   }
   function get(id) {
     const file = filename(id);
     if (!fs.existsSync(file)) throw batchError("SUBMISSION_BATCH_NOT_FOUND", "Submission batch was not found");
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    return normalizeBatch(JSON.parse(fs.readFileSync(file, "utf8")));
   }
   function list() {
-    return fs.readdirSync(directory, { withFileTypes: true }).filter((entry) => /^batch-[A-Za-z0-9_-]+\.json$/.test(entry.name)).map((entry) => JSON.parse(fs.readFileSync(path.join(directory, entry.name), "utf8"))).sort((left, right) => {
+    return fs.readdirSync(directory, { withFileTypes: true }).filter((entry) => /^batch-[A-Za-z0-9_-]+\.json$/.test(entry.name)).map((entry) => normalizeBatch(JSON.parse(fs.readFileSync(path.join(directory, entry.name), "utf8")))).sort((left, right) => {
       const leftTime = Date.parse(left.createdAt);
       const rightTime = Date.parse(right.createdAt);
       const leftValid = Number.isFinite(leftTime);
@@ -92,9 +107,10 @@ function createSubmissionBatchStore(options) {
     const nextStatus = transition.status;
     const allowed = transitions[item.status] || new Set();
     if (item.status !== nextStatus && !allowed.has(nextStatus)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid");
-    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt", "pairState", "identityMatched", "contentMatched", "mainExists", "sidecarExists"];
+    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt", "pairState", "identityMatched", "contentMatched", "mainExists", "sidecarExists", "localArchive"];
     Object.keys(transition).forEach((key) => { if (!allowedFields.includes(key)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid"); });
     Object.assign(item, transition, { status: nextStatus, publicationStatus: transition.publicationStatus === undefined ? nextStatus : transition.publicationStatus, updatedAt: transition.updatedAt || now() });
+    item.localArchive = normalizeLocalArchive(item.localArchive);
     return item;
   }
   function updateItem(batchId, identity, transition) {

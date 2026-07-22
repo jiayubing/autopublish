@@ -209,6 +209,31 @@ describe("submission batch and platform worker integration", function() {
       assert.equal(persisted.status, "completed");
       assert.equal(persisted.items[0].status, "published");
       assert.equal(persisted.items[0].remoteId, "remote-success");
+      assert.equal(persisted.items[0].localArchive.status, "archived");
+      // A fresh store instance represents a worker/runtime restart. The
+      // archive fact remains separate from the remote publication result.
+      const restarted = createSubmissionBatchStore({ workspaceRoot: value.root, directory: value.paths.submissionRecords }).get(batch.batchId);
+      assert.equal(restarted.items[0].status, "published");
+      assert.equal(restarted.items[0].localArchive.status, "archived");
+    } finally {
+      dispose(value);
+    }
+  });
+
+  it("persists a local archive failure without downgrading the published remote outcome", async function() {
+    const value = harness({ status: "published", remoteId: "remote-success" });
+    try {
+      const batch = createBatch(value);
+      fs.mkdirSync(value.paths.published, { recursive: true });
+      fs.writeFileSync(path.join(value.paths.published, path.basename(batch.items[0].filePath)), "collision", "utf8");
+
+      const result = await executeBatch(value, batch);
+      assert.equal(result.archiveSummary.failed, 1);
+      assert.equal(currentRecord(value, batch).status, "published");
+      const restarted = createSubmissionBatchStore({ workspaceRoot: value.root, directory: value.paths.submissionRecords }).get(batch.batchId);
+      assert.equal(restarted.items[0].status, "published");
+      assert.equal(restarted.items[0].localArchive.status, "failed");
+      assert.equal(restarted.items[0].localArchive.errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
     } finally {
       dispose(value);
     }
