@@ -103,7 +103,7 @@ function createArticleAttentionResolver(options) {
     }
 
     const changedScopes = ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"];
-    if (!result || result.domainHandled !== true && (!Array.isArray(result.changedScopes) || result.changedScopes.length === 0)) invalidate(changedScopes, "ARTICLE_ATTENTION_RESOLVED");
+    if (!result || result.domainHandled !== true && (!Array.isArray(result.changedScopes) || result.changedScopes.length === 0)) invalidate("ARTICLE_ATTENTION_RESOLVED");
     if (typeof opts.getRevision !== "function" && query && typeof query.invalidate === "function") query.invalidate();
     return { outcome: "resolved", attentionId: entry.item.attentionId, result: result || null, changedScopes };
   }
