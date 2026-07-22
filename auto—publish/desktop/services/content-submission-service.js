@@ -190,89 +190,6 @@ function createContentSubmissionService(opts) {
     return found;
   }
 
-  function previewArticleRemovalImpact(value) {
-    const selections = value && (value.selections || value.articles);
-    if (!Array.isArray(selections) || !selections.length) throw batchError("CONTENT_INPUT_INVALID", "At least one article is required");
-    const normalized = selections.map(function(item) {
-      if (!item || typeof item.clientId !== "string" || !item.clientId.trim() || typeof item.articleId !== "string" || !item.articleId.trim()) throw batchError("CONTENT_INPUT_INVALID", "Article selection is invalid");
-      return { clientId: item.clientId, articleId: item.articleId };
-    });
-    const entries = articleSubmissionItems(normalized);
-    const byKey = new Set(entries.map(function(entry) { return entry.safe.publicationId + "\0" + entry.safe.attemptId; }));
-    if (typeof publicationLedger.listForArticles === "function") {
-      normalized.forEach(function(selection) {
-        let records = [];
-        try { records = publicationLedger.listForArticles(selection.clientId, [selection.articleId]); } catch (_) {}
-        records.forEach(function(record) {
-          const latest = latestAttempt(record);
-          const key = record.publicationId + "\0" + (latest && latest.attemptId || "");
-          if (byKey.has(key)) return;
-          entries.push({ safe: {
-            clientId: selection.clientId, articleId: selection.articleId, batchId: null,
-            targetPlatformId: record.platformId || null, publicationId: record.publicationId,
-            attemptId: latest && latest.attemptId || null, contentHash: record.contentHash || null,
-            status: record.status, unchanged: false, pairState: null, identityMatched: false, contentMatched: null
-          }, item: null, batch: null, record: record, sidecar: null, latest: latest });
-        });
-      });
-    }
-    const queuedToCancel = [];
-    const failedToClean = [];
-    const publishedToClean = [];
-    const cancelledToClean = [];
-    const blockedItems = [];
-    const publicItems = entries.map(function(entry) {
-      const value = entry.safe;
-      if (["submitting", "submitted", "uncertain"].indexOf(value.status) !== -1) {
-        blockedItems.push(Object.assign({}, value, { reasonCode: "ARTICLE_SUBMISSION_ACTIVE" }));
-      } else if (value.status === "queued") {
-        if (value.batchId && value.publicationId && value.attemptId) {
-          const checked = evaluateItemAction(Object.assign({}, value, { action: "cancel" }));
-          if (checked.allowed) queuedToCancel.push(Object.assign({}, value, { action: "cancel", evaluationFingerprint: checked.bindingFingerprint }));
-          else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
-        } else blockedItems.push(Object.assign({}, value, { reasonCode: "PUBLICATION_RESERVATION_WITHOUT_QUEUE" }));
-      } else if (value.status === "failed") {
-        if (value.batchId && value.publicationId && value.attemptId) {
-          const checked = evaluateItemAction(Object.assign({}, value, { action: "cleanup" }));
-          if (checked.allowed) failedToClean.push(Object.assign({}, value, { action: "cleanup", evaluationFingerprint: checked.bindingFingerprint }));
-          else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
-        }
-      } else if (["published", "cancelled"].includes(value.status) && value.batchId) {
-        const action = value.status === "published" ? "cleanupPublishedLocal" : "cleanupCancelledLocal";
-        // Remote publication and local archival are independent facts.  A
-        // failed archive means the local queue copy is still needed for a
-        // retry, so fail closed before any article-removal cleanup is planned.
-        if (value.status === "published" && entry.item && entry.item.localArchive && entry.item.localArchive.status === "failed") {
-          blockedItems.push(Object.assign({}, value, { reasonCode: "PUBLISHED_ARCHIVE_FAILED" }));
-          return Object.assign({}, value, { sourceArticleState: "active" });
-        }
-        if (value.publicationId && value.attemptId) {
-          const checked = evaluateItemAction(Object.assign({}, value, { action: action }));
-          if (checked.allowed) {
-            const target = Object.assign({}, value, { action: action, evaluationFingerprint: checked.bindingFingerprint });
-            (value.status === "published" ? publishedToClean : cancelledToClean).push(target);
-          } else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
-        } else blockedItems.push(Object.assign({}, value, { reasonCode: "SUBMISSION_IDENTITY_CONFLICT" }));
-      }
-      return Object.assign({}, value, { sourceArticleState: "active" });
-    });
-    return {
-      selections: normalized,
-      articleCount: normalized.length,
-      items: publicItems,
-      queuedToCancel: queuedToCancel,
-      failedToClean: failedToClean,
-      publishedToClean: publishedToClean,
-      cancelledToClean: cancelledToClean,
-      blockedItems: blockedItems,
-      queuedToCancelCount: queuedToCancel.length,
-      failedToCleanCount: failedToClean.length,
-      publishedToCleanCount: publishedToClean.length,
-      cancelledToCleanCount: cancelledToClean.length,
-      terminalCleanupCount: failedToClean.length + publishedToClean.length + cancelledToClean.length,
-      canCommit: blockedItems.length === 0
-    };
-  }
 
   function locateArticleSubmissionItem(action, snapshot) {
     const readSnapshot = snapshot || createReadSnapshot({ batchId: action.batchId });
@@ -368,410 +285,6 @@ function createContentSubmissionService(opts) {
     return evaluation(action, entry, true, null);
   }
 
-  function applyItemAction(action, nextStatus, reasonCode) {
-    // Never execute against a query snapshot or an earlier evaluation.  The
-    // action fingerprint is rechecked from one newly loaded, minimal batch.
-    const mutationSnapshot = createReadSnapshot({ batchId: action.batchId });
-    const entry = locateArticleSubmissionItem(action, mutationSnapshot);
-    if (!entry || !entry.item || !entry.batch) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item is unavailable");
-    if (entry.safe.status === nextStatus || ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) || entry.safe.status === "cancelled" && action.action === "cancel") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: [], domainHandled: true };
-    const checked = evaluateItemAction(action, mutationSnapshot);
-    if (!checked.allowed) throw batchError(checked.reasonCode || "SUBMISSION_QUEUE_CHANGED", "Submission item action is no longer valid");
-    if (action.evaluationFingerprint && checked.bindingFingerprint !== action.evaluationFingerprint) throw batchError("SUBMISSION_ACTION_STALE", "Submission item action is stale");
-    let originalFile = null;
-    let originalSidecar = null;
-    try { if (fs.existsSync(entry.item.filePath)) originalFile = fs.readFileSync(entry.item.filePath); } catch (_) {}
-    try { if (fs.existsSync(entry.item.sidecarPath)) originalSidecar = fs.readFileSync(entry.item.sidecarPath); } catch (_) {}
-    try {
-      if (action.action === "cancel" && entry.record) cancelReservation(publicationLedger, { publicationId: action.publicationId, attemptId: action.attemptId }, reasonCode);
-      if (["cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action) && entry.record && entry.item.status !== entry.record.status) {
-        batchStore.updateItem(entry.batch.id, { publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: entry.record.status, publicationStatus: entry.record.status, reasonCode: "SUBMISSION_STATUS_RECONCILED" });
-      }
-      const physicalFilesAlreadyAbsent = entry.safe.pairState === "both_absent";
-      if (!physicalFilesAlreadyAbsent) removeSubmissionPairStrict(entry.item.filePath, entry.item.sidecarPath);
-      if (!action.deferBatchUpdate) {
-        batchStore.updateItem(entry.batch.id, { articleId: action.articleId, publicationId: action.publicationId, attemptId: action.attemptId, targetPlatformId: action.targetPlatformId }, { status: nextStatus, publicationStatus: entry.record ? entry.record.status : undefined, reasonCode: reasonCode });
-      }
-      if (physicalFilesAlreadyAbsent) {
-        if (!action.suppressNotification) notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-        return { action: action.action || nextStatus, status: nextStatus, idempotent: action.action === "cancel" ? false : true, physicalFilesAlreadyAbsent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
-      }
-    } catch (error) {
-      try { if (originalFile !== null && !fs.existsSync(entry.item.filePath)) { fs.mkdirSync(path.dirname(entry.item.filePath), { recursive: true }); fs.writeFileSync(entry.item.filePath, originalFile); } } catch (_) {}
-      try { if (originalSidecar !== null && !fs.existsSync(entry.item.sidecarPath)) { fs.mkdirSync(path.dirname(entry.item.sidecarPath), { recursive: true }); fs.writeFileSync(entry.item.sidecarPath, originalSidecar); } } catch (_) {}
-      throw error;
-    }
-    if (!action.suppressNotification) notifyData(action.action === "cancel" ? "SUBMISSION_QUEUE_CANCELLED" : "SUBMISSION_QUEUE_CLEANED");
-    return { action: action.action || nextStatus, status: nextStatus, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], domainHandled: true };
-  }
-
-  function cancelArticleSubmissionItem(action) { return applyItemAction(action, "cancelled", "ARTICLE_TRASHED_BEFORE_SUBMISSION"); }
-  function cleanupArticleSubmissionItem(action) { return applyItemAction(action, "failed-cleaned", "ARTICLE_TRASHED_FAILED_QUEUE_CLEANUP"); }
-  function cleanupPublishedArticleLocal(action) { return applyItemAction(action, "published-cleaned", "ARTICLE_TRASHED_PUBLISHED_LOCAL_CLEANUP"); }
-  function cleanupCancelledArticleLocal(action) { return applyItemAction(action, "cancelled-cleaned", "ARTICLE_TRASHED_CANCELLED_LOCAL_CLEANUP"); }
-
-  function isSubmissionItemExecutable(action) {
-    const entry = locateArticleSubmissionItem(action);
-    if (!entry) return false;
-    if (typeof store.isArticleRemoved === "function" && store.isArticleRemoved(action.clientId, action.articleId) ||
-        typeof store.isArticleTrashed === "function" && store.isArticleTrashed(action.clientId, action.articleId)) return false;
-    return entry.safe.status === "queued" && entry.safe.pairState === "intact";
-  }
-
-  function previewTrashedArticleQueueResidue() {
-    const items = [];
-    batchStore.list().forEach(function(batch) {
-      (batch.items || []).forEach(function(item) {
-        if (["failed-cleaned", "published-cleaned", "cancelled-cleaned", "skipped"].includes(item.status)) return;
-        var removed = typeof store.isArticleRemoved === "function"
-          ? store.isArticleRemoved(batch.clientId, item.articleId)
-          : typeof store.isArticleTrashed === "function" && store.isArticleTrashed(batch.clientId, item.articleId);
-        if (!removed) return;
-        const entry = articleSubmissionItems([{ clientId: batch.clientId, articleId: item.articleId }]).find(function(candidate) {
-          return candidate.safe.batchId === batch.id && candidate.safe.publicationId === item.publicationId && candidate.safe.attemptId === item.attemptId;
-        });
-        if (!entry) return;
-        const safe = Object.assign({}, entry.safe, { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" });
-        const requestedAction = entry.safe.status === "queued" ? "cancel" : entry.safe.status === "failed" ? "cleanup" : entry.safe.status === "published" ? "cleanupPublishedLocal" : entry.safe.status === "cancelled" ? "cleanupCancelledLocal" : null;
-        const checked = requestedAction ? evaluateItemAction(Object.assign({}, entry.safe, { action: requestedAction })) : { allowed: false, reasonCode: entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_FAILED" : "ARTICLE_SUBMISSION_ACTIVE" };
-        if (checked.allowed) {
-          safe.repairAction = requestedAction;
-          safe.evaluationFingerprint = checked.bindingFingerprint;
-        } else {
-          safe.repairAction = null;
-          safe.reasonCode = checked.reasonCode || safe.reasonCode;
-        }
-        items.push(safe);
-      });
-    });
-    return {
-      items: items,
-      cleanableItems: items.filter(function(item) { return !!item.repairAction; }),
-      reportedItems: items.filter(function(item) { return !item.repairAction; }),
-      cleanableCount: items.filter(function(item) { return !!item.repairAction; }).length,
-      reportedCount: items.filter(function(item) { return !item.repairAction; }).length
-    };
-  }
-
-  function cleanupTrashedArticleQueueResidue(value) {
-    if (!value || value.confirmed !== true) throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Queue residue confirmation is required");
-    const preview = previewTrashedArticleQueueResidue();
-    let cleanedCount = 0;
-    let failedCount = 0;
-    const results = [];
-    preview.items.forEach(function(item) {
-      if (!item.repairAction) {
-        results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: item.reasonCode || "RESIDUE_NOT_CLEANABLE" });
-        return;
-      }
-      try {
-        const action = Object.assign({}, item, { action: item.repairAction, evaluationFingerprint: item.evaluationFingerprint });
-        const result = item.repairAction === "cancel" ? cancelArticleSubmissionItem(action) : item.repairAction === "cleanupPublishedLocal" ? cleanupPublishedArticleLocal(action) : item.repairAction === "cleanupCancelledLocal" ? cleanupCancelledArticleLocal(action) : cleanupArticleSubmissionItem(action);
-        cleanedCount += 1;
-        results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: "cleaned", reasonCode: null, action: item.repairAction, resultStatus: result.status });
-      } catch (error) {
-        failedCount += 1;
-        results.push({ publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: error && error.code || "SUBMISSION_RESIDUE_CLEANUP_FAILED", action: item.repairAction });
-      }
-    });
-    const after = previewTrashedArticleQueueResidue();
-    const cleanupResult = {
-      status: failedCount > 0 ? "failed" : cleanedCount > 0 ? "completed" : "no-op",
-      cleanedCount: cleanedCount,
-      failedCount: failedCount,
-      remainingCount: after.items.length,
-      cleanableCount: after.cleanableCount,
-      reportedCount: after.reportedCount,
-      items: results,
-      remainingItems: after.items.map(function(item) {
-        return { publicationId: item.publicationId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: item.reasonCode || null };
-      })
-    };
-    if (cleanedCount > 0) notifyData("TRASHED_QUEUE_RESIDUE_RESOLVED");
-    return cleanupResult;
-  }
-
-  function reconcileBatch(batchId, snapshot) {
-    const readSnapshot = snapshot || createReadSnapshot({ batchId: batchId });
-    let batch = readSnapshot.batchesById.get(batchId);
-    if (!batch) throw batchError("SUBMISSION_BATCH_NOT_FOUND", "Submission batch was not found");
-    const reconciled = [];
-    const transitions = [];
-    (batch.items || []).forEach((item) => {
-      const copy = Object.assign({}, item);
-      // A queue item may be staged before a remote reservation exists.  Its
-      // local batch/article/platform identity is sufficient for local actions;
-      // this is intentionally platform-agnostic.
-      if (!item.publicationId || !item.attemptId) {
-        const entry = readSnapshot.itemsByIdentity.get((item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || ""));
-        const sidecar = snapshotSidecar(readSnapshot, entry);
-        const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: null });
-        const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, action: "cancel" };
-        const cancelEvaluation = evaluateItemAction(actionInput, readSnapshot);
-        copy.unchanged = pair.pairState === "intact";
-        copy.pairState = pair.pairState;
-        copy.identityMatched = pair.identityMatched;
-        copy.contentMatched = pair.contentMatched;
-        copy.mainExists = pair.mainExists;
-        copy.sidecarExists = pair.sidecarExists;
-        copy.reconciledStatus = item.status;
-        copy.publicationStatus = item.status;
-        copy.canCancel = Boolean(cancelEvaluation.allowed);
-        copy.canCleanup = false;
-        copy.actionFingerprint = cancelEvaluation.bindingFingerprint;
-        if (!copy.canCancel) copy.reasonCode = cancelEvaluation.reasonCode || "SUBMISSION_QUEUE_CHANGED";
-        reconciled.push(copy);
-        return;
-      }
-      const entry = readSnapshot.itemsByIdentity.get(item.publicationId + "\0" + item.attemptId);
-      const record = snapshotPublication(readSnapshot, item);
-      const latest = latestAttempt(record);
-      if (!record || !latest || record.platformId && record.platformId !== item.targetPlatformId) {
-        copy.reconciledStatus = "conflict";
-        copy.reasonCode = !record ? "PUBLICATION_RECORD_MISSING" : "PUBLICATION_PLATFORM_MISMATCH";
-        reconciled.push(copy);
-        return;
-      }
-      const sidecar = snapshotSidecar(readSnapshot, entry);
-      const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
-      copy.unchanged = pair.pairState === "intact";
-      copy.pairState = pair.pairState;
-      copy.identityMatched = pair.identityMatched;
-      copy.contentMatched = pair.contentMatched;
-      copy.mainExists = pair.mainExists;
-      copy.sidecarExists = pair.sidecarExists;
-      copy.reconciledStatus = record.status;
-      copy.publicationStatus = record.status;
-      copy.errorCode = latest.errorCode || item.errorCode || null;
-      const locallyCleaned = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(item.status);
-      if (item.status !== record.status && !locallyCleaned) {
-        transitions.push({
-          identity: { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId },
-          transition: { status: record.status, publicationStatus: record.status, errorCode: latest.errorCode || undefined, remoteId: latest.remoteId || undefined, remoteUrl: latest.remoteUrl || undefined, reasonCode: latest.reasonCode || undefined }
-        });
-      }
-      const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId };
-      const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" }), readSnapshot) : null;
-      const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" }), readSnapshot) : null;
-      const publishedCleanupEvaluation = record.status === "published" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupPublishedLocal" }), readSnapshot) : null;
-      const cancelledCleanupEvaluation = record.status === "cancelled" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupCancelledLocal" }), readSnapshot) : null;
-      copy.canCancel = !!(cancelEvaluation && cancelEvaluation.allowed);
-      copy.canCleanup = !!(cleanupEvaluation && cleanupEvaluation.allowed);
-      copy.canCleanupPublished = !!(publishedCleanupEvaluation && publishedCleanupEvaluation.allowed);
-      copy.canCleanupCancelled = !!(cancelledCleanupEvaluation && cancelledCleanupEvaluation.allowed);
-      copy.actionFingerprint = copy.canCancel ? cancelEvaluation.bindingFingerprint : copy.canCleanup ? cleanupEvaluation.bindingFingerprint : copy.canCleanupPublished ? publishedCleanupEvaluation.bindingFingerprint : copy.canCleanupCancelled ? cancelledCleanupEvaluation.bindingFingerprint : null;
-      if (!copy.canCancel && !copy.canCleanup && !copy.canCleanupPublished && !copy.canCleanupCancelled && (cancelEvaluation || cleanupEvaluation || publishedCleanupEvaluation || cancelledCleanupEvaluation)) copy.reasonCode = (cancelEvaluation || cleanupEvaluation || publishedCleanupEvaluation || cancelledCleanupEvaluation).reasonCode;
-      reconciled.push(copy);
-    });
-    if (transitions.length) {
-      try {
-        // Reconcile all observations in memory and commit the batch once. This
-        // preserves the batch's atomic boundary when several queue items move
-        // together after a platform result is observed.
-        batch = batchStore.reconcile(batch.id, transitions);
-      } catch (_) {
-        transitions.forEach(function(change) {
-          const conflict = reconciled.find(function(candidate) {
-            return candidate.publicationId === change.identity.publicationId && candidate.attemptId === change.identity.attemptId && candidate.targetPlatformId === change.identity.targetPlatformId;
-          });
-          if (conflict) {
-            conflict.reconciledStatus = "conflict";
-            conflict.reasonCode = "SUBMISSION_STATUS_CONFLICT";
-          }
-        });
-      }
-    }
-    const reconciledByIdentity = new Map(reconciled.map(function(candidate) {
-      return [[candidate.articleId, candidate.targetPlatformId, candidate.publicationId || null, candidate.attemptId || null].join("\0"), candidate];
-    }));
-    const enrichedItems = batch.items.map((item) => {
-      const state = reconciledByIdentity.get([item.articleId, item.targetPlatformId, item.publicationId || null, item.attemptId || null].join("\0"));
-      return state ? Object.assign({}, item, {
-        reconciledStatus: state.reconciledStatus,
-        unchanged: state.unchanged,
-        pairState: state.pairState,
-        identityMatched: state.identityMatched,
-        contentMatched: state.contentMatched,
-        mainExists: state.mainExists,
-        sidecarExists: state.sidecarExists,
-        canCancel: state.canCancel,
-        canCleanup: state.canCleanup,
-        canCleanupPublished: state.canCleanupPublished,
-        canCleanupCancelled: state.canCleanupCancelled,
-        reasonCode: state.reasonCode,
-        publicationStatus: state.publicationStatus || item.publicationStatus,
-        errorCode: state.errorCode || item.errorCode || null
-      }) : item;
-    });
-    return { batch: Object.assign({}, batch, { items: enrichedItems }), items: reconciled };
-  }
-
-  function previewCleanupFailedItems(value) {
-    if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
-    const result = reconcileBatch(value.batchId);
-    let cleanableCount = 0;
-    let uncleanableCount = 0;
-    const items = result.batch.items.map((item) => {
-      const copy = Object.assign({}, item);
-      delete copy.filePath;
-      delete copy.sidecarPath;
-      const state = result.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
-      const cleanable = Boolean(state && state.reconciledStatus === "failed" && state.canCleanup);
-      if (cleanable) cleanableCount += 1; else uncleanableCount += 1;
-      return Object.assign(copy, { cleanable, reasonCode: cleanable ? null : (state && state.reasonCode) || (state && state.reconciledStatus === "failed" ? "SUBMISSION_QUEUE_CHANGED" : "SUBMISSION_NOT_FAILED") });
-    });
-    return { batchId: result.batch.id, cleanableCount, uncleanableCount, items };
-  }
-
-  function cleanupFailedItems(value) {
-    if (!value || value.confirmed !== true || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation is required");
-    const result = reconcileBatch(value.batchId);
-    let cleanedCount = 0;
-    let skippedCount = 0;
-    result.batch.items.forEach((item) => {
-      const state = result.items.find((candidate) => candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId && candidate.targetPlatformId === item.targetPlatformId);
-      if (!state || state.reconciledStatus !== "failed" || !state.canCleanup) { skippedCount += 1; return; }
-      let originalFile = null;
-      let originalSidecar = null;
-      try { if (fs.existsSync(item.filePath)) originalFile = fs.readFileSync(item.filePath); } catch (_) {}
-      try { if (fs.existsSync(item.sidecarPath)) originalSidecar = fs.readFileSync(item.sidecarPath); } catch (_) {}
-      try {
-        cleanupArticleSubmissionItem({
-          clientId: result.batch.clientId,
-          articleId: item.articleId,
-          batchId: result.batch.id,
-          targetPlatformId: item.targetPlatformId,
-          publicationId: item.publicationId,
-          attemptId: item.attemptId,
-          action: "cleanup",
-          evaluationFingerprint: state.actionFingerprint
-        });
-        cleanedCount += 1;
-      } catch (_) {
-        try {
-          if (originalFile !== null && !fs.existsSync(item.filePath)) { fs.mkdirSync(path.dirname(item.filePath), { recursive: true }); fs.writeFileSync(item.filePath, originalFile); }
-          if (originalSidecar !== null && !fs.existsSync(item.sidecarPath)) { fs.mkdirSync(path.dirname(item.sidecarPath), { recursive: true }); fs.writeFileSync(item.sidecarPath, originalSidecar); }
-        } catch (restoreError) {
-          if (typeof options.onCleanupRestoreError === "function") options.onCleanupRestoreError({ code: restoreError && restoreError.code || "SUBMISSION_QUEUE_RESTORE_FAILED", batchId: result.batch.id });
-        }
-        skippedCount += 1;
-      }
-    });
-    const batch = batchStore.get(result.batch.id);
-    const cleanupResult = { batchId: batch.id, cleanedCount, skippedCount, items: batch.items };
-    if (cleanedCount > 0) notifyData("FAILED_QUEUE_ITEMS_CLEANED");
-    return cleanupResult;
-  }
-
-  function actionReasonMessage(reasonCode) {
-    const messages = {
-      SUBMISSION_ACTION_STALE: "动作计划已过期，请重新预览。",
-      SUBMISSION_IDENTITY_CONFLICT: "本地队列身份不完整或不匹配。",
-      SUBMISSION_CONTENT_CHANGED: "队列文件内容已变化。",
-      SUBMISSION_QUEUE_CHANGED: "队列文件状态已变化。",
-      PUBLICATION_REMOTE_STARTED: "投稿已经开始，不能撤销。",
-      ARTICLE_SUBMISSION_ACTIVE: "投稿正在进行，不能撤销。",
-      SUBMISSION_ALREADY_CANCELLED: "该项目已经撤销。"
-    };
-    return messages[reasonCode] || "当前项目不能执行该操作。";
-  }
-
-  // This is the sole action resolver for preview, list summaries and execute.
-  // `planId` binds the complete batch revision and every item fingerprint.
-  function buildSubmissionActionPlan(batchId, action, snapshot, reconciledResult) {
-    if (typeof batchId !== "string" || !batchId) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
-    if (action !== "cancel") throw batchError("SUBMISSION_ACTION_INVALID", "Submission action is invalid");
-    const readSnapshot = snapshot || createReadSnapshot({ batchId: batchId });
-    const reconciled = reconciledResult || reconcileBatch(batchId, readSnapshot);
-    const batch = reconciled.batch;
-    // Reconciliation may persist observed remote state.  Re-index its returned
-    // batch for planning, while carrying already-read immutable facts forward.
-    // This avoids both stale fingerprints and a second sidecar read.
-    const planSnapshot = reconciledResult ? createReadSnapshot({ batches: [batch] }) : readSnapshot;
-    if (reconciledResult) {
-      readSnapshot.publicationsById.forEach(function(value, key) { planSnapshot.publicationsById.set(key, value); });
-      readSnapshot.sidecarsByItem.forEach(function(value, key) { planSnapshot.sidecarsByItem.set(key, value); });
-    }
-    const items = batch.items.map(function(item) {
-      const request = {
-        clientId: batch.clientId, articleId: item.articleId, batchId: batch.id,
-        targetPlatformId: item.targetPlatformId, publicationId: item.publicationId,
-        attemptId: item.attemptId, action: action
-      };
-      const checked = evaluateItemAction(request, planSnapshot);
-      return {
-        articleId: item.articleId,
-        targetPlatformId: item.targetPlatformId,
-        publicationId: item.publicationId || null,
-        attemptId: item.attemptId || null,
-        action: action,
-        allowed: checked.allowed,
-        reasonCode: checked.reasonCode || null,
-        reasonMessage: checked.allowed ? null : actionReasonMessage(checked.reasonCode),
-        fingerprint: checked.bindingFingerprint || null
-      };
-    });
-    const revision = hash(JSON.stringify({ id: batch.id, clientId: batch.clientId, updatedAt: batch.updatedAt || null, status: batch.status, items: batch.items }));
-    const planId = hash(JSON.stringify({ batchId: batch.id, action: action, revision: revision, items: items.map(function(item) { return [item.articleId, item.targetPlatformId, item.publicationId, item.attemptId, item.fingerprint, item.allowed]; }) }));
-    return {
-      batchId: batch.id,
-      clientId: batch.clientId,
-      action: action,
-      revision: revision,
-      planId: planId,
-      fingerprint: planId,
-      items: items,
-      allowedCount: items.filter(function(item) { return item.allowed; }).length,
-      blockedCount: items.filter(function(item) { return !item.allowed; }).length
-    };
-  }
-
-  function cancelBatch(value) {
-    if (!value || value.confirmed !== true || typeof value.batchId !== "string" || typeof value.planId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation and action plan are required");
-    const plan = buildSubmissionActionPlan(value.batchId, "cancel");
-    if (plan.planId !== value.planId) throw batchError("SUBMISSION_ACTION_STALE", "Submission action plan is stale");
-    let cancelledCount = 0;
-    let idempotentCount = 0;
-    const blockedItems = plan.items.filter(function(item) { return !item.allowed && item.reasonCode !== "SUBMISSION_ALREADY_CANCELLED"; });
-    const transitions = [];
-    plan.items.filter(function(item) { return item.allowed; }).forEach(function(item) {
-      const result = cancelArticleSubmissionItem({
-        clientId: plan.clientId, articleId: item.articleId, batchId: plan.batchId,
-        targetPlatformId: item.targetPlatformId, publicationId: item.publicationId || undefined,
-        attemptId: item.attemptId || undefined, action: "cancel", evaluationFingerprint: item.fingerprint,
-        deferBatchUpdate: true, suppressNotification: true
-      });
-      if (result.idempotent) idempotentCount += 1;
-      else {
-        cancelledCount += 1;
-        transitions.push({
-          identity: { articleId: item.articleId, publicationId: item.publicationId || undefined, attemptId: item.attemptId || undefined, targetPlatformId: item.targetPlatformId },
-          transition: { status: "cancelled", publicationStatus: "cancelled", reasonCode: "ARTICLE_TRASHED_BEFORE_SUBMISSION" }
-        });
-      }
-    });
-    const alreadyCancelled = plan.items.filter(function(item) { return item.reasonCode === "SUBMISSION_ALREADY_CANCELLED"; });
-    idempotentCount += alreadyCancelled.length;
-    const batch = transitions.length ? batchStore.reconcile(plan.batchId, transitions) : batchStore.get(plan.batchId);
-    if (cancelledCount > 0 || idempotentCount > 0) notifyData("SUBMISSION_BATCH_CANCELLED");
-    return {
-      batchId: batch.id,
-      planId: plan.planId,
-      cancelledCount: cancelledCount,
-      idempotentCount: idempotentCount,
-      skippedCount: blockedItems.length,
-      blockedItems: blockedItems,
-      batchStatus: batch.status,
-      changedScopes: cancelledCount > 0 || idempotentCount > 0 ? ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"] : [],
-      items: batch.items
-    };
-  }
-
-  function previewCancelBatch(value) {
-    if (!value || typeof value.batchId !== "string") throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
-    return buildSubmissionActionPlan(value.batchId, "cancel");
-  }
-
   function input(value) { if (!value || value.confirmed !== true || !value.clientId) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return value; }
 
   function inspectPair(value) {
@@ -821,8 +334,14 @@ function createContentSubmissionService(opts) {
   const query = createSubmissionQuery({
     batchStore: batchStore,
     getDataRevision: options.getDataRevision,
-    reconcileBatch: reconcileBatch,
-    buildActionPlan: buildSubmissionActionPlan
+    onSnapshotCreated: options.onSubmissionSnapshotCreated,
+    publicationLedger: publicationLedger,
+    latestAttempt: latestAttempt,
+    readSidecar: readSidecar,
+    inspectSubmissionPair: inspectSubmissionPairState,
+    rootDir: rootDir,
+    getArticle: function(clientId, articleId) { return store.getArticle(clientId, articleId); },
+    hash: hash
   });
   const preparation = createSubmissionPreparation({
     publicationLedger: publicationLedger, articleStore: store, latestAttempt: latestAttempt,
@@ -840,7 +359,26 @@ function createContentSubmissionService(opts) {
     platformFor: function(id) { return availablePlatforms().find(function(platform) { return platform.id === id && platform.contentQueueImport === true; }); },
     evaluateEligibility: function(article, platformId) { return evaluateArticleSubmissionEligibility(article, { targetPlatform: { id: platformId, contentQueueImport: true } }); }
   });
-  const action = createSubmissionAction({ batchStore: batchStore, buildActionPlan: buildSubmissionActionPlan, reconcileBatch: reconcileBatch, cancelItem: cancelArticleSubmissionItem, notifyData: notifyData });
+  const action = createSubmissionAction({
+    batchStore: batchStore,
+    query: query,
+    notifyData: notifyData,
+    cancelReservation: function(reservation, reason) { return cancelReservation(publicationLedger, reservation, reason); },
+    readPair: function(item) {
+      let file = null; let sidecar = null;
+      try { if (fs.existsSync(item.filePath)) file = fs.readFileSync(item.filePath); } catch (_) {}
+      try { if (fs.existsSync(item.sidecarPath)) sidecar = fs.readFileSync(item.sidecarPath); } catch (_) {}
+      return { file: file, sidecar: sidecar };
+    },
+    removePair: function(item) { removeSubmissionPairStrict(item.filePath, item.sidecarPath); },
+    restorePair: function(item, original) {
+      try { if (original.file !== null && !fs.existsSync(item.filePath)) { fs.mkdirSync(path.dirname(item.filePath), { recursive: true }); fs.writeFileSync(item.filePath, original.file); } } catch (_) {}
+      try { if (original.sidecar !== null && !fs.existsSync(item.sidecarPath)) { fs.mkdirSync(path.dirname(item.sidecarPath), { recursive: true }); fs.writeFileSync(item.sidecarPath, original.sidecar); } } catch (_) {}
+    },
+    isArticleTrashed: function(clientId, articleId) {
+      return typeof store.isArticleRemoved === "function" ? store.isArticleRemoved(clientId, articleId) : typeof store.isArticleTrashed === "function" && store.isArticleTrashed(clientId, articleId);
+    }
+  });
   return {
     previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); },
     exportArticle: function(value) {
@@ -852,24 +390,24 @@ function createContentSubmissionService(opts) {
     listPlatforms,
     previewBatch: preparation.previewBatch,
     createBatch: preparation.createBatch,
-    buildSubmissionActionPlan,
+    buildSubmissionActionPlan: query.buildActionPlan,
     previewCancelBatch: action.previewCancelBatch,
     cancelBatch: action.cancelBatch,
     getBatch: query.getBatch,
     listBatches: query.listBatches,
-    reconcileBatch,
+    reconcileBatch: query.reconcileBatch,
     previewCleanupFailedItems: action.previewCleanupFailedItems,
-    cleanupFailedItems,
-    previewArticleRemovalImpact,
-    cancelArticleSubmissionItem,
-    cleanupArticleSubmissionItem,
-    cleanupPublishedArticleLocal,
-    cleanupCancelledArticleLocal,
+    cleanupFailedItems: action.cleanupFailedItems,
+    previewArticleRemovalImpact: query.previewArticleRemovalImpact,
+    cancelArticleSubmissionItem: action.cancelArticleSubmissionItem,
+    cleanupArticleSubmissionItem: action.cleanupArticleSubmissionItem,
+    cleanupPublishedArticleLocal: action.cleanupPublishedArticleLocal,
+    cleanupCancelledArticleLocal: action.cleanupCancelledArticleLocal,
     inspectSubmissionPair: inspectPair,
-    evaluateItemAction,
-    isSubmissionItemExecutable,
-    previewTrashedArticleQueueResidue,
-    cleanupTrashedArticleQueueResidue,
+    evaluateItemAction: query.evaluateItemAction,
+    isSubmissionItemExecutable: action.isSubmissionItemExecutable,
+    previewTrashedArticleQueueResidue: action.previewTrashedArticleQueueResidue,
+    cleanupTrashedArticleQueueResidue: action.cleanupTrashedArticleQueueResidue,
     previewRetryFailedPublication: preparation.previewRetryFailedPublication,
     retryFailedPublication: preparation.retryFailedPublication
     ,listArchiveFailures
