@@ -9,6 +9,8 @@ const { createArticleStore } = require("../src/content/article-store");
 const { createSubmissionBatchStore } = require("../src/content/submission-batch-store");
 const { createContentSubmissionService } = require("../desktop/services/content-submission-service");
 const { createPlatformWorkbenchService } = require("../desktop/services/platform-workbench-service");
+const { createArticleAttentionQuery } = require("../desktop/services/article-attention-query");
+const { createArticleAttentionResolver } = require("../desktop/services/article-attention-resolver");
 const { createPublicationLedger } = require("../src/publication/publication-ledger");
 const { clearStopSignal, requestStopSignal } = require("../src/core/stop-signal");
 
@@ -236,6 +238,29 @@ describe("submission batch and platform worker integration", function() {
       fs.unlinkSync(path.join(value.paths.published, path.basename(item.filePath)));
       const retried = value.workbench.retryArchive(failures[0]);
       assert.equal(retried.status, "archived");
+      assert.equal(currentRecord(value, batch).status, "published");
+      assert.equal(value.submission.getBatch(batch.batchId).items[0].localArchive.status, "archived");
+    } finally {
+      dispose(value);
+    }
+  });
+
+  it("retries a persisted archive failure from article attention through the real archive service", async function() {
+    const value = harness({ status: "published", remoteId: "remote-success" });
+    try {
+      const batch = createBatch(value);
+      const item = batch.items[0];
+      fs.mkdirSync(value.paths.published, { recursive: true });
+      fs.writeFileSync(path.join(value.paths.published, path.basename(item.filePath)), "collision", "utf8");
+      await executeBatch(value, batch);
+      fs.unlinkSync(path.join(value.paths.published, path.basename(item.filePath)));
+
+      const query = createArticleAttentionQuery({ contentSubmissionService: value.submission, archiveService: value.workbench });
+      const resolver = createArticleAttentionResolver({ query, archiveService: value.workbench });
+      const attention = query.list().items.find((candidate) => candidate.kind === "published_archive_failed");
+      const retried = resolver.resolve({ attentionId: attention.attentionId, action: "retry-archive", expectedRevision: query.getRevision(), confirmed: true });
+
+      assert.equal(retried.result.status, "archived");
       assert.equal(currentRecord(value, batch).status, "published");
       assert.equal(value.submission.getBatch(batch.batchId).items[0].localArchive.status, "archived");
     } finally {

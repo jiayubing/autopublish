@@ -459,6 +459,13 @@ function createContentSubmissionService(opts) {
         }
       } else if (["published", "cancelled"].includes(value.status) && value.batchId) {
         const action = value.status === "published" ? "cleanupPublishedLocal" : "cleanupCancelledLocal";
+        // Remote publication and local archival are independent facts.  A
+        // failed archive means the local queue copy is still needed for a
+        // retry, so fail closed before any article-removal cleanup is planned.
+        if (value.status === "published" && entry.item && entry.item.localArchive && entry.item.localArchive.status === "failed") {
+          blockedItems.push(Object.assign({}, value, { reasonCode: "PUBLISHED_ARCHIVE_FAILED" }));
+          return Object.assign({}, value, { sourceArticleState: "active" });
+        }
         if (value.publicationId && value.attemptId) {
           const checked = evaluateItemAction(Object.assign({}, value, { action: action }));
           if (checked.allowed) {

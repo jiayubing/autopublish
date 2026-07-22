@@ -143,7 +143,7 @@ function createArticleAttentionQuery(options) {
       canRetryRemoval: !!(removal && typeof removal.retryArticleRemovalTransaction === "function"),
       canRetryFailedPublication: !!(service && typeof service.previewRetryFailedPublication === "function" && typeof service.retryFailedPublication === "function"),
       canReconcile: !!(opts.publicationLedger && typeof opts.publicationLedger.reconcile === "function"),
-      canRetryArchive: !!(archive && typeof archive.retry === "function"),
+      canRetryArchive: !!(archive && typeof archive.retryArchive === "function"),
       canOpenPublication: true,
       canInspect: true,
       canOpenArticle: true
