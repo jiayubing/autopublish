@@ -166,7 +166,6 @@ function createPlatformWorkbenchService(opts) {
     directory: options.paths && options.paths.submissionRecords
   });
   var articleStore = options.articleStore || createArticleStore(rootDir, { paths: options.paths });
-  var archiveFailures = new Map();
 
   function sourceArticleState(metadata) {
     var data = metadata && metadata.data;
@@ -180,18 +179,6 @@ function createPlatformWorkbenchService(opts) {
       if (removed) return { sourceArticleState: "trashed", reasonCode: "SOURCE_ARTICLE_TRASHED" };
     } catch (_) {}
     return { sourceArticleState: "active", reasonCode: null };
-  }
-
-  function listArchiveFailures() {
-    return [...archiveFailures.entries()].map(function(entry) {
-      var separator = entry[0].indexOf("\u0000");
-      return {
-        platformId: separator >= 0 ? entry[0].slice(0, separator) : entry[0],
-        filename: separator >= 0 ? entry[0].slice(separator + 1) : "",
-        status: "published",
-        reasonCode: entry[1]
-      };
-    });
   }
 
   function scanQueue() {
@@ -227,7 +214,7 @@ function createPlatformWorkbenchService(opts) {
             title: title,
             sourceArticleState: state.sourceArticleState,
             reasonCode: state.reasonCode,
-            archiveError: archiveFailures.get(platformId + "\u0000" + filename) || null
+            archiveError: null
           };
         });
       }
@@ -464,7 +451,7 @@ function createPlatformWorkbenchService(opts) {
   function updateSubmissionBatch(metadata, reference, targetPlatformId, outcome) {
     var sidecar = metadata.data || {};
     var batchId = sidecar.submissionBatchId;
-    if (!batchId || !reference || !reference.publicationId || !reference.attemptId) return;
+    if (!batchId || !reference || !reference.publicationId || !reference.attemptId) return { ok: true, batchId: null };
     try {
       submissionBatchStore.updateItem(batchId, { publicationId: reference.publicationId, attemptId: reference.attemptId, targetPlatformId: targetPlatformId }, {
         status: outcome.status,
@@ -472,10 +459,66 @@ function createPlatformWorkbenchService(opts) {
         errorCode: outcome.errorCode,
         remoteId: outcome.remoteId,
         remoteUrl: outcome.remoteUrl,
-        reasonCode: outcome.reasonCode
+        reasonCode: outcome.reasonCode,
+        // A remote success only starts local archival.  It must never claim
+        // archival completion before the filesystem transaction has finished.
+        localArchive: outcome.status === "published" ? { status: "pending", errorCode: null, updatedAt: new Date().toISOString() } : undefined
       });
+      return { ok: true, batchId: batchId };
     } catch (error) {
       if (typeof options.onBatchSyncError === "function") options.onBatchSyncError({ code: error && error.code || "SUBMISSION_BATCH_SYNC_FAILED", batchId: batchId });
+      return { ok: false, batchId: batchId, errorCode: safeOutcomeError(error, "SUBMISSION_BATCH_SYNC_FAILED") };
+    }
+  }
+
+  function persistArchiveOutcome(result, localArchive) {
+    if (!result || !result.batchId || !result.publicationId || !result.attemptId || !result.task) return { ok: true };
+    try {
+      submissionBatchStore.updateLocalArchive(result.batchId, {
+        publicationId: result.publicationId,
+        attemptId: result.attemptId,
+        targetPlatformId: result.task.targetPlatformId
+      }, localArchive);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, errorCode: safeOutcomeError(error, "SUBMISSION_BATCH_ARCHIVE_SYNC_FAILED") };
+    }
+  }
+
+  function retryArchive(attentionItem) {
+    var request = attentionItem || {};
+    var batch = submissionBatchStore.get(request.batchId);
+    var item = (batch.items || []).find(function(candidate) {
+      return candidate.publicationId === request.publicationId && candidate.attemptId === request.attemptId && candidate.targetPlatformId === (request.platformId || request.targetPlatformId);
+    });
+    if (!item || !item.localArchive || item.localArchive.status !== "failed") throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_INVALID", "Archive retry is no longer available");
+    var record = ledger.get(item.publicationId);
+    if (record.status !== "published" || item.status !== "published" || item.publicationStatus !== "published" ||
+        record.clientId !== batch.clientId || record.articleId !== item.articleId || record.platformId !== item.targetPlatformId) {
+      throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_CONFLICT", "Published submission identity changed");
+    }
+    var sourcePlatformId = item.sourcePlatformId || item.targetPlatformId;
+    var filePath = resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, path.basename(item.filePath || ""), true);
+    if (path.resolve(item.filePath || "") !== filePath) throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_CONFLICT", "Submission queue path changed");
+    var metadata = readSubmissionMetadata(filePath, true);
+    var data = metadata.data || {};
+    if (!metadata.valid || data.submissionBatchId !== batch.id || data.publicationId !== item.publicationId || data.attemptId !== item.attemptId ||
+        (data.generatedArticleId || data.articleId) !== item.articleId || data.clientId !== batch.clientId || data.contentHash !== item.contentHash) {
+      throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_CONFLICT", "Submission queue identity changed");
+    }
+    var archiveMoved = false;
+    try {
+      archivePublishedArticle({ file: filePath, filePath: filePath, sourceFile: filePath, filename: path.basename(filePath), fileBaseName: path.basename(filePath, path.extname(filePath)) }, options.paths || { published: path.join(rootDir, "published") });
+      archiveMoved = true;
+      var archived = persistArchiveOutcome({ batchId: batch.id, publicationId: item.publicationId, attemptId: item.attemptId, task: { targetPlatformId: item.targetPlatformId } }, { status: "archived", errorCode: null, updatedAt: new Date().toISOString() });
+      if (!archived.ok) throw submissionInputError(archived.errorCode, "Archive state could not be persisted");
+      return { status: "archived", domainHandled: true, changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"] };
+    } catch (error) {
+      if (archiveMoved) throw error;
+      var errorCode = safeOutcomeError(error, "PUBLISHED_ARCHIVE_FAILED");
+      var failed = persistArchiveOutcome({ batchId: batch.id, publicationId: item.publicationId, attemptId: item.attemptId, task: { targetPlatformId: item.targetPlatformId } }, { status: "failed", errorCode: errorCode, updatedAt: new Date().toISOString() });
+      if (!failed.ok) throw submissionInputError(failed.errorCode, "Archive state could not be persisted");
+      throw error;
     }
   }
 
@@ -695,7 +738,7 @@ function createPlatformWorkbenchService(opts) {
           // not manufacture a retryable failure when the local ledger is busy.
           result.ledgerError = safeOutcomeError(ledgerError, "PUBLICATION_RECORD_FAILED");
         }
-        updateSubmissionBatch(metadata, reference, task.targetPlatformId, outcome);
+        var batchSync = updateSubmissionBatch(metadata, reference, task.targetPlatformId, outcome);
         result.status = outcome.status === "published" ? "success" : outcome.status === "submitted" ? (outcome.legacyStatus === "pending" ? "pending" : "submitted") : outcome.status;
         result.publicationStatus = outcome.status;
         if (outcome.errorCode) result.error = outcome.errorCode;
@@ -703,6 +746,8 @@ function createPlatformWorkbenchService(opts) {
         if (outcome.remoteUrl) result.remoteUrl = outcome.remoteUrl;
         result.publicationId = submitting.publicationId;
         result.attemptId = submitting.attemptId;
+        result.batchId = metadata.data && metadata.data.submissionBatchId || null;
+        if (outcome.status === "published" && !batchSync.ok) result.archiveError = batchSync.errorCode;
         recordTaskResult(result, group);
       } catch (error) {
         var failed = { task: task, status: isStopError(error) ? "skipped" : "failed", error: safeOutcomeError(error, "PLATFORM_SUBMISSION_FAILED"), publicationStatus: isStopError(error) ? "cancelled" : "failed" };
@@ -726,12 +771,16 @@ function createPlatformWorkbenchService(opts) {
       archiveAttempted += 1;
       try {
         archivePublishedArticle(group.article, options.paths || { published: path.join(rootDir, "published") });
-        group.results.forEach(function(result) { archiveFailures.delete(group.archiveKey); });
+        group.results.filter(function(result) { return result.publicationStatus === "published"; }).forEach(function(result) {
+          var persisted = persistArchiveOutcome(result, { status: "archived", errorCode: null, updatedAt: new Date().toISOString() });
+          if (!persisted.ok) result.archiveError = persisted.errorCode;
+        });
       } catch (error) {
         archiveFailed += 1;
-        group.results.forEach(function(result) {
+        group.results.filter(function(result) { return result.publicationStatus === "published"; }).forEach(function(result) {
           result.archiveError = safeOutcomeError(error, "PUBLISHED_ARCHIVE_FAILED");
-          archiveFailures.set(group.archiveKey, result.archiveError);
+          var persisted = persistArchiveOutcome(result, { status: "failed", errorCode: result.archiveError, updatedAt: new Date().toISOString() });
+          if (!persisted.ok) result.archiveError = persisted.errorCode;
         });
       }
     });
@@ -764,7 +813,7 @@ function createPlatformWorkbenchService(opts) {
       var filePath = resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false);
       return readSubmissionMetadata(filePath, true);
     },
-    listArchiveFailures: listArchiveFailures
+    retryArchive: retryArchive
   };
 }
 

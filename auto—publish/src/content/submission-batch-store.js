@@ -16,6 +16,20 @@ function createSubmissionBatchStore(options) {
     return path.join(directory, "batch-" + id + ".json");
   }
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  function validateLocalArchive(value) {
+    if (value === undefined) return;
+    if (!value || typeof value !== "object" || Array.isArray(value) || !["pending", "archived", "failed"].includes(value.status) ||
+        (value.errorCode !== null && value.errorCode !== undefined && (typeof value.errorCode !== "string" || !/^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value.errorCode))) ||
+        typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
+      throw batchError("SUBMISSION_BATCH_ARCHIVE_INVALID", "Submission batch local archive state is invalid");
+    }
+    if (value.status === "failed" && !value.errorCode) throw batchError("SUBMISSION_BATCH_ARCHIVE_INVALID", "Submission batch local archive failure requires an error code");
+    if (value.status !== "failed" && value.errorCode != null) throw batchError("SUBMISSION_BATCH_ARCHIVE_INVALID", "Submission batch local archive state has an invalid error code");
+  }
+  function validateBatch(batch) {
+    if (!batch || typeof batch !== "object" || !Array.isArray(batch.items)) throw batchError("SUBMISSION_BATCH_INVALID", "Submission batch is invalid");
+    batch.items.forEach(function(item) { validateLocalArchive(item && item.localArchive); });
+  }
   function batchStatus(items) {
     const values = Array.isArray(items) ? items.map((item) => item.status) : [];
     if (values.some((status) => ["queued", "reserving"].includes(status))) return "queued";
@@ -42,6 +56,7 @@ function createSubmissionBatchStore(options) {
     "cancelled-cleaned": new Set([])
   };
   function save(batch) {
+    validateBatch(batch);
     const file = filename(batch.id);
     const temp = `${file}.tmp-${process.pid}-${crypto.randomUUID()}`;
     try {
@@ -92,10 +107,23 @@ function createSubmissionBatchStore(options) {
     const nextStatus = transition.status;
     const allowed = transitions[item.status] || new Set();
     if (item.status !== nextStatus && !allowed.has(nextStatus)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid");
-    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt", "pairState", "identityMatched", "contentMatched", "mainExists", "sidecarExists"];
+    const allowedFields = ["status", "publicationStatus", "errorCode", "remoteId", "remoteUrl", "reasonCode", "updatedAt", "pairState", "identityMatched", "contentMatched", "mainExists", "sidecarExists", "localArchive"];
     Object.keys(transition).forEach((key) => { if (!allowedFields.includes(key)) throw batchError("SUBMISSION_BATCH_TRANSITION_INVALID", "Submission batch transition is invalid"); });
     Object.assign(item, transition, { status: nextStatus, publicationStatus: transition.publicationStatus === undefined ? nextStatus : transition.publicationStatus, updatedAt: transition.updatedAt || now() });
     return item;
+  }
+  function updateLocalArchive(batchId, identity, localArchive) {
+    validateLocalArchive(localArchive);
+    const batch = get(batchId);
+    const reference = identity || {};
+    const item = batch.items.find(function(candidate) {
+      return candidate.publicationId === reference.publicationId && candidate.attemptId === reference.attemptId && candidate.targetPlatformId === reference.targetPlatformId;
+    });
+    if (!item) throw batchError("SUBMISSION_BATCH_ITEM_NOT_FOUND", "Submission batch item was not found");
+    if (item.status !== "published" || item.publicationStatus !== "published") throw batchError("SUBMISSION_BATCH_ARCHIVE_STATE_INVALID", "Only a published submission can update local archive state");
+    item.localArchive = { status: localArchive.status, errorCode: localArchive.errorCode || null, updatedAt: localArchive.updatedAt || now() };
+    batch.updatedAt = now();
+    return save(batch);
   }
   function updateItem(batchId, identity, transition) {
     const batch = get(batchId);
@@ -144,7 +172,7 @@ function createSubmissionBatchStore(options) {
     batch.updatedAt = now();
     return save(batch);
   }
-  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, rebindAttempt, reconcile, batchStatus };
+  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, updateLocalArchive, rebindAttempt, reconcile, batchStatus };
 }
 
 module.exports = { createSubmissionBatchStore };

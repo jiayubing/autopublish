@@ -52,7 +52,10 @@ test("removed failed publication is excluded from attention while remaining quer
 
 test("article attention query aggregates safe, actionable DTOs without filesystem paths", () => {
   const query = createArticleAttentionQuery({
-    contentSubmissionService: { cleanupArticleSubmissionItem: () => ({}) },
+    contentSubmissionService: {
+      cleanupArticleSubmissionItem: () => ({}),
+      listArchiveFailures: () => [{ publicationId: "pub-4", clientId: "client-1", articleId: "article-5", platformId: "lieju", targetPlatformId: "lieju", batchId: "batch-4", attemptId: "attempt-4", status: "published", reasonCode: "PUBLISHED_ARCHIVE_FAILED" }]
+    },
     readers: {
       listResidues: () => ({ items: [
         { clientId: "client-1", articleId: "article-1", batchId: "batch-1", publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan", status: "failed", pairState: "both_absent", repairAction: "cleanup", mainExists: false, sidecarExists: false, titleSnapshot: "残留文章" },
@@ -60,7 +63,6 @@ test("article attention query aggregates safe, actionable DTOs without filesyste
       ] }),
       listTransactions: () => [{ id: "removal-1", clientId: "client-1", articleId: "article-3", status: "needs_repair", phase: "needs_repair", errorCode: "SUBMISSION_QUEUE_CHANGED", updatedAt: "2026-07-19T00:00:00.000Z", articles: [{ clientId: "client-1", articleId: "article-3" }] }],
       listPublications: () => [{ publicationId: "pub-3", clientId: "client-1", articleId: "article-4", platformId: "toutiao", status: "uncertain", attempts: [{ attemptId: "attempt-3", status: "uncertain" }] }],
-      listArchiveFailures: () => [{ publicationId: "pub-4", clientId: "client-1", articleId: "article-5", platformId: "lieju", status: "published", reasonCode: "PUBLISHED_ARCHIVE_FAILED" }]
     }
   });
 

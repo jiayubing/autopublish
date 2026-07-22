@@ -82,7 +82,10 @@ function createArticleAttentionQuery(options) {
   }
 
   function readArchiveFailures() {
-    const value = reader("listArchiveFailures", function() { return []; })();
+    const value = reader("listArchiveFailures", function() {
+      if (opts.contentSubmissionService && typeof opts.contentSubmissionService.listArchiveFailures === "function") return opts.contentSubmissionService.listArchiveFailures();
+      return [];
+    })();
     return Array.isArray(value) ? value : [];
   }
 
@@ -248,7 +251,7 @@ function createArticleAttentionQuery(options) {
 
   function archiveEntries() {
     return readArchiveFailures().map(function(item) {
-      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { canRetryArchive: true });
+      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { hasQueueBinding: !!(item.batchId && item.publicationId && item.attemptId && item.targetPlatformId), canRetryArchive: true });
     });
   }
 

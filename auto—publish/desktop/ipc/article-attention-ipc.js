@@ -12,7 +12,6 @@ function registerArticleAttentionIpc(deps) {
     publicationLedger: publicationLedger,
     getRevision: options.getWorkspaceDataRevision,
     readers: {
-      listArchiveFailures: options.archiveIssueReader,
       listTransactions: options.aiContentService && options.aiContentService.listArticleRemovalTransactions,
       getArticle: options.aiContentService && options.aiContentService.getGeneratedArticle,
       platformCapabilities: options.contentSubmissionService && options.contentSubmissionService.listPlatforms,
@@ -28,6 +27,7 @@ function registerArticleAttentionIpc(deps) {
     contentSubmissionService: options.contentSubmissionService,
     articleRemovalService: options.aiContentService,
     publicationLedger: publicationLedger,
+    archiveService: options.archiveService,
     onDataInvalidated: options.invalidateData
   });
 

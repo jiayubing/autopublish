@@ -34,14 +34,14 @@ function registerIpc(deps) {
   });
   require("./batch-ipc").registerBatchIpc(guarded);
   require("./media-ipc").registerMediaIpc(guarded);
-  require("./platform-ipc").registerPlatformIpc(guarded);
+  const platform = require("./platform-ipc").registerPlatformIpc(guarded);
   require("./ai-provider-ipc").registerAiProviderIpc(guarded);
   require("./platform-settings-ipc").registerPlatformSettingsIpc(guarded);
   require("./ai-content-ipc").registerAiContentIpc(guarded);
   require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(guarded);
   require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(guarded);
   require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
-  const attention = require("./article-attention-ipc").registerArticleAttentionIpc(guarded);
+  const attention = require("./article-attention-ipc").registerArticleAttentionIpc(Object.assign({}, guarded, { archiveService: platform && platform.service }));
   require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, { articleAttentionQuery: attention.query }));
   require("./publication-ipc").registerPublicationIpc(guarded);
   require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);

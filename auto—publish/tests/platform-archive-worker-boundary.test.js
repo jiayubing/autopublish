@@ -6,7 +6,7 @@ const { it } = require("node:test");
 
 const { createPlatformWorkbenchService } = require("../desktop/services/platform-workbench-service");
 
-it("retains a published local archive failure after the worker service instance is discarded", async function() {
+it("does not retain archive failures in the worker service process memory", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "platform-archive-worker-boundary-"));
   try {
     const input = path.join(root, "input", "lieju");
@@ -25,10 +25,7 @@ it("retains a published local archive failure after the worker service instance 
     const result = await workerService.submitSelectedPlanSerially(workerService.buildSelectedPlan({ selectedArticles: [{ sourcePlatformId: "lieju", filename: "article.txt" }], targetPlatformIds: ["lieju"] }), { autoSubmit: true, interactive: false });
     assert.equal(result.results[0].publicationStatus, "published");
     assert.equal(result.results[0].archiveError, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(workerService.listArchiveFailures().length, 1);
-
-    const mainProcessQuery = createPlatformWorkbenchService(options);
-    assert.equal(mainProcessQuery.listArchiveFailures().length, 1);
+    assert.equal(typeof workerService.listArchiveFailures, "undefined");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

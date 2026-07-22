@@ -26,7 +26,6 @@ function registerPlatformIpc(deps) {
     }),
     adapters: adapters
   });
-  deps.archiveIssueReader = typeof service.listArchiveFailures === "function" ? service.listArchiveFailures : function() { return []; };
 
   function buildPlanFromSubmissions(values) {
     if (!Array.isArray(values) || !values.length) throw inputError();
@@ -258,6 +257,7 @@ function registerPlatformIpc(deps) {
       return taskService.getState();
     });
   });
+  return { service: service };
 }
 
 module.exports = { registerPlatformIpc };

@@ -214,6 +214,35 @@ describe("submission batch and platform worker integration", function() {
     }
   });
 
+  it("persists a published archive failure across a rebuilt submission service without changing remote publication", async function() {
+    const value = harness({ status: "published", remoteId: "remote-success" });
+    try {
+      const batch = createBatch(value);
+      const item = batch.items[0];
+      fs.mkdirSync(value.paths.published, { recursive: true });
+      fs.writeFileSync(path.join(value.paths.published, path.basename(item.filePath)), "collision", "utf8");
+      const result = await executeBatch(value, batch);
+      assert.equal(result.results[0].publicationStatus, "published");
+      assert.equal(result.results[0].archiveError, "PUBLISHED_ARCHIVE_CONFLICT");
+      assert.equal(currentRecord(value, batch).status, "published");
+      const persisted = value.submission.getBatch(batch.batchId).items[0];
+      assert.deepEqual(persisted.localArchive.status, "failed");
+      assert.equal(persisted.localArchive.errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
+      const rebuilt = createContentSubmissionService({ workspaceRoot: value.root, paths: value.paths, articleStore: createArticleStore(value.root), platforms: [PLATFORM], publicationLedger: value.publicationLedger });
+      const failures = rebuilt.listArchiveFailures();
+      assert.equal(failures.length, 1);
+      assert.equal(failures[0].publicationId, item.publicationId);
+      assert.equal(failures[0].reasonCode, "PUBLISHED_ARCHIVE_CONFLICT");
+      fs.unlinkSync(path.join(value.paths.published, path.basename(item.filePath)));
+      const retried = value.workbench.retryArchive(failures[0]);
+      assert.equal(retried.status, "archived");
+      assert.equal(currentRecord(value, batch).status, "published");
+      assert.equal(value.submission.getBatch(batch.batchId).items[0].localArchive.status, "archived");
+    } finally {
+      dispose(value);
+    }
+  });
+
   it("keeps an uncertain worker result visible in both records", async function() {
     const value = harness({ status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" });
     try {

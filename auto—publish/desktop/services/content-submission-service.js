@@ -955,6 +955,33 @@ function createContentSubmissionService(opts) {
     if (!entry) throw batchError("SUBMISSION_QUEUE_ITEM_NOT_FOUND", "Submission batch item was not found");
     return inspectSubmissionPairState(entry.item, entry.batch, entry.sidecar, { rootDir: rootDir, record: entry.record || request.record || null });
   }
+  // Local archival is a persisted batch fact.  Reading it is deliberately
+  // side-effect free so historical batches without this optional field remain
+  // compatible and are never rewritten merely by opening the attention view.
+  function listArchiveFailures() {
+    return batchStore.list().reduce(function(result, batch) {
+      (batch.items || []).forEach(function(item) {
+        if (!item.localArchive || item.localArchive.status !== "failed" || item.status !== "published" || item.publicationStatus !== "published") return;
+        const record = publicationForBatchItem(item);
+        if (!record || record.status !== "published") return;
+        const pair = inspectSubmissionPairState(item, batch, readSidecar(item), { rootDir: rootDir, record: record });
+        result.push({
+          batchId: batch.id,
+          clientId: batch.clientId,
+          articleId: item.articleId,
+          platformId: item.targetPlatformId,
+          targetPlatformId: item.targetPlatformId,
+          publicationId: item.publicationId,
+          attemptId: item.attemptId,
+          status: "published",
+          reasonCode: item.localArchive.errorCode,
+          updatedAt: item.localArchive.updatedAt,
+          pairState: pair.pairState
+        });
+      });
+      return result;
+    }, []);
+  }
   function exporterFor(value) {
     return options.exporter || createSubmissionExportService({
       rootDir,
@@ -1007,6 +1034,7 @@ function createContentSubmissionService(opts) {
     cleanupTrashedArticleQueueResidue,
     previewRetryFailedPublication,
     retryFailedPublication
+    ,listArchiveFailures
   };
 }
 
