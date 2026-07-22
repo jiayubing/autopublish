@@ -20,6 +20,7 @@ import ArticleList from './components/ArticleList';
 import ArticleEditor from './components/ArticleEditor';
 import PreflightModal, { MediaPreflightSummary } from './components/PreflightModal';
 import { WorkspaceDataProvider, usePlatformQueue } from './workspace-data-store';
+import { onWorkspaceDataInvalidated } from './bridge/workspace';
 import { PlatformTaskProvider } from './platform-task-store';
 import { 
   Database, 
@@ -71,6 +72,7 @@ function AppContent() {
   const [isRefreshingResources, setIsRefreshingResources] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const mediaRefreshRequestId = useRef(0);
+  const mediaInvalidationRevision = useRef(0);
 
   const openArticleAttention = (intent: { attentionId?: string; clientId?: string } = {}) => {
     setArticleAttentionIntent(intent);
@@ -268,6 +270,11 @@ function AppContent() {
     if (requestId !== mediaRefreshRequestId.current) return;
     setOrders(freshOrders);
   }, []);
+  useEffect(() => onWorkspaceDataInvalidated((event) => {
+    if (!event.scopes.includes('mediaWorkbench') || event.revision <= mediaInvalidationRevision.current) return;
+    mediaInvalidationRevision.current = event.revision;
+    void refreshMediaWorkbenchData().catch((error) => console.error('media workbench refresh failed:', error));
+  }), [refreshMediaWorkbenchData]);
   const confirmRealSubmit = async () => {
     setIsSubmitting(true);
     setSubmissionError(null);

@@ -133,7 +133,7 @@ export default function WorkspaceSelectionPanel({
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <section className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        {showAppName && <p className="text-sm font-semibold tracking-wide text-blue-600">AutoPublish</p>}
+        {showAppName && <div><p className="text-xl font-bold text-blue-600">鱼饼大王</p><p className="text-xs text-slate-500">Auto Publish</p></div>}
         <h1 className="mt-2 text-2xl font-bold text-slate-900">{title}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
 

@@ -58,7 +58,9 @@ function createContentSubmissionService(opts) {
 
   function notifyData(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
-    try { options.onDataInvalidated(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode); } catch (_) {}
+    const scopes = ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"];
+    if (reasonCode === "CONTENT_EXPORT_QUEUED") scopes.push("mediaWorkbench");
+    try { options.onDataInvalidated(scopes, reasonCode); } catch (_) {}
   }
 
   function previewRetryFailedPublication(value) {
@@ -964,7 +966,12 @@ function createContentSubmissionService(opts) {
   }
   return {
     previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); },
-    exportArticle: function(value) { value = input(value); return exporterFor(value).exportArticle(value); },
+    exportArticle: function(value) {
+      value = input(value);
+      const result = exporterFor(value).exportArticle(value);
+      notifyData("CONTENT_EXPORT_QUEUED");
+      return result;
+    },
     listPlatforms,
     previewBatch,
     createBatch,

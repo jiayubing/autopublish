@@ -14,7 +14,8 @@ describe('renderer article management workflow seam', () => {
     assert.match(tabs, /文章流程阶段/);
     assert.match(tabs, /role="tab"/);
     assert.match(content, /articleStageFilter/);
-    assert.match(list, /deriveArticleWorkflow/);
+    assert.match(list, /snapshotWorkflowByArticle/);
+    assert.match(list, /getArticleManagementSnapshot/);
     assert.match(list, /打开需处理/);
     assert.match(content, /GeneratedArticleEditorPanel/);
   });

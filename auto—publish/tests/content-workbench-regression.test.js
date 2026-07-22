@@ -78,8 +78,8 @@ describe("content workbench regression", function() {
     const api = read("media-workbench/src/bridge/content.ts");
     assert.match(preload, /previewDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:preview-doubao-batch", input\); \}/);
     assert.match(preload, /startPreparedDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:start-prepared-doubao-batch", input\); \}/);
-    assert.match(api, /export async function previewDoubaoBatch[\s\S]*callContent\("previewDoubaoBatch", \[input\]/);
-    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*callContent\("startPreparedDoubaoBatch", \[\{ tasks \}\]/);
+    assert.match(api, /export async function previewDoubaoBatch[\s\S]*callContent\(\s*"previewDoubaoBatch",\s*\[input\]/);
+    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*callContent\(\s*"startPreparedDoubaoBatch",\s*\[\{ tasks \}\]/);
     assert.doesNotMatch(api, /export function startPreparedDoubaoBatch[\s\S]*return startDoubaoBatch\(tasks\)/);
   });
 
@@ -102,7 +102,7 @@ describe("content workbench regression", function() {
     ["单篇生成", "批量生成", "CollapsibleSourceItem", "materialIds", "researchQueryIds"].forEach(function(value) {
       assert.equal(article.includes(value), true, "missing " + value);
     });
-    ["previewGenerationBatch", "startGenerationBatch", "getGenerationRuntimeSnapshot", "pauseGenerationBatch", "resumeGenerationBatch", "stopGenerationBatch", "retryFailedGenerationBatch"].forEach(function(value) {
+    ["previewGenerationBatch", "createAndStartGenerationBatch", "getGenerationRuntimeSnapshot", "pauseGenerationBatch", "resumeGenerationBatch", "stopGenerationBatch", "retryFailedGenerationBatch"].forEach(function(value) {
       assert.equal(batch.includes(value) && api.includes(value), true, "missing " + value);
     });
     assert.doesNotMatch(batch, /safeStorage|readFileSync|Playwright|playwright|fetch\(/i);

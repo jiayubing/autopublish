@@ -3,6 +3,8 @@ const path = require("node:path");
 
 const APPLICATION_NAME = "AutoPublish";
 const APPLICATION_ID = "com.autopublish.desktop";
+const DISPLAY_NAME_ZH = "鱼饼大王";
+const DISPLAY_NAME_EN = "Auto Publish";
 const LEGACY_PACKAGE_NAMES = Object.freeze(["auto-publish-desktop", "AutoPublish Desktop"]);
 const IMPORTABLE_FILES = Object.freeze(["workspace-location.json", "runtime-config.json", "ai-provider.json"]);
 const LEGACY_RUNTIME_SECRET_KEYS = new Set(["XQW_API_KEY", "XQW_BASE_URL", "XQW_TIMEOUT_MS", "XQW_ALLOW_INSECURE", "HEPAN_COOKIE_PATH", "HEPAN_PYTHON", "HEPAN_VENDOR_DIR", "HEPAN_CATEGORY_ID"]);
@@ -72,4 +74,4 @@ function importLegacyApplicationConfig(options) {
   }
 }
 
-module.exports = { APPLICATION_NAME, APPLICATION_ID, LEGACY_PACKAGE_NAMES, IMPORTABLE_FILES, LEGACY_RUNTIME_SECRET_KEYS, configureApplicationIdentity, legacyUserDataPaths, importLegacyApplicationConfig };
+module.exports = { APPLICATION_NAME, APPLICATION_ID, DISPLAY_NAME_ZH, DISPLAY_NAME_EN, LEGACY_PACKAGE_NAMES, IMPORTABLE_FILES, LEGACY_RUNTIME_SECRET_KEYS, configureApplicationIdentity, legacyUserDataPaths, importLegacyApplicationConfig };

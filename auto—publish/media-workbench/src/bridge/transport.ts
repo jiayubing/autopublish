@@ -10,8 +10,13 @@ export function isElectron(): boolean {
   return typeof window !== "undefined" && Boolean(window.desktopConsole);
 }
 
-export function ipcError(error: IpcError | { code?: string; message?: string } | undefined, fallback: string): Error & { code?: string } {
-  const value = Object.assign(new Error(error?.message || fallback), { code: error?.code });
+export function ipcError(
+  error: IpcError | { code?: string; message?: string } | undefined,
+  fallback: string,
+): Error & { code?: string } {
+  const value = Object.assign(new Error(error?.message || fallback), {
+    code: error?.code,
+  });
   return value;
 }
 

@@ -177,6 +177,7 @@ const api = {
     getDoubaoQueueState: function() { return ipcRenderer.invoke("content:get-doubao-queue-state"); },
     previewGenerationBatch: function(input) { return ipcRenderer.invoke("content:preview-generation-batch", input || {}); },
     createGenerationBatch: function(input) { return ipcRenderer.invoke("content:create-generation-batch", input || {}); },
+    createAndStartGenerationBatch: function(input) { return ipcRenderer.invoke("content:create-and-start-generation-batch", input || {}); },
     listGenerationBatches: function() { return ipcRenderer.invoke("content:list-generation-batches"); },
     getGenerationBatch: function(batchId) { return ipcRenderer.invoke("content:get-generation-batch", { batchId: batchId }); },
     startGenerationBatch: function(input) { return ipcRenderer.invoke("content:start-generation-batch", input || {}); },

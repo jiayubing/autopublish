@@ -1,7 +1,7 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage } = require("electron");
 const { isAllowedRendererNavigation } = require("./security/navigation");
-const { configureApplicationIdentity } = require("./application-identity");
+const { configureApplicationIdentity, DISPLAY_NAME_ZH } = require("./application-identity");
 const { createAuthenticatedRuntime } = require("./services/authenticated-runtime");
 
 configureApplicationIdentity(app);
@@ -44,7 +44,7 @@ function sendToRenderer(channel, payload) {
 function invalidateWorkspaceData(scopes, reasonCode) {
   workspaceDataRevision += 1;
   const allowedScopes = Array.isArray(scopes) ? scopes.filter(function(scope) {
-    return ["platformQueue", "navigationSummary", "articleAttention", "articleManagement", "orders", "contentSources"].includes(scope);
+    return ["platformQueue", "navigationSummary", "articleAttention", "articleManagement", "orders", "contentSources", "mediaWorkbench"].includes(scope);
   }) : [];
   sendToRenderer("workspace:data-invalidated", {
     revision: workspaceDataRevision,
@@ -66,7 +66,7 @@ function createMainWindow() {
     minWidth: 1180,
     minHeight: 760,
     backgroundColor: "#f6f7f4",
-    title: "Auto Publish Desktop Console",
+    title: DISPLAY_NAME_ZH,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

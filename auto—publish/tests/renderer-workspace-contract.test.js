@@ -29,7 +29,7 @@ describe("renderer workspace bootstrap contract", function() {
     const types = readSource("types.ts");
     const api = readSource("bridge/workspace.ts");
     assert.match(types, /interface WorkspaceSelectionToken\s*\{\s*token: string;/s);
-    assert.match(api, /confirmWorkspaceSelection\(input: WorkspaceSelectionToken\)/);
+    assert.match(api, /confirmWorkspaceSelection\s*\(\s*input: WorkspaceSelectionToken\s*,?\s*\)/);
     assert.doesNotMatch(api, /confirmWorkspaceSelection\([^)]*path/);
     ["getWorkspaceBootstrapState", "chooseWorkspaceDirectory", "confirmWorkspaceSelection", "cancelWorkspaceSelection", "getCurrentWorkspace", "openCurrentWorkspace", "requestWorkspaceSwitch"].forEach((name) => assert.match(api, new RegExp(name)));
   });

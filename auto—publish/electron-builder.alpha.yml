@@ -1,5 +1,5 @@
 appId: com.autopublish.desktop
-productName: AutoPublish
+productName: 鱼饼大王
 copyright: "Copyright © 2026"
 
 directories:
@@ -103,7 +103,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: AutoPublish Alpha
+  shortcutName: 鱼饼大王 Alpha
 
 portable:
   artifactName: "${productName}-Alpha-${version}-portable.${ext}"

@@ -68,8 +68,8 @@ export default function Sidebar({
           <Sparkles className="w-5 h-5" />
         </div>
         <div>
-          <h1 className="font-bold text-slate-100 text-base leading-tight tracking-tight">Auto Publish</h1>
-          <span className="text-[10px] text-slate-400 tracking-wider font-semibold uppercase">智能媒体分发台</span>
+          <h1 className="font-bold text-slate-100 text-lg leading-tight">鱼饼大王</h1>
+          <span className="text-[10px] text-slate-400 font-semibold uppercase">Auto Publish</span>
         </div>
       </div>
 
@@ -196,7 +196,7 @@ export default function Sidebar({
         
         {/* Soft watermark */}
         <div className="mt-3 text-center text-[10px] text-slate-600 font-medium">
-          Auto Publish Desktop Console
+          鱼饼大王
         </div>
       </div>
     </aside>

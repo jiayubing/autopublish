@@ -580,6 +580,11 @@ function createContentGenerationBatchService(options) {
     return runtimeBatch(batch, commandStatus);
   }
 
+  async function createAndStartBatch(input) {
+    const batch = await createBatch(input);
+    return runBatch(batch.id, "pending", false);
+  }
+
   async function stopBatch(input) {
     return requestStop(input, "stopping");
   }
@@ -599,7 +604,7 @@ function createContentGenerationBatchService(options) {
 
   return {
     preview: preview, previewBatch: preview, prepare: prepareBatch, prepareBatch: prepareBatch, revalidate: revalidateBatch, revalidateBatch: revalidateBatch,
-    createBatch: createBatch, startBatch: startBatch, startGenerationBatch: startBatch, startPreparedBatch: startBatch,
+    createBatch: createBatch, createAndStartBatch: createAndStartBatch, createAndStartGenerationBatch: createAndStartBatch, startBatch: startBatch, startGenerationBatch: startBatch, startPreparedBatch: startBatch,
     continueBatch: continueBatch, continueGenerationBatch: continueBatch, resumeBatch: continueBatch, resumeGenerationBatch: continueBatch,
     pauseBatch: pauseBatch, pauseGenerationBatch: pauseBatch, stopBatch: stopBatch, stopGenerationBatch: stopBatch,
     retryFailed: retryFailed, retryFailedBatch: retryFailed, retryFailedGenerationBatch: retryFailed,

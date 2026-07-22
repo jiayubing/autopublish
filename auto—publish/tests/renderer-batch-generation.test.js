@@ -163,7 +163,7 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /可执行任务数/);
     assert.match(batch, /确认.*启动|启动.*确认/);
     assert.match(batch, /previewGenerationBatch/);
-    assert.match(batch, /startGenerationBatch/);
+    assert.match(batch, /createAndStartGenerationBatch/);
     assert.match(batch, /getGenerationRuntimeSnapshot/);
     assert.match(batch, /pauseGenerationBatch/);
     assert.match(batch, /resumeGenerationBatch/);
@@ -176,8 +176,7 @@ describe("renderer content generation workflow", function() {
     const preload = read("desktop/preload.js");
     [
       "previewGenerationBatch",
-      "createGenerationBatch",
-      "startGenerationBatch",
+      "createAndStartGenerationBatch",
       "pauseGenerationBatch",
       "resumeGenerationBatch",
       "stopGenerationBatch",

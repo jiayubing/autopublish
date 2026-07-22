@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   continueGenerationBatch,
-  createGenerationBatch,
+  createAndStartGenerationBatch,
   getGenerationRuntimeSnapshot,
   listContentResearch,
   listContentTemplateCatalog,
@@ -11,7 +11,6 @@ import {
   retryContentMaterial,
   retryFailedGenerationBatch,
   resumeGenerationBatch,
-  startGenerationBatch,
   stopGenerationBatch,
   subscribeGenerationBatchState,
 } from '../../bridge/content';
@@ -270,10 +269,9 @@ export default function BatchGenerationView({ clients, currentClientId, refreshT
     operationBusyRef.current = true;
     setCommandPending(true); setLoading(true); setError('');
     try {
-      const created = await createGenerationBatch({ clientIds: selectedClientIds, templates: selectedTemplates, clientSources: currentSources, templateCatalogRevision: catalog.revision });
-      setBatch(created);
+      const accepted = await createAndStartGenerationBatch({ clientIds: selectedClientIds, templates: selectedTemplates, clientSources: currentSources, templateCatalogRevision: catalog.revision });
+      setBatch(accepted);
       setViewMode('monitoring');
-      const accepted = await startGenerationBatch({ batchId: created.id });
       setBatch(mergeRuntimeSnapshot(accepted));
       onRefreshBatchState();
     } catch (value) { setError(value instanceof Error ? value.message : '无法启动批量生成'); }

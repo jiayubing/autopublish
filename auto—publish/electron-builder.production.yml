@@ -30,7 +30,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: AutoPublish
+  shortcutName: 鱼饼大王
 
 portable:
   artifactName: "${productName}-${version}-portable.${ext}"

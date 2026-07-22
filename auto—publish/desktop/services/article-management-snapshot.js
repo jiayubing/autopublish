@@ -72,6 +72,23 @@ const TERMINAL_PUBLICATIONS = new Set(["published", "cancelled"]);
 const ACTIVE_BATCHES = new Set(["queued", "submitting", "submitted", "reserving"]);
 const FAILED_BATCHES = new Set(["failed", "conflict", "uncertain"]);
 
+const STAGE_POLICY = Object.freeze({
+  trash: { primaryAction: "restore", allowedBulkActions: ["restore"], locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: false } },
+  failed: { primaryAction: "open_attention", allowedBulkActions: ["open_attention", "trash"], locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: true } },
+  queued: { primaryAction: "view_progress", allowedBulkActions: ["view_progress"], locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: false } },
+  published: { primaryAction: "view_publication", allowedBulkActions: ["view_publication", "trash"], locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: true } },
+  pending_submission: { primaryAction: "queue", allowedBulkActions: ["queue"], locks: { canEdit: true, canQueue: true, canCancel: false, canTrash: true } }
+});
+
+function targetKeyFor(value) {
+  if (!value || typeof value !== "object") return null;
+  if (typeof value.targetKey === "string" && value.targetKey) return value.targetKey;
+  if (value.mediaResourceId) return "media-resource:" + value.mediaResourceId;
+  if (value.platformId) return "platform:" + value.platformId;
+  if (value.targetPlatformId) return "platform:" + value.targetPlatformId;
+  return null;
+}
+
 function publicationSummary(records) {
   const values = records.map(function(record) { return String(record.status || ""); });
   const published = values.filter(function(status) { return status === "published"; }).length;
@@ -88,38 +105,33 @@ function publicationSummary(records) {
 
 function deriveWorkflow(article, records, batches, transactions, attentionItems, indexedFacts) {
   const articleId = article.id;
+  const targetFacts = indexedFacts && indexedFacts.targetFacts ? indexedFacts.targetFacts : {};
+  const facts = Object.values(targetFacts);
   const publicationStatuses = records.map(function(record) { return String(record.status || ""); });
   const batchStatuses = indexedFacts && indexedFacts.batchStatuses ? indexedFacts.batchStatuses : batches.flatMap(function(batch) { return (batch.items || []).filter(function(item) { return item.articleId === articleId; }).map(function(item) { return String(item.status || ""); }); });
   const relevantAttentionItems = indexedFacts && indexedFacts.attentionItems ? indexedFacts.attentionItems : attentionItems;
   const isTrash = ["trashed", "trash"].includes(String(article.status || ""));
-  const hasActive = publicationStatuses.some(function(status) { return ACTIVE_PUBLICATIONS.has(status); }) || batchStatuses.some(function(status) { return ACTIVE_BATCHES.has(status); });
+  const effectiveStatuses = facts.length ? facts.map(function(fact) { return fact.status; }) : publicationStatuses.concat(batchStatuses);
+  const hasActive = effectiveStatuses.some(function(status) { return ACTIVE_PUBLICATIONS.has(status) || ACTIVE_BATCHES.has(status); });
   const hasUncertain = publicationStatuses.includes("uncertain") || batchStatuses.includes("uncertain");
   const hasRepairTransaction = indexedFacts && indexedFacts.hasRepairTransaction !== undefined ? indexedFacts.hasRepairTransaction : transactions.some(function(item) { return item.status === "needs_repair" || item.phase === "needs_repair"; });
-  const hasFailure = ["failed", "uncertain"].includes(String(article.status || "")) || relevantAttentionItems.some(function(item) { return item.articleId === articleId || item.archiveError != null; }) || hasRepairTransaction || publicationStatuses.some(function(status) { return FAILED_PUBLICATIONS.has(status); }) || batchStatuses.some(function(status) { return FAILED_BATCHES.has(status); });
-  const combined = publicationStatuses.concat(batchStatuses.filter(function(status) { return TERMINAL_PUBLICATIONS.has(status); }));
-  const hasPublished = combined.includes("published");
-  const allTargetsTerminal = combined.length > 0 && combined.every(function(status) { return TERMINAL_PUBLICATIONS.has(status); });
+  const hasFailure = ["failed", "uncertain"].includes(String(article.status || "")) || relevantAttentionItems.some(function(item) { return item.articleId === articleId; }) || hasRepairTransaction || effectiveStatuses.some(function(status) { return FAILED_PUBLICATIONS.has(status) || FAILED_BATCHES.has(status); });
+  const hasPublished = effectiveStatuses.includes("published");
+  const allTargetsTerminal = effectiveStatuses.length > 0 && effectiveStatuses.every(function(status) { return TERMINAL_PUBLICATIONS.has(status) || status === "failed"; });
   let stage = "pending_submission";
   if (isTrash) stage = "trash";
   else if (hasFailure) stage = "failed";
   else if (hasActive) stage = "queued";
   else if (hasPublished && allTargetsTerminal) stage = "published";
-  const locks = stage === "trash"
-    ? { canEdit: false, canQueue: false, canCancel: false, canTrash: false }
-    : stage === "failed"
-      ? { canEdit: false, canQueue: false, canCancel: false, canTrash: !hasActive && !hasUncertain }
-      : stage === "queued"
-        ? { canEdit: false, canQueue: false, canCancel: batchStatuses.includes("queued"), canTrash: false }
-        : stage === "published"
-          ? { canEdit: false, canQueue: false, canCancel: false, canTrash: true }
-          : { canEdit: true, canQueue: true, canCancel: false, canTrash: true };
-  const allowedBulkActions = stage === "trash" ? ["restore"] : stage === "failed" ? (hasUncertain ? ["open_attention"] : ["open_attention", "trash"]) : stage === "queued" ? ["view_progress"] : stage === "published" ? ["view_publication", "trash"] : ["queue"];
+  const policy = STAGE_POLICY[stage];
+  const locks = Object.assign({}, policy.locks, { canCancel: facts.some(function(fact) { return fact.canCancel; }) });
   return {
     stage,
-    primaryAction: stage === "trash" ? "restore" : stage === "failed" ? "open_attention" : stage === "queued" ? "view_progress" : stage === "published" ? "view_publication" : "queue",
-    allowedBulkActions,
+    primaryAction: policy.primaryAction,
+    allowedBulkActions: stage === "failed" && hasUncertain ? ["open_attention"] : policy.allowedBulkActions.slice(),
     locks,
-    publicationSummary: publicationSummary(records)
+    publicationSummary: publicationSummary(records),
+    targetFacts
   };
 }
 
@@ -144,7 +156,7 @@ function createArticleManagementSnapshot(options) {
     return fallback;
   }
 
-  async function get(input) {
+  async function get(input, retry) {
     const clientId = assertClientId(typeof input === "string" ? input : input && input.clientId);
     const revision = Number(getRevision()) || 0;
     const cacheKey = key(clientId, revision);
@@ -167,22 +179,41 @@ function createArticleManagementSnapshot(options) {
     const recordsByArticle = new Map();
     publicationRecords.forEach(function(record) { if (record.articleId) recordsByArticle.set(record.articleId, (recordsByArticle.get(record.articleId) || []).concat(record)); });
     const batchStatusesByArticle = new Map();
+    const targetFactsByArticle = new Map();
+    function addTarget(articleId, targetKey, patch) {
+      if (!articleId || !targetKey) return;
+      const byTarget = targetFactsByArticle.get(articleId) || {};
+      byTarget[targetKey] = Object.assign({ targetKey, status: "not_submitted", canCancel: false }, byTarget[targetKey] || {}, patch);
+      targetFactsByArticle.set(articleId, byTarget);
+    }
+    platforms.forEach(function(platform) {
+      if (platform && platform.contentQueueImport && platform.id !== "media") articleIds.forEach(function(articleId) { addTarget(articleId, "platform:" + platform.id, { displayName: platform.displayName || platform.id }); });
+    });
+    publicationRecords.forEach(function(record) { addTarget(record.articleId, targetKeyFor(record), { status: String(record.status || ""), publicationId: record.publicationId || null, displayName: record.displayName || record.platformId || record.mediaResourceId || null }); });
     batches.forEach(function(batch) { (batch.items || []).forEach(function(item) {
       if (!item.articleId) return;
       batchStatusesByArticle.set(item.articleId, (batchStatusesByArticle.get(item.articleId) || []).concat(String(item.status || "")));
+      const targetKey = targetKeyFor(item);
+      if (!targetKey) return;
+      const existing = (targetFactsByArticle.get(item.articleId) || {})[targetKey];
+      const publicationTerminal = existing && ["published", "submitted", "submitting", "uncertain"].includes(existing.status);
+      addTarget(item.articleId, targetKey, {
+        status: publicationTerminal ? existing.status : String(item.publicationStatus || item.status || ""),
+        batchId: batch.id,
+        canCancel: !publicationTerminal && String(item.status || "") === "queued" && String(batch.status || "") === "queued"
+      });
     }); });
     const attentionByArticle = new Map();
-    const globalAttention = attentionItems.filter(function(item) { return item.archiveError != null; });
     attentionItems.forEach(function(item) { if (item.articleId) attentionByArticle.set(item.articleId, (attentionByArticle.get(item.articleId) || []).concat(item)); });
-    const hasRepairTransaction = transactions.some(function(item) { return item.status === "needs_repair" || item.phase === "needs_repair"; });
     const workflowByArticle = {};
     const publicationSummaries = {};
     articleList.forEach(function(article) {
       const records = recordsByArticle.get(article.id) || [];
       workflowByArticle[article.id] = deriveWorkflow(article, records, batches, transactions, attentionItems, {
         batchStatuses: batchStatusesByArticle.get(article.id) || [],
-        attentionItems: (attentionByArticle.get(article.id) || []).concat(globalAttention),
-        hasRepairTransaction
+        attentionItems: attentionByArticle.get(article.id) || [],
+        hasRepairTransaction: transactions.some(function(item) { return item.articleId === article.id && (item.status === "needs_repair" || item.phase === "needs_repair"); }),
+        targetFacts: targetFactsByArticle.get(article.id) || {}
       });
       publicationSummaries[article.id] = workflowByArticle[article.id].publicationSummary;
     });
@@ -199,6 +230,11 @@ function createArticleManagementSnapshot(options) {
       workflowByArticle,
       publicationSummaries
     };
+    const finalRevision = Number(getRevision()) || 0;
+    if (finalRevision !== revision) {
+      if (retry) throw snapshotError("ARTICLE_MANAGEMENT_SNAPSHOT_STALE", "Article management data changed while loading");
+      return get(input, true);
+    }
     cache.set(cacheKey, snapshot);
     return clone(snapshot);
   }

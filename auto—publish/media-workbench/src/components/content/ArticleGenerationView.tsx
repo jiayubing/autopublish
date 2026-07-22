@@ -175,7 +175,12 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   async function generate() {
     if (SELECTION_CONTROL_TYPE !== 'checkbox' || !clientId || !materialIds.length || !selectedIds.length || !templateId || generating) return;
     setGenerating(true); setError('');
-      try { onArticleChange(await generateContentArticle({ clientId, materialIds, researchQueryIds: selectedIds, platform, templateId, templateCatalogRevision: templateRevision })); }
+      try {
+        const article = await generateContentArticle({ clientId, materialIds, researchQueryIds: selectedIds, platform, templateId, templateCatalogRevision: templateRevision });
+        if (article.clientId !== clientId) return;
+        onArticleChange(article);
+        onRefreshArticles();
+      }
     catch (value) { setError(value instanceof Error ? value.message : '生成文章失败'); }
     finally { setGenerating(false); }
   }
@@ -201,7 +206,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
       </section>
       <section className="min-h-[360px] flex-1 rounded-md">{selectedArticle ? <GeneratedArticleEditorPanel embedded sourceLabel="文章生成" article={selectedArticle} onSaved={(saved) => { onArticleChange(saved); onRefreshArticles(); }} onClose={() => onArticleChange(null)} onSaveArticle={async (draft) => {
         const resolvedTemplateId = resolveAvailableTemplateId({ ...draft, templateId }, templates) || draft.templateId;
-        return saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, title: draft.title, content: draft.content, materialIds, status: selectedArticle.status, updatedAt: new Date().toISOString() });
+        return saveContentArticle({ ...selectedArticle, templateId: resolvedTemplateId, title: draft.title, content: draft.content, materialIds, status: 'saved', updatedAt: new Date().toISOString() });
       }} footer={<div className="flex flex-wrap items-center gap-2"><select aria-label="导出平台" value={exportTarget} onChange={(event) => setExportTarget(event.target.value)} className="h-8 min-w-0 rounded border border-slate-300 px-2 text-xs">{submissionPlatforms.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select><button type="button" onClick={() => void preview()} disabled={!exportTarget} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><Eye className="h-3.5 w-3.5" />投稿预检</button><button type="button" onClick={() => void exportArticle()} disabled={(selectedArticle.status !== 'generated' && selectedArticle.status !== 'saved') || !exportTarget} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><Download className="h-3.5 w-3.5" />加入待投稿队列</button>{exportPreviewText && <span className="text-xs text-slate-500">{exportPreviewText}</span>}</div>} /> : <div className="flex h-full min-h-[360px] items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-400">选择资料与回答并生成文章，或从历史标签页打开文章</div>}</section>{error && <div role="alert" className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     </div>}
   </div>;

@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { describe, it } = require("node:test");
 
-const { createArticleManagementSnapshot } = require("../desktop/services/article-management-snapshot");
+const { createArticleManagementSnapshot, deriveWorkflow } = require("../desktop/services/article-management-snapshot");
 const { registerArticleManagementIpc } = require("../desktop/ipc/article-management-ipc");
 
 function createFixture() {
@@ -69,5 +69,25 @@ describe("article management snapshot", function() {
     const invalid = await handlers.get("content:get-article-management-snapshot")({}, { clientId: "../other" });
     assert.equal(invalid.ok, false);
     assert.equal(invalid.error.code, "ARTICLE_MANAGEMENT_CLIENT_INVALID");
+  });
+
+  it("does not offer cancellation for a published target when an old queued item remains", function() {
+    const workflow = deriveWorkflow({ id: "article-a", status: "saved" }, [], [], [], [], {
+      targetFacts: {
+        "platform:toutiao": { targetKey: "platform:toutiao", status: "published", canCancel: false }
+      }
+    });
+    assert.equal(workflow.stage, "published");
+    assert.equal(workflow.locks.canCancel, false);
+  });
+
+  it("keeps an article pending while another declared target remains available", function() {
+    const workflow = deriveWorkflow({ id: "article-a", status: "saved" }, [], [], [], [], {
+      targetFacts: {
+        "platform:toutiao": { targetKey: "platform:toutiao", status: "published", canCancel: false },
+        "platform:hepan": { targetKey: "platform:hepan", status: "not_submitted", canCancel: false }
+      }
+    });
+    assert.equal(workflow.stage, "pending_submission");
   });
 });

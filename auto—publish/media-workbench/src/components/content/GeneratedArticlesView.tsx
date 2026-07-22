@@ -4,7 +4,7 @@ import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copy
 import { reconcilePublicationHistory } from '../../bridge/publication';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ArticleAttentionItem, ArticleAttentionList, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
-import { deriveArticleManagementStatus, deriveArticleWorkflow, type ArticleWorkflowStage } from '../../article-workflow';
+import { type ArticleWorkflowStage } from '../../article-workflow';
 import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import { summarizePublicationRecords } from '../../publication-status';
@@ -53,6 +53,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const confirmationActionRef = useRef<(() => Promise<void>) | null>(null);
   const confirmationIdRef = useRef(0);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
+  const [snapshotWorkflowByArticle, setSnapshotWorkflowByArticle] = useState<Awaited<ReturnType<typeof getArticleManagementSnapshot>>['workflowByArticle']>({});
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] = useState<ArticleAttentionItem | null>(null);
   const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
@@ -126,6 +127,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setCancellationPlans(snapshot.cancellationPlans || []);
     setTrash(snapshot.trash || []);
     setPublicationRecords(snapshot.publicationRecords || []);
+    setSnapshotWorkflowByArticle(snapshot.workflowByArticle || {});
     setSubmissionPlatforms((snapshot.submissionPlatforms || []).filter((platform) => platform.contentQueueImport));
     setAttentionSnapshot({ ...(snapshot.attention || { revision: snapshot.revision, items: [], counts: { total: 0, actionable: 0 } }), loading: false, error: null });
     return snapshot.articles || [];
@@ -139,6 +141,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       setArticles([]);
       setSubmissionBatches([]);
       setPublicationRecords([]);
+      setSnapshotWorkflowByArticle({});
       return () => { cancelled = true; };
     }
     getArticleManagementSnapshot(clientId)
@@ -164,15 +167,17 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     });
     return summaries;
   }, [articles, publicationRecordsByArticle, queuedArticleIds]);
-  const workflowByArticle = useMemo(() => new Map(articles.map((article) => [article.id, deriveArticleWorkflow(article, publicationRecordsByArticle.get(article.id) || [], submissionBatches, [], attentionItems)])), [articles, attentionItems, publicationRecordsByArticle, submissionBatches]);
+  const workflowByArticle = useMemo(() => new Map(articles.map((article) => [article.id, snapshotWorkflowByArticle[article.id]])), [articles, snapshotWorkflowByArticle]);
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
     return articles.filter((article) => {
-      const stageMatches = selectedStage === 'all' || deriveArticleManagementStatus(article, publicationRecordsByArticle.get(article.id) || [], submissionBatches, [], attentionItems) === selectedStage;
+      // Older main-process snapshots did not include workflowByArticle. Treat
+      // those articles as pending until a fresh authoritative snapshot arrives.
+      const stageMatches = selectedStage === 'all' || (snapshotWorkflowByArticle[article.id]?.stage || 'pending_submission') === selectedStage;
       const textMatches = !query || `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query);
       return stageMatches && textMatches;
     });
-  }, [articles, attentionItems, filter, publicationRecordsByArticle, selectedStage, submissionBatches]);
+  }, [articles, filter, selectedStage, snapshotWorkflowByArticle]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
   const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)));

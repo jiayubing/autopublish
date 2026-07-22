@@ -37,6 +37,7 @@ function registerContentGenerationBatchIpc(deps) {
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation batch IPC dependencies are required");
   ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(function() { return service.preview(input(value)); }); });
   ipcMain.handle("content:create-generation-batch", function(event, value) { return invoke(function() { return service.createBatch(input(value)); }); });
+  ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(function() { return service.createAndStartBatch(input(value)); }); });
   ipcMain.handle("content:list-generation-batches", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.list(); }); });
   ipcMain.handle("content:get-generation-batch", function(event, value) { return invoke(function() { return service.get(input(value).batchId); }); });
   ipcMain.handle("content:start-generation-batch", function(event, value) { return invoke(function() { return service.startBatch(input(value)); }); });
