@@ -344,20 +344,59 @@ function createContentSubmissionService(opts) {
 
   function articleSelectionKey(item) { return item.clientId + "\0" + item.articleId; }
 
-  function articleSubmissionItems(selections) {
+  // Read snapshots are deliberately private to this service.  They make a
+  // query internally consistent, but are never accepted from callers that
+  // mutate state: mutations must observe the filesystem again.
+  function createReadSnapshot(input) {
+    const source = input && Array.isArray(input.batches) ? input.batches : input && input.batchId ? [batchStore.get(input.batchId)] : batchStore.list();
+    const snapshot = {
+      revision: typeof options.getDataRevision === "function" ? options.getDataRevision() : null,
+      batches: source,
+      batchesById: new Map(),
+      itemsByArticle: new Map(),
+      itemsByIdentity: new Map(),
+      publicationsById: new Map(),
+      sidecarsByItem: new Map()
+    };
+    source.forEach(function(batch) {
+      snapshot.batchesById.set(batch.id, batch);
+      (batch.items || []).forEach(function(item, index) {
+        const entry = { batch: batch, item: item, itemKey: batch.id + "\0" + index };
+        const articleKey = articleSelectionKey({ clientId: batch.clientId, articleId: item.articleId });
+        snapshot.itemsByArticle.set(articleKey, (snapshot.itemsByArticle.get(articleKey) || []).concat(entry));
+        const identityKey = (item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || "");
+        snapshot.itemsByIdentity.set(identityKey, entry);
+      });
+    });
+    return snapshot;
+  }
+
+  function snapshotPublication(snapshot, item) {
+    if (!item.publicationId || !item.attemptId) return null;
+    if (!snapshot.publicationsById.has(item.publicationId)) snapshot.publicationsById.set(item.publicationId, publicationForBatchItem(item));
+    return snapshot.publicationsById.get(item.publicationId);
+  }
+
+  function snapshotSidecar(snapshot, entry) {
+    if (!snapshot.sidecarsByItem.has(entry.itemKey)) snapshot.sidecarsByItem.set(entry.itemKey, readSidecar(entry.item));
+    return snapshot.sidecarsByItem.get(entry.itemKey);
+  }
+
+  function articleSubmissionItems(selections, snapshot) {
+    const readSnapshot = snapshot || createReadSnapshot();
     const requested = new Set(selections.map(articleSelectionKey));
     const found = [];
     const seen = new Set();
-    batchStore.list().forEach(function(batch) {
-      (batch.items || []).forEach(function(item) {
-        const key = batch.clientId + "\0" + item.articleId;
-        if (!requested.has(key)) return;
+    requested.forEach(function(key) {
+      (readSnapshot.itemsByArticle.get(key) || []).forEach(function(entry) {
+        const batch = entry.batch;
+        const item = entry.item;
         const identityKey = (item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || "");
         if (seen.has(identityKey)) return;
         seen.add(identityKey);
-        const record = publicationForBatchItem(item);
+        const record = snapshotPublication(readSnapshot, item);
         const latest = latestAttempt(record);
-        const sidecar = readSidecar(item);
+        const sidecar = snapshotSidecar(readSnapshot, entry);
         const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
         const cleanedStatuses = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"];
         const status = cleanedStatuses.includes(item.status) ? item.status : record ? record.status : item.publicationStatus || item.status;
@@ -466,13 +505,14 @@ function createContentSubmissionService(opts) {
     };
   }
 
-  function locateArticleSubmissionItem(action) {
-    const entries = articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }]);
+  function locateArticleSubmissionItem(action, snapshot) {
+    const readSnapshot = snapshot || createReadSnapshot({ batchId: action.batchId });
+    const identityKey = (action.publicationId || action.batchId + ":" + action.targetPlatformId + ":" + action.articleId) + "\0" + (action.attemptId || "");
+    const indexed = readSnapshot.itemsByIdentity.get(identityKey);
+    const entries = indexed ? articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], readSnapshot).filter(function(entry) { return entry.item === indexed.item; }) : articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], readSnapshot);
     return entries.find(function(entry) {
       return entry.safe.batchId === action.batchId && entry.safe.targetPlatformId === action.targetPlatformId &&
-        (action.publicationId && action.attemptId
-          ? entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId
-          : entry.safe.articleId === action.articleId);
+        (action.publicationId && action.attemptId ? entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId : entry.safe.articleId === action.articleId);
     });
   }
 
@@ -486,7 +526,6 @@ function createContentSubmissionService(opts) {
       targetPlatformId: entry.safe.targetPlatformId,
       publicationId: entry.safe.publicationId,
       attemptId: entry.safe.attemptId,
-      itemStatus: entry.item && entry.item.status,
       publicationStatus: entry.safe.status,
       contentHash: entry.safe.contentHash,
       sidecarAttemptId: entry.sidecar && entry.sidecar.attemptId || null,
@@ -511,11 +550,11 @@ function createContentSubmissionService(opts) {
     };
   }
 
-  function evaluateItemAction(action) {
+  function evaluateItemAction(action, snapshot) {
     if (!action || typeof action !== "object" || !["cancel", "cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action)) {
       return { allowed: false, action: action && action.action || null, reasonCode: "SUBMISSION_ACTION_INVALID", resolvedState: null, bindingFingerprint: null, entry: null };
     }
-    const entry = locateArticleSubmissionItem(action);
+    const entry = locateArticleSubmissionItem(action, snapshot);
     if (!entry || !entry.item || !entry.batch) return { allowed: false, action: action.action, reasonCode: "SUBMISSION_QUEUE_ITEM_NOT_FOUND", resolvedState: null, bindingFingerprint: null, entry: null };
     const currentFingerprint = actionBindingFingerprint(entry, action);
     if (action.evaluationFingerprint && action.evaluationFingerprint !== currentFingerprint) {
@@ -561,10 +600,13 @@ function createContentSubmissionService(opts) {
   }
 
   function applyItemAction(action, nextStatus, reasonCode) {
-    const entry = locateArticleSubmissionItem(action);
+    // Never execute against a query snapshot or an earlier evaluation.  The
+    // action fingerprint is rechecked from one newly loaded, minimal batch.
+    const mutationSnapshot = createReadSnapshot({ batchId: action.batchId });
+    const entry = locateArticleSubmissionItem(action, mutationSnapshot);
     if (!entry || !entry.item || !entry.batch) throw batchError("SUBMISSION_QUEUE_CHANGED", "Submission queue item is unavailable");
     if (entry.safe.status === nextStatus || ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) || entry.safe.status === "cancelled" && action.action === "cancel") return { action: action.action || nextStatus, status: entry.safe.status, idempotent: true, batchId: entry.batch.id, publicationId: action.publicationId, attemptId: action.attemptId, changedScopes: [], domainHandled: true };
-    const checked = evaluateItemAction(action);
+    const checked = evaluateItemAction(action, mutationSnapshot);
     if (!checked.allowed) throw batchError(checked.reasonCode || "SUBMISSION_QUEUE_CHANGED", "Submission item action is no longer valid");
     if (action.evaluationFingerprint && checked.bindingFingerprint !== action.evaluationFingerprint) throw batchError("SUBMISSION_ACTION_STALE", "Submission item action is stale");
     let originalFile = null;
@@ -680,8 +722,10 @@ function createContentSubmissionService(opts) {
     return cleanupResult;
   }
 
-  function reconcileBatch(batchId) {
-    let batch = batchStore.get(batchId);
+  function reconcileBatch(batchId, snapshot) {
+    const readSnapshot = snapshot || createReadSnapshot({ batchId: batchId });
+    let batch = readSnapshot.batchesById.get(batchId);
+    if (!batch) throw batchError("SUBMISSION_BATCH_NOT_FOUND", "Submission batch was not found");
     const reconciled = [];
     const transitions = [];
     (batch.items || []).forEach((item) => {
@@ -690,10 +734,11 @@ function createContentSubmissionService(opts) {
       // local batch/article/platform identity is sufficient for local actions;
       // this is intentionally platform-agnostic.
       if (!item.publicationId || !item.attemptId) {
-        const sidecar = readSidecar(item);
+        const entry = readSnapshot.itemsByIdentity.get((item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || ""));
+        const sidecar = snapshotSidecar(readSnapshot, entry);
         const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: null });
         const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, action: "cancel" };
-        const cancelEvaluation = evaluateItemAction(actionInput);
+        const cancelEvaluation = evaluateItemAction(actionInput, readSnapshot);
         copy.unchanged = pair.pairState === "intact";
         copy.pairState = pair.pairState;
         copy.identityMatched = pair.identityMatched;
@@ -709,7 +754,8 @@ function createContentSubmissionService(opts) {
         reconciled.push(copy);
         return;
       }
-      const record = publicationForBatchItem(item);
+      const entry = readSnapshot.itemsByIdentity.get(item.publicationId + "\0" + item.attemptId);
+      const record = snapshotPublication(readSnapshot, item);
       const latest = latestAttempt(record);
       if (!record || !latest || record.platformId && record.platformId !== item.targetPlatformId) {
         copy.reconciledStatus = "conflict";
@@ -717,7 +763,7 @@ function createContentSubmissionService(opts) {
         reconciled.push(copy);
         return;
       }
-      const sidecar = readSidecar(item);
+      const sidecar = snapshotSidecar(readSnapshot, entry);
       const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
       copy.unchanged = pair.pairState === "intact";
       copy.pairState = pair.pairState;
@@ -736,10 +782,10 @@ function createContentSubmissionService(opts) {
         });
       }
       const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId };
-      const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" })) : null;
-      const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" })) : null;
-      const publishedCleanupEvaluation = record.status === "published" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupPublishedLocal" })) : null;
-      const cancelledCleanupEvaluation = record.status === "cancelled" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupCancelledLocal" })) : null;
+      const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" }), readSnapshot) : null;
+      const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" }), readSnapshot) : null;
+      const publishedCleanupEvaluation = record.status === "published" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupPublishedLocal" }), readSnapshot) : null;
+      const cancelledCleanupEvaluation = record.status === "cancelled" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupCancelledLocal" }), readSnapshot) : null;
       copy.canCancel = !!(cancelEvaluation && cancelEvaluation.allowed);
       copy.canCleanup = !!(cleanupEvaluation && cleanupEvaluation.allowed);
       copy.canCleanupPublished = !!(publishedCleanupEvaluation && publishedCleanupEvaluation.allowed);
@@ -860,18 +906,27 @@ function createContentSubmissionService(opts) {
 
   // This is the sole action resolver for preview, list summaries and execute.
   // `planId` binds the complete batch revision and every item fingerprint.
-  function buildSubmissionActionPlan(batchId, action) {
+  function buildSubmissionActionPlan(batchId, action, snapshot, reconciledResult) {
     if (typeof batchId !== "string" || !batchId) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
     if (action !== "cancel") throw batchError("SUBMISSION_ACTION_INVALID", "Submission action is invalid");
-    const reconciled = reconcileBatch(batchId);
+    const readSnapshot = snapshot || createReadSnapshot({ batchId: batchId });
+    const reconciled = reconciledResult || reconcileBatch(batchId, readSnapshot);
     const batch = reconciled.batch;
+    // Reconciliation may persist observed remote state.  Re-index its returned
+    // batch for planning, while carrying already-read immutable facts forward.
+    // This avoids both stale fingerprints and a second sidecar read.
+    const planSnapshot = reconciledResult ? createReadSnapshot({ batches: [batch] }) : readSnapshot;
+    if (reconciledResult) {
+      readSnapshot.publicationsById.forEach(function(value, key) { planSnapshot.publicationsById.set(key, value); });
+      readSnapshot.sidecarsByItem.forEach(function(value, key) { planSnapshot.sidecarsByItem.set(key, value); });
+    }
     const items = batch.items.map(function(item) {
       const request = {
         clientId: batch.clientId, articleId: item.articleId, batchId: batch.id,
         targetPlatformId: item.targetPlatformId, publicationId: item.publicationId,
         attemptId: item.attemptId, action: action
       };
-      const checked = evaluateItemAction(request);
+      const checked = evaluateItemAction(request, planSnapshot);
       return {
         articleId: item.articleId,
         targetPlatformId: item.targetPlatformId,
@@ -1007,9 +1062,11 @@ function createContentSubmissionService(opts) {
     cancelBatch,
     getBatch: function(batchId) { return reconcileBatch(batchId).batch; },
     listBatches: function(clientId) {
-      return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) {
-        const reconciled = reconcileBatch(batch.id).batch;
-        const plan = buildSubmissionActionPlan(batch.id, "cancel");
+      const snapshot = createReadSnapshot();
+      return snapshot.batches.filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) {
+        const result = reconcileBatch(batch.id, snapshot);
+        const reconciled = result.batch;
+        const plan = buildSubmissionActionPlan(batch.id, "cancel", snapshot, result);
         return Object.assign({}, reconciled, {
           actionPlan: plan,
           items: reconciled.items.map(function(item) {
