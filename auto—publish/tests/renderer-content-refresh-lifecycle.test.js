@@ -39,10 +39,10 @@ describe("renderer content refresh lifecycle", function() {
   it("keeps content-source invalidation separate from customer and template rescans", function() {
     const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    const main = read("desktop/main.js");
+    const invalidation = read("desktop/workspace-data-invalidation.js");
     assert.match(workbench, /contentSourcesRefreshToken/);
     assert.match(workbench, /onWorkspaceDataInvalidated/);
-    assert.match(main, /contentSources/);
+    assert.match(invalidation, /contentSources/);
     assert.match(questions, /onContentSourcesChanged/);
     assert.doesNotMatch(questions, /refreshWorkspaceSources/);
   });
