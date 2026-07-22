@@ -11,6 +11,7 @@ import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
 import ActionConfirmationModal, { type ActionConfirmation } from './ActionConfirmationModal';
+import { useArticleManagementSnapshot } from '../../hooks/use-article-management-snapshot';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
 
@@ -64,7 +65,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [removalWatchVersion, setRemovalWatchVersion] = useState(0);
   const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removalUnsubscribeRef = useRef<(() => void) | null>(null);
-  const clientRequestIdRef = useRef(0);
   const cancellationRequestIdRef = useRef(0);
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
@@ -133,22 +133,15 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     return snapshot.articles || [];
   }, []);
 
+  const { error: managementSnapshotError, refresh: loadManagementSnapshot } = useArticleManagementSnapshot(clientId, refreshToken, applyManagementSnapshot);
+
   useEffect(() => {
-    const requestId = ++clientRequestIdRef.current;
-    let cancelled = false;
-    const isCurrent = () => !cancelled && mountedRef.current && clientIdRef.current === clientId && requestId === clientRequestIdRef.current;
     if (!clientId) {
-      setArticles([]);
-      setSubmissionBatches([]);
-      setPublicationRecords([]);
-      setSnapshotWorkflowByArticle({});
-      return () => { cancelled = true; };
+      setArticles([]); setSubmissionBatches([]); setPublicationRecords([]); setSnapshotWorkflowByArticle({});
     }
-    getArticleManagementSnapshot(clientId)
-      .then((snapshot) => { if (isCurrent()) applyManagementSnapshot(snapshot); })
-      .catch((value) => { if (isCurrent()) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
-    return () => { cancelled = true; };
-  }, [applyManagementSnapshot, clientId, refreshToken]);
+  }, [clientId]);
+
+  useEffect(() => { if (managementSnapshotError) setError(managementSnapshotError); }, [managementSnapshotError]);
 
   const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const publicationRecordsByArticle = useMemo(() => {
@@ -223,17 +216,16 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const refreshHistoryData = useCallback(async () => {
     const requestedClientId = clientId;
     if (!mountedRef.current || requestedClientId !== clientIdRef.current) return [];
-    const requestId = ++clientRequestIdRef.current;
-    const snapshot = await getArticleManagementSnapshot(requestedClientId);
-    if (!mountedRef.current || requestedClientId !== clientIdRef.current || requestId !== clientRequestIdRef.current) return [];
+    const snapshot = await loadManagementSnapshot();
+    if (!snapshot || !mountedRef.current || requestedClientId !== clientIdRef.current) return [];
     return applyManagementSnapshot(snapshot);
-  }, [applyManagementSnapshot, clientId]);
+  }, [applyManagementSnapshot, clientId, loadManagementSnapshot]);
 
   const refreshAttention = useCallback(async () => {
-    const snapshot = await getArticleManagementSnapshot(clientId);
-    if (mountedRef.current && clientIdRef.current === clientId) applyManagementSnapshot(snapshot);
+    const snapshot = await loadManagementSnapshot();
+    if (snapshot && mountedRef.current && clientIdRef.current === clientId) applyManagementSnapshot(snapshot);
     return attentionSnapshot;
-  }, [applyManagementSnapshot, attentionSnapshot, clientId]);
+  }, [applyManagementSnapshot, attentionSnapshot, clientId, loadManagementSnapshot]);
 
   useEffect(() => {
     stopRemovalTransactionWatch();

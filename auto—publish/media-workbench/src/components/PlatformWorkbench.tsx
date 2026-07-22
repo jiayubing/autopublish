@@ -1,18 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   PlatformArticle,
   PlatformSubmitResult,
 } from "../types";
 import {
-  submitPlatformSelection,
-  stopPlatformSubmit,
-  pausePlatformSubmit,
   getPlatformSettingsStatus,
   previewTrashedArticleQueueResidue,
   cleanupTrashedArticleQueueResidue,
 } from "../bridge/platform";
 import { usePlatformQueue } from "../workspace-data-store";
 import { usePlatformTask } from "../platform-task-store";
+import { usePlatformWorkbenchController } from "../hooks/use-platform-workbench-controller";
 import type { HepanProviderStatus } from "../types";
 import PlatformTaskIndicator from "./PlatformTaskIndicator";
 import {
@@ -57,44 +55,15 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const loading = queueSnapshot.loading;
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedArticles, setSelectedArticles] = useState<Set<string>>(
-    new Set()
-  );
-  const [selectedPlatformIds, setSelectedPlatformIds] = useState<Set<string>>(
-    new Set()
-  );
-
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [autoTrashRequested, setAutoTrashRequested] = useState(() => {
-    try { return window.localStorage.getItem("auto-publish:auto-trash-after-publish") === "true"; } catch (_) { return false; }
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isStopping, setIsStopping] = useState(false);
-  const [submitResult, setSubmitResult] =
-    useState<PlatformSubmitResult | null>(null);
-  const [showResult, setShowResult] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<string>("");
   const [publishIntervalSeconds, setPublishIntervalSeconds] = useState<number | null>(null);
   const [queueResidue, setQueueResidue] = useState<{ cleanableCount: number; reportedCount: number }>({ cleanableCount: 0, reportedCount: 0 });
   const [repairingResidue, setRepairingResidue] = useState(false);
   const [residuePhase, setResiduePhase] = useState<"idle" | "checking" | "cleaning">("idle");
   const [residueFeedback, setResidueFeedback] = useState<{ kind: "status" | "error"; text: string } | null>(null);
 
-  useEffect(() => {
-    try { window.localStorage.setItem("auto-publish:auto-trash-after-publish", String(autoTrashRequested)); } catch (_) {}
-  }, [autoTrashRequested]);
-
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    new Set()
-  );
-  const hasObservedRunningRef = useRef(false);
-  const terminalQueueRevisionRef = useRef<number | null>(null);
-
-  const hasArchiveFailure = useCallback((article: PlatformArticle) => Boolean(article.archiveError), []);
-  const isSelectableArticle = useCallback((article: PlatformArticle) => article.sourceArticleState !== "trashed" && !hasArchiveFailure(article), [hasArchiveFailure]);
+  const controller = usePlatformWorkbenchController({ queue, platforms, platformState, refreshQueue, onError: setError });
+  const { selectedArticles, selectedPlatformIds, collapsedGroups, isConfirming, setIsConfirming, autoTrashRequested, setAutoTrashRequested, isSubmitting, isStopping, submitResult, showResult, submitStatus, taskIsActive, taskBusy, selectedArticleList, selectedPlatformList, canSubmit, toggleArticle, toggleSelectAllInGroup, toggleAll, togglePlatform, toggleGroupCollapse, pause: handlePause, stop: handleStop, submit: handleSubmit, dismissResult, selectionKey: articleSelectionKey, selectable: isSelectableArticle } = controller;
   const displayError = error || queueSnapshot.error;
-  const taskIsActive = platformState.isPlatformRunning || ["running", "waiting-interval", "stopping"].includes(platformState.phase);
-  const taskBusy = isSubmitting || taskIsActive;
 
   const loadQueue = useCallback(async () => {
     try {
@@ -104,13 +73,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       setError(e instanceof Error ? e.message : "Failed to load queue");
     }
   }, [refreshQueue]);
-
-  useEffect(() => {
-    setSelectedArticles((current) => {
-      const next = new Set([...current].filter((key) => queue.some((article) => articleSelectionKey(article) === key && isSelectableArticle(article))));
-      return next.size === current.size ? current : next;
-    });
-  }, [isSelectableArticle, queue]);
 
   const inspectQueueResidue = useCallback(async () => {
     try {
@@ -170,25 +132,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    const phase = platformState.phase || platformState.status || "";
-    const waiting = phase === "waiting-interval" || phase === "waiting_interval";
-    const running = phase === "running" || waiting || phase === "stopping" || platformState.isPlatformRunning === true;
-    if (running) hasObservedRunningRef.current = true;
-    if (waiting) setSubmitStatus("等待下一篇河畔文章…");
-    else if (phase === "running") setSubmitStatus("正在投稿…");
-    else if (phase === "stopping") setSubmitStatus("正在停止投稿…");
-    else if (["completed", "idle", "failed", "stopped", "interrupted"].includes(phase) && !running) {
-      if (!isSubmitting) setSubmitStatus("");
-      const queueRevision = platformState.queueRevision;
-      if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision) && terminalQueueRevisionRef.current !== queueRevision) {
-        terminalQueueRevisionRef.current = queueRevision;
-        hasObservedRunningRef.current = false;
-        void refreshQueue("submit-terminal").catch(() => {});
-      }
-    }
-  }, [platformState, refreshQueue, isSubmitting]);
-
   const groupedArticles: Record<string, PlatformArticle[]> = {};
   for (const article of queue) {
     const key = article.sourcePlatformId || article.platformId || "unknown";
@@ -198,106 +141,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   const sortedGroups = PLATFORM_ORDER.filter((id) => groupedArticles[id]);
 
-  const toggleArticle = (key: string) => {
-    const article = queue.find((item) => articleSelectionKey(item) === key);
-    if (!article || !isSelectableArticle(article)) return;
-    setSelectedArticles((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const toggleSelectAllInGroup = (platformId: string) => {
-    const groupArticles = groupedArticles[platformId] || [];
-    const selectableGroup = groupArticles.filter(isSelectableArticle);
-    if (!selectableGroup.length) return;
-    const allSelected = selectableGroup.every((a) =>
-      selectedArticles.has(articleSelectionKey(a))
-    );
-    setSelectedArticles((prev) => {
-      const next = new Set(prev);
-      for (const a of selectableGroup) {
-        if (allSelected) next.delete(articleSelectionKey(a));
-        else next.add(articleSelectionKey(a));
-      }
-      return next;
-    });
-  };
-
-  const togglePlatform = (platformId: string) => {
-    setSelectedPlatformIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(platformId)) next.delete(platformId);
-      else next.add(platformId);
-      return next;
-    });
-  };
-
-  const toggleGroupCollapse = (platformId: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(platformId)) next.delete(platformId);
-      else next.add(platformId);
-      return next;
-    });
-  };
-
-  const selectedArticleList = queue.filter((a) => isSelectableArticle(a) &&
-    selectedArticles.has(articleSelectionKey(a))
-  );
-  const selectedPlatformList = platforms.filter((p) =>
-    selectedPlatformIds.has(p.id)
-  );
-
   const taskCount =
     selectedArticleList.length * selectedPlatformIds.size;
   const selectedHepan = selectedPlatformIds.has("hepan");
   const hepanArticleCount = selectedHepan ? selectedArticleList.length : 0;
   const effectivePublishIntervalSeconds = publishIntervalSeconds ?? 0;
   const minimumHepanWaitSeconds = Math.max(0, hepanArticleCount - 1) * effectivePublishIntervalSeconds;
-  const canSubmit =
-    selectedArticleList.length > 0 && selectedPlatformIds.size > 0;
-
-  const handlePause = async () => {
-    setSubmitStatus("已暂停 — 正在关闭浏览器...");
-    try { await pausePlatformSubmit(platformState.runId); } catch (_) {}
-    setSubmitStatus("");
-  };
-
-  const handleStop = async () => {
-    setIsStopping(true);
-    try { await stopPlatformSubmit(platformState.runId); } catch (_) {}
-  };
-
-  const handleSubmit = async () => {
-    if (!canSubmit || taskBusy) return;
-    setIsConfirming(false);
-    setIsSubmitting(true);
-    setError(null);
-      setSubmitStatus(`正在提交 ${taskCount} 个任务，请稍候...`);
-    try {
-      const result = await submitPlatformSelection({
-        submissions: selectedArticleList.map((article) => ({
-          sourcePlatformId: article.sourcePlatformId,
-          filename: article.filename,
-          targetPlatformIds: [...selectedPlatformIds],
-        })),
-        autoTrash: autoTrashRequested,
-      });
-      setSubmitStatus("");
-      setSubmitResult(result);
-      setShowResult(true);
-    } catch (e: unknown) {
-      setSubmitStatus("");
-      setError(e instanceof Error ? e.message : "Submission failed");
-    } finally {
-      try { await refreshQueue("submit-terminal"); } catch (_) {}
-      setIsSubmitting(false);
-      setIsStopping(false);
-    }
-  };
 
   const terminalResult = submitResult || platformState.terminalResult;
   const resultOk = terminalResult?.ok ?? 0;
@@ -311,11 +160,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     ? `原因：${submitResult.trashSummary.reasonCodes.join("、")}`
     : "";
 
-  const dismissResult = () => {
-    setShowResult(false);
-    setSubmitResult(null);
-    setSubmitStatus("");
-  };
 
   return (
     <div className="flex flex-col h-full">
@@ -371,15 +215,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
             {queue.length > 0 && (
               <button
                 onClick={() => {
-                  const selectableQueue = queue.filter(isSelectableArticle);
-                  const allSelected = selectableQueue.length > 0 && selectableQueue.every((a) =>
-                    selectedArticles.has(articleSelectionKey(a))
-                  );
-                  if (allSelected) {
-                    setSelectedArticles(new Set());
-                  } else {
-                      setSelectedArticles(new Set(selectableQueue.map(articleSelectionKey)));
-                  }
+                  toggleAll();
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 font-medium"
               >
@@ -433,7 +269,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleSelectAllInGroup(platformId);
+                              toggleSelectAllInGroup(groupArticles);
                             }}
                             className="p-0.5"
                           >
