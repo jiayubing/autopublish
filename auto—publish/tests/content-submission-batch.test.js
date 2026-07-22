@@ -24,6 +24,8 @@ function makeService(root, values = {}) {
   return createContentSubmissionService({
     workspaceRoot: root,
     paths: values.paths,
+    batchStore: values.batchStore,
+    publicationLedger: values.publicationLedger,
     articleStore: {
       getArticle(clientId, id) {
         const found = articles.find((item) => item.clientId === clientId && item.id === id);
@@ -154,6 +156,26 @@ describe("content submission batch", function() {
       store.save({ id: "newer", clientId: "client-1", createdAt: "2026-07-16T00:00:00.000Z", status: "queued", items: [] });
       fs.writeFileSync(path.join(root, ".autopublish", "submission-batches", "batch-damaged.json"), JSON.stringify({ id: "damaged", createdAt: "not-a-date", items: [] }), "utf8");
       assert.deepStrictEqual(store.list().map((batch) => batch.id), ["newer", "same-z", "same-a", "damaged"]);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("reads the batch store once while building a list query snapshot", function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-query-snapshot-"));
+    try {
+      const store = createSubmissionBatchStore({ workspaceRoot: root });
+      const ledger = createPublicationLedger({ workspaceRoot: root });
+      const writer = makeService(root, { batchStore: store, publicationLedger: ledger });
+      writer.createBatch({ clientId: "client-1", articleIds: ["saved", "generated"], targetPlatformIds: ["toutiao"], confirmed: true });
+      let listCalls = 0;
+      const reader = makeService(root, {
+        publicationLedger: ledger,
+        batchStore: Object.assign({}, store, {
+          list() { listCalls += 1; return store.list(); }
+        })
+      });
+      const listed = reader.listBatches("client-1");
+      assert.equal(listed.length, 1);
+      assert.equal(listCalls, 1);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 

@@ -18,6 +18,10 @@ const fs = require("fs");
 const path = require("path");
 const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
 const { evaluateArticleSubmissionEligibility } = require("../../src/content/article-submission-eligibility");
+const { createSubmissionReadSnapshot } = require("./submission/read-snapshot");
+const { createSubmissionQuery } = require("./submission/query");
+const { actionReasonMessage } = require("./submission/action");
+const { uniqueSelection } = require("./submission/preparation");
 
 function batchError(code, message) { const error = new Error(message); error.code = code; return error; }
 function hash(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
@@ -55,6 +59,8 @@ function createContentSubmissionService(opts) {
   const batchStore = options.batchStore || createSubmissionBatchStore({ workspaceRoot: rootDir, directory: options.paths && options.paths.submissionRecords });
   const publicationLedger = options.publicationLedger || createPublicationLedger({ workspaceRoot: rootDir, paths: options.paths });
   const inputRoot = path.resolve(options.paths && options.paths.input || path.join(rootDir, ".autopublish", "input"));
+
+  function readSnapshot() { return createSubmissionReadSnapshot(batchStore); }
 
   function notifyData(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
@@ -125,8 +131,7 @@ function createContentSubmissionService(opts) {
 
   function assertBatchInput(value) {
     if (!value || typeof value !== "object" || typeof value.clientId !== "string" || !value.clientId.trim() || !Array.isArray(value.articleIds) || !Array.isArray(value.targetPlatformIds) || !value.articleIds.length || !value.targetPlatformIds.length) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch selection is invalid");
-    const unique = (values) => new Set(values).size === values.length && values.every((item) => typeof item === "string" && /^[A-Za-z0-9_.-]+$/.test(item));
-    if (!unique(value.articleIds) || !unique(value.targetPlatformIds)) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch selection is invalid");
+    if (!uniqueSelection(value.articleIds) || !uniqueSelection(value.targetPlatformIds)) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch selection is invalid");
     return value;
   }
 
@@ -344,20 +349,23 @@ function createContentSubmissionService(opts) {
 
   function articleSelectionKey(item) { return item.clientId + "\0" + item.articleId; }
 
-  function articleSubmissionItems(selections) {
+  function articleSubmissionItems(selections, snapshot) {
+    snapshot = snapshot || readSnapshot();
     const requested = new Set(selections.map(articleSelectionKey));
     const found = [];
     const seen = new Set();
-    batchStore.list().forEach(function(batch) {
-      (batch.items || []).forEach(function(item) {
+    selections.forEach(function(selection) {
+      snapshot.entriesForArticle(selection.clientId, selection.articleId).forEach(function(entry) {
+        const batch = entry.batch;
+        const item = entry.item;
         const key = batch.clientId + "\0" + item.articleId;
         if (!requested.has(key)) return;
         const identityKey = (item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || "");
         if (seen.has(identityKey)) return;
         seen.add(identityKey);
-        const record = publicationForBatchItem(item);
+        const record = snapshot.publicationFor(item, publicationForBatchItem);
         const latest = latestAttempt(record);
-        const sidecar = readSidecar(item);
+        const sidecar = snapshot.readSidecar(item, readSidecar);
         const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
         const cleanedStatuses = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"];
         const status = cleanedStatuses.includes(item.status) ? item.status : record ? record.status : item.publicationStatus || item.status;
@@ -396,7 +404,8 @@ function createContentSubmissionService(opts) {
       if (!item || typeof item.clientId !== "string" || !item.clientId.trim() || typeof item.articleId !== "string" || !item.articleId.trim()) throw batchError("CONTENT_INPUT_INVALID", "Article selection is invalid");
       return { clientId: item.clientId, articleId: item.articleId };
     });
-    const entries = articleSubmissionItems(normalized);
+    const snapshot = readSnapshot();
+    const entries = articleSubmissionItems(normalized, snapshot);
     const byKey = new Set(entries.map(function(entry) { return entry.safe.publicationId + "\0" + entry.safe.attemptId; }));
     if (typeof publicationLedger.listForArticles === "function") {
       normalized.forEach(function(selection) {
@@ -426,20 +435,20 @@ function createContentSubmissionService(opts) {
         blockedItems.push(Object.assign({}, value, { reasonCode: "ARTICLE_SUBMISSION_ACTIVE" }));
       } else if (value.status === "queued") {
         if (value.batchId && value.publicationId && value.attemptId) {
-          const checked = evaluateItemAction(Object.assign({}, value, { action: "cancel" }));
+          const checked = evaluateItemAction(Object.assign({}, value, { action: "cancel" }), snapshot);
           if (checked.allowed) queuedToCancel.push(Object.assign({}, value, { action: "cancel", evaluationFingerprint: checked.bindingFingerprint }));
           else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
         } else blockedItems.push(Object.assign({}, value, { reasonCode: "PUBLICATION_RESERVATION_WITHOUT_QUEUE" }));
       } else if (value.status === "failed") {
         if (value.batchId && value.publicationId && value.attemptId) {
-          const checked = evaluateItemAction(Object.assign({}, value, { action: "cleanup" }));
+          const checked = evaluateItemAction(Object.assign({}, value, { action: "cleanup" }), snapshot);
           if (checked.allowed) failedToClean.push(Object.assign({}, value, { action: "cleanup", evaluationFingerprint: checked.bindingFingerprint }));
           else blockedItems.push(Object.assign({}, value, { reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED" }));
         }
       } else if (["published", "cancelled"].includes(value.status) && value.batchId) {
         const action = value.status === "published" ? "cleanupPublishedLocal" : "cleanupCancelledLocal";
         if (value.publicationId && value.attemptId) {
-          const checked = evaluateItemAction(Object.assign({}, value, { action: action }));
+          const checked = evaluateItemAction(Object.assign({}, value, { action: action }), snapshot);
           if (checked.allowed) {
             const target = Object.assign({}, value, { action: action, evaluationFingerprint: checked.bindingFingerprint });
             (value.status === "published" ? publishedToClean : cancelledToClean).push(target);
@@ -466,8 +475,8 @@ function createContentSubmissionService(opts) {
     };
   }
 
-  function locateArticleSubmissionItem(action) {
-    const entries = articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }]);
+  function locateArticleSubmissionItem(action, snapshot) {
+    const entries = articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], snapshot);
     return entries.find(function(entry) {
       return entry.safe.batchId === action.batchId && entry.safe.targetPlatformId === action.targetPlatformId &&
         (action.publicationId && action.attemptId
@@ -486,7 +495,11 @@ function createContentSubmissionService(opts) {
       targetPlatformId: entry.safe.targetPlatformId,
       publicationId: entry.safe.publicationId,
       attemptId: entry.safe.attemptId,
-      itemStatus: entry.item && entry.item.status,
+      // The ledger is authoritative for a remote transition.  The persisted
+      // batch status may lag until reconciliation commits it, so including it
+      // here would make a freshly reconciled (but otherwise unchanged) plan
+      // spuriously stale.
+      itemStatus: entry.safe.status,
       publicationStatus: entry.safe.status,
       contentHash: entry.safe.contentHash,
       sidecarAttemptId: entry.sidecar && entry.sidecar.attemptId || null,
@@ -511,11 +524,11 @@ function createContentSubmissionService(opts) {
     };
   }
 
-  function evaluateItemAction(action) {
+  function evaluateItemAction(action, snapshot) {
     if (!action || typeof action !== "object" || !["cancel", "cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action)) {
       return { allowed: false, action: action && action.action || null, reasonCode: "SUBMISSION_ACTION_INVALID", resolvedState: null, bindingFingerprint: null, entry: null };
     }
-    const entry = locateArticleSubmissionItem(action);
+    const entry = locateArticleSubmissionItem(action, snapshot);
     if (!entry || !entry.item || !entry.batch) return { allowed: false, action: action.action, reasonCode: "SUBMISSION_QUEUE_ITEM_NOT_FOUND", resolvedState: null, bindingFingerprint: null, entry: null };
     const currentFingerprint = actionBindingFingerprint(entry, action);
     if (action.evaluationFingerprint && action.evaluationFingerprint !== currentFingerprint) {
@@ -680,8 +693,9 @@ function createContentSubmissionService(opts) {
     return cleanupResult;
   }
 
-  function reconcileBatch(batchId) {
-    let batch = batchStore.get(batchId);
+  function reconcileBatch(batchId, snapshot) {
+    snapshot = snapshot || readSnapshot();
+    let batch = snapshot.getBatch(batchId) || batchStore.get(batchId);
     const reconciled = [];
     const transitions = [];
     (batch.items || []).forEach((item) => {
@@ -690,10 +704,10 @@ function createContentSubmissionService(opts) {
       // local batch/article/platform identity is sufficient for local actions;
       // this is intentionally platform-agnostic.
       if (!item.publicationId || !item.attemptId) {
-        const sidecar = readSidecar(item);
+        const sidecar = snapshot.readSidecar(item, readSidecar);
         const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: null });
         const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, action: "cancel" };
-        const cancelEvaluation = evaluateItemAction(actionInput);
+        const cancelEvaluation = evaluateItemAction(actionInput, snapshot);
         copy.unchanged = pair.pairState === "intact";
         copy.pairState = pair.pairState;
         copy.identityMatched = pair.identityMatched;
@@ -709,7 +723,7 @@ function createContentSubmissionService(opts) {
         reconciled.push(copy);
         return;
       }
-      const record = publicationForBatchItem(item);
+      const record = snapshot.publicationFor(item, publicationForBatchItem);
       const latest = latestAttempt(record);
       if (!record || !latest || record.platformId && record.platformId !== item.targetPlatformId) {
         copy.reconciledStatus = "conflict";
@@ -717,7 +731,7 @@ function createContentSubmissionService(opts) {
         reconciled.push(copy);
         return;
       }
-      const sidecar = readSidecar(item);
+      const sidecar = snapshot.readSidecar(item, readSidecar);
       const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
       copy.unchanged = pair.pairState === "intact";
       copy.pairState = pair.pairState;
@@ -736,10 +750,10 @@ function createContentSubmissionService(opts) {
         });
       }
       const actionInput = { clientId: batch.clientId, articleId: item.articleId, batchId: batch.id, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId };
-      const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" })) : null;
-      const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" })) : null;
-      const publishedCleanupEvaluation = record.status === "published" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupPublishedLocal" })) : null;
-      const cancelledCleanupEvaluation = record.status === "cancelled" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupCancelledLocal" })) : null;
+      const cancelEvaluation = record.status === "queued" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cancel" }), snapshot) : null;
+      const cleanupEvaluation = record.status === "failed" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanup" }), snapshot) : null;
+      const publishedCleanupEvaluation = record.status === "published" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupPublishedLocal" }), snapshot) : null;
+      const cancelledCleanupEvaluation = record.status === "cancelled" ? evaluateItemAction(Object.assign({}, actionInput, { action: "cleanupCancelledLocal" }), snapshot) : null;
       copy.canCancel = !!(cancelEvaluation && cancelEvaluation.allowed);
       copy.canCleanup = !!(cleanupEvaluation && cleanupEvaluation.allowed);
       copy.canCleanupPublished = !!(publishedCleanupEvaluation && publishedCleanupEvaluation.allowed);
@@ -754,6 +768,7 @@ function createContentSubmissionService(opts) {
         // preserves the batch's atomic boundary when several queue items move
         // together after a platform result is observed.
         batch = batchStore.reconcile(batch.id, transitions);
+        snapshot.replaceBatch(batch);
       } catch (_) {
         transitions.forEach(function(change) {
           const conflict = reconciled.find(function(candidate) {
@@ -845,25 +860,13 @@ function createContentSubmissionService(opts) {
     return cleanupResult;
   }
 
-  function actionReasonMessage(reasonCode) {
-    const messages = {
-      SUBMISSION_ACTION_STALE: "动作计划已过期，请重新预览。",
-      SUBMISSION_IDENTITY_CONFLICT: "本地队列身份不完整或不匹配。",
-      SUBMISSION_CONTENT_CHANGED: "队列文件内容已变化。",
-      SUBMISSION_QUEUE_CHANGED: "队列文件状态已变化。",
-      PUBLICATION_REMOTE_STARTED: "投稿已经开始，不能撤销。",
-      ARTICLE_SUBMISSION_ACTIVE: "投稿正在进行，不能撤销。",
-      SUBMISSION_ALREADY_CANCELLED: "该项目已经撤销。"
-    };
-    return messages[reasonCode] || "当前项目不能执行该操作。";
-  }
-
   // This is the sole action resolver for preview, list summaries and execute.
   // `planId` binds the complete batch revision and every item fingerprint.
-  function buildSubmissionActionPlan(batchId, action) {
+  function buildSubmissionActionPlan(batchId, action, snapshot) {
     if (typeof batchId !== "string" || !batchId) throw batchError("CONTENT_SUBMISSION_BATCH_INPUT_INVALID", "Batch id is required");
     if (action !== "cancel") throw batchError("SUBMISSION_ACTION_INVALID", "Submission action is invalid");
-    const reconciled = reconcileBatch(batchId);
+    snapshot = snapshot || readSnapshot();
+    const reconciled = reconcileBatch(batchId, snapshot);
     const batch = reconciled.batch;
     const items = batch.items.map(function(item) {
       const request = {
@@ -871,7 +874,7 @@ function createContentSubmissionService(opts) {
         targetPlatformId: item.targetPlatformId, publicationId: item.publicationId,
         attemptId: item.attemptId, action: action
       };
-      const checked = evaluateItemAction(request);
+      const checked = evaluateItemAction(request, snapshot);
       return {
         articleId: item.articleId,
         targetPlatformId: item.targetPlatformId,
@@ -979,19 +982,7 @@ function createContentSubmissionService(opts) {
     previewCancelBatch,
     cancelBatch,
     getBatch: function(batchId) { return reconcileBatch(batchId).batch; },
-    listBatches: function(clientId) {
-      return batchStore.list().filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) {
-        const reconciled = reconcileBatch(batch.id).batch;
-        const plan = buildSubmissionActionPlan(batch.id, "cancel");
-        return Object.assign({}, reconciled, {
-          actionPlan: plan,
-          items: reconciled.items.map(function(item) {
-            const planned = plan.items.find(function(candidate) { return candidate.articleId === item.articleId && candidate.targetPlatformId === item.targetPlatformId && candidate.publicationId === (item.publicationId || null) && candidate.attemptId === (item.attemptId || null); });
-            return Object.assign({}, item, { canCancel: !!(planned && planned.allowed), actionFingerprint: planned && planned.fingerprint || null, reasonCode: planned && !planned.allowed ? planned.reasonCode : item.reasonCode });
-          })
-        });
-      });
-    },
+    listBatches: createSubmissionQuery({ createSnapshot: readSnapshot, reconcileBatch: reconcileBatch, buildActionPlan: buildSubmissionActionPlan }).listBatches,
     reconcileBatch,
     previewCleanupFailedItems,
     cleanupFailedItems,
