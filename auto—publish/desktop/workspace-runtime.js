@@ -74,7 +74,8 @@ function createWorkspaceRuntime(deps) {
         }
         const unsubscribeCollection = doubaoCollectionService.subscribe(function(value) { options.sendToRenderer("content:doubao-queue-state", value); });
         const unsubscribeLogs = require("../src/core/logger").subscribe(function(entry) { options.sendToRenderer("publish-log", entry); });
-        disposers.push(unsubscribeCollection, unsubscribeLogs);
+        if (typeof unsubscribeCollection === "function") disposers.push(unsubscribeCollection);
+        if (typeof unsubscribeLogs === "function") disposers.push(unsubscribeLogs);
         bootstrap = bootstrapState || null;
         state = "running";
         return getState();
@@ -93,11 +94,24 @@ function createWorkspaceRuntime(deps) {
     disposePromise = (async function() {
       state = "disposing";
       const pending = disposers.splice(0).reverse();
-      pending.forEach(function(dispose) { try { dispose(); } catch (_) {} });
+      for (const dispose of pending) {
+        try { await dispose(); } catch (_) {}
+      }
       const values = modules || {};
-      try { if (values.taskService && values.taskService.dispose) values.taskService.dispose(); } catch (_) {}
-      try { if (values.doubaoCollectionService && values.doubaoCollectionService.dispose) await values.doubaoCollectionService.dispose(); } catch (_) {}
-      try { if (values.contentGenerationBatchService && values.contentGenerationBatchService.dispose) await values.contentGenerationBatchService.dispose(); } catch (_) {}
+      for (const serviceName of [
+        "platformWorkbenchService",
+        "storageMaintenanceService",
+        "contentGenerationBatchService",
+        "aiContentService",
+        "contentSubmissionService",
+        "aiProviderService",
+        "doubaoCollectionService",
+        "taskService",
+        "platformSettingsService"
+      ]) {
+        const service = values[serviceName];
+        try { if (service && typeof service.dispose === "function") await service.dispose(); } catch (_) {}
+      }
       modules = null; ipc = null; ipcDeps = null; runtime = null; bootstrap = null;
       state = "stopped";
       disposePromise = null;
@@ -109,13 +123,13 @@ function createWorkspaceRuntime(deps) {
     if (state !== "running" || !ipcDeps) throw new Error("Workspace runtime is not started");
     if (ipc) return ipc;
     ipc = require("./ipc/register").registerIpc(ipcDeps);
-    disposers.push(ipc.dispose);
+    if (ipc && typeof ipc.dispose === "function") disposers.push(function() { return ipc.dispose(); });
     if (modules && modules.storageMaintenanceService) {
       const storageIpc = require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
         ipcMain: require("./ipc/register").createAuthenticatedIpcMain(options.ipcMain, options.authService && options.authService.requireAuthenticated),
         storageMaintenanceService: modules.storageMaintenanceService
       });
-      if (storageIpc && storageIpc.dispose) disposers.push(storageIpc.dispose);
+      if (storageIpc && typeof storageIpc.dispose === "function") disposers.push(function() { return storageIpc.dispose(); });
     }
     return ipc;
   }

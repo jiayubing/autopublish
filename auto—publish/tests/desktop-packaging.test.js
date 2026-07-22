@@ -88,6 +88,16 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
     ["./services/doubao-collection-service", {
       createDoubaoCollectionDesktopService: function() { return service; }
     }],
+    ["./workspace-runtime", {
+      createWorkspaceRuntime: function() {
+        return {
+          start: function() { return Promise.resolve(); },
+          registerIpc: function() {},
+          getState: function() { return { phase: "running" }; },
+          dispose: function() { return service.dispose(); }
+        };
+      }
+    }],
     ["./ipc/register", { registerIpc: function() {} }],
     ["../src/core/logger", { subscribe: function() { return options.unsubscribeLogs || function() {}; } }]
   ]);
@@ -572,10 +582,10 @@ describe("source assembly and packaging contract", function() {
   });
 
   it("configures a writable runtime workspace before IPC registration", function() {
-    const main = read("desktop/main.js");
-    assert.ok(main.includes("configureRuntimeEnvironment"));
-    assert.ok(main.includes("rootDir: runtime.workspaceRoot") || main.includes("rootDir: runtimeRoot"));
-    assert.ok(main.indexOf("configureRuntimeEnvironment") < main.indexOf("registerIpc"));
+    const runtime = read("desktop/workspace-runtime.js");
+    assert.ok(runtime.includes("configureRuntimeEnvironment"));
+    assert.ok(runtime.includes("rootDir: workspaceRoot"));
+    assert.ok(runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf("registerIpc"));
   });
 
   it("excludes private runtime data from alpha package config", function() {
@@ -686,24 +696,24 @@ describe("source assembly and packaging contract", function() {
   });
 
   it("initializes runtime environment before loading config-dependent services", function() {
-    const main = read("desktop/main.js");
-    assert.ok(main.includes("configureRuntimeEnvironment"));
+    const runtime = read("desktop/workspace-runtime.js");
+    assert.ok(runtime.includes("configureRuntimeEnvironment"));
     assert.ok(
-      main.indexOf("configureRuntimeEnvironment") < main.indexOf('require("../src/core/logger")'),
+      runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf('require("../src/core/logger")'),
       "logger must be required after runtime environment configuration"
     );
     assert.ok(
-      main.indexOf("configureRuntimeEnvironment") < main.indexOf('require("./ipc/register")'),
+      runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf('require("./ipc/register")'),
       "IPC registration must be required after runtime environment configuration"
     );
   });
 
   it("checks the Doubao service source assembly contract", function() {
-    const main = read("desktop/main.js");
-    assert.match(main, /createDoubaoCollection/);
-    assert.match(main, /content:doubao-queue-state/);
-    assert.match(main, /(?:doubaoCollectionService|service)\.dispose\(\)/);
-    assert.ok(main.indexOf("configureRuntimeEnvironment") < main.indexOf("createDoubaoCollection"));
+    const runtime = read("desktop/workspace-runtime.js");
+    assert.match(runtime, /createDoubaoCollection/);
+    assert.match(runtime, /content:doubao-queue-state/);
+    assert.match(runtime, /doubaoCollectionService/);
+    assert.ok(runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf("createDoubaoCollection"));
   });
 
   it("waits for Doubao disposal before quitting and does not re-enter the quit guard", async function() {
