@@ -165,6 +165,7 @@ it("disposes services already created when a middle workspace factory fails", as
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /generation factory failed/);
     assert.deepEqual(events, ["content", "submission", "provider", "doubao", "task"]);
     assert.equal(runtime.getState().phase, "stopped");
+    assert.equal(runtime.getState().task, null);
     assert.throws(function() { runtime.registerIpc(); }, /not started/);
   } finally {
     restore();
@@ -177,7 +178,7 @@ it("unsubscribes and disposes all started workspace resources when subscription 
   const events = [];
   const restore = replaceModules([
     { request: "../desktop/services/desktop-task-service", exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
-    { request: "../desktop/services/doubao-collection-service", exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); }; } }); } } },
+    { request: "../desktop/services/doubao-collection-service", exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); throw new Error("collection unsubscribe failed"); }; } }); } } },
     { request: "../desktop/services/ai-provider-service", exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
     { request: "../desktop/services/content-submission-service", exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
     { request: "../desktop/services/ai-content-service", exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
@@ -190,6 +191,7 @@ it("unsubscribes and disposes all started workspace resources when subscription 
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /log subscription failed/);
     assert.deepEqual(events, ["collection-unsubscribe", "workbench", "generation", "content", "submission", "provider", "doubao", "task"]);
     assert.equal(runtime.getState().phase, "stopped");
+    assert.equal(runtime.getState().task, null);
     assert.throws(function() { runtime.registerIpc(); }, /not started/);
   } finally {
     restore();
