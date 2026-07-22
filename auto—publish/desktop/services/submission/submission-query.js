@@ -20,13 +20,15 @@ function createSubmissionQuery(deps) {
         const result = deps.reconcileBatch(batch.id, snapshot);
         const reconciled = result.batch;
         const plan = deps.buildActionPlan(batch.id, "cancel", snapshot, result);
+        // A batch plan has one candidate per batch item.  Index it once rather
+        // than scanning the complete plan for every returned item.
+        const plannedByIdentity = new Map(plan.items.map(function(candidate) {
+          return [itemIdentity(candidate), candidate];
+        }));
         return Object.assign({}, reconciled, {
           actionPlan: plan,
           items: reconciled.items.map(function(item) {
-            const planned = plan.items.find(function(candidate) {
-              return candidate.articleId === item.articleId && candidate.targetPlatformId === item.targetPlatformId &&
-                candidate.publicationId === (item.publicationId || null) && candidate.attemptId === (item.attemptId || null);
-            });
+            const planned = plannedByIdentity.get(itemIdentity(item));
             return Object.assign({}, item, {
               canCancel: !!(planned && planned.allowed),
               actionFingerprint: planned && planned.fingerprint || null,
@@ -35,6 +37,10 @@ function createSubmissionQuery(deps) {
           })
         });
       });
+  }
+
+  function itemIdentity(item) {
+    return [item.articleId, item.targetPlatformId, item.publicationId || null, item.attemptId || null].join("\0");
   }
 
   return Object.freeze({ createReadSnapshot, getBatch, listBatches });

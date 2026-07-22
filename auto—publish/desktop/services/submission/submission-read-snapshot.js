@@ -12,11 +12,14 @@ function createSubmissionReadSnapshot(deps, input) {
     itemsByArticle: new Map(),
     itemsByIdentity: new Map(),
     publicationsById: new Map(),
-    sidecarsByItem: new Map()
+    sidecarsByItem: new Map(),
+    operationCounts: { batchVisits: 0, itemVisits: 0 }
   };
   source.forEach(function(batch) {
+    snapshot.operationCounts.batchVisits += 1;
     snapshot.batchesById.set(batch.id, batch);
     (batch.items || []).forEach(function(item, index) {
+      snapshot.operationCounts.itemVisits += 1;
       const entry = { batch: batch, item: item, itemKey: batch.id + "\0" + index };
       const articleKey = batch.clientId + "\0" + item.articleId;
       snapshot.itemsByArticle.set(articleKey, (snapshot.itemsByArticle.get(articleKey) || []).concat(entry));
@@ -24,6 +27,7 @@ function createSubmissionReadSnapshot(deps, input) {
       snapshot.itemsByIdentity.set(identityKey, entry);
     });
   });
+  if (typeof deps.onSnapshotCreated === "function") deps.onSnapshotCreated(snapshot.operationCounts);
   return snapshot;
 }
 

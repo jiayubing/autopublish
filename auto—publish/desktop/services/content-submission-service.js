@@ -350,7 +350,7 @@ function createContentSubmissionService(opts) {
   // query internally consistent, but are never accepted from callers that
   // mutate state: mutations must observe the filesystem again.
   function createReadSnapshot(input) {
-    return createSubmissionReadSnapshot({ batchStore: batchStore, getDataRevision: options.getDataRevision }, input);
+    return createSubmissionReadSnapshot({ batchStore: batchStore, getDataRevision: options.getDataRevision, onSnapshotCreated: options.onSubmissionSnapshotCreated }, input);
   }
 
   function snapshotPublication(snapshot, item) {
@@ -801,8 +801,11 @@ function createContentSubmissionService(opts) {
         });
       }
     }
+    const reconciledByIdentity = new Map(reconciled.map(function(candidate) {
+      return [[candidate.articleId, candidate.targetPlatformId, candidate.publicationId || null, candidate.attemptId || null].join("\0"), candidate];
+    }));
     const enrichedItems = batch.items.map((item) => {
-      const state = reconciled.find((candidate) => candidate.articleId === item.articleId && candidate.targetPlatformId === item.targetPlatformId && candidate.publicationId === item.publicationId && candidate.attemptId === item.attemptId);
+      const state = reconciledByIdentity.get([item.articleId, item.targetPlatformId, item.publicationId || null, item.attemptId || null].join("\0"));
       return state ? Object.assign({}, item, {
         reconciledStatus: state.reconciledStatus,
         unchanged: state.unchanged,
