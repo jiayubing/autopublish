@@ -3139,6 +3139,12 @@
 
 以下结果来自隔离 fixture 或本地构建，不连接真实 AI、浏览器远端投稿服务或客户工作区：
 
+### Phase 0 runtime/publication/submission baseline
+
+- `tests/runtime-publication-wiring.test.js`：通过 `registerIpc()` 的生产式 IPC 组装观察 publication IPC 与文章管理 snapshot 是否读取同一 published record；Phase 0 先暴露主进程 ledger 注入缺口，Phase 1 起作为回归测试。
+- `tests/platform-archive-worker-boundary.test.js`：在临时工作区制造远端 `published` 与本地 archive conflict，销毁 Worker service 后重新构建主进程 query；当前预期为红测，定位仅存于 Worker `Map` 的 archive failure。
+- `tests/content-submission-query-benchmark.test.js`：真实 `SubmissionBatchStore` 10 个 batch 的 `listBatches()` 操作基线，记录 `list/get/reconcile`、ledger 和 sidecar 读取计数；当前预期为红测，主 gate 是每查询一次全量 `batchStore.list()`。
+
 | 命令/分组 | 结果 |
 | --- | --- |
 | `npm run typecheck:bridge` | 通过 |
