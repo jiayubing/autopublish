@@ -18,6 +18,9 @@ function registerPlatformIpc(deps) {
   var service = deps.platformWorkbenchService || createPlatformWorkbenchService({
     rootDir: rootDir,
     paths: deps.paths,
+    // This is the main-process workbench.  The worker intentionally creates
+    // its own filesystem-backed ledger after crossing the process boundary.
+    publicationLedger: deps.publicationLedger,
     platforms: loadedPlatforms.map(function(platform) {
       return { id: platform.id, scanDir: platform.scanDir };
     }),

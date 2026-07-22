@@ -8,6 +8,14 @@ const { registerIpc } = require("../desktop/ipc/register");
 const { createPublicationLedger } = require("../src/publication/publication-ledger");
 const { resolveArticleIdentity } = require("../src/publication/article-identity");
 
+it("authenticated IPC assembly rejects a missing main-process publication ledger", function() {
+  assert.throws(function() {
+    registerIpc({ ipcMain: { handle: () => {} } });
+  }, function(error) {
+    return error && error.code === "PUBLICATION_LEDGER_REQUIRED";
+  });
+});
+
 it("production-like IPC assembly exposes the published record through article management", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-publication-wiring-"));
   try {
@@ -26,10 +34,11 @@ it("production-like IPC assembly exposes the published record through article ma
       taskService,
       sendToRenderer: () => {},
       aiContentService: { listGeneratedArticles: () => [{ id: "article-1", clientId: "client-1", title: "Published title", status: "saved" }], listTrashedArticles: () => [], listArticleRemovalTransactions: () => [] },
-      contentSubmissionService: { listBatches: () => [], listPlatforms: () => [] },
+      contentSubmissionService: { listBatches: () => [], listPlatforms: () => [], previewBatch: () => ({}), createBatch: () => ({}) },
+      publicationLedger: ledger,
       platformSettingsService: {},
       aiProviderService: {},
-      contentGenerationBatchService: {},
+      contentGenerationBatchService: { get: () => null },
       doubaoCollectionService: {},
       runtimeDiagnosticsService: {}
     });

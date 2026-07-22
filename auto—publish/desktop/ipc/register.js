@@ -20,6 +20,15 @@ function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
 
 function registerIpc(deps) {
   const values = deps || {};
+  // `registerIpc` is the authenticated main-process composition boundary.
+  // Individual IPC registrars retain their explicit factory fallbacks for
+  // isolated tests, but a production runtime must supply its owned ledger so
+  // no registrar can silently create a second in-memory module instance.
+  if (!values.publicationLedger || typeof values.publicationLedger.listForArticles !== "function") {
+    const error = new Error("Authenticated IPC requires a publication ledger");
+    error.code = "PUBLICATION_LEDGER_REQUIRED";
+    throw error;
+  }
   const guarded = Object.assign({}, values, {
     ipcMain: createAuthenticatedIpcMain(values.ipcMain, values.requireAuthenticated || (values.authService && values.authService.requireAuthenticated))
   });

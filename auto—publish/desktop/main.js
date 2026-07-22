@@ -259,9 +259,18 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
   });
   const createAiContentService = require("./services/ai-content-service").createAiContentService;
   const createContentSubmissionService = require("./services/content-submission-service").createContentSubmissionService;
+  // The authenticated workspace owns the sole main-process ledger.  Worker
+  // processes reconstruct their own filesystem-backed instance at the IPC
+  // boundary and must never receive this JavaScript object.
+  const createPublicationLedger = require("../src/publication/publication-ledger").createPublicationLedger;
+  const publicationLedger = createPublicationLedger({
+    workspaceRoot: runtime.workspaceRoot,
+    paths: injectedPaths
+  });
   const contentSubmissionService = createContentSubmissionService({
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
+    publicationLedger: publicationLedger,
     onDataInvalidated: invalidateWorkspaceData,
     getDataRevision: getWorkspaceDataRevision
   });
@@ -269,6 +278,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     workspaceRoot: runtime.workspaceRoot,
     paths: injectedPaths,
     contentSubmissionService: contentSubmissionService,
+    publicationLedger: publicationLedger,
     onArticleRemovalTransaction: function(transaction) {
       sendToRenderer("content:article-removal-transaction", transaction);
       invalidateWorkspaceData(["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], "ARTICLE_REMOVAL_TRANSACTION_CHANGED");
@@ -301,6 +311,7 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     legacyProviderSettings: legacyProviderSettings,
     aiContentService: aiContentService,
     contentSubmissionService: contentSubmissionService,
+    publicationLedger: publicationLedger,
     contentGenerationBatchService: contentGenerationBatchService,
     runtimeDiagnosticsService: runtime.diagnosticsService,
     invalidateData: invalidateWorkspaceData,
