@@ -85,6 +85,15 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
       }
     }],
     ["./services/desktop-task-service", { createDesktopTaskService: function() { return {}; } }],
+    ["./services/platform-settings-service", { createPlatformSettingsService: function() { return { getAdapterForRuntime: function() { return null; } }; } }],
+    ["./services/platform-settings/media-settings-adapter", { createMediaSettingsAdapter: function() { return {}; } }],
+    ["./services/platform-settings/hepan-settings-adapter", { createHepanSettingsAdapter: function() { return {}; } }],
+    ["./runtime-config", { createLegacyProviderSettingsMigration: function() { return {}; } }],
+    ["./services/ai-provider-service", { createAiProviderService: function() { return { createClient: function() { return {}; } }; } }],
+    ["./services/content-submission-service", { createContentSubmissionService: function() { return {}; } }],
+    ["./services/ai-content-service", { createAiContentService: function() { return {}; } }],
+    ["./services/content-generation-batch-service", { createContentGenerationBatchService: function() { return { dispose: function() {} }; } }],
+    ["../src/publication/publication-ledger", { createPublicationLedger: function() { return {}; } }],
     ["./services/doubao-collection-service", {
       createDoubaoCollectionDesktopService: function() { return service; }
     }],

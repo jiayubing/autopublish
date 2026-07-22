@@ -23,7 +23,9 @@ function registerPlatformIpc(deps) {
     }),
     adapters: adapters
   });
-  deps.archiveIssueReader = typeof service.listArchiveFailures === "function" ? service.listArchiveFailures : function() { return []; };
+  // Registration must not mutate the shared dependency bag: consumers get
+  // this reader explicitly from the workspace runtime.
+  var archiveIssueReader = typeof service.listArchiveFailures === "function" ? service.listArchiveFailures : function() { return []; };
 
   function buildPlanFromSubmissions(values) {
     if (!Array.isArray(values) || !values.length) throw inputError();
@@ -255,6 +257,7 @@ function registerPlatformIpc(deps) {
       return taskService.getState();
     });
   });
+  return { service: service, archiveIssueReader: archiveIssueReader };
 }
 
 module.exports = { registerPlatformIpc };

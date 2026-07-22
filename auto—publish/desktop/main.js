@@ -3,28 +3,20 @@ const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage } = require("ele
 const { isAllowedRendererNavigation } = require("./security/navigation");
 const { configureApplicationIdentity, DISPLAY_NAME_ZH } = require("./application-identity");
 const { createAuthenticatedRuntime } = require("./services/authenticated-runtime");
+const { createWorkspaceRuntime } = require("./services/workspace-runtime");
 
 configureApplicationIdentity(app);
 
 let mainWindow = null;
-let unsubscribeLogs = null;
-let unsubscribeDoubaoQueue = null;
-let doubaoCollectionService = null;
-let aiProviderService = null;
-let platformSettingsService = null;
-let contentGenerationBatchService = null;
-let taskService = null;
-let storageMaintenanceService = null;
 let authService = null;
 let workspaceBootstrap = null;
 let runtimeContext = null;
 let authenticatedRuntime = null;
-let runtimeDisposePromise = null;
+let workspaceRuntime = null;
 let quitPromise = null;
 let quitReady = false;
 let startupStatus = "starting";
 let isQuitting = false;
-let workspaceDataRevision = 0;
 const EXTERNAL_LINK_HOSTS = new Set(["www.toutiao.com", "mp.weixin.qq.com", "www.lieju.com"]);
 const WORKSPACE_OPEN_FAILED_MESSAGE = "Could not open the current workspace";
 
@@ -41,21 +33,8 @@ function sendToRenderer(channel, payload) {
   }
 }
 
-function invalidateWorkspaceData(scopes, reasonCode) {
-  workspaceDataRevision += 1;
-  const allowedScopes = Array.isArray(scopes) ? scopes.filter(function(scope) {
-    return ["platformQueue", "navigationSummary", "articleAttention", "articleManagement", "orders", "contentSources", "mediaWorkbench"].includes(scope);
-  }) : [];
-  sendToRenderer("workspace:data-invalidated", {
-    revision: workspaceDataRevision,
-    scopes: [...new Set(allowedScopes)],
-    reasonCode: typeof reasonCode === "string" && /^[A-Z0-9_.:-]{1,128}$/.test(reasonCode) ? reasonCode : "WORKSPACE_DATA_CHANGED"
-  });
-  return workspaceDataRevision;
-}
-
-function getWorkspaceDataRevision() {
-  return workspaceDataRevision;
+function activeWorkspaceServices() {
+  return workspaceRuntime && typeof workspaceRuntime.getServices === "function" ? workspaceRuntime.getServices() : null;
 }
 
 function createMainWindow() {
@@ -92,7 +71,8 @@ function createMainWindow() {
 function createDeferredTaskService() {
   return {
     getState: function() {
-      if (taskService && typeof taskService.getState === "function") return taskService.getState();
+      const services = activeWorkspaceServices();
+      if (services && services.taskService && typeof services.taskService.getState === "function") return services.taskService.getState();
       return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
     }
   };
@@ -101,8 +81,9 @@ function createDeferredTaskService() {
 function createDeferredQueueService() {
   return {
     getQueueState: function() {
-      if (doubaoCollectionService && typeof doubaoCollectionService.getQueueState === "function") {
-        return doubaoCollectionService.getQueueState();
+      const services = activeWorkspaceServices();
+      if (services && services.doubaoCollectionService && typeof services.doubaoCollectionService.getQueueState === "function") {
+        return services.doubaoCollectionService.getQueueState();
       }
       return { state: "idle" };
     }
@@ -112,50 +93,15 @@ function createDeferredQueueService() {
 function createDeferredGenerationBatchService() {
   return {
     getState: function() {
-      if (contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function") return contentGenerationBatchService.getState();
+      const services = activeWorkspaceServices();
+      if (services && services.contentGenerationBatchService && typeof services.contentGenerationBatchService.getState === "function") return services.contentGenerationBatchService.getState();
       return { status: "idle", isBatchRunning: false, isStopPending: false };
     }
   };
 }
 
-async function disposeRuntimeServices() {
-  if (runtimeDisposePromise) return runtimeDisposePromise;
-  runtimeDisposePromise = (async function() {
-    if (unsubscribeDoubaoQueue) {
-      try { unsubscribeDoubaoQueue(); } catch (_) {}
-      finally { unsubscribeDoubaoQueue = null; }
-    }
-    if (unsubscribeLogs) {
-      try { unsubscribeLogs(); } catch (_) {}
-      finally { unsubscribeLogs = null; }
-    }
-    const service = doubaoCollectionService;
-    doubaoCollectionService = null;
-    const desktopService = taskService;
-    taskService = null;
-    const generationService = contentGenerationBatchService;
-    contentGenerationBatchService = null;
-    aiProviderService = null;
-    platformSettingsService = null;
-    storageMaintenanceService = null;
-    try {
-      if (desktopService && typeof desktopService.dispose === "function") desktopService.dispose();
-    } catch (_) {}
-    try {
-      if (service && typeof service.dispose === "function") await service.dispose();
-    } catch (_) {}
-    try {
-      if (generationService && typeof generationService.dispose === "function") await generationService.dispose();
-    } catch (_) {}
-    try {
-      if (authService && typeof authService.dispose === "function") authService.dispose();
-    } catch (_) {}
-  })();
-  return runtimeDisposePromise;
-}
-
 async function disposeRuntime() {
-  if (!authenticatedRuntime || authenticatedRuntime.getState().phase === "idle") return disposeRuntimeServices();
+  if (!authenticatedRuntime || authenticatedRuntime.getState().phase === "idle") return undefined;
   return authenticatedRuntime.dispose();
 }
 
@@ -188,7 +134,17 @@ function openWorkspacePath(value) {
   });
 }
 
-function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPath) {
+function createRuntimeServices(bootstrapState, appRoot, userDataPath, sessionDataPath, controls) {
+  let unsubscribeLogs = null;
+  let unsubscribeDoubaoQueue = null;
+  let doubaoCollectionService = null;
+  let aiProviderService = null;
+  let platformSettingsService = null;
+  let contentGenerationBatchService = null;
+  let taskService = null;
+  let storageMaintenanceService = null;
+  const invalidateWorkspaceData = function(scopes, reasonCode) { return controls.invalidate(reasonCode, scopes); };
+  const getWorkspaceDataRevision = function() { return controls.getRevision(); };
   // Lazy-load config-dependent modules only after workspace bootstrap is ready.
   // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
   // its default project-root path.
@@ -293,48 +249,58 @@ function initializeRuntime(bootstrapState, appRoot, userDataPath, sessionDataPat
     onDataInvalidated: invalidateWorkspaceData
   });
 
-  const registerIpc = require("./ipc/register").registerIpc;
-  registerIpc({
-    ipcMain: ipcMain,
+  return {
     taskService: taskService,
-    sendToRenderer: sendToRenderer,
-    rootDir: runtime.workspaceRoot,
-    appRoot: runtime.appRoot,
-    paths: runtime.paths,
     doubaoCollectionService: doubaoCollectionService,
-    aiProviderService: aiProviderService,
-    platformSettingsService: platformSettingsService,
-    legacyProviderSettings: legacyProviderSettings,
-    aiContentService: aiContentService,
-    contentSubmissionService: contentSubmissionService,
-    publicationLedger: publicationLedger,
     contentGenerationBatchService: contentGenerationBatchService,
-    runtimeDiagnosticsService: runtime.diagnosticsService,
-    invalidateData: invalidateWorkspaceData,
-    getWorkspaceDataRevision: getWorkspaceDataRevision,
-    authService: authService
-  });
-  if (storageMaintenanceService) {
-    require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
-      ipcMain: createAuthenticatedIpcMain(),
-      storageMaintenanceService: storageMaintenanceService
-    });
-  }
-
-  unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) {
-    sendToRenderer("content:doubao-queue-state", state);
-  });
-
-  const subscribe = require("../src/core/logger").subscribe;
-  unsubscribeLogs = subscribe(function(entry) { sendToRenderer("publish-log", entry); });
+    registerIpc: function() {
+      require("./ipc/register").registerIpc({
+        ipcMain: ipcMain, taskService: taskService, sendToRenderer: sendToRenderer,
+        rootDir: runtime.workspaceRoot, appRoot: runtime.appRoot, paths: runtime.paths,
+        doubaoCollectionService: doubaoCollectionService, aiProviderService: aiProviderService,
+        platformSettingsService: platformSettingsService, legacyProviderSettings: legacyProviderSettings,
+        aiContentService: aiContentService, contentSubmissionService: contentSubmissionService,
+        publicationLedger: publicationLedger, contentGenerationBatchService: contentGenerationBatchService,
+        runtimeDiagnosticsService: runtime.diagnosticsService, invalidateData: invalidateWorkspaceData,
+        getWorkspaceDataRevision: getWorkspaceDataRevision, authService: authService
+      });
+      if (storageMaintenanceService) require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
+        ipcMain: createAuthenticatedIpcMain(), storageMaintenanceService: storageMaintenanceService
+      });
+    },
+    subscribe: function() {
+      unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) { sendToRenderer("content:doubao-queue-state", state); });
+      unsubscribeLogs = require("../src/core/logger").subscribe(function(entry) { sendToRenderer("publish-log", entry); });
+      return [function() { if (unsubscribeDoubaoQueue) unsubscribeDoubaoQueue(); }, function() { if (unsubscribeLogs) unsubscribeLogs(); }];
+    },
+    dispose: async function() {
+      if (unsubscribeDoubaoQueue) { try { unsubscribeDoubaoQueue(); } catch (_) {} unsubscribeDoubaoQueue = null; }
+      if (unsubscribeLogs) { try { unsubscribeLogs(); } catch (_) {} unsubscribeLogs = null; }
+      try { if (taskService && typeof taskService.dispose === "function") taskService.dispose(); } catch (_) {}
+      try { if (doubaoCollectionService && typeof doubaoCollectionService.dispose === "function") await doubaoCollectionService.dispose(); } catch (_) {}
+      try { if (contentGenerationBatchService && typeof contentGenerationBatchService.dispose === "function") await contentGenerationBatchService.dispose(); } catch (_) {}
+    }
+  };
 }
+
+workspaceRuntime = createWorkspaceRuntime({
+  sendToRenderer: sendToRenderer,
+  createServices: function(bootstrapState, controls) {
+    if (!runtimeContext) throw new Error("Authenticated runtime context is unavailable");
+    return createRuntimeServices(bootstrapState, runtimeContext.appRoot, runtimeContext.userDataPath, runtimeContext.sessionDataPath, controls);
+  },
+  registerIpc: function(runtime) { runtime.services.registerIpc(); },
+  subscribe: function(runtime) { return runtime.services.subscribe(); },
+  disposeServices: function(services) {
+    return services && typeof services.dispose === "function" ? services.dispose() : undefined;
+  }
+});
 
 authenticatedRuntime = createAuthenticatedRuntime({
   start: function(bootstrapState) {
-    if (!runtimeContext) throw new Error("Authenticated runtime context is unavailable");
-    initializeRuntime(bootstrapState, runtimeContext.appRoot, runtimeContext.userDataPath, runtimeContext.sessionDataPath);
+    return workspaceRuntime.start(bootstrapState);
   },
-  dispose: disposeRuntimeServices
+  dispose: function() { return workspaceRuntime.dispose(); }
 });
 
 function initializeWorkspaceBootstrap() {

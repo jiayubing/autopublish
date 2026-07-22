@@ -11,6 +11,8 @@ test('attention and workspace seams keep ownership and dependency direction expl
   const resolver = read('desktop/services/article-attention-resolver.js');
   const workspace = read('media-workbench/src/workspace-data-store.tsx');
   const main = read('desktop/main.js');
+  const workspaceRuntime = read('desktop/services/workspace-runtime.js');
+  const invalidationPolicy = read('desktop/workspace-invalidation-policy.js');
   const sidebar = read('media-workbench/src/components/Sidebar.tsx');
   const platform = read('media-workbench/src/components/PlatformWorkbench.tsx');
 
@@ -27,10 +29,14 @@ test('attention and workspace seams keep ownership and dependency direction expl
   assert.doesNotMatch(platform, /getPlatformQueue\(/);
   assert.doesNotMatch(query, /React|Renderer|window\./);
   assert.doesNotMatch(resolver, /React|Renderer|window\./);
-  assert.match(main, /workspace:data-invalidated/);
-  assert.match(main, /revision:/);
-  assert.match(main, /scopes:/);
-  assert.match(main, /reasonCode:/);
+  assert.match(main, /createWorkspaceRuntime/);
+  assert.match(workspaceRuntime, /createWorkspaceInvalidator/);
+  assert.match(workspaceRuntime, /registerIpc/);
+  assert.match(workspaceRuntime, /disposeServices/);
+  assert.match(invalidationPolicy, /workspace:data-invalidated/);
+  assert.match(invalidationPolicy, /revision/);
+  assert.match(invalidationPolicy, /scopes/);
+  assert.match(invalidationPolicy, /reasonCode/);
 });
 
 test('business views use domain bridges instead of Electron transport or main-process files', () => {
