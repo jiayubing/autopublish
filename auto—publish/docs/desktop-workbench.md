@@ -77,10 +77,12 @@ content sources without rescanning clients or templates.
 
 ## Architecture
 
-- **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`batch-ipc.js`, `media-ipc.js`, `platform-ipc.js`
+- **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`media-ipc.js`, `platform-ipc.js`
 - **Services:** `desktop/services/ipc-response.js`, `media-workbench-service.js`, `platform-workbench-service.js`, `media-order-service.js`, `desktop-task-service.js`
 - **Renderer:** React source under `media-workbench/src`; production loads only the packaged `media-workbench/dist` bundle.
-- **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
+- **Preload API:** grouped under `.media`, `.platforms`, `.orders`.
+  `desktopConsole.batch` remains a deprecated compatibility surface while
+  external operator/CLI usage is audited; new code must use `.platforms`.
 - **Content handoff API:** `desktopConsole.content.previewGenerationSubmissionHandoff` and
   `desktopConsole.content.commitGenerationSubmissionHandoff` return only safe
   IDs, counts, statuses, and reason codes; renderer paths, article bodies,
@@ -102,7 +104,10 @@ content, credentials, or browser state.
 - `media-workbench-service`: article scan, preview, confirmation summary, serial submit, and stop handling.
 - `media-order-service`: order record loading, order view DTOs, and sync.
 - `media-ipc`: transport only; it forwards requests and does not own parsing, pagination, normalization, or view shaping.
-- `desktop/preload.js`: exposes only the canonical media/platform/order IPC surface.
+- `desktop/preload.js`: exposes the canonical media/platform/order IPC surface.
+  Its legacy `batch` surface is compatibility-only and must not receive new
+  callers; ordinary-platform remote publishing uses `platform-ipc` and the
+  Platform Runtime.
 
 ## Tests
 
