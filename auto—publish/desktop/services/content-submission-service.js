@@ -65,60 +65,6 @@ function createContentSubmissionService(opts) {
     try { options.onDataInvalidated(reasonCode); } catch (_) {}
   }
 
-  function previewRetryFailedPublication(value) {
-    const publicationId = value && value.publicationId;
-    if (typeof publicationId !== "string" || !publicationId.trim()) throw batchError("CONTENT_SUBMISSION_PUBLICATION_REQUIRED", "Publication id is required");
-    const record = typeof publicationLedger.get === "function" ? publicationLedger.get(publicationId) : null;
-    if (!record) throw batchError("PUBLICATION_RECORD_MISSING", "Publication record was not found");
-    if (record.status !== "failed") throw batchError("PUBLICATION_STATUS_NOT_FAILED", "Only failed publications can be retried");
-    const latest = latestAttempt(record);
-    if (!latest || latest.status !== "failed") throw batchError("PUBLICATION_ATTEMPT_NOT_FAILED", "The latest publication attempt is not failed");
-    let article;
-    try { article = store.getArticle(record.clientId, record.articleId); }
-    catch (_) { throw batchError("ARTICLE_NOT_FOUND", "The source article is no longer available"); }
-    const eligibility = evaluateArticleSubmissionEligibility(article, { targetPlatform: { id: record.platformId, contentQueueImport: true } });
-    if (!eligibility.eligible) throw batchError("ARTICLE_NOT_RETRYABLE", eligibility.reasons.join("、"));
-    const platform = availablePlatforms().find(function(candidate) { return candidate.id === record.platformId; });
-    if (!platform || platform.contentQueueImport !== true) throw batchError("CONTENT_SUBMISSION_TARGET_UNSUPPORTED", "The publication target does not support content queue import");
-    const preview = previewBatch({ clientId: record.clientId, articleIds: [record.articleId], targetPlatformIds: [record.platformId] });
-    const retryableItem = preview.items.find(function(item) { return item.articleId === record.articleId && item.targetPlatformId === record.platformId; });
-    if (!retryableItem || !["queueable", "idempotent"].includes(retryableItem.status)) {
-      throw batchError(retryableItem && retryableItem.reasonCode || "SUBMISSION_QUEUE_CHANGED", "投稿队列已变化，请重新预检");
-    }
-    const failureCount = Array.isArray(record.attempts) ? record.attempts.filter(function(attempt) { return attempt.status === "failed"; }).length : 1;
-    return {
-      publicationId: record.publicationId,
-      clientId: record.clientId,
-      articleId: record.articleId,
-      targetPlatformId: record.platformId,
-      titleSnapshot: record.titleSnapshot || article.title,
-      failureCount: failureCount,
-      requiresConfirmation: true,
-      message: `确认将“${(record.titleSnapshot || article.title || "文章").slice(0, 80)}”重新投稿到 ${record.platformId}？历史失败 ${failureCount} 次。`,
-      details: { titleSnapshot: record.titleSnapshot || article.title, targetPlatformId: record.platformId, failureCount },
-      preview: { queueableTaskCount: preview.queueableTaskCount, idempotentCount: preview.idempotentCount, conflictCount: preview.conflictCount }
-    };
-  }
-
-  function retryFailedPublication(value) {
-    if (!value || value.confirmed !== true || typeof value.publicationId !== "string") throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Publication retry confirmation is required");
-    if (typeof options.getDataRevision === "function" && value.expectedRevision !== undefined && Number(value.expectedRevision) !== Number(options.getDataRevision())) {
-      throw batchError("ARTICLE_ATTENTION_STALE", "Publication state changed; review the retry again");
-    }
-    const preview = previewRetryFailedPublication(value);
-    const created = createBatch({ clientId: preview.clientId, articleIds: [preview.articleId], targetPlatformIds: [preview.targetPlatformId], confirmed: true });
-    const item = (created.items || []).find(function(candidate) { return candidate.publicationId === preview.publicationId; }) || (created.items || [])[0] || {};
-    return {
-      batchId: created.batchId,
-      publicationId: item.publicationId || preview.publicationId,
-      attemptId: item.attemptId || null,
-      clientId: preview.clientId,
-      articleId: preview.articleId,
-      targetPlatformId: preview.targetPlatformId,
-      changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]
-    };
-  }
-
   function availablePlatforms() {
     if (Array.isArray(options.platforms)) return options.platforms.slice();
     const { loadPlatforms } = require("../../src/core/platforms");
@@ -165,174 +111,8 @@ function createContentSubmissionService(opts) {
     }, publicationFields(context, record), state.conflictCode ? { reasonCode: state.conflictCode } : {});
   }
 
-  function previewBatch(value) {
-    const input = assertBatchInput(value);
-    const platforms = availablePlatforms();
-    const platformMap = new Map(platforms.map((platform) => [platform.id, platform]));
-    const unsupportedPlatformIds = input.targetPlatformIds.filter((id) => !platformMap.has(id) || platformMap.get(id).contentQueueImport !== true);
-    const items = [];
-    const ineligibleArticleIds = [];
-    const missingArticleIds = [];
-    const conflicts = [];
-    input.articleIds.forEach((articleId) => {
-      let article;
-      try { article = store.getArticle(input.clientId, articleId); } catch (_) { missingArticleIds.push(articleId); return; }
-      input.targetPlatformIds.forEach((platformId) => {
-        const platform = platformMap.get(platformId);
-        const item = { articleId, targetPlatformId: platformId, contentHash: hash(articleMarkdown(article)), status: "excluded" };
-        if (platform && platform.contentQueueImport === true) {
-          const eligibility = evaluateArticleSubmissionEligibility(article, { targetPlatform: platform });
-          if (!eligibility.eligible) {
-            if (!ineligibleArticleIds.includes(articleId)) ineligibleArticleIds.push(articleId);
-            Object.assign(item, { status: "blocked", reasonCode: eligibility.reasonCodes[0], reasonCodes: eligibility.reasonCodes, reasons: eligibility.reasons });
-            items.push(item);
-            return;
-          }
-          const classified = itemForArticle(article, platform, platformId);
-          Object.assign(item, classified);
-          if (item.status === "conflict") conflicts.push(item);
-        }
-        items.push(item);
-      });
-    });
-    const count = (status) => items.filter((item) => item.status === status).length;
-    return {
-      clientId: input.clientId,
-      articleIds: input.articleIds.slice(),
-      targetPlatformIds: input.targetPlatformIds.slice(),
-      totalTaskCount: input.articleIds.length * input.targetPlatformIds.length,
-      queueableTaskCount: count("queueable"),
-      idempotentCount: count("idempotent"),
-      alreadyQueuedCount: count("idempotent"),
-      blockedPublishedCount: count("blockedPublished"),
-      blockedUncertainCount: count("blockedUncertain"),
-      blockedContentCount: count("blocked"),
-      conflictCount: conflicts.length,
-      ineligibleArticleIds: [...new Set(ineligibleArticleIds)],
-      unreviewedArticleIds: [...new Set(ineligibleArticleIds)],
-      missingArticleIds,
-      unsupportedPlatformIds,
-      items
-    };
-  }
-
   function listPlatforms() {
     return availablePlatforms().map((platform) => ({ id: platform.id, displayName: platform.displayName || platform.id, scanDir: platform.scanDir || platform.id, contentQueueImport: platform.contentQueueImport === true }));
-  }
-
-  function applyReservation(item, context, reservation) {
-    Object.assign(item, publicationFields(context, null, reservation), { publicationStatus: reservation.status });
-    item.status = "queued";
-    return item;
-  }
-
-  function saveBatch(batch) { return batchStore.save(batch); }
-
-  function createBatch(value) {
-    const input = assertBatchInput(value);
-    if (value.confirmed !== true) throw batchError("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED", "Batch confirmation is required");
-    const preview = previewBatch(input);
-    if (preview.missingArticleIds.length) throw batchError("CONTENT_SUBMISSION_ARTICLE_NOT_FOUND", "Selected article was not found");
-    const batchId = batchStore.createId();
-    const createdAt = new Date().toISOString();
-    const batch = { version: 1, id: batchId, clientId: input.clientId, createdAt, status: "queued", items: [] };
-    const createdReservations = [];
-    const writtenItems = [];
-    let createdCount = 0;
-    let idempotentCount = 0;
-    saveBatch(batch);
-    try {
-      preview.items.forEach((previewItem) => {
-        if (previewItem.status !== "queueable" && previewItem.status !== "idempotent") {
-          batch.items.push(Object.assign({}, previewItem));
-          saveBatch(batch);
-          return;
-        }
-        const article = store.getArticle(input.clientId, previewItem.articleId);
-        const platform = availablePlatforms().find((candidate) => candidate.id === previewItem.targetPlatformId);
-        if (!platform) throw batchError("CONTENT_SUBMISSION_TARGET_INVALID", "Submission target is invalid");
-        const markdown = articleMarkdown(article);
-        const contentHash = hash(markdown);
-        const context = publicationContext(article, previewItem.targetPlatformId);
-        let record = publicationRecordFor(publicationLedger, context);
-        let reservation = null;
-        const needsReservation = context.tracked && (!record || ["failed", "cancelled"].indexOf(record.status) !== -1);
-        try {
-          if (needsReservation) {
-            reservation = publicationLedger.reserve(context.identity, context.target, { displayName: previewItem.targetPlatformId, titleSnapshot: context.titleSnapshot });
-            createdReservations.push({ reservation, item: previewItem });
-            record = reservation;
-          }
-        } catch (caught) {
-          if (!isBlockingReservationError(caught)) throw caught;
-          const freshItem = itemForArticle(article, platform, previewItem.targetPlatformId);
-          freshItem.status = itemStatusForRecord(publicationRecordFor(publicationLedger, context), inspectSubmission({
-            filePath: freshItem.filePath,
-            sidecarPath: freshItem.sidecarPath,
-            markdown,
-            article,
-            contentHash,
-            targetPlatform: previewItem.targetPlatformId,
-            context,
-            record: publicationRecordFor(publicationLedger, context),
-            rootDir: rootDir
-          }));
-          batch.items.push(freshItem);
-          saveBatch(batch);
-          return;
-        }
-
-        const item = Object.assign({}, previewItem, { status: previewItem.status, submissionBatchId: batchId });
-        Object.assign(item, publicationFields(context, record, reservation));
-        batch.items.push(item);
-        // Persist the reservation before touching queue files. A crash here is
-        // discoverable as a batch item plus a queued ledger record.
-        item.status = "reserving";
-        saveBatch(batch);
-        const sidecar = makeSidecar({
-          submissionBatchId: batchId,
-          article,
-          targetPlatform: previewItem.targetPlatformId,
-          targetPlatformId: previewItem.targetPlatformId,
-          filename: path.basename(item.filePath),
-          contentHash,
-          queuedAt: createdAt,
-          context,
-          reservation: reservation || record
-        });
-        fs.mkdirSync(path.dirname(item.filePath), { recursive: true });
-        if (previewItem.status === "idempotent") {
-          if (reservation) writeAtomic(item.sidecarPath, JSON.stringify(sidecar, null, 2) + "\n");
-          item.status = "skipped";
-          idempotentCount += 1;
-        } else {
-          writePairAtomic(item.filePath, markdown, item.sidecarPath, JSON.stringify(sidecar, null, 2) + "\n");
-          item.status = "queued";
-          createdCount += 1;
-          writtenItems.push(item);
-        }
-        item.publicationStatus = (reservation || record || {}).status || null;
-        saveBatch(batch);
-      });
-    } catch (caught) {
-      writtenItems.forEach((item) => removeSubmissionPair(item.filePath, item.sidecarPath));
-      createdReservations.slice().reverse().forEach((entry) => {
-        try { cancelReservation(publicationLedger, entry.reservation, "QUEUE_WRITE_FAILED"); } catch (_) {}
-      });
-      throw caught;
-    }
-    batch.status = createdCount > 0 ? "queued" : "completed";
-    batch.updatedAt = new Date().toISOString();
-    saveBatch(batch);
-    notifyData("SUBMISSION_BATCH_CREATED");
-    return Object.assign({}, preview, {
-      batchId,
-      createdCount,
-      idempotentCount,
-      items: batch.items,
-      queueableTaskCount: createdCount,
-      alreadyQueuedCount: idempotentCount
-    });
   }
 
   function publicationForBatchItem(item) {
@@ -1046,7 +826,17 @@ function createContentSubmissionService(opts) {
   });
   const preparation = createSubmissionPreparation({
     publicationLedger: publicationLedger, articleStore: store, latestAttempt: latestAttempt,
-    getDataRevision: options.getDataRevision, previewBatch: previewBatch, createBatch: createBatch,
+    getDataRevision: options.getDataRevision, getArticle: function(clientId, articleId) { return store.getArticle(clientId, articleId); },
+    assertBatchInput: assertBatchInput, availablePlatforms: availablePlatforms, hash: hash, articleMarkdown: articleMarkdown,
+    batchStore: batchStore, publicationContext: publicationContext,
+    publicationRecordFor: function(context) { return publicationRecordFor(publicationLedger, context); },
+    publicationFields: publicationFields, makeSidecar: makeSidecar, basename: path.basename,
+    mkdirFor: function(filePath) { fs.mkdirSync(path.dirname(filePath), { recursive: true }); },
+    writeAtomic: writeAtomic, writePairAtomic: writePairAtomic, removeSubmissionPair: removeSubmissionPair,
+    cancelReservation: function(reservation, reason) { return cancelReservation(publicationLedger, reservation, reason); },
+    isBlockingReservationError: isBlockingReservationError, itemStatusForRecord: itemStatusForRecord,
+    inspectSubmission: function(item, markdown, article, contentHash, targetPlatform, context) { return inspectSubmission({ filePath: item.filePath, sidecarPath: item.sidecarPath, markdown: markdown, article: article, contentHash: contentHash, targetPlatform: targetPlatform, context: context, record: publicationRecordFor(publicationLedger, context), rootDir: rootDir }); },
+    itemForArticle: itemForArticle, notifyData: notifyData,
     platformFor: function(id) { return availablePlatforms().find(function(platform) { return platform.id === id && platform.contentQueueImport === true; }); },
     evaluateEligibility: function(article, platformId) { return evaluateArticleSubmissionEligibility(article, { targetPlatform: { id: platformId, contentQueueImport: true } }); }
   });
@@ -1060,8 +850,8 @@ function createContentSubmissionService(opts) {
       return result;
     },
     listPlatforms,
-    previewBatch,
-    createBatch,
+    previewBatch: preparation.previewBatch,
+    createBatch: preparation.createBatch,
     buildSubmissionActionPlan,
     previewCancelBatch: action.previewCancelBatch,
     cancelBatch: action.cancelBatch,
