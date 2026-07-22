@@ -18,6 +18,10 @@ const fs = require("fs");
 const path = require("path");
 const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
 const { evaluateArticleSubmissionEligibility } = require("../../src/content/article-submission-eligibility");
+const { createSubmissionReadSnapshot } = require("./submission/submission-read-snapshot");
+const { createSubmissionQuery } = require("./submission/submission-query");
+const { createSubmissionPreparation } = require("./submission/submission-preparation");
+const { createSubmissionAction } = require("./submission/submission-action");
 
 function batchError(code, message) { const error = new Error(message); error.code = code; return error; }
 function hash(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
@@ -348,27 +352,7 @@ function createContentSubmissionService(opts) {
   // query internally consistent, but are never accepted from callers that
   // mutate state: mutations must observe the filesystem again.
   function createReadSnapshot(input) {
-    const source = input && Array.isArray(input.batches) ? input.batches : input && input.batchId ? [batchStore.get(input.batchId)] : batchStore.list();
-    const snapshot = {
-      revision: typeof options.getDataRevision === "function" ? options.getDataRevision() : null,
-      batches: source,
-      batchesById: new Map(),
-      itemsByArticle: new Map(),
-      itemsByIdentity: new Map(),
-      publicationsById: new Map(),
-      sidecarsByItem: new Map()
-    };
-    source.forEach(function(batch) {
-      snapshot.batchesById.set(batch.id, batch);
-      (batch.items || []).forEach(function(item, index) {
-        const entry = { batch: batch, item: item, itemKey: batch.id + "\0" + index };
-        const articleKey = articleSelectionKey({ clientId: batch.clientId, articleId: item.articleId });
-        snapshot.itemsByArticle.set(articleKey, (snapshot.itemsByArticle.get(articleKey) || []).concat(entry));
-        const identityKey = (item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || "");
-        snapshot.itemsByIdentity.set(identityKey, entry);
-      });
-    });
-    return snapshot;
+    return createSubmissionReadSnapshot({ batchStore: batchStore, getDataRevision: options.getDataRevision }, input);
   }
 
   function snapshotPublication(snapshot, item) {
@@ -1046,6 +1030,19 @@ function createContentSubmissionService(opts) {
       getArticle: function(id) { return store.getArticle(value.clientId, id); }
     });
   }
+  const query = createSubmissionQuery({
+    batchStore: batchStore,
+    getDataRevision: options.getDataRevision,
+    reconcileBatch: reconcileBatch,
+    buildActionPlan: buildSubmissionActionPlan
+  });
+  const preparation = createSubmissionPreparation({
+    publicationLedger: publicationLedger, articleStore: store, latestAttempt: latestAttempt,
+    getDataRevision: options.getDataRevision, previewBatch: previewBatch, createBatch: createBatch,
+    platformFor: function(id) { return availablePlatforms().find(function(platform) { return platform.id === id && platform.contentQueueImport === true; }); },
+    evaluateEligibility: function(article, platformId) { return evaluateArticleSubmissionEligibility(article, { targetPlatform: { id: platformId, contentQueueImport: true } }); }
+  });
+  const action = createSubmissionAction({ batchStore: batchStore, buildActionPlan: buildSubmissionActionPlan, reconcileBatch: reconcileBatch, cancelItem: cancelArticleSubmissionItem, notifyData: notifyData });
   return {
     previewExport: function(value) { value = input(value); return exporterFor(value).previewExport(value); },
     exportArticle: function(value) {
@@ -1058,26 +1055,12 @@ function createContentSubmissionService(opts) {
     previewBatch,
     createBatch,
     buildSubmissionActionPlan,
-    previewCancelBatch,
-    cancelBatch,
-    getBatch: function(batchId) { return reconcileBatch(batchId).batch; },
-    listBatches: function(clientId) {
-      const snapshot = createReadSnapshot();
-      return snapshot.batches.filter(function(batch) { return !clientId || batch.clientId === clientId; }).map(function(batch) {
-        const result = reconcileBatch(batch.id, snapshot);
-        const reconciled = result.batch;
-        const plan = buildSubmissionActionPlan(batch.id, "cancel", snapshot, result);
-        return Object.assign({}, reconciled, {
-          actionPlan: plan,
-          items: reconciled.items.map(function(item) {
-            const planned = plan.items.find(function(candidate) { return candidate.articleId === item.articleId && candidate.targetPlatformId === item.targetPlatformId && candidate.publicationId === (item.publicationId || null) && candidate.attemptId === (item.attemptId || null); });
-            return Object.assign({}, item, { canCancel: !!(planned && planned.allowed), actionFingerprint: planned && planned.fingerprint || null, reasonCode: planned && !planned.allowed ? planned.reasonCode : item.reasonCode });
-          })
-        });
-      });
-    },
+    previewCancelBatch: action.previewCancelBatch,
+    cancelBatch: action.cancelBatch,
+    getBatch: query.getBatch,
+    listBatches: query.listBatches,
     reconcileBatch,
-    previewCleanupFailedItems,
+    previewCleanupFailedItems: action.previewCleanupFailedItems,
     cleanupFailedItems,
     previewArticleRemovalImpact,
     cancelArticleSubmissionItem,
@@ -1089,8 +1072,8 @@ function createContentSubmissionService(opts) {
     isSubmissionItemExecutable,
     previewTrashedArticleQueueResidue,
     cleanupTrashedArticleQueueResidue,
-    previewRetryFailedPublication,
-    retryFailedPublication
+    previewRetryFailedPublication: preparation.previewRetryFailedPublication,
+    retryFailedPublication: preparation.retryFailedPublication
     ,listArchiveFailures
   };
 }
