@@ -36,6 +36,12 @@ function registerStorageMaintenanceIpc(deps) {
   values.ipcMain.handle("storage-maintenance:clean-caches", function(event, input) {
     return invoke(function() { noInput(input, "Cache cleanup"); return service.cleanupCaches(); });
   });
+  return { module: service, dispose: function() {
+    if (typeof values.ipcMain.removeHandler === "function") {
+      values.ipcMain.removeHandler("storage-maintenance:get-usage");
+      values.ipcMain.removeHandler("storage-maintenance:clean-caches");
+    }
+  } };
 }
 
 module.exports = { registerStorageMaintenanceIpc };

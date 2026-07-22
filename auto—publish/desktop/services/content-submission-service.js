@@ -62,9 +62,7 @@ function createContentSubmissionService(opts) {
 
   function notifyData(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
-    const scopes = ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"];
-    if (reasonCode === "CONTENT_EXPORT_QUEUED") scopes.push("mediaWorkbench");
-    try { options.onDataInvalidated(scopes, reasonCode); } catch (_) {}
+    try { options.onDataInvalidated(reasonCode); } catch (_) {}
   }
 
   function previewRetryFailedPublication(value) {

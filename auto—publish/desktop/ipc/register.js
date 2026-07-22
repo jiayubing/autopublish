@@ -13,6 +13,9 @@ function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
       };
       proxy.lastHandler = wrapped;
       return ipcMain.handle(channel, wrapped);
+    },
+    removeHandler(channel) {
+      if (ipcMain && typeof ipcMain.removeHandler === "function") return ipcMain.removeHandler(channel);
     }
   };
   return proxy;
@@ -29,23 +32,38 @@ function registerIpc(deps) {
     error.code = "PUBLICATION_LEDGER_REQUIRED";
     throw error;
   }
-  const guarded = Object.assign({}, values, {
-    ipcMain: createAuthenticatedIpcMain(values.ipcMain, values.requireAuthenticated || (values.authService && values.authService.requireAuthenticated))
+  const channels = [];
+  const authenticated = createAuthenticatedIpcMain(values.ipcMain, values.requireAuthenticated || (values.authService && values.authService.requireAuthenticated));
+  const guardedIpcMain = Object.assign({}, authenticated, {
+    handle: function(channel, handler) { channels.push(channel); return authenticated.handle(channel, handler); }
   });
-  require("./batch-ipc").registerBatchIpc(guarded);
-  require("./media-ipc").registerMediaIpc(guarded);
-  const platform = require("./platform-ipc").registerPlatformIpc(guarded);
-  require("./ai-provider-ipc").registerAiProviderIpc(guarded);
-  require("./platform-settings-ipc").registerPlatformSettingsIpc(guarded);
-  require("./ai-content-ipc").registerAiContentIpc(guarded);
-  require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(guarded);
-  require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(guarded);
-  require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
-  const attention = require("./article-attention-ipc").registerArticleAttentionIpc(Object.assign({}, guarded, { archiveService: platform && platform.service }));
-  require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, { articleAttentionQuery: attention.query }));
-  require("./publication-ipc").registerPublicationIpc(guarded);
-  require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);
-  require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(guarded);
+  const guarded = Object.assign({}, values, { ipcMain: guardedIpcMain });
+  const modules = {};
+  modules.batch = require("./batch-ipc").registerBatchIpc(guarded);
+  modules.media = require("./media-ipc").registerMediaIpc(guarded);
+  modules.platform = require("./platform-ipc").registerPlatformIpc(guarded);
+  modules.aiProvider = require("./ai-provider-ipc").registerAiProviderIpc(guarded);
+  modules.platformSettings = require("./platform-settings-ipc").registerPlatformSettingsIpc(guarded);
+  modules.aiContent = require("./ai-content-ipc").registerAiContentIpc(guarded);
+  modules.generation = require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(guarded);
+  modules.handoff = require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(guarded);
+  modules.submission = require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
+  // archiveService is assembled by WorkspaceRuntime, not leaked from a prior
+  // registrar's return value. Registration order is no longer an interface.
+  modules.attention = require("./article-attention-ipc").registerArticleAttentionIpc(Object.assign({}, guarded, { archiveService: values.archiveService, articleAttentionQuery: values.articleAttentionQuery }));
+  modules.articleManagement = require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, { articleAttentionQuery: modules.attention.query }));
+  modules.publication = require("./publication-ipc").registerPublicationIpc(guarded);
+  modules.doubao = require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);
+  modules.diagnostics = require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(guarded);
+  let disposed = false;
+  return {
+    modules: modules,
+    dispose: function() {
+      if (disposed) return;
+      disposed = true;
+      [...new Set(channels)].forEach(function(channel) { guardedIpcMain.removeHandler(channel); });
+    }
+  };
 }
 
 module.exports = { registerIpc, createAuthenticatedIpcMain };

@@ -47,7 +47,7 @@ function registerGenerationSubmissionHandoffIpc(deps) {
   ipcMain.handle("content:preview-generation-submission-handoff", function(event, value) { return invoke(function() { return service.preview(input(value, false)); }); });
   ipcMain.handle("content:commit-generation-submission-handoff", function(event, value) { return invoke(function() {
     const result = service.commit(input(value, true));
-    if (typeof values.invalidateData === "function" && result && Array.isArray(result.changedScopes)) values.invalidateData([...new Set(["articleManagement"].concat(result.changedScopes))], "GENERATION_SUBMISSION_HANDOFF_COMMITTED");
+    if (typeof values.invalidateData === "function" && result) values.invalidateData("GENERATION_SUBMISSION_HANDOFF_COMMITTED");
     return result;
   }); });
   return { service };

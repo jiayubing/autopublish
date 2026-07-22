@@ -181,7 +181,7 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:submit-selected", function(event, articles) {
     return wrap(async function() {
       const result = await mediaWorkbenchService.submitTasksSerially(await resolveSubmissions(articles));
-      if (typeof deps.invalidateData === "function") deps.invalidateData(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], "MEDIA_SUBMIT_COMPLETED");
+      if (typeof deps.invalidateData === "function") deps.invalidateData("MEDIA_SUBMIT_COMPLETED");
       return result;
     });
   });

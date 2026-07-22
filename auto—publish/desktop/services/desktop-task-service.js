@@ -304,7 +304,7 @@ function closeBrowserSessions() {
       var terminalPhase = result && result.errorCode === "STOP_REQUESTED" ? "stopped"
         : result && result.ok && result.data && Number(result.data.fail || 0) === 0 && Number(result.data.uncertain || 0) === 0 ? "completed"
         : "failed";
-      var queueRevision = invalidateData(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_SUBMIT_" + terminalPhase.toUpperCase());
+      var queueRevision = invalidateData("PLATFORM_SUBMIT_" + terminalPhase.toUpperCase());
       var terminalSnapshot = platformTaskStateStore.finish(result || { errorCode: "PLATFORM_SUBMIT_FAILED" }, terminalPhase, { queueRevision: queueRevision });
       activePlatformRunId = null;
       sendToRenderer("platform-state", terminalSnapshot);

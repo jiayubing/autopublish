@@ -157,7 +157,7 @@ function registerPlatformIpc(deps) {
     }
 
     if (refreshNeeded && typeof deps.invalidateData === "function") {
-      try { deps.invalidateData(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
+      try { deps.invalidateData("PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
     }
     var accepted = summary.movedCount + summary.recoveryCount === summary.requestedCount && summary.blockedCount === 0 && summary.failedCount === 0;
     return Object.assign(data, {

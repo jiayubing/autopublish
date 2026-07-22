@@ -25,9 +25,10 @@ it("production-like IPC assembly exposes the published record through article ma
     ledger.recordOutcome(reservation.publicationId, reservation.attemptId, { status: "published", remoteId: "remote-1" });
 
     const handlers = new Map();
+    const removedHandlers = [];
     const taskService = { getState: () => ({}), refreshQueueSnapshot: () => ({}), startBatch: () => ({}), stopBatch: () => ({}) };
-    registerIpc({
-      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    const deps = {
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: (channel) => removedHandlers.push(channel) },
       requireAuthenticated: async () => {},
       rootDir: root,
       paths: { workspaceRoot: root, contentLibrary: root, input: path.join(root, ".autopublish", "input"), submissionRecords: path.join(root, ".autopublish", "submission-records") },
@@ -41,7 +42,10 @@ it("production-like IPC assembly exposes the published record through article ma
       contentGenerationBatchService: { get: () => null },
       doubaoCollectionService: {},
       runtimeDiagnosticsService: {}
-    });
+    };
+    const registration = registerIpc(deps);
+    assert.equal(typeof registration.dispose, "function");
+    assert.equal(Object.prototype.hasOwnProperty.call(deps, "archiveService"), false);
 
     const history = await handlers.get("publication:list-for-articles")({}, { clientId: "client-1", articleIds: ["article-1"] });
     const snapshot = await handlers.get("content:get-article-management-snapshot")({}, { clientId: "client-1" });
@@ -50,6 +54,8 @@ it("production-like IPC assembly exposes the published record through article ma
     assert.equal(history.data[0].status, "published");
     assert.equal(snapshot.ok, true);
     assert.deepEqual(snapshot.data.publicationRecords.map((record) => [record.publicationId, record.status]), [[reservation.publicationId, "published"]]);
+    registration.dispose();
+    assert.ok(removedHandlers.includes("content:get-article-management-snapshot"));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
