@@ -6,10 +6,15 @@ const { createPublicationLedger } = require("../../src/publication/publication-l
 function registerArticleAttentionIpc(deps) {
   const options = deps || {};
   const publicationLedger = options.publicationLedger || createPublicationLedger({ workspaceRoot: options.rootDir, paths: options.paths });
+  // This is deliberately one injected action port: query uses it to expose
+  // capability, resolver uses the exact same port to perform the action.
+  // Keep archiveService as an isolated-registrar compatibility alias only.
+  const archiveActionPort = options.archiveActionPort || options.archiveService;
   const query = options.articleAttentionQuery || createArticleAttentionQuery({
     contentSubmissionService: options.contentSubmissionService,
     articleRemovalService: options.aiContentService,
     publicationLedger: publicationLedger,
+    archiveActionPort: archiveActionPort,
     getRevision: options.getWorkspaceDataRevision,
     readers: {
       listTransactions: options.aiContentService && options.aiContentService.listArticleRemovalTransactions,
@@ -27,7 +32,7 @@ function registerArticleAttentionIpc(deps) {
     contentSubmissionService: options.contentSubmissionService,
     articleRemovalService: options.aiContentService,
     publicationLedger: publicationLedger,
-    archiveService: options.archiveService,
+    archiveActionPort: archiveActionPort,
     onDataInvalidated: options.invalidateData
   });
 

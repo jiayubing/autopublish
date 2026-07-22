@@ -50,7 +50,11 @@ function registerIpc(deps) {
   modules.submission = require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
   // archiveService is assembled by WorkspaceRuntime, not leaked from a prior
   // registrar's return value. Registration order is no longer an interface.
-  modules.attention = require("./article-attention-ipc").registerArticleAttentionIpc(Object.assign({}, guarded, { archiveService: values.archiveService, articleAttentionQuery: values.articleAttentionQuery }));
+  modules.attention = require("./article-attention-ipc").registerArticleAttentionIpc(Object.assign({}, guarded, {
+    archiveActionPort: values.archiveActionPort,
+    articleAttentionQuery: values.articleAttentionQuery,
+    articleAttentionResolver: values.articleAttentionResolver
+  }));
   modules.articleManagement = require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, { articleAttentionQuery: modules.attention.query }));
   modules.publication = require("./publication-ipc").registerPublicationIpc(guarded);
   modules.doubao = require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);

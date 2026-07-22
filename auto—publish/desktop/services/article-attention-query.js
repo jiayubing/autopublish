@@ -136,7 +136,7 @@ function createArticleAttentionQuery(options) {
   function domainCapabilities(kind) {
     const service = opts.contentSubmissionService;
     const removal = opts.articleRemovalService;
-    const archive = opts.archiveService;
+    const archive = opts.archiveActionPort || opts.archiveService;
     return Object.assign({
       canCleanup: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
       canFinalize: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
