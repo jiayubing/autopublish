@@ -47,12 +47,12 @@ function createWorkspaceRuntime(deps) {
         const workspaceRoot = runtime.workspaceRoot;
         const createPublicationLedger = require("../src/publication/publication-ledger").createPublicationLedger;
         const publicationLedger = createPublicationLedger({ workspaceRoot, paths: injectedPaths });
-        const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
-        const taskService = createDesktopTaskService({ cwd: workspaceRoot, paths: injectedPaths, sendToRenderer: options.sendToRenderer, invalidateData: invalidation.invalidate, platformSettingsService: null });
         const createPlatformSettingsService = require("./services/platform-settings-service").createPlatformSettingsService;
         const { createMediaSettingsAdapter } = require("./services/platform-settings/media-settings-adapter");
         const { createHepanSettingsAdapter } = require("./services/platform-settings/hepan-settings-adapter");
         const platformSettingsService = createPlatformSettingsService({ userDataPath: options.userDataPath, safeStorage: options.safeStorage, env: process.env, localStateRoot: paths && paths.localState, adapters: [createMediaSettingsAdapter(), createHepanSettingsAdapter({ localStateRoot: paths && paths.localState })], getTaskState: taskState });
+        const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
+        const taskService = createDesktopTaskService({ cwd: workspaceRoot, paths: injectedPaths, sendToRenderer: options.sendToRenderer, invalidateData: invalidation.invalidate, platformSettingsService });
         if (runtime.diagnosticsService && runtime.diagnosticsService.setPlatformSettingsService) runtime.diagnosticsService.setPlatformSettingsService(platformSettingsService);
         const legacyProviderSettings = require("./runtime-config").createLegacyProviderSettingsMigration({ configRoot: options.userDataPath, workspaceRoot, runtimeConfigStore: runtime.runtimeConfigStore, platformSettingsService });
         const doubaoCollectionService = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService({ workspaceRoot, paths: injectedPaths, onDataInvalidated: invalidation.invalidate });
