@@ -3139,11 +3139,15 @@
 
 以下结果来自隔离 fixture 或本地构建，不连接真实 AI、浏览器远端投稿服务或客户工作区：
 
-### Phase 0 runtime/publication/submission baseline
+### Phase 0-6 runtime/publication/submission implementation record
 
-- `tests/runtime-publication-wiring.test.js`：通过 `registerIpc()` 的生产式 IPC 组装观察 publication IPC 与文章管理 snapshot 是否读取同一 published record；Phase 0 先暴露主进程 ledger 注入缺口，Phase 1 起作为回归测试。
-- `tests/platform-archive-worker-boundary.test.js`：在临时工作区制造远端 `published` 与本地 archive conflict，销毁 Worker service 后重新构建主进程 query；当前预期为红测，定位仅存于 Worker `Map` 的 archive failure。
-- `tests/content-submission-query-benchmark.test.js`：真实 `SubmissionBatchStore` 10 个 batch 的 `listBatches()` 操作基线，记录 `list/get/reconcile`、ledger 和 sidecar 读取计数；当前预期为红测，主 gate 是每查询一次全量 `batchStore.list()`。
+- `tests/runtime-publication-wiring.test.js`：通过 `registerIpc()` 的生产式 IPC 组装观察 publication IPC 与文章管理 snapshot 是否读取同一 published record；`a4361cf` 后作为单一主进程 ledger 注入的回归测试。
+- `tests/platform-archive-worker-boundary.test.js`：在临时工作区制造远端 `published` 与本地 archive conflict，销毁 Worker service 后重新构建主进程 query；`7c6b5b3` 后验证归档失败是持久 batch item 事实，且不把 publication 改为 failed。
+- `tests/content-submission-query-benchmark.test.js`：真实 `SubmissionBatchStore` 的 `listBatches()` 操作计数 benchmark；`5403eee`、`092c538` 后验证一次查询只全量读取 batch store 一次、sidecar 每 item 至多一次，并保持近似线性。1000-batch 墙钟 p95 因旧、新 fixture 派生工作不等价而不可比；该项作为接受的 unavailable wall-clock gate 记录，不宣称时间提升。
+- `tests/desktop-task-service.test.js`、`tests/platform-ipc-boundary.test.js` 与 `tests/platform-submission-invocation-count.test.js`：`77f22ca` 后验证唯一普通平台远端执行链是 `platforms:submit-selected` -> `startPlatformSubmit` -> Worker `platform-submit`。
+- Phase 6 caller Go 证据：`desktop:start-batch`、`desktop:stop-batch`、`desktop:refresh-queue`、`desktop:get-state` 仅在被删除的 preload/IPC 链内互相引用；Renderer 没有 `desktopConsole.batch` 调用；Worker `batch` 是 `runPublicationBatch` 的唯一生产调用者。相反，`npm run snapshot` -> `scripts/snapshot.cmd` -> Worker `snapshot` -> `createQueueSnapshot` 仍是受支持 CLI，故 snapshot 保留。
+
+对应实施提交：`8fc1cba`（基线）、`a4361cf`（ledger）、`7c6b5b3`（archive）、`5403eee`/`092c538`（read snapshot）、`7e62241`/`83784e9`/`920b8d0`/`6bef000`（submission modules）、`e320a97`/`e38b85d`/`95959b9`（Workspace Runtime/invalidation）、`77f22ca`（旧 remote batch 退休）。
 
 | 命令/分组 | 结果 |
 | --- | --- |
