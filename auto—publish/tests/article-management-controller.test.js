@@ -65,3 +65,24 @@ it('article management controller stops a removal watch when switching clients o
   state.dispose();
   assert.equal(stopped, 2);
 });
+
+it('article management controller owns removal subscription and ignores its late poll after a client switch', async function() {
+  const { createArticleManagementController } = await controller();
+  let listener;
+  let unsubscribed = 0;
+  let resolvePoll;
+  const state = createArticleManagementController({
+    loadSnapshot: async () => ({}),
+    watchRemoval: (_id, next) => { listener = next; return () => { unsubscribed += 1; }; },
+    loadRemoval: () => new Promise((resolve) => { resolvePoll = resolve; }),
+  });
+  state.setClient('client-a');
+  state.startRemovalWatch('removal-a');
+  listener({ transactionId: 'removal-a', status: 'pending_recovery' });
+  assert.equal(state.getState().removalTransaction.transactionId, 'removal-a');
+  state.setClient('client-b');
+  resolvePoll({ transactionId: 'removal-a', status: 'committed' });
+  await Promise.resolve();
+  assert.equal(unsubscribed, 1);
+  assert.equal(state.getState().removalTransaction, null);
+});

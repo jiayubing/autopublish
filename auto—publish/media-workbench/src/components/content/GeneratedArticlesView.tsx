@@ -28,10 +28,6 @@ function transactionStatusOf(transaction: Pick<ArticleRemovalTransaction, 'statu
   return transaction.status;
 }
 
-function isTerminalRemovalTransaction(status: string): boolean {
-  return status === 'committed' || status === 'superseded' || status === 'needs_repair';
-}
-
   function transactionReason(transaction: ArticleRemovalTransaction | null): string {
   return transaction?.reasonCode || transaction?.errorCode || '状态冲突';
 }
@@ -48,8 +44,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [cancellationPlans, setCancellationPlans] = useState<ContentSubmissionCancellationPreview[]>([]);
   const confirmationActionRef = useRef<(() => Promise<void>) | null>(null);
   const confirmationIdRef = useRef(0);
-  const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const removalUnsubscribeRef = useRef<(() => void) | null>(null);
   const cancellationRequestIdRef = useRef(0);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
   const [snapshotWorkflowByArticle, setSnapshotWorkflowByArticle] = useState<Awaited<ReturnType<typeof getArticleManagementSnapshot>>['workflowByArticle']>({});
@@ -90,15 +84,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     return mountedRef.current && clientIdRef.current === requestedClientId;
   }
 
-  const stopRemovalTransactionWatch = useCallback(() => {
-    if (removalTimerRef.current) {
-      clearTimeout(removalTimerRef.current);
-      removalTimerRef.current = null;
-    }
-    removalUnsubscribeRef.current?.();
-    removalUnsubscribeRef.current = null;
-  }, []);
-
   useEffect(() => {
     setSelectedStage(stageFilter);
     if (stageFilter !== 'trash') lastNonTrashStageRef.current = stageFilter;
@@ -111,9 +96,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       unsubscribe();
       mountedRef.current = false;
       managementControllerRef.current.dispose();
-      stopRemovalTransactionWatch();
+      managementControllerRef.current.stopRemovalWatch();
     };
-  }, [stopRemovalTransactionWatch]);
+  }, []);
 
   const resetClientState = useCallback(() => {
     setRemovalTransaction(null);
@@ -133,8 +118,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     confirmationActionRef.current = null;
     setPendingConfirmation(null);
     setBusy(false);
-    stopRemovalTransactionWatch();
-  }, [stopRemovalTransactionWatch]);
+    managementControllerRef.current.stopRemovalWatch();
+  }, []);
   resetClientStateRef.current = resetClientState;
 
   const applyManagementSnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getArticleManagementSnapshot>>) => {
@@ -243,42 +228,20 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   }, [attentionSnapshot, clientId]);
 
   useEffect(() => {
-    stopRemovalTransactionWatch();
-    if (!removalTransactionId) return;
-    let active = true;
-    let hasQueryableSnapshot = false;
-    const applyTransaction = (next: ArticleRemovalTransaction) => {
-      if (!active || !mountedRef.current) return;
-      setRemovalTransaction(next);
-      const status = transactionStatusOf(next);
-      if (isTerminalRemovalTransaction(status)) {
-        stopRemovalTransactionWatch();
+    if (!removalTransactionId) {
+      managementControllerRef.current.stopRemovalWatch();
+      return;
+    }
+    managementControllerRef.current.startRemovalWatch(removalTransactionId, {
+      onTerminal: (_transaction, status) => {
         if (status === 'committed' || status === 'superseded') void refreshHistoryData().catch((value) => {
-          if (active && mountedRef.current) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '刷新删除事务结果失败' });
+          if (mountedRef.current) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '刷新删除事务结果失败' });
         });
-      }
-    };
-    removalUnsubscribeRef.current = onContentArticleRemovalTransaction(removalTransactionId, applyTransaction);
-    const poll = async () => {
-      try {
-        const next = await getContentArticleRemovalTransaction(removalTransactionId);
-        if (!active || !mountedRef.current) return;
-        if (next) {
-          hasQueryableSnapshot = true;
-          applyTransaction(next);
-          if (isTerminalRemovalTransaction(transactionStatusOf(next))) return;
-        }
-      } catch (value) {
-        if (active && mountedRef.current) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '读取删除事务状态失败' });
-      }
-      if (active && mountedRef.current && hasQueryableSnapshot) removalTimerRef.current = setTimeout(() => { void poll(); }, 1000);
-    };
-    void poll();
-    return () => {
-      active = false;
-      stopRemovalTransactionWatch();
-    };
-  }, [removalTransactionId, removalWatchVersion, refreshHistoryData, stopRemovalTransactionWatch]);
+      },
+      onError: (value) => setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '读取删除事务状态失败' }),
+    });
+    return () => managementControllerRef.current.stopRemovalWatch();
+  }, [removalTransactionId, removalWatchVersion, refreshHistoryData]);
 
   function toggleArticle(article: GeneratedContentArticle) {
     if (article.status !== 'generated' && article.status !== 'saved') return;
