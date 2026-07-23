@@ -34,6 +34,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { createPlatformSubmissionController } from "../controllers/platform-submission-controller";
 
 // hepan is the technical ID for 蓝色河畔. We keep this mapping and do NOT
 // Platform display names and submission adaptation belong to the platform bridge.
@@ -79,6 +80,11 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const [repairingResidue, setRepairingResidue] = useState(false);
   const [residuePhase, setResiduePhase] = useState<"idle" | "checking" | "cleaning">("idle");
   const [residueFeedback, setResidueFeedback] = useState<{ kind: "status" | "error"; text: string } | null>(null);
+  const submissionControllerRef = useRef<ReturnType<typeof createPlatformSubmissionController> | null>(null);
+  if (!submissionControllerRef.current) {
+    submissionControllerRef.current = createPlatformSubmissionController({ submit: submitPlatformSelection, stop: stopPlatformSubmit, previewResidue: previewTrashedArticleQueueResidue, cleanupResidue: cleanupTrashedArticleQueueResidue }, async (reason: string) => refreshQueue(reason));
+  }
+  const submissionController = submissionControllerRef.current;
 
   useEffect(() => {
     try { window.localStorage.setItem("auto-publish:auto-trash-after-publish", String(autoTrashRequested)); } catch (_) {}
@@ -88,7 +94,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     new Set()
   );
   const hasObservedRunningRef = useRef(false);
-  const terminalQueueRevisionRef = useRef<number | null>(null);
 
   const hasArchiveFailure = useCallback((article: PlatformArticle) => Boolean(article.archiveError), []);
   const isSelectableArticle = useCallback((article: PlatformArticle) => article.sourceArticleState !== "trashed" && !hasArchiveFailure(article), [hasArchiveFailure]);
@@ -106,20 +111,17 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   }, [refreshQueue]);
 
   useEffect(() => {
-    setSelectedArticles((current) => {
-      const next = new Set([...current].filter((key) => queue.some((article) => articleSelectionKey(article) === key && isSelectableArticle(article))));
-      return next.size === current.size ? current : next;
-    });
-  }, [isSelectableArticle, queue]);
+    submissionController.pruneArticles(new Set(queue.filter(isSelectableArticle).map(articleSelectionKey)), (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
+  }, [isSelectableArticle, queue, submissionController]);
 
   const inspectQueueResidue = useCallback(async () => {
     try {
-      const report = await previewTrashedArticleQueueResidue();
+      const report = await submissionController.inspectResidue();
       setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "无法检查已删除文章队列残留");
     }
-  }, []);
+  }, [submissionController]);
 
   useEffect(() => { void inspectQueueResidue(); }, [inspectQueueResidue, queue.length]);
 
@@ -129,7 +131,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     setResiduePhase("checking");
     setResidueFeedback(null);
     try {
-      const report = await previewTrashedArticleQueueResidue();
+      const report = await submissionController.inspectResidue();
       setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
       if (!report.cleanableCount) {
         setResidueFeedback({ kind: "error", text: report.reportedCount ? `发现 ${report.reportedCount} 项需处理残留。请进入“文章管理”的“需处理”阶段查看原因和允许动作。` : "未发现已删除源文章的可修复队列残留。" });
@@ -138,8 +140,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       if (!window.confirm(`发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`)) return;
       setResiduePhase("cleaning");
       setResidueFeedback({ kind: "status", text: "清理中…" });
-      const result = await cleanupTrashedArticleQueueResidue();
-      const refreshed = await previewTrashedArticleQueueResidue();
+      const result = await submissionController.cleanupResidue();
+      const refreshed = await submissionController.inspectResidue();
       setQueueResidue({ cleanableCount: refreshed.cleanableCount, reportedCount: refreshed.reportedCount });
       await loadQueue();
       const cleanedCount = Number(result.cleanedCount) || 0;
@@ -181,13 +183,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     else if (["completed", "idle", "failed", "stopped", "interrupted"].includes(phase) && !running) {
       if (!isSubmitting) setSubmitStatus("");
       const queueRevision = platformState.queueRevision;
-      if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision) && terminalQueueRevisionRef.current !== queueRevision) {
-        terminalQueueRevisionRef.current = queueRevision;
+      if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision)) {
         hasObservedRunningRef.current = false;
-        void refreshQueue("submit-terminal").catch(() => {});
+        void submissionController.refreshTerminal(queueRevision).catch(() => {});
       }
     }
-  }, [platformState, refreshQueue, isSubmitting]);
+  }, [platformState, submissionController, isSubmitting]);
 
   const groupedArticles: Record<string, PlatformArticle[]> = {};
   for (const article of queue) {
@@ -201,12 +202,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const toggleArticle = (key: string) => {
     const article = queue.find((item) => articleSelectionKey(item) === key);
     if (!article || !isSelectableArticle(article)) return;
-    setSelectedArticles((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    submissionController.toggleArticle(key, (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
   };
 
   const toggleSelectAllInGroup = (platformId: string) => {
@@ -216,23 +212,11 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     const allSelected = selectableGroup.every((a) =>
       selectedArticles.has(articleSelectionKey(a))
     );
-    setSelectedArticles((prev) => {
-      const next = new Set(prev);
-      for (const a of selectableGroup) {
-        if (allSelected) next.delete(articleSelectionKey(a));
-        else next.add(articleSelectionKey(a));
-      }
-      return next;
-    });
+    submissionController.selectGroup(selectableGroup.map(articleSelectionKey), allSelected, (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
   };
 
   const togglePlatform = (platformId: string) => {
-    setSelectedPlatformIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(platformId)) next.delete(platformId);
-      else next.add(platformId);
-      return next;
-    });
+    submissionController.togglePlatform(platformId, (next: { selectedPlatformIds: Set<string> }) => setSelectedPlatformIds(next.selectedPlatformIds));
   };
 
   const toggleGroupCollapse = (platformId: string) => {
@@ -267,35 +251,29 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   };
 
   const handleStop = async () => {
-    setIsStopping(true);
-    try { await stopPlatformSubmit(platformState.runId); } catch (_) {}
+    try { await submissionController.stop(platformState.runId, (next: { stopping?: boolean }) => { if (typeof next.stopping === "boolean") setIsStopping(next.stopping); }); } catch (_) {}
   };
 
   const handleSubmit = async () => {
     if (!canSubmit || taskBusy) return;
     setIsConfirming(false);
-    setIsSubmitting(true);
-    setError(null);
-      setSubmitStatus(`正在提交 ${taskCount} 个任务，请稍候...`);
+    setSubmitStatus(`正在提交 ${taskCount} 个任务，请稍候...`);
     try {
-      const result = await submitPlatformSelection({
+      await submissionController.submit({
         submissions: selectedArticleList.map((article) => ({
           sourcePlatformId: article.sourcePlatformId,
           filename: article.filename,
           targetPlatformIds: [...selectedPlatformIds],
         })),
         autoTrash: autoTrashRequested,
+      }, (next: { submitting?: boolean; stopping?: boolean; error?: string | null; result?: PlatformSubmitResult; showResult?: boolean }) => {
+        if (typeof next.submitting === "boolean") setIsSubmitting(next.submitting);
+        if (typeof next.stopping === "boolean") setIsStopping(next.stopping);
+        if (next.error !== undefined) setError(next.error);
+        if (next.result) { setSubmitResult(next.result); setShowResult(next.showResult === true); setSubmitStatus(""); }
       });
-      setSubmitStatus("");
-      setSubmitResult(result);
-      setShowResult(true);
     } catch (e: unknown) {
       setSubmitStatus("");
-      setError(e instanceof Error ? e.message : "Submission failed");
-    } finally {
-      try { await refreshQueue("submit-terminal"); } catch (_) {}
-      setIsSubmitting(false);
-      setIsStopping(false);
     }
   };
 
@@ -376,9 +354,9 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                     selectedArticles.has(articleSelectionKey(a))
                   );
                   if (allSelected) {
-                    setSelectedArticles(new Set());
+                    submissionController.replaceArticles([], (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
                   } else {
-                      setSelectedArticles(new Set(selectableQueue.map(articleSelectionKey)));
+                      submissionController.replaceArticles(selectableQueue.map(articleSelectionKey), (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
                   }
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 font-medium"

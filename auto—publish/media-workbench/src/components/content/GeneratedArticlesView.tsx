@@ -11,6 +11,7 @@ import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
 import ActionConfirmationModal, { type ActionConfirmation } from './ActionConfirmationModal';
+import { createArticleManagementController } from '../../article-management-controller';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
 
@@ -64,12 +65,19 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [removalWatchVersion, setRemovalWatchVersion] = useState(0);
   const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removalUnsubscribeRef = useRef<(() => void) | null>(null);
-  const clientRequestIdRef = useRef(0);
   const cancellationRequestIdRef = useRef(0);
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | 'all'>(stageFilter === 'trash' ? 'all' : stageFilter);
   const [attentionSnapshot, setAttentionSnapshot] = useState<ArticleAttentionList & { loading: boolean; error: string | null }>({ revision: 0, items: [], counts: { total: 0, actionable: 0 }, loading: false, error: null });
+  const applySnapshotRef = useRef<(snapshot: Awaited<ReturnType<typeof getArticleManagementSnapshot>>) => void>(() => {});
+  const resetClientStateRef = useRef<() => void>(() => {});
+  const managementControllerRef = useRef(createArticleManagementController({
+    loadSnapshot: getArticleManagementSnapshot,
+    onSnapshot: (snapshot) => applySnapshotRef.current(snapshot),
+    onReset: () => resetClientStateRef.current(),
+    onError: (value) => setError(value instanceof Error ? value.message : '无法加载历史文章'),
+  }));
   const attentionItems = attentionSnapshot.items;
   clientIdRef.current = clientId;
 
@@ -95,11 +103,12 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      managementControllerRef.current.dispose();
       stopRemovalTransactionWatch();
     };
   }, [stopRemovalTransactionWatch]);
 
-  useEffect(() => {
+  const resetClientState = useCallback(() => {
     setRemovalTransaction(null);
     setRemovalTransactionId(null);
     setRemovalWatchVersion(0);
@@ -119,7 +128,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setPendingConfirmation(null);
     setBusy(false);
     stopRemovalTransactionWatch();
-  }, [clientId, stopRemovalTransactionWatch]);
+  }, [stopRemovalTransactionWatch]);
+  resetClientStateRef.current = resetClientState;
 
   const applyManagementSnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getArticleManagementSnapshot>>) => {
     setArticles(snapshot.articles || []);
@@ -132,23 +142,19 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setAttentionSnapshot({ ...(snapshot.attention || { revision: snapshot.revision, items: [], counts: { total: 0, actionable: 0 } }), loading: false, error: null });
     return snapshot.articles || [];
   }, []);
+  applySnapshotRef.current = applyManagementSnapshot;
+
+  const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
+    setSelected((current) => {
+      const value = typeof next === 'function' ? next(current) : next;
+      managementControllerRef.current.setSelection(value);
+      return value;
+    });
+  }, []);
 
   useEffect(() => {
-    const requestId = ++clientRequestIdRef.current;
-    let cancelled = false;
-    const isCurrent = () => !cancelled && mountedRef.current && clientIdRef.current === clientId && requestId === clientRequestIdRef.current;
-    if (!clientId) {
-      setArticles([]);
-      setSubmissionBatches([]);
-      setPublicationRecords([]);
-      setSnapshotWorkflowByArticle({});
-      return () => { cancelled = true; };
-    }
-    getArticleManagementSnapshot(clientId)
-      .then((snapshot) => { if (isCurrent()) applyManagementSnapshot(snapshot); })
-      .catch((value) => { if (isCurrent()) setError(value instanceof Error ? value.message : '无法加载历史文章'); });
-    return () => { cancelled = true; };
-  }, [applyManagementSnapshot, clientId, refreshToken]);
+    void managementControllerRef.current.refresh(clientId);
+  }, [clientId, refreshToken]);
 
   const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const publicationRecordsByArticle = useMemo(() => {
@@ -223,17 +229,14 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const refreshHistoryData = useCallback(async () => {
     const requestedClientId = clientId;
     if (!mountedRef.current || requestedClientId !== clientIdRef.current) return [];
-    const requestId = ++clientRequestIdRef.current;
-    const snapshot = await getArticleManagementSnapshot(requestedClientId);
-    if (!mountedRef.current || requestedClientId !== clientIdRef.current || requestId !== clientRequestIdRef.current) return [];
-    return applyManagementSnapshot(snapshot);
-  }, [applyManagementSnapshot, clientId]);
+    const snapshot = await managementControllerRef.current.refresh(requestedClientId);
+    return snapshot?.articles || [];
+  }, [clientId]);
 
   const refreshAttention = useCallback(async () => {
-    const snapshot = await getArticleManagementSnapshot(clientId);
-    if (mountedRef.current && clientIdRef.current === clientId) applyManagementSnapshot(snapshot);
+    await managementControllerRef.current.refresh(clientId);
     return attentionSnapshot;
-  }, [applyManagementSnapshot, attentionSnapshot, clientId]);
+  }, [attentionSnapshot, clientId]);
 
   useEffect(() => {
     stopRemovalTransactionWatch();
@@ -276,13 +279,13 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   function toggleArticle(article: GeneratedContentArticle) {
     if (article.status !== 'generated' && article.status !== 'saved') return;
     const key = selectionKey(article);
-    setSelected((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+    updateSelected((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   }
 
   function toggleGroup(groupArticles: GeneratedContentArticle[]) {
     const ids = selectableArticles(groupArticles, clientId).map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
-    setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+    updateSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
   async function queueSelected() {
@@ -300,7 +303,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
         try {
           await createContentSubmissionBatch({ ...input, confirmed: true });
           if (!isCurrentClient(requestedClientId)) return;
-          setSelected([]);
+          updateSelected([]);
           await refreshHistoryData();
         } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
         finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
@@ -467,7 +470,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       const resultTransactionId = result.transactionId || transactionIdOf(resultTransaction);
       if (resultTransactionId) setRemovalTransactionId(resultTransactionId);
       setTrashPreview(null);
-      setSelected([]);
+      updateSelected([]);
       await refreshHistoryData();
       if (resultStatus === 'pending_auto_recovery' || resultStatus === 'pending_recovery') {
         setTrashFeedback({ kind: 'status', text: `已确认移入回收站 ${result.articleCount || selections.length} 篇，删除事务正在自动恢复${resultTransaction?.updatedAt ? `（最近更新：${formatBeijingTime(resultTransaction.updatedAt)})` : ''}。` });
@@ -527,7 +530,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   function toggleAll() {
     const ids = operable.map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
-    setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+    updateSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
   if (selectedStage === 'trash') return <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">

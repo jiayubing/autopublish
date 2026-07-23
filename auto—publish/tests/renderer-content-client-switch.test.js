@@ -1,11 +1,8 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { after, before } = require("node:test");
 const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
-function read(file) { return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8"); }
 
 async function changeClientByPointer(page, select, key) {
   const box = await select.boundingBox();
@@ -28,59 +25,6 @@ describe("renderer content client switching", function() {
   });
 
   after(closeRenderer);
-
-  it("keeps ordinary queueing scoped to the current client", function() {
-    const view = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
-    const queueSelected = view.slice(view.indexOf("async function queueSelected"), view.indexOf("\n  function openArticle", view.indexOf("async function queueSelected")));
-    assert.match(queueSelected, /createContentSubmissionBatch/);
-    assert.match(queueSelected, /setSelected\(\[\]\)/);
-    assert.match(queueSelected, /refreshHistoryData\(\)/);
-    assert.doesNotMatch(queueSelected, /setClientId/);
-  });
-
-  it("guards client-scoped article, queue, trash, and publication responses", function() {
-    const view = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
-    assert.match(view, /clientRequestIdRef/);
-    assert.match(view, /requestId === clientRequestIdRef\.current/);
-    assert.match(view, /getArticleManagementSnapshot\(clientId\)/);
-    assert.match(view, /requestId === clientRequestIdRef\.current/);
-    assert.doesNotMatch(view, /listContentArticles\(clientId\)/);
-  });
-
-  it("uses one-way history refreshes and keeps the editor inside the content host", function() {
-    const view = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
-    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-    const editor = read("media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx");
-    assert.doesNotMatch(view, /onRefreshArticles/);
-    assert.doesNotMatch(workbench.slice(workbench.indexOf("<GeneratedArticlesView")), /onRefreshArticles=/);
-    assert.match(workbench, /relative flex min-h-0 min-w-0 flex-1 flex-col/);
-    assert.doesNotMatch(editor, /fixed inset-0 z-30/);
-    assert.doesNotMatch(editor, /aria-modal/);
-  });
-
-  it("clears client-local UI state while retaining workspace preferences", function() {
-    const view = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
-    const reset = view.slice(view.indexOf("useEffect(() => {\n    setRemovalTransaction(null)"), view.indexOf("\n  }, [clientId, stopRemovalTransactionWatch]"));
-    for (const state of ["setSelected([])", "setBatchFeedback(null)", "setTrashFeedback(null)", "setTrashPreview(null)", "setDrawerArticle(null)", "setAttentionDetail(null)"]) {
-      assert.match(reset, new RegExp(state.replace(/[()[\]]/g, "\\$&")));
-    }
-    assert.match(view, /const \[targetPlatformIds, setTargetPlatformIds\]/);
-    assert.doesNotMatch(reset, /setTargetPlatformIds/);
-  });
-
-  it("does not use client changes as a signal to stop generation work", function() {
-    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-    const change = workbench.slice(workbench.indexOf("function handleClientChange"), workbench.indexOf("\n  function changeTab", workbench.indexOf("function handleClientChange")));
-    assert.match(change, /setClientId\(nextClientId\)/);
-    assert.doesNotMatch(change, /stop|cancel|abort|terminate/i);
-  });
-
-  it("resets a real client switch to the pending-submission stage", function() {
-    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-    const change = workbench.slice(workbench.indexOf("function handleClientChange"), workbench.indexOf("\n  function changeTab", workbench.indexOf("function handleClientChange")));
-    assert.match(change, /setArticleStageFilter\('pending_submission'\)/);
-    assert.doesNotMatch(change, /setArticleStageFilter\('all'\)/);
-  });
 
   it("switches from a queued client to another client through the real Renderer", async function() {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });

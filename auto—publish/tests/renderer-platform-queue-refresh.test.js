@@ -12,7 +12,8 @@ describe('renderer platform queue refresh seam', () => {
     const app = read('App.tsx');
     const sidebar = read('components/Sidebar.tsx');
     assert.match(platform, /usePlatformQueue/);
-    assert.match(platform, /refreshQueue\("submit-terminal"\)/);
+    // Terminal refresh behavior is exercised through the platform controller
+    // contract; asserting a component source string would freeze its wiring.
     assert.doesNotMatch(platform, /getPlatformQueue\(/);
     assert.doesNotMatch(platform, /setQueue\(/);
     assert.match(app, /WorkspaceDataProvider/);

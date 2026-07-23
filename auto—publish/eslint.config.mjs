@@ -42,4 +42,8 @@ export default tseslint.config(
     files: ["media-workbench/src/**/*.js", "eslint.config.mjs"],
     languageOptions: { sourceType: "module" },
   },
+  {
+    files: ["tests/**/*.mjs"],
+    languageOptions: { sourceType: "module" },
+  },
 );
