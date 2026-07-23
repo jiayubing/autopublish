@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import {
   PlatformArticle,
   PlatformSubmitResult,
@@ -56,35 +56,21 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const queue = queueSnapshot.queue;
   const platforms = queueSnapshot.platforms;
   const loading = queueSnapshot.loading;
-  const [error, setError] = useState<string | null>(null);
-
-  const [selectedArticles, setSelectedArticles] = useState<Set<string>>(
-    new Set()
-  );
-  const [selectedPlatformIds, setSelectedPlatformIds] = useState<Set<string>>(
-    new Set()
-  );
-
   const [isConfirming, setIsConfirming] = useState(false);
   const [autoTrashRequested, setAutoTrashRequested] = useState(() => {
     try { return window.localStorage.getItem("auto-publish:auto-trash-after-publish") === "true"; } catch (_) { return false; }
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isStopping, setIsStopping] = useState(false);
-  const [submitResult, setSubmitResult] =
-    useState<PlatformSubmitResult | null>(null);
-  const [showResult, setShowResult] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string>("");
   const [publishIntervalSeconds, setPublishIntervalSeconds] = useState<number | null>(null);
-  const [queueResidue, setQueueResidue] = useState<{ cleanableCount: number; reportedCount: number }>({ cleanableCount: 0, reportedCount: 0 });
-  const [repairingResidue, setRepairingResidue] = useState(false);
-  const [residuePhase, setResiduePhase] = useState<"idle" | "checking" | "cleaning">("idle");
-  const [residueFeedback, setResidueFeedback] = useState<{ kind: "status" | "error"; text: string } | null>(null);
   const submissionControllerRef = useRef<ReturnType<typeof createPlatformSubmissionController> | null>(null);
   if (!submissionControllerRef.current) {
-    submissionControllerRef.current = createPlatformSubmissionController({ submit: submitPlatformSelection, stop: stopPlatformSubmit, previewResidue: previewTrashedArticleQueueResidue, cleanupResidue: cleanupTrashedArticleQueueResidue }, async (reason: string) => refreshQueue(reason));
+    submissionControllerRef.current = createPlatformSubmissionController({ submit: submitPlatformSelection, pause: pausePlatformSubmit, stop: stopPlatformSubmit, previewResidue: previewTrashedArticleQueueResidue, cleanupResidue: cleanupTrashedArticleQueueResidue }, async (reason: string) => refreshQueue(reason));
   }
   const submissionController = submissionControllerRef.current;
+  const commandState = useSyncExternalStore(submissionController.subscribe, submissionController.getState, submissionController.getState);
+  const { selectedArticles, selectedPlatformIds, submitting: isSubmitting, stopping: isStopping, result: submitResult, showResult, error, residue } = commandState;
+
+  useEffect(() => () => submissionController.dispose(), [submissionController]);
 
   useEffect(() => {
     try { window.localStorage.setItem("auto-publish:auto-trash-after-publish", String(autoTrashRequested)); } catch (_) {}
@@ -103,65 +89,35 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   const loadQueue = useCallback(async () => {
     try {
-      setError(null);
+      submissionController.setError(null);
       await refreshQueue("manual");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load queue");
+      submissionController.setError(e instanceof Error ? e.message : "Failed to load queue");
     }
   }, [refreshQueue]);
 
   useEffect(() => {
-    submissionController.pruneArticles(new Set(queue.filter(isSelectableArticle).map(articleSelectionKey)), (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
+    submissionController.pruneArticles(new Set(queue.filter(isSelectableArticle).map(articleSelectionKey)));
   }, [isSelectableArticle, queue, submissionController]);
 
   const inspectQueueResidue = useCallback(async () => {
     try {
-      const report = await submissionController.inspectResidue();
-      setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "无法检查已删除文章队列残留");
-    }
+      await submissionController.inspectResidue();
+    } catch (_) {}
   }, [submissionController]);
 
   useEffect(() => { void inspectQueueResidue(); }, [inspectQueueResidue, queue.length]);
 
   const repairQueueResidue = async () => {
-    if (repairingResidue) return;
-    setRepairingResidue(true);
-    setResiduePhase("checking");
-    setResidueFeedback(null);
+    if (residue.phase === "checking" || residue.phase === "cleaning") return;
     try {
       const report = await submissionController.inspectResidue();
-      setQueueResidue({ cleanableCount: report.cleanableCount, reportedCount: report.reportedCount });
       if (!report.cleanableCount) {
-        setResidueFeedback({ kind: "error", text: report.reportedCount ? `发现 ${report.reportedCount} 项需处理残留。请进入“文章管理”的“需处理”阶段查看原因和允许动作。` : "未发现已删除源文章的可修复队列残留。" });
         return;
       }
       if (!window.confirm(`发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`)) return;
-      setResiduePhase("cleaning");
-      setResidueFeedback({ kind: "status", text: "清理中…" });
-      const result = await submissionController.cleanupResidue();
-      const refreshed = await submissionController.inspectResidue();
-      setQueueResidue({ cleanableCount: refreshed.cleanableCount, reportedCount: refreshed.reportedCount });
-      await loadQueue();
-      const cleanedCount = Number(result.cleanedCount) || 0;
-      const failedCount = Number(result.failedCount ?? result.failedItems?.length ?? 0) || 0;
-      const remainingCount = Number(result.remainingCount ?? (refreshed.cleanableCount + refreshed.reportedCount)) || 0;
-      const reasons = [...new Set((result.failedItems || []).map((item) => item.reasonCode).filter((value): value is string => typeof value === "string" && Boolean(value.trim())))];
-      if (failedCount > 0 || cleanedCount === 0) {
-        const reason = reasons.length ? `原因：${reasons.join("、")}` : "原因：存在状态冲突或队列身份变化";
-        setResidueFeedback({ kind: "error", text: cleanedCount > 0 ? `部分清理：已清理 ${cleanedCount} 项，仍有 ${Math.max(failedCount, remainingCount)} 项未清理。${reason}` : `未清理任何残留项。仍有 ${Math.max(failedCount, remainingCount)} 项需要处理。${reason}` });
-      } else {
-        setResidueFeedback({ kind: "status", text: `已清理 ${cleanedCount} 项已删除源文章队列残留。` });
-      }
-    } catch (e: unknown) {
-      const value = e as { code?: unknown; reasonCode?: unknown; message?: unknown };
-      const reason = typeof value.code === "string" ? value.code : typeof value.reasonCode === "string" ? value.reasonCode : typeof value.message === "string" ? value.message : "清理服务返回失败";
-      setResidueFeedback({ kind: "error", text: `已删除文章队列残留清理失败。原因：${reason}` });
-    } finally {
-      setResiduePhase("idle");
-      setRepairingResidue(false);
-    }
+      await submissionController.cleanupResidue({ confirmed: true });
+    } catch (_) {}
   };
 
   useEffect(() => {
@@ -202,7 +158,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const toggleArticle = (key: string) => {
     const article = queue.find((item) => articleSelectionKey(item) === key);
     if (!article || !isSelectableArticle(article)) return;
-    submissionController.toggleArticle(key, (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
+    submissionController.toggleArticle(key);
   };
 
   const toggleSelectAllInGroup = (platformId: string) => {
@@ -212,11 +168,11 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     const allSelected = selectableGroup.every((a) =>
       selectedArticles.has(articleSelectionKey(a))
     );
-    submissionController.selectGroup(selectableGroup.map(articleSelectionKey), allSelected, (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
+    submissionController.selectGroup(selectableGroup.map(articleSelectionKey), allSelected);
   };
 
   const togglePlatform = (platformId: string) => {
-    submissionController.togglePlatform(platformId, (next: { selectedPlatformIds: Set<string> }) => setSelectedPlatformIds(next.selectedPlatformIds));
+    submissionController.togglePlatform(platformId);
   };
 
   const toggleGroupCollapse = (platformId: string) => {
@@ -246,12 +202,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   const handlePause = async () => {
     setSubmitStatus("已暂停 — 正在关闭浏览器...");
-    try { await pausePlatformSubmit(platformState.runId); } catch (_) {}
+    try { await submissionController.pause(platformState.runId); } catch (_) {}
     setSubmitStatus("");
   };
 
   const handleStop = async () => {
-    try { await submissionController.stop(platformState.runId, (next: { stopping?: boolean }) => { if (typeof next.stopping === "boolean") setIsStopping(next.stopping); }); } catch (_) {}
+    try { await submissionController.stop(platformState.runId); } catch (_) {}
   };
 
   const handleSubmit = async () => {
@@ -266,11 +222,6 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
           targetPlatformIds: [...selectedPlatformIds],
         })),
         autoTrash: autoTrashRequested,
-      }, (next: { submitting?: boolean; stopping?: boolean; error?: string | null; result?: PlatformSubmitResult; showResult?: boolean }) => {
-        if (typeof next.submitting === "boolean") setIsSubmitting(next.submitting);
-        if (typeof next.stopping === "boolean") setIsStopping(next.stopping);
-        if (next.error !== undefined) setError(next.error);
-        if (next.result) { setSubmitResult(next.result); setShowResult(next.showResult === true); setSubmitStatus(""); }
       });
     } catch (e: unknown) {
       setSubmitStatus("");
@@ -290,8 +241,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     : "";
 
   const dismissResult = () => {
-    setShowResult(false);
-    setSubmitResult(null);
+    submissionController.dismissResult();
     setSubmitStatus("");
   };
 
@@ -316,18 +266,18 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
           />
           <span>刷新队列</span>
         </button>
-        {queueResidue.cleanableCount > 0 && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || taskBusy || repairingResidue} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{repairingResidue ? (residuePhase === "checking" ? "检查中…" : "清理中…") : `检查并清理已删除文章残留 · 安全收尾 (${queueResidue.cleanableCount})`}</button>}
-        {queueResidue.reportedCount > 0 && <button type="button" onClick={onOpenArticleManagement} disabled={loading || taskBusy} className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">查看需处理项 ({queueResidue.reportedCount})</button>}
+        {residue.cleanableCount > 0 && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || taskBusy || residue.phase === "checking" || residue.phase === "cleaning"} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{residue.phase === "checking" ? "检查中…" : residue.phase === "cleaning" ? "清理中…" : `检查并清理已删除文章残留 · 安全收尾 (${residue.cleanableCount})`}</button>}
+        {residue.reportedCount > 0 && <button type="button" onClick={onOpenArticleManagement} disabled={loading || taskBusy} className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">查看需处理项 ({residue.reportedCount})</button>}
       </div>
 
-      {residueFeedback && <div role={residueFeedback.kind === "error" ? "alert" : "status"} aria-live={residueFeedback.kind === "error" ? "assertive" : "polite"} className={`mb-3 rounded border p-3 text-xs ${residueFeedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>{residueFeedback.text}</div>}
+      {residue.feedback && <div role={residue.feedback.kind === "error" ? "alert" : "status"} aria-live={residue.feedback.kind === "error" ? "assertive" : "polite"} className={`mb-3 rounded border p-3 text-xs ${residue.feedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>{residue.feedback.text}</div>}
 
       {displayError && (
         <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2 text-red-700 text-xs">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{displayError}</span>
           <button
-            onClick={() => setError(null)}
+            onClick={() => submissionController.setError(null)}
             className="ml-auto shrink-0 p-0.5 hover:bg-red-100 rounded"
           >
             <X className="w-3.5 h-3.5" />
@@ -354,9 +304,9 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                     selectedArticles.has(articleSelectionKey(a))
                   );
                   if (allSelected) {
-                    submissionController.replaceArticles([], (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
+                    submissionController.replaceArticles([]);
                   } else {
-                      submissionController.replaceArticles(selectableQueue.map(articleSelectionKey), (next: { selectedArticles: Set<string> }) => setSelectedArticles(next.selectedArticles));
+                      submissionController.replaceArticles(selectableQueue.map(articleSelectionKey));
                   }
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 font-medium"
