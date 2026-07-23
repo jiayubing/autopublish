@@ -16,20 +16,41 @@ function createSubmissionBatchStore(options) {
     return path.join(directory, "batch-" + id + ".json");
   }
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
-  // Archive handling is local bookkeeping.  It must never replace the remote
+  // Archive handling is local bookkeeping. It must never replace the remote
   // publication outcome (which remains in item.status/publicationStatus).
-  function normalizeLocalArchive(value) {
-    if (!value || typeof value !== "object") return { status: "pending" };
-    const result = { status: value.status };
-    if (!["pending", "archived", "failed"].includes(result.status)) result.status = "pending";
-    if (typeof value.errorCode === "string") result.errorCode = value.errorCode;
-    if (typeof value.updatedAt === "string") result.updatedAt = value.updatedAt;
-    return result;
+  // Normalize legacy batches before applying the stricter persisted contract.
+  function normalizeLocalArchive(value, fallbackTimestamp) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return { status: "pending", errorCode: null, updatedAt: fallbackTimestamp };
+    }
+    const status = ["pending", "archived", "failed"].includes(value.status) ? value.status : "pending";
+    const errorCode = status === "failed" && typeof value.errorCode === "string" ? value.errorCode : null;
+    const updatedAt = typeof value.updatedAt === "string" && Number.isFinite(Date.parse(value.updatedAt))
+      ? value.updatedAt
+      : fallbackTimestamp;
+    return { status, errorCode, updatedAt };
   }
   function normalizeBatch(batch) {
     if (!batch || !Array.isArray(batch.items)) return batch;
-    batch.items.forEach((item) => { item.localArchive = normalizeLocalArchive(item.localArchive); });
+    const fallbackTimestamp = typeof batch.updatedAt === "string" && Number.isFinite(Date.parse(batch.updatedAt))
+      ? batch.updatedAt
+      : typeof batch.createdAt === "string" && Number.isFinite(Date.parse(batch.createdAt)) ? batch.createdAt : now();
+    batch.items.forEach(function(item) { item.localArchive = normalizeLocalArchive(item.localArchive, fallbackTimestamp); });
     return batch;
+  }
+  function validateLocalArchive(value) {
+    if (value === undefined) return;
+    if (!value || typeof value !== "object" || Array.isArray(value) || !["pending", "archived", "failed"].includes(value.status) ||
+        (value.errorCode !== null && value.errorCode !== undefined && (typeof value.errorCode !== "string" || !/^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value.errorCode))) ||
+        typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
+      throw batchError("SUBMISSION_BATCH_ARCHIVE_INVALID", "Submission batch local archive state is invalid");
+    }
+    if (value.status === "failed" && !value.errorCode) throw batchError("SUBMISSION_BATCH_ARCHIVE_INVALID", "Submission batch local archive failure requires an error code");
+    if (value.status !== "failed" && value.errorCode != null) throw batchError("SUBMISSION_BATCH_ARCHIVE_INVALID", "Submission batch local archive state has an invalid error code");
+  }
+  function validateBatch(batch) {
+    if (!batch || typeof batch !== "object" || !Array.isArray(batch.items)) throw batchError("SUBMISSION_BATCH_INVALID", "Submission batch is invalid");
+    batch.items.forEach(function(item) { validateLocalArchive(item && item.localArchive); });
   }
   function batchStatus(items) {
     const values = Array.isArray(items) ? items.map((item) => item.status) : [];
@@ -57,6 +78,8 @@ function createSubmissionBatchStore(options) {
     "cancelled-cleaned": new Set([])
   };
   function save(batch) {
+    normalizeBatch(batch);
+    validateBatch(batch);
     const file = filename(batch.id);
     const temp = `${file}.tmp-${process.pid}-${crypto.randomUUID()}`;
     try {
@@ -113,6 +136,19 @@ function createSubmissionBatchStore(options) {
     item.localArchive = normalizeLocalArchive(item.localArchive);
     return item;
   }
+  function updateLocalArchive(batchId, identity, localArchive) {
+    validateLocalArchive(localArchive);
+    const batch = get(batchId);
+    const reference = identity || {};
+    const item = batch.items.find(function(candidate) {
+      return candidate.publicationId === reference.publicationId && candidate.attemptId === reference.attemptId && candidate.targetPlatformId === reference.targetPlatformId;
+    });
+    if (!item) throw batchError("SUBMISSION_BATCH_ITEM_NOT_FOUND", "Submission batch item was not found");
+    if (item.status !== "published" || item.publicationStatus !== "published") throw batchError("SUBMISSION_BATCH_ARCHIVE_STATE_INVALID", "Only a published submission can update local archive state");
+    item.localArchive = { status: localArchive.status, errorCode: localArchive.errorCode || null, updatedAt: localArchive.updatedAt || now() };
+    batch.updatedAt = now();
+    return save(batch);
+  }
   function updateItem(batchId, identity, transition) {
     const batch = get(batchId);
     applyItemTransition(batch, identity, transition);
@@ -160,7 +196,7 @@ function createSubmissionBatchStore(options) {
     batch.updatedAt = now();
     return save(batch);
   }
-  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, rebindAttempt, reconcile, batchStatus };
+  return { createId, save, get, list, listItemsByArticle, findByArticle: listItemsByArticle, listByArticle: listItemsByArticle, updateItem, updateLocalArchive, rebindAttempt, reconcile, batchStatus };
 }
 
 module.exports = { createSubmissionBatchStore };

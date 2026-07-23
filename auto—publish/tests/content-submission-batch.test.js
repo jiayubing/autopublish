@@ -102,7 +102,7 @@ describe("content submission batch", function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "content-submission-batch-"));
     try {
       const invalidations = [];
-      const service = makeService(root, { onDataInvalidated(scopes, reasonCode) { invalidations.push({ scopes, reasonCode }); } });
+      const service = makeService(root, { onDataInvalidated(reasonCode) { invalidations.push(reasonCode); } });
       const batch = service.createBatch({ clientId: "client-1", articleIds: ["saved"], targetPlatformIds: ["toutiao"], confirmed: true });
       invalidations.length = 0;
       assert.equal(service.listBatches("client-1").length, 1);
@@ -123,10 +123,7 @@ describe("content submission batch", function() {
       assert.equal(repeated.idempotentCount, 1);
       assert.equal(repeated.batchStatus, "cancelled");
       assert.deepEqual(repeated.changedScopes, ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]);
-      assert.deepEqual(invalidations, [
-        { scopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" },
-        { scopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode: "SUBMISSION_BATCH_CANCELLED" }
-      ]);
+      assert.deepEqual(invalidations, ["SUBMISSION_BATCH_CANCELLED", "SUBMISSION_BATCH_CANCELLED"]);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 

@@ -186,7 +186,7 @@ function createContentGenerationBatchService(options) {
 
   function notifyData(reasonCode) {
     if (typeof opts.onDataInvalidated !== "function") return;
-    try { opts.onDataInvalidated(["articleManagement"], reasonCode); } catch (_) {}
+    try { opts.onDataInvalidated(reasonCode); } catch (_) {}
   }
 
   function fingerprint() {

@@ -11,7 +11,7 @@ test("article attention resolver previews and delegates a safe missing-pair fina
   const resolver = createArticleAttentionResolver({
     query,
     contentSubmissionService: { cleanupArticleSubmissionItem: (action) => { calls.push(action); return { status: "failed-cleaned", idempotent: true }; } },
-    onDataInvalidated: (scopes, reasonCode) => invalidations.push({ scopes, reasonCode })
+    onDataInvalidated: (reasonCode) => invalidations.push(reasonCode)
   });
   const item = query.list().items[0];
   const preview = resolver.preview({ attentionId: item.attentionId, action: "finalize" });
@@ -20,7 +20,7 @@ test("article attention resolver previews and delegates a safe missing-pair fina
   const result = resolver.resolve({ attentionId: item.attentionId, action: "finalize", expectedRevision: query.getRevision(), confirmed: true });
   assert.equal(result.outcome, "resolved");
   assert.equal(calls[0].action, "cleanup");
-  assert.deepEqual(invalidations[0].scopes, ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]);
+  assert.equal(invalidations[0], "ARTICLE_ATTENTION_RESOLVED");
 });
 
 test("article attention resolver rejects an old revision before writing", () => {
@@ -31,4 +31,32 @@ test("article attention resolver rejects an old revision before writing", () => 
   query.invalidate();
   assert.throws(() => resolver.resolve({ attentionId: item.attentionId, action: "finalize", expectedRevision: 1, confirmed: true }), (error) => error.code === "ARTICLE_ATTENTION_STALE");
   assert.equal(called, false);
+});
+
+test("article attention resolver delegates archive retry to the archive service contract", () => {
+  const calls = [];
+  const archiveService = {
+    retryArchive: (item) => {
+      calls.push(item);
+      return { status: "archived", domainHandled: true, changedScopes: ["articleAttention"] };
+    }
+  };
+  const query = createArticleAttentionQuery({
+    archiveService,
+    readers: {
+      listArchiveFailures: () => [{
+        clientId: "client-1", articleId: "article-1", batchId: "batch-1",
+        publicationId: "pub-1", attemptId: "attempt-1", targetPlatformId: "hepan",
+        status: "published", reasonCode: "PUBLISHED_ARCHIVE_FAILED"
+      }]
+    }
+  });
+  const resolver = createArticleAttentionResolver({ query, archiveService });
+  const item = query.list().items[0];
+
+  const result = resolver.resolve({ attentionId: item.attentionId, action: "retry-archive", expectedRevision: query.getRevision(), confirmed: true });
+
+  assert.equal(result.result.status, "archived");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].publicationId, "pub-1");
 });

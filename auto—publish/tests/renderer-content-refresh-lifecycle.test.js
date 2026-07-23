@@ -43,6 +43,10 @@ describe("renderer content refresh lifecycle", function() {
     assert.match(workbench, /contentSourcesRefreshToken/);
     assert.match(workbench, /onWorkspaceDataInvalidated/);
     assert.match(invalidationPolicy, /contentSources/);
+    const invalidation = read("desktop/workspace-data-invalidation.js");
+    assert.match(workbench, /contentSourcesRefreshToken/);
+    assert.match(workbench, /onWorkspaceDataInvalidated/);
+    assert.match(invalidation, /contentSources/);
     assert.match(questions, /onContentSourcesChanged/);
     assert.doesNotMatch(questions, /refreshWorkspaceSources/);
   });

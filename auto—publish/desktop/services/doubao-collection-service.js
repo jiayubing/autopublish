@@ -50,7 +50,7 @@ function createDoubaoCollectionDesktopService(options) {
 
   function notifyContentSources(reasonCode) {
     if (typeof opts.onDataInvalidated !== "function") return;
-    try { opts.onDataInvalidated(["contentSources"], reasonCode); } catch (_) {}
+    try { opts.onDataInvalidated(reasonCode); } catch (_) {}
   }
 
   function clientIdOf(input) {

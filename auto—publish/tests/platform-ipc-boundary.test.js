@@ -52,7 +52,7 @@ describe("platform IPC submission boundary", function() {
         rootDir: root,
         ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } },
         sendToRenderer: function() {},
-        invalidateData: function(scopes, reasonCode) { invalidations.push({ scopes: scopes, reasonCode: reasonCode }); },
+        invalidateData: function(reasonCode) { invalidations.push(reasonCode); },
         aiContentService: {
           previewArticleRemovalImpact: function() { previewCalls += 1; return { canCommit: true, token: "preview-token" }; },
           trashArticles: function() { trashCalls += 1; return { status: "committed" }; }
@@ -72,7 +72,7 @@ describe("platform IPC submission boundary", function() {
       assert.equal(response.data.trashDisposition, "auto_trash_requested");
       assert.equal(previewCalls, 1);
       assert.equal(trashCalls, 1);
-      assert.deepEqual(invalidations, [{ scopes: ["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], reasonCode: "PLATFORM_AUTO_TRASH_APPLIED" }]);
+      assert.deepEqual(invalidations, ["PLATFORM_AUTO_TRASH_APPLIED"]);
       assert.equal(workerPlan.tasks[0].filePath, undefined);
       assert.equal(workerPlan.tasks[0].clientId, undefined);
       assert.equal(workerPlan.tasks[0].articleId, undefined);

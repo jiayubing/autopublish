@@ -11,7 +11,7 @@ import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
 import ActionConfirmationModal, { type ActionConfirmation } from './ActionConfirmationModal';
-import { useArticleManagementSnapshot } from '../../hooks/use-article-management-snapshot';
+import { createArticleManagementController } from '../../article-management-controller';
 
 interface GeneratedArticlesViewProps { clientId: string; refreshToken: number; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
 
@@ -28,63 +28,61 @@ function transactionStatusOf(transaction: Pick<ArticleRemovalTransaction, 'statu
   return transaction.status;
 }
 
-function isTerminalRemovalTransaction(status: string): boolean {
-  return status === 'committed' || status === 'superseded' || status === 'needs_repair';
-}
-
   function transactionReason(transaction: ArticleRemovalTransaction | null): string {
   return transaction?.reasonCode || transaction?.errorCode || '状态冲突';
 }
 
 export default function GeneratedArticlesView({ clientId, refreshToken, stageFilter = 'all', selectedAttentionId, onArticleSelect, onStageFilterChange }: GeneratedArticlesViewProps) {
   const [articles, setArticles] = useState<GeneratedContentArticle[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowStage | 'all'>(stageFilter);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const [submissionPlatforms, setSubmissionPlatforms] = useState<ContentSubmissionPlatform[]>([]);
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
   const [cancellationPlans, setCancellationPlans] = useState<ContentSubmissionCancellationPreview[]>([]);
-  const [cancellationPending, setCancellationPending] = useState<{ clientId: string; count: number } | null>(null);
-  const [pendingConfirmation, setPendingConfirmation] = useState<ActionConfirmation | null>(null);
   const confirmationActionRef = useRef<(() => Promise<void>) | null>(null);
   const confirmationIdRef = useRef(0);
+  const cancellationRequestIdRef = useRef(0);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
   const [snapshotWorkflowByArticle, setSnapshotWorkflowByArticle] = useState<Awaited<ReturnType<typeof getArticleManagementSnapshot>>['workflowByArticle']>({});
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] = useState<ArticleAttentionItem | null>(null);
-  const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
-  const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(null);
-  const [trashFeedback, setTrashFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
-  const [removalTransaction, setRemovalTransaction] = useState<ArticleRemovalTransaction | null>(null);
-  const [removalTransactionId, setRemovalTransactionId] = useState<string | null>(null);
-  const [removalWatchVersion, setRemovalWatchVersion] = useState(0);
-  const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const removalUnsubscribeRef = useRef<(() => void) | null>(null);
-  const cancellationRequestIdRef = useRef(0);
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | 'all'>(stageFilter === 'trash' ? 'all' : stageFilter);
   const [attentionSnapshot, setAttentionSnapshot] = useState<ArticleAttentionList & { loading: boolean; error: string | null }>({ revision: 0, items: [], counts: { total: 0, actionable: 0 }, loading: false, error: null });
+  const applySnapshotRef = useRef<(snapshot: Awaited<ReturnType<typeof getArticleManagementSnapshot>>) => void>(() => {});
+  const resetClientStateRef = useRef<() => void>(() => {});
+  const managementControllerRef = useRef(createArticleManagementController({
+    loadSnapshot: getArticleManagementSnapshot,
+    loadRemoval: getContentArticleRemovalTransaction,
+    watchRemoval: onContentArticleRemovalTransaction,
+    onSnapshot: (snapshot) => applySnapshotRef.current(snapshot),
+    onReset: () => resetClientStateRef.current(),
+    onError: (value) => setError(value instanceof Error ? value.message : '无法加载历史文章'),
+  }));
+  const [managementControllerState, setManagementControllerState] = useState(() => managementControllerRef.current.getState());
+  const selected = managementControllerState.selected;
+  const { busy, error, cancellationPending, pendingConfirmation, batchFeedback, trashPreview, trashFeedback, removalTransaction, removalTransactionId, removalWatchVersion } = managementControllerState;
+  const setControllerState = useCallback((next: (state: any) => Record<string, unknown>) => managementControllerRef.current.setState(next), []);
+  const setBusy = (value: React.SetStateAction<boolean>) => setControllerState((state) => ({ busy: typeof value === 'function' ? value(state.busy) : value }));
+  const setError = (value: React.SetStateAction<string>) => setControllerState((state) => ({ error: typeof value === 'function' ? value(state.error) : value }));
+  const setCancellationPending = (value: React.SetStateAction<{ clientId: string; count: number } | null>) => setControllerState((state) => ({ cancellationPending: typeof value === 'function' ? value(state.cancellationPending) : value }));
+  const setPendingConfirmation = (value: React.SetStateAction<ActionConfirmation | null>) => setControllerState((state) => ({ pendingConfirmation: typeof value === 'function' ? value(state.pendingConfirmation) : value }));
+  const setBatchFeedback = (value: React.SetStateAction<{ kind: 'status' | 'error'; text: string } | null>) => setControllerState((state) => ({ batchFeedback: typeof value === 'function' ? value(state.batchFeedback) : value }));
+  const setTrashPreview = (value: React.SetStateAction<ArticleTrashPreview | null>) => setControllerState((state) => ({ trashPreview: typeof value === 'function' ? value(state.trashPreview) : value }));
+  const setTrashFeedback = (value: React.SetStateAction<{ kind: 'status' | 'error'; text: string } | null>) => setControllerState((state) => ({ trashFeedback: typeof value === 'function' ? value(state.trashFeedback) : value }));
+  const setRemovalTransaction = (value: React.SetStateAction<ArticleRemovalTransaction | null>) => setControllerState((state) => ({ removalTransaction: typeof value === 'function' ? value(state.removalTransaction) : value }));
+  const setRemovalTransactionId = (value: React.SetStateAction<string | null>) => setControllerState((state) => ({ removalTransactionId: typeof value === 'function' ? value(state.removalTransactionId) : value }));
+  const setRemovalWatchVersion = (value: React.SetStateAction<number>) => setControllerState((state) => ({ removalWatchVersion: typeof value === 'function' ? value(state.removalWatchVersion) : value }));
   const attentionItems = attentionSnapshot.items;
   clientIdRef.current = clientId;
 
   function isCurrentClient(requestedClientId: string): boolean {
     return mountedRef.current && clientIdRef.current === requestedClientId;
   }
-
-  const stopRemovalTransactionWatch = useCallback(() => {
-    if (removalTimerRef.current) {
-      clearTimeout(removalTimerRef.current);
-      removalTimerRef.current = null;
-    }
-    removalUnsubscribeRef.current?.();
-    removalUnsubscribeRef.current = null;
-  }, []);
 
   useEffect(() => {
     setSelectedStage(stageFilter);
@@ -93,17 +91,19 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
 
   useEffect(() => {
     mountedRef.current = true;
+    const unsubscribe = managementControllerRef.current.subscribe(setManagementControllerState);
     return () => {
+      unsubscribe();
       mountedRef.current = false;
-      stopRemovalTransactionWatch();
+      managementControllerRef.current.dispose();
+      managementControllerRef.current.stopRemovalWatch();
     };
-  }, [stopRemovalTransactionWatch]);
+  }, []);
 
-  useEffect(() => {
+  const resetClientState = useCallback(() => {
     setRemovalTransaction(null);
     setRemovalTransactionId(null);
     setRemovalWatchVersion(0);
-    setSelected([]);
     setError('');
     setBatchFeedback(null);
     setTrashFeedback(null);
@@ -118,8 +118,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     confirmationActionRef.current = null;
     setPendingConfirmation(null);
     setBusy(false);
-    stopRemovalTransactionWatch();
-  }, [clientId, stopRemovalTransactionWatch]);
+    managementControllerRef.current.stopRemovalWatch();
+  }, []);
+  resetClientStateRef.current = resetClientState;
 
   const applyManagementSnapshot = useCallback((snapshot: Awaited<ReturnType<typeof getArticleManagementSnapshot>>) => {
     setArticles(snapshot.articles || []);
@@ -132,16 +133,17 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setAttentionSnapshot({ ...(snapshot.attention || { revision: snapshot.revision, items: [], counts: { total: 0, actionable: 0 } }), loading: false, error: null });
     return snapshot.articles || [];
   }, []);
+  applySnapshotRef.current = applyManagementSnapshot;
 
-  const { error: managementSnapshotError, refresh: loadManagementSnapshot } = useArticleManagementSnapshot(clientId, refreshToken, applyManagementSnapshot);
+  const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
+    const current = managementControllerRef.current.selection();
+    const value = typeof next === 'function' ? next(current) : next;
+    managementControllerRef.current.setSelection(value);
+  }, []);
 
   useEffect(() => {
-    if (!clientId) {
-      setArticles([]); setSubmissionBatches([]); setPublicationRecords([]); setSnapshotWorkflowByArticle({});
-    }
-  }, [clientId]);
-
-  useEffect(() => { if (managementSnapshotError) setError(managementSnapshotError); }, [managementSnapshotError]);
+    void managementControllerRef.current.refresh(clientId);
+  }, [clientId, refreshToken]);
 
   const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const publicationRecordsByArticle = useMemo(() => {
@@ -216,65 +218,41 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const refreshHistoryData = useCallback(async () => {
     const requestedClientId = clientId;
     if (!mountedRef.current || requestedClientId !== clientIdRef.current) return [];
-    const snapshot = await loadManagementSnapshot();
-    if (!snapshot || !mountedRef.current || requestedClientId !== clientIdRef.current) return [];
-    return applyManagementSnapshot(snapshot);
-  }, [applyManagementSnapshot, clientId, loadManagementSnapshot]);
+    const snapshot = await managementControllerRef.current.refresh(requestedClientId);
+    return snapshot?.articles || [];
+  }, [clientId]);
 
   const refreshAttention = useCallback(async () => {
-    const snapshot = await loadManagementSnapshot();
-    if (snapshot && mountedRef.current && clientIdRef.current === clientId) applyManagementSnapshot(snapshot);
+    await managementControllerRef.current.refresh(clientId);
     return attentionSnapshot;
-  }, [applyManagementSnapshot, attentionSnapshot, clientId, loadManagementSnapshot]);
+  }, [attentionSnapshot, clientId]);
 
   useEffect(() => {
-    stopRemovalTransactionWatch();
-    if (!removalTransactionId) return;
-    let active = true;
-    let hasQueryableSnapshot = false;
-    const applyTransaction = (next: ArticleRemovalTransaction) => {
-      if (!active || !mountedRef.current) return;
-      setRemovalTransaction(next);
-      const status = transactionStatusOf(next);
-      if (isTerminalRemovalTransaction(status)) {
-        stopRemovalTransactionWatch();
+    if (!removalTransactionId) {
+      managementControllerRef.current.stopRemovalWatch();
+      return;
+    }
+    managementControllerRef.current.startRemovalWatch(removalTransactionId, {
+      onTerminal: (_transaction, status) => {
         if (status === 'committed' || status === 'superseded') void refreshHistoryData().catch((value) => {
-          if (active && mountedRef.current) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '刷新删除事务结果失败' });
+          if (mountedRef.current) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '刷新删除事务结果失败' });
         });
-      }
-    };
-    removalUnsubscribeRef.current = onContentArticleRemovalTransaction(removalTransactionId, applyTransaction);
-    const poll = async () => {
-      try {
-        const next = await getContentArticleRemovalTransaction(removalTransactionId);
-        if (!active || !mountedRef.current) return;
-        if (next) {
-          hasQueryableSnapshot = true;
-          applyTransaction(next);
-          if (isTerminalRemovalTransaction(transactionStatusOf(next))) return;
-        }
-      } catch (value) {
-        if (active && mountedRef.current) setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '读取删除事务状态失败' });
-      }
-      if (active && mountedRef.current && hasQueryableSnapshot) removalTimerRef.current = setTimeout(() => { void poll(); }, 1000);
-    };
-    void poll();
-    return () => {
-      active = false;
-      stopRemovalTransactionWatch();
-    };
-  }, [removalTransactionId, removalWatchVersion, refreshHistoryData, stopRemovalTransactionWatch]);
+      },
+      onError: (value) => setTrashFeedback({ kind: 'error', text: value instanceof Error ? value.message : '读取删除事务状态失败' }),
+    });
+    return () => managementControllerRef.current.stopRemovalWatch();
+  }, [removalTransactionId, removalWatchVersion, refreshHistoryData]);
 
   function toggleArticle(article: GeneratedContentArticle) {
     if (article.status !== 'generated' && article.status !== 'saved') return;
     const key = selectionKey(article);
-    setSelected((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+    updateSelected((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   }
 
   function toggleGroup(groupArticles: GeneratedContentArticle[]) {
     const ids = selectableArticles(groupArticles, clientId).map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
-    setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+    updateSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
   async function queueSelected() {
@@ -292,7 +270,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
         try {
           await createContentSubmissionBatch({ ...input, confirmed: true });
           if (!isCurrentClient(requestedClientId)) return;
-          setSelected([]);
+          updateSelected([]);
           await refreshHistoryData();
         } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
         finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
@@ -459,7 +437,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       const resultTransactionId = result.transactionId || transactionIdOf(resultTransaction);
       if (resultTransactionId) setRemovalTransactionId(resultTransactionId);
       setTrashPreview(null);
-      setSelected([]);
+      updateSelected([]);
       await refreshHistoryData();
       if (resultStatus === 'pending_auto_recovery' || resultStatus === 'pending_recovery') {
         setTrashFeedback({ kind: 'status', text: `已确认移入回收站 ${result.articleCount || selections.length} 篇，删除事务正在自动恢复${resultTransaction?.updatedAt ? `（最近更新：${formatBeijingTime(resultTransaction.updatedAt)})` : ''}。` });
@@ -519,7 +497,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   function toggleAll() {
     const ids = operable.map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
-    setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+    updateSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
 
   if (selectedStage === 'trash') return <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">

@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage } = require("ele
 const { isAllowedRendererNavigation } = require("./security/navigation");
 const { configureApplicationIdentity, DISPLAY_NAME_ZH } = require("./application-identity");
 const { createAuthenticatedRuntime } = require("./services/authenticated-runtime");
-const { createWorkspaceRuntime } = require("./services/workspace-runtime");
+const { createWorkspaceRuntime } = require("./workspace-runtime");
 
 configureApplicationIdentity(app);
 
@@ -31,10 +31,6 @@ function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
-}
-
-function activeWorkspaceServices() {
-  return workspaceRuntime && typeof workspaceRuntime.getServices === "function" ? workspaceRuntime.getServices() : null;
 }
 
 function createMainWindow() {
@@ -71,8 +67,7 @@ function createMainWindow() {
 function createDeferredTaskService() {
   return {
     getState: function() {
-      const services = activeWorkspaceServices();
-      if (services && services.taskService && typeof services.taskService.getState === "function") return services.taskService.getState();
+      if (workspaceRuntime && workspaceRuntime.getState().task) return workspaceRuntime.getState().task;
       return { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
     }
   };
@@ -81,10 +76,7 @@ function createDeferredTaskService() {
 function createDeferredQueueService() {
   return {
     getQueueState: function() {
-      const services = activeWorkspaceServices();
-      if (services && services.doubaoCollectionService && typeof services.doubaoCollectionService.getQueueState === "function") {
-        return services.doubaoCollectionService.getQueueState();
-      }
+      if (workspaceRuntime && workspaceRuntime.getState().collection) return workspaceRuntime.getState().collection;
       return { state: "idle" };
     }
   };
@@ -93,16 +85,14 @@ function createDeferredQueueService() {
 function createDeferredGenerationBatchService() {
   return {
     getState: function() {
-      const services = activeWorkspaceServices();
-      if (services && services.contentGenerationBatchService && typeof services.contentGenerationBatchService.getState === "function") return services.contentGenerationBatchService.getState();
+      if (workspaceRuntime && workspaceRuntime.getState().generation) return workspaceRuntime.getState().generation;
       return { status: "idle", isBatchRunning: false, isStopPending: false };
     }
   };
 }
 
 async function disposeRuntime() {
-  if (!authenticatedRuntime || authenticatedRuntime.getState().phase === "idle") return undefined;
-  return authenticatedRuntime.dispose();
+  if (authenticatedRuntime) return authenticatedRuntime.dispose();
 }
 
 async function relaunchApplication() {
@@ -134,173 +124,29 @@ function openWorkspacePath(value) {
   });
 }
 
-function createRuntimeServices(bootstrapState, appRoot, userDataPath, sessionDataPath, controls) {
-  let unsubscribeLogs = null;
-  let unsubscribeDoubaoQueue = null;
-  let doubaoCollectionService = null;
-  let aiProviderService = null;
-  let platformSettingsService = null;
-  let contentGenerationBatchService = null;
-  let taskService = null;
-  let storageMaintenanceService = null;
-  const invalidateWorkspaceData = function(scopes, reasonCode) { return controls.invalidate(reasonCode, scopes); };
-  const getWorkspaceDataRevision = function() { return controls.getRevision(); };
-  // Lazy-load config-dependent modules only after workspace bootstrap is ready.
-  // This ensures scripts/config.js sees AUTO_PUBLISH_ROOT_DIR before resolving
-  // its default project-root path.
-  const configureRuntimeEnvironment = require("./runtime-paths").configureRuntimeEnvironment;
-  const runtime = configureRuntimeEnvironment({
-    workspaceRoot: bootstrapState.workspacePath,
-    appRoot: appRoot,
-    roamingConfigRoot: userDataPath,
-    localStateRoot: sessionDataPath
-  });
-  const injectedPaths = runtime.paths && runtime.paths.installation ? runtime.paths : undefined;
-
-  if (runtime.paths && runtime.paths.localState) {
-    const createStorageMaintenanceService = require("./services/storage-maintenance-service").createStorageMaintenanceService;
-    storageMaintenanceService = createStorageMaintenanceService({
-      paths: runtime.paths,
-      getActivityState: function() {
-        return {
-          task: taskService && typeof taskService.getState === "function" ? taskService.getState() : null,
-          collection: doubaoCollectionService && typeof doubaoCollectionService.getQueueState === "function" ? doubaoCollectionService.getQueueState() : null,
-          generation: contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function" ? contentGenerationBatchService.getState() : null
-        };
-      }
-    });
-  }
-
-  const createPlatformSettingsService = require("./services/platform-settings-service").createPlatformSettingsService;
-  const { createMediaSettingsAdapter } = require("./services/platform-settings/media-settings-adapter");
-  const { createHepanSettingsAdapter } = require("./services/platform-settings/hepan-settings-adapter");
-  platformSettingsService = createPlatformSettingsService({
-    userDataPath: userDataPath,
-    safeStorage: safeStorage,
-    env: process.env,
-    localStateRoot: runtime.paths && runtime.paths.localState,
-    adapters: [createMediaSettingsAdapter(), createHepanSettingsAdapter({ localStateRoot: runtime.paths && runtime.paths.localState })],
-    getTaskState: function() { return taskService && typeof taskService.getState === "function" ? taskService.getState() : {}; }
-  });
-  if (runtime.diagnosticsService && typeof runtime.diagnosticsService.setPlatformSettingsService === "function") runtime.diagnosticsService.setPlatformSettingsService(platformSettingsService);
-  const createLegacyProviderSettingsMigration = require("./runtime-config").createLegacyProviderSettingsMigration;
-  const legacyProviderSettings = createLegacyProviderSettingsMigration({
-    configRoot: userDataPath,
-    workspaceRoot: runtime.workspaceRoot,
-    runtimeConfigStore: runtime.runtimeConfigStore,
-    platformSettingsService: platformSettingsService
-  });
-
-  const createDesktopTaskService = require("./services/desktop-task-service").createDesktopTaskService;
-  taskService = createDesktopTaskService({
-    cwd: runtime.workspaceRoot,
-    paths: injectedPaths,
-    sendToRenderer: sendToRenderer,
-    invalidateData: invalidateWorkspaceData,
-    platformSettingsService: platformSettingsService
-  });
-
-  const createDoubaoCollection = require("./services/doubao-collection-service").createDoubaoCollectionDesktopService;
-  doubaoCollectionService = createDoubaoCollection({ workspaceRoot: runtime.workspaceRoot, paths: injectedPaths, onDataInvalidated: invalidateWorkspaceData });
-
-  const createAiProviderService = require("./services/ai-provider-service").createAiProviderService;
-  aiProviderService = createAiProviderService({
-    userDataPath: userDataPath,
-    paths: injectedPaths,
-    safeStorage: safeStorage,
-    getBatchState: function() {
-      if (contentGenerationBatchService && typeof contentGenerationBatchService.getState === "function") return contentGenerationBatchService.getState();
-      return taskService && typeof taskService.getState === "function" ? taskService.getState() : {};
-    }
-  });
-  const createAiContentService = require("./services/ai-content-service").createAiContentService;
-  const createContentSubmissionService = require("./services/content-submission-service").createContentSubmissionService;
-  // The authenticated main process owns one ledger instance for this
-  // workspace.  Every IPC-facing service receives this same instance.
-  const createPublicationLedger = require("../src/publication/publication-ledger").createPublicationLedger;
-  const publicationLedger = createPublicationLedger({ workspaceRoot: runtime.workspaceRoot, paths: injectedPaths });
-  const contentSubmissionService = createContentSubmissionService({
-    workspaceRoot: runtime.workspaceRoot,
-    paths: injectedPaths,
-    publicationLedger: publicationLedger,
-    onDataInvalidated: invalidateWorkspaceData,
-    getDataRevision: getWorkspaceDataRevision
-  });
-  const aiContentService = createAiContentService({
-    workspaceRoot: runtime.workspaceRoot,
-    paths: injectedPaths,
-    contentSubmissionService: contentSubmissionService,
-    publicationLedger: publicationLedger,
-    onArticleRemovalTransaction: function(transaction) {
-      sendToRenderer("content:article-removal-transaction", transaction);
-      invalidateWorkspaceData(["articleManagement", "articleAttention", "platformQueue", "navigationSummary"], "ARTICLE_REMOVAL_TRANSACTION_CHANGED");
-    },
-    onDataInvalidated: invalidateWorkspaceData,
-    aiClientFactory: function() { return aiProviderService.createClient(); }
-  });
-  if (aiContentService && typeof aiContentService.recoverPendingArticleRemovals === "function") {
-    try { aiContentService.recoverPendingArticleRemovals(); } catch (_) {}
-  }
-  const createContentGenerationBatchService = require("./services/content-generation-batch-service").createContentGenerationBatchService;
-  contentGenerationBatchService = createContentGenerationBatchService({
-    workspaceRoot: runtime.workspaceRoot,
-    paths: injectedPaths,
-    aiProviderService: aiProviderService,
-    onDataInvalidated: invalidateWorkspaceData
-  });
-
-  return {
-    taskService: taskService,
-    doubaoCollectionService: doubaoCollectionService,
-    contentGenerationBatchService: contentGenerationBatchService,
-    registerIpc: function() {
-      require("./ipc/register").registerIpc({
-        ipcMain: ipcMain, taskService: taskService, sendToRenderer: sendToRenderer,
-        rootDir: runtime.workspaceRoot, appRoot: runtime.appRoot, paths: runtime.paths,
-        doubaoCollectionService: doubaoCollectionService, aiProviderService: aiProviderService,
-        platformSettingsService: platformSettingsService, legacyProviderSettings: legacyProviderSettings,
-        aiContentService: aiContentService, contentSubmissionService: contentSubmissionService,
-        publicationLedger: publicationLedger, contentGenerationBatchService: contentGenerationBatchService,
-        runtimeDiagnosticsService: runtime.diagnosticsService, invalidateData: invalidateWorkspaceData,
-        getWorkspaceDataRevision: getWorkspaceDataRevision, authService: authService
-      });
-      if (storageMaintenanceService) require("./ipc/storage-maintenance-ipc").registerStorageMaintenanceIpc({
-        ipcMain: createAuthenticatedIpcMain(), storageMaintenanceService: storageMaintenanceService
-      });
-    },
-    subscribe: function() {
-      unsubscribeDoubaoQueue = doubaoCollectionService.subscribe(function(state) { sendToRenderer("content:doubao-queue-state", state); });
-      unsubscribeLogs = require("../src/core/logger").subscribe(function(entry) { sendToRenderer("publish-log", entry); });
-      return [function() { if (unsubscribeDoubaoQueue) unsubscribeDoubaoQueue(); }, function() { if (unsubscribeLogs) unsubscribeLogs(); }];
-    },
-    dispose: async function() {
-      if (unsubscribeDoubaoQueue) { try { unsubscribeDoubaoQueue(); } catch (_) {} unsubscribeDoubaoQueue = null; }
-      if (unsubscribeLogs) { try { unsubscribeLogs(); } catch (_) {} unsubscribeLogs = null; }
-      try { if (taskService && typeof taskService.dispose === "function") taskService.dispose(); } catch (_) {}
-      try { if (doubaoCollectionService && typeof doubaoCollectionService.dispose === "function") await doubaoCollectionService.dispose(); } catch (_) {}
-      try { if (contentGenerationBatchService && typeof contentGenerationBatchService.dispose === "function") await contentGenerationBatchService.dispose(); } catch (_) {}
-    }
-  };
-}
-
-workspaceRuntime = createWorkspaceRuntime({
-  sendToRenderer: sendToRenderer,
-  createServices: function(bootstrapState, controls) {
-    if (!runtimeContext) throw new Error("Authenticated runtime context is unavailable");
-    return createRuntimeServices(bootstrapState, runtimeContext.appRoot, runtimeContext.userDataPath, runtimeContext.sessionDataPath, controls);
-  },
-  registerIpc: function(runtime) { runtime.services.registerIpc(); },
-  subscribe: function(runtime) { return runtime.services.subscribe(); },
-  disposeServices: function(services) {
-    return services && typeof services.dispose === "function" ? services.dispose() : undefined;
-  }
-});
-
 authenticatedRuntime = createAuthenticatedRuntime({
-  start: function(bootstrapState) {
-    return workspaceRuntime.start(bootstrapState);
+  start: async function(bootstrapState) {
+    if (!runtimeContext) throw new Error("Authenticated runtime context is unavailable");
+    const nextRuntime = createWorkspaceRuntime({
+      ipcMain: ipcMain,
+      safeStorage: safeStorage,
+      sendToRenderer: sendToRenderer,
+      appRoot: runtimeContext.appRoot,
+      userDataPath: runtimeContext.userDataPath,
+      sessionDataPath: runtimeContext.sessionDataPath,
+      authService: authService
+    });
+    workspaceRuntime = nextRuntime;
+    await nextRuntime.start(bootstrapState);
+    // A quit or workspace switch may have disposed this instance while start
+    // was awaiting service setup.  Never register IPC for a stale runtime.
+    if (workspaceRuntime === nextRuntime) nextRuntime.registerIpc();
   },
-  dispose: function() { return workspaceRuntime.dispose(); }
+  dispose: async function() {
+    const runtime = workspaceRuntime;
+    workspaceRuntime = null;
+    if (runtime) await runtime.dispose();
+  }
 });
 
 function initializeWorkspaceBootstrap() {

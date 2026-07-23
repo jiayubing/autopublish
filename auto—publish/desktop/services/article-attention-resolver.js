@@ -96,14 +96,15 @@ function createArticleAttentionResolver(options) {
       if (!opts.publicationLedger || typeof opts.publicationLedger.reconcile !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "发布核对服务不可用");
       result = opts.publicationLedger.reconcile(entry.item.publicationId, { status: action === "reconcile-published" ? "published" : "failed", reasonCode: action === "reconcile-published" ? "CONFIRMED_PUBLISHED" : "CONFIRMED_NOT_PUBLISHED" });
     } else if (action === "retry-archive") {
-      if (!opts.archiveService || typeof opts.archiveService.retry !== "function") throw attentionError("ARTICLE_ARCHIVE_RETRY_UNAVAILABLE", "本地归档重试服务不可用");
-      result = opts.archiveService.retry(entry.item);
+      const archiveActionPort = opts.archiveActionPort || opts.archiveService;
+      if (!archiveActionPort || typeof archiveActionPort.retryArchive !== "function") throw attentionError("ARTICLE_ARCHIVE_RETRY_UNAVAILABLE", "本地归档重试服务不可用");
+      result = archiveActionPort.retryArchive(entry.item);
     } else {
       throw attentionError("ARTICLE_ATTENTION_ACTION_INVALID", "需处理动作无效");
     }
 
     const changedScopes = ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"];
-    if (!result || result.domainHandled !== true && (!Array.isArray(result.changedScopes) || result.changedScopes.length === 0)) invalidate(changedScopes, "ARTICLE_ATTENTION_RESOLVED");
+    if (!result || result.domainHandled !== true && (!Array.isArray(result.changedScopes) || result.changedScopes.length === 0)) invalidate("ARTICLE_ATTENTION_RESOLVED");
     if (typeof opts.getRevision !== "function" && query && typeof query.invalidate === "function") query.invalidate();
     return { outcome: "resolved", attentionId: entry.item.attentionId, result: result || null, changedScopes };
   }

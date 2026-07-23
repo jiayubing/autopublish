@@ -13,6 +13,7 @@ test('attention and workspace seams keep ownership and dependency direction expl
   const main = read('desktop/main.js');
   const workspaceRuntime = read('desktop/services/workspace-runtime.js');
   const invalidationPolicy = read('desktop/workspace-invalidation-policy.js');
+  const invalidation = read('desktop/workspace-data-invalidation.js');
   const sidebar = read('media-workbench/src/components/Sidebar.tsx');
   const platform = read('media-workbench/src/components/PlatformWorkbench.tsx');
 
@@ -37,6 +38,9 @@ test('attention and workspace seams keep ownership and dependency direction expl
   assert.match(invalidationPolicy, /revision/);
   assert.match(invalidationPolicy, /scopes/);
   assert.match(invalidationPolicy, /reasonCode/);
+  assert.match(invalidation, /workspace:data-invalidated/);
+  assert.match(invalidation, /\{ revision, scopes, reasonCode:/);
+  assert.match(invalidation, /reasonCode:/);
 });
 
 test('business views use domain bridges instead of Electron transport or main-process files', () => {

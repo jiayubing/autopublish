@@ -18,14 +18,14 @@ function registerPlatformIpc(deps) {
   var service = deps.platformWorkbenchService || createPlatformWorkbenchService({
     rootDir: rootDir,
     paths: deps.paths,
+    // This is the main-process workbench.  The worker intentionally creates
+    // its own filesystem-backed ledger after crossing the process boundary.
+    publicationLedger: deps.publicationLedger,
     platforms: loadedPlatforms.map(function(platform) {
       return { id: platform.id, scanDir: platform.scanDir };
     }),
     adapters: adapters
   });
-  // Registration must not mutate the shared dependency bag: consumers get
-  // this reader explicitly from the workspace runtime.
-  var archiveIssueReader = typeof service.listArchiveFailures === "function" ? service.listArchiveFailures : function() { return []; };
 
   function buildPlanFromSubmissions(values) {
     if (!Array.isArray(values) || !values.length) throw inputError();
@@ -157,7 +157,7 @@ function registerPlatformIpc(deps) {
     }
 
     if (refreshNeeded && typeof deps.invalidateData === "function") {
-      try { deps.invalidateData(["articleManagement", "platformQueue", "navigationSummary", "articleAttention"], "PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
+      try { deps.invalidateData("PLATFORM_AUTO_TRASH_APPLIED"); } catch (_) {}
     }
     var accepted = summary.movedCount + summary.recoveryCount === summary.requestedCount && summary.blockedCount === 0 && summary.failedCount === 0;
     return Object.assign(data, {
@@ -257,7 +257,7 @@ function registerPlatformIpc(deps) {
       return taskService.getState();
     });
   });
-  return { service: service, archiveIssueReader: archiveIssueReader };
+  return { service: service };
 }
 
 module.exports = { registerPlatformIpc };

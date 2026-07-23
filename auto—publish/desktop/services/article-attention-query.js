@@ -82,7 +82,10 @@ function createArticleAttentionQuery(options) {
   }
 
   function readArchiveFailures() {
-    const value = reader("listArchiveFailures", function() { return []; })();
+    const value = reader("listArchiveFailures", function() {
+      if (opts.contentSubmissionService && typeof opts.contentSubmissionService.listArchiveFailures === "function") return opts.contentSubmissionService.listArchiveFailures();
+      return [];
+    })();
     return Array.isArray(value) ? value : [];
   }
 
@@ -133,14 +136,14 @@ function createArticleAttentionQuery(options) {
   function domainCapabilities(kind) {
     const service = opts.contentSubmissionService;
     const removal = opts.articleRemovalService;
-    const archive = opts.archiveService;
+    const archive = opts.archiveActionPort || opts.archiveService;
     return Object.assign({
       canCleanup: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
       canFinalize: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
       canRetryRemoval: !!(removal && typeof removal.retryArticleRemovalTransaction === "function"),
       canRetryFailedPublication: !!(service && typeof service.previewRetryFailedPublication === "function" && typeof service.retryFailedPublication === "function"),
       canReconcile: !!(opts.publicationLedger && typeof opts.publicationLedger.reconcile === "function"),
-      canRetryArchive: !!(archive && typeof archive.retry === "function"),
+      canRetryArchive: !!(archive && typeof archive.retryArchive === "function"),
       canOpenPublication: true,
       canInspect: true,
       canOpenArticle: true
@@ -248,7 +251,7 @@ function createArticleAttentionQuery(options) {
 
   function archiveEntries() {
     return readArchiveFailures().map(function(item) {
-      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { canRetryArchive: true });
+      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { hasQueueBinding: !!(item.batchId && item.publicationId && item.attemptId && item.targetPlatformId), canRetryArchive: true });
     });
   }
 

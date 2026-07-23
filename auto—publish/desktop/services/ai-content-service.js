@@ -150,7 +150,7 @@ function createAiContentService(opts) {
 
   function notifyAttentionChange(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
-    try { options.onDataInvalidated(["articleManagement", "articleAttention", "navigationSummary"], reasonCode); } catch (_) {}
+    try { options.onDataInvalidated(reasonCode); } catch (_) {}
   }
 
   async function materializeClient(client) {

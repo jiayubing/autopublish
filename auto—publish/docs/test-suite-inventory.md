@@ -1,21 +1,21 @@
-# 测试套件清单（Phase 0）
+# 测试套件清单（Phase 0-5）
 
 > 自动生成文件。重新运行 `node scripts/test-inventory.js` 会重新扫描 `tests/*.test.js` 并覆盖本清单。
 
 ## 范围与证据边界
 
-- 生成时间：`2026-07-22T14:19:17.536Z`（仅是清单生成时间，不是测试运行时间）。
-- 扫描范围：根目录 `tests/*.test.js`，共 **162 个文件**；静态解析出 **913 个测试声明**。
+- 生成时间：`2026-07-21T16:29:07.360Z`（仅是清单生成时间，不是测试运行时间）。
+- 扫描范围：根目录 `tests/*.test.js`，共 **161 个文件**；静态解析出 **909 个测试声明**。
 - 本脚本只使用 Node 内置 `fs`、`path` 和字符串扫描；不会 `require` 测试文件，不启动 Node test runner，不启动浏览器、Vite、Electron、Python 或任何外部服务，也不发起网络请求。
 - `Renderer build`、`启动浏览器`、`读取生产源码` 均为静态证据标签，不代表本次执行过这些行为；未检测到证据时只表示“未见静态证据”。
-- 运行时间、通过/失败/跳过、认证测试、lint/typecheck、Renderer build、audit 和包体积均未在本次清单生成中实际采集，不伪造基线。
+- 本文件主体是静态清单；下方“受控执行记录”单独记录本次实际运行结果，不把静态声明数当作通过数。
 
 ## 基线记录
 
 | 项目 | 状态 | 证据/采集命令 |
 | --- | --- | --- |
-| 根测试文件 | 已静态扫描：162 个 | `tests/*.test.js` |
-| 根测试声明数 | 已静态解析：913 个 | 不是实际运行结果；需用 `npm test` 采集 |
+| 根测试文件 | 已静态扫描：161 个 | `tests/*.test.js` |
+| 根测试声明数 | 已静态解析：909 个 | 不是实际运行结果；需用 `npm test` 采集 |
 | 根测试运行时间与通过/失败/跳过 | 待采集 | `npm test` |
 | 认证服务测试 | 待采集 | `npm --prefix auth-server test` |
 | Renderer lint/typecheck | 待采集 | `npm --prefix media-workbench run lint`（计划命令） |
@@ -27,24 +27,24 @@
 
 | 指标 | 数值 |
 | --- | ---: |
-| 测试文件 | 162 |
-| 静态测试声明 | 913 |
+| 测试文件 | 161 |
+| 静态测试声明 | 909 |
 | 检测到 Renderer build 静态证据的文件 | 7 |
 | 检测到浏览器启动静态证据的文件 | 10 |
-| 检测到读取生产源码静态证据的文件 | 41 |
+| 检测到读取生产源码静态证据的文件 | 40 |
 | 未提取出明确不变量、需人工确认的测试声明 | 0 |
 
 ### 按主层级的静态测试声明数
 
 | 主层级 | 测试声明数 |
 | --- | ---: |
-| `domain` | 159 |
+| `domain` | 157 |
 | `ipc` | 79 |
 | `migration` | 34 |
 | `packaging` | 54 |
-| `renderer` | 201 |
+| `renderer` | 200 |
 | `security` | 35 |
-| `store` | 351 |
+| `store` | 350 |
 
 ## 文件清单
 
@@ -67,7 +67,7 @@
 | `tests/article-generator.test.js` | 16 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 16633 | `2026-07-17T16:09:36.091Z` |
 | `tests/article-management-filter-model.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2722 | `2026-07-19T06:35:04.229Z` |
 | `tests/article-management-snapshot-benchmark.test.js` | 2 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8029 | `2026-07-21T16:18:53.384Z` |
-| `tests/article-management-snapshot.test.js` | 5 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5116 | `2026-07-21T23:07:19.857Z` |
+| `tests/article-management-snapshot.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4172 | `2026-07-21T15:20:15.991Z` |
 | `tests/article-removal-recovery-regression.test.js` | 5 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 13185 | `2026-07-19T06:57:22.813Z` |
 | `tests/article-review-service.test.js` | 4 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5651 | `2026-07-15T11:19:56.408Z` |
 | `tests/article-store.test.js` | 23 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 20300 | `2026-07-16T14:14:14.752Z` |
@@ -92,7 +92,7 @@
 | `tests/content-submission-batch.test.js` | 12 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 18254 | `2026-07-21T15:49:56.109Z` |
 | `tests/content-submission-export.test.js` | 5 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6570 | `2026-07-19T06:47:18.358Z` |
 | `tests/content-submission-ipc.test.js` | 6 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6182 | `2026-07-20T14:55:31.229Z` |
-| `tests/content-workbench-regression.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 5949 | `2026-07-21T23:58:00.366Z` |
+| `tests/content-workbench-regression.test.js` | 8 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 5930 | `2026-07-21T15:59:51.855Z` |
 | `tests/content-workspace.test.js` | 7 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 3665 | `2026-07-12T02:33:02.226Z` |
 | `tests/desktop-ipc-response.test.js` | 5 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1281 | `2026-07-12T02:33:02.227Z` |
 | `tests/desktop-packaging.test.js` | 32 | `packaging` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 35838 | `2026-07-19T14:08:03.838Z` |
@@ -124,7 +124,6 @@
 | `tests/j4125-auth-contract.test.js` | 1 | `security` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 992 | `2026-07-19T14:11:14.850Z` |
 | `tests/legacy-migration.test.js` | 16 | `migration` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 17669 | `2026-07-14T00:29:57.764Z` |
 | `tests/legacy-platform-settings-migration.test.js` | 3 | `migration` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 5649 | `2026-07-17T16:25:10.589Z` |
-| `tests/legacy-submission-path-audit.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1723 | `2026-07-22T14:18:35.500Z` |
 | `tests/media-article-converter.test.js` | 1 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 963 | `2026-06-27T13:41:22.783Z` |
 | `tests/media-article-drawer-boundary.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 776 | `2026-07-16T15:53:25.954Z` |
 | `tests/media-client.test.js` | 1 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 1267 | `2026-06-27T13:41:22.783Z` |
@@ -164,8 +163,8 @@
 | `tests/renderer-article-attention-actions.test.js` | 1 | `renderer` | 否（未见静态证据） | 是（检测到 chromium/firefox/webkit/electron launch 调用） | 否（未见静态证据） | 8053 | `2026-07-21T16:11:47.918Z` |
 | `tests/renderer-article-history.test.js` | 9 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 7699 | `2026-07-21T15:35:58.419Z` |
 | `tests/renderer-article-management-filters.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1131 | `2026-07-19T06:22:12.290Z` |
-| `tests/renderer-article-management-flow.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1018 | `2026-07-21T23:57:26.017Z` |
-| `tests/renderer-batch-generation.test.js` | 25 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 15598 | `2026-07-21T23:54:18.582Z` |
+| `tests/renderer-article-management-flow.test.js` | 1 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 958 | `2026-07-19T02:46:12.415Z` |
+| `tests/renderer-batch-generation.test.js` | 25 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 15614 | `2026-07-21T15:57:39.736Z` |
 | `tests/renderer-confirmation-host.test.js` | 4 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2541 | `2026-07-21T12:33:54.120Z` |
 | `tests/renderer-content-client-switch.test.js` | 7 | `renderer` | 是（检测到共享 Renderer harness 的构建入口调用） | 是（检测到共享 Renderer harness 的浏览器生命周期入口调用） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 19672 | `2026-07-21T16:15:05.222Z` |
 | `tests/renderer-content-confirmation-flow.test.js` | 2 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1559 | `2026-07-20T16:38:14.928Z` |
@@ -191,7 +190,7 @@
 | `tests/renderer-template-discovery-empty-client.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 2344 | `2026-07-18T04:39:41.478Z` |
 | `tests/renderer-time-format.test.js` | 3 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 1521 | `2026-07-16T14:14:14.756Z` |
 | `tests/renderer-workspace-behavior.test.js` | 7 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7348 | `2026-07-14T15:32:26.385Z` |
-| `tests/renderer-workspace-contract.test.js` | 7 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4241 | `2026-07-21T23:56:42.788Z` |
+| `tests/renderer-workspace-contract.test.js` | 7 | `renderer` | 否（未见静态证据） | 否（未见静态证据） | 是（检测到文件读取调用的生产路径参数、生产根变量或生产源码读取辅助函数） | 4227 | `2026-07-21T15:59:51.859Z` |
 | `tests/research-store.test.js` | 9 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 7193 | `2026-07-14T00:29:57.765Z` |
 | `tests/runtime-diagnostics-ipc.test.js` | 2 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2435 | `2026-07-17T04:18:37.353Z` |
 | `tests/runtime-diagnostics.test.js` | 15 | `ipc` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 16030 | `2026-07-17T03:59:38.089Z` |
@@ -200,7 +199,7 @@
 | `tests/storage-paths.test.js` | 4 | `security` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 4546 | `2026-07-18T04:50:22.569Z` |
 | `tests/submission-attempt-rebind.test.js` | 2 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6991 | `2026-07-19T06:57:22.812Z` |
 | `tests/submission-batch-reconcile-write.test.js` | 1 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 2332 | `2026-07-19T18:22:37.795Z` |
-| `tests/submission-batch-worker-integration.test.js` | 8 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 14528 | `2026-07-22T14:17:08.953Z` |
+| `tests/submission-batch-worker-integration.test.js` | 7 | `store` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 13014 | `2026-07-20T16:15:29.281Z` |
 | `tests/submission-pair-state.test.js` | 3 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 8840 | `2026-07-19T06:57:22.814Z` |
 | `tests/submission-preflight-integration.test.js` | 1 | `domain` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 749 | `2026-07-12T02:33:02.230Z` |
 | `tests/template-catalog.test.js` | 6 | `security` | 否（未见静态证据） | 否（未见静态证据） | 否（未见静态证据） | 6119 | `2026-07-18T09:55:58.113Z` |
@@ -456,7 +455,7 @@
 
 ### `tests/article-management-snapshot.test.js`
 
-- 测试声明数：**5**。
+- 测试声明数：**3**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
 
@@ -465,8 +464,6 @@
 | 28 | `combines one client read into a revisioned snapshot and reuses it` | — | `domain` | 客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 42 | `isolates clients and invalidates only after the workspace revision changes` | — | `store` | 客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 | 58 | `exposes only the client-scoped snapshot seam through IPC` | — | `ipc` | 安全边界与敏感信息不泄露<br>客户端知识、问题查询与来源数据保持稳定<br>工作区数据、文件事务与内容生命周期保持完整 | 工作区 fixture: workspaceRoot + IPC stub: handlers :: equal |
-| 74 | `does not offer cancellation for a published target when an old queued item remains` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 84 | `keeps an article pending while another declared target remains available` | — | `domain` | 内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
 
 ### `tests/article-removal-recovery-regression.test.js`
 
@@ -1392,16 +1389,6 @@
 | 70 | `imports legacy values into encrypted provider stores, removes old runtime secrets, and is idempotent` | — | `migration`、`store` | 安全边界与敏感信息不泄露<br>迁移兼容、幂等与恢复语义保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定 | 文件 fixture: readFileSync :: equal + deep-equal |
 | 93 | `does not persist an environment override during explicit legacy import` | — | `migration`、`store` | 迁移兼容、幂等与恢复语义保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>配置持久化、默认值与环境来源保持明确 | — |
 
-### `tests/legacy-submission-path-audit.test.js`
-
-- 测试声明数：**1**。
-- 未采集运行时间：**待采集**（本脚本未执行该文件）。
-- 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=是。
-
-| 行 | 测试名 | 静态标记 | 层级 | 主要不变量 | fixture/断言签名 |
-| ---: | --- | --- | --- | --- | --- |
-| 18 | `has no current renderer or command-line caller` | — | `renderer`、`migration`、`security` | 安全边界与敏感信息不泄露<br>发布状态、重复保护与尝试历史保持一致<br>迁移兼容、幂等与恢复语义保持稳定 | 文件 fixture: readFileSync :: equal + deep-equal |
-
 ### `tests/media-article-converter.test.js`
 
 - 测试声明数：**1**。
@@ -1938,16 +1925,16 @@
 | 142 | `labels builtin and custom templates with accurate source wording` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
 | 152 | `renders the batch client, platform template, source and confirmation contracts` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
 | 174 | `exposes renderer-only generation batch wrappers through preload` | — | `renderer`、`ipc`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 文件 fixture: readFileSync :: match |
-| 192 | `provides a single and batch segmented control without losing the article editor` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
-| 200 | `separates the new-batch wizard from persisted batch monitoring` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 210 | `rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 221 | `uses runtime state only when it belongs to the displayed batch` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
-| 229 | `does not let initial idle hydration overwrite a matching runtime batch state` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
-| 238 | `keeps command pending separate from the live batch run and does not optimistically mark every command running` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 247 | `offers continuation when failed tasks are the only unfinished work` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 252 | `keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 262 | `rehydrates the same live counts and status after returning to the page` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 271 | `exposes cancelled counts and a preview-confirmed pending cancellation action` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 193 | `provides a single and batch segmented control without losing the article editor` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>工作区数据、文件事务与内容生命周期保持完整 | — |
+| 201 | `separates the new-batch wizard from persisted batch monitoring` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 211 | `rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 222 | `uses runtime state only when it belongs to the displayed batch` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 230 | `does not let initial idle hydration overwrite a matching runtime batch state` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯<br>打包边界、运行时依赖与应用身份保持一致 | — |
+| 239 | `keeps command pending separate from the live batch run and does not optimistically mark every command running` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 248 | `offers continuation when failed tasks are the only unfinished work` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 253 | `keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 263 | `rehydrates the same live counts and status after returning to the page` | — | `renderer`、`store` | Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 272 | `exposes cancelled counts and a preview-confirmed pending cancellation action` | — | `renderer`、`store` | 安全边界与敏感信息不泄露<br>Renderer 用户流程、状态刷新与布局行为保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | — |
 
 ### `tests/renderer-confirmation-host.test.js`
 
@@ -2376,7 +2363,7 @@
 
 ### `tests/submission-batch-worker-integration.test.js`
 
-- 测试声明数：**8**。
+- 测试声明数：**7**。
 - 未采集运行时间：**待采集**（本脚本未执行该文件）。
 - 静态信号：Renderer build=否；浏览器启动=否；读取生产源码=否。
 
@@ -2384,12 +2371,11 @@
 | ---: | --- | --- | --- | --- | --- |
 | 15 | `retries an active saved failed publication through the submission service` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | 工作区 fixture: workspaceRoot + store/service stub: createSubmissionBatchStore :: equal + truthiness |
 | 182 | `writes a failed worker outcome back to both the publication ledger and batch` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | store/service stub: FAKE_ADAPTER_FAILED :: equal |
-| 200 | `writes a successful worker outcome back to the batch without losing the published ledger result` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | 工作区 fixture: workspaceRoot + store/service stub: createSubmissionBatchStore :: equal |
-| 223 | `persists a local archive failure without downgrading the published remote outcome` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定<br>内容生成来源、模板与输入选择保持可追溯 | 工作区 fixture: workspaceRoot + store/service stub: createSubmissionBatchStore + 文件 fixture: writeFileSync :: equal |
-| 242 | `keeps an uncertain worker result visible in both records` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | — |
-| 259 | `cancels the queued attempt when stop is requested before the remote call` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
-| 280 | `does not let an old attempt update the newer attempt's batch result` | — | `store` | 发布状态、重复保护与尝试历史保持一致 | store/service stub: FAKE_ADAPTER_FAILED :: equal |
-| 301 | `reconciles a stale queued batch, keeps ordinary cancel unavailable, and permits failed-item cleanup` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | 工作区 fixture: workspaceRoot + store/service stub: FAKE_ADAPTER_FAILED :: equal |
+| 200 | `writes a successful worker outcome back to the batch without losing the published ledger result` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 217 | `keeps an uncertain worker result visible in both records` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | — |
+| 234 | `cancels the queued attempt when stop is requested before the remote call` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>平台适配、配置隔离与远端结果分类保持稳定 | — |
+| 255 | `does not let an old attempt update the newer attempt's batch result` | — | `store` | 发布状态、重复保护与尝试历史保持一致 | store/service stub: FAKE_ADAPTER_FAILED :: equal |
+| 276 | `reconciles a stale queued batch, keeps ordinary cancel unavailable, and permits failed-item cleanup` | — | `store` | 发布状态、重复保护与尝试历史保持一致<br>内容生成来源、模板与输入选择保持可追溯 | 工作区 fixture: workspaceRoot + store/service stub: FAKE_ADAPTER_FAILED :: equal |
 
 ### `tests/submission-pair-state.test.js`
 
@@ -2853,12 +2839,6 @@
 - `tests/article-store.test.js:44` — writes editable markdown alongside full JSON metadata
 - `tests/article-store.test.js:55` — replaces both files when saving an updated article id
 
-### `文件 fixture: readFileSync :: equal + deep-equal`（3 项）
-
-- `tests/legacy-platform-settings-migration.test.js:70` — imports legacy values into encrypted provider stores, removes old runtime secrets, and is idempotent
-- `tests/legacy-submission-path-audit.test.js:18` — has no current renderer or command-line caller
-- `tests/question-store.test.js:40` — creates, updates, lists, toggles, and deletes a stable question
-
 ### `IPC stub: ipcRenderer :: match`（3 项）
 
 - `tests/architecture-seams.test.js:36` — business views use domain bridges instead of Electron transport or main-process files
@@ -3040,6 +3020,11 @@
 - `tests/submission-attempt-rebind.test.js:113` — cancels a new reservation and skips the remote call when rebind cannot persist
 - `tests/workspace-paths.test.js:231` — keeps media API key resolution free of dotenv loading side effects
 
+### `文件 fixture: readFileSync :: equal + deep-equal`（2 项）
+
+- `tests/legacy-platform-settings-migration.test.js:70` — imports legacy values into encrypted provider stores, removes old runtime secrets, and is idempotent
+- `tests/question-store.test.js:40` — creates, updates, lists, toggles, and deletes a stable question
+
 ### `文件 fixture: readFileSync :: equal + match + truthiness`（2 项）
 
 - `tests/react-workbench-regression.test.js:57` — uses the complete main-process platform status shape
@@ -3143,17 +3128,56 @@
 ### `store/service stub: FAKE_ADAPTER_FAILED :: equal`（2 项）
 
 - `tests/submission-batch-worker-integration.test.js:182` — writes a failed worker outcome back to both the publication ledger and batch
-- `tests/submission-batch-worker-integration.test.js:280` — does not let an old attempt update the newer attempt's batch result
+- `tests/submission-batch-worker-integration.test.js:255` — does not let an old attempt update the newer attempt's batch result
 
 ### `store/service stub: fakeStore :: equal`（2 项）
 
 - `tests/generation-batch-runner.test.js:186` — aborts the active task and leaves later tasks pending when stopped
 - `tests/generation-batch-runner.test.js:427` — handles a controllable fifty-task run without duplicate execution after stop and continue
 
+## 受控执行记录
+
+以下结果来自隔离 fixture 或本地构建，不连接真实 AI、浏览器远端投稿服务或客户工作区：
+
+### Phase 0-7 runtime/publication/submission/Renderer implementation record
+
+- `tests/runtime-publication-wiring.test.js`：通过 `registerIpc()` 的生产式 IPC 组装观察 publication IPC 与文章管理 snapshot 是否读取同一 published record；`a4361cf` 后作为单一主进程 ledger 注入的回归测试。
+- `tests/platform-archive-worker-boundary.test.js`：在临时工作区制造远端 `published` 与本地 archive conflict，销毁 Worker service 后重新构建主进程 query；`7c6b5b3` 后验证归档失败是持久 batch item 事实，且不把 publication 改为 failed。
+- `tests/content-submission-query-benchmark.test.js`：真实 `SubmissionBatchStore` 的 `listBatches()` 操作计数 benchmark；`5403eee`、`092c538` 后验证一次查询只全量读取 batch store 一次、sidecar 每 item 至多一次，并保持近似线性。1000-batch 墙钟 p95 因旧、新 fixture 派生工作不等价而不可比；该项作为接受的 unavailable wall-clock gate 记录，不宣称时间提升。
+- `tests/desktop-task-service.test.js`、`tests/platform-ipc-boundary.test.js` 与 `tests/platform-submission-invocation-count.test.js`：`77f22ca` 后验证唯一普通平台远端执行链是 `platforms:submit-selected` -> `startPlatformSubmit` -> Worker `platform-submit`。
+- Phase 6 caller Go 证据：`desktop:start-batch`、`desktop:stop-batch`、`desktop:refresh-queue`、`desktop:get-state` 仅在被删除的 preload/IPC 链内互相引用；Renderer 没有 `desktopConsole.batch` 调用；Worker `batch` 是 `runPublicationBatch` 的唯一生产调用者。相反，`npm run snapshot` -> `scripts/snapshot.cmd` -> Worker `snapshot` -> `createQueueSnapshot` 仍是受支持 CLI，故 snapshot 保留。
+- Phase 7 controller/test replacement：`tests/platform-submission-controller.test.mjs` 通过 bridge interface 覆盖重复 submit/pause/stop 抑制、陈旧命令隔离、每 terminal revision 一次刷新、residue inspect/confirm/cleanup/refresh 和 dispose；`tests/article-management-controller.test.js` 通过 controller interface 覆盖客户原子重置且保留 workspace target 偏好、陈旧 snapshot/cancellation 隔离、重复 mutation 抑制和 removal watch/poll 在客户切换或 dispose 后停止。旧 `renderer-residue-cleanup-flow` 源码字符串断言已由其真实页面 cleanup 行为与 controller interface 测试替代，覆盖“不留 busy、失败不报成功、残留清理仅刷新一次”的不变量。业务发布阶段仍由主进程 snapshot 的 `workflowByArticle` 提供。
+
+对应实施提交：`8fc1cba`（基线）、`a4361cf`（ledger）、`7c6b5b3`（archive）、`5403eee`/`092c538`（read snapshot）、`7e62241`/`83784e9`/`920b8d0`/`6bef000`（submission modules）、`e320a97`/`e38b85d`/`95959b9`（Workspace Runtime/invalidation）、`77f22ca`（旧 remote batch 退休）。
+
+| 命令/分组 | 结果 |
+| --- | --- |
+| `npm run typecheck:bridge` | 通过 |
+| `npm run typecheck:renderer` | 通过 |
+| Renderer 静态分组 | 94/94 通过 |
+| 非 Renderer 受控分组 | 732 通过、7 跳过、0 失败；7 项因 Windows 文件 symlink 权限跳过 |
+| 文章 attention、客户切换、generation handoff、history/question editor、residue cleanup、responsive layout、platform queue browser 分组 | 通过 |
+| `npm run build:renderer` | 通过；当前唯一 JS/首屏 chunk `index-CR-EwY9J.js` 为 704,499 bytes，gzip 196.40 kB |
+| `npm test` | 928 通过、0 失败、7 跳过 |
+| `node --test`（Phase 7 页面/控制器） | 2026-07-23：控制器与 residue 页面定向 10/10 通过；完整 `npm test` 包含全部 Renderer 页面回归，931 通过、0 失败、7 项 Windows symlink 权限跳过。 |
+| `npm run typecheck:renderer` | 2026-07-23：通过 |
+| `npm run typecheck:bridge` | 2026-07-23：通过 |
+| `npm run lint` | 2026-07-23：通过；旧临时安装包已归档到仓库外，未修改源码或新增宽泛 ignore。 |
+| `npm run test:auth` | 2026-07-23：16/16 通过。 |
+| `node --test tests/production-packaging.test.js` | 2026-07-23：1/1 通过。 |
+| `npm run verify` | 2026-07-23：通过；其中全量测试为 931 通过、0 失败、7 项 Windows symlink 权限跳过。 |
+| Alpha package / DOCX / launch smoke | 2026-07-23：通过。`release-alpha/鱼饼大王-Alpha-1.0.1-portable.exe`，artifact、embedded FileVersion/ProductVersion、package.json 和 `config/build-info.json` 均为 `1.0.1`；build-info commit 为 `6da1187`。启动 smoke 使用随机临时工作区及用户目录，退出后清理。 |
+
+`electron-api.ts`、`transport-legacy.ts`、`submission-workflow.js` 及其测试已删除。`tests/architecture-seams.test.js` 继续保护业务 view 不直接依赖 `window.desktopConsole`、`ipcRenderer`、IPC channel 字符串或主进程文件，并保护领域 bridge 不回退到兼容 facade。
+
+### 快照 benchmark
+
+在最终重点验证中的 `node --test tests/article-management-snapshot-benchmark.test.js` 运行里，1000 篇文章/100 个批次的旧路径 p95 为 0.297 ms，新快照路径 p95 为 11.13 ms；IPC 从 104 降为 1，逻辑文件扫描从 104 降为 6。墙钟 p95 会受本机调度噪声影响；新路径还包含安全 DTO clone、attention、transaction 等派生，而旧 fixture 未计入等价成本，因此该数据用于记录预算和架构收益，不宣称达到 25% 时间下降目标。平台调用和生成事件 benchmark 详见对应测试输出及实施计划。
+
 ## 后续采集与人工复核
 
-- [ ] 在隔离且不连接真实客户/投稿服务的环境执行 `npm test`，记录实际总时长、通过/失败/跳过，并与本清单的静态声明数对照。
-- [ ] 单独执行 `npm --prefix auth-server test`、`npm --prefix media-workbench run lint` 和 `npm run build:renderer`，记录实际结果、耗时和产物体积。
+- [x] 完整 `npm test`：928 通过、0 失败、7 跳过。
+- [ ] 单独执行 `npm --prefix auth-server test` 并记录实际结果；Renderer lint/build 已在受控执行记录中完成。
 - [ ] 运行 `npm audit` 并记录报告时间、范围和已知接受项。
-- [ ] 对重复名称和 fixture/断言组合逐项确认替代覆盖位置；只有满足计划删除门槛的测试才进入后续 Phase 6。
+- [x] 对 `submission-workflow.test.js` 的删除完成替代覆盖核对：平台投稿 IPC/调用计数、platform service 和完整投稿生命周期测试覆盖原 owner 行为。
 - [ ] 对检测到的四个 Renderer build/browser 流程人工确认是否可在共享 harness 中复用；本清单不改变任何测试执行方式。

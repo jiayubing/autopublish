@@ -71,6 +71,13 @@ describe("article management snapshot", function() {
     assert.equal(invalid.error.code, "ARTICLE_MANAGEMENT_CLIENT_INVALID");
   });
 
+  it("keeps published history in the snapshot when the ledger supplies the same article record", async function() {
+    const fixture = createFixture();
+    const snapshot = await fixture.service.get({ clientId: "client-a" });
+    assert.deepEqual(snapshot.publicationRecords.map(function(record) { return [record.publicationId, record.status]; }), [["publication-a", "published"]]);
+    assert.equal(snapshot.workflowByArticle["article-a"].stage, "queued");
+  });
+
   it("does not offer cancellation for a published target when an old queued item remains", function() {
     const workflow = deriveWorkflow({ id: "article-a", status: "saved" }, [], [], [], [], {
       targetFacts: {

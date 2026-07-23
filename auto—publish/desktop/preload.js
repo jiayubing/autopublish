@@ -59,27 +59,6 @@ const api = {
     get: function() { return ipcRenderer.invoke("runtime-diagnostics:get"); },
     browserSmoke: function() { return ipcRenderer.invoke("runtime-diagnostics:browser-smoke"); }
   },
-  batch: {
-    getState: function() { return ipcRenderer.invoke("desktop:get-state"); },
-    refreshQueue: function(options) { return ipcRenderer.invoke("desktop:refresh-queue", options || {}); },
-    startBatch: function(options) { return ipcRenderer.invoke("desktop:start-batch", options || {}); },
-    stopBatch: function() { return ipcRenderer.invoke("desktop:stop-batch"); },
-    onLog: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
-      ipcRenderer.on("publish-log", handler);
-      return function() { ipcRenderer.removeListener("publish-log", handler); };
-    },
-    onState: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
-      ipcRenderer.on("batch-state", handler);
-      return function() { ipcRenderer.removeListener("batch-state", handler); };
-    },
-    onQueueUpdated: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
-      ipcRenderer.on("queue-updated", handler);
-      return function() { ipcRenderer.removeListener("queue-updated", handler); };
-    }
-  },
   media: {
     scanArticles: function() { return ipcRenderer.invoke("media:scan-articles"); },
     previewArticle: function(filename) { return ipcRenderer.invoke("media:preview-article", filename); },
