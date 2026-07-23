@@ -8,28 +8,35 @@ function emptyManagement() {
   };
 }
 
-export function createArticleManagementController({ loadSnapshot, cancel, watchRemoval: watchRemovalTransaction, onSnapshot, onReset, onError }) {
+export function createArticleManagementController({ loadSnapshot, cancel = null, watchRemoval: watchRemovalTransaction = null, loadRemoval = null, onSnapshot = null, onReset = null, onError = null }) {
   let clientId = '';
   let requestId = 0;
   let disposed = false;
   let removalUnsubscribe = null;
+  let removalTimer = null;
   let activeCancellation = null;
   const listeners = new Set();
   let state = {
     clientId, requestId, management: emptyManagement(), selected: [], targetPlatformIds: [],
-    busy: false, activeCommand: null, cancellationPending: null, removalTransaction: null,
-    removalTransactionId: null, feedback: null, error: '',
+    busy: false, activeCommand: null, cancellationPending: null, cancellationRequestId: 0,
+    removalTransaction: null, removalTransactionId: null, removalWatchVersion: 0,
+    pendingConfirmation: null, batchFeedback: null, trashFeedback: null, trashPreview: null,
+    feedback: null, error: '',
   };
 
   function emit() { listeners.forEach((listener) => listener(state)); }
   function patch(next) { state = { ...state, ...next }; emit(); }
-  function stopRemovalWatch() { removalUnsubscribe?.(); removalUnsubscribe = null; }
+  function stopRemovalWatch() {
+    if (removalTimer) clearTimeout(removalTimer);
+    removalTimer = null;
+    removalUnsubscribe?.(); removalUnsubscribe = null;
+  }
   function reset(nextClientId) {
     requestId += 1;
     stopRemovalWatch();
     activeCancellation = null;
     clientId = nextClientId || '';
-    patch({ clientId, requestId, management: emptyManagement(), selected: [], busy: false, activeCommand: null, cancellationPending: null, removalTransaction: null, removalTransactionId: null, feedback: null, error: '' });
+    patch({ clientId, requestId, management: emptyManagement(), selected: [], busy: false, activeCommand: null, cancellationPending: null, cancellationRequestId: state.cancellationRequestId + 1, removalTransaction: null, removalTransactionId: null, removalWatchVersion: 0, pendingConfirmation: null, batchFeedback: null, trashFeedback: null, trashPreview: null, feedback: null, error: '' });
     onReset?.();
   }
   function snapshotState(snapshot) {
@@ -91,11 +98,32 @@ export function createArticleManagementController({ loadSnapshot, cancel, watchR
       if (!disposed && requestedClientId === clientId) { patch({ removalTransaction: transaction }); onTransaction?.(transaction); }
     });
   }
+  function startRemovalWatch(transactionId, { onTerminal, onError: reportError } = {}) {
+    stopRemovalWatch();
+    if (!transactionId) return;
+    const requestedClientId = clientId;
+    const apply = (transaction) => {
+      if (disposed || requestedClientId !== clientId || !transaction) return;
+      patch({ removalTransaction: transaction });
+      const status = transaction.status === 'pending_recovery' ? (transaction.phase === 'needs_repair' ? 'needs_repair' : 'pending_auto_recovery') : transaction.status;
+      if (status === 'committed' || status === 'superseded' || status === 'needs_repair') { stopRemovalWatch(); onTerminal?.(transaction, status); }
+    };
+    if (watchRemovalTransaction) removalUnsubscribe = watchRemovalTransaction(transactionId, apply);
+    if (!loadRemoval) return;
+    const poll = async () => {
+      try { const transaction = await loadRemoval(transactionId); apply(transaction); }
+      catch (error) { if (!disposed && requestedClientId === clientId) reportError?.(error); }
+      if (!disposed && requestedClientId === clientId && removalUnsubscribe !== null) removalTimer = setTimeout(poll, 1000);
+    };
+    void poll();
+  }
   return Object.freeze({
     getState() { return state; }, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     setClient(nextClientId) { if (nextClientId !== clientId) reset(nextClientId); }, refresh,
     setSelection(next) { patch({ selected: Array.isArray(next) ? [...new Set(next)] : [] }); }, selection() { return [...state.selected]; },
     setTargetPlatformIds(next) { patch({ targetPlatformIds: Array.isArray(next) ? [...new Set(next)] : [] }); },
+    setState(next) { patch(typeof next === 'function' ? next(state) : next); },
+    stopRemovalWatch,
     setFeedback(feedback) { patch({ feedback }); }, runCancellation, watchRemoval,
     clientId() { return clientId; }, dispose() { disposed = true; requestId += 1; stopRemovalWatch(); activeCancellation = null; listeners.clear(); state = { ...state, selected: [], busy: false, activeCommand: null, cancellationPending: null }; }
   });

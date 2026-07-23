@@ -41,30 +41,20 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowStage | 'all'>(stageFilter);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const [submissionPlatforms, setSubmissionPlatforms] = useState<ContentSubmissionPlatform[]>([]);
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
   const [cancellationPlans, setCancellationPlans] = useState<ContentSubmissionCancellationPreview[]>([]);
-  const [cancellationPending, setCancellationPending] = useState<{ clientId: string; count: number } | null>(null);
-  const [pendingConfirmation, setPendingConfirmation] = useState<ActionConfirmation | null>(null);
   const confirmationActionRef = useRef<(() => Promise<void>) | null>(null);
   const confirmationIdRef = useRef(0);
+  const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const removalUnsubscribeRef = useRef<(() => void) | null>(null);
+  const cancellationRequestIdRef = useRef(0);
   const [publicationRecords, setPublicationRecords] = useState<PublicationHistoryRecord[]>([]);
   const [snapshotWorkflowByArticle, setSnapshotWorkflowByArticle] = useState<Awaited<ReturnType<typeof getArticleManagementSnapshot>>['workflowByArticle']>({});
   const [drawerArticle, setDrawerArticle] = useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] = useState<ArticleAttentionItem | null>(null);
-  const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
-  const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(null);
-  const [trashFeedback, setTrashFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
-  const [removalTransaction, setRemovalTransaction] = useState<ArticleRemovalTransaction | null>(null);
-  const [removalTransactionId, setRemovalTransactionId] = useState<string | null>(null);
-  const [removalWatchVersion, setRemovalWatchVersion] = useState(0);
-  const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const removalUnsubscribeRef = useRef<(() => void) | null>(null);
-  const cancellationRequestIdRef = useRef(0);
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | 'all'>(stageFilter === 'trash' ? 'all' : stageFilter);
@@ -73,12 +63,26 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const resetClientStateRef = useRef<() => void>(() => {});
   const managementControllerRef = useRef(createArticleManagementController({
     loadSnapshot: getArticleManagementSnapshot,
+    loadRemoval: getContentArticleRemovalTransaction,
+    watchRemoval: onContentArticleRemovalTransaction,
     onSnapshot: (snapshot) => applySnapshotRef.current(snapshot),
     onReset: () => resetClientStateRef.current(),
     onError: (value) => setError(value instanceof Error ? value.message : '无法加载历史文章'),
   }));
   const [managementControllerState, setManagementControllerState] = useState(() => managementControllerRef.current.getState());
   const selected = managementControllerState.selected;
+  const { busy, error, cancellationPending, pendingConfirmation, batchFeedback, trashPreview, trashFeedback, removalTransaction, removalTransactionId, removalWatchVersion } = managementControllerState;
+  const setControllerState = useCallback((next: (state: any) => Record<string, unknown>) => managementControllerRef.current.setState(next), []);
+  const setBusy = (value: React.SetStateAction<boolean>) => setControllerState((state) => ({ busy: typeof value === 'function' ? value(state.busy) : value }));
+  const setError = (value: React.SetStateAction<string>) => setControllerState((state) => ({ error: typeof value === 'function' ? value(state.error) : value }));
+  const setCancellationPending = (value: React.SetStateAction<{ clientId: string; count: number } | null>) => setControllerState((state) => ({ cancellationPending: typeof value === 'function' ? value(state.cancellationPending) : value }));
+  const setPendingConfirmation = (value: React.SetStateAction<ActionConfirmation | null>) => setControllerState((state) => ({ pendingConfirmation: typeof value === 'function' ? value(state.pendingConfirmation) : value }));
+  const setBatchFeedback = (value: React.SetStateAction<{ kind: 'status' | 'error'; text: string } | null>) => setControllerState((state) => ({ batchFeedback: typeof value === 'function' ? value(state.batchFeedback) : value }));
+  const setTrashPreview = (value: React.SetStateAction<ArticleTrashPreview | null>) => setControllerState((state) => ({ trashPreview: typeof value === 'function' ? value(state.trashPreview) : value }));
+  const setTrashFeedback = (value: React.SetStateAction<{ kind: 'status' | 'error'; text: string } | null>) => setControllerState((state) => ({ trashFeedback: typeof value === 'function' ? value(state.trashFeedback) : value }));
+  const setRemovalTransaction = (value: React.SetStateAction<ArticleRemovalTransaction | null>) => setControllerState((state) => ({ removalTransaction: typeof value === 'function' ? value(state.removalTransaction) : value }));
+  const setRemovalTransactionId = (value: React.SetStateAction<string | null>) => setControllerState((state) => ({ removalTransactionId: typeof value === 'function' ? value(state.removalTransactionId) : value }));
+  const setRemovalWatchVersion = (value: React.SetStateAction<number>) => setControllerState((state) => ({ removalWatchVersion: typeof value === 'function' ? value(state.removalWatchVersion) : value }));
   const attentionItems = attentionSnapshot.items;
   clientIdRef.current = clientId;
 
