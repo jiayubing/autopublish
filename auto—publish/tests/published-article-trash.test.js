@@ -143,6 +143,29 @@ describe("published article trash lifecycle", () => {
     }
   });
 
+  it("blocks local article removal while published queue archival is pending, while retaining remote publication", () => {
+    const current = fixture();
+    try {
+      const batch = current.batches[3];
+      const item = batch.items[0];
+      current.batchStore.updateItem(batch.batchId, { publicationId: item.publicationId, attemptId: item.attemptId, targetPlatformId: item.targetPlatformId }, { status: "published", publicationStatus: "published" });
+      current.batchStore.updateLocalArchive(batch.batchId, {
+        publicationId: item.publicationId,
+        attemptId: item.attemptId,
+        targetPlatformId: item.targetPlatformId
+      }, { status: "pending", errorCode: null, updatedAt: "2026-07-23T00:00:00.000Z" });
+
+      const preview = current.trash.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "published-4" }] });
+
+      assert.equal(preview.canCommit, false);
+      assert.equal(preview.publishedToClean.length, 0);
+      assert.equal(preview.blockedItems[0].reasonCode, "PUBLISHED_ARCHIVE_PENDING");
+      assert.equal(current.ledger.get(item.publicationId).status, "published");
+    } finally {
+      fs.rmSync(current.root, { recursive: true, force: true });
+    }
+  });
+
   it("allows local article removal after published queue archival succeeds", () => {
     const current = fixture();
     try {
@@ -159,6 +182,24 @@ describe("published article trash lifecycle", () => {
 
       assert.equal(preview.canCommit, true);
       assert.equal(preview.publishedToClean.length, 1);
+      assert.equal(current.ledger.get(item.publicationId).status, "published");
+    } finally {
+      fs.rmSync(current.root, { recursive: true, force: true });
+    }
+  });
+
+  it("safely derives cleanup for historical published batches without local archive state", () => {
+    const current = fixture();
+    try {
+      const batch = current.batches[3];
+      const item = batch.items[0];
+      assert.equal(current.batchStore.get(batch.batchId).items[0].localArchive, undefined);
+
+      const preview = current.trash.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "published-4" }] });
+
+      assert.equal(preview.canCommit, true);
+      assert.equal(preview.publishedToClean.length, 1);
+      assert.equal(current.batchStore.get(batch.batchId).items[0].localArchive, undefined);
       assert.equal(current.ledger.get(item.publicationId).status, "published");
     } finally {
       fs.rmSync(current.root, { recursive: true, force: true });
