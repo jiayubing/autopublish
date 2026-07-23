@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-22  
 **基线：** `2a018fe`  
-**状态：** 实施中；Phase 0-7 的实施、替换测试和最终 `npm test` 验证已完成。P2 仍因未满足启动条件而不实施；`npm run pack:alpha` 在本次执行窗口内超时，alpha package smoke 尚未通过。
+**状态：** 实施中；Phase 0-6 已完成。Phase 7 的 Controller ownership 实现已收口，页面级回归与最终 Gate 仍在执行；不得提前标为已完成。P2 仍因未满足启动条件而不实施。临时 `release-alpha-nsis/` 未经授权不能清理，故正式 alpha clean build、smoke 与最终工作区清洁 Gate 尚未通过。
 **范围：** Electron 主进程运行时组装、发布账本注入、普通平台 Worker 归档事实、投稿批次查询、投稿模块深化、IPC 注册、相关 Renderer 控制器与测试  
 **依据：** 全项目只读架构审查、静态依赖图、生产调用链复核、投稿批次内存基准、`CONTEXT.md`、ADR 0003-0004，以及 `2026-07-21` 架构深化计划实施后的剩余问题
 
@@ -237,7 +237,7 @@ Phase 1-3 可以分别提交，但不得并行修改同一个状态转换函数�
 6. `e320a97`、`e38b85d`、`95959b9`：Workspace Runtime 生命周期与集中 invalidation policy
 7. `77f22ca` `refactor(desktop): retire unused legacy remote batch execution`
 
-Phase 7 已完成：`PlatformWorkbench` 将提交、停止、残留修复、选择和 terminal refresh 生命周期委托给 platform submission controller。controller 使用 request identity 忽略陈旧响应、阻止重复提交，并对每个主进程 terminal revision 只刷新一次队列。`GeneratedArticlesView` 使用 article-management controller 对 snapshot 请求绑定 client/request identity，拒绝旧客户响应并在客户切换时清空客户局部选择；发布阶段继续消费主进程 `workflowByArticle`。
+Phase 7 收尾中：`PlatformWorkbench` 已将提交、停止、暂停、残留修复、选择和 terminal refresh 生命周期委托给 platform submission controller；controller 使用 request identity 忽略陈旧响应、阻止重复命令，并对每个主进程 terminal revision 只刷新一次队列。`GeneratedArticlesView` 已将客户/request identity、selection、busy、取消、确认、回收事务和 watch/poll 生命周期委托给 article-management controller；发布阶段继续消费主进程 `workflowByArticle`。控制器定向行为测试与 Renderer/bridge 类型检查已通过；完整页面级回归曾在 304 秒内未给出结果，必须重跑后才可通过 Phase 7 Gate。
 
 最终验证仅记录已提供结果：`npm test` 完成，928 通过、0 失败、7 跳过；`npm run pack:alpha` 在 124 秒执行窗口内超时，未标记为通过。
 
@@ -704,7 +704,7 @@ node --test tests/platform-ipc-boundary.test.js tests/platform-submission-invoca
 **风险：** 中；可能产生焦点、Escape、按钮 busy 状态和响应式布局回归。  
 **成本：** 5-8 天。
 
-**实施状态（2026-07-23）：** 已完成。platform submission controller 管理 request identity、busy/stop、选择及 terminal refresh；article-management controller 管理 client/request identity、selection reset 和陈旧 snapshot 拒绝。视图不再拥有这些异步命令生命周期，且 `GeneratedArticlesView` 直接使用 snapshot `workflowByArticle`。
+**实施状态（2026-07-23）：** 收尾中。platform submission controller 管理 request identity、submit/stop/pause、选择、residue inspection/cleanup、terminal refresh 和 dispose；article-management controller 管理 client/request identity、management snapshot、selection、busy/confirmation、cancellation、removal transaction watch/poll、客户端重置和 dispose。视图只消费 controller snapshot/command，并直接使用 snapshot `workflowByArticle`；完整页面级回归尚需在可完成的执行窗口重跑。
 
 ### Files
 
@@ -716,13 +716,13 @@ node --test tests/platform-ipc-boundary.test.js tests/platform-submission-invoca
 
 ### Tasks
 
-- [ ] 控制器拥有 requestId、clientId、busy、selection、terminal refresh 和 stale response 处理。
-- [ ] `PlatformWorkbench` 不再同时实现 queue selection、submit lifecycle、residue repair 和全部展示状态。
-- [ ] `GeneratedArticlesView` 不再自行派生 publication stage；直接消费 snapshot `workflowByArticle`。
-- [ ] 业务 plan、target pairing、publication status 和 cleanup eligibility 不进入 Renderer controller。
-- [ ] 组件只保留局部展示状态，例如 drawer 展开、视觉折叠和输入草稿。
-- [ ] 新 hook 必须通过 bridge interface 测试，不直接访问 `window.desktopConsole`。
-- [ ] 完成新 interface 测试后删除依赖源码字符串或私有 hook 状态的旧测试。
+- [x] 控制器拥有 requestId、clientId、busy、selection、terminal refresh 和 stale response 处理。
+- [x] `PlatformWorkbench` 不再同时实现 queue selection、submit lifecycle、residue repair 和全部展示状态。
+- [x] `GeneratedArticlesView` 不再自行派生 publication stage；直接消费 snapshot `workflowByArticle`。
+- [x] 业务 plan、target pairing、publication status 和 cleanup eligibility 不进入 Renderer controller。
+- [x] 组件只保留局部展示状态，例如 drawer 展开、视觉折叠和输入草稿。
+- [x] 新 hook 必须通过 bridge interface 测试，不直接访问 `window.desktopConsole`。
+- [x] 完成新 interface 测试后删除依赖源码字符串或私有 hook 状态的旧测试。
 
 ### Verification
 

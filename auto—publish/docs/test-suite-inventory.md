@@ -3146,7 +3146,7 @@
 - `tests/content-submission-query-benchmark.test.js`：真实 `SubmissionBatchStore` 的 `listBatches()` 操作计数 benchmark；`5403eee`、`092c538` 后验证一次查询只全量读取 batch store 一次、sidecar 每 item 至多一次，并保持近似线性。1000-batch 墙钟 p95 因旧、新 fixture 派生工作不等价而不可比；该项作为接受的 unavailable wall-clock gate 记录，不宣称时间提升。
 - `tests/desktop-task-service.test.js`、`tests/platform-ipc-boundary.test.js` 与 `tests/platform-submission-invocation-count.test.js`：`77f22ca` 后验证唯一普通平台远端执行链是 `platforms:submit-selected` -> `startPlatformSubmit` -> Worker `platform-submit`。
 - Phase 6 caller Go 证据：`desktop:start-batch`、`desktop:stop-batch`、`desktop:refresh-queue`、`desktop:get-state` 仅在被删除的 preload/IPC 链内互相引用；Renderer 没有 `desktopConsole.batch` 调用；Worker `batch` 是 `runPublicationBatch` 的唯一生产调用者。相反，`npm run snapshot` -> `scripts/snapshot.cmd` -> Worker `snapshot` -> `createQueueSnapshot` 仍是受支持 CLI，故 snapshot 保留。
-- Phase 7 controller/test replacement：`tests/platform-submission-controller.test.mjs` 覆盖重复提交抑制、陈旧响应隔离和每 terminal revision 一次队列刷新；`tests/article-management-controller.test.js` 与 `tests/renderer-content-client-switch.test.js` 覆盖客户切换时的 selection reset 与陈旧 snapshot 隔离。业务发布阶段仍由主进程 snapshot 的 `workflowByArticle` 提供。
+- Phase 7 controller/test replacement：`tests/platform-submission-controller.test.mjs` 通过 bridge interface 覆盖重复 submit/pause/stop 抑制、陈旧命令隔离、每 terminal revision 一次刷新、residue inspect/confirm/cleanup/refresh 和 dispose；`tests/article-management-controller.test.js` 通过 controller interface 覆盖客户原子重置且保留 workspace target 偏好、陈旧 snapshot/cancellation 隔离、重复 mutation 抑制和 removal watch/poll 在客户切换或 dispose 后停止。业务发布阶段仍由主进程 snapshot 的 `workflowByArticle` 提供；页面级回归必须在可完成的执行窗口重跑后才可关闭最终 Gate。
 
 对应实施提交：`8fc1cba`（基线）、`a4361cf`（ledger）、`7c6b5b3`（archive）、`5403eee`/`092c538`（read snapshot）、`7e62241`/`83784e9`/`920b8d0`/`6bef000`（submission modules）、`e320a97`/`e38b85d`/`95959b9`（Workspace Runtime/invalidation）、`77f22ca`（旧 remote batch 退休）。
 
@@ -3159,6 +3159,10 @@
 | 文章 attention、客户切换、generation handoff、history/question editor、residue cleanup、responsive layout、platform queue browser 分组 | 通过 |
 | `npm run build:renderer` | 通过；当前唯一 JS/首屏 chunk `index-CR-EwY9J.js` 为 704,499 bytes，gzip 196.40 kB |
 | `npm test` | 928 通过、0 失败、7 跳过 |
+| `node --test`（Phase 7 八个页面/控制器文件） | 2026-07-23：304 秒超时且无测试汇总；不作为通过。控制器定向 11/11 通过。 |
+| `npm run typecheck:renderer` | 2026-07-23：通过 |
+| `npm run typecheck:bridge` | 2026-07-23：通过 |
+| `npm run lint` | 2026-07-23：失败；仅为未跟踪 `release-alpha-nsis/win-unpacked/.../index-DzJ14oqL.js` 的两处生成 bundle `no-empty`，未修改源码或新增宽泛 ignore。 |
 
 `electron-api.ts`、`transport-legacy.ts`、`submission-workflow.js` 及其测试已删除。`tests/architecture-seams.test.js` 继续保护业务 view 不直接依赖 `window.desktopConsole`、`ipcRenderer`、IPC channel 字符串或主进程文件，并保护领域 bridge 不回退到兼容 facade。
 
