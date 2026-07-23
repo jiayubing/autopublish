@@ -18,7 +18,6 @@ const fs = require("fs");
 const path = require("path");
 const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
 const { evaluateArticleSubmissionEligibility } = require("../../src/content/article-submission-eligibility");
-const { createSubmissionReadSnapshot } = require("./submission/submission-read-snapshot");
 const { createSubmissionQuery } = require("./submission/submission-query");
 const { createSubmissionPreparation } = require("./submission/submission-preparation");
 const { createSubmissionAction } = require("./submission/submission-action");
@@ -115,213 +114,8 @@ function createContentSubmissionService(opts) {
     return availablePlatforms().map((platform) => ({ id: platform.id, displayName: platform.displayName || platform.id, scanDir: platform.scanDir || platform.id, contentQueueImport: platform.contentQueueImport === true }));
   }
 
-  function publicationForBatchItem(item) {
-    if (!item.publicationId || !item.attemptId || typeof publicationLedger.get !== "function") return null;
-    try { return publicationLedger.get(item.publicationId); } catch (_) { return null; }
-  }
-
-  function readSidecar(item) {
-    try { return JSON.parse(fs.readFileSync(item.sidecarPath, "utf8")); } catch (_) { return null; }
-  }
-
-  function articleSelectionKey(item) { return item.clientId + "\0" + item.articleId; }
-
-  // Read snapshots are deliberately private to this service.  They make a
-  // query internally consistent, but are never accepted from callers that
-  // mutate state: mutations must observe the filesystem again.
-  function createReadSnapshot(input) {
-    return createSubmissionReadSnapshot({ batchStore: batchStore, getDataRevision: options.getDataRevision, onSnapshotCreated: options.onSubmissionSnapshotCreated }, input);
-  }
-
-  function snapshotPublication(snapshot, item) {
-    if (!item.publicationId || !item.attemptId) return null;
-    if (!snapshot.publicationsById.has(item.publicationId)) snapshot.publicationsById.set(item.publicationId, publicationForBatchItem(item));
-    return snapshot.publicationsById.get(item.publicationId);
-  }
-
-  function snapshotSidecar(snapshot, entry) {
-    if (!snapshot.sidecarsByItem.has(entry.itemKey)) snapshot.sidecarsByItem.set(entry.itemKey, readSidecar(entry.item));
-    return snapshot.sidecarsByItem.get(entry.itemKey);
-  }
-
-  function articleSubmissionItems(selections, snapshot) {
-    const readSnapshot = snapshot || createReadSnapshot();
-    const requested = new Set(selections.map(articleSelectionKey));
-    const found = [];
-    const seen = new Set();
-    requested.forEach(function(key) {
-      (readSnapshot.itemsByArticle.get(key) || []).forEach(function(entry) {
-        const batch = entry.batch;
-        const item = entry.item;
-        const identityKey = (item.publicationId || batch.id + ":" + item.targetPlatformId + ":" + item.articleId) + "\0" + (item.attemptId || "");
-        if (seen.has(identityKey)) return;
-        seen.add(identityKey);
-        const record = snapshotPublication(readSnapshot, item);
-        const latest = latestAttempt(record);
-        const sidecar = snapshotSidecar(readSnapshot, entry);
-        const pair = inspectSubmissionPairState(item, batch, sidecar, { rootDir: rootDir, record: record });
-        const cleanedStatuses = ["failed-cleaned", "published-cleaned", "cancelled-cleaned"];
-        const status = cleanedStatuses.includes(item.status) ? item.status : record ? record.status : item.publicationStatus || item.status;
-        if (record && (record.titleSnapshot === undefined || record.titleSnapshot === null) && typeof publicationLedger.ensureTitleSnapshot === "function") {
-          try {
-            const sourceArticle = store.getArticle(batch.clientId, item.articleId);
-            publicationLedger.ensureTitleSnapshot(record.publicationId, sourceArticle.title);
-          } catch (_) {}
-        }
-        const safe = {
-          clientId: batch.clientId,
-          articleId: item.articleId,
-          batchId: batch.id,
-          targetPlatformId: item.targetPlatformId,
-          publicationId: item.publicationId || null,
-          attemptId: item.attemptId || null,
-          contentHash: item.contentHash || (sidecar && sidecar.contentHash) || null,
-          status: status,
-          unchanged: pair.pairState === "intact",
-          pairState: pair.pairState,
-          identityMatched: pair.identityMatched,
-          contentMatched: pair.contentMatched,
-          mainExists: pair.mainExists,
-          sidecarExists: pair.sidecarExists
-        };
-        found.push({ safe: safe, item: item, batch: batch, record: record, sidecar: sidecar, latest: latest });
-      });
-    });
-    return found;
-  }
-
-
-  function locateArticleSubmissionItem(action, snapshot) {
-    const readSnapshot = snapshot || createReadSnapshot({ batchId: action.batchId });
-    const identityKey = (action.publicationId || action.batchId + ":" + action.targetPlatformId + ":" + action.articleId) + "\0" + (action.attemptId || "");
-    const indexed = readSnapshot.itemsByIdentity.get(identityKey);
-    const entries = indexed ? articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], readSnapshot).filter(function(entry) { return entry.item === indexed.item; }) : articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], readSnapshot);
-    return entries.find(function(entry) {
-      return entry.safe.batchId === action.batchId && entry.safe.targetPlatformId === action.targetPlatformId &&
-        (action.publicationId && action.attemptId ? entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId : entry.safe.articleId === action.articleId);
-    });
-  }
-
-  function actionBindingFingerprint(entry, action) {
-    const record = entry.record || {};
-    return hash(JSON.stringify({
-      action: action.action,
-      clientId: entry.safe.clientId,
-      articleId: entry.safe.articleId,
-      batchId: entry.safe.batchId,
-      targetPlatformId: entry.safe.targetPlatformId,
-      publicationId: entry.safe.publicationId,
-      attemptId: entry.safe.attemptId,
-      publicationStatus: entry.safe.status,
-      contentHash: entry.safe.contentHash,
-      sidecarAttemptId: entry.sidecar && entry.sidecar.attemptId || null,
-      unchanged: entry.safe.unchanged,
-      pairState: entry.safe.pairState,
-      identityMatched: entry.safe.identityMatched,
-      contentMatched: entry.safe.contentMatched,
-      recordStatus: record.status || null,
-      attempts: Array.isArray(record.attempts) ? record.attempts.map(function(attempt) { return { attemptId: attempt.attemptId, status: attempt.status }; }) : []
-    }));
-  }
-
-  function evaluation(action, entry, allowed, reasonCode, resolvedState) {
-    const safeState = Object.assign({}, entry && entry.safe || {}, { reasonCode: reasonCode || null });
-    return {
-      allowed: allowed === true,
-      action: action.action,
-      reasonCode: reasonCode || null,
-      resolvedState: resolvedState || safeState,
-      bindingFingerprint: entry ? actionBindingFingerprint(entry, action) : null,
-      entry: entry || null
-    };
-  }
-
-  function evaluateItemAction(action, snapshot) {
-    if (!action || typeof action !== "object" || !["cancel", "cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action)) {
-      return { allowed: false, action: action && action.action || null, reasonCode: "SUBMISSION_ACTION_INVALID", resolvedState: null, bindingFingerprint: null, entry: null };
-    }
-    const entry = locateArticleSubmissionItem(action, snapshot);
-    if (!entry || !entry.item || !entry.batch) return { allowed: false, action: action.action, reasonCode: "SUBMISSION_QUEUE_ITEM_NOT_FOUND", resolvedState: null, bindingFingerprint: null, entry: null };
-    const currentFingerprint = actionBindingFingerprint(entry, action);
-    if (action.evaluationFingerprint && action.evaluationFingerprint !== currentFingerprint) {
-      return evaluation(action, entry, false, "SUBMISSION_ACTION_STALE");
-    }
-    if (!["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status) && !["intact", "both_absent", "main_absent", "sidecar_absent"].includes(entry.safe.pairState)) {
-      const reason = entry.safe.pairState === "identity_conflict" ? "SUBMISSION_IDENTITY_CONFLICT"
-        : entry.safe.pairState === "content_changed" ? "SUBMISSION_CONTENT_CHANGED" : "SUBMISSION_QUEUE_CHANGED";
-      return evaluation(action, entry, false, reason);
-    }
-    if (entry.safe.pairState === "both_absent" && entry.safe.identityMatched !== true) {
-      return evaluation(action, entry, false, "SUBMISSION_IDENTITY_CONFLICT");
-    }
-    if (["main_absent", "sidecar_absent"].includes(entry.safe.pairState) && entry.safe.identityMatched !== true) {
-      return evaluation(action, entry, false, "SUBMISSION_IDENTITY_CONFLICT");
-    }
-    if (action.action === "cancel" && entry.safe.status === "cancelled") {
-      return evaluation(action, entry, false, "SUBMISSION_ALREADY_CANCELLED");
-    }
-    if (["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(entry.safe.status)) return evaluation(action, entry, true, null);
-
-    if (action.action === "cancel") {
-      if (entry.safe.status !== "queued") return evaluation(action, entry, false, entry.safe.status === "failed" ? "PUBLICATION_STATUS_NOT_QUEUED" : "ARTICLE_SUBMISSION_ACTIVE");
-      if (entry.record && (entry.record.status !== "queued" || !entry.latest || entry.latest.attemptId !== action.attemptId)) {
-        return evaluation(action, entry, false, "PUBLICATION_ATTEMPT_MISMATCH");
-      }
-      if (entry.latest && entry.latest.status !== "queued") return evaluation(action, entry, false, "PUBLICATION_REMOTE_STARTED");
-      return evaluation(action, entry, true, null);
-    }
-
-    const localCleanupAction = ["cleanup", "cleanupPublishedLocal", "cleanupCancelledLocal"].includes(action.action);
-    if (!localCleanupAction) return evaluation(action, entry, false, "SUBMISSION_ACTION_INVALID");
-    const expectedStatus = action.action === "cleanup" ? "failed" : action.action === "cleanupPublishedLocal" ? "published" : "cancelled";
-    if (entry.safe.status !== expectedStatus) return evaluation(action, entry, false, ["queued", "submitting", "submitted", "uncertain"].includes(entry.safe.status) ? "ARTICLE_SUBMISSION_ACTIVE" : "PUBLICATION_STATUS_NOT_FAILED");
-    if (entry.record) {
-      if (entry.record.status !== expectedStatus) return evaluation(action, entry, false, action.action === "cleanup" ? "PUBLICATION_STATUS_NOT_FAILED" : "PUBLICATION_ATTEMPT_MISMATCH");
-      const historicalAttempt = Array.isArray(entry.record.attempts) && entry.record.attempts.find(function(attempt) { return attempt.attemptId === action.attemptId && attempt.status === expectedStatus; });
-      if (!historicalAttempt) return evaluation(action, entry, false, "PUBLICATION_ATTEMPT_MISMATCH");
-    } else if (entry.safe.publicationId) {
-      return evaluation(action, entry, false, "PUBLICATION_RECORD_MISSING");
-    }
-    return evaluation(action, entry, true, null);
-  }
-
   function input(value) { if (!value || value.confirmed !== true || !value.clientId) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return value; }
 
-  function inspectPair(value) {
-    const request = value || {};
-    const entry = request.item && request.batch
-      ? { item: request.item, batch: request.batch, sidecar: request.sidecar }
-      : locateArticleSubmissionItem(request);
-    if (!entry) throw batchError("SUBMISSION_QUEUE_ITEM_NOT_FOUND", "Submission batch item was not found");
-    return inspectSubmissionPairState(entry.item, entry.batch, entry.sidecar, { rootDir: rootDir, record: entry.record || request.record || null });
-  }
-  // Local archival is a persisted batch fact.  Reading it is deliberately
-  // side-effect free so historical batches without this optional field remain
-  // compatible and are never rewritten merely by opening the attention view.
-  function listArchiveFailures() {
-    return batchStore.list().reduce(function(result, batch) {
-      (batch.items || []).forEach(function(item) {
-        if (!item.localArchive || item.localArchive.status !== "failed" || item.status !== "published" || item.publicationStatus !== "published") return;
-        const record = publicationForBatchItem(item);
-        if (!record || record.status !== "published") return;
-        const pair = inspectSubmissionPairState(item, batch, readSidecar(item), { rootDir: rootDir, record: record });
-        result.push({
-          batchId: batch.id,
-          clientId: batch.clientId,
-          articleId: item.articleId,
-          platformId: item.targetPlatformId,
-          targetPlatformId: item.targetPlatformId,
-          publicationId: item.publicationId,
-          attemptId: item.attemptId,
-          status: "published",
-          reasonCode: item.localArchive.errorCode,
-          updatedAt: item.localArchive.updatedAt,
-          pairState: pair.pairState
-        });
-      });
-      return result;
-    }, []);
-  }
   function exporterFor(value) {
     return options.exporter || createSubmissionExportService({
       rootDir,
@@ -337,7 +131,7 @@ function createContentSubmissionService(opts) {
     onSnapshotCreated: options.onSubmissionSnapshotCreated,
     publicationLedger: publicationLedger,
     latestAttempt: latestAttempt,
-    readSidecar: readSidecar,
+    readSidecar: function(item) { try { return JSON.parse(fs.readFileSync(item.sidecarPath, "utf8")); } catch (_) { return null; } },
     inspectSubmissionPair: inspectSubmissionPairState,
     rootDir: rootDir,
     getArticle: function(clientId, articleId) { return store.getArticle(clientId, articleId); },
@@ -403,14 +197,14 @@ function createContentSubmissionService(opts) {
     cleanupArticleSubmissionItem: action.cleanupArticleSubmissionItem,
     cleanupPublishedArticleLocal: action.cleanupPublishedArticleLocal,
     cleanupCancelledArticleLocal: action.cleanupCancelledArticleLocal,
-    inspectSubmissionPair: inspectPair,
+    inspectSubmissionPair: query.inspectSubmissionPair,
     evaluateItemAction: query.evaluateItemAction,
     isSubmissionItemExecutable: action.isSubmissionItemExecutable,
     previewTrashedArticleQueueResidue: action.previewTrashedArticleQueueResidue,
     cleanupTrashedArticleQueueResidue: action.cleanupTrashedArticleQueueResidue,
     previewRetryFailedPublication: preparation.previewRetryFailedPublication,
-    retryFailedPublication: preparation.retryFailedPublication
-    ,listArchiveFailures
+    retryFailedPublication: preparation.retryFailedPublication,
+    listArchiveFailures: query.listArchiveFailures
   };
 }
 

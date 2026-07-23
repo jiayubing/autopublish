@@ -24,6 +24,22 @@ function createSubmissionQuery(deps) {
     }); }); return found;
   }
   function locateArticleSubmissionItem(action, snapshot) { const readSnapshot = snapshot || createReadSnapshot({ batchId: action.batchId }); const key = (action.publicationId || action.batchId + ":" + action.targetPlatformId + ":" + action.articleId) + "\0" + (action.attemptId || ""); const indexed = readSnapshot.itemsByIdentity.get(key); const entries = indexed ? articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], readSnapshot).filter(function(entry) { return entry.item === indexed.item; }) : articleSubmissionItems([{ clientId: action.clientId, articleId: action.articleId }], readSnapshot); return entries.find(function(entry) { return entry.safe.batchId === action.batchId && entry.safe.targetPlatformId === action.targetPlatformId && (action.publicationId && action.attemptId ? entry.safe.publicationId === action.publicationId && entry.safe.attemptId === action.attemptId : entry.safe.articleId === action.articleId); }); }
+  function inspectSubmissionPair(value) {
+    const request = value || {};
+    const entry = request.item && request.batch ? { item: request.item, batch: request.batch, sidecar: request.sidecar, record: request.record } : locateArticleSubmissionItem(request);
+    if (!entry) throw batchError("SUBMISSION_QUEUE_ITEM_NOT_FOUND", "Submission batch item was not found");
+    const sidecar = entry.sidecar === undefined ? deps.readSidecar(entry.item) : entry.sidecar;
+    return deps.inspectSubmissionPair(entry.item, entry.batch, sidecar, { rootDir: deps.rootDir, record: entry.record || request.record || null });
+  }
+  function listArchiveFailures() {
+    const snapshot = createReadSnapshot(); const result = [];
+    snapshot.batches.forEach(function(batch) { (batch.items || []).forEach(function(item, index) {
+      if (!item.localArchive || item.localArchive.status !== "failed" || item.status !== "published" || item.publicationStatus !== "published") return;
+      const record = snapshotPublication(snapshot, item); if (!record || record.status !== "published") return;
+      const pair = inspectSubmissionPair({ item, batch, sidecar: snapshotSidecar(snapshot, { item, itemKey: batch.id + "\0" + index }), record });
+      result.push({ batchId: batch.id, clientId: batch.clientId, articleId: item.articleId, platformId: item.targetPlatformId, targetPlatformId: item.targetPlatformId, publicationId: item.publicationId, attemptId: item.attemptId, status: "published", reasonCode: item.localArchive.errorCode, updatedAt: item.localArchive.updatedAt, pairState: pair.pairState });
+    }); }); return result;
+  }
   function actionBindingFingerprint(entry, action) { const record = entry.record || {}; return deps.hash(JSON.stringify({ action: action.action, clientId: entry.safe.clientId, articleId: entry.safe.articleId, batchId: entry.safe.batchId, targetPlatformId: entry.safe.targetPlatformId, publicationId: entry.safe.publicationId, attemptId: entry.safe.attemptId, publicationStatus: entry.safe.status, contentHash: entry.safe.contentHash, sidecarAttemptId: entry.sidecar && entry.sidecar.attemptId || null, unchanged: entry.safe.unchanged, pairState: entry.safe.pairState, identityMatched: entry.safe.identityMatched, contentMatched: entry.safe.contentMatched, recordStatus: record.status || null, attempts: Array.isArray(record.attempts) ? record.attempts.map(function(attempt) { return { attemptId: attempt.attemptId, status: attempt.status }; }) : [] })); }
   function evaluation(action, entry, allowed, reasonCode, resolvedState) { const safe = Object.assign({}, entry && entry.safe || {}, { reasonCode: reasonCode || null }); return { allowed: allowed === true, action: action.action, reasonCode: reasonCode || null, resolvedState: resolvedState || safe, bindingFingerprint: entry ? actionBindingFingerprint(entry, action) : null, entry: entry || null }; }
   function evaluateItemAction(action, snapshot) {
@@ -89,6 +105,6 @@ function createSubmissionQuery(deps) {
     });
     return { selections: normalized, articleCount: normalized.length, items, queuedToCancel, failedToClean, publishedToClean, cancelledToClean, blockedItems, queuedToCancelCount: queuedToCancel.length, failedToCleanCount: failedToClean.length, publishedToCleanCount: publishedToClean.length, cancelledToCleanCount: cancelledToClean.length, terminalCleanupCount: failedToClean.length + publishedToClean.length + cancelledToClean.length, canCommit: blockedItems.length === 0 };
   }
-  return Object.freeze({ createReadSnapshot, getBatch, listBatches, reconcileBatch, buildActionPlan, previewArticleRemovalImpact, articleSubmissionItems, locateArticleSubmissionItem, evaluateItemAction, itemIdentity });
+  return Object.freeze({ createReadSnapshot, getBatch, listBatches, reconcileBatch, buildActionPlan, previewArticleRemovalImpact, articleSubmissionItems, locateArticleSubmissionItem, inspectSubmissionPair, listArchiveFailures, evaluateItemAction, itemIdentity });
 }
 module.exports = { createSubmissionQuery };
