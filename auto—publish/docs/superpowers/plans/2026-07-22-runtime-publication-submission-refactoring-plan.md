@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-22  
 **基线：** `2a018fe`  
-**状态：** 实施中；Phase 0-6 已按下列实施记录完成，Phase 7 和最终完成标准仍未完成。  
+**状态：** 已完成；Phase 0-7 的实施、替换测试和最终 `npm test` 验证已完成。P2 仍因未满足启动条件而不实施。
 **范围：** Electron 主进程运行时组装、发布账本注入、普通平台 Worker 归档事实、投稿批次查询、投稿模块深化、IPC 注册、相关 Renderer 控制器与测试  
 **依据：** 全项目只读架构审查、静态依赖图、生产调用链复核、投稿批次内存基准、`CONTEXT.md`、ADR 0003-0004，以及 `2026-07-21` 架构深化计划实施后的剩余问题
 
@@ -227,7 +227,7 @@ Phase 1-3 可以分别提交，但不得并行修改同一个状态转换函数�
 
 ### 实施记录（2026-07-23）
 
-已完成的可回滚提交如下；本记录只陈述已验证的实现状态，不将 Phase 7、P2 或最终完成标准标为完成：
+已完成的可回滚提交和最终验证如下；P2 仍按启动条件不实施：
 
 1. `8fc1cba` `test(runtime): expose publication wiring and submission baselines`
 2. `a4361cf` `refactor(runtime): inject one main-process publication ledger`
@@ -236,6 +236,10 @@ Phase 1-3 可以分别提交，但不得并行修改同一个状态转换函数�
 5. `7e62241`、`83784e9`、`920b8d0`、`6bef000`：投稿 Preparation、Query、Action owner 的提取及平行 facade 清理
 6. `e320a97`、`e38b85d`、`95959b9`：Workspace Runtime 生命周期与集中 invalidation policy
 7. `77f22ca` `refactor(desktop): retire unused legacy remote batch execution`
+
+Phase 7 已完成：`PlatformWorkbench` 将提交、停止、残留修复、选择和 terminal refresh 生命周期委托给 platform submission controller。controller 使用 request identity 忽略陈旧响应、阻止重复提交，并对每个主进程 terminal revision 只刷新一次队列。`GeneratedArticlesView` 使用 article-management controller 对 snapshot 请求绑定 client/request identity，拒绝旧客户响应并在客户切换时清空客户局部选择；发布阶段继续消费主进程 `workflowByArticle`。
+
+最终验证仅记录已提供结果：`npm test` 完成，928 通过、0 失败、7 跳过。
 
 Phase 3 的结构性 gate 已通过：`listBatches()` 的真实 store 操作计数改为单次 list、每 item sidecar 至多一次读取，并保持近似线性。1000-batch 墙钟 p95 无法作为与旧 fixture 的可比 gate（新路径还包含安全 DTO clone、attention 与 transaction 派生，而旧 fixture 不含等价工作）；该不可比性已记录并接受，未把墙钟数字表述为性能提升承诺。
 
@@ -700,6 +704,8 @@ node --test tests/platform-ipc-boundary.test.js tests/platform-submission-invoca
 **风险：** 中；可能产生焦点、Escape、按钮 busy 状态和响应式布局回归。  
 **成本：** 5-8 天。
 
+**实施状态（2026-07-23）：** 已完成。platform submission controller 管理 request identity、busy/stop、选择及 terminal refresh；article-management controller 管理 client/request identity、selection reset 和陈旧 snapshot 拒绝。视图不再拥有这些异步命令生命周期，且 `GeneratedArticlesView` 直接使用 snapshot `workflowByArticle`。
+
 ### Files
 
 - Modify: `media-workbench/src/components/PlatformWorkbench.tsx`
@@ -808,6 +814,8 @@ node --test tests/renderer-responsive-layout.test.js
 | `buildBatchPlan()` 的 workspace scan fixture | `tests/batch-workspace-scan.test.js` 的 `createQueueSnapshot()` CLI 事实 | snapshot 只扫描显式 `AUTO_PUBLISH_WORKSPACE` input |
 | `desktopConsole.batch` / `batch-ipc` surface | `tests/platform-ipc-boundary.test.js`、`tests/platform-submission-invocation-count.test.js` | Renderer 只经 `platforms:submit-selected` 触发一次主进程拥有的普通平台投稿 |
 | 旧 content submission facade query 状态机测试 | `tests/submission-module-interface.test.js`、`tests/submission-query-interface.test.js` 与 `tests/submission-action-interface.test.js` | Preparation、Query、Action 的领域 owner、stale plan 和 fail-closed 行为 |
+| `PlatformWorkbench` 内联提交/停止/terminal refresh 状态 | `tests/platform-submission-controller.test.mjs` | 重复命令只执行一次、陈旧 submit 响应不覆盖当前状态、每个 terminal revision 只刷新一次 |
+| `GeneratedArticlesView` 内联 article snapshot 请求状态 | `tests/article-management-controller.test.js`、`tests/renderer-content-client-switch.test.js` | 客户切换时清空局部选择，旧客户 snapshot 不覆盖新客户 |
 
 ### 18.3 可以替换或删除
 
