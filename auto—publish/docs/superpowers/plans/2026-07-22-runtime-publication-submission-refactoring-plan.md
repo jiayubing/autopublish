@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-22  
 **基线：** `2a018fe`  
-**状态：** 已完成；Phase 0-7 的实施、替换测试和最终 `npm test` 验证已完成。P2 仍因未满足启动条件而不实施。
+**状态：** 实施中；Phase 0-7 的实施、替换测试和最终 `npm test` 验证已完成。P2 仍因未满足启动条件而不实施；`npm run pack:alpha` 在本次执行窗口内超时，alpha package smoke 尚未通过。
 **范围：** Electron 主进程运行时组装、发布账本注入、普通平台 Worker 归档事实、投稿批次查询、投稿模块深化、IPC 注册、相关 Renderer 控制器与测试  
 **依据：** 全项目只读架构审查、静态依赖图、生产调用链复核、投稿批次内存基准、`CONTEXT.md`、ADR 0003-0004，以及 `2026-07-21` 架构深化计划实施后的剩余问题
 
@@ -227,7 +227,7 @@ Phase 1-3 可以分别提交，但不得并行修改同一个状态转换函数�
 
 ### 实施记录（2026-07-23）
 
-已完成的可回滚提交和最终验证如下；P2 仍按启动条件不实施：
+已完成的可回滚提交和已通过验证如下；P2 仍按启动条件不实施。最终 alpha package smoke 仍待补跑：
 
 1. `8fc1cba` `test(runtime): expose publication wiring and submission baselines`
 2. `a4361cf` `refactor(runtime): inject one main-process publication ledger`
@@ -239,7 +239,7 @@ Phase 1-3 可以分别提交，但不得并行修改同一个状态转换函数�
 
 Phase 7 已完成：`PlatformWorkbench` 将提交、停止、残留修复、选择和 terminal refresh 生命周期委托给 platform submission controller。controller 使用 request identity 忽略陈旧响应、阻止重复提交，并对每个主进程 terminal revision 只刷新一次队列。`GeneratedArticlesView` 使用 article-management controller 对 snapshot 请求绑定 client/request identity，拒绝旧客户响应并在客户切换时清空客户局部选择；发布阶段继续消费主进程 `workflowByArticle`。
 
-最终验证仅记录已提供结果：`npm test` 完成，928 通过、0 失败、7 跳过。
+最终验证仅记录已提供结果：`npm test` 完成，928 通过、0 失败、7 跳过；`npm run pack:alpha` 在 124 秒执行窗口内超时，未标记为通过。
 
 Phase 3 的结构性 gate 已通过：`listBatches()` 的真实 store 操作计数改为单次 list、每 item sidecar 至多一次读取，并保持近似线性。1000-batch 墙钟 p95 无法作为与旧 fixture 的可比 gate（新路径还包含安全 DTO clone、attention 与 transaction 派生，而旧 fixture 不含等价工作）；该不可比性已记录并接受，未把墙钟数字表述为性能提升承诺。
 
