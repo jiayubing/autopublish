@@ -38,7 +38,6 @@ function isTerminalRemovalTransaction(status: string): boolean {
 
 export default function GeneratedArticlesView({ clientId, refreshToken, stageFilter = 'all', selectedAttentionId, onArticleSelect, onStageFilterChange }: GeneratedArticlesViewProps) {
   const [articles, setArticles] = useState<GeneratedContentArticle[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowStage | 'all'>(stageFilter);
@@ -78,6 +77,8 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     onReset: () => resetClientStateRef.current(),
     onError: (value) => setError(value instanceof Error ? value.message : '无法加载历史文章'),
   }));
+  const [managementControllerState, setManagementControllerState] = useState(() => managementControllerRef.current.getState());
+  const selected = managementControllerState.selected;
   const attentionItems = attentionSnapshot.items;
   clientIdRef.current = clientId;
 
@@ -101,7 +102,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
 
   useEffect(() => {
     mountedRef.current = true;
+    const unsubscribe = managementControllerRef.current.subscribe(setManagementControllerState);
     return () => {
+      unsubscribe();
       mountedRef.current = false;
       managementControllerRef.current.dispose();
       stopRemovalTransactionWatch();
@@ -112,7 +115,6 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     setRemovalTransaction(null);
     setRemovalTransactionId(null);
     setRemovalWatchVersion(0);
-    setSelected([]);
     setError('');
     setBatchFeedback(null);
     setTrashFeedback(null);
@@ -145,11 +147,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   applySnapshotRef.current = applyManagementSnapshot;
 
   const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
-    setSelected((current) => {
-      const value = typeof next === 'function' ? next(current) : next;
-      managementControllerRef.current.setSelection(value);
-      return value;
-    });
+    const current = managementControllerRef.current.selection();
+    const value = typeof next === 'function' ? next(current) : next;
+    managementControllerRef.current.setSelection(value);
   }, []);
 
   useEffect(() => {

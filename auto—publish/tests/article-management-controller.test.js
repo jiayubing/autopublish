@@ -14,3 +14,54 @@ it('article management controller rejects a stale client snapshot and clears cli
   await Promise.all([first, second]);
   assert.deepEqual(snapshots, [{ clientId: 'client-b' }]);
 });
+
+it('article management controller resets client facts atomically but retains workspace target preferences', async function() {
+  const { createArticleManagementController } = await controller();
+  const state = createArticleManagementController({ loadSnapshot: async (clientId) => ({ clientId, articles: [{ id: clientId }], trash: [{ articleId: clientId }], submissionBatches: [{ id: clientId }], cancellationPlans: [{ batchId: clientId }], publicationRecords: [{ articleId: clientId }], workflowByArticle: { [clientId]: { stage: 'failed' } }, attention: { items: [{ articleId: clientId }] } }) });
+  state.setTargetPlatformIds(['platform-a']);
+  await state.refresh('client-a');
+  state.setSelection(['article-a']);
+  state.setClient('client-b');
+  assert.deepEqual(state.getState().management.articles, []);
+  assert.deepEqual(state.getState().management.trash, []);
+  assert.deepEqual(state.getState().management.submissionBatches, []);
+  assert.deepEqual(state.getState().management.cancellationPlans, []);
+  assert.deepEqual(state.getState().management.publicationRecords, []);
+  assert.deepEqual(state.getState().management.workflowByArticle, {});
+  assert.deepEqual(state.getState().management.attention.items, []);
+  assert.deepEqual(state.getState().selected, []);
+  assert.deepEqual(state.getState().targetPlatformIds, ['platform-a']);
+});
+
+it('article management controller deduplicates a cancellation mutation and ignores its old-client completion', async function() {
+  const { createArticleManagementController } = await controller();
+  let resolveCancel;
+  let calls = 0;
+  const state = createArticleManagementController({
+    loadSnapshot: async (clientId) => ({ clientId }),
+    cancel: () => { calls += 1; return new Promise((resolve) => { resolveCancel = resolve; }); },
+  });
+  state.setClient('client-a');
+  const first = state.runCancellation({ batchId: 'batch-a' });
+  const duplicate = state.runCancellation({ batchId: 'batch-a' });
+  assert.equal(calls, 1);
+  assert.strictEqual(first, duplicate);
+  state.setClient('client-b');
+  resolveCancel({ cancelledCount: 1 });
+  await first;
+  assert.equal(state.getState().cancellationPending, null);
+  assert.equal(state.getState().feedback, null);
+});
+
+it('article management controller stops a removal watch when switching clients or disposing', async function() {
+  const { createArticleManagementController } = await controller();
+  let stopped = 0;
+  const state = createArticleManagementController({ loadSnapshot: async () => ({}), watchRemoval: () => () => { stopped += 1; } });
+  state.setClient('client-a');
+  state.watchRemoval('removal-a');
+  state.setClient('client-b');
+  assert.equal(stopped, 1);
+  state.watchRemoval('removal-b');
+  state.dispose();
+  assert.equal(stopped, 2);
+});
