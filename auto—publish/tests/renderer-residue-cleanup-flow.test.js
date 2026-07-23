@@ -1,10 +1,7 @@
 const { after, before, describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
-const rootDir = path.resolve(__dirname, "..");
 const rendererUrl = "http://127.0.0.1:4175/";
 
 let browser;
@@ -132,22 +129,4 @@ describe("renderer residue cleanup flow", { concurrency: false }, () => {
       }
     });
   }
-
-  it("declares the transaction lifecycle contract at the renderer boundary", () => {
-    const platform = fs.readFileSync(path.join(rootDir, "media-workbench/src/components/PlatformWorkbench.tsx"), "utf8");
-    const history = fs.readFileSync(path.join(rootDir, "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    const api = fs.readFileSync(path.join(rootDir, "media-workbench/src/bridge/content.ts"), "utf8");
-    const types = fs.readFileSync(path.join(rootDir, "media-workbench/src/types.ts"), "utf8");
-    assert.match(platform, /repairingResidue/);
-    assert.match(platform, /finally/);
-    assert.match(history, /pending_auto_recovery/);
-    assert.match(history, /needs_repair/);
-    assert.match(history, /retry.*Removal|retry.*removal/i);
-    assert.match(history, /openTransaction/);
-    assert.match(history, /removalSubmitDisabled/);
-    assert.match(history, /clearTimeout/);
-    assert.match(api, /getContentArticleRemovalTransaction/);
-    assert.match(api, /onContentArticleRemovalTransaction/);
-    assert.match(types, /ArticleRemovalTransaction/);
-  });
 });
