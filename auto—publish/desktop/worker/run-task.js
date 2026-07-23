@@ -101,31 +101,6 @@ process.on("message", function(message) {
       return;
     }
 
-    if (task === "batch") {
-      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
-      configureWorkerEnvironment(options.paths);
-      const { clearStopSignal } = require("../../src/core/stop-signal");
-      const { subscribe } = require("../../src/core/logger");
-      const { runPublicationBatch } = require("../../src/app/publish-batch");
-      clearStopSignal();
-      const unsubscribe = subscribe(function(entry) {
-        send("log", entry);
-      });
-
-      try {
-        const result = await runPublicationBatch(Object.assign({}, options, {
-          interactive: false,
-          shouldStop: function() {
-            return stopRequested;
-          }
-        }));
-        send("result", { ok: true, data: result });
-      } finally {
-        unsubscribe();
-      }
-      return;
-    }
-
     if (task === "platform-submit") {
       const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
       configureWorkerEnvironment(options.paths);

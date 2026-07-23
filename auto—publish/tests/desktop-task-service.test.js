@@ -8,7 +8,7 @@ const os = require("node:os");
 
 const { createDesktopTaskService } = require("../desktop/services/desktop-task-service");
 
-it("passes complete storage paths to desktop workers and keeps worker config portable", async function() {
+it("passes complete storage paths to platform-submit workers and keeps worker config portable", async function() {
   const paths = {
     contentLibrary: "C:\\portable-content",
     localState: "C:\\local-state",
@@ -34,9 +34,10 @@ it("passes complete storage paths to desktop workers and keeps worker config por
   }
 
   const service = createDesktopTaskService({ cwd: paths.contentLibrary, paths: paths, fork: fakeFork });
-  await service.startBatch({ interactive: false });
+  await service.startPlatformSubmit({ tasks: [] });
 
   const first = calls[0];
+  assert.equal(first.args[0], "platform-submit");
   assert.equal(first.options.env.AUTO_PUBLISH_WORKSPACE, paths.contentLibrary);
   assert.equal(first.options.env.AUTO_PUBLISH_INPUT_DIR, paths.input);
   assert.equal(first.options.env.AUTO_PUBLISH_LOGS_DIR, paths.logs);

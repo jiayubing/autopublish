@@ -39,7 +39,6 @@ function registerIpc(deps) {
   });
   const guarded = Object.assign({}, values, { ipcMain: guardedIpcMain });
   const modules = {};
-  modules.batch = require("./batch-ipc").registerBatchIpc(guarded);
   modules.media = require("./media-ipc").registerMediaIpc(guarded);
   modules.platform = require("./platform-ipc").registerPlatformIpc(guarded);
   modules.aiProvider = require("./ai-provider-ipc").registerAiProviderIpc(guarded);

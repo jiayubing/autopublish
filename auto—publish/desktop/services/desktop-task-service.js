@@ -35,11 +35,6 @@ function createDesktopTaskService(opts) {
     return storagePaths.tmp || path.join(cwd, "tmp");
   }
 
-  var isBatchRunning = false;
-  var isStopPending = false;
-  var snapshotTask = null;
-  var batchTask = null;
-  var batchChild = null;
   var platformChild = null;
   var isPlatformRunning = false;
   var platformAbort = null;
@@ -50,26 +45,19 @@ function createDesktopTaskService(opts) {
     persistedSnapshotPath: storagePaths.localState ? path.join(storagePaths.localState, "platform-task-snapshot.json") : null
   });
 
-  function emitBatchState() {
-    sendToRenderer("batch-state", {
-      isBatchRunning: isBatchRunning,
-      isStopPending: isStopPending
-    });
-  }
-
   function emitPlatformState(extra) {
     if (platformTaskStateStore.getSnapshot().runId) {
       platformTaskStateStore.setControls(Object.assign({
-        isBatchRunning: isBatchRunning,
-        isStopPending: isStopPending,
+        isBatchRunning: false,
+        isStopPending: false,
         isPlatformRunning: isPlatformRunning
       }, extra || {}));
       sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
       return;
     }
     sendToRenderer("platform-state", Object.assign({
-      isBatchRunning: isBatchRunning,
-      isStopPending: isStopPending,
+      isBatchRunning: false,
+      isStopPending: false,
       isPlatformRunning: isPlatformRunning
     }, extra || {}));
   }
@@ -161,45 +149,6 @@ function closeBrowserSessions() {
       execFileProcess(nodeExe, [cliJs, "-s=" + session, "close"], { timeout: 5000, windowsHide: true, env: env }, function() {});
     });
 }
-
-  function refreshQueueSnapshot(options) {
-    var payload = options || {};
-    if (!snapshotTask) {
-      snapshotTask = spawnDesktopTask("snapshot", payload).promise.finally(function() {
-        snapshotTask = null;
-      });
-    }
-    return snapshotTask;
-  }
-
-  async function startBatch(options, hooks) {
-    if (isBatchRunning) throw new Error("当前已有发文批次正在运行。");
-    clearStopSignal(stopSignalDirectory());
-    isBatchRunning = true;
-    isStopPending = false;
-    emitBatchState();
-    try {
-      var task = spawnDesktopTask("batch", options || {}, { onLog: hooks && hooks.onLog ? hooks.onLog : function() {} });
-      batchChild = task.child;
-      batchTask = task.promise;
-      return await batchTask;
-    } finally {
-      batchChild = null; batchTask = null;
-      isBatchRunning = false; isStopPending = false;
-      emitBatchState();
-      sendToRenderer("queue-updated", await refreshQueueSnapshot(options));
-    }
-  }
-
-  function stopBatch() {
-    if (!isBatchRunning || !batchChild) throw new Error("当前没有正在运行的发文批次。");
-    if (isStopPending) return { alreadyRequested: true };
-    requestStopSignal("desktop_stop_button", stopSignalDirectory());
-    batchChild.send({ type: "stop" });
-    isStopPending = true;
-    emitBatchState();
-    return { alreadyRequested: false };
-  }
 
   async function startPlatformSubmit(plan, hooks) {
     if (isPlatformRunning) throw new Error("当前已有平台投稿任务正在运行。");
@@ -366,7 +315,7 @@ function closeBrowserSessions() {
       activeRuntimeCleanup = null;
     }
     if (isPlatformRunning) platformTaskStateStore.markInterrupted();
-    [batchChild, platformChild].forEach(function(child) {
+    [platformChild].forEach(function(child) {
       if (child) {
         try { child.kill(); } catch (_) {}
       }
@@ -376,14 +325,13 @@ function closeBrowserSessions() {
   function getState() {
     var snapshot = platformTaskStateStore.getSnapshot();
     return Object.assign(snapshot, {
-      isBatchRunning: isBatchRunning,
-      isStopPending: isStopPending || snapshot.isStopPending,
+      isBatchRunning: false,
+      isStopPending: snapshot.isStopPending,
       isPlatformRunning: isPlatformRunning || snapshot.isPlatformRunning
     });
   }
 
   return {
-    refreshQueueSnapshot, startBatch, stopBatch,
     startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState, dispose
   };
 }

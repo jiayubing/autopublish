@@ -27,7 +27,7 @@ it("production-like IPC assembly exposes the published record through article ma
 
     const handlers = new Map();
     const removedHandlers = [];
-    const taskService = { getState: () => ({}), refreshQueueSnapshot: () => ({}), startBatch: () => ({}), stopBatch: () => ({}) };
+    const taskService = { getState: () => ({}) };
     const deps = {
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: (channel) => removedHandlers.push(channel) },
       requireAuthenticated: async () => {},
@@ -88,7 +88,7 @@ it("production-like attention IPC retries a persisted local archive failure with
     const handlers = new Map();
     registerIpc({
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: () => {} }, requireAuthenticated: async () => {}, rootDir: root, paths,
-      taskService: { getState: () => ({}), refreshQueueSnapshot: () => ({}), startBatch: () => ({}), stopBatch: () => ({}) }, sendToRenderer: () => {},
+      taskService: { getState: () => ({}) }, sendToRenderer: () => {},
       aiContentService: { listGeneratedArticles: () => [{ id: "article-1", clientId: "client-1", title: "Published title", status: "saved" }], listTrashedArticles: () => [], listArticleRemovalTransactions: () => [] },
       contentSubmissionService: submission, publicationLedger: ledger, archiveActionPort: archiveService, platformSettingsService: {}, aiProviderService: {}, contentGenerationBatchService: { get: () => null }, doubaoCollectionService: {}, runtimeDiagnosticsService: {}
     });

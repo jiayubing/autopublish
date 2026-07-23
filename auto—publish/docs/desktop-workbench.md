@@ -77,10 +77,10 @@ content sources without rescanning clients or templates.
 
 ## Architecture
 
-- **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`batch-ipc.js`, `media-ipc.js`, `platform-ipc.js`
+- **Main process:** `desktop/main.js` (lifecycle only) 鈫?`desktop/ipc/register.js` 鈫?`media-ipc.js`, `platform-ipc.js`
 - **Services:** `desktop/services/ipc-response.js`, `media-workbench-service.js`, `platform-workbench-service.js`, `media-order-service.js`, `desktop-task-service.js`
 - **Renderer:** React source under `media-workbench/src`; production loads only the packaged `media-workbench/dist` bundle.
-- **Preload API:** grouped under `desktopConsole.batch`, `.media`, `.platforms`, `.orders`
+- **Preload API:** grouped under `desktopConsole.media`, `.platforms`, `.orders`
 - **Content handoff API:** `desktopConsole.content.previewGenerationSubmissionHandoff` and
   `desktopConsole.content.commitGenerationSubmissionHandoff` return only safe
   IDs, counts, statuses, and reason codes; renderer paths, article bodies,
