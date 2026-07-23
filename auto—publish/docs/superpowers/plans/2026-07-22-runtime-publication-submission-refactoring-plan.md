@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-22  
 **基线：** `2a018fe`  
-**状态：** 实施中；Phase 0-6 已完成。Phase 7 的 Controller ownership 实现已收口，页面级回归与最终 Gate 仍在执行；不得提前标为已完成。P2 仍因未满足启动条件而不实施。临时 `release-alpha-nsis/` 未经授权不能清理，故正式 alpha clean build、smoke 与最终工作区清洁 Gate 尚未通过。
+**状态：** 已完成；Phase 0-7 的实现与最终 Gate 均已通过。P2 仍未达到启动条件，Phase 8、9 不实施：**不值得修改。** 临时 `release-alpha-nsis/` 已按用户授权归档到仓库外的 `F:\AutoPublish-archives\release-alpha-nsis`；正式 alpha clean build、smoke 与工作区清洁 Gate 已通过。
 **范围：** Electron 主进程运行时组装、发布账本注入、普通平台 Worker 归档事实、投稿批次查询、投稿模块深化、IPC 注册、相关 Renderer 控制器与测试  
 **依据：** 全项目只读架构审查、静态依赖图、生产调用链复核、投稿批次内存基准、`CONTEXT.md`、ADR 0003-0004，以及 `2026-07-21` 架构深化计划实施后的剩余问题
 
@@ -237,9 +237,9 @@ Phase 1-3 可以分别提交，但不得并行修改同一个状态转换函数�
 6. `e320a97`、`e38b85d`、`95959b9`：Workspace Runtime 生命周期与集中 invalidation policy
 7. `77f22ca` `refactor(desktop): retire unused legacy remote batch execution`
 
-Phase 7 收尾中：`PlatformWorkbench` 已将提交、停止、暂停、残留修复、选择和 terminal refresh 生命周期委托给 platform submission controller；controller 使用 request identity 忽略陈旧响应、阻止重复命令，并对每个主进程 terminal revision 只刷新一次队列。`GeneratedArticlesView` 已将客户/request identity、selection、busy、取消、确认、回收事务和 watch/poll 生命周期委托给 article-management controller；发布阶段继续消费主进程 `workflowByArticle`。控制器定向行为测试与 Renderer/bridge 类型检查已通过；完整页面级回归曾在 304 秒内未给出结果，必须重跑后才可通过 Phase 7 Gate。
+Phase 7 已完成：`PlatformWorkbench` 已将提交、停止、暂停、残留修复、选择和 terminal refresh 生命周期委托给 platform submission controller；controller 使用 request identity 忽略陈旧响应、阻止重复命令，并对每个主进程 terminal revision 只刷新一次队列。`GeneratedArticlesView` 已将客户/request identity、selection、busy、取消、确认、回收事务和 watch/poll 生命周期委托给 article-management controller；发布阶段继续消费主进程 `workflowByArticle`。控制器定向行为测试、Renderer 页面行为回归与 Renderer/bridge 类型检查均已通过。
 
-最终验证仅记录已提供结果：`npm test` 完成，928 通过、0 失败、7 跳过；`npm run pack:alpha` 在 124 秒执行窗口内超时，未标记为通过。
+最终验证（2026-07-23）：`npm run lint`、`npm run typecheck:renderer`、`npm run typecheck:bridge`、`npm test`（931 通过、0 失败、7 项 Windows symlink 权限跳过）、`npm run test:auth`（16/16）、`npm run build:renderer`、`node --test tests/production-packaging.test.js` 和 `npm run verify` 均通过。`npm run pack:alpha` 从干净提交 `6da1187` 成功构建到 `release-alpha`；package contents smoke、DOCX runtime smoke 和隔离启动 smoke 均通过。portable artifact、embedded FileVersion/ProductVersion、package.json 和 build-info 的版本均为 `1.0.1`。
 
 Phase 3 的结构性 gate 已通过：`listBatches()` 的真实 store 操作计数改为单次 list、每 item sidecar 至多一次读取，并保持近似线性。1000-batch 墙钟 p95 无法作为与旧 fixture 的可比 gate（新路径还包含安全 DTO clone、attention 与 transaction 派生，而旧 fixture 不含等价工作）；该不可比性已记录并接受，未把墙钟数字表述为性能提升承诺。
 
@@ -704,7 +704,7 @@ node --test tests/platform-ipc-boundary.test.js tests/platform-submission-invoca
 **风险：** 中；可能产生焦点、Escape、按钮 busy 状态和响应式布局回归。  
 **成本：** 5-8 天。
 
-**实施状态（2026-07-23）：** 收尾中。platform submission controller 管理 request identity、submit/stop/pause、选择、residue inspection/cleanup、terminal refresh 和 dispose；article-management controller 管理 client/request identity、management snapshot、selection、busy/confirmation、cancellation、removal transaction watch/poll、客户端重置和 dispose。视图只消费 controller snapshot/command，并直接使用 snapshot `workflowByArticle`；完整页面级回归尚需在可完成的执行窗口重跑。
+**实施状态（2026-07-23）：** 已完成。platform submission controller 管理 request identity、submit/stop/pause、选择、residue inspection/cleanup、terminal refresh 和 dispose；article-management controller 管理 client/request identity、management snapshot、selection、busy/confirmation、cancellation、removal transaction watch/poll、客户端重置和 dispose。视图只消费 controller snapshot/command，并直接使用 snapshot `workflowByArticle`；完整页面级回归已通过。
 
 ### Files
 
