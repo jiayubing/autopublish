@@ -46,10 +46,6 @@ test("phase 1 contracts stay pure while renderer and worker load only shared def
       .parseWorkerPublishDto,
     "function",
   );
-  assert.equal(
-    fs.existsSync(path.join(root, "src/infrastructure/operational-store")),
-    false,
-  );
 });
 
 test("two platform fixtures and the fake publisher validate the common contract without remote calls", async () => {

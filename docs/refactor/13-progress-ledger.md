@@ -37,8 +37,8 @@
 |---:|---|---|---|---|---|---|
 | 0 工程基线 | COMPLETE | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | `0bcbbfcca9ac4baf140359e048f3bf706f7b9526` | canonical本地门禁、静态workflow契约与link安全172/172均通过 | 无；remote/PR/push/required checks为`NOT_APPLICABLE` | `docs/refactor/handoffs/phase-00.md` |
 | 1 领域契约 | COMPLETE | `926723f076cd1d8c88beb35695567bfb74df6639` | `027e9f88e00cb206669c2490cec9fcad7e6a47ad` | 178个默认测试文件、Phase 01 contract/architecture测试、严格类型检查、renderer/worker/package smoke均通过 | 无；不得在本任务执行 | `docs/refactor/handoffs/phase-01.md` |
-| 2 OperationalStore | READY | — | — | Phase 01里程碑与交接已完成 | 隔离workspace路径需授权 | — |
-| 3 PublicationWorkflow | NOT_STARTED | — | — | — | 迁移副本需授权 | — |
+| 2 OperationalStore | COMPLETE | `7cab1c9aad167c7e2eca8f1dd2732124ba24a434` | 当前 `HEAD`（`refactor(phase-02): complete operational store`） | 182测试文件、默认977/977、Phase 02 15/15、auth 16/16、links 172/172、packaging 33/33、Electron SQLite probe及所有canonical门禁通过 | 仅合成workspace；未请求或访问真实库 | `docs/refactor/handoffs/phase-02.md` |
+| 3 PublicationWorkflow | NOT_STARTED | — | — | Phase 02里程碑已固化；下一任务可标为READY后开始 | 迁移副本需授权 | — |
 | 4 Platform/Adapters | NOT_STARTED | — | — | — | 平台fixture/测试账号/TLS | — |
 | 5 Content生命周期 | NOT_STARTED | — | — | — | 内容迁移副本需授权 | — |
 | 6 Renderer/IPC | NOT_STARTED | — | — | — | 可访问性手工smoke | — |
