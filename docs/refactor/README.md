@@ -69,4 +69,4 @@ docs/refactor/XX-phase-YY-....md 这一阶段。
 
 ## 6. 当前入口
 
-当前应从阶段0开始。当前审查基线是 `master@e8d817847bab3a9e6020006cab35340f645e527f`，但工作区已有用户维护的历史文档删除和未跟踪审查/优化文档；阶段0开始前必须重新记录并由用户决定如何固化这些变化，任何 Codex 任务都不得自行恢复、清理或提交它们。
+当前应从阶段0开始。活跃worktree是`F:\官媒投稿-refactor`，分支是`codex/refactor-program`，规划基线是`dc5265359ca10a866ccd10e56a84314214b7897f`；其父commit及原审查代码基线是`master@e8d817847bab3a9e6020006cab35340f645e527f`。阶段0任务必须在此worktree重新核验HEAD与状态，不得回到原工作区执行。

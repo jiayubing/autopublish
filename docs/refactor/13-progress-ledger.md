@@ -6,15 +6,17 @@
 
 | 项目 | 当前记录 |
 |---|---|
-| 规划基线分支 | `master` |
-| 规划基线commit | `e8d817847bab3a9e6020006cab35340f645e527f` |
+| 原审查代码基线 | `master@e8d817847bab3a9e6020006cab35340f645e527f` |
+| 重构规划分支 | `codex/refactor-program` |
+| 重构规划commit | `dc5265359ca10a866ccd10e56a84314214b7897f` |
+| 活跃worktree | `F:\官媒投稿-refactor` |
 | 规划日期 | 2026-07-24 Asia/Shanghai |
 | 目标形态 | 文件内容 + workspace SQLite运行状态 + Electron/React/Node |
 | 当前可执行阶段 | 阶段0 |
 | 普通功能开发 | 冻结 |
 | 正式release | 冻结 |
 
-阶段0开始时必须替换为实际commit。当前工作区已观察到用户维护的`auto—publish/docs/...` tracked删除，以及未跟踪的review/optimization/refactor文档；这些不是Codex可自行清理的噪声，必须由用户先决定如何固化。
+重构worktree已从独立规划commit创建；review、optimization、refactor、ADR和领域词汇已纳入该commit。原工作区`F:\官媒投稿`中用户维护的`auto—publish/docs/...`删除和未跟踪旧文档README没有进入重构分支，也不得由后续任务复制、恢复或清理。阶段0开始时必须重新核验当前HEAD和工作区状态。
 
 ## 2. 已冻结的架构决定
 
@@ -33,7 +35,7 @@
 
 | 阶段 | 状态 | 开始commit | 完成commit | 自动验证 | 人工验证 | Handoff |
 |---:|---|---|---|---|---|---|
-| 0 工程基线 | READY | — | — | — | CI ownership待确认 | — |
+| 0 工程基线 | READY | 阶段0任务开始时记录当前HEAD | — | worktree创建验证通过 | CI ownership待确认 | — |
 | 1 领域契约 | NOT_STARTED | — | — | — | — | — |
 | 2 OperationalStore | NOT_STARTED | — | — | — | 隔离workspace路径需授权 | — |
 | 3 PublicationWorkflow | NOT_STARTED | — | — | — | 迁移副本需授权 | — |
