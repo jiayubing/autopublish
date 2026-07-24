@@ -3,7 +3,7 @@
 ## 1. 状态
 
 - 状态：COMPLETE
-- 前一阶段完成证据：不适用；Phase 00是唯一不要求前序阶段完成的阶段，Phase 01仍为 `NOT_STARTED`。
+- 前一阶段完成证据：不适用；Phase 00是唯一不要求前序阶段完成的阶段。Phase 01已为 `READY`，但尚未执行。
 - 开始分支与commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`
 - Phase 0里程碑commit：`0bcbbfcca9ac4baf140359e048f3bf706f7b9526`（`refactor(phase-0): establish trusted engineering gates`）
 - 工作区状态：Phase 0代码、测试、workflow和主要文档已由上述本地里程碑提交固化；三份lockfile未修改。没有恢复或清理原工作区历史文档；本项目采用本地Git里程碑，remote/PR/push/required checks为`NOT_APPLICABLE`，未push、未创建PR、未配置remote。
