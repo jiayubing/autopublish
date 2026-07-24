@@ -31,7 +31,7 @@
 
 | OPT | 优先级 / 当前状态 | 关联发现 | 代码 | 测试 | 验证 | 审查 | 文档 | 实施前的关键门 |
 |---|---|---|---|---|---|---|---|---|
-| OPT-001 | P0 / 可实施 | F-H15、F-M01、F-M20、F-M21 | [ ] | [ ] | [ ] | [ ] | [ ] | 确认实际 CI 平台、required checks 管理权与 production seam |
+| OPT-001 | P0 / 可实施 | F-H15、F-M01、F-M20、F-M21 | [ ] | [ ] | [ ] | [ ] | [ ] | 确认本地Git里程碑、canonical门禁、file symlink能力与production seam；remote/required checks为`NOT_APPLICABLE` |
 | OPT-002 | P1 / 可实施 | F-H04 | [ ] | [ ] | [ ] | [ ] | [ ] | OPT-001；lock record/lease/Windows 回收规则评审 |
 | OPT-003 | P1 / 可实施 | F-H05、F-H07 | [ ] | [ ] | [ ] | [ ] | [ ] | OPT-001、002；recovery 状态、不变量、事实优先级评审 |
 | OPT-004 | P1 / 可实施 | F-H06；关联 F-H05 | [ ] | [ ] | [ ] | [ ] | [ ] | OPT-001；先与 OPT-003 对齐 interruption intent |
@@ -66,20 +66,20 @@
 ### 开始条件
 
 - [ ] 通用开始门全部满足。
-- [ ] 确认 Git 托管与 CI 平台；若不是 GitHub，记录等价根级配置和 required gate 证明方式。
+- [ ] 确认本地Git里程碑策略；本项目不配置remote，PR/push/required checks均为`NOT_APPLICABLE`。
 - [ ] 指定 OPT-001 的唯一 seam owner。
 
 ### 执行与检查
 
-- [ ] 按“根 workflow/cwd → 默认测试收集 → production seam 测试 → required check”执行 OPT-001。
+- [ ] 按“根 workflow/cwd静态契约 → 默认测试收集 → production seam 测试 → 本地里程碑”执行 OPT-001。
 - [ ] 默认命令收集 `.js` 和 `.mjs`，且不以跳过有效测试换取全绿。
 - [ ] 运行默认测试、auth、lint、renderer/bridge typecheck、renderer build、links 和 production packaging。
-- [ ] 以真实 PR/push 证明 jobs 被触发并可被设为 required checks。
+- [ ] 运行静态workflow契约；不以remote、PR/push或required checks作为证据。
 
 ### 完成条件
 
 - [ ] OPT-001 的代码、测试、验证、审查和文档五列全部完成。
-- [ ] required checks 可见且全绿，收集清单含 `.mjs`，production 架构断言不读取影子 runtime。
+- [ ] canonical本地门禁全绿、收集清单含 `.mjs`，production 架构断言不读取影子 runtime；若file symlink能力缺失则保持BLOCKED。
 - [ ] 若 workflow 未触发、默认套件仍红或 production seam 不明确，已停止后续合并并执行批次回滚策略。
 
 ## 4. 批次 1：发布阻断、安全与灾备隔离

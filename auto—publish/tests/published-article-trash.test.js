@@ -188,6 +188,39 @@ describe("published article trash lifecycle", () => {
     }
   });
 
+  it("persists and restores explicit published queue archive states", () => {
+    const current = fixture();
+    try {
+      ["pending", "archived", "failed"].forEach((status, index) => {
+        const batch = current.batches[index];
+        const item = batch.items[0];
+        current.batchStore.updateItem(batch.batchId, {
+          publicationId: item.publicationId,
+          attemptId: item.attemptId,
+          targetPlatformId: item.targetPlatformId
+        }, { status: "published", publicationStatus: "published" });
+        current.batchStore.updateLocalArchive(batch.batchId, {
+          publicationId: item.publicationId,
+          attemptId: item.attemptId,
+          targetPlatformId: item.targetPlatformId
+        }, {
+          status,
+          errorCode: status === "failed" ? "PUBLISHED_ARCHIVE_FAILED" : null,
+          updatedAt: "2026-07-23T00:00:00.000Z"
+        });
+
+        const restored = createSubmissionBatchStore({ workspaceRoot: current.root }).get(batch.batchId).items[0].localArchive;
+        assert.deepEqual(restored, {
+          status,
+          errorCode: status === "failed" ? "PUBLISHED_ARCHIVE_FAILED" : null,
+          updatedAt: "2026-07-23T00:00:00.000Z"
+        });
+      });
+    } finally {
+      fs.rmSync(current.root, { recursive: true, force: true });
+    }
+  });
+
   it("safely derives cleanup for historical published batches without local archive state", () => {
     const current = fixture();
     try {

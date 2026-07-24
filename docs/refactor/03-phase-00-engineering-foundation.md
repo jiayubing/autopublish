@@ -55,7 +55,7 @@
 
 ### 6.2 恢复根级CI
 
-1. 在Git根建立可被实际托管平台发现的workflow。
+1. 在Git根建立可移植、可静态验证的workflow；本项目不配置remote，也不以托管平台作为验收平台。
 2. 每个应用命令显式以`auto—publish`为working directory。
 3. 至少运行默认测试、auth、lint、renderer/bridge typecheck、renderer build、link安全、migration/backup脚本测试和production packaging契约。
 4. 明确Node 24 Electron/desktop和Node 22 auth的运行矩阵；不要用一个版本通过推断另一个版本安全。
@@ -118,7 +118,7 @@ npm run format:check
 
 ## 9. 完成条件
 
-- 真实PR/push能够触发全部required jobs，或本地已完成且明确只剩托管平台人工启用。
+- canonical本地命令、静态workflow契约和本地Git里程碑commit均有可复核证据；真实PR/push、remote和required checks为`NOT_APPLICABLE`。
 - 默认测试收集清单含`.mjs`且全绿。
 - 旧架构seam测试不再失败，production runtime/controller各只有一个。
 - 根CI、本地命令和package脚本的cwd一致。
@@ -128,7 +128,7 @@ npm run format:check
 ## 10. 停止条件
 
 - 无法识别真实production runtime/controller。
-- CI托管平台或required checks所有权不明，导致无法完成真实触发证明。
+- 本机无法实际运行适用的安全门禁（例如file symlink capability缺失）。
 - 扩大测试发现后出现无法归类的大量失败。
 - 基线包含未解释的业务代码变化。
 - manifest工具需要读取真实敏感内容才能工作。
@@ -137,5 +137,5 @@ npm run format:check
 
 ## 11. 交接重点
 
-交接必须给出：阶段完成commit、canonical全局命令、测试文件/测试数量、唯一production runtime/controller路径、仍需人工设置的required checks，以及阶段1可以依赖的架构门禁名称。
+交接必须给出：本地阶段里程碑commit、canonical全局命令、测试文件/测试数量、唯一production runtime/controller路径、静态workflow契约和仍需本机人工启用的能力，以及阶段1可以依赖的架构门禁名称。remote/PR/push/required checks记录为`NOT_APPLICABLE`。
 

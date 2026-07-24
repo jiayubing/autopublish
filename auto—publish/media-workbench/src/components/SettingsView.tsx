@@ -1,58 +1,445 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ExternalLink, FolderOpen, Info, RefreshCw } from 'lucide-react';
-import { cancelWorkspaceSelection, confirmWorkspaceSelection, getCurrentWorkspace, openCurrentWorkspace, requestWorkspaceSwitch } from '../bridge/workspace';
-import { getRuntimeDiagnostics, runBrowserSelfCheck } from '../bridge/workspace';
-import type { RuntimeCapability, RuntimeDiagnostics } from '../bridge/workspace';
-import { WorkspaceBootstrapState, WorkspaceConfirmationResult, WorkspaceCurrent } from '../types';
-import { getSettingsCommandState } from '../workspace-ui-logic.js';
-import { mapRuntimeCapabilityState } from '../runtime-capability-state.cjs';
-import AiProviderSettings from './AiProviderSettings';
-import WorkspaceSelectionPanel from './WorkspaceSelectionPanel';
-import SettingsNavigation, { SettingsSection } from './settings/SettingsNavigation';
-import SettingsOverview from './settings/SettingsOverview';
-import MediaProviderSettings from './settings/MediaProviderSettings';
-import HepanProviderSettings from './settings/HepanProviderSettings';
-import { useConfirmation } from '../confirmation';
+import React, { useEffect, useRef, useState } from "react";
+import { ExternalLink, FolderOpen, Info, RefreshCw } from "lucide-react";
+import {
+  cancelWorkspaceSelection,
+  confirmWorkspaceSelection,
+  getCurrentWorkspace,
+  openCurrentWorkspace,
+  requestWorkspaceSwitch,
+} from "../bridge/workspace";
+import {
+  getRuntimeDiagnostics,
+  runBrowserSelfCheck,
+} from "../bridge/workspace";
+import type {
+  RuntimeCapability,
+  RuntimeDiagnostics,
+} from "../bridge/workspace";
+import {
+  WorkspaceBootstrapState,
+  WorkspaceConfirmationResult,
+  WorkspaceCurrent,
+} from "../types";
+import { getSettingsCommandState } from "../workspace-ui-logic.js";
+import { mapRuntimeCapabilityState } from "../runtime-capability-state.cjs";
+import AiProviderSettings from "./AiProviderSettings";
+import WorkspaceSelectionPanel from "./WorkspaceSelectionPanel";
+import SettingsNavigation, {
+  SettingsSection,
+} from "./settings/SettingsNavigation";
+import SettingsOverview from "./settings/SettingsOverview";
+import MediaProviderSettings from "./settings/MediaProviderSettings";
+import HepanProviderSettings from "./settings/HepanProviderSettings";
+import { useConfirmation } from "../confirmation";
 
-const READY_STATE: WorkspaceBootstrapState = { state: 'ready', workspacePath: null, envOverride: false };
-type StorageUsageCategory = { bytes: number; files: number; followedSymlinks?: number };
-type StorageUsage = { logs: StorageUsageCategory; temporary: StorageUsageCategory; docxCache: StorageUsageCategory; profiles: StorageUsageCategory; active?: boolean };
-type StorageMaintenanceApi = { getUsage: () => Promise<{ ok: boolean; data?: StorageUsage; error?: { message?: string } }>; cleanCaches: () => Promise<{ ok: boolean; data?: { blocked?: boolean }; error?: { message?: string } }> };
+const READY_STATE: WorkspaceBootstrapState = {
+  state: "ready",
+  workspacePath: null,
+  envOverride: false,
+};
+type StorageUsageCategory = {
+  bytes: number;
+  files: number;
+  followedSymlinks?: number;
+  skippedSymlinks?: number;
+};
+type StorageUsage = {
+  logs: StorageUsageCategory;
+  temporary: StorageUsageCategory;
+  docxCache: StorageUsageCategory;
+  profiles: StorageUsageCategory;
+  active?: boolean;
+};
+type StorageMaintenanceApi = {
+  getUsage: () => Promise<{
+    ok: boolean;
+    data?: StorageUsage;
+    error?: { message?: string };
+  }>;
+  cleanCaches: () => Promise<{
+    ok: boolean;
+    data?: { blocked?: boolean };
+    error?: { message?: string };
+  }>;
+};
 
-function getStorageMaintenanceApi(): StorageMaintenanceApi | null { return typeof window === 'undefined' ? null : (window as unknown as { desktopConsole?: { storageMaintenance?: StorageMaintenanceApi } }).desktopConsole?.storageMaintenance || null; }
-function formatBytes(bytes: number): string { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`; }
-function validationLabel(kind?: string): string { if (kind === 'existing_workspace') return '已有工作区，标记有效'; if (kind === 'empty_directory') return '空目录，可初始化'; if (kind === 'nonempty_directory') return '非空目录，需确认初始化'; return '未读取到验证状态'; }
-function capabilityClass(capability: RuntimeCapability): string { const tone = mapRuntimeCapabilityState(capability).tone; return tone === 'ready' ? 'text-emerald-700' : tone === 'unavailable' ? 'text-rose-700' : tone === 'optional' ? 'text-slate-500' : 'text-amber-700'; }
+function getStorageMaintenanceApi(): StorageMaintenanceApi | null {
+  return typeof window === "undefined"
+    ? null
+    : (
+        window as unknown as {
+          desktopConsole?: { storageMaintenance?: StorageMaintenanceApi };
+        }
+      ).desktopConsole?.storageMaintenance || null;
+}
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+function validationLabel(kind?: string): string {
+  if (kind === "existing_workspace") return "已有工作区，标记有效";
+  if (kind === "empty_directory") return "空目录，可初始化";
+  if (kind === "nonempty_directory") return "非空目录，需确认初始化";
+  return "未读取到验证状态";
+}
+function capabilityClass(capability: RuntimeCapability): string {
+  const tone = mapRuntimeCapabilityState(capability).tone;
+  return tone === "ready"
+    ? "text-emerald-700"
+    : tone === "unavailable"
+      ? "text-rose-700"
+      : tone === "optional"
+        ? "text-slate-500"
+        : "text-amber-700";
+}
 
 function WorkspaceSettings() {
   const { confirm } = useConfirmation();
-  const [current, setCurrent] = useState<WorkspaceCurrent | null>(null); const [loading, setLoading] = useState(true); const [operationError, setOperationError] = useState(''); const [switchOpen, setSwitchOpen] = useState(false); const [switchState, setSwitchState] = useState<WorkspaceBootstrapState>(READY_STATE); const [switchBusy, setSwitchBusy] = useState(false); const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(null); const mountedRef = useRef(true);
-  useEffect(() => { mountedRef.current = true; const request = currentWorkspaceRequestRef.current || (currentWorkspaceRequestRef.current = getCurrentWorkspace()); request.then((value) => { if (!mountedRef.current) return; setCurrent(value); setSwitchState({ state: 'ready', workspacePath: value.workspacePath, envOverride: value.envOverride }); }).catch(() => { if (mountedRef.current) setOperationError('无法读取当前工作区。'); }).finally(() => { if (mountedRef.current) setLoading(false); }); return () => { mountedRef.current = false; }; }, []);
-  const envOverride = current?.envOverride === true; const commandState = getSettingsCommandState({ loading, switchBusy, current, switchState });
-  const open = async () => { setOperationError(''); try { await openCurrentWorkspace(); } catch (_) { setOperationError('无法打开当前工作区。'); } };
-  const requestSwitch = async (): Promise<WorkspaceBootstrapState> => { if (!await confirm({ title: '切换工作区', message: '切换工作区会重启应用，是否继续？', confirmLabel: '切换工作区', tone: 'warning' })) return READY_STATE; setOperationError(''); return requestWorkspaceSwitch(); };
-  return <div className="space-y-4"><section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="flex items-center gap-2 text-base font-semibold text-slate-800"><FolderOpen className="h-4 w-4" />工作区</h3><div className="mt-4 break-all rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700" aria-label="当前工作区路径">{loading ? '读取中…' : current?.workspacePath || '未选择工作区'}</div><p className="mt-3 text-xs text-slate-600">校验状态：{loading ? '检查中…' : validationLabel(current?.validation?.kind)}</p>{envOverride && <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">当前工作区由环境变量 AUTO_PUBLISH_WORKSPACE 控制，不能在此更换。</p>}{operationError && <p role="alert" className="mt-3 text-sm text-rose-700">{operationError}</p>}<div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => void open()} disabled={commandState.openDisabled} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"><ExternalLink className="h-4 w-4" />打开文件夹</button><button type="button" onClick={() => setSwitchOpen(true)} disabled={commandState.switchDisabled} className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" />更换工作区</button></div></section>{switchOpen && !envOverride && <WorkspaceSelectionPanel state={switchState} onChooseDirectory={requestSwitch} onConfirmSelection={async (input): Promise<WorkspaceConfirmationResult> => confirmWorkspaceSelection(input)} onCancelSelection={cancelWorkspaceSelection} onStateChange={(next) => { setSwitchState(next); if (next.state === 'relaunching') setSwitchOpen(true); }} onBusyChange={setSwitchBusy} title="更换工作区" description="主进程会先校验新目录，再重启应用。" />}<section data-safety-note="Workspace switching does not copy, move, or delete the original data" className="flex gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800"><Info className="h-4 w-4 shrink-0" />工作区切换不会复制、移动或删除原有业务数据。</section></div>;
+  const [current, setCurrent] = useState<WorkspaceCurrent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [operationError, setOperationError] = useState("");
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [switchState, setSwitchState] =
+    useState<WorkspaceBootstrapState>(READY_STATE);
+  const [switchBusy, setSwitchBusy] = useState(false);
+  const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(
+    null,
+  );
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    const request =
+      currentWorkspaceRequestRef.current ||
+      (currentWorkspaceRequestRef.current = getCurrentWorkspace());
+    request
+      .then((value) => {
+        if (!mountedRef.current) return;
+        setCurrent(value);
+        setSwitchState({
+          state: "ready",
+          workspacePath: value.workspacePath,
+          envOverride: value.envOverride,
+        });
+      })
+      .catch(() => {
+        if (mountedRef.current) setOperationError("无法读取当前工作区。");
+      })
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const envOverride = current?.envOverride === true;
+  const commandState = getSettingsCommandState({
+    loading,
+    switchBusy,
+    current,
+    switchState,
+  });
+  const open = async () => {
+    setOperationError("");
+    try {
+      await openCurrentWorkspace();
+    } catch (_) {
+      setOperationError("无法打开当前工作区。");
+    }
+  };
+  const requestSwitch = async (): Promise<WorkspaceBootstrapState> => {
+    if (
+      !(await confirm({
+        title: "切换工作区",
+        message: "切换工作区会重启应用，是否继续？",
+        confirmLabel: "切换工作区",
+        tone: "warning",
+      }))
+    )
+      return READY_STATE;
+    setOperationError("");
+    return requestWorkspaceSwitch();
+  };
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+          <FolderOpen className="h-4 w-4" />
+          工作区
+        </h3>
+        <div
+          className="mt-4 break-all rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
+          aria-label="当前工作区路径"
+        >
+          {loading ? "读取中…" : current?.workspacePath || "未选择工作区"}
+        </div>
+        <p className="mt-3 text-xs text-slate-600">
+          校验状态：
+          {loading ? "检查中…" : validationLabel(current?.validation?.kind)}
+        </p>
+        {envOverride && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            当前工作区由环境变量 AUTO_PUBLISH_WORKSPACE 控制，不能在此更换。
+          </p>
+        )}
+        {operationError && (
+          <p role="alert" className="mt-3 text-sm text-rose-700">
+            {operationError}
+          </p>
+        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void open()}
+            disabled={commandState.openDisabled}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+          >
+            <ExternalLink className="h-4 w-4" />
+            打开文件夹
+          </button>
+          <button
+            type="button"
+            onClick={() => setSwitchOpen(true)}
+            disabled={commandState.switchDisabled}
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            更换工作区
+          </button>
+        </div>
+      </section>
+      {switchOpen && !envOverride && (
+        <WorkspaceSelectionPanel
+          state={switchState}
+          onChooseDirectory={requestSwitch}
+          onConfirmSelection={async (
+            input,
+          ): Promise<WorkspaceConfirmationResult> =>
+            confirmWorkspaceSelection(input)
+          }
+          onCancelSelection={cancelWorkspaceSelection}
+          onStateChange={(next) => {
+            setSwitchState(next);
+            if (next.state === "relaunching") setSwitchOpen(true);
+          }}
+          onBusyChange={setSwitchBusy}
+          title="更换工作区"
+          description="主进程会先校验新目录，再重启应用。"
+        />
+      )}
+      <section
+        data-safety-note="Workspace switching does not copy, move, or delete the original data"
+        className="flex gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800"
+      >
+        <Info className="h-4 w-4 shrink-0" />
+        工作区切换不会复制、移动或删除原有业务数据。
+      </section>
+    </div>
+  );
 }
 
 function RuntimeSettings() {
-  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics | null>(null); const [loading, setLoading] = useState(true); const [checking, setChecking] = useState(false); const [error, setError] = useState('');
-  const load = async () => { try { setDiagnostics(await getRuntimeDiagnostics()); } catch (_) { setError('无法读取运行环境状态。'); } finally { setLoading(false); } };
-  useEffect(() => { void load(); }, []);
-  const check = async () => { setChecking(true); setError(''); try { await runBrowserSelfCheck(); await load(); } catch (_) { setError('浏览器自检失败，请检查运行环境。'); setChecking(false); } };
-  const items: Array<[string, RuntimeCapability]> = diagnostics ? [['Playwright Node', diagnostics.capabilities.playwrightNode], ['Playwright CLI', diagnostics.capabilities.playwrightCli], ['浏览器通道', diagnostics.capabilities.browserChannel], ['DOCX 解析', diagnostics.capabilities.docx], ['河畔 Python', diagnostics.capabilities.hepan]] : [];
-  return <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-800">运行环境</h3><p className="mt-1 text-sm text-slate-500">运行时诊断只返回能力状态，不包含密钥或 Cookie。</p></div><button type="button" onClick={() => void check()} disabled={loading || checking} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">{checking ? '检查中…' : '运行浏览器自检'}</button></div>{error && <p role="alert" className="text-sm text-rose-700">{error}</p>}<div className="grid gap-2 sm:grid-cols-2">{items.map(([label, item]) => { const state = mapRuntimeCapabilityState(item); return <div key={label} className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2 text-sm"><span>{label}</span><span className={capabilityClass(item)}>{state.label}</span></div>; })}</div>{diagnostics?.buildInfo && <p className="text-xs text-slate-500">版本 {diagnostics.buildInfo.version} · commit {diagnostics.buildInfo.commit} · {diagnostics.buildInfo.dirty ? 'dirty' : 'clean'}</p>}</section>;
+  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try {
+      setDiagnostics(await getRuntimeDiagnostics());
+    } catch (_) {
+      setError("无法读取运行环境状态。");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const check = async () => {
+    setChecking(true);
+    setError("");
+    try {
+      await runBrowserSelfCheck();
+      await load();
+    } catch (_) {
+      setError("浏览器自检失败，请检查运行环境。");
+      setChecking(false);
+    }
+  };
+  const items: Array<[string, RuntimeCapability]> = diagnostics
+    ? [
+        ["Playwright Node", diagnostics.capabilities.playwrightNode],
+        ["Playwright CLI", diagnostics.capabilities.playwrightCli],
+        ["浏览器通道", diagnostics.capabilities.browserChannel],
+        ["DOCX 解析", diagnostics.capabilities.docx],
+        ["河畔 Python", diagnostics.capabilities.hepan],
+      ]
+    : [];
+  return (
+    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-800">运行环境</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            运行时诊断只返回能力状态，不包含密钥或 Cookie。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void check()}
+          disabled={loading || checking}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {checking ? "检查中…" : "运行浏览器自检"}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-rose-700">
+          {error}
+        </p>
+      )}
+      <div className="grid gap-2 sm:grid-cols-2">
+        {items.map(([label, item]) => {
+          const state = mapRuntimeCapabilityState(item);
+          return (
+            <div
+              key={label}
+              className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+            >
+              <span>{label}</span>
+              <span className={capabilityClass(item)}>{state.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      {diagnostics?.buildInfo && (
+        <p className="text-xs text-slate-500">
+          版本 {diagnostics.buildInfo.version} · commit{" "}
+          {diagnostics.buildInfo.commit} ·{" "}
+          {diagnostics.buildInfo.dirty ? "dirty" : "clean"}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function StorageSettings() {
-  const [usage, setUsage] = useState<StorageUsage | null>(null); const [loading, setLoading] = useState(true); const [cleaning, setCleaning] = useState(false); const [error, setError] = useState('');
-  const load = async () => { const api = getStorageMaintenanceApi(); if (!api) { setLoading(false); return; } try { const result = await api.getUsage(); if (!result.ok || !result.data) throw new Error(); setUsage(result.data); } catch (_) { setError('无法读取存储用量。'); } finally { setLoading(false); } };
-  useEffect(() => { void load(); }, []);
-  const clean = async () => { const api = getStorageMaintenanceApi(); if (!api || cleaning || usage?.active) return; setCleaning(true); setError(''); try { const result = await api.cleanCaches(); if (!result.ok || result.data?.blocked) throw new Error(); await load(); } catch (_) { setError('缓存清理失败，任务运行期间不能清理。'); } finally { setCleaning(false); } };
-  return <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-800">存储与清理</h3><p className="mt-1 text-sm text-slate-500">仅清理过期日志、临时文件和 DOCX 缓存，不删除业务数据。</p></div><button type="button" onClick={() => void clean()} disabled={loading || cleaning || usage?.active === true} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">{cleaning ? '清理中…' : '清理缓存'}</button></div>{error && <p role="alert" className="text-sm text-rose-700">{error}</p>}<div className="grid grid-cols-2 gap-3 text-sm text-slate-600"><div>日志：{loading ? '读取中…' : formatBytes(usage?.logs.bytes || 0)}</div><div>临时文件：{loading ? '读取中…' : formatBytes(usage?.temporary.bytes || 0)}</div><div>DOCX 缓存：{loading ? '读取中…' : formatBytes(usage?.docxCache.bytes || 0)}</div><div>浏览器配置：{loading ? '读取中…' : formatBytes(usage?.profiles.bytes || 0)}</div></div></section>;
+  const [usage, setUsage] = useState<StorageUsage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cleaning, setCleaning] = useState(false);
+  const [error, setError] = useState("");
+  const load = async () => {
+    const api = getStorageMaintenanceApi();
+    if (!api) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const result = await api.getUsage();
+      if (!result.ok || !result.data) throw new Error();
+      setUsage(result.data);
+    } catch (_) {
+      setError("无法读取存储用量。");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const clean = async () => {
+    const api = getStorageMaintenanceApi();
+    if (!api || cleaning || usage?.active) return;
+    setCleaning(true);
+    setError("");
+    try {
+      const result = await api.cleanCaches();
+      if (!result.ok || result.data?.blocked) throw new Error();
+      await load();
+    } catch (_) {
+      setError("缓存清理失败，任务运行期间不能清理。");
+    } finally {
+      setCleaning(false);
+    }
+  };
+  return (
+    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-800">存储与清理</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            仅清理过期日志、临时文件和 DOCX 缓存，不删除业务数据。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void clean()}
+          disabled={loading || cleaning || usage?.active === true}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {cleaning ? "清理中…" : "清理缓存"}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-rose-700">
+          {error}
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3 text-sm text-slate-600">
+        <div>
+          日志：{loading ? "读取中…" : formatBytes(usage?.logs.bytes || 0)}
+        </div>
+        <div>
+          临时文件：
+          {loading ? "读取中…" : formatBytes(usage?.temporary.bytes || 0)}
+        </div>
+        <div>
+          DOCX 缓存：
+          {loading ? "读取中…" : formatBytes(usage?.docxCache.bytes || 0)}
+        </div>
+        <div>
+          浏览器配置：
+          {loading ? "读取中…" : formatBytes(usage?.profiles.bytes || 0)}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function SettingsView() {
-  const [active, setActive] = useState<SettingsSection>('overview');
-  const content = active === 'overview' ? <SettingsOverview onSelect={setActive} /> : active === 'ai' ? <AiProviderSettings /> : active === 'media' ? <MediaProviderSettings /> : active === 'hepan' ? <HepanProviderSettings /> : active === 'workspace' ? <WorkspaceSettings /> : active === 'runtime' ? <RuntimeSettings /> : <StorageSettings />;
-  return <div className="min-w-0 max-w-6xl space-y-5"><div><h2 className="text-xl font-bold text-slate-800">配置中心</h2><p className="mt-1 text-sm text-slate-500">管理服务账号、工作区和运行环境。账号配置与内容工作区相互独立。</p></div><div className="grid min-w-0 gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]"><SettingsNavigation active={active} onChange={setActive} /><main className="min-w-0">{content}</main></div></div>;
+  const [active, setActive] = useState<SettingsSection>("overview");
+  const content =
+    active === "overview" ? (
+      <SettingsOverview onSelect={setActive} />
+    ) : active === "ai" ? (
+      <AiProviderSettings />
+    ) : active === "media" ? (
+      <MediaProviderSettings />
+    ) : active === "hepan" ? (
+      <HepanProviderSettings />
+    ) : active === "workspace" ? (
+      <WorkspaceSettings />
+    ) : active === "runtime" ? (
+      <RuntimeSettings />
+    ) : (
+      <StorageSettings />
+    );
+  return (
+    <div className="min-w-0 max-w-6xl space-y-5">
+      <div>
+        <h2 className="text-xl font-bold text-slate-800">配置中心</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          管理服务账号、工作区和运行环境。账号配置与内容工作区相互独立。
+        </p>
+      </div>
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <SettingsNavigation active={active} onChange={setActive} />
+        <main className="min-w-0">{content}</main>
+      </div>
+    </div>
+  );
 }

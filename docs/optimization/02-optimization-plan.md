@@ -49,7 +49,7 @@ OPT-008、OPT-029 需要人工决策；OPT-028 暂缓
 - 优先级：P0
 - 状态：可实施
 - 关联发现：F-H15、F-M01、F-M20、F-M21
-- 目标：PR/push 在 Git 根真实触发；默认命令收集 `.js/.mjs`；架构测试只约束 production runtime/controller seam，结果全绿。
+- 目标：根workflow具有严格静态契约；默认命令收集 `.js/.mjs`；架构测试只约束 production runtime/controller seam，结果全绿。本项目以canonical本地门禁和本地Git里程碑验收，remote、PR、push、required checks为`NOT_APPLICABLE`。
 - 非目标：本项不修业务 defect，不引入 CD、签名证书或发布审批系统。
 - 当前问题：workflow 位于嵌套目录且 working directory 错；默认 glob 漏 `.mjs`；两组测试约束影子/弃用 seam。
 - 根本原因：测试与 caller 未通过同一个 module interface，仓库布局变更后门禁路径没有同步。
@@ -59,14 +59,14 @@ OPT-008、OPT-029 需要人工决策；OPT-028 暂缓
 - 前置依赖：无。
 - 与其他优化项的关系：所有其他项的合并门禁；必须先完成。
 - 推荐设计：Git 根 workflow 的每个 step 显式 `working-directory: auto—publish`；测试发现使用 Node 支持的目录/显式双扩展；架构测试直接 import/read production seam。删除测试专用影子 interface，而不是再加第三层适配。
-- 实施步骤：1) 在根建立 workflow；2) 修 npm test 收集；3) 以 production runtime/controller 重写 seam 断言；4) 移除或明确标注不再生产的旧 module；5) 本地运行与 PR 运行各留一份收集清单；6) 确认 auth Node 22 与主 Node 24 的矩阵。
+- 实施步骤：1) 在根建立 workflow；2) 修 npm test 收集；3) 以 production runtime/controller 重写 seam 断言；4) 移除或明确标注不再生产的旧 module；5) 保留一份由 `test:discover` 输出、由静态workflow契约验证的本地收集清单；6) 确认 auth Node 22 与主 Node 24 的矩阵。
 - 兼容性考虑：npm script 名保持不变；外部脚本继续调用 `npm test`。
 - 数据迁移要求：无。
 - 安全影响：恢复 audit、安全测试和依赖检查门禁。
 - 性能影响：默认测试多收集 1 个 `.mjs`，耗时影响可忽略。
 - 测试要求：默认套件、auth、lint、renderer/bridge typecheck、link security、production packaging；增加“workflow 在根、cwd 正确、收集含 mjs”的契约测试。
-- 验收标准：真实 PR 页面出现全部 jobs；`npm test` 输出包含 `platform-submission-controller.test.mjs`；旧 seam 测试不再失败；不存在测试读取非 production runtime 来证明 production 架构的情况。
-- 发布或启用方式：先以普通 PR 验证 workflow，再设为 required checks。
+- 验收标准：静态workflow契约通过；`npm test` 输出包含 `platform-submission-controller.test.mjs`；旧 seam 测试不再失败；不存在测试读取非 production runtime 来证明 production 架构的情况；本地里程碑commit固化证据。
+- 发布或启用方式：workflow保留为可移植配置；以canonical本地命令和本地Git提交验收，不配置remote或required checks。
 - 回滚方案：回退 workflow/package script/test 变更；保留此前本地命令作为临时人工门禁。
 - 潜在回归风险：glob 变化可能收集依赖环境的测试；需显式分类 Electron/外部测试。
 - 复杂度：中
@@ -891,13 +891,13 @@ OPT-008、OPT-029 需要人工决策；OPT-028 暂缓
 
 - 包含：OPT-001。
 - 为什么：没有可发现且一致的门禁，后续任何修复的验证不可被合并流程信任。
-- 前置条件：Git 基线无代码漂移；确认使用 GitHub Actions 或等价外部CI。若不是GitHub，仍需根级可执行配置和证据。
-- 执行顺序：workflow/cwd → test收集 → production seam tests → required check。
+- 前置条件：Git 基线无代码漂移；根workflow可作为可移植配置被静态验证。
+- 执行顺序：workflow/cwd → test收集 → production seam tests → canonical本地门禁 → 本地里程碑commit。
 - 可以并行：不建议。
 - 不允许并行：不得多人分别定义旧/新seam。
-- 批次级测试：默认 test/auth/lint/typecheck/build/link/packaging；真实PR触发。
-- 批次完成标准：全部required checks可见且绿，收集清单包含 `.mjs`，无影子seam红测。
-- 失败时停止条件：workflow未触发、默认套件仍红或无法确定production seam时，停止后续合并。
+- 批次级测试：默认 test/auth/lint/typecheck/build/link/packaging；静态workflow契约。
+- 批次完成标准：canonical本地门禁全绿、收集清单包含 `.mjs`、无影子seam红测并有本地里程碑commit；file symlink能力不足时保持BLOCKED。
+- 失败时停止条件：适用本地门禁失败、默认套件仍红或无法确定production seam时，停止后续合并。
 - 回滚策略：回退配置；临时保留人工门禁，重新修正后再进入批次1。
 
 ### 批次 1：发布阻断、安全与灾备隔离

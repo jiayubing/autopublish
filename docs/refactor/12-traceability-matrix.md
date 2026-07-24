@@ -54,7 +54,7 @@
 | F-H12 | 接受 | OPT-009 | 3 | projection失败后remote order ID仍可查询 |
 | F-H13 | 接受 | OPT-010 | 7 | 备份destination独立验证 |
 | F-H14 | 接受 | OPT-010 | 7 | 缺失restore目标零副作用且失败 |
-| F-H15 | 接受 | OPT-001 | 0 | 根CI真实触发和required checks |
+| F-H15 | 接受 | OPT-001 | 0 | 根workflow静态契约、canonical本地门禁和本地里程碑commit；remote/PR/push/required checks为`NOT_APPLICABLE` |
 | F-M01 | 合并 | OPT-001 | 0 | 测试与production runtime同seam |
 | F-M02 | 暂缓后决定删除 | OPT-028 | 7 | 死sender/channel 0引用，诊断interface可用 |
 | F-M03 | 接受 | OPT-015 | 6 | initial/refresh统一request identity |
@@ -82,7 +82,7 @@
 
 | 阶段 | 必须关闭/转交的OPT |
 |---:|---|
-| 0 | OPT-001代码与本地门禁完成；托管required checks可标`PENDING_HUMAN` |
+| 0 | OPT-001代码、静态workflow契约与本地门禁完成；file symlink能力不足时保持`BLOCKED`，不以托管required checks替代 |
 | 1 | OPT-029的领域决策和identity contract完成；其运行验证转阶段4 |
 | 2 | OPT-002/013的存储implementation完成但production关闭由阶段3证明 |
 | 3 | OPT-002、003、009、013、014完成 |

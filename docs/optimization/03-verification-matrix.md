@@ -22,7 +22,7 @@
 
 | OPT | 关联发现 | 单元测试 | 集成/端到端测试 | 安全、并发、迁移与压力 | 静态/手工/回归范围 | 可观察验收标准 | 回滚验证 |
 |---|---|---|---|---|---|---|---|
-| OPT-001 | F-H15、F-M01、F-M20、F-M21 | test discovery、production seam断言 | 真实PR push触发全jobs；`.mjs` 6/6与seam测试进入同一默认命令 | 依赖audit、link security；Node22 auth/Node24 desktop矩阵 | 检查根workflow/cwd；全默认套件、lint/typecheck/build/packaging | PR上required checks可见且全绿；收集清单含`.mjs`；无测试用影子runtime | 回退配置后人工命令仍可运行；重新应用时结果一致 |
+| OPT-001 | F-H15、F-M01、F-M20、F-M21 | test discovery、production seam、workflow cwd/audit契约 | `.mjs`与seam/workflow契约进入同一默认命令 | production audit、link security；Node22 auth/Node24 desktop矩阵 | 检查根workflow/cwd；全默认套件、lint/typecheck/build/packaging | canonical本地门禁全绿、静态workflow契约通过、收集清单含`.mjs`；本机file symlink不具备时明确BLOCKED；remote/PR/push/required checks为`NOT_APPLICABLE` | 回退配置后本地命令仍可运行；重新应用时结果一致 |
 | OPT-002 | F-H04 | lock record、owner token、lease、旧锁、损坏锁 | 两进程争锁；强杀writer后恢复 | 并发/时钟回拨/PID复用；旧锁惰性兼容 | publication全回归；路径/symlink静态检查 | 活writer不被回收；过期遗锁可恢复；只影响对应聚合 | 关闭自动回收后新旧锁仍可读，记录不丢 |
 | OPT-003 | F-H05、F-H07 | recovery state transition、DTO脱敏、attention policy | 远端前/后、ledger写前/后、archive前强杀并重启 | 并发attempt；intent schema兼容；磁盘满/rename故障 | publication/submission/worker/attention全回归；人工检查状态表 | 每个故障点只产生安全终态或明确需核对；unknown不可重试；known outcome未落账不归档 | 关闭自动转换后intent仍可列出并人工核对 |
 | OPT-004 | F-H06；关联F-H05 | immutable run context、phase、message runId | fake child双run、旧消息、stop/pause/watchdog；短真实child强杀 | 并发/压力：快速stop-start 100次；cleanup恰好一次 | renderer task store/controller、worker、Hepan interval回归 | remote-started后的第二start拒绝；旧child不改新snapshot；terminal前不清busy | 回退执行文件后新recovery记录仍可读，暂停新任务 |
@@ -64,7 +64,7 @@
 
 | 批次 | 必须回归 |
 |---|---|
-| 0 | 全仓默认测试、auth、lint、两类typecheck、renderer build、links、packaging、真实CI触发 |
+| 0 | 全仓默认测试、auth、lint、两类typecheck、renderer build、links、packaging、静态workflow契约与本地里程碑commit；真实CI触发为`NOT_APPLICABLE` |
 | 1 | production制品、auth备份/restore、Doubao/Hepan安全工件、article trash/永久删除 |
 | 2 | publication、submission、worker、attention、archive、batch、renderer task snapshot |
 | 3 | Hepan/Toutiao/Lieju adapters、media order/resource target、ledger/recovery、attention |

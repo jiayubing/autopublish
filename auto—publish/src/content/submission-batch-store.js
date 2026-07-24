@@ -18,8 +18,10 @@ function createSubmissionBatchStore(options) {
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
   // Archive handling is local bookkeeping. It must never replace the remote
   // publication outcome (which remains in item.status/publicationStatus).
-  // Normalize legacy batches before applying the stricter persisted contract.
+  // A missing legacy archive fact is distinct from an archive that is pending.
+  // Only a new publication flow may explicitly persist the latter.
   function normalizeLocalArchive(value, fallbackTimestamp) {
+    if (value === undefined) return undefined;
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return { status: "pending", errorCode: null, updatedAt: fallbackTimestamp };
     }

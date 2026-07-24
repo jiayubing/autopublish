@@ -35,7 +35,7 @@
 
 | 阶段 | 状态 | 开始commit | 完成commit | 自动验证 | 人工验证 | Handoff |
 |---:|---|---|---|---|---|---|
-| 0 工程基线 | READY | 阶段0任务开始时记录当前HEAD | — | worktree创建验证通过 | CI ownership待确认 | — |
+| 0 工程基线 | IN_PROGRESS | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | — | canonical本地门禁、静态workflow契约与link安全172/172均通过 | 正在创建获授权的两提交本地里程碑 | `docs/refactor/handoffs/phase-00.md` |
 | 1 领域契约 | NOT_STARTED | — | — | — | — | — |
 | 2 OperationalStore | NOT_STARTED | — | — | — | 隔离workspace路径需授权 | — |
 | 3 PublicationWorkflow | NOT_STARTED | — | — | — | 迁移副本需授权 | — |
@@ -109,3 +109,58 @@
 - Release状态：
 - 普通功能开发状态：
 
+### 阶段0：工程基线与可信门禁
+
+- 状态：IN_PROGRESS（canonical本地门禁完成，等待获授权的本地里程碑commit）
+- 开始时间：2026-07-24 Asia/Shanghai（本阶段执行任务开始时）
+- 前一阶段完成证据：不适用；阶段0是唯一不要求前序阶段完成的阶段，阶段1及以后均保持未开始。
+- 开始分支/commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`
+- 当前分支/commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`（未提交）
+- Git根与应用根：Git根 `F:\官媒投稿-refactor`；应用根 `F:\官媒投稿-refactor\auto—publish`
+- 执行环境：Windows 11 专业版 build 26200；Node `v24.16.0`；npm `11.13.0`；Electron `43.1.1`
+- package lock状态：根应用、`auth-server`、`media-workbench` 三份 `package-lock.json` 均未修改；未执行普通依赖升级
+- 用户已有改动：未恢复、覆盖或清理原工作区历史文档删除及无关文件；未连接真实workspace、投稿、扣费或生产账号
+- 计划内文件范围：根 `.github/workflows/`、`auto—publish/package.json`、测试收集/manifest/锁验证脚本、架构/打包测试、确认无生产引用的旧seam资产、本阶段账本与交接；本任务获准的最小例外为submission batch `localArchive`存储及其测试
+- 已完成工作：
+  - 在Git根新增 `.github/workflows/ci.yml`，所有应用命令显式使用 `auto—publish` 工作目录，并分离Node 24 desktop与Node 22 auth矩阵。
+  - `scripts/run-tests.js` 收集并排序全部 `.test.js`/`.test.mjs`，以 `--test-concurrency=1` 串行运行；`test:discover` 输出176个测试文件并包含 `.mjs`。
+  - production runtime统一为 `desktop/workspace-runtime.js`，由 `desktop/main.js` 组装；production renderer controller seam为 `media-workbench/src/controllers/platform-submission-controller.js` 与 `media-workbench/src/article-management-controller.js`。架构测试直接约束这些入口。
+  - 删除无production引用的 `desktop/services/workspace-runtime.js`、`desktop/workspace-invalidation-policy.js` 和三个旧renderer hook及其旧测试；替换为production interface测试。
+  - 新增合成workspace只读manifest：仅输出分类计数、字节数、相对路径与SHA-256，不复制或输出正文；新增renderer构建锁的陈旧锁回收/活动owner保护测试。
+  - 新增本地测试/打包脚本：`test:discover`、`test:packaging`、`pack:smoke`；`pack:smoke` 已完成非签名目录制品构建。
+  - 修复原基线合并提交 `e8d817847bab3a9e6020006cab35340f645e527f` 的 `localArchive` 回归：历史batch缺失字段保持缺失，不再在读/写/transition时伪造为`pending`；新发布路径仍显式持久化`pending`。
+  - 保留 `submission-query` 对显式`pending`和`failed`的本地清理安全拦截；新增定向测试确认显式`pending`、`archived`、`failed`均可验证、持久化并跨store重建恢复。
+  - 根CI的阻断audit改为 `npm audit --omit=dev --audit-level=high`；完整开发依赖audit保留为非阻断已知风险报告，未运行`npm audit fix`且未修改任何lockfile。
+- 已核验的基线缺陷与收口：
+  - `desktop/services/storage-maintenance-service.js` 的原基线扫描器使用 `lstat` 后安全跳过文件链接和目录junction，却把该动作错误计入 `followedSymlinks`。字段现仅表示真正进入链接目标的次数（安全扫描恒为0）；新增兼容性的诊断字段 `skippedSymlinks`。定向回归以临时合成fixture实际创建文件链接和目录junction，证明不读取目标、不计入容量且清理不触及目标。
+  - `npm run test:links`已在本机实际运行：`file-symlink=yes`、`directory-junction=yes`、172/172通过、0 skip；旧的Windows EPERM阻塞结论失效。
+  - 本项目采用本地Git里程碑提交；Git未配置remote，PR/push/required checks为`NOT_APPLICABLE`，根workflow仅作可移植配置和静态契约对象。
+- Interface/schema偏差：无持久化schema、用户数据或外部平台行为变更；未执行真实迁移。唯一production runtime为 `desktop/workspace-runtime.js`，renderer使用明确的feature controller seam。
+- 测试命令与结果：
+  - `npm run test:discover`：通过，收集176个 `.test.js/.test.mjs`，包含新增CI workflow contract测试。
+  - 修复前定向基线：原工作树与重构工作树均为 `tests/published-article-trash.test.js` 7项中5通过、2失败（`:59`、`:191`）；均来自 `e8d817847bab3a9e6020006cab35340f645e527f`。
+  - 修复后定向测试：`node --test tests/published-article-trash.test.js`：8/8通过；相关submission/archive集成、查询与reconcile测试：13/13通过。
+  - `node --test tests/storage-maintenance-service.test.js`：修复前6项中5通过、1失败（`:75`，实际`followedSymlinks=1`）；修复后6/6通过、0 skip，覆盖文件链接与目录junction跳过、容量排除和清理边界。
+  - `npm test`：955 tests；955 pass、0 fail、0 skip；全部使用默认合成/临时fixture。
+  - `npm run test:auth`：16/16通过。
+  - `npm run lint`：通过。
+  - `npm run typecheck:renderer`、`npm run typecheck:bridge`：均通过。
+  - `npm run build:renderer`：通过，Vite转换2137 modules。
+  - `npm run test:packaging`：33/33通过。
+  - `npm run pack:smoke`：通过，`electron-builder --dir --config electron-builder.alpha.yml`完成非签名Windows目录制品；未发布正式包。
+  - `npm run format:check`：通过。
+  - `npm run test:links`：通过，172/172、0 skip；`file-symlink=yes`、`directory-junction=yes`。
+  - Phase 00定向架构/锁/发现/manifest/刷新/controller/CI测试：7个文件、14/14通过（`architecture-seams`、`ci-workflow-contract`、`renderer-harness-lock`、`test-discovery-contract`、`workspace-manifest`、`renderer-content-refresh-lifecycle`、`renderer-workbench-controller-seams`）。
+  - `npm audit --audit-level=high`：非阻断报告，`brace-expansion`、`fast-uri`两项high，均在开发/构建工具传递依赖；未执行`npm audit fix`。
+  - `npm audit --omit=dev --audit-level=high`：通过，0 high、0 critical（`found 0 vulnerabilities`）；这是CI阻断门禁。
+- 故障/迁移/回滚证据：
+  - manifest测试使用临时合成workspace，验证publication、batch、sidecar、order各1项，仅返回相对路径/计数/字节数/哈希且序列化结果不含合成正文、私密材料或绝对workspace路径；CLI测试确认只读行为。
+  - renderer harness锁测试验证陈旧锁可回收、活动owner锁不被回收；未对用户workspace做删除或恢复。
+  - Phase 00不引入schema迁移；正式workspace迁移、备份恢复和外部平台回滚均未执行，按阶段边界留给后续阶段/人工授权。
+- 人工待办：
+- 自动验证已完成：`npm run test:links`在启用Developer Mode后实际执行172/172并通过；未弱化、跳过或伪造成功。
+- remote、PR/push与required checks：`NOT_APPLICABLE`；根workflow保留为可移植配置并由静态契约验证。
+- 开发依赖风险待办：由依赖维护者在单独授权的工作中处理2个high；Phase 0不升级普通依赖。
+- 停止条件是否触发：否。所有canonical本地门禁已通过；正在按本任务授权创建两提交本地里程碑，提交完成前阶段保持`IN_PROGRESS`。
+- Handoff路径：`docs/refactor/handoffs/phase-00.md`
+- 下一阶段是否READY：否。阶段1保持 `NOT_STARTED`，直至本地里程碑提交完成；不得执行Phase 1。

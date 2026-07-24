@@ -2,6 +2,10 @@
 
 > 本文记录无法仅凭当前仓库代码可靠决定的事项。缺少决定时，不得用默认假设扩大实施范围。
 
+## 本地 Git 验收决定（2026-07-24）
+
+本项目只使用本地Git里程碑提交，不配置remote、不创建PR、不push，也不使用remote required checks。根`.github/workflows/ci.yml`保留为可移植自动化配置和静态验证对象；真实PR/push触发为`NOT_APPLICABLE`，不得作为Phase 0阻塞或完成条件。Phase 0仍必须实际运行适用canonical本地门禁，尤其`npm run test:links`；本机缺少真实file symlink能力时阶段必须保持`BLOCKED`。正式签名、发布和生产运维所有权仍由其后续阶段保留。
+
 ## 1. 主要实施风险
 
 | 风险 | 触发点 | 影响 | 控制与停止条件 | 关联 OPT |
@@ -28,7 +32,7 @@
 - 平台是否永久单账号，还是正式支持多品牌/多账号；稳定账号ID能否读取。
 - J4125/Cloudflare真实来源头与边缘限速配置。
 - Auth备份位置、加密/保留/异地策略、RPO/RTO、恢复演练负责人。
-- Git托管/CI平台、required check管理权限、production签名/制品/审批负责人。
+- production签名/制品/审批负责人；Git托管/CI平台与required checks对本项目本地Phase 0验收为`NOT_APPLICABLE`。
 - 真实客户、文章、媒体资源、attempt、auth RPS/不同loginName数量与延迟目标。
 - 失败诊断是否确有保留图片的业务需要，还是结构化摘要已足够。
 
@@ -84,18 +88,13 @@
 - 不做决定的后果：OPT-010代码可完成，但不能验收“生产可恢复”或宣称RPO/RTO。
 - 被阻塞的优化项：OPT-010的生产级完成门禁。
 
-## 7. 决策 D-005：CI、required checks与生产发布所有权
+## 7. 决策 D-005：本地Git验收与后续生产发布所有权
 
-- 决策问题：当前仓库实际托管在哪个CI平台，谁有权限设置required checks、签名证书和发布审批？
-- 背景：嵌套GitHub workflow不可发现；production要求证书环境变量，现场流程不在仓库。
-- 可选方案：
-  1. GitHub Actions根workflow + protected branch +签名release job（推荐，若仓库在GitHub）。
-  2. 外部CI，但提交同等可执行配置、日志和required gate证明。
-  3. 继续人工本地验证。
-- 各方案影响：方案1/2可审计；方案3容易漏跑且不能作为合并门禁。
-- 推荐方案：选择实际托管平台的自动门禁；签名/发布可后置，但测试required checks必须先恢复。
-- 不做决定的后果：OPT-001可准备本地配置但无法完成真实PR验收；OPT-007不能完成正式签名制品验收。
-- 被阻塞的优化项：OPT-001最终启用、OPT-007正式release验收。
+- 决策：Phase 0 只以 canonical 本地门禁、根workflow静态契约和本地Git里程碑commit验收。remote、PR、push与托管 required checks 统一为`NOT_APPLICABLE`；不得把它们作为 OPT-001 或 Phase 0 的完成条件。
+- 背景：本项目已明确不配置remote、不创建PR、不push。根`.github/workflows/ci.yml`仍是可移植自动化配置，必须继续接受静态契约测试，但不代表托管触发已执行。
+- Phase 0影响：OPT-001在全部适用本地门禁通过并形成里程碑commit后即可完成；不需要真实PR或托管required check证明。
+- 后续保留：正式签名、发布、证书和生产运维审批仍属于后续正式发布阶段的人工所有权，不能由本地Phase 0替代或宣称已验收。
+- 被阻塞的优化项：无本地Phase 0阻塞；OPT-007的正式签名/release验收仍等待生产所有权与人工授权。
 
 ## 8. 决策 D-006：失败诊断图像是否必要
 

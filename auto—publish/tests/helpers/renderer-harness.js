@@ -15,9 +15,35 @@ const viteEntry = path.join(
   "vite.js",
 );
 const buildLock = path.join(os.tmpdir(), "auto-publish-renderer-build.lock");
+const BUILD_LOCK_STALE_MS = 5 * 60 * 1000;
 let buildPromise;
 let browserPromise;
 const servers = new Map();
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function isStaleBuildLock(filename, now = Date.now()) {
+  let stat;
+  try {
+    stat = fs.statSync(filename);
+  } catch (_) {
+    return false;
+  }
+  if (now - stat.mtimeMs < BUILD_LOCK_STALE_MS) return false;
+  let owner = null;
+  try {
+    owner = JSON.parse(fs.readFileSync(filename, "utf8"));
+  } catch (_) {}
+  return !owner || !isProcessAlive(owner.pid);
+}
 
 function waitForServer(url) {
   const deadline = Date.now() + 20000;
@@ -70,9 +96,25 @@ function ensureBuild() {
           lockHandle = fs.openSync(buildLock, "wx");
         } catch (error) {
           if (error.code !== "EEXIST") throw error;
+          if (isStaleBuildLock(buildLock)) {
+            try {
+              fs.unlinkSync(buildLock);
+            } catch (_) {}
+            continue;
+          }
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
+      try {
+        fs.writeFileSync(
+          buildLock,
+          JSON.stringify({
+            pid: process.pid,
+            createdAt: new Date().toISOString(),
+          }),
+          "utf8",
+        );
+      } catch (_) {}
       try {
         if (
           !fs.existsSync(indexPath) ||
@@ -164,4 +206,10 @@ async function closeRenderer() {
   browserPromise = null;
 }
 
-module.exports = { closeRenderer, ensureBuild, startRenderer };
+module.exports = {
+  BUILD_LOCK_STALE_MS,
+  closeRenderer,
+  ensureBuild,
+  isStaleBuildLock,
+  startRenderer,
+};
