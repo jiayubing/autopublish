@@ -5,7 +5,13 @@ import type {
   ArticleAttentionResolution,
   PublicationHistoryRecord,
 } from "../types";
+import type {
+  PublicationTargetDto,
+  SafeOperationalErrorDto,
+} from "../contracts/phase-01-domain";
 import { ipcError, isElectron, unavailable } from "./transport";
+
+export type { PublicationTargetDto, SafeOperationalErrorDto };
 
 export async function listPublicationHistory(
   clientId: string,
