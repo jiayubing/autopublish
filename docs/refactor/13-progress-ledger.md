@@ -35,8 +35,8 @@
 
 | 阶段 | 状态 | 开始commit | 完成commit | 自动验证 | 人工验证 | Handoff |
 |---:|---|---|---|---|---|---|
-| 0 工程基线 | IN_PROGRESS | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | — | canonical本地门禁、静态workflow契约与link安全172/172均通过 | 正在创建获授权的两提交本地里程碑 | `docs/refactor/handoffs/phase-00.md` |
-| 1 领域契约 | NOT_STARTED | — | — | — | — | — |
+| 0 工程基线 | COMPLETE | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | `0bcbbfcca9ac4baf140359e048f3bf706f7b9526` | canonical本地门禁、静态workflow契约与link安全172/172均通过 | 无；remote/PR/push/required checks为`NOT_APPLICABLE` | `docs/refactor/handoffs/phase-00.md` |
+| 1 领域契约 | READY | — | — | Phase 0里程碑与交接已完成 | 不得在本任务执行 | — |
 | 2 OperationalStore | NOT_STARTED | — | — | — | 隔离workspace路径需授权 | — |
 | 3 PublicationWorkflow | NOT_STARTED | — | — | — | 迁移副本需授权 | — |
 | 4 Platform/Adapters | NOT_STARTED | — | — | — | 平台fixture/测试账号/TLS | — |
@@ -111,11 +111,11 @@
 
 ### 阶段0：工程基线与可信门禁
 
-- 状态：IN_PROGRESS（canonical本地门禁完成，等待获授权的本地里程碑commit）
+- 状态：COMPLETE
 - 开始时间：2026-07-24 Asia/Shanghai（本阶段执行任务开始时）
 - 前一阶段完成证据：不适用；阶段0是唯一不要求前序阶段完成的阶段，阶段1及以后均保持未开始。
 - 开始分支/commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`
-- 当前分支/commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`（未提交）
+- Phase 0里程碑commit：`0bcbbfcca9ac4baf140359e048f3bf706f7b9526`（`refactor(phase-0): establish trusted engineering gates`）
 - Git根与应用根：Git根 `F:\官媒投稿-refactor`；应用根 `F:\官媒投稿-refactor\auto—publish`
 - 执行环境：Windows 11 专业版 build 26200；Node `v24.16.0`；npm `11.13.0`；Electron `43.1.1`
 - package lock状态：根应用、`auth-server`、`media-workbench` 三份 `package-lock.json` 均未修改；未执行普通依赖升级
@@ -161,6 +161,6 @@
 - 自动验证已完成：`npm run test:links`在启用Developer Mode后实际执行172/172并通过；未弱化、跳过或伪造成功。
 - remote、PR/push与required checks：`NOT_APPLICABLE`；根workflow保留为可移植配置并由静态契约验证。
 - 开发依赖风险待办：由依赖维护者在单独授权的工作中处理2个high；Phase 0不升级普通依赖。
-- 停止条件是否触发：否。所有canonical本地门禁已通过；正在按本任务授权创建两提交本地里程碑，提交完成前阶段保持`IN_PROGRESS`。
+- 停止条件是否触发：否。所有canonical本地门禁已通过，并已由本地里程碑commit固化。
 - Handoff路径：`docs/refactor/handoffs/phase-00.md`
-- 下一阶段是否READY：否。阶段1保持 `NOT_STARTED`，直至本地里程碑提交完成；不得执行Phase 1。
+- 下一阶段是否READY：是。阶段1为`READY`，但本任务未执行且不得开始Phase 1。

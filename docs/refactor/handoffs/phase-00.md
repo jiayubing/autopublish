@@ -2,11 +2,11 @@
 
 ## 1. 状态
 
-- 状态：IN_PROGRESS（canonical本地门禁完成，等待获授权的本地里程碑commit）
+- 状态：COMPLETE
 - 前一阶段完成证据：不适用；Phase 00是唯一不要求前序阶段完成的阶段，Phase 01仍为 `NOT_STARTED`。
 - 开始分支与commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`
-- 当前分支与commit：`codex/refactor-program` / `bee1b3f24039bb77be0d13d9a663b88e5657e61c`（未提交）
-- 工作区状态：保留全部既有Phase 00改动；本次额外修改submission batch `localArchive`存储、manifest、CI契约、renderer重复测试、根CI audit门禁及本账本/交接。三份lockfile未修改。没有恢复或清理原工作区历史文档；本项目采用本地Git里程碑，remote/PR/push/required checks为`NOT_APPLICABLE`，未暂存、提交或推送。
+- Phase 0里程碑commit：`0bcbbfcca9ac4baf140359e048f3bf706f7b9526`（`refactor(phase-0): establish trusted engineering gates`）
+- 工作区状态：Phase 0代码、测试、workflow和主要文档已由上述本地里程碑提交固化；三份lockfile未修改。没有恢复或清理原工作区历史文档；本项目采用本地Git里程碑，remote/PR/push/required checks为`NOT_APPLICABLE`，未push、未创建PR、未配置remote。
 - 执行日期与环境：2026-07-24 Asia/Shanghai；Git根 `F:\官媒投稿-refactor`；应用根 `F:\官媒投稿-refactor\auto—publish`；Windows 11 build 26200；Node `v24.16.0`；Electron `43.1.1`
 
 ## 2. 已完成结果
@@ -145,8 +145,8 @@ media-workbench/src/components/content/GeneratedArticlesView.tsx
 
 - 代码未完成：无；默认测试和本地可运行门禁已完成。
 - 自动验证未完成：无；本机 `npm run test:links`实际执行172/172、0 skip。根workflow保留可移植配置并由静态契约验证；真实PR/push为`NOT_APPLICABLE`。
-- 收口待办：创建获授权的两提交本地里程碑。开发依赖2个high只作为非阻断风险记录，须在单独授权的依赖维护任务处理。
-- 触发的停止条件：否；所有canonical本地门禁通过，阶段为`IN_PROGRESS`直至里程碑commit完成。阶段1仍不得开始。
+- 收口：Phase 0里程碑已创建；本文件的SHA/状态记录由紧随其后的仅文档收口commit固化。开发依赖2个high只作为非阻断风险记录，须在单独授权的依赖维护任务处理。
+- 触发的停止条件：否；所有canonical本地门禁通过且已形成里程碑commit。阶段1可标记`READY`，但本任务不执行Phase 1。
 
 ## 11. 下一任务入口
 
@@ -155,4 +155,4 @@ media-workbench/src/components/content/GeneratedArticlesView.tsx
 - 首个回归测试：`auto—publish/tests/storage-maintenance-service.test.js:56`；原失败断言为`:75`。修复后6/6通过，文件链接/目录junction不跟随、目标不计容量且不清理。既有获准的submission batch回归 `published-article-trash.test.js` 亦保持8/8通过。
 - 允许修改范围：解决本阶段验证阻塞所需的CI/测试/架构门禁/文档，以及获准的submission batch `localArchive`合并回归；任何其他业务、schema、真实迁移和依赖升级需单独授权。
 - 禁止修改范围：真实投稿/扣费/生产账号或Cookie、真实workspace、publication/content/auth语义、用户无关历史文档、lockfile与普通依赖（无明确授权）。
-- 下一阶段是否READY：否；阶段1仍为 `NOT_STARTED`，等待本地里程碑commit收口；不得执行Phase 1。
+- 下一阶段是否READY：是；阶段1为`READY`，但本任务到此结束，未执行Phase 1。
