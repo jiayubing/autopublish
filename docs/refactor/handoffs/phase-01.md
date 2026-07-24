@@ -4,8 +4,8 @@
 
 - 状态：COMPLETE
 - 开始分支与commit：`codex/refactor-program` / `926723f076cd1d8c88beb35695567bfb74df6639`
-- 当前分支与commit：`codex/refactor-program` / `926723f076cd1d8c88beb35695567bfb74df6639`；本阶段结果未提交，遵从用户“不自行提交”的要求。
-- 工作区状态：只含本阶段获准的 contract、测试、类型门禁与文档变更；未暂存，无用户无关改动。
+- 当前分支与commit：`codex/refactor-program` / `027e9f88e00cb206669c2490cec9fcad7e6a47ad`（`refactor(phase-1): establish domain contracts`）；本交接的SHA回填将由紧随其后的docs收口commit固化。
+- 工作区状态：Phase 01代码、测试、配置、ADR与初始交接已由里程碑commit固化；仅本次docs收口回填待提交，无用户无关改动。
 - 执行日期与环境：2026-07-24 Asia/Shanghai；Windows 11 build 26200；Node 24.16.0；Electron 43.1.1。
 
 ## 2. 已完成结果
@@ -86,7 +86,7 @@ desktop/composition/phase-01-composition.js
 
 - 代码未完成：无，Phase 1完成条件均满足。
 - 自动验证未完成：无；full package smoke已运行。生产签名/发布不在本阶段范围。
-- PENDING_HUMAN：用户需在Phase 2前将当前纯Phase 1变更固化为里程碑commit；这是执行协议的阶段边界，不是代码阻塞。
+- PENDING_HUMAN：无；真实内容库迁移授权属于Phase 2开始条件，未在本阶段执行。
 - 触发的停止条件：否。
 
 ## 11. 下一任务入口
@@ -96,4 +96,4 @@ desktop/composition/phase-01-composition.js
 - 首个失败测试：Phase 2应先为OperationalStore空库/schema/dry-run/rollback写红测；不得复用或修改Phase 1 contract语义。
 - 允许修改范围：仅Phase 2文档允许的SQLite store、migration/backup/restore及其隔离fixture。
 - 禁止修改范围：不得改变 identity、target key、outcome/evidence、安全error或legacy未知账号的fail-closed语义；不得执行真实投稿、扣费或未经授权的真实workspace迁移。
-- 下一阶段是否READY：否，先由用户创建阶段1里程碑commit；commit完成后Phase 2可开始。
+- 下一阶段是否READY：是；Phase 2账本状态为`READY`，但本任务按范围在Phase 1收口后停止。

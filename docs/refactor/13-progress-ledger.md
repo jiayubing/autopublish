@@ -12,7 +12,7 @@
 | 活跃worktree | `F:\官媒投稿-refactor` |
 | 规划日期 | 2026-07-24 Asia/Shanghai |
 | 目标形态 | 文件内容 + workspace SQLite运行状态 + Electron/React/Node |
-| 当前可执行阶段 | 阶段0 |
+| 当前可执行阶段 | 阶段2 |
 | 普通功能开发 | 冻结 |
 | 正式release | 冻结 |
 
@@ -36,8 +36,8 @@
 | 阶段 | 状态 | 开始commit | 完成commit | 自动验证 | 人工验证 | Handoff |
 |---:|---|---|---|---|---|---|
 | 0 工程基线 | COMPLETE | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | `0bcbbfcca9ac4baf140359e048f3bf706f7b9526` | canonical本地门禁、静态workflow契约与link安全172/172均通过 | 无；remote/PR/push/required checks为`NOT_APPLICABLE` | `docs/refactor/handoffs/phase-00.md` |
-| 1 领域契约 | READY | — | — | Phase 0里程碑与交接已完成 | 不得在本任务执行 | — |
-| 2 OperationalStore | NOT_STARTED | — | — | — | 隔离workspace路径需授权 | — |
+| 1 领域契约 | COMPLETE | `926723f076cd1d8c88beb35695567bfb74df6639` | `027e9f88e00cb206669c2490cec9fcad7e6a47ad` | 178个默认测试文件、Phase 01 contract/architecture测试、严格类型检查、renderer/worker/package smoke均通过 | 无；不得在本任务执行 | `docs/refactor/handoffs/phase-01.md` |
+| 2 OperationalStore | READY | — | — | Phase 01里程碑与交接已完成 | 隔离workspace路径需授权 | — |
 | 3 PublicationWorkflow | NOT_STARTED | — | — | — | 迁移副本需授权 | — |
 | 4 Platform/Adapters | NOT_STARTED | — | — | — | 平台fixture/测试账号/TLS | — |
 | 5 Content生命周期 | NOT_STARTED | — | — | — | 内容迁移副本需授权 | — |
@@ -164,3 +164,22 @@
 - 停止条件是否触发：否。所有canonical本地门禁已通过，并已由本地里程碑commit固化。
 - Handoff路径：`docs/refactor/handoffs/phase-00.md`
 - 下一阶段是否READY：是。阶段1为`READY`，但本任务未执行且不得开始Phase 1。
+
+### 阶段1：领域契约与目标module骨架
+
+- 状态：COMPLETE
+- 开始时间：2026-07-24 Asia/Shanghai
+- 开始分支/commit：`codex/refactor-program` / `926723f076cd1d8c88beb35695567bfb74df6639`
+- 完成commit：`027e9f88e00cb206669c2490cec9fcad7e6a47ad`（`refactor(phase-1): establish domain contracts`）
+- 执行任务/线程：当前 Codex 任务
+- 用户已有改动：开始时工作区干净；未恢复、覆盖或混入原工作区的历史文档删除、未跟踪文件或真实内容库。
+- 计划内文件范围：纯 `src/domain`/`src/application` contract，测试、类型/构建门禁、仅供测试组装的 composition skeleton、renderer 安全 DTO 声明、CONTEXT/ADR、账本和交接。
+- 已完成工作：新增唯一 domain contract 出口 `src/domain/index.js`；account-aware 普通 target、media target及 `legacy-unknown-account` fail-closed 规则；安全错误、版本化 IPC/worker envelope、publisher outcome/evidence validator和fake publisher；未接入生产的 PublicationWorkflow/composition 骨架；严格 TS contract 检查和依赖方向测试；更新平台账号术语与主进程类型策略 ADR。
+- 未完成工作：没有 SQLite schema、迁移、writer切换、远端 adapter 切换、renderer产品行为或真实 workspace 操作；这些均属后续阶段。
+- Interface/schema偏差：旧 publication target 仍仅按 platform 建模，Phase 1 未添加兼容字段或改写旧记录；Phase 2 必须将旧普通平台记录导入为 `legacy-unknown-account`，且不得自动执行。
+- 测试命令与结果：完整 `npm test`、`npm run test:auth`、`npm run lint`、`npm run typecheck:main`、`npm run typecheck:renderer`、`npm run typecheck:bridge`、`npm run build:renderer`、`npm run test:links`、`npm run format:check`、`npm run test:packaging`、`npm run pack:smoke` 均通过；默认发现178个测试文件，新增Phase 01定向7/7，auth 16/16，links 172/172，packaging 33/33；仅临时合成fixture、无真实外部调用。
+- 故障/迁移/回滚证据：Phase 1禁止创建SQLite/迁移或改变writer，因此迁移、备份与回滚为不适用而非未验证；静态生产引用检查确认 `desktop/main.js`/`workspace-runtime.js`未引用新composition，未改变旧writer。非法identity、未知字段、未知DTO版本、缺失/不匹配证据、legacy未知账号均有拒绝测试。
+- 人工待办：真实内容库副本、迁移、备份和恢复仅在获得隔离路径授权后的Phase 2执行。
+- 停止条件是否触发：否。
+- Handoff路径：`docs/refactor/handoffs/phase-01.md`
+- 下一阶段是否READY：是；Phase 2为`READY`，但本任务不执行Phase 2。
