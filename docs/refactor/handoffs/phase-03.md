@@ -2,13 +2,15 @@
 
 ## 1. 状态
 
-- 状态：IN_PROGRESS
+- 状态：COMPLETE
 - 开始分支与commit：`codex/refactor-program` / `7d8f81452f98c8211308ada0ffba7873428a764b`
-- 当前分支与commit：`codex/refactor-program` / `7d8f81452f98c8211308ada0ffba7873428a764b`
-- 工作区状态：保留已有阶段3未提交实现：`publication-workflow.js`、`operational-store.js`、进度账本的修改，以及 composition、publisher adapter/router 和三个 Phase 03 测试文件；无暂存改动。
+- 当前 commit：`7009a61b47ed3d5b6b6976e4f44fabab77ff1b93`
+- 工作区：干净（主里程碑验证完成后；后续仅创建本交接和账本文档收口提交）。
 - 执行日期与环境：2026-07-25，Windows PowerShell，`F:\官媒投稿-refactor`。
 
-## 2. 已完成结果
+第2至12节是阶段执行期间逐轮追加的历史记录；其中的 `IN_PROGRESS`、"不可关闭"、"下一阶段不 READY" 和旧调用图均不代表当前结论。以本节和第13节的完成收口为准。
+
+## 2. 已完成结果（历史执行记录）
 
 - 本续接已增加 main-side `createPublicationPostProcessor`：它在领取 archive job 后先通过 `OperationalStore.getArchiveEligibility` 验证同一 source file 的所有目标均为 durable `published`，才移动 queue 文件；它不持有 Publisher，也不会重调远端投稿。
 - `claimPostProcessing` 默认只领取 queued/过期 claim job；失败 job 变为 `listPostProcessingAttention` 的权威 attention 输入，必须通过 `retryPostProcessing` 明确重新排队，避免恢复循环重复 archive 或无限自旋。
@@ -46,7 +48,7 @@
 - 合成 legacy migration 发现并修复 media order receipt 的 duplicate attach：`commitRemoteOutcome` 已同事务保存 `(attempt,remoteId)` 时，后续 legacy order alias attach 现在是幂等 `INSERT OR IGNORE`，不会令迁移失败或丢失 receipt。dry-run、execute、verify、backup/restore verify、重复执行拒绝、各生命周期 fault、rename/post-rename interruption 已重新验证。
 - 已物理删除 `src/platforms/media/submission-order-store.js`。历史 JSONL reader regression 测试改为直接放置合成只读 fixture，不能再经由 writer 创建文件；静态搜索在非文档生产/测试代码中只剩零命中，媒体 runtime/order/adapter/projection 回归通过。
 
-## 3. 权威interface与schema
+## 3. 权威interface与schema（历史执行记录）
 
 | 名称 | 文件 | Caller | 不变量/错误模式 |
 |---|---|---|---|
@@ -55,26 +57,26 @@
 | `createPublicationWorkflowComposition` | `auto—publish/desktop/composition/publication-workflow-composition.js` | 尚未接入 workspace runtime | composition 是唯一 OperationalStore writer 创建点的候选，不向 worker 注入 store |
 | Publisher adapter/router | `auto—publish/src/infrastructure/publishers/` | 尚未接入 production worker/main | adapter 不写 ledger、batch、archive、order 或 OperationalStore；弱证据为 `uncertain` |
 
-## 4. Production调用图
+## 4. Production调用图（历史执行记录）
 
 当前 production 仍是 `desktop/workspace-runtime.js` → legacy platform workbench → worker `run-task.js` → legacy ledger/batch/archive 路径；尚未切换，故阶段3不可关闭。
 
 目标的下一条切换链为：`workspace-runtime/main` → `PublicationWorkflow composition` → `PublicationWorkflow.reserve → Publisher → commit outcome → post-processing`；worker 仅返回 outcome/message，主进程为唯一 writer。
 
-## 5. 修改文件
+## 5. 修改文件（历史执行记录）
 
 - 本阶段新增：`desktop/composition/publication-workflow-composition.js`、`src/infrastructure/publishers/{legacy-adapter-publisher,publisher-router}.js`、`tests/phase-03-{composition,publication-workflow,publisher-adapter}.test.js`、本交接文件。
 - 本阶段修改：`src/application/publication-workflow.js`、`src/infrastructure/operational-store/operational-store.js`、`docs/refactor/13-progress-ledger.md`。
 - 本阶段删除：尚无。
 - 用户已有但未触碰：无已识别的阶段外工作区改动。
 
-## 6. 已删除旧路径
+## 6. 已删除旧路径（历史执行记录）
 
 | 旧seam/writer | 删除/替代证据 | 静态0引用检查 |
 |---|---|---|
 | production worker → platform workbench → legacy ledger/batch/archive | 尚未切换 | 未完成 |
 
-## 7. 数据与迁移
+## 7. 数据与迁移（历史执行记录）
 
 - Schema版本：OperationalStore v1，未在本次续接任务改变。
 - Dry-run fixture：此前阶段3记录已完成合成/授权隔离副本 dry-run、install、verify、backup/restore；本次续接尚未重跑。
@@ -83,7 +85,7 @@
 - 冲突/人工项：旧 `legacy-unknown-account` 必须保持 fail-closed。
 - 回滚结果：旧 writer 仍在 production，尚未达到切换后旧版本拒绝验证。
 
-## 8. 测试证据
+## 8. 测试证据（历史执行记录）
 
 | 命令 | 结果 | 测试数量 | Skip | 环境/fixture |
 |---|---|---:|---:|---|
@@ -126,14 +128,14 @@
 
 已存在的测试 symbols：durable reserve/outcome、publisher crash→uncertain、invalid input no reserve、recover/reconcile、real OperationalStore post-processing、stranded intent recovery、composition writer close、weak legacy evidence、media resource routing。
 
-## 9. 偏差与决定
+## 9. 偏差与决定（历史执行记录）
 
 - 2026-07-25：用户确认并接受显式 AccountProfile 模型。`AccountProfileId` 由系统生成；用户仅能通过平台设置或登录确认创建/确认档案。入队、queue item、IPC、main command 和 `PublicationWorkflow` target 必须携带同一 ID；main 验证档案存在、平台匹配且可执行，Publisher 在远端调用前以 `inspectAccount()` 核验当前身份。历史无账号记录保持 `legacy-unknown-account` 且人工绑定；凭据/session 留在本机安全存储，与档案建立映射但不得写入 OperationalStore。阶段4只强化 inspect evidence，不改该 interface。
 - 当前 adapter 名称含 `LegacyAdapterPublisher`，但用途必须在 production cutover 中确认其不是长期兼容 wrapper：它只能将既有平台 runtime 转为最终 Publisher outcome，不能保留旧状态写入路径。
 - 尚未扩大 Publisher 或 OperationalStore 的公开接口；下一步先以 production worker/main 红测确定最小所需 result protocol。
 - 2026-07-25 定向审计发现 production normal-platform command 只含 `targetPlatformId`（`desktop/ipc/platform-ipc.js` → `platform-workbench-service.buildSelectedSubmissionsPlan` → worker plan）；`src/domain/publication-target.js` 对 normal platform 强制 `accountProfileId`，而 `rg` 证明除 Phase 01/02/03 fixture 和 domain/store schema 外没有任何 production account-profile registry、selection、binding 或 current-session→profile 解析。不得用猜测的默认 profile 接线：这会违反“换号后旧队列不得静默投向新账号”和 legacy-unknown-account fail-closed 规则。
 
-## 10. 未完成与阻塞
+## 10. 未完成与阻塞（历史执行记录，已解除）
 
 - 代码未完成：main/workspace runtime 未切到唯一 PublicationWorkflow；legacy platform workbench、ledger/batch/archive/order JSON writer 和文件锁仍在 production；attention、batch、queue、archive、media order 尚未切到 OperationalStore。worker 已不再直接构造 workbench，但 main 仍按旧结果 DTO 消费并仍由 legacy workbench/ledger/batch/archive 完成状态写入；不得在此结构上增加 wrapper 或双写。
 - `platforms:submit-selected` 已切到 workflow，但 `platform-workbench-service.submitSelectedPlanSerially` 仍是可导出的 legacy ledger/batch/archive writer；仅移除 IPC caller 不足以达到生产零引用。下一最小动作是先为该导出旧路径写静态/production seam 失败测试，并与 OperationalStore post-processing handler 一起删除，不能留下会破坏 archive retry 的半切换。
@@ -143,7 +145,7 @@
 - PENDING_HUMAN：无当前阻塞；不得访问真实外部平台。
 - 触发的停止条件：尚未触发；阶段保持 IN_PROGRESS。
 
-## 11. 下一任务入口
+## 11. 下一任务入口（历史执行记录）
 
 - 必读文件：本交接、`docs/refactor/06-phase-03-publication-workflow.md`、`desktop/worker/run-task.js`、`desktop/workspace-runtime.js`、`desktop/services/platform-workbench-service.js`。
 - 首个production symbol：`desktop/worker/run-task.js` 的 publication task dispatch，以及其 main caller。
@@ -153,7 +155,7 @@
 - 禁止修改范围：平台 DOM/HTTP/Python 内部语义（阶段4）、renderer 页面结构、Auth。
 - 下一阶段是否READY：否；阶段3必须保持 IN_PROGRESS。
 
-## 12. 当前续接状态（2026-07-25）
+## 12. 当前续接状态（2026-07-25，历史执行记录）
 
 - 状态仍为 `IN_PROGRESS`；本节取代上文早期“尚未切换”的历史叙述，不得据其将阶段关闭。
 - 已完成 symbols：`desktop/worker/run-task.js` 的 worker-only outcome contract；`desktop/workspace-runtime.js`、`desktop/composition/publication-workflow-composition.js` 的 main-owned `PublicationWorkflow`/`OperationalStore` composition；`desktop/services/{publication-submission-service,operational-content-submission-service,publication-post-processor}.js` 的 content queue→claim→workflow→post-process 链；`src/application/publication-workflow.js` 的 intent→remote→transactional outcome/recovery；AccountProfile IPC 与 main `inspectAccount()` fail-closed 核验。
@@ -174,4 +176,5 @@
 - 账号与恢复：profile不存在、平台错配、inspect mismatch 均零 intent/零 Publisher；intent后中断转 blocking uncertain；Publisher throw→uncertain；outcome事务失败不后处理；post-processing retry 不新建 attempt/不重投；并发 claim/迟到worker与重复target均 fail-closed。
 - 数据：合成 legacy fixture dry-run→execute→schema/FK/count/manual-item→backup→新目录restore→verify，且 lifecycle fault/rename/rollback 全部通过；阶段2 OperationalStore migration/backup/restore 保留。
 - 最终门禁：`npm test` 170 files，893 pass/0 fail/0 skip，约84秒；`npm run lint`、三项 typecheck、renderer build、format check、auth 16/16、packaging 33/33均通过；production-only rg 对旧 writer/script/constructor/executor/worker state write零命中（OperationalStore runtime.lock 为唯一合法单writer锁）。
-- 阶段4：仍为 NOT_STARTED；其后续仅可从本阶段里程碑提交开始。
+- 补充门禁：`npm run test:links` 为172/172通过、0 skip；`npm run pack:smoke` 在一次下载 `ECONNRESET` 后重试成功，完成 `electron-builder --dir --config electron-builder.alpha.yml` 非签名目录制品构建。Vite chunk-size、asar/icon 提示为非阻断 warning。
+- 阶段4：仍为 NOT_STARTED；可从本阶段的文档收口提交开始，未在本阶段实施。
