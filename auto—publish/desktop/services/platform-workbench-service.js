@@ -3,15 +3,8 @@ const path = require("path");
 const crypto = require("crypto");
 const mammoth = require("mammoth");
 
-const { throwIfStopped } = require("../../src/core/operator-flow");
-const { archivePublishedArticle } = require("../../src/core/files");
-const { normalizePublicationOutcome } = require("../../src/core/jobs");
-const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 const { resolveArticleIdentity } = require("../../src/publication/article-identity");
-const { resolvePublicationTarget } = require("../../src/publication/publication-targets");
-const { createSubmissionBatchStore } = require("../../src/content/submission-batch-store");
 const { createArticleStore } = require("../../src/content/article-store");
-const { writeAtomic } = require("../../src/content/submission-export-service");
 
 const ARTICLE_EXTENSIONS = [".md", ".txt", ".docx"];
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -124,32 +117,14 @@ function safeTask(task) {
   return {
     sourcePlatformId: task.sourcePlatformId,
     filename: task.filename,
-    targetPlatformId: task.targetPlatformId
+    targetPlatformId: task.targetPlatformId,
+    ...(typeof task.accountProfileId === "string" ? { accountProfileId: task.accountProfileId } : {})
   };
 }
 
 function taskKey(task) {
   var value = safeTask(task);
   return value.sourcePlatformId + "\u0000" + value.filename + "\u0000" + value.targetPlatformId;
-}
-
-function isStopError(error) {
-  return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
-}
-
-function isStopRequested(options) {
-  if (options && typeof options.shouldStop === "function" && options.shouldStop()) return true;
-  try {
-    throwIfStopped();
-    return false;
-  } catch (_) {
-    return true;
-  }
-}
-
-function safeOutcomeError(error, fallback) {
-  var code = error && typeof error.code === "string" ? error.code : fallback;
-  return /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(code || "") ? code : fallback;
 }
 
 function createPlatformWorkbenchService(opts) {
@@ -160,11 +135,6 @@ function createPlatformWorkbenchService(opts) {
     : path.join(rootDir, "input");
   var platforms = options.platforms || [];
   var adapters = options.adapters || {};
-  var ledger = options.publicationLedger || createPublicationLedger({ workspaceRoot: rootDir, paths: options.paths });
-  var submissionBatchStore = options.submissionBatchStore || createSubmissionBatchStore({
-    workspaceRoot: rootDir,
-    directory: options.paths && options.paths.submissionRecords
-  });
   var articleStore = options.articleStore || createArticleStore(rootDir, { paths: options.paths });
 
   function sourceArticleState(metadata) {
@@ -239,10 +209,23 @@ function createPlatformWorkbenchService(opts) {
     var selected = safeTask({ sourcePlatformId: selectedArticle.sourcePlatformId, filename: selectedArticle.filename, targetPlatformId: targetPlatformIds[0] });
     var filePath = resolveSelectedFilePath(selectedArticle);
     var sourceMetadata = readSubmissionMetadata(filePath, true);
+    var durableAccountProfileId = sourceMetadata && sourceMetadata.data && sourceMetadata.data.accountProfileId;
+    if (typeof durableAccountProfileId !== "string" || !durableAccountProfileId) {
+      throw submissionInputError("LEGACY_UNKNOWN_ACCOUNT", "The queued publication must be manually bound to an account profile");
+    }
     var state = sourceArticleState(sourceMetadata);
     if (state.sourceArticleState === "trashed") throw submissionInputError(state.reasonCode, "Source article is in the trash");
     var tasks = [];
     for (var j = 0; j < targetPlatformIds.length; j++) {
+      var targetPlatformId = targetPlatformIds[j];
+      var rendererAccountProfileId = selectedArticle.accountProfiles && selectedArticle.accountProfiles[targetPlatformId];
+      var durableTargetPlatformId = sourceMetadata && sourceMetadata.data && (sourceMetadata.data.targetPlatformId || sourceMetadata.data.targetPlatform);
+      if (typeof durableTargetPlatformId === "string" && durableTargetPlatformId && durableTargetPlatformId !== targetPlatformId) {
+        throw submissionInputError("PUBLICATION_TARGET_MISMATCH", "The selected target does not match the queued publication");
+      }
+      if (rendererAccountProfileId !== durableAccountProfileId) {
+        throw submissionInputError("ACCOUNT_PROFILE_MISMATCH", "The selected account does not match the queued publication");
+      }
       tasks.push({
         sourcePlatformId: selected.sourcePlatformId,
         filename: selected.filename,
@@ -253,7 +236,8 @@ function createPlatformWorkbenchService(opts) {
           sourceFile: filePath,
           fileBaseName: path.basename(selected.filename, path.extname(selected.filename))
         }),
-        targetPlatformId: targetPlatformIds[j]
+        targetPlatformId: targetPlatformId,
+        accountProfileId: durableAccountProfileId
       });
     }
     return tasks;
@@ -310,6 +294,50 @@ function createPlatformWorkbenchService(opts) {
     return identities;
   }
 
+  async function preparePublicationCommand(rawTask) {
+    const task = safeTask(rawTask);
+    if (typeof task.accountProfileId !== "string" || !task.accountProfileId) throw submissionInputError("ACCOUNT_PROFILE_REQUIRED", "A platform account profile is required");
+    const adapter = adapters[task.targetPlatformId];
+    if (!adapter) throw submissionInputError("SUBMISSION_ADAPTER_MISSING", "Missing adapter");
+    const filePath = resolveSelectedFilePath(task, true);
+    const metadata = readSubmissionMetadata(filePath, true);
+    const durableAccountProfileId = metadata && metadata.data && metadata.data.accountProfileId;
+    if (typeof durableAccountProfileId !== "string" || !durableAccountProfileId)
+      throw submissionInputError("LEGACY_UNKNOWN_ACCOUNT", "The queued publication must be manually bound to an account profile");
+    if (durableAccountProfileId !== task.accountProfileId)
+      throw submissionInputError("ACCOUNT_PROFILE_MISMATCH", "The selected account does not match the queued publication");
+    const durableTargetPlatformId = metadata && metadata.data && (metadata.data.targetPlatformId || metadata.data.targetPlatform);
+    if (typeof durableTargetPlatformId === "string" && durableTargetPlatformId && durableTargetPlatformId !== task.targetPlatformId)
+      throw submissionInputError("PUBLICATION_TARGET_MISMATCH", "The selected target does not match the queued publication");
+    const source = { file: filePath, filePath: filePath, sourceFile: filePath, filename: task.filename, fileBaseName: path.basename(task.filename, path.extname(task.filename)) };
+    const parsed = adapter.parseArticleFiles ? await adapter.parseArticleFiles([source]) : [await fallbackParseArticle(source, filePath)];
+    if (!parsed.length) throw submissionInputError("ARTICLE_PARSE_FAILED", "Article parse returned no publishable article");
+    const article = parsed[0];
+    const identity = articleIdentity(article, metadata, filePath);
+    const submissionBatchId = metadata && metadata.data && metadata.data.submissionBatchId;
+    if (typeof submissionBatchId !== "string" || !submissionBatchId)
+      throw submissionInputError("SUBMISSION_BATCH_MISSING", "The queued publication has no durable batch identity");
+    return Object.freeze({ articleId: identity.articleId || identity.articleKey, target: { kind: "platform", platformId: task.targetPlatformId, accountProfileId: task.accountProfileId }, title: article.title || path.basename(task.filename, path.extname(task.filename)), body: typeof article.body === "string" ? article.body : "", postProcessingPayload: { sourcePlatformId: task.sourcePlatformId, filename: task.filename, batchId: submissionBatchId }, workerTask: task });
+  }
+
+  async function prepareMediaPublicationCommands(articles) {
+    const commands = [];
+    for (const article of articles || []) {
+      // Media drafts pre-date normal-platform sidecars; their immutable
+      // identity is derived from converted content below, so do not treat a
+      // missing normal submission sidecar as a publication fact source.
+      const filePath = resolveSelectedFilePath({ sourcePlatformId: "media", filename: article.filename }, false);
+      const parsed = await fallbackParseArticle({ filename: article.filename, fileBaseName: path.basename(article.filename, path.extname(article.filename)) }, filePath);
+      const body = typeof parsed.body === "string" && parsed.body.trim() ? parsed.body : "媒体稿件内容";
+      const articleId = "media-" + crypto.createHash("sha256").update(String(parsed.title || article.filename) + "\u0000" + body).digest("hex").slice(0, 48);
+      for (const resource of article.selectedResources || []) {
+        if (!resource || typeof resource.resourceId !== "string" || !resource.resourceId) throw submissionInputError();
+        commands.push(Object.freeze({ articleId, target: { kind: "media", mediaResourceId: resource.resourceId }, title: parsed.title || article.filename, body, postProcessingPayload: { sourcePlatformId: "media", filename: article.filename } }));
+      }
+    }
+    return commands;
+  }
+
   function fallbackParseArticle(sourceArticle, filePath) {
     var article = {
       sourceFile: filePath,
@@ -358,462 +386,18 @@ function createPlatformWorkbenchService(opts) {
     });
   }
 
-  function cancelQueuedReservation(reference) {
-    if (!reference || !reference.publicationId || !ledger.store || typeof ledger.store.update !== "function") return;
-    try {
-      ledger.store.update(reference.publicationId, function(record) {
-        if (record.status !== "queued") return record;
-        var timestamp = new Date().toISOString();
-        var attempt = record.attempts[record.attempts.length - 1];
-        record.status = "cancelled";
-        attempt.status = "cancelled";
-        attempt.updatedAt = timestamp;
-        attempt.finishedAt = timestamp;
-        record.updatedAt = timestamp;
-        return record;
-      });
-    } catch (_) {}
-  }
-
-  function rebindSubmissionPair(metadata, identity, target, previous, replacement) {
-    var sidecar = metadata && metadata.data;
-    var batchId = sidecar && sidecar.submissionBatchId;
-    if (!batchId || !metadata.path || !sidecar) throw submissionInputError("SUBMISSION_ATTEMPT_REBIND_REQUIRED", "Submission attempt cannot be rebound safely");
-    if (sidecar.publicationId !== previous.publicationId || sidecar.attemptId !== previous.attemptId || (identity.contentHash && sidecar.contentHash !== identity.contentHash)) {
-      throw submissionInputError("SUBMISSION_ATTEMPT_REBIND_CONFLICT", "Submission attempt identity changed");
-    }
-    var originalSidecar = fs.readFileSync(metadata.path, "utf8");
-    var updatedSidecar = Object.assign({}, sidecar, { attemptId: replacement.attemptId, status: "queued" });
-    try {
-      // The queue sidecar is replaced atomically and the old bytes remain
-      // recoverable until the batch identity update has succeeded.
-      writeAtomic(metadata.path, JSON.stringify(updatedSidecar, null, 2) + "\n");
-      submissionBatchStore.rebindAttempt(batchId, {
-        publicationId: previous.publicationId,
-        attemptId: previous.attemptId,
-        targetPlatformId: target.platformId
-      }, replacement, {
-        articleId: sidecar.generatedArticleId || sidecar.articleId,
-        targetPlatformId: target.platformId,
-        contentHash: sidecar.contentHash
-      });
-    } catch (error) {
-      try { writeAtomic(metadata.path, originalSidecar); } catch (_) {}
-      throw error;
-    }
-  }
-
-  function reservePublication(identity, target, metadata) {
-    var sidecar = metadata.data || {};
-    var suppliedPublicationId = sidecar.publicationId;
-    var suppliedAttemptId = sidecar.attemptId;
-    if (suppliedPublicationId && suppliedAttemptId) {
-      try {
-        var existing = ledger.get(suppliedPublicationId);
-        if (existing.articleKey === identity.articleKey && existing.targetKey === target.targetKey &&
-            existing.status === "queued" && existing.attempts[existing.attempts.length - 1].attemptId === suppliedAttemptId) {
-          return { publicationId: existing.publicationId, attemptId: suppliedAttemptId, status: existing.status, record: existing };
-        }
-      } catch (_) {}
-    }
-
-    var previous = null;
-    if (suppliedPublicationId && suppliedAttemptId) {
-      try { previous = ledger.get(suppliedPublicationId); } catch (_) {}
-    }
-    try {
-      var reserved = ledger.reserve(identity, target, { displayName: target.platformId });
-      if (previous && reserved.attemptId !== suppliedAttemptId && previous.publicationId === reserved.publicationId) {
-        try {
-          rebindSubmissionPair(metadata, identity, target, Object.assign({}, previous, { attemptId: suppliedAttemptId }), reserved);
-        } catch (error) {
-          try { cancelQueuedReservation(reserved); } catch (_) {}
-          throw submissionInputError(error && error.code || "SUBMISSION_ATTEMPT_REBIND_FAILED", "Submission attempt rebind failed");
-        }
-      }
-      return { publicationId: reserved.publicationId, attemptId: reserved.attemptId, status: reserved.status, record: reserved };
-    } catch (error) {
-      if (error && (error.code === "PUBLICATION_DUPLICATE" || error.code === "PUBLICATION_UNCERTAIN")) {
-        if (suppliedPublicationId && suppliedAttemptId) {
-          try {
-            var current = ledger.get(suppliedPublicationId);
-            if (current.articleKey === identity.articleKey && current.targetKey === target.targetKey &&
-                current.status === "queued" && current.attempts[current.attempts.length - 1].attemptId === suppliedAttemptId) {
-              return { publicationId: current.publicationId, attemptId: suppliedAttemptId, status: current.status, record: current };
-            }
-          } catch (_) {}
-        }
-      }
-      throw error;
-    }
-  }
-
-  function updateSubmissionBatch(metadata, reference, targetPlatformId, outcome) {
-    var sidecar = metadata.data || {};
-    var batchId = sidecar.submissionBatchId;
-    if (!batchId || !reference || !reference.publicationId || !reference.attemptId) return { ok: true, batchId: null };
-    try {
-      submissionBatchStore.updateItem(batchId, { publicationId: reference.publicationId, attemptId: reference.attemptId, targetPlatformId: targetPlatformId }, {
-        status: outcome.status,
-        publicationStatus: outcome.status,
-        errorCode: outcome.errorCode,
-        remoteId: outcome.remoteId,
-        remoteUrl: outcome.remoteUrl,
-        reasonCode: outcome.reasonCode,
-        // A remote success only starts local archival.  It must never claim
-        // archival completion before the filesystem transaction has finished.
-        localArchive: outcome.status === "published" ? { status: "pending", errorCode: null, updatedAt: new Date().toISOString() } : undefined
-      });
-      return { ok: true, batchId: batchId };
-    } catch (error) {
-      if (typeof options.onBatchSyncError === "function") options.onBatchSyncError({ code: error && error.code || "SUBMISSION_BATCH_SYNC_FAILED", batchId: batchId });
-      return { ok: false, batchId: batchId, errorCode: safeOutcomeError(error, "SUBMISSION_BATCH_SYNC_FAILED") };
-    }
-  }
-
-  function persistArchiveOutcome(result, localArchive) {
-    if (!result || !result.batchId || !result.publicationId || !result.attemptId || !result.task) return { ok: true };
-    try {
-      submissionBatchStore.updateLocalArchive(result.batchId, {
-        publicationId: result.publicationId,
-        attemptId: result.attemptId,
-        targetPlatformId: result.task.targetPlatformId
-      }, localArchive);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, errorCode: safeOutcomeError(error, "SUBMISSION_BATCH_ARCHIVE_SYNC_FAILED") };
-    }
-  }
-
-  function retryArchive(attentionItem) {
-    var request = attentionItem || {};
-    var batch = submissionBatchStore.get(request.batchId);
-    var item = (batch.items || []).find(function(candidate) {
-      return candidate.publicationId === request.publicationId && candidate.attemptId === request.attemptId && candidate.targetPlatformId === (request.platformId || request.targetPlatformId);
-    });
-    if (!item || !item.localArchive || item.localArchive.status !== "failed") throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_INVALID", "Archive retry is no longer available");
-    var record = ledger.get(item.publicationId);
-    if (record.status !== "published" || item.status !== "published" || item.publicationStatus !== "published" ||
-        record.clientId !== batch.clientId || record.articleId !== item.articleId || record.platformId !== item.targetPlatformId) {
-      throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_CONFLICT", "Published submission identity changed");
-    }
-    var sourcePlatformId = item.sourcePlatformId || item.targetPlatformId;
-    var filePath = resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, path.basename(item.filePath || ""), true);
-    if (path.resolve(item.filePath || "") !== filePath) throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_CONFLICT", "Submission queue path changed");
-    var metadata = readSubmissionMetadata(filePath, true);
-    var data = metadata.data || {};
-    if (!metadata.valid || data.submissionBatchId !== batch.id || data.publicationId !== item.publicationId || data.attemptId !== item.attemptId ||
-        (data.generatedArticleId || data.articleId) !== item.articleId || data.clientId !== batch.clientId || data.contentHash !== item.contentHash) {
-      throw submissionInputError("SUBMISSION_ARCHIVE_RETRY_CONFLICT", "Submission queue identity changed");
-    }
-    var archiveMoved = false;
-    try {
-      archivePublishedArticle({ file: filePath, filePath: filePath, sourceFile: filePath, filename: path.basename(filePath), fileBaseName: path.basename(filePath, path.extname(filePath)) }, options.paths || { published: path.join(rootDir, "published") });
-      archiveMoved = true;
-      var archived = persistArchiveOutcome({ batchId: batch.id, publicationId: item.publicationId, attemptId: item.attemptId, task: { targetPlatformId: item.targetPlatformId } }, { status: "archived", errorCode: null, updatedAt: new Date().toISOString() });
-      if (!archived.ok) throw submissionInputError(archived.errorCode, "Archive state could not be persisted");
-      return { status: "archived", domainHandled: true, changedScopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"] };
-    } catch (error) {
-      if (archiveMoved) throw error;
-      var errorCode = safeOutcomeError(error, "PUBLISHED_ARCHIVE_FAILED");
-      var failed = persistArchiveOutcome({ batchId: batch.id, publicationId: item.publicationId, attemptId: item.attemptId, task: { targetPlatformId: item.targetPlatformId } }, { status: "failed", errorCode: errorCode, updatedAt: new Date().toISOString() });
-      if (!failed.ok) throw submissionInputError(failed.errorCode, "Archive state could not be persisted");
-      throw error;
-    }
-  }
-
-  async function submitSelectedPlanSerially(plan, submitOptions) {
-    var opts = submitOptions || {};
-    var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
-    var results = [];
-    var sourceGroups = new Map();
-    var lastRemoteEndedAt = new Map();
-    var now = typeof opts.now === "function" ? opts.now : function() { return Date.now(); };
-    var wait = typeof opts.wait === "function" ? opts.wait : function(ms) {
-      return new Promise(function(resolve) { setTimeout(resolve, ms); });
-    };
-
-    function recordTaskResult(result, group) {
-      results.push(result);
-      if (group) group.results.push(result);
-      if (typeof opts.onTaskState === "function") {
-        opts.onTaskState({
-          phase: "task-finished",
-          task: safeTask(result && result.task),
-          status: result && result.status,
-          publicationStatus: result && result.publicationStatus,
-          errorCode: result && result.error
-        });
-      }
-    }
-
-    function intervalFor(targetPlatformId) {
-      var intervals = opts.intervalByTargetMs && typeof opts.intervalByTargetMs === "object" ? opts.intervalByTargetMs : {};
-      var value = Number(intervals[targetPlatformId]);
-      return Number.isFinite(value) && value > 0 ? value : 0;
-    }
-
-    async function waitForTargetInterval(task) {
-      var intervalMs = intervalFor(task.targetPlatformId);
-      var previousEnd = lastRemoteEndedAt.get(task.targetPlatformId);
-      if (!intervalMs || previousEnd === undefined) return !isStopRequested(opts);
-
-      var remaining = Math.max(0, intervalMs - (Number(now()) - Number(previousEnd)));
-      while (remaining > 0) {
-        if (isStopRequested(opts)) return false;
-        if (typeof opts.onTaskState === "function") {
-          opts.onTaskState({
-            phase: "waiting-interval",
-            task: task,
-            nextTask: task,
-            targetPlatformId: task.targetPlatformId,
-            waitRemainingMs: remaining
-          });
-        }
-        await wait(Math.min(remaining, 250), {
-          phase: "waiting-interval",
-          task: task,
-          shouldStop: function() { return isStopRequested(opts); }
-        });
-        if (isStopRequested(opts)) return false;
-        remaining = Math.max(0, intervalMs - (Number(now()) - Number(previousEnd)));
-      }
-      return true;
-    }
-
-    for (var i = 0; i < tasks.length; i++) {
-      var task;
-      try { task = safeTask(tasks[i]); } catch (error) {
-        recordTaskResult({ task: {}, status: "failed", error: error.code || "SUBMISSION_INPUT_INVALID" });
-        continue;
-      }
-      var adapter = adapters[task.targetPlatformId];
-      var filePath;
-      var metadata;
-      var group = sourceGroups.get(task.sourcePlatformId + "\0" + task.filename);
-      if (!group) {
-        group = { sourcePlatformId: task.sourcePlatformId, filename: task.filename, filePath: null, article: null, results: [] };
-        sourceGroups.set(task.sourcePlatformId + "\0" + task.filename, group);
-      }
-
-      try {
-        filePath = resolveSelectedFilePath(task, true);
-        metadata = readSubmissionMetadata(filePath, true);
-        var sourceState = sourceArticleState(metadata);
-        group.filePath = filePath;
-        group.archiveKey = task.sourcePlatformId + "\u0000" + task.filename;
-        if (!adapter) throw submissionInputError("SUBMISSION_ADAPTER_MISSING", "Missing adapter: " + task.targetPlatformId);
-        var sourceArticle = {
-          file: filePath,
-          filePath: filePath,
-          sourceFile: filePath,
-          filename: task.filename,
-          fileBaseName: path.basename(task.filename, path.extname(task.filename))
-        };
-        var parsed = adapter.parseArticleFiles
-          ? await adapter.parseArticleFiles([sourceArticle])
-          : [await fallbackParseArticle(sourceArticle, filePath)];
-        if (!parsed.length) throw new Error("Article parse returned no publishable article");
-        var article = parsed[0];
-        article.sourceFile = article.sourceFile || filePath;
-        article.file = article.file || filePath;
-        article.filePath = filePath;
-        article.filename = article.filename || task.filename;
-        article.normalizedFilename = article.normalizedFilename || task.filename;
-        if (!article.title) article.title = firstTitle(fs.readFileSync(filePath, "utf8"), path.basename(task.filename, path.extname(task.filename)));
-        group.article = article;
-
-        var identity = articleIdentity(article, metadata, filePath);
-        var target = resolvePublicationTarget({ platformId: task.targetPlatformId });
-        var reference = reservePublication(identity, target, metadata);
-        var result = { task: task, publicationId: reference.publicationId, attemptId: reference.attemptId, articleKey: identity.articleKey, targetKey: target.targetKey };
-
-        if (sourceState.sourceArticleState === "trashed") {
-          result.status = "skipped";
-          result.publicationStatus = reference.status || "queued";
-          result.error = sourceState.reasonCode;
-          result.reasonCode = sourceState.reasonCode;
-          recordTaskResult(result, group);
-          continue;
-        }
-
-        try {
-          if (isStopRequested(opts)) throw new Error("Stop requested");
-        } catch (stopError) {
-          cancelQueuedReservation(reference);
-          updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
-          result.status = "skipped";
-          result.publicationStatus = "cancelled";
-          result.error = "STOP_REQUESTED";
-          recordTaskResult(result, group);
-          break;
-        }
-
-        try {
-          adapter.ensureSession();
-          await adapter.ensureLoggedIn({ interactive: opts.interactive, timeoutMs: opts.timeoutMs });
-          if (isStopRequested(opts)) throw new Error("Stop requested");
-        } catch (error) {
-          if (isStopError(error)) {
-            cancelQueuedReservation(reference);
-            updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
-            result.status = "skipped";
-            result.publicationStatus = "cancelled";
-            result.error = "STOP_REQUESTED";
-          } else {
-            var loginOutcome = { status: "failed", errorCode: safeOutcomeError(error, "ADAPTER_PREPARE_FAILED") };
-            try { ledger.markSubmitting(reference.publicationId, reference.attemptId); } catch (_) {}
-            try { ledger.recordOutcome(reference.publicationId, reference.attemptId, loginOutcome); } catch (_) {}
-            updateSubmissionBatch(metadata, reference, task.targetPlatformId, loginOutcome);
-            result.status = "failed";
-            result.publicationStatus = "failed";
-            result.error = loginOutcome.errorCode;
-          }
-          recordTaskResult(result, group);
-          if (adapter.closeSession && opts.closeAfterEach !== false) { try { adapter.closeSession(); } catch (_) {} }
-          continue;
-        }
-
-        if (!(await waitForTargetInterval(task))) {
-          cancelQueuedReservation(reference);
-          updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
-          result.status = "skipped";
-          result.publicationStatus = "cancelled";
-          result.error = "STOP_REQUESTED";
-          recordTaskResult(result, group);
-          break;
-        }
-        if (isStopRequested(opts)) {
-          cancelQueuedReservation(reference);
-          updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "cancelled", errorCode: "STOP_REQUESTED" });
-          result.status = "skipped";
-          result.publicationStatus = "cancelled";
-          result.error = "STOP_REQUESTED";
-          recordTaskResult(result, group);
-          break;
-        }
-
-        // Re-check the source article immediately before reserving/submitting.
-        // A history removal may have completed after queue scanning.
-        var latestSourceState = sourceArticleState(readSubmissionMetadata(filePath, true));
-        if (latestSourceState.sourceArticleState === "trashed") {
-          result.status = "skipped";
-          result.publicationStatus = reference.status || "queued";
-          result.error = latestSourceState.reasonCode;
-          result.reasonCode = latestSourceState.reasonCode;
-          recordTaskResult(result, group);
-          continue;
-        }
-
-        if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "before-remote", task: task });
-        var submitting = ledger.markSubmitting(reference.publicationId, reference.attemptId);
-        updateSubmissionBatch(metadata, reference, task.targetPlatformId, { status: "submitting" });
-        if (typeof opts.onTaskState === "function") opts.onTaskState({ phase: "remote-started", task: task, publicationId: reference.publicationId, attemptId: reference.attemptId });
-        var rawOutcome;
-        try {
-          rawOutcome = await adapter.publishArticle(article, {
-            autoSubmit: opts.autoSubmit !== false,
-            interactive: opts.interactive,
-            timeoutMs: opts.timeoutMs,
-            publication: { publicationId: reference.publicationId, attemptId: reference.attemptId, articleKey: identity.articleKey, targetKey: target.targetKey }
-          });
-        } catch (error) {
-          error.remoteCallStarted = true;
-          rawOutcome = error;
-        }
-        var remoteEndedAt = Number(now());
-        lastRemoteEndedAt.set(task.targetPlatformId, remoteEndedAt);
-        var outcome = normalizePublicationOutcome(rawOutcome, rawOutcome && rawOutcome.message ? rawOutcome : null);
-        if (typeof opts.onTaskState === "function") opts.onTaskState({
-          phase: "remote-finished",
-          task: task,
-          targetPlatformId: task.targetPlatformId,
-          publicationId: reference.publicationId,
-          attemptId: reference.attemptId,
-          status: outcome.status,
-          errorCode: outcome.errorCode
-        });
-        try { ledger.recordOutcome(reference.publicationId, reference.attemptId, outcome); } catch (ledgerError) {
-          // A remote result is already known. Keep it in the task result and do
-          // not manufacture a retryable failure when the local ledger is busy.
-          result.ledgerError = safeOutcomeError(ledgerError, "PUBLICATION_RECORD_FAILED");
-        }
-        var batchSync = updateSubmissionBatch(metadata, reference, task.targetPlatformId, outcome);
-        result.status = outcome.status === "published" ? "success" : outcome.status === "submitted" ? (outcome.legacyStatus === "pending" ? "pending" : "submitted") : outcome.status;
-        result.publicationStatus = outcome.status;
-        if (outcome.errorCode) result.error = outcome.errorCode;
-        if (outcome.remoteId) result.remoteId = outcome.remoteId;
-        if (outcome.remoteUrl) result.remoteUrl = outcome.remoteUrl;
-        result.publicationId = submitting.publicationId;
-        result.attemptId = submitting.attemptId;
-        result.batchId = metadata.data && metadata.data.submissionBatchId || null;
-        if (outcome.status === "published" && !batchSync.ok) result.archiveError = batchSync.errorCode;
-        recordTaskResult(result, group);
-      } catch (error) {
-        var failed = { task: task, status: isStopError(error) ? "skipped" : "failed", error: safeOutcomeError(error, "PLATFORM_SUBMISSION_FAILED"), publicationStatus: isStopError(error) ? "cancelled" : "failed" };
-        if (isStopError(error)) break;
-        recordTaskResult(failed, group);
-      } finally {
-        if (adapter && adapter.closeSession && opts.closeAfterEach !== false) {
-          try { adapter.closeSession(); } catch (_) {}
-        }
-      }
-    }
-
-    var archiveAttempted = 0;
-    var archiveFailed = 0;
-    sourceGroups.forEach(function(group) {
-      if (!group.filePath || !group.article || !group.results.length) return;
-      var allPublished = group.results.every(function(result) {
-        return result.publicationStatus === "published" || result.publicationStatus === "cancelled" && result.status === "skipped";
-      });
-      if (!allPublished) return;
-      archiveAttempted += 1;
-      try {
-        archivePublishedArticle(group.article, options.paths || { published: path.join(rootDir, "published") });
-        group.results.filter(function(result) { return result.publicationStatus === "published"; }).forEach(function(result) {
-          var persisted = persistArchiveOutcome(result, { status: "archived", errorCode: null, updatedAt: new Date().toISOString() });
-          if (!persisted.ok) result.archiveError = persisted.errorCode;
-        });
-      } catch (error) {
-        archiveFailed += 1;
-        group.results.filter(function(result) { return result.publicationStatus === "published"; }).forEach(function(result) {
-          result.archiveError = safeOutcomeError(error, "PUBLISHED_ARCHIVE_FAILED");
-          var persisted = persistArchiveOutcome(result, { status: "failed", errorCode: result.archiveError, updatedAt: new Date().toISOString() });
-          if (!persisted.ok) result.archiveError = persisted.errorCode;
-        });
-      }
-    });
-
-    var published = results.filter(function(item) { return item.publicationStatus === "published"; }).length;
-    var submitted = results.filter(function(item) { return item.publicationStatus === "submitted"; }).length;
-    var uncertain = results.filter(function(item) { return item.publicationStatus === "uncertain"; }).length;
-    var skipped = results.filter(function(item) { return item.status === "skipped"; }).length;
-    return {
-      ok: published + submitted,
-      fail: results.filter(function(item) { return item.publicationStatus === "failed"; }).length,
-      pending: results.filter(function(item) { return item.status === "pending"; }).length,
-      uncertain: uncertain,
-      skipped: skipped,
-      results: results,
-      archiveSummary: { attempted: archiveAttempted, succeeded: archiveAttempted - archiveFailed, failed: archiveFailed }
-    };
-  }
-
   return {
     scanQueue: scanQueue,
     buildSelectedPlan: buildSelectedPlan,
     buildSelectedSubmissionsPlan: buildSelectedSubmissionsPlan,
-    toWorkerPlan: toWorkerPlan,
-    captureTaskIdentities: captureTaskIdentities,
+    preparePublicationCommand: preparePublicationCommand,
+    prepareMediaPublicationCommands: prepareMediaPublicationCommands,
     taskKey: taskKey,
-    submitSelectedPlanSerially: submitSelectedPlanSerially,
     resolveSubmissionFile: function(sourcePlatformId, filename) { return resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false); },
     readSubmissionMetadata: function(sourcePlatformId, filename) {
       var filePath = resolvePlatformSubmissionFile(inputRoot, platforms, sourcePlatformId, filename, false);
       return readSubmissionMetadata(filePath, true);
-    },
-    retryArchive: retryArchive
+    }
   };
 }
 

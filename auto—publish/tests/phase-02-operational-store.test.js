@@ -108,7 +108,7 @@ test("backup verifier reads destination and missing or corrupt targets have no s
 test("database reopens after close and explicit batch writes stay isolated from legacy files", () => {
   const dir = root(),
     store = createOperationalStore({ workspaceRoot: dir });
-  store.createSubmissionBatch({
+  const batch = store.createSubmissionBatch({
     batchId: "batch-1",
     items: [
       {
@@ -118,6 +118,12 @@ test("database reopens after close and explicit batch writes stay isolated from 
       },
     ],
   });
+  assert.equal(batch.batchId, "batch-1");
+  assert.equal(batch.items.length, 1);
+  assert.match(batch.items[0].itemId, /^[0-9a-f-]{36}$/i);
+  const loadedBatch = store.getSubmissionBatch("batch-1");
+  assert.equal(loadedBatch.items[0].status, "queued");
+  assert.deepEqual(loadedBatch.items[0].payload, { revision: 1 });
   const db = store.databasePath;
   store.close();
   const reopened = createOperationalStore({ workspaceRoot: dir });

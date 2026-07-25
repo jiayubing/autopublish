@@ -18,9 +18,6 @@ function registerPlatformIpc(deps) {
   var service = deps.platformWorkbenchService || createPlatformWorkbenchService({
     rootDir: rootDir,
     paths: deps.paths,
-    // This is the main-process workbench.  The worker intentionally creates
-    // its own filesystem-backed ledger after crossing the process boundary.
-    publicationLedger: deps.publicationLedger,
     platforms: loadedPlatforms.map(function(platform) {
       return { id: platform.id, scanDir: platform.scanDir };
     }),
@@ -218,25 +215,25 @@ function registerPlatformIpc(deps) {
     return wrap(async function() {
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
       var plan = buildPlanFromSubmissions(submissionValues(input));
-      var autoTrashRequested = !Array.isArray(input) && input && input.autoTrash === true;
-      // Renderer selections are resolved and validated in the main process.
-      // The worker receives only source/target references; never forward the
-      // resolved absolute path or parsed article content.
-      var identities = service.captureTaskIdentities(plan);
-      var workerPlan = service.toWorkerPlan(plan);
-      var workerResult = await taskService.startPlatformSubmit(workerPlan, {
-        onLog: function(entry) {
-          sendToRenderer("publish-log", entry);
-        }
-      });
-      if (!workerResult || !workerResult.ok) {
-        var failure = new Error(workerResult && workerResult.error ? workerResult.error : "Platform publish failed");
-        failure.code = workerResult && workerResult.errorCode || "PLATFORM_SUBMIT_FAILED";
-        throw failure;
+      if (!deps.publicationSubmissionService || typeof deps.publicationSubmissionService.submit !== "function") {
+        var unavailable = new Error("Publication workflow is unavailable");
+        unavailable.code = "PUBLICATION_WORKFLOW_UNAVAILABLE";
+        throw unavailable;
       }
-      var data = workerResult.data || { ok: 0, fail: 0, skipped: 0, results: [] };
-      data.skipped = data.skipped || data.pending || 0;
-      return applyPostPublishDisposition(data, plan, autoTrashRequested, identities);
+      var execution = await deps.publicationSubmissionService.submit(plan);
+      var results = (execution.results || []).map(function(result, index) {
+        return Object.assign({ task: plan.tasks[index] }, result);
+      });
+      return {
+        ok: results.filter(function(result) { return result.status === "published" || result.status === "submitted"; }).length,
+        fail: results.filter(function(result) { return result.status === "failed"; }).length,
+        uncertain: results.filter(function(result) { return result.status === "uncertain"; }).length,
+        skipped: 0,
+        results: results,
+        archiveSummary: { attempted: 0, succeeded: 0, failed: 0 },
+        trashDisposition: "keep_local",
+        trashSummary: { offeredCount: 0, requestedCount: 0, movedCount: 0, recoveryCount: 0, blockedCount: 0, failedCount: 0 }
+      };
     });
   });
 

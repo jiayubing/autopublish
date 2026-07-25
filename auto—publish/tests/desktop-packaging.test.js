@@ -93,7 +93,6 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
     ["./services/content-submission-service", { createContentSubmissionService: function() { return {}; } }],
     ["./services/ai-content-service", { createAiContentService: function() { return {}; } }],
     ["./services/content-generation-batch-service", { createContentGenerationBatchService: function() { return { dispose: function() {} }; } }],
-    ["../src/publication/publication-ledger", { createPublicationLedger: function() { return {}; } }],
     ["./services/doubao-collection-service", {
       createDoubaoCollectionDesktopService: function() { return service; }
     }],
@@ -296,7 +295,6 @@ describe("source assembly and packaging contract", function() {
       "src/content/research-store.js",
       "src/content/article-store.js",
       "src/content/legacy-migration.js",
-      "src/content/submission-export-service.js",
       "src/platforms/media/adapter.js",
       "desktop/ipc/content-submission-ipc.js",
       "desktop/ipc/media-ipc.js",
@@ -321,8 +319,6 @@ describe("source assembly and packaging contract", function() {
       "desktop/ipc/content-generation-batch-ipc.js",
       "desktop/ipc/publication-ipc.js",
       "src/content/article-version-service.js",
-      "src/publication/publication-ledger.js",
-      "src/publication/publication-ledger-store.js",
       "media-workbench/dist/index.html"
     ]) {
       assert.match(verifier, new RegExp('"' + escapeRegExp(requiredSurface) + '"'), requiredSurface + " must be verified");
@@ -698,10 +694,9 @@ describe("source assembly and packaging contract", function() {
     );
   });
 
-  it("keeps the publication ledger migration as an operator-only script", function() {
+  it("does not package retired publication ledger writers or scripts", function() {
     const config = read("electron-builder.alpha.yml");
-    assert.match(config, /^\s*-\s+["']?!scripts\/migrate-publication-ledger-v1\.js["']?\s*$/m);
-    assert.equal(config.includes("!scripts/**"), false, "the scripts directory must remain available to runtime code");
+    assert.doesNotMatch(config, /migrate-publication-ledger-v1|publication-ledger/);
   });
 
   it("initializes runtime environment before loading config-dependent services", function() {

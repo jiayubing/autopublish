@@ -1,10 +1,7 @@
 ﻿const fs = require("fs");
 const path = require("path");
 const mammoth = require("mammoth");
-const { detectDocxImages, convertArticle } = require("../../src/platforms/media/article-converter");
-const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
-const { runPreflight } = require("../../src/platforms/media/preflight");
-const { createPublicationLedger } = require("../../src/publication/publication-ledger");
+const { detectDocxImages } = require("../../src/platforms/media/article-converter");
 const { resolveArticleIdentity } = require("../../src/publication/article-identity");
 const { resolvePublicationTarget } = require("../../src/publication/publication-targets");
 
@@ -205,12 +202,8 @@ function createMediaWorkbenchService(opts) {
   var inputDir = options.inputDir;
   var draftStore = options.draftStore || { get: function() { return null; } };
   var workspacePaths = options.paths;
-  var configuredOrderStore = options.orderStore;
   var clientProvider = typeof options.clientProvider === "function" ? options.clientProvider : null;
-  var workspaceRoot = resolveWorkspaceRoot(options, inputDir);
-  var publicationLedger = options.publicationLedger || (workspaceRoot
-    ? createPublicationLedger({ workspaceRoot: workspaceRoot, paths: workspacePaths })
-    : null);
+  var publicationLedger = options.publicationLedger || null;
   var stopRequested = false;
 
   async function readAutoTitle(filePath) {
@@ -345,174 +338,11 @@ function createMediaWorkbenchService(opts) {
 
   function requestStop() { stopRequested = true; }
 
-  async function submitTasksSerially(articles, injected) {
-    stopRequested = false;
-    var preflight = await runPreflight({ articles: articles || [], dryRun: true });
-    if (!preflight.ok) return { ok: 0, fail: 0, skipped: 0, results: [], preflight: preflight };
-    var deps = injected || {};
-    var client = deps.client || (clientProvider ? clientProvider() : null);
-    if (!client) {
-      var configError = new Error("付费媒体配置未设置");
-      configError.code = "MEDIA_CONFIG_NOT_SET";
-      throw configError;
-    }
-    var orderStore = deps.orderStore || configuredOrderStore || new SubmissionOrderStore({ paths: workspacePaths });
-    var tasks = expandSubmissionTasks(articles);
-    var results = [];
-    for (var i = 0; i < tasks.length; i++) {
-      var task = tasks[i];
-      if (stopRequested) {
-        task.status = "skipped";
-        results.push({ taskId: task.taskId, status: "skipped", reason: "stop requested" });
-        continue;
-      }
-      var publication = null;
-      var thirdId = task.article.filename + "::" + task.resource.resourceId;
-      try {
-        var converted = await convertArticle(task.article.filePath);
-        if (stopRequested) {
-          task.status = "skipped";
-          results.push({ taskId: task.taskId, status: "skipped", reason: "stop requested" });
-          continue;
-        }
-
-        if (publicationLedger) {
-          var existing = findPublication(publicationLedger, task.article, task.resource);
-          var block = publicationBlock(existing);
-          if (block) {
-            results.push({
-              taskId: task.taskId,
-              status: "blocked",
-              publicationStatus: block.status,
-              reasonCode: block.reasonCode,
-              publicationId: block.publicationId,
-              attemptId: block.attemptId,
-              resourceId: String(task.resource.resourceId)
-            });
-            continue;
-          }
-          try {
-            var publicationContext = {};
-            if (task.resource.name || task.resource.resourceName) publicationContext.displayName = task.resource.name || task.resource.resourceName;
-            publication = publicationLedger.reserve(resolveMediaArticleIdentity(task.article), publicationTargetFor(task.resource), publicationContext);
-            publication = publicationLedger.markSubmitting(publication.publicationId, publication.attemptId);
-          } catch (error) {
-            if (error && (error.code === "PUBLICATION_DUPLICATE" || error.code === "PUBLICATION_UNCERTAIN")) {
-              var raced = findPublication(publicationLedger, task.article, task.resource);
-              var racedBlock = publicationBlock(raced) || { status: "uncertain", reasonCode: error.code };
-              results.push({
-                taskId: task.taskId,
-                status: "blocked",
-                publicationStatus: racedBlock.status,
-                reasonCode: racedBlock.reasonCode || error.code,
-                publicationId: raced && raced.publicationId,
-                attemptId: raced && latestAttempt(raced) && latestAttempt(raced).attemptId,
-                resourceId: String(task.resource.resourceId)
-              });
-              continue;
-            }
-            throw error;
-          }
-          thirdId = thirdIdFor(publication, thirdId);
-        }
-
-        var response = await client.sendArticle({
-          resourceId: task.resource.resourceId,
-          title: task.article.title,
-          content: converted.html,
-          remark: task.article.remark || "",
-          thirdId: thirdId
-        });
-        var outcome = publicationLedger && isExplicitRejectionResponse(response)
-          ? { status: "failed", errorCode: "MEDIA_API_REJECTED" }
-          : { status: "submitted" };
-        if (publicationLedger) {
-          publication = publicationLedger.recordOutcome(publication.publicationId, publication.attemptId, outcome);
-        }
-        var record = {
-          taskId: task.taskId, article: safeArticleSnapshot(task.article), resource: {
-            resourceId: String(task.resource.resourceId),
-            name: task.resource.name || task.resource.resourceName || "",
-            price: task.resource.price
-          },
-          publicationId: publication && publication.publicationId || null,
-          attemptId: publication && publication.attemptId || null,
-          orderNid: orderNidFromResponse(response),
-          result: response, submittedAt: new Date().toISOString()
-        };
-        var orderWriteError = null;
-        try {
-          await orderStore.record({
-            publicationId: publication && publication.publicationId || undefined,
-            attemptId: publication && publication.attemptId || undefined,
-            orderNid: record.orderNid || undefined,
-            command: "submit", dryRun: false,
-            params: {
-              publication_id: publication && publication.publicationId || undefined,
-              attempt_id: publication && publication.attemptId || undefined,
-              resource_id: task.resource.resourceId,
-              title: task.article.title,
-              content_file: task.article.filePath,
-              remark: task.article.remark || "",
-              third_id: thirdId,
-              order_nid: record.orderNid || undefined
-            },
-            result: { success: outcome.status === "submitted", data: record }
-          });
-        } catch (error) {
-          orderWriteError = error;
-        }
-        if (outcome.status === "failed") {
-          results.push({ taskId: task.taskId, status: "failed", publicationStatus: "failed", publicationId: publication && publication.publicationId, attemptId: publication && publication.attemptId, error: "API 明确拒绝" });
-        } else {
-          results.push({ taskId: task.taskId, status: "success", publicationStatus: "submitted", publicationId: publication && publication.publicationId, attemptId: publication && publication.attemptId, response: response, orderWriteError: orderWriteError && orderWriteError.message });
-        }
-      } catch (error) {
-        var errorOutcomeValue = publicationLedger && publication ? errorOutcome(error) : { status: "failed", errorCode: "MEDIA_SUBMISSION_FAILED" };
-        if (publicationLedger && publication) {
-          try { publication = publicationLedger.recordOutcome(publication.publicationId, publication.attemptId, errorOutcomeValue); } catch (_) {}
-        }
-        try {
-          await orderStore.record({
-            publicationId: publication && publication.publicationId || undefined,
-            attemptId: publication && publication.attemptId || undefined,
-            command: "submit", dryRun: false,
-            params: {
-              publication_id: publication && publication.publicationId || undefined,
-              attempt_id: publication && publication.attemptId || undefined,
-              resource_id: task.resource && task.resource.resourceId,
-              title: task.article && task.article.title,
-              content_file: task.article && task.article.filePath,
-              third_id: thirdId
-            },
-            result: { success: false, error: error.message }
-          });
-        } catch (_) {}
-        results.push({
-          taskId: task.taskId,
-          status: errorOutcomeValue.status === "uncertain" ? "uncertain" : "failed",
-          publicationStatus: errorOutcomeValue.status,
-          publicationId: publication && publication.publicationId,
-          attemptId: publication && publication.attemptId,
-          error: error.message
-        });
-      }
-    }
-    return {
-      ok: results.filter(function(item) { return item.status === "success"; }).length,
-      fail: results.filter(function(item) { return item.status === "failed"; }).length,
-      skipped: results.filter(function(item) { return item.status === "skipped"; }).length,
-      blocked: results.filter(function(item) { return item.status === "blocked"; }).length,
-      uncertain: results.filter(function(item) { return item.status === "uncertain"; }).length,
-      results: results
-    };
-  }
-
   return {
     scanArticles: scanArticles, previewArticle: previewArticle,
     expandSubmissionTasks: expandSubmissionTasks,
     buildConfirmationSummary: buildConfirmationSummary,
-    submitTasksSerially: submitTasksSerially, requestStop: requestStop,
+    requestStop: requestStop,
     resolveSubmissionFile: function(filename) { return resolveSubmissionFile(inputDir, filename); }
   };
 }

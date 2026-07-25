@@ -19,6 +19,7 @@ function registerArticleManagementIpc(deps) {
     aiContentService: values.aiContentService,
     contentSubmissionService: values.contentSubmissionService,
     publicationLedger: values.publicationLedger,
+    operationalStore: values.operationalStore,
     articleAttentionQuery: values.articleAttentionQuery
   });
   values.ipcMain.handle("content:get-article-management-snapshot", function(event, input) {

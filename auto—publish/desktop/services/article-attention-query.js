@@ -73,12 +73,14 @@ function createArticleAttentionQuery(options) {
     return Array.isArray(value) ? value : [];
   }
 
-  function readPublications() {
-    const value = reader("listPublications", function() {
-      if (opts.publicationLedger && typeof opts.publicationLedger.list === "function") return opts.publicationLedger.list();
-      return [];
-    })();
-    return Array.isArray(value) ? value : [];
+  function readOperationalPublications() {
+    if (opts.operationalStore && typeof opts.operationalStore.listPublicationAttention === "function") return opts.operationalStore.listPublicationAttention();
+    return [];
+  }
+
+  function readOperationalPostProcessing() {
+    if (opts.operationalStore && typeof opts.operationalStore.listPostProcessingAttention === "function") return opts.operationalStore.listPostProcessingAttention();
+    return [];
   }
 
   function readArchiveFailures() {
@@ -142,7 +144,7 @@ function createArticleAttentionQuery(options) {
       canFinalize: !!(service && typeof service.cleanupArticleSubmissionItem === "function"),
       canRetryRemoval: !!(removal && typeof removal.retryArticleRemovalTransaction === "function"),
       canRetryFailedPublication: !!(service && typeof service.previewRetryFailedPublication === "function" && typeof service.retryFailedPublication === "function"),
-      canReconcile: !!(opts.publicationLedger && typeof opts.publicationLedger.reconcile === "function"),
+      canReconcile: !!(opts.publicationWorkflow && typeof opts.publicationWorkflow.reconcile === "function"),
       canRetryArchive: !!(archive && typeof archive.retryArchive === "function"),
       canOpenPublication: true,
       canInspect: true,
@@ -168,10 +170,12 @@ function createArticleAttentionQuery(options) {
       titleSnapshot: titleFor(value, articleState),
       clientId: safeText(value.clientId, 100),
       platformId: safeText(value.platformId || value.targetPlatformId, 100),
+      accountProfileId: safeText(value.accountProfileId, 160),
       displayName: safeText(value.displayName || value.platformName, 100),
       batchId: safeText(value.batchId, 160),
       publicationId: safeText(value.publicationId, 160),
       attemptId: safeText(value.attemptId, 160),
+      jobId: safeText(value.jobId, 160),
       transactionId: safeText(value.transactionId || value.id, 160),
       status: safeText(value.status, 80),
       reasonCode: safeText(value.reasonCode || value.errorCode, 128),
@@ -222,7 +226,7 @@ function createArticleAttentionQuery(options) {
 
   function publicationEntries() {
     const platforms = platformCapabilities();
-    return readPublications().filter(function(item) {
+    return readOperationalPublications().filter(function(item) {
       return item && ["uncertain", "failed"].includes(item.status);
     }).map(function(item) {
       const latest = Array.isArray(item.attempts) && item.attempts.length ? item.attempts[item.attempts.length - 1] : null;
@@ -250,9 +254,16 @@ function createArticleAttentionQuery(options) {
   }
 
   function archiveEntries() {
-    return readArchiveFailures().map(function(item) {
-      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { hasQueueBinding: !!(item.batchId && item.publicationId && item.attemptId && item.targetPlatformId), canRetryArchive: true });
+    const operational = readOperationalPostProcessing().map(function(item) {
+      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, Object.assign({}, item, {
+        platformId: item.payload && item.payload.sourcePlatformId,
+        filename: item.payload && item.payload.filename,
+        batchId: item.payload && item.payload.batchId,
+      }), { hasQueueBinding: !!(item.jobId && item.attemptId), canRetryArchive: true });
     });
+    return operational.concat(readArchiveFailures().map(function(item) {
+      return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, { hasQueueBinding: !!(item.batchId && item.publicationId && item.attemptId && item.targetPlatformId), canRetryArchive: true });
+    }));
   }
 
   function entries() {

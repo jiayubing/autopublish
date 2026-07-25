@@ -1,7 +1,6 @@
 ﻿const fs = require("fs");
 const path = require("path");
 const { resolveStorePath } = require("../../src/platforms/media/store-paths");
-const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 
 var STATUS_LABELS = {
   "0": "待审核",
@@ -27,16 +26,16 @@ function resolveWorkspaceRoot(options) {
 
 function createMediaOrderService(opts) {
   var options = opts || {};
+  var operationalStore = options.operationalStore || null;
   var storePath = options.storePath || (options.paths && options.paths.data
     ? path.join(options.paths.data, "submission-orders.jsonl")
     : resolveStorePath(options, "submission-orders.jsonl"));
   var clientProvider = typeof options.clientProvider === "function" ? options.clientProvider : null;
   var workspaceRoot = resolveWorkspaceRoot(options);
-  var publicationLedger = options.publicationLedger || (workspaceRoot
-    ? createPublicationLedger({ workspaceRoot: workspaceRoot, paths: options.paths })
-    : null);
+  var publicationLedger = options.publicationLedger || null;
 
   function listOrders() {
+    if (operationalStore && typeof operationalStore.listRemoteOrders === "function") return operationalStore.listRemoteOrders();
     var orders = [];
     if (!fs.existsSync(storePath)) return orders;
     var raw = fs.readFileSync(storePath, "utf-8").trim();
@@ -48,6 +47,7 @@ function createMediaOrderService(opts) {
   }
 
   function listOrderViews() {
+    if (operationalStore && typeof operationalStore.listRemoteOrders === "function") return listOrders().map(toOperationalOrderView);
     return listOrders().map(function(record) {
       return toOrderView(record, publicationLedger);
     });
@@ -61,6 +61,23 @@ function createMediaOrderService(opts) {
       throw configError;
     }
     var response = await client.orderInfo(orderNid);
+    // The phase-3 production path owns order state in OperationalStore. A
+    // later reconciliation command will turn this remote observation into a
+    // durable outcome; never mutate the retired JSONL history here.
+    if (operationalStore) {
+      var item = firstOrderItem(response);
+      var status = mapOrderStatus(response);
+      var outcome = status === "published"
+        ? { status, remoteUrl: item.order_url || item.orderUrl }
+        : status === "failed"
+          ? { status, error: { code: "MEDIA_ORDER_REJECTED" } }
+          : status === "submitted"
+            ? { status }
+            : { status: "uncertain", error: { code: "MEDIA_ORDER_STATUS_UNKNOWN" } };
+      try { operationalStore.reconcileRemoteOrder({ orderId: String(orderNid), outcome }); }
+      catch (_) { /* evidence gaps remain safely visible in existing state */ }
+      return response;
+    }
     updateLocalOrderRecord(storePath, orderNid, response);
     var localRecord = findOrderRecord(storePath, orderNid);
     if (publicationLedger && localRecord) {
@@ -71,6 +88,27 @@ function createMediaOrderService(opts) {
   }
 
   return { storePath: storePath, listOrders: listOrders, listOrderViews: listOrderViews, syncOrder: syncOrder };
+}
+
+function toOperationalOrderView(order) {
+  var value = order || {};
+  return {
+    title: "",
+    filename: "",
+    orderNid: String(value.orderNid || value.orderId || ""),
+    statusCode: String(value.status || ""),
+    statusLabel: STATUS_LABELS[String(value.status || "")] || "未知",
+    submittedAt: formatTimestamp(value.createdAt),
+    publishedAt: value.status === "published" ? formatTimestamp(value.createdAt) : "",
+    resourceId: String(value.mediaResourceId || ""),
+    resourceName: "",
+    price: "",
+    orderUrl: value.remoteUrl || "",
+    publicationId: value.publicationId || "",
+    attemptId: value.attemptId || "",
+    publicationStatus: value.status || "",
+    raw: value
+  };
 }
 
 function toOrderView(record, publicationLedger) {

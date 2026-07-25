@@ -58,7 +58,7 @@ function createArticleAttentionResolver(options) {
     };
   }
 
-  function resolve(input) {
+  async function resolve(input) {
     const value = input || {};
     const entry = find(value);
     const action = value.action;
@@ -93,12 +93,16 @@ function createArticleAttentionResolver(options) {
       if (!service || typeof service.retryFailedPublication !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "失败投稿重试服务不可用");
       result = service.retryFailedPublication({ publicationId: entry.item.publicationId, expectedRevision: value.expectedRevision, confirmed: true });
     } else if (action === "reconcile-published" || action === "reconcile-failed") {
-      if (!opts.publicationLedger || typeof opts.publicationLedger.reconcile !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "发布核对服务不可用");
-      result = opts.publicationLedger.reconcile(entry.item.publicationId, { status: action === "reconcile-published" ? "published" : "failed", reasonCode: action === "reconcile-published" ? "CONFIRMED_PUBLISHED" : "CONFIRMED_NOT_PUBLISHED" });
+      if (!opts.publicationWorkflow || typeof opts.publicationWorkflow.reconcile !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "发布核对服务不可用");
+      result = await opts.publicationWorkflow.reconcile({ attemptId: entry.item.attemptId, outcome: { status: action === "reconcile-published" ? "published" : "failed", error: { code: action === "reconcile-published" ? "CONFIRMED_PUBLISHED" : "CONFIRMED_NOT_PUBLISHED", category: "remote", retryability: "never", userMessage: "Manual reconciliation" } } });
     } else if (action === "retry-archive") {
-      const archiveActionPort = opts.archiveActionPort || opts.archiveService;
-      if (!archiveActionPort || typeof archiveActionPort.retryArchive !== "function") throw attentionError("ARTICLE_ARCHIVE_RETRY_UNAVAILABLE", "本地归档重试服务不可用");
-      result = archiveActionPort.retryArchive(entry.item);
+      if (entry.item.jobId && opts.postProcessingPort && typeof opts.postProcessingPort.retry === "function") {
+        result = await opts.postProcessingPort.retry({ jobId: entry.item.jobId });
+      } else {
+        const archiveActionPort = opts.archiveActionPort || opts.archiveService;
+        if (!archiveActionPort || typeof archiveActionPort.retryArchive !== "function") throw attentionError("ARTICLE_ARCHIVE_RETRY_UNAVAILABLE", "本地归档重试服务不可用");
+        result = archiveActionPort.retryArchive(entry.item);
+      }
     } else {
       throw attentionError("ARTICLE_ATTENTION_ACTION_INVALID", "需处理动作无效");
     }

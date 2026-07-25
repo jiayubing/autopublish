@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { inspectSubmissionPair } = require("../src/content/submission-export-service");
+const { inspectSubmissionPair } = require("../src/diagnostics/submission-pair-inspector");
 
 function fail(message) {
   const error = new Error(message);

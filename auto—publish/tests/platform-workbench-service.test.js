@@ -17,6 +17,7 @@ describe("platform-workbench-service", function() {
     fs.mkdirSync(path.join(root, "input", "hepan"), { recursive: true });
     fs.mkdirSync(path.join(root, "input", "media"), { recursive: true });
     fs.writeFileSync(path.join(root, "input", "lieju", "a.txt"), "A\nBody", "utf-8");
+    fs.writeFileSync(path.join(root, "input", "lieju", "a.txt.submission.json"), JSON.stringify({ submissionBatchId: "batch-fixture", clientId: "client-1", generatedArticleId: "article-1", targetPlatformId: "lieju", accountProfileId: "account-lieju", contentHash: require("crypto").createHash("sha256").update("A\nBody").digest("hex"), status: "queued" }), "utf8");
     service = createPlatformWorkbenchService({
       rootDir: root,
       platforms: [
@@ -42,6 +43,7 @@ describe("platform-workbench-service", function() {
     const portableInput = path.join(root, ".autopublish", "input");
     fs.mkdirSync(path.join(portableInput, "lieju"), { recursive: true });
     fs.writeFileSync(path.join(portableInput, "lieju", "portable.txt"), "Portable\nBody", "utf-8");
+    fs.writeFileSync(path.join(portableInput, "lieju", "portable.txt.submission.json"), JSON.stringify({ submissionBatchId: "batch-fixture", clientId: "client-1", generatedArticleId: "article-1", targetPlatformId: "lieju", accountProfileId: "account-lieju", contentHash: require("crypto").createHash("sha256").update("Portable\nBody").digest("hex"), status: "queued" }), "utf8");
     const portableService = createPlatformWorkbenchService({
       rootDir: root,
       paths: { input: portableInput },
@@ -51,7 +53,7 @@ describe("platform-workbench-service", function() {
     const queue = portableService.scanQueue();
     assert.deepStrictEqual(queue[0].articles.map(function(article) { return article.filename; }), ["portable.txt"]);
     const plan = portableService.buildSelectedPlan({
-      selectedArticles: [{ sourcePlatformId: "lieju", filename: "portable.txt" }],
+      selectedArticles: [{ sourcePlatformId: "lieju", filename: "portable.txt", accountProfiles: { lieju: "account-lieju" } }],
       targetPlatformIds: ["lieju"]
     });
     assert.equal(plan.tasks[0].filePath, path.join(portableInput, "lieju", "portable.txt"));
@@ -60,59 +62,19 @@ describe("platform-workbench-service", function() {
 
   it("builds selected article target plan", function() {
     const plan = service.buildSelectedPlan({
-      selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt" }],
-      targetPlatformIds: ["toutiao", "hepan"]
+      selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt", accountProfiles: { lieju: "account-lieju" } }],
+      targetPlatformIds: ["lieju"]
     });
     assert.deepStrictEqual(plan.tasks.map(function(task) {
       return task.targetPlatformId;
-    }), ["toutiao", "hepan"]);
+    }), ["lieju"]);
   });
 
-  it("submits selected platform tasks serially and continues after failure", async function() {
-    const calls = [];
-    const serviceWithAdapters = createPlatformWorkbenchService({
-      rootDir: root,
-      platforms: [{ id: "lieju", scanDir: "lieju" }],
-      adapters: {
-        toutiao: {
-          id: "toutiao",
-          parseArticleFiles: function(items) {
-            return items.map(function(item) {
-              return { title: item.filename, sourceFile: item.filePath, filename: item.filename };
-            });
-          },
-          ensureSession: function() {},
-          ensureLoggedIn: async function() {},
-          publishArticle: async function(article) {
-            calls.push("toutiao:" + article.filename);
-            return true;
-          },
-          closeSession: function() {}
-        },
-        hepan: {
-          id: "hepan",
-          parseArticleFiles: function(items) {
-            return items.map(function(item) {
-              return { title: item.filename, sourceFile: item.filePath, filename: item.filename };
-            });
-          },
-          ensureSession: function() {},
-          ensureLoggedIn: async function() {},
-          publishArticle: async function(article) {
-            calls.push("hepan:" + article.filename);
-            throw new Error("hepan failed");
-          },
-          closeSession: function() {}
-        }
-      }
-    });
-    const plan = serviceWithAdapters.buildSelectedPlan({
-      selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt" }],
-      targetPlatformIds: ["toutiao", "hepan"]
-    });
-    const result = await serviceWithAdapters.submitSelectedPlanSerially(plan, { autoSubmit: true, interactive: false });
-    assert.deepStrictEqual(calls, ["toutiao:a.txt", "hepan:a.txt"]);
-    assert.strictEqual(result.ok, 1);
-    assert.strictEqual(result.fail, 1);
+  it("prepares an account-bound workflow command without writing publication state", async function() {
+    const commandService = createPlatformWorkbenchService({ rootDir: root, platforms: [{ id: "lieju", scanDir: "lieju" }], adapters: { lieju: { id: "lieju", parseArticleFiles: async (items) => [{ title: "title", body: "body", sourceFile: items[0].filePath, filename: items[0].filename }] } } });
+    const prepared = await commandService.preparePublicationCommand({ sourcePlatformId: "lieju", filename: "a.txt", targetPlatformId: "lieju", accountProfileId: "account-lieju" });
+    assert.equal(prepared.target.accountProfileId, "account-lieju");
+    assert.equal(prepared.target.platformId, "lieju");
+    assert.equal(prepared.workerTask.filename, "a.txt");
   });
 });

@@ -2,11 +2,9 @@ const path = require("path");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
-const { SubmissionOrderStore } = require("../../src/platforms/media/submission-order-store");
 const { createMediaOrderService } = require("../services/media-order-service");
 const { createMediaWorkbenchService } = require("../services/media-workbench-service");
 const { createMediaResourceService } = require("../services/media-resource-service");
-const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 const { wrap } = require("../services/ipc-response");
 const { validateMediaSubmission, validateDraft, inputError } = require("../services/submission-boundary");
 
@@ -20,11 +18,6 @@ function registerMediaIpc(deps) {
   var mediaResourceStore = new MediaResourceStore({ paths: deps.paths });
   var mediaPoolStore = new MediaPoolStore({ paths: deps.paths });
   var mediaDraftStore = new MediaDraftStore({ paths: deps.paths });
-  var submissionOrderStore = deps.orderStore || new SubmissionOrderStore({ paths: deps.paths });
-  var workspaceRoot = deps.workspaceRoot || deps.paths && (deps.paths.workspaceRoot || deps.paths.contentLibrary || deps.paths.root);
-  var publicationLedger = deps.publicationLedger || (workspaceRoot
-    ? createPublicationLedger({ workspaceRoot: workspaceRoot, paths: deps.paths })
-    : null);
   function clientProvider() {
     if (typeof deps.mediaClientProvider === "function") return deps.mediaClientProvider();
     if (deps.platformSettingsService) {
@@ -45,13 +38,11 @@ function registerMediaIpc(deps) {
     poolStore: mediaPoolStore,
     clientProvider: clientProvider
   });
-  var mediaOrderService = createMediaOrderService({ paths: deps.paths, clientProvider: clientProvider, publicationLedger: publicationLedger });
+  var mediaOrderService = createMediaOrderService({ paths: deps.paths, clientProvider: clientProvider, operationalStore: deps.operationalStore });
   var mediaWorkbenchService = createMediaWorkbenchService({
     inputDir: resolveMediaInputDir(deps),
     draftStore: mediaDraftStore,
     paths: deps.paths,
-    orderStore: submissionOrderStore,
-    publicationLedger: publicationLedger,
     clientProvider: clientProvider
   });
 
@@ -180,7 +171,19 @@ function registerMediaIpc(deps) {
 
   ipcMain.handle("media:submit-selected", function(event, articles) {
     return wrap(async function() {
-      const result = await mediaWorkbenchService.submitTasksSerially(await resolveSubmissions(articles));
+      const prepared = await resolveSubmissions(articles);
+      if (!deps.mediaPublicationSubmissionService || typeof deps.mediaPublicationSubmissionService.submit !== "function") {
+        const error = new Error("Publication workflow is unavailable"); error.code = "PUBLICATION_WORKFLOW_UNAVAILABLE"; throw error;
+      }
+      const execution = await deps.mediaPublicationSubmissionService.submit(prepared);
+      const result = {
+        batchId: execution.batchId,
+        ok: execution.results.filter((item) => item.status === "published" || item.status === "submitted").length,
+        fail: execution.results.filter((item) => item.status === "failed").length,
+        uncertain: execution.results.filter((item) => item.status === "uncertain").length,
+        skipped: 0,
+        results: execution.results,
+      };
       if (typeof deps.invalidateData === "function") deps.invalidateData("MEDIA_SUBMIT_COMPLETED");
       return result;
     });

@@ -105,7 +105,7 @@ process.on("message", function(message) {
       const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
       configureWorkerEnvironment(options.paths);
       const { loadPlatforms } = require("../../src/core/platforms");
-      const { createPlatformWorkbenchService } = require("../services/platform-workbench-service");
+      const { createWorkerPublisherExecutor } = require("./publisher-executor");
       const { subscribe } = require("../../src/core/logger");
       const { clearStopSignal } = require("../../src/core/stop-signal");
       const rootDir = options.paths && (options.paths.contentLibrary || options.paths.workspaceRoot) || process.env.AUTO_PUBLISH_WORKSPACE || require("path").resolve(__dirname, "..", "..");
@@ -141,30 +141,21 @@ process.on("message", function(message) {
         adapters.hepan.setRuntimeConfig(options.hepanRuntime || null);
       }
 
-        var servicePlatforms = loadedPlatforms.map(function(platform) {
-          return { id: platform.id, scanDir: platform.scanDir };
-        });
-
-        const service = createPlatformWorkbenchService({
-           rootDir: rootDir,
-           paths: options.paths,
-          platforms: servicePlatforms,
-          adapters: adapters
-        });
-
         var activeTask = null;
         var heartbeat = setInterval(function() {
           sendPlatformState({ phase: "heartbeat", task: activeTask || undefined });
         }, 250);
         try {
-          const result = await service.submitSelectedPlanSerially(plan, Object.assign({}, submitOptions, {
+          const executor = createWorkerPublisherExecutor({
+            adapters: adapters,
+            paths: options.paths,
             shouldStop: function() { return stopRequested; },
-            onTaskState: function(state) {
+            onState: function(state) {
               if (state && state.task) activeTask = state.task;
               sendPlatformState(state);
             }
-          }));
-          result.skipped = result.skipped || result.pending || 0;
+          });
+          const result = await executor.execute(plan, submitOptions);
           send("result", { ok: true, data: result });
         } finally {
           clearInterval(heartbeat);

@@ -16,7 +16,7 @@ function createSubmissionPreparation(deps) {
       try { article = (deps.getArticle || function(clientId, id) { return deps.articleStore.getArticle(clientId, id); })(input.clientId, articleId); } catch (_) { missingArticleIds.push(articleId); return; }
       input.targetPlatformIds.forEach(function(platformId) {
         const platform = platformMap.get(platformId);
-        const item = { articleId: articleId, targetPlatformId: platformId, contentHash: deps.hash(deps.articleMarkdown(article)), status: "excluded" };
+        const item = { articleId: articleId, targetPlatformId: platformId, accountProfileId: input.accountProfiles[platformId], contentHash: deps.hash(deps.articleMarkdown(article)), status: "excluded" };
         if (platform && platform.contentQueueImport === true) {
           const eligibility = deps.evaluateEligibility(article, platformId, platform);
           if (!eligibility.eligible) {
@@ -24,14 +24,14 @@ function createSubmissionPreparation(deps) {
             Object.assign(item, { status: "blocked", reasonCode: eligibility.reasonCodes[0], reasonCodes: eligibility.reasonCodes, reasons: eligibility.reasons });
             items.push(item); return;
           }
-          Object.assign(item, deps.itemForArticle(article, platform, platformId));
+          Object.assign(item, deps.itemForArticle(article, platform, platformId), { accountProfileId: input.accountProfiles[platformId] });
           if (item.status === "conflict") conflicts.push(item);
         }
         items.push(item);
       });
     });
     function count(status) { return items.filter(function(item) { return item.status === status; }).length; }
-    return { clientId: input.clientId, articleIds: input.articleIds.slice(), targetPlatformIds: input.targetPlatformIds.slice(),
+    return { clientId: input.clientId, articleIds: input.articleIds.slice(), targetPlatformIds: input.targetPlatformIds.slice(), accountProfiles: Object.assign({}, input.accountProfiles),
       totalTaskCount: input.articleIds.length * input.targetPlatformIds.length, queueableTaskCount: count("queueable"), idempotentCount: count("idempotent"), alreadyQueuedCount: count("idempotent"),
       blockedPublishedCount: count("blockedPublished"), blockedUncertainCount: count("blockedUncertain"), blockedContentCount: count("blocked"), conflictCount: conflicts.length,
       ineligibleArticleIds: [...new Set(ineligibleArticleIds)], unreviewedArticleIds: [...new Set(ineligibleArticleIds)], missingArticleIds: missingArticleIds, unsupportedPlatformIds: unsupportedPlatformIds, items: items };
@@ -43,7 +43,7 @@ function createSubmissionPreparation(deps) {
     const preview = previewBatch(input);
     if (preview.missingArticleIds.length) throw batchError("CONTENT_SUBMISSION_ARTICLE_NOT_FOUND", "Selected article was not found");
     const batchId = deps.batchStore.createId(); const createdAt = new Date().toISOString();
-    const batch = { version: 1, id: batchId, clientId: input.clientId, createdAt: createdAt, status: "queued", items: [] };
+    const batch = { version: 1, id: batchId, clientId: input.clientId, accountProfiles: Object.assign({}, input.accountProfiles), createdAt: createdAt, status: "queued", items: [] };
     const createdReservations = []; const writtenItems = []; let createdCount = 0; let idempotentCount = 0;
     function save() { return deps.batchStore.save(batch); }
     save();
@@ -68,7 +68,7 @@ function createSubmissionPreparation(deps) {
         }
         const item = Object.assign({}, previewItem, { status: previewItem.status, submissionBatchId: batchId });
         Object.assign(item, deps.publicationFields(context, record, reservation)); batch.items.push(item); item.status = "reserving"; save();
-        const sidecar = deps.makeSidecar({ submissionBatchId: batchId, article: article, targetPlatform: previewItem.targetPlatformId, targetPlatformId: previewItem.targetPlatformId, filename: deps.basename(item.filePath), contentHash: contentHash, queuedAt: createdAt, context: context, reservation: reservation || record });
+        const sidecar = deps.makeSidecar({ submissionBatchId: batchId, article: article, targetPlatform: previewItem.targetPlatformId, targetPlatformId: previewItem.targetPlatformId, accountProfileId: previewItem.accountProfileId, filename: deps.basename(item.filePath), contentHash: contentHash, queuedAt: createdAt, context: context, reservation: reservation || record });
         deps.mkdirFor(item.filePath);
         if (previewItem.status === "idempotent") { if (reservation) deps.writeAtomic(item.sidecarPath, JSON.stringify(sidecar, null, 2) + "\n"); item.status = "skipped"; idempotentCount += 1; }
         else { deps.writePairAtomic(item.filePath, markdown, item.sidecarPath, JSON.stringify(sidecar, null, 2) + "\n"); item.status = "queued"; createdCount += 1; writtenItems.push(item); }

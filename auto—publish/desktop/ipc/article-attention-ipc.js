@@ -1,40 +1,10 @@
 const { wrap } = require("../services/ipc-response");
-const { createArticleAttentionQuery } = require("../services/article-attention-query");
-const { createArticleAttentionResolver } = require("../services/article-attention-resolver");
-const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 
 function registerArticleAttentionIpc(deps) {
   const options = deps || {};
-  const publicationLedger = options.publicationLedger || createPublicationLedger({ workspaceRoot: options.rootDir, paths: options.paths });
-  // This is deliberately one injected action port: query uses it to expose
-  // capability, resolver uses the exact same port to perform the action.
-  // Keep archiveService as an isolated-registrar compatibility alias only.
-  const archiveActionPort = options.archiveActionPort || options.archiveService;
-  const query = options.articleAttentionQuery || createArticleAttentionQuery({
-    contentSubmissionService: options.contentSubmissionService,
-    articleRemovalService: options.aiContentService,
-    publicationLedger: publicationLedger,
-    archiveActionPort: archiveActionPort,
-    getRevision: options.getWorkspaceDataRevision,
-    readers: {
-      listTransactions: options.aiContentService && options.aiContentService.listArticleRemovalTransactions,
-      getArticle: options.aiContentService && options.aiContentService.getGeneratedArticle,
-      platformCapabilities: options.contentSubmissionService && options.contentSubmissionService.listPlatforms,
-      getTrashedArticle: function(clientId, articleId) {
-        if (!options.aiContentService || typeof options.aiContentService.listTrashedArticles !== "function") return null;
-        const record = options.aiContentService.listTrashedArticles(clientId).find(function(item) { return item && item.articleId === articleId; });
-        return record || null;
-      }
-    }
-  });
-  const resolver = options.articleAttentionResolver || createArticleAttentionResolver({
-    query,
-    contentSubmissionService: options.contentSubmissionService,
-    articleRemovalService: options.aiContentService,
-    publicationLedger: publicationLedger,
-    archiveActionPort: archiveActionPort,
-    onDataInvalidated: options.invalidateData
-  });
+  if (!options.articleAttentionQuery || !options.articleAttentionResolver) throw new Error("Article attention ports are required from composition");
+  const query = options.articleAttentionQuery;
+  const resolver = options.articleAttentionResolver;
 
   options.ipcMain.handle("content:list-article-attention", function(event, input) { return wrap(function() { return query.list(input || {}); }); });
   options.ipcMain.handle("content:get-article-attention", function(event, input) { return wrap(function() { return query.get(input || {}); }); });

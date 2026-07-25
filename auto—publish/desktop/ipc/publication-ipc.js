@@ -1,4 +1,3 @@
-const { createPublicationLedger } = require("../../src/publication/publication-ledger");
 const { wrap } = require("../services/ipc-response");
 
 const MAX_ARTICLE_IDS = 2000;
@@ -93,16 +92,23 @@ function safeRecord(record) {
 
 function registerPublicationIpc(deps) {
   const values = deps || {};
-  const ledger = values.publicationLedger || createPublicationLedger({ workspaceRoot: values.rootDir, paths: values.paths });
+  const ledger = values.publicationLedger || null;
   values.ipcMain.handle("publication:list-for-articles", function(event, input) {
     return wrap(function() {
       const request = validateListInput(input);
-      return ledger.listForArticles(request.clientId, request.articleIds).map(safeRecord);
+      const records = values.operationalStore && typeof values.operationalStore.listPublicationRecords === "function"
+        ? values.operationalStore.listPublicationRecords({ articleIds: request.articleIds })
+        : ledger.listForArticles(request.clientId, request.articleIds);
+      return records.map(safeRecord);
     });
   });
   values.ipcMain.handle("publication:reconcile", function(event, input) {
     return wrap(function() {
       const request = validateReconcileInput(input);
+      if (!ledger) {
+        const error = inputError("PUBLICATION_RECONCILE_EVIDENCE_REQUIRED", "Manual reconciliation needs remote evidence and is not available through this legacy command");
+        throw error;
+      }
       const record = ledger.reconcile(request.publicationId, {
         status: request.status,
         reasonCode: request.reasonCode

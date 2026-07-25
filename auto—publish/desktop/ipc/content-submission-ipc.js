@@ -1,4 +1,3 @@
-const { createContentSubmissionService } = require("../services/content-submission-service");
 const { wrap } = require("../services/ipc-response");
 
 function bind(service, name) {
@@ -26,16 +25,28 @@ function createSubmissionInterface(service) {
 }
 
 function registerContentSubmissionIpc(deps) {
-  const service = deps.contentSubmissionService || createContentSubmissionService({ workspaceRoot: deps.rootDir, paths: deps.paths, platforms: deps.platforms });
+  const service = deps.contentSubmissionService;
+  if (!service) {
+    const error = new Error("Content submission service is required");
+    error.code = "CONTENT_SUBMISSION_SERVICE_REQUIRED";
+    throw error;
+  }
   const workflow = deps.submissionWorkflow || createSubmissionInterface(service);
   function checked(input) { if (!input || input.confirmed !== true || Object.keys(input).some(function(key) { return ["clientId", "generatedArticleId", "targetPlatform", "mediaResourceId", "confirmed"].indexOf(key) === -1; })) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return input; }
   deps.ipcMain.handle("content:preview-export", function(event, input) { return wrap(function() { return workflow.preparation.previewExport(checked(input)); }); });
   deps.ipcMain.handle("content:export-article", function(event, input) { return wrap(function() { return workflow.preparation.exportArticle(checked(input)); }); });
   function batchInput(input, confirmed) {
-    if (!input || typeof input !== "object" || Object.keys(input).some(function(key) { return ["clientId", "articleIds", "targetPlatformIds", "confirmed", "batchId", "planId"].indexOf(key) === -1; })) {
+    if (!input || typeof input !== "object" || Object.keys(input).some(function(key) { return ["clientId", "articleIds", "targetPlatformIds", "accountProfiles", "confirmed", "batchId", "planId"].indexOf(key) === -1; })) {
       const e = new Error("Invalid content submission batch input"); e.code = "CONTENT_SUBMISSION_BATCH_INPUT_INVALID"; throw e;
     }
     if (confirmed && input.confirmed !== true) { const e = new Error("Batch confirmation is required"); e.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED"; throw e; }
+    if (Array.isArray(input.targetPlatformIds) && input.targetPlatformIds.length) {
+      if (!input.accountProfiles || typeof input.accountProfiles !== "object" || Array.isArray(input.accountProfiles) ||
+          Object.keys(input.accountProfiles).length !== input.targetPlatformIds.length ||
+          input.targetPlatformIds.some(function(platformId) { return typeof input.accountProfiles[platformId] !== "string" || !input.accountProfiles[platformId].trim(); })) {
+        const e = new Error("A platform account profile is required"); e.code = "ACCOUNT_PROFILE_REQUIRED"; throw e;
+      }
+    }
     return input;
   }
   function safeBatchResult(value) {

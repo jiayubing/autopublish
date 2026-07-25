@@ -24,12 +24,12 @@ function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
 function registerIpc(deps) {
   const values = deps || {};
   // `registerIpc` is the authenticated main-process composition boundary.
-  // Individual IPC registrars retain their explicit factory fallbacks for
-  // isolated tests, but a production runtime must supply its owned ledger so
-  // no registrar can silently create a second in-memory module instance.
-  if (!values.publicationLedger || typeof values.publicationLedger.listForArticles !== "function") {
-    const error = new Error("Authenticated IPC requires a publication ledger");
-    error.code = "PUBLICATION_LEDGER_REQUIRED";
+  // Production must supply the OperationalStore owned by the workspace
+  // composition root. Registrars may retain isolated-test fallbacks, but the
+  // assembled application cannot create a legacy JSON publication writer.
+  if (!values.operationalStore || typeof values.operationalStore.listPublicationRecords !== "function") {
+    const error = new Error("Authenticated IPC requires an OperationalStore");
+    error.code = "OPERATIONAL_STORE_REQUIRED";
     throw error;
   }
   const channels = [];
@@ -39,6 +39,10 @@ function registerIpc(deps) {
   });
   const guarded = Object.assign({}, values, { ipcMain: guardedIpcMain });
   const modules = {};
+  // Isolated legacy registrar tests intentionally do not construct a
+  // workspace OperationalStore. A production WorkspaceRuntime always does,
+  // and therefore always exposes the explicit confirmation command.
+  if (values.operationalStore) modules.accountProfiles = require("./account-profile-ipc").registerAccountProfileIpc(guarded);
   modules.media = require("./media-ipc").registerMediaIpc(guarded);
   modules.platform = require("./platform-ipc").registerPlatformIpc(guarded);
   modules.aiProvider = require("./ai-provider-ipc").registerAiProviderIpc(guarded);

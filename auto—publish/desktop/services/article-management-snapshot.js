@@ -143,6 +143,7 @@ function createArticleManagementSnapshot(options) {
   const ai = opts.aiContentService || {};
   const submission = opts.contentSubmissionService || {};
   const ledger = opts.publicationLedger || {};
+  const operationalStore = opts.operationalStore || null;
   const attention = opts.articleAttentionQuery || null;
 
   function key(clientId, revision) {
@@ -168,7 +169,10 @@ function createArticleManagementSnapshot(options) {
     const batches = (Array.isArray(batchesRaw) ? batchesRaw : []).map(safeBatch);
     const articleList = Array.isArray(articles) ? clone(articles) : [];
     const articleIds = articleList.map(function(article) { return article.id; }).filter(Boolean);
-    const recordsRaw = await read("listPublications", function() { return typeof ledger.listForArticles === "function" ? ledger.listForArticles(clientId, articleIds) : []; }, clientId);
+    const recordsRaw = await read("listPublications", function() {
+      if (operationalStore && typeof operationalStore.listPublicationRecords === "function") return operationalStore.listPublicationRecords({ articleIds });
+      return typeof ledger.listForArticles === "function" ? ledger.listForArticles(clientId, articleIds) : [];
+    }, clientId);
     const publicationRecords = (Array.isArray(recordsRaw) ? recordsRaw : []).map(safeRecord);
     const attentionList = await read("listAttention", function() { return attention && typeof attention.list === "function" ? attention.list({ clientId }) : { revision, items: [], counts: { total: 0, actionable: 0 } }; }, clientId);
     const attentionItems = Array.isArray(attentionList && attentionList.items) ? clone(attentionList.items) : [];

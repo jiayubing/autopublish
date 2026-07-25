@@ -6,7 +6,6 @@
 const { MediaClient } = require('./media-client');
 const { convertArticle } = require('./article-converter');
 const { detectDocxImages } = require('./article-converter');
-const { SubmissionOrderStore } = require('./submission-order-store');
 const { MediaDraftStore } = require('./media-draft-store');
 const { resolveApiKey } = require('./config');
 const { DIRS } = require('../../../scripts/config');
@@ -23,7 +22,6 @@ function createMediaAdapter(opts) {
     apiKey: apiKey,
     baseUrl: opts.baseUrl
   });
-  const store = new SubmissionOrderStore({ paths: opts.paths });
   const inputDir = opts.paths && opts.paths.mediaInput || path.join(DIRS.inputDir, "media");
 
   return {
@@ -64,19 +62,6 @@ function createMediaAdapter(opts) {
           thirdId: thirdId
         });
       } catch (err) {
-        await store.record({
-          command: 'submit',
-          dryRun: false,
-          params: {
-            resource_id: resourceId,
-            title: title,
-            content_file: contentFile,
-            remark: remark,
-            third_id: thirdId
-          },
-          result: { success: false, error: err.message }
-        });
-
         return {
           platform: 'media',
           status: 'error',
@@ -85,19 +70,6 @@ function createMediaAdapter(opts) {
           error: err.message
         };
       }
-
-      await store.record({
-        command: 'submit',
-        dryRun: false,
-        params: {
-          resource_id: resourceId,
-          title: title,
-          content_file: contentFile,
-          remark: remark,
-          third_id: thirdId
-        },
-        result: { success: true, data: response }
-      });
 
       var data = response && response.data ? response.data : {};
       return {
@@ -118,12 +90,6 @@ function createMediaAdapter(opts) {
       try {
         response = await client.orderInfo(orderNid);
       } catch (err) {
-        await store.record({
-          command: 'order',
-          dryRun: false,
-          params: { order_nids: [orderNid] },
-          result: { success: false, error: err.message }
-        });
         return {
           platform: 'media',
           status: 'error',
@@ -131,13 +97,6 @@ function createMediaAdapter(opts) {
           error: err.message
         };
       }
-
-      await store.record({
-        command: 'order',
-        dryRun: false,
-        params: { order_nids: [orderNid] },
-        result: { success: true, data: response }
-      });
 
       return {
         platform: 'media',

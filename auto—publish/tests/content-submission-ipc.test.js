@@ -38,6 +38,14 @@ it("forwards only the preview action plan token for batch cancellation", async f
   assert.deepEqual(result, { ok: true, data: { batchId: "batch-1", planId: "plan-1", cancelledCount: 1, blockedItems: [] } });
 });
 
+it("rejects a content submission batch without explicit account profile bindings", async function() {
+  const handlers = new Map();
+  registerContentSubmissionIpc({ ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) }, contentSubmissionService: { createBatch: () => ({}) } });
+  const result = await handlers.get("content:create-submission-batch")(null, { clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], confirmed: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "ACCOUNT_PROFILE_REQUIRED");
+});
+
 it("passes an optional media resource id but continues rejecting renderer paths", async function() {
   const handlers = new Map();
   let received;

@@ -30,12 +30,17 @@ function validateMediaSubmission(value) {
 }
 
 function validatePlatformSubmission(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || !hasOnlyKeys(value, ["sourcePlatformId", "filename", "targetPlatformIds"])) throw inputError();
+  if (!value || typeof value !== "object" || Array.isArray(value) || !hasOnlyKeys(value, ["sourcePlatformId", "filename", "targetPlatformIds", "accountProfiles"])) throw inputError();
   if (typeof value.sourcePlatformId !== "string" || !value.sourcePlatformId || value.sourcePlatformId.trim() !== value.sourcePlatformId) throw inputError();
+  var targetPlatformIds = validateIdList(value.targetPlatformIds);
+  if (!value.accountProfiles || typeof value.accountProfiles !== "object" || Array.isArray(value.accountProfiles) ||
+      Object.keys(value.accountProfiles).length !== targetPlatformIds.length ||
+      targetPlatformIds.some(function(platformId) { return typeof value.accountProfiles[platformId] !== "string" || !value.accountProfiles[platformId].trim(); })) throw inputError("ACCOUNT_PROFILE_REQUIRED", "A platform account profile is required");
   return {
     sourcePlatformId: value.sourcePlatformId,
     filename: validateFilename(value.filename),
-    targetPlatformIds: validateIdList(value.targetPlatformIds)
+    targetPlatformIds: targetPlatformIds,
+    accountProfiles: Object.fromEntries(targetPlatformIds.map(function(platformId) { return [platformId, value.accountProfiles[platformId]]; }))
   };
 }
 

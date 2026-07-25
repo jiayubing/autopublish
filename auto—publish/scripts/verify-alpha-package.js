@@ -30,8 +30,6 @@ const REQUIRED_FILES = [
   "src/content/generation-batch-runner.js",
   "src/content/article-review-service.js",
   "src/content/article-version-service.js",
-  "src/publication/publication-ledger.js",
-  "src/publication/publication-ledger-store.js",
   "scripts/config.js",
   "config/platforms.json",
   "config/build-info.json",
