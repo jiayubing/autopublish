@@ -6,11 +6,23 @@ const { execSync } = require("child_process");
 const { DIRS, PW } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 const { ensureDir, sleep, quoteArg } = require("../../core/files");
-const { pwSessionConfig, pwEnv, pwCmd, pwRun, runCode } = require("../../core/playwright");
+const {
+  pwSessionConfig,
+  pwEnv,
+  pwCmd,
+  pwRun,
+  runCode,
+} = require("../../core/playwright");
 const { extractDocxArticle } = require("../../core/docx-text-extractor");
 const { parseArticle } = require("../../core/article-text");
-const { resolveInteractive, throwIfStopped, waitForCondition } = require("../../core/operator-flow");
-const { createBrowserSessionLifecycle } = require("../shared/browser-session-lifecycle");
+const {
+  resolveInteractive,
+  throwIfStopped,
+  waitForCondition,
+} = require("../../core/operator-flow");
+const {
+  createBrowserSessionLifecycle,
+} = require("../shared/browser-session-lifecycle");
 
 var SESSION = pwSessionConfig("toutiao");
 var SESSION_OPTS = { session: SESSION };
@@ -24,7 +36,7 @@ var TOUTIAO = {
   loginUrl: "https://mp.toutiao.com",
   publishUrl: "https://mp.toutiao.com/profile_v4/graphic/publish",
   articleListUrl: "https://mp.toutiao.com/profile_v4/graphic/articles",
-  successUrlPattern: /\/profile_v4\/graphic\/articles(?:[/?#]|$)/
+  successUrlPattern: /\/profile_v4\/graphic\/articles(?:[/?#]|$)/,
 };
 
 var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
@@ -35,15 +47,36 @@ var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
   ensureDir: ensureDir,
   sleep: sleep,
   log: log,
-  start: function() {
-    execSync(pwCmd("open " + TOUTIAO.base + " --browser=" + PW.browserChannel + " --headed --persistent --profile=" + quoteArg(SESSION.profileDir), SESSION), { encoding: "utf-8", timeout: 20000, env: pwEnv(SESSION) });
-  }
+  start: function () {
+    execSync(
+      pwCmd(
+        "open " +
+          TOUTIAO.base +
+          " --browser=" +
+          PW.browserChannel +
+          " --headed --persistent --profile=" +
+          quoteArg(SESSION.profileDir),
+        SESSION,
+      ),
+      { encoding: "utf-8", timeout: 20000, env: pwEnv(SESSION) },
+    );
+  },
 });
-function daemonAlive() { return SESSION_LIFECYCLE.isAlive(); }
-function ensureDaemon() { return SESSION_LIFECYCLE.ensureStarted(); }
-function loadSavedState() { return SESSION_LIFECYCLE.loadSavedState(); }
-function saveCurrentState() { return SESSION_LIFECYCLE.saveState(); }
-function closeBrowserSession() { return SESSION_LIFECYCLE.close(); }
+function daemonAlive() {
+  return SESSION_LIFECYCLE.isAlive();
+}
+function ensureDaemon() {
+  return SESSION_LIFECYCLE.ensureStarted();
+}
+function loadSavedState() {
+  return SESSION_LIFECYCLE.loadSavedState();
+}
+function saveCurrentState() {
+  return SESSION_LIFECYCLE.saveState();
+}
+function closeBrowserSession() {
+  return SESSION_LIFECYCLE.close();
+}
 
 function getCurrentPageUrl() {
   return runCode("  return page.url();\n", SESSION_OPTS).trim();
@@ -53,7 +86,7 @@ function getCurrentPageText() {
   try {
     return runCode(
       "  return document.body ? document.body.innerText : '';\n",
-      SESSION_OPTS
+      SESSION_OPTS,
     );
   } catch (e) {
     return "";
@@ -69,6 +102,16 @@ function checkLogin() {
   }
 }
 
+function openLogin() {
+  ensureDaemon();
+  try {
+    loadSavedState();
+  } catch (e) {
+    log("Failed to load login state: " + e.message, "WARN");
+  }
+  pwRun("goto " + TOUTIAO.loginUrl, { timeout: 15000, session: SESSION });
+}
+
 function checkLoginInCurrentPage() {
   try {
     var url = getCurrentPageUrl();
@@ -78,17 +121,41 @@ function checkLoginInCurrentPage() {
   }
 }
 
+function inspectAccount() {
+  try {
+    var evidence = runCode(
+      [
+        "  var selectors = ['[data-user-id]', '[data-uid]', '[data-account-id]', 'a[href*=\"uid=\"]', 'a[href*=\"user_id=\"]'];",
+        "  var node = null;",
+        "  for (var i = 0; i < selectors.length && !node; i += 1) node = document.querySelector(selectors[i]);",
+        "  if (!node) return { verified: false };",
+        "  var href = String(node.getAttribute('href') || '');",
+        "  var match = href.match(/[?&](?:uid|user_id|userId)=([A-Za-z0-9_-]{1,128})/);",
+        "  var remoteAccountId = String(node.getAttribute('data-user-id') || node.getAttribute('data-uid') || node.getAttribute('data-account-id') || (match && match[1]) || '').trim();",
+        "  var displayName = String(node.getAttribute('data-user-name') || node.textContent || '').replace(/[\\u0000-\\u001f\\u007f]/g, '').trim();",
+        "  return remoteAccountId && displayName && displayName.length <= 128 ? { verified: true, remoteAccountId: remoteAccountId, displayName: displayName } : { verified: false };",
+      ].join("\n"),
+      SESSION_OPTS,
+    );
+    return evidence && evidence.verified === true
+      ? evidence
+      : { verified: false };
+  } catch (_) {
+    return { verified: false };
+  }
+}
+
 function waitForLoginState(timeoutMs) {
   return waitForCondition(checkLoginInCurrentPage, {
     timeoutMs: timeoutMs,
-    intervalMs: FAST_POLL_MS
+    intervalMs: FAST_POLL_MS,
   });
 }
 
 function waitForLoginCompletion(timeoutMs) {
   return waitForCondition(checkLoginInCurrentPage, {
     timeoutMs: timeoutMs || LOGIN_WAIT_TIMEOUT_MS,
-    intervalMs: FAST_POLL_MS
+    intervalMs: FAST_POLL_MS,
   });
 }
 
@@ -101,13 +168,19 @@ function doLogin(options) {
   } catch (e) {}
 
   if (!interactive) {
-    log("Desktop mode detected; the batch will resume automatically after login", "INFO");
+    log(
+      "Desktop mode detected; the batch will resume automatically after login",
+      "INFO",
+    );
     return Promise.resolve(waitForLoginCompletion(opts.timeoutMs));
   }
 
-  return new Promise(function(resolve) {
-    var rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question("Press Enter after login...", function() {
+  return new Promise(function (resolve) {
+    var rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question("Press Enter after login...", function () {
       rl.close();
       resolve(waitForLoginCompletion(opts.timeoutMs));
     });
@@ -130,7 +203,10 @@ async function ensureLoggedIn(options) {
     return;
   }
 
-  var relogged = await doLogin({ interactive: interactive, timeoutMs: opts.timeoutMs });
+  var relogged = await doLogin({
+    interactive: interactive,
+    timeoutMs: opts.timeoutMs,
+  });
   if (!relogged || !checkLogin()) {
     throw new Error("Login failed");
   }
@@ -143,15 +219,15 @@ function dismissAssistantDrawer() {
   try {
     runCode(
       "  var mask = page.locator('div.byte-drawer-mask').first();\n" +
-      "  if (await mask.count()) {\n" +
-      "    var vis = await mask.evaluate(function(el) { return el.offsetParent !== null && el.getBoundingClientRect().width > 0; });\n" +
-      "    if (vis) {\n" +
-      "      await mask.click({ timeout: 3000 }).catch(function() {});\n" +
-      "      await page.waitForTimeout(500);\n" +
-      "    }\n" +
-      "  }\n" +
-      "  return 'ok';\n",
-      { timeout: 10000, session: SESSION }
+        "  if (await mask.count()) {\n" +
+        "    var vis = await mask.evaluate(function(el) { return el.offsetParent !== null && el.getBoundingClientRect().width > 0; });\n" +
+        "    if (vis) {\n" +
+        "      await mask.click({ timeout: 3000 }).catch(function() {});\n" +
+        "      await page.waitForTimeout(500);\n" +
+        "    }\n" +
+        "  }\n" +
+        "  return 'ok';\n",
+      { timeout: 10000, session: SESSION },
     );
   } catch (e) {}
 }
@@ -159,55 +235,68 @@ function dismissAssistantDrawer() {
 function fillTitle(title) {
   runCode(
     "  var titleInput = page.locator('textarea[placeholder*=\"文章标题\"]').first();\n" +
-    "  await titleInput.waitFor({ state: 'visible', timeout: 15000 });\n" +
-    "  await titleInput.fill(" + JSON.stringify(title || "") + ");\n" +
-    "  await page.waitForTimeout(300);\n",
-    { timeout: 20000, session: SESSION }
+      "  await titleInput.waitFor({ state: 'visible', timeout: 15000 });\n" +
+      "  await titleInput.fill(" +
+      JSON.stringify(title || "") +
+      ");\n" +
+      "  await page.waitForTimeout(300);\n",
+    { timeout: 20000, session: SESSION },
   );
 }
 
 function fillBody(body) {
   runCode(
     "  var editor = page.locator('div.ProseMirror').first();\n" +
-    "  await editor.waitFor({ state: 'visible', timeout: 15000 });\n" +
-    "  await editor.click({ timeout: 10000 });\n" +
-    "  await page.waitForTimeout(200);\n" +
-    "  await page.keyboard.type(" + JSON.stringify(body || "") + ");\n" +
-    "  await page.waitForTimeout(300);\n",
-    { timeout: 60000, session: SESSION }
+      "  await editor.waitFor({ state: 'visible', timeout: 15000 });\n" +
+      "  await editor.click({ timeout: 10000 });\n" +
+      "  await page.waitForTimeout(200);\n" +
+      "  await page.keyboard.type(" +
+      JSON.stringify(body || "") +
+      ");\n" +
+      "  await page.waitForTimeout(300);\n",
+    { timeout: 60000, session: SESSION },
   );
 }
 
 function selectCoverMode(coverMode) {
-  var mode = coverMode === "single" ? "单图" : coverMode === "triple" ? "三图" : "无封面";
+  var mode =
+    coverMode === "single"
+      ? "单图"
+      : coverMode === "triple"
+        ? "三图"
+        : "无封面";
   runCode(
-    "  var option = page.getByText(" + JSON.stringify(mode) + ", { exact: true }).first();\n" +
-    "  if (await option.count()) {\n" +
-    "    await option.click({ timeout: 10000 });\n" +
-    "    await page.waitForTimeout(300);\n" +
-    "  }\n",
-    { timeout: 15000, session: SESSION }
+    "  var option = page.getByText(" +
+      JSON.stringify(mode) +
+      ", { exact: true }).first();\n" +
+      "  if (await option.count()) {\n" +
+      "    await option.click({ timeout: 10000 });\n" +
+      "    await page.waitForTimeout(300);\n" +
+      "  }\n",
+    { timeout: 15000, session: SESSION },
   );
 }
 
 function selectAdEnabled(adEnabled) {
   var label = adEnabled ? "投放广告赚收益" : "不投放广告";
   runCode(
-    "  var option = page.getByText(" + JSON.stringify(label) + ", { exact: true }).first();\n" +
-    "  if (await option.count()) {\n" +
-    "    await option.click({ timeout: 10000 });\n" +
-    "    await page.waitForTimeout(300);\n" +
-    "  }\n",
-    { timeout: 15000, session: SESSION }
+    "  var option = page.getByText(" +
+      JSON.stringify(label) +
+      ", { exact: true }).first();\n" +
+      "  if (await option.count()) {\n" +
+      "    await option.click({ timeout: 10000 });\n" +
+      "    await page.waitForTimeout(300);\n" +
+      "  }\n",
+    { timeout: 15000, session: SESSION },
   );
 }
 
 function clickPreviewAndPublish() {
   runCode(
     "  var button = page.getByRole('button', { name: '预览并发布' }).first();\n" +
-    "  await button.click({ timeout: 15000 });\n" +
-    "  await page.waitForTimeout(1000);\n",
-    { timeout: 20000, session: SESSION }
+      "  await button.click({ timeout: 15000 });\n" +
+      "  await page.waitForTimeout(1000);\n",
+    { timeout: 20000, session: SESSION },
   );
 }
 
@@ -215,12 +304,12 @@ function confirmAdDialog() {
   try {
     runCode(
       "  var modal = page.locator('div.byte-modal').first();\n" +
-      "  var ok = modal.locator('text=确定').first();\n" +
-      "  if (await ok.count()) {\n" +
-      "    await ok.click({ timeout: 10000 });\n" +
-      "    await page.waitForTimeout(1500);\n" +
-      "  }\n",
-      { timeout: 15000, session: SESSION }
+        "  var ok = modal.locator('text=确定').first();\n" +
+        "  if (await ok.count()) {\n" +
+        "    await ok.click({ timeout: 10000 });\n" +
+        "    await page.waitForTimeout(1500);\n" +
+        "  }\n",
+      { timeout: 15000, session: SESSION },
     );
   } catch (e) {}
 }
@@ -228,60 +317,15 @@ function confirmAdDialog() {
 function clickConfirmPublish() {
   runCode(
     "  var button = page.getByRole('button', { name: '确认发布' });\n" +
-    "  try {\n" +
-    "    await button.first().waitFor({ state: 'visible', timeout: 10000 });\n" +
-    "  } catch (e) {\n" +
-    "    return;\n" +
-    "  }\n" +
-    "  await button.first().click({ timeout: 15000 });\n" +
-    "  await page.waitForTimeout(1000);\n",
-    { timeout: 25000, session: SESSION }
+      "  try {\n" +
+      "    await button.first().waitFor({ state: 'visible', timeout: 10000 });\n" +
+      "  } catch (e) {\n" +
+      "    return;\n" +
+      "  }\n" +
+      "  await button.first().click({ timeout: 15000 });\n" +
+      "  await page.waitForTimeout(1000);\n",
+    { timeout: 25000, session: SESSION },
   );
-}
-
-function waitForPublishSuccess(timeoutMs) {
-  return waitForCondition(function() {
-    try {
-      return TOUTIAO.successUrlPattern.test(getCurrentPageUrl());
-    } catch (e) {
-      return false;
-    }
-  }, {
-    timeoutMs: timeoutMs || 25000,
-    intervalMs: 2000
-  });
-}
-
-function articleListShowsPublished(articleTitle) {
-  var title = String(articleTitle || "").trim();
-  if (!title) {
-    return false;
-  }
-
-  var text = getCurrentPageText();
-  if (!text || text.indexOf(title) === -1) {
-    return false;
-  }
-
-  return text.indexOf("已发布") !== -1 || text.indexOf("已推送") !== -1 || text.indexOf("审核中") !== -1;
-}
-
-function verifyPublishFromArticleList(articleTitle, timeoutMs) {
-  var title = String(articleTitle || "").trim();
-  if (!title) {
-    return false;
-  }
-
-  try {
-    pwRun("goto " + TOUTIAO.articleListUrl, { timeout: 25000, session: SESSION });
-  } catch (e) {}
-
-  return waitForCondition(function() {
-    return articleListShowsPublished(title);
-  }, {
-    timeoutMs: timeoutMs || 15000,
-    intervalMs: FAST_POLL_MS
-  });
 }
 
 async function publishArticle(article, options) {
@@ -301,7 +345,10 @@ async function publishArticle(article, options) {
 
     if (!checkLoginInCurrentPage()) {
       log("Toutiao publish page requires login", "WARN");
-      var relogged = await doLogin({ interactive: interactive, timeoutMs: opts.timeoutMs });
+      var relogged = await doLogin({
+        interactive: interactive,
+        timeoutMs: opts.timeoutMs,
+      });
       if (!relogged || !checkLogin()) {
         return { status: "failed", errorCode: "LOGIN_FAILED" };
       }
@@ -339,31 +386,27 @@ async function publishArticle(article, options) {
       clickConfirmPublish();
       throwIfStopped();
 
-      if (await waitForPublishSuccess(10000)) {
-        var url = "";
-        try { url = getCurrentPageUrl(); } catch (_) {}
-        return { status: "published", remoteUrl: url || undefined };
-      }
-
-      if (await verifyPublishFromArticleList(article.title, 15000)) {
-        var verifiedUrl = "";
-        try { verifiedUrl = getCurrentPageUrl(); } catch (_) {}
-        return { status: "published", remoteUrl: verifiedUrl || undefined };
-      }
-
+      // Navigation to a generic list cannot bind a remote record to this
+      // article/attempt. Browser submission has no response evidence yet.
       return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
     } catch (remoteError) {
       return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
     }
   } catch (error) {
-    if (remoteCallStarted) return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
-    if (isStopError(error)) return { status: "failed", errorCode: "STOP_REQUESTED" };
+    if (remoteCallStarted)
+      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+    if (isStopError(error))
+      return { status: "failed", errorCode: "STOP_REQUESTED" };
     return { status: "failed", errorCode: "ADAPTER_FAILED" };
   }
 }
 
 function isStopError(error) {
-  return !!(error && error.message && error.message.indexOf("Stop requested") !== -1);
+  return !!(
+    error &&
+    error.message &&
+    error.message.indexOf("Stop requested") !== -1
+  );
 }
 
 function scanArticles(scanDir) {
@@ -372,20 +415,23 @@ function scanArticles(scanDir) {
     return [];
   }
 
-  return fs.readdirSync(inputDir).filter(function(name) {
-    if (name.indexOf("~$") === 0) {
-      return false;
-    }
-    return name.endsWith(".docx") || name.endsWith(".md");
-  }).map(function(name) {
-    var ext = path.extname(name);
-    var baseName = path.basename(name, ext).trim();
-    return {
-      file: path.join(inputDir, name),
-      filename: name,
-      fileBaseName: baseName
-    };
-  });
+  return fs
+    .readdirSync(inputDir)
+    .filter(function (name) {
+      if (name.indexOf("~$") === 0) {
+        return false;
+      }
+      return name.endsWith(".docx") || name.endsWith(".md");
+    })
+    .map(function (name) {
+      var ext = path.extname(name);
+      var baseName = path.basename(name, ext).trim();
+      return {
+        file: path.join(inputDir, name),
+        filename: name,
+        fileBaseName: baseName,
+      };
+    });
 }
 
 async function parseArticleFiles(articles) {
@@ -394,12 +440,13 @@ async function parseArticleFiles(articles) {
   for (var i = 0; i < articles.length; i++) {
     var article = articles[i];
     try {
-      var data = path.extname(article.file).toLowerCase() === ".docx"
-        ? await extractDocxArticle({
-            buffer: fs.readFileSync(article.file),
-            fallbackTitle: article.fileBaseName
-          })
-        : parseArticle(article.file);
+      var data =
+        path.extname(article.file).toLowerCase() === ".docx"
+          ? await extractDocxArticle({
+              buffer: fs.readFileSync(article.file),
+              fallbackTitle: article.fileBaseName,
+            })
+          : parseArticle(article.file);
       var mdTitle = (data.title || "").trim();
       var fileTitle = (article.fileBaseName || "").trim();
       data.title = mdTitle || fileTitle;
@@ -411,7 +458,10 @@ async function parseArticleFiles(articles) {
       parsed.push(data);
       log("Article: " + data.title, "INFO");
     } catch (e) {
-      log("Conversion failed: " + article.filename + " - " + e.message, "ERROR");
+      log(
+        "Conversion failed: " + article.filename + " - " + e.message,
+        "ERROR",
+      );
     }
   }
 
@@ -426,7 +476,13 @@ function loadSidecar(articleFile) {
   try {
     return JSON.parse(fs.readFileSync(sidecarPath, "utf-8")) || {};
   } catch (e) {
-    log("Failed to parse sidecar: " + path.basename(sidecarPath) + " - " + e.message, "WARN");
+    log(
+      "Failed to parse sidecar: " +
+        path.basename(sidecarPath) +
+        " - " +
+        e.message,
+      "WARN",
+    );
     return {};
   }
 }
@@ -438,10 +494,12 @@ module.exports = {
   scanDir: "toutiao",
   ensureSession: ensureDaemon,
   ensureLoggedIn: ensureLoggedIn,
+  openLogin: openLogin,
   checkLogin: checkLogin,
+  inspectAccount: inspectAccount,
   publishArticle: publishArticle,
   saveSession: saveCurrentState,
   closeSession: closeBrowserSession,
   scanArticles: scanArticles,
-  parseArticleFiles: parseArticleFiles
+  parseArticleFiles: parseArticleFiles,
 };

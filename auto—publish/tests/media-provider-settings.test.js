@@ -16,13 +16,29 @@ function store(initial) {
 }
 
 describe("media provider settings", () => {
-  it("validates the approved default, timeout and transport status", () => {
+  it("requires an explicit endpoint and explicit approval for HTTP transport", () => {
     const adapter = createMediaSettingsAdapter();
-    const config = adapter.validate({ apiKey: "fixture-media-key", baseUrl: DEFAULT_MEDIA_BASE_URL, timeoutMs: 30000 });
-    assert.equal(config.timeoutMs, 30000);
-    assert.equal(config.allowInsecure, false);
-    assert.equal(adapter.status(config, { source: "application", lastTest: null }).transport, "不加密连接");
-    assert.throws(() => adapter.validate({ apiKey: "fixture-media-key", baseUrl: "http://unapproved.example", timeoutMs: 30000 }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
+    assert.equal(DEFAULT_MEDIA_BASE_URL, "");
+    const secure = adapter.validate({ apiKey: "fixture-media-key", baseUrl: "https://media.example.test", timeoutMs: 30000 });
+    assert.equal(secure.timeoutMs, 30000);
+    assert.equal(secure.allowInsecure, false);
+    assert.equal(adapter.status(secure, { source: "application", lastTest: null }).transport, "HTTPS");
+    assert.throws(() => adapter.validate({ apiKey: "fixture-media-key", baseUrl: "http://provider.example", timeoutMs: 30000 }), (error) => error.code === "MEDIA_HTTP_CONFIRMATION_REQUIRED");
+    const approvedHttp = adapter.validate({ apiKey: "fixture-media-key", baseUrl: "http://provider.example", timeoutMs: 30000, allowInsecure: true });
+    assert.equal(approvedHttp.allowInsecure, true);
+    assert.equal(adapter.status(approvedHttp, { source: "application", lastTest: null }).transport, "不加密连接");
+    const saved = store();
+    adapter.createStore = () => saved;
+    const service = createPlatformSettingsService({ adapters: [adapter] });
+    assert.throws(() => service.save("media", { apiKey: "fixture-media-key", baseUrl: "http://provider.example", timeoutMs: 30000 }), (error) => error.code === "MEDIA_HTTP_CONFIRMATION_REQUIRED");
+  });
+
+  it("requires the environment override to explicitly approve HTTP", () => {
+    const adapter = createMediaSettingsAdapter();
+    assert.throws(() => adapter.environment({ XQW_API_KEY: "fixture-key", XQW_BASE_URL: "http://provider.example" }), (error) => error.code === "MEDIA_HTTP_CONFIRMATION_REQUIRED");
+    assert.equal(adapter.environment({ XQW_API_KEY: "fixture-key", XQW_BASE_URL: "http://provider.example", XQW_ALLOW_INSECURE: "1" }).allowInsecure, true);
+    assert.equal(adapter.environment({ XQW_API_KEY: "fixture-key", XQW_BASE_URL: "http://provider.example", XQW_ALLOW_INSECURE: "true" }).allowInsecure, true);
+    assert.throws(() => adapter.validate({ apiKey: "fixture-key", baseUrl: "http://provider.example", allowInsecure: "true" }), (error) => error.code === "MEDIA_HTTP_CONFIRMATION_REQUIRED");
   });
 
   it("saves without calling the network and tests balance without replacing the saved config", async () => {

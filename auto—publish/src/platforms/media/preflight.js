@@ -1,10 +1,8 @@
 ﻿// auto—publish/src/platforms/media/preflight.js
 // Preflight checks and dry-run for media submission.
 
-const { MediaClient } = require('./media-client');
 const { MediaDraftStore } = require('./media-draft-store');
 const { MediaResourceStore } = require('./media-resource-store');
-const { resolveApiKey } = require('./config');
 
 /**
  * Resolve the list of selected resources from an article, supporting both
@@ -34,6 +32,11 @@ async function runPreflight(opts) {
   opts = opts || {};
   var articles = opts.articles || [];
   var dryRun = opts.dryRun !== false;
+  // This legacy helper has no main-process settings/client dependency. It is
+  // deliberately local-only so it cannot become a second network writer.
+  if (!dryRun) {
+    return { ok: false, dryRun: false, articles: [], checks: { allHaveResources: true, balanceOk: false, noImageBlockers: true }, totalEstimatedCost: 0, balance: null, errors: ["MEDIA_MAIN_PROCESS_REQUIRED"], warnings: [], taskCount: 0 };
+  }
 
   var result = {
     ok: true,
@@ -106,40 +109,11 @@ async function runPreflight(opts) {
     result.errors.push('没有待投稿文章');
   }
 
-  // Check 2: balance (only if not dry-run)
-  if (!dryRun && articles.length > 0) {
-    try {
-      var apiKey = resolveApiKey(null);
-      var client = new MediaClient({ apiKey: apiKey });
-      var balanceResp = await client.getBalance();
-      result.balance = balanceResp;
-      // Try to extract balance amount
-      var bal = extractBalance(balanceResp);
-      result.balanceAmount = bal;
-      // Estimate cost (simple: assume each article costs based on resource)
-      // For now, we use a nominal check — if balance data exists, it passes
-    } catch (err) {
-      result.checks.balanceOk = false;
-      result.errors.push('余额查询失败: ' + err.message);
-    }
-  }
-
   if (result.errors.length > 0) {
     result.ok = false;
   }
 
   return result;
-}
-
-function extractBalance(response) {
-  if (!response) return null;
-  if (response.data && response.data.balance !== undefined) {
-    return Number(response.data.balance);
-  }
-  if (response.balance !== undefined) {
-    return Number(response.balance);
-  }
-  return null;
 }
 
 module.exports = { runPreflight };

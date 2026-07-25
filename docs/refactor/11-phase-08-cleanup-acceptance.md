@@ -58,7 +58,7 @@
 - 页面级重复invalidation订阅、共享busy和native confirm。
 - 客户路径拼接、可选unique finder和启动一次恢复器。
 - 原始publish-log和整页诊断截图路径。
-- 公网HTTP默认配置及不安全确认豁免。
+- 公网HTTP隐式默认配置、绕过显式确认的豁免，以及跨provider复用媒体HTTP例外的路径。
 
 ### 7.2 测试
 
@@ -107,7 +107,7 @@
 ### 8.3 安全
 
 - Electron sandbox/preload/IPC认证。
-- HTTP拒绝、TLS错误和账号切换阻断。
+- 媒体HTTP未确认拒绝、确认后风险状态、TLS错误和账号切换阻断。
 - DTO/log/fixture/temp/package敏感信息扫描。
 - Path traversal、symlink、普通文件和workspace包含关系。
 - Auth密码/token、代理来源和限速容量。
@@ -153,7 +153,7 @@
 
 ## 11. Release与功能开发判断
 
-- 若自动验收完成但平台账号、HTTPS、签名或真实Auth恢复演练未完：架构重构可以完成，普通本地功能开发可开放，正式production release保持blocked。
+- 若自动验收完成但平台账号、媒体HTTP风险人工确认（或未来HTTPS迁移）、签名或真实Auth恢复演练未完：架构重构可以完成，普通本地功能开发可开放，正式production release保持blocked。
 - 若存在远端未知事实、迁移未解释冲突、旧writer或回滚失败：重构和功能开发均不得开放。
 - 后续新功能必须先声明它属于哪个Domain/Application/Renderer feature module；无法归属时先做设计评审，不直接添加跨层caller。
 

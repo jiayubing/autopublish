@@ -25,7 +25,11 @@ export async function getPlatformQueue(): Promise<PlatformQueueData> {
     result.data && typeof result.data === "object"
       ? (result.data as {
           revision?: number;
-          platforms?: Array<{ id: string; scanDir: string }>;
+          platforms?: Array<{
+            id: string;
+            scanDir: string;
+            loginAvailable?: boolean;
+          }>;
           queue?: PlatformArticle[];
         })
       : {};
@@ -39,11 +43,25 @@ export async function getPlatformQueue(): Promise<PlatformQueueData> {
   };
 }
 
+export async function openPlatformLogin(platformId: string): Promise<void> {
+  if (!isElectron()) return;
+  const result = await window.desktopConsole!.platforms.openLogin(platformId);
+  if (!result.ok) throw ipcError(result.error, "openPlatformLogin failed");
+}
+
+export async function checkPlatformLogin(platformId: string): Promise<boolean> {
+  if (!isElectron()) return false;
+  const result = await window.desktopConsole!.platforms.checkLogin(platformId);
+  if (!result.ok) throw ipcError(result.error, "checkPlatformLogin failed");
+  return result.data?.authenticated === true;
+}
+
 export async function submitPlatformSelection(input: {
   submissions: Array<{
     sourcePlatformId: string;
     filename: string;
     targetPlatformIds: string[];
+    accountProfiles: Record<string, string>;
   }>;
   autoTrash?: boolean;
 }): Promise<PlatformSubmitResult> {

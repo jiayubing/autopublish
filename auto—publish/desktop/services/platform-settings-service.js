@@ -169,7 +169,7 @@ function createPlatformSettingsService(options) {
       const draft = mergePatch(adapter, current, input);
       return adapter.validate(draft, current || null);
     } catch (error) {
-      if (error && (error.code === "PLATFORM_CONFIG_INVALID" || /^HEPAN_/.test(error.code || ""))) throw error;
+      if (error && (error.code === "PLATFORM_CONFIG_INVALID" || /^(HEPAN_|MEDIA_)/.test(error.code || ""))) throw error;
       throw settingsError("PLATFORM_CONFIG_INVALID", "Platform provider configuration is invalid");
     }
   }

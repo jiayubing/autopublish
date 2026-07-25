@@ -687,9 +687,16 @@ def main() -> int:
     parser.add_argument("--check-login", action="store_true")
     parser.add_argument("--category-id", type=int, default=CATID)
     parser.add_argument("--vendor-dir")
+    parser.add_argument("--test-site-origin")
     args = parser.parse_args()
 
     try:
+        if args.test_site_origin:
+            parsed = urlparse(args.test_site_origin)
+            if os.environ.get("HEPAN_TEST_MODE") != "1" or parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost"}:
+                raise PayloadError("HEPAN_ARGUMENT_INVALID", "Hepan arguments are invalid")
+            global SITE_ORIGIN
+            SITE_ORIGIN = args.test_site_origin.rstrip("/")
         if args.validate_payload:
             if args.article or args.payload_path or args.check_login:
                 raise PayloadError("HEPAN_ARGUMENT_INVALID", "Hepan arguments are invalid")
@@ -724,9 +731,9 @@ def main() -> int:
         return 1
     except Exception as exc:
         if requests is not None and isinstance(exc, requests.RequestException):
-            print_json({"ok": False, "errorCode": "HEPAN_REMOTE_REQUEST_FAILED", "error": "Hepan remote request failed"})
+            print_json({"ok": False, "stage": "publish", "requestMayHaveBeenSent": True, "errorCode": "HEPAN_REMOTE_REQUEST_FAILED", "error": "Hepan remote request failed"})
         else:
-            print_json({"ok": False, "errorCode": "HEPAN_PUBLISH_FAILED", "error": "Hepan publish failed"})
+            print_json({"ok": False, "stage": "publish", "requestMayHaveBeenSent": False, "errorCode": "HEPAN_PUBLISH_FAILED", "error": "Hepan publish failed"})
         return 1
 
 

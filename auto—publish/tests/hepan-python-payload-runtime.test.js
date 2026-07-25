@@ -4,6 +4,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
+const http = require("node:http");
 
 const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
 
@@ -140,6 +142,42 @@ describe("Hepan Python payload runtime", () => {
         assert.doesNotMatch(result.payload.error, /河畔标题|正文|cookie|[A-Z]:\\/i);
       }
     } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("maps a fake-server disconnect after the publish POST to an uncertain-safe outcome", async () => {
+    const python = pythonCommand();
+    const root = tempDirectory();
+    const server = http.createServer((request, response) => {
+      if (request.method === "GET") {
+        response.writeHead(200, { "content-type": "text/html" });
+        response.end('<div id="um"><strong class="vwmy"><a href="home.php?mod=space&uid=1">fixture</a></strong></div><input name="formhash" value="safe"><script>{"uid":"1","hash":"abcdef"}</script>');
+        return;
+      }
+      request.resume();
+      request.once("end", () => request.socket.destroy());
+    });
+    try {
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      const payloadPath = path.join(root, "payload.json");
+      const cookiePath = path.join(root, "cookie.txt");
+      const imageDir = path.join(root, "images");
+      fs.writeFileSync(payloadPath, JSON.stringify({ title: "fixture", contentHtml: "<p>body</p>", sourceStem: "fixture" }));
+      fs.writeFileSync(cookiePath, "sid=fixture");
+      fs.mkdirSync(imageDir);
+      const result = await new Promise((resolve) => {
+        const child = spawn(python, [scriptPath, "--payload-path", payloadPath, "--image-dir", imageDir, "--cookie-path", cookiePath, "--test-site-origin", `http://127.0.0.1:${address.port}`], { encoding: "utf8", windowsHide: true, env: Object.assign({}, process.env, { HEPAN_TEST_MODE: "1", PYTHONIOENCODING: "utf-8" }) });
+        let stdout = "";
+        child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+        child.once("close", (status) => resolve({ status, stdout }));
+      });
+      const payload = JSON.parse(result.stdout.trim());
+      assert.equal(result.status, 1);
+      assert.deepEqual(payload, { ok: false, stage: "publish", requestMayHaveBeenSent: true, errorCode: "HEPAN_REMOTE_REQUEST_FAILED", error: "Hepan remote request failed" });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
       fs.rmSync(root, { recursive: true, force: true });
     }
   });

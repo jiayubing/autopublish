@@ -13,9 +13,6 @@ describe("production packaging contract", function () {
     assert.match(config, /^asar:\s*true$/m);
     assert.match(config, /forceCodeSigning:\s*true/);
     assert.match(config, /certificateFile:\s*"\$\{env\.WIN_CSC_LINK\}"/);
-    assert.match(config, /asarUnpack:/);
-    assert.match(config, /tools\/node\/\*\*\//);
-    assert.match(config, /hepan_publish\.py/);
-    assert.match(config, /resources\/hepan\/vendor-pure\/\*\*\//);
+    assert.doesNotMatch(config, /asarUnpack:/);
   });
 });

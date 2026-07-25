@@ -68,26 +68,42 @@ export interface HepanProviderStatus {
   bundledVendorAvailable?: boolean;
   siteOrigin: string;
   publishIntervalSeconds: number;
-  lastTest: (PlatformProviderTestResult & {
-    authenticated?: boolean;
-    publishAccess?: boolean;
-    uploadContext?: 'available' | 'changed' | 'not_checked';
-    stage?: 'authentication' | 'publish_access' | 'upload_context' | 'dependency' | string;
-    warnings?: string[];
-    account?: { displayName: string; uid: string };
-  }) | null;
+  lastTest:
+    | (PlatformProviderTestResult & {
+        authenticated?: boolean;
+        publishAccess?: boolean;
+        uploadContext?: 'available' | 'changed' | 'not_checked';
+        stage?:
+          | 'authentication'
+          | 'publish_access'
+          | 'upload_context'
+          | 'dependency'
+          | string;
+        warnings?: string[];
+        account?: { displayName: string; uid: string };
+      })
+    | null;
 }
 export type PlatformProviderStatus = MediaProviderStatus | HepanProviderStatus;
 export interface LegacyProviderSettingsDiscovery {
   media: { available: boolean; sources: string[] };
-  hepan: { available: boolean; sources: string[]; cookiePathAvailable: boolean };
+  hepan: {
+    available: boolean;
+    sources: string[];
+    cookiePathAvailable: boolean;
+  };
   sources: string[];
   importable: boolean;
 }
 export interface LegacyProviderSettingsRecord {
   version: 1;
   updatedAt: string | null;
-  entries: Array<{ platform: string; source: string; status: string; code: string | null }>;
+  entries: Array<{
+    platform: string;
+    source: string;
+    status: string;
+    code: string | null;
+  }>;
 }
 export interface LegacyProviderSettingsStatus {
   discover: LegacyProviderSettingsDiscovery;
@@ -107,7 +123,12 @@ export interface GenerationBatchState {
   runtimeId?: string | null;
   sequence?: number;
   batch?: GenerationBatch | null;
-  capabilities?: { canResume?: boolean; canContinue?: boolean; canRetry?: boolean; canCancel?: boolean };
+  capabilities?: {
+    canResume?: boolean;
+    canContinue?: boolean;
+    canRetry?: boolean;
+    canCancel?: boolean;
+  };
 }
 
 export interface GenerationBatchCounts {
@@ -136,9 +157,7 @@ export type WorkspaceBootstrapStatus =
   | 'relaunching';
 
 export type WorkspaceSelectionKind =
-  | 'existing_workspace'
-  | 'empty_directory'
-  | 'nonempty_directory';
+  'existing_workspace' | 'empty_directory' | 'nonempty_directory';
 
 export interface WorkspaceSelectionToken {
   token: string;
@@ -249,30 +268,86 @@ export interface RealOrder {
   orderUrl: string;
   publicationId?: string;
   attemptId?: string;
-  publicationStatus?: 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'cancelled' | string;
+  publicationStatus?:
+    | 'queued'
+    | 'submitting'
+    | 'submitted'
+    | 'published'
+    | 'uncertain'
+    | 'failed'
+    | 'cancelled'
+    | string;
   errorCode?: string;
 }
 
-export type RuntimeCapabilityState = "ready" | "not_checked" | "optional_unconfigured" | "unavailable";
-export interface RuntimeCapability { state: RuntimeCapabilityState; source: string | null; errorCode: string | null; lastCheckedAt: string | null; available?: boolean; }
-export interface RuntimeBrowserCapability extends RuntimeCapability { channel: string | null; configured: boolean; probed: boolean; }
+export type RuntimeCapabilityState =
+  'ready' | 'not_checked' | 'optional_unconfigured' | 'unavailable';
+export interface RuntimeCapability {
+  state: RuntimeCapabilityState;
+  source: string | null;
+  errorCode: string | null;
+  lastCheckedAt: string | null;
+  available?: boolean;
+}
+export interface RuntimeBrowserCapability extends RuntimeCapability {
+  channel: string | null;
+  configured: boolean;
+  probed: boolean;
+}
 export interface RuntimeDiagnostics {
   ok: boolean;
   buildInfo: { version: string; commit: string; dirty: boolean };
   browserChannel: RuntimeBrowserCapability;
-  capabilities: { playwrightNode: RuntimeCapability; playwrightCli: RuntimeCapability; browserChannel: RuntimeBrowserCapability; docx: RuntimeCapability; hepan: RuntimeCapability };
-  tools?: { playwrightNode: RuntimeCapability; playwrightCli: RuntimeCapability; hepanPython: RuntimeCapability };
+  capabilities: {
+    playwrightNode: RuntimeCapability;
+    playwrightCli: RuntimeCapability;
+    browserChannel: RuntimeBrowserCapability;
+    docx: RuntimeCapability;
+    hepan: RuntimeCapability;
+  };
+  tools?: {
+    playwrightNode: RuntimeCapability;
+    playwrightCli: RuntimeCapability;
+    hepanPython: RuntimeCapability;
+  };
   errors: Array<{ code: string; message: string }>;
   warnings: Array<{ code: string; message: string }>;
 }
 
-export type GenerationBatchLiveStatus = 'idle' | 'pending' | 'starting' | 'running' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'interrupted' | 'paused_configuration' | 'failed' | 'completed';
+export type GenerationBatchLiveStatus =
+  | 'idle'
+  | 'pending'
+  | 'starting'
+  | 'running'
+  | 'pausing'
+  | 'paused'
+  | 'stopping'
+  | 'stopped'
+  | 'interrupted'
+  | 'paused_configuration'
+  | 'failed'
+  | 'completed';
 
 export interface AuthState {
   authenticated: boolean;
-  user: { id?: string; loginName: string; role?: 'admin' | 'user'; enabled?: boolean; mustChangePassword?: boolean } | null;
-  entitlements: Array<{ product: string; enabled: boolean; expiresAt?: string | null }>;
-  device?: { displayName?: string | null; registered?: boolean; deviceCount?: number; maxDevices?: number } | null;
+  user: {
+    id?: string;
+    loginName: string;
+    role?: 'admin' | 'user';
+    enabled?: boolean;
+    mustChangePassword?: boolean;
+  } | null;
+  entitlements: Array<{
+    product: string;
+    enabled: boolean;
+    expiresAt?: string | null;
+  }>;
+  device?: {
+    displayName?: string | null;
+    registered?: boolean;
+    deviceCount?: number;
+    maxDevices?: number;
+  } | null;
   errorCode?: string | null;
   sessionStatus?: 'signed_out' | 'authenticated' | 'recovering';
   passwordChangeRequired?: boolean;
@@ -294,8 +369,28 @@ export interface GenerationSubmissionHandoffPreview {
   blockedContentCount: number;
   conflictCount: number;
   unavailableArticleCount: number;
-  invalidArticles: Array<{ clientId: string; articleId?: string | null; taskId: string; reasonCode: string }>;
-  clientGroups: Array<{ clientId: string; articleCount: number; queueableTaskCount: number; idempotentCount: number; blockedPublishedCount: number; blockedUncertainCount: number; blockedContentCount: number; conflictCount: number; items: Array<{ articleId: string; targetPlatformId: string; status: string; reasonCode?: string | null }> }>;
+  invalidArticles: Array<{
+    clientId: string;
+    articleId?: string | null;
+    taskId: string;
+    reasonCode: string;
+  }>;
+  clientGroups: Array<{
+    clientId: string;
+    articleCount: number;
+    queueableTaskCount: number;
+    idempotentCount: number;
+    blockedPublishedCount: number;
+    blockedUncertainCount: number;
+    blockedContentCount: number;
+    conflictCount: number;
+    items: Array<{
+      articleId: string;
+      targetPlatformId: string;
+      status: string;
+      reasonCode?: string | null;
+    }>;
+  }>;
 }
 
 export interface GenerationSubmissionHandoffResult {
@@ -306,14 +401,20 @@ export interface GenerationSubmissionHandoffResult {
   conflictCount: number;
   failedClientGroups: Array<{ clientId: string; code: string }>;
   completedClientGroups: string[];
-  clientGroups: Array<{ clientId: string; articleCount: number; queueableTaskCount: number; idempotentCount: number }>;
+  clientGroups: Array<{
+    clientId: string;
+    articleCount: number;
+    queueableTaskCount: number;
+    idempotentCount: number;
+  }>;
   changedScopes?: string[];
 }
 
 // Backward-compatible alias for PreflightModal and mockData
 export type Order = SubmissionOrder;
 
-export type ViewMode = 'workbench' | 'resources' | 'orders' | 'settings' | 'platforms' | 'content';
+export type ViewMode =
+  'workbench' | 'resources' | 'orders' | 'settings' | 'platforms' | 'content';
 
 export interface ContentMaterial {
   id?: string;
@@ -326,10 +427,25 @@ export interface ContentMaterial {
   contentHash?: string;
   source?: 'text' | 'docx' | string;
 }
-export interface ContentClient { id: string; name: string; searchQuery?: string; knowledgeFiles: ContentMaterial[]; }
-export interface ContentQuestion { id: string; text: string; enabled: boolean; createdAt: string; updatedAt: string; }
+export interface ContentClient {
+  id: string;
+  name: string;
+  searchQuery?: string;
+  knowledgeFiles: ContentMaterial[];
+}
+export interface ContentQuestion {
+  id: string;
+  text: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 export type DoubaoBatchMode = 'missing' | 'recollect';
-export interface DoubaoBatchTask { clientId: string; questionId: string; force: boolean; }
+export interface DoubaoBatchTask {
+  clientId: string;
+  questionId: string;
+  force: boolean;
+}
 export interface DoubaoBatchPreview {
   mode: DoubaoBatchMode;
   clientCount: number;
@@ -338,19 +454,101 @@ export interface DoubaoBatchPreview {
   disabledQuestions: number;
   tasks: DoubaoBatchTask[];
 }
-export type DoubaoLoginStatus = 'unknown' | 'checking' | 'login_required' | 'authenticated' | 'session_error';
-export type DoubaoTaskStatus = 'pending' | 'waiting_login' | 'running' | 'waiting_interval' | 'paused' | 'succeeded' | 'failed' | 'cancelled';
-export interface DoubaoTask { id: string; clientId: string; questionId: string; status: DoubaoTaskStatus; answerLength: number; referenceCount: number; error?: { code: string; message: string } | null; }
-export interface DoubaoQueueState { status: 'idle' | 'running' | 'paused' | 'stopping' | 'completed'; currentTaskId: string | null; completed: number; total: number; waitRemainingMs: number; tasks: DoubaoTask[]; }
-export interface DoubaoLoginState { status: DoubaoLoginStatus; errorText?: string; }
-export interface ContentResearch { id: string; clientId: string; question?: string; answerText?: string; references: Array<{ title: string; url: string; snippet?: string }>; collectionMethod: 'automatic' | 'manual' | 'legacy'; collectedAt?: string; updatedAt?: string; createdAt?: string; isAnswerComplete?: boolean; }
-export interface ContentTemplate { id: string; templateId?: string; platform: string; platformId?: string; scenario: string; name: string; displayName?: string; description?: string; order?: number; enabled?: boolean; body: string; source?: 'builtin' | 'custom'; readOnly?: boolean; bodyHash?: string; revision?: string; sourceFileName?: string; }
-export interface ContentTemplatePlatform { id: string; displayName: string; description: string; order: number; source?: 'builtin' | 'custom'; }
-export interface ContentTemplateDiagnostic { code: string; message: string; platformId?: string; templateId?: string; source?: 'builtin' | 'custom'; }
-export interface ContentTemplateCatalog { revision: string; platforms: ContentTemplatePlatform[]; templates: ContentTemplate[]; diagnostics: ContentTemplateDiagnostic[]; }
-export interface GenerationBatchTemplateSelection { platform: string; templateId: string; }
-export interface GenerationBatchSourceSelection { clientId: string; materialIds: string[]; researchQueryIds: string[]; }
-export interface GenerationBatchExcludedClient { clientId: string; codes: string[]; }
+export type DoubaoLoginStatus =
+  'unknown' | 'checking' | 'login_required' | 'authenticated' | 'session_error';
+export type DoubaoTaskStatus =
+  | 'pending'
+  | 'waiting_login'
+  | 'running'
+  | 'waiting_interval'
+  | 'paused'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+export interface DoubaoTask {
+  id: string;
+  clientId: string;
+  questionId: string;
+  status: DoubaoTaskStatus;
+  answerLength: number;
+  referenceCount: number;
+  error?: { code: string; message: string } | null;
+}
+export interface DoubaoQueueState {
+  status: 'idle' | 'running' | 'paused' | 'stopping' | 'completed';
+  currentTaskId: string | null;
+  completed: number;
+  total: number;
+  waitRemainingMs: number;
+  tasks: DoubaoTask[];
+}
+export interface DoubaoLoginState {
+  status: DoubaoLoginStatus;
+  errorText?: string;
+}
+export interface ContentResearch {
+  id: string;
+  clientId: string;
+  question?: string;
+  answerText?: string;
+  references: Array<{ title: string; url: string; snippet?: string }>;
+  collectionMethod: 'automatic' | 'manual' | 'legacy';
+  collectedAt?: string;
+  updatedAt?: string;
+  createdAt?: string;
+  isAnswerComplete?: boolean;
+}
+export interface ContentTemplate {
+  id: string;
+  templateId?: string;
+  platform: string;
+  platformId?: string;
+  scenario: string;
+  name: string;
+  displayName?: string;
+  description?: string;
+  order?: number;
+  enabled?: boolean;
+  body: string;
+  source?: 'builtin' | 'custom';
+  readOnly?: boolean;
+  bodyHash?: string;
+  revision?: string;
+  sourceFileName?: string;
+}
+export interface ContentTemplatePlatform {
+  id: string;
+  displayName: string;
+  description: string;
+  order: number;
+  source?: 'builtin' | 'custom';
+}
+export interface ContentTemplateDiagnostic {
+  code: string;
+  message: string;
+  platformId?: string;
+  templateId?: string;
+  source?: 'builtin' | 'custom';
+}
+export interface ContentTemplateCatalog {
+  revision: string;
+  platforms: ContentTemplatePlatform[];
+  templates: ContentTemplate[];
+  diagnostics: ContentTemplateDiagnostic[];
+}
+export interface GenerationBatchTemplateSelection {
+  platform: string;
+  templateId: string;
+}
+export interface GenerationBatchSourceSelection {
+  clientId: string;
+  materialIds: string[];
+  researchQueryIds: string[];
+}
+export interface GenerationBatchExcludedClient {
+  clientId: string;
+  codes: string[];
+}
 export interface GenerationBatchPreview {
   clientCount: number;
   executableClientCount: number;
@@ -360,9 +558,12 @@ export interface GenerationBatchPreview {
   excludedClients: GenerationBatchExcludedClient[];
   templates: GenerationBatchTemplateSelection[];
   clientSources: GenerationBatchSourceSelection[];
-  tasks?: Array<GenerationBatchSourceSelection & { platform: string; templateId: string }>;
+  tasks?: Array<
+    GenerationBatchSourceSelection & { platform: string; templateId: string }
+  >;
 }
-export type GenerationTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'interrupted' | 'cancelled';
+export type GenerationTaskStatus =
+  'pending' | 'running' | 'succeeded' | 'failed' | 'interrupted' | 'cancelled';
 export interface GenerationBatchTask {
   id: string;
   clientId: string;
@@ -386,18 +587,77 @@ export interface GenerationBatch {
   aiConfigFingerprint?: string;
   updatedAt?: string;
 }
-export interface ResearchSnapshot { questionId: string; question?: string; answerText: string; references: Array<{ title: string; url: string; snippet?: string }>; collectedAt?: string; collectionMethod: 'automatic' | 'manual' | 'legacy'; }
+export interface ResearchSnapshot {
+  questionId: string;
+  question?: string;
+  answerText: string;
+  references: Array<{ title: string; url: string; snippet?: string }>;
+  collectedAt?: string;
+  collectionMethod: 'automatic' | 'manual' | 'legacy';
+}
 export interface GeneratedContentArticle {
-  id: string; clientId: string; materialIds?: string[]; researchQueryIds: string[]; researchQueryId?: string; researchSnapshots?: ResearchSnapshot[]; platform: string; scenario: string; templateId: string;
-  title: string; content: string; status: 'generated' | 'saved' | string; source: { client_material: boolean; doubao_answer: boolean; references: boolean; template: boolean }; createdAt: string; updatedAt?: string; reviewedAt?: string | null;
-  materialSnapshots?: Array<{ id: string; name: string; extension: string; content: string; contentHash: string; source: string }>;
-  templateSnapshot?: { platform: string; id: string; name: string; scenario: string; body: string; bodyHash: string; source?: 'builtin' | 'custom' };
-  generationBatchId?: string | null; generationTaskId?: string | null;
-  sourceArticleId?: string | null; version?: number;
+  id: string;
+  clientId: string;
+  materialIds?: string[];
+  researchQueryIds: string[];
+  researchQueryId?: string;
+  researchSnapshots?: ResearchSnapshot[];
+  platform: string;
+  scenario: string;
+  templateId: string;
+  title: string;
+  content: string;
+  status: 'generated' | 'saved' | string;
+  source: {
+    client_material: boolean;
+    doubao_answer: boolean;
+    references: boolean;
+    template: boolean;
+  };
+  createdAt: string;
+  updatedAt?: string;
+  reviewedAt?: string | null;
+  materialSnapshots?: Array<{
+    id: string;
+    name: string;
+    extension: string;
+    content: string;
+    contentHash: string;
+    source: string;
+  }>;
+  templateSnapshot?: {
+    platform: string;
+    id: string;
+    name: string;
+    scenario: string;
+    body: string;
+    bodyHash: string;
+    source?: 'builtin' | 'custom';
+  };
+  generationBatchId?: string | null;
+  generationTaskId?: string | null;
+  sourceArticleId?: string | null;
+  version?: number;
 }
 
-export type PublicationRecordStatus = 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'cancelled' | string;
-export type PublicationHistorySummaryStatus = 'not_submitted' | 'queued' | 'submitting' | 'reviewing' | 'partial' | 'published' | 'uncertain' | 'failed';
+export type PublicationRecordStatus =
+  | 'queued'
+  | 'submitting'
+  | 'submitted'
+  | 'published'
+  | 'uncertain'
+  | 'failed'
+  | 'cancelled'
+  | string;
+export type PublicationHistorySummaryStatus =
+  | 'not_submitted'
+  | 'queued'
+  | 'submitting'
+  | 'reviewing'
+  | 'partial'
+  | 'published'
+  | 'uncertain'
+  | 'failed';
 export interface PublicationHistoryAttempt {
   attemptId: string | null;
   status: PublicationRecordStatus | null;
@@ -439,9 +699,22 @@ export interface PublicationHistorySummary {
   uncertain: boolean;
 }
 
-export interface ArticleReviewSelection { clientId: string; articleId: string; }
-export interface ArticleReviewResult { approved: string[]; rejected: Array<{ articleId: string; code: string }>; skipped: string[]; }
-export type ArticleRemovalTransactionStatus = 'pending_auto_recovery' | 'needs_repair' | 'committed' | 'superseded' | 'pending_recovery' | string;
+export interface ArticleReviewSelection {
+  clientId: string;
+  articleId: string;
+}
+export interface ArticleReviewResult {
+  approved: string[];
+  rejected: Array<{ articleId: string; code: string }>;
+  skipped: string[];
+}
+export type ArticleRemovalTransactionStatus =
+  | 'pending_auto_recovery'
+  | 'needs_repair'
+  | 'committed'
+  | 'superseded'
+  | 'pending_recovery'
+  | string;
 export interface ArticleRemovalTransaction {
   id?: string;
   transactionId?: string;
@@ -455,25 +728,138 @@ export interface ArticleRemovalTransaction {
   queueCursor?: number;
   articleCursor?: number;
 }
-export interface ContentSubmissionBatchInput { clientId: string; articleIds: string[]; targetPlatformIds: string[]; confirmed?: true; }
-export type ContentSubmissionItemStatus = 'excluded' | 'blocked' | 'queueable' | 'idempotent' | 'alreadyQueued' | 'blockedPublished' | 'blockedUncertain' | 'conflict' | 'reserving' | 'queued' | 'submitting' | 'submitted' | 'published' | 'uncertain' | 'failed' | 'failed-cleaned' | 'published-cleaned' | 'cancelled' | 'cancelled-cleaned' | 'skipped' | string;
-export interface ContentSubmissionBatchItem { articleId: string; targetPlatformId: string; status: ContentSubmissionItemStatus; contentHash: string; filename?: string; filePath?: string; sidecarPath?: string; publicationId?: string | null; attemptId?: string | null; articleKey?: string; targetKey?: string; publicationStatus?: string | null; reasonCode?: string | null; reasonCodes?: string[]; reasons?: string[]; reconciledStatus?: string; unchanged?: boolean; canCancel?: boolean; canCleanup?: boolean; submissionBatchId?: string; }
-export interface ContentSubmissionBatchPreview { batchId?: string; clientId: string; totalTaskCount: number; queueableTaskCount: number; idempotentCount: number; alreadyQueuedCount?: number; blockedPublishedCount?: number; blockedUncertainCount?: number; blockedContentCount?: number; conflictCount: number; ineligibleArticleIds?: string[]; unreviewedArticleIds: string[]; missingArticleIds: string[]; unsupportedPlatformIds: string[]; items: ContentSubmissionBatchItem[]; }
-export interface ContentSubmissionBatchRecord { id: string; clientId: string; status: string; createdAt: string; updatedAt?: string; items: ContentSubmissionBatchItem[]; }
-export interface ContentSubmissionPlatform { id: string; displayName: string; scanDir: string; contentQueueImport: boolean; }
-export interface ContentSubmissionActionPlanItem { articleId: string; targetPlatformId: string; publicationId?: string | null; attemptId?: string | null; action: 'cancel'; allowed: boolean; reasonCode?: string | null; reasonMessage?: string | null; fingerprint?: string | null; }
-export interface ContentSubmissionCancellationPreview { batchId: string; clientId: string; action: 'cancel'; planId: string; fingerprint: string; allowedCount: number; blockedCount: number; items: ContentSubmissionActionPlanItem[]; }
-export interface ContentSubmissionCleanupPreview { batchId: string; cleanableCount: number; uncleanableCount: number; items: Array<ContentSubmissionBatchItem & { cleanable: boolean }>; }
-export interface ContentSubmissionCleanupResult { batchId: string; cleanedCount: number; skippedCount: number; items: ContentSubmissionBatchItem[]; }
+export interface AccountProfile {
+  accountProfileId: string;
+  platformId: string;
+  displayName: string;
+  createdAt?: string;
+}
+export interface ContentSubmissionBatchInput {
+  clientId: string;
+  articleIds: string[];
+  targetPlatformIds: string[];
+  accountProfiles: Record<string, string>;
+  confirmed?: true;
+}
+export type ContentSubmissionItemStatus =
+  | 'excluded'
+  | 'blocked'
+  | 'queueable'
+  | 'idempotent'
+  | 'alreadyQueued'
+  | 'blockedPublished'
+  | 'blockedUncertain'
+  | 'conflict'
+  | 'reserving'
+  | 'queued'
+  | 'submitting'
+  | 'submitted'
+  | 'published'
+  | 'uncertain'
+  | 'failed'
+  | 'failed-cleaned'
+  | 'published-cleaned'
+  | 'cancelled'
+  | 'cancelled-cleaned'
+  | 'skipped'
+  | string;
+export interface ContentSubmissionBatchItem {
+  articleId: string;
+  targetPlatformId: string;
+  status: ContentSubmissionItemStatus;
+  contentHash: string;
+  filename?: string;
+  filePath?: string;
+  sidecarPath?: string;
+  publicationId?: string | null;
+  attemptId?: string | null;
+  articleKey?: string;
+  targetKey?: string;
+  publicationStatus?: string | null;
+  reasonCode?: string | null;
+  reasonCodes?: string[];
+  reasons?: string[];
+  reconciledStatus?: string;
+  unchanged?: boolean;
+  canCancel?: boolean;
+  canCleanup?: boolean;
+  submissionBatchId?: string;
+}
+export interface ContentSubmissionBatchPreview {
+  batchId?: string;
+  clientId: string;
+  totalTaskCount: number;
+  queueableTaskCount: number;
+  idempotentCount: number;
+  alreadyQueuedCount?: number;
+  blockedPublishedCount?: number;
+  blockedUncertainCount?: number;
+  blockedContentCount?: number;
+  conflictCount: number;
+  ineligibleArticleIds?: string[];
+  unreviewedArticleIds: string[];
+  missingArticleIds: string[];
+  unsupportedPlatformIds: string[];
+  items: ContentSubmissionBatchItem[];
+}
+export interface ContentSubmissionBatchRecord {
+  id: string;
+  clientId: string;
+  status: string;
+  createdAt: string;
+  updatedAt?: string;
+  items: ContentSubmissionBatchItem[];
+}
+export interface ContentSubmissionPlatform {
+  id: string;
+  displayName: string;
+  scanDir: string;
+  contentQueueImport: boolean;
+}
+export interface ContentSubmissionActionPlanItem {
+  articleId: string;
+  targetPlatformId: string;
+  publicationId?: string | null;
+  attemptId?: string | null;
+  action: 'cancel';
+  allowed: boolean;
+  reasonCode?: string | null;
+  reasonMessage?: string | null;
+  fingerprint?: string | null;
+}
+export interface ContentSubmissionCancellationPreview {
+  batchId: string;
+  clientId: string;
+  action: 'cancel';
+  planId: string;
+  fingerprint: string;
+  allowedCount: number;
+  blockedCount: number;
+  items: ContentSubmissionActionPlanItem[];
+}
+export interface ContentSubmissionCleanupPreview {
+  batchId: string;
+  cleanableCount: number;
+  uncleanableCount: number;
+  items: Array<ContentSubmissionBatchItem & { cleanable: boolean }>;
+}
+export interface ContentSubmissionCleanupResult {
+  batchId: string;
+  cleanedCount: number;
+  skippedCount: number;
+  items: ContentSubmissionBatchItem[];
+}
 
 export interface PlatformArticle {
   filename: string;
   title: string;
   platformId: string;
   sourcePlatformId: string;
+  accountProfileId?: string;
   sourceArticleState?: 'active' | 'trashed' | 'missing' | string | null;
   reasonCode?: string | null;
-  archiveError?: string | { code?: string | null; message?: string | null } | null;
+  archiveError?:
+    string | { code?: string | null; message?: string | null } | null;
   remoteStatus?: 'published' | 'failed' | 'uncertain' | string | null;
 }
 
@@ -492,7 +878,14 @@ export interface PlatformQueueSnapshot {
   error: string | null;
 }
 
-export type WorkspaceDataInvalidationScope = 'platformQueue' | 'navigationSummary' | 'articleAttention' | 'articleManagement' | 'orders' | 'contentSources' | string;
+export type WorkspaceDataInvalidationScope =
+  | 'platformQueue'
+  | 'navigationSummary'
+  | 'articleAttention'
+  | 'articleManagement'
+  | 'orders'
+  | 'contentSources'
+  | string;
 export interface WorkspaceDataInvalidatedEvent {
   revision: number;
   scopes: WorkspaceDataInvalidationScope[];
@@ -534,7 +927,8 @@ export interface ArticleTrashRecord {
   status: string;
   references: Array<{ type: string; id: string }>;
   titleSnapshot?: string | null;
-  publicationSummary?: PublicationHistorySummary | Record<string, unknown> | null;
+  publicationSummary?:
+    PublicationHistorySummary | Record<string, unknown> | null;
   publicationRecords?: PublicationHistoryRecord[];
 }
 
@@ -548,13 +942,21 @@ export interface ArticleManagementSnapshot {
   publicationRecords: PublicationHistoryRecord[];
   attention: ArticleAttentionList;
   submissionPlatforms: ContentSubmissionPlatform[];
-  workflowByArticle: Record<string, {
-    stage: 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
-    primaryAction: string;
-    allowedBulkActions: string[];
-    locks: { canEdit: boolean; canQueue: boolean; canCancel: boolean; canTrash: boolean };
-    publicationSummary: PublicationHistorySummary;
-  }>;
+  workflowByArticle: Record<
+    string,
+    {
+      stage: 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
+      primaryAction: string;
+      allowedBulkActions: string[];
+      locks: {
+        canEdit: boolean;
+        canQueue: boolean;
+        canCancel: boolean;
+        canTrash: boolean;
+      };
+      publicationSummary: PublicationHistorySummary;
+    }
+  >;
   publicationSummaries: Record<string, PublicationHistorySummary>;
 }
 
@@ -583,7 +985,11 @@ export interface FailedPublicationRetryPreview {
   failureCount: number;
   requiresConfirmation: boolean;
   message: string;
-  details?: { titleSnapshot?: string | null; targetPlatformId: string; failureCount: number };
+  details?: {
+    titleSnapshot?: string | null;
+    targetPlatformId: string;
+    failureCount: number;
+  };
 }
 
 export interface FailedPublicationRetryResult {
@@ -600,6 +1006,7 @@ export interface PlatformTarget {
   id: string;
   displayName: string;
   scanDir: string;
+  loginAvailable?: boolean;
 }
 
 export interface PlatformStatus {
@@ -617,7 +1024,14 @@ export interface PlatformStatus {
   startedAt?: string | null;
   updatedAt?: string | null;
   terminalResult?: PlatformTerminalResult | null;
-  phase?: 'idle' | 'running' | 'waiting-interval' | 'stopping' | 'completed' | 'failed' | string;
+  phase?:
+    | 'idle'
+    | 'running'
+    | 'waiting-interval'
+    | 'stopping'
+    | 'completed'
+    | 'failed'
+    | string;
   status?: string;
   waitRemainingMs?: number;
   nextTask?: PlatformTaskReference | PlatformSubmitTask | null;
@@ -685,7 +1099,12 @@ export interface PlatformSubmitResult {
     succeeded: number;
     failed: number;
   };
-  trashDisposition?: 'keep_local' | 'offer_trash' | 'auto_trash_requested' | 'auto_trash_blocked' | string;
+  trashDisposition?:
+    | 'keep_local'
+    | 'offer_trash'
+    | 'auto_trash_requested'
+    | 'auto_trash_blocked'
+    | string;
   trashSummary?: {
     offeredCount?: number;
     requestedCount?: number;
@@ -693,7 +1112,9 @@ export interface PlatformSubmitResult {
     recoveryCount?: number;
     blockedCount?: number;
     failedCount?: number;
-    reasonCodes?: Array<'IDENTITY_MISSING' | 'REMOVAL_BLOCKED' | 'REMOVAL_NEEDS_REPAIR' | string>;
+    reasonCodes?: Array<
+      'IDENTITY_MISSING' | 'REMOVAL_BLOCKED' | 'REMOVAL_NEEDS_REPAIR' | string
+    >;
   };
 }
 
@@ -702,5 +1123,6 @@ export interface PlatformTaskResult {
   status: 'success' | 'failed' | 'pending';
   publicationStatus?: PublicationRecordStatus | null;
   error?: string;
-  archiveError?: string | { code?: string | null; message?: string | null } | null;
+  archiveError?:
+    string | { code?: string | null; message?: string | null } | null;
 }

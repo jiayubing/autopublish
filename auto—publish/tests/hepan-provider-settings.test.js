@@ -113,6 +113,32 @@ describe("Hepan provider settings", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("recovers only expired, owned Hepan temporary regular files", () => {
+    const root = tempDirectory();
+    try {
+      const tmp = path.join(root, "tmp");
+      fs.mkdirSync(tmp);
+      const expiredCookie = path.join(tmp, ".hepan-cookie-11111111-1111-1111-1111-111111111111.tmp");
+      const expiredPayload = path.join(tmp, ".hepan-payload-22222222-2222-2222-2222-222222222222.json");
+      const freshCookie = path.join(tmp, ".hepan-cookie-33333333-3333-3333-3333-333333333333.tmp");
+      const unrelated = path.join(tmp, "notes.txt");
+      fs.writeFileSync(expiredCookie, "synthetic secret", { mode: 0o600 });
+      fs.writeFileSync(expiredPayload, "{}", { mode: 0o600 });
+      fs.writeFileSync(freshCookie, "synthetic secret", { mode: 0o600 });
+      fs.writeFileSync(unrelated, "preserve");
+      const now = Date.now();
+      fs.utimesSync(expiredCookie, new Date(now - 172800000), new Date(now - 172800000));
+      fs.utimesSync(expiredPayload, new Date(now - 172800000), new Date(now - 172800000));
+      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
+      const result = adapter.cleanupExpiredTemporaryFiles({ now: () => now, maxAgeMs: 86400000 });
+      assert.deepStrictEqual(result.removed.sort(), [path.basename(expiredCookie), path.basename(expiredPayload)].sort());
+      assert.equal(fs.existsSync(expiredCookie), false);
+      assert.equal(fs.existsSync(expiredPayload), false);
+      assert.equal(fs.existsSync(freshCookie), true);
+      assert.equal(fs.existsSync(unrelated), true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   it("maps a failed login to a stable error without leaking cookie or temp path", async () => {
     const root = tempDirectory();
     try {

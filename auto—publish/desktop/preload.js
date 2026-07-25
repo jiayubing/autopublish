@@ -79,6 +79,10 @@ const api = {
   },
   platforms: {
     getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
+    listAccountProfiles: function() { return ipcRenderer.invoke("platforms:list-account-profiles"); },
+    confirmAccountProfile: function(input) { return ipcRenderer.invoke("platforms:confirm-account-profile", input); },
+    openLogin: function(platformId) { return ipcRenderer.invoke("platforms:open-login", { platformId: platformId }); },
+    checkLogin: function(platformId) { return ipcRenderer.invoke("platforms:check-login", { platformId: platformId }); },
     submitSelected: function(input) { return ipcRenderer.invoke("platforms:submit-selected", input); },
     pauseSubmit: function(runId) { return ipcRenderer.invoke("platforms:pause-submit", runId ? { runId: runId } : undefined); },
     stopSubmit: function(runId) { return ipcRenderer.invoke("platforms:stop-submit", runId ? { runId: runId } : undefined); },

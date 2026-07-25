@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
-import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, getArticleManagementSnapshot, getContentArticleRemovalTransaction, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../bridge/content';
+import { cancelContentSubmissionBatch, cleanupFailedContentSubmissionItems, copyContentArticleVersion, createContentSubmissionBatch, exportToSubmissionQueue, getArticleManagementSnapshot, getContentArticleRemovalTransaction, onContentArticleRemovalTransaction, permanentlyDeleteContentArticle, preparePermanentDeleteContentArticle, previewCleanupFailedContentSubmissionItems, previewContentArticleRemoval, previewContentSubmissionBatch, previewExport, restoreContentArticle, retryContentArticleRemovalTransaction, trashContentArticles, type ArticleTrashImpactItem, type ArticleTrashPreview, type ArticleTrashRecord } from '../../bridge/content';
 import { reconcilePublicationHistory } from '../../bridge/publication';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import { ArticleAttentionItem, ArticleAttentionList, ArticleRemovalTransaction, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, GeneratedContentArticle, PublicationHistoryRecord } from '../../types';
@@ -10,6 +10,7 @@ import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
+import AccountProfileSelector from './AccountProfileSelector';
 import ActionConfirmationModal, { type ActionConfirmation } from './ActionConfirmationModal';
 import { createArticleManagementController } from '../../article-management-controller';
 
@@ -39,6 +40,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowStage | 'all'>(stageFilter);
   const [submissionPlatforms, setSubmissionPlatforms] = useState<ContentSubmissionPlatform[]>([]);
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
+  const [accountProfiles, setAccountProfiles] = useState<Record<string, string>>({});
   const [trash, setTrash] = useState<ArticleTrashRecord[]>([]);
   const [submissionBatches, setSubmissionBatches] = useState<ContentSubmissionBatchRecord[]>([]);
   const [cancellationPlans, setCancellationPlans] = useState<ContentSubmissionCancellationPreview[]>([]);
@@ -261,7 +263,7 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
     if (!selectedQueueable.length || !targetPlatformIds.length) return;
     setError('');
     try {
-      const input = { clientId, articleIds: selectedQueueable.map((article) => article.id), targetPlatformIds };
+      const input = { clientId, articleIds: selectedQueueable.map((article) => article.id), targetPlatformIds, accountProfiles };
       const preview = await previewContentSubmissionBatch(input);
       if (!isCurrentClient(requestedClientId)) return;
       if (!preview.queueableTaskCount && !preview.idempotentCount) throw new Error('没有符合投稿就绪规则的文章');
@@ -277,6 +279,37 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
       };
       setPendingConfirmation({ id: ++confirmationIdRef.current, clientId: requestedClientId, kind: 'queue', title: '确认加入投稿队列', message: `新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，阻断 ${preview.blockedContentCount || 0} 项，冲突 ${preview.conflictCount} 项。`, confirmLabel: '确认加入投稿队列' });
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
+  }
+
+  async function handoffSelectedToMedia() {
+    const requestedClientId = clientId;
+    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && (article.status === 'generated' || article.status === 'saved'));
+    if (!selectedQueueable.length) return;
+    setError('');
+    try {
+      const inputs = selectedQueueable.map((article) => ({ clientId: requestedClientId, generatedArticleId: article.id, targetPlatform: 'media', confirmed: true as const }));
+      await Promise.all(inputs.map((input) => previewExport(input)));
+      if (!isCurrentClient(requestedClientId)) return;
+      confirmationActionRef.current = async () => {
+        setBusy(true); setError(''); setBatchFeedback(null);
+        try {
+          for (const input of inputs) await exportToSubmissionQueue(input);
+          if (!isCurrentClient(requestedClientId)) return;
+          updateSelected([]);
+          setBatchFeedback({ kind: 'status', text: '已加入付费媒体工作台，请前往付费媒体投稿选择资源。' });
+          await refreshHistoryData();
+        } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '加入付费媒体工作台失败'); }
+        finally { if (isCurrentClient(requestedClientId)) setBusy(false); }
+      };
+      setPendingConfirmation({
+        id: ++confirmationIdRef.current,
+        clientId: requestedClientId,
+        kind: 'media-handoff',
+        title: '确认加入付费媒体投稿',
+        message: `将 ${selectedQueueable.length} 篇文章复制到付费媒体工作台。之后仍需在工作台中选择具体媒体资源并再次确认；本次操作不会投稿或扣费。`,
+        confirmLabel: '确认加入付费媒体投稿',
+      });
+    } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '付费媒体投稿预检失败'); }
   }
 
   function openArticle(article: GeneratedContentArticle, source: HTMLElement | null, published: boolean) {
@@ -537,7 +570,9 @@ export default function GeneratedArticlesView({ clientId, refreshToken, stageFil
           <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
         </div>
-         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'generated' || article.status === 'saved') || !targetPlatformIds.length || busy} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'generated' || article.status === 'saved') || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || busy} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+        <button type="button" onClick={() => void handoffSelectedToMedia()} disabled={!selectedArticles.some((article) => article.status === 'generated' || article.status === 'saved') || busy} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
+        <AccountProfileSelector platforms={submissionPlatforms} targetPlatformIds={targetPlatformIds} value={accountProfiles} onChange={setAccountProfiles} />
       </div>
     </div>
      {error && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}

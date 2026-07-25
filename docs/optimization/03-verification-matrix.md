@@ -29,7 +29,7 @@
 | OPT-005 | F-H09 | Python stage/error矩阵；Node outcome mapping | fake HTTP接收POST后断连/超时；ledger+attention | 安全：错误不含Cookie/正文；并发retry拒绝 | Hepan contract、publication状态回归；禁止真实投稿 | POST后模糊异常为uncertain、有核对动作、新reserve拒绝；前置失败仍failed | 回退adapter时保留uncertain，不降为failed |
 | OPT-006 | F-H08、F-M16 | 头条同一row/详情证据；列举response/详情证据 | 脱敏DOM fixture E2E；批准测试账号受控成功/失败 | 安全：fixture脱敏；压力：页面延迟/同名多行 | adapter/worker/archive回归；人工核对remote ID/URL | 跨行标题+状态、无关success均不能published；真实成功有文章级证据 | 关闭自动published，统一退uncertain，不恢复弱谓词 |
 | OPT-007 | F-H10 | resolver候选、普通文件/symlink拒绝 | `electron-builder --dir`后从`app.asar.unpacked`执行Python self-test | 路径安全；alpha/production布局矩阵 | production YAML、runtime manifest、Windows手工smoke | 最终制品脚本存在且self-test退出0；`app.asar/...py`伪路径明确失败 | 回退制品并禁用production Hepan；开发数据不变 |
-| OPT-008 | F-H11 | URL/证书校验、HTTP拒绝 | 外部HTTPS测试环境连接；证书错误/超时 | 安全抓包/MITM；旧配置迁移；性能延迟 | 设置UI/配置/媒体client全回归；人工核对TLS终止 | 默认不会发HTTP；错误证书/HTTP在发送body前拒绝；生产请求全HTTPS | 切备用HTTPS；验证不会静默回HTTP |
+| OPT-008 | F-H11 | URL协议、HTTP显式确认、client二次校验、redirect manual | HTTP未确认/已确认与HTTPS fake endpoint；3xx不跟随；环境变量覆盖 | 未确认时fetch为0；redirect目标收到0 body；旧配置迁移；人工记录明文残余风险 | 设置UI/配置/媒体client全回归；未来HTTPS迁移检查 | 默认无endpoint；HTTP未确认时body发送前拒绝；确认后持续显示“不加密连接”；HTTPS无需确认；无固定地址豁免；3xx不转发multipart | 清除配置或关闭媒体；验证不会恢复隐式HTTP、自动redirect或绕过确认 |
 | OPT-009 | F-H12 | orderNid解析、outcome remoteId、projection幂等 | API返回ID+JSONL ENOSPC；重启从ledger重建 | 磁盘满/权限/重复恢复；旧submitted兼容 | media order/workbench/publication/attention回归 | JSONL失败后仍可查询远端ID、显示需修复、不可重复投稿；恢复只一条projection | 停用projection builder，ledger remoteId保持可读 |
 | OPT-010 | F-H13、F-H14 | verifier存在/普通文件/read-only/schema/count | 合法备份、截断/损坏/空/缺失目标；隔离restore启动 | 安全：备份权限/输出脱敏；WAL/磁盘满；v1样本只读 | auth全套、CLI退出码；人工RPO/RTO演练 | 缺失路径执行后仍不存在且非零；坏destination不报成功；合法目标可隔离启动 | 验证失败不删除备份；旧源库不被改写 |
 | OPT-011 | F-H03、F-M18 | screenshot裁剪/无图、artifact命名/owner/年龄 | 强杀Cookie/payload child并重启；真实fixture图像检查 | 安全像素/字符串扫描、ACL、越界/ symlink；残留量压力 | Doubao/Hepan/storage maintenance回归；人工检查目录 | 输出不含账号/问题/答案敏感像素；只清合法过期工件；日志无秘密 | 退为仅结构摘要；关闭自动清理但不恢复原始截图 |
@@ -77,5 +77,5 @@
 - 回滚前停止新投稿/生成/删除任务并记录当前 runId、publicationId、attemptId、batch revision。
 - 兼容reader必须先证明可读取新schema；不能用旧writer直接覆盖新schema。
 - 回滚后重新跑对应批次测试，并验证 unknown/uncertain、recovery intent、订单remoteId和备份文件仍存在。
-- 安全项回滚测试必须证明不会重新发HTTP、保存原始截图或宽匹配删除临时文件。
+- 安全项回滚测试必须证明不会恢复隐式HTTP或绕过显式确认，也不会保存原始截图或宽匹配删除临时文件。
 - 任何回滚若需要真实删除、数据库覆盖、账号变更或外部投稿，必须停止并取得人工授权。

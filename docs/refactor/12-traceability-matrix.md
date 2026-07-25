@@ -13,7 +13,7 @@
 | OPT-005 | Hepan POST模糊异常 | 4 | 3 | 异步publisher、stage语义、uncertain outcome |
 | OPT-006 | 头条/列举文章级证据 | 4 | 8 | Publisher contract、脱敏fixture、人工production门 |
 | OPT-007 | ASAR Hepan脚本路径 | 4 | 7 | unpacked resolver、制品self-test、release smoke |
-| OPT-008 | 媒体HTTPS | 4 | 7 | Adapter fail-closed、production TLS人工门 |
+| OPT-008 | 媒体传输风险控制 | 4 | 7 | 无隐式endpoint、HTTP显式确认、3xx不跟随、风险状态与未来HTTPS迁移门 |
 | OPT-009 | 媒体remote order恢复 | 3 | 2 | Outcome事务内保存remote order evidence |
 | OPT-010 | Auth备份/恢复验证 | 7 | 8 | destination验证、只读restore、隔离演练 |
 | OPT-011 | 安全诊断/临时秘密 | 4 | 7 | 无原始截图、PlatformRun cleanup、结构化诊断 |
@@ -50,7 +50,7 @@
 | F-H08 | 调整 | OPT-006 | 4 | 头条跨行/同名/无关toast不能published |
 | F-H09 | 接受 | OPT-005 | 4 | Hepan接收后断连为uncertain |
 | F-H10 | 接受 | OPT-007 | 4/7 | 最终`app.asar.unpacked`脚本self-test |
-| F-H11 | 接受 | OPT-008 | 4/7 | 非loopback HTTP发送body前拒绝 |
+| F-H11 | 接受 | OPT-008 | 4/7 | HTTP未显式确认时发送body前拒绝；已确认HTTP持续标记未加密风险 |
 | F-H12 | 接受 | OPT-009 | 3 | projection失败后remote order ID仍可查询 |
 | F-H13 | 接受 | OPT-010 | 7 | 备份destination独立验证 |
 | F-H14 | 接受 | OPT-010 | 7 | 缺失restore目标零副作用且失败 |

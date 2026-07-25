@@ -57,6 +57,10 @@ function createWorkerPublisherExecutor(options) {
       let task;
       try {
         task = safeTask(rawTask);
+        if (task.targetPlatformId === "media") {
+          results.push(Object.freeze({ task, outcome: { status: "failed", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" } }));
+          continue;
+        }
         const adapter = adapters[task.targetPlatformId];
         if (!adapter || typeof adapter.publishArticle !== "function") throw workerError("SUBMISSION_ADAPTER_MISSING");
         if (value.shouldStop && value.shouldStop()) {

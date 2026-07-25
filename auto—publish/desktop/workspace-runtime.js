@@ -66,7 +66,10 @@ function createWorkspaceRuntime(deps) {
         const taskService = ownService(createDesktopTaskService({ cwd: workspaceRoot, paths: injectedPaths, sendToRenderer: options.sendToRenderer, invalidateData: invalidation.invalidate, platformSettingsService }));
         const { loadPlatforms } = require("../src/core/platforms");
         const loadedPlatforms = loadPlatforms();
-        const workerPublisher = require("./services/worker-publisher").createWorkerPublisher({ taskService, inspectAccount: async function() { return { verified: false }; } });
+        let accountInspector = null;
+        const workerPublisher = require("./services/worker-publisher").createWorkerPublisher({ taskService, inspectAccount: function(task) {
+          return accountInspector ? accountInspector.inspect(task) : { verified: false };
+        } });
         const mediaPublisher = require("./services/media-publisher").createMediaPublisher({ clientProvider: function() {
           const runtime = platformSettingsService.getAdapterForRuntime("media");
           return runtime.adapter.createClient(runtime.config);
@@ -80,6 +83,11 @@ function createWorkspaceRuntime(deps) {
             operationalStore
           });
         } }));
+        accountInspector = require("./services/platform-account-inspector").createPlatformAccountInspector({
+          adapters: Object.fromEntries(loadedPlatforms.map(function(platform) { return [platform.id, platform]; })),
+          operationalStore: publicationComposition.operationalStore,
+          bindingStore: require("./services/platform-account-binding-store").createPlatformAccountBindingStore({ localStateRoot: paths.localState }),
+        });
         if (runtime.diagnosticsService && runtime.diagnosticsService.setPlatformSettingsService) runtime.diagnosticsService.setPlatformSettingsService(platformSettingsService);
         const legacyProviderSettings = require("./runtime-config").createLegacyProviderSettingsMigration({ configRoot: options.userDataPath, workspaceRoot, runtimeConfigStore: runtime.runtimeConfigStore, platformSettingsService });
         const doubaoCollectionService = ownService(require("./services/doubao-collection-service").createDoubaoCollectionDesktopService({ workspaceRoot, paths: injectedPaths, onDataInvalidated: invalidation.invalidate }));

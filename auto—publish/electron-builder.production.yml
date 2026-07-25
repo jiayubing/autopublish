@@ -6,10 +6,6 @@ directories:
   output: release
 
 asar: true
-asarUnpack:
-  - tools/node/**/*
-  - src/platforms/hepan/hepan_publish.py
-  - resources/hepan/vendor-pure/**/*
 
 win:
   signAndEditExecutable: true

@@ -87,8 +87,11 @@
 
 ### 6.6 媒体adapter
 
-- 非loopback HTTP在发送body前拒绝，不存在静默fallback。
-- Production HTTPS endpoint缺失时媒体发布保持disabled/fail-closed。
+- endpoint必须显式配置，不保留隐式公网HTTP默认值。
+- HTTPS无需额外确认；服务商当前仅提供HTTP时，必须由操作者显式勾选`allowInsecure`，未确认则在发送body前拒绝。
+- HTTP状态必须持续显示“不加密连接”风险；媒体请求不自动跟随重定向，不允许从HTTPS静默降级；该例外仅适用于媒体provider。
+- Production媒体发布只能由main进程通过platform settings解析完整config并构造client；旧worker `publishArticle -> createMediaAdapter()`空参路径必须退出production，不得为修复它而把API key发进worker message。
+- 无production caller的旧`media/preflight.js`非dry-run和standalone空参client路径应删除或明确退出production，不能依赖隐式endpoint复活。
 - Target使用media resource identity，outcome包含remote order evidence。
 - 价格变化、资源下架、重复idempotency和超时结果明确分类。
 - TLS、证书错误和fake server测试不使用真实API key。
@@ -111,6 +114,7 @@
 - 原始截图；
 - 返回`app.asar/...py`伪路径的resolver；
 - 平台粒度、无账号的普通target构造。
+- 媒体worker空参publisher和无caller的非dry-run preflight网络路径。
 
 ## 7. 测试要求
 
@@ -118,7 +122,7 @@
 - 100轮stop-start交错和短真实child强杀。
 - 每个平台Publisher contract及脱敏fixture正负测试。
 - Hepan fake server、异步child、打包脚本self-test。
-- Media HTTP拒绝、TLS错误、remote ID和resource target测试。
+- Media显式HTTP确认/拒绝、3xx不跟随、HTTPS/TLS错误、main-process runtime config caller、remote ID和resource target测试。
 - 账号切换：旧队列明确阻断，不静默改target。
 - 敏感信息静态/像素/文件扫描。
 - `electron-builder --dir`最终制品worker/Playwright/Python smoke。
@@ -130,7 +134,7 @@
 - 所有publisher只返回证据化outcome；弱证据全部`uncertain`。
 - 换号后旧队列阻断，target记录accountProfileId。
 - Hepan异步、可abort、heartbeat不阻塞，脚本在最终制品执行。
-- Media不发送公网HTTP；缺HTTPS时明确禁用。
+- Media无隐式公网HTTP默认值；HTTP只有在显式配置并确认风险后可用，未确认时不发送body。
 - 无原始诊断截图和异常退出秘密残留。
 - 新增fake publisher无需修改PublicationWorkflow即可通过contract suite。
 
@@ -140,7 +144,7 @@
 - 平台无法获取文章级证据且implementation仍试图返回`published`。
 - Publisher需要访问OperationalStore才能工作。
 - Stop/cleanup要求callback读取全局当前run。
-- HTTPS缺失时implementation尝试保留HTTPfallback。
+- implementation尝试静默启用HTTP、跳过`allowInsecure`确认，或把媒体例外扩展到其他provider。
 - Fixture无法脱敏。
 
 ## 10. 人工验收
@@ -149,7 +153,7 @@
 
 - 头条/列举受控测试账号成功投稿及remote ID核对。
 - 河畔测试账号断连后的远端核对。
-- 媒体可信HTTPS endpoint和测试资源投稿。
+- 媒体服务商HTTP endpoint的人工风险确认、测试资源投稿；服务商未来提供HTTPS后优先迁移验证。
 - Production签名制品中的真实浏览器登录。
 
 人工项未完成不允许正式release，但不阻止阶段5本地重构。

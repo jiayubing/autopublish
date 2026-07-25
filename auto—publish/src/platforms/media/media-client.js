@@ -5,7 +5,7 @@
 const FormData = require('form-data');
 const { maskApiKey } = require('./config');
 
-const DEFAULT_BASE_URL = 'http://8.138.187.158:8082';
+const DEFAULT_BASE_URL = '';
 const DEFAULT_TIMEOUT_MS = 30000;
 
 /**
@@ -23,13 +23,14 @@ class MediaClient {
    * @param {string} opts.apiKey - API key for authentication
    * @param {string} [opts.baseUrl] - API base URL (defaults to DEFAULT_BASE_URL)
    * @param {number} [opts.timeoutMs] - Request timeout in milliseconds
+   * @param {boolean} [opts.allowInsecure] - Explicit approval for an HTTP provider endpoint
    */
-  constructor({ apiKey, baseUrl, timeoutMs } = {}) {
+  constructor({ apiKey, baseUrl, timeoutMs, allowInsecure } = {}) {
     if (!hasText(apiKey)) {
       throw new Error('MediaClient requires an apiKey.');
     }
     this.apiKey = String(apiKey).trim();
-    this.baseUrl = normalizeBaseUrl(baseUrl || DEFAULT_BASE_URL);
+    this.baseUrl = normalizeBaseUrl(baseUrl || DEFAULT_BASE_URL, allowInsecure === true);
     this.timeoutMs = timeoutMs || DEFAULT_TIMEOUT_MS;
   }
 
@@ -145,8 +146,13 @@ class MediaClient {
         method: 'POST',
         headers: form.getHeaders(),
         body: form.getBuffer(),
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'manual'
       });
+
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error('API 请求拒绝重定向，请显式配置最终 endpoint');
+      }
 
       const text = await response.text();
 
@@ -183,10 +189,13 @@ class MediaClient {
 
 module.exports = { MediaClient };
 
-function normalizeBaseUrl(baseUrl) {
+function normalizeBaseUrl(baseUrl, allowInsecure) {
   var normalized = requireText(baseUrl, 'baseUrl').replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(normalized)) {
     throw new Error('baseUrl 必须以 http:// 或 https:// 开头');
+  }
+  if (/^http:\/\//i.test(normalized) && !allowInsecure) {
+    throw new Error('HTTP baseUrl 必须显式设置 allowInsecure=true');
   }
   return normalized;
 }

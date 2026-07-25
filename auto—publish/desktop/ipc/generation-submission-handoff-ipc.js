@@ -15,10 +15,13 @@ const SAFE_MESSAGES = Object.freeze({
 
 function input(value, commit) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Object.assign(new Error(SAFE_MESSAGES.HANDOFF_INPUT_INVALID), { code: "HANDOFF_INPUT_INVALID" });
-  const allowed = commit ? ["generationBatchId", "targetPlatformIds", "previewToken", "confirmed"] : ["generationBatchId", "targetPlatformIds"];
+  const allowed = commit ? ["generationBatchId", "targetPlatformIds", "accountProfiles", "previewToken", "confirmed"] : ["generationBatchId", "targetPlatformIds", "accountProfiles"];
   if (Object.keys(value).some((key) => !allowed.includes(key))) throw Object.assign(new Error(SAFE_MESSAGES.HANDOFF_INPUT_INVALID), { code: "HANDOFF_INPUT_INVALID" });
   const safeId = (candidate) => typeof candidate === "string" && /^[A-Za-z0-9_.:-]{1,200}$/.test(candidate);
-  if (!safeId(value.generationBatchId) || !Array.isArray(value.targetPlatformIds) || value.targetPlatformIds.some((target) => !safeId(target))) {
+  if (!safeId(value.generationBatchId) || !Array.isArray(value.targetPlatformIds) || value.targetPlatformIds.some((target) => !safeId(target)) ||
+      !value.accountProfiles || typeof value.accountProfiles !== "object" || Array.isArray(value.accountProfiles) ||
+      Object.keys(value.accountProfiles).length !== value.targetPlatformIds.length ||
+      value.targetPlatformIds.some((target) => !safeId(value.accountProfiles[target]))) {
     throw Object.assign(new Error(SAFE_MESSAGES.HANDOFF_INPUT_INVALID), { code: "HANDOFF_INPUT_INVALID" });
   }
   if (commit && (!safeId(value.previewToken) || value.confirmed !== true)) {

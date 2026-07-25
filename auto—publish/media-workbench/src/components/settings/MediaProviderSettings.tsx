@@ -4,7 +4,7 @@ import type { MediaProviderStatus } from '../../types';
 import { useConfirmation } from '../../confirmation';
 
 const EMPTY: MediaProviderStatus = { source: 'application', configured: false, baseUrl: '', timeoutMs: 0, allowInsecure: false, transport: '未配置', apiKeyMask: '', lastTest: null };
-function message(error: unknown): string { const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code || '') : ''; return ({ PLATFORM_CONFIG_INVALID: '配置无效，请检查输入项。', PLATFORM_CONFIG_BUSY: '付费媒体投稿运行中，暂时不能修改配置。', PLATFORM_CONFIG_ENV_OVERRIDE: '配置由环境变量覆盖，当前页面只能查看。', PLATFORM_CONFIG_NOT_SET: '尚未配置付费媒体。', MEDIA_CONNECTION_FAILED: '连接测试失败，请检查地址和 API Key。' } as Record<string, string>)[code] || '付费媒体配置操作失败。'; }
+function message(error: unknown): string { const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code || '') : ''; return ({ PLATFORM_CONFIG_INVALID: '配置无效，请检查输入项。', MEDIA_HTTP_CONFIRMATION_REQUIRED: '该地址使用 HTTP。请勾选“允许批准的 HTTP 地址”并确认传输风险。', PLATFORM_CONFIG_BUSY: '付费媒体投稿运行中，暂时不能修改配置。', PLATFORM_CONFIG_ENV_OVERRIDE: '配置由环境变量覆盖，当前页面只能查看。', PLATFORM_CONFIG_NOT_SET: '尚未配置付费媒体。', MEDIA_CONNECTION_FAILED: '连接测试失败，请检查地址和 API Key。' } as Record<string, string>)[code] || '付费媒体配置操作失败。'; }
 
 export default function MediaProviderSettings() {
   const { confirm } = useConfirmation();

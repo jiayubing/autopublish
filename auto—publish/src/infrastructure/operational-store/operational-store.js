@@ -214,6 +214,24 @@ function createOperationalStore(options) {
       displayName: v.displayName.trim(),
     });
   }
+  function listAccountProfiles() {
+    open();
+    return Object.freeze(
+      db
+        .prepare(
+          "SELECT account_profile_id,platform_id,display_name,created_at FROM account_profiles ORDER BY created_at,account_profile_id LIMIT 1000",
+        )
+        .all()
+        .map((profile) =>
+          Object.freeze({
+            accountProfileId: profile.account_profile_id,
+            platformId: profile.platform_id,
+            displayName: profile.display_name,
+            createdAt: profile.created_at,
+          }),
+        ),
+    );
+  }
   function assertExecutableAccountProfile(input) {
     open();
     const v = input || {};
@@ -1135,6 +1153,7 @@ function createOperationalStore(options) {
   return Object.freeze({
     databasePath: filename,
     createAccountProfile,
+    listAccountProfiles,
     assertExecutableAccountProfile,
     reservePublicationTarget,
     commitRemoteOutcome,

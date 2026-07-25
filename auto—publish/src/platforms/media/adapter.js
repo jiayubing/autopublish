@@ -17,11 +17,25 @@ const path = require('path');
 
 function createMediaAdapter(opts) {
   opts = opts || {};
-  const apiKey = resolveApiKey(opts.apiKey || null);
-  const client = new MediaClient({
-    apiKey: apiKey,
-    baseUrl: opts.baseUrl
-  });
+  if (opts.mainProcess !== true) {
+    return Object.freeze({
+      scanArticles: function() { return []; },
+      publish: async function() { return { platform: "media", status: "error", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" }; },
+      queryOrder: async function() { return { platform: "media", status: "error", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" }; },
+      getBalance: async function() { return { platform: "media", status: "error", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" }; },
+    });
+  }
+  let client = null;
+  function getClient() {
+    if (!client) {
+      client = new MediaClient({
+        apiKey: resolveApiKey(opts.apiKey || null),
+        baseUrl: opts.baseUrl,
+        allowInsecure: opts.allowInsecure
+      });
+    }
+    return client;
+  }
   const inputDir = opts.paths && opts.paths.mediaInput || path.join(DIRS.inputDir, "media");
 
   return {
@@ -54,7 +68,7 @@ function createMediaAdapter(opts) {
 
       var response;
       try {
-        response = await client.sendArticle({
+        response = await getClient().sendArticle({
           resourceId: resourceId,
           title: title,
           content: article.html,
@@ -79,16 +93,13 @@ function createMediaAdapter(opts) {
         resourceId: resourceId,
         thirdId: thirdId || null,
         orderNid: data.order_nid || null,
-        raw: response,
-        htmlContent: article.html,
-        plainText: article.plainText
       };
     },
 
     queryOrder: async function (orderNid) {
       var response;
       try {
-        response = await client.orderInfo(orderNid);
+        response = await getClient().orderInfo(orderNid);
       } catch (err) {
         return {
           platform: 'media',
@@ -102,14 +113,13 @@ function createMediaAdapter(opts) {
         platform: 'media',
         status: 'ok',
         orderNid: orderNid,
-        raw: response
       };
     },
 
     getBalance: async function () {
       var response;
       try {
-        response = await client.getBalance();
+        response = await getClient().getBalance();
       } catch (err) {
         return {
           platform: 'media',
@@ -121,7 +131,6 @@ function createMediaAdapter(opts) {
       return {
         platform: 'media',
         status: 'ok',
-        raw: response
       };
     }
   };
@@ -170,31 +179,10 @@ module.exports = {
 
   closeSession: function() {},
 
-  publishArticle: async function(article, options) {
-    var draft = draftStore.get(article.filename);
-    if (!draft || !draft.resourceId) {
-      throw new Error('未选择媒体资源: ' + article.filename);
-    }
-
-    var imgInfo = detectDocxImages(article.sourceFile || article.file);
-    if (imgInfo.hasImages && !draft.ignoreImages) {
-      throw new Error('文章包含 ' + imgInfo.imageCount + ' 张图片，未勾选忽略图片');
-    }
-
-    var adapter = createMediaAdapter();
-    var result = await adapter.publish({
-      title: draft.title || article.title,
-      contentFile: article.sourceFile || article.file,
-      resourceId: draft.resourceId,
-      remark: draft.remark || undefined,
-      thirdId: article.filename
-    });
-
-    if (result.status === 'submitted') {
-      return 'submitted';
-    }
-
-    throw new Error(result.error || '投稿失败');
+  publishArticle: async function() {
+    // Media submission is main-process only: its configured client is built
+    // from platform settings and must never be reconstructed in a worker.
+    return { status: "failed", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" };
   },
 
   createMediaAdapter: createMediaAdapter

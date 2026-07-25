@@ -943,6 +943,7 @@ export async function cleanupFailedContentSubmissionItems(
 export async function previewGenerationSubmissionHandoff(input: {
   generationBatchId: string;
   targetPlatformIds: string[];
+  accountProfiles: Record<string, string>;
 }): Promise<GenerationSubmissionHandoffPreview> {
   return callContent(
     "previewGenerationSubmissionHandoff",
@@ -953,6 +954,7 @@ export async function previewGenerationSubmissionHandoff(input: {
 export async function commitGenerationSubmissionHandoff(input: {
   generationBatchId: string;
   targetPlatformIds: string[];
+  accountProfiles: Record<string, string>;
   previewToken: string;
   confirmed: true;
 }): Promise<GenerationSubmissionHandoffResult> {

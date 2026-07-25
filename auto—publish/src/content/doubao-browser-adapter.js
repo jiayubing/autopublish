@@ -274,32 +274,19 @@ function createDoubaoBrowserAdapter(options) {
     fs.mkdirSync(diagnosticsDir, { recursive: true });
     const stamp = safeTimestamp(now());
     const stem = stamp + "-" + String(code).replace(/[^a-zA-Z0-9_-]/g, "_") + "-" + diagnosticSequence++;
-    const pngPath = path.join(diagnosticsDir, stem + ".png");
     const jsonPath = path.join(diagnosticsDir, stem + ".json");
-    let screenshotError = "";
-    try {
-      await withTimeout(runtime.screenshot({
-        action: "capture-diagnostic",
-        path: pngPath,
-        timeoutMs: diagnosticTimeoutMs
-      }), diagnosticTimeoutMs);
-    } catch (captureError) {
-      screenshotError = captureError.message;
-    }
     const page = snapshot && typeof snapshot === "object" ? snapshot : {};
     const summary = {
       action: "capture-diagnostic",
       code: code,
       capturedAt: now(),
-      url: typeof page.url === "string" ? page.url : "",
       status: classifyPage(page).status,
-      errorText: typeof page.errorText === "string" ? page.errorText.slice(0, 500) : "",
       messageCount: Array.isArray(page.messages) ? page.messages.length : 0,
-      screenshotError: screenshotError || (error && error.message ? error.message : "")
+      errorCode: error && error.code ? String(error.code) : ""
     };
     fs.writeFileSync(jsonPath, JSON.stringify(summary, null, 2), "utf8");
     trimDiagnostics(diagnosticsDir, diagnosticsLimit);
-    return { pngPath: pngPath, jsonPath: jsonPath };
+    return { diagnosticId: stem };
   }
 
   async function getLoginState() {
@@ -321,7 +308,7 @@ function createDoubaoBrowserAdapter(options) {
       throw error;
     }
     if (pageState.status === "page_error") {
-      const error = codedError("DOUBAO_PAGE_ERROR", pageState.errorText);
+      const error = codedError("DOUBAO_PAGE_ERROR", "Doubao page reported an error");
       await captureDiagnostic(error.code, snapshot, error);
       throw error;
     }

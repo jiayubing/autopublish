@@ -32,7 +32,7 @@
 | F-H08 | 调整 | `toutiao/adapter.js:255-266` 的标题和状态是两个全页独立谓词，`:348-351` 命中即写 `published`，文章级证据确实不足。真实生产 DOM、同名稿和 fallback 出现频率未现场验证，因此保留高后果但状态改为“需要验证”，不能无条件自动上线。 | OPT-006 |
 | F-H09 | 接受 | Python 在 POST 后把任意 `RequestException` 输出 `HEPAN_REMOTE_REQUEST_FAILED`（`hepan_publish.py:303-321,725-730`）；Node 在 `adapter.js:229-243` 先将任意 `HEPAN_*` 映射为 `failed`。ledger 允许 failed 新 attempt，现实网络异常会导致盲重试。 | OPT-005 |
 | F-H10 | 接受 | production `asarUnpack` 明确解包 Python 脚本，但 `runtime-paths.js:33-37` 仍返回 `__dirname/hepan_publish.py`；外部 Python 不理解 `app.asar` 虚拟路径。vendor resolver 已处理 `app.asar.unpacked`，进一步证明脚本 resolver 缺失。 | OPT-007 |
-| F-H11 | 接受 | `media-client.js:8,85-103,136-149` 默认公网 HTTP 且发送 API key/全文；`media-settings-adapter.js:51-57` 特意豁免默认 HTTP 的显式确认。代码默认不安全成立；生产是否另有 TLS/VPN 决定迁移方式，故工作项为待决策而非驳回。 | OPT-008 |
+| F-H11 | 接受（处置更新） | `media-client.js:8,85-103,136-149` 原默认公网 HTTP 且发送 API key/全文；`media-settings-adapter.js:51-57` 原先特意豁免默认 HTTP 的显式确认。2026-07-25用户确认服务商当前只提供HTTP，因此不再以“全面强制HTTPS”为验收；改为删除隐式默认、HTTP必须显式配置并确认风险、底层client二次校验且持续显示未加密状态。 | OPT-008 |
 | F-H12 | 接受 | `media-workbench-service.js:419-468` 先以不含 order ID 的 `submitted` 写 ledger，后解析并 append JSONL；append 异常只进入返回 DTO。ledger 与订单 store 都可能没有持久 orderNid，后续同步无法定位。 | OPT-009 |
 | F-H13 | 接受 | `auth-server/scripts/backup.js:9-13` 完成 `backupTo(destination)` 后调用仍指向源库的 `repository.healthCheck()`；没有重新打开 destination。坏目标可被错误报告成功。 | OPT-010 |
 | F-H14 | 接受 | `restore-check.js:4-12` 直接构造 repository；构造器 `sqlite-auth-repository.js:104-119` 会创建目录/文件、执行 migration 并校验新 schema。缺失路径会被改变成健康空库，检查命令具有副作用并可误报。 | OPT-010 |

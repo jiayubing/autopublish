@@ -32,8 +32,20 @@ function resolveHepanVendorDir(options) {
 
 function resolveHepanScriptPath(options) {
   const values = options || {};
+  const io = values.fs || fs;
   const pathApi = values.path || path;
-  return values.scriptPath || pathApi.join(__dirname, "hepan_publish.py");
+  if (values.scriptPath && values.development === true) return values.scriptPath;
+  const packaged = values.packaged === true || (values.packaged !== false && Boolean(process.resourcesPath));
+  const candidate = packaged
+    ? pathApi.join(process.resourcesPath || "", "app.asar.unpacked", "src", "platforms", "hepan", "hepan_publish.py")
+    : pathApi.join(__dirname, "hepan_publish.py");
+  try {
+    const stat = io.lstatSync(candidate);
+    if (stat.isFile() && (typeof stat.isSymbolicLink !== "function" || !stat.isSymbolicLink())) return candidate;
+  } catch (_) {}
+  const error = new Error("Hepan packaged script is unavailable");
+  error.code = "HEPAN_RUNTIME_SCRIPT_UNAVAILABLE";
+  throw error;
 }
 
 function withHepanVendorEnvironment(options, vendorDir) {

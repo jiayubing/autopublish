@@ -43,6 +43,14 @@ describe("react workbench regression", function() {
   it("exposes platform commands through preload", function() {
     const preload = fs.readFileSync(path.resolve(__dirname, "..", "desktop", "preload.js"), "utf8");
     assert.ok(preload.includes("platforms:") && preload.includes("getQueue"));
+    assert.ok(preload.includes("platforms:open-login") && preload.includes("platforms:check-login"));
+  });
+
+  it("exposes browser login controls for platform accounts", function() {
+    const api = readApp("bridge/platform.ts");
+    const workbench = readComponent("PlatformWorkbench.tsx");
+    assert.ok(api.includes("openPlatformLogin") && api.includes("checkPlatformLogin"));
+    assert.ok(workbench.includes("打开登录") && workbench.includes("检查登录"));
   });
 
   it("shares the structured IPC response envelope", function() {
@@ -61,9 +69,10 @@ describe("react workbench regression", function() {
     assert.ok(types.includes("interface PlatformStatus") && types.includes("isBatchRunning: boolean") && types.includes("isStopPending: boolean") && types.includes("isPlatformRunning: boolean"));
     assert.match(taskService, /isBatchRunning:\s*false/);
     assert.match(taskService, /isStopPending:\s*(?:false|snapshot\.isStopPending)/);
-    assert.match(taskService, /isPlatformRunning:\s*(?:isPlatformRunning|isPlatformRunning \|\| snapshot\.isPlatformRunning)/);
+    assert.match(taskService, /isPlatformRunning:\s*Boolean\(platformRun && platformRun\.snapshot\(\)\)/);
     assert.match(taskService, /platformTaskStateStore/);
-    assert.match(taskService, /activePlatformRunId/);
+    assert.match(taskService, /createPlatformRun/);
+    assert.doesNotMatch(taskService, /activePlatformRunId/);
     assert.equal(types.includes("isPlatformPaused"), false);
     assert.equal(api.includes("isPlatformPaused"), false);
   });

@@ -23,18 +23,99 @@ test("content queue execution claims and completes its original OperationalStore
     const input = path.join(root, ".autopublish", "input");
     const content = createContentSubmissionService({ workspaceRoot: root, paths: { input }, operationalStore: store, articleStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
     const queued = content.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
-    const workbench = createPlatformWorkbenchService({ rootDir: root, paths: { input }, platforms: [{ id: "toutiao", scanDir: "toutiao" }], adapters: { toutiao: { parseArticleFiles: async () => [{ title: "Fixture", body: "Body" }] } } });
+    const workbench = createPlatformWorkbenchService({ rootDir: root, paths: { input }, platforms: [{ id: "toutiao", scanDir: "toutiao" }], adapters: { toutiao: { parseArticleFiles: async () => [{ title: "Fixture" }] } } });
+    let publishedBody = null;
     const workflow = createPublicationWorkflow({ operationalStore: store, clock: () => new Date("2026-07-25T00:00:00.000Z"), publisher: {
       inspectAccount: async () => ({ verified: true, accountProfileId: profile.accountProfileId }),
-      publish: async (publishInput) => ({ status: "published", evidence: { articleId: publishInput.articleId, attemptId: publishInput.attemptId, targetKey: `platform:toutiao:account:${profile.accountProfileId}`, accountProfileId: profile.accountProfileId, remoteId: "remote-1", remoteUrl: "https://example.test/remote-1" } }),
+      publish: async (publishInput) => { publishedBody = publishInput.body; return { status: "published", evidence: { articleId: publishInput.articleId, attemptId: publishInput.attemptId, targetKey: `platform:toutiao:account:${profile.accountProfileId}`, accountProfileId: profile.accountProfileId, remoteId: "remote-1", remoteUrl: "https://example.test/remote-1" } }; },
     } });
     const service = createPublicationSubmissionService({ workflow, operationalStore: store, workbench, workerPublisher: { registerAttempt: () => {}, unregisterAttempt: () => {} } });
     const plan = workbench.buildSelectedSubmissionsPlan([{ sourcePlatformId: "toutiao", filename: path.basename(queued.items[0].filePath), targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId } }]);
     const result = await service.submit(plan);
     assert.equal(result.batchId, queued.batchId);
     assert.equal(result.results[0].status, "published");
+    assert.equal(publishedBody, "Body");
     assert.equal(store.getSubmissionBatch(queued.batchId).items[0].status, "completed");
     assert.equal(store.listPublicationRecords({ articleIds: ["article-1"] })[0].status, "published");
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an account verification failure does not claim later selected platform items", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-04-content-claim-"));
+  const store = createOperationalStore({ workspaceRoot: root });
+  try {
+    const toutiaoProfile = store.createAccountProfile({ platformId: "toutiao", displayName: "toutiao-fixture" });
+    const liejuProfile = store.createAccountProfile({ platformId: "lieju", displayName: "lieju-fixture" });
+    const input = path.join(root, ".autopublish", "input");
+    const platforms = [
+      { id: "toutiao", scanDir: "toutiao", contentQueueImport: true },
+      { id: "lieju", scanDir: "lieju", contentQueueImport: true },
+    ];
+    const content = createContentSubmissionService({ workspaceRoot: root, paths: { input }, operationalStore: store, articleStore: { getArticle: () => article() }, platforms });
+    const queued = content.createBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao", "lieju"],
+      accountProfiles: { toutiao: toutiaoProfile.accountProfileId, lieju: liejuProfile.accountProfileId },
+      confirmed: true,
+    });
+    const workbench = createPlatformWorkbenchService({
+      rootDir: root,
+      paths: { input },
+      platforms,
+      adapters: {
+        toutiao: { parseArticleFiles: async () => [{ title: "Fixture" }] },
+        lieju: { parseArticleFiles: async () => [{ title: "Fixture" }] },
+      },
+    });
+    const workflow = createPublicationWorkflow({
+      operationalStore: store,
+      clock: () => new Date("2026-07-25T00:00:00.000Z"),
+      publisher: { inspectAccount: async () => ({ verified: false }), publish: async () => { throw new Error("must not publish"); } },
+    });
+    const service = createPublicationSubmissionService({ workflow, operationalStore: store, workbench, workerPublisher: { registerAttempt: () => {}, unregisterAttempt: () => {} } });
+    const byPlatform = new Map(queued.items.map((item) => [item.targetPlatformId, item]));
+    const plan = workbench.buildSelectedSubmissionsPlan([
+      { sourcePlatformId: "toutiao", filename: path.basename(byPlatform.get("toutiao").filePath), targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: toutiaoProfile.accountProfileId } },
+      { sourcePlatformId: "lieju", filename: path.basename(byPlatform.get("lieju").filePath), targetPlatformIds: ["lieju"], accountProfiles: { lieju: liejuProfile.accountProfileId } },
+    ]);
+
+    await assert.rejects(() => service.submit(plan), { code: "ACCOUNT_PROFILE_INSPECTION_UNVERIFIED" });
+    assert.deepEqual(store.getSubmissionBatch(queued.batchId).items.map((item) => item.status), ["queued", "queued"]);
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an expired local claim can be reclaimed instead of reporting that the queue is no longer executable", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-04-expired-claim-"));
+  let now = new Date("2026-07-25T00:00:00.000Z");
+  const store = createOperationalStore({ workspaceRoot: root, clock: () => now });
+  try {
+    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
+    const input = path.join(root, ".autopublish", "input");
+    const platforms = [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }];
+    const content = createContentSubmissionService({ workspaceRoot: root, paths: { input }, operationalStore: store, articleStore: { getArticle: () => article() }, platforms });
+    const queued = content.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const durable = store.getSubmissionBatch(queued.batchId).items[0];
+    store.claimSubmissionItemById({ batchId: queued.batchId, itemId: durable.itemId, claimToken: "abandoned-claim", leaseMs: 1000 });
+    now = new Date("2026-07-25T00:00:02.000Z");
+
+    const workbench = createPlatformWorkbenchService({ rootDir: root, paths: { input }, platforms, adapters: { toutiao: { parseArticleFiles: async () => [{ title: "Fixture" }] } } });
+    const workflow = createPublicationWorkflow({ operationalStore: store, clock: () => now, publisher: {
+      inspectAccount: async () => ({ verified: true, accountProfileId: profile.accountProfileId }),
+      publish: async (publishInput) => ({ status: "published", evidence: { articleId: publishInput.articleId, attemptId: publishInput.attemptId, targetKey: `platform:toutiao:account:${profile.accountProfileId}`, accountProfileId: profile.accountProfileId, remoteId: "remote-reclaimed", remoteUrl: "https://example.test/remote-reclaimed" } }),
+    } });
+    const service = createPublicationSubmissionService({ workflow, operationalStore: store, workbench, workerPublisher: { registerAttempt: () => {}, unregisterAttempt: () => {} } });
+    const plan = workbench.buildSelectedSubmissionsPlan([{ sourcePlatformId: "toutiao", filename: path.basename(queued.items[0].filePath), targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId } }]);
+
+    const result = await service.submit(plan);
+    assert.equal(result.results[0].status, "published");
+    assert.equal(store.getSubmissionBatch(queued.batchId).items[0].status, "completed");
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });

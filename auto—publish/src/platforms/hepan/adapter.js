@@ -1,12 +1,38 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { spawnSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
 
 const { DIRS } = require("../../../scripts/config");
 const { log } = require("../../core/logger");
 const { parseArticle, scanArticles: scanArticleSources } = require("./article-source");
 const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("./runtime-paths");
+
+const HEPAN_PAYLOAD_FILE = /^\.hepan-payload-[0-9a-f-]{36}\.json$/i;
+const HEPAN_PAYLOAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function cleanupExpiredHepanPayloads(options) {
+  const values = options || {};
+  const io = values.fs || fs;
+  const pathApi = values.path || path;
+  const directory = pathApi.resolve(values.tempDir || pathApi.join(DIRS.tmpDir, "hepan"));
+  const now = typeof values.now === "function" ? values.now : () => Date.now();
+  const maxAgeMs = Number.isSafeInteger(values.maxAgeMs) && values.maxAgeMs >= 0 ? values.maxAgeMs : HEPAN_PAYLOAD_MAX_AGE_MS;
+  const removed = [];
+  let names;
+  try { names = io.readdirSync(directory); } catch (_) { return { removed, skipped: 0 }; }
+  let skipped = 0;
+  names.forEach((name) => {
+    if (!HEPAN_PAYLOAD_FILE.test(name)) { skipped += 1; return; }
+    const candidate = pathApi.resolve(directory, name);
+    if (pathApi.dirname(candidate) !== directory) { skipped += 1; return; }
+    let stat;
+    try { stat = io.lstatSync(candidate); } catch (_) { return; }
+    if (!stat.isFile() || stat.isSymbolicLink() || now() - stat.mtimeMs < maxAgeMs) { skipped += 1; return; }
+    try { io.unlinkSync(candidate); removed.push(name); } catch (_) { skipped += 1; }
+  });
+  return { removed, skipped };
+}
 
 function resolveHepanRuntime(workspaceRoot, environment) {
   const root = workspaceRoot || DIRS.rootDir;
@@ -71,8 +97,56 @@ function createHepanAdapter(options) {
   const getRuntime = typeof values.getRuntime === "function"
     ? values.getRuntime
     : function() { return runtimeValue ? Object.assign({}, runtimeValue) : currentRuntime(); };
+  const spawnProcess = typeof values.spawnProcess === "function" ? values.spawnProcess : spawn;
   const commandRunner = values.runCommand || function(command, args, commandOptions) {
-    return spawnSync(command, args, Object.assign({ encoding: "utf8", timeout: 240000, windowsHide: true }, commandOptions || {}));
+    const settings = Object.assign({ timeout: 240000, windowsHide: true }, commandOptions || {});
+    const signal = settings.signal;
+    delete settings.signal;
+    return new Promise(function(resolve) {
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const finish = function(value) { if (!settled) { settled = true; resolve(value); } };
+      let child;
+      try { child = spawnProcess(command, args, settings); } catch (error) { finish({ error: error, stdout: stdout, stderr: stderr }); return; }
+      child.stdout && child.stdout.on("data", function(chunk) { stdout += String(chunk); });
+      child.stderr && child.stderr.on("data", function(chunk) { stderr += String(chunk); });
+      let terminalResult = null;
+      let timer;
+      let cleanedUp = false;
+      const cleanup = function() {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        clearTimeout(timer);
+        if (signal) signal.removeEventListener("abort", abort);
+      };
+      const onClose = function(status) {
+        cleanup();
+        finish(terminalResult || { status: status, stdout: stdout, stderr: stderr });
+      };
+      child.once("error", function(error) {
+        if (!terminalResult) {
+          cleanup();
+          finish({ error: error, stdout: stdout, stderr: stderr });
+        }
+      });
+      child.once("close", onClose);
+      const terminate = function(result) {
+        if (terminalResult) return;
+        terminalResult = result;
+        try { child.kill(); } catch (_) {}
+      };
+      const abort = function() {
+        terminate({ error: Object.assign(new Error("HEPAN_PROCESS_ABORTED"), { code: "HEPAN_PROCESS_ABORTED" }), stdout: stdout, stderr: stderr });
+      };
+      timer = setTimeout(function() {
+        terminate({ error: Object.assign(new Error("HEPAN_PROCESS_TIMEOUT"), { code: "HEPAN_PROCESS_TIMEOUT" }), stdout: stdout, stderr: stderr });
+      }, settings.timeout);
+      if (signal) {
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      }
+    });
   };
   const script = values.scriptPath || scriptPath();
   const bundledVendorDir = resolveHepanVendorDir({ fs: io, path: pathApi, scriptPath: script, explicit: values.bundledVendorDir });
@@ -92,23 +166,25 @@ function createHepanAdapter(options) {
     if (!io.existsSync(imagesDirectory)) io.mkdirSync(imagesDirectory, { recursive: true });
   }
 
-  function runHepan(args) {
+  function runHepan(args, signal) {
     const config = runtime();
     if (!config.pythonPath || !config.cookiePath) {
       const error = new Error("Hepan publishing is not configured");
       error.code = "HEPAN_CONFIG_NOT_SET";
       throw error;
     }
-    const result = commandRunner(config.pythonPath, [script].concat(args), {
+    return Promise.resolve(commandRunner(config.pythonPath, [script].concat(args), {
       cwd: DIRS.rootDir,
       encoding: "utf8",
       timeout: 240000,
+      signal,
       ...withHepanVendorEnvironment({ env: Object.assign({}, process.env, { PYTHONIOENCODING: "utf-8" }) }, config.vendorDir)
-    });
+    })).then(function(result) {
     if (result && result.error) throw result.error;
     const payload = parseJsonOutput(result && result.stdout);
     if (result && result.status !== 0 && payload && !payload.error) payload.error = "Hepan script failed";
     return payload;
+    });
   }
 
   function createTemporaryPayload(article) {
@@ -153,6 +229,56 @@ function createHepanAdapter(options) {
     log("[hepan] Cookie configuration is ready", "INFO");
   }
 
+  async function inspectAccount() {
+    const config = runtime();
+    if (
+      !config.pythonPath ||
+      !config.cookiePath ||
+      !io.existsSync(config.cookiePath)
+    )
+      return { verified: false };
+    try {
+      normalizeHepanCookie(io.readFileSync(config.cookiePath, "utf8"));
+      const args = [
+        "--cookie-path",
+        config.cookiePath,
+        "--check-login",
+        "--category-id",
+        String(config.categoryId),
+      ];
+      if (config.vendorDir) args.push("--vendor-dir", config.vendorDir);
+      const payload = await runHepan(args);
+      const account = payload && payload.account;
+      const remoteAccountId =
+        account && (typeof account.uid === "string" || typeof account.uid === "number")
+          ? String(account.uid).trim()
+          : "";
+      const displayName = String(
+        account && typeof account.displayName === "string"
+          ? account.displayName
+          : "",
+      )
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .trim();
+      if (
+        !payload ||
+        payload.ok !== true ||
+        payload.authenticated !== true ||
+        !/^\d{1,20}$/.test(remoteAccountId) ||
+        !displayName ||
+        displayName.length > 128
+      )
+        return { verified: false };
+      return {
+        verified: true,
+        remoteAccountId,
+        displayName,
+      };
+    } catch (_) {
+      return { verified: false };
+    }
+  }
+
   async function validatePayload(article) {
     const config = runtime();
     if (!config.pythonPath) return { ok: false, errorCode: "HEPAN_CONFIG_NOT_SET" };
@@ -161,7 +287,7 @@ function createHepanAdapter(options) {
     try {
       const parsed = article && article.contentHtml ? article : parseArticle(sourceFile, { fs: io, path: pathApi });
       temporaryPayload = createTemporaryPayload(parsed);
-      const result = commandRunner(config.pythonPath, [script, "--validate-payload", temporaryPayload.filename], {
+      const result = await commandRunner(config.pythonPath, [script, "--validate-payload", temporaryPayload.filename], {
         cwd: DIRS.rootDir,
         encoding: "utf8",
         timeout: 120000,
@@ -202,7 +328,8 @@ function createHepanAdapter(options) {
     });
   }
 
-  async function publishArticle(article) {
+  async function publishArticle(article, options) {
+    const signal = options && options.signal;
     const config = runtime();
     const filename = article && (article.filename || article.sourceFile) || "article";
     log("[hepan] Publishing via HTTP: " + pathApi.basename(filename), "INFO");
@@ -227,8 +354,13 @@ function createHepanAdapter(options) {
         args.push("--article", sourceFile);
       }
       remoteCallStarted = true;
-      const payload = await runHepan(args);
-      if (payload.errorCode && /^HEPAN_/.test(payload.errorCode)) return { status: "failed", errorCode: payload.errorCode };
+      const payload = await runHepan(args, signal);
+      if (payload.errorCode && /^HEPAN_/.test(payload.errorCode)) {
+        if (["HEPAN_REMOTE_REQUEST_FAILED", "HEPAN_PROCESS_TIMEOUT", "HEPAN_PROTOCOL_ERROR"].includes(payload.errorCode) || payload.requestMayHaveBeenSent) {
+          return { status: "uncertain", errorCode: payload.errorCode };
+        }
+        return { status: "failed", errorCode: payload.errorCode };
+      }
       if (payload.needsLogin) {
         log("[hepan] Cookie needs update", "WARN");
         return { status: "submitted", legacyStatus: "pending", errorCode: "LOGIN_REQUIRED" };
@@ -239,6 +371,9 @@ function createHepanAdapter(options) {
       log("[hepan] Published: " + (payload.url || ""), "INFO");
       return { status: "published", remoteUrl: payload.url || undefined };
     } catch (error) {
+      if (remoteCallStarted && error && ["HEPAN_PROCESS_TIMEOUT", "HEPAN_PROCESS_ABORTED", "HEPAN_PROTOCOL_ERROR"].includes(error.code)) {
+        return { status: "uncertain", errorCode: error.code };
+      }
       if (error && /^HEPAN_/.test(error.code || "")) return { status: "failed", errorCode: error.code };
       if (remoteCallStarted) return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
       return { status: "failed", errorCode: "ADAPTER_FAILED" };
@@ -254,6 +389,7 @@ function createHepanAdapter(options) {
     scanDir: "hepan",
     ensureSession,
     ensureLoggedIn,
+    inspectAccount,
     validatePayload,
     publishArticle,
     closeSession: function() {},
@@ -270,6 +406,7 @@ const defaultAdapter = createHepanAdapter();
 module.exports = Object.assign({}, defaultAdapter, {
   createHepanAdapter,
   resolveHepanRuntime,
+  cleanupExpiredHepanPayloads,
   setRuntimeConfig,
   clearRuntimeConfig: function() { batchRuntime = null; }
 });

@@ -51,6 +51,7 @@ describe("renderer content client switching", function() {
         cancellationCalls: [],
         resolveCancellation: null,
         cancelPreviewCalls: [],
+        mediaExportCalls: [],
       };
       const generationBatch = {
         id: "generation-batch-a", status: "completed",
@@ -87,6 +88,8 @@ describe("renderer content client switching", function() {
           state.batches[input.clientId] = [{ id: "batch-a", clientId: input.clientId, status: "queued", createdAt: "2026-07-20T00:00:01.000Z", updatedAt: "2026-07-20T00:00:01.000Z", items: input.articleIds.map((articleId) => ({ articleId, targetPlatformId: input.targetPlatformIds[0], status: "queued", canCancel: true })) }];
           return new Promise((resolve) => { state.resolveQueue = () => resolve({ ok: true, data: state.batches[input.clientId][0] }); });
         },
+        previewExport: (input) => ok({ filename: `${input.generatedArticleId}.md` }),
+        exportArticle: (input) => { state.mediaExportCalls.push(input); return ok({ filename: `${input.generatedArticleId}.md` }); },
         previewCancelSubmissionBatch: ({ batchId }) => {
           state.cancelPreviewCalls.push(batchId);
           const batch = Object.values(state.batches).flat().find((item) => item.id === batchId);
@@ -120,7 +123,7 @@ describe("renderer content client switching", function() {
         aiProvider: { getStatus: () => ok({ configured: false, source: "application", apiKeyMask: "", lastTest: null }), save: () => ok({}), testConnection: () => ok({}), clear: () => ok({}) },
         platformSettings: { getStatus: () => ok({ configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null }), save: () => ok({}), test: () => ok({}), clear: () => ok({}) },
         storageMaintenance: { getUsage: () => ok({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }), cleanCaches: () => ok({ blocked: false }) },
-        platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} },
+        platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok([{ accountProfileId: "account-fixture", platformId: "fixture-platform", displayName: "测试账号" }]), confirmAccountProfile: (input) => ok({ accountProfileId: "account-confirmed", platformId: input.platformId, displayName: input.displayName }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} },
         publication: { listForArticles: () => ok([]), reconcile: () => ok({}) },
         articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) },
         content,
@@ -135,6 +138,12 @@ describe("renderer content client switching", function() {
       await page.getByRole("heading", { name: "历史文章" }).waitFor();
       await page.getByRole("button", { name: /fixture-platform.*测试模板/ }).click();
       await page.locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]').check();
+      await page.getByRole("button", { name: "加入付费媒体投稿" }).click();
+      await page.getByRole("dialog", { name: "确认加入付费媒体投稿" }).waitFor();
+      await page.getByRole("button", { name: "确认加入付费媒体投稿" }).click();
+      await page.waitForFunction(() => window.__clientSwitchFlow.mediaExportCalls.length === 1);
+      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.mediaExportCalls[0]), { clientId: "client-a", generatedArticleId: "article-a", targetPlatform: "media", confirmed: true });
+      await page.locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]').check();
       await page.getByRole("button", { name: "测试投稿平台" }).click();
       await page.getByRole("button", { name: "加入投稿队列" }).click();
       await page.getByRole("dialog", { name: "确认加入投稿队列" }).waitFor();
@@ -147,6 +156,7 @@ describe("renderer content client switching", function() {
       assert.equal(await page.getByText("客户 B 文章", { exact: true }).count(), 1);
       assert.equal(await page.getByText("客户 A 文章", { exact: true }).count(), 0);
       assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.map((item) => item.clientId)), ["client-a"]);
+      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls[0].accountProfiles), { "fixture-platform": "account-fixture" });
       assert.equal(await page.getByRole("button", { name: "加入投稿队列" }).isDisabled(), true);
       await changeClientByPointer(page, clientSelect, "ArrowUp");
       assert.equal(await clientSelect.inputValue(), "client-a");

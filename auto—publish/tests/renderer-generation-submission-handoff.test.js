@@ -26,13 +26,14 @@ describe("renderer generation submission handoff", { concurrency: false }, funct
         tasks: [{ id: "generation-task-a", clientId: "client-a", platform: "fixture-platform", templateId: "fixture-template", materialIds: [], researchQueryIds: [], status: "succeeded", attempts: 1, error: null, articleId: "article-a" }],
         counts: { total: 1, succeeded: 1, failed: 0, pending: 0, interrupted: 0, cancelled: 0 },
       };
+      const state = { profiles: [], previewInputs: [] };
       const content = {
         listClients: () => ok([client]), listResearch: () => ok([]), listQuestions: () => ok([]), listGeneratedArticles: () => ok([]), getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowByArticle: {}, publicationSummaries: {} }), listSubmissionBatches: () => ok([]), listArticleTrash: () => ok([]), getDoubaoLoginState: () => ok({ status: "unknown" }), getDoubaoQueueState: () => ok({ status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }), onDoubaoQueueState: () => () => {},
         listArticleAttention: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }),
         listSubmissionPlatforms: () => ok([{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }]),
         listTemplateCatalog: () => ok({ revision: "fixture", platforms: [{ id: "fixture-platform", displayName: "测试模板平台", description: "", order: 1 }], templates: [{ id: "fixture-template", platform: "fixture-platform", scenario: "交接回归", name: "测试模板", body: "fixture", bodyHash: "fixture", source: "custom" }], diagnostics: [] }),
         listGenerationBatches: () => ok([batch]), getGenerationBatch: () => ok(batch), getGenerationBatchState: () => ok({ status: "idle", state: "idle", batchId: null }), getGenerationRuntimeSnapshot: () => ok({ runtimeId: "fixture-runtime", sequence: 0, runtime: { status: "idle", state: "idle", batchId: null }, batch, capabilities: {} }), onGenerationBatchState: () => () => {},
-        previewGenerationSubmissionHandoff: () => ok({ generationBatchId: batch.id, previewToken: "preview", articleCount: 1, clientCount: 1, targetPlatformIds: ["fixture-platform"], estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }),
+        previewGenerationSubmissionHandoff: (input) => { state.previewInputs.push(input); return ok({ generationBatchId: batch.id, previewToken: "preview", articleCount: 1, clientCount: 1, targetPlatformIds: ["fixture-platform"], estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }); },
         commitGenerationSubmissionHandoff: () => ok({ generationBatchId: batch.id, createdCount: 1, idempotentCount: 0, blockedCount: 0, conflictCount: 0, failedClientGroups: [], completedClientGroups: ["client-a"], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }] }),
       };
       window.desktopConsole = {
@@ -42,8 +43,9 @@ describe("renderer generation submission handoff", { concurrency: false }, funct
         media: { scanArticles: () => ok([]), getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 1 }), getPool: () => ok([]), getBalance: () => ok({ balance: "0" }) }, orders: { getOrders: () => ok([]) },
         aiProvider: { getStatus: () => ok({ configured: false, source: "application", apiKeyMask: "", lastTest: null }) }, platformSettings: { getStatus: () => ok({ configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null }) },
         storageMaintenance: { getUsage: () => ok({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }) },
-        platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} }, publication: { listForArticles: () => ok([]) }, articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) }, content,
+        platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok(state.profiles), confirmAccountProfile: (input) => { const profile = { accountProfileId: "account-confirmed", platformId: input.platformId, displayName: input.displayName }; state.profiles.push(profile); return ok(profile); }, getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} }, publication: { listForArticles: () => ok([]) }, articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) }, content,
       };
+      window.__handoffFlow = state;
     });
     try {
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
@@ -52,7 +54,13 @@ describe("renderer generation submission handoff", { concurrency: false }, funct
       await page.getByRole("tab", { name: "批量生成" }).click();
       await page.getByRole("button", { name: "将成功文章加入投稿队列" }).click();
       await page.getByRole("checkbox", { name: "测试投稿平台" }).check();
+      assert.equal(await page.getByRole("button", { name: "检查并确认" }).isDisabled(), true);
+      await page.getByRole("textbox", { name: "测试投稿平台新账号名称" }).fill("测试登录账号");
+      await page.getByRole("button", { name: "确认账号" }).click();
+      await page.waitForFunction(() => !document.querySelector('button')?.disabled || window.__handoffFlow.profiles.length === 1);
+      await page.getByRole("button", { name: "检查并确认" }).waitFor({ state: "visible" });
       await page.getByRole("button", { name: "检查并确认" }).click();
+      assert.deepEqual(await page.evaluate(() => window.__handoffFlow.previewInputs[0].accountProfiles), { "fixture-platform": "account-confirmed" });
       await page.getByRole("button", { name: "一次确认并加入投稿队列" }).click();
       await page.getByTestId("generation-handoff-summary").waitFor();
       assert.equal(await page.getByRole("dialog", { name: "生成批次投稿交接" }).count(), 0);

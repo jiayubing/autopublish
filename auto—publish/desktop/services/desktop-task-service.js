@@ -1,7 +1,9 @@
 ﻿const path = require("path");
 const { fork, execFile } = require("child_process");
 const { createPlatformTaskStateStore, createRunId } = require("./platform-task-state-store");
+const { createPlatformRun, WORKER_SCHEMA_VERSION } = require("./platform-run");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
+const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapter");
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
 
@@ -14,7 +16,8 @@ function sanitizePlatformPlan(plan) {
       return {
         sourcePlatformId: typeof task.sourcePlatformId === "string" ? task.sourcePlatformId : "",
         filename: typeof task.filename === "string" ? task.filename : "",
-        targetPlatformId: typeof task.targetPlatformId === "string" ? task.targetPlatformId : ""
+        targetPlatformId: typeof task.targetPlatformId === "string" ? task.targetPlatformId : "",
+        accountProfileId: typeof task.accountProfileId === "string" ? task.accountProfileId : ""
       };
     })
   };
@@ -35,12 +38,7 @@ function createDesktopTaskService(opts) {
     return storagePaths.tmp || path.join(cwd, "tmp");
   }
 
-  var platformChild = null;
-  var isPlatformRunning = false;
-  var platformAbort = null;
-  var platformTaskCount = 0;
-  var platformRemoteCallStarted = false;
-  var activePlatformRunId = null;
+  var platformRun = null;
   var platformTaskStateStore = createPlatformTaskStateStore({
     persistedSnapshotPath: storagePaths.localState ? path.join(storagePaths.localState, "platform-task-snapshot.json") : null
   });
@@ -50,7 +48,7 @@ function createDesktopTaskService(opts) {
       platformTaskStateStore.setControls(Object.assign({
         isBatchRunning: false,
         isStopPending: false,
-        isPlatformRunning: isPlatformRunning
+        isPlatformRunning: Boolean(platformRun && platformRun.snapshot())
       }, extra || {}));
       sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
       return;
@@ -58,12 +56,13 @@ function createDesktopTaskService(opts) {
     sendToRenderer("platform-state", Object.assign({
       isBatchRunning: false,
       isStopPending: false,
-      isPlatformRunning: isPlatformRunning
+      isPlatformRunning: Boolean(platformRun && platformRun.snapshot())
     }, extra || {}));
   }
 
   function spawnDesktopTask(taskName, payload, hooks) {
     var workerPayload = Object.assign({}, payload || {}, { paths: storagePaths });
+    var expectedRunId = typeof workerPayload.runId === "string" ? workerPayload.runId : null;
     var child = forkProcess(path.join(__dirname, "..", "worker", "run-task.js"), [taskName, JSON.stringify(workerPayload)], {
       cwd: cwd,
       env: Object.assign({}, process.env, {
@@ -93,14 +92,16 @@ function createDesktopTaskService(opts) {
       var settled = false;
 
       child.on("message", function(message) {
-        if (!message) return;
+        if (!message || message.schemaVersion !== WORKER_SCHEMA_VERSION || message.runId !== expectedRunId ||
+          !["log", "state", "result", "error"].includes(message.type)) return;
+        var serialized;
+        try { serialized = JSON.stringify(message.payload || {}); } catch (_) { return; }
+        if (Buffer.byteLength(serialized, "utf8") > 32768 || /(?:cookie|api[_-]?key|contentHtml|filePath|body|accountName)/i.test(serialized)) return;
         if (message.type === "log" && hooks && typeof hooks.onLog === "function") {
           hooks.onLog(message.payload);
           return;
         }
         if (message.type === "state" && message.payload) {
-          if (message.payload.phase === "remote-started") platformRemoteCallStarted = true;
-          if (message.payload.phase === "before-remote" || message.payload.phase === "remote-finished") platformRemoteCallStarted = false;
           if (hooks && typeof hooks.onState === "function") hooks.onState(message.payload);
           return;
         }
@@ -112,13 +113,13 @@ function createDesktopTaskService(opts) {
 
       child.on("exit", function(code) {
         if (!settled) {
-          resolve({ ok: false, error: "Desktop task exited unexpectedly (code " + code + ")." });
+          resolve({ ok: false, error: { code: "PLATFORM_WORKER_EXITED", category: "transport", retryability: "manual-check", userMessage: "投稿执行器意外结束" } });
         }
       });
 
       child.on("error", function(error) {
         if (!settled) {
-          resolve({ ok: false, error: error.message });
+          resolve({ ok: false, error: { code: error && error.code || "PLATFORM_WORKER_FAILED", category: "transport", retryability: "manual-check", userMessage: "投稿执行器未启动" } });
         }
       });
     });
@@ -151,7 +152,11 @@ function closeBrowserSessions() {
 }
 
   async function startPlatformSubmit(plan, hooks) {
-    if (isPlatformRunning) throw new Error("当前已有平台投稿任务正在运行。");
+    if (platformRun && platformRun.snapshot()) {
+      var alreadyActive = new Error("当前已有平台投稿任务正在运行。");
+      alreadyActive.code = "PLATFORM_RUN_ACTIVE";
+      throw alreadyActive;
+    }
     var workerPlan = sanitizePlatformPlan(plan);
 
     var hepanRuntime = null;
@@ -169,6 +174,10 @@ function closeBrowserSessions() {
         missingCookie.code = "HEPAN_CONFIG_NOT_SET";
         throw missingCookie;
       }
+      if (typeof runtime.adapter.cleanupExpiredTemporaryFiles === "function") {
+        try { runtime.adapter.cleanupExpiredTemporaryFiles(); } catch (_) {}
+      }
+      try { cleanupExpiredHepanPayloads({ tempDir: path.join(stopSignalDirectory(), "hepan") }); } catch (_) {}
       var temporaryCookie = runtime.adapter.createTemporaryCookie(runtime.config);
       hepanCleanup = temporaryCookie.cleanup;
       activeRuntimeCleanup = hepanCleanup;
@@ -184,85 +193,67 @@ function closeBrowserSessions() {
     }
 
     clearStopSignal(stopSignalDirectory());
-    isPlatformRunning = true;
-    platformTaskCount = workerPlan.tasks.length;
-    platformRemoteCallStarted = false;
-    activePlatformRunId = createRunId();
-    platformTaskStateStore.start({ runId: activePlatformRunId, tasks: workerPlan.tasks });
-    sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
 
     var result = null;
     try {
       var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
       if (hepanRuntime) submitOptions.intervalByTargetMs = { hepan: hepanRuntime.publishIntervalSeconds * 1000 };
-      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions, runId: activePlatformRunId };
+      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions };
       var watchdogMs = Number.isInteger(hooks && hooks.platformWatchdogMs) && hooks.platformWatchdogMs > 0
         ? hooks.platformWatchdogMs
         : (Number.isInteger(options.platformWatchdogMs) && options.platformWatchdogMs > 0
           ? options.platformWatchdogMs
           : Math.max(submitOptions.timeoutMs + 5000, 15000));
-      var watchdogId;
-      var watchdogResolve;
-      var watchdogPromise = new Promise(function(resolve) { watchdogResolve = resolve; });
-      function armWatchdog() {
-        clearTimeout(watchdogId);
-        watchdogId = setTimeout(function() {
-          watchdogResolve({ ok: false, errorCode: "PLATFORM_WORKER_WATCHDOG_TIMEOUT", error: "Platform publish worker stopped making progress." });
-        }, watchdogMs);
-      }
-      var task = spawnDesktopTask("platform-submit", payload, {
-        onLog: hooks && hooks.onLog ? hooks.onLog : function() {},
-        onState: function(state) {
-          armWatchdog();
-          var snapshot = platformTaskStateStore.applyWorkerState(Object.assign({}, state || {}, { runId: activePlatformRunId }));
+      platformRun = createPlatformRun({
+        watchdogMs: watchdogMs,
+        launch: function(run) {
+          platformTaskStateStore.start({ runId: run.runId, tasks: run.command.tasks });
+          sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
+          return spawnDesktopTask("platform-submit", Object.assign({}, payload, { plan: { tasks: run.command.tasks }, runId: run.runId }), {
+            onLog: hooks && hooks.onLog ? hooks.onLog : function() {},
+            onState: function(state) { run.onMessage({ schemaVersion: WORKER_SCHEMA_VERSION, runId: run.runId, type: "state", payload: state }); }
+          });
+        },
+        onSnapshot: function(snapshot) {
+          if (snapshot.phase === "running" || snapshot.phase === "stopping") {
+            var value = platformTaskStateStore.applyWorkerState({ runId: snapshot.runId, phase: snapshot.phase === "stopping" ? "stopping" : "heartbeat" });
+            sendToRenderer("platform-state", value);
+            if (hooks && typeof hooks.onState === "function") hooks.onState(value);
+          }
+        }
+      });
+      var targetPlatformIds = Array.from(new Set(workerPlan.tasks.map(function(task) { return task.targetPlatformId; }).filter(Boolean)));
+      var accountProfileIds = Array.from(new Set(workerPlan.tasks.map(function(task) { return task.accountProfileId; }).filter(Boolean)));
+      result = await platformRun.start({
+        publisher: "platform-submit",
+        target: targetPlatformIds.length === 1 ? targetPlatformIds[0] : "mixed",
+        accountProfileId: accountProfileIds.length === 1 ? accountProfileIds[0] : "",
+        tasks: workerPlan.tasks,
+        cleanup: hepanCleanup,
+        onMessage: function(message) {
+          if (!message || message.type !== "state") return;
+          var snapshot = platformTaskStateStore.applyWorkerState(Object.assign({}, message.payload || {}, { runId: message.runId }));
           sendToRenderer("platform-state", snapshot);
           if (hooks && typeof hooks.onState === "function") hooks.onState(snapshot);
         }
       });
-      platformChild = task.child;
-      armWatchdog();
-
-      var abortPromise = new Promise(function(resolve) {
-        platformAbort = function() {
-          resolve({ ok: true, errorCode: "STOP_REQUESTED", data: { ok: 0, fail: 0, skipped: platformTaskCount, pending: 0, results: [] } });
-        };
-      });
-
-      result = await Promise.race([task.promise, abortPromise, watchdogPromise]);
-      clearTimeout(watchdogId);
-
-      if (result && result.errorCode === "PLATFORM_WORKER_WATCHDOG_TIMEOUT") {
-        try { platformChild.kill(); } catch (_) {}
-      } else if (result && result.data && result.data.skipped === platformTaskCount) {
-        if (!platformRemoteCallStarted) {
-          try { platformChild.kill(); } catch (_) {}
-        }
-      }
 
       return result;
     } finally {
-      if (hepanCleanup) {
-        try { hepanCleanup(); } catch (_) {}
-        if (activeRuntimeCleanup === hepanCleanup) activeRuntimeCleanup = null;
-      }
-      platformAbort = null;
-      platformTaskCount = 0;
-      platformRemoteCallStarted = false;
-      platformChild = null;
-      isPlatformRunning = false;
+      if (activeRuntimeCleanup === hepanCleanup) activeRuntimeCleanup = null;
       var terminalPhase = result && result.errorCode === "STOP_REQUESTED" ? "stopped"
         : result && result.ok && result.data && Number(result.data.fail || 0) === 0 && Number(result.data.uncertain || 0) === 0 ? "completed"
         : "failed";
       var queueRevision = invalidateData("PLATFORM_SUBMIT_" + terminalPhase.toUpperCase());
       var terminalSnapshot = platformTaskStateStore.finish(result || { errorCode: "PLATFORM_SUBMIT_FAILED" }, terminalPhase, { queueRevision: queueRevision });
-      activePlatformRunId = null;
       sendToRenderer("platform-state", terminalSnapshot);
       if (hooks && typeof hooks.onState === "function") hooks.onState(terminalSnapshot);
     }
   }
 
   function assertActivePlatformRun(runId) {
-    if (runId !== undefined && runId !== null && runId !== activePlatformRunId) {
+    var active = platformRun && platformRun.snapshot();
+    if (runId !== undefined && runId !== null && (!active || runId !== active.runId)) {
       var error = new Error("The platform task run is no longer active.");
       error.code = "PLATFORM_RUN_MISMATCH";
       throw error;
@@ -271,42 +262,23 @@ function closeBrowserSessions() {
 
   function pausePlatformSubmit(runId) {
     assertActivePlatformRun(runId);
-    if (!isPlatformRunning) return { ok: true };
-
-    if (platformAbort && !platformRemoteCallStarted) { platformAbort(); platformAbort = null; }
-
-    // Kill the worker immediately to prevent ensureDaemon from reopening browser.
-    // The main promise already resolved via platformAbort.
-    if (platformChild) {
-      try { platformChild.send({ type: "pause" }); } catch (_) {}
-      if (!platformRemoteCallStarted) {
-        var dyingChild = platformChild;
-        setTimeout(function() { try { dyingChild.kill("SIGKILL"); } catch (_) {} }, 500);
-      }
-    }
+    if (!platformRun || !platformRun.snapshot()) return { ok: true };
 
     closeBrowserSessions();
     requestStopSignal("operator_pause", stopSignalDirectory());
 
-    isPlatformRunning = false;
+    platformRun.stop(runId, "operator_pause");
     emitPlatformState();
     return { ok: true };
   }
 
   function stopPlatformSubmit(runId) {
     assertActivePlatformRun(runId);
-    if (!isPlatformRunning) return { alreadyStopped: true };
-    if (platformAbort && !platformRemoteCallStarted) { platformAbort(); platformAbort = null; }
-    if (platformChild) {
-      requestStopSignal("desktop_stop_button", stopSignalDirectory());
-      try { platformChild.send({ type: "stop" }); } catch (_) {}
-      if (!platformRemoteCallStarted) {
-        setTimeout(function() { try { if (platformChild) platformChild.kill(); } catch (_) {} }, 3000);
-      }
-    }
-    isPlatformRunning = false;
+    if (!platformRun || !platformRun.snapshot()) return { alreadyStopped: true };
+    requestStopSignal("desktop_stop_button", stopSignalDirectory());
+    var stopped = platformRun.stop(runId, "operator_stop");
     emitPlatformState();
-    return { alreadyRequested: false };
+    return stopped;
   }
 
   function dispose() {
@@ -314,12 +286,7 @@ function closeBrowserSessions() {
       try { activeRuntimeCleanup(); } catch (_) {}
       activeRuntimeCleanup = null;
     }
-    if (isPlatformRunning) platformTaskStateStore.markInterrupted();
-    [platformChild].forEach(function(child) {
-      if (child) {
-        try { child.kill(); } catch (_) {}
-      }
-    });
+    if (platformRun && platformRun.snapshot()) { platformTaskStateStore.markInterrupted(); platformRun.stop(null, "dispose"); }
   }
 
   function getState() {
@@ -327,7 +294,7 @@ function closeBrowserSessions() {
     return Object.assign(snapshot, {
       isBatchRunning: false,
       isStopPending: snapshot.isStopPending,
-      isPlatformRunning: isPlatformRunning || snapshot.isPlatformRunning
+      isPlatformRunning: Boolean(platformRun && platformRun.snapshot()) || snapshot.isPlatformRunning
     });
   }
 

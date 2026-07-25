@@ -137,7 +137,8 @@ function createClient(opts) {
   return new MediaClient({
     apiKey: options.apiKey,
     baseUrl: options.baseUrl,
-    timeoutMs: options.timeoutMs
+    timeoutMs: options.timeoutMs,
+    allowInsecure: options.allowInsecure
   });
 }
 

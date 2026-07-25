@@ -7,8 +7,8 @@ function read(file) {
   return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
 }
 
-describe("desktop workbench flow", function() {
-  it("loads the React production renderer from the packaged dist entry", function() {
+describe("desktop workbench flow", function () {
+  it("loads the React production renderer from the packaged dist entry", function () {
     const main = read("desktop/main.js");
     const packaging = read("electron-builder.alpha.yml");
     assert.match(main, /media-workbench["\\']?, ["\\']dist["\\']?/);
@@ -18,9 +18,11 @@ describe("desktop workbench flow", function() {
     assert.doesNotMatch(main, /desktop[\\/]renderer/);
   });
 
-  it("keeps media, platform, order, and content workbenches on the React app surface", function() {
+  it("keeps media, platform, order, and content workbenches on the React app surface", function () {
     const app = read("media-workbench/src/App.tsx");
-    const platform = read("media-workbench/src/components/PlatformWorkbench.tsx");
+    const platform = read(
+      "media-workbench/src/components/PlatformWorkbench.tsx",
+    );
     const content = read("media-workbench/src/components/ContentWorkbench.tsx");
     assert.match(app, /ResourceLibrary/);
     assert.match(app, /ArticleEditor/);
@@ -31,11 +33,15 @@ describe("desktop workbench flow", function() {
     assert.match(content, /GeneratedArticlesView/);
   });
 
-  it("keeps platform batch selection until explicit confirmation", function() {
-    const platform = read("media-workbench/src/components/PlatformWorkbench.tsx");
+  it("keeps platform batch selection until explicit confirmation", function () {
+    const platform = read(
+      "media-workbench/src/components/PlatformWorkbench.tsx",
+    );
     assert.match(platform, /selectedArticles/);
     assert.match(platform, /selectedPlatformIds/);
     assert.match(platform, /submitPlatformSelection/);
     assert.match(platform, /isConfirming/);
+    assert.match(platform, /accountProfiles: Object\.fromEntries/);
+    assert.match(platform, /article\.accountProfileId/);
   });
 });

@@ -13,8 +13,9 @@ it("media adapters scan only their injected workspace input without module reloa
     const twoInput = path.join(two, "input", "media");
     fs.mkdirSync(oneInput, { recursive: true }); fs.mkdirSync(twoInput, { recursive: true });
     fs.writeFileSync(path.join(oneInput, "one.txt"), "one"); fs.writeFileSync(path.join(twoInput, "two.txt"), "two");
-    assert.deepStrictEqual(createMediaAdapter({ apiKey: "test", paths: { mediaInput: oneInput } }).scanArticles().map((x) => x.filename), ["one.txt"]);
-    assert.deepStrictEqual(createMediaAdapter({ apiKey: "test", paths: { mediaInput: twoInput } }).scanArticles().map((x) => x.filename), ["two.txt"]);
+    assert.deepStrictEqual(createMediaAdapter({ paths: { mediaInput: oneInput } }).scanArticles(), []);
+    assert.deepStrictEqual(createMediaAdapter({ mainProcess: true, apiKey: "test", paths: { mediaInput: oneInput } }).scanArticles().map((x) => x.filename), ["one.txt"]);
+    assert.deepStrictEqual(createMediaAdapter({ mainProcess: true, apiKey: "test", paths: { mediaInput: twoInput } }).scanArticles().map((x) => x.filename), ["two.txt"]);
   } finally { fs.rmSync(one, { recursive: true, force: true }); fs.rmSync(two, { recursive: true, force: true }); }
 });
 

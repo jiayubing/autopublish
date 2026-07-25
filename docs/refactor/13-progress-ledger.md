@@ -4,46 +4,65 @@
 
 ## 1. 当前程序基线
 
-| 项目 | 当前记录 |
-|---|---|
-| 原审查代码基线 | `master@e8d817847bab3a9e6020006cab35340f645e527f` |
-| 重构规划分支 | `codex/refactor-program` |
-| 重构规划commit | `dc5265359ca10a866ccd10e56a84314214b7897f` |
-| 活跃worktree | `F:\官媒投稿-refactor` |
-| 规划日期 | 2026-07-24 Asia/Shanghai |
-| 目标形态 | 文件内容 + workspace SQLite运行状态 + Electron/React/Node |
-| 当前可执行阶段 | 阶段4（阶段3已`COMPLETE`；可从阶段3文档收口提交开始） |
-| 普通功能开发 | 冻结 |
-| 正式release | 冻结 |
+| 项目           | 当前记录                                                  |
+| -------------- | --------------------------------------------------------- |
+| 原审查代码基线 | `master@e8d817847bab3a9e6020006cab35340f645e527f`         |
+| 重构规划分支   | `codex/refactor-program`                                  |
+| 重构规划commit | `dc5265359ca10a866ccd10e56a84314214b7897f`                |
+| 活跃worktree   | `F:\官媒投稿-refactor`                                    |
+| 规划日期       | 2026-07-24 Asia/Shanghai                                  |
+| 目标形态       | 文件内容 + workspace SQLite运行状态 + Electron/React/Node |
+| 当前可执行阶段 | 阶段5（阶段4为`PENDING_HUMAN`；本地重构允许开始）         |
+| 普通功能开发   | 阶段5本地重构允许；正式release仍冻结                      |
+| 正式release    | 冻结                                                      |
 
 重构worktree已从独立规划commit创建；review、optimization、refactor、ADR和领域词汇已纳入该commit。原工作区`F:\官媒投稿`中用户维护的`auto—publish/docs/...`删除和未跟踪旧文档README没有进入重构分支，也不得由后续任务复制、恢复或清理。阶段0开始时必须重新核验当前HEAD和工作区状态。
 
 ## 2. 已冻结的架构决定
 
-| 决定 | 状态 | 权威记录 |
-|---|---|---|
-| 用户创作内容保持文件化 | ACCEPTED | ADR-0003 |
-| 运行协调状态迁入workspace SQLite | ACCEPTED | ADR-0003 |
-| 串行阶段、单writer切换、无长期双轨 | ACCEPTED | ADR-0004 |
-| 普通平台target包含AccountProfileId | ACCEPTED | `01-target-architecture.md`、CONTEXT |
-| Electron/React/Node/Playwright保留 | ACCEPTED | `00-program-charter.md` |
-| 诊断默认结构化、无原始整页截图 | ACCEPTED | 阶段4/7计划 |
-| 删除死publish-log，不新增原始日志UI | ACCEPTED | 阶段7计划 |
-| Media production只允许HTTPS | ACCEPTED | 阶段4/7计划 |
+| 决定                                | 状态                           | 权威记录                                                                                      |
+| ----------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
+| 用户创作内容保持文件化              | ACCEPTED                       | ADR-0003                                                                                      |
+| 运行协调状态迁入workspace SQLite    | ACCEPTED                       | ADR-0003                                                                                      |
+| 串行阶段、单writer切换、无长期双轨  | ACCEPTED                       | ADR-0004                                                                                      |
+| 普通平台target包含AccountProfileId  | ACCEPTED                       | `01-target-architecture.md`、CONTEXT                                                          |
+| Electron/React/Node/Playwright保留  | ACCEPTED                       | `00-program-charter.md`                                                                       |
+| 诊断默认结构化、无原始整页截图      | ACCEPTED                       | 阶段4/7计划                                                                                   |
+| 删除死publish-log，不新增原始日志UI | ACCEPTED                       | 阶段7计划                                                                                     |
+| Media允许服务商HTTP例外             | ACCEPTED（2026-07-25用户决策） | endpoint必须显式配置；HTTP要求`allowInsecure`确认并持续警告；不得静默降级或扩展到其他provider |
 
 ## 3. 阶段状态
 
-| 阶段 | 状态 | 开始commit | 完成commit | 自动验证 | 人工验证 | Handoff |
-|---:|---|---|---|---|---|---|
-| 0 工程基线 | COMPLETE | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | `0bcbbfcca9ac4baf140359e048f3bf706f7b9526` | canonical本地门禁、静态workflow契约与link安全172/172均通过 | 无；remote/PR/push/required checks为`NOT_APPLICABLE` | `docs/refactor/handoffs/phase-00.md` |
-| 1 领域契约 | COMPLETE | `926723f076cd1d8c88beb35695567bfb74df6639` | `027e9f88e00cb206669c2490cec9fcad7e6a47ad` | 178个默认测试文件、Phase 01 contract/architecture测试、严格类型检查、renderer/worker/package smoke均通过 | 无；不得在本任务执行 | `docs/refactor/handoffs/phase-01.md` |
-| 2 OperationalStore | COMPLETE | `7cab1c9aad167c7e2eca8f1dd2732124ba24a434` | `7d8f81452f98c8211308ada0ffba7873428a764b` | 182测试文件、默认977/977、Phase 02 15/15、auth 16/16、links 172/172、packaging 33/33、Electron SQLite probe及所有canonical门禁通过 | 仅合成workspace；未请求或访问真实库 | `docs/refactor/handoffs/phase-02.md` |
-| 3 PublicationWorkflow | COMPLETE | `7d8f81452f98c8211308ada0ffba7873428a764b` | `7009a61b47ed3d5b6b6976e4f44fabab77ff1b93` | 唯一 PublicationWorkflow/OperationalStore write owner、AccountProfile fail-closed、worker outcome-only、attention composition ports、legacy JSON writer物理退出。合成 migration dry-run/execute/schema+FK+manual item/backup→restore/fault+rollback 10/10；phase3 attention/workflow/recovery定向通过；canonical `npm test` 170 files、893/893、0 fail/skip（约84s）；lint/typechecks/renderer build/format/auth 16/16/packaging 33/33、links 172/172（0 skip）及 `pack:smoke` 非签名目录制品构建均通过。production-only rg 对 legacy ledger/batch/order writer、旧 executor与worker state write均为0（仅 OperationalStore runtime.lock single-writer lock 保留）。 | 无真实外部平台调用；全部验证为临时合成 workspace/fixture。 | `docs/refactor/handoffs/phase-03.md` |
-| 4 Platform/Adapters | NOT_STARTED | — | — | — | 平台fixture/测试账号/TLS | — |
-| 5 Content生命周期 | NOT_STARTED | — | — | — | 内容迁移副本需授权 | — |
-| 6 Renderer/IPC | NOT_STARTED | — | — | — | 可访问性手工smoke | — |
-| 7 Auth/Build/Ops | NOT_STARTED | — | — | — | RPO/RTO、TLS、签名、release owner | — |
-| 8 Cleanup/Acceptance | NOT_STARTED | — | — | — | 全部release门 | — |
+|                  阶段 | 状态          | 开始commit                                 | 完成commit                                 | 自动验证                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 人工验证                                                   | Handoff                              |
+| --------------------: | ------------- | ------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------ |
+|            0 工程基线 | COMPLETE      | `bee1b3f24039bb77be0d13d9a663b88e5657e61c` | `0bcbbfcca9ac4baf140359e048f3bf706f7b9526` | canonical本地门禁、静态workflow契约与link安全172/172均通过                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 无；remote/PR/push/required checks为`NOT_APPLICABLE`       | `docs/refactor/handoffs/phase-00.md` |
+|            1 领域契约 | COMPLETE      | `926723f076cd1d8c88beb35695567bfb74df6639` | `027e9f88e00cb206669c2490cec9fcad7e6a47ad` | 178个默认测试文件、Phase 01 contract/architecture测试、严格类型检查、renderer/worker/package smoke均通过                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 无；不得在本任务执行                                       | `docs/refactor/handoffs/phase-01.md` |
+|    2 OperationalStore | COMPLETE      | `7cab1c9aad167c7e2eca8f1dd2732124ba24a434` | `7d8f81452f98c8211308ada0ffba7873428a764b` | 182测试文件、默认977/977、Phase 02 15/15、auth 16/16、links 172/172、packaging 33/33、Electron SQLite probe及所有canonical门禁通过                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 仅合成workspace；未请求或访问真实库                        | `docs/refactor/handoffs/phase-02.md` |
+| 3 PublicationWorkflow | COMPLETE      | `7d8f81452f98c8211308ada0ffba7873428a764b` | `7009a61b47ed3d5b6b6976e4f44fabab77ff1b93` | 唯一 PublicationWorkflow/OperationalStore write owner、AccountProfile fail-closed、worker outcome-only、attention composition ports、legacy JSON writer物理退出。合成 migration dry-run/execute/schema+FK+manual item/backup→restore/fault+rollback 10/10；phase3 attention/workflow/recovery定向通过；canonical `npm test` 170 files、893/893、0 fail/skip（约84s）；lint/typechecks/renderer build/format/auth 16/16/packaging 33/33、links 172/172（0 skip）及 `pack:smoke` 非签名目录制品构建均通过。production-only rg 对 legacy ledger/batch/order writer、旧 executor与worker state write均为0（仅 OperationalStore runtime.lock single-writer lock 保留）。 | 无真实外部平台调用；全部验证为临时合成 workspace/fixture。 | `docs/refactor/handoffs/phase-03.md` |
+|   4 Platform/Adapters | PENDING_HUMAN | `8cbce7f1761c4e67baf4467d89f0a8397e93d9db` | —                                          | 933/933全量、Phase 04定向27/27、auth 16/16、links、packaging、lint、format、三项typecheck及最小解包目录制品 smoke均通过 | 四项受控人工验收；阻止正式release，不阻止Phase 05本地重构 | `docs/refactor/handoffs/phase-04.md` |
+|     5 Content生命周期 | READY         | —                                          | —                                          | Phase 04自动门禁完成；仅允许本地重构                       | 内容迁移副本需授权                                         | —                                    |
+|        6 Renderer/IPC | NOT_STARTED   | —                                          | —                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 可访问性手工smoke                                          | —                                    |
+|      7 Auth/Build/Ops | NOT_STARTED   | —                                          | —                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | RPO/RTO、TLS、签名、release owner                          | —                                    |
+|  8 Cleanup/Acceptance | NOT_STARTED   | —                                          | —                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 全部release门                                              | —                                    |
+
+### 阶段4：平台运行期与 Publisher Adapters
+
+- 状态：PENDING_HUMAN（自动门禁与最小解包目录制品 smoke 已通过；不得标记`COMPLETE`）
+- 开始时间：2026-07-25 Asia/Shanghai
+- 开始分支/commit：`codex/refactor-program` / `8cbce7f1761c4e67baf4467d89f0a8397e93d9db`
+- 执行任务/线程：当前 Codex 任务
+- 用户已有改动：开始时工作区干净；未恢复、覆盖、清理或访问真实内容库。
+- 计划内文件范围：PlatformRun、worker protocol、adapter/runtime、安全诊断、platform tests、账本与交接。
+- 已完成工作：PlatformRun 已成为 desktop task service 的唯一 child lifecycle owner；worker envelope 在主进程按 version/runId/闭集type/32 KiB/敏感字段拒绝；头条和列举无文章级证据一律`uncertain`；Hepan 异步 child、unpacked resolver、最小权限临时文件和启动残留精确回收已完成；媒体仅 main-process runtime config，HTTP仅显式endpoint+`allowInsecure`确认；诊断仅保存结构化摘要，无原始截图。首次人工 smoke 后补齐 AccountProfile 持久查询、authenticated IPC/preload/Renderer 选择与显式确认，并把账号映射绑定到普通文章入队和 generation handoff 预检令牌；媒体 resource target 已从普通账号队列排除。普通投稿页面现仅投影队列 sidecar 中已持久化的 AccountProfileId，并在提交时原样回传；主进程继续校验它与 durable target/profile 一致，旧无档案项继续 fail-closed。文章管理页的“加入付费媒体投稿”现由 production `previewExport`/`exportArticle` 原子写入媒体 staging 与 provenance sidecar，不选择资源、不投稿、不扣费。普通平台提交改为逐项临执行前 claim，首项账号失败不再占用后续项，过期 claim 可由 OperationalStore 原子恢复。头条/列举新增非阻塞“打开登录”和“检查登录”入口，成功检查后保存会话；Hepan 使用只读 `--check-login` 的受信账号节点提供真实身份，不显示浏览器登录入口。`pack:smoke` 已改为准备 Node runtime 并验证真实目录制品。
+- 自动收口：PlatformRun 完整冻结运行上下文；头条/列举只接受文章级证据；Hepan AbortSignal 与 child close 生命周期、普通 unpacked resolver和默认异步 runner已覆盖；worker只传递安全 outcome；media standalone 网络路径已退出生产。Alpha/production共用显式最小解包边界，最终 resources verifier 分别检查 app.asar、app.asar.unpacked与resources/tools/node，并执行隔离 Playwright和Hepan安全 smoke。
+- Interface/schema偏差：无；未修改 PublicationWorkflow public interface、OperationalStore schema 或 writer。
+- 测试命令与结果：Phase 04定向27/27、`npm test` 933/933、`npm run test:auth` 16/16、`npm run test:links`、`npm run test:packaging`、`npm run lint`、`npm run format:check`、`npm run typecheck:renderer`、`npm run typecheck:bridge`、`npm run typecheck:main`、`npm run pack:smoke`、`git diff --check`均通过。`pack:smoke`重建非签名`win-unpacked`，验证app.asar、最小unpacked运行期和resources/tools/node，并运行最终制品的Playwright/Hepan安全 smoke；无真实外部调用。
+- 故障/迁移/回滚证据：精确复现并回归锁定三个现场故障：production content service 缺少 `previewExport`/`exportArticle` 导致 `Submission operation is unavailable: previewExport`；批量预先 claim 与旧状态快照提前拒绝导致 `Queued publication is no longer executable`；头条/列举无公共登录 IPC/bridge/UI。修复未修改 OperationalStore schema 或 writer，过期租约使用现有原子 claim 规则恢复，不删除或伪造队列状态。Hepan账号身份来自只读检查返回的受信 `uid`/displayName，缺失或变化仍 fail-closed。临时Cookie/payload在正常、失败、stop/watchdog与下次启动均有有界清理和回收验证。
+- 人工待办（四项）：(1) 头条/列举受控账号 remote ID 核验及首次显式 AccountProfile binding；(2) Hepan断连后的远端核对；(3) 媒体服务商HTTP风险确认与测试资源；(4) 签名正式制品中的真实浏览器登录。它们仍阻止正式release，但不阻止Phase 05本地重构。
+- 后续产品问题分期：用户同意将入队后撤销、清理及其他跨页状态/UI问题留到完整重构的 Phase 05/06 边界内统一收口；本次不扩大 Phase 04 修复范围。
+- 停止条件是否触发：否；未把弱证据升级为published，媒体HTTP只能由显式配置和`allowInsecure`确认启用。
+- Handoff路径：`docs/refactor/handoffs/phase-04.md`
+- 下一阶段是否READY：是；Phase 05为`READY`，仅限本地重构。Phase 04维持`PENDING_HUMAN`，不得标记`COMPLETE`，直到四项人工验收完成。
 
 ## 4. 当前阶段记录模板
 

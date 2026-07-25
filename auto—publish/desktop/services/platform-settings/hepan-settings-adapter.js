@@ -2,7 +2,7 @@ const defaultFs = require("node:fs");
 const defaultPath = require("node:path");
 const defaultOs = require("node:os");
 const crypto = require("node:crypto");
-const { spawnSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
 const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("../../../src/platforms/hepan/runtime-paths");
 
@@ -13,6 +13,8 @@ const HEPAN_SELF_TEST_PAYLOAD = JSON.stringify({
 });
 const HEPAN_CHECK_STAGES = new Set(["authentication", "publish_access", "upload_context", "dependency"]);
 const HEPAN_UPLOAD_CONTEXTS = new Set(["available", "changed", "not_checked"]);
+const HEPAN_TEMPORARY_FILE = /^\.hepan-(?:cookie-[0-9a-f-]{36}\.tmp|payload-[0-9a-f-]{36}\.json|payload-self-test-[0-9a-f-]{36}\.json)$/i;
+const HEPAN_TEMPORARY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function adapterError(code, message) {
   const error = new Error(message);
@@ -94,16 +96,51 @@ function assertCookiePath(value, io, path) {
   return path.resolve(text);
 }
 
+function cleanupExpiredHepanTemporaryFiles(options) {
+  const values = options || {};
+  const io = values.fs || defaultFs;
+  const path = values.path || defaultPath;
+  const now = typeof values.now === "function" ? values.now : () => Date.now();
+  const maxAgeMs = Number.isSafeInteger(values.maxAgeMs) && values.maxAgeMs >= 0 ? values.maxAgeMs : HEPAN_TEMPORARY_MAX_AGE_MS;
+  const tmpRoot = path.resolve(values.tmpRoot || path.join(values.localStateRoot || path.join(defaultOs.tmpdir(), "auto-publish-hepan-runtime"), "tmp"));
+  const removed = [];
+  let names;
+  try { names = io.readdirSync(tmpRoot); } catch (_) { return { removed, skipped: 0 }; }
+  let skipped = 0;
+  names.forEach((name) => {
+    if (!HEPAN_TEMPORARY_FILE.test(name)) { skipped += 1; return; }
+    const candidate = path.resolve(tmpRoot, name);
+    if (path.dirname(candidate) !== tmpRoot) { skipped += 1; return; }
+    let stat;
+    try { stat = io.lstatSync(candidate); } catch (_) { return; }
+    if (!stat.isFile() || stat.isSymbolicLink() || now() - stat.mtimeMs < maxAgeMs) { skipped += 1; return; }
+    try { io.unlinkSync(candidate); removed.push(name); } catch (_) { skipped += 1; }
+  });
+  return { removed, skipped };
+}
+
 function createHepanSettingsAdapter(options) {
   const values = options || {};
   const io = values.fs || defaultFs;
   const path = values.path || defaultPath;
   const localStateRoot = values.localStateRoot || path.join(defaultOs.tmpdir(), "auto-publish-hepan-runtime");
   const scriptPath = values.scriptPath || resolveHepanScriptPath({ path });
-  const runCommand = values.runCommand || (async (command, args, commandOptions) => {
-    const result = spawnSync(command, args, Object.assign({ encoding: "utf8", timeout: 120000, windowsHide: true }, commandOptions || {}));
-    return { status: result.status, stdout: result.stdout || "", stderr: result.stderr || "", error: result.error || null };
-  });
+  const runCommand = values.runCommand || ((command, args, commandOptions) => new Promise((resolve) => {
+    const settings = Object.assign({ windowsHide: true }, commandOptions || {});
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (result) => { if (!settled) { settled = true; resolve(result); } };
+    let child;
+    try { child = spawn(command, args, settings); } catch (error) { finish({ status: null, stdout, stderr, error }); return; }
+    child.stdout && child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr && child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.once("error", (error) => finish({ status: null, stdout, stderr, error }));
+    child.once("close", (status) => finish({ status, stdout, stderr, error: null }));
+    const timeoutMs = Number.isInteger(settings.timeout) ? settings.timeout : 120000;
+    const timer = setTimeout(() => { try { child.kill(); } catch (_) {} finish({ status: null, stdout, stderr, error: Object.assign(new Error("HEPAN_PROCESS_TIMEOUT"), { code: "ETIMEDOUT" }) }); }, timeoutMs);
+    child.once("close", () => clearTimeout(timer));
+  }));
   const adapter = {
     id: "hepan",
     fileName: "hepan-provider.json",
@@ -208,6 +245,7 @@ function createHepanSettingsAdapter(options) {
     errorCode(error) { return error && error.code && /^HEPAN_/.test(error.code) ? error.code : "HEPAN_CONNECTION_FAILED"; },
     withTemporaryCookie: (config, callback) => withTemporaryCookie(config, callback, io, path, localStateRoot),
     createTemporaryCookie: (config) => createTemporaryCookie(config, io, path, localStateRoot),
+    cleanupExpiredTemporaryFiles: (cleanupOptions) => cleanupExpiredHepanTemporaryFiles(Object.assign({}, cleanupOptions || {}, { fs: io, path, localStateRoot })),
     siteOrigin: HEPAN_SITE_ORIGIN
   };
   const bundledVendorDir = resolveHepanVendorDir({ fs: io, path, scriptPath, explicit: values.bundledVendorDir });
@@ -282,4 +320,4 @@ function parseJsonOutput(output) {
   return null;
 }
 
-module.exports = { createHepanSettingsAdapter, HEPAN_SITE_ORIGIN };
+module.exports = { createHepanSettingsAdapter, cleanupExpiredHepanTemporaryFiles, HEPAN_SITE_ORIGIN };

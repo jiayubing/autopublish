@@ -11,7 +11,7 @@
 - 阶段6为`COMPLETE`。
 - Core/Application/Renderer interfaces已冻结。
 - 所有外部待人工事项和production配置缺口已在进度账本列出。
-- Auth真实部署owner、CI/release owner、媒体HTTPS owner至少已确定负责人；无法确定时对应production验收保持blocked。
+- Auth真实部署owner、CI/release owner、媒体传输风险owner至少已确定负责人；无法确定时对应production验收保持blocked。
 
 ## 3. 必读输入
 
@@ -34,11 +34,11 @@
 - 为可观测性把内部状态/原始错误暴露给renderer。
 - 自动配置生产DNS、证书、Cloudflare、WAF或正式签名。
 - 在真实Auth数据库执行恢复或破坏性migration。
-- 因HTTPS暂不可用恢复公网HTTP。
+- 静默恢复媒体公网HTTP、取消显式风险确认，或把媒体HTTP例外扩展到其他服务。
 
 ## 6. 已确定的产品/安全选择
 
-- Media production只允许可信HTTPS；缺endpoint时功能禁用。
+- Media endpoint必须显式配置；服务商当前仅提供HTTP，只有显式`allowInsecure`确认后才可用，并持续显示未加密风险；HTTPS可用后优先迁移。
 - 失败诊断默认结构化摘要，不保存原始整页截图。
 - 不增加原始实时publish-log UI；删除死sender，以task snapshot、attention、diagnosticId和本地结构化日志作为interface。
 - Auth保持Node + SQLite单实例，除非本阶段容量证据证明当前目标必须HA；本轮不迁PostgreSQL。
@@ -68,13 +68,14 @@
 - 覆盖100k loginName、NAT共享、重启和窗口过期。
 - 真实Cloudflare/Tunnel来源头由人工环境验收，不从文档推断。
 
-### 7.4 完成HTTPS与配置门禁
+### 7.4 完成媒体传输与配置门禁
 
 - Media base URL默认不包含公网HTTP。
-- 非loopback HTTP在读取/发送API key和正文前拒绝。
+- HTTP endpoint未显式`allowInsecure`确认时，在发送API key和正文前拒绝。
+- 媒体client不自动跟随3xx，防止已批准endpoint把multipart和API key重定向到其他地址。
 - TLS证书错误、hostname错误和timeout安全分类。
-- Settings明确显示disabled/invalid，不提供“继续使用不安全默认值”。
-- Production endpoint、证书和网络路径由人工验收并记录。
+- Settings明确显示disabled/invalid/不加密状态，不提供隐式不安全默认值。
+- Production endpoint和HTTP风险接受由人工验收并记录；服务商提供HTTPS后再补证书和网络路径验收。
 
 ### 7.5 建立结构化诊断
 
@@ -105,7 +106,7 @@
 - Auth backup destination、read-only restore、v1/v2、WAL、损坏和副作用测试。
 - Liveness/readiness/integrity分离和超时。
 - 100k limiter key容量、TTL/LRU、可信/不可信代理头。
-- Media HTTP拒绝、TLS fake endpoint和敏感body未发送。
+- Media HTTP未确认拒绝、显式确认路径、3xx不跟随、TLS fake endpoint和敏感body未发送。
 - Diagnostic DTO/log脱敏、轮换、容量和symlink/path安全。
 - 无`publish-log` sender/consumer/channel静态检查。
 - Auth Linux container、Electron Windows `--dir`、Python self-test和migration CLI smoke。
@@ -115,7 +116,7 @@
 - Auth backup验证真实destination，restore-check零副作用。
 - Healthcheck不会高频执行全库完整性扫描。
 - Limiter有硬上限且可信来源配置明确。
-- Media production无公网HTTPfallback。
+- Media production没有隐式公网HTTP fallback；HTTP只通过显式endpoint和风险确认启用。
 - 诊断结构化、有界、脱敏，死publish-log interface已删除。
 - 最终制品离线smoke通过，资源路径指向真实解包文件。
 - CI和release checklist覆盖schema、备份、制品和人工门。
@@ -124,7 +125,7 @@
 ## 10. 停止条件
 
 - Backup/restore测试需要触碰真实数据库。
-- 无HTTPS时implementation尝试继续发送敏感body。
+- HTTP未确认时implementation尝试继续发送敏感body，或出现HTTPS到HTTP静默降级。
 - 日志需求要求把原始错误/内容暴露给renderer。
 - Production package只能依赖源码路径工作。
 - 代理来源规则无法与真实部署owner确认却被标为已验收。

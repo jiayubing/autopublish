@@ -91,19 +91,24 @@ function readPackagedManifest(appDir) {
   return manifest;
 }
 
-function verifyStaticPackage(appDir) {
+function verifyStaticPackage(appDir, options) {
   const root = path.resolve(appDir || "");
   if (!root || !fs.existsSync(root)) throw verificationError("PACKAGED_APP_MISSING", "Packaged app directory is missing");
-  const missing = REQUIRED_FILES.filter(function(filename) { return !regularFile(path.join(root, filename)); });
+  const externalNode = options && options.node;
+  const required = externalNode ? REQUIRED_FILES.filter(function(filename) { return !filename.startsWith("tools/node/"); }) : REQUIRED_FILES;
+  const missing = required.filter(function(filename) { return !regularFile(path.join(root, filename)); });
+  if (externalNode && !regularFile(externalNode)) missing.push("external node.exe");
   if (missing.length) throw verificationError("PACKAGED_RUNTIME_FILES_MISSING", "Packaged Playwright runtime files are missing");
   const packageJson = path.join(root, "node_modules", "@playwright", "cli", "package.json");
   let cliPackage;
   try { cliPackage = JSON.parse(fs.readFileSync(packageJson, "utf8")); } catch (_) { throw verificationError("PACKAGED_CLI_INVALID", "Packaged Playwright CLI metadata is invalid"); }
   if (cliPackage.version !== "0.1.14") throw verificationError("PACKAGED_CLI_VERSION_INVALID", "Packaged Playwright CLI version is not approved");
-  const manifest = readPackagedManifest(root);
+  const manifest = externalNode
+    ? JSON.parse(fs.readFileSync(path.join(path.dirname(externalNode), "runtime-tools-manifest.json"), "utf8"))
+    : readPackagedManifest(root);
   const privateEntries = staticEntries(root);
   if (privateEntries.length) throw verificationError("PACKAGED_PRIVATE_DATA", "Packaged app contains private data or an unsafe reference");
-  return { appDir: root, node: path.join(root, "tools", "node", "node.exe"), cli: path.join(root, "node_modules", "@playwright", "cli", "playwright-cli.js"), manifest: manifest };
+  return { appDir: root, node: externalNode || path.join(root, "tools", "node", "node.exe"), cli: path.join(root, "node_modules", "@playwright", "cli", "playwright-cli.js"), manifest: manifest };
 }
 
 function isolatedEnvironment(tempRoot) {
@@ -162,7 +167,7 @@ function verifyIsolatedRuntime(runtime, options) {
 }
 
 function verifyPackagedRuntime(appDir, options) {
-  const runtime = verifyStaticPackage(appDir);
+  const runtime = verifyStaticPackage(appDir, options);
   const result = { static: runtime };
   if (!(options && options.staticOnly)) result.execution = verifyIsolatedRuntime(runtime, options);
   return result;

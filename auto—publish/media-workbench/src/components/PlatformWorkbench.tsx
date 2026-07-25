@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
-import {
-  PlatformArticle,
-  PlatformSubmitResult,
-} from "../types";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { PlatformArticle, PlatformSubmitResult } from "../types";
 import {
   getPlatformSettingsStatus,
+  openPlatformLogin,
+  checkPlatformLogin,
   submitPlatformSelection,
   pausePlatformSubmit,
   stopPlatformSubmit,
@@ -32,6 +37,8 @@ import {
   Clock,
   X,
   Loader2,
+  LogIn,
+  ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { createPlatformSubmissionController } from "../controllers/platform-submission-controller";
@@ -41,16 +48,22 @@ import { createPlatformSubmissionController } from "../controllers/platform-subm
 
 const PLATFORM_ORDER = ["lieju", "toutiao", "hepan"] as const;
 
-function archiveErrorText(value: PlatformArticle['archiveError'] | PlatformSubmitResult['results'][number]['archiveError']): string {
-  if (typeof value === 'string') return value;
-  return value?.message || value?.code || '本地归档失败';
+function archiveErrorText(
+  value:
+    | PlatformArticle["archiveError"]
+    | PlatformSubmitResult["results"][number]["archiveError"],
+): string {
+  if (typeof value === "string") return value;
+  return value?.message || value?.code || "本地归档失败";
 }
 
 function articleSelectionKey(article: PlatformArticle): string {
   return `${article.sourcePlatformId}\u0000${article.filename}`;
 }
 
-export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenArticleManagement?: () => void } = {}) {
+export default function PlatformWorkbench({
+  onOpenArticleManagement,
+}: { onOpenArticleManagement?: () => void } = {}) {
   const { snapshot: queueSnapshot, refresh: refreshQueue } = usePlatformQueue();
   const platformState = usePlatformTask();
   const queue = queueSnapshot.queue;
@@ -58,33 +71,83 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const loading = queueSnapshot.loading;
   const [isConfirming, setIsConfirming] = useState(false);
   const [autoTrashRequested, setAutoTrashRequested] = useState(() => {
-    try { return window.localStorage.getItem("auto-publish:auto-trash-after-publish") === "true"; } catch (_) { return false; }
+    try {
+      return (
+        window.localStorage.getItem("auto-publish:auto-trash-after-publish") ===
+        "true"
+      );
+    } catch (_) {
+      return false;
+    }
   });
   const [submitStatus, setSubmitStatus] = useState<string>("");
-  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState<number | null>(null);
-  const submissionControllerRef = useRef<ReturnType<typeof createPlatformSubmissionController> | null>(null);
+  const [loginStates, setLoginStates] = useState<
+    Record<string, { busy: boolean; message: string; authenticated?: boolean }>
+  >({});
+  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState<
+    number | null
+  >(null);
+  const submissionControllerRef = useRef<ReturnType<
+    typeof createPlatformSubmissionController
+  > | null>(null);
   if (!submissionControllerRef.current) {
-    submissionControllerRef.current = createPlatformSubmissionController({ submit: submitPlatformSelection, pause: pausePlatformSubmit, stop: stopPlatformSubmit, previewResidue: previewTrashedArticleQueueResidue, cleanupResidue: cleanupTrashedArticleQueueResidue }, async (reason: string) => refreshQueue(reason));
+    submissionControllerRef.current = createPlatformSubmissionController(
+      {
+        submit: submitPlatformSelection,
+        pause: pausePlatformSubmit,
+        stop: stopPlatformSubmit,
+        previewResidue: previewTrashedArticleQueueResidue,
+        cleanupResidue: cleanupTrashedArticleQueueResidue,
+      },
+      async (reason: string) => refreshQueue(reason),
+    );
   }
   const submissionController = submissionControllerRef.current;
-  const commandState = useSyncExternalStore(submissionController.subscribe, submissionController.getState, submissionController.getState);
-  const { selectedArticles, selectedPlatformIds, submitting: isSubmitting, stopping: isStopping, result: submitResult, showResult, error, residue } = commandState;
+  const commandState = useSyncExternalStore(
+    submissionController.subscribe,
+    submissionController.getState,
+    submissionController.getState,
+  );
+  const {
+    selectedArticles,
+    selectedPlatformIds,
+    submitting: isSubmitting,
+    stopping: isStopping,
+    result: submitResult,
+    showResult,
+    error,
+    residue,
+  } = commandState;
 
   useEffect(() => () => submissionController.dispose(), [submissionController]);
 
   useEffect(() => {
-    try { window.localStorage.setItem("auto-publish:auto-trash-after-publish", String(autoTrashRequested)); } catch (_) {}
+    try {
+      window.localStorage.setItem(
+        "auto-publish:auto-trash-after-publish",
+        String(autoTrashRequested),
+      );
+    } catch (_) {}
   }, [autoTrashRequested]);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const hasObservedRunningRef = useRef(false);
 
-  const hasArchiveFailure = useCallback((article: PlatformArticle) => Boolean(article.archiveError), []);
-  const isSelectableArticle = useCallback((article: PlatformArticle) => article.sourceArticleState !== "trashed" && !hasArchiveFailure(article), [hasArchiveFailure]);
+  const hasArchiveFailure = useCallback(
+    (article: PlatformArticle) => Boolean(article.archiveError),
+    [],
+  );
+  const isSelectableArticle = useCallback(
+    (article: PlatformArticle) =>
+      article.sourceArticleState !== "trashed" && !hasArchiveFailure(article),
+    [hasArchiveFailure],
+  );
   const displayError = error || queueSnapshot.error;
-  const taskIsActive = platformState.isPlatformRunning || ["running", "waiting-interval", "stopping"].includes(platformState.phase);
+  const taskIsActive =
+    platformState.isPlatformRunning ||
+    ["running", "waiting-interval", "stopping"].includes(platformState.phase);
   const taskBusy = isSubmitting || isStopping || taskIsActive;
 
   const loadQueue = useCallback(async () => {
@@ -92,12 +155,16 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       submissionController.setError(null);
       await refreshQueue("manual");
     } catch (e: unknown) {
-      submissionController.setError(e instanceof Error ? e.message : "Failed to load queue");
+      submissionController.setError(
+        e instanceof Error ? e.message : "Failed to load queue",
+      );
     }
   }, [refreshQueue]);
 
   useEffect(() => {
-    submissionController.pruneArticles(new Set(queue.filter(isSelectableArticle).map(articleSelectionKey)));
+    submissionController.pruneArticles(
+      new Set(queue.filter(isSelectableArticle).map(articleSelectionKey)),
+    );
   }, [isSelectableArticle, queue, submissionController]);
 
   const inspectQueueResidue = useCallback(async () => {
@@ -106,7 +173,9 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     } catch (_) {}
   }, [submissionController]);
 
-  useEffect(() => { void inspectQueueResidue(); }, [inspectQueueResidue, queue.length]);
+  useEffect(() => {
+    void inspectQueueResidue();
+  }, [inspectQueueResidue, queue.length]);
 
   const repairQueueResidue = async () => {
     if (residue.phase === "checking" || residue.phase === "cleaning") return;
@@ -115,33 +184,61 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       if (!report.cleanableCount) {
         return;
       }
-      if (!window.confirm(`发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`)) return;
+      if (
+        !window.confirm(
+          `发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`,
+        )
+      )
+        return;
       await submissionController.cleanupResidue({ confirmed: true });
     } catch (_) {}
   };
 
   useEffect(() => {
     let active = true;
-    getPlatformSettingsStatus<HepanProviderStatus>("hepan").then((status) => {
-      if (active && Number.isInteger(status.publishIntervalSeconds)) setPublishIntervalSeconds(status.publishIntervalSeconds);
-    }).catch(() => { /* Settings may be unavailable for non-desktop fixtures. */ });
-    return () => { active = false; };
+    getPlatformSettingsStatus<HepanProviderStatus>("hepan")
+      .then((status) => {
+        if (active && Number.isInteger(status.publishIntervalSeconds))
+          setPublishIntervalSeconds(status.publishIntervalSeconds);
+      })
+      .catch(() => {
+        /* Settings may be unavailable for non-desktop fixtures. */
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
     const phase = platformState.phase || platformState.status || "";
-    const waiting = phase === "waiting-interval" || phase === "waiting_interval";
-    const running = phase === "running" || waiting || phase === "stopping" || platformState.isPlatformRunning === true;
+    const waiting =
+      phase === "waiting-interval" || phase === "waiting_interval";
+    const running =
+      phase === "running" ||
+      waiting ||
+      phase === "stopping" ||
+      platformState.isPlatformRunning === true;
     if (running) hasObservedRunningRef.current = true;
     if (waiting) setSubmitStatus("等待下一篇河畔文章…");
     else if (phase === "running") setSubmitStatus("正在投稿…");
     else if (phase === "stopping") setSubmitStatus("正在停止投稿…");
-    else if (["completed", "idle", "failed", "stopped", "interrupted"].includes(phase) && !running) {
+    else if (
+      ["completed", "idle", "failed", "stopped", "interrupted"].includes(
+        phase,
+      ) &&
+      !running
+    ) {
       if (!isSubmitting) setSubmitStatus("");
       const queueRevision = platformState.queueRevision;
-      if (hasObservedRunningRef.current && typeof queueRevision === "number" && Number.isFinite(queueRevision)) {
+      if (
+        hasObservedRunningRef.current &&
+        typeof queueRevision === "number" &&
+        Number.isFinite(queueRevision)
+      ) {
         hasObservedRunningRef.current = false;
-        void submissionController.refreshTerminal(queueRevision).catch(() => {});
+        void submissionController
+          .refreshTerminal(queueRevision)
+          .catch(() => {});
       }
     }
   }, [platformState, submissionController, isSubmitting]);
@@ -166,9 +263,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     const selectableGroup = groupArticles.filter(isSelectableArticle);
     if (!selectableGroup.length) return;
     const allSelected = selectableGroup.every((a) =>
-      selectedArticles.has(articleSelectionKey(a))
+      selectedArticles.has(articleSelectionKey(a)),
     );
-    submissionController.selectGroup(selectableGroup.map(articleSelectionKey), allSelected);
+    submissionController.selectGroup(
+      selectableGroup.map(articleSelectionKey),
+      allSelected,
+    );
   };
 
   const togglePlatform = (platformId: string) => {
@@ -184,30 +284,88 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
     });
   };
 
-  const selectedArticleList = queue.filter((a) => isSelectableArticle(a) &&
-    selectedArticles.has(articleSelectionKey(a))
+  const selectedArticleList = queue.filter(
+    (a) =>
+      isSelectableArticle(a) && selectedArticles.has(articleSelectionKey(a)),
   );
   const selectedPlatformList = platforms.filter((p) =>
-    selectedPlatformIds.has(p.id)
+    selectedPlatformIds.has(p.id),
   );
 
-  const taskCount =
-    selectedArticleList.length * selectedPlatformIds.size;
+  const taskCount = selectedArticleList.length * selectedPlatformIds.size;
   const selectedHepan = selectedPlatformIds.has("hepan");
   const hepanArticleCount = selectedHepan ? selectedArticleList.length : 0;
   const effectivePublishIntervalSeconds = publishIntervalSeconds ?? 0;
-  const minimumHepanWaitSeconds = Math.max(0, hepanArticleCount - 1) * effectivePublishIntervalSeconds;
+  const minimumHepanWaitSeconds =
+    Math.max(0, hepanArticleCount - 1) * effectivePublishIntervalSeconds;
   const canSubmit =
     selectedArticleList.length > 0 && selectedPlatformIds.size > 0;
 
   const handlePause = async () => {
     setSubmitStatus("已暂停 — 正在关闭浏览器...");
-    try { await submissionController.pause(platformState.runId); } catch (_) {}
+    try {
+      await submissionController.pause(platformState.runId);
+    } catch (_) {}
     setSubmitStatus("");
   };
 
   const handleStop = async () => {
-    try { await submissionController.stop(platformState.runId); } catch (_) {}
+    try {
+      await submissionController.stop(platformState.runId);
+    } catch (_) {}
+  };
+
+  const handleOpenLogin = async (platformId: string) => {
+    setLoginStates((current) => ({
+      ...current,
+      [platformId]: { busy: true, message: "正在打开登录页..." },
+    }));
+    try {
+      await openPlatformLogin(platformId);
+      setLoginStates((current) => ({
+        ...current,
+        [platformId]: {
+          busy: false,
+          message: "登录页已打开，请完成登录后点击检查登录",
+        },
+      }));
+    } catch (error: unknown) {
+      setLoginStates((current) => ({
+        ...current,
+        [platformId]: {
+          busy: false,
+          message: error instanceof Error ? error.message : "登录页打开失败",
+          authenticated: false,
+        },
+      }));
+    }
+  };
+
+  const handleCheckLogin = async (platformId: string) => {
+    setLoginStates((current) => ({
+      ...current,
+      [platformId]: { busy: true, message: "正在检查登录状态..." },
+    }));
+    try {
+      const authenticated = await checkPlatformLogin(platformId);
+      setLoginStates((current) => ({
+        ...current,
+        [platformId]: {
+          busy: false,
+          message: authenticated ? "已登录，会话已保存" : "尚未检测到登录",
+          authenticated,
+        },
+      }));
+    } catch (error: unknown) {
+      setLoginStates((current) => ({
+        ...current,
+        [platformId]: {
+          busy: false,
+          message: error instanceof Error ? error.message : "登录检查失败",
+          authenticated: false,
+        },
+      }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -220,6 +378,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
           sourcePlatformId: article.sourcePlatformId,
           filename: article.filename,
           targetPlatformIds: [...selectedPlatformIds],
+          accountProfiles: Object.fromEntries(
+            [...selectedPlatformIds].map((platformId) => [
+              platformId,
+              article.accountProfileId || "",
+            ]),
+          ),
         })),
         autoTrash: autoTrashRequested,
       });
@@ -232,10 +396,18 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
   const resultOk = terminalResult?.ok ?? 0;
   const resultFail = terminalResult?.fail ?? 0;
   const resultSkipped = terminalResult?.skipped ?? 0;
-  const waitingSeconds = Math.max(0, Math.ceil((platformState.waitRemainingMs || 0) / 1000));
-  const nextTaskLabel = platformState.nextTask?.filename || platformState.task?.filename || "下一篇";
+  const waitingSeconds = Math.max(
+    0,
+    Math.ceil((platformState.waitRemainingMs || 0) / 1000),
+  );
+  const nextTaskLabel =
+    platformState.nextTask?.filename ||
+    platformState.task?.filename ||
+    "下一篇";
   const platformPhase = platformState.phase || platformState.status || "";
-  const isWaitingInterval = platformPhase === "waiting-interval" || platformPhase === "waiting_interval";
+  const isWaitingInterval =
+    platformPhase === "waiting-interval" ||
+    platformPhase === "waiting_interval";
   const trashReasonText = submitResult?.trashSummary?.reasonCodes?.length
     ? `原因：${submitResult.trashSummary.reasonCodes.join("、")}`
     : "";
@@ -247,7 +419,10 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
   return (
     <div className="flex flex-col h-full">
-      <PlatformTaskIndicator snapshot={platformState} /><span className="sr-only">已处理 {platformState.processed} / {platformState.total}</span>
+      <PlatformTaskIndicator snapshot={platformState} />
+      <span className="sr-only">
+        已处理 {platformState.processed} / {platformState.total}
+      </span>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2.5">
@@ -266,11 +441,46 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
           />
           <span>刷新队列</span>
         </button>
-        {residue.cleanableCount > 0 && <button type="button" onClick={() => void repairQueueResidue()} disabled={loading || taskBusy || residue.phase === "checking" || residue.phase === "cleaning"} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{residue.phase === "checking" ? "检查中…" : residue.phase === "cleaning" ? "清理中…" : `检查并清理已删除文章残留 · 安全收尾 (${residue.cleanableCount})`}</button>}
-        {residue.reportedCount > 0 && <button type="button" onClick={onOpenArticleManagement} disabled={loading || taskBusy} className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">查看需处理项 ({residue.reportedCount})</button>}
+        {residue.cleanableCount > 0 && (
+          <button
+            type="button"
+            onClick={() => void repairQueueResidue()}
+            disabled={
+              loading ||
+              taskBusy ||
+              residue.phase === "checking" ||
+              residue.phase === "cleaning"
+            }
+            className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50"
+          >
+            {residue.phase === "checking"
+              ? "检查中…"
+              : residue.phase === "cleaning"
+                ? "清理中…"
+                : `检查并清理已删除文章残留 · 安全收尾 (${residue.cleanableCount})`}
+          </button>
+        )}
+        {residue.reportedCount > 0 && (
+          <button
+            type="button"
+            onClick={onOpenArticleManagement}
+            disabled={loading || taskBusy}
+            className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50"
+          >
+            查看需处理项 ({residue.reportedCount})
+          </button>
+        )}
       </div>
 
-      {residue.feedback && <div role={residue.feedback.kind === "error" ? "alert" : "status"} aria-live={residue.feedback.kind === "error" ? "assertive" : "polite"} className={`mb-3 rounded border p-3 text-xs ${residue.feedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>{residue.feedback.text}</div>}
+      {residue.feedback && (
+        <div
+          role={residue.feedback.kind === "error" ? "alert" : "status"}
+          aria-live={residue.feedback.kind === "error" ? "assertive" : "polite"}
+          className={`mb-3 rounded border p-3 text-xs ${residue.feedback.kind === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}
+        >
+          {residue.feedback.text}
+        </div>
+      )}
 
       {displayError && (
         <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2 text-red-700 text-xs">
@@ -300,18 +510,25 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
               <button
                 onClick={() => {
                   const selectableQueue = queue.filter(isSelectableArticle);
-                  const allSelected = selectableQueue.length > 0 && selectableQueue.every((a) =>
-                    selectedArticles.has(articleSelectionKey(a))
-                  );
+                  const allSelected =
+                    selectableQueue.length > 0 &&
+                    selectableQueue.every((a) =>
+                      selectedArticles.has(articleSelectionKey(a)),
+                    );
                   if (allSelected) {
                     submissionController.replaceArticles([]);
                   } else {
-                      submissionController.replaceArticles(selectableQueue.map(articleSelectionKey));
+                    submissionController.replaceArticles(
+                      selectableQueue.map(articleSelectionKey),
+                    );
                   }
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 font-medium"
               >
-                {queue.filter(isSelectableArticle).length > 0 && queue.filter(isSelectableArticle).every((a) => selectedArticles.has(articleSelectionKey(a)))
+                {queue.filter(isSelectableArticle).length > 0 &&
+                queue
+                  .filter(isSelectableArticle)
+                  .every((a) => selectedArticles.has(articleSelectionKey(a)))
                   ? "取消全选"
                   : "全选"}
               </button>
@@ -337,19 +554,20 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                 {sortedGroups.map((platformId) => {
                   const groupArticles = groupedArticles[platformId];
                   const isCollapsed = collapsedGroups.has(platformId);
-                  const selectableGroup = groupArticles.filter(isSelectableArticle);
+                  const selectableGroup =
+                    groupArticles.filter(isSelectableArticle);
                   const allInGroupSelected =
                     selectableGroup.length > 0 &&
                     selectableGroup.every((a) =>
-                      selectedArticles.has(articleSelectionKey(a))
+                      selectedArticles.has(articleSelectionKey(a)),
                     );
                   const someInGroupSelected = selectableGroup.some((a) =>
-                    selectedArticles.has(articleSelectionKey(a))
+                    selectedArticles.has(articleSelectionKey(a)),
                   );
 
                   const displayName =
-                    platforms.find((p) => p.id === platformId)
-                      ?.displayName || platformId;
+                    platforms.find((p) => p.id === platformId)?.displayName ||
+                    platformId;
 
                   return (
                     <div key={platformId}>
@@ -391,18 +609,30 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
 
                       {!isCollapsed && (
                         <div>
-                           {groupArticles.map((article) => (
+                          {groupArticles.map((article) => (
                             <button
                               key={articleSelectionKey(article)}
                               onClick={() =>
                                 toggleArticle(articleSelectionKey(article))
                               }
                               disabled={!isSelectableArticle(article)}
-                              title={article.archiveError ? "远端已发布，本地归档待处理，禁止再次远端投稿" : article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? `：${article.reasonCode}` : ""}` : undefined}
+                              title={
+                                article.archiveError
+                                  ? "远端已发布，本地归档待处理，禁止再次远端投稿"
+                                  : article.sourceArticleState === "trashed"
+                                    ? `源文章已删除，禁止投稿${article.reasonCode ? `：${article.reasonCode}` : ""}`
+                                    : undefined
+                              }
                               className={`w-full flex items-center space-x-2.5 px-3.5 py-2 transition-colors text-left ${
-                                selectedArticles.has(articleSelectionKey(article))
+                                selectedArticles.has(
+                                  articleSelectionKey(article),
+                                )
                                   ? "bg-blue-50/60"
-                                  : article.archiveError ? "bg-amber-50/60" : article.sourceArticleState === "trashed" ? "bg-rose-50/60" : "hover:bg-slate-50"
+                                  : article.archiveError
+                                    ? "bg-amber-50/60"
+                                    : article.sourceArticleState === "trashed"
+                                      ? "bg-rose-50/60"
+                                      : "hover:bg-slate-50"
                               }`}
                             >
                               {article.archiveError ? (
@@ -410,19 +640,22 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                               ) : article.sourceArticleState === "trashed" ? (
                                 <XCircle className="w-4 h-4 text-rose-500 shrink-0" />
                               ) : selectedArticles.has(
-                                articleSelectionKey(article)
-                              ) ? (
+                                  articleSelectionKey(article),
+                                ) ? (
                                 <CheckSquare className="w-4 h-4 text-blue-500 shrink-0" />
                               ) : (
                                 <Square className="w-4 h-4 text-slate-300 shrink-0" />
                               )}
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-medium text-slate-700 truncate">
-                                  {article.title ||
-                                    article.filename}
+                                  {article.title || article.filename}
                                 </p>
                                 <p className="text-xs text-slate-400 truncate">
-                                  {article.archiveError ? "远端已发布，本地归档待处理（禁止重投）" : article.sourceArticleState === "trashed" ? `源文章已删除，禁止投稿${article.reasonCode ? ` · ${article.reasonCode}` : ""}` : article.filename}
+                                  {article.archiveError
+                                    ? "远端已发布，本地归档待处理（禁止重投）"
+                                    : article.sourceArticleState === "trashed"
+                                      ? `源文章已删除，禁止投稿${article.reasonCode ? ` · ${article.reasonCode}` : ""}`
+                                      : article.filename}
                                 </p>
                               </div>
                             </button>
@@ -454,33 +687,87 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
               </div>
             ) : (
               <div className="space-y-2">
-                {platforms.map((platform) => (
-                  <button
-                    key={platform.id}
-                    onClick={() => togglePlatform(platform.id)}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${
-                      selectedPlatformIds.has(platform.id)
-                        ? "border-blue-300 bg-blue-50/60 shadow-sm"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      {selectedPlatformIds.has(platform.id) ? (
-                        <CheckSquare className="w-4.5 h-4.5 text-blue-500" />
-                      ) : (
-                        <Square className="w-4.5 h-4.5 text-slate-300" />
+                {platforms.map((platform) => {
+                  const loginState = loginStates[platform.id];
+                  return (
+                    <div
+                      key={platform.id}
+                      className={`overflow-hidden rounded-lg border transition-all ${
+                        selectedPlatformIds.has(platform.id)
+                          ? "border-blue-300 bg-blue-50/60 shadow-sm"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => togglePlatform(platform.id)}
+                        className="flex w-full items-center justify-between p-3 text-left hover:bg-slate-50"
+                      >
+                        <div className="flex items-center space-x-3">
+                          {selectedPlatformIds.has(platform.id) ? (
+                            <CheckSquare className="w-4.5 h-4.5 text-blue-500" />
+                          ) : (
+                            <Square className="w-4.5 h-4.5 text-slate-300" />
+                          )}
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">
+                              {platform.displayName}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              扫描目录: {platform.scanDir}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      {platform.loginAvailable && (
+                        <div className="border-t border-slate-200 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenLogin(platform.id)}
+                              disabled={taskBusy || loginState?.busy}
+                              className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              <LogIn className="h-3.5 w-3.5" />
+                              <span>打开登录</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleCheckLogin(platform.id)}
+                              disabled={taskBusy || loginState?.busy}
+                              className="flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              {loginState?.busy ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              )}
+                              <span>检查登录</span>
+                            </button>
+                          </div>
+                          {loginState?.message && (
+                            <p
+                              role={
+                                loginState.authenticated === false
+                                  ? "alert"
+                                  : "status"
+                              }
+                              className={`mt-2 text-xs ${
+                                loginState.authenticated === true
+                                  ? "text-emerald-700"
+                                  : loginState.authenticated === false
+                                    ? "text-amber-700"
+                                    : "text-slate-500"
+                              }`}
+                            >
+                              {loginState.message}
+                            </p>
+                          )}
+                        </div>
                       )}
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700">
-                          {platform.displayName}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          扫描目录: {platform.scanDir}
-                        </p>
-                      </div>
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -510,8 +797,16 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
       {(submitStatus || taskIsActive) && (
         <div className="mt-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            {isWaitingInterval ? <Clock className="w-4 h-4 text-blue-500 shrink-0" /> : <Loader2 className="w-4 h-4 animate-spin text-blue-500 shrink-0" />}
-            <span>{isWaitingInterval ? `等待下一篇河畔文章：${waitingSeconds} 秒（${nextTaskLabel}）` : (submitStatus || "正在投稿…")}</span>
+            {isWaitingInterval ? (
+              <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+            ) : (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500 shrink-0" />
+            )}
+            <span>
+              {isWaitingInterval
+                ? `等待下一篇河畔文章：${waitingSeconds} 秒（${nextTaskLabel}）`
+                : submitStatus || "正在投稿…"}
+            </span>
           </div>
           <div className="flex items-center space-x-1.5">
             <button
@@ -546,9 +841,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
           className="flex items-center space-x-1.5 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95 disabled:pointer-events-none disabled:shadow-none"
         >
           <Send className="w-4 h-4" />
-          <span>
-            {taskBusy ? "提交中..." : `确认提交 (${taskCount} 任务)`}
-          </span>
+          <span>{taskBusy ? "提交中..." : `确认提交 (${taskCount} 任务)`}</span>
         </button>
       </div>
 
@@ -596,9 +889,7 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                     ))}
                   </div>
                   {selectedArticleList.length === 0 && (
-                    <p className="text-xs text-red-500">
-                      请先选择至少一篇文章
-                    </p>
+                    <p className="text-xs text-red-500">请先选择至少一篇文章</p>
                   )}
                 </div>
 
@@ -627,13 +918,38 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                   <p className="text-sm font-bold text-indigo-700">
                     共 {taskCount} 个发布任务
                   </p>
-                  {selectedHepan && <p className="mt-1 text-xs text-indigo-700">河畔文章：{hepanArticleCount} 篇 · 配置间隔：{publishIntervalSeconds === null ? '读取中' : `${publishIntervalSeconds} 秒`} · 最少等待：{minimumHepanWaitSeconds} 秒（第一篇立即执行）</p>}
-                  {selectedHepan && publishIntervalSeconds === 0 && <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">0 秒不增加等待，但存在河畔频率限制风险。</p>}
+                  {selectedHepan && (
+                    <p className="mt-1 text-xs text-indigo-700">
+                      河畔文章：{hepanArticleCount} 篇 · 配置间隔：
+                      {publishIntervalSeconds === null
+                        ? "读取中"
+                        : `${publishIntervalSeconds} 秒`}{" "}
+                      · 最少等待：{minimumHepanWaitSeconds} 秒（第一篇立即执行）
+                    </p>
+                  )}
+                  {selectedHepan && publishIntervalSeconds === 0 && (
+                    <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                      0 秒不增加等待，但存在河畔频率限制风险。
+                    </p>
+                  )}
                 </div>
 
                 <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                  <input type="checkbox" checked={autoTrashRequested} onChange={(event) => setAutoTrashRequested(event.target.checked)} disabled={taskBusy} className="mt-0.5" />
-                  <span><strong>全部目标发布成功后自动移入回收站</strong><span className="mt-1 block text-slate-500">默认关闭；远端已发布内容不会撤回，发布记录和标题快照会保留。失败、待确认或本地归档失败时不会自动回收。</span></span>
+                  <input
+                    type="checkbox"
+                    checked={autoTrashRequested}
+                    onChange={(event) =>
+                      setAutoTrashRequested(event.target.checked)
+                    }
+                    disabled={taskBusy}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <strong>全部目标发布成功后自动移入回收站</strong>
+                    <span className="mt-1 block text-slate-500">
+                      默认关闭；远端已发布内容不会撤回，发布记录和标题快照会保留。失败、待确认或本地归档失败时不会自动回收。
+                    </span>
+                  </span>
                 </label>
 
                 {!canSubmit && (
@@ -707,31 +1023,72 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                     <p className="text-2xl font-bold text-emerald-600">
                       {resultOk}
                     </p>
-                    <p className="text-xs text-emerald-600 font-medium">
-                      成功
-                    </p>
+                    <p className="text-xs text-emerald-600 font-medium">成功</p>
                   </div>
                   <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-center">
                     <p className="text-2xl font-bold text-red-500">
                       {resultFail}
                     </p>
-                    <p className="text-xs text-red-500 font-medium">
-                      失败
-                    </p>
+                    <p className="text-xs text-red-500 font-medium">失败</p>
                   </div>
                   <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-center">
                     <p className="text-2xl font-bold text-amber-500">
                       {resultSkipped}
                     </p>
-                    <p className="text-xs text-amber-500 font-medium">
-                      跳过
-                    </p>
+                    <p className="text-xs text-amber-500 font-medium">跳过</p>
                   </div>
                 </div>
-                {submitResult.archiveSummary && submitResult.archiveSummary.failed > 0 && <div role="status" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">远端已发布，本地归档待处理：{submitResult.archiveSummary.failed} 项。队列中的这些文章已禁止再次远端投稿。</div>}
-                {submitResult.trashDisposition === "offer_trash" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布 {submitResult.trashSummary?.offeredCount || resultOk} 篇，可移入回收站。<button type="button" onClick={onOpenArticleManagement} className="ml-2 rounded border border-emerald-300 px-2 py-1 font-semibold">打开文章管理</button></div>}
-                {submitResult.trashDisposition === "auto_trash_blocked" && <div role="alert" className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">自动回收未执行：存在失败、待确认、活动投稿或本地归档待处理项。远端已发布结果保持不变，可稍后从文章管理手动回收。{trashReasonText && <span className="mt-1 block">{trashReasonText}</span>}</div>}
-                {submitResult.trashDisposition === "auto_trash_requested" && <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">已发布目标全部满足条件，文章本地副本已按确认策略移入回收站；发布记录继续保留。{(submitResult.trashSummary?.recoveryCount || 0) > 0 && <span className="mt-1 block">部分回收已进入恢复事务，系统会继续刷新处理状态。</span>}</div>}
+                {submitResult.archiveSummary &&
+                  submitResult.archiveSummary.failed > 0 && (
+                    <div
+                      role="status"
+                      className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+                    >
+                      远端已发布，本地归档待处理：
+                      {submitResult.archiveSummary.failed}{" "}
+                      项。队列中的这些文章已禁止再次远端投稿。
+                    </div>
+                  )}
+                {submitResult.trashDisposition === "offer_trash" && (
+                  <div
+                    role="status"
+                    className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"
+                  >
+                    已发布 {submitResult.trashSummary?.offeredCount || resultOk}{" "}
+                    篇，可移入回收站。
+                    <button
+                      type="button"
+                      onClick={onOpenArticleManagement}
+                      className="ml-2 rounded border border-emerald-300 px-2 py-1 font-semibold"
+                    >
+                      打开文章管理
+                    </button>
+                  </div>
+                )}
+                {submitResult.trashDisposition === "auto_trash_blocked" && (
+                  <div
+                    role="alert"
+                    className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+                  >
+                    自动回收未执行：存在失败、待确认、活动投稿或本地归档待处理项。远端已发布结果保持不变，可稍后从文章管理手动回收。
+                    {trashReasonText && (
+                      <span className="mt-1 block">{trashReasonText}</span>
+                    )}
+                  </div>
+                )}
+                {submitResult.trashDisposition === "auto_trash_requested" && (
+                  <div
+                    role="status"
+                    className="mb-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"
+                  >
+                    已发布目标全部满足条件，文章本地副本已按确认策略移入回收站；发布记录继续保留。
+                    {(submitResult.trashSummary?.recoveryCount || 0) > 0 && (
+                      <span className="mt-1 block">
+                        部分回收已进入恢复事务，系统会继续刷新处理状态。
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <div className="max-h-60 overflow-y-auto space-y-1.5">
                   {(terminalResult?.results || []).map((r, i) => (
@@ -741,8 +1098,8 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                         r.status === "success"
                           ? "bg-emerald-50/60"
                           : r.status === "failed"
-                          ? "bg-red-50/60"
-                          : "bg-slate-50/60"
+                            ? "bg-red-50/60"
+                            : "bg-slate-50/60"
                       }`}
                     >
                       {r.status === "success" ? (
@@ -763,7 +1120,12 @@ export default function PlatformWorkbench({ onOpenArticleManagement }: { onOpenA
                               - {r.error}
                             </span>
                           )}
-                          {r.archiveError && <span className="text-amber-600 ml-1">- 远端成功，本地归档待处理：{archiveErrorText(r.archiveError)}</span>}
+                          {r.archiveError && (
+                            <span className="text-amber-600 ml-1">
+                              - 远端成功，本地归档待处理：
+                              {archiveErrorText(r.archiveError)}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

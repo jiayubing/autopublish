@@ -1,5 +1,8 @@
 const task = process.argv[2];
 var stopRequested = false;
+var activeRunId = null;
+var activeAbortController = null;
+const WORKER_SCHEMA_VERSION = 1;
 
 if (!task) {
   console.error("Missing desktop worker task.");
@@ -8,7 +11,7 @@ if (!task) {
 
 function send(type, payload) {
   if (typeof process.send === "function") {
-    process.send({ type, payload });
+    process.send({ schemaVersion: WORKER_SCHEMA_VERSION, runId: activeRunId, type, payload });
     return;
   }
 
@@ -49,8 +52,11 @@ function configureWorkerEnvironment(paths) {
 process.on("message", function(message) {
   if (!message) return;
 
+  if (message.schemaVersion !== WORKER_SCHEMA_VERSION || message.runId !== activeRunId) return;
+
   if (message.type === "stop" && !stopRequested) {
     stopRequested = true;
+    if (activeAbortController) activeAbortController.abort("operator");
     var ts = new Date().toISOString().replace("T", " ").substring(0, 19);
     send("log", {
       ts: ts,
@@ -112,6 +118,8 @@ process.on("message", function(message) {
       const plan = options.plan || { tasks: [] };
       const submitOptions = options.submitOptions || { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
       const runId = typeof options.runId === "string" ? options.runId : null;
+      if (!runId) throw new Error("Platform worker runId is required");
+      activeRunId = runId;
 
       function sendPlatformState(state) {
         send("state", Object.assign({}, state || {}, {
@@ -121,6 +129,7 @@ process.on("message", function(message) {
       }
 
       clearStopSignal();
+      activeAbortController = new AbortController();
 
       const unsubscribe = subscribe(function(entry) {
         send("log", entry);
@@ -155,14 +164,15 @@ process.on("message", function(message) {
               sendPlatformState(state);
             }
           });
-          const result = await executor.execute(plan, submitOptions);
+          const result = await executor.execute(plan, Object.assign({}, submitOptions, { signal: activeAbortController.signal }));
           send("result", { ok: true, data: result });
         } finally {
           clearInterval(heartbeat);
         }
       } catch (error) {
-        send("result", { ok: false, error: error.message });
+        send("result", { ok: false, error: { code: error && error.code || "PLATFORM_WORKER_FAILED", category: "internal", retryability: "manual-check", userMessage: "投稿执行器未完成" } });
       } finally {
+        activeAbortController = null;
         unsubscribe();
         try {
           const loadedPlatforms = require("../../src/core/platforms").loadPlatforms();
@@ -179,7 +189,7 @@ process.on("message", function(message) {
 
     throw new Error("Unsupported desktop worker task: " + task);
   } catch (error) {
-    send("result", { ok: false, error: error.message });
+    send("result", { ok: false, error: { code: error && error.code || "PLATFORM_WORKER_FAILED", category: "internal", retryability: "manual-check", userMessage: "投稿执行器未完成" } });
     process.exitCode = 1;
   }
 })();

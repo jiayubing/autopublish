@@ -3,7 +3,10 @@ const path = require("node:path");
 const { maskApiKey } = require("../../../src/platforms/media/config");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
 
-const DEFAULT_MEDIA_BASE_URL = "http://8.138.187.158:8082";
+// A production endpoint is intentionally not guessed. The current provider
+// only offers HTTP, so operators must supply the endpoint and explicitly
+// acknowledge the unencrypted transport before credentials can be used.
+const DEFAULT_MEDIA_BASE_URL = "";
 const DEFAULT_MEDIA_TIMEOUT_MS = 30000;
 
 function adapterError(code, message) {
@@ -50,11 +53,11 @@ function createMediaSettingsAdapter(options) {
       if (!apiKey) throw adapterError("PLATFORM_CONFIG_INVALID", "Media provider configuration is invalid");
       const baseUrl = normalizeBaseUrl(value.baseUrl || DEFAULT_MEDIA_BASE_URL);
       const timeoutMs = normalizeTimeout(value.timeoutMs);
-      const allowInsecure = Boolean(value.allowInsecure);
-      if (/^http:\/\//i.test(baseUrl) && baseUrl !== DEFAULT_MEDIA_BASE_URL && !allowInsecure) {
-        throw adapterError("PLATFORM_CONFIG_INVALID", "HTTP media provider addresses require explicit confirmation");
+      const allowInsecure = value.allowInsecure === true;
+      if (/^http:\/\//i.test(baseUrl) && !allowInsecure) {
+        throw adapterError("MEDIA_HTTP_CONFIRMATION_REQUIRED", "HTTP media provider addresses require explicit confirmation");
       }
-      return { apiKey, baseUrl, timeoutMs, allowInsecure };
+      return { apiKey, baseUrl, timeoutMs, allowInsecure: /^http:\/\//i.test(baseUrl) };
     },
     environment(env) {
       const source = env || process.env;
@@ -62,7 +65,8 @@ function createMediaSettingsAdapter(options) {
       const hasBase = typeof source.XQW_BASE_URL === "string" && source.XQW_BASE_URL.trim() !== "";
       if (!hasKey && !hasBase) return null;
       if (!hasKey) throw adapterError("PLATFORM_CONFIG_INVALID", "Media provider environment configuration is invalid");
-      return adapter.validate({ apiKey: source.XQW_API_KEY, baseUrl: source.XQW_BASE_URL || DEFAULT_MEDIA_BASE_URL, timeoutMs: source.XQW_TIMEOUT_MS || DEFAULT_MEDIA_TIMEOUT_MS, allowInsecure: source.XQW_ALLOW_INSECURE === "1" });
+      const allowInsecure = /^(1|true)$/i.test(String(source.XQW_ALLOW_INSECURE == null ? "" : source.XQW_ALLOW_INSECURE).trim());
+      return adapter.validate({ apiKey: source.XQW_API_KEY, baseUrl: source.XQW_BASE_URL || DEFAULT_MEDIA_BASE_URL, timeoutMs: source.XQW_TIMEOUT_MS || DEFAULT_MEDIA_TIMEOUT_MS, allowInsecure });
     },
     status(config, context) {
       const value = config || {};

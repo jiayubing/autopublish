@@ -31,7 +31,8 @@ describe("media-client", function() {
   it("sends page and pageSize in mediaList requests", async function() {
     const client = new MediaClient({
       apiKey: "test-key",
-      baseUrl: "http://example.com"
+      baseUrl: "http://example.test",
+      allowInsecure: true
     });
 
     await client.mediaList({ page: 2, pageSize: 30 });
@@ -41,5 +42,17 @@ describe("media-client", function() {
     assert.match(body, /name="page"\r?\n\r?\n2/);
     assert.match(body, /name="pageSize"\r?\n\r?\n30/);
     assert.match(body, /name="api_key"\r?\n\r?\ntest-key/);
+    assert.equal(request.options.redirect, "manual");
+  });
+
+  it("refuses redirects instead of forwarding the API key and body to another endpoint", async function() {
+    global.fetch = async function(url, options) {
+      request = { url: url, options: options };
+      return { ok: false, status: 307, text: async function() { return ""; } };
+    };
+    const client = new MediaClient({ apiKey: "test-key", baseUrl: "https://media.example.test" });
+
+    await assert.rejects(client.getBalance(), /拒绝重定向/);
+    assert.equal(request.options.redirect, "manual");
   });
 });

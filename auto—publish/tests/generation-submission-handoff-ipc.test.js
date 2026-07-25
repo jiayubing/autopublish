@@ -22,7 +22,7 @@ describe("generation submission handoff IPC", function() {
   it("returns only the allowlisted safe error for a stale preview", async function() {
     const { ipcMain, handlers } = fakeIpc();
     registerGenerationSubmissionHandoffIpc({ ipcMain, generationSubmissionHandoffService: { preview() { return { previewToken: "handoff-token" }; }, commit() { throw Object.assign(new Error("C:\\secret\\article.md"), { code: "HANDOFF_PREVIEW_STALE", filePath: "C:\\secret\\article.md" }); } } });
-    const result = await handlers.get("content:commit-generation-submission-handoff")(null, { generationBatchId: "generation-1", targetPlatformIds: ["target-a"], previewToken: "handoff-token", confirmed: true });
+    const result = await handlers.get("content:commit-generation-submission-handoff")(null, { generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" }, previewToken: "handoff-token", confirmed: true });
     assert.deepEqual(result, { ok: false, error: { code: "HANDOFF_PREVIEW_STALE", message: "投稿交接预检已过期，请重新检查" } });
     assert.equal(JSON.stringify(result).includes("secret"), false);
   });

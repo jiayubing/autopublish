@@ -27,7 +27,7 @@ it("passes complete storage paths to platform-submit workers and keeps worker co
     const child = new EventEmitter();
     child.send = function() {};
     process.nextTick(function() {
-      child.emit("message", { type: "result", payload: { ok: true, data: {} } });
+      child.emit("message", { schemaVersion: 1, runId: JSON.parse(args[1]).runId, type: "result", payload: { ok: true, data: {} } });
       child.emit("exit", 0);
     });
     return child;
@@ -93,7 +93,7 @@ it("closes every platform session with the resolved bundled Node and CLI", async
   function fakeFork() {
     worker = new EventEmitter();
     worker.send = function() {};
-    worker.kill = function() {};
+    worker.kill = function() { worker.emit("exit", 0); };
     return worker;
   }
   function fakeExecFile(file, args, options, callback) {
@@ -128,8 +128,9 @@ it("snapshots the Hepan interval once when a platform batch starts", async funct
     child.send = function() {};
     child.kill = function() {};
     process.nextTick(function() {
-      child.emit("message", { type: "state", payload: { phase: "heartbeat" } });
-      child.emit("message", { type: "result", payload: { ok: true, data: {} } });
+      var runId = JSON.parse(args[1]).runId;
+      child.emit("message", { schemaVersion: 1, runId: runId, type: "state", payload: { phase: "heartbeat" } });
+      child.emit("message", { schemaVersion: 1, runId: runId, type: "result", payload: { ok: true, data: {} } });
       child.emit("exit", 0);
     });
     return child;
@@ -196,9 +197,10 @@ it("keeps a safe run snapshot available while the renderer is absent", async fun
     assert.equal(started.total, 2);
     assert.equal(typeof started.runId, "string");
     assert.equal(started.isPlatformRunning, true);
-    worker.emit("message", { type: "state", payload: { phase: "remote-finished", task: { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju", filePath: "C:\\private\\one.md" }, status: "published", runId: started.runId } });
+    worker.emit("message", { schemaVersion: 1, runId: started.runId, type: "state", payload: { phase: "remote-finished", task: { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju" }, status: "published" } });
     assert.equal(service.getState().processed, 1);
-    worker.emit("message", { type: "result", payload: { ok: true, data: { ok: 2, fail: 0, skipped: 0, uncertain: 0, results: [{ task: { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju" }, status: "success", publicationStatus: "published" }, { task: { sourcePlatformId: "hepan", filename: "two.md", targetPlatformId: "lieju" }, status: "success", publicationStatus: "published" }] } } });
+    worker.emit("message", { schemaVersion: 1, runId: started.runId, type: "result", payload: { ok: true, data: { ok: 2, fail: 0, skipped: 0, uncertain: 0, results: [{ task: { sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "lieju" }, status: "success", publicationStatus: "published" }, { task: { sourcePlatformId: "hepan", filename: "two.md", targetPlatformId: "lieju" }, status: "success", publicationStatus: "published" }] } } });
+    worker.emit("exit", 0);
     await pending;
     const completed = service.getState();
     assert.equal(completed.phase, "completed");
@@ -207,4 +209,23 @@ it("keeps a safe run snapshot available while the renderer is absent", async fun
   } finally {
     service.dispose();
   }
+});
+
+it("rejects stale, oversized, and secret-bearing worker envelopes", async function() {
+  let worker;
+  const service = createDesktopTaskService({ cwd: "C:\\portable-content", paths: { contentLibrary: "C:\\portable-content", tmp: "C:\\tmp" }, fork: function() {
+    worker = new EventEmitter(); worker.send = function() {}; worker.kill = function() {}; return worker;
+  } });
+  const pending = service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "a", filename: "a.md", targetPlatformId: "lieju" }] });
+  await new Promise((resolve) => setImmediate(resolve));
+  const runId = service.getState().runId;
+  worker.emit("message", { schemaVersion: 1, runId: "old", type: "state", payload: { phase: "remote-finished" } });
+  worker.emit("message", { schemaVersion: 1, runId: "old", type: "result", payload: { ok: true, data: { results: [] } } });
+  worker.emit("message", { schemaVersion: 1, runId, type: "state", payload: { phase: "heartbeat", apiKey: "fixture" } });
+  worker.emit("message", { schemaVersion: 1, runId, type: "state", payload: { phase: "heartbeat", value: "x".repeat(40000) } });
+  assert.equal(service.getState().processed, 0);
+  assert.notEqual(service.getState().phase, "completed");
+  worker.emit("message", { schemaVersion: 1, runId, type: "result", payload: { ok: true, data: { results: [] } } });
+  worker.emit("exit", 0);
+  await pending;
 });

@@ -553,22 +553,19 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     assert.ok(runtimeCalls.every(function(call) { return call[1].timeoutMs <= 120000; }));
   });
 
-  it("bounds a diagnostic screenshot independently and still writes its summary", async function() {
+  it("writes a structured diagnostic summary without an original screenshot", async function() {
     const calls = [];
     const diagnosticsDir = makeTemporaryDirectory("doubao-screenshot-timeout-");
     const runtime = fakeRuntime(challengeFixture, calls);
-    runtime.screenshot = async function(input) {
-      calls.push(["screenshot", input]);
-      return new Promise(function(_, reject) { setTimeout(function() { reject(new Error("late screenshot failure")); }, 25); });
-    };
     const adapter = createDoubaoBrowserAdapter({ runtime: runtime, diagnosticsDir: diagnosticsDir, diagnosticTimeoutMs: 5, sleep: async function() {} });
 
     await assert.rejects(adapter.collect("test question"), function(error) { return error.code === "DOUBAO_CHALLENGE"; });
-    const screenshotCall = calls.find(function(call) { return call[0] === "screenshot"; });
-    assert.equal(screenshotCall[1].timeoutMs, 5);
+    assert.equal(calls.some(function(call) { return call[0] === "screenshot"; }), false);
     const summaries = fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".json"); });
     assert.equal(summaries.length, 1);
-    assert.match(fs.readFileSync(path.join(diagnosticsDir, summaries[0]), "utf8"), /timed out/i);
+    const summary = fs.readFileSync(path.join(diagnosticsDir, summaries[0]), "utf8");
+    assert.match(summary, /DOUBAO_CHALLENGE/);
+    assert.equal(fs.readdirSync(diagnosticsDir).some(function(name) { return name.endsWith(".png"); }), false);
   });
 
   it("times out after 120 seconds when an answer never becomes complete", async function() {
@@ -602,13 +599,18 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     await assert.rejects(adapter.collect(fixtureQuestion), function(error) { return error.code === "DOUBAO_TIMEOUT"; });
   });
 
-  it("stops on a challenge page and captures a diagnostic", async function() {
+  it("stops on a challenge page and captures a structured diagnostic", async function() {
     const calls = [];
     const diagnosticsDir = makeTemporaryDirectory("doubao-challenge-");
     const adapter = createDoubaoBrowserAdapter({ runtime: fakeRuntime(challengeFixture, calls), diagnosticsDir: diagnosticsDir, sleep: async function() {} });
     await assert.rejects(adapter.collect("test question"), function(error) { return error.code === "DOUBAO_CHALLENGE"; });
-    assert.equal(fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".png"); }).length, 1);
-    assert.equal(fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".json"); }).length, 1);
+    const files = fs.readdirSync(diagnosticsDir);
+    assert.equal(files.filter(function(name) { return name.endsWith(".png"); }).length, 0);
+    assert.equal(files.filter(function(name) { return name.endsWith(".json"); }).length, 1);
+    const summary = JSON.parse(fs.readFileSync(path.join(diagnosticsDir, files.find(function(name) { return name.endsWith(".json"); })), "utf8"));
+    assert.equal(summary.code, "DOUBAO_CHALLENGE");
+    assert.equal(summary.status, "challenge");
+    assert.equal(Object.hasOwn(summary, "url"), false);
     assert.equal(calls.some(function(call) {
       return call[0] === "evaluate" && call[1].action === "send-question";
     }), false);
@@ -654,6 +656,9 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     });
 
     await assert.rejects(adapter.collect("test question"), function(error) { return error.code === "DOUBAO_PAGE_ERROR"; });
+    const summaryName = fs.readdirSync(diagnosticsDir).find(function(name) { return name.endsWith(".json"); });
+    const summary = fs.readFileSync(path.join(diagnosticsDir, summaryName), "utf8");
+    assert.doesNotMatch(summary, /page load failed|test question|errorText/);
     assert.equal(calls.some(function(call) {
       return call[0] === "evaluate" && call[1].action === "send-question";
     }), false);
@@ -672,7 +677,7 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     for (let index = 0; index < 25; index += 1) {
       await assert.rejects(adapter.collect("test question"), function(error) { return error.code === "DOUBAO_CHALLENGE"; });
     }
-    assert.equal(fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".png"); }).length, 20);
+    assert.equal(fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".png"); }).length, 0);
     assert.equal(fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".json"); }).length, 20);
   });
 

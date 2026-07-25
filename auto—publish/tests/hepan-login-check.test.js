@@ -229,4 +229,35 @@ print("ok")
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
+
+  it("reports a post-request failure as an uncertain-safe Python outcome", () => {
+    const code = String.raw`
+import contextlib
+import importlib.util
+import io
+import json
+import sys
+spec = importlib.util.spec_from_file_location("hepan_publish", r"${script.replace(/\\/g, "\\\\")}")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+class RequestException(Exception): pass
+class Requests: RequestException = RequestException
+module.requests = Requests()
+def fail(*args, **kwargs): raise RequestException("synthetic disconnect")
+module.publish_one = fail
+sys.argv = ["hepan_publish.py", "--payload-path", "fixture.json", "--image-dir", "images", "--cookie-path", "cookie.txt"]
+output = io.StringIO()
+with contextlib.redirect_stdout(output): status = module.main()
+payload = json.loads(output.getvalue())
+assert status == 1
+assert payload["errorCode"] == "HEPAN_REMOTE_REQUEST_FAILED"
+assert payload["stage"] == "publish"
+assert payload["requestMayHaveBeenSent"] is True
+assert "synthetic disconnect" not in json.dumps(payload)
+print("ok")
+`;
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.stdout.trim(), "ok");
+  });
 });
