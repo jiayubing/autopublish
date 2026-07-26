@@ -216,6 +216,84 @@ test("upgrades a real schema v1 database to the operation schema without changin
   reopened.close();
 });
 
+test("repairs the known v1 history plus legacy operation table left by an early Phase 05 build", () => {
+  const dir = root();
+  const initial = createOperationalStore({
+    workspaceRoot: dir,
+    clock: () => new Date("2026-07-26T00:00:00.000Z"),
+  });
+  const batch = initial.createSubmissionBatch({
+    batchId: "batch-legacy-operation",
+    items: [
+      {
+        articleId: "article-legacy-operation",
+        target: input().target,
+        payload: { source: "legacy-phase-05" },
+      },
+    ],
+  });
+  initial.prepareSubmissionItemAction({
+    operationId: "operation-legacy-phase-05",
+    batchId: batch.batchId,
+    itemId: batch.items[0].itemId,
+    action: "cancel",
+    expectedFingerprint: "legacy-fingerprint",
+    expectedStatus: "queued",
+    payload: { evidence: "preserve-me" },
+  });
+  const database = initial.databasePath;
+  initial.close();
+
+  const legacy = new DatabaseSync(database);
+  legacy.exec(`
+    DELETE FROM schema_migrations WHERE version > 1;
+    ALTER TABLE submission_item_operations RENAME TO submission_item_operations_final;
+    CREATE TABLE submission_item_operations(
+      operation_id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL REFERENCES submission_batches(batch_id),
+      item_id TEXT NOT NULL REFERENCES submission_items(item_id),
+      action TEXT NOT NULL,
+      state TEXT NOT NULL CHECK(state IN('prepared','main_staged','sidecar_staged','staged','state_applied','complete')),
+      expected_fingerprint TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(batch_id,item_id,action)
+    );
+    INSERT INTO submission_item_operations SELECT * FROM submission_item_operations_final;
+    DROP TABLE submission_item_operations_final;
+  `);
+  legacy.close();
+
+  const upgraded = createOperationalStore({ workspaceRoot: dir });
+  assert.equal(upgraded.verify().schemaVersion, 2);
+  assert.deepEqual(
+    upgraded.getSubmissionItemAction("operation-legacy-phase-05"),
+    {
+      operationId: "operation-legacy-phase-05",
+      batchId: batch.batchId,
+      itemId: batch.items[0].itemId,
+      action: "cancel",
+      state: "prepared",
+      expectedFingerprint: "legacy-fingerprint",
+      payload: { evidence: "preserve-me", expectedStatus: "queued" },
+      createdAt: "2026-07-26T00:00:00.000Z",
+      updatedAt: "2026-07-26T00:00:00.000Z",
+    },
+  );
+  upgraded.close();
+
+  const verified = new DatabaseSync(database, { readOnly: true });
+  assert.equal(
+    verified
+      .prepare("PRAGMA table_info(submission_item_operations)")
+      .all()
+      .find((column) => column.name === "operation_id").notnull,
+    1,
+  );
+  verified.close();
+});
+
 test("rolls back every schema v2 migration fault and retries idempotently", () => {
   for (const point of [
     "before-v2",

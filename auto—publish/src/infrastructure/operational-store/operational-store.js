@@ -202,7 +202,9 @@ function verifyTableDataHashes(db, expected, errorCode) {
   );
   if (text(actual) !== text(expected)) throw fail(errorCode);
 }
-function verifyV2Structure(db, errorCode) {
+function verifyV2Structure(db, errorCode, options) {
+  const allowLegacyOperationIdNullability =
+    options && options.allowLegacyOperationIdNullability === true;
   const tables = tableNames(db);
   const definition = tables.includes("submission_item_operations")
     ? db
@@ -250,7 +252,10 @@ function verifyV2Structure(db, errorCode) {
         columns[index] &&
         columns[index].name === name &&
         columns[index].type.toUpperCase() === type &&
-        columns[index].notnull === 1,
+        (columns[index].notnull === 1 ||
+          (allowLegacyOperationIdNullability &&
+            name === "operation_id" &&
+            columns[index].notnull === 0)),
     ) ||
     !operationId ||
     (operationId.pk !== 1 && !uniqueIndexes.includes("operation_id")) ||
@@ -274,6 +279,33 @@ function verifyV2Structure(db, errorCode) {
     )
   )
     throw fail(errorCode);
+}
+function installV2OperationSchema(db, errorCode) {
+  if (!tableNames(db).includes("submission_item_operations")) {
+    db.exec(V2_SCHEMA);
+    return;
+  }
+  verifyV2Structure(db, errorCode, {
+    allowLegacyOperationIdNullability: true,
+  });
+  const operationId = db
+    .prepare("PRAGMA table_info(submission_item_operations)")
+    .all()
+    .find((column) => column.name === "operation_id");
+  if (operationId && operationId.notnull === 1) return;
+  if (
+    db
+      .prepare(
+        "SELECT COUNT(*) count FROM submission_item_operations WHERE operation_id IS NULL",
+      )
+      .get().count !== 0
+  )
+    throw fail(errorCode);
+  db.exec(`ALTER TABLE submission_item_operations RENAME TO submission_item_operations_legacy_phase_05;
+${V2_SCHEMA}
+INSERT INTO submission_item_operations(operation_id,batch_id,item_id,action,state,expected_fingerprint,payload_json,created_at,updated_at)
+SELECT operation_id,batch_id,item_id,action,state,expected_fingerprint,payload_json,created_at,updated_at FROM submission_item_operations_legacy_phase_05;
+DROP TABLE submission_item_operations_legacy_phase_05;`);
 }
 function migrationFault(hook, point, db) {
   if (hook) hook(point, db);
@@ -307,7 +339,7 @@ function schema(db, migrationHook) {
       const beforeWithoutHistory = { ...before };
       delete beforeWithoutHistory.schema_migrations;
       migrationFault(migrationHook, "before-v2", db);
-      db.exec(V2_SCHEMA);
+      installV2OperationSchema(db, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
       migrationFault(migrationHook, "after-v2-create", db);
       verifyTableDataHashes(db, before, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
       verifyV2Structure(db, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
