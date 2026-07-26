@@ -6,7 +6,7 @@
 - Phase 06：`NOT_STARTED`，本任务不实施、不开启 Phase 06。
 - 分支：`codex/refactor-program`。
 - 起始 HEAD：`9ff69a073eb7869df930b688d15bfd2dabb79fc8`。
-- 完成 commit：本次 Phase 05 里程碑提交（提交后回填）；未 push、未创建 PR。
+- 完成 commit：`75dba966375302a99ebfd020c02ee6dd83930a9e`；未 push、未创建 PR。
 - 环境：2026-07-26 Asia/Shanghai，Windows，本地临时合成 workspace。
 - 真实系统边界：未连接真实投稿、付费、生产系统；仅操作用户明确授权的 `F:\workspace-migration-copy` 副本，未操作其原始内容库。
 - 人工验收：`docs/refactor/08c-phase-05-human-acceptance.md` 已执行；该副本的 dry-run/execute/rollback 和逐文件 SHA-256 校验均通过。
