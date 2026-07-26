@@ -38,7 +38,20 @@
 - Phase 04 定向：PlatformRun、adapter browser evidence、Hepan resolver、media transport、account inspector/binding、worker-main contract 与 workspace lifecycle 共28/28；覆盖显式 profile/platform、只写opaque fingerprint、身份漂移和损坏绑定文件不覆盖。
 - 投稿页回归：queue durable AccountProfileId projection、IPC forwarding、platform workbench 与 Renderer 共9/9；未绑定队列仍按原规则拒绝。
 - 投稿 DTO 回归：`tests/platform-workbench-service.test.js` 与完整 `tests/phase-03-content-publication-chain.test.js` 共3/3通过；适配器缺失 `body` 时回读受校验源文件正文，标题-only 文件在工作台返回 `ARTICLE_BODY_REQUIRED`，不再穿透为 `Operational DTO is invalid`。
+- 2026-07-26 蓝色河畔多行正文现场回归：最新 `hepan` 队列正文含 35 个换行；旧 `safeString()` 将换行误判为非法控制字符，首次提交返回 `PUBLISH_INPUT_INVALID / Operational DTO is invalid`，而 claim 已先持久化，立即重试返回 `OPERATIONAL_BATCH_ITEM_NOT_EXECUTABLE`。只读核验该现场没有创建 publication、attempt 或 recovery intent，未触发远端调用。
+- 修复：publisher DTO 正文允许 `LF/CR/TAB`，仍拒绝其他控制字符；`PublicationSubmissionService` 在 claim 前校验完整 DTO，任何纯本地 DTO 错误都不会占用队列。新增多行正文端到端回归和 claim 前校验回归；定向 34/34、全量 1012/1012、links 176/176、packaging 33/33、lint/typechecks/format/renderer build 全部通过。
+- 打包：旧 `release-alpha/win-unpacked` 正被用户窗口占用，标准 `npm run pack:smoke` 本轮因 Windows `EBUSY` 未覆盖；使用相同配置生成独立 `release-alpha-fixed/win-unpacked`，`node scripts/verify-alpha-package.js release-alpha-fixed/win-unpacked/resources` 通过。未连接真实蓝色河畔或执行投稿。
+- 2026-07-26 账号核验现场回归：DTO 与 claim 修复后，蓝色河畔在投稿前返回 `Current platform account could not be verified`；只读数据库显示该项已安全回到 `queued`，没有 publication/attempt。根因是 production AccountInspector 仍直接调用旧 Hepan adapter，未接入应用设置服务保存的 Python/Cookie/vendor 配置。现由 runtime adapter seam 复用 `platformSettingsService.test("hepan")` 的只读 `--check-login` 结果，并仅转换安全 uid/displayName；无效结果继续 fail-closed。账号 runtime 定向 34/34、全量 1014/1014、lint、main typecheck、format 均通过；独立 `release-alpha-fixed` verifier 重建通过。未执行真实投稿。
 - 本轮现场故障定向：`phase-03-operational-content-submission`、`phase-03-content-publication-chain`、`phase-04-*`、`platform-account-*`、Hepan login/publish contract 与 Renderer regression 共49/49通过；红测分别复现缺失 `previewExport`、批量遗留 claim/过期 claim 不可恢复、缺失登录 handler/UI 以及 Hepan 缺少 `inspectAccount`。
+
+## 2026-07-26 蓝色河畔现场 Playwright Node 回归
+
+- 现场症状：蓝色河畔提交前置能力检查返回 `Bundled Playwright Node is unavailable`。
+- 根因：Node 由 `extraResources` 安装到 `resources/tools/node/node.exe`，但 runtime diagnostics 只按 `appRoot/tools/node/node.exe` 查找；打包应用的 `appRoot` 是 `resources/app.asar`，导致“文件存在但 resolver 不可见”。Playwright CLI 同时位于 `resources/app.asar.unpacked/node_modules`，也必须使用独立 resources/unpacked 语义。
+- 修复：`resourcesPath` 从 Electron main 贯穿 WorkspaceRuntime、runtime-config 和 diagnostics；packaged resolver 优先解析 `resources/tools/node` 与 `resources/app.asar.unpacked/node_modules/@playwright/cli`，不依赖 PATH 或用户配置。
+- 防回归：新增真实 packaged-layout 单测；alpha verifier 现在临时解包实际 `app.asar`，用最终 `resources` 路径执行 runtime diagnostics，并在 Node/CLI unavailable 时失败，不再只证明资源文件“存在”。
+- 验证：原始最小复现由 Node=`null` 转为 bundled Node/CLI；runtime/WorkspaceRuntime 26/26，packaging 37/37，完整 `npm test` 189 files、1010 pass/0 fail/0 skip；lint、main/bridge typecheck、format、packaging 33/33、`git diff --check` 通过；`npm run pack:smoke` 重建并通过最终 resources verifier。
+- 未连接蓝色河畔账号或执行真实投稿；新解包制品位于 `auto—publish/release-alpha/win-unpacked`。阶段仍为 `PENDING_HUMAN`。
 
 ## 数据、回滚与人工项
 
