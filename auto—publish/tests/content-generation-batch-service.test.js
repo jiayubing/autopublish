@@ -83,13 +83,13 @@ function makeHarness(options) {
     dispose: async function() {}
   };
 
-  const articleStore = settings.articleStore || { saveArticle: function(article) { savedArticles.push(article); return article; }, findByGenerationTaskId: function() { return null; } };
+  const articleStore = settings.contentStore || { saveArticle: function(article) { savedArticles.push(article); return article; }, findByGenerationTaskId: function() { return null; } };
   const service = createContentGenerationBatchService({
     clientKnowledge: { getClient: function(id) { if (!clients[id]) throw Object.assign(new Error("missing"), { code: "CLIENT_NOT_FOUND" }); return clients[id]; }, listClients: function() { return Object.values(clients); } },
     materialStore: { listMaterials: async function(id) { return materials[id] || []; }, getSelectedMaterials: async function(id, ids) { return (materials[id] || []).filter(function(item) { return ids.includes(item.id); }); } },
     researchStore: { listResearch: function(id) { return research[id] || []; }, getResearch: function(id, queryId) { return (research[id] || []).find(function(item) { return item.id === queryId; }); } },
     templateStore: { getTemplate: function(platform, id) { return templates[platform + ":" + id]; }, listTemplates: function() { return Object.values(templates); } },
-    articleStore: articleStore,
+    contentStore: articleStore,
     articleGeneratorFactory: function() { return { generateArticle: async function(input) { calls.generate.push(input); return { id: "article-1", clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } }; },
     aiProviderService: { getFingerprint: function() { return currentFingerprint; }, createClient: function() { return {}; } },
     batchStore: batchStore,
@@ -117,7 +117,8 @@ describe("content generation batch service", function() {
         assert.equal(clientId, "c1");
         return [];
       },
-      saveArticle: function(article) { return article; }
+      saveArticle: function(article) { return article; },
+      findByGenerationTaskId: function() { return null; }
     };
     const service = createContentGenerationBatchService({
       workspaceRoot: workspaceRoot,
@@ -126,7 +127,7 @@ describe("content generation batch service", function() {
       materialStore: { listMaterials: async function() { return [{ id: "brand.md", status: "ready", content: "facts" }]; } },
       researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
       templateStore: { getTemplate: function() { return { id: "guide", body: "write" }; } },
-      articleStore: articleStore,
+      contentStore: articleStore,
       articleGeneratorFactory: function() {
         return { generateArticle: async function() {
           aiCalls.push("generate");
@@ -162,7 +163,8 @@ describe("content generation batch service", function() {
         assert.equal(clientId, "c1");
         throw lookupError;
       },
-      saveArticle: function(article) { return article; }
+      saveArticle: function(article) { return article; },
+      findByGenerationTaskId: function() { throw lookupError; }
     };
     const service = createContentGenerationBatchService({
       workspaceRoot: workspaceRoot,
@@ -171,7 +173,7 @@ describe("content generation batch service", function() {
       materialStore: { listMaterials: async function() { return [{ id: "brand.md", status: "ready", content: "facts" }]; } },
       researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
       templateStore: { getTemplate: function() { return { id: "guide", body: "write" }; } },
-      articleStore: articleStore,
+      contentStore: articleStore,
       articleGeneratorFactory: function() {
         return { generateArticle: async function() { throw new Error("must not generate"); } };
       },
@@ -206,6 +208,7 @@ describe("content generation batch service", function() {
         materialStore: createClientMaterialStore({ workspaceRoot: workspaceRoot }),
         researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
         templateStore: { getTemplate: function() { return { id: "guide", body: "body" }; } },
+        contentStore: { saveArticle: function(article) { return article; }, findByGenerationTaskId: function() { return { kind: "none" }; } },
         aiProviderService: { getFingerprint: function() { return "test"; } }
       });
 
@@ -265,10 +268,11 @@ describe("content generation batch service", function() {
     for (const code of ["ARTICLE_NOT_FOUND", "GENERATION_ARTICLE_NOT_FOUND"]) {
       const missingArticleStore = {
         saveArticle: function() {},
-        listArticles: async function() { throw Object.assign(new Error("Article was not found"), { code: code }); }
+        listArticles: async function() { throw Object.assign(new Error("Article was not found"), { code: code }); },
+        findByGenerationTaskId: async function() { throw Object.assign(new Error("Article was not found"), { code: code }); }
       };
       const missing = makeHarness({
-        articleStore: missingArticleStore,
+        contentStore: missingArticleStore,
         runnerFactory: function(options) { return createGenerationBatchRunner(options); }
       });
       const generated = await missing.service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
@@ -281,14 +285,15 @@ describe("content generation batch service", function() {
     const readError = Object.assign(new Error("Article JSON is invalid"), { code: "ARTICLE_INVALID" });
     const articleStore = {
       saveArticle: function() {},
-      listArticles: async function() { throw readError; }
+      listArticles: async function() { throw readError; },
+      findByGenerationTaskId: async function() { throw readError; }
     };
     const { service, calls } = makeHarness({
-      articleStore: articleStore,
+      contentStore: articleStore,
       runnerFactory: function(options) {
         return {
           run: async function(batchId) {
-            await options.findByGenerationTaskId({ id: "task-c1-guide", clientId: "c1" });
+            await options.contentStore.findByGenerationTaskId("task-c1-guide");
             return options.batchStore.getBatch(batchId);
           }
         };

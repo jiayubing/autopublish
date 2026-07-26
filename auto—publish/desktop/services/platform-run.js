@@ -89,7 +89,25 @@ function createPlatformRun(options) {
       emit(context);
       try { if (context.child && typeof context.child.kill === "function") context.child.kill(); } catch (_) {}
       // The parent durable workflow owns recovery intent; this only owns child lifecycle.
-      terminal(context, { ok: false, errorCode: "PLATFORM_WORKER_WATCHDOG_TIMEOUT", remoteStarted: context.remoteStarted });
+      const uncertain = Boolean(context.remoteStarted);
+      terminal(context, {
+        ok: uncertain,
+        errorCode: "PLATFORM_WORKER_WATCHDOG_TIMEOUT",
+        remoteStarted: uncertain,
+        currentTask: context.currentTask || null,
+        data: {
+          ok: 0,
+          fail: uncertain ? 0 : 1,
+          skipped: uncertain ? 0 : Math.max(0, context.command.tasks.length - 1),
+          uncertain: uncertain ? 1 : 0,
+          results: uncertain && context.currentTask ? [{
+            task: context.currentTask,
+            status: "uncertain",
+            publicationStatus: "uncertain",
+            error: "PLATFORM_WORKER_WATCHDOG_TIMEOUT"
+          }] : []
+        }
+      });
     }, watchdogMs);
   }
 
@@ -100,6 +118,7 @@ function createPlatformRun(options) {
     if (message.type === "state" || message.type === "progress" || message.type === "heartbeat") {
       if (payload.phase === "remote-started") context.remoteStarted = true;
       if (payload.phase === "remote-finished") context.remoteStarted = false;
+      if (payload.task && typeof payload.task === "object") context.currentTask = payload.task;
       armWatchdog(context);
       emit(context);
       if (typeof context.onMessage === "function") context.onMessage(message);

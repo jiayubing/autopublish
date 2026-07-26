@@ -16,7 +16,7 @@ test("generic content queue lists only account-bound platform targets", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-operational-targets-"));
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, articleStore: { getArticle: () => article() }, platforms: [
+    const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, contentStore: { getArticle: () => article() }, platforms: [
       { id: "toutiao", displayName: "头条", scanDir: "toutiao", contentQueueImport: true, publicationTarget: { kind: "platform" } },
       { id: "media", displayName: "媒体", scanDir: "media", contentQueueImport: true, publicationTarget: { kind: "resource" } },
     ] });
@@ -37,7 +37,7 @@ test("production content service stages a generated article for the paid-media w
       workspaceRoot: root,
       paths: { input },
       operationalStore: store,
-      articleStore: { getArticle: () => article() },
+      contentStore: { getArticle: () => article() },
       platforms: [
         {
           id: "media",
@@ -81,7 +81,7 @@ test("production content batch persists explicit account binding in OperationalS
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, articleStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
+    const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, contentStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
     const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
     const durable = store.getSubmissionBatch(batch.batchId);
     const sidecar = JSON.parse(fs.readFileSync(batch.items[0].sidecarPath, "utf8"));
@@ -102,7 +102,7 @@ test("cancelling an unclaimed operational content batch removes only its queue c
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, articleStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
+    const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, contentStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
     const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
     const preview = service.previewCancelBatch({ batchId: batch.batchId });
     assert.equal(preview.allowedCount, 1);

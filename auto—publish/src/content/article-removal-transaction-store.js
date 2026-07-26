@@ -26,6 +26,7 @@ function createArticleRemovalTransactionStore(options) {
   fs.mkdirSync(directory, { recursive: true });
   const createId = opts.createId || function() { return crypto.randomUUID(); };
   const now = opts.now || function() { return new Date().toISOString(); };
+  const lockTtlMs = Number.isFinite(opts.lockTtlMs) ? Math.max(1000, opts.lockTtlMs) : 5 * 60 * 1000;
 
   function filename(id) {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]+$/.test(id)) {
@@ -77,6 +78,65 @@ function createArticleRemovalTransactionStore(options) {
     return save(next);
   }
 
+  // A short-lived exclusive lock makes the read/compare/write sequence safe
+  // across independently-created service instances in the same workspace.
+  function compareAndUpdate(id, expectedRevision, updater) {
+    const lock = filename(id) + ".lock";
+    let descriptor; let lockToken = null;
+    function lockOwnerState(info) {
+      if (!info || info.version !== 1 || typeof info.token !== "string" || !info.token || !Number.isSafeInteger(info.pid) || info.pid <= 0) return "unknown";
+      try { process.kill(info.pid, 0); return "alive"; }
+      catch (error) { return error && (error.code === "ESRCH" || error.code === "ENOENT") ? "dead" : "unknown"; }
+    }
+    function writeLock() {
+      lockToken = crypto.randomUUID();
+      fs.writeFileSync(descriptor, JSON.stringify({ version: 1, token: lockToken, owner: String(process.pid), pid: process.pid, createdAt: now() }) + "\n", "utf8");
+    }
+    try { descriptor = fs.openSync(lock, "wx"); }
+    catch (error) {
+      if (!error || error.code !== "EEXIST") throw error;
+      let stale = false; let info = null; let mtimeMs = 0;
+      try {
+        info = JSON.parse(fs.readFileSync(lock, "utf8"));
+        mtimeMs = fs.statSync(lock).mtimeMs;
+        const currentTime = Date.parse(typeof now === "function" ? now() : now);
+        stale = Number.isFinite(currentTime) && currentTime - mtimeMs >= lockTtlMs;
+      } catch (_) { return null; }
+      const ownerState = lockOwnerState(info);
+      if (ownerState !== "dead" || !stale) return null;
+      // Rename is the ABA fence. Once this succeeds, a competing writer can
+      // create a new lock at the original path; it can never be unlinked by
+      // this reclaimer. A plain read-then-unlink would delete that new lock.
+      const quarantine = lock + ".reclaim-" + crypto.randomUUID();
+      try { fs.renameSync(lock, quarantine); } catch (_) { return null; }
+      try {
+        const quarantined = JSON.parse(fs.readFileSync(quarantine, "utf8"));
+        if (!quarantined || quarantined.token !== info.token) return null;
+      } catch (_) { return null; }
+      try { fs.unlinkSync(quarantine); } catch (_) {}
+      try { descriptor = fs.openSync(lock, "wx"); } catch (_) { return null; }
+    }
+    try { writeLock(); } catch (error) { try { fs.closeSync(descriptor); fs.unlinkSync(lock); } catch (_) {} throw error; }
+    try {
+      const current = get(id);
+      if (Number(current.revision || 0) !== Number(expectedRevision || 0)) return null;
+      const next = typeof updater === "function" ? updater(clone(current)) : updater;
+      if (next === null) return null;
+      if (!next || typeof next !== "object" || next.id !== current.id) {
+        throw removalError("ARTICLE_REMOVAL_TRANSACTION_INVALID", "Removal transaction identity cannot change");
+      }
+      next.revision = Number(current.revision || 0) + 1;
+      next.updatedAt = next.updatedAt || now();
+      return save(next);
+    } finally {
+      try { fs.closeSync(descriptor); } catch (_) {}
+      try {
+        const info = JSON.parse(fs.readFileSync(lock, "utf8"));
+        if (info && info.token === lockToken) fs.unlinkSync(lock);
+      } catch (_) {}
+    }
+  }
+
   function recordResolution(id, resolutionCode) {
     if (typeof resolutionCode !== "string" || !/^[A-Z0-9_]{1,80}$/.test(resolutionCode)) {
       throw removalError("ARTICLE_REMOVAL_RESOLUTION_INVALID", "Removal resolution code is invalid");
@@ -93,7 +153,7 @@ function createArticleRemovalTransactionStore(options) {
     return true;
   }
 
-  return { directory, createId, now, save, create: save, get, read: get, list, update, recordResolution, remove, delete: remove };
+  return { directory, createId, now, save, create: save, get, read: get, list, update, compareAndUpdate, recordResolution, remove, delete: remove };
 }
 
 module.exports = { createArticleRemovalTransactionStore };

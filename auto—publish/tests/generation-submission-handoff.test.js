@@ -1,6 +1,15 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { createGenerationSubmissionHandoffService } = require("../desktop/services/generation-submission-handoff-service");
+const { createGenerationSubmissionHandoffService: createService } = require("../desktop/services/generation-submission-handoff-service");
+function createGenerationSubmissionHandoffService(options) {
+  const value = Object.assign({}, options);
+  value.contentStore = { findByGenerationTaskId(id) {
+    const result = value.articleStore && value.articleStore.findByGenerationTaskId ? value.articleStore.findByGenerationTaskId(id) : null;
+    const matches = Array.isArray(result) ? result : result ? [result] : [];
+    return matches.length === 0 ? { kind: "none" } : matches.length === 1 ? { kind: "one", article: matches[0] } : { kind: "many", matches: matches.map((article) => ({ clientId: article.clientId, articleId: article.id })) };
+  } };
+  return createService(value);
+}
 
 function article(id, clientId, taskId) {
   return {

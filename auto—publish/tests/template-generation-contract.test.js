@@ -39,7 +39,7 @@ describe("template catalog to generation contract", function() {
         clientKnowledge: { getClient: () => ({ id: "client-1", name: "Fixture client" }) },
         materialStore: { listMaterials: async () => [{ id: "brand.md", status: "ready", content: "fixture material" }] },
         researchStore: { listResearch: () => [{ id: "q1", answerText: "fixture answer" }] },
-        articleStore: { saveArticle: (article) => article, listArticles: () => [] },
+        contentStore: { saveArticle: (article) => article, findByGenerationTaskId: () => ({ kind: "none" }) },
         aiProviderService: { getFingerprint: () => "fixture" },
         articleGeneratorFactory: (deps) => ({
           generateArticle: async (input) => {

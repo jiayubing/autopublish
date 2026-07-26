@@ -135,6 +135,16 @@ function createPlatformTaskStateStore(options) {
     return true;
   }
 
+  function normalizeWorkerResult(item) {
+    if (!item || typeof item !== "object") return item;
+    if (!item.outcome || typeof item.outcome !== "object") return item;
+    return Object.assign({}, item, {
+      status: item.outcome.status,
+      publicationStatus: item.outcome.status,
+      error: item.outcome.errorCode
+    });
+  }
+
   function terminalizeRemaining(kind) {
     const remaining = Math.max(0, snapshot.total - snapshot.processed);
     for (let index = 0; index < remaining; index += 1) updateCounts(kind);
@@ -193,12 +203,12 @@ function createPlatformTaskStateStore(options) {
     const value = result || {};
     const data = value.data && typeof value.data === "object" ? value.data : value;
     const results = Array.isArray(data.results) ? data.results : [];
-    results.forEach(recordResult);
+    results.map(normalizeWorkerResult).forEach(recordResult);
     const finalPhase = phase || (value.errorCode === "STOP_REQUESTED" ? "stopped" : "completed");
     if (snapshot.total > snapshot.processed) {
       terminalizeRemaining(finalPhase === "stopped" ? "skipped" : "uncertain");
     }
-    const terminalResults = results.map((item) => ({
+    const terminalResults = results.map(normalizeWorkerResult).map((item) => ({
       task: safeTask(item && item.task),
       status: typeof item?.status === "string" ? item.status : "failed",
       publicationStatus: typeof item?.publicationStatus === "string" ? item.publicationStatus : null,

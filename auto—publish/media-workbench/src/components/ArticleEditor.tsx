@@ -1,6 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Article, Draft, MediaResource } from '../types';
-import { getDraft } from '../bridge/media';
 import { 
   FileText, 
   Trash2, 
@@ -17,13 +16,22 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { articleIdentity, createArticleEditorSession } from './article-editor-session';
 
 interface ArticleEditorProps {
   activeArticle: Article | null;
-  onSaveDraft: (draft: Draft) => Promise<void>;
+  onSaveDraft: (draft: Draft, article?: Article) => Promise<void>;
   onCloseArticle: () => void;
   onRemoveSelectedResource: (resourceId: string) => void;
   resourceStates?: Record<string, { status?: string; reasonCode?: string }>;
+}
+
+interface ArticleEditorSnapshot {
+  draft: Draft | null;
+  isSaving: boolean;
+  saveSuccess: boolean;
+  saveError: string | null;
+  dirty: boolean;
 }
 
 export default function ArticleEditor({
@@ -34,21 +42,44 @@ export default function ArticleEditor({
   resourceStates = {}
 }: ArticleEditorProps) {
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
-  const [title, setTitle] = useState('');
-  const [remark, setRemark] = useState('');
-  const [ignoreImages, setIgnoreImages] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [editorState, setEditorState] = useState<ArticleEditorSnapshot>(() => ({ draft: null, isSaving: false, saveSuccess: false, saveError: null, dirty: false }));
+  const saveDraftRef = useRef(onSaveDraft);
+  saveDraftRef.current = onSaveDraft;
+  const editorSession = useRef<ReturnType<typeof createArticleEditorSession> | null>(null);
+  if (!editorSession.current) editorSession.current = createArticleEditorSession({ saveDraft: (draft, article) => saveDraftRef.current(draft, article) });
 
-  // Sync draft local states when activeArticle changes
+  const draftIsDirty = (): boolean => Boolean(editorSession.current?.snapshot().dirty);
+
+  const stateFromSnapshot = (snapshot: ReturnType<ReturnType<typeof createArticleEditorSession>['snapshot']>): ArticleEditorSnapshot => ({
+    draft: snapshot.draft,
+    isSaving: snapshot.isSaving,
+    saveSuccess: snapshot.saveSuccess,
+    saveError: snapshot.saveError,
+    dirty: snapshot.dirty,
+  });
+
+  const updateDraft = (changes: Partial<Draft>) => {
+    const next = editorSession.current?.update(changes);
+    if (next) setEditorState(stateFromSnapshot(next));
+  };
+
   useEffect(() => {
-    if (activeArticle) {
-      setTitle(activeArticle.title);
-      setRemark('');
-      setIgnoreImages(false);
-      setSaveSuccess(false);
-    }
-  }, [activeArticle]);
+    const session = editorSession.current;
+    if (!session) return undefined;
+    const unsubscribe = session.subscribe(() => setEditorState(stateFromSnapshot(session.snapshot())));
+    return () => { unsubscribe(); session.dispose(); };
+  }, []);
+
+  const activeArticleId = articleIdentity(activeArticle);
+  useEffect(() => {
+    const session = editorSession.current;
+    if (!session) return;
+    const current = session.snapshot();
+    const next = current.articleId === activeArticleId
+      ? session.mergeExternal(activeArticle)
+      : session.open(activeArticle);
+    setEditorState(stateFromSnapshot(next));
+  }, [activeArticleId, activeArticle]);
 
   if (!activeArticle) {
     return (
@@ -64,41 +95,29 @@ export default function ArticleEditor({
     );
   }
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
-    
-    const draft: Draft = {
-      filename: activeArticle.filename,
-      title: title,
-      remark: remark,
-      ignoreImages: ignoreImages,
-      selectedResources: activeArticle.selectedResources
-    };
-
-    try {
-      await onSaveDraft(draft);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSaving(false);
-    }
+  const saveDraft = async () => {
+    if (!activeArticle || editorSession.current?.snapshot().articleId !== activeArticleId || !editorSession.current?.snapshot().draft) return { saved: false, stale: false };
+    const result = await editorSession.current.save();
+    const next = editorSession.current.snapshot();
+    setEditorState(stateFromSnapshot(next));
+    return result;
   };
 
-    const handleClose = async () => {
-    if (activeArticle) {
-      const draft: Draft = {
-        filename: activeArticle.filename,
-        title: title,
-        remark: remark,
-        ignoreImages: ignoreImages,
-        selectedResources: activeArticle.selectedResources,
-      };
-      try { await onSaveDraft(draft); } catch (e) { console.error(e); }
+  const handleSave = () => {
+    void saveDraft().catch(() => undefined);
+  };
+
+  const handleClose = async () => {
+    if (!activeArticle || editorSession.current?.snapshot().isSaving) return;
+    if (!draftIsDirty()) {
+      onCloseArticle();
+      return;
     }
-    onCloseArticle();
+    if (typeof window !== 'undefined' && !window.confirm('草稿有未保存修改，是否保存后关闭？')) return;
+    try {
+      const result = await saveDraft();
+      if (result.saved && !draftIsDirty()) onCloseArticle();
+    } catch (_) { /* The session consumes expected save failures; keep the editor open for unexpected errors. */ }
   };
 
   const getMediaIcon = (type: string) => {
@@ -142,21 +161,21 @@ export default function ArticleEditor({
         <div className="flex items-center space-x-2 self-start sm:self-auto">
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={editorState.isSaving}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95 ${
-              saveSuccess 
+              editorState.saveSuccess
                 ? 'bg-emerald-500 hover:bg-emerald-600 text-white' 
                 : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
           >
-            {isSaving ? (
+            {editorState.isSaving ? (
               <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : saveSuccess ? (
+            ) : editorState.saveSuccess ? (
               <Check className="w-3.5 h-3.5" />
             ) : (
               <Save className="w-3.5 h-3.5" />
             )}
-            <span>{saveSuccess ? '已保存草稿' : '保存草稿'}</span>
+            <span>{editorState.saveSuccess ? '已保存草稿' : '保存草稿'}</span>
           </button>
 
           <button
@@ -166,6 +185,7 @@ export default function ArticleEditor({
             <X className="w-3.5 h-3.5" />
             <span>关闭</span>
           </button>
+          {editorState.saveError && <span role="alert" className="text-[10px] text-rose-600">{editorState.saveError}</span>}
         </div>
       </div>
 
@@ -223,8 +243,8 @@ export default function ArticleEditor({
                     <input
                       id="draftTitleInput"
                       type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
+                      value={editorState.draft?.title ?? ''}
+                      onChange={(e) => updateDraft({ title: e.target.value })}
                       placeholder="设置文章提交时的标题"
                       className="w-full px-3 py-2 text-xs bg-white text-slate-800 border border-slate-200 rounded-lg focus:border-blue-500 focus:outline-hidden transition-all shadow-2xs"
                     />
@@ -235,8 +255,8 @@ export default function ArticleEditor({
                     <label className="text-xs font-semibold text-slate-600">渠道专属备注 (Remark)</label>
                     <textarea
                       id="draftRemarkInput"
-                      value={remark}
-                      onChange={(e) => setRemark(e.target.value)}
+                      value={editorState.draft?.remark ?? ''}
+                      onChange={(e) => updateDraft({ remark: e.target.value })}
                       rows={4}
                       placeholder="可填写给审核编辑的留言或渠道定制参数..."
                       className="w-full px-3 py-2 text-xs bg-white text-slate-800 border border-slate-200 rounded-lg focus:border-blue-500 focus:outline-hidden transition-all resize-none shadow-2xs"
@@ -249,8 +269,8 @@ export default function ArticleEditor({
                       <input
                         id="ignoreImagesInput"
                         type="checkbox"
-                        checked={ignoreImages}
-                        onChange={(e) => setIgnoreImages(e.target.checked)}
+                        checked={editorState.draft?.ignoreImages ?? false}
+                        onChange={(e) => updateDraft({ ignoreImages: e.target.checked })}
                         className="w-4 h-4 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500/20"
                       />
                       <span className="group-hover:text-slate-900 transition-colors">自动忽略文中配图进行纯文本投稿</span>

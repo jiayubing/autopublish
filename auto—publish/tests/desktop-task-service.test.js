@@ -211,6 +211,51 @@ it("keeps a safe run snapshot available while the renderer is absent", async fun
   }
 });
 
+it("redacts internal paths from a worker result without discarding the result", async function() {
+  const child = new EventEmitter();
+  child.send = function() {};
+  child.kill = function() {};
+  const service = createDesktopTaskService({
+    cwd: "C:\\portable-content",
+    paths: { contentLibrary: "C:\\portable-content", tmp: "C:\\local-state\\tmp" },
+    fork: function() { return child; }
+  });
+  const pending = service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "source", filename: "article.txt", targetPlatformId: "lieju" }] });
+  await new Promise((resolve) => setImmediate(resolve));
+  const runId = service.getState().runId;
+  child.emit("message", {
+    schemaVersion: 1,
+    runId,
+    type: "result",
+    payload: { ok: true, data: { ok: 1, fail: 0, uncertain: 0, results: [{ task: { filename: "article.txt", filePath: "C:\\secret\\article.txt" }, status: "success", publicationStatus: "published" }] } }
+  });
+  child.emit("exit", 0);
+  const result = await pending;
+  assert.equal(result.ok, true);
+  assert.equal(result.data.results[0].task.filePath, undefined);
+  assert.equal(service.getState().phase, "completed");
+  service.dispose();
+});
+
+it("accepts a result queued just after the worker exit notification", async function() {
+  const child = new EventEmitter();
+  child.send = function() {};
+  child.kill = function() {};
+  const service = createDesktopTaskService({
+    cwd: "C:\\portable-content",
+    paths: { contentLibrary: "C:\\portable-content", tmp: "C:\\local-state\\tmp" },
+    fork: function() { return child; }
+  });
+  const pending = service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "source", filename: "article.txt", targetPlatformId: "lieju" }] });
+  await new Promise((resolve) => setImmediate(resolve));
+  const runId = service.getState().runId;
+  child.emit("exit", 0);
+  child.emit("message", { schemaVersion: 1, runId, type: "result", payload: { ok: true, data: { ok: 1, fail: 0, uncertain: 0, results: [] } } });
+  const result = await pending;
+  assert.equal(result.ok, true);
+  service.dispose();
+});
+
 it("rejects stale, oversized, and secret-bearing worker envelopes", async function() {
   let worker;
   const service = createDesktopTaskService({ cwd: "C:\\portable-content", paths: { contentLibrary: "C:\\portable-content", tmp: "C:\\tmp" }, fork: function() {

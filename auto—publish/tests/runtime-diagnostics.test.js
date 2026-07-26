@@ -5,6 +5,18 @@ const os = require("os");
 const path = require("path");
 
 const { createRuntimeDiagnosticsService } = require("../desktop/services/runtime-diagnostics-service");
+
+it("retains safe runtime diagnostic events reported by lifecycle services", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-event-workspace-"));
+  const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-event-app-"));
+  try {
+    const service = createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot });
+    assert.equal(service.report({ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "queue failed" }), true);
+    const events = service.diagnose().runtimeEvents;
+    assert.equal(events.length, 1); assert.equal(events[0].code, "ARTICLE_REMOVAL_RECOVERY_FAILED"); assert.equal(events[0].message, "queue failed");
+    assert.equal(service.safeDiagnostics().runtimeEvents[0].code, "ARTICLE_REMOVAL_RECOVERY_FAILED");
+  } finally { fs.rmSync(workspace, { recursive: true, force: true }); fs.rmSync(appRoot, { recursive: true, force: true }); }
+});
 const { createPlaywrightRuntime, pwSessionConfig, pwCmd, pwRun, runCode } = require("../src/core/playwright");
 
 describe("runtime diagnostics", function() {
@@ -137,6 +149,31 @@ describe("runtime diagnostics", function() {
     assert.equal(diagnostics.tools.playwrightCli.source, "bundled");
     assert.equal(diagnostics.errors.some(function(error) { return error.code === "PLAYWRIGHT_NODE_UNAVAILABLE"; }), false);
     assert.equal(diagnostics.errors.some(function(error) { return error.code === "PLAYWRIGHT_CLI_UNAVAILABLE"; }), false);
+  });
+
+  it("resolves extraResources Node beside app.asar.unpacked in a packaged layout", function() {
+    const resourcesPath = makeTemporaryDirectory("runtime-diagnostics-resources-");
+    const unpackedRoot = path.join(resourcesPath, "app.asar.unpacked");
+    const node = path.join(resourcesPath, "tools", "node", "node.exe");
+    const cli = path.join(unpackedRoot, "node_modules", "@playwright", "cli", "playwright-cli.js");
+    fs.mkdirSync(path.dirname(node), { recursive: true });
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    fs.writeFileSync(node, "bundled node", "utf8");
+    fs.writeFileSync(cli, "bundled cli", "utf8");
+
+    const diagnostics = createRuntimeDiagnosticsService({
+      workspaceRoot: workspace,
+      appRoot: unpackedRoot,
+      resourcesPath: resourcesPath,
+      packaged: true,
+      env: {},
+      applicationTools: {},
+      pathLookup: function() { throw new Error("PATH must not be consulted"); }
+    }).diagnose();
+
+    assert.equal(diagnostics.tools.playwrightNode.command, node);
+    assert.equal(diagnostics.tools.playwrightCli.command, cli);
+    assert.equal(diagnostics.errors.some(function(error) { return error.code === "PLAYWRIGHT_NODE_UNAVAILABLE"; }), false);
   });
 
   it("exposes an async runtime while keeping Doubao on its own session paths", function() {

@@ -1,4 +1,3 @@
-const { createAiContentService } = require("../services/ai-content-service");
 const { wrap } = require("../services/ipc-response");
 
 function contentInputError(message) {
@@ -16,7 +15,8 @@ function generationInput(input) {
 
 function registerAiContentIpc(deps) {
   const ipcMain = deps.ipcMain;
-  const service = deps.aiContentService || createAiContentService({ workspaceRoot: deps.rootDir });
+  const service = deps.aiContentService;
+  if (!ipcMain || !service) throw new Error("AI content IPC requires the workspace content service");
 
   ipcMain.handle("content:list-clients", function() { return wrap(function() { return service.listClients(); }); });
   ipcMain.handle("content:get-client", function(event, clientId) { return wrap(function() { return service.getClient(clientId); }); });

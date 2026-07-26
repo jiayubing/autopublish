@@ -18,9 +18,9 @@ function latestRevision(batch) { return batch && (batch.revision || batch.update
 function createGenerationSubmissionHandoffService(options) {
   const opts = options || {};
   const generationBatchService = opts.generationBatchService;
-  const articleStore = opts.articleStore;
+  const contentStore = opts.contentStore;
   const submissionService = opts.contentSubmissionService;
-  if (!generationBatchService || typeof generationBatchService.get !== "function" || !articleStore || !submissionService ||
+  if (!generationBatchService || typeof generationBatchService.get !== "function" || !contentStore || typeof contentStore.findByGenerationTaskId !== "function" || !submissionService ||
       typeof submissionService.previewBatch !== "function" || typeof submissionService.createBatch !== "function") {
     throw handoffError("HANDOFF_SERVICE_INVALID", "Generation submission handoff dependencies are incomplete");
   }
@@ -48,21 +48,17 @@ function createGenerationSubmissionHandoffService(options) {
     return batch;
   }
 
-  function findArticle(task) {
+  function findArticle(task, generationIndex) {
     let article = null;
-    if (typeof articleStore.findByGenerationTaskId === "function") {
-      try {
-        const matches = articleStore.findByGenerationTaskId(task.id);
-        if (Array.isArray(matches)) {
-          if (matches.length !== 1) return { article: null, reasonCode: "HANDOFF_ARTICLE_IDENTITY_CONFLICT" };
-          article = matches[0];
-        } else {
-          article = matches;
-        }
-      } catch (_) { article = null; }
-    }
-    if (!article && task.articleId && typeof articleStore.getArticle === "function") {
-      try { article = articleStore.getArticle(task.clientId, task.articleId); } catch (_) { article = null; }
+    try {
+      const result = (generationIndex || contentStore).findByGenerationTaskId(task.id);
+      if (result.kind === "many") return { article: null, reasonCode: "HANDOFF_ARTICLE_IDENTITY_CONFLICT" };
+      article = result.kind === "one" ? result.article : null;
+    } catch (_) { article = null; }
+    if (!article && task.articleId && generationIndex && typeof generationIndex.findByArticleId === "function") {
+      const byArticle = generationIndex.findByArticleId(task.articleId);
+      if (byArticle.kind === "many") return { article: null, reasonCode: "HANDOFF_ARTICLE_IDENTITY_CONFLICT" };
+      article = byArticle.kind === "one" ? byArticle.article : null;
     }
     if (!article || article.clientId !== task.clientId || (task.articleId && article.id !== task.articleId) || article.generationTaskId !== task.id || (article.generationBatchId && task.generationBatchId && article.generationBatchId !== task.generationBatchId)) {
       return { article: null, reasonCode: "HANDOFF_ARTICLE_IDENTITY_CONFLICT" };
@@ -71,13 +67,15 @@ function createGenerationSubmissionHandoffService(options) {
   }
 
   function articleFingerprint(article) {
-    return hash({ id: article.id, clientId: article.clientId, generationTaskId: article.generationTaskId || null, generationBatchId: article.generationBatchId || null, status: article.status, title: article.title, content: article.content, source: article.source, materialSnapshots: article.materialSnapshots, researchSnapshots: article.researchSnapshots, templateSnapshot: article.templateSnapshot });
+    if (typeof contentStore.fingerprintArticle === "function") return contentStore.fingerprintArticle(article);
+    return hash(article);
   }
 
   function resolveArticles(batch) {
+    const generationIndex = typeof contentStore.createGenerationTaskIndex === "function" ? contentStore.createGenerationTaskIndex() : contentStore;
     const entries = [];
     (batch.tasks || []).filter((task) => task && task.status === "succeeded").forEach((task) => {
-      const found = findArticle(Object.assign({}, task, { generationBatchId: batch.id }));
+      const found = findArticle(Object.assign({}, task, { generationBatchId: batch.id }), generationIndex);
       const eligibility = found.article ? evaluateArticleSubmissionEligibility(found.article) : null;
       entries.push({ task, article: found.article, eligibility, reasonCode: found.reasonCode || (eligibility && !eligibility.eligible ? eligibility.reasonCodes[0] : null), fingerprint: found.article ? articleFingerprint(found.article) : null });
     });
@@ -155,7 +153,7 @@ function createGenerationSubmissionHandoffService(options) {
     const fingerprint = baseFingerprint(batch, targets, accountProfiles, entries);
     const previewToken = `handoff:${crypto.randomUUID()}`;
     tokens.set(previewToken, { fingerprint, generationBatchId: batch.id, targetPlatformIds: targets.ids.slice(), accountProfiles, batchRevision: latestRevision(batch), entries: valid.map((entry) => ({ clientId: entry.task.clientId, articleId: entry.article.id })) });
-    return {
+    const result = {
       generationBatchId: batch.id,
       batchRevision: latestRevision(batch),
       previewToken,
@@ -174,6 +172,10 @@ function createGenerationSubmissionHandoffService(options) {
       invalidArticles,
       clientGroups
     };
+    // Keep the full entries only inside the application service. The property
+    // is non-enumerable so IPC/renderer DTOs cannot receive article bodies.
+    Object.defineProperty(result, "__entries", { value: entries, enumerable: false });
+    return result;
   }
 
   function preview(input) {
@@ -189,7 +191,7 @@ function createGenerationSubmissionHandoffService(options) {
     if (JSON.stringify(committedProfiles) !== JSON.stringify(stored.accountProfiles)) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview is stale; run preflight again");
     const current = buildPreview({ generationBatchId: stored.generationBatchId, targetPlatformIds: stored.targetPlatformIds, accountProfiles: stored.accountProfiles });
     const batch = getBatch(stored.generationBatchId);
-    const currentEntries = resolveArticles(batch);
+    const currentEntries = current.__entries || [];
     if (baseFingerprint(batch, { ids: stored.targetPlatformIds }, stored.accountProfiles, currentEntries) !== stored.fingerprint) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview is stale; run preflight again");
     const completed = completedClients.get(input.previewToken) || new Set();
     let createdCount = 0;

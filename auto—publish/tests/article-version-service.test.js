@@ -84,7 +84,7 @@ describe("article version service", function() {
     const source = sourceArticle();
     const store = createMemoryStore(source);
     const service = createArticleVersionService({
-      articleStore: store,
+      contentStore: store,
       createId: function() { return "article-copy"; },
       now: function() { return "2026-07-18T00:00:00.000Z"; }
     });
@@ -114,7 +114,7 @@ describe("article version service", function() {
     const before = clone(source);
     const store = createMemoryStore(source);
     const service = createArticleVersionService({
-      articleStore: store,
+      contentStore: store,
       createId: function() { return "article-copy"; },
       now: function() { return "2026-07-18T00:00:00.000Z"; }
     });
@@ -134,7 +134,7 @@ describe("article version service", function() {
     store.records.set("client-1:article-conflict", sourceArticle({ id: "article-conflict", title: "Existing article" }));
     let calls = 0;
     const service = createArticleVersionService({
-      articleStore: store,
+      contentStore: store,
       createId: function() { calls += 1; return "article-conflict"; },
       now: function() { return "2026-07-18T00:00:00.000Z"; }
     });
@@ -152,7 +152,7 @@ describe("article version service", function() {
   it("rejects illegal input and unsafe generated ids before saving", function() {
     const store = createMemoryStore(sourceArticle());
     const service = createArticleVersionService({
-      articleStore: store,
+      contentStore: store,
       createId: function() { return "safe-copy"; },
       now: function() { return "2026-07-18T00:00:00.000Z"; }
     });
@@ -170,7 +170,7 @@ describe("article version service", function() {
     });
 
     const unsafeIdService = createArticleVersionService({
-      articleStore: store,
+      contentStore: store,
       createId: function() { return "../unsafe"; },
       now: function() { return "2026-07-18T00:00:00.000Z"; }
     });

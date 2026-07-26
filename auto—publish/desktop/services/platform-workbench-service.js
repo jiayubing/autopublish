@@ -6,7 +6,6 @@ const mammoth = require("mammoth");
 const {
   resolveArticleIdentity,
 } = require("../../src/publication/article-identity");
-const { createArticleStore } = require("../../src/content/article-store");
 
 const ARTICLE_EXTENSIONS = [".md", ".txt", ".docx"];
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -246,9 +245,7 @@ function createPlatformWorkbenchService(opts) {
       : path.join(rootDir, "input");
   var platforms = options.platforms || [];
   var adapters = options.adapters || {};
-  var articleStore =
-    options.articleStore ||
-    createArticleStore(rootDir, { paths: options.paths });
+  var contentStore = options.contentStore || {};
 
   function sourceArticleState(metadata) {
     var data = metadata && metadata.data;
@@ -257,16 +254,16 @@ function createPlatformWorkbenchService(opts) {
     if (
       !clientId ||
       !articleId ||
-      !articleStore ||
-      (typeof articleStore.isArticleTrashed !== "function" &&
-        typeof articleStore.isArticleRemoved !== "function")
+      !contentStore ||
+      (typeof contentStore.isArticleTrashed !== "function" &&
+        typeof contentStore.isArticleRemoved !== "function")
     )
       return { sourceArticleState: "active", reasonCode: null };
     try {
       var removed =
-        typeof articleStore.isArticleRemoved === "function"
-          ? articleStore.isArticleRemoved(clientId, articleId)
-          : articleStore.isArticleTrashed(clientId, articleId);
+        typeof contentStore.isArticleRemoved === "function"
+          ? contentStore.isArticleRemoved(clientId, articleId)
+          : contentStore.isArticleTrashed(clientId, articleId);
       if (removed)
         return {
           sourceArticleState: "trashed",

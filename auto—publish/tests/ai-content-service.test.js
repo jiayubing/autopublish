@@ -34,7 +34,7 @@ function createService(overrides) {
       getResearch: function(clientId, id) { calls.push("getResearch:" + clientId + ":" + id); return research; }
     },
     templateStore: { listTemplates: function(platform) { calls.push("listTemplates:" + platform); return [{ id: "template-1" }]; } },
-    articleStore: {
+    contentStore: {
       saveArticle: function(value) { calls.push("saveArticle"); return value; },
       listArticles: function(id) { calls.push("listArticles:" + id); return [article]; },
       getArticle: function(clientId, id) { calls.push("getArticle:" + clientId + ":" + id); return article; },

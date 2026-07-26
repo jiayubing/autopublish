@@ -1,7 +1,6 @@
 const { listClients, getClient } = require("../../src/content/client-knowledge");
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
-const { createArticleStore } = require("../../src/content/article-store");
 const { createArticleTrashService } = require("../../src/content/article-trash-service");
 const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
@@ -81,25 +80,25 @@ function createAiContentService(opts) {
   };
   const researchStore = options.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
-  const articleStore = options.articleStore || createArticleStore(workspaceRoot, { paths: paths });
+  const contentStore = options.contentStore;
   // WorkspaceRuntime injects the sole OperationalStore-backed submission
   // service. AI content never creates a legacy batch/ledger writer itself.
   const contentSubmissionService = options.contentSubmissionService || null;
-  const articleTrashService = options.articleTrashService || createArticleTrashService({
-    articleStore: articleStore,
+  const articleTrashService = options.articleTrashService || (contentStore && createArticleTrashService({
+    contentStore: contentStore,
     workspaceRoot: workspaceRoot,
     submissionService: contentSubmissionService,
     transactionStore: options.articleRemovalTransactionStore,
     now: options.now,
     tokenTtlMs: options.articleRemovalTokenTtlMs,
     onTransactionStatus: notifyArticleRemovalTransaction
-  });
-  const articleReviewService = options.articleReviewService || createArticleReviewService({ articleStore: articleStore });
-  const articleVersionService = options.articleVersionService || createArticleVersionService({
-    articleStore: articleStore,
+  })) || {};
+  const articleReviewService = options.articleReviewService || (contentStore && typeof contentStore.getArticle === "function" && typeof contentStore.saveArticle === "function" ? createArticleReviewService({ contentStore: contentStore }) : null);
+  const articleVersionService = options.articleVersionService || (contentStore && typeof contentStore.getArticle === "function" ? createArticleVersionService({
+    contentStore: contentStore,
     createId: options.createId,
     now: options.now
-  });
+  }) : null);
   const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths }) : {
     getSelectedMaterials: async function(clientId, materialIds) {
       const client = clientKnowledge.getClient(clientId);
@@ -254,20 +253,20 @@ function createAiContentService(opts) {
     if (!article || typeof article !== "object" || Array.isArray(article)) {
       throw contentError("CONTENT_INPUT_INVALID", "Article is required");
     }
-    const saved = articleStore.saveArticle(article);
+    const saved = contentStore.saveArticle(article);
     notifyAttentionChange("ARTICLE_SAVED");
     return saved;
   }
 
   function listGeneratedArticles(clientId) {
     assertId(clientId, "Client id");
-    return articleStore.listArticles(clientId);
+    return contentStore.listArticles(clientId);
   }
 
   function getGeneratedArticle(clientId, articleId) {
     assertId(clientId, "Client id");
     assertId(articleId, "Article id");
-    return articleStore.getArticle(clientId, articleId);
+    return contentStore.getArticle(clientId, articleId);
   }
 
   function copyArticleVersion(input) {

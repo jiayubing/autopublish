@@ -166,17 +166,21 @@ function createHepanAdapter(options) {
     if (!io.existsSync(imagesDirectory)) io.mkdirSync(imagesDirectory, { recursive: true });
   }
 
-  function runHepan(args, signal) {
+  function runHepan(args, signal, timeoutMs) {
     const config = runtime();
     if (!config.pythonPath || !config.cookiePath) {
       const error = new Error("Hepan publishing is not configured");
       error.code = "HEPAN_CONFIG_NOT_SET";
       throw error;
     }
+    const requestedTimeout = Number(timeoutMs);
+    const processTimeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+      ? Math.max(1000, Math.ceil(requestedTimeout))
+      : 240000;
     return Promise.resolve(commandRunner(config.pythonPath, [script].concat(args), {
       cwd: DIRS.rootDir,
       encoding: "utf8",
-      timeout: 240000,
+      timeout: processTimeout,
       signal,
       ...withHepanVendorEnvironment({ env: Object.assign({}, process.env, { PYTHONIOENCODING: "utf-8" }) }, config.vendorDir)
     })).then(function(result) {
@@ -354,7 +358,7 @@ function createHepanAdapter(options) {
         args.push("--article", sourceFile);
       }
       remoteCallStarted = true;
-      const payload = await runHepan(args, signal);
+      const payload = await runHepan(args, signal, options && options.timeoutMs);
       if (payload.errorCode && /^HEPAN_/.test(payload.errorCode)) {
         if (["HEPAN_REMOTE_REQUEST_FAILED", "HEPAN_PROCESS_TIMEOUT", "HEPAN_PROTOCOL_ERROR"].includes(payload.errorCode) || payload.requestMayHaveBeenSent) {
           return { status: "uncertain", errorCode: payload.errorCode };
@@ -368,8 +372,12 @@ function createHepanAdapter(options) {
       if (!payload.ok) return { status: "failed", errorCode: "REMOTE_REJECTED" };
       article.title = payload.title || article.title;
       article.publishUrl = payload.url;
-      log("[hepan] Published: " + (payload.url || ""), "INFO");
-      return { status: "published", remoteUrl: payload.url || undefined };
+      const remoteUrl = typeof payload.url === "string" ? payload.url : "";
+      const remoteIdMatch = remoteUrl.match(/[?&]aid=([A-Za-z0-9_-]+)/i) || remoteUrl.match(/\/(?:article|aid)\/([A-Za-z0-9_-]+)(?:$|[?#])/i);
+      const remoteId = remoteIdMatch && remoteIdMatch[1];
+      if (!remoteId) return { status: "uncertain", errorCode: "HEPAN_REMOTE_ID_MISSING" };
+      log("[hepan] Published: " + remoteUrl, "INFO");
+      return { status: "published", remoteId: remoteId, remoteUrl: remoteUrl || undefined };
     } catch (error) {
       if (remoteCallStarted && error && ["HEPAN_PROCESS_TIMEOUT", "HEPAN_PROCESS_ABORTED", "HEPAN_PROTOCOL_ERROR"].includes(error.code)) {
         return { status: "uncertain", errorCode: error.code };

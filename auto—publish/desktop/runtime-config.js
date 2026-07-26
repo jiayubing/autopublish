@@ -299,6 +299,7 @@ function configureRuntimeEnvironment(options) {
   const diagnosticsService = createRuntimeDiagnosticsService({
     workspaceRoot: contentLibrary,
     appRoot: appRoot,
+    resourcesPath: values.resourcesPath,
     paths: paths,
     applicationValues: applicationValues,
     packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"

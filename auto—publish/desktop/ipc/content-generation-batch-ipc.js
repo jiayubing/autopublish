@@ -1,5 +1,5 @@
 const { wrap } = require("../services/ipc-response");
-const { createContentGenerationBatchService, SAFE_MESSAGES } = require("../services/content-generation-batch-service");
+const { SAFE_MESSAGES } = require("../services/content-generation-batch-service");
 
 function safeFailure(error) {
   const code = error && typeof error.code === "string" && SAFE_MESSAGES[error.code] ? error.code : "GENERATION_INPUT_INVALID";
@@ -33,7 +33,7 @@ function invokeBatchCommand(service, method, value) {
 function registerContentGenerationBatchIpc(deps) {
   const values = deps || {};
   const ipcMain = values.ipcMain;
-  const service = values.contentGenerationBatchService || createContentGenerationBatchService({ workspaceRoot: values.rootDir, aiProviderService: values.aiProviderService });
+  const service = values.contentGenerationBatchService;
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation batch IPC dependencies are required");
   ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(function() { return service.preview(input(value)); }); });
   ipcMain.handle("content:create-generation-batch", function(event, value) { return invoke(function() { return service.createBatch(input(value)); }); });

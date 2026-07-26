@@ -122,18 +122,33 @@ function verifyPackagedPlaywright(resources) {
   return require("./verify-packaged-playwright-runtime").verifyPackagedRuntime(verified.unpacked, { staticOnly: false, node: verified.node });
 }
 
-function verifyRuntimeSmoke(appDir) {
+function verifyRuntimeSmoke(appDir, resourcesPath) {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-alpha-smoke-"));
+  let extractedRoot = null;
   try {
-    const paths = require(path.join(appDir, "desktop", "workspace-paths"));
-    const runtime = require(path.join(appDir, "desktop", "services", "runtime-diagnostics-service"));
+    let moduleRoot = appDir;
+    let runtimeAppRoot = appDir;
+    if (resourcesPath) {
+      extractedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-alpha-asar-"));
+      const archive = path.join(resourcesPath, "app.asar");
+      require("@electron/asar").extractAll(archive, extractedRoot);
+      moduleRoot = extractedRoot;
+      runtimeAppRoot = archive;
+    }
+    const paths = require(path.join(moduleRoot, "desktop", "workspace-paths"));
+    const runtime = require(path.join(moduleRoot, "desktop", "services", "runtime-diagnostics-service"));
     const workspacePaths = paths.ensureWorkspaceDirectories(paths.createWorkspacePaths(workspace));
     [workspacePaths.mediaInput, workspacePaths.liejuInput, workspacePaths.toutiaoInput, workspacePaths.hepanInput].forEach((dir) => {
       if (!fs.existsSync(dir)) throw new Error("Runtime workspace initialization failed");
     });
-    const diagnostics = runtime.createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: appDir, pathLookup: () => null }).diagnose();
+    const diagnostics = runtime.createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot: runtimeAppRoot, resourcesPath: resourcesPath, packaged: Boolean(resourcesPath), env: {}, applicationTools: {}, pathLookup: () => null }).diagnose();
     if (!diagnostics || !Array.isArray(diagnostics.errors)) throw new Error("Runtime diagnostics did not return actionable results");
-  } finally { fs.rmSync(workspace, { recursive: true, force: true }); }
+    const playwrightErrors = diagnostics.errors.filter((error) => error && (error.code === "PLAYWRIGHT_NODE_UNAVAILABLE" || error.code === "PLAYWRIGHT_CLI_UNAVAILABLE"));
+    if (playwrightErrors.length) throw new Error(playwrightErrors.map((error) => error.code + ": " + error.message).join("\n"));
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    if (extractedRoot) fs.rmSync(extractedRoot, { recursive: true, force: true });
+  }
 }
 
 if (require.main === module) {
@@ -141,6 +156,7 @@ if (require.main === module) {
     const verified = verifyPackage(process.argv[2]);
     verifyHepanSmoke(verified.unpacked);
     require("./verify-packaged-playwright-runtime").verifyPackagedRuntime(verified.unpacked, { staticOnly: false, node: verified.node });
+    verifyRuntimeSmoke(verified.unpacked, verified.resources);
     console.log("Alpha package contents OK: " + verified.resources);
   } catch (error) {
     console.error(error.message || String(error));

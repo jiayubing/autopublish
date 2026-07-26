@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { resolveClientIdentity } = require("./client-knowledge");
 
 function questionError(code, message) {
   const error = new Error(message);
@@ -67,7 +68,24 @@ function createQuestionStore(workspaceRoot, options) {
 
   function clientDirectory(clientId) {
     assertPathSegment(clientId, "CLIENT_ID_INVALID", "client id");
-    const resolved = path.join(clientsRoot, clientId);
+    // A legacy physical directory that happens to match the logical id must
+    // still be rejected when it is a link; metadata discovery intentionally
+    // skips it, which would otherwise turn a safety violation into not-found.
+    const legacyCandidate = path.join(clientsRoot, clientId);
+    if (fs.existsSync(legacyCandidate) && fs.lstatSync(legacyCandidate).isSymbolicLink()) {
+      throw questionError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+    }
+    // ClientId is logical metadata, not a directory name.  Resolve it through
+    // the sole client metadata reader before doing any filesystem operation.
+    let client;
+    try {
+      client = resolveClientIdentity(root, clientId);
+    } catch (error) {
+      if (error && error.code === "CLIENT_NOT_FOUND") throw questionError("CLIENT_NOT_FOUND", "Client directory was not found");
+      if (error && error.code === "CLIENT_IDENTITY_CONFLICT") throw questionError("CLIENT_IDENTITY_CONFLICT", "Client identity is duplicated");
+      throw questionError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
+    }
+    const resolved = client && client.directory;
     const outOfBounds = function() {
       throw questionError("CLIENT_PATH_OUT_OF_BOUNDS", "Client directory is outside workspace.clients");
     };

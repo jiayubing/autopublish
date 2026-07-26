@@ -92,10 +92,10 @@ function copyContentFields(source, clientId, articleId, lineageId, version, time
 
 function createArticleVersionService(options) {
   const settings = options || {};
-  if (!settings.articleStore || typeof settings.articleStore.getArticle !== "function") {
-    throw versionError("ARTICLE_VERSION_SERVICE_INVALID", "Article version store is invalid");
+  if (!settings.contentStore || typeof settings.contentStore.getArticle !== "function") {
+    throw versionError("ARTICLE_VERSION_SERVICE_INVALID", "Content store is invalid");
   }
-  const articleStore = settings.articleStore;
+  const contentStore = settings.contentStore;
   const createId = typeof settings.createId === "function" ? settings.createId : function() { return crypto.randomUUID(); };
   const now = typeof settings.now === "function" ? settings.now : function() { return new Date().toISOString(); };
 
@@ -109,7 +109,7 @@ function createArticleVersionService(options) {
   }
 
   function readSource(input) {
-    const source = articleStore.getArticle(input.clientId, input.sourceArticleId);
+    const source = contentStore.getArticle(input.clientId, input.sourceArticleId);
     if (!source || typeof source !== "object" || Array.isArray(source) ||
         source.id !== input.sourceArticleId || source.clientId !== input.clientId) {
       throw versionError("ARTICLE_VERSION_SOURCE_INVALID", "Source article is invalid");
@@ -125,7 +125,7 @@ function createArticleVersionService(options) {
       }
       let existing;
       try {
-        existing = articleStore.getArticle(clientId, articleId);
+        existing = contentStore.getArticle(clientId, articleId);
       } catch (error) {
         if (!error || error.code !== "ARTICLE_NOT_FOUND") throw error;
       }
@@ -138,14 +138,14 @@ function createArticleVersionService(options) {
   function copyArticleVersion(input) {
     const normalized = normalizeInput(input);
     const source = readSource(normalized);
-    if (typeof articleStore.saveArticle !== "function") {
-      throw versionError("ARTICLE_VERSION_SERVICE_INVALID", "Article version store cannot save articles");
+    if (typeof contentStore.saveArticle !== "function") {
+      throw versionError("ARTICLE_VERSION_SERVICE_INVALID", "Content store cannot save articles");
     }
     const articleId = createUniqueId(normalized.clientId, normalized.sourceArticleId);
     const timestamp = resolveTimestamp(now);
     const version = sourceVersion(source) + 1;
     const copied = copyContentFields(source, normalized.clientId, articleId, sourceLineageId(source), version, timestamp);
-    const saved = articleStore.saveArticle(copied);
+    const saved = contentStore.saveArticle(copied);
     return saved === undefined ? copied : saved;
   }
 

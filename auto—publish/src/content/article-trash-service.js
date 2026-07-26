@@ -24,14 +24,15 @@ function selection(input) {
 
 function createArticleTrashService(options) {
   const opts = options || {};
-  if (!opts.articleStore) throw trashError("ARTICLE_TRASH_SERVICE_INVALID", "Article store is required");
-  const articleStore = opts.articleStore;
+  if (!opts.contentStore) throw trashError("ARTICLE_TRASH_SERVICE_INVALID", "Content store is required");
+  const contentStore = opts.contentStore;
   const now = opts.now || function() { return new Date().toISOString(); };
+  const tokenTtlMs = Number.isFinite(opts.permanentDeleteTokenTtlMs) && opts.permanentDeleteTokenTtlMs > 0 ? opts.permanentDeleteTokenTtlMs : 5 * 60 * 1000;
   const confirmations = new Map();
   const removalService = opts.articleRemovalService || (opts.submissionService && opts.workspaceRoot
     ? createArticleRemovalService({
       workspaceRoot: opts.workspaceRoot,
-      articleStore: articleStore,
+      contentStore: contentStore,
       submissionService: opts.submissionService,
       transactionStore: opts.transactionStore,
       transactionDirectory: opts.transactionDirectory,
@@ -58,13 +59,22 @@ function createArticleTrashService(options) {
       articleId: article.id,
       status: article.status,
       references: references,
-      titleSnapshot: typeof article.title === "string" && article.title.trim() ? article.title.trim().slice(0, 200) : null
+      titleSnapshot: typeof article.title === "string" && article.title.trim() ? article.title.trim().slice(0, 200) : null,
+      contentFingerprint: typeof contentStore.fingerprintArticle === "function" ? contentStore.fingerprintArticle(article) : undefined
     };
+  }
+
+  function tombstoneFingerprint(tombstone) {
+    return crypto.createHash("sha256").update(JSON.stringify({
+      version: tombstone.version, deletedAt: tombstone.deletedAt, clientId: tombstone.clientId,
+      articleId: tombstone.articleId, status: tombstone.status, references: tombstone.references,
+      contentFingerprint: tombstone.contentFingerprint || null
+    })).digest("hex");
   }
 
   function listTrashedArticles(clientId) {
     assertId(clientId, "Client id");
-    return articleStore.listTrashedArticles(clientId);
+    return contentStore.listTrashedArticles(clientId);
   }
 
   function trashArticles(input) {
@@ -87,12 +97,12 @@ function createArticleTrashService(options) {
     input.articles.forEach(function(rawSelection) {
       const item = selection(rawSelection);
       try {
-        const article = articleStore.getArticle(item.clientId, item.articleId);
-        const tombstone = articleStore.moveArticleToTrash(item.clientId, item.articleId, buildTombstone(article));
+        const article = contentStore.getArticle(item.clientId, item.articleId);
+        const tombstone = contentStore.moveArticleToTrash(item.clientId, item.articleId, buildTombstone(article));
         moved.push(tombstone);
       } catch (error) {
         if (error && error.code === "ARTICLE_NOT_FOUND") {
-          const existing = articleStore.listTrashedArticles(item.clientId).find(function(value) { return value.articleId === item.articleId; });
+          const existing = contentStore.listTrashedArticles(item.clientId).find(function(value) { return value.articleId === item.articleId; });
           if (existing) {
             skipped.push(existing);
             return;
@@ -111,19 +121,24 @@ function createArticleTrashService(options) {
 
   function restoreArticle(input) {
     const item = selection(input);
-    const restored = articleStore.restoreTrashedArticle(item.clientId, item.articleId);
+    const restored = contentStore.restoreTrashedArticle(item.clientId, item.articleId);
+    for (const [token, binding] of confirmations) {
+      if (binding.clientId === item.clientId && binding.articleId === item.articleId) confirmations.delete(token);
+    }
     return removalService ? { article: restored, restored: true, queueRestored: false, message: "文章已恢复，投稿队列不会自动恢复" } : restored;
   }
 
   function preparePermanentDelete(input) {
     const item = selection(input);
-    const tombstone = typeof articleStore.getTrashedTombstone === "function"
-      ? articleStore.getTrashedTombstone(item.clientId, item.articleId)
-      : articleStore.listTrashedArticles(item.clientId).find(function(value) { return value.articleId === item.articleId; });
+    const tombstone = contentStore.getTrashedTombstone(item.clientId, item.articleId);
     if (!tombstone) throw trashError("ARTICLE_NOT_FOUND", "Trashed article was not found");
+    const issuedAt = now();
+    const issuedMs = Date.parse(issuedAt);
+    if (Number.isNaN(issuedMs)) throw trashError("ARTICLE_PERMANENT_DELETE_CLOCK_INVALID", "Permanent deletion clock is invalid");
+    const fingerprint = tombstoneFingerprint(tombstone);
     const token = crypto.randomUUID();
-    confirmations.set(token, item);
-    return { token: token, clientId: item.clientId, articleId: item.articleId, deletedAt: tombstone.deletedAt, status: tombstone.status, permanentlyDeleted: tombstone.permanentlyDeleted === true };
+    confirmations.set(token, { clientId: item.clientId, articleId: item.articleId, fingerprint, issuedAt, expiresAt: new Date(issuedMs + tokenTtlMs).toISOString() });
+    return { token: token, clientId: item.clientId, articleId: item.articleId, deletedAt: tombstone.deletedAt, version: tombstone.version, fingerprint, issuedAt, expiresAt: new Date(issuedMs + tokenTtlMs).toISOString(), status: tombstone.status, permanentlyDeleted: tombstone.permanentlyDeleted === true };
   }
 
   function permanentlyDeleteArticle(input) {
@@ -135,8 +150,22 @@ function createArticleTrashService(options) {
     if (!confirmed || confirmed.clientId !== item.clientId || confirmed.articleId !== item.articleId) {
       throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_INVALID", "Permanent deletion confirmation is invalid");
     }
-    const tombstone = articleStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId, now());
-    confirmations.delete(input.token);
+    const executionAt = Date.parse(now());
+    if (Number.isNaN(executionAt)) throw trashError("ARTICLE_PERMANENT_DELETE_CLOCK_INVALID", "Permanent deletion clock is invalid");
+    if (executionAt >= Date.parse(confirmed.expiresAt)) {
+      confirmations.delete(input.token);
+      throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_EXPIRED", "Permanent deletion confirmation has expired");
+    }
+    const current = contentStore.getTrashedTombstone(item.clientId, item.articleId);
+    const fingerprint = tombstoneFingerprint(current);
+    if (fingerprint !== confirmed.fingerprint) {
+      confirmations.delete(input.token);
+      throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_STALE", "Permanent deletion confirmation is stale");
+    }
+    const tombstone = contentStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId, now());
+    for (const [token, binding] of confirmations) {
+      if (binding.clientId === item.clientId && binding.articleId === item.articleId) confirmations.delete(token);
+    }
     return { clientId: item.clientId, articleId: item.articleId, deleted: true, deletedAt: tombstone.deletedAt };
   }
 

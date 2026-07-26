@@ -110,13 +110,14 @@ function createGenerationBatchRunner(options) {
   }
 
   function findExistingArticle(task) {
-    const injectedFinder = typeof deps.findByGenerationTaskId === "function" ? deps.findByGenerationTaskId : null;
-    const articleStoreFinder = !injectedFinder && deps.articleStore && typeof deps.articleStore.findByGenerationTaskId === "function"
-      ? deps.articleStore.findByGenerationTaskId.bind(deps.articleStore) : null;
-    if (!injectedFinder && !articleStoreFinder) return null;
+    const contentStoreFinder = deps.contentStore && typeof deps.contentStore.findByGenerationTaskId === "function"
+      ? deps.contentStore.findByGenerationTaskId.bind(deps.contentStore) : null;
+    if (!contentStoreFinder) return null;
     return Promise.resolve().then(function() {
-      if (injectedFinder) return injectedFinder(task);
-      return articleStoreFinder(task.id);
+      const result = contentStoreFinder(task.id);
+      if (!result || result.kind === "none") return null;
+      if (result && result.kind === "many") throw runnerError("GENERATION_ARTICLE_IDENTITY_CONFLICT", "Generation task matches multiple articles");
+      return result.kind === "one" ? result.article : result;
     }).catch(function(error) {
       if (error && (error.code === "ARTICLE_NOT_FOUND" || error.code === "GENERATION_ARTICLE_NOT_FOUND")) return null;
       throw error;
@@ -187,10 +188,6 @@ function createGenerationBatchRunner(options) {
       }
       const result = await executeWithRetry(task, controller.signal);
       if (stopSignal.aborted) throw abortError();
-      if (deps.articleStore && typeof deps.articleStore.saveArticle === "function" && result && typeof result === "object" &&
-          typeof result.title === "string" && typeof result.content === "string") {
-        deps.articleStore.saveArticle(result);
-      }
       const articleId = articleIdFromResult(result);
       deps.batchStore.markTaskSucceeded(batchId, task.id, articleId);
     } catch (error) {

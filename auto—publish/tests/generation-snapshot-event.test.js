@@ -41,7 +41,7 @@ function createEventFixture(options) {
     materialStore: { listMaterials: async () => [] },
     researchStore: { listResearch: () => [] },
     templateStore: { getTemplate: () => null },
-    articleStore: {},
+    contentStore: { saveArticle: (article) => article, findByGenerationTaskId: () => ({ kind: "none" }) },
     now: () => '2026-07-21T00:00:00.000Z',
     runnerFactory: () => runner,
   });

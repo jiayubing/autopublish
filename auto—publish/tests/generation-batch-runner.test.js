@@ -102,12 +102,11 @@ describe("generation batch runner", function() {
     const generated = [];
     const runner = createGenerationBatchRunner({
       batchStore: store,
-      findByGenerationTaskId: function(task) {
-        lookedUp.push(task);
-        assert.equal(task.id, "task-1");
-        assert.equal(task.clientId, "client-1");
+      contentStore: { findByGenerationTaskId: function(taskId) {
+        lookedUp.push(taskId);
+        assert.equal(taskId, "task-1");
         return null;
-      },
+      } },
       executeTask: async function(task) {
         generated.push(task.id);
         return { id: "article-1" };
@@ -118,7 +117,7 @@ describe("generation batch runner", function() {
 
     assert.equal(result.status, "completed");
     assert.equal(result.tasks[0].status, "succeeded");
-    assert.deepStrictEqual(lookedUp.map(function(task) { return task.id; }), ["task-1"]);
+    assert.deepStrictEqual(lookedUp, ["task-1"]);
     assert.deepStrictEqual(generated, ["task-1"]);
   });
 
@@ -128,10 +127,10 @@ describe("generation batch runner", function() {
     const lookupError = taskError("ARTICLE_STORE_READ_FAILED");
     const runner = createGenerationBatchRunner({
       batchStore: store,
-      findByGenerationTaskId: function(task) {
-        assert.equal(task.clientId, "client-1");
+      contentStore: { findByGenerationTaskId: function(taskId) {
+        assert.equal(taskId, "task-1");
         throw lookupError;
-      },
+      } },
       executeTask: async function() { throw new Error("must not generate"); }
     });
 
@@ -301,7 +300,7 @@ describe("generation batch runner", function() {
     const calls = [];
     const runner = createGenerationBatchRunner({
       batchStore: store,
-      articleStore: {
+      contentStore: {
         findByGenerationTaskId: function(taskId) {
           if (taskId === "task-2") return { id: "article-recovered" };
           return null;

@@ -12,8 +12,8 @@
 | 活跃worktree   | `F:\官媒投稿-refactor`                                    |
 | 规划日期       | 2026-07-24 Asia/Shanghai                                  |
 | 目标形态       | 文件内容 + workspace SQLite运行状态 + Electron/React/Node |
-| 当前可执行阶段 | 阶段5（阶段4为`PENDING_HUMAN`；本地重构允许开始）         |
-| 普通功能开发   | 阶段5本地重构允许；正式release仍冻结                      |
+| 当前可执行阶段 | 阶段6（`NOT_STARTED`；本任务未启动）                       |
+| 普通功能开发   | 需新的 Phase 06 明确任务；正式release仍冻结                 |
 | 正式release    | 冻结                                                      |
 
 重构worktree已从独立规划commit创建；review、optimization、refactor、ADR和领域词汇已纳入该commit。原工作区`F:\官媒投稿`中用户维护的`auto—publish/docs/...`删除和未跟踪旧文档README没有进入重构分支，也不得由后续任务复制、恢复或清理。阶段0开始时必须重新核验当前HEAD和工作区状态。
@@ -39,9 +39,9 @@
 |            1 领域契约 | COMPLETE      | `926723f076cd1d8c88beb35695567bfb74df6639` | `027e9f88e00cb206669c2490cec9fcad7e6a47ad` | 178个默认测试文件、Phase 01 contract/architecture测试、严格类型检查、renderer/worker/package smoke均通过                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 无；不得在本任务执行                                       | `docs/refactor/handoffs/phase-01.md` |
 |    2 OperationalStore | COMPLETE      | `7cab1c9aad167c7e2eca8f1dd2732124ba24a434` | `7d8f81452f98c8211308ada0ffba7873428a764b` | 182测试文件、默认977/977、Phase 02 15/15、auth 16/16、links 172/172、packaging 33/33、Electron SQLite probe及所有canonical门禁通过                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 仅合成workspace；未请求或访问真实库                        | `docs/refactor/handoffs/phase-02.md` |
 | 3 PublicationWorkflow | COMPLETE      | `7d8f81452f98c8211308ada0ffba7873428a764b` | `7009a61b47ed3d5b6b6976e4f44fabab77ff1b93` | 唯一 PublicationWorkflow/OperationalStore write owner、AccountProfile fail-closed、worker outcome-only、attention composition ports、legacy JSON writer物理退出。合成 migration dry-run/execute/schema+FK+manual item/backup→restore/fault+rollback 10/10；phase3 attention/workflow/recovery定向通过；canonical `npm test` 170 files、893/893、0 fail/skip（约84s）；lint/typechecks/renderer build/format/auth 16/16/packaging 33/33、links 172/172（0 skip）及 `pack:smoke` 非签名目录制品构建均通过。production-only rg 对 legacy ledger/batch/order writer、旧 executor与worker state write均为0（仅 OperationalStore runtime.lock single-writer lock 保留）。 | 无真实外部平台调用；全部验证为临时合成 workspace/fixture。 | `docs/refactor/handoffs/phase-03.md` |
-|   4 Platform/Adapters | PENDING_HUMAN | `8cbce7f1761c4e67baf4467d89f0a8397e93d9db` | —                                          | 933/933全量、Phase 04定向27/27、auth 16/16、links、packaging、lint、format、三项typecheck及最小解包目录制品 smoke均通过 | 四项受控人工验收；阻止正式release，不阻止Phase 05本地重构 | `docs/refactor/handoffs/phase-04.md` |
-|     5 Content生命周期 | READY         | —                                          | —                                          | Phase 04自动门禁完成；仅允许本地重构                       | 内容迁移副本需授权                                         | —                                    |
-|        6 Renderer/IPC | NOT_STARTED   | —                                          | —                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 可访问性手工smoke                                          | —                                    |
+|   4 Platform/Adapters | PENDING_HUMAN | `8cbce7f1761c4e67baf4467d89f0a8397e93d9db` | —                                          | 1014/1014全量、现场多行正文/claim/账号核验回归、links 176/176、packaging 33/33、lint、format、三项typecheck及独立解包制品 verifier均通过；标准 pack smoke 因旧窗口占用 `EBUSY`，未覆盖原目录 | 四项受控人工验收；阻止正式release，不阻止Phase 05本地重构 | `docs/refactor/handoffs/phase-04.md` |
+|     5 Content生命周期 | COMPLETE | `9ff69a073eb7869df930b688d15bfd2dabb79fc8` | 本次 Phase 05 里程碑提交（提交后回填）      | 08d A-G 与追加 P1 全部 RED→GREEN；专项、176/176 扩展、1050/1050 全局门禁、打包 smoke 及最终独立复核均通过，无剩余 P0/P1 | Phase 04 人工项仍阻止正式 release，不影响本阶段本地完成 | `docs/refactor/handoffs/phase-05.md`   |
+|        6 Renderer/IPC | NOT_STARTED | —                                          | —                                          | Phase 05 已完成；本任务未实施 Phase 06 | 可访问性手工smoke                                          | —                                    |
 |      7 Auth/Build/Ops | NOT_STARTED   | —                                          | —                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | RPO/RTO、TLS、签名、release owner                          | —                                    |
 |  8 Cleanup/Acceptance | NOT_STARTED   | —                                          | —                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 全部release门                                              | —                                    |
 
@@ -59,10 +59,13 @@
 - 测试命令与结果：Phase 04定向27/27、`npm test` 933/933、`npm run test:auth` 16/16、`npm run test:links`、`npm run test:packaging`、`npm run lint`、`npm run format:check`、`npm run typecheck:renderer`、`npm run typecheck:bridge`、`npm run typecheck:main`、`npm run pack:smoke`、`git diff --check`均通过。`pack:smoke`重建非签名`win-unpacked`，验证app.asar、最小unpacked运行期和resources/tools/node，并运行最终制品的Playwright/Hepan安全 smoke；无真实外部调用。
 - 故障/迁移/回滚证据：精确复现并回归锁定三个现场故障：production content service 缺少 `previewExport`/`exportArticle` 导致 `Submission operation is unavailable: previewExport`；批量预先 claim 与旧状态快照提前拒绝导致 `Queued publication is no longer executable`；头条/列举无公共登录 IPC/bridge/UI。修复未修改 OperationalStore schema 或 writer，过期租约使用现有原子 claim 规则恢复，不删除或伪造队列状态。Hepan账号身份来自只读检查返回的受信 `uid`/displayName，缺失或变化仍 fail-closed。临时Cookie/payload在正常、失败、stop/watchdog与下次启动均有有界清理和回收验证。
 - 人工待办（四项）：(1) 头条/列举受控账号 remote ID 核验及首次显式 AccountProfile binding；(2) Hepan断连后的远端核对；(3) 媒体服务商HTTP风险确认与测试资源；(4) 签名正式制品中的真实浏览器登录。它们仍阻止正式release，但不阻止Phase 05本地重构。
+- 2026-07-26 现场回归：蓝色河畔提交提示 `Bundled Playwright Node is unavailable`。根因为 `extraResources` 将 Node 放在 `resources/tools/node`，runtime diagnostics 却只在 `appRoot/tools/node` 查找。现已把 `resourcesPath` 从 main 贯穿 WorkspaceRuntime/runtime-config/diagnostics，并解析 unpacked CLI；alpha verifier 会临时解包真实 app.asar 并执行最终布局诊断。runtime/WorkspaceRuntime 26/26、packaging 37/37、全量 1010/1010、pack:smoke 通过；未连接真实河畔或投稿。
+- 2026-07-26 现场回归：蓝色河畔多行正文（35 个换行）触发 `PUBLISH_INPUT_INVALID / Operational DTO is invalid`，首次失败后 item 被 claim，立即重试为 `OPERATIONAL_BATCH_ITEM_NOT_EXECUTABLE`；只读数据库确认无 publication/attempt/recovery intent，未触发远端。现已允许正文 `LF/CR/TAB`，并在 claim 前完成完整 DTO 校验；新增双回归，定向 34/34、全量 1012/1012 通过。旧目录制品仍运行导致标准 pack smoke `EBUSY`，独立 `release-alpha-fixed/win-unpacked` verifier 通过；未连接真实河畔或投稿。
+- 2026-07-26 现场回归：多行正文与 claim 修复后，蓝色河畔返回 `Current platform account could not be verified`；队列项已安全释放为 `queued`，无 publication/attempt。根因是 production AccountInspector 未使用 platformSettingsService 保存的 Hepan Python/Cookie/vendor 配置；现已通过 runtime adapter seam 调用设置服务的只读 `--check-login` 并转换安全账号证据。账号/平台定向 34/34、全量 1014/1014、lint/main typecheck/format 通过；独立解包制品 verifier 重建通过，未执行真实投稿。
 - 后续产品问题分期：用户同意将入队后撤销、清理及其他跨页状态/UI问题留到完整重构的 Phase 05/06 边界内统一收口；本次不扩大 Phase 04 修复范围。
 - 停止条件是否触发：否；未把弱证据升级为published，媒体HTTP只能由显式配置和`allowInsecure`确认启用。
 - Handoff路径：`docs/refactor/handoffs/phase-04.md`
-- 下一阶段是否READY：是；Phase 05为`READY`，仅限本地重构。Phase 04维持`PENDING_HUMAN`，不得标记`COMPLETE`，直到四项人工验收完成。
+- 历史启动记录：Phase 04 完成自动门禁时，Phase 05 曾为`READY`仅限本地重构；现已启动并以本表状态为准，必须保持`IN_PROGRESS`。Phase 04维持`PENDING_HUMAN`，不得标记`COMPLETE`，直到四项人工验收完成。
 
 ## 4. 当前阶段记录模板
 
@@ -71,7 +74,7 @@
 ```md
 ### 阶段X：名称
 
-- 状态：IN_PROGRESS
+- 状态：COMPLETE
 - 开始时间：
 - 开始分支/commit：
 - 执行任务/线程：
@@ -127,6 +130,49 @@
 - 剩余`PENDING_HUMAN`：
 - Release状态：
 - 普通功能开发状态：
+
+### 阶段5：内容身份、交接与删除生命周期（2026-07-26 独立复核整改）
+
+- 状态：IN_PROGRESS
+- 开始时间：2026-07-25 Asia/Shanghai；重开时间：2026-07-26 Asia/Shanghai
+- 开始分支/commit：`codex/refactor-program` / `9ff69a073eb7869df930b688d15bfd2dabb79fc8`
+- 完成时间：2026-07-26 Asia/Shanghai；commit：本次 Phase 05 里程碑提交（提交后回填）。
+- 用户已有改动：继承并保留全部未提交 Phase 05 WIP；未 reset、checkout、clean、覆盖或遗漏 untracked 文件；未访问、复制或修改真实内容库、投稿、付费或生产系统。
+- 独立复核整改：本轮三个 P1 已完成。queue action 已改为 OperationalStore-backed stable operationId + before manifest + `prepared → main_staged → sidecar_staged → staged → state_applied → complete` checkpoint/staging 协议；active queue operation 的 retryable 会重验 blockedItems、content/remaining-queue fingerprint、kind/cursor/operationId 归属和 claim/revision/lease/fence 后复用原 operationId；ArticleEditor 同 ArticleId props 更新使用 `mergeExternal()`，保留本地 title/remark/dirty，异文章及迟到 save/timer/dispose 继续由 session fence 隔离。metadata migration 已改为 PREPARED manifest + snapshot/staging/safe switch，并严格校验 manifest、backup、after hash 和 rollback；clients 缺失仍扫描 generated；文档数字来自本次最终命令输出。
+- 删除的旧路径：IPC 自行组装 ArticleStore/ContentStore、desktop/content service 的 `articleStore` fallback、runner 注入/可选 `findByGenerationTaskId` fallback、handoff 第一项选择和 caller 侧目录/路径知识。`legacy-migration.js` 的 ArticleStore 创建仅保留为明确的一次性迁移 allowlist，不属于 workspace runtime。
+- Interface/schema偏差：无；正文仍为文件内容，Operations SQLite 未被触碰；ContentStore snapshot/fingerprint 是 Removal/Trash/Handoff 唯一权威。
+- 测试命令与结果：P1 组合（`tests/phase-05-p1-blockers.test.js` + `tests/article-editor-session.test.js`）14/14 pass、0 fail、0 skip；08b六文件专项命令 45/45；08a原始主定向命令 112/112；扩展 Phase 05 定向 136/136，均 0 fail、0 skip（含 ArticleEditor/session、metadata、500/5000 handoff、production removal、operational submission）；`npm test` 收集 189 个测试文件，1001 pass、0 fail、0 skip；`npm run lint`、`npm run typecheck:renderer`、`npm run typecheck:bridge`、`npm run typecheck:main`、`npm run format:check`、`npm run test:links` 176/176、`npm run test:packaging` 33/33、`npm run build:renderer`（Vite 2140 modules）、`npm run pack:smoke`、`git diff --check` 均通过。所有测试使用临时合成 workspace/fixture。
+- 故障/迁移/回滚证据：queue 主文件/sidecar 写失败、main-only 中断、外部 hash 篡改、部分/全部缺失边界、相同 operationId retry 和 operationId 冲突均通过；active queue retryable 会实际再次调用同 operationId，blocked/remaining fingerprint/归属冲突 fail-closed；article active operation、stale runner fence、stale lock 5/5（dead/live/unknown/corrupt/ABA）均通过；ArticleEditor 同 identity merge 和 A→B 迟到 resolve/reject 均通过；migration 9/9 覆盖 clients 缺失仍扫描 generated、首/中/末 staging 写故障、manifest/backup 篡改、重复 execute/rollback、逐文件 byte-for-byte rollback；500/5000 handoff 证明每次 preview/commit 仅一次 identity scan。真实副本演练未执行，保留为 `PENDING_HUMAN`。
+- 停止条件是否触发：否。08d 阻断项、真实授权副本验收、完整门禁与最终独立复核均已完成；Phase 04 人工项继续阻止正式 release，但不阻止 Phase 05 本地完成。Phase 06 保持 `NOT_STARTED`。
+- Handoff路径：`docs/refactor/handoffs/phase-05.md`
+- 下一阶段是否READY：是；Phase 06=`NOT_STARTED`，必须由新的明确任务启动，本任务未实施 Phase 06。
+
+#### 2026-07-26 P1 恢复安全续记
+
+- 状态不变：Phase 05=`IN_PROGRESS`，Phase 06=`NOT_STARTED`；原因是等待下一轮独立复核。未 stage、commit、push、PR，未访问真实内容库或真实外部系统。
+- 根因/协议：queue `state_applied` 的 DB terminal item 与 staging cleanup 曾被错误折叠为 completed，现以同 operationId 重验 binding/fingerprint/terminal status/topology/hash 后 cleanup→complete，并把派生 `cleanupCancelledLocal` 识别为已完成 cancel 的 cleanup continuation。migration 在 oldRoot 部分删除失败后曾删除新 workspace 并尝试恢复残缺 before；现在新 after workspace 安装验证后持久 `INSTALLED/CLEANUP_PENDING`，oldRoot cleanup 独立可重试，snapshot 是唯一 rollback authority。`COMMITTING` 由 recover/CLI `--recover` 在 workspace 缺失时也可根据 manifest、snapshot、staging、oldRoot inventories 恢复，矛盾证据进入 `NEEDS_REPAIR`。
+- 本次真实命令：P1+editor 16/16；08b 六文件 47/47；扩展 Phase 05 138/138；`npm test` 189 files、1005 pass/0 fail/0 skip；lint、三项 typecheck、format 通过；links 176/176；packaging 33/33；renderer 2140 modules；pack smoke 通过；`git diff --check` 见本轮最终检查。所有 fixture 均为临时合成 workspace。
+
+#### 2026-07-26 rollback 与路径边界续记
+
+- 状态不变：Phase 05=`IN_PROGRESS`，Phase 06=`NOT_STARTED`；未 stage、commit、push、PR，未访问真实内容库或真实外部系统。
+- 本轮修复：rollback 使用持久 `ROLLBACK_COMMITTING` 状态；restore switch 中断后由 `recover()` 依据 snapshot、restore staging、rollback oldRoot 和 before/after inventory 恢复；`COMMITTED`/`ROLLED_BACK` no-op 先验证 workspace inventory 与残留。`inventoryAt()` 对 workspace、staging、oldRoot、restore 根路径统一 lstat，symlink/junction/非目录 fail-closed，避免 staging 链接被安装成 workspace。
+- 新增故障注入：rollback 第二次 rename 中断后可 recover；staging 根 junction 在 mutation 前进入 `NEEDS_REPAIR`；`NEEDS_REPAIR` 无显式授权不可再次 recover；已安装 workspace 旁 residual staging 不得伪装为 `COMMITTED`；dangling symlink evidence path 也 fail-closed。迁移专项 16/16；P1+editor 18/18；08b 六文件 51/51；Phase 05 扩展定向 142/142；`npm test` 189 files、1009 pass/0 fail/0 skip；lint、三项 typecheck、format、links 176/176、packaging 33/33、renderer build 2140 modules、pack smoke、`git diff --check` 均通过。所有 fixture 均为临时合成 workspace。
+
+#### 2026-07-26 08d 代码审查与再次独立复核续记
+
+- 状态：Phase 05=`COMPLETE`，Phase 06=`NOT_STARTED`。08d A-G 与再次独立复核追加 P1 均已完成 RED→GREEN；最终独立只读复核未发现剩余 P0/P1。用户现已授权形成 Phase 05 里程碑提交。
+- 追加修复：ArticleStore save/recovery/move/restore 共用 per-article 跨进程锁，fingerprint 与 rename 位于同一锁内；candidate/release 目录原子 rename 消除 acquire/release 崩溃半锁，覆盖 live/dead/unknown/ABA 与真实子进程退出。queue operation staging 根及祖先拒绝 junction/symlink/canonical escape。migration 限制 UUID v4 transactionId 并验证所有派生 evidence sibling，`NEEDS_REPAIR` 持久 forward/rollback intent，禁止残留 restore 误写 `COMMITTED`，补 old-root junction。OperationalStore v2 精确验证列、identity、unique、FK、连续 history/applied_at，并逐表哈希保护 v1 数据。
+- 最终命令：08d 原四组 `40/40`、`26/26`、`15/15`、`22/22`；独立复核扩展 `68/68`、`26/26`、`19/19`、`22/22`；Phase 05 扩展定向 `176/176`；`npm test` 191 files、`1050/1050`；auth `16/16`；links `180/180`（file symlink 与 directory junction available）；packaging `33/33`；lint、main/renderer/bridge typecheck、format、renderer build（2141 modules）、pack smoke、`git diff --check` 全部通过，0 fail/skip。全部新增破坏性、迁移、恢复和并发测试仅使用临时合成 workspace；本轮未访问真实内容库或真实投稿、付费、生产系统。
+- Git/边界：HEAD 仍为 `9ff69a073eb7869df930b688d15bfd2dabb79fc8`；未 reset/checkout/clean，未 stage/commit/push/PR；既有 Phase 05 WIP 与无关 Phase 06 计划文档修改均原样保留，且不计入本轮 08d 证据。
+
+#### 2026-07-26 用户授权副本人工 migration 验收
+
+- 仅操作用户明确指定的 `F:\workspace-migration-copy` 副本；未连接投稿、付费或生产系统，未操作原始内容库。
+- 初次 dry-run 发现 13 个客户缺失 `client.json`；已在副本中补齐。12 个客户沿用生成文章中已有的一致 `clientId`；`头一锅` 使用新 UUID `1b9a780e-52c6-4db7-a4a5-a820b7125e65`。修复前副本备份为 `F:\workspace-migration-copy.pre-client-repair-backup`。
+- execute：13 clients、52 articles、65 个 metadataVersion 写入，manifest=`COMMITTED`；execute 后 dry-run=`writes 0 / repairItems 0`（`头一锅` 的目录名与逻辑 UUID 差异记录为允许的 `directoryConflicts`）。
+- rollback：manifest=`ROLLED_BACK`；backup snapshot 与 workspace 均 814 个文件，逐文件 SHA-256 差异为 `0`。证据目录：`F:\workspace-migration-copy.phase05-evidence`；migration backup：`F:\workspace-migration-copy.phase05-backup`。
+- 本次副本验收已完成，但 Phase 05 仍=`IN_PROGRESS`，等待独立复核；Phase 06 仍=`NOT_STARTED`。
 
 ### 阶段0：工程基线与可信门禁
 

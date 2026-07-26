@@ -14,6 +14,7 @@ const ACTIONS = Object.freeze({
 const MESSAGES = Object.freeze({
   missing_pair_finalize: "队列文件已不存在，只差完成记录收尾",
   queue_pair_conflict: "队列文件与原投稿记录不一致",
+  removal_auto_recovery: "删除事务正在自动恢复",
   removal_needs_repair: "删除事务未完成，需要重新预检并继续",
   publication_uncertain: "远端结果待确认，请先核对发布详情",
   published_archive_failed: "远端已发布，但本地归档待处理",
@@ -84,6 +85,9 @@ function deriveAttentionPolicy(input, capabilities) {
   }
   if (kind === "removal_needs_repair") {
     return policy(kind, facts, caps, [ACTIONS.RETRY_REMOVAL, ACTIONS.INSPECT], ACTIONS.RETRY_REMOVAL);
+  }
+  if (kind === "removal_auto_recovery") {
+    return policy(kind, facts, caps, [ACTIONS.INSPECT], ACTIONS.INSPECT);
   }
   if (kind === "publication_uncertain") {
     return policy(kind, facts, caps, [ACTIONS.OPEN_PUBLICATION, ACTIONS.RECONCILE_PUBLISHED, ACTIONS.RECONCILE_FAILED], ACTIONS.OPEN_PUBLICATION);

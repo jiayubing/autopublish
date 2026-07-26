@@ -82,8 +82,12 @@ function resolvePlaywrightRuntime(options) {
   const config = opts.applicationTools || readApplicationTools(appRoot, opts);
   const env = opts.env || process.env;
   const packaged = opts.packaged === undefined ? env.AUTO_PUBLISH_PACKAGED === "1" : opts.packaged === true;
-  const nodeBundled = [path.join(appRoot, "tools", "node", "node.exe")];
-  const cliBundled = [path.join(appRoot, "node_modules", "@playwright", "cli", "playwright-cli.js")];
+  const appRootName = path.basename(appRoot).toLowerCase();
+  const inferredResourcesPath = packaged && (appRootName === "app.asar" || appRootName === "app.asar.unpacked") ? path.dirname(appRoot) : appRoot;
+  const resourcesPath = path.resolve(opts.resourcesPath || inferredResourcesPath);
+  const unpackedRoot = packaged ? path.join(resourcesPath, "app.asar.unpacked") : appRoot;
+  const nodeBundled = [path.join(resourcesPath, "tools", "node", "node.exe"), path.join(appRoot, "tools", "node", "node.exe")];
+  const cliBundled = [path.join(unpackedRoot, "node_modules", "@playwright", "cli", "playwright-cli.js"), path.join(appRoot, "node_modules", "@playwright", "cli", "playwright-cli.js")];
   if (!packaged) nodeBundled.push(path.join(appRoot, "build", "runtime-tools", "node", "node.exe"));
   const playwrightNode = resolveExecutable({
     config: config,
@@ -228,7 +232,8 @@ function safeDiagnostics(diagnostics) {
       hepanPython: safeCapabilities.hepan
     },
     errors: Array.isArray(source.errors) ? source.errors.map(function(error) { return { code: error.code, message: error.message }; }) : [],
-    warnings: Array.isArray(source.warnings) ? source.warnings.map(function(warning) { return { code: warning.code, message: warning.message }; }) : []
+    warnings: Array.isArray(source.warnings) ? source.warnings.map(function(warning) { return { code: warning.code, message: warning.message }; }) : [],
+    runtimeEvents: Array.isArray(source.runtimeEvents) ? source.runtimeEvents.slice(-100).map(function(event) { return { code: event.code, message: event.message, occurredAt: event.occurredAt }; }) : []
   };
 }
 
@@ -270,6 +275,7 @@ function createRuntimeDiagnosticsService(options) {
   const execFile = opts.execFile || childProcess.execFile;
   let platformSettingsService = opts.platformSettingsService || null;
   let browserProbe = { channel: null, state: "not_checked", lastCheckedAt: null, errorCode: null };
+  const runtimeEvents = [];
 
   function currentBrowserCapability(browserChannel) {
     if (!browserChannel.configured) {
@@ -296,7 +302,7 @@ function createRuntimeDiagnosticsService(options) {
     };
     const errors = diagnosticErrors(tools, capabilities);
     const warnings = diagnosticWarnings(tools, capabilities);
-    return { ok: errors.length === 0, workspaceRoot: workspaceRoot, appRoot: appRoot, buildInfo: readBuildInfo(appRoot, opts.env), tools: tools, capabilities: capabilities, errors: errors, warnings: warnings };
+    return { ok: errors.length === 0, workspaceRoot: workspaceRoot, appRoot: appRoot, buildInfo: readBuildInfo(appRoot, opts.env), tools: tools, capabilities: capabilities, errors: errors, warnings: warnings, runtimeEvents: runtimeEvents.slice() };
   }
 
   async function probeBrowser() {
@@ -353,6 +359,12 @@ function createRuntimeDiagnosticsService(options) {
     probeBrowser: probeBrowser,
     resolvePlaywrightRuntime: function() { return resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot: appRoot })); },
     safeDiagnostics: function() { return safeDiagnostics(diagnose()); },
+    report: function(event) {
+      if (!event || typeof event !== "object") return false;
+      runtimeEvents.push({ code: typeof event.code === "string" ? event.code.slice(0, 128) : "RUNTIME_DIAGNOSTIC", message: typeof event.message === "string" ? event.message.slice(0, 500) : "Runtime diagnostic", occurredAt: new Date().toISOString() });
+      if (runtimeEvents.length > 100) runtimeEvents.shift();
+      return true;
+    },
     setPlatformSettingsService: function(service) { platformSettingsService = service || null; }
   };
 }

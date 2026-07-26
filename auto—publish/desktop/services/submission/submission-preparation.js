@@ -5,6 +5,10 @@ function batchError(code, message) { const error = new Error(message); error.cod
 // preview/create methods, so retry and ordinary submission share one
 // fail-closed reservation and rollback state machine.
 function createSubmissionPreparation(deps) {
+  const getArticle = typeof deps.getArticle === "function"
+    ? deps.getArticle
+    : function(clientId, articleId) { return deps.contentStore.getArticle(clientId, articleId); };
+
   function previewBatch(value) {
     const input = deps.assertBatchInput(value);
     const platforms = deps.availablePlatforms();
@@ -13,7 +17,7 @@ function createSubmissionPreparation(deps) {
     const items = []; const ineligibleArticleIds = []; const missingArticleIds = []; const conflicts = [];
     input.articleIds.forEach(function(articleId) {
       let article;
-      try { article = (deps.getArticle || function(clientId, id) { return deps.articleStore.getArticle(clientId, id); })(input.clientId, articleId); } catch (_) { missingArticleIds.push(articleId); return; }
+      try { article = getArticle(input.clientId, articleId); } catch (_) { missingArticleIds.push(articleId); return; }
       input.targetPlatformIds.forEach(function(platformId) {
         const platform = platformMap.get(platformId);
         const item = { articleId: articleId, targetPlatformId: platformId, accountProfileId: input.accountProfiles[platformId], contentHash: deps.hash(deps.articleMarkdown(article)), status: "excluded" };
@@ -50,7 +54,7 @@ function createSubmissionPreparation(deps) {
     try {
       preview.items.forEach(function(previewItem) {
         if (previewItem.status !== "queueable" && previewItem.status !== "idempotent") { batch.items.push(Object.assign({}, previewItem)); save(); return; }
-        const article = (deps.getArticle || function(clientId, id) { return deps.articleStore.getArticle(clientId, id); })(input.clientId, previewItem.articleId);
+        const article = getArticle(input.clientId, previewItem.articleId);
         const platform = deps.availablePlatforms().find(function(candidate) { return candidate.id === previewItem.targetPlatformId; });
         if (!platform) throw batchError("CONTENT_SUBMISSION_TARGET_INVALID", "Submission target is invalid");
         const markdown = deps.articleMarkdown(article); const contentHash = deps.hash(markdown); const context = deps.publicationContext(article, previewItem.targetPlatformId);
@@ -91,7 +95,7 @@ function createSubmissionPreparation(deps) {
     if (record.status !== "failed") throw batchError("PUBLICATION_STATUS_NOT_FAILED", "Only failed publications can be retried");
     const latest = deps.latestAttempt(record);
     if (!latest || latest.status !== "failed") throw batchError("PUBLICATION_ATTEMPT_NOT_FAILED", "The latest publication attempt is not failed");
-    let article; try { article = (deps.getArticle || function(clientId, id) { return deps.articleStore.getArticle(clientId, id); })(record.clientId, record.articleId); } catch (_) { throw batchError("ARTICLE_NOT_FOUND", "The source article is no longer available"); }
+    let article; try { article = getArticle(record.clientId, record.articleId); } catch (_) { throw batchError("ARTICLE_NOT_FOUND", "The source article is no longer available"); }
     const eligibility = deps.evaluateEligibility(article, record.platformId);
     if (!eligibility.eligible) throw batchError("ARTICLE_NOT_RETRYABLE", eligibility.reasons.join("、"));
     if (!deps.platformFor(record.platformId)) throw batchError("CONTENT_SUBMISSION_TARGET_UNSUPPORTED", "The publication target does not support content queue import");

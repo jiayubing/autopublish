@@ -253,6 +253,38 @@ function getClient(workspaceRoot, clientId) {
   return client;
 }
 
+// Identity lookup intentionally reads only directory and client.json metadata.
+// Callers which merely need a physical location must not load knowledge files.
+function resolveClientIdentity(workspaceRoot, clientId) {
+  const clients = resolveClientContext(workspaceRoot);
+  if (!clients.realClientsRoot) throw contentError("CLIENT_NOT_FOUND", "Client was not found");
+  let entries;
+  try { entries = fs.readdirSync(clients.clientsRoot, { withFileTypes: true }); }
+  catch (_) { throw pathOutOfBounds(); }
+  const matches = [];
+  entries.filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); }).forEach(function(entry) {
+    const directory = getClientWorkspace({ root: clients.workspaceRoot, clients: clients.clientsRoot }, entry.name);
+    const boundary = assertClientDirectory(directory, clients);
+    const metadata = readClientMetadata(boundary);
+    if (metadata.id === clientId) matches.push({ id: metadata.id, name: metadata.name, directory: directory });
+  });
+  if (!matches.length) throw contentError("CLIENT_NOT_FOUND", "Client was not found");
+  if (matches.length > 1) throw contentError("CLIENT_IDENTITY_CONFLICT", "Client identity is duplicated");
+  return matches[0];
+}
+
+function listClientIdentities(workspaceRoot) {
+  const clients = resolveClientContext(workspaceRoot);
+  if (!clients.realClientsRoot) return [];
+  let entries;
+  try { entries = fs.readdirSync(clients.clientsRoot, { withFileTypes: true }); } catch (_) { throw pathOutOfBounds(); }
+  return entries.filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); }).map(function(entry) {
+    const directory = getClientWorkspace({ root: clients.workspaceRoot, clients: clients.clientsRoot }, entry.name);
+    const metadata = readClientMetadata(assertClientDirectory(directory, clients));
+    return { id: metadata.id, name: metadata.name, directory: directory };
+  });
+}
+
 function listClients(workspaceRoot) {
   const clients = resolveClientContext(workspaceRoot);
   const workspace = { root: clients.workspaceRoot, clients: clients.clientsRoot };
@@ -290,4 +322,4 @@ function listClients(workspaceRoot) {
     });
 }
 
-module.exports = { listClients, getClient, loadClientKnowledge, readSearchQuery };
+module.exports = { listClients, getClient, resolveClientIdentity, listClientIdentities, loadClientKnowledge, readSearchQuery };

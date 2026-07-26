@@ -1,4 +1,3 @@
-const { createArticleStore } = require("../../src/content/article-store");
 const { createGenerationSubmissionHandoffService } = require("../services/generation-submission-handoff-service");
 const { wrap } = require("../services/ipc-response");
 
@@ -41,11 +40,7 @@ function invoke(handler) {
 function registerGenerationSubmissionHandoffIpc(deps) {
   const values = deps || {};
   const ipcMain = values.ipcMain;
-  const service = values.generationSubmissionHandoffService || createGenerationSubmissionHandoffService({
-    generationBatchService: values.contentGenerationBatchService,
-    contentSubmissionService: values.contentSubmissionService,
-    articleStore: values.articleStore || createArticleStore(values.rootDir, { paths: values.paths })
-  });
+  const service = values.generationSubmissionHandoffService;
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation submission handoff IPC dependencies are required");
   ipcMain.handle("content:preview-generation-submission-handoff", function(event, value) { return invoke(function() { return service.preview(input(value, false)); }); });
   ipcMain.handle("content:commit-generation-submission-handoff", function(event, value) { return invoke(function() {

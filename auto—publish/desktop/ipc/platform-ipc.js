@@ -1,8 +1,5 @@
 const mammoth = require("mammoth");
 const { loadPlatforms } = require("../../src/core/platforms");
-const {
-  createPlatformWorkbenchService,
-} = require("../services/platform-workbench-service");
 const { wrap } = require("../services/ipc-response");
 const {
   validatePlatformSubmission,
@@ -15,7 +12,6 @@ const { createPlatformSessionService } = require("../services/platform-session-s
 
 function registerPlatformIpc(deps) {
   var ipcMain = deps.ipcMain;
-  var rootDir = deps.rootDir;
   var taskService = deps.taskService;
   var sendToRenderer = deps.sendToRenderer;
   var loadedPlatforms = deps.loadedPlatforms || loadPlatforms();
@@ -24,16 +20,8 @@ function registerPlatformIpc(deps) {
     adapters[platform.id] = platform;
   });
   var platformSessionService = deps.platformSessionService || createPlatformSessionService({ adapters: adapters, assertPlaywrightAvailable: function() { assertPlaywrightAvailable(deps.runtimeDiagnosticsService); } });
-  var service =
-    deps.platformWorkbenchService ||
-    createPlatformWorkbenchService({
-      rootDir: rootDir,
-      paths: deps.paths,
-      platforms: loadedPlatforms.map(function (platform) {
-        return { id: platform.id, scanDir: platform.scanDir };
-      }),
-      adapters: adapters,
-    });
+  var service = deps.platformWorkbenchService;
+  if (!service) throw new Error("Platform IPC requires the workspace ContentStore service");
 
   function buildPlanFromSubmissions(values) {
     if (!Array.isArray(values) || !values.length) throw inputError();

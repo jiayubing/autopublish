@@ -15,6 +15,15 @@ const {
   safeString,
 } = require("./safe-operational-error");
 
+function safeBody(value, max) {
+  return (
+    typeof value === "string" &&
+    value.trim() &&
+    value.length <= max &&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)
+  );
+}
+
 function parsePublishInput(input) {
   exact(input, [
     "version",
@@ -27,7 +36,7 @@ function parsePublishInput(input) {
   if (
     input.version !== 1 ||
     !safeString(input.title, 256) ||
-    !safeString(input.body, 200000)
+    !safeBody(input.body, 200000)
   )
     throw dtoError("PUBLISH_INPUT_INVALID");
   return Object.freeze({

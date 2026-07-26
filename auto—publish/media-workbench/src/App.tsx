@@ -36,6 +36,7 @@ import {
   ListFilter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { createAppDraftSaveController } from './app-draft-save-controller';
 
 const ResourceLibrary = lazy(() => import('./components/ResourceLibrary'));
 const OrdersView = lazy(() => import('./components/OrdersView'));
@@ -64,6 +65,14 @@ function AppContent() {
 
   // UI States
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
+  const draftSaveController = useRef<ReturnType<typeof createAppDraftSaveController> | null>(null);
+  if (!draftSaveController.current) {
+    draftSaveController.current = createAppDraftSaveController({
+      persistDraft: setDraft,
+      setArticles,
+      setActiveArticle,
+    });
+  }
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,6 +82,12 @@ function AppContent() {
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const mediaRefreshRequestId = useRef(0);
   const mediaInvalidationRevision = useRef(0);
+
+  const articleKey = (article: Article | null | undefined) => {
+    if (!article) return null;
+    const record = article as Article & { id?: string; articleId?: string };
+    return record.id || record.articleId || article.filename;
+  };
 
   const openArticleAttention = (intent: { attentionId?: string; clientId?: string } = {}) => {
     setArticleAttentionIntent(intent);
@@ -161,85 +176,27 @@ function AppContent() {
 
 
   // Save drafts and update internal list states
-  const handleSaveDraft = async (draft: Draft) => {
-    // Update the active article's in-memory state and persist to backend
-    if (activeArticle) {
-      // Store draft in Electron main or localStorage
-      await setDraft(draft.filename, draft);
-      
-      // Update the articles list with draft modifications
-      setArticles(prev => prev.map(a => {
-        if (a.filename === draft.filename) {
-          return {
-            ...a,
-            title: draft.title,
-            remark: draft.remark,
-            ignoreImages: draft.ignoreImages,
-            selectedResources: draft.selectedResources,
-          };
-        }
-        return a;
-      }));
-
-      // Update active article to reflect changes
-      setActiveArticle(prev => prev && prev.filename === draft.filename ? {
-        ...prev,
-        title: draft.title,
-        remark: draft.remark,
-        ignoreImages: draft.ignoreImages,
-        selectedResources: draft.selectedResources,
-      } : prev);
-    }
+  const handleSaveDraft = async (draft: Draft, sourceArticle?: Article) => {
+    const targetArticle = sourceArticle || activeArticle;
+    if (targetArticle) await draftSaveController.current!.saveDraft(draft, targetArticle);
   };
 
   // Pick a resource: bind or unbind to the active article
   const handlePickResource = (resource: MediaResource) => {
     if (!activeArticle) return;
-
-    const alreadySelected = activeArticle.selectedResources.some(
-      (r) => r.resourceId === resource.resourceId
-    );
-
-    if (alreadySelected) {
-      // Remove from selection
-      setActiveArticle(prev => prev ? {
-        ...prev,
-        selectedResources: prev.selectedResources.filter(
-          (r) => r.resourceId !== resource.resourceId
-        ),
-      } : prev);
-    } else {
-      // Append to selection
-      setActiveArticle(prev => prev ? {
-        ...prev,
-        selectedResources: [...prev.selectedResources, resource],
-      } : prev);
-    }
+    draftSaveController.current!.toggleResource(resource, activeArticle);
   };
 
   // Remove a selected resource from the active article
   const handleRemoveSelectedResource = (resourceId: string) => {
     if (!activeArticle) return;
-    setActiveArticle(prev => prev ? {
-      ...prev,
-      selectedResources: prev.selectedResources.filter(
-        (r) => r.resourceId !== resourceId
-      ),
-    } : prev);
+    draftSaveController.current!.removeResource(resourceId, activeArticle);
   };
 
   // Directly add a resource to the active article selection
   const handleAddResource = (resource: MediaResource) => {
     if (!activeArticle) return;
-    const alreadySelected = activeArticle.selectedResources.some(
-      (r) => r.resourceId === resource.resourceId
-    );
-    if (!alreadySelected) {
-      setActiveArticle(prev => prev ? {
-        ...prev,
-        selectedResources: [...prev.selectedResources, resource],
-      } : prev);
-    }
+    draftSaveController.current!.addResource(resource, activeArticle);
   };
 
   // Order & submission handling

@@ -20,10 +20,10 @@ function validateSelection(selection) {
 
 function createArticleReviewService(options) {
   const opts = options || {};
-  const articleStore = opts.articleStore;
-  if (!articleStore || typeof articleStore.getArticle !== "function" ||
-      typeof articleStore.saveArticle !== "function") {
-    throw reviewError("ARTICLE_REVIEW_SERVICE_INVALID", "Article store is required");
+  const contentStore = opts.contentStore;
+  if (!contentStore || typeof contentStore.getArticle !== "function" ||
+      typeof contentStore.saveArticle !== "function") {
+    throw reviewError("ARTICLE_REVIEW_SERVICE_INVALID", "Content store is required");
   }
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
 
@@ -32,10 +32,10 @@ function createArticleReviewService(options) {
   }
 
   function persistReviewed(article, reviewedAt) {
-    if (typeof articleStore.reviewArticle === "function") {
-      return articleStore.reviewArticle(article.clientId, article.id, reviewedAt);
+    if (typeof contentStore.reviewArticle === "function") {
+      return contentStore.reviewArticle(article.clientId, article.id, reviewedAt);
     }
-    return articleStore.saveArticle(Object.assign({}, article, { status: "saved", reviewedAt: reviewedAt }));
+    return contentStore.saveArticle(Object.assign({}, article, { status: "saved", reviewedAt: reviewedAt }));
   }
 
   function reviewMany(selections) {
@@ -53,7 +53,7 @@ function createArticleReviewService(options) {
       seen.add(key);
       let article;
       try {
-        article = articleStore.getArticle(selection.clientId, selection.articleId);
+        article = contentStore.getArticle(selection.clientId, selection.articleId);
       } catch (error) {
         rejected.push(rejection(selection.articleId, error && error.code === "ARTICLE_INVALID" ? "ARTICLE_CORRUPTED" : "ARTICLE_NOT_FOUND"));
         return;

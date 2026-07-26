@@ -26,6 +26,16 @@ it("exposes safe capability diagnostics and a browser self-check IPC boundary", 
   assert.equal("stack" in smoke.error, false);
 });
 
+it("exposes bounded runtime lifecycle events through the diagnostics IPC", async function() {
+  const handlers = new Map();
+  registerRuntimeDiagnosticsIpc({
+    ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } },
+    runtimeDiagnosticsService: { safeDiagnostics: function() { return { ok: true, errors: [], warnings: [], runtimeEvents: [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "Removal recovery failed", occurredAt: "2026-07-25T00:00:00.000Z" }] }; }, probeBrowser: async function() { return {}; } }
+  });
+  const diagnostics = await handlers.get("runtime-diagnostics:get")();
+  assert.deepEqual(diagnostics.data.runtimeEvents, [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "Removal recovery failed", occurredAt: "2026-07-25T00:00:00.000Z" }]);
+});
+
 it("forwards the updated browser capability returned by a successful self-check", async function() {
   const handlers = new Map();
   const capability = { channel: "msedge", configured: true, state: "ready", probed: true, source: "default", errorCode: null, lastCheckedAt: "2026-07-17T00:00:00.000Z" };

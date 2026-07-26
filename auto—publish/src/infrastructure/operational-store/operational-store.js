@@ -5,7 +5,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 const domain = require("../../domain");
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const owners = new Map();
 function fail(code) {
   const e = new Error(code);
@@ -122,25 +122,217 @@ function releaseRuntimeOwner(owner) {
     } catch (_) {}
   }
 }
-function schema(db) {
+const V1_SCHEMA = `CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+CREATE TABLE account_profiles(account_profile_id TEXT PRIMARY KEY, platform_id TEXT NOT NULL, display_name TEXT, created_at TEXT NOT NULL);
+CREATE TABLE publication_records(publication_id TEXT PRIMARY KEY, article_id TEXT NOT NULL, target_key TEXT NOT NULL, target_json TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN('queued','remote_started','submitted','published','failed','uncertain')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(article_id,target_key));
+CREATE TABLE publication_attempts(attempt_id TEXT PRIMARY KEY, publication_id TEXT NOT NULL REFERENCES publication_records(publication_id), status TEXT NOT NULL CHECK(status IN('queued','remote_started','submitted','published','failed','uncertain')), created_at TEXT NOT NULL, finished_at TEXT);
+CREATE TABLE remote_evidence(evidence_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES publication_attempts(attempt_id), remote_id TEXT NOT NULL, remote_url TEXT, evidence_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(attempt_id,remote_id));
+CREATE TABLE recovery_intents(intent_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL UNIQUE REFERENCES publication_attempts(attempt_id), state TEXT NOT NULL CHECK(state IN('remote_started','outcome_pending','resolved','manual_check')), payload_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE submission_batches(batch_id TEXT PRIMARY KEY, status TEXT NOT NULL, revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE submission_items(item_id TEXT PRIMARY KEY, batch_id TEXT NOT NULL REFERENCES submission_batches(batch_id), article_id TEXT NOT NULL, target_key TEXT NOT NULL, revision INTEGER NOT NULL, status TEXT NOT NULL, claim_token TEXT, claim_until TEXT, payload_json TEXT NOT NULL, UNIQUE(batch_id,article_id,target_key));
+CREATE TABLE remote_orders(order_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES publication_attempts(attempt_id), remote_id TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(attempt_id,remote_id));
+CREATE TABLE post_processing_jobs(job_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES publication_attempts(attempt_id), kind TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN('queued','claimed','completed','failed')), attempts INTEGER NOT NULL, claim_token TEXT, claim_until TEXT, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(attempt_id,kind));
+CREATE INDEX recovery_actionable ON recovery_intents(state,updated_at);
+CREATE INDEX job_actionable ON post_processing_jobs(status,claim_until);
+CREATE INDEX submission_claimable ON submission_items(batch_id,status,claim_until,item_id);`;
+const V2_SCHEMA = `CREATE TABLE submission_item_operations(operation_id TEXT PRIMARY KEY NOT NULL, batch_id TEXT NOT NULL REFERENCES submission_batches(batch_id), item_id TEXT NOT NULL REFERENCES submission_items(item_id), action TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN('prepared','main_staged','sidecar_staged','staged','state_applied','complete')), expected_fingerprint TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(batch_id,item_id,action));`;
+function tableNames(db) {
+  return db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    .all()
+    .map((row) => row.name);
+}
+function schemaVersion(db) {
+  const row = db
+    .prepare("SELECT MAX(version) version FROM schema_migrations")
+    .get();
+  return row && Number.isInteger(row.version) ? row.version : 0;
+}
+function verifyMigrationHistory(db, expectedVersions, errorCode) {
+  const rows = db
+    .prepare(
+      "SELECT version,applied_at FROM schema_migrations ORDER BY version",
+    )
+    .all();
+  if (
+    rows.length !== expectedVersions.length ||
+    rows.some(
+      (row, index) =>
+        row.version !== expectedVersions[index] ||
+        typeof row.applied_at !== "string" ||
+        !row.applied_at.trim() ||
+        !Number.isFinite(Date.parse(row.applied_at)),
+    )
+  )
+    throw fail(errorCode);
+}
+function tableDataHashes(db, ignoredTables = []) {
+  const ignored = new Set(ignoredTables);
+  return Object.fromEntries(
+    tableNames(db)
+      .filter((name) => !name.startsWith("sqlite_") && !ignored.has(name))
+      .sort()
+      .map((name) => {
+        const quotedName = JSON.stringify(name);
+        const columns = db
+          .prepare(`PRAGMA table_info(${quotedName})`)
+          .all()
+          .sort((left, right) => left.cid - right.cid)
+          .map((column) => column.name);
+        const selection = columns
+          .map((column) => JSON.stringify(column))
+          .join(",");
+        const rows = db
+          .prepare(
+            `SELECT ${selection} FROM ${quotedName} ORDER BY ${selection}`,
+          )
+          .all()
+          .map((row) => columns.map((column) => row[column]));
+        return [
+          name,
+          crypto.createHash("sha256").update(text(rows)).digest("hex"),
+        ];
+      }),
+  );
+}
+function verifyTableDataHashes(db, expected, errorCode) {
+  const actual = tableDataHashes(
+    db,
+    tableNames(db).filter((name) => !(name in expected)),
+  );
+  if (text(actual) !== text(expected)) throw fail(errorCode);
+}
+function verifyV2Structure(db, errorCode) {
+  const tables = tableNames(db);
+  const definition = tables.includes("submission_item_operations")
+    ? db
+        .prepare(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='submission_item_operations'",
+        )
+        .get()
+    : null;
+  const columns = tables.includes("submission_item_operations")
+    ? db.prepare("PRAGMA table_info(submission_item_operations)").all()
+    : [];
+  const foreignKeys = tables.includes("submission_item_operations")
+    ? db.prepare("PRAGMA foreign_key_list(submission_item_operations)").all()
+    : [];
+  const requiredColumns = [
+    ["operation_id", "TEXT"],
+    ["batch_id", "TEXT"],
+    ["item_id", "TEXT"],
+    ["action", "TEXT"],
+    ["state", "TEXT"],
+    ["expected_fingerprint", "TEXT"],
+    ["payload_json", "TEXT"],
+    ["created_at", "TEXT"],
+    ["updated_at", "TEXT"],
+  ];
+  const uniqueIndexes = tables.includes("submission_item_operations")
+    ? db
+        .prepare("PRAGMA index_list(submission_item_operations)")
+        .all()
+        .filter((index) => index.unique === 1)
+        .map((index) =>
+          db
+            .prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`)
+            .all()
+            .map((column) => column.name)
+            .join(","),
+        )
+    : [];
+  const operationId = columns.find((column) => column.name === "operation_id");
+  if (
+    !tables.includes("submission_item_operations") ||
+    columns.length !== requiredColumns.length ||
+    !requiredColumns.every(
+      ([name, type], index) =>
+        columns[index] &&
+        columns[index].name === name &&
+        columns[index].type.toUpperCase() === type &&
+        columns[index].notnull === 1,
+    ) ||
+    !operationId ||
+    (operationId.pk !== 1 && !uniqueIndexes.includes("operation_id")) ||
+    !definition ||
+    !/CHECK\s*\(\s*state\s+IN\s*\(\s*'prepared'\s*,\s*'main_staged'\s*,\s*'sidecar_staged'\s*,\s*'staged'\s*,\s*'state_applied'\s*,\s*'complete'\s*\)\s*\)/i.test(
+      definition.sql || "",
+    ) ||
+    !uniqueIndexes.includes("batch_id,item_id,action") ||
+    foreignKeys.length !== 2 ||
+    !foreignKeys.some(
+      (foreignKey) =>
+        foreignKey.table === "submission_batches" &&
+        foreignKey.from === "batch_id" &&
+        foreignKey.to === "batch_id",
+    ) ||
+    !foreignKeys.some(
+      (foreignKey) =>
+        foreignKey.table === "submission_items" &&
+        foreignKey.from === "item_id" &&
+        foreignKey.to === "item_id",
+    )
+  )
+    throw fail(errorCode);
+}
+function migrationFault(hook, point, db) {
+  if (hook) hook(point, db);
+}
+function schema(db, migrationHook) {
   db.exec(
     "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;",
   );
-  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS account_profiles(account_profile_id TEXT PRIMARY KEY, platform_id TEXT NOT NULL, display_name TEXT, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS publication_records(publication_id TEXT PRIMARY KEY, article_id TEXT NOT NULL, target_key TEXT NOT NULL, target_json TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN('queued','remote_started','submitted','published','failed','uncertain')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(article_id,target_key));
-CREATE TABLE IF NOT EXISTS publication_attempts(attempt_id TEXT PRIMARY KEY, publication_id TEXT NOT NULL REFERENCES publication_records(publication_id), status TEXT NOT NULL CHECK(status IN('queued','remote_started','submitted','published','failed','uncertain')), created_at TEXT NOT NULL, finished_at TEXT);
-CREATE TABLE IF NOT EXISTS remote_evidence(evidence_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES publication_attempts(attempt_id), remote_id TEXT NOT NULL, remote_url TEXT, evidence_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(attempt_id,remote_id));
-CREATE TABLE IF NOT EXISTS recovery_intents(intent_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL UNIQUE REFERENCES publication_attempts(attempt_id), state TEXT NOT NULL CHECK(state IN('remote_started','outcome_pending','resolved','manual_check')), payload_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS submission_batches(batch_id TEXT PRIMARY KEY, status TEXT NOT NULL, revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS submission_items(item_id TEXT PRIMARY KEY, batch_id TEXT NOT NULL REFERENCES submission_batches(batch_id), article_id TEXT NOT NULL, target_key TEXT NOT NULL, revision INTEGER NOT NULL, status TEXT NOT NULL, claim_token TEXT, claim_until TEXT, payload_json TEXT NOT NULL, UNIQUE(batch_id,article_id,target_key));
-CREATE TABLE IF NOT EXISTS remote_orders(order_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES publication_attempts(attempt_id), remote_id TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(attempt_id,remote_id));
-CREATE TABLE IF NOT EXISTS post_processing_jobs(job_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES publication_attempts(attempt_id), kind TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN('queued','claimed','completed','failed')), attempts INTEGER NOT NULL, claim_token TEXT, claim_until TEXT, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(attempt_id,kind));
-CREATE INDEX IF NOT EXISTS recovery_actionable ON recovery_intents(state,updated_at); CREATE INDEX IF NOT EXISTS job_actionable ON post_processing_jobs(status,claim_until); CREATE INDEX IF NOT EXISTS submission_claimable ON submission_items(batch_id,status,claim_until,item_id);`);
-  db.prepare("INSERT OR IGNORE INTO schema_migrations VALUES(?,?)").run(
-    SCHEMA_VERSION,
-    new Date().toISOString(),
+  const tables = tableNames(db);
+  if (!tables.includes("schema_migrations")) {
+    if (tables.some((name) => name !== "sqlite_sequence"))
+      throw fail("OPERATIONAL_SCHEMA_INVALID");
+    transaction(db, () => {
+      db.exec(V1_SCHEMA);
+      db.prepare("INSERT INTO schema_migrations VALUES(1,?)").run(
+        new Date().toISOString(),
+      );
+    });
+  }
+  let version = schemaVersion(db);
+  if (version > SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_FUTURE");
+  if (version < 1) throw fail("OPERATIONAL_SCHEMA_INVALID");
+  verifyMigrationHistory(
+    db,
+    version === 1 ? [1] : [1, 2],
+    "OPERATIONAL_SCHEMA_INVALID",
   );
+  if (version === 1) {
+    transaction(db, () => {
+      const before = tableDataHashes(db);
+      const beforeWithoutHistory = { ...before };
+      delete beforeWithoutHistory.schema_migrations;
+      migrationFault(migrationHook, "before-v2", db);
+      db.exec(V2_SCHEMA);
+      migrationFault(migrationHook, "after-v2-create", db);
+      verifyTableDataHashes(db, before, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
+      verifyV2Structure(db, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
+      migrationFault(migrationHook, "after-v2-verify", db);
+      verifyTableDataHashes(db, before, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
+      db.prepare("INSERT INTO schema_migrations VALUES(2,?)").run(
+        new Date().toISOString(),
+      );
+      migrationFault(migrationHook, "after-v2-record", db);
+      verifyTableDataHashes(
+        db,
+        beforeWithoutHistory,
+        "OPERATIONAL_SCHEMA_MIGRATION_INVALID",
+      );
+      verifyMigrationHistory(
+        db,
+        [1, 2],
+        "OPERATIONAL_SCHEMA_MIGRATION_INVALID",
+      );
+    });
+    version = 2;
+  }
+  if (version !== SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_INVALID");
+  verifyMigrationHistory(db, [1, 2], "OPERATIONAL_SCHEMA_INVALID");
+  verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
 }
 function integrityOk(db) {
   const result = db.prepare("PRAGMA integrity_check").all();
@@ -173,7 +365,12 @@ function createOperationalStore(options) {
   let db;
   try {
     db = new DatabaseSync(filename);
-    schema(db);
+    schema(
+      db,
+      typeof o.internalMigrationFault === "function"
+        ? o.internalMigrationFault
+        : null,
+    );
   } catch (error) {
     try {
       if (db) db.close();
@@ -648,6 +845,7 @@ function createOperationalStore(options) {
           )
           .get(v.itemId, v.batchId);
         if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+        const operation = operationForTransition(db, v, "cancel");
         if (item.status === "cancelled")
           return Object.freeze({
             itemId: item.item_id,
@@ -658,10 +856,17 @@ function createOperationalStore(options) {
           throw fail("OPERATIONAL_BATCH_ITEM_NOT_CANCELLABLE");
         const payload = Object.assign({}, fromText(item.payload_json) || {}, {
           cancelledAt: stamp,
+          ...(typeof v.operationId === "string" && v.operationId
+            ? { removalOperationId: v.operationId }
+            : {}),
         });
         db.prepare(
           "UPDATE submission_items SET status='cancelled',revision=revision+1,payload_json=? WHERE item_id=?",
         ).run(text(payload), item.item_id);
+        if (operation)
+          db.prepare(
+            "UPDATE submission_item_operations SET state='state_applied',updated_at=? WHERE operation_id=?",
+          ).run(stamp, v.operationId);
         const remaining = db
           .prepare(
             "SELECT COUNT(*) count FROM submission_items WHERE batch_id=? AND status!='cancelled'",
@@ -679,6 +884,239 @@ function createOperationalStore(options) {
       },
       internalBeforeCommit,
     );
+  }
+  function markSubmissionItemCleaned(input) {
+    open();
+    const v = input || {};
+    const transitions = {
+      failed: "failed-cleaned",
+      published: "published-cleaned",
+      completed: "published-cleaned",
+      cancelled: "cancelled-cleaned",
+    };
+    if (
+      typeof v.itemId !== "string" ||
+      !v.itemId ||
+      typeof v.batchId !== "string" ||
+      !v.batchId ||
+      !transitions[v.fromStatus]
+    )
+      throw fail("OPERATIONAL_BATCH_CLEANUP_INVALID");
+    const targetStatus = transitions[v.fromStatus];
+    const stamp = iso(clock);
+    return transaction(
+      db,
+      () => {
+        const item = db
+          .prepare(
+            "SELECT item_id,status,payload_json FROM submission_items WHERE item_id=? AND batch_id=?",
+          )
+          .get(v.itemId, v.batchId);
+        if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+        const operationAction =
+          v.action ||
+          (v.fromStatus === "failed"
+            ? "cleanup"
+            : v.fromStatus === "cancelled"
+              ? "cleanupCancelledLocal"
+              : "cleanupPublishedLocal");
+        const operation = operationForTransition(db, v, operationAction);
+        if (item.status === targetStatus)
+          return Object.freeze({
+            itemId: item.item_id,
+            status: targetStatus,
+            idempotent: true,
+          });
+        if (item.status !== v.fromStatus)
+          throw fail("OPERATIONAL_BATCH_ITEM_STATUS_CONFLICT");
+        const payload = Object.assign({}, fromText(item.payload_json) || {}, {
+          localCleanupAt: stamp,
+          ...(typeof v.operationId === "string" && v.operationId
+            ? { removalOperationId: v.operationId }
+            : {}),
+        });
+        db.prepare(
+          "UPDATE submission_items SET status=?,revision=revision+1,payload_json=? WHERE item_id=? AND status=?",
+        ).run(targetStatus, text(payload), item.item_id, v.fromStatus);
+        if (operation)
+          db.prepare(
+            "UPDATE submission_item_operations SET state='state_applied',updated_at=? WHERE operation_id=?",
+          ).run(stamp, v.operationId);
+        return Object.freeze({
+          itemId: item.item_id,
+          status: targetStatus,
+          idempotent: false,
+        });
+      },
+      internalBeforeCommit,
+    );
+  }
+  function submissionActionRow(row) {
+    if (!row) return null;
+    return Object.freeze({
+      operationId: row.operation_id,
+      batchId: row.batch_id,
+      itemId: row.item_id,
+      action: row.action,
+      state: row.state,
+      expectedFingerprint: row.expected_fingerprint,
+      payload: fromText(row.payload_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+  }
+  function prepareSubmissionItemAction(input) {
+    open();
+    const v = input || {};
+    if (
+      typeof v.operationId !== "string" ||
+      !v.operationId ||
+      typeof v.batchId !== "string" ||
+      !v.batchId ||
+      typeof v.itemId !== "string" ||
+      !v.itemId ||
+      ![
+        "cancel",
+        "cleanup",
+        "cleanupPublishedLocal",
+        "cleanupCancelledLocal",
+      ].includes(v.action) ||
+      typeof v.expectedFingerprint !== "string" ||
+      !v.expectedFingerprint
+    )
+      throw fail("OPERATIONAL_SUBMISSION_OPERATION_INVALID");
+    const stamp = iso(clock);
+    return transaction(
+      db,
+      () => {
+        const existing = db
+          .prepare(
+            "SELECT * FROM submission_item_operations WHERE batch_id=? AND item_id=? AND action=?",
+          )
+          .get(v.batchId, v.itemId, v.action);
+        if (existing) {
+          if (
+            existing.operation_id !== v.operationId ||
+            existing.expected_fingerprint !== v.expectedFingerprint
+          )
+            throw fail("OPERATIONAL_SUBMISSION_OPERATION_CONFLICT");
+          return submissionActionRow(existing);
+        }
+        const item = db
+          .prepare(
+            "SELECT status FROM submission_items WHERE item_id=? AND batch_id=?",
+          )
+          .get(v.itemId, v.batchId);
+        if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+        if (v.expectedStatus && item.status !== v.expectedStatus)
+          throw fail("OPERATIONAL_BATCH_ITEM_STATUS_CONFLICT");
+        const payload = Object.assign({}, v.payload || {}, {
+          expectedStatus: v.expectedStatus || item.status,
+        });
+        db.prepare(
+          "INSERT INTO submission_item_operations VALUES(?,?,?,?,?,?,?,?,?)",
+        ).run(
+          v.operationId,
+          v.batchId,
+          v.itemId,
+          v.action,
+          "prepared",
+          v.expectedFingerprint,
+          text(payload),
+          stamp,
+          stamp,
+        );
+        return submissionActionRow(
+          db
+            .prepare(
+              "SELECT * FROM submission_item_operations WHERE operation_id=?",
+            )
+            .get(v.operationId),
+        );
+      },
+      internalBeforeCommit,
+    );
+  }
+  function getSubmissionItemAction(input) {
+    open();
+    const operationId =
+      typeof input === "string" ? input : input && input.operationId;
+    if (typeof operationId !== "string" || !operationId)
+      throw fail("OPERATIONAL_SUBMISSION_OPERATION_INVALID");
+    return submissionActionRow(
+      db
+        .prepare(
+          "SELECT * FROM submission_item_operations WHERE operation_id=?",
+        )
+        .get(operationId),
+    );
+  }
+  function checkpointSubmissionItemAction(input) {
+    open();
+    const v = input || {};
+    if (
+      typeof v.operationId !== "string" ||
+      !v.operationId ||
+      ![
+        "prepared",
+        "main_staged",
+        "sidecar_staged",
+        "staged",
+        "state_applied",
+        "complete",
+      ].includes(v.state)
+    )
+      throw fail("OPERATIONAL_SUBMISSION_CHECKPOINT_INVALID");
+    const stamp = iso(clock);
+    return transaction(
+      db,
+      () => {
+        const current = db
+          .prepare(
+            "SELECT * FROM submission_item_operations WHERE operation_id=?",
+          )
+          .get(v.operationId);
+        if (!current) throw fail("OPERATIONAL_SUBMISSION_OPERATION_NOT_FOUND");
+        if (current.state === v.state) return submissionActionRow(current);
+        const changed = db
+          .prepare(
+            "UPDATE submission_item_operations SET state=?,payload_json=?,updated_at=? WHERE operation_id=? AND state=?",
+          )
+          .run(
+            v.state,
+            text(v.payload || fromText(current.payload_json) || {}),
+            stamp,
+            v.operationId,
+            current.state,
+          ).changes;
+        if (changed !== 1)
+          throw fail("OPERATIONAL_SUBMISSION_OPERATION_CONFLICT");
+        return submissionActionRow(
+          db
+            .prepare(
+              "SELECT * FROM submission_item_operations WHERE operation_id=?",
+            )
+            .get(v.operationId),
+        );
+      },
+      internalBeforeCommit,
+    );
+  }
+  function operationForTransition(dbHandle, v, action) {
+    if (!v.operationId) return null;
+    const operation = dbHandle
+      .prepare("SELECT * FROM submission_item_operations WHERE operation_id=?")
+      .get(v.operationId);
+    if (
+      !operation ||
+      operation.batch_id !== v.batchId ||
+      operation.item_id !== v.itemId ||
+      operation.action !== action
+    )
+      throw fail("OPERATIONAL_SUBMISSION_OPERATION_CONFLICT");
+    if (!["staged", "state_applied", "complete"].includes(operation.state))
+      throw fail("OPERATIONAL_SUBMISSION_OPERATION_STATE_INVALID");
+    return operation;
   }
   function getSubmissionBatch(input) {
     open();
@@ -1112,18 +1550,19 @@ function createOperationalStore(options) {
   function verify() {
     open();
     const fk = db.prepare("PRAGMA foreign_key_check").all(),
-      tables = db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .all()
-        .map((x) => x.name);
+      tables = tableNames(db),
+      version = schemaVersion(db);
     if (
       fk.length ||
       !integrityOk(db) ||
-      !tables.includes("publication_records")
+      !tables.includes("publication_records") ||
+      version !== SCHEMA_VERSION
     )
       throw fail("OPERATIONAL_VERIFY_FAILED");
+    verifyMigrationHistory(db, [1, 2], "OPERATIONAL_VERIFY_FAILED");
+    verifyV2Structure(db, "OPERATIONAL_VERIFY_FAILED");
     return {
-      schemaVersion: SCHEMA_VERSION,
+      schemaVersion: version,
       databasePath: filename,
       foreignKeyViolations: 0,
       tableCount: tables.length,
@@ -1160,10 +1599,14 @@ function createOperationalStore(options) {
     listActionableRecovery,
     markRecoveryUncertain,
     createSubmissionBatch,
+    prepareSubmissionItemAction,
+    getSubmissionItemAction,
+    checkpointSubmissionItemAction,
     claimSubmissionItem,
     claimSubmissionItemById,
     updateSubmissionItem,
     cancelQueuedSubmissionItem,
+    markSubmissionItemCleaned,
     getSubmissionBatch,
     listSubmissionBatches,
     findSubmissionItem,
@@ -1193,22 +1636,21 @@ function verifyOperationalDatabase(filename) {
     throw fail("OPERATIONAL_RESTORE_TARGET_INVALID");
   const db = new DatabaseSync(filename, { readOnly: true });
   try {
-    const tables = db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .all()
-        .map((x) => x.name),
-      fk = db.prepare("PRAGMA foreign_key_check").all();
+    const tables = tableNames(db),
+      fk = db.prepare("PRAGMA foreign_key_check").all(),
+      version = tables.includes("schema_migrations") ? schemaVersion(db) : 0;
     if (
       !tables.includes("schema_migrations") ||
       !tables.includes("publication_records") ||
       !integrityOk(db) ||
-      fk.length
+      fk.length ||
+      version !== SCHEMA_VERSION
     )
       throw fail("OPERATIONAL_RESTORE_INVALID");
+    verifyMigrationHistory(db, [1, 2], "OPERATIONAL_RESTORE_INVALID");
+    verifyV2Structure(db, "OPERATIONAL_RESTORE_INVALID");
     return {
-      schemaVersion: db
-        .prepare("SELECT MAX(version) version FROM schema_migrations")
-        .get().version,
+      schemaVersion: version,
       tables: tables.length,
       rows: db.prepare("SELECT COUNT(*) count FROM publication_records").get()
         .count,

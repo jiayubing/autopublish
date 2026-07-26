@@ -71,7 +71,10 @@ function isRepairableError(error) {
     "PUBLICATION_STATUS_NOT_QUEUED",
     "SUBMISSION_STATUS_CONFLICT",
     "SUBMISSION_BATCH_ITEM_NOT_FOUND",
-    "SUBMISSION_BATCH_REBIND_CONFLICT"
+    "SUBMISSION_BATCH_REBIND_CONFLICT",
+    "SUBMISSION_ACTION_OPERATION_CONFLICT",
+    "SUBMISSION_ACTION_PROTOCOL_UNAVAILABLE"
+    ,"ARTICLE_REMOVAL_OPERATION_IN_FLIGHT"
   ].includes(error.code);
 }
 
@@ -81,9 +84,9 @@ function titleSnapshot(article) {
 
 function createArticleRemovalService(options) {
   const opts = options || {};
-  if (!opts.articleStore) throw removalError("ARTICLE_REMOVAL_SERVICE_INVALID", "Article store is required");
+  if (!opts.contentStore) throw removalError("ARTICLE_REMOVAL_SERVICE_INVALID", "Content store is required");
   if (!opts.submissionService) throw removalError("ARTICLE_REMOVAL_SERVICE_INVALID", "Content submission service is required");
-  const articleStore = opts.articleStore;
+  const contentStore = opts.contentStore;
   const submissionService = opts.submissionService;
   const transactionStore = opts.transactionStore || createArticleRemovalTransactionStore({
     workspaceRoot: opts.workspaceRoot,
@@ -93,7 +96,10 @@ function createArticleRemovalService(options) {
   });
   const clock = opts.now || function() { return new Date().toISOString(); };
   const ttlMs = Number.isFinite(opts.tokenTtlMs) ? Math.max(1000, opts.tokenTtlMs) : 5 * 60 * 1000;
+  const maxRecoveryAttempts = Number.isFinite(opts.maxRecoveryAttempts) ? Math.max(1, opts.maxRecoveryAttempts) : 5;
+  const recoveryBackoffMs = Number.isFinite(opts.recoveryBackoffMs) ? Math.max(1, opts.recoveryBackoffMs) : 1000;
   const makeToken = opts.tokenGenerator || function() { return crypto.randomUUID(); };
+  const runnerId = String(opts.runnerId || makeToken());
   const tokens = new Map();
   const completedTransactions = new Map();
 
@@ -105,11 +111,182 @@ function createArticleRemovalService(options) {
   }
 
   function persist(transaction) {
-    const saved = transactionStore.save(transaction);
+    let saved;
+    if (transaction && transaction.claimToken && transactionStore.compareAndUpdate) {
+      const now = Date.parse(nowIso());
+      saved = transactionStore.compareAndUpdate(transaction.id, transaction.revision || 0, function(current) {
+        const lease = Date.parse(current.claimLeaseExpiresAt || 0);
+        if (current.claimOwner !== runnerId || current.claimToken !== transaction.claimToken || !Number.isFinite(lease) || lease <= now) return null;
+        const next = clone(transaction);
+        next.claimOwner = runnerId;
+        next.claimToken = transaction.claimToken;
+        next.claimLeaseExpiresAt = new Date(now + ttlMs).toISOString();
+        next.updatedAt = nowIso();
+        return next;
+      });
+      if (!saved) throw removalError("ARTICLE_REMOVAL_CLAIM_LOST", "Removal transaction claim was lost");
+      Object.assign(transaction, clone(saved));
+    } else saved = transactionStore.save(transaction);
     if (typeof opts.onTransactionStatus === "function") {
       try { opts.onTransactionStatus(clone(saved)); } catch (_) {}
     }
     return saved;
+  }
+
+  function validAutomaticState(transaction) {
+    return !!transaction && (
+      (transaction.status === "pending_auto_recovery" && ["intent", "queue-actions", "articles", "committed"].includes(transaction.phase)) ||
+      (transaction.status === "pending_recovery" && ["intent", "queue-actions", "articles", "committed"].includes(transaction.phase))
+    );
+  }
+
+  function contentIdentity(article) {
+    if (!article || article.missing) return { missing: true, clientId: article && article.clientId, articleId: article && article.articleId };
+    if (contentStore && typeof contentStore.snapshotArticle === "function") return contentStore.snapshotArticle(article);
+    return {
+      clientId: article.clientId, articleId: article.id || article.articleId,
+      title: article.title || null, content: article.content || article.markdown || article.body || null,
+      status: article.status || null, generationBatchId: article.generationBatchId || null,
+      generationTaskId: article.generationTaskId || null,
+      ...(Object.prototype.hasOwnProperty.call(article, "remark") ? { remark: article.remark } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "ignoreImages") ? { ignoreImages: article.ignoreImages } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "source") ? { source: article.source } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "materialSnapshots") ? { materialSnapshots: article.materialSnapshots } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "researchSnapshots") ? { researchSnapshots: article.researchSnapshots } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "templateSnapshot") ? { templateSnapshot: article.templateSnapshot } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "reviewedAt") ? { reviewedAt: article.reviewedAt } : {}),
+      ...(Object.prototype.hasOwnProperty.call(article, "updatedAt") ? { updatedAt: article.updatedAt } : {})
+    };
+  }
+
+  function articleFingerprint(article) {
+    if (contentStore && typeof contentStore.fingerprintArticle === "function") return contentStore.fingerprintArticle(article);
+    return fingerprint(contentIdentity(article));
+  }
+
+  function operationId(transaction, kind, index) {
+    return transaction.id + ":" + kind + ":" + index;
+  }
+
+  function beginOperation(transaction, kind, index, item) {
+    const expected = operationId(transaction, kind, index);
+    if (transaction.activeOperation) {
+      if (transaction.activeOperation.operationId === expected && transaction.activeOperation.owner === runnerId) return transaction;
+      throw removalError("ARTICLE_REMOVAL_OPERATION_IN_FLIGHT", "Removal operation is already in flight");
+    }
+    transaction.activeOperation = {
+      operationId: expected,
+      kind: kind,
+      cursor: index,
+      owner: runnerId,
+      clientId: item && item.clientId || null,
+      articleId: item && (item.articleId || item.id) || null
+    };
+    persist(transaction);
+    return transaction;
+  }
+
+  function finishOperation(transaction) {
+    delete transaction.activeOperation;
+  }
+
+  function claim(transaction) {
+    if (!transactionStore.compareAndUpdate) return transaction;
+    const now = Date.parse(nowIso());
+    const leaseExpiresAt = new Date(now + ttlMs).toISOString();
+    return transactionStore.compareAndUpdate(transaction.id, transaction.revision || 0, function(current) {
+      const owner = current.claimOwner || null;
+      const lease = Date.parse(current.claimLeaseExpiresAt || 0);
+      if (owner && owner !== runnerId && Number.isFinite(lease) && lease > now) return null;
+      current.claimToken = String(makeToken());
+      current.claimOwner = runnerId;
+      current.claimLeaseExpiresAt = leaseExpiresAt;
+      current.claimedAt = nowIso();
+      return current;
+    });
+  }
+
+  function transitionToRepair(transaction, code, resolutionCode) {
+    if (transaction.phase !== "needs_repair") transaction.resumePhase = transaction.phase;
+    if (transaction.resumePhase === "needs_repair" || !["intent", "queue-actions", "articles", "committed"].includes(transaction.resumePhase)) transaction.resumePhase = "articles";
+    transaction.status = "needs_repair";
+    transaction.phase = "needs_repair";
+    transaction.errorCode = code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
+    transaction.resolutionCode = resolutionCode || "REMOVAL_REVALIDATION_FAILED";
+    transaction.updatedAt = nowIso();
+    persist(transaction);
+    return transaction;
+  }
+
+  function revalidate(transaction) {
+    if (!transaction.contentFingerprint) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_FINGERPRINT_MISSING", "LEGACY_CONTENT_FINGERPRINT_REQUIRED") };
+    const impact = buildImpact(transaction.selections);
+    const resolvedArticles = transaction.selections.map(articleFor);
+    const unreadable = resolvedArticles.find(function(article) {
+      return article.missing && article.code && article.code !== "ARTICLE_NOT_FOUND";
+    });
+    if (unreadable) throw removalError(unreadable.code, "Article content could not be revalidated");
+    const currentArticles = resolvedArticles.map(contentIdentity);
+    const remaining = (transaction.queueActions || []).slice(Number(transaction.queueCursor || 0));
+    const fresh = submissionServiceActions(impact);
+    const recoverable = [];
+    remaining.forEach(function(action, offset) {
+      if (typeof submissionService.reconcileArticleRemovalAction !== "function") return;
+      const expected = operationId(transaction, "queue", Number(transaction.queueCursor || 0) + offset);
+      let proof;
+      try { proof = submissionService.reconcileArticleRemovalAction(Object.assign(clone(action), { operationId: expected }), expected); }
+      catch (_) { return; }
+      if (proof && proof.operationId === expected && ["retryable", "completed"].includes(proof.status)) recoverable.push(action);
+    });
+    const effectiveFresh = fresh.slice();
+    recoverable.forEach(function(action) {
+      if (!effectiveFresh.some(function(candidate) { return sameQueueAction(candidate, action); })) effectiveFresh.push(action);
+    });
+    const blocked = (impact.blockedItems || []).filter(function(blockedItem) {
+      return !recoverable.some(function(action) {
+        return action.clientId === blockedItem.clientId && action.articleId === blockedItem.articleId &&
+          action.batchId === blockedItem.batchId && action.publicationId === blockedItem.publicationId &&
+          action.targetPlatformId === blockedItem.targetPlatformId && action.attemptId === blockedItem.attemptId;
+      });
+    });
+    const sameActions = fingerprint(remaining.map(actionIdentity).sort()) === fingerprint(effectiveFresh.map(actionIdentity).sort());
+    if (blocked.length) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_BLOCKED", "REMOVAL_BLOCKED_REVALIDATION") };
+    if (transaction.contentFingerprint && transaction.contentFingerprint !== fingerprint(currentArticles)) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_CHANGED", "CONTENT_IDENTITY_REVALIDATION_FAILED") };
+    if (!sameActions) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_FINGERPRINT_CHANGED", "QUEUE_FINGERPRINT_REVALIDATION_FAILED") };
+    return { ok: true, transaction: transaction };
+  }
+
+  function revalidateContentRemaining(transaction) {
+    if (!transaction.contentFingerprint || !Array.isArray(transaction.contentArticleFingerprints)) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_FINGERPRINT_MISSING", "LEGACY_CONTENT_FINGERPRINT_REQUIRED") };
+    const impact = buildImpact(transaction.selections);
+    if ((impact.blockedItems || []).length) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_BLOCKED", "REMOVAL_BLOCKED_REVALIDATION") };
+    const remaining = (transaction.queueActions || []).slice(Number(transaction.queueCursor || 0));
+    let fresh = submissionServiceActions(impact);
+    // A completed cancel operation intentionally changes a queued item into a
+    // cancelled item.  The preview then derives cleanupCancelledLocal, which is
+    // not a new destructive obligation when the original durable operation has
+    // already proven both the state transition and stage cleanup.
+    const completedCancels = (transaction.queueActions || []).slice(0, Number(transaction.queueCursor || 0)).filter(function(action, index) {
+      if (action.action !== "cancel" || typeof submissionService.reconcileArticleRemovalAction !== "function") return false;
+      const expected = operationId(transaction, "queue", index);
+      try { const proof = submissionService.reconcileArticleRemovalAction(Object.assign(clone(action), { operationId: expected }), expected); return proof && proof.operationId === expected && proof.status === "completed"; }
+      catch (_) { return false; }
+    });
+    if (completedCancels.length) fresh = fresh.filter(function(action) {
+      return !(action.action === "cleanupCancelledLocal" && completedCancels.some(function(cancel) {
+        return cancel.clientId === action.clientId && cancel.articleId === action.articleId && cancel.batchId === action.batchId && cancel.itemId === action.itemId;
+      }));
+    });
+    if (fingerprint(remaining.map(actionIdentity).sort()) !== fingerprint(fresh.map(actionIdentity).sort())) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_FINGERPRINT_CHANGED", "QUEUE_FINGERPRINT_REVALIDATION_FAILED") };
+    const start = Number(transaction.articleCursor || 0);
+    for (let index = start; index < transaction.selections.length; index += 1) {
+      const article = articleFor(transaction.selections[index]);
+      if (article.missing && article.code && article.code !== "ARTICLE_NOT_FOUND") {
+        throw removalError(article.code, "Article content could not be revalidated");
+      }
+      if (article.missing || articleFingerprint(article) !== transaction.contentArticleFingerprints[index]) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_CHANGED", "CONTENT_IDENTITY_REVALIDATION_FAILED") };
+    }
+    return { ok: true, transaction };
   }
 
   function transactionDto(transaction) {
@@ -131,7 +308,7 @@ function createArticleRemovalService(options) {
   }
 
   function articleFor(item) {
-    try { return articleStore.getArticle(item.clientId, item.articleId); }
+    try { return contentStore.getArticle(item.clientId, item.articleId); }
     catch (error) {
       return { missing: true, clientId: item.clientId, articleId: item.articleId, code: error && error.code || "ARTICLE_NOT_FOUND" };
     }
@@ -164,7 +341,9 @@ function createArticleRemovalService(options) {
         transactionStore.remove(transaction.id);
       });
     });
-    return transactionStore.list();
+    return transactionStore.list().filter(function(transaction) {
+      return isOpenStatus(transaction.status);
+    });
   }
 
   function findOpenTransaction(items, queueActions) {
@@ -243,7 +422,7 @@ function createArticleRemovalService(options) {
     return current;
   }
 
-  function tombstoneFor(article) {
+  function tombstoneFor(article, operationId) {
     const references = [];
     ["generationBatchId", "generationTaskId"].forEach(function(field) {
       if (typeof article[field] === "string" && article[field].trim()) references.push({ type: field === "generationBatchId" ? "generation-batch" : "generation-task", id: article[field] });
@@ -255,8 +434,128 @@ function createArticleRemovalService(options) {
       articleId: article.id,
       status: article.status,
       references: references,
-      titleSnapshot: titleSnapshot(article)
+      titleSnapshot: titleSnapshot(article),
+      contentFingerprint: articleFingerprint(article),
+      operationId: operationId
     };
+  }
+
+  function operationItem(transaction, operation) {
+    const expected = operationId(transaction, operation.kind, operation.cursor);
+    const items = operation.kind === "queue" ? transaction.queueActions : transaction.articles;
+    const item = Array.isArray(items) ? items[Number(operation.cursor)] : null;
+    if (!item || operation.operationId !== expected || Number(operation.cursor) < 0 ||
+        operation.clientId !== item.clientId || operation.articleId !== (item.articleId || item.id)) {
+      return { error: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_ID_CONFLICT") };
+    }
+    return { expected, item };
+  }
+
+  function matchingTombstone(transaction, item, tombstone, expected) {
+    const index = Number(transaction.activeOperation.cursor);
+    const expectedFingerprint = Array.isArray(transaction.contentArticleFingerprints) ? transaction.contentArticleFingerprints[index] : null;
+    if (!tombstone || tombstone.clientId !== item.clientId || tombstone.articleId !== item.articleId ||
+        tombstone.operationId !== expected ||
+        (transaction.articles[index] && transaction.articles[index].titleSnapshot !== undefined && tombstone.titleSnapshot !== transaction.articles[index].titleSnapshot) ||
+        (expectedFingerprint && tombstone.contentFingerprint !== expectedFingerprint)) return false;
+    return true;
+  }
+
+  function reconcileActiveOperation(transaction) {
+    const operation = transaction && transaction.activeOperation;
+    if (!operation) return { status: "none", transaction };
+    const located = operationItem(transaction, operation);
+    if (located.error) return { status: "repair", transaction: located.error };
+    const expected = located.expected;
+    const item = located.item;
+    if (operation.kind === "queue") {
+      if (typeof submissionService.reconcileArticleRemovalAction !== "function") {
+        return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_RESULT_UNPROVABLE", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
+      }
+      let proof;
+      try { proof = submissionService.reconcileArticleRemovalAction(Object.assign(clone(item), { operationId: expected }), expected); }
+      catch (error) { return { status: "retry", error }; }
+      if (proof && proof.operationId !== undefined && proof.operationId !== expected) {
+        return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_ID_CONFLICT") };
+      }
+      if (proof && proof.status === "cleanup_pending") {
+        transaction.activeOperation.owner = runnerId;
+        persist(transaction);
+        try {
+          const command = Object.assign(clone(item), { operationId: expected });
+          if (item.action === "cancel") submissionService.cancelArticleSubmissionItem(command);
+          else if (item.action === "cleanupPublishedLocal") submissionService.cleanupPublishedArticleLocal(command);
+          else if (item.action === "cleanupCancelledLocal") submissionService.cleanupCancelledArticleLocal(command);
+          else submissionService.cleanupArticleSubmissionItem(command);
+          proof = submissionService.reconcileArticleRemovalAction(command, expected);
+        } catch (error) { return { status: "retry", error }; }
+      }
+      if (!proof || proof.status !== "completed") {
+        if (proof && proof.status === "retryable") {
+          transaction.activeOperation.owner = runnerId;
+          persist(transaction);
+          return { status: "retryable", transaction };
+        }
+        return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_RESULT_UNPROVABLE", proof && proof.reasonCode || "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
+      }
+      transaction.activeOperation.owner = runnerId;
+      transaction.queueResults = transaction.queueResults || [];
+      transaction.queueResults[Number(operation.cursor)] = clone(proof.result || { idempotent: true });
+      transaction.queueCursor = Number(operation.cursor) + 1;
+      finishOperation(transaction);
+      transaction.resolutionCode = "QUEUE_OPERATION_RECONCILED";
+      persist(transaction);
+      return { status: "resolved", transaction };
+    }
+    let tombstone = null;
+    let tombstoneMissing = false;
+    try { tombstone = typeof contentStore.getTrashedTombstone === "function" ? contentStore.getTrashedTombstone(item.clientId, item.articleId) : null; tombstoneMissing = !tombstone; }
+    catch (error) { if (error && error.code === "ARTICLE_NOT_FOUND") tombstoneMissing = true; else return { status: "retry", error }; }
+    if (tombstone && !matchingTombstone(transaction, item, tombstone, expected)) {
+      return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
+    }
+    if (tombstone && !tombstoneMissing) {
+      try { contentStore.getArticle(item.clientId, item.articleId); return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_SOURCE_AND_TRASH_BOTH_EXIST") }; }
+      catch (error) { if (!error || error.code !== "ARTICLE_NOT_FOUND") return { status: "retry", error }; }
+      transaction.articleCursor = Number(operation.cursor) + 1;
+      finishOperation(transaction);
+      transaction.resolutionCode = "ARTICLE_OPERATION_RECONCILED";
+      persist(transaction);
+      return { status: "resolved", transaction };
+    }
+    if (!tombstoneMissing || typeof contentStore.getTrashedTombstone !== "function" || contentStore.supportsIdempotentRemovalOperation !== true) {
+      return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_RESULT_UNPROVABLE", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
+    }
+    let article;
+    try { article = contentStore.getArticle(item.clientId, item.articleId); }
+    catch (error) { return { status: "retry", error }; }
+    const expectedFingerprint = Array.isArray(transaction.contentArticleFingerprints) ? transaction.contentArticleFingerprints[Number(operation.cursor)] : null;
+    if (!expectedFingerprint || articleFingerprint(article) !== expectedFingerprint) {
+      return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_CHANGED", "CONTENT_IDENTITY_REVALIDATION_FAILED") };
+    }
+    transaction.activeOperation.owner = runnerId;
+    persist(transaction);
+    try {
+      contentStore.moveArticleToTrash(
+        item.clientId,
+        item.articleId,
+        tombstoneFor(article, expected),
+        expected,
+        expectedFingerprint,
+      );
+    }
+    catch (error) { return { status: "retry", error }; }
+    let completedTombstone;
+    try { completedTombstone = contentStore.getTrashedTombstone(item.clientId, item.articleId); }
+    catch (error) { return { status: "retry", error }; }
+    if (!matchingTombstone(transaction, item, completedTombstone, expected)) {
+      return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
+    }
+    transaction.articleCursor = Number(operation.cursor) + 1;
+    finishOperation(transaction);
+    transaction.resolutionCode = "ARTICLE_OPERATION_RECONCILED_AFTER_RETRY";
+    persist(transaction);
+    return { status: "resolved", transaction };
   }
 
   function sameQueueAction(left, right) {
@@ -287,14 +586,43 @@ function createArticleRemovalService(options) {
       .concat((impact.cancelledToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanupCancelledLocal" }); })));
   }
 
-  function perform(transaction) {
+  function performSteps(transaction, requireRevalidation) {
     let current = transaction;
+    if (current.phase === "committed") {
+      current.status = "committed";
+      current.resolutionCode = "ARTICLE_REMOVAL_COMMITTED";
+      current.errorCode = null;
+      delete current.nextAttemptAt;
+      current.updatedAt = nowIso();
+      persist(current);
+      completedTransactions.set(current.id, clone(current));
+      return current;
+    }
     let actions = Array.isArray(current.queueActions) ? current.queueActions : [];
+    let reconciledOperation = false;
+    if (current.activeOperation) {
+      const reconciliation = reconcileActiveOperation(current);
+      if (reconciliation.status === "retry") throw reconciliation.error;
+      current = reconciliation.transaction;
+      if (reconciliation.status === "repair") return current;
+      reconciledOperation = reconciliation.status === "resolved";
+      actions = Array.isArray(current.queueActions) ? current.queueActions : [];
+      if (current.phase === "needs_repair") {
+        current.status = "pending_auto_recovery";
+        current.phase = current.resumePhase || (current.activeOperation && current.activeOperation.kind === "queue" ? "queue-actions" : "articles");
+        delete current.resumePhase;
+        current.errorCode = null;
+        persist(current);
+      }
+    }
     if (current.phase === "needs_repair") {
-      current = refreshQueueActions(current);
+      const validation = revalidate(current);
+      current = validation.transaction;
+      if (!validation.ok) return current;
       actions = Array.isArray(current.queueActions) ? current.queueActions : [];
       current.status = "pending_auto_recovery";
-      current.phase = "queue-actions";
+      current.phase = current.resumePhase || "articles";
+      delete current.resumePhase;
       current.errorCode = null;
       current.resolutionCode = "QUEUE_ACTIONS_REVALIDATED";
       current.updatedAt = nowIso();
@@ -302,6 +630,15 @@ function createArticleRemovalService(options) {
     } else if (current.status === "pending_recovery") {
       current.status = "pending_auto_recovery";
       persist(current);
+    }
+    if (reconciledOperation) {
+      const validation = revalidateContentRemaining(current);
+      current = validation.transaction;
+      if (!validation.ok) return current;
+    } else if (requireRevalidation || current.phase === "intent") {
+      const validation = revalidate(current);
+      current = validation.transaction;
+      if (!validation.ok) return current;
     }
     if (current.phase === "intent") {
       current.phase = "queue-actions";
@@ -312,70 +649,138 @@ function createArticleRemovalService(options) {
       for (let index = current.queueCursor || 0; index < actions.length; index += 1) {
         const action = actions[index];
         try {
+          persist(current); // token-fenced checkpoint and lease renewal before I/O
+          beginOperation(current, "queue", index, action);
+          const actionWithOperation = Object.assign({}, action, { operationId: operationId(current, "queue", index) });
           const result = action.action === "cancel"
-            ? submissionService.cancelArticleSubmissionItem(action)
+            ? submissionService.cancelArticleSubmissionItem(actionWithOperation)
             : action.action === "cleanupPublishedLocal"
-              ? submissionService.cleanupPublishedArticleLocal(action)
+              ? submissionService.cleanupPublishedArticleLocal(actionWithOperation)
               : action.action === "cleanupCancelledLocal"
-                ? submissionService.cleanupCancelledArticleLocal(action)
-                : submissionService.cleanupArticleSubmissionItem(action);
+                ? submissionService.cleanupCancelledArticleLocal(actionWithOperation)
+                : submissionService.cleanupArticleSubmissionItem(actionWithOperation);
           current.queueResults = current.queueResults || [];
           current.queueResults[index] = clone(result);
           current.resolutionCode = result && result.idempotent ? "QUEUE_PAIR_ALREADY_RESOLVED" : action.action === "cancel" ? "QUEUE_RESERVATION_CANCELLED" : action.action === "cleanupPublishedLocal" ? "PUBLISHED_LOCAL_COPY_CLEANED" : action.action === "cleanupCancelledLocal" ? "CANCELLED_LOCAL_COPY_CLEANED" : "QUEUE_ITEM_CLEANED";
           current.queueCursor = index + 1;
+          finishOperation(current);
           persist(current);
           if (typeof opts.afterQueueAction === "function") opts.afterQueueAction(clone(action), index, clone(current));
         } catch (error) {
-          current.updatedAt = nowIso();
-          current.errorCode = error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
-          current.resolutionCode = "QUEUE_ACTION_RETRY_REQUIRED";
-          if (isRepairableError(error)) {
-            current.status = "needs_repair";
-            current.phase = "needs_repair";
-          } else {
-            current.status = "pending_auto_recovery";
-            current.phase = "queue-actions";
-            current.retryCount = Number(current.retryCount || 0) + 1;
-          }
-          persist(current);
-          throw error;
+          // Only the durable stage-cleanup failure proves the state transition
+          // may already have happened. Other queue failures retain their prior
+          // retry semantics and do not manufacture an in-flight operation.
+          if (!error || error.code !== "CONTENT_SUBMISSION_QUEUE_STAGE_CLEANUP_FAILED") finishOperation(current);
+          return recordRetry(current, error, "QUEUE_ACTION_RETRY_REQUIRED");
         }
       }
       current.phase = "articles";
       current.status = "pending_auto_recovery";
       persist(current);
+      const validation = revalidateContentRemaining(current);
+      current = validation.transaction;
+      if (!validation.ok) return current;
     }
     if (current.phase === "articles") {
       for (let index = current.articleCursor || 0; index < current.articles.length; index += 1) {
         const item = current.articles[index];
         let article;
-        try { article = articleStore.getArticle(item.clientId, item.articleId); }
+        try { article = contentStore.getArticle(item.clientId, item.articleId); }
         catch (error) {
-          if (error && error.code === "ARTICLE_NOT_FOUND" && articleStore.isArticleTrashed && articleStore.isArticleTrashed(item.clientId, item.articleId)) {
+          if (error && error.code === "ARTICLE_NOT_FOUND" && contentStore.isArticleTrashed && contentStore.isArticleTrashed(item.clientId, item.articleId)) {
             current.articleCursor = index + 1;
             persist(current);
             continue;
           }
-          throw error;
+          return recordRetry(current, error, "ARTICLE_READ_RETRY_REQUIRED");
         }
-        articleStore.moveArticleToTrash(item.clientId, item.articleId, tombstoneFor(article));
+        try {
+          if (contentStore.isArticleTrashed && contentStore.isArticleTrashed(item.clientId, item.articleId)) {
+            current.articleCursor = index + 1;
+            persist(current);
+            continue;
+          }
+          const expectedFingerprint = Array.isArray(current.contentArticleFingerprints)
+            ? current.contentArticleFingerprints[index]
+            : null;
+          if (!expectedFingerprint || articleFingerprint(article) !== expectedFingerprint) {
+            return transitionToRepair(
+              current,
+              expectedFingerprint
+                ? "ARTICLE_REMOVAL_CONTENT_CHANGED"
+                : "ARTICLE_REMOVAL_CONTENT_FINGERPRINT_MISSING",
+              "CONTENT_IDENTITY_REVALIDATION_FAILED",
+            );
+          }
+          persist(current);
+          beginOperation(current, "article", index, item);
+          contentStore.moveArticleToTrash(
+            item.clientId,
+            item.articleId,
+            tombstoneFor(article, operationId(current, "article", index)),
+            operationId(current, "article", index),
+            expectedFingerprint,
+          );
+        }
+        catch (error) {
+          if (error && error.code === "ARTICLE_REMOVAL_CONTENT_CHANGED") {
+            finishOperation(current);
+            return transitionToRepair(
+              current,
+              error.code,
+              "CONTENT_IDENTITY_REVALIDATION_FAILED",
+            );
+          }
+          if (!error || error.code !== "ARTICLE_REMOVAL_CLAIM_LOST") finishOperation(current);
+          return recordRetry(current, error, "ARTICLE_MOVE_RETRY_REQUIRED");
+        }
         current.articleCursor = index + 1;
         current.status = "pending_auto_recovery";
+        finishOperation(current);
         persist(current);
         if (typeof opts.afterArticleMove === "function") opts.afterArticleMove(clone(item), index, clone(current));
       }
       current.phase = "committed";
-      persist(current);
-    }
-    if (current.phase === "committed") {
       current.status = "committed";
       current.resolutionCode = "ARTICLE_REMOVAL_COMMITTED";
+      current.errorCode = null;
+      delete current.nextAttemptAt;
       current.updatedAt = nowIso();
       persist(current);
       completedTransactions.set(current.id, clone(current));
-      transactionStore.remove(current.id);
     }
     return current;
+  }
+
+  function recordRetry(transaction, error, resolutionCode) {
+    if (isRepairableError(error)) return transitionToRepair(transaction, error && error.code, "REMOVAL_MANUAL_REPAIR_REQUIRED");
+    transaction.updatedAt = nowIso();
+    transaction.errorCode = error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
+    transaction.resolutionCode = resolutionCode || "RECOVERY_RETRY_REQUIRED";
+    transaction.retryCount = Number(transaction.retryCount || 0) + 1;
+    transaction.attempt = transaction.retryCount;
+    if (transaction.retryCount >= maxRecoveryAttempts) {
+      if (transaction.phase !== "needs_repair") transaction.resumePhase = transaction.phase;
+      transaction.status = "needs_repair";
+      transaction.phase = "needs_repair";
+      transaction.resolutionCode = "RECOVERY_ATTEMPTS_EXHAUSTED";
+    } else {
+      transaction.status = "pending_auto_recovery";
+      if (transaction.phase === "committed") transaction.phase = "articles";
+      transaction.nextAttemptAt = new Date(Date.parse(transaction.updatedAt) + recoveryBackoffMs * Math.pow(2, transaction.retryCount - 1)).toISOString();
+    }
+    try { persist(transaction); } catch (_) {}
+    return transaction;
+  }
+
+  function perform(transaction, requireRevalidation) {
+    try { return performSteps(transaction, requireRevalidation); }
+    catch (error) {
+      // A failed attempt to persist a fail-closed revalidation result must not
+      // turn it back into an automatically executable transaction in memory.
+      if (transaction.phase === "needs_repair") return transaction;
+      return recordRetry(transaction, error, "PERSISTENCE_RETRY_REQUIRED");
+    }
   }
 
   function applyArticleRemovalImpact(input) {
@@ -414,31 +819,40 @@ function createArticleRemovalService(options) {
       updatedAt: createdAt,
       selections: clone(token.binding.selections),
       articles: clone(token.binding.articles),
+      contentArticleFingerprints: token.binding.selections.map(articleFor).map(articleFingerprint),
       queueActions: queueActions,
-      fingerprint: transactionFingerprint(token.binding.selections, queueActions)
+      fingerprint: transactionFingerprint(token.binding.selections, queueActions),
+      contentFingerprint: fingerprint(token.binding.selections.map(articleFor).map(contentIdentity)),
+      revision: 0
     };
     persist(transaction);
-    try {
-      const result = perform(transaction);
-      return {
-        transactionId: result.id,
-        status: "committed",
-        articleCount: result.articles.length,
-        queueActions: result.queueResults || []
-      };
-    } catch (error) {
-      if (error && error.code === "ARTICLE_TRASH_PREVIEW_STALE") throw error;
+    const claimed = claim(transaction);
+    if (!claimed) {
       const persisted = transactionStore.get(transaction.id);
-      return { transactionId: transaction.id, status: persisted.status, articleCount: transaction.articles.length, queueActions: persisted.queueResults || [], errorCode: persisted.errorCode || error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED" };
+      return { transactionId: transaction.id, status: persisted.status, articleCount: transaction.articles.length, queueActions: persisted.queueResults || [], errorCode: persisted.errorCode || "ARTICLE_REMOVAL_CLAIM_UNAVAILABLE" };
     }
+    const result = perform(claimed);
+    return {
+      transactionId: result.id,
+      status: result.status,
+      articleCount: result.articles.length,
+      queueActions: result.queueResults || [],
+      errorCode: result.errorCode || null
+    };
   }
 
-  function recoverPendingRemovals() {
-    return canonicalizeOpenTransactions().filter(function(transaction) { return transaction.phase !== "committed" && transaction.phase !== "superseded"; }).map(function(transaction) {
-      try { return perform(transaction); }
+  function recoverPendingRemovals(lifecycle) {
+    if (lifecycle && lifecycle.isDisposed && lifecycle.isDisposed()) return [];
+    const now = Date.parse(nowIso());
+    return canonicalizeOpenTransactions().filter(function(transaction) {
+      return validAutomaticState(transaction) && (!transaction.nextAttemptAt || Date.parse(transaction.nextAttemptAt) <= now);
+    }).map(function(transaction) {
+      if (lifecycle && lifecycle.isDisposed && lifecycle.isDisposed()) return transaction;
+      const claimed = claim(transaction);
+      if (!claimed) return transaction;
+      try { return perform(claimed, true); }
       catch (error) {
-        try { return transactionStore.get(transaction.id); }
-        catch (_) { return Object.assign({}, transaction, { status: isRepairableError(error) ? "needs_repair" : "pending_auto_recovery", errorCode: error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED" }); }
+        return recordRetry(claimed, error, "RECOVERY_IO_RETRY_REQUIRED");
       }
     });
   }
@@ -462,8 +876,13 @@ function createArticleRemovalService(options) {
       throw error;
     }
     if (transaction.status === "superseded" || transaction.phase === "superseded") return transactionDto(transaction);
-    try { return transactionDto(perform(transaction)); }
-    catch (_) { return transactionDto(transactionStore.get(transaction.id)); }
+    if (transaction.status === "committed" && transaction.phase === "committed") return transactionDto(transaction);
+    const claimed = claim(transaction);
+    if (!claimed) return transactionDto(transaction);
+    try { return transactionDto(perform(claimed, true)); }
+    catch (_) {
+      return transactionDto(transactionStore.get(transaction.id));
+    }
   }
 
   return {

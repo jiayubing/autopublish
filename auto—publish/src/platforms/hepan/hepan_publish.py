@@ -239,7 +239,7 @@ class HepanPortalPublisher:
                 headers=headers,
                 data=payload,
                 files=[("Filedata", (image_path.name, f))],
-                timeout=180,
+                timeout=(15, 60),
             )
         if response.status_code in (401, 403):
             raise NeedsLoginError(f"hepan cookie rejected during image upload with HTTP {response.status_code}")
@@ -305,7 +305,7 @@ class HepanPortalPublisher:
             headers=headers,
             data=payload,
             files=[("file", (None, None))],
-            timeout=180,
+            timeout=(15, 60),
         )
         if response.status_code in (401, 403):
             raise NeedsLoginError(f"hepan cookie rejected during publish with HTTP {response.status_code}")

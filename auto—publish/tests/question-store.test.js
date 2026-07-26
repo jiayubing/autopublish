@@ -77,6 +77,27 @@ describe("question store", function() {
     assert.equal(fs.existsSync(clientDirectory), false);
   });
 
+  it("resolves a logical client id through metadata rather than its directory name", function() {
+    fs.renameSync(path.join(root, "clients", "client-1"), path.join(root, "clients", "physical-folder"));
+    fs.writeFileSync(path.join(root, "clients", "physical-folder", "client.json"), JSON.stringify({ id: "logical-client", name: "Logical client" }));
+    const created = store.createQuestion("logical-client", { text: "metadata path" });
+    assert.equal(created.id, "question-1");
+    assert.equal(fs.existsSync(path.join(root, "clients", "physical-folder", "questions.json")), true);
+  });
+
+  it("fails closed on duplicate ClientId metadata without writing either candidate", function() {
+    fs.renameSync(path.join(root, "clients", "client-1"), path.join(root, "clients", "first"));
+    fs.mkdirSync(path.join(root, "clients", "second"));
+    ["first", "second"].forEach(function(directory) {
+      fs.writeFileSync(path.join(root, "clients", directory, "client.json"), JSON.stringify({ id: "duplicate", name: directory }));
+    });
+    assert.throws(function() { store.createQuestion("duplicate", { text: "must not write" }); }, function(error) {
+      return error.code === "CLIENT_IDENTITY_CONFLICT";
+    });
+    assert.equal(fs.existsSync(path.join(root, "clients", "first", "questions.json")), false);
+    assert.equal(fs.existsSync(path.join(root, "clients", "second", "questions.json")), false);
+  });
+
   it("keeps the old questions file readable when the atomic rename fails", function() {
     const created = store.createQuestion("client-1", { text: "original question" });
     const filename = path.join(root, "clients", "client-1", "questions.json");

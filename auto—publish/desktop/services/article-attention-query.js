@@ -5,6 +5,7 @@ const { evaluateArticleSubmissionEligibility } = require("../../src/content/arti
 const ATTENTION_KINDS = Object.freeze({
   MISSING_PAIR_FINALIZE: "missing_pair_finalize",
   QUEUE_PAIR_CONFLICT: "queue_pair_conflict",
+  REMOVAL_AUTO_RECOVERY: "removal_auto_recovery",
   REMOVAL_NEEDS_REPAIR: "removal_needs_repair",
   PUBLICATION_UNCERTAIN: "publication_uncertain",
   PUBLISHED_ARCHIVE_FAILED: "published_archive_failed",
@@ -217,9 +218,10 @@ function createArticleAttentionQuery(options) {
     return readTransactions().filter(function(item) {
       return item && ["pending_auto_recovery", "pending_recovery", "needs_repair"].includes(item.status);
     }).map(function(item) {
-      return makeEntry(ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR, item, {
+      const automatic = ["pending_auto_recovery", "pending_recovery"].includes(item.status) && item.phase !== "needs_repair";
+      return makeEntry(automatic ? ATTENTION_KINDS.REMOVAL_AUTO_RECOVERY : ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR, item, {
         hasRemovalTransaction: true,
-        canRetryRemoval: true
+        canRetryRemoval: !automatic
       });
     });
   }

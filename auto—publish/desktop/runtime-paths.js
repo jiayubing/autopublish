@@ -28,6 +28,7 @@ function configureRuntimeEnvironment(options) {
   }
   return runtimeConfig.configureRuntimeEnvironment({
     appRoot: values.appRoot,
+    resourcesPath: values.resourcesPath,
     workspaceRoot: values.workspaceRoot,
     roamingConfigRoot: values.roamingConfigRoot || values.userDataPath,
     localStateRoot: values.localStateRoot || values.sessionDataPath

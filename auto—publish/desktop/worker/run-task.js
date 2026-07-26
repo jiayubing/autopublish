@@ -2,6 +2,7 @@ const task = process.argv[2];
 var stopRequested = false;
 var activeRunId = null;
 var activeAbortController = null;
+var resultDisconnectScheduled = false;
 const WORKER_SCHEMA_VERSION = 1;
 
 if (!task) {
@@ -11,7 +12,17 @@ if (!task) {
 
 function send(type, payload) {
   if (typeof process.send === "function") {
-    process.send({ schemaVersion: WORKER_SCHEMA_VERSION, runId: activeRunId, type, payload });
+    var message = { schemaVersion: WORKER_SCHEMA_VERSION, runId: activeRunId, type, payload };
+    process.send(message);
+    if (type === "result" && !resultDisconnectScheduled) {
+      resultDisconnectScheduled = true;
+      // The IPC channel itself is an active handle in a forked worker. Once
+      // the final result is queued, close that channel so PlatformRun can
+      // observe child exit and publish the terminal state to the renderer.
+      setImmediate(function() {
+        try { if (typeof process.disconnect === "function" && process.connected) process.disconnect(); } catch (_) {}
+      });
+    }
     return;
   }
 

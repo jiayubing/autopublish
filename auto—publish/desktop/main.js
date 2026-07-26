@@ -132,6 +132,7 @@ authenticatedRuntime = createAuthenticatedRuntime({
       safeStorage: safeStorage,
       sendToRenderer: sendToRenderer,
       appRoot: runtimeContext.appRoot,
+      resourcesPath: runtimeContext.resourcesPath,
       userDataPath: runtimeContext.userDataPath,
       sessionDataPath: runtimeContext.sessionDataPath,
       authService: authService
@@ -179,7 +180,7 @@ function initializeWorkspaceBootstrap() {
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService
   });
-  return { service: workspaceBootstrapService, appRoot: appRoot, userDataPath: userDataPath, sessionDataPath: sessionDataPath };
+  return { service: workspaceBootstrapService, appRoot: appRoot, resourcesPath: process.resourcesPath, userDataPath: userDataPath, sessionDataPath: sessionDataPath };
 }
 
 function createAuthenticatedIpcMain() {

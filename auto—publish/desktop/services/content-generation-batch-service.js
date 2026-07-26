@@ -5,7 +5,6 @@ const { listClients, getClient } = require("../../src/content/client-knowledge")
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
-const { createArticleStore } = require("../../src/content/article-store");
 const { createArticleGenerator } = require("../../src/content/article-generator");
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const { createGenerationBatchStore } = require("../../src/content/generation-batch-store");
@@ -167,7 +166,10 @@ function createContentGenerationBatchService(options) {
   const materialStore = opts.materialStore || createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths });
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = opts.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
-  const articleStore = opts.articleStore || createArticleStore(workspaceRoot, { paths: paths });
+  const contentStore = opts.contentStore;
+  if (!contentStore || typeof contentStore.saveArticle !== "function" || typeof contentStore.findByGenerationTaskId !== "function") {
+    throw generationError("GENERATION_CONTENT_STORE_REQUIRED", "Content store is required");
+  }
   const batchStore = opts.batchStore || createGenerationBatchStore({ workspaceRoot: workspaceRoot, paths: paths });
   const provider = opts.aiProviderService || {};
   const generatorFactory = opts.articleGeneratorFactory || createArticleGenerator;
@@ -410,24 +412,6 @@ function createContentGenerationBatchService(options) {
     };
   }
 
-  async function findExistingArticle(task) {
-    function isNotFound(error) {
-      return error && (error.code === "ARTICLE_NOT_FOUND" || error.code === "GENERATION_ARTICLE_NOT_FOUND");
-    }
-    if (typeof articleStore.findByGenerationTaskId === "function") {
-      try { return await articleStore.findByGenerationTaskId(task.id); }
-      catch (error) { if (isNotFound(error)) return null; throw error; }
-    }
-    if (typeof articleStore.listArticles !== "function") return null;
-    try {
-      const articles = await articleStore.listArticles(task.clientId);
-      return articles.find(function(article) { return article.generationTaskId === task.id; }) || null;
-    } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
-    }
-  }
-
   async function executeTask(task, context) {
     const aiClient = opts.aiClient || (typeof provider.createClient === "function" ? provider.createClient() : null);
     if (!aiClient && generatorFactory === createArticleGenerator) throw generationError("AI_CONFIG_NOT_SET");
@@ -445,14 +429,14 @@ function createContentGenerationBatchService(options) {
     article.status = "generated";
     article.generationBatchId = activeBatchId;
     article.generationTaskId = task.id;
-    articleStore.saveArticle(article);
+    contentStore.saveArticle(article);
     return { id: article.id, articleId: article.id };
   }
 
   function ensureRunner() {
     if (runner) return runner;
     runner = (opts.runnerFactory || createGenerationBatchRunner)({ batchStore: batchStore, executeTask: executeTask,
-      findByGenerationTaskId: findExistingArticle, concurrency: 1 });
+      contentStore: contentStore, concurrency: 1 });
     if (runner && typeof runner.subscribe === "function") runner.subscribe(function(event) { emit(event); });
     return runner;
   }

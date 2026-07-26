@@ -91,30 +91,45 @@ function createDesktopTaskService(opts) {
     var promise = new Promise(function(resolve) {
       var settled = false;
 
+      function redactWorkerPayload(value) {
+        if (Array.isArray(value)) return value.map(redactWorkerPayload);
+        if (!value || typeof value !== "object") return value;
+        var output = {};
+        Object.keys(value).forEach(function(key) {
+          if (/^(?:cookie|api[_-]?key|contentHtml|filePath|body|accountName)$/i.test(key)) return;
+          output[key] = redactWorkerPayload(value[key]);
+        });
+        return output;
+      }
+
       child.on("message", function(message) {
         if (!message || message.schemaVersion !== WORKER_SCHEMA_VERSION || message.runId !== expectedRunId ||
           !["log", "state", "result", "error"].includes(message.type)) return;
+        var safePayload = message.type === "result" ? redactWorkerPayload(message.payload || {}) : message.payload || {};
         var serialized;
-        try { serialized = JSON.stringify(message.payload || {}); } catch (_) { return; }
-        if (Buffer.byteLength(serialized, "utf8") > 32768 || /(?:cookie|api[_-]?key|contentHtml|filePath|body|accountName)/i.test(serialized)) return;
+        try { serialized = JSON.stringify(safePayload); } catch (_) { return; }
+        if (Buffer.byteLength(serialized, "utf8") > 32768 || (message.type !== "result" && /(?:cookie|api[_-]?key|contentHtml|filePath|body|accountName)/i.test(serialized))) return;
         if (message.type === "log" && hooks && typeof hooks.onLog === "function") {
-          hooks.onLog(message.payload);
+          hooks.onLog(safePayload);
           return;
         }
         if (message.type === "state" && message.payload) {
-          if (hooks && typeof hooks.onState === "function") hooks.onState(message.payload);
+          if (hooks && typeof hooks.onState === "function") hooks.onState(safePayload);
           return;
         }
         if (message.type === "result") {
           settled = true;
-          resolve(message.payload);
+          resolve(safePayload);
         }
       });
 
       child.on("exit", function(code) {
-        if (!settled) {
-          resolve({ ok: false, error: { code: "PLATFORM_WORKER_EXITED", category: "transport", retryability: "manual-check", userMessage: "投稿执行器意外结束" } });
-        }
+        // Node may deliver the child's exit notification before the final IPC
+        // result message already queued by process.send(). Give that message
+        // one turn to arrive before manufacturing WORKER_RESULT_MISSING.
+        if (!settled) setImmediate(function() {
+          if (!settled) resolve({ ok: false, error: { code: "PLATFORM_WORKER_EXITED", category: "transport", retryability: "manual-check", userMessage: "投稿执行器意外结束" } });
+        });
       });
 
       child.on("error", function(error) {
@@ -196,7 +211,10 @@ function closeBrowserSessions() {
 
     var result = null;
     try {
-      var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
+      // Hepan performs up to two HTTP requests, each allowed to take 180s.
+      // Keep the worker watchdog beyond that bounded window so an in-flight
+      // request is not killed before it can return a safe outcome.
+      var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: hepanRuntime ? 120000 : 90000 };
       if (hepanRuntime) submitOptions.intervalByTargetMs = { hepan: hepanRuntime.publishIntervalSeconds * 1000 };
       var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions };
       var watchdogMs = Number.isInteger(hooks && hooks.platformWatchdogMs) && hooks.platformWatchdogMs > 0

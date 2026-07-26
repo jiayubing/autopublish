@@ -38,7 +38,7 @@ describe("article review service", function() {
   beforeEach(function() {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "article-review-"));
     store = createArticleStore(root);
-    review = createArticleReviewService({ articleStore: store, now: function() { return REVIEWED_AT; } });
+    review = createArticleReviewService({ contentStore: store, now: function() { return REVIEWED_AT; } });
   });
 
   afterEach(function() { fs.rmSync(root, { recursive: true, force: true }); });
@@ -65,7 +65,7 @@ describe("article review service", function() {
       getArticle: function(clientId, articleId) { return records.get(clientId + ":" + articleId); },
       saveArticle: function(value) { saves.push(value); records.set(value.clientId + ":" + value.id, value); return value; }
     };
-    const service = createArticleReviewService({ articleStore: fakeStore, now: function() { return REVIEWED_AT; } });
+    const service = createArticleReviewService({ contentStore: fakeStore, now: function() { return REVIEWED_AT; } });
 
     const result = service.reviewMany([{ clientId: "c1", articleId: "a1" }, { clientId: "c2", articleId: "a2" }]);
 
@@ -87,7 +87,7 @@ describe("article review service", function() {
       },
       saveArticle: function() { throw new Error("invalid records must not be saved"); }
     };
-    const service = createArticleReviewService({ articleStore: fakeStore, now: function() { return REVIEWED_AT; } });
+    const service = createArticleReviewService({ contentStore: fakeStore, now: function() { return REVIEWED_AT; } });
 
     const result = service.reviewMany([
       { clientId: "c", articleId: "title" },
@@ -111,7 +111,7 @@ describe("article review service", function() {
       getArticle: function() { return saved; },
       saveArticle: function(value) { saves.push(value); return value; }
     };
-    const service = createArticleReviewService({ articleStore: fakeStore, now: function() { return REVIEWED_AT; } });
+    const service = createArticleReviewService({ contentStore: fakeStore, now: function() { return REVIEWED_AT; } });
 
     const result = service.reviewMany([{ clientId: "c1", articleId: "saved" }]);
 
