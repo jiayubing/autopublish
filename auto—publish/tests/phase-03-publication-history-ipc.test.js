@@ -19,6 +19,6 @@ test("production publication history reads committed OperationalStore evidence r
     registerPublicationIpc({ ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) }, operationalStore: store });
     const result = await handlers.get("publication:list-for-articles")({}, { clientId: "client-ignored", articleIds: ["article-1"] });
     assert.equal(result.ok, true);
-    assert.deepEqual(result.data.map((item) => [item.publicationId, item.status, item.remoteId]), [["publication-1", "published", "remote-1"]]);
+    assert.deepEqual(result.data.records.map((item) => [item.publicationId, item.status, item.remoteId]), [["publication-1", "published", "remote-1"]]);
   } finally { store.close(); }
 });

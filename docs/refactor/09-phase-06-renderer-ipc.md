@@ -1,11 +1,13 @@
 # 阶段6：Renderer状态与Typed IPC
 
-> 当前状态：**READY；计划已澄清，尚未启动实施**。
+> 当前状态：**COMPLETE；2026-07-26 已完成 Renderer 状态与 Typed IPC 重构，2026-07-27 已收口 production sandbox preload、workspace bootstrap composition、AI/豆包DTO、Unicode业务identity、workspace级command与豆包session恢复门禁、workspace relaunch环境P1并重跑全部门禁**。
 >
 > Phase 05 已在 `13-progress-ledger.md` 与 `handoffs/phase-05.md` 记录为
 > `COMPLETE`，完成commit为 `75dba966375302a99ebfd020c02ee6dd83930a9e`，里程碑记录commit为
-> `365df706af110a25f900f63f05406a50d7b5e3b9`。Phase 06 仍为 `NOT_STARTED`；只有新的明确任务
-> 在干净且无未解释前序改动的工作区通过第3节门禁后，才可将其改为 `IN_PROGRESS` 并开始实施。
+> `365df706af110a25f900f63f05406a50d7b5e3b9`。本任务从
+> `743571d9597ea2c68ab10a08da0914ccaed5352b` 启动；分支、commit ancestry、空工作区、前序状态、
+> IPC inventory、定向基线和完整基线均已核验；最终实现从该 commit 后的未提交工作树完成，
+> 用户于2026-07-28明确授权在完整安全门禁后形成一次Phase 06里程碑commit；未授权push/PR。Phase 07 保持 `NOT_STARTED`。
 >
 > 本阶段的唯一文档来源是 `F:/官媒投稿-refactor/docs/`。除非本文或本文引用的当前
 > `docs/refactor` 文档明确引用，禁止读取或采用 `auto—publish/docs/` 下的 ADR、计划、
@@ -435,4 +437,59 @@ Phase 06 handoff必须列出：
 - 用户确认本阶段优先优化低耦合、可维护、可扩展和运行时性能。
 - 用户确认采用本文七个feature owner、非Auth typed IPC范围、main唯一reason→scope映射、opaque workspace runtime ID、FIFO confirmation、移除订单清空按钮和不暴露raw publish log。
 - 媒体资源预计约13,000项；采用默认页50、IPC最大100、200页/20,000唯一项硬上限，并要求显式截断和容量实测。
-- 本次只完善Phase 06计划；Phase 05已为`COMPLETE`，Phase 06为`READY/NOT_STARTED`，须由新的明确任务通过启动门禁后实施。
+- Phase 06 已按本文串行工作块完成；最终 inventory、feature owner、删除项、容量数据和门禁证据见 `handoffs/phase-06.md`。
+
+### 2026-07-28 付费媒体预检补充验收
+
+- `buildConfirmationSummary`已删除依赖退役legacy publication ledger的简化早退，Typed IPC预检会返回逐article/resource的可提交与阻止明细，不再出现有价格却目标数为0的矛盾snapshot。
+- 重复发布保护由main组合边界只读接回OperationalStore publication read model，并复用真实媒体command preparation identity；进行中、已提交、已发布和不确定状态均阻止，失败/取消允许重试。未修改冻结接口，也未恢复旧ledger。
+- 新增registrar纵向fixture覆盖可提交和已发布阻止，明确断言付费发送调用为0。媒体全域69/69、全仓1220/1220及完整门禁通过；最新本地目录制品时间为2026-07-28 00:23:54。详细证据见`handoffs/phase-06.md`。
+
+### 2026-07-28 付费媒体payload补充验收
+
+- media command preparation必须保留Renderer已保存的投稿标题，不得回退为带业务UUID的staging文件basename；文件名继续只作为main内部定位和post-processing identity。
+- 供应方`content`字段现为main投影的有效HTML正文，独立标题行不重复进入body，原始HTML字符被转义；multipart合成fixture逐字段验证`resource_id/title/content/third_id`且不联网。
+- `third_id`明确等于本地每次PublicationWorkflow尝试的`attempt-UUID`，远端订单号仍只来自响应`order_nid/orderNid`。媒体专项72/72、全仓1222/1222及完整门禁通过，证据见`handoffs/phase-06.md`。
+
+## 16. 实施完成记录（2026-07-26）
+
+- 七个 owner 已固定为 workspace、content、generation、platform、media、attention、settings；View 只消费 snapshot 和命名 command。
+- 非 Auth production Typed IPC 为 128/128：56 query、67 command、5 event；每项均有独立合法 fixture、owner、production caller、request/result/error/event validator。Auth 5 invoke + 1 event 明确留给 Phase 07。
+- `workspace:data-invalidated` 只有一个 Renderer transport consumer；opaque runtime ID、revision gap、known scopes 全量刷新和安全 diagnostic 已实现。
+- 旧 controller/store/modal、原始页面订阅、native confirm、`pageSize:99999`、`publish-log` sender、无消费者 preload channel 均已删除。
+- 媒体默认页 50、IPC 页上限 100、远端上限 200 页/20,000 unique ID，第 20,001 项显式 truncated；1k/10k/13k/20k 合成容量数据已记录。
+- 完成后真实启动复核发现 P1：`sandbox: true` 的 production preload 直接加载本地 CommonJS contract registry 时整体失败，导致 `window.desktopConsole.auth` 缺失并显示“桌面认证不可用”。Phase 06 临时重新打开后，以单文件 `build/preload/preload.cjs` 收口；开发启动及全部 pack/dist 路径均先构建该 bundle，ASAR 明确包含并直接加载它，未关闭 sandbox、未扩展 preload 能力面。
+- 原 VM mock `require` packaging 测试与合成 preload Electron focus 未经过真实 production sandbox composition，因而漏检。新增真实 Electron 精确症状回归：source sandbox 2/2，显式 packaged ASAR 3/3；两者均断言固定 Auth API 存在且无通用 invoke/on。
+- 登录恢复后又以 production composition 精确复现 workspace bootstrap P1：main 把已自行执行版本化验证的 workspace registrar 接入 `createAuthenticatedIpcMain`，同一 wire request 被解码两次；已有工作区读取和目录选择均闭合为 `IPC_REQUEST_INVALID`。现由 workspace registrar 单独拥有认证、request验证和result编码，main直接传原始`ipcMain`与`requireAuthenticated`，未保留双路径wrapper。合成existing/selection及未认证安全拒绝、真实sandbox与packaged ASAR workspace调用均已锁定。
+- AI单篇生成production RED确认：domain research/reference snapshot会保留“可选字段存在但值为`undefined`”，content exact result validator因此返回`IPC_RESULT_INVALID`。Content DTO projector现统一省略undefined可选字段，未放宽schema；真实generator形状、source sandbox与packaged ASAR `content:generate-article`均通过。
+- workspace切换锁定RED确认：runtime为内部模块写入`AUTO_PUBLISH_WORKSPACE`，`app.relaunch()`继承后被下一进程误判为外部环境override。main现捕获启动时该键的原始存在状态和值，relaunch前恢复；应用自写值不再污染重启，同时真实显式用户override仍保持锁定语义。Windows Process/User/Machine范围均未发现用户设置。
+- 最终门禁：221 个默认测试文件、1196/1196（0 fail/skip，约153秒）；Auth 16/16；links 180/180；packaging 33/33；本轮最新Content/Renderer/preload定向51/51；lint、三套 typecheck、format、Renderer build（2153 modules）、preload build（227,170 bytes）、pack smoke、最新 Renderer build 上的 Electron focus 1/1、packaged ASAR production-preload/workspace/content 3/3、`git diff --check` 全部通过。
+- 用户复核继续显示“内容结果未通过安全校验”并采集到`Content command is unavailable`后，production RED证实两条提示属于同一连锁：domain允许中文客户目录名及中文自定义platform/template identity，而content Typed IPC共用ASCII token validator，导致workspace sources查询失败且无selected client；页面随后初始化workspace级豆包队列，旧统一门禁又错误要求selected client。content business identity现使用拒绝路径分隔符、控制字符、`.`/`..`和首尾空白的Unicode-safe segment validator；confirmation token仍使用ASCII opaque token。workspace级content command仅要求workspace scope，客户级mutation继续fail-closed。
+- 另一个独立production RED证实旧research snapshot缺少`collectionMethod`时仍会形成`IPC_RESULT_INVALID`；投影边界现显式归类为`legacy`，不放宽result validator、不改变ContentStore或Domain/Application接口。Unicode client/platform/template generation request/result与legacy provenance均已通过source及packaged ASAR Electron探针。
+- 问题与采集页后续production RED证实豆包contract仍保留独立ASCII-only identity，中文client/question在preload request编码即失败并显示“豆包结果未通过安全校验”；同时passive登录检查的`PLAYWRIGHT_SESSION_NOT_OPEN`未进入豆包安全错误闭集，被降级为`IPC_INTERNAL`，Renderer无法进入保留上次稳定状态的分支而显示`session_error`。豆包identity现使用与main边界一致的Unicode-safe path-free segment，session-not-open现返回精确`transport/safe` SafeOperationalError；raw session消息、Cookie、profile路径仍不进入Renderer。
+- 本轮最终门禁更新为221文件1198/1198、豆包/Renderer/source preload定向43/43、Auth16/16、links180/180、packaging33/33、三套typecheck/lint/format、Renderer2153 modules、preload229,242 bytes、标准pack smoke、packaged ASAR 3/3、最新Renderer Electron focus1/1与diff check全部通过。
+- 批量生成“检查并确认”production RED证实两条独立Typed IPC偏差：generation identity仍为ASCII-only，中文client/platform/template/material/research ID在preload request编码阶段失败；真实模板预检又携带`source/readOnly`，registrar未投影而exact result只允许`platform/templateId`。generation现使用Unicode-safe path-free business segment，并由main精确投影preview DTO；preload也已把本地request校验失败分类为`IPC_REQUEST_INVALID`，不再伪装成result-invalid。
+- 单篇保存后文章与投稿下拉同时为空的production RED证实article-management snapshot中的真实`actionPlan.items`没有`status`，却错误复用普通submission item validator，导致整个snapshot返回`IPC_RESULT_INVALID`并被Renderer空模型遮蔽。cancellation plan现有独立精确validator/projector，与Renderer既有action-plan DTO一致；普通submission item严格schema未放松。管理页显式显示query error，不再把失败呈现为“暂无历史文章”。
+- `ARTICLE_SAVED` wire event经preload `parseEvent`验证后会移除envelope `schemaVersion`，workspace coordinator此前再次强制要求该字段，造成所有production invalidation被拒。coordinator现接受已验证payload或直接测试wire payload，unknown version仍由preload registry拒绝；main reasonCode→scopes、单一raw consumer及revision规则不变。
+- 最新完整门禁：221文件1203/1203、Auth16/16、links180/180、packaging33/33；批量/management/invalidation域回归69/69；三套typecheck、lint、format、Renderer build 2153 modules、preload 230,279 bytes、标准pack smoke、packaged ASAR 3/3、最新Renderer Electron focus1/1及diff check均通过。全部新增验证使用临时合成fixture，未访问真实workspace/账号/数据；Phase 07未启动。
+- 个别客户的文章管理仍会被一条旧publication record整体拒绝：历史记录可以在合法的`publicationId/clientId/articleId/status/attempts`之外缺少后来才增加的`articleKey/targetKey/createdAt/updatedAt`及顶层attempt摘要。article-management read-model现将这些增强字段精确标为optional，不伪造domain identity，不放宽必填业务字段、unknown field或unsafe error校验。
+- 单篇生成页左下旧“导出平台”会列出所有content queue平台，但该旧快捷service实际只接受`media`，是一个会诱导用户进入必然失败路径的伪通用入口。该footer、下拉框和页面caller已删除；正式多平台/账号/确认流程仍由文章管理页拥有，底层Typed IPC因其他production consumer仍在而保留。
+- 本次现场回归最终门禁：221文件1205/1205，Auth16/16、links180/180、packaging33/33、域定向50/50；三套typecheck、lint、format、Renderer build 2153 modules、preload 230,459 bytes、pack smoke、packaged ASAR 3/3、最新Renderer Electron focus1/1及`git diff --check`均通过。制品为`release-alpha/win-unpacked/鱼饼大王.exe`（225,485,824 bytes，2026-07-27 13:43:43）。
+- 用户以同一工作区两个客户的对照截图证明上述legacy publication修复仍不完整。进一步producer/contract差分找到真正的按客户触发项：豆包parser和ResearchStore合法允许无界引用title/url/snippet，article-management result却有既定1,000/4,096/10,000上限；某篇文章携带10,001字摘要时会使整个客户snapshot返回`IPC_RESULT_INVALID`。
+- main Content DTO projector现对引用标题/URL移除控制字符并按既有contract上限截断，对摘要保留合法换行、移除非法控制字符并限为10,000字；`null/undefined`可选摘要直接省略。schema仍为有界exact DTO，未改ContentStore/ResearchStore或冻结接口。
+- 本轮验证：article/content/management域70/70；`npm test`221文件1206/1206；Auth16/16、links180/180、packaging33/33、三套typecheck、lint、format、Renderer2153 modules、preload231,191 bytes、pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1。source和packaged ASAR均通过真实`getArticleManagementSnapshot("畅途")`链验证10,001→10,000且`ok:true`。新制品时间2026-07-27 14:31:19。
+- 后续跨客户production RED证实引用`snippet`不只可能超长，也可能是object/array；Research producer合法保留该结构，但Renderer DTO只允许文本。Content main projector现仅在IPC边界省略非文本snippet，文本仍按既有10,000字上限投影；exact schema、unknown-field拒绝和Domain/Application/ContentStore接口均未放宽。
+- 工作区串数据诊断分别锁定Renderer公开snapshot与主进程真实业务IPC：runtime A→B会同步清空A且拒绝A迟到结果；两个临时合成workspace含相同clientId时，新runtime只返回B文章。真正的生命周期缺口是bootstrap重复创建时读取可变`process.env`，把runtime内部写入的旧`AUTO_PUBLISH_WORKSPACE`误判为外部override。main现把应用启动瞬间该键的存在状态和值冻结为bootstrap唯一环境输入；内部runtime写回不再锁住旧workspace，显式外部override仍保持原语义。
+- 最新完整门禁：221文件1210/1210、0 fail/skip；Auth16/16、links180/180、packaging33/33；本轮Content/Workspace定向66/66；三套typecheck、lint、format、Renderer build 2153 modules、preload 231,173 bytes、标准pack smoke、packaged ASAR 3/3、最新Renderer Electron focus1/1及`git diff --check`全部通过。所有新增测试只使用临时合成workspace/DTO，未读取真实内容库、账号、Cookie或Auth数据库。最新制品为`release-alpha/win-unpacked/鱼饼大王.exe`（225,485,824 bytes，2026-07-27 15:32:47）；Phase 07未启动。
+- 用户后续对照证明失败与客户历史状态稳定相关：从未投稿的客户可持续显示，已失败客户新增文章后仍整页失败。真实OperationalStore→article-management snapshot→Typed IPC RED确认`listPublicationRecords()`的合法producer形状固定为`clientId:null`，而Renderer publication DTO要求客户identity；任一投稿记录因此使整个client snapshot返回`IPC_RESULT_INVALID`。
+- 修复位于client-scoped article-management组合边界：先仅保留当前客户article ID集合对应的publication records，再将null的历史client identity绑定到已验证的请求scope；若record显式声称另一客户则fail-closed。未改OperationalStore冻结接口，未放宽nullable IPC schema。回归同时包含旧已投稿文章与同客户新生成文章，两者均返回。
+- 最新门禁：221文件1211/1211、0 fail/skip；Auth16/16、links180/180、packaging33/33；三套typecheck、lint、format、Renderer 2153 modules、preload 231,173 bytes、标准pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1与`git diff --check`通过。标准制品已在用户关闭旧进程后重建；Phase 07未启动。
+- 普通投稿与付费媒体handoff现场RED确认：submission contract把合法业务`clientId`错误限制为ASCII技术token，中文客户的`preview/create submission batch`与`preview/export media`四条请求均在preload编码阶段返回`IPC_REQUEST_INVALID`，main与service从未执行。contract现复用content核心既定的Unicode-safe、path-free客户identity规则；文章、账号绑定、target和confirmation仍使用各自精确validator，unknown field与敏感边界不变。
+- 列举网/头条登录现场RED确认：公开preload caller先传`{ platformId }`，platform contract `fromArgs`又按位置参数包装，形成嵌套identity并被拒。`openLogin/checkLogin`现只传原始单一`platformId`；不改session service、平台adapter或领域接口。
+- 本轮结论不是历史数据不兼容：相同错误会拒绝当前合法中文客户下的新旧文章，登录请求完全不读取客户/文章/采集数据。无需删除、迁移或重建历史资料，也未增加legacy wrapper。完整门禁更新为221文件1213/1213、Auth16/16、links180/180、packaging33/33、域定向52/52、三套typecheck/lint/format、Renderer 2153 modules、标准pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1及diff check通过；最新exe为225,485,824 bytes，2026-07-27 20:46:18。Phase 07未启动。
+- 付费媒体工作台的三个现场问题也不是历史数据兼容问题。文章预览result原错误复用禁止换行的单行`safeText`，正常Markdown正文因此成为`IPC_RESULT_INVALID`；现改用有界多行正文validator（最大2,000,000字符），不允许路径、raw error或额外字段。收藏失败来自公开Renderer传入完整资源，而wire contract只接受`resourceId/name/price`；preload现只做精确DTO投影，wire schema未放宽。刷新请求本身成功执行，但App遗漏command error/result消费；现同时显示安全失败、完成数量和显式truncated反馈。
+- 资源库旧“添加媒体”只向Renderer局部state写入随机`RES-*`，没有Typed IPC capability或后端owner，且未打开文章时静默失效；该按钮、表单、caller和feature command已删除，没有新增兼容wrapper。资源分页/收藏/远端刷新仍由既有18项media Typed IPC能力拥有。
+- 最新完整门禁：媒体定向47/47；`npm test`221文件1217/1217、0 fail/skip；Auth16/16、links180/180、packaging33/33；三套typecheck、lint、format、Renderer build 2153 modules、preload 231,751 bytes、标准pack smoke、packaged ASAR preload sandbox 3/3、最新Renderer Electron focus1/1及`git diff --check`全部通过。容量fixture在1k/10k/13k/20k均为单页单请求，payload约4.28KB，未访问真实workspace、付费平台、账号或内容库。最新exe为225,485,824 bytes，2026-07-27 23:03:31；Phase 07未启动。
+- 付费媒体13k刷新现场RED确认外部multipart adapter使用camelCase `pageSize`，与该API既有`api_key/resource_id/third_id`字段约定不一致；供应方退回默认20项且无可识别分页元数据时，main又以`20 < 100`错误结束并声称complete。adapter现发送`page_size`；资源服务会学习供应方实际页宽，不能再把首个20项页伪装为完整成功。合成13,000项在100项/页时130次请求完成；若供应方仍固定20项，则严格在200页/4,000项处显式`truncated=max-pages`，不提高Phase 06硬上限。
+- “预检并提交”无反应来自media feature把所有扫描稿件都作为单次候选，并在任一未选媒体时静默禁用顶部按钮；prepare失败又只显示在成功后才打开的modal中。feature现仅对明确选过资源的稿件建立有界预检快照，未选稿件不进入本次候选；顶部入口改为“投稿预检”，安全失败直接显示。最终按钮明确为“确认付费提交”，只能提交已成功预检的快照；选择变化、workspace切换或文章刷新会使旧预检失效。
+- 本轮没有调用真实`media/send`、真实付费平台或真实账号；Renderer测试中的submit仅为内存计数fake，并断言预检阶段submit调用数为0。最新门禁为媒体域63/63、全仓221文件1220/1220、Auth16/16、links180/180、packaging33/33，三套typecheck/lint/format/build、pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1及diff check通过。最新exe为225,485,824 bytes，2026-07-27 23:35:24；Phase 07未启动。

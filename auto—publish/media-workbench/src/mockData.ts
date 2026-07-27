@@ -1,6 +1,6 @@
 import { Article, MediaResource, Order } from './types';
 
-type MockArticle = Omit<Article, 'filePath' | 'autoTitle' | 'remark' | 'hasImages' | 'imageCount' | 'ignoreImages'>;
+type MockArticle = Omit<Article, 'autoTitle' | 'remark' | 'hasImages' | 'imageCount' | 'ignoreImages'>;
 
 export const INITIAL_RESOURCES: MediaResource[] = [
   {

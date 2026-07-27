@@ -31,11 +31,11 @@ function registerAccountProfileIpc(deps) {
         error.code = "ACCOUNT_PROFILE_QUERY_INVALID";
         throw error;
       }
-      return store.listAccountProfiles();
+      return { profiles: store.listAccountProfiles() };
     });
   });
   value.ipcMain.handle("platforms:confirm-account-profile", function(event, input) {
-    return wrap(function() { return store.createAccountProfile(accountProfileInput(input)); });
+    return wrap(function() { return { profile: store.createAccountProfile(accountProfileInput(input)) }; });
   });
   return {
     list: function() { return store.listAccountProfiles(); },

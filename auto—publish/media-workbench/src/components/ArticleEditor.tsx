@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { articleIdentity, createArticleEditorSession } from './article-editor-session';
+import { useConfirmation } from '../confirmation';
 
 interface ArticleEditorProps {
   activeArticle: Article | null;
@@ -41,6 +42,7 @@ export default function ArticleEditor({
   onRemoveSelectedResource,
   resourceStates = {}
 }: ArticleEditorProps) {
+  const { confirm } = useConfirmation();
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   const [editorState, setEditorState] = useState<ArticleEditorSnapshot>(() => ({ draft: null, isSaving: false, saveSuccess: false, saveError: null, dirty: false }));
   const saveDraftRef = useRef(onSaveDraft);
@@ -113,7 +115,12 @@ export default function ArticleEditor({
       onCloseArticle();
       return;
     }
-    if (typeof window !== 'undefined' && !window.confirm('草稿有未保存修改，是否保存后关闭？')) return;
+    if (!(await confirm({
+      title: '保存未完成的草稿',
+      message: '草稿有未保存修改，是否保存后关闭？',
+      confirmLabel: '保存并关闭',
+      tone: 'warning',
+    }))) return;
     try {
       const result = await saveDraft();
       if (result.saved && !draftIsDirty()) onCloseArticle();

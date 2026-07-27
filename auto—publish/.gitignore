@@ -21,5 +21,6 @@ release-alpha/
 # Downloaded/extracted runtime tools are reproducible build outputs.
 build/runtime-tools/
 build/runtime-tools-cache/
+/build/preload/
 /build/build-info.json
 /config/build-info.json

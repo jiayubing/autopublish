@@ -1,4 +1,18 @@
 const { wrap } = require("../services/ipc-response");
+const {
+  projectArticleRemovalTransaction,
+  projectArticle,
+  projectClient,
+  projectImpactPreview,
+  projectMaterial,
+  projectPermanentDeleteConfirmation,
+  projectPermanentDeleteResult,
+  projectResearch,
+  projectTemplate,
+  projectTemplateCatalog,
+  projectTrashCommitResult,
+  projectTrashRecord,
+} = require("./contracts/content-core-contracts");
 
 function contentInputError(message) {
   const error = new Error(message);
@@ -18,25 +32,18 @@ function registerAiContentIpc(deps) {
   const service = deps.aiContentService;
   if (!ipcMain || !service) throw new Error("AI content IPC requires the workspace content service");
 
-  ipcMain.handle("content:list-clients", function() { return wrap(function() { return service.listClients(); }); });
-  ipcMain.handle("content:get-client", function(event, clientId) { return wrap(function() { return service.getClient(clientId); }); });
-  ipcMain.handle("content:list-research", function(event, clientId) { return wrap(function() { return service.listResearch(clientId); }); });
-  ipcMain.handle("content:get-research", function(event, input) {
-    return wrap(function() { return service.getResearch(input && input.clientId, input && input.researchId); });
-  });
-  ipcMain.handle("content:list-templates", function(event, platform) { return wrap(function() { return service.listTemplates(platform); }); });
-  ipcMain.handle("content:list-template-catalog", function() { return wrap(function() { return service.listTemplateCatalog(); }); });
+  ipcMain.handle("content:list-clients", function() { return wrap(async function() { return { clients: (await service.listClients()).map(projectClient) }; }); });
+  ipcMain.handle("content:list-research", function(event, clientId) { return wrap(function() { return { research: service.listResearch(clientId).map(projectResearch) }; }); });
+  ipcMain.handle("content:list-templates", function(event, platform) { return wrap(function() { return { templates: service.listTemplates(platform).map(projectTemplate) }; }); });
+  ipcMain.handle("content:list-template-catalog", function() { return wrap(function() { return projectTemplateCatalog(service.listTemplateCatalog()); }); });
   ipcMain.handle("content:retry-material", function(event, input) {
-    return wrap(function() { return service.retryMaterial(input && input.clientId, input && input.materialId); });
+    return wrap(async function() { return { material: projectMaterial(await service.retryMaterial(input && input.clientId, input && input.materialId)) }; });
   });
-  ipcMain.handle("content:generate-article", function(event, input) { return wrap(function() { return service.generateArticle(generationInput(input)); }); });
-  ipcMain.handle("content:save-article", function(event, article) { return wrap(function() { return service.saveArticle(article); }); });
-  ipcMain.handle("content:list-generated-articles", function(event, clientId) { return wrap(function() { return service.listGeneratedArticles(clientId); }); });
-  ipcMain.handle("content:get-generated-article", function(event, input) {
-    return wrap(function() { return service.getGeneratedArticle(input && input.clientId, input && input.articleId); });
-  });
+  ipcMain.handle("content:generate-article", function(event, input) { return wrap(async function() { return { article: projectArticle(await service.generateArticle(generationInput(input))) }; }); });
+  ipcMain.handle("content:save-article", function(event, article) { return wrap(function() { return { article: projectArticle(service.saveArticle(article)) }; }); });
+  ipcMain.handle("content:list-generated-articles", function(event, clientId) { return wrap(function() { return { articles: service.listGeneratedArticles(clientId).map(projectArticle) }; }); });
   ipcMain.handle("content:copy-article-version", function(event, input) {
-    return wrap(function() { return service.copyArticleVersion(input); });
+    return wrap(function() { return { article: projectArticle(service.copyArticleVersion(input)) }; });
   });
   ipcMain.handle("content:review-articles", function(event, input) {
     return wrap(function() {
@@ -45,42 +52,43 @@ function registerAiContentIpc(deps) {
     });
   });
   ipcMain.handle("content:list-article-trash", function(event, clientId) {
-    return wrap(function() { return service.listTrashedArticles(clientId); });
+    return wrap(function() { return { trash: service.listTrashedArticles(clientId).map(projectTrashRecord) }; });
   });
   ipcMain.handle("content:preview-trash-articles", function(event, input) {
-    return wrap(function() { return service.previewTrashArticles(input); });
+    return wrap(function() { return projectImpactPreview(service.previewTrashArticles(input)); });
   });
   ipcMain.handle("content:preview-article-removal-impact", function(event, input) {
-    return wrap(function() { return service.previewArticleRemovalImpact(input); });
+    return wrap(function() { return projectImpactPreview(service.previewArticleRemovalImpact(input)); });
   });
   ipcMain.handle("content:trash-articles", function(event, input) {
-    return wrap(function() { return service.trashArticles(input); });
+    return wrap(function() { return projectTrashCommitResult(service.trashArticles(input)); });
   });
   ipcMain.handle("content:restore-article", function(event, input) {
-    return wrap(function() { return service.restoreArticle(input); });
+    return wrap(function() {
+      const result = service.restoreArticle(input);
+      const article = result && result.article ? result.article : result;
+      return { article: projectArticle(article), restored: result && result.restored !== undefined ? result.restored : true, queueRestored: result && result.queueRestored === true, message: result && result.message || "文章已恢复，投稿队列不会自动恢复" };
+    });
   });
   ipcMain.handle("content:prepare-permanent-delete-article", function(event, input) {
-    return wrap(function() { return service.preparePermanentDelete(input); });
+    return wrap(function() { return projectPermanentDeleteConfirmation(service.preparePermanentDelete(input)); });
   });
   ipcMain.handle("content:permanently-delete-article", function(event, input) {
-    return wrap(function() { return service.permanentlyDeleteArticle(input); });
-  });
-  ipcMain.handle("content:recover-article-removals", function() {
-    return wrap(function() { return service.recoverPendingArticleRemovals(); });
+    return wrap(function() { return projectPermanentDeleteResult(service.permanentlyDeleteArticle(input)); });
   });
   ipcMain.handle("content:get-article-removal-transaction", function(event, input) {
     return wrap(function() {
       if (!input || typeof input.transactionId !== "string" || !input.transactionId.trim()) throw contentInputError("Removal transaction id is required");
-      return service.getArticleRemovalTransaction(input.transactionId);
+      return { transaction: projectArticleRemovalTransaction(service.getArticleRemovalTransaction(input.transactionId)) };
     });
   });
   ipcMain.handle("content:list-article-removal-transactions", function() {
-    return wrap(function() { return service.listArticleRemovalTransactions(); });
+    return wrap(function() { return { transactions: service.listArticleRemovalTransactions().map(projectArticleRemovalTransaction) }; });
   });
   ipcMain.handle("content:retry-article-removal-transaction", function(event, input) {
     return wrap(function() {
       if (!input || typeof input.transactionId !== "string" || !input.transactionId.trim() || input.confirmed !== true) throw contentInputError("Removal transaction confirmation is required");
-      return service.retryArticleRemovalTransaction(input);
+      return { transaction: projectArticleRemovalTransaction(service.retryArticleRemovalTransaction(input)) };
     });
   });
 }

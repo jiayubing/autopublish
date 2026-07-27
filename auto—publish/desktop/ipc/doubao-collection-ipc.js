@@ -1,6 +1,9 @@
 const { wrap } = require("../services/ipc-response");
 const { assertPlaywrightAvailable } = require("../services/playwright-capability");
 const { createDoubaoCollectionDesktopService } = require("../services/doubao-collection-service");
+const {
+  projectLogin, projectPreview, projectQuestion, projectQueue, projectResearch,
+} = require("./contracts/doubao-contracts");
 
 function ipcError(message) {
   const error = new Error(message);
@@ -69,36 +72,22 @@ function safeWrap(handler) {
   return wrap(handler).then(function(result) { return sanitizeOutput(result, false); });
 }
 
-function sanitizeQueueSubscription(service) {
-  if (!service || typeof service.subscribe !== "function" || service.subscribe.__ipcOutputSanitized) return;
-
-  const subscribe = service.subscribe;
-  const wrappedSubscribe = function(listener) {
-    return subscribe.call(this, function(state) {
-      return listener(sanitizeOutput(state, false));
-    });
-  };
-  wrappedSubscribe.__ipcOutputSanitized = true;
-  service.subscribe = wrappedSubscribe;
-}
-
 function registerDoubaoCollectionIpc(deps) {
   const options = deps || {};
   const ipcMain = options.ipcMain;
   const service = options.doubaoCollectionService || createDoubaoCollectionDesktopService({
     workspaceRoot: options.rootDir
   });
-  sanitizeQueueSubscription(service);
 
   ipcMain.handle("content:list-questions", function(event, input) {
-    return safeWrap(function() { return service.listQuestions(idInput(input, ["clientId"], "List questions input")); });
+    return safeWrap(function() { return { questions: service.listQuestions(idInput(input, ["clientId"], "List questions input")).map(projectQuestion) }; });
   });
   ipcMain.handle("content:create-question", function(event, input) {
     return safeWrap(function() {
       const value = idInput(input, ["clientId", "text", "enabled"], "Create question input");
       if (typeof value.text !== "string") throw ipcError("Question text is invalid");
       if (value.enabled !== undefined && typeof value.enabled !== "boolean") throw ipcError("Question enabled state is invalid");
-      return service.createQuestion(value);
+      return { question: projectQuestion(service.createQuestion(value)) };
     });
   });
   ipcMain.handle("content:update-question", function(event, input) {
@@ -106,24 +95,24 @@ function registerDoubaoCollectionIpc(deps) {
       const value = questionInput(input, ["clientId", "questionId", "text", "enabled"], "Update question input");
       if (value.text !== undefined && typeof value.text !== "string") throw ipcError("Question text is invalid");
       if (value.enabled !== undefined && typeof value.enabled !== "boolean") throw ipcError("Question enabled state is invalid");
-      return service.updateQuestion(value);
+      return { question: projectQuestion(service.updateQuestion(value)) };
     });
   });
   ipcMain.handle("content:delete-question", function(event, input) {
-    return safeWrap(function() { return service.deleteQuestion(questionInput(input, ["clientId", "questionId"], "Delete question input")); });
+    return safeWrap(function() { return { question: projectQuestion(service.deleteQuestion(questionInput(input, ["clientId", "questionId"], "Delete question input"))) }; });
   });
   ipcMain.handle("content:get-doubao-login-state", function(event, input) {
-    return safeWrap(function() { noInput(input, "Login state"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.getLoginState(); });
+    return safeWrap(async function() { noInput(input, "Login state"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return { loginState: projectLogin(await service.getLoginState()) }; });
   });
   ipcMain.handle("content:open-doubao-login", function(event, input) {
-    return safeWrap(function() { noInput(input, "Open login"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.openLogin(); });
+    return safeWrap(async function() { noInput(input, "Open login"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return { loginState: projectLogin(await service.openLogin()) }; });
   });
   ipcMain.handle("content:collect-doubao-one", function(event, input) {
     return safeWrap(function() {
       const value = questionInput(input, ["clientId", "questionId", "force"], "Collect input");
       optionalForce(value);
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
-      return service.collectOne(value);
+      return Promise.resolve(service.collectOne(value)).then(function(result) { return { research: projectResearch(result) }; });
     });
   });
   ipcMain.handle("content:preview-doubao-batch", function(event, input) {
@@ -137,7 +126,7 @@ function registerDoubaoCollectionIpc(deps) {
         if (!isSafeId(clientId)) throw ipcError("Batch client id is invalid");
         return clientId;
       });
-      return service.previewBatch({ clientIds: clientIds, mode: value.mode });
+      return { preview: projectPreview(service.previewBatch({ clientIds: clientIds, mode: value.mode })) };
     });
   });
   ipcMain.handle("content:start-doubao-batch", function(event, input) {
@@ -151,7 +140,7 @@ function registerDoubaoCollectionIpc(deps) {
         return { clientId: item.clientId, questionId: item.questionId, force: item.force };
       });
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
-      return service.startBatch(tasks);
+      return Promise.resolve(service.startBatch(tasks)).then(function(result) { return { queue: projectQueue(result) }; });
     });
   });
   ipcMain.handle("content:start-prepared-doubao-batch", function(event, input) {
@@ -165,30 +154,30 @@ function registerDoubaoCollectionIpc(deps) {
         return { clientId: item.clientId, questionId: item.questionId, force: item.force };
       });
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
-      return service.startPreparedBatch({ tasks: tasks });
+      return Promise.resolve(service.startPreparedBatch({ tasks: tasks })).then(function(result) { return { queue: projectQueue(result) }; });
     });
   });
   ipcMain.handle("content:pause-doubao-batch", function(event, input) {
-    return safeWrap(function() { noInput(input, "Pause batch"); return service.pauseBatch(); });
+    return safeWrap(function() { noInput(input, "Pause batch"); return Promise.resolve(service.pauseBatch()).then(function(result) { return { queue: projectQueue(result) }; }); });
   });
   ipcMain.handle("content:resume-doubao-batch", function(event, input) {
-    return safeWrap(function() { noInput(input, "Resume batch"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.resumeBatch(); });
+    return safeWrap(function() { noInput(input, "Resume batch"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return Promise.resolve(service.resumeBatch()).then(function(result) { return { queue: projectQueue(result) }; }); });
   });
   ipcMain.handle("content:stop-doubao-batch", function(event, input) {
-    return safeWrap(function() { noInput(input, "Stop batch"); return service.stopBatch(); });
+    return safeWrap(function() { noInput(input, "Stop batch"); return Promise.resolve(service.stopBatch()).then(function(result) { return { queue: projectQueue(result) }; }); });
   });
   ipcMain.handle("content:retry-failed-doubao", function(event, input) {
-    return safeWrap(function() { noInput(input, "Retry failed"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return service.retryFailed(); });
+    return safeWrap(function() { noInput(input, "Retry failed"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return Promise.resolve(service.retryFailed()).then(function(result) { return { queue: projectQueue(result) }; }); });
   });
   ipcMain.handle("content:get-doubao-queue-state", function(event, input) {
-    return safeWrap(function() { noInput(input, "Queue state"); return service.getQueueState(); });
+    return safeWrap(function() { noInput(input, "Queue state"); return { queue: projectQueue(service.getQueueState()) }; });
   });
   ipcMain.handle("content:save-manual-research", function(event, input) {
     return safeWrap(function() {
       const value = questionInput(input, ["clientId", "questionId", "answerText", "references"], "Manual research input");
       if (typeof value.answerText !== "string") throw ipcError("Manual answer is invalid");
       if (value.references !== undefined && !Array.isArray(value.references)) throw ipcError("Manual references are invalid");
-      return service.saveManual(value);
+      return { research: projectResearch(service.saveManual(value)) };
     });
   });
 }

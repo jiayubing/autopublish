@@ -7,15 +7,22 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 describe('renderer content confirmation flow', () => {
-  it('uses an observable in-app dialog for queue and cancel, never a native dialog', () => {
+  it('uses the shared FIFO confirmation seam for destructive content actions, never a native dialog', () => {
     const view = read('media-workbench/src/components/content/GeneratedArticlesView.tsx');
-    const queue = view.slice(view.indexOf('async function queueSelected'), view.indexOf('\n  function openArticle'));
+    const workbench = read('media-workbench/src/components/ContentWorkbench.tsx');
+    const editor = read('media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx');
+    const queue = view.slice(view.indexOf('async function queueSelected'), view.indexOf('\n  async function copyArticleVersion'));
     const cancel = view.slice(view.indexOf('async function cancelCancelableBatches'), view.indexOf('\n  async function cleanupFailedBatches'));
-    assert.match(read('media-workbench/src/components/content/ActionConfirmationModal.tsx'), /role="dialog"/);
+    [view, workbench, editor].forEach((source) => {
+      assert.match(source, /useConfirmation/);
+      assert.match(source, /const \{ confirm \} = useConfirmation\(\)/);
+      assert.doesNotMatch(source, /ActionConfirmationModal|pendingConfirmation|confirmationActionRef|window\.confirm/);
+    });
     assert.match(queue, /title: '确认加入投稿队列'/);
     assert.match(cancel, /title: '确认撤销未开始投稿'/);
-    assert.doesNotMatch(queue, /window\.confirm/);
-    assert.doesNotMatch(cancel, /window\.confirm/);
+    const host = read('media-workbench/src/components/ConfirmationHost.tsx');
+    assert.match(host, /ConfirmationHost/);
+    assert.match(host, /queueRef\.current\.push/);
   });
 
   it('does not auto-accept native dialogs in content queue regression tests', () => {

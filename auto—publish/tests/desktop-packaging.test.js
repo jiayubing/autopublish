@@ -141,6 +141,20 @@ function loadPreloadHarness() {
     on: function() {},
     removeListener: function() {}
   };
+  const preloadRegistry = {
+    byChannel: function(channel) {
+      const eventChannels = ["auth-state-changed", "workspace:data-invalidated", "platform-state", "content:article-removal-transaction", "content:doubao-queue-state", "content:generation-batch-state"];
+      return {
+        channel: channel,
+        kind: eventChannels.includes(channel) ? "event" : "query",
+        fromArgs: function(args) { return args[0] || {}; }
+      };
+    },
+    encodeRequest: function(contract, payload) { return payload; },
+    parseResult: function() {},
+    parseEvent: function(contract, payload) { return payload; },
+    failure: function() { return { ok: false, error: { code: "IPC_RESULT_INVALID" } }; }
+  };
   vm.runInNewContext(read("desktop/preload.js"), {
     require: function(name) {
       if (name === "electron") {
@@ -148,6 +162,9 @@ function loadPreloadHarness() {
           contextBridge: { exposeInMainWorld: function(name, api) { exposed[name] = api; } },
           ipcRenderer: ipcRenderer
         };
+      }
+      if (name === "./ipc/contracts/production-registry") {
+        return { productionIpcRegistry: preloadRegistry };
       }
       throw new Error("unexpected require: " + name);
     }
@@ -714,9 +731,10 @@ describe("source assembly and packaging contract", function() {
   it("initializes runtime environment before loading config-dependent services", function() {
     const runtime = read("desktop/workspace-runtime.js");
     assert.ok(runtime.includes("configureRuntimeEnvironment"));
-    assert.ok(
-      runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf('require("../src/core/logger")'),
-      "logger must be required after runtime environment configuration"
+    assert.doesNotMatch(
+      runtime,
+      /require\(["']\.\.\/src\/core\/logger["']\)/,
+      "workspace runtime must not restore the removed raw publish-log sender"
     );
     assert.ok(
       runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf('require("./ipc/register")'),

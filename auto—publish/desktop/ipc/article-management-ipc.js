@@ -1,5 +1,6 @@
 const { wrap } = require("../services/ipc-response");
 const { createArticleManagementSnapshot } = require("../services/article-management-snapshot");
+const { projectManagementSnapshot } = require("./contracts/content-core-contracts");
 
 function validateInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(function(key) { return key !== "clientId"; }) || typeof input.clientId !== "string" || !input.clientId.trim()) {
@@ -23,7 +24,7 @@ function registerArticleManagementIpc(deps) {
     articleAttentionQuery: values.articleAttentionQuery
   });
   values.ipcMain.handle("content:get-article-management-snapshot", function(event, input) {
-    return wrap(function() { return snapshot.get(validateInput(input)); });
+    return wrap(async function() { return projectManagementSnapshot(await snapshot.get(validateInput(input))); });
   });
   return snapshot;
 }

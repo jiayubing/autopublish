@@ -129,25 +129,25 @@ function installDesktopFixture(page, fixture) {
       source: "custom"
     };
     const content = {
-      listClients: () => ok([client]),
-      listGeneratedArticles: () => ok(state.articles),
-      getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: state.publicationRecords, attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowByArticle: {}, publicationSummaries: {} }),
-      listSubmissionPlatforms: () => ok([{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }]),
-      listSubmissionBatches: () => ok([]),
-      listArticleTrash: () => ok([]),
-      listResearch: () => ok([]),
-      listQuestions: () => ok([]),
-      getDoubaoLoginState: () => ok({ status: "unknown" }),
-      getDoubaoQueueState: () => ok({ status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }),
+      listClients: () => ok({ clients: [client] }),
+      listGeneratedArticles: () => ok({ articles: state.articles }),
+      getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: state.publicationRecords, attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems: [], publicationSummaryItems: [] }),
+      listSubmissionPlatforms: () => ok({ platforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }] }),
+      listSubmissionBatches: () => ok({ batches: [] }),
+      listArticleTrash: () => ok({ trash: [] }),
+      listResearch: () => ok({ research: [] }),
+      listQuestions: () => ok({ questions: [] }),
+      getDoubaoLoginState: () => ok({ loginState: { status: "unknown" } }),
+      getDoubaoQueueState: () => ok({ queue: { status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }),
       onDoubaoQueueState: () => () => {},
-      listTemplates: () => ok([template]),
+      listTemplates: () => ok({ templates: [template] }),
       listTemplateCatalog: () => ok({ revision: "fixture", platforms: [{ id: template.platform, displayName: "测试模板平台", description: "", order: 1 }], templates: [template], diagnostics: [] }),
       retryMaterial: () => ok({}),
       generateArticle: () => ok(state.articles[0]),
       saveArticle: (article) => {
         state.calls.saveArticle.push(article);
         state.articles = state.articles.map((item) => item.id === article.id ? article : item);
-        return ok(article);
+        return ok({ article });
       },
       reviewArticles: () => ok({ reviewed: [], rejected: [] }),
       copyArticleVersion: (request) => {
@@ -155,7 +155,7 @@ function installDesktopFixture(page, fixture) {
         const source = state.articles.find((article) => article.id === request.sourceArticleId);
         const copied = { ...source, id: "copied-published-article", sourceArticleId: source.id, version: (source.version || 1) + 1, status: "generated", reviewedAt: null };
         state.articles = [...state.articles, copied];
-        return ok(copied);
+        return ok({ article: copied });
       },
       previewExport: () => ok({ filename: "fixture.md" }),
       exportArticle: () => { state.calls.submission.push("exportArticle"); return ok({ filename: "fixture.md" }); },
@@ -166,21 +166,19 @@ function installDesktopFixture(page, fixture) {
         return ok({ transactionId: transaction.transactionId, status: transaction.status, phase: transaction.phase, errorCode: transaction.errorCode, reasonCode: transaction.reasonCode, articleCount: input.selections.length });
       },
       getArticleRemovalTransaction: (transactionId) => {
-        if (state.removalTransaction?.transactionId === transactionId && state.removalTransaction.status === "pending_auto_recovery") {
-          state.removalPolls += 1;
-          if (state.removalPolls >= 2) {
-            state.removalTransaction = { ...state.removalTransaction, status: "committed", phase: "committed", errorCode: null, reasonCode: null, updatedAt: "2026-07-18T00:30:03.000Z" };
-            state.removalListeners.forEach((listener) => listener(state.removalTransaction));
-          }
-        }
-        return ok(state.removalTransaction);
+        if (state.removalTransaction?.transactionId === transactionId && state.removalTransaction.status === "pending_auto_recovery") state.removalPolls += 1;
+        return ok({ transaction: state.removalTransaction });
       },
       onArticleRemovalTransaction: (listener) => { state.removalListeners.push(listener); return () => { state.removalListeners = state.removalListeners.filter((item) => item !== listener); }; },
       retryArticleRemovalTransaction: (input) => {
         state.calls.removalRetries += 1;
         state.removalPolls = 0;
         state.removalTransaction = { transactionId: input.transactionId, status: "pending_auto_recovery", phase: "queue-actions", updatedAt: "2026-07-18T00:30:01.000Z" };
-        return ok(state.removalTransaction);
+        window.setTimeout(() => {
+          state.removalTransaction = { ...state.removalTransaction, status: "committed", phase: "committed", errorCode: null, reasonCode: null, updatedAt: "2026-07-18T00:30:03.000Z" };
+          state.removalListeners.forEach((listener) => listener(state.removalTransaction));
+        }, 300);
+        return ok({ transaction: state.removalTransaction });
       },
       previewSubmissionBatch: () => ok({ queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0 }),
       createSubmissionBatch: () => { state.calls.submission.push("createSubmissionBatch"); return ok({}); },
@@ -296,8 +294,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("dialog").getByRole("button", { name: "放弃修改" }).click();
       await page.getByText(fixture.publishedArticle.title, { exact: true }).locator("..").locator("..").getByRole("button", { name: "发布详情" }).click();
       await page.getByRole("button", { name: "复制为新版本" }).click();
-      await page.getByRole("button", { name: "关闭发布详情" }).last().click({ force: true });
-      await page.getByRole("dialog").getByRole("button", { name: "确认复制" }).click();
+      await page.getByRole("dialog", { name: "确认复制文章新版本" }).getByRole("button", { name: "确认复制" }).click();
       await page.waitForFunction(() => window.__historyEditorFlow.calls.copyArticleVersion.length === 1);
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.copyArticleVersion[0]), { clientId, sourceArticleId: publishedArticleId });
       assert.equal(await page.getByRole("heading", { name: "历史文章" }).isVisible(), true, "copying a published article keeps the history list mounted");
@@ -325,8 +322,9 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /移入回收站 \(1\)/ }).click();
-      await page.getByRole("dialog", { name: "移入回收站预检" }).waitFor();
-      await page.getByRole("button", { name: "确认移入回收站" }).click();
+      const removalConfirmation = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "确认移入回收站" }) });
+      await removalConfirmation.waitFor();
+      await removalConfirmation.getByRole("button", { name: "确认移入回收站" }).click();
       await page.getByRole("alert").filter({ hasText: /^删除事务需要修复：PUBLICATION_ATTEMPT_MISMATCH$/ }).waitFor();
       const retry = page.getByRole("button", { name: "重试修复删除事务" });
       assert.equal(await retry.isDisabled(), false);

@@ -17,8 +17,18 @@ function assertClientId(value) {
   return value.trim();
 }
 
-function safeRecord(record) {
+function safeRecord(record, scopedClientId) {
   const value = record && typeof record === "object" ? record : {};
+  if (
+    value.clientId !== null &&
+    value.clientId !== undefined &&
+    value.clientId !== scopedClientId
+  ) {
+    throw snapshotError(
+      "ARTICLE_MANAGEMENT_PUBLICATION_CLIENT_MISMATCH",
+      "Publication record does not belong to the requested client",
+    );
+  }
   const attempts = Array.isArray(value.attempts) ? value.attempts.map(function(attempt) {
     return {
       attemptId: typeof attempt.attemptId === "string" ? attempt.attemptId : null,
@@ -37,7 +47,7 @@ function safeRecord(record) {
   return {
     version: value.version,
     publicationId: value.publicationId,
-    clientId: value.clientId,
+    clientId: scopedClientId,
     articleId: value.articleId === undefined ? null : value.articleId,
     articleKey: value.articleKey,
     targetKey: value.targetKey,
@@ -173,7 +183,14 @@ function createArticleManagementSnapshot(options) {
       if (operationalStore && typeof operationalStore.listPublicationRecords === "function") return operationalStore.listPublicationRecords({ articleIds });
       return typeof ledger.listForArticles === "function" ? ledger.listForArticles(clientId, articleIds) : [];
     }, clientId);
-    const publicationRecords = (Array.isArray(recordsRaw) ? recordsRaw : []).map(safeRecord);
+    const articleIdSet = new Set(articleIds);
+    const publicationRecords = (Array.isArray(recordsRaw) ? recordsRaw : [])
+      .filter(function(record) {
+        return record && articleIdSet.has(record.articleId);
+      })
+      .map(function(record) {
+        return safeRecord(record, clientId);
+      });
     const attentionList = await read("listAttention", function() { return attention && typeof attention.list === "function" ? attention.list({ clientId }) : { revision, items: [], counts: { total: 0, actionable: 0 } }; }, clientId);
     const attentionItems = Array.isArray(attentionList && attentionList.items) ? clone(attentionList.items) : [];
     const transactionsRaw = await read("listTransactions", function() { return typeof ai.listArticleRemovalTransactions === "function" ? ai.listArticleRemovalTransactions() : []; }, clientId);

@@ -311,9 +311,6 @@ function createMediaWorkbenchService(opts) {
       }
       items.push({ filename: article.filename, title: article.title || "", resources: articleItems });
     }
-    if (!publicationLedger) {
-      return { articleCount: articles.length, resourceCount: resourceCount, taskCount: resourceCount, estimatedTotalPrice: estimatedTotalPrice, blockers: blockers };
-    }
     return {
       articleCount: articles.length,
       resourceCount: resourceCount,

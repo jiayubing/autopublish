@@ -39,40 +39,9 @@ export function getBootstrapView(state) {
   return {
     kind: 'welcome',
     mountsApp: false,
-    text: state?.error
-      ? getWorkspaceErrorMessage(state.error)
+    text: state?.errorCode
+      ? getWorkspaceErrorMessage(state.errorCode)
       : '请选择一个工作区后继续使用应用。',
-  };
-}
-
-export function createBootstrapGateController({ getBootstrapState }) {
-  let state = { state: 'checking', workspacePath: null, envOverride: false };
-  let startPromise = null;
-
-  return {
-    getState() {
-      return state;
-    },
-    start() {
-      if (startPromise) return startPromise;
-      state = { state: 'checking', workspacePath: null, envOverride: false };
-      startPromise = Promise.resolve()
-        .then(() => getBootstrapState())
-        .then((nextState) => {
-          state = nextState;
-          return state;
-        })
-        .catch(() => {
-          state = {
-            state: 'invalid',
-            workspacePath: null,
-            envOverride: false,
-            error: { code: 'WORKSPACE_BOOTSTRAP_FAILED', message: ERROR_MESSAGES.WORKSPACE_BOOTSTRAP_FAILED },
-          };
-          return state;
-        });
-      return startPromise;
-    },
   };
 }
 
@@ -94,12 +63,12 @@ export function getSelectionView(state) {
       : state?.state || 'selection_required';
   return {
     kind,
-    path: selection?.path || null,
+    label: selection?.label || null,
     category: selection ? kindLabel(selection.kind) : null,
     warning: selection?.kind === 'nonempty_directory'
       ? '这是非空目录。确认后将在其中创建 AutoPublish 工作区目录和必要文件，不会删除或覆盖现有文件。'
       : null,
-    errorMessage: getWorkspaceErrorMessage(state?.error),
+    errorMessage: getWorkspaceErrorMessage(state?.errorCode),
     text: relaunching ? '正在重启应用…' : '请选择一个工作区后继续使用应用。',
     chooseDisabled: relaunching,
     confirmDisabled: relaunching || !isConfirmation,
@@ -109,60 +78,10 @@ export function getSelectionView(state) {
 
 export function getSettingsCommandState({ loading, switchBusy, current, switchState }) {
   const relaunching = switchState?.state === 'relaunching';
-  const envOverride = current?.envOverride === true;
-  const hasWorkspacePath = Boolean(current?.workspacePath);
+  const environmentManaged = current?.environmentManaged === true;
+  const configured = current?.configured === true;
   return {
-    openDisabled: Boolean(loading || switchBusy || relaunching || !hasWorkspacePath),
-    switchDisabled: Boolean(loading || switchBusy || relaunching || envOverride),
-  };
-}
-
-export function createWorkspaceSelectionController({
-  initialState,
-  chooseDirectory,
-  confirmSelection,
-  cancelSelection,
-}) {
-  let baseState = initialState;
-  let state = initialState;
-
-  return {
-    getState() {
-      return state;
-    },
-    reset(nextState) {
-      baseState = nextState;
-      state = nextState;
-    },
-    async chooseDirectory() {
-      try {
-        state = await chooseDirectory();
-        return state;
-      } catch (error) {
-        if (errorCode(error) === 'WORKSPACE_SELECTION_CANCELLED') state = baseState;
-        throw error;
-      }
-    },
-    async confirmSelection() {
-      const selection = state?.selection;
-      if (!selection) return state;
-      const result = await confirmSelection({ token: selection.token });
-      state = {
-        state: result.state,
-        workspacePath: result.workspacePath,
-        envOverride: result.envOverride,
-      };
-      return state;
-    },
-    async cancelSelection() {
-      try {
-        await cancelSelection();
-        state = baseState;
-        return state;
-      } catch (error) {
-        if (errorCode(error) === 'WORKSPACE_SELECTION_CANCELLED') state = baseState;
-        throw error;
-      }
-    },
+    openDisabled: Boolean(loading || switchBusy || relaunching || !configured),
+    switchDisabled: Boolean(loading || switchBusy || relaunching || environmentManaged),
   };
 }

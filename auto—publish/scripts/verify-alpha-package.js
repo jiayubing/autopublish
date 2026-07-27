@@ -18,7 +18,7 @@ const ARCHIVE_FILES = [
   "src/content/generation-batch-store.js", "src/content/generation-batch-runner.js",
   "src/content/article-review-service.js", "src/content/article-version-service.js", "scripts/config.js",
   "config/platforms.json", "config/build-info.json", "resources/hepan/requirements.txt",
-  "media-workbench/dist/index.html", "node_modules/mammoth/LICENSE"
+  "media-workbench/dist/index.html", "build/preload/preload.cjs", "node_modules/mammoth/LICENSE"
 ];
 
 const UNPACKED_FILES = [

@@ -8,10 +8,17 @@ function read(file) { return fs.readFileSync(path.resolve(__dirname, "..", file)
 describe("renderer content generation contract", function() {
   it("keeps writing-template discovery independent from client research", function() {
     const source = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    assert.match(source, /listContentTemplateCatalog\(\)/);
-    assert.match(source, /listContentSubmissionPlatforms\(\)/);
-    assert.match(source, /if \(!clientId\) \{ setResearch\(\[\]\)/);
+    assert.doesNotMatch(source, /listContentTemplateCatalog|listContentSubmissionPlatforms|listContentResearch/);
+    assert.match(source, /templateCatalog \|\|/);
+    assert.doesNotMatch(source, /managementSubmissionPlatforms/);
     assert.doesNotMatch(source, /if \(!clientId\) \{[^}]*setTemplates\(\[\]\)/);
+  });
+
+  it("routes submission through article management instead of the obsolete single-article export picker", function() {
+    const source = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    assert.doesNotMatch(source, /aria-label="导出平台"/);
+    assert.doesNotMatch(source, /commands\.(previewExport|exportToSubmissionQueue)/);
+    assert.doesNotMatch(source, /加入待投稿队列|投稿预检/);
   });
 
   it("labels template controls and distinguishes builtin/custom sources", function() {
@@ -23,10 +30,9 @@ describe("renderer content generation contract", function() {
     assert.match(source, /displayName/);
   });
 
-  it("keeps generation disabled when no client is selected and ignores stale async responses", function() {
+  it("keeps generation disabled when no client is selected and consumes scoped read snapshots", function() {
     const source = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     assert.match(source, /disabled=\{!materialIds\.length \|\| !selectedIds\.length \|\| !clientId/);
-    assert.match(source, /let cancelled = false/);
-    assert.match(source, /if \(cancelled\) return/);
+    assert.match(source, /researchByClient/);
   });
 });

@@ -16,6 +16,7 @@ interface ResourcePreflightItem {
 }
 
 export interface MediaPreflightSummary {
+  articleCount?: number;
   blockers?: string[];
   blockedResources?: ResourcePreflightItem[];
   submitableResources?: ResourcePreflightItem[];
@@ -110,7 +111,7 @@ export default function PreflightModal({
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>待处理稿件 {articles.length} 篇，选中目标 {blocked.length + submitable.length} 个</span>
+            <span>待处理稿件 {Number(summary.articleCount ?? articles.length)} 篇，选中目标 {blocked.length + submitable.length} 个</span>
             <span className="font-semibold text-slate-700">可提交 {submitable.length} 个</span>
           </div>
 
@@ -164,7 +165,7 @@ export default function PreflightModal({
           <button onClick={onClose} disabled={isSubmitting} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg disabled:opacity-50">取消</button>
           <button data-preflight-confirm="true" onClick={onSubmit} disabled={!canSubmit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
             {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            <span>{isSubmitting ? '提交中...' : `确认提交 ${submitable.length} 个资源`}</span>
+            <span>{isSubmitting ? '提交中...' : `确认付费提交 ${submitable.length} 个资源`}</span>
           </button>
         </div>
       </motion.div>

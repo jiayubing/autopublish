@@ -37,18 +37,81 @@ function invoke(handler) {
   });
 }
 
+function safePreview(value) {
+  const input = value || {};
+  return {
+    generationBatchId: input.generationBatchId,
+    ...(input.batchRevision !== undefined ? { batchRevision: input.batchRevision } : {}),
+    previewToken: input.previewToken,
+    articleCount: input.articleCount,
+    clientCount: input.clientCount,
+    targetPlatformIds: Array.isArray(input.targetPlatformIds) ? input.targetPlatformIds.slice() : [],
+    estimatedTaskCount: input.estimatedTaskCount,
+    queueableTaskCount: input.queueableTaskCount,
+    idempotentCount: input.idempotentCount,
+    blockedPublishedCount: input.blockedPublishedCount,
+    blockedUncertainCount: input.blockedUncertainCount,
+    blockedContentCount: input.blockedContentCount,
+    conflictCount: input.conflictCount,
+    unavailableArticleCount: input.unavailableArticleCount,
+    invalidArticles: Array.isArray(input.invalidArticles) ? input.invalidArticles.map((item) => ({
+      clientId: item.clientId,
+      ...(item.articleId !== undefined ? { articleId: item.articleId } : {}),
+      taskId: item.taskId,
+      reasonCode: item.reasonCode,
+    })) : [],
+    clientGroups: Array.isArray(input.clientGroups) ? input.clientGroups.map((group) => ({
+      clientId: group.clientId,
+      articleCount: group.articleCount,
+      queueableTaskCount: group.queueableTaskCount,
+      idempotentCount: group.idempotentCount,
+      blockedPublishedCount: group.blockedPublishedCount,
+      blockedUncertainCount: group.blockedUncertainCount,
+      blockedContentCount: group.blockedContentCount,
+      conflictCount: group.conflictCount,
+      items: Array.isArray(group.items) ? group.items.map((item) => ({
+        articleId: item.articleId,
+        targetPlatformId: item.targetPlatformId,
+        status: item.status,
+        ...(item.reasonCode !== undefined ? { reasonCode: item.reasonCode } : {}),
+      })) : [],
+    })) : [],
+  };
+}
+
+function safeResult(value) {
+  const input = value || {};
+  const result = {
+    generationBatchId: input.generationBatchId,
+    createdCount: input.createdCount,
+    idempotentCount: input.idempotentCount,
+    blockedCount: input.blockedCount,
+    conflictCount: input.conflictCount,
+    failedClientGroups: Array.isArray(input.failedClientGroups) ? input.failedClientGroups.map((item) => ({ clientId: item.clientId, code: item.code })) : [],
+    completedClientGroups: Array.isArray(input.completedClientGroups) ? input.completedClientGroups.slice() : [],
+    clientGroups: Array.isArray(input.clientGroups) ? input.clientGroups.map((item) => ({
+      clientId: item.clientId,
+      articleCount: item.articleCount,
+      queueableTaskCount: item.queueableTaskCount,
+      idempotentCount: item.idempotentCount,
+    })) : [],
+  };
+  if (Array.isArray(input.changedScopes)) result.changedScopes = input.changedScopes.slice();
+  return result;
+}
+
 function registerGenerationSubmissionHandoffIpc(deps) {
   const values = deps || {};
   const ipcMain = values.ipcMain;
   const service = values.generationSubmissionHandoffService;
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation submission handoff IPC dependencies are required");
-  ipcMain.handle("content:preview-generation-submission-handoff", function(event, value) { return invoke(function() { return service.preview(input(value, false)); }); });
+  ipcMain.handle("content:preview-generation-submission-handoff", function(event, value) { return invoke(function() { return safePreview(service.preview(input(value, false))); }); });
   ipcMain.handle("content:commit-generation-submission-handoff", function(event, value) { return invoke(function() {
     const result = service.commit(input(value, true));
     if (typeof values.invalidateData === "function" && result) values.invalidateData("GENERATION_SUBMISSION_HANDOFF_COMMITTED");
-    return result;
+    return safeResult(result);
   }); });
   return { service };
 }
 
-module.exports = { registerGenerationSubmissionHandoffIpc, SAFE_MESSAGES };
+module.exports = { registerGenerationSubmissionHandoffIpc, SAFE_MESSAGES, safePreview, safeResult };

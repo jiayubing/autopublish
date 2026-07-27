@@ -1,5 +1,31 @@
 import type { AuthState } from "../types";
-import { ipcError, isElectron, unavailable } from "./transport";
+import { authIpcError, isElectron, unavailable } from "./transport";
+
+type LegacyAuthResponse<T> = {
+  ok: boolean;
+  data?: T;
+  error?: { code?: string; message?: string };
+};
+
+type AuthApi = {
+  getState: () => Promise<LegacyAuthResponse<AuthState>>;
+  login: (
+    loginName: string,
+    password: string,
+  ) => Promise<LegacyAuthResponse<AuthState>>;
+  changePassword: (
+    loginName: string,
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<LegacyAuthResponse<AuthState>>;
+  refresh: () => Promise<LegacyAuthResponse<AuthState>>;
+  logout: () => Promise<LegacyAuthResponse<AuthState>>;
+  onStateChanged: (listener: (state: AuthState) => void) => () => void;
+};
+
+function authApi(): AuthApi | undefined {
+  return window.desktopConsole?.auth as AuthApi | undefined;
+}
 
 export function createUnauthenticatedState(): AuthState {
   return {
@@ -11,9 +37,9 @@ export function createUnauthenticatedState(): AuthState {
 }
 
 export async function getAuthState(): Promise<AuthState> {
-  if (!isElectron() || !window.desktopConsole?.auth)
-    return createUnauthenticatedState();
-  const result = await window.desktopConsole.auth.getState();
+  const api = authApi();
+  if (!isElectron() || !api) return createUnauthenticatedState();
+  const result = await api.getState();
   return result.ok && result.data
     ? result.data
     : {
@@ -31,17 +57,15 @@ async function confirmedAuthCall(
   fallback: string,
 ): Promise<AuthState> {
   const result = await command;
-  if (!result.ok || !result.data) throw ipcError(result.error, fallback);
+  if (!result.ok || !result.data) throw authIpcError(result.error, fallback);
   return result.data;
 }
 
 export function login(loginName: string, password: string): Promise<AuthState> {
-  if (!isElectron() || !window.desktopConsole?.auth)
+  const api = authApi();
+  if (!isElectron() || !api)
     return Promise.reject(unavailable("桌面认证不可用"));
-  return confirmedAuthCall(
-    window.desktopConsole.auth.login(loginName, password),
-    "登录失败",
-  );
+  return confirmedAuthCall(api.login(loginName, password), "登录失败");
 }
 
 export function changeAuthPassword(
@@ -49,39 +73,34 @@ export function changeAuthPassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<AuthState> {
-  if (!isElectron() || !window.desktopConsole?.auth)
+  const api = authApi();
+  if (!isElectron() || !api)
     return Promise.reject(unavailable("桌面认证不可用"));
   return confirmedAuthCall(
-    window.desktopConsole.auth.changePassword(
-      loginName,
-      currentPassword,
-      newPassword,
-    ),
+    api.changePassword(loginName, currentPassword, newPassword),
     "修改密码失败",
   );
 }
 
 export async function refreshAuth(): Promise<AuthState> {
-  if (!isElectron() || !window.desktopConsole?.auth)
-    return createUnauthenticatedState();
-  const result = await window.desktopConsole.auth.refresh();
+  const api = authApi();
+  if (!isElectron() || !api) return createUnauthenticatedState();
+  const result = await api.refresh();
   return result.ok && result.data ? result.data : createUnauthenticatedState();
 }
 
 export async function logout(): Promise<AuthState> {
-  if (!isElectron() || !window.desktopConsole?.auth)
-    return createUnauthenticatedState();
-  const result = await window.desktopConsole.auth.logout();
+  const api = authApi();
+  if (!isElectron() || !api) return createUnauthenticatedState();
+  const result = await api.logout();
   return result.ok && result.data ? result.data : createUnauthenticatedState();
 }
 
 export function onAuthStateChanged(
   listener: (state: AuthState) => void,
 ): () => void {
-  if (
-    !isElectron() ||
-    typeof window.desktopConsole?.auth?.onStateChanged !== "function"
-  )
+  const api = authApi();
+  if (!isElectron() || typeof api?.onStateChanged !== "function")
     return () => {};
-  return window.desktopConsole.auth.onStateChanged(listener);
+  return api.onStateChanged(listener);
 }

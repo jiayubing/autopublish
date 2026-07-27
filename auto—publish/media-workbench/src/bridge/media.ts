@@ -8,30 +8,108 @@ import type {
 import { formatBeijingTime } from "../time-format";
 import { ipcError, isElectron, unavailable } from "./transport";
 
-type Command = (...args: unknown[]) => Promise<IpcResponse<unknown>>;
+type MediaRefreshResult = {
+  status: "complete" | "truncated";
+  complete: boolean;
+  truncated: boolean;
+  truncationReason: string | null;
+  pageCount: number;
+  resourceCount: number;
+  diagnostics: Array<Record<string, unknown>>;
+  refreshedAt: string;
+};
 
-async function callMedia<T>(
-  method: string,
-  args: unknown[],
+type MediaApi = {
+  scanArticles: () => Promise<
+    IpcResponse<{ items: Record<string, unknown>[] }>
+  >;
+  previewArticle: (
+    filename: string,
+  ) => Promise<IpcResponse<{ article: Record<string, unknown> }>>;
+  getDrafts: () => Promise<IpcResponse<{ items: Draft[] }>>;
+  getDraft: (filename: string) => Promise<IpcResponse<{ draft: Draft | null }>>;
+  setDraft: (
+    filename: string,
+    draft: Omit<Draft, "filename">,
+  ) => Promise<IpcResponse<{ completed: boolean }>>;
+  removeDraft: (
+    filename: string,
+  ) => Promise<IpcResponse<{ completed: boolean }>>;
+  buildConfirmation: (submissions: unknown[]) => Promise<IpcResponse<unknown>>;
+  submitSelected: (submissions: unknown[]) => Promise<IpcResponse<unknown>>;
+  stopSubmit: () => Promise<IpcResponse<{ stopped: boolean }>>;
+  refreshResources: (
+    input: Record<string, never>,
+  ) => Promise<IpcResponse<MediaRefreshResult>>;
+  getResourcePage: (input: { page: number; pageSize: number }) => Promise<
+    IpcResponse<{
+      items: Record<string, unknown>[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>
+  >;
+  searchResourcePage: (input: {
+    query: string;
+    page: number;
+    pageSize: number;
+  }) => Promise<
+    IpcResponse<{
+      items: Record<string, unknown>[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>
+  >;
+  getPool: (input: {
+    page: number;
+    pageSize: number;
+    resourceIds: string[];
+  }) => Promise<
+    IpcResponse<{
+      items: Record<string, unknown>[];
+      memberResourceIds: string[];
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+      hasPrev: boolean;
+      hasNext: boolean;
+    }>
+  >;
+  addToPool: (
+    resource: MediaResource,
+  ) => Promise<IpcResponse<{ resource: Record<string, unknown> }>>;
+  removeFromPool: (
+    resourceId: string,
+  ) => Promise<IpcResponse<{ completed: boolean }>>;
+  getBalance: () => Promise<IpcResponse<{ balance: string }>>;
+};
+
+type OrdersApi = {
+  getOrders: () => Promise<IpcResponse<{ items: Record<string, unknown>[] }>>;
+  syncOrder: (
+    orderNid: string,
+  ) => Promise<IpcResponse<{ order: Record<string, unknown> }>>;
+};
+
+function mediaApi(): MediaApi | null {
+  if (!isElectron()) return null;
+  return window.desktopConsole?.media as MediaApi | null;
+}
+
+function ordersApi(): OrdersApi | null {
+  if (!isElectron()) return null;
+  return window.desktopConsole?.orders as OrdersApi | null;
+}
+
+async function unwrap<T>(
+  request: Promise<IpcResponse<T>>,
   message: string,
-  fallback?: T,
-  hasFallback = false,
 ): Promise<T> {
-  if (!isElectron()) {
-    if (hasFallback) return fallback as T;
-    throw unavailable(message);
-  }
-  const api = window.desktopConsole?.media as unknown as
-    Record<string, unknown> | undefined;
-  const command = api?.[method] as Command | undefined;
-  if (typeof command !== "function") {
-    if (hasFallback) return fallback as T;
-    throw unavailable(message);
-  }
-  const result = (await command(...args)) as IpcResponse<T>;
+  const result = await request;
   if (!result.ok) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null) {
-    if (hasFallback) return fallback as T;
     throw ipcError(result.error, message);
   }
   return result.data;
@@ -54,7 +132,6 @@ function normalizeArticle(raw: Record<string, unknown>): Article {
     lastModified: formatBeijingTime(
       raw.lastModified || new Date().toISOString(),
     ),
-    filePath: String(raw.filePath || ""),
     autoTitle: String(raw.autoTitle || ""),
     remark: String(raw.remark || ""),
     hasImages: Boolean(raw.hasImages),
@@ -102,100 +179,97 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
 }
 
 export async function scanArticles(): Promise<Article[]> {
-  const raw = await callMedia<unknown[]>(
-    "scanArticles",
-    [],
-    "scanArticles failed",
-    [],
-    true,
-  );
-  return raw.map((item) => normalizeArticle(item as Record<string, unknown>));
+  const api = mediaApi();
+  if (!api) return [];
+  const data = await unwrap(api.scanArticles(), "scanArticles failed");
+  return data.items.map(normalizeArticle);
 }
 export async function previewArticle(filename: string): Promise<Article> {
-  return normalizeArticle(
-    await callMedia<Record<string, unknown>>(
-      "previewArticle",
-      [filename],
-      "previewArticle failed",
-    ),
+  const api = mediaApi();
+  if (!api) throw unavailable("previewArticle failed");
+  const data = await unwrap(
+    api.previewArticle(filename),
+    "previewArticle failed",
   );
+  return normalizeArticle(data.article);
 }
 export async function getDrafts(): Promise<Draft[]> {
-  return callMedia("getDrafts", [], "getDrafts failed", [], true);
+  const api = mediaApi();
+  if (!api) return [];
+  return (await unwrap(api.getDrafts(), "getDrafts failed")).items;
 }
 export async function getDraft(filename: string): Promise<Draft> {
-  return callMedia("getDraft", [filename], "getDraft failed: " + filename);
+  const api = mediaApi();
+  if (!api) throw unavailable("getDraft failed: " + filename);
+  const data = await unwrap(
+    api.getDraft(filename),
+    "getDraft failed: " + filename,
+  );
+  if (!data.draft) throw unavailable("draft is unavailable: " + filename);
+  return data.draft;
 }
 export async function setDraft(filename: string, draft: Draft): Promise<void> {
+  const api = mediaApi();
+  if (!api) return;
   const { filename: _filename, selectedResources, ...fields } = draft;
-  await callMedia(
-    "setDraft",
-    [
-      filename,
-      {
-        ...fields,
-        selectedResources: selectedResources.map((resource) => ({
-          resourceId: resource.resourceId,
-          name: resource.name,
-          price: resource.price,
-        })),
-      },
-    ],
+  await unwrap(
+    api.setDraft(filename, {
+      ...fields,
+      selectedResources: selectedResources.map((resource) => ({
+        resourceId: resource.resourceId,
+        name: resource.name,
+        price: resource.price,
+      })) as MediaResource[],
+    }),
     "setDraft failed",
-    undefined,
-    true,
   );
 }
 export async function removeDraft(filename: string): Promise<void> {
-  await callMedia(
-    "removeDraft",
-    [filename],
-    "removeDraft failed",
-    undefined,
-    true,
-  );
+  const api = mediaApi();
+  if (!api) return;
+  await unwrap(api.removeDraft(filename), "removeDraft failed");
 }
 export async function buildConfirmation(articles: Article[]): Promise<unknown> {
-  return callMedia(
-    "buildConfirmation",
-    [
+  const api = mediaApi();
+  if (!api) throw unavailable("buildConfirmation failed");
+  return unwrap(
+    api.buildConfirmation(
       articles.map((article) => ({
         filename: article.filename,
         resourceIds: article.selectedResources.map(
           (resource) => resource.resourceId,
         ),
       })),
-    ],
+    ),
     "buildConfirmation failed",
   );
 }
 export async function submitSelected(articles: Article[]): Promise<unknown> {
-  return callMedia(
-    "submitSelected",
-    [
+  const api = mediaApi();
+  if (!api) throw unavailable("submitSelected failed");
+  return unwrap(
+    api.submitSelected(
       articles.map((article) => ({
         filename: article.filename,
         resourceIds: article.selectedResources.map(
           (resource) => resource.resourceId,
         ),
       })),
-    ],
+    ),
     "submitSelected failed",
   );
 }
 export async function stopSubmit(): Promise<void> {
-  await callMedia("stopSubmit", [], "stopSubmit failed", undefined, true);
+  const api = mediaApi();
+  if (!api) return;
+  await unwrap(api.stopSubmit(), "stopSubmit failed");
 }
-export async function refreshResources(
-  opts?: Record<string, unknown>,
-): Promise<void> {
-  await callMedia(
-    "refreshResources",
-    [opts],
-    "refreshResources failed",
-    undefined,
-    true,
-  );
+export async function refreshResources(): Promise<
+  MediaRefreshResult | undefined
+> {
+  const api = mediaApi();
+  if (!api) return;
+  return unwrap(api.refreshResources({}), "refreshResources failed");
 }
 export async function getResourcePage(opts: {
   page?: number;
@@ -206,22 +280,12 @@ export async function getResourcePage(opts: {
   page: number;
   pageSize: number;
 }> {
-  const raw = await callMedia<{
-    items?: unknown[];
-    total: number;
-    page: number;
-    pageSize: number;
-  }>(
-    "getResourcePage",
-    [opts],
+  const api = mediaApi();
+  const input = { page: opts.page || 1, pageSize: opts.pageSize || 50 };
+  if (!api) return { items: [], total: 0, ...input };
+  const raw = await unwrap(
+    api.getResourcePage(input),
     "getResourcePage failed",
-    {
-      items: [],
-      total: 0,
-      page: opts.page || 1,
-      pageSize: opts.pageSize || 20,
-    },
-    true,
   );
   return {
     ...raw,
@@ -240,22 +304,17 @@ export async function searchResourcePage(opts: {
   page: number;
   pageSize: number;
 }> {
-  const raw = await callMedia<{
-    items?: unknown[];
-    total: number;
-    page: number;
-    pageSize: number;
-  }>(
-    "searchResourcePage",
-    [opts],
+  const api = mediaApi();
+  const input = {
+    query: opts.query,
+    page: opts.page || 1,
+    pageSize: opts.pageSize || 50,
+  };
+  if (!api)
+    return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+  const raw = await unwrap(
+    api.searchResourcePage(input),
     "searchResourcePage failed",
-    {
-      items: [],
-      total: 0,
-      page: opts.page || 1,
-      pageSize: opts.pageSize || 20,
-    },
-    true,
   );
   return {
     ...raw,
@@ -264,57 +323,59 @@ export async function searchResourcePage(opts: {
     ),
   };
 }
-export async function getPool(): Promise<MediaResource[]> {
-  const raw = await callMedia<unknown[]>(
-    "getPool",
-    [],
-    "getPool failed",
-    [],
-    true,
-  );
-  return raw.map((item) => normalizeResource(item as Record<string, unknown>));
+export async function getPoolPage(input: {
+  page: number;
+  pageSize: number;
+  resourceIds: string[];
+}): Promise<{
+  items: MediaResource[];
+  memberResourceIds: string[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+}> {
+  const api = mediaApi();
+  if (!api)
+    return {
+      items: [],
+      memberResourceIds: [],
+      total: 0,
+      page: input.page,
+      pageSize: input.pageSize,
+      totalPages: 0,
+      hasPrev: false,
+      hasNext: false,
+    };
+  const data = await unwrap(api.getPool(input), "getPool failed");
+  return { ...data, items: data.items.map(normalizeResource) };
 }
 export async function addToPool(resource: MediaResource): Promise<void> {
-  await callMedia("addToPool", [resource], "addToPool failed", undefined, true);
+  const api = mediaApi();
+  if (!api) return;
+  await unwrap(api.addToPool(resource), "addToPool failed");
 }
 export async function removeFromPool(resourceId: string): Promise<void> {
-  await callMedia(
-    "removeFromPool",
-    [resourceId],
-    "removeFromPool failed",
-    undefined,
-    true,
-  );
+  const api = mediaApi();
+  if (!api) return;
+  await unwrap(api.removeFromPool(resourceId), "removeFromPool failed");
 }
 export async function getBalance(): Promise<number> {
-  const raw = await callMedia<{ balance?: string | number }>(
-    "getBalance",
-    [],
-    "getBalance failed",
-    { balance: 0 },
-    true,
-  );
+  const api = mediaApi();
+  if (!api) return 0;
+  const raw = await unwrap(api.getBalance(), "getBalance failed");
   return Number(raw.balance || 0);
 }
 export async function getOrders(): Promise<RealOrder[]> {
-  if (!isElectron()) return [];
-  const api = window.desktopConsole?.orders as unknown as
-    Record<string, unknown> | undefined;
-  const command = api?.getOrders as Command | undefined;
-  if (typeof command !== "function") return [];
-  const result = (await command()) as IpcResponse<unknown[]>;
-  if (!result.ok) throw ipcError(result.error, "getOrders failed");
-  return (result.data || []).map((item) =>
-    normalizeOrder(item as Record<string, unknown>),
-  );
+  const api = ordersApi();
+  if (!api) return [];
+  const data = await unwrap(api.getOrders(), "getOrders failed");
+  return data.items.map(normalizeOrder);
 }
 export async function syncOrder(orderNid: string): Promise<unknown> {
-  if (!isElectron()) return null;
-  const api = window.desktopConsole?.orders as unknown as
-    Record<string, unknown> | undefined;
-  const command = api?.syncOrder as Command | undefined;
-  if (typeof command !== "function") return null;
-  const result = (await command(orderNid)) as IpcResponse<unknown>;
-  if (!result.ok) throw ipcError(result.error, "syncOrder failed");
-  return result.data;
+  const api = ordersApi();
+  if (!api) return null;
+  return unwrap(api.syncOrder(orderNid), "syncOrder failed");
 }

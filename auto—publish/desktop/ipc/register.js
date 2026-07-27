@@ -1,15 +1,44 @@
 const { fail } = require("../services/ipc-response");
+const { productionIpcRegistry } = require("./contracts/production-registry");
 
 function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
   const proxy = {
     lastHandler: null,
     handle(channel, handler) {
+      const contract = productionIpcRegistry.byChannel(channel);
       const wrapped = async function(event, ...args) {
         if (typeof requireAuthenticated === "function") {
           try { await requireAuthenticated(); }
-          catch (error) { return fail(error); }
+          catch (error) {
+            if (contract) {
+              return productionIpcRegistry.failure(contract, { code: "AUTH_REQUIRED" });
+            }
+            return fail(error);
+          }
         }
-        return handler(event, ...args);
+        if (!contract) return handler(event, ...args);
+        let payload;
+        try {
+          if (args.length !== 1) throw Object.assign(new Error("Invalid IPC request"), { code: "IPC_REQUEST_INVALID" });
+          payload = productionIpcRegistry.parseRequest(contract, args[0]);
+        } catch (_) {
+          return productionIpcRegistry.failure(contract, { code: "IPC_REQUEST_INVALID" });
+        }
+        try {
+          const legacyArgs = contract.toArgs ? contract.toArgs(payload) : [payload];
+          const result = await handler(event, ...legacyArgs);
+          if (!result || result.ok !== true) {
+            const legacyError = result && result.error ? result.error : { code: "IPC_INTERNAL" };
+            return productionIpcRegistry.failure(contract, legacyError);
+          }
+          try {
+            return productionIpcRegistry.success(contract, result.data);
+          } catch (_) {
+            return productionIpcRegistry.failure(contract, { code: "IPC_RESULT_INVALID" });
+          }
+        } catch (_) {
+          return productionIpcRegistry.failure(contract, { code: "IPC_INTERNAL" });
+        }
       };
       proxy.lastHandler = wrapped;
       return ipcMain.handle(channel, wrapped);
@@ -39,6 +68,7 @@ function registerIpc(deps) {
   });
   const guarded = Object.assign({}, values, { ipcMain: guardedIpcMain });
   const modules = {};
+  modules.workspace = require("./workspace-runtime-ipc").registerWorkspaceRuntimeIpc(guarded);
   // Isolated legacy registrar tests intentionally do not construct a
   // workspace OperationalStore. A production WorkspaceRuntime always does,
   // and therefore always exposes the explicit confirmation command.

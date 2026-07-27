@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { confirmAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
-import type { AccountProfile, ContentSubmissionPlatform } from '../../types';
+import type { ContentSubmissionPlatform } from '../../types';
+import { usePlatformFeature } from '../../features/platform/platform-feature-context';
 
 interface AccountProfileSelectorProps {
   platforms: ContentSubmissionPlatform[];
@@ -9,19 +9,33 @@ interface AccountProfileSelectorProps {
   onChange: (value: Record<string, string>) => void;
 }
 
-export default function AccountProfileSelector({ platforms, targetPlatformIds, value, onChange }: AccountProfileSelectorProps) {
-  const [profiles, setProfiles] = useState<AccountProfile[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [busyPlatformId, setBusyPlatformId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const targets = useMemo(() => platforms.filter((platform) => targetPlatformIds.includes(platform.id)), [platforms, targetPlatformIds]);
+interface AccountProfileConfirmationInput {
+  feature: {
+    confirmAccountProfile(input: { platformId: string; displayName: string }): Promise<{ accountProfileId?: string } | undefined>;
+  };
+  platformId: string;
+  displayName: string;
+  value: Record<string, string>;
+  onChange: (value: Record<string, string>) => void;
+}
 
-  useEffect(() => {
-    if (!targetPlatformIds.length) return;
-    let active = true;
-    listAccountProfiles().then((items) => { if (active) setProfiles(items); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : '读取平台账号档案失败'); });
-    return () => { active = false; };
-  }, [targetPlatformIds.length]);
+export async function confirmAccountProfileSelection({ feature, platformId, displayName, value, onChange }: AccountProfileConfirmationInput): Promise<boolean> {
+  try {
+    const profile = await feature.confirmAccountProfile({ platformId, displayName });
+    if (!profile?.accountProfileId) return false;
+    onChange({ ...value, [platformId]: profile.accountProfileId });
+    return true;
+  } catch (_) {
+    // The platform feature owns the visible SafeOperationalError snapshot.
+    return false;
+  }
+}
+
+export default function AccountProfileSelector({ platforms, targetPlatformIds, value, onChange }: AccountProfileSelectorProps) {
+  const { snapshot, feature } = usePlatformFeature();
+  const profiles = snapshot.accountProfiles.items;
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const targets = useMemo(() => platforms.filter((platform) => targetPlatformIds.includes(platform.id)), [platforms, targetPlatformIds]);
 
   useEffect(() => {
     const next: Record<string, string> = {};
@@ -39,18 +53,14 @@ export default function AccountProfileSelector({ platforms, targetPlatformIds, v
 
   async function confirm(platformId: string) {
     const displayName = (drafts[platformId] || '').trim();
-    if (!displayName) { setError('请填写当前登录账号的名称'); return; }
-    setBusyPlatformId(platformId); setError('');
-    try {
-      const profile = await confirmAccountProfile({ platformId, displayName });
-      setProfiles((current) => [...current, profile]);
-      onChange({ ...value, [platformId]: profile.accountProfileId });
-      setDrafts((current) => ({ ...current, [platformId]: '' }));
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '确认平台账号档案失败'); }
-    finally { setBusyPlatformId(null); }
+    if (!displayName) return;
+    const accepted = await confirmAccountProfileSelection({ feature, platformId, displayName, value, onChange });
+    if (accepted) setDrafts((current) => ({ ...current, [platformId]: '' }));
   }
 
   if (!targets.length) return null;
+  const busy = snapshot.commands.confirmAccountProfile.busy;
+  const error = snapshot.commands.confirmAccountProfile.error?.userMessage || snapshot.accountProfiles.query.error?.userMessage;
   return <div className="grid w-full gap-2 border-t border-slate-200 pt-2">
     <p className="text-xs text-slate-500">为每个平台选择已确认的登录账号；换号时请新建档案，旧队列不会自动改投。</p>
     {targets.map((platform) => {
@@ -65,7 +75,7 @@ export default function AccountProfileSelector({ platforms, targetPlatformIds, v
         <label className="grid gap-1 text-xs text-slate-600">确认新的当前登录账号
           <input aria-label={`${platform.displayName || platform.id}新账号名称`} value={drafts[platform.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [platform.id]: event.target.value }))} placeholder="例如：机构主账号" maxLength={128} className="h-9 min-w-0 rounded border border-slate-300 px-2" />
         </label>
-        <button type="button" disabled={busyPlatformId === platform.id || !(drafts[platform.id] || '').trim()} onClick={() => void confirm(platform.id)} className="h-9 rounded border border-blue-300 px-3 text-xs text-blue-700 disabled:opacity-40">{busyPlatformId === platform.id ? '确认中…' : '确认账号'}</button>
+        <button type="button" disabled={busy || !(drafts[platform.id] || '').trim()} onClick={() => void confirm(platform.id)} className="h-9 rounded border border-blue-300 px-3 text-xs text-blue-700 disabled:opacity-40">{busy ? '确认中…' : '确认账号'}</button>
       </div>;
     })}
     {error && <div role="alert" className="rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}

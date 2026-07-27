@@ -1,25 +1,12 @@
-import React from 'react';
-import {
-  cancelWorkspaceSelection,
-  chooseWorkspaceDirectory,
-  confirmWorkspaceSelection,
-} from '../bridge/workspace';
-import { WorkspaceBootstrapState } from '../types';
-import WorkspaceSelectionPanel from './WorkspaceSelectionPanel';
+import React from "react";
+import WorkspaceSelectionPanel from "./WorkspaceSelectionPanel";
+import { useWorkspaceFeature } from "../features/workspace/workspace-feature-context";
 
-interface WorkspaceWelcomeProps {
-  state: WorkspaceBootstrapState;
-  onStateChange: (state: WorkspaceBootstrapState) => void;
-}
-
-export default function WorkspaceWelcome({ state, onStateChange }: WorkspaceWelcomeProps) {
+export default function WorkspaceWelcome() {
+  useWorkspaceFeature();
   return (
     <WorkspaceSelectionPanel
-      state={state}
-      onChooseDirectory={chooseWorkspaceDirectory}
-      onConfirmSelection={confirmWorkspaceSelection}
-      onCancelSelection={cancelWorkspaceSelection}
-      onStateChange={onStateChange}
+      mode="bootstrap"
       title="选择工作区"
       description="请选择一个工作区后继续使用应用。工作区用于保存本地业务数据和运行配置。"
       showAppName

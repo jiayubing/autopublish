@@ -13,56 +13,111 @@ import { ipcError, isElectron, unavailable } from "./transport";
 
 export type { PublicationTargetDto, SafeOperationalErrorDto };
 
+type PublicationIpcResponse<T> = {
+  ok: boolean;
+  data?: T;
+  error?: SafeOperationalErrorDto;
+};
+type PublicationListInput = { clientId: string; articleIds: string[] };
+type PublicationReconcileInput = {
+  publicationId: string;
+  status: "published" | "failed";
+  reasonCode: string;
+  confirmed: true;
+};
+type PublicationApi = {
+  listForArticles?: (
+    input: PublicationListInput,
+  ) => Promise<PublicationIpcResponse<{ records: PublicationHistoryRecord[] }>>;
+  reconcile?: (
+    input: PublicationReconcileInput,
+  ) => Promise<PublicationIpcResponse<{ record: PublicationHistoryRecord }>>;
+};
+type AttentionContentApi = {
+  listArticleAttention?: (input?: {
+    clientId: string;
+  }) => Promise<PublicationIpcResponse<ArticleAttentionList>>;
+  getArticleAttention?: (input: {
+    attentionId: string;
+  }) => Promise<PublicationIpcResponse<{ item: ArticleAttentionItem | null }>>;
+  previewArticleAttention?: (input: {
+    attentionId: string;
+    action: string;
+  }) => Promise<PublicationIpcResponse<ArticleAttentionPreview>>;
+  resolveArticleAttention?: (input: {
+    attentionId: string;
+    action: string;
+    expectedRevision: number;
+    confirmed?: boolean;
+  }) => Promise<PublicationIpcResponse<ArticleAttentionResolution>>;
+};
+
+function publicationApi(): PublicationApi | undefined {
+  return window.desktopConsole?.publication as PublicationApi | undefined;
+}
+
+function attentionContentApi(): AttentionContentApi | undefined {
+  return window.desktopConsole?.content as AttentionContentApi | undefined;
+}
+
+function publicationError(
+  error: SafeOperationalErrorDto | undefined,
+  fallback: string,
+): Error & { code?: string } {
+  return Object.assign(new Error(error?.userMessage || fallback), {
+    code: error?.code,
+  });
+}
+
 export async function listPublicationHistory(
   clientId: string,
   articleIds: string[],
 ): Promise<PublicationHistoryRecord[]> {
-  if (
-    !isElectron() ||
-    typeof window.desktopConsole?.publication?.listForArticles !== "function"
-  )
-    return [];
-  const result = await window.desktopConsole.publication.listForArticles({
+  if (!isElectron()) return [];
+  const api = publicationApi();
+  if (typeof api?.listForArticles !== "function") return [];
+  const result = await api.listForArticles({
     clientId,
     articleIds,
   });
-  if (!result.ok) throw ipcError(result.error, "publication history failed");
-  return result.data || [];
+  if (result.ok === false)
+    throw publicationError(result.error, "publication history failed");
+  return result.data?.records || [];
 }
 export async function reconcilePublicationHistory(input: {
   publicationId: string;
   status: "published" | "failed";
   reasonCode: string;
 }): Promise<PublicationHistoryRecord> {
-  if (
-    !isElectron() ||
-    typeof window.desktopConsole?.publication?.reconcile !== "function"
-  )
+  if (!isElectron())
     throw unavailable("Publication reconciliation requires the desktop app");
-  const result = await window.desktopConsole.publication.reconcile({
+  const api = publicationApi();
+  if (typeof api?.reconcile !== "function")
+    throw unavailable("Publication reconciliation requires the desktop app");
+  const result = await api.reconcile({
     ...input,
     confirmed: true,
   });
-  if (!result.ok || !result.data)
-    throw ipcError(result.error, "Unable to reconcile publication result");
-  return result.data;
+  if (result.ok === false)
+    throw publicationError(
+      result.error,
+      "Unable to reconcile publication result",
+    );
+  if (!result.data?.record)
+    throw publicationError(undefined, "Unable to reconcile publication result");
+  return result.data.record;
 }
 export async function listArticleAttentionSnapshot(
   clientId?: string,
 ): Promise<ArticleAttentionList> {
   if (!isElectron())
     return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
-  const attention = window.desktopConsole!.articleAttention;
-  const content = window.desktopConsole!.content;
-  const list =
-    typeof attention?.list === "function"
-      ? attention.list.bind(attention)
-      : typeof content?.listArticleAttention === "function"
-        ? content.listArticleAttention.bind(content)
-        : undefined;
-  if (!list)
+  const content = attentionContentApi();
+  if (typeof content?.listArticleAttention !== "function")
     return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
-  const result = await list(clientId ? { clientId } : undefined);
+  const result = await content.listArticleAttention(
+    clientId ? { clientId } : undefined,
+  );
   if (!result.ok || !result.data)
     throw ipcError(result.error, "listArticleAttention failed");
   return result.data;
@@ -76,34 +131,21 @@ export async function getArticleAttention(
   attentionId: string,
 ): Promise<ArticleAttentionItem | null> {
   if (!isElectron()) return null;
-  const attention = window.desktopConsole!.articleAttention;
-  const content = window.desktopConsole!.content;
-  const get =
-    typeof attention?.get === "function"
-      ? attention.get.bind(attention)
-      : typeof content?.getArticleAttention === "function"
-        ? content.getArticleAttention.bind(content)
-        : undefined;
-  if (!get) return null;
-  const result = await get({ attentionId });
+  const content = attentionContentApi();
+  if (typeof content?.getArticleAttention !== "function") return null;
+  const result = await content.getArticleAttention({ attentionId });
   if (!result.ok) throw ipcError(result.error, "getArticleAttention failed");
-  return result.data || null;
+  return result.data?.item || null;
 }
 export async function previewArticleAttention(input: {
   attentionId: string;
   action: string;
 }): Promise<ArticleAttentionPreview> {
   if (!isElectron()) throw unavailable("需处理中心不可用");
-  const attention = window.desktopConsole!.articleAttention;
-  const content = window.desktopConsole!.content;
-  const preview =
-    typeof attention?.preview === "function"
-      ? attention.preview.bind(attention)
-      : typeof content?.previewArticleAttention === "function"
-        ? content.previewArticleAttention.bind(content)
-        : undefined;
-  if (!preview) throw unavailable("需处理中心不可用");
-  const result = await preview(input);
+  const content = attentionContentApi();
+  if (typeof content?.previewArticleAttention !== "function")
+    throw unavailable("需处理中心不可用");
+  const result = await content.previewArticleAttention(input);
   if (!result.ok || !result.data)
     throw ipcError(result.error, "previewArticleAttention failed");
   return result.data;
@@ -115,16 +157,10 @@ export async function resolveArticleAttention(input: {
   confirmed?: boolean;
 }): Promise<ArticleAttentionResolution> {
   if (!isElectron()) throw unavailable("需处理中心不可用");
-  const attention = window.desktopConsole!.articleAttention;
-  const content = window.desktopConsole!.content;
-  const resolve =
-    typeof attention?.resolve === "function"
-      ? attention.resolve.bind(attention)
-      : typeof content?.resolveArticleAttention === "function"
-        ? content.resolveArticleAttention.bind(content)
-        : undefined;
-  if (!resolve) throw unavailable("需处理中心不可用");
-  const result = await resolve(input);
+  const content = attentionContentApi();
+  if (typeof content?.resolveArticleAttention !== "function")
+    throw unavailable("需处理中心不可用");
+  const result = await content.resolveArticleAttention(input);
   if (!result.ok || !result.data)
     throw ipcError(result.error, "resolveArticleAttention failed");
   return result.data;

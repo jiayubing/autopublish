@@ -46,15 +46,15 @@ test('article attention actions produce visible publication/detail results', asy
       const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
       const calls = [];
       const content = {
-        listClients: () => ok([{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }]),
-        listGeneratedArticles: () => ok([article]),
-        getArticleManagementSnapshot: () => ok({ clientId: article.clientId, revision: 1, articles: [article], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [publication], attention: { revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }, submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }], workflowByArticle: {}, publicationSummaries: {} }),
+        listClients: () => ok({ clients: [{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
+        listGeneratedArticles: () => ok({ articles: [article] }),
+        getArticleManagementSnapshot: () => ok({ clientId: article.clientId, revision: 1, articles: [article], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [publication], attention: { revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }, submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }], workflowItems: [], publicationSummaryItems: [] }),
         listArticleAttention: () => ok({ revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }),
-        getArticleAttention: ({ attentionId }) => ok(attentionId === conflict.attentionId ? conflict : attention), previewArticleAttention: ({ action }) => ok({ attentionId: attention.attentionId, revision: 1, action, requiresConfirmation: false, message: '投稿明确失败', changedScopes: [] }),
+        getArticleAttention: ({ attentionId }) => ok({ item: attentionId === conflict.attentionId ? conflict : attention }), previewArticleAttention: ({ action }) => ok({ attentionId: attention.attentionId, revision: 1, action, requiresConfirmation: true, message: '投稿明确失败', changedScopes: [] }),
         resolveArticleAttention: ({ action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId: attention.attentionId, changedScopes: [] }); },
-        listSubmissionPlatforms: () => ok([{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }]), listSubmissionBatches: () => ok([]), listArticleTrash: () => ok([]),
-        listPublicationHistory: () => ok([publication]), listResearch: () => ok([]), listQuestions: () => ok([]), listTemplateCatalog: () => ok({ revision: '1', platforms: [], templates: [], diagnostics: [] }), listTemplates: () => ok([]),
-        getDoubaoLoginState: () => ok({ status: 'unknown' }), getDoubaoQueueState: () => ok({ status: 'idle', currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }), onDoubaoQueueState: () => () => {}, onArticleRemovalTransaction: () => () => {}, listArticleRemovalTransactions: () => ok([])
+        listSubmissionPlatforms: () => ok({ platforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }] }), listSubmissionBatches: () => ok({ batches: [] }), listArticleTrash: () => ok({ trash: [] }),
+        listPublicationHistory: () => ok({ records: [publication] }), listResearch: () => ok({ research: [] }), listQuestions: () => ok({ questions: [] }), listTemplateCatalog: () => ok({ revision: '1', platforms: [], templates: [], diagnostics: [] }), listTemplates: () => ok({ templates: [] }),
+        getDoubaoLoginState: () => ok({ loginState: { status: 'unknown' } }), getDoubaoQueueState: () => ok({ queue: { status: 'idle', currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }), onDoubaoQueueState: () => () => {}, onArticleRemovalTransaction: () => () => {}, listArticleRemovalTransactions: () => ok({ transactions: [] })
       };
       window.desktopConsole = {
         auth: { getState: () => ok({ authenticated: true, user: { loginName: 'admin' }, entitlements: [{ product: 'AutoPublish', enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} },
@@ -75,6 +75,9 @@ test('article attention actions produce visible publication/detail results', asy
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await page.getByRole('button', { name: '关闭发布详情' }).first().click();
     await page.getByRole('button', { name: '重新投稿' }).click();
+    await page.getByRole('dialog', { name: '确认处理需处理项' }).waitFor({ state: 'visible' });
+    assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
+    await page.getByRole('button', { name: '重新投稿' }).last().click();
     await page.waitForFunction(() => window.__attentionActionCalls.includes('retry-publication'));
     await page.getByRole('button', { name: '查看差异' }).click();
     await page.getByRole('dialog', { name: '需处理详情' }).waitFor({ state: 'visible' });

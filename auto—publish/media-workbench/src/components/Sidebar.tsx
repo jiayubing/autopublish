@@ -16,10 +16,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { deriveNavigationSummary } from '../navigation-summary';
-import { usePlatformQueue } from '../workspace-data-store';
-import { usePlatformTask } from '../platform-task-store';
+import { usePlatformFeature } from '../features/platform/platform-feature-context';
 import PlatformTaskIndicator from './PlatformTaskIndicator';
-import type { PlatformQueueSnapshot } from '../types';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -31,7 +29,6 @@ interface SidebarProps {
   totalResources: number;
   totalOrders: number;
   totalPlatformArticles?: number;
-  platformQueueSnapshot?: PlatformQueueSnapshot;
 }
 
 export default function Sidebar({
@@ -44,12 +41,11 @@ export default function Sidebar({
   totalResources,
   totalOrders,
   totalPlatformArticles: _legacyPlatformArticles,
-  platformQueueSnapshot
 }: SidebarProps) {
   const [showWalletDetails, setShowWalletDetails] = useState(false);
-  const queueStore = usePlatformQueue();
-  const platformTask = usePlatformTask();
-  const queueSnapshot = platformQueueSnapshot || queueStore.snapshot;
+  const { snapshot: platformSnapshot } = usePlatformFeature();
+  const queueSnapshot = platformSnapshot.queue;
+  const platformTask = platformSnapshot.run;
   const navigationSummary = deriveNavigationSummary({ platformQueue: queueSnapshot, contentArticles: totalArticles, orders: totalOrders });
 
   const menuItems = [

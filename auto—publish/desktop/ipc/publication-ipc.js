@@ -49,6 +49,19 @@ function validateReconcileInput(input) {
   return { publicationId: input.publicationId.trim(), status: input.status, reasonCode: input.reasonCode.trim() };
 }
 
+function safeRemoteUrl(value) {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
 function safeAttempt(attempt) {
   if (!attempt || typeof attempt !== "object") return null;
   return {
@@ -59,7 +72,7 @@ function safeAttempt(attempt) {
     startedAt: attempt.startedAt || null,
     finishedAt: attempt.finishedAt || null,
     remoteId: typeof attempt.remoteId === "string" ? attempt.remoteId : null,
-    remoteUrl: typeof attempt.remoteUrl === "string" ? attempt.remoteUrl : null,
+    remoteUrl: safeRemoteUrl(attempt.remoteUrl),
     errorCode: typeof attempt.errorCode === "string" ? attempt.errorCode : null,
     reasonCode: typeof attempt.reasonCode === "string" ? attempt.reasonCode : null
   };
@@ -99,7 +112,7 @@ function registerPublicationIpc(deps) {
       const records = values.operationalStore && typeof values.operationalStore.listPublicationRecords === "function"
         ? values.operationalStore.listPublicationRecords({ articleIds: request.articleIds })
         : ledger.listForArticles(request.clientId, request.articleIds);
-      return records.map(safeRecord);
+      return { records: records.map(safeRecord) };
     });
   });
   values.ipcMain.handle("publication:reconcile", function(event, input) {
@@ -114,9 +127,9 @@ function registerPublicationIpc(deps) {
         reasonCode: request.reasonCode
       });
       if (typeof values.invalidateData === "function") values.invalidateData("PUBLICATION_RECONCILED");
-      return safeRecord(record);
+      return { record: safeRecord(record) };
     });
   });
 }
 
-module.exports = { registerPublicationIpc, validateListInput, validateReconcileInput, safeRecord };
+module.exports = { registerPublicationIpc, validateListInput, validateReconcileInput, safeRecord, safeRemoteUrl };

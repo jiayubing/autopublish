@@ -19,6 +19,33 @@ function firstTitle(raw, fallback) {
   return fallback;
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function mediaBodyHtml(value) {
+  return String(value || "")
+    .trim()
+    .split(/\n\s*\n/)
+    .map(function (block) {
+      return block.trim();
+    })
+    .filter(Boolean)
+    .map(function (block) {
+      var heading = /^(#{1,6})\s+([\s\S]*)$/.exec(block);
+      if (heading) {
+        var level = heading[1].length;
+        return "<h" + level + ">" + escapeHtml(heading[2].trim()) + "</h" + level + ">";
+      }
+      return "<p>" + escapeHtml(block).replace(/\n/g, "<br />") + "</p>";
+    })
+    .join("\n");
+}
+
 function submissionInputError(code, message) {
   var error = new Error(message || "Invalid submission input");
   error.code = code || "SUBMISSION_INPUT_INVALID";
@@ -629,6 +656,7 @@ function createPlatformWorkbenchService(opts) {
       const parsed = await fallbackParseArticle(
         {
           filename: article.filename,
+          title: article.title,
           fileBaseName: path.basename(
             article.filename,
             path.extname(article.filename),
@@ -636,10 +664,11 @@ function createPlatformWorkbenchService(opts) {
         },
         filePath,
       );
-      const body =
+      const sourceBody =
         typeof parsed.body === "string" && parsed.body.trim()
           ? parsed.body
           : "媒体稿件内容";
+      const body = mediaBodyHtml(sourceBody);
       const articleId =
         "media-" +
         crypto

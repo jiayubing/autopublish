@@ -43,12 +43,48 @@ function workspaceRuntimeOptions(root) {
   };
 }
 
+function generatedArticle(id, title) {
+  return {
+    id: id,
+    clientId: "shared-client",
+    researchQueryIds: ["query-1"],
+    researchSnapshots: [{
+      questionId: "query-1",
+      question: "Synthetic question",
+      answerText: "Synthetic answer",
+      references: [],
+      collectedAt: "2026-07-27T00:00:00.000Z",
+      collectionMethod: "automatic"
+    }],
+    platform: "ctrip",
+    scenario: "guide",
+    templateId: "template-1",
+    title: title,
+    content: "Synthetic article body.",
+    status: "generated",
+    source: { client_material: true, doubao_answer: true, references: false, template: true },
+    createdAt: "2026-07-27T00:00:00.000Z",
+    updatedAt: "2026-07-27T00:00:00.000Z"
+  };
+}
+
+function syntheticIpcMain() {
+  const handlers = new Map();
+  return {
+    handlers: handlers,
+    handle: function(channel, handler) { handlers.set(channel, handler); },
+    removeHandler: function(channel) { handlers.delete(channel); }
+  };
+}
+
 it("workspace invalidation owns reason-to-scope policy and emits safe monotonic payloads", function() {
   const sent = [];
-  const invalidation = createWorkspaceDataInvalidation({ sendToRenderer: function(channel, payload) { sent.push([channel, payload]); } });
+  const invalidation = createWorkspaceDataInvalidation({ workspaceRuntimeId: "runtime-fixture-1", sendToRenderer: function(channel, payload) { sent.push([channel, payload]); } });
   assert.equal(invalidation.invalidate("PUBLICATION_RECONCILED"), 1);
   assert.equal(invalidation.invalidate("PUBLICATION_RECONCILED"), 2);
   assert.deepEqual(sent[0], ["workspace:data-invalidated", {
+    schemaVersion: 1,
+    workspaceRuntimeId: "runtime-fixture-1",
     revision: 1,
     scopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
     reasonCode: "PUBLICATION_RECONCILED"
@@ -99,6 +135,48 @@ it("maps every production workspace mutation reason explicitly without a broad f
 it("workspace runtime validates lifecycle dependencies before a workspace can start", function() {
   assert.throws(function() { createWorkspaceRuntime({}); }, /ipcMain/);
   assert.throws(function() { createWorkspaceRuntime({ ipcMain: {} }); }, /sendToRenderer/);
+});
+
+it("article management reads only the newly started workspace when client ids overlap", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-isolation-"));
+  const workspaceA = path.join(root, "workspace-a");
+  const workspaceB = path.join(root, "workspace-b");
+  const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
+  const ipcMain = syntheticIpcMain();
+  const options = Object.assign(workspaceRuntimeOptions(root), {
+    ipcMain: ipcMain,
+    authService: { requireAuthenticated: async function() {} }
+  });
+  fs.mkdirSync(workspaceA, { recursive: true });
+  fs.mkdirSync(workspaceB, { recursive: true });
+  createContentLifecycleComposition({ workspaceRoot: workspaceA }).contentStore.saveArticle(generatedArticle("article-a", "Workspace A"));
+  createContentLifecycleComposition({ workspaceRoot: workspaceB }).contentStore.saveArticle(generatedArticle("article-b", "Workspace B"));
+
+  let runtime = createWorkspaceRuntime(options);
+  try {
+    await runtime.start({ workspacePath: workspaceA });
+    runtime.registerIpc();
+    let response = await ipcMain.handlers.get("content:get-article-management-snapshot")(null, {
+      schemaVersion: 1,
+      payload: { clientId: "shared-client" }
+    });
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.deepEqual(response.data.articles.map(function(article) { return article.id; }), ["article-a"]);
+    await runtime.dispose();
+
+    runtime = createWorkspaceRuntime(options);
+    await runtime.start({ workspacePath: workspaceB });
+    runtime.registerIpc();
+    response = await ipcMain.handlers.get("content:get-article-management-snapshot")(null, {
+      schemaVersion: 1,
+      payload: { clientId: "shared-client" }
+    });
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.deepEqual(response.data.articles.map(function(article) { return article.id; }), ["article-b"]);
+  } finally {
+    await runtime.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 it("workspace runtime gives the Hepan task service its configured platform settings", async function() {
@@ -173,7 +251,7 @@ it("disposes services already created when a middle workspace factory fails", as
   }
 });
 
-it("unsubscribes and disposes all started workspace resources when subscription setup fails", async function() {
+it("unsubscribes and disposes all started workspace resources when post-subscription setup fails", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-subscription-failure-"));
   const events = [];
   const restore = replaceModules([
@@ -184,11 +262,11 @@ it("unsubscribes and disposes all started workspace resources when subscription 
     { request: "../desktop/services/ai-content-service", exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
     { request: "../desktop/services/content-generation-batch-service", exports: { createContentGenerationBatchService: function() { return lifecycleService("generation", events, { getState: function() { return {}; } }); } } },
     { request: "../desktop/services/platform-workbench-service", exports: { createPlatformWorkbenchService: function() { return lifecycleService("workbench", events); } } },
-    { request: "../src/core/logger", exports: { subscribe: function() { throw new Error("log subscription failed"); } } }
+    { request: "../desktop/services/generation-submission-handoff-service", exports: { createGenerationSubmissionHandoffService: function() { throw new Error("handoff setup failed"); } } }
   ]);
   try {
     const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
-    await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /log subscription failed/);
+    await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /handoff setup failed/);
     assert.deepEqual(events, ["collection-unsubscribe", "workbench", "generation", "content", "submission", "provider", "doubao", "task"]);
     assert.equal(runtime.getState().phase, "stopped");
     assert.equal(runtime.getState().task, null);

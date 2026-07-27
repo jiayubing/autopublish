@@ -9,27 +9,36 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 describe("renderer workbench controller seams", () => {
   it("keeps platform selection, request identity, and terminal refresh in a renderer controller", () => {
     const controller = read(
-      "media-workbench/src/controllers/platform-submission-controller.js",
+      "media-workbench/src/features/platform/platform-feature.js",
     );
     const view = read("media-workbench/src/components/PlatformWorkbench.tsx");
-    assert.match(controller, /createPlatformSubmissionController/);
-    assert.match(controller, /requestId/);
-    assert.match(controller, /refresh\("submit-terminal"\)/);
+    assert.match(controller, /createPlatformFeature/);
+    assert.match(controller, /createCommandOwner/);
+    assert.doesNotMatch(controller, /requestId/);
+    assert.match(controller, /refreshQueue\(['"]submit-terminal['"]\)/);
     assert.match(controller, /subscribe/);
-    assert.match(view, /createPlatformSubmissionController/);
+    assert.match(view, /usePlatformFeature/);
+    assert.doesNotMatch(view, /bridge\/platform|usePlatformQueue|usePlatformTask/);
     assert.doesNotMatch(view, /usePlatformWorkbenchController/);
   });
 
-  it("loads article-management snapshots through the production controller seam", () => {
-    const controller = read(
-      "media-workbench/src/article-management-controller.js",
-    );
+  it("loads article-management snapshots through the production content feature seam", () => {
     const view = read(
       "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     );
-    assert.match(controller, /createArticleManagementController/);
-    assert.match(controller, /requestId/);
-    assert.match(view, /createArticleManagementController/);
-    assert.doesNotMatch(view, /useArticleManagementSnapshot/);
+    const feature = read("media-workbench/src/features/content/content-workbench-feature.js");
+    assert.equal(fs.existsSync(path.join(root, "media-workbench/src/article-management-controller.js")), false);
+    assert.doesNotMatch(view, /createArticleManagementController/);
+    assert.doesNotMatch(view, /getArticleManagementSnapshot|refreshToken/);
+    assert.match(feature, /query: 'articleManagement'/);
+  });
+
+  it("account profile selection consumes the root platform feature", () => {
+    const selector = read(
+      "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    );
+    assert.match(selector, /usePlatformFeature/);
+    assert.doesNotMatch(selector, /bridge\/account-profile|listAccountProfiles/);
+    assert.doesNotMatch(selector, /setProfiles|setBusyPlatformId|setError/);
   });
 });

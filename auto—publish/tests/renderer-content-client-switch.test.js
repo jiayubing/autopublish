@@ -62,21 +62,21 @@ describe("renderer content client switching", function() {
       };
       const platforms = [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }];
       const content = {
-        listClients: () => ok(clients),
-        listGeneratedArticles: (clientId) => ok(state.articles[clientId] || []),
+        listClients: () => ok({ clients }),
+        listGeneratedArticles: (clientId) => ok({ articles: state.articles[clientId] || [] }),
         getArticleManagementSnapshot: ({ clientId }) => {
           const batches = state.batches[clientId] || [];
-          return ok({ clientId, revision: 1, articles: state.articles[clientId] || [], trash: [], submissionBatches: batches, cancellationPlans: batches.filter((batch) => batch.status === "queued").map((batch) => ({ batchId: batch.id, clientId, action: "cancel", planId: `plan-${batch.id}-${batch.status}`, fingerprint: batch.status, allowedCount: batch.items.length, blockedCount: 0, items: batch.items.map((item) => ({ articleId: item.articleId, targetPlatformId: item.targetPlatformId, action: "cancel", allowed: true })) })), publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: platforms, workflowByArticle: {}, publicationSummaries: {} });
+          return ok({ clientId, revision: 1, articles: state.articles[clientId] || [], trash: [], submissionBatches: batches, cancellationPlans: batches.filter((batch) => batch.status === "queued").map((batch) => ({ batchId: batch.id, clientId, action: "cancel", planId: `plan-${batch.id}-${batch.status}`, fingerprint: batch.status, allowedCount: batch.items.length, blockedCount: 0, items: batch.items.map((item) => ({ articleId: item.articleId, targetPlatformId: item.targetPlatformId, action: "cancel", allowed: true })) })), publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: platforms, workflowItems: [], publicationSummaryItems: [] });
         },
-        listSubmissionPlatforms: () => ok(platforms),
-        listSubmissionBatches: ({ clientId }) => ok(state.batches[clientId] || []),
-        listArticleTrash: () => ok([]),
-        listResearch: () => ok([]),
-        listQuestions: () => ok([]),
+        listSubmissionPlatforms: () => ok({ platforms }),
+        listSubmissionBatches: ({ clientId }) => ok({ batches: state.batches[clientId] || [] }),
+        listArticleTrash: () => ok({ trash: [] }),
+        listResearch: () => ok({ research: [] }),
+        listQuestions: () => ok({ questions: [] }),
         listArticleAttention: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }),
         listTemplateCatalog: () => ok({ revision: "fixture", platforms: [{ id: "fixture-platform", displayName: "测试模板平台", description: "", order: 1 }], templates: [{ id: "fixture-template", platform: "fixture-platform", scenario: "客户切换回归", name: "测试模板", body: "fixture", bodyHash: "fixture", source: "custom" }], diagnostics: [] }),
-        listGenerationBatches: () => ok([generationBatch]),
-        getGenerationBatch: () => ok(generationBatch),
+        listGenerationBatches: () => ok({ batches: [generationBatch] }),
+        getGenerationBatch: () => ok({ batch: generationBatch }),
         getGenerationBatchState: () => ok({ status: "idle", state: "idle", batchId: null }),
         getGenerationRuntimeSnapshot: () => ok({ runtimeId: "fixture-runtime", sequence: 0, runtime: { status: "idle", state: "idle", batchId: null }, batch: generationBatch, capabilities: {} }),
         onGenerationBatchState: () => () => {},
@@ -108,8 +108,8 @@ describe("renderer content client switching", function() {
             };
           });
         },
-        getDoubaoLoginState: () => ok({ status: "unknown" }),
-        getDoubaoQueueState: () => ok({ status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }),
+        getDoubaoLoginState: () => ok({ loginState: { status: "unknown" } }),
+        getDoubaoQueueState: () => ok({ queue: { status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }),
         onDoubaoQueueState: () => () => {},
       };
       window.__clientSwitchFlow = state;
@@ -118,14 +118,13 @@ describe("renderer content client switching", function() {
         workspace: { getBootstrapState: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), getCurrent: () => ok({ workspacePath: "fixture", envOverride: false, validation: { ok: true, errors: [], warnings: [] } }), openCurrent: () => ok(undefined), requestSwitch: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), chooseDirectory: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), confirmSelection: () => ok({ state: "ready" }), cancelSelection: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }) },
         workspaceData: { onInvalidated: () => () => {} },
         runtimeDiagnostics: { get: () => ok({ ok: true, buildInfo: { version: "1.0.1" }, browserChannel: { channel: "chromium", configured: true, state: "ready", probed: true }, capabilities: {}, errors: [], warnings: [] }), browserSmoke: () => ok({ ok: true }) },
-        media: { scanArticles: () => ok([]), getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 1 }), getPool: () => ok([]), getBalance: () => ok({ balance: "0" }), getOrders: () => ok([]) },
-        orders: { getOrders: () => ok([]) },
+        media: { scanArticles: () => ok({ items: [] }), getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 1 }), getPool: () => ok({ items: [] }), getBalance: () => ok({ balance: "0" }) },
+        orders: { getOrders: () => ok({ items: [] }) },
         aiProvider: { getStatus: () => ok({ configured: false, source: "application", apiKeyMask: "", lastTest: null }), save: () => ok({}), testConnection: () => ok({}), clear: () => ok({}) },
         platformSettings: { getStatus: () => ok({ configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null }), save: () => ok({}), test: () => ok({}), clear: () => ok({}) },
         storageMaintenance: { getUsage: () => ok({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }), cleanCaches: () => ok({ blocked: false }) },
-        platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok([{ accountProfileId: "account-fixture", platformId: "fixture-platform", displayName: "测试账号" }]), confirmAccountProfile: (input) => ok({ accountProfileId: "account-confirmed", platformId: input.platformId, displayName: input.displayName }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} },
-        publication: { listForArticles: () => ok([]), reconcile: () => ok({}) },
-        articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) },
+        platforms: { getQueue: () => ok({ revision: 0, platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [{ accountProfileId: "account-fixture", platformId: "fixture-platform", displayName: "测试账号" }] }), confirmAccountProfile: (input) => ok({ profile: { accountProfileId: "account-confirmed", platformId: input.platformId, displayName: input.displayName } }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} },
+        publication: { listForArticles: () => ok({ records: [] }), reconcile: () => ok({ record: {} }) },
         content,
       };
     });

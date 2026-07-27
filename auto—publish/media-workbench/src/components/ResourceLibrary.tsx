@@ -2,7 +2,6 @@
 import { MediaResource, MediaType } from '../types';
 import { 
   Search, 
-  Plus, 
   FolderOpen, 
   Image as ImageIcon, 
   Video as VideoIcon, 
@@ -31,7 +30,14 @@ interface ResourceLibraryProps {
   onTogglePool: (resource: MediaResource) => void;
   onRefreshResources?: () => void;
   isRefreshingResources?: boolean;
-  onAddResource: (resource: Omit<MediaResource, 'createdAt'>) => void;
+  totalResources?: number;
+  resourcePage?: number;
+  resourcePageSize?: number;
+  resourceSearch?: string;
+  onResourceSearch?: (query: string) => void;
+  onResourcePageChange?: (page: number) => void;
+  errorMessage?: string | null;
+  statusMessage?: string | null;
 }
 
 export default function ResourceLibrary({
@@ -44,32 +50,35 @@ export default function ResourceLibrary({
   onTogglePool,
   onRefreshResources,
   isRefreshingResources,
-  onAddResource
+  totalResources,
+  resourcePage,
+  resourcePageSize,
+  resourceSearch,
+  onResourceSearch,
+  onResourcePageChange,
+  errorMessage,
+  statusMessage,
 }: ResourceLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<MediaType | 'all'>('all');
-  const [showAddForm, setShowAddForm] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
-
-  // Form states for adding new media
-  const [newMediaName, setNewMediaName] = useState('');
-  const [newMediaType, setNewMediaType] = useState<MediaType>('image');
-  const [newMediaPrice, setNewMediaPrice] = useState('10');
-  const [newMediaSize, setNewMediaSize] = useState('2.5 MB');
+  const usesRemotePaging = typeof onResourcePageChange === 'function';
+  const usesRemoteSearch = typeof onResourceSearch === 'function';
 
   // Filter items
   const filteredResources = resources.filter((resource) => {
-    const matchesSearch = resource.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = usesRemoteSearch || resource.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           resource.resourceId.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = activeFilter === 'all' || resource.type === activeFilter;
     return matchesSearch && matchesFilter;
   });
 
   // Paginated items
-  const totalPages = Math.ceil(filteredResources.length / itemsPerPage);
+  const totalPages = usesRemotePaging ? Math.max(1, Math.ceil((totalResources || 0) / (resourcePageSize || 50))) : Math.ceil(filteredResources.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedResources = filteredResources.slice(startIndex, startIndex + itemsPerPage);
+  const visiblePage = usesRemotePaging ? (resourcePage || 1) : currentPage;
+  const paginatedResources = usesRemotePaging ? filteredResources : filteredResources.slice(startIndex, startIndex + itemsPerPage);
 
   const getMediaIcon = (type: MediaType) => {
     switch (type) {
@@ -87,27 +96,6 @@ export default function ResourceLibrary({
       case 'audio': return '音频';
       default: return '文档';
     }
-  };
-
-  const handleAddMedia = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMediaName.trim()) return;
-
-    const randId = `RES-${Math.floor(100 + Math.random() * 900)}`;
-    onAddResource({
-      resourceId: randId,
-      name: newMediaName,
-      type: newMediaType,
-      price: parseFloat(newMediaPrice) || 0,
-      size: newMediaSize || '1.0 MB'
-    });
-
-    // Reset states
-    setNewMediaName('');
-    setNewMediaType('image');
-    setNewMediaPrice('10');
-    setNewMediaSize('2.5 MB');
-    setShowAddForm(false);
   };
 
   return (
@@ -132,13 +120,6 @@ export default function ResourceLibrary({
                 <span>{isRefreshingResources ? "拉取中..." : "刷新库"}</span>
               </button>
             )}
-            <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100/80 rounded-lg text-xs font-semibold flex items-center space-x-1 border border-blue-200/20 transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>添加媒体</span>
-          </button>
           </div>
         </div>
 
@@ -160,98 +141,17 @@ export default function ResourceLibrary({
         )}
       </div>
 
-      {/* Add Media Panel overlay */}
-      <AnimatePresence>
-        {showAddForm && (
-          <motion.form
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            onSubmit={handleAddMedia}
-            className="p-4 border-b border-slate-100 bg-blue-50/10 space-y-3 overflow-hidden text-xs"
-          >
-            <h3 className="font-bold text-slate-700">录入新媒体资源</h3>
-            
-            <div className="space-y-1.5">
-              <label className="font-medium text-slate-600">资源名称</label>
-              <input
-                type="text"
-                placeholder="例如：行业深度图表.png"
-                value={newMediaName}
-                onChange={(e) => setNewMediaName(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs focus:border-blue-500 outline-hidden"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <label className="font-medium text-slate-600">资源类型</label>
-                <select
-                  value={newMediaType}
-                  onChange={(e) => setNewMediaType(e.target.value as MediaType)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs focus:border-blue-500 outline-hidden"
-                >
-                  <option value="image">JPEG/PNG 图片</option>
-                  <option value="video">MP4/AVI 视频</option>
-                  <option value="audio">MP3/WAV 音频</option>
-                  <option value="document">PDF/DOCX 附件</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-medium text-slate-600">授权单价 (元)</label>
-                <input
-                  type="number"
-                  placeholder="10"
-                  value={newMediaPrice}
-                  onChange={(e) => setNewMediaPrice(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs focus:border-blue-500 outline-hidden"
-                  min="0"
-                  step="0.1"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="font-medium text-slate-600">文件大小</label>
-              <input
-                type="text"
-                placeholder="2.5 MB"
-                value={newMediaSize}
-                onChange={(e) => setNewMediaSize(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs focus:border-blue-500 outline-hidden"
-              />
-            </div>
-
-            <div className="flex space-x-2 pt-1.5">
-              <button
-                type="submit"
-                className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-2xs transition-all"
-              >
-                保存并导入
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddForm(false)}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-md transition-all"
-              >
-                取消
-              </button>
-            </div>
-          </motion.form>
-        )}
-      </AnimatePresence>
-
       {/* Search and filter tags */}
       <div className="p-3 border-b border-slate-100 space-y-2">
+        {errorMessage && <div role="alert" className="rounded border border-rose-100 bg-rose-50 px-2 py-1.5 text-xs text-rose-700">{errorMessage}</div>}
+        {!errorMessage && statusMessage && <div role="status" className="rounded border border-emerald-100 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700">{statusMessage}</div>}
         <div className="relative flex items-center">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3" />
           <input
             type="text"
             placeholder="搜索资源名称、编码..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            value={usesRemoteSearch ? (resourceSearch || '') : searchQuery}
+            onChange={(e) => { if (usesRemoteSearch) onResourceSearch(e.target.value); else { setSearchQuery(e.target.value); setCurrentPage(1); } }}
             className="media-search w-full pl-8 pr-3 py-1.5 bg-slate-50 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-lg outline-hidden focus:border-blue-400 transition-all"
           />
         </div>
@@ -347,19 +247,19 @@ export default function ResourceLibrary({
       {totalPages > 1 && (
         <div className="pagination p-3.5 border-t border-slate-100 flex items-center justify-between text-xs bg-slate-50/40">
           <span className="page-info text-slate-500">
-            第 <b>{currentPage}</b> / <b>{totalPages}</b> 页 (共 {filteredResources.length} 项)
+            第 <b>{visiblePage}</b> / <b>{totalPages}</b> 页 (共 {usesRemotePaging ? (totalResources || 0) : filteredResources.length} 项)
           </span>
           <div className="flex items-center space-x-1">
             <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
+              onClick={() => usesRemotePaging ? onResourcePageChange?.(Math.max(visiblePage - 1, 1)) : setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={visiblePage === 1}
               className="p-1 rounded-md border border-slate-200 bg-white text-slate-600 hover:text-slate-800 disabled:opacity-40"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
+              onClick={() => usesRemotePaging ? onResourcePageChange?.(Math.min(visiblePage + 1, totalPages)) : setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={visiblePage === totalPages}
               className="p-1 rounded-md border border-slate-200 bg-white text-slate-600 hover:text-slate-800 disabled:opacity-40"
             >
               <ChevronRight className="w-3.5 h-3.5" />

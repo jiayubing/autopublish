@@ -71,7 +71,8 @@ describe("article history grouping", async function() {
   it("keeps article opening separate from queue selection", function() {
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
     assert.doesNotMatch(view, /reviewContentArticles|审核已选|待审核/);
-    assert.match(view, /ActionConfirmationModal/);
+    assert.match(view, /useConfirmation/);
+    assert.match(view, /const \{ confirm \} = useConfirmation\(\)/);
     assert.match(view, /article\.status !== 'generated'/);
     assert.match(view, /onArticleSelect\(article\)/);
     assert.match(view, /全选当前结果/);
@@ -81,15 +82,14 @@ describe("article history grouping", async function() {
 
   it("offers a current-client trash view with restore and confirmed permanent deletion", function() {
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    const api = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/bridge/content.ts"), "utf8");
-    assert.match(view, /getArticleManagementSnapshot|setTrash/);
-    assert.match(view, /restoreContentArticle/);
-    assert.match(view, /preparePermanentDeleteContentArticle/);
-    assert.match(view, /permanentlyDeleteContentArticle/);
+    assert.match(view, /management: ArticleManagementReadModel/);
+    assert.doesNotMatch(view, /getArticleManagementSnapshot/);
+    assert.match(view, /commands\.restoreContentArticle/);
+    assert.match(view, /commands\.preparePermanentDeleteContentArticle/);
+    assert.match(view, /await confirm\(\{ title: '确认永久删除文章'/);
+    assert.match(view, /commands\.permanentlyDeleteContentArticle/);
     assert.match(view, /移入回收站/);
     assert.match(view, /永久删除/);
-    assert.match(api, /preparePermanentDeleteContentArticle/);
-    assert.match(api, /permanentlyDeleteContentArticle/);
   });
 
   it("keeps saved articles selectable for submission queueing", function() {
@@ -98,7 +98,9 @@ describe("article history grouping", async function() {
     assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'generated' \|\| article\.status === 'saved'\)/);
     assert.match(view, /状态：/);
     assert.match(view, /撤销未开始投稿/);
-    assert.match(view, /getArticleManagementSnapshot/);
+    assert.match(view, /management: ArticleManagementReadModel/);
+    assert.match(view, /const \[selected, setSelected\]/);
+    assert.match(view, /onArticleSelect\(article\)/);
     assert.match(view, /queueableTaskCount/);
     assert.match(view, /idempotentCount/);
     assert.match(view, /conflictCount/);

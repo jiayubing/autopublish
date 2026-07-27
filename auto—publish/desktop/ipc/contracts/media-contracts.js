@@ -1,0 +1,473 @@
+const {
+  defineContract,
+  exactObject,
+  stringField,
+  integerField,
+  optionalField,
+  nullableField,
+  enumField,
+  multilineStringField,
+  numberField,
+  arrayField,
+} = require("./registry");
+
+const safeText = (max, min = 0) =>
+  stringField({ max, min, pattern: /^[^\x00-\x1f\x7f]*$/u });
+const filename = stringField({
+  max: 255,
+  min: 1,
+  pattern: /^[^\\/\x00-\x1f\x7f]+$/u,
+});
+const identifier = stringField({
+  max: 256,
+  min: 1,
+  pattern: /^[^\\/\x00-\x1f\x7f]+$/u,
+});
+const emptyRequest = exactObject({});
+const completed = exactObject({ completed: "boolean" });
+
+const COMMON_ERRORS = {
+  AUTH_REQUIRED: {
+    category: "authentication",
+    retryability: "never",
+    userMessage: "请先完成登录后再继续。",
+  },
+  IPC_REQUEST_INVALID: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "请求数据无效，请刷新页面后重试。",
+  },
+  IPC_RESULT_INVALID: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "操作结果未通过安全校验，请刷新后重试。",
+  },
+  IPC_INTERNAL: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "操作未能安全完成，请稍后重试或检查诊断信息。",
+  },
+  MEDIA_CONFIG_NOT_SET: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "请先配置付费媒体服务。",
+  },
+  MEDIA_RESOURCE_PAGE_SIZE_INVALID: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "资源分页大小必须介于 1 到 100。",
+  },
+  MEDIA_RESOURCE_REFRESH_OPTIONS_INVALID: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "资源刷新边界只能由主进程控制。",
+  },
+  MEDIA_POOL_CAPACITY_EXCEEDED: {
+    category: "validation",
+    retryability: "manual-check",
+    userMessage: "资源池超过安全容量，请清理后重试。",
+  },
+  SUBMISSION_INPUT_INVALID: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "投稿输入无效，请重新选择稿件和媒体资源。",
+  },
+  DRAFT_INVALID: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "草稿数据无效，请检查后重试。",
+  },
+  PUBLICATION_WORKFLOW_UNAVAILABLE: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "投稿工作流当前不可用，请检查诊断信息。",
+  },
+};
+
+const BASE_ERROR_CODES = [
+  "AUTH_REQUIRED",
+  "IPC_REQUEST_INVALID",
+  "IPC_RESULT_INVALID",
+  "IPC_INTERNAL",
+];
+
+function errors(...codes) {
+  const errorCodes = [...new Set([...BASE_ERROR_CODES, ...codes])];
+  return {
+    errorCodes,
+    errors: Object.fromEntries(errorCodes.map((code) => [code, COMMON_ERRORS[code]])),
+  };
+}
+
+const resource = exactObject({
+  resourceId: identifier,
+  name: safeText(500),
+  price: numberField({ min: 0, max: 100000000 }),
+  type: enumField(["image", "video"]),
+  url: optionalField(safeText(2048)),
+  duration: optionalField(safeText(64)),
+  resolution: optionalField(safeText(64)),
+  size: optionalField(safeText(64)),
+  createdAt: safeText(64),
+});
+
+const selectedResource = exactObject({
+  resourceId: identifier,
+  name: optionalField(safeText(500)),
+  price: optionalField(numberField({ min: 0, max: 100000000 })),
+});
+
+const draftInput = exactObject({
+  title: optionalField(safeText(1000)),
+  remark: optionalField(safeText(10000)),
+  ignoreImages: optionalField("boolean"),
+  selectedResources: optionalField(arrayField(selectedResource, { max: 100 })),
+});
+
+const draft = exactObject({
+  filename,
+  title: safeText(1000),
+  remark: safeText(10000),
+  ignoreImages: "boolean",
+  selectedResources: arrayField(resource, { max: 100 }),
+  updatedAt: optionalField(safeText(64)),
+});
+
+const articleSummary = exactObject({
+  filename,
+  title: safeText(1000),
+  autoTitle: safeText(1000),
+  remark: safeText(10000),
+  hasImages: "boolean",
+  imageCount: integerField({ min: 0, max: 10000 }),
+  ignoreImages: "boolean",
+  selectedResources: arrayField(resource, { max: 100 }),
+});
+
+const articlePreview = exactObject({
+  filename,
+  title: safeText(1000),
+  content: multilineStringField({ min: 0, max: 2000000 }),
+  selectedResources: arrayField(resource, { max: 100 }),
+});
+
+const submission = exactObject({
+  filename,
+  resourceIds: arrayField(identifier, { min: 1, max: 100 }),
+  draftRevision: optionalField(safeText(64)),
+});
+
+const preflightItem = exactObject({
+  filename,
+  title: safeText(1000),
+  resourceId: identifier,
+  resourceName: safeText(500),
+  price: numberField({ min: 0, max: 100000000 }),
+  status: safeText(64),
+  reasonCode: optionalField(safeText(128)),
+  publicationId: optionalField(safeText(256)),
+});
+
+const preflight = exactObject({
+  articleCount: integerField({ min: 0, max: 1000 }),
+  resourceCount: integerField({ min: 0, max: 20000 }),
+  submitableResourceCount: integerField({ min: 0, max: 20000 }),
+  blockedResourceCount: integerField({ min: 0, max: 20000 }),
+  estimatedTotalPrice: numberField({ min: 0, max: 1000000000 }),
+  actualPrice: numberField({ min: 0, max: 1000000000 }),
+  blockers: arrayField(safeText(1000), { max: 1000 }),
+  blockedResources: arrayField(preflightItem, { max: 20000 }),
+  submitableResources: arrayField(preflightItem, { max: 20000 }),
+});
+
+const order = exactObject({
+  title: safeText(1000),
+  filename: safeText(255),
+  orderNid: identifier,
+  statusCode: safeText(64),
+  statusLabel: safeText(128),
+  submittedAt: safeText(64),
+  publishedAt: safeText(64),
+  resourceId: safeText(256),
+  resourceName: safeText(500),
+  price: safeText(128),
+  orderUrl: safeText(2048),
+  publicationId: optionalField(safeText(256)),
+  attemptId: optionalField(safeText(256)),
+  publicationStatus: optionalField(safeText(64)),
+  errorCode: optionalField(safeText(128)),
+});
+
+const resourcePage = exactObject({
+  items: arrayField(resource, { max: 100 }),
+  total: integerField({ min: 0, max: 20000 }),
+  page: integerField({ min: 1, max: 20000 }),
+  pageSize: integerField({ min: 1, max: 100 }),
+  totalPages: integerField({ min: 0, max: 20000 }),
+  hasPrev: "boolean",
+  hasNext: "boolean",
+});
+
+const poolPage = exactObject({
+  items: arrayField(resource, { max: 100 }),
+  memberResourceIds: arrayField(identifier, { max: 100 }),
+  total: integerField({ min: 0, max: 20000 }),
+  page: integerField({ min: 1, max: 20000 }),
+  pageSize: integerField({ min: 1, max: 100 }),
+  totalPages: integerField({ min: 0, max: 20000 }),
+  hasPrev: "boolean",
+  hasNext: "boolean",
+});
+
+const diagnostic = exactObject({
+  code: safeText(128, 1),
+  page: optionalField(integerField({ min: 1, max: 200 })),
+  count: optionalField(integerField({ min: 0, max: 100000 })),
+  loadedCount: optionalField(integerField({ min: 0, max: 20000 })),
+});
+
+function noArgs() {
+  return {};
+}
+
+function noLegacyInput() {
+  return [undefined];
+}
+
+function oneObject(args) {
+  return args[0] === undefined ? {} : args[0];
+}
+
+function selectedResourceFromArgs(args) {
+  const value = args[0] || {};
+  const resource = { resourceId: value.resourceId };
+  if (value.name !== undefined) resource.name = value.name;
+  if (value.price !== undefined) resource.price = value.price;
+  return { resource };
+}
+
+function contract(input, errorCodes = []) {
+  return defineContract({
+    feature: "media",
+    ...input,
+    ...errors(...errorCodes),
+  });
+}
+
+const mediaContracts = [
+  contract(
+    {
+      capability: "media.refreshResources",
+      channel: "media:refresh-resources",
+      kind: "command",
+      request: emptyRequest,
+      success: exactObject({
+        status: enumField(["complete", "truncated"]),
+        complete: "boolean",
+        truncated: "boolean",
+        truncationReason: nullableField(safeText(64)),
+        pageCount: integerField({ min: 0, max: 200 }),
+        resourceCount: integerField({ min: 0, max: 20000 }),
+        diagnostics: arrayField(diagnostic, { max: 1000 }),
+        refreshedAt: safeText(64, 1),
+      }),
+      fromArgs: oneObject,
+      toArgs: () => [{ fetchAll: true }],
+    },
+    [
+      "MEDIA_CONFIG_NOT_SET",
+      "MEDIA_RESOURCE_PAGE_SIZE_INVALID",
+      "MEDIA_RESOURCE_REFRESH_OPTIONS_INVALID",
+    ],
+  ),
+  contract(
+    {
+      capability: "media.getResourcePage",
+      channel: "media:get-resource-page",
+      kind: "query",
+      request: exactObject({
+        page: integerField({ min: 1, max: 20000 }),
+        pageSize: integerField({ min: 1, max: 100 }),
+      }),
+      success: resourcePage,
+      fromArgs: oneObject,
+      toArgs: (payload) => [payload],
+    },
+    ["MEDIA_RESOURCE_PAGE_SIZE_INVALID"],
+  ),
+  contract(
+    {
+      capability: "media.searchResourcePage",
+      channel: "media:search-resource-page",
+      kind: "query",
+      request: exactObject({
+        query: safeText(500),
+        page: integerField({ min: 1, max: 20000 }),
+        pageSize: integerField({ min: 1, max: 100 }),
+      }),
+      success: resourcePage,
+      fromArgs: oneObject,
+      toArgs: (payload) => [
+        { keyword: payload.query, page: payload.page, pageSize: payload.pageSize },
+      ],
+    },
+    ["MEDIA_RESOURCE_PAGE_SIZE_INVALID"],
+  ),
+  contract(
+    {
+      capability: "media.getPool",
+      channel: "media:get-pool",
+      kind: "query",
+      request: exactObject({
+        page: integerField({ min: 1, max: 20000 }),
+        pageSize: integerField({ min: 1, max: 100 }),
+        resourceIds: arrayField(identifier, { max: 100 }),
+      }),
+      success: poolPage,
+      fromArgs: oneObject,
+      toArgs: (payload) => [payload],
+    },
+    ["MEDIA_RESOURCE_PAGE_SIZE_INVALID", "MEDIA_POOL_CAPACITY_EXCEEDED"],
+  ),
+  contract({
+    capability: "media.addToPool",
+    channel: "media:add-to-pool",
+    kind: "command",
+    request: exactObject({ resource: selectedResource }),
+    success: exactObject({ resource }),
+    fromArgs: selectedResourceFromArgs,
+    toArgs: (payload) => [payload.resource],
+  }),
+  contract({
+    capability: "media.removeFromPool",
+    channel: "media:remove-from-pool",
+    kind: "command",
+    request: exactObject({ resourceId: identifier }),
+    success: completed,
+    fromArgs: (args) => ({ resourceId: args[0] }),
+    toArgs: (payload) => [payload.resourceId],
+  }),
+  contract({
+    capability: "media.getDrafts",
+    channel: "media:get-drafts",
+    kind: "query",
+    request: emptyRequest,
+    success: exactObject({ items: arrayField(draft, { max: 1000 }) }),
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+  }),
+  contract(
+    {
+      capability: "media.getDraft",
+      channel: "media:get-draft",
+      kind: "query",
+      request: exactObject({ filename }),
+      success: exactObject({ draft: nullableField(draft) }),
+      fromArgs: (args) => ({ filename: args[0] }),
+      toArgs: (payload) => [payload.filename],
+    },
+    ["SUBMISSION_INPUT_INVALID"],
+  ),
+  contract(
+    {
+      capability: "media.setDraft",
+      channel: "media:set-draft",
+      kind: "command",
+      request: exactObject({ filename, draft: draftInput }),
+      success: completed,
+      fromArgs: (args) => ({ filename: args[0], draft: args[1] }),
+      toArgs: (payload) => [payload.filename, payload.draft],
+    },
+    ["SUBMISSION_INPUT_INVALID", "DRAFT_INVALID"],
+  ),
+  contract(
+    {
+      capability: "media.removeDraft",
+      channel: "media:remove-draft",
+      kind: "command",
+      request: exactObject({ filename }),
+      success: completed,
+      fromArgs: (args) => ({ filename: args[0] }),
+      toArgs: (payload) => [payload.filename],
+    },
+    ["SUBMISSION_INPUT_INVALID"],
+  ),
+  contract({
+    capability: "media.scanArticles",
+    channel: "media:scan-articles",
+    kind: "query",
+    request: emptyRequest,
+    success: exactObject({ items: arrayField(articleSummary, { max: 1000 }) }),
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+  }),
+  contract(
+    {
+      capability: "media.previewArticle",
+      channel: "media:preview-article",
+      kind: "query",
+      request: exactObject({ filename }),
+      success: exactObject({ article: articlePreview }),
+      fromArgs: (args) => ({ filename: args[0] }),
+      toArgs: (payload) => [payload.filename],
+    },
+    ["SUBMISSION_INPUT_INVALID"],
+  ),
+  contract(
+    {
+      capability: "media.buildConfirmation",
+      channel: "media:build-confirmation",
+      kind: "query",
+      request: exactObject({
+        submissions: arrayField(submission, { min: 1, max: 1000 }),
+      }),
+      success: preflight,
+      fromArgs: (args) => ({ submissions: args[0] }),
+      toArgs: (payload) => [payload.submissions],
+    },
+    ["SUBMISSION_INPUT_INVALID"],
+  ),
+  contract(
+    {
+      capability: "media.submitSelected",
+      channel: "media:submit-selected",
+      kind: "command",
+      request: exactObject({
+        submissions: arrayField(submission, { min: 1, max: 1000 }),
+      }),
+      success: exactObject({
+        batchId: safeText(256),
+        publishedCount: integerField({ min: 0, max: 20000 }),
+        failedCount: integerField({ min: 0, max: 20000 }),
+        uncertainCount: integerField({ min: 0, max: 20000 }),
+        skippedCount: integerField({ min: 0, max: 20000 }),
+      }),
+      fromArgs: (args) => ({ submissions: args[0] }),
+      toArgs: (payload) => [payload.submissions],
+    },
+    ["SUBMISSION_INPUT_INVALID", "PUBLICATION_WORKFLOW_UNAVAILABLE"],
+  ),
+  contract({
+    capability: "media.getOrders",
+    channel: "media:get-orders",
+    kind: "query",
+    request: emptyRequest,
+    success: exactObject({ items: arrayField(order, { max: 20000 }) }),
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+  }),
+  contract(
+    {
+      capability: "media.syncOrder",
+      channel: "media:sync-order",
+      kind: "command",
+      request: exactObject({ orderNid: identifier }),
+      success: exactObject({ order }),
+      fromArgs: (args) => ({ orderNid: args[0] }),
+      toArgs: (payload) => [payload.orderNid],
+    },
+    ["MEDIA_CONFIG_NOT_SET"],
+  ),
+];
+
+module.exports = { mediaContracts };

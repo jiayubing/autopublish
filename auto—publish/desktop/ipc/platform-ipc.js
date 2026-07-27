@@ -9,6 +9,11 @@ const {
   assertPlaywrightAvailable,
 } = require("../services/playwright-capability");
 const { createPlatformSessionService } = require("../services/platform-session-service");
+const {
+  projectPlatformQueue,
+  projectPlatformSnapshot,
+  projectPlatformSubmitResult,
+} = require("./contracts/platform-contracts");
 
 function registerPlatformIpc(deps) {
   var ipcMain = deps.ipcMain;
@@ -311,7 +316,7 @@ function registerPlatformIpc(deps) {
           });
         }
       }
-      return {
+      return projectPlatformQueue({
         platforms: nonMedia.map(function (platform) {
           return {
             id: platform.id,
@@ -320,7 +325,7 @@ function registerPlatformIpc(deps) {
           };
         }),
         queue: flat,
-      };
+      });
     });
   });
 
@@ -352,7 +357,7 @@ function registerPlatformIpc(deps) {
       var results = (execution.results || []).map(function (result, index) {
         return Object.assign({ task: plan.tasks[index] }, result);
       });
-      return {
+      return projectPlatformSubmitResult({
         ok: results.filter(function (result) {
           return result.status === "published" || result.status === "submitted";
         }).length,
@@ -374,25 +379,27 @@ function registerPlatformIpc(deps) {
           blockedCount: 0,
           failedCount: 0,
         },
-      };
+      });
     });
   });
 
   ipcMain.handle("platforms:pause-submit", function (event, input) {
     return wrap(function () {
-      return taskService.pausePlatformSubmit(input && input.runId);
+      var result = taskService.pausePlatformSubmit(input && input.runId) || {};
+      return { accepted: result.ok === true, alreadyStopped: result.alreadyStopped === true };
     });
   });
 
   ipcMain.handle("platforms:stop-submit", function (event, input) {
     return wrap(function () {
-      return taskService.stopPlatformSubmit(input && input.runId);
+      var result = taskService.stopPlatformSubmit(input && input.runId) || {};
+      return { accepted: result !== false && result.alreadyStopped !== true, alreadyStopped: result.alreadyStopped === true };
     });
   });
 
   ipcMain.handle("platforms:get-state", function () {
     return wrap(function () {
-      return taskService.getState();
+      return projectPlatformSnapshot(taskService.getState());
     });
   });
   return { service: service };

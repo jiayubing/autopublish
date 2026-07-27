@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -12,20 +13,26 @@ import {
   ConfirmationPortal,
   type ConfirmationHostFocusProps,
   type ConfirmationOptions,
+  type ConfirmationRequester,
   type ConfirmationTone,
 } from '../confirmation';
 
 type FocusTarget = HTMLElement | null;
 
 type PendingConfirmation = ConfirmationOptions & {
+  id: number;
+  requester: ConfirmationRequester;
   trigger: FocusTarget;
   fallback: FocusTarget;
   resolve: (approved: boolean) => void;
+  settled: boolean;
+  abortListener: (() => void) | null;
 };
 
 export type ConfirmationHostProps = ConfirmationHostFocusProps & {
   children: ReactNode;
   portalContainer?: HTMLElement | null;
+  scopeKey?: string | number | null;
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -142,7 +149,7 @@ function ConfirmationDialog({
   useEffect(() => {
     const frame = scheduleFrame(() => cancelRef.current?.focus());
     return () => cancelScheduledFrame(frame);
-  }, []);
+  }, [pending.id]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
@@ -169,7 +176,7 @@ function ConfirmationDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/35 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+    <div data-confirmation-backdrop className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/35 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
       <div
         role="dialog"
         aria-modal="true"
@@ -195,46 +202,116 @@ function ConfirmationDialog({
   );
 }
 
-export default function ConfirmationHost({ children, portalContainer, settingsTitleRef }: ConfirmationHostProps) {
+export default function ConfirmationHost({ children, portalContainer, settingsTitleRef, scopeKey = null }: ConfirmationHostProps) {
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const pendingRef = useRef<PendingConfirmation | null>(null);
+  const queueRef = useRef<PendingConfirmation[]>([]);
+  const nextIdRef = useRef(1);
+  const mountedRef = useRef(true);
+  const previousScopeRef = useRef(scopeKey);
+  const finishRequestRef = useRef<(request: PendingConfirmation, approved: boolean) => void>(() => undefined);
   const titleId = `confirmation-title-${useId().replace(/:/g, '')}`;
   const messageId = `confirmation-message-${useId().replace(/:/g, '')}`;
 
-  const settle = useCallback((approved: boolean) => {
-    const current = pendingRef.current;
-    if (!current) return;
-    pendingRef.current = null;
-    setPending(null);
-    current.resolve(approved);
-    scheduleFrame(() => restoreFocus(current.trigger, current.fallback));
+  const resolveRequest = useCallback((request: PendingConfirmation, approved: boolean) => {
+    if (request.settled) return false;
+    request.settled = true;
+    if (request.signal && request.abortListener) {
+      request.signal.removeEventListener('abort', request.abortListener);
+    }
+    request.abortListener = null;
+    request.resolve(approved);
+    return true;
   }, []);
 
-  const confirm = useCallback((options: ConfirmationOptions): Promise<boolean> => {
-    if (pendingRef.current) return Promise.resolve(false);
+  const finishRequest = useCallback((request: PendingConfirmation, approved: boolean) => {
+    if (request.settled) return;
+    if (pendingRef.current !== request) {
+      const queuedIndex = queueRef.current.indexOf(request);
+      if (queuedIndex < 0) return;
+      queueRef.current.splice(queuedIndex, 1);
+      resolveRequest(request, approved);
+      return;
+    }
+
+    pendingRef.current = null;
+    if (!resolveRequest(request, approved)) return;
+    const next = queueRef.current.shift() || null;
+    pendingRef.current = next;
+    if (mountedRef.current) setPending(next);
+    if (!next) {
+      scheduleFrame(() => restoreFocus(request.trigger, request.fallback));
+    }
+  }, [resolveRequest]);
+  finishRequestRef.current = finishRequest;
+
+  const cancelAll = useCallback(() => {
+    const requests = [pendingRef.current, ...queueRef.current].filter(
+      (request): request is PendingConfirmation => Boolean(request),
+    );
+    pendingRef.current = null;
+    queueRef.current = [];
+    if (mountedRef.current) setPending(null);
+    for (const request of requests) resolveRequest(request, false);
+  }, [resolveRequest]);
+
+  const request = useCallback((requester: ConfirmationRequester, options: ConfirmationOptions): Promise<boolean> => {
+    if (options.signal?.aborted) return Promise.resolve(false);
     const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
     const trigger = activeElement instanceof HTMLElement ? activeElement : null;
     const fallback = settingsTitleRef?.current || getSettingsTitle(trigger) || findFallbackTitle();
     return new Promise<boolean>((resolve) => {
-      const next: PendingConfirmation = { ...options, trigger, fallback, resolve };
-      pendingRef.current = next;
-      setPending(next);
+      const next: PendingConfirmation = {
+        ...options,
+        id: nextIdRef.current++,
+        requester,
+        trigger,
+        fallback,
+        resolve,
+        settled: false,
+        abortListener: null,
+      };
+      if (options.signal) {
+        next.abortListener = () => finishRequestRef.current(next, false);
+        options.signal.addEventListener('abort', next.abortListener, { once: true });
+      }
+      if (pendingRef.current) {
+        queueRef.current.push(next);
+      } else {
+        pendingRef.current = next;
+        if (mountedRef.current) setPending(next);
+      }
+      if (options.signal?.aborted) finishRequestRef.current(next, false);
     });
   }, [settingsTitleRef]);
 
-  useEffect(() => () => {
-    const current = pendingRef.current;
-    if (!current) return;
-    pendingRef.current = null;
-    current.resolve(false);
+  const cancelRequester = useCallback((requester: ConfirmationRequester) => {
+    const ownedRequests = [pendingRef.current, ...queueRef.current].filter(
+      (request): request is PendingConfirmation => Boolean(request && request.requester === requester),
+    );
+    for (const ownedRequest of ownedRequests) finishRequestRef.current(ownedRequest, false);
   }, []);
 
-  const contextValue = { confirm };
+  useEffect(() => {
+    if (Object.is(previousScopeRef.current, scopeKey)) return;
+    previousScopeRef.current = scopeKey;
+    cancelAll();
+  }, [cancelAll, scopeKey]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelAll();
+    };
+  }, [cancelAll]);
+
+  const contextValue = useMemo(() => ({ request, cancelRequester }), [cancelRequester, request]);
   return (
     <ConfirmationContext.Provider value={contextValue}>
       {children}
       <ConfirmationPortal container={portalContainer}>
-        {pending && <ConfirmationDialog pending={pending} titleId={titleId} messageId={messageId} onConfirm={() => settle(true)} onCancel={() => settle(false)} />}
+        {pending && <ConfirmationDialog pending={pending} titleId={titleId} messageId={messageId} onConfirm={() => finishRequest(pending, true)} onCancel={() => finishRequest(pending, false)} />}
       </ConfirmationPortal>
     </ConfirmationContext.Provider>
   );

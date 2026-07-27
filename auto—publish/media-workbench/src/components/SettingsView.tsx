@@ -1,25 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { ExternalLink, FolderOpen, Info, RefreshCw } from "lucide-react";
-import {
-  cancelWorkspaceSelection,
-  confirmWorkspaceSelection,
-  getCurrentWorkspace,
-  openCurrentWorkspace,
-  requestWorkspaceSwitch,
-} from "../bridge/workspace";
-import {
-  getRuntimeDiagnostics,
-  runBrowserSelfCheck,
-} from "../bridge/workspace";
 import type {
   RuntimeCapability,
   RuntimeDiagnostics,
 } from "../bridge/workspace";
-import {
-  WorkspaceBootstrapState,
-  WorkspaceConfirmationResult,
-  WorkspaceCurrent,
-} from "../types";
 import { getSettingsCommandState } from "../workspace-ui-logic.js";
 import { mapRuntimeCapabilityState } from "../runtime-capability-state.cjs";
 import AiProviderSettings from "./AiProviderSettings";
@@ -30,13 +14,12 @@ import SettingsNavigation, {
 import SettingsOverview from "./settings/SettingsOverview";
 import MediaProviderSettings from "./settings/MediaProviderSettings";
 import HepanProviderSettings from "./settings/HepanProviderSettings";
-import { useConfirmation } from "../confirmation";
+import { useWorkspaceFeature } from "../features/workspace/workspace-feature-context";
+import {
+  SettingsFeatureProvider,
+  useSettingsFeature,
+} from "../features/settings/settings-context";
 
-const READY_STATE: WorkspaceBootstrapState = {
-  state: "ready",
-  workspacePath: null,
-  envOverride: false,
-};
 type StorageUsageCategory = {
   bytes: number;
   files: number;
@@ -50,28 +33,6 @@ type StorageUsage = {
   profiles: StorageUsageCategory;
   active?: boolean;
 };
-type StorageMaintenanceApi = {
-  getUsage: () => Promise<{
-    ok: boolean;
-    data?: StorageUsage;
-    error?: { message?: string };
-  }>;
-  cleanCaches: () => Promise<{
-    ok: boolean;
-    data?: { blocked?: boolean };
-    error?: { message?: string };
-  }>;
-};
-
-function getStorageMaintenanceApi(): StorageMaintenanceApi | null {
-  return typeof window === "undefined"
-    ? null
-    : (
-        window as unknown as {
-          desktopConsole?: { storageMaintenance?: StorageMaintenanceApi };
-        }
-      ).desktopConsole?.storageMaintenance || null;
-}
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -79,11 +40,12 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
-function validationLabel(kind?: string): string {
-  if (kind === "existing_workspace") return "已有工作区，标记有效";
-  if (kind === "empty_directory") return "空目录，可初始化";
-  if (kind === "nonempty_directory") return "非空目录，需确认初始化";
-  return "未读取到验证状态";
+function stateLabel(state?: string): string {
+  if (state === "ready") return "可用";
+  if (state === "confirmation_required") return "等待确认";
+  if (state === "relaunching") return "正在重启";
+  if (state === "invalid") return "需要重新选择";
+  return "尚未配置";
 }
 function capabilityClass(capability: RuntimeCapability): string {
   const tone = mapRuntimeCapabilityState(capability).tone;
@@ -97,71 +59,25 @@ function capabilityClass(capability: RuntimeCapability): string {
 }
 
 function WorkspaceSettings() {
-  const { confirm } = useConfirmation();
-  const [current, setCurrent] = useState<WorkspaceCurrent | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [operationError, setOperationError] = useState("");
+  const { feature, snapshot } = useWorkspaceFeature();
+  const current = snapshot.current.data;
+  const loading = snapshot.current.query.loading;
   const [switchOpen, setSwitchOpen] = useState(false);
-  const [switchState, setSwitchState] =
-    useState<WorkspaceBootstrapState>(READY_STATE);
-  const [switchBusy, setSwitchBusy] = useState(false);
-  const currentWorkspaceRequestRef = useRef<Promise<WorkspaceCurrent> | null>(
-    null,
-  );
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    const request =
-      currentWorkspaceRequestRef.current ||
-      (currentWorkspaceRequestRef.current = getCurrentWorkspace());
-    request
-      .then((value) => {
-        if (!mountedRef.current) return;
-        setCurrent(value);
-        setSwitchState({
-          state: "ready",
-          workspacePath: value.workspacePath,
-          envOverride: value.envOverride,
-        });
-      })
-      .catch(() => {
-        if (mountedRef.current) setOperationError("无法读取当前工作区。");
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false);
-      });
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-  const envOverride = current?.envOverride === true;
+  const environmentManaged = current?.environmentManaged === true;
+  const switchState = snapshot.selection.data || current;
   const commandState = getSettingsCommandState({
-    loading,
-    switchBusy,
+    loading: loading || snapshot.commands.openCurrent.busy,
+    switchBusy:
+      snapshot.commands.requestSwitch.busy ||
+      snapshot.commands.confirmSelection.busy ||
+      snapshot.commands.cancelSelection.busy,
     current,
     switchState,
   });
-  const open = async () => {
-    setOperationError("");
-    try {
-      await openCurrentWorkspace();
-    } catch (_) {
-      setOperationError("无法打开当前工作区。");
-    }
-  };
-  const requestSwitch = async (): Promise<WorkspaceBootstrapState> => {
-    if (
-      !(await confirm({
-        title: "切换工作区",
-        message: "切换工作区会重启应用，是否继续？",
-        confirmLabel: "切换工作区",
-        tone: "warning",
-      }))
-    )
-      return READY_STATE;
-    setOperationError("");
-    return requestWorkspaceSwitch();
-  };
+  const operationError =
+    snapshot.current.query.error?.userMessage ||
+    snapshot.commands.openCurrent.error?.userMessage ||
+    snapshot.commands.requestSwitch.error?.userMessage;
   return (
     <div className="space-y-4">
       <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -171,15 +87,15 @@ function WorkspaceSettings() {
         </h3>
         <div
           className="mt-4 break-all rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
-          aria-label="当前工作区路径"
+          aria-label="当前工作区状态"
         >
-          {loading ? "读取中…" : current?.workspacePath || "未选择工作区"}
+          {loading ? "读取中…" : current?.label || "未选择工作区"}
         </div>
         <p className="mt-3 text-xs text-slate-600">
           校验状态：
-          {loading ? "检查中…" : validationLabel(current?.validation?.kind)}
+          {loading ? "检查中…" : stateLabel(current?.state)}
         </p>
-        {envOverride && (
+        {environmentManaged && (
           <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
             当前工作区由环境变量 AUTO_PUBLISH_WORKSPACE 控制，不能在此更换。
           </p>
@@ -192,7 +108,7 @@ function WorkspaceSettings() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void open()}
+            onClick={() => void feature.openCurrent()}
             disabled={commandState.openDisabled}
             className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
           >
@@ -210,21 +126,9 @@ function WorkspaceSettings() {
           </button>
         </div>
       </section>
-      {switchOpen && !envOverride && (
+      {switchOpen && !environmentManaged && (
         <WorkspaceSelectionPanel
-          state={switchState}
-          onChooseDirectory={requestSwitch}
-          onConfirmSelection={async (
-            input,
-          ): Promise<WorkspaceConfirmationResult> =>
-            confirmWorkspaceSelection(input)
-          }
-          onCancelSelection={cancelWorkspaceSelection}
-          onStateChange={(next) => {
-            setSwitchState(next);
-            if (next.state === "relaunching") setSwitchOpen(true);
-          }}
-          onBusyChange={setSwitchBusy}
+          mode="switch"
           title="更换工作区"
           description="主进程会先校验新目录，再重启应用。"
         />
@@ -241,35 +145,13 @@ function WorkspaceSettings() {
 }
 
 function RuntimeSettings() {
-  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [checking, setChecking] = useState(false);
-  const [error, setError] = useState("");
-  const load = async () => {
-    try {
-      setDiagnostics(await getRuntimeDiagnostics());
-    } catch (_) {
-      setError("无法读取运行环境状态。");
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    void load();
-  }, []);
-  const check = async () => {
-    setChecking(true);
-    setError("");
-    try {
-      await runBrowserSelfCheck();
-      await load();
-    } catch (_) {
-      setError("浏览器自检失败，请检查运行环境。");
-      setChecking(false);
-    }
-  };
+  const { feature, snapshot } = useSettingsFeature();
+  const diagnostics = snapshot.runtime.data as RuntimeDiagnostics | null;
+  const loading = snapshot.runtime.query.loading;
+  const checking = snapshot.commands.runBrowserSelfCheck.busy;
+  const error =
+    snapshot.runtime.query.error?.userMessage ||
+    snapshot.commands.runBrowserSelfCheck.error?.userMessage;
   const items: Array<[string, RuntimeCapability]> = diagnostics
     ? [
         ["Playwright Node", diagnostics.capabilities.playwrightNode],
@@ -290,7 +172,7 @@ function RuntimeSettings() {
         </div>
         <button
           type="button"
-          onClick={() => void check()}
+          onClick={() => void feature.runBrowserSelfCheck()}
           disabled={loading || checking}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
         >
@@ -328,44 +210,13 @@ function RuntimeSettings() {
 }
 
 function StorageSettings() {
-  const [usage, setUsage] = useState<StorageUsage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [cleaning, setCleaning] = useState(false);
-  const [error, setError] = useState("");
-  const load = async () => {
-    const api = getStorageMaintenanceApi();
-    if (!api) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const result = await api.getUsage();
-      if (!result.ok || !result.data) throw new Error();
-      setUsage(result.data);
-    } catch (_) {
-      setError("无法读取存储用量。");
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    void load();
-  }, []);
-  const clean = async () => {
-    const api = getStorageMaintenanceApi();
-    if (!api || cleaning || usage?.active) return;
-    setCleaning(true);
-    setError("");
-    try {
-      const result = await api.cleanCaches();
-      if (!result.ok || result.data?.blocked) throw new Error();
-      await load();
-    } catch (_) {
-      setError("缓存清理失败，任务运行期间不能清理。");
-    } finally {
-      setCleaning(false);
-    }
-  };
+  const { feature, snapshot } = useSettingsFeature();
+  const usage = snapshot.storage.data as StorageUsage | null;
+  const loading = snapshot.storage.query.loading;
+  const cleaning = snapshot.commands.cleanStorageCaches.busy;
+  const error =
+    snapshot.storage.query.error?.userMessage ||
+    snapshot.commands.cleanStorageCaches.error?.userMessage;
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -377,7 +228,7 @@ function StorageSettings() {
         </div>
         <button
           type="button"
-          onClick={() => void clean()}
+          onClick={() => void feature.cleanStorageCaches()}
           disabled={loading || cleaning || usage?.active === true}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
         >
@@ -410,7 +261,8 @@ function StorageSettings() {
   );
 }
 
-export default function SettingsView() {
+function SettingsViewContent() {
+  useSettingsFeature();
   const [active, setActive] = useState<SettingsSection>("overview");
   const content =
     active === "overview" ? (
@@ -441,5 +293,13 @@ export default function SettingsView() {
         <main className="min-w-0">{content}</main>
       </div>
     </div>
+  );
+}
+
+export default function SettingsView() {
+  return (
+    <SettingsFeatureProvider>
+      <SettingsViewContent />
+    </SettingsFeatureProvider>
   );
 }

@@ -12,11 +12,15 @@ describe("media resource ux", function() {
     const service = read("desktop/services/media-resource-service.js");
     const library = read("media-workbench/src/components/ResourceLibrary.tsx");
     const app = read("media-workbench/src/App.tsx");
+    const feature = read("media-workbench/src/features/media/media-feature.js");
     assert.match(service, /extractBalanceValue/);
     assert.match(service, /balance:/);
     assert.match(library, /resource\.price/);
     assert.match(library, /setSearchQuery/);
     assert.match(library, /setCurrentPage/);
-    assert.match(app, /getBalance/);
+    assert.match(app, /mediaSnapshot\.balance\.value/);
+    assert.match(app, /mediaFeature\.checkBalance/);
+    assert.doesNotMatch(app, /getBalance\s*\(/);
+    assert.match(feature, /checkBalance/);
   });
 });

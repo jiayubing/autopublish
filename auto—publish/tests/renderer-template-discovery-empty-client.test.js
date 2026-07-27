@@ -29,18 +29,22 @@ describe("empty-client template discovery", function() {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
-  it("loads catalog and submission platforms without a selected client", function() {
+  it("loads the writing-template catalog without a selected client", function() {
     const source = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
+    const feature = read("media-workbench/src/features/content/use-content-workbench-feature.ts");
     assert.doesNotMatch(source, /if \(!clientId\) \{ setResearch\(\[\]\); setTemplates\(\[\]\);/);
-    assert.match(source, /listContentTemplateCatalog\(\)/);
-    assert.match(source, /listContentSubmissionPlatforms\(\)/);
+    assert.match(workbench, /templateCatalog/);
+    assert.doesNotMatch(workbench, /submissionPlatforms=\{management\.submissionPlatforms\}/);
+    assert.match(feature, /listTemplateCatalog:\s*listContentTemplateCatalog/);
+    assert.doesNotMatch(source, /listContentTemplateCatalog|listContentSubmissionPlatforms/);
     assert.match(source, /当前工作区还没有客户|没有客户/);
   });
 
   it("provides an explicit refresh action for clients and templates", function() {
     const source = read("media-workbench/src/components/ContentWorkbench.tsx");
     assert.match(source, /刷新客户与模板/);
-    assert.match(source, /listContentClients\(\)/);
-    assert.match(source, /refreshToken/);
+    assert.match(source, /content\.refresh\('manual'\)/);
+    assert.doesNotMatch(source, /listContentClients\(\)|refreshToken/);
   });
 });

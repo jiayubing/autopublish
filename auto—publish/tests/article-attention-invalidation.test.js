@@ -12,47 +12,56 @@ function runTs(source) {
 }
 
 describe('article attention invalidation and single snapshot', () => {
-  it('merges concurrent refreshes, notifies once per accepted snapshot, and keeps one revision source', () => {
+  it('lets a newer invalidation refresh supersede an older initial query', () => {
     runTs(`
       import assert from 'node:assert/strict';
-      import { createArticleAttentionStore } from './media-workbench/src/article-attention-store.tsx';
+      import { createAttentionFeature } from './media-workbench/src/features/attention/attention-feature.js';
       let calls = 0;
-      let revision = 4;
-      const store = createArticleAttentionStore('client-1', async () => {
-        calls += 1;
-        return { revision, items: [{ attentionId: String(revision), kind: 'failed_submission', allowedActions: ['open-publication'] }], counts: { total: 1, actionable: 0 } };
+      let resolveOld;
+      let resolveNew;
+      const feature = createAttentionFeature({
+        list: () => new Promise((resolve) => { calls += 1; if (calls === 1) resolveOld = resolve; else resolveNew = resolve; }),
+        preview: async () => ({}),
+        execute: async () => ({}),
       });
+      feature.setScope({ workspaceRuntimeId: 'workspace-1', clientId: 'client-1' });
       let notifications = 0;
-      const stop = store.subscribe(() => { notifications += 1; });
-      const first = store.refresh('mount');
-      const merged = store.refresh('invalidation');
-      assert.strictEqual(first, merged);
+      const stop = feature.subscribe(() => { notifications += 1; });
+      const first = feature.refresh('initial');
+      const newer = feature.refresh('invalidation');
+      assert.notStrictEqual(first, newer);
+      resolveNew({ revision: 5, items: [{ attentionId: 'new', kind: 'failed_submission', allowedActions: ['open-publication'] }], counts: { total: 1, actionable: 0 } });
+      await newer;
+      resolveOld({ revision: 4, items: [{ attentionId: 'old', kind: 'failed_submission', allowedActions: ['open-publication'] }], counts: { total: 1, actionable: 0 } });
       await first;
-      assert.equal(calls, 1);
-      assert.equal(store.getSnapshot().revision, 4);
-      assert.equal(store.getSnapshot().items[0].attentionId, '4');
-      const before = notifications;
-      revision = 5;
-      await store.refresh('terminal');
       assert.equal(calls, 2);
-      assert.equal(store.getSnapshot().revision, 5);
-      assert.equal(store.getSnapshot().items[0].attentionId, '5');
-      assert.ok(notifications > before);
+      assert.equal(feature.getSnapshot().revision, 5);
+      assert.equal(feature.getSnapshot().items[0].attentionId, 'new');
+      assert.ok(notifications >= 3);
       stop();
     `);
   });
 
-  it('does not let an older snapshot replace a newer accepted revision', () => {
+  it('does not let an old client response replace the current scope', () => {
     runTs(`
       import assert from 'node:assert/strict';
-      import { createArticleAttentionStore } from './media-workbench/src/article-attention-store.tsx';
-      let resolve;
-      const store = createArticleAttentionStore('client-1', () => new Promise((done) => { resolve = done; }));
-      const pending = store.refresh('old');
-      resolve({ revision: 2, items: [], counts: { total: 0, actionable: 0 } });
+      import { createAttentionFeature } from './media-workbench/src/features/attention/attention-feature.js';
+      let resolveOld;
+      const feature = createAttentionFeature({
+        list: (clientId) => clientId === 'client-1'
+          ? new Promise((resolve) => { resolveOld = resolve; })
+          : Promise.resolve({ revision: 9, items: [{ attentionId: clientId, kind: 'failed_submission', allowedActions: [] }], counts: { total: 1, actionable: 0 } }),
+        preview: async () => ({}),
+        execute: async () => ({}),
+      });
+      feature.setScope({ workspaceRuntimeId: 'workspace-1', clientId: 'client-1' });
+      const pending = feature.refresh('initial');
+      feature.setScope({ workspaceRuntimeId: 'workspace-1', clientId: 'client-2' });
+      await feature.refresh('initial');
+      resolveOld({ revision: 2, items: [{ attentionId: 'client-1', kind: 'failed_submission', allowedActions: [] }], counts: { total: 1, actionable: 0 } });
       await pending;
-      assert.equal(store.getSnapshot().revision, 2);
-      assert.equal(store.getSnapshot().loading, false);
+      assert.equal(feature.getSnapshot().revision, 9);
+      assert.equal(feature.getSnapshot().items[0].attentionId, 'client-2');
     `);
   });
 });

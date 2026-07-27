@@ -13,7 +13,7 @@ export interface ArticleWorkflowAttention {
   kind?: string | null;
   status?: string | null;
   reasonCode?: string | null;
-  archiveError?: unknown;
+  archiveErrorCode?: string | null;
 }
 
 export interface ArticleWorkflowLocks {
@@ -37,7 +37,7 @@ const FAILURE_BATCH_STATUSES = new Set(['failed', 'conflict', 'uncertain']);
 const TERMINAL_PUBLICATION_STATUSES = new Set(['published', 'cancelled']);
 
 function hasArticleAttention(articleId: string, attention: ArticleWorkflowAttention[]): boolean {
-  return attention.some((item) => item.articleId === articleId || item.archiveError != null);
+  return attention.some((item) => item.articleId === articleId || item.archiveErrorCode != null);
 }
 
 function articleBatchStatuses(articleId: string, batches: ContentSubmissionBatchRecord[]): string[] {

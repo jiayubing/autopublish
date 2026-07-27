@@ -59,14 +59,24 @@ describe("storage maintenance", function () {
 
     assert.equal(handlers.has("storage-maintenance:get-usage"), true);
     assert.equal(handlers.has("storage-maintenance:clean-caches"), true);
-    assert.deepEqual(
-      await handlers.get("storage-maintenance:get-usage")(null, undefined),
-      { ok: true, data: { logs: { bytes: 1 } } },
-    );
-    assert.deepEqual(
-      await handlers.get("storage-maintenance:clean-caches")(null, undefined),
-      { ok: true, data: { blocked: false, deleted: [], failed: [] } },
-    );
+    const usage = await handlers.get("storage-maintenance:get-usage")(null, undefined);
+    assert.equal(usage.ok, true);
+    assert.equal(usage.data.logs.bytes, 1);
+    assert.deepEqual(Object.keys(usage.data).sort(), [
+      "active", "docxCache", "logs", "profiles", "removableBytes",
+      "temporary", "tmp", "totalBytes",
+    ]);
+    const cleanup = await handlers.get("storage-maintenance:clean-caches")(null, undefined);
+    assert.deepEqual(cleanup, {
+      ok: true,
+      data: {
+        blocked: false,
+        reason: null,
+        deletedCount: 0,
+        failedCount: 0,
+        usage: usage.data,
+      },
+    });
     const invalid = await handlers.get("storage-maintenance:clean-caches")(
       null,
       { clearAll: true },

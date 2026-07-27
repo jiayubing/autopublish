@@ -54,7 +54,7 @@ test("platform queue projects only its durable account profile id", async () => 
     sourceArticleState: "active",
     reasonCode: null,
     accountProfileId: "account-toutiao",
-    archiveError: null,
+    archiveErrorCode: null,
     remoteStatus: null,
   });
 });

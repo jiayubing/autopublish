@@ -1,5 +1,7 @@
 "use strict";
 
+const { randomUUID } = require("node:crypto");
+
 const ALLOWED_SCOPES = Object.freeze([
   "platformQueue", "navigationSummary", "articleAttention", "articleManagement",
   "orders", "contentSources", "mediaWorkbench"
@@ -51,6 +53,8 @@ function scopesForReason(reasonCode) {
 
 function createWorkspaceDataInvalidation(options) {
   const opts = options || {};
+  const workspaceRuntimeId = typeof opts.workspaceRuntimeId === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(opts.workspaceRuntimeId)
+    ? opts.workspaceRuntimeId : randomUUID();
   let revision = Number.isInteger(opts.initialRevision) && opts.initialRevision >= 0 ? opts.initialRevision : 0;
   const send = typeof opts.sendToRenderer === "function" ? opts.sendToRenderer : function() {};
 
@@ -58,11 +62,25 @@ function createWorkspaceDataInvalidation(options) {
     const code = safeReasonCode(reasonCode);
     const scopes = [...new Set(scopesForReason(code).filter((scope) => ALLOWED_SCOPES.includes(scope)))];
     revision += 1;
-    send("workspace:data-invalidated", { revision, scopes, reasonCode: code });
+    send("workspace:data-invalidated", {
+      schemaVersion: 1,
+      workspaceRuntimeId,
+      revision,
+      scopes,
+      reasonCode: code,
+    });
     return revision;
   }
 
-  return { invalidate, getRevision: function() { return revision; }, scopesForReason };
+  return {
+    invalidate,
+    getRevision: function() { return revision; },
+    getWorkspaceRuntimeId: function() { return workspaceRuntimeId; },
+    getRuntimeIdentity: function() {
+      return { workspaceRuntimeId, revision };
+    },
+    scopesForReason,
+  };
 }
 
 module.exports = { ALLOWED_SCOPES, SCOPES_BY_REASON, scopesForReason, createWorkspaceDataInvalidation };

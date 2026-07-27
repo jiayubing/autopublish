@@ -1,8 +1,7 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { Save, X } from 'lucide-react';
-import { saveContentArticle } from '../../bridge/content';
 import { GeneratedContentArticle } from '../../types';
-import ActionConfirmationModal from './ActionConfirmationModal';
+import { useConfirmation } from '../../confirmation';
 
 interface GeneratedArticleEditorPanelProps {
   article: GeneratedContentArticle;
@@ -12,17 +11,17 @@ interface GeneratedArticleEditorPanelProps {
   onCopyVersion?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSaveArticle?: (article: GeneratedContentArticle) => Promise<GeneratedContentArticle>;
+  saving?: boolean;
   footer?: ReactNode;
   embedded?: boolean;
   sourceLabel?: string;
 }
 
-export default function GeneratedArticleEditorPanel({ article, published = false, onSaved, onClose, onCopyVersion, onDirtyChange, onSaveArticle, footer, embedded = false, sourceLabel = '历史文章' }: GeneratedArticleEditorPanelProps) {
+export default function GeneratedArticleEditorPanel({ article, published = false, onSaved, onClose, onCopyVersion, onDirtyChange, onSaveArticle, saving = false, footer, embedded = false, sourceLabel = '历史文章' }: GeneratedArticleEditorPanelProps) {
+  const { confirm } = useConfirmation();
   const [draft, setDraft] = useState(article);
   const [base, setBase] = useState(article);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [confirmClose, setConfirmClose] = useState(false);
   const saveInFlightRef = useRef(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const dirty = draft.title !== base.title || draft.content !== base.content;
@@ -44,7 +43,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        close();
+        void close();
         return;
       }
     }
@@ -52,22 +51,18 @@ export default function GeneratedArticleEditorPanel({ article, published = false
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [dirty]);
 
-  function close() {
-    if (dirty) { setConfirmClose(true); return; }
+  async function close() {
+    if (dirty && !(await confirm({ title: '放弃未保存修改？', message: '文章有未保存修改，确认关闭并放弃这些修改吗？', confirmLabel: '放弃修改', tone: 'warning' }))) return;
     onClose();
   }
 
   async function save() {
     if (published || (!dirty && !requiresInitialSave) || saveInFlightRef.current) return;
     saveInFlightRef.current = true;
-    setSaving(true);
     setError('');
     try {
-      const saved = await (onSaveArticle ? onSaveArticle(draft) : saveContentArticle({
-        ...draft,
-        status: 'saved',
-        updatedAt: new Date().toISOString(),
-      }));
+      if (!onSaveArticle) throw new Error('文章保存命令不可用');
+      const saved = await onSaveArticle(draft);
       setDraft(saved);
       setBase(saved);
       onSaved(saved);
@@ -75,7 +70,6 @@ export default function GeneratedArticleEditorPanel({ article, published = false
       setError(value instanceof Error ? value.message : '保存文章失败');
     } finally {
       saveInFlightRef.current = false;
-      setSaving(false);
     }
   }
 
@@ -87,7 +81,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
       </div>
       {published && onCopyVersion && <button type="button" onClick={onCopyVersion} disabled={saving} className="shrink-0 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 disabled:opacity-40">复制为新版本</button>}
       {!published && <button type="button" onClick={() => void save()} disabled={saving || (!dirty && !requiresInitialSave)} aria-label="保存文章" className="task-icon-button shrink-0"><Save className="h-4 w-4" /></button>}
-      <button type="button" onClick={close} disabled={saving} aria-label="关闭文章编辑器" title="关闭文章编辑器" className="task-icon-button shrink-0"><X className="h-4 w-4" /></button>
+      <button type="button" onClick={() => void close()} disabled={saving} aria-label="关闭文章编辑器" title="关闭文章编辑器" className="task-icon-button shrink-0"><X className="h-4 w-4" /></button>
     </div>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
       <label className="grid gap-1 text-xs font-medium text-slate-600">文章标题
@@ -101,6 +95,5 @@ export default function GeneratedArticleEditorPanel({ article, published = false
       {error && <p role="alert" aria-live="assertive" className="rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
       {!published && <button type="button" onClick={() => void save()} disabled={saving || (!dirty && !requiresInitialSave)} className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Save className="h-3.5 w-3.5" />{saving ? '保存中…' : '保存文章'}</button>}
     </div>
-    <ActionConfirmationModal pending={confirmClose ? { id: 1, kind: 'discard-editor', title: '放弃未保存修改？', message: '文章有未保存修改，确认关闭并放弃这些修改吗？', confirmLabel: '放弃修改' } : null} submitting={saving} onCancel={() => setConfirmClose(false)} onConfirm={() => { setConfirmClose(false); onClose(); }} />
   </section>;
 }

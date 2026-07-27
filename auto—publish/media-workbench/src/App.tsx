@@ -1,27 +1,11 @@
-import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
-import { ViewMode, Article, MediaResource, Draft, Order } from './types';
-import {
-  scanArticles,
-  previewArticle,
-  setDraft,
-  addToPool,
-  removeFromPool,
-  getPool,
-  getBalance,
-  getOrders,
-  refreshResources,
-  getResourcePage,
-  getDraft,
-  buildConfirmation,
-  submitSelected,
-} from "./bridge/media";
+import React, { lazy, Suspense, useState } from 'react';
+import { ViewMode } from './types';
 import Sidebar from './components/Sidebar';
 import ArticleList from './components/ArticleList';
 import ArticleEditor from './components/ArticleEditor';
-import PreflightModal, { MediaPreflightSummary } from './components/PreflightModal';
-import { WorkspaceDataProvider, usePlatformQueue } from './workspace-data-store';
-import { onWorkspaceDataInvalidated } from './bridge/workspace';
-import { PlatformTaskProvider } from './platform-task-store';
+import PreflightModal from './components/PreflightModal';
+import { WorkspaceCoordinatorProvider } from './features/workspace/workspace-coordinator-context';
+import { PlatformFeatureProvider } from './features/platform/platform-feature-context';
 import { 
   Database, 
   HelpCircle, 
@@ -36,7 +20,7 @@ import {
   ListFilter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { createAppDraftSaveController } from './app-draft-save-controller';
+import { useMediaFeature } from './features/media/use-media-feature';
 
 const ResourceLibrary = lazy(() => import('./components/ResourceLibrary'));
 const OrdersView = lazy(() => import('./components/OrdersView'));
@@ -45,209 +29,44 @@ const PlatformWorkbench = lazy(() => import('./components/PlatformWorkbench'));
 const ContentWorkbench = lazy(() => import('./components/ContentWorkbench'));
 
 export default function App() {
-  return <PlatformTaskProvider><WorkspaceDataProvider><AppContent /></WorkspaceDataProvider></PlatformTaskProvider>;
+  return <WorkspaceCoordinatorProvider><PlatformFeatureProvider><AppContent /></PlatformFeatureProvider></WorkspaceCoordinatorProvider>;
 }
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>('workbench');
   const [articleAttentionIntent, setArticleAttentionIntent] = useState<{ attentionId?: string; clientId?: string } | null>(null);
-  const { snapshot: platformQueue } = usePlatformQueue();
-  
-  // Data State
-  const [articles, setArticles] = useState<Article[]>([]);
-  
-  const [resources, setResources] = useState<MediaResource[]>([]);
-  const [poolResources, setPoolResources] = useState<MediaResource[]>([]);
-  
-  const [orders, setOrders] = useState<Order[]>([]);
-
-  const [balance, setBalance] = useState<number>(0);
-
-  // UI States
-  const [activeArticle, setActiveArticle] = useState<Article | null>(null);
-  const draftSaveController = useRef<ReturnType<typeof createAppDraftSaveController> | null>(null);
-  if (!draftSaveController.current) {
-    draftSaveController.current = createAppDraftSaveController({
-      persistDraft: setDraft,
-      setArticles,
-      setActiveArticle,
-    });
-  }
-  const [isScanning, setIsScanning] = useState(false);
-  const [isCheckingBalance, setIsCheckingBalance] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [confirmation, setConfirmation] = useState<MediaPreflightSummary | null>(null);
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const [isRefreshingResources, setIsRefreshingResources] = useState(false);
-  const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const mediaRefreshRequestId = useRef(0);
-  const mediaInvalidationRevision = useRef(0);
-
-  const articleKey = (article: Article | null | undefined) => {
-    if (!article) return null;
-    const record = article as Article & { id?: string; articleId?: string };
-    return record.id || record.articleId || article.filename;
-  };
+  const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
+  const articles = mediaSnapshot.articles.items;
+  const activeArticle = mediaSnapshot.articles.activeArticle;
+  const resources = mediaSnapshot.resources.items;
+  const poolResources = mediaSnapshot.pool.items;
+  const orders = mediaSnapshot.orders.items;
+  const balance = mediaSnapshot.balance.value;
+  const dataLoaded = Boolean(mediaSnapshot.scope) && [
+    mediaSnapshot.articles.query,
+    mediaSnapshot.drafts.query,
+    mediaSnapshot.resources.query,
+    mediaSnapshot.pool.query,
+    mediaSnapshot.balance.query,
+    mediaSnapshot.orders.query,
+  ].every((query) => !query.loading);
+  const isScanning = mediaSnapshot.commands.scanArticles.busy;
+  const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
+  const isSubmitting = mediaSnapshot.commands.prepareSubmission.busy || mediaSnapshot.commands.submitPrepared.busy;
+  const submissionError = mediaSnapshot.commands.prepareSubmission.error?.userMessage || mediaSnapshot.commands.submitPrepared.error?.userMessage || null;
+  const mediaRefreshResult = mediaSnapshot.commands.refreshResources.result as { truncated?: boolean; resourceCount?: number } | null;
+  const mediaRefreshMessage = mediaRefreshResult
+    ? mediaRefreshResult.truncated
+      ? `资源刷新达到安全上限，已加载 ${mediaRefreshResult.resourceCount || 0} 项，结果已截断。`
+      : `资源库已刷新，共 ${mediaRefreshResult.resourceCount || 0} 项。`
+    : null;
+  const readyForSubmit = mediaSnapshot.readyForSubmission;
 
   const openArticleAttention = (intent: { attentionId?: string; clientId?: string } = {}) => {
     setArticleAttentionIntent(intent);
     setCurrentView('content');
   };
 
-  // Load data from API (or localStorage fallback) on mount
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [articlesData, resourcePage, ordersData, balanceData] =
-          await Promise.all([
-            scanArticles(),
-            getResourcePage({ page: 1, pageSize: 99999 }),
-            getOrders(),
-            getBalance(),
-          ]);
-        setArticles(articlesData);
-        setResources(resourcePage.items);
-        setOrders(ordersData);
-        setBalance(balanceData);
-        const pool = await getPool();
-        setPoolResources(pool);
-      } catch (e) {
-        console.error("Failed to load initial data:", e);
-      } finally {
-        setDataLoaded(true);
-      }
-    }
-    loadData();
-  }, []);
-
-  // Toggle resource in/out of media pool
-  const handleTogglePool = async (resource: MediaResource) => {
-    const inPool = poolResources.some(r => r.resourceId === resource.resourceId);
-    try {
-      if (inPool) {
-        await removeFromPool(resource.resourceId);
-        setPoolResources(prev => prev.filter(r => r.resourceId !== resource.resourceId));
-      } else {
-        await addToPool(resource);
-        setPoolResources(prev => [...prev, resource]);
-      }
-    } catch (e) { console.error("Pool toggle failed:", e); }
-  };
-
-  // Refresh all resources from API (slow, pulls all pages)
-  const handleRefreshResources = async () => {
-    setIsRefreshingResources(true);
-    try {
-      await refreshResources({ fetchAll: true });
-      const page = await getResourcePage({ page: 1, pageSize: 99999 });
-      setResources(page.items);
-    } catch (e) {
-      console.error("Resource refresh failed:", e);
-    } finally {
-      setIsRefreshingResources(false);
-    }
-  };
-
-  // Balance Refresh Handler
-  const handleCheckBalance = async () => {
-    setIsCheckingBalance(true);
-    try {
-      const bal = await getBalance();
-      setBalance(bal);
-    } catch (e) {
-      console.error("Balance check failed:", e);
-    } finally {
-      setIsCheckingBalance(false);
-    }
-  };
-
-  // Article scan triggers real IPC scan
-  const handleScanArticles = async () => {
-    setIsScanning(true);
-    try {
-      const fresh = await scanArticles();
-      setArticles(fresh);
-    } catch (e) {
-      console.error("Scan failed:", e);
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-
-  // Save drafts and update internal list states
-  const handleSaveDraft = async (draft: Draft, sourceArticle?: Article) => {
-    const targetArticle = sourceArticle || activeArticle;
-    if (targetArticle) await draftSaveController.current!.saveDraft(draft, targetArticle);
-  };
-
-  // Pick a resource: bind or unbind to the active article
-  const handlePickResource = (resource: MediaResource) => {
-    if (!activeArticle) return;
-    draftSaveController.current!.toggleResource(resource, activeArticle);
-  };
-
-  // Remove a selected resource from the active article
-  const handleRemoveSelectedResource = (resourceId: string) => {
-    if (!activeArticle) return;
-    draftSaveController.current!.removeResource(resourceId, activeArticle);
-  };
-
-  // Directly add a resource to the active article selection
-  const handleAddResource = (resource: MediaResource) => {
-    if (!activeArticle) return;
-    draftSaveController.current!.addResource(resource, activeArticle);
-  };
-
-  // Order & submission handling
-  const handleClearOrders = () => {
-    setOrders([]);
-  };
-  const readyForSubmit = articles.length > 0 && articles.every((article) => article.selectedResources && article.selectedResources.length > 0 && (!article.hasImages || article.ignoreImages));
-  const handleRealSubmit = async () => {
-    if (!readyForSubmit || isSubmitting) return;
-    setIsSubmitting(true);
-    setSubmissionError(null);
-    try { const preflight = await buildConfirmation(articles) as MediaPreflightSummary; setConfirmation(preflight); }
-    catch (e) { console.error('media submit failed', e); }
-    finally { setIsSubmitting(false); }
-  };
-
-  // The media workbench owns this snapshot.  A submission may consume files,
-  // so refresh articles before orders and ignore responses superseded by a
-  // newer refresh.
-  const refreshMediaWorkbenchData = useCallback(async () => {
-    const requestId = ++mediaRefreshRequestId.current;
-    const freshArticles = await scanArticles();
-    if (requestId !== mediaRefreshRequestId.current) return;
-    setArticles(freshArticles);
-    setActiveArticle((current) => current && !freshArticles.some((article) => article.filename === current.filename) ? null : current);
-
-    const freshOrders = await getOrders();
-    if (requestId !== mediaRefreshRequestId.current) return;
-    setOrders(freshOrders);
-  }, []);
-  useEffect(() => onWorkspaceDataInvalidated((event) => {
-    if (!event.scopes.includes('mediaWorkbench') || event.revision <= mediaInvalidationRevision.current) return;
-    mediaInvalidationRevision.current = event.revision;
-    void refreshMediaWorkbenchData().catch((error) => console.error('media workbench refresh failed:', error));
-  }), [refreshMediaWorkbenchData]);
-  const confirmRealSubmit = async () => {
-    setIsSubmitting(true);
-    setSubmissionError(null);
-    try {
-      await submitSelected(articles);
-      await refreshMediaWorkbenchData();
-      setConfirmation(null);
-    } catch (error) {
-      console.error('media submit failed', error);
-      setSubmissionError(error instanceof Error ? error.message : '提交失败，请稍后重试');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Clear all local order records
     return (
     <div className="flex h-full w-full overflow-hidden bg-slate-50">
       {/* 1. Fixed Left Sidebar */}
@@ -255,12 +74,11 @@ function AppContent() {
         currentView={currentView}
         onViewChange={setCurrentView}
         balance={balance}
-        onCheckBalance={handleCheckBalance}
+        onCheckBalance={() => { void mediaFeature.checkBalance(); }}
         isCheckingBalance={isCheckingBalance}
         totalArticles={articles.length}
-        totalResources={resources.length}
+        totalResources={mediaSnapshot.resources.total}
         totalOrders={orders.length}
-        platformQueueSnapshot={platformQueue}
       />
 
       {/* 2. Main Content Viewport */}
@@ -283,13 +101,13 @@ function AppContent() {
             </div>
             {currentView === 'workbench' && articles.some(a => a.selectedResources && a.selectedResources.length > 0) && (
               <button
-                onClick={handleRealSubmit}
+                onClick={() => { void mediaFeature.prepareSubmission().catch(() => undefined); }}
                 disabled={!readyForSubmit || isSubmitting}
-                title={readyForSubmit ? "将执行真实预检并提交" : "所有文章必须选择资源，并处理图片后才能提交"}
+                title={readyForSubmit ? "仅执行投稿预检；付费提交必须在确认弹窗中再次确认" : "请先为至少一篇稿件选择媒体资源"}
                 className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95"
               >
                 <Send className="w-4 h-4" />
-                <span>{isSubmitting ? '提交中' : '预检并提交'}</span>
+                <span>{isSubmitting ? '预检中' : '投稿预检'}</span>
               </button>
             )}
           </div>
@@ -314,8 +132,8 @@ function AppContent() {
                   <ArticleList
                     articles={articles}
                     activeArticle={activeArticle}
-                    onOpenArticle={async (art) => { try { const preview = await previewArticle(art.filename); const wordCount = String(preview.content || '').replace(/\s/g, '').length; const updated = { ...art, content: preview.content, words: wordCount || art.words }; setActiveArticle(updated); setArticles(prev => prev.map(a => a.filename === art.filename ? updated : a)); } catch (e) { console.error(e); setActiveArticle(art); } }}
-                    onScanArticles={handleScanArticles}
+                    onOpenArticle={(article) => mediaFeature.openArticle(article.filename)}
+                    onScanArticles={() => mediaFeature.scanArticles()}
                     isScanning={isScanning}
                   />
                 </div>
@@ -324,9 +142,9 @@ function AppContent() {
                 <div className="xl:col-span-5 h-full">
                   <ArticleEditor
                     activeArticle={activeArticle}
-                    onSaveDraft={handleSaveDraft}
-                    onCloseArticle={() => setActiveArticle(null)}
-                    onRemoveSelectedResource={handleRemoveSelectedResource}
+                    onSaveDraft={(draft) => mediaFeature.saveDraft(draft)}
+                    onCloseArticle={() => mediaFeature.closeArticle()}
+                    onRemoveSelectedResource={(resourceId) => mediaFeature.removeSelectedResource(resourceId)}
                   />
                 </div>
 
@@ -335,17 +153,24 @@ function AppContent() {
                   <ResourceLibrary
                     resources={activeArticle ? poolResources : resources}
                     selectedResourceIds={activeArticle ? activeArticle.selectedResources.map(r => r.resourceId) : []}
-                    poolResourceIds={poolResources.map(r => r.resourceId)}
-                    onTogglePool={handleTogglePool}
-                    onRefreshResources={handleRefreshResources}
-                    isRefreshingResources={isRefreshingResources}
+                    poolResourceIds={activeArticle ? poolResources.map((resource) => resource.resourceId) : mediaSnapshot.pool.memberResourceIds}
+                    onTogglePool={(resource) => { void mediaFeature.togglePool(resource); }}
+                    onRefreshResources={() => { void mediaFeature.refreshResources(); }}
+                    isRefreshingResources={mediaSnapshot.commands.refreshResources.busy}
                     mode={activeArticle ? 'picker' : 'management'}
                     activeArticleLabel={activeArticle ? activeArticle.title : ''}
-                    onPickResource={handlePickResource}
-                    onAddResource={handleAddResource}
+                    onPickResource={(resource) => mediaFeature.toggleSelectedResource(resource)}
+                    totalResources={activeArticle ? mediaSnapshot.pool.total : mediaSnapshot.resources.total}
+                    resourcePage={activeArticle ? mediaSnapshot.pool.page : mediaSnapshot.resources.page}
+                    resourcePageSize={activeArticle ? mediaSnapshot.pool.pageSize : mediaSnapshot.resources.pageSize}
+                    resourceSearch={activeArticle ? '' : mediaSnapshot.resources.search}
+                    onResourceSearch={activeArticle ? undefined : (query) => { void mediaFeature.searchResources(query); }}
+                    onResourcePageChange={activeArticle ? (page) => { void mediaFeature.loadPoolPage(page, 'manual'); } : (page) => { void mediaFeature.loadResourcePage(page, 'manual'); }}
+                    errorMessage={submissionError || mediaSnapshot.commands.openArticle.error?.userMessage || mediaSnapshot.commands.refreshResources.error?.userMessage || mediaSnapshot.commands.togglePool.error?.userMessage || (activeArticle ? mediaSnapshot.pool.query.error : mediaSnapshot.resources.query.error)?.userMessage}
+                    statusMessage={mediaRefreshMessage}
                   />
                 </div>
-                <PreflightModal isOpen={Boolean(confirmation)} onClose={() => { setSubmissionError(null); setConfirmation(null); }} articles={articles} balance={balance} summary={confirmation || {}} isSubmitting={isSubmitting} submissionError={submissionError} onSubmit={confirmRealSubmit} />
+                <PreflightModal isOpen={Boolean(mediaSnapshot.preflight.data)} onClose={() => mediaFeature.dismissPreflight()} articles={articles} balance={balance} summary={mediaSnapshot.preflight.data || {}} isSubmitting={isSubmitting} submissionError={submissionError} onSubmit={async () => { await mediaFeature.submitPrepared().catch(() => undefined); }} />
               </motion.div>
             )}
 
@@ -365,10 +190,19 @@ function AppContent() {
                     selectedResourceIds={[]}
                     mode="management"
                     activeArticleLabel=""
-                    poolResourceIds={poolResources.map(r => r.resourceId)}
-                    onTogglePool={handleTogglePool}
+                    poolResourceIds={mediaSnapshot.pool.memberResourceIds}
+                    onTogglePool={(resource) => { void mediaFeature.togglePool(resource); }}
+                    onRefreshResources={() => { void mediaFeature.refreshResources(); }}
+                    isRefreshingResources={mediaSnapshot.commands.refreshResources.busy}
                     onPickResource={() => {}}
-                    onAddResource={handleAddResource}
+                    totalResources={mediaSnapshot.resources.total}
+                    resourcePage={mediaSnapshot.resources.page}
+                    resourcePageSize={mediaSnapshot.resources.pageSize}
+                    resourceSearch={mediaSnapshot.resources.search}
+                    onResourceSearch={(query) => { void mediaFeature.searchResources(query); }}
+                    onResourcePageChange={(page) => { void mediaFeature.loadResourcePage(page, 'manual'); }}
+                    errorMessage={mediaSnapshot.commands.refreshResources.error?.userMessage || mediaSnapshot.commands.togglePool.error?.userMessage || mediaSnapshot.resources.query.error?.userMessage}
+                    statusMessage={mediaRefreshMessage}
                   />
                 </div>
               </motion.div>
@@ -413,7 +247,9 @@ function AppContent() {
               >
                 <OrdersView
                   orders={orders}
-                  onClearOrders={handleClearOrders}
+                  onSyncOrder={(orderNid) => mediaFeature.syncOrder(orderNid)}
+                  syncingOrderNid={mediaSnapshot.orders.syncingOrderNid}
+                  errorMessage={mediaSnapshot.commands.syncOrder.error?.userMessage || mediaSnapshot.orders.query.error?.userMessage}
                 />
               </motion.div>
             )}

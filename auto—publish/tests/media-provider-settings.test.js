@@ -76,13 +76,16 @@ describe("media provider settings", () => {
       { mediaList: async () => ({ data: [{ id: "new" }] }), getBalance: async () => ({ data: { balance: "2" } }) }
     ];
     let index = 0;
+    let cachedResources = [];
     const service = createMediaResourceService({
-      resourceStore: { getAll: () => null, setAll: () => {} },
+      resourceStore: { getAll: () => null, setAll: (resources) => { cachedResources = resources; } },
       clientProvider: () => clients[index++]
     });
     const first = await service.refreshResources();
     const balance = await service.getBalance();
-    assert.equal(first.resources[0].resourceId, "old");
+    assert.equal(first.resourceCount, 1);
+    assert.equal(Object.hasOwn(first, "resources"), false);
+    assert.equal(cachedResources[0].resourceId, "old");
     assert.equal(balance.balance, "2");
   });
 });

@@ -15,8 +15,9 @@ describe("renderer confirmation host", () => {
     assert.match(source, /event\.key === 'Escape'/);
     assert.match(source, /event\.key !== 'Tab'/);
     assert.match(source, /requestAnimationFrame/);
-    assert.match(source, /current\.resolve\(approved\)/);
-    assert.match(source, /current\.resolve\(false\)/);
+    assert.match(source, /request\.resolve\(approved\)/);
+    assert.match(source, /queueRef\.current/);
+    assert.match(source, /cancelRequester/);
     assert.match(source, /pendingRef\.current/);
     assert.doesNotMatch(source, /window\.confirm|window\.focus|window\.restore/);
   });
@@ -29,25 +30,32 @@ describe("renderer confirmation host", () => {
     assert.doesNotMatch(source, /dangerouslySetInnerHTML/);
   });
 
-  it("installs one host only after authentication and removes settings native confirms", () => {
+  it("installs one host only after authentication and removes business native confirms", () => {
+    const main = read("media-workbench/src/main.tsx");
     const gate = read("media-workbench/src/components/WorkspaceBootstrapGate.tsx");
-    assert.match(gate, /<ConfirmationHost><App \/><\/ConfirmationHost>/);
+    assert.equal((main.match(/<ConfirmationHost>/g) || []).length, 1);
+    assert.match(main, /<AuthGate>\s*<ConfirmationHost>/s);
+    assert.doesNotMatch(gate, /ConfirmationHost/);
     for (const file of [
       "media-workbench/src/components/settings/HepanProviderSettings.tsx",
       "media-workbench/src/components/settings/MediaProviderSettings.tsx",
       "media-workbench/src/components/AiProviderSettings.tsx",
       "media-workbench/src/components/settings/SettingsOverview.tsx",
       "media-workbench/src/components/SettingsView.tsx",
+      "media-workbench/src/components/content/QuestionCollectionView.tsx",
     ]) {
-      assert.doesNotMatch(read(file), /window\.confirm|^\s*confirm\s*\(\s*['"`]/m);
+      assert.doesNotMatch(read(file), /\b(?:window\.)?confirm\s*\(\s*['"`]/);
     }
   });
 
-  it("keeps media preflight owned by the workbench view", () => {
+  it("renders media preflight from the media feature snapshot", () => {
     const app = read("media-workbench/src/App.tsx");
+    const feature = read("media-workbench/src/features/media/media-feature.js");
     assert.match(app, /currentView === 'workbench'/);
-    assert.match(app, /<PreflightModal isOpen=\{Boolean\(confirmation\)\}/);
-    assert.doesNotMatch(app, /currentView === 'workbench' && Boolean\(confirmation\)/);
-    assert.doesNotMatch(app, /function changeView|setConfirmation\(null\);\s*\}\s*\}, \[currentView\]\)/);
+    assert.match(app, /<PreflightModal isOpen=\{Boolean\(mediaSnapshot\.preflight\.data\)\}/);
+    assert.match(app, /mediaFeature\.submitPrepared/);
+    assert.match(feature, /prepareSubmission/);
+    assert.match(feature, /submitPrepared/);
+    assert.doesNotMatch(app, /setConfirmation|setIsSubmitting|setSubmissionError/);
   });
 });

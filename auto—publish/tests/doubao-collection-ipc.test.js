@@ -60,17 +60,22 @@ describe("Doubao desktop IPC", function() {
   });
 
   it("routes batch preview and prepared start through validated public inputs", async function() {
-    const handlers = registered();
+    const queue = { status: "running", currentTaskId: null, completed: 0, total: 1, waitRemainingMs: 0, tasks: [] };
+    const handlers = registered({
+      ...fakeService(),
+      previewBatch: function(input) { return { mode: input.mode, clientCount: input.clientIds.length, taskCount: 0, skippedExisting: 0, disabledQuestions: 0, tasks: [] }; },
+      startPreparedBatch: function() { return queue; }
+    });
     const preview = await handlers.get("content:preview-doubao-batch")(null, {
       clientIds: ["client-a", "client-b"],
       mode: "missing"
     });
-    assert.deepEqual(preview, { ok: true, data: { clientIds: ["client-a", "client-b"], mode: "missing" } });
+    assert.deepEqual(preview, { ok: true, data: { preview: { mode: "missing", clientCount: 2, taskCount: 0, skippedExisting: 0, disabledQuestions: 0, tasks: [] } } });
 
     const prepared = await handlers.get("content:start-prepared-doubao-batch")(null, {
       tasks: [{ clientId: "client-a", questionId: "question-a", force: true }]
     });
-    assert.deepEqual(prepared, { ok: true, data: { tasks: [{ clientId: "client-a", questionId: "question-a", force: true }] } });
+    assert.deepEqual(prepared, { ok: true, data: { queue: queue } });
   });
 
   it("wraps service results and does not expose error internals", async function() {
@@ -312,23 +317,13 @@ describe("Doubao desktop IPC", function() {
     const handlers = registered(service);
 
     const result = await handlers.get("content:get-doubao-queue-state")(null);
-    assert.deepEqual(Object.keys(result.data), Object.keys(queueState));
-    assert.equal(result.data.completed, 1);
-    assert.equal(result.data.tasks[0].error.code, "DOUBAO_FAILED");
-    assert.doesNotMatch(result.data.tasks[0].error.message, /Cookie|C:\\private\\profile/i);
-    assert.equal(result.data.tasks[0].error.message, "failed with [redacted] and [redacted path]");
-
-    service.subscribe(function(payload) { emittedPayload = payload; });
-    queueListener({
-      state: queueState,
-      tasks: queueState.tasks,
-      answerText: "answer keeps Cookie=answer-content",
-      references: [{ title: "reference keeps C:\\reference\\content", url: "https://example.com" }]
-    });
-    assert.doesNotMatch(emittedPayload.state.tasks[0].error.message, /Cookie|C:\\private\\profile/i);
-    assert.equal(emittedPayload.state.tasks[0].error.code, "DOUBAO_FAILED");
-    assert.equal(emittedPayload.answerText, "answer keeps Cookie=answer-content");
-    assert.deepEqual(emittedPayload.references, [{ title: "reference keeps C:\\reference\\content", url: "https://example.com" }]);
+    assert.deepEqual(Object.keys(result.data.queue), Object.keys(queueState));
+    assert.equal(result.data.queue.completed, 1);
+    assert.equal(result.data.queue.tasks[0].error.code, "DOUBAO_FAILED");
+    assert.doesNotMatch(result.data.queue.tasks[0].error.message, /Cookie|C:\\private\\profile/i);
+    assert.equal(result.data.queue.tasks[0].error.message, "豆包采集任务失败，请检查诊断信息。");
+    assert.equal(queueListener, undefined, "IPC registration must not mutate the domain subscription");
+    assert.equal(emittedPayload, undefined);
   });
 
   it("rejects unsafe ids, paths, renderer scripts and profile paths at the boundary", async function() {

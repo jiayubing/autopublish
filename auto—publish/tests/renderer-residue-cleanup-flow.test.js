@@ -44,9 +44,15 @@ function installDesktopFixture(page, scenario) {
       cleanupTrashedArticleQueueResidue: () => {
         state.cleanupCalls += 1;
         if (state.scenario === "reject") {
-          const error = new Error("cleanup rejected");
-          error.code = "PUBLICATION_ATTEMPT_MISMATCH";
-          return Promise.reject(error);
+          return Promise.resolve({
+            ok: false,
+            error: {
+              code: "PUBLICATION_ATTEMPT_MISMATCH",
+              category: "conflict",
+              retryability: "manual-check",
+              userMessage: "清理服务拒绝该残留项。"
+            }
+          });
         }
         if (state.scenario === "zero") return ok({ ...residue(1, 0, "PUBLICATION_ATTEMPT_MISMATCH"), cleanedCount: 0, failedCount: 1, remainingCount: 1, failedItems: [{ reasonCode: "PUBLICATION_ATTEMPT_MISMATCH" }] });
         if (state.scenario === "partial") return ok({ ...residue(1, 0, "PUBLICATION_ATTEMPT_MISMATCH"), cleanedCount: 1, failedCount: 1, remainingCount: 1, failedItems: [{ reasonCode: "PUBLICATION_ATTEMPT_MISMATCH" }] });
@@ -74,16 +80,33 @@ function installDesktopFixture(page, scenario) {
       confirmSelection: () => ok({ state: "ready" }),
       cancelSelection: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false })
     };
-    const media = { scanArticles: () => ok([]), getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 100 }), getPool: () => ok([]), getBalance: () => ok({ balance: "0" }) };
+    const media = {
+      scanArticles: () => ok({ items: [] }),
+      previewArticle: () => ok({ article: { filename: "fixture.md", title: "Fixture", content: "", selectedResources: [] } }),
+      getDrafts: () => ok({ items: [] }),
+      getDraft: () => ok({ draft: null }),
+      setDraft: () => ok({ completed: true }),
+      removeDraft: () => ok({ completed: true }),
+      buildConfirmation: () => ok({ articleCount: 0, resourceCount: 0, submitableResourceCount: 0, blockedResourceCount: 0, estimatedTotalPrice: 0, actualPrice: 0, blockers: [], blockedResources: [], submitableResources: [] }),
+      submitSelected: () => ok({ batchId: "fixture", publishedCount: 0, failedCount: 0, uncertainCount: 0, skippedCount: 0 }),
+      stopSubmit: () => ok({ stopped: true }),
+      refreshResources: () => ok({ status: "complete", complete: true, truncated: false, truncationReason: null, pageCount: 0, resourceCount: 0, diagnostics: [], refreshedAt: "2026-07-27T00:00:00.000Z" }),
+      getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 50, totalPages: 0, hasPrev: false, hasNext: false }),
+      searchResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 50, totalPages: 0, hasPrev: false, hasNext: false }),
+      getPool: () => ok({ items: [], memberResourceIds: [], total: 0, page: 1, pageSize: 50, totalPages: 0, hasPrev: false, hasNext: false }),
+      addToPool: () => ok({ resource: { resourceId: "fixture", name: "Fixture", price: 0 } }),
+      removeFromPool: () => ok({ completed: true }),
+      getBalance: () => ok({ balance: "0" })
+    };
     const platformStatus = { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
     const platforms = { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok(platformStatus), onState: () => () => {} };
-    const orders = { getOrders: () => ok([]) };
+    const orders = { getOrders: () => ok({ items: [] }), syncOrder: () => ok({ order: { title: "", filename: "", orderNid: "fixture", statusCode: "", statusLabel: "", submittedAt: "", publishedAt: "", resourceId: "", resourceName: "", price: "0", orderUrl: "" } }) };
     const aiProvider = { getStatus: () => ok({ configured: false, source: "application", apiKeyMask: "", lastTest: null }), save: () => ok({}), testConnection: () => ok({}), clear: () => ok({ cleared: true }) };
     const platformSettings = { getStatus: () => ok({ configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null }), save: () => ok({}), test: () => ok({ testedAt: "", ok: true, code: "OK" }), clear: () => ok({ cleared: true }) };
     const storageMaintenance = { getUsage: () => ok({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }), cleanCaches: () => ok({ blocked: false }) };
     window.__residueFlow = state;
-    window.desktopConsole = { auth: { getState: () => ok({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} }, workspace, runtimeDiagnostics: { get: () => ok(runtimeDiagnostics()) }, aiProvider, platformSettings, storageMaintenance, media, orders, platforms, content };
-    window.confirm = () => true;
+    const workspaceData = { getRuntimeIdentity: () => ok({ workspaceRuntimeId: "renderer-residue-fixture", revision: 0 }), onInvalidated: () => () => {} };
+    window.desktopConsole = { auth: { getState: () => ok({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} }, workspace, workspaceData, runtimeDiagnostics: { get: () => ok(runtimeDiagnostics()) }, aiProvider, platformSettings, storageMaintenance, media, orders, platforms, content };
   }, { scenario });
 }
 
@@ -111,6 +134,8 @@ describe("renderer residue cleanup flow", { concurrency: false }, () => {
       try {
         const action = page.getByRole("button", { name: /检查并清理已删除文章残留/ });
         await action.click();
+        await page.getByRole("dialog", { name: "清理已删除文章队列残留" }).waitFor();
+        await page.getByRole("button", { name: "确认清理" }).click();
         await page.waitForFunction(() => !document.body.innerText.includes("清理中…"));
         const alerts = page.getByRole("alert");
         const statuses = page.getByRole("status");

@@ -56,19 +56,23 @@ function installDesktopFixture(page) {
       confirmSelection: () => result({ state: "ready" }),
       cancelSelection: () => result({ state: "ready", workspacePath, envOverride: false })
     };
+    const workspaceData = {
+      getRuntimeIdentity: () => result({ workspaceRuntimeId: "renderer-layout-fixture", revision: 0 }),
+      onInvalidated: () => () => {}
+    };
     const content = {
-      listClients: () => result([client]),
-      listGeneratedArticles: () => result([]),
-      getArticleManagementSnapshot: ({ clientId }) => result({ clientId, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms, workflowByArticle: {}, publicationSummaries: {} }),
-      listSubmissionPlatforms: () => result(submissionPlatforms),
-      listSubmissionBatches: () => result([]),
-      listArticleTrash: () => result([]),
-      listResearch: () => result([]),
-      listQuestions: () => result([]),
-      getDoubaoLoginState: () => result({ status: "unknown" }),
-      getDoubaoQueueState: () => result({ status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] }),
+      listClients: () => result({ clients: [client] }),
+      listGeneratedArticles: () => result({ articles: [] }),
+      getArticleManagementSnapshot: ({ clientId }) => result({ clientId, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms, workflowItems: [], publicationSummaryItems: [] }),
+      listSubmissionPlatforms: () => result({ platforms: submissionPlatforms }),
+      listSubmissionBatches: () => result({ batches: [] }),
+      listArticleTrash: () => result({ trash: [] }),
+      listResearch: () => result({ research: [] }),
+      listQuestions: () => result({ questions: [] }),
+      getDoubaoLoginState: () => result({ loginState: { status: "unknown" } }),
+      getDoubaoQueueState: () => result({ queue: { status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }),
       onDoubaoQueueState: () => () => {},
-      listTemplates: () => result([]),
+      listTemplates: () => result({ templates: [] }),
       listGenerationBatches: () => result([]),
       getGenerationBatchState: () => result({ state: "idle", currentBatchId: null, completed: 0, total: 0, tasks: [] }),
       previewGenerationBatch: () => result({}),
@@ -80,21 +84,43 @@ function installDesktopFixture(page) {
       filename: "preflight-fixture.md", title: "预检交互稿件", content: "fixture", words: 7, hasImages: false,
       selectedResources: [{ resourceId: "preflight-resource", name: "预检资源", type: "image", price: 1 }]
     };
-    const mediaSubmissionState = { submitted: false, scanCalls: 0 };
+    const unselectedMediaArticle = {
+      filename: "unselected-fixture.md", title: "未选择媒体的稿件", content: "fixture", words: 7, hasImages: false,
+      selectedResources: []
+    };
+    const mediaSubmissionState = { submitted: false, scanCalls: 0, refreshShouldFail: false, preflightShouldFail: false, preflightCalls: 0, submitCalls: 0, preflightSubmissionCount: 0 };
     window.__mediaSubmissionState = mediaSubmissionState;
     const media = {
-      scanArticles: () => { mediaSubmissionState.scanCalls += 1; return result(mediaSubmissionState.submitted ? [] : [mediaArticle]); },
-      getResourcePage: () => result({ items: [], total: 0, page: 1, pageSize: 100 }),
-      getPool: () => result([]),
+      scanArticles: () => { mediaSubmissionState.scanCalls += 1; return result({ items: mediaSubmissionState.submitted ? [] : [mediaArticle, unselectedMediaArticle] }); },
+      previewArticle: () => result({ article: mediaArticle }),
+      getDrafts: () => result({ items: [] }),
+      getDraft: () => result({ draft: null }),
+      setDraft: () => result({ completed: true }),
+      removeDraft: () => result({ completed: true }),
+      refreshResources: () => mediaSubmissionState.refreshShouldFail
+        ? Promise.resolve({ ok: false, error: { code: "MEDIA_CONFIG_NOT_SET", category: "validation", retryability: "never", userMessage: "请先配置付费媒体服务。" } })
+        : result({ status: "complete", complete: true, truncated: false, truncationReason: null, pageCount: 0, resourceCount: 0, diagnostics: [], refreshedAt: "2026-07-27T00:00:00.000Z" }),
+      getResourcePage: () => result({ items: [], total: 0, page: 1, pageSize: 50, totalPages: 0, hasPrev: false, hasNext: false }),
+      searchResourcePage: () => result({ items: [], total: 0, page: 1, pageSize: 50, totalPages: 0, hasPrev: false, hasNext: false }),
+      getPool: () => result({ items: [], memberResourceIds: [], total: 0, page: 1, pageSize: 50, totalPages: 0, hasPrev: false, hasNext: false }),
+      addToPool: () => result({ resource: { resourceId: "preflight-resource", name: "预检资源", price: 1 } }),
+      removeFromPool: () => result({ completed: true }),
       getBalance: () => result({ balance: "100" }),
-      buildConfirmation: () => result({ submitableResources: [{ filename: mediaArticle.filename, title: mediaArticle.title, resourceId: "preflight-resource", resourceName: "预检资源", price: 1 }], actualPrice: 1 }),
-      submitSelected: () => { mediaSubmissionState.submitted = true; return result({}); }
+      buildConfirmation: (submissions) => {
+        mediaSubmissionState.preflightCalls += 1;
+        mediaSubmissionState.preflightSubmissionCount = submissions.length;
+        return mediaSubmissionState.preflightShouldFail
+          ? Promise.resolve({ ok: false, error: { code: "SUBMISSION_INPUT_INVALID", category: "validation", retryability: "never", userMessage: "付费媒体投稿预检请求无效。" } })
+          : result({ articleCount: 1, resourceCount: 1, submitableResourceCount: 1, blockedResourceCount: 0, estimatedTotalPrice: 1, actualPrice: 1, blockers: [], blockedResources: [], submitableResources: [{ filename: mediaArticle.filename, title: mediaArticle.title, resourceId: "preflight-resource", resourceName: "预检资源", price: 1, status: "available" }] });
+      },
+      submitSelected: () => { mediaSubmissionState.submitCalls += 1; mediaSubmissionState.submitted = true; return result({ batchId: "preflight-batch", publishedCount: 1, failedCount: 0, uncertainCount: 0, skippedCount: 0 }); },
+      stopSubmit: () => result({ stopped: true })
     };
-    const orders = { getOrders: () => result(mediaSubmissionState.submitted ? [{ id: "preflight-order", status: "submitted" }] : []) };
+    const orders = { getOrders: () => result({ items: mediaSubmissionState.submitted ? [{ title: mediaArticle.title, filename: mediaArticle.filename, orderNid: "preflight-order", statusCode: "submitted", statusLabel: "已提交", submittedAt: "2026-07-27T00:00:00.000Z", publishedAt: "", resourceId: "preflight-resource", resourceName: "预检资源", price: "1", orderUrl: "" }] : [] }), syncOrder: () => result({ order: { title: mediaArticle.title, filename: mediaArticle.filename, orderNid: "preflight-order", statusCode: "submitted", statusLabel: "已提交", submittedAt: "2026-07-27T00:00:00.000Z", publishedAt: "", resourceId: "preflight-resource", resourceName: "预检资源", price: "1", orderUrl: "" } }) };
     const aiProvider = { getStatus: () => result({ configured: false, source: "application", apiKeyMask: "", lastTest: null }), save: () => result({}), testConnection: () => result({}), clear: () => result({ cleared: true }) };
     const platformSettings = { getStatus: (platformId) => result(platformId === "media" ? { configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null } : { configured: false, source: "application", pythonConfigured: false, cookieConfigured: false, categoryId: 121, vendorConfigured: false, siteOrigin: "https://www.hepan.com", lastTest: null }), save: () => result({}), test: () => result({ testedAt: "", ok: true, code: "OK" }), clear: () => result({ cleared: true }) };
     const storageMaintenance = { getUsage: () => result({ logs: { bytes: 0, files: 0 }, temporary: { bytes: 0, files: 0 }, docxCache: { bytes: 0, files: 0 }, profiles: { bytes: 0, files: 0 } }), cleanCaches: () => result({ blocked: false }) };
-    window.desktopConsole = { auth: { getState: () => result({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => result({ authenticated: true }), refresh: () => result({ authenticated: true }), logout: () => result({ authenticated: false }), onStateChanged: () => () => {} }, workspace, runtimeDiagnostics: runtime, aiProvider, platformSettings, storageMaintenance, media, orders, platforms: { getQueue: () => result({ platforms: [], queue: [] }), getState: () => result({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} }, content };
+    window.desktopConsole = { auth: { getState: () => result({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => result({ authenticated: true }), refresh: () => result({ authenticated: true }), logout: () => result({ authenticated: false }), onStateChanged: () => () => {} }, workspace, workspaceData, runtimeDiagnostics: runtime, aiProvider, platformSettings, storageMaintenance, media, orders, platforms: { getQueue: () => result({ revision: 0, platforms: [], queue: [] }), getState: () => result({ runId: null, phase: "idle", total: 0, processed: 0, succeeded: 0, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: null, updatedAt: null, terminalResult: null, isBatchRunning: false, isStopPending: false, isPlatformRunning: false, waitRemainingMs: 0 }), onState: () => () => {} }, content };
   }, fixtureWorkspace);
 }
 
@@ -158,9 +184,12 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
         page.setDefaultTimeout(5000);
         await installDesktopFixture(page);
         await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-        await page.getByRole("button", { name: "预检并提交" }).click();
+        await page.getByRole("button", { name: "投稿预检" }).click();
         const confirm = page.locator("[data-preflight-confirm='true']");
         await confirm.waitFor();
+        const preflightState = await page.evaluate(() => window.__mediaSubmissionState);
+        assert.equal(preflightState.preflightSubmissionCount, 1);
+        assert.equal(preflightState.submitCalls, 0);
         const hit = await page.evaluate(() => {
           const button = document.querySelector("[data-preflight-confirm='true']");
           const status = document.querySelector("[aria-label='授权状态']");
@@ -192,15 +221,59 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       page.setDefaultTimeout(5000);
       await installDesktopFixture(page);
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.getByRole("button", { name: "打开" }).click();
+      await page.getByRole("button", { name: "打开" }).first().click();
       await page.getByText("当前编辑", { exact: true }).waitFor();
       const initialScanCalls = await page.evaluate(() => window.__mediaSubmissionState.scanCalls);
-      await page.getByRole("button", { name: "预检并提交" }).click();
+      await page.getByRole("button", { name: "投稿预检" }).click();
       await page.locator("[data-preflight-confirm='true']").click();
       await page.waitForFunction(() => window.__mediaSubmissionState.scanCalls > 1 && !document.body.innerText.includes("预检交互稿件"));
       const refreshed = await page.evaluate(() => ({ scanCalls: window.__mediaSubmissionState.scanCalls, body: document.body.innerText }));
       assert.ok(refreshed.scanCalls > initialScanCalls, JSON.stringify(refreshed));
       assert.match(refreshed.body, /暂无打开的稿件/);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("shows a safe preflight failure without invoking paid submission", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => { window.__mediaSubmissionState.preflightShouldFail = true; });
+      await page.getByRole("button", { name: "投稿预检" }).click();
+      await page.getByRole("alert").filter({ hasText: "付费媒体投稿预检请求无效" }).waitFor();
+      const state = await page.evaluate(() => window.__mediaSubmissionState);
+      assert.equal(state.preflightCalls, 1);
+      assert.equal(state.submitCalls, 0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("shows a safe media refresh failure instead of leaving the button with no feedback", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => { window.__mediaSubmissionState.refreshShouldFail = true; });
+      await page.getByRole("button", { name: "刷新库" }).click();
+      await page.getByRole("alert").filter({ hasText: "请先配置付费媒体服务" }).waitFor();
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("shows completion feedback when a media refresh succeeds without changing the page", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "刷新库" }).click();
+      await page.getByRole("status").filter({ hasText: "资源库已刷新，共 0 项" }).waitFor();
     } finally {
       await page.close();
     }
@@ -274,10 +347,10 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       try {
         await page.evaluate((items) => {
           const response = (data) => Promise.resolve({ ok: true, data });
-          window.desktopConsole.content.listGeneratedArticles = () => response(items);
-          window.desktopConsole.content.getArticleManagementSnapshot = ({ clientId }) => response({ clientId, revision: Date.now(), articles: items, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowByArticle: {}, publicationSummaries: {} });
+          window.desktopConsole.content.listGeneratedArticles = () => response({ articles: items });
+          window.desktopConsole.content.getArticleManagementSnapshot = ({ clientId }) => response({ clientId, revision: Date.now(), articles: items, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowItems: [], publicationSummaryItems: [] });
           window.desktopConsole.content.listTemplateCatalog = () => response({ revision: "responsive-fixture", platforms: [{ id: "fixture-responsive-platform", displayName: "响应式测试平台", description: "", order: 1 }], templates: [{ id: "fixture-responsive-template", platform: "fixture-responsive-platform", scenario: "响应式历史编辑", name: "超长模板名称用于响应式历史列表边界回归", body: "responsive template body", bodyHash: "responsive-template-hash", source: "custom" }], diagnostics: [] });
-          window.desktopConsole.publication = { listForArticles: () => response([]) };
+          window.desktopConsole.publication = { listForArticles: () => response({ records: [] }) };
         }, articles);
         await page.getByRole("button", { name: "刷新客户与模板" }).click();
         await page.waitForFunction(() => document.querySelector("select[aria-label='当前客户（单篇/问题/历史）']")?.value === "layout-smoke");

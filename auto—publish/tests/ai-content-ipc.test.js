@@ -12,21 +12,21 @@ describe("ai content ipc", function() {
   it("registers the complete thin content IPC surface", async function() {
     const ipc = createIpc();
     const service = {
-      listClients: function() { return [{ id: "client-1" }]; }, getClient: function() { return {}; }, retryMaterial: function(clientId, materialId) { return { clientId: clientId, materialId: materialId, status: "ready" }; },
-      listResearch: function() { return []; }, getResearch: function() { return {}; }, listTemplates: function() { return []; },
+      listClients: function() { return [{ id: "client-1", name: "Client", knowledgeFiles: [] }]; }, retryMaterial: function() { return { id: "material-1", name: "facts.txt", content: "facts", status: "ready" }; },
+      listResearch: function() { return []; }, listTemplates: function() { return []; },
       generateArticle: async function() { return { id: "article-1" }; }, saveArticle: function(value) { return value; },
-      listGeneratedArticles: function() { return []; }, getGeneratedArticle: function() { return {}; }, copyArticleVersion: function(input) { return { id: "article-copy", sourceArticleId: input.sourceArticleId, version: 2 }; },
+      listGeneratedArticles: function() { return []; }, copyArticleVersion: function(input) { return { id: "article-copy", sourceArticleId: input.sourceArticleId, version: 2 }; },
       reviewArticles: function(value) { return { approved: value.map(function(item) { return item.articleId; }), rejected: [], skipped: [] }; }
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
-    ["content:list-clients", "content:get-client", "content:list-research", "content:get-research", "content:list-templates", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:get-generated-article", "content:copy-article-version", "content:review-articles"].forEach(function(channel) {
+    ["content:list-clients", "content:list-research", "content:list-templates", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article", "content:list-generated-articles", "content:copy-article-version", "content:review-articles"].forEach(function(channel) {
       assert.equal(ipc.handlers.has(channel), true, "missing " + channel);
     });
-    assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: [{ id: "client-1" }] });
-    assert.deepStrictEqual(await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1" }), { ok: true, data: { id: "article-1" } });
-    assert.deepStrictEqual(await ipc.handlers.get("content:copy-article-version")(null, { clientId: "client-1", sourceArticleId: "article-1" }), { ok: true, data: { id: "article-copy", sourceArticleId: "article-1", version: 2 } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: { clients: [{ id: "client-1", name: "Client", knowledgeFiles: [] }] } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1" }), { ok: true, data: { article: { id: "article-1" } } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:copy-article-version")(null, { clientId: "client-1", sourceArticleId: "article-1" }), { ok: true, data: { article: { id: "article-copy", sourceArticleId: "article-1", version: 2 } } });
     assert.deepStrictEqual(await ipc.handlers.get("content:review-articles")(null, { articles: [{ clientId: "c1", articleId: "a1" }] }), { ok: true, data: { approved: ["a1"], rejected: [], skipped: [] } });
-    assert.deepStrictEqual(await ipc.handlers.get("content:retry-material")(null, { clientId: "client-1", materialId: "material-1" }), { ok: true, data: { clientId: "client-1", materialId: "material-1", status: "ready" } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:retry-material")(null, { clientId: "client-1", materialId: "material-1" }), { ok: true, data: { material: { id: "material-1", name: "facts.txt", content: "facts", status: "ready" } } });
   });
 
   it("wraps coded service errors without stack traces", async function() {
@@ -66,8 +66,8 @@ describe("ai content ipc", function() {
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
 
-    assert.deepEqual(await ipc.handlers.get("content:get-article-removal-transaction")(null, { transactionId: "tx-1" }), { ok: true, data: { id: "tx-1", transactionId: "tx-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH" } });
-    assert.deepEqual(await ipc.handlers.get("content:list-article-removal-transactions")(), { ok: true, data: [{ id: "tx-1", transactionId: "tx-1", status: "pending_auto_recovery", phase: "queue-actions" }] });
-    assert.deepEqual(await ipc.handlers.get("content:retry-article-removal-transaction")(null, { transactionId: "tx-1", confirmed: true }), { ok: true, data: { id: "tx-1", transactionId: "tx-1", status: "committed", phase: "committed" } });
+    assert.deepEqual(await ipc.handlers.get("content:get-article-removal-transaction")(null, { transactionId: "tx-1" }), { ok: true, data: { transaction: { id: "tx-1", transactionId: "tx-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH" } } });
+    assert.deepEqual(await ipc.handlers.get("content:list-article-removal-transactions")(), { ok: true, data: { transactions: [{ id: "tx-1", transactionId: "tx-1", status: "pending_auto_recovery", phase: "queue-actions" }] } });
+    assert.deepEqual(await ipc.handlers.get("content:retry-article-removal-transaction")(null, { transactionId: "tx-1", confirmed: true }), { ok: true, data: { transaction: { id: "tx-1", transactionId: "tx-1", status: "committed", phase: "committed" } } });
   });
 });

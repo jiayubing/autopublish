@@ -35,11 +35,11 @@ it("lists publication history for many articles in one ledger query and strips s
 
   assert.deepEqual(calls, [{ clientId: "client-1", articleIds: ["article-1", "article-2"] }]);
   assert.equal(result.ok, true);
-  assert.equal(result.data.length, 1);
-  assert.equal(result.data[0].status, "uncertain");
-  assert.equal(result.data[0].errorCode, "REMOTE_RESULT_UNKNOWN");
-  assert.equal(result.data[0].accountFingerprint, undefined);
-  assert.equal(result.data[0].contentHash, undefined);
+  assert.equal(result.data.records.length, 1);
+  assert.equal(result.data.records[0].status, "uncertain");
+  assert.equal(result.data.records[0].errorCode, "REMOTE_RESULT_UNKNOWN");
+  assert.equal(result.data.records[0].accountFingerprint, undefined);
+  assert.equal(result.data.records[0].contentHash, undefined);
 });
 
 it("rejects renderer path-like publication history input", async function() {
@@ -85,6 +85,6 @@ it("requires a second-confirmation marker and exposes only safe reconciliation f
   const result = await handlers.get("publication:reconcile")(null, { publicationId: "publication-1", status: "failed", reasonCode: "CONFIRMED_NOT_PUBLISHED", confirmed: true });
   assert.equal(result.ok, true);
   assert.deepEqual(calls, [{ publicationId: "publication-1", decision: { status: "failed", reasonCode: "CONFIRMED_NOT_PUBLISHED" } }]);
-  assert.equal(result.data.reasonCode, "CONFIRMED_NOT_PUBLISHED");
-  assert.equal(result.data.accountFingerprint, undefined);
+  assert.equal(result.data.record.reasonCode, "CONFIRMED_NOT_PUBLISHED");
+  assert.equal(result.data.record.accountFingerprint, undefined);
 });

@@ -12,13 +12,13 @@ it("exposes current-client submission batch history without renderer paths", asy
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     contentSubmissionService: {
-      listBatches: (clientId) => [{ id: "batch-1", clientId, items: [{ filePath: "C:\\secret.md", status: "queued" }] }]
+      listBatches: (clientId) => [{ id: "batch-1", clientId, status: "queued", items: [{ filePath: "C:\\secret.md", status: "queued" }] }]
     }
   });
 
   const result = await handlers.get("content:list-submission-batches")(null, { clientId: "client-1" });
 
-  assert.deepEqual(result, { ok: true, data: [{ id: "batch-1", clientId: "client-1", items: [{ status: "queued" }] }] });
+  assert.deepEqual(result, { ok: true, data: { batches: [{ id: "batch-1", clientId: "client-1", status: "queued", items: [{ status: "queued" }] }] } });
 });
 
 it("forwards only the preview action plan token for batch cancellation", async function() {

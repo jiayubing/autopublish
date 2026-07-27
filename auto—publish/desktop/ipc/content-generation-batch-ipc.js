@@ -1,5 +1,6 @@
 const { wrap } = require("../services/ipc-response");
 const { SAFE_MESSAGES } = require("../services/content-generation-batch-service");
+const { productionIpcRegistry } = require("./contracts/production-registry");
 
 function safeFailure(error) {
   const code = error && typeof error.code === "string" && SAFE_MESSAGES[error.code] ? error.code : "GENERATION_INPUT_INVALID";
@@ -23,11 +24,120 @@ function input(value) {
   return Object.assign({}, value);
 }
 
-function invokeBatchCommand(service, method, value) {
-  return invoke(async function() {
-    const commandInput = input(value);
-    return service[method](commandInput);
-  });
+function safeTask(value) {
+  const task = value || {};
+  const result = {
+    id: task.id,
+    clientId: task.clientId,
+    platform: task.platform,
+    templateId: task.templateId,
+    materialIds: Array.isArray(task.materialIds) ? task.materialIds.slice() : [],
+    researchQueryIds: Array.isArray(task.researchQueryIds) ? task.researchQueryIds.slice() : [],
+    status: task.status,
+    attempts: task.attempts,
+  };
+  if (task.error === null) result.error = null;
+  else if (task.error) result.error = {
+    code: typeof task.error.code === "string" ? task.error.code : "GENERATION_TASK_FAILED",
+    message: "生成任务失败，请检查诊断信息。",
+  };
+  if (task.articleId !== undefined) result.articleId = task.articleId;
+  if (task.createdAt !== undefined) result.createdAt = task.createdAt;
+  if (task.updatedAt !== undefined) result.updatedAt = task.updatedAt;
+  return result;
+}
+
+function safeBatch(value) {
+  if (value === null || value === undefined) return null;
+  const batch = {
+    id: value.id,
+    status: value.status,
+    clientSources: Array.isArray(value.clientSources) ? value.clientSources.map((item) => ({
+      clientId: item.clientId,
+      materialIds: Array.isArray(item.materialIds) ? item.materialIds.slice() : [],
+      researchQueryIds: Array.isArray(item.researchQueryIds) ? item.researchQueryIds.slice() : [],
+    })) : [],
+    templates: Array.isArray(value.templates) ? value.templates.map((item) => ({
+      platform: item.platform,
+      templateId: item.templateId,
+    })) : [],
+    tasks: Array.isArray(value.tasks) ? value.tasks.map(safeTask) : [],
+    counts: value.counts,
+  };
+  for (const key of ["version", "concurrency", "createdAt", "updatedAt", "aiConfigFingerprint"])
+    if (value[key] !== undefined) batch[key] = value[key];
+  if (Array.isArray(value.excludedClients)) batch.excludedClients = value.excludedClients.map((item) => ({
+    clientId: item.clientId,
+    codes: Array.isArray(item.codes) ? item.codes.slice() : [],
+  }));
+  return batch;
+}
+
+function safePreview(value) {
+  const input = value || {};
+  return {
+    clientCount: input.clientCount,
+    executableClientCount: input.executableClientCount,
+    taskCount: input.taskCount,
+    executableTaskCount: input.executableTaskCount,
+    excludedTaskCount: input.excludedTaskCount,
+    excludedClients: Array.isArray(input.excludedClients) ? input.excludedClients.map((item) => ({
+      clientId: item.clientId,
+      codes: Array.isArray(item.codes) ? item.codes.slice() : [],
+    })) : [],
+    templates: Array.isArray(input.templates) ? input.templates.map((item) => ({
+      platform: item.platform,
+      templateId: item.templateId,
+    })) : [],
+    clientSources: Array.isArray(input.clientSources) ? input.clientSources.map((item) => ({
+      clientId: item.clientId,
+      materialIds: Array.isArray(item.materialIds) ? item.materialIds.slice() : [],
+      researchQueryIds: Array.isArray(item.researchQueryIds) ? item.researchQueryIds.slice() : [],
+    })) : [],
+    tasks: Array.isArray(input.tasks) ? input.tasks.map((item) => ({
+      clientId: item.clientId,
+      platform: item.platform,
+      templateId: item.templateId,
+      materialIds: Array.isArray(item.materialIds) ? item.materialIds.slice() : [],
+      researchQueryIds: Array.isArray(item.researchQueryIds) ? item.researchQueryIds.slice() : [],
+    })) : [],
+  };
+}
+
+function safeState(value) {
+  const state = value || {};
+  return {
+    state: state.state || state.status || "idle",
+    status: state.status || state.state || "idle",
+    batchId: state.batchId || null,
+    counts: state.counts || null,
+    updatedAt: state.updatedAt,
+    runtimeId: state.runtimeId,
+    sequence: state.sequence,
+    isBatchRunning: state.isBatchRunning === true,
+    isStopPending: state.isStopPending === true,
+  };
+}
+
+function safeCapabilities(value) {
+  const input = value || {};
+  return {
+    canResume: input.canResume === true,
+    canContinue: input.canContinue === true,
+    canRetry: input.canRetry === true,
+    canCancel: input.canCancel === true,
+  };
+}
+
+function safeRuntimeSnapshot(value) {
+  const input = value || {};
+  return {
+    runtimeId: input.runtimeId,
+    sequence: input.sequence,
+    runtime: safeState(input.runtime),
+    batch: safeBatch(input.batch),
+    capabilities: safeCapabilities(input.capabilities),
+  };
 }
 
 function registerContentGenerationBatchIpc(deps) {
@@ -35,29 +145,34 @@ function registerContentGenerationBatchIpc(deps) {
   const ipcMain = values.ipcMain;
   const service = values.contentGenerationBatchService;
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation batch IPC dependencies are required");
-  ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(function() { return service.preview(input(value)); }); });
-  ipcMain.handle("content:create-generation-batch", function(event, value) { return invoke(function() { return service.createBatch(input(value)); }); });
-  ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(function() { return service.createAndStartBatch(input(value)); }); });
-  ipcMain.handle("content:list-generation-batches", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.list(); }); });
-  ipcMain.handle("content:get-generation-batch", function(event, value) { return invoke(function() { return service.get(input(value).batchId); }); });
-  ipcMain.handle("content:start-generation-batch", function(event, value) { return invoke(function() { return service.startBatch(input(value)); }); });
-  ipcMain.handle("content:stop-generation-batch", function(event, value) { return invoke(function() { return service.stopBatch(value === undefined ? undefined : input(value)); }); });
-  ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(function() { return service.pauseBatch(value === undefined ? undefined : input(value)); }); });
-  ipcMain.handle("content:continue-generation-batch", function(event, value) { return invokeBatchCommand(service, "continueBatch", value); });
-  ipcMain.handle("content:resume-generation-batch", function(event, value) { return invokeBatchCommand(service, "resumeBatch", value); });
-  ipcMain.handle("content:retry-failed-generation-batch", function(event, value) { return invoke(function() { return service.retryFailed(input(value)); }); });
+  ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(async function() { return safePreview(await service.preview(input(value))); }); });
+  ipcMain.handle("content:create-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createBatch(input(value))) }; }); });
+  ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createAndStartBatch(input(value))) }; }); });
+  ipcMain.handle("content:list-generation-batches", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return { batches: service.list().map(safeBatch) }; }); });
+  ipcMain.handle("content:get-generation-batch", function(event, value) { return invoke(function() { return { batch: safeBatch(service.get(input(value).batchId)) }; }); });
+  ipcMain.handle("content:start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.startBatch(input(value))) }; }); });
+  ipcMain.handle("content:stop-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.stopBatch(value === undefined ? undefined : input(value))) }; }); });
+  ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.pauseBatch(value === undefined ? undefined : input(value))) }; }); });
+  ipcMain.handle("content:continue-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.continueBatch(input(value))) }; }); });
+  ipcMain.handle("content:resume-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.resumeBatch(input(value))) }; }); });
+  ipcMain.handle("content:retry-failed-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.retryFailed(input(value))) }; }); });
   ipcMain.handle("content:preview-cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.previewCancelPending(input(value)); }); });
-  ipcMain.handle("content:cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.cancelPending(input(value)); }); });
-  ipcMain.handle("content:get-generation-batch-state", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return service.getState(); }); });
+  ipcMain.handle("content:cancel-pending-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.cancelPending(input(value))) }; }); });
+  ipcMain.handle("content:get-generation-batch-state", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return safeState(service.getState()); }); });
   ipcMain.handle("content:get-generation-runtime-snapshot", function() { return invoke(function() {
-    if (typeof service.getRuntimeSnapshot === "function") return service.getRuntimeSnapshot();
-    return { runtime: service.getState(), batch: null, capabilities: {} };
+    if (typeof service.getRuntimeSnapshot === "function") return safeRuntimeSnapshot(service.getRuntimeSnapshot());
+    const runtime = safeState(service.getState());
+    return { runtimeId: runtime.runtimeId, sequence: runtime.sequence, runtime, batch: null, capabilities: safeCapabilities({}) };
   }); });
   const sendToRenderer = values.sendToRenderer;
+  const runtimeEvent = productionIpcRegistry.byCapability("generation.runtimeChanged");
   const unsubscribe = typeof service.subscribe === "function" ? service.subscribe(function(state) {
-    if (typeof sendToRenderer === "function") sendToRenderer("content:generation-batch-state", state);
+    if (typeof sendToRenderer !== "function") return;
+    try {
+      sendToRenderer(runtimeEvent.channel, productionIpcRegistry.event(runtimeEvent, state));
+    } catch (_) {}
   }) : function() {};
   return { dispose: unsubscribe };
 }
 
-module.exports = { registerContentGenerationBatchIpc };
+module.exports = { registerContentGenerationBatchIpc, safeBatch, safePreview, safeState, safeRuntimeSnapshot };

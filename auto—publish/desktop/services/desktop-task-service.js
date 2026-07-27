@@ -4,8 +4,15 @@ const { createPlatformTaskStateStore, createRunId } = require("./platform-task-s
 const { createPlatformRun, WORKER_SCHEMA_VERSION } = require("./platform-run");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapter");
+const { productionIpcRegistry } = require("../ipc/contracts/production-registry");
+const { projectPlatformSnapshot } = require("../ipc/contracts/platform-contracts");
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
+
+function encodePlatformStateEvent(snapshot) {
+  var contract = productionIpcRegistry.byChannel("platform-state");
+  return productionIpcRegistry.event(contract, projectPlatformSnapshot(snapshot));
+}
 
 function sanitizePlatformPlan(plan) {
   var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
@@ -34,6 +41,10 @@ function createDesktopTaskService(opts) {
   var platformSettingsService = options.platformSettingsService || null;
   var activeRuntimeCleanup = null;
 
+  function sendPlatformState(snapshot) {
+    sendToRenderer("platform-state", encodePlatformStateEvent(snapshot));
+  }
+
   function stopSignalDirectory() {
     return storagePaths.tmp || path.join(cwd, "tmp");
   }
@@ -50,10 +61,10 @@ function createDesktopTaskService(opts) {
         isStopPending: false,
         isPlatformRunning: Boolean(platformRun && platformRun.snapshot())
       }, extra || {}));
-      sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
+      sendPlatformState(platformTaskStateStore.getSnapshot());
       return;
     }
-    sendToRenderer("platform-state", Object.assign({
+    sendPlatformState(Object.assign({
       isBatchRunning: false,
       isStopPending: false,
       isPlatformRunning: Boolean(platformRun && platformRun.snapshot())
@@ -226,7 +237,7 @@ function closeBrowserSessions() {
         watchdogMs: watchdogMs,
         launch: function(run) {
           platformTaskStateStore.start({ runId: run.runId, tasks: run.command.tasks });
-          sendToRenderer("platform-state", platformTaskStateStore.getSnapshot());
+          sendPlatformState(platformTaskStateStore.getSnapshot());
           return spawnDesktopTask("platform-submit", Object.assign({}, payload, { plan: { tasks: run.command.tasks }, runId: run.runId }), {
             onLog: hooks && hooks.onLog ? hooks.onLog : function() {},
             onState: function(state) { run.onMessage({ schemaVersion: WORKER_SCHEMA_VERSION, runId: run.runId, type: "state", payload: state }); }
@@ -235,7 +246,7 @@ function closeBrowserSessions() {
         onSnapshot: function(snapshot) {
           if (snapshot.phase === "running" || snapshot.phase === "stopping") {
             var value = platformTaskStateStore.applyWorkerState({ runId: snapshot.runId, phase: snapshot.phase === "stopping" ? "stopping" : "heartbeat" });
-            sendToRenderer("platform-state", value);
+            sendPlatformState(value);
             if (hooks && typeof hooks.onState === "function") hooks.onState(value);
           }
         }
@@ -251,7 +262,7 @@ function closeBrowserSessions() {
         onMessage: function(message) {
           if (!message || message.type !== "state") return;
           var snapshot = platformTaskStateStore.applyWorkerState(Object.assign({}, message.payload || {}, { runId: message.runId }));
-          sendToRenderer("platform-state", snapshot);
+          sendPlatformState(snapshot);
           if (hooks && typeof hooks.onState === "function") hooks.onState(snapshot);
         }
       });
@@ -264,7 +275,7 @@ function closeBrowserSessions() {
         : "failed";
       var queueRevision = invalidateData("PLATFORM_SUBMIT_" + terminalPhase.toUpperCase());
       var terminalSnapshot = platformTaskStateStore.finish(result || { errorCode: "PLATFORM_SUBMIT_FAILED" }, terminalPhase, { queueRevision: queueRevision });
-      sendToRenderer("platform-state", terminalSnapshot);
+      sendPlatformState(terminalSnapshot);
       if (hooks && typeof hooks.onState === "function") hooks.onState(terminalSnapshot);
     }
   }
@@ -321,4 +332,4 @@ function closeBrowserSessions() {
   };
 }
 
-module.exports = { createDesktopTaskService };
+module.exports = { createDesktopTaskService, encodePlatformStateEvent };

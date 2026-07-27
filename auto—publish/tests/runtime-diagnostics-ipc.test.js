@@ -33,7 +33,7 @@ it("exposes bounded runtime lifecycle events through the diagnostics IPC", async
     runtimeDiagnosticsService: { safeDiagnostics: function() { return { ok: true, errors: [], warnings: [], runtimeEvents: [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "Removal recovery failed", occurredAt: "2026-07-25T00:00:00.000Z" }] }; }, probeBrowser: async function() { return {}; } }
   });
   const diagnostics = await handlers.get("runtime-diagnostics:get")();
-  assert.deepEqual(diagnostics.data.runtimeEvents, [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "Removal recovery failed", occurredAt: "2026-07-25T00:00:00.000Z" }]);
+  assert.deepEqual(diagnostics.data.runtimeEvents, [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "运行期诊断事件，请检查诊断代码。", occurredAt: "2026-07-25T00:00:00.000Z" }]);
 });
 
 it("forwards the updated browser capability returned by a successful self-check", async function() {

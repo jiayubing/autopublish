@@ -1,4 +1,72 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer: electronIpcRenderer } = require("electron");
+const { productionIpcRegistry } = require("./ipc/contracts/production-registry");
+
+// Phase 07 owns Auth IPC. These six capabilities are the only temporary raw
+// transport exemptions; every business capability must exist in the registry.
+const AUTH_INVOKE_EXEMPTIONS = new Set([
+  "auth:get-state", "auth:login", "auth:change-password", "auth:refresh", "auth:logout",
+]);
+const AUTH_EVENT_EXEMPTIONS = new Set(["auth-state-changed"]);
+const UNREGISTERED_FAILURE = Object.freeze({
+  schemaVersion: 1,
+  ok: false,
+  error: Object.freeze({
+    code: "IPC_INTERNAL",
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "操作未能安全完成，请刷新后重试。",
+  }),
+});
+
+const eventListeners = new Map();
+const ipcRenderer = {
+  invoke: async function(channel, ...args) {
+    const contract = productionIpcRegistry.byChannel(channel);
+    if (!contract) {
+      if (AUTH_INVOKE_EXEMPTIONS.has(channel)) return electronIpcRenderer.invoke(channel, ...args);
+      return UNREGISTERED_FAILURE;
+    }
+    if (contract.kind === "event") return UNREGISTERED_FAILURE;
+    let request;
+    try {
+      const payload = contract.fromArgs ? contract.fromArgs(args) : args[0];
+      request = productionIpcRegistry.encodeRequest(contract, payload);
+    } catch (_) {
+      return productionIpcRegistry.failure(contract, { code: "IPC_REQUEST_INVALID" });
+    }
+    try {
+      const result = await electronIpcRenderer.invoke(
+        channel,
+        request,
+      );
+      productionIpcRegistry.parseResult(contract, result);
+      return result;
+    } catch (_) {
+      return productionIpcRegistry.failure(contract, { code: "IPC_RESULT_INVALID" });
+    }
+  },
+  on: function(channel, listener) {
+    const contract = productionIpcRegistry.byChannel(channel);
+    if (!contract) {
+      if (AUTH_EVENT_EXEMPTIONS.has(channel)) return electronIpcRenderer.on(channel, listener);
+      return undefined;
+    }
+    if (contract.kind !== "event") return undefined;
+    const wrapped = function(event, payload) {
+      try { listener(event, productionIpcRegistry.parseEvent(contract, payload)); }
+      catch (_) {}
+    };
+    eventListeners.set(listener, wrapped);
+    return electronIpcRenderer.on(channel, wrapped);
+  },
+  removeListener: function(channel, listener) {
+    const contract = productionIpcRegistry.byChannel(channel);
+    if (!contract && !AUTH_EVENT_EXEMPTIONS.has(channel)) return undefined;
+    const wrapped = eventListeners.get(listener) || listener;
+    eventListeners.delete(listener);
+    return electronIpcRenderer.removeListener(channel, wrapped);
+  },
+};
 
 function confirmWorkspaceSelection(input) {
   if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 ||
@@ -31,6 +99,7 @@ const api = {
     requestSwitch: function() { return ipcRenderer.invoke("workspace:request-switch"); }
   },
   workspaceData: {
+    getRuntimeIdentity: function() { return ipcRenderer.invoke("workspace:get-runtime-identity"); },
     onInvalidated: function(listener) {
       var handler = function(event, payload) { listener(payload); };
       ipcRenderer.on("workspace:data-invalidated", handler);
@@ -72,7 +141,7 @@ const api = {
     refreshResources: function(opts) { return ipcRenderer.invoke("media:refresh-resources", opts || {}); },
     getResourcePage: function(opts) { return ipcRenderer.invoke("media:get-resource-page", opts || {}); },
     searchResourcePage: function(opts) { return ipcRenderer.invoke("media:search-resource-page", opts || {}); },
-    getPool: function() { return ipcRenderer.invoke("media:get-pool"); },
+    getPool: function(opts) { return ipcRenderer.invoke("media:get-pool", opts); },
     addToPool: function(resource) { return ipcRenderer.invoke("media:add-to-pool", resource); },
     removeFromPool: function(resourceId) { return ipcRenderer.invoke("media:remove-from-pool", resourceId); },
     getBalance: function() { return ipcRenderer.invoke("media:get-balance"); }
@@ -81,8 +150,8 @@ const api = {
     getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
     listAccountProfiles: function() { return ipcRenderer.invoke("platforms:list-account-profiles"); },
     confirmAccountProfile: function(input) { return ipcRenderer.invoke("platforms:confirm-account-profile", input); },
-    openLogin: function(platformId) { return ipcRenderer.invoke("platforms:open-login", { platformId: platformId }); },
-    checkLogin: function(platformId) { return ipcRenderer.invoke("platforms:check-login", { platformId: platformId }); },
+    openLogin: function(platformId) { return ipcRenderer.invoke("platforms:open-login", platformId); },
+    checkLogin: function(platformId) { return ipcRenderer.invoke("platforms:check-login", platformId); },
     submitSelected: function(input) { return ipcRenderer.invoke("platforms:submit-selected", input); },
     pauseSubmit: function(runId) { return ipcRenderer.invoke("platforms:pause-submit", runId ? { runId: runId } : undefined); },
     stopSubmit: function(runId) { return ipcRenderer.invoke("platforms:stop-submit", runId ? { runId: runId } : undefined); },
@@ -95,9 +164,7 @@ const api = {
   },
   content: {
     listClients: function() { return ipcRenderer.invoke("content:list-clients"); },
-    getClient: function(clientId) { return ipcRenderer.invoke("content:get-client", clientId); },
     listResearch: function(clientId) { return ipcRenderer.invoke("content:list-research", clientId); },
-    getResearch: function(input) { return ipcRenderer.invoke("content:get-research", input); },
     listTemplates: function(platform) { return ipcRenderer.invoke("content:list-templates", platform); },
     listTemplateCatalog: function() { return ipcRenderer.invoke("content:list-template-catalog"); },
     retryMaterial: function(input) { return ipcRenderer.invoke("content:retry-material", input); },
@@ -105,7 +172,6 @@ const api = {
     saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
     listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
     getArticleManagementSnapshot: function(input) { return ipcRenderer.invoke("content:get-article-management-snapshot", input); },
-    getGeneratedArticle: function(input) { return ipcRenderer.invoke("content:get-generated-article", input); },
     copyArticleVersion: function(input) { return ipcRenderer.invoke("content:copy-article-version", input); },
     reviewArticles: function(articles) { return ipcRenderer.invoke("content:review-articles", { articles: articles }); },
     listArticleTrash: function(clientId) { return ipcRenderer.invoke("content:list-article-trash", clientId); },
@@ -130,7 +196,6 @@ const api = {
     retryFailedPublication: function(input) { return ipcRenderer.invoke("content:retry-failed-publication", input || {}); },
     previewTrashedArticleQueueResidue: function() { return ipcRenderer.invoke("content:preview-trashed-article-queue-residue"); },
     cleanupTrashedArticleQueueResidue: function(input) { return ipcRenderer.invoke("content:cleanup-trashed-article-queue-residue", input || {}); },
-    getSubmissionBatch: function(batchId) { return ipcRenderer.invoke("content:get-submission-batch", { batchId: batchId }); },
     getArticleRemovalTransaction: function(transactionId) { return ipcRenderer.invoke("content:get-article-removal-transaction", { transactionId: transactionId }); },
     listArticleRemovalTransactions: function() { return ipcRenderer.invoke("content:list-article-removal-transactions"); },
     retryArticleRemovalTransaction: function(input) { return ipcRenderer.invoke("content:retry-article-removal-transaction", input || {}); },
@@ -190,12 +255,6 @@ const api = {
   publication: {
     listForArticles: function(input) { return ipcRenderer.invoke("publication:list-for-articles", input); },
     reconcile: function(input) { return ipcRenderer.invoke("publication:reconcile", input); }
-  },
-  articleAttention: {
-    list: function(input) { return ipcRenderer.invoke("content:list-article-attention", input || {}); },
-    get: function(input) { return ipcRenderer.invoke("content:get-article-attention", input || {}); },
-    preview: function(input) { return ipcRenderer.invoke("content:preview-article-attention", input || {}); },
-    resolve: function(input) { return ipcRenderer.invoke("content:resolve-article-attention", input || {}); }
   },
   orders: {
     getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },

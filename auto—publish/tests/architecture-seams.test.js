@@ -9,7 +9,9 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 test("attention and workspace seams keep ownership and dependency direction explicit", () => {
   const query = read("desktop/services/article-attention-query.js");
   const resolver = read("desktop/services/article-attention-resolver.js");
-  const workspace = read("media-workbench/src/workspace-data-store.tsx");
+  const platformFeature = read(
+    "media-workbench/src/features/platform/platform-feature.js",
+  );
   const main = read("desktop/main.js");
   const workspaceRuntime = read("desktop/workspace-runtime.js");
   const invalidation = read("desktop/workspace-data-invalidation.js");
@@ -28,9 +30,9 @@ test("attention and workspace seams keep ownership and dependency direction expl
   assert.match(query, /get\(input\)/);
   assert.match(resolver, /preview\(input\)/);
   assert.match(resolver, /resolve\(input\)/);
-  assert.match(workspace, /getSnapshot\(scope/);
-  assert.match(workspace, /refresh\(scope/);
-  assert.match(workspace, /subscribe\(scope/);
+  assert.match(platformFeature, /getSnapshot/);
+  assert.match(platformFeature, /refreshQueue/);
+  assert.match(platformFeature, /subscribe\(listener/);
   assert.doesNotMatch(sidebar, /getPlatformQueue\(/);
   assert.doesNotMatch(platform, /getPlatformQueue\(/);
   assert.doesNotMatch(query, /React|Renderer|window\./);
@@ -40,7 +42,10 @@ test("attention and workspace seams keep ownership and dependency direction expl
   assert.match(workspaceRuntime, /registerIpc/);
   assert.match(workspaceRuntime, /async function dispose\(\)/);
   assert.match(invalidation, /workspace:data-invalidated/);
-  assert.match(invalidation, /\{ revision, scopes, reasonCode:/);
+  assert.match(
+    invalidation,
+    /schemaVersion:\s*1[\s\S]*workspaceRuntimeId[\s\S]*revision[\s\S]*scopes[\s\S]*reasonCode/,
+  );
   assert.match(invalidation, /reasonCode:/);
   assert.equal(
     fs.existsSync(path.join(root, "desktop/services/workspace-runtime.js")),
@@ -77,12 +82,15 @@ test("article management owns one revisioned snapshot seam", () => {
   const view = read(
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
   );
+  const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
 
   assert.match(snapshot, /clientId.*revision/);
   assert.match(snapshot, /cancellationPlans/);
   assert.match(snapshot, /workflowByArticle/);
   assert.match(ipc, /content:get-article-management-snapshot/);
-  assert.match(view, /getArticleManagementSnapshot/);
+  assert.match(view, /management: ArticleManagementReadModel/);
+  assert.match(workbench, /useContentWorkbenchFeature/);
+  assert.match(workbench, /management=\{management\}/);
   assert.doesNotMatch(
     view,
     /listContentArticles\(|listContentSubmissionBatches\(|listContentTrash\(|listPublicationHistory\(|previewCancelContentSubmissionBatch\(/,
@@ -137,12 +145,16 @@ test("electron transport facade is gone and domains own their bridge seams", () 
     read("media-workbench/src/bridge/media.ts"),
     /transport-legacy/,
   );
-  assert.match(
+  assert.doesNotMatch(
     read("media-workbench/src/bridge/content.ts"),
-    /async function callContent/,
+    /\b(?:type ContentCommand|callContent\s*\(|api\?\.\[method\])/,
   );
   assert.match(
     read("media-workbench/src/bridge/media.ts"),
-    /async function callMedia/,
+    /function mediaApi/,
+  );
+  assert.doesNotMatch(
+    read("media-workbench/src/bridge/media.ts"),
+    /api\?\.\[method\]|callMedia\s*\(/,
   );
 });

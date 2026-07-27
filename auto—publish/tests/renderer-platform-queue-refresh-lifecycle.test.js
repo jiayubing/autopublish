@@ -110,7 +110,7 @@ function installDesktopFixture(page) {
       state,
       emitWorkspaceInvalidated(revision) {
         state.queueRevision = revision;
-        const event = { revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_TERMINAL' };
+        const event = { schemaVersion: 1, workspaceRuntimeId: 'fixture-runtime-1', revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_TERMINAL' };
         state.invalidationListeners.slice().forEach((listener) => listener(event));
       },
       emitPlatformState(next) {
@@ -183,7 +183,7 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByText('数据已就绪').waitFor();
     const initialCalls = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
-    assert.equal(initialCalls, 1, 'WorkspaceDataProvider owns the initial queue load');
+    assert.equal(initialCalls, 1, 'PlatformFeatureProvider owns the initial queue load');
 
     await page.waitForTimeout(500);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), initialCalls, 'initial idle does not trigger terminal refresh');
@@ -203,7 +203,7 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
       window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 41 });
       window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 41 });
     });
-    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() === expected + 1, afterManualRefresh);
+    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() >= expected + 1, afterManualRefresh);
     await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), afterManualRefresh + 1, 'one explicit terminal revision refreshes once');
 
@@ -214,7 +214,7 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
       window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 42 });
       window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 42 });
     });
-    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() === expected + 1, afterFirstTerminal);
+    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() >= expected + 1, afterFirstTerminal);
     await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), afterFirstTerminal + 1, 'a new explicit terminal revision refreshes once');
 

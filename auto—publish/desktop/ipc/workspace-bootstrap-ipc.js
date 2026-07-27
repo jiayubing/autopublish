@@ -1,58 +1,77 @@
-const { wrap } = require("../services/ipc-response");
+const { productionIpcRegistry } = require("./contracts/production-registry");
 
-const SAFE_MESSAGES = {
-  WORKSPACE_SELECTION_REQUIRED: "Workspace selection is required",
-  WORKSPACE_SELECTION_CANCELLED: "Workspace selection was cancelled",
-  WORKSPACE_CONFIRMATION_REQUIRED: "Workspace confirmation is required",
-  WORKSPACE_PATH_INVALID: "Workspace path is invalid",
-  WORKSPACE_PATH_FORBIDDEN: "Workspace path is forbidden",
-  WORKSPACE_NOT_WRITABLE: "Workspace path is not writable",
-  WORKSPACE_MARKER_INVALID: "Workspace marker is invalid",
-  WORKSPACE_SELECTION_EXPIRED: "Workspace selection has expired",
-  WORKSPACE_SWITCH_BUSY: "Workspace cannot be switched while work is active",
-  WORKSPACE_ENV_OVERRIDE: "Workspace is controlled by AUTO_PUBLISH_WORKSPACE",
-  WORKSPACE_RELAUNCH_FAILED: "Application relaunch failed",
-  WORKSPACE_OPEN_FAILED: "Could not open the current workspace",
-  WORKSPACE_LOCATION_WRITE_FAILED: "Workspace location could not be saved",
-  WORKSPACE_CLEANUP_FAILED: "Workspace cleanup failed; some newly created items remain",
-  WORKSPACE_SWITCH_STATE_UNAVAILABLE: "Workspace switch state is unavailable",
-  WORKSPACE_IPC_INPUT_INVALID: "Workspace IPC input is invalid",
-  IPC_ERROR: "Workspace operation failed"
-};
+const STATE_VALUES = new Set([
+  "checking",
+  "selection_required",
+  "confirmation_required",
+  "ready",
+  "invalid",
+  "relaunching",
+]);
 
-function inputError(message) {
-  const error = { code: "WORKSPACE_IPC_INPUT_INVALID", message: message || SAFE_MESSAGES.WORKSPACE_IPC_INPUT_INVALID };
-  throw error;
+function selectionLabel(kind) {
+  if (kind === "existing_workspace") return "已有工作区";
+  if (kind === "empty_directory") return "空目录";
+  if (kind === "nonempty_directory") return "非空目录";
+  return null;
 }
 
-function noInput(input, label) {
-  if (input !== undefined) inputError(label + " does not accept input");
+function safeErrorCode(value) {
+  const code = value && value.error && value.error.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{0,95}$/.test(code)
+    ? code
+    : null;
 }
 
-function tokenInput(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 ||
-    typeof input.token !== "string" || input.token.trim() === "") {
-    inputError("Confirmation token is invalid");
-  }
-  return { token: input.token };
-}
-
-function safeWrap(handler) {
-  return wrap(handler).then(function(result) {
-    if (result.ok) return result;
-    const code = result.error && SAFE_MESSAGES[result.error.code] ? result.error.code : "IPC_ERROR";
-    return { ok: false, error: { code: code, message: SAFE_MESSAGES[code] } };
-  });
+function rendererWorkspaceState(value) {
+  const source =
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const configured =
+    typeof source.workspacePath === "string" && source.workspacePath.length > 0;
+  const rawState = STATE_VALUES.has(source.state)
+    ? source.state
+    : configured
+      ? "ready"
+      : "selection_required";
+  const kind =
+    source.selection && selectionLabel(source.selection.kind)
+      ? source.selection.kind
+      : null;
+  const token =
+    source.selection && typeof source.selection.token === "string"
+      ? source.selection.token
+      : null;
+  return {
+    state: rawState,
+    configured,
+    environmentManaged: source.envOverride === true,
+    label: configured ? "工作区已配置" : "尚未配置工作区",
+    selection:
+      kind && token ? { token, kind, label: selectionLabel(kind) } : null,
+    errorCode: safeErrorCode(source),
+    changed: typeof source.changed === "boolean" ? source.changed : null,
+  };
 }
 
 function createDialogPicker(showOpenDialog, service) {
-  return async function() {
+  return async function () {
     const result = await showOpenDialog({ properties: ["openDirectory"] });
-    if (!result || result.canceled === true || !Array.isArray(result.filePaths) || result.filePaths.length === 0) {
+    if (
+      !result ||
+      result.canceled === true ||
+      !Array.isArray(result.filePaths) ||
+      result.filePaths.length === 0
+    ) {
       return service.cancelSelection();
     }
-    if (result.filePaths.length !== 1 || typeof result.filePaths[0] !== "string" || result.filePaths[0].trim() === "") {
-      inputError("Directory selection is invalid");
+    if (
+      result.filePaths.length !== 1 ||
+      typeof result.filePaths[0] !== "string" ||
+      result.filePaths[0].trim() === ""
+    ) {
+      const error = new Error("Workspace dialog result is invalid");
+      error.code = "WORKSPACE_IPC_INPUT_INVALID";
+      throw error;
     }
     return result.filePaths[0];
   };
@@ -62,38 +81,88 @@ function registerWorkspaceBootstrapIpc(deps) {
   const options = deps || {};
   const ipcMain = options.ipcMain;
   const service = options.workspaceBootstrapService;
-  const showOpenDialog = options.showOpenDialog || (options.dialog && options.dialog.showOpenDialog
-    ? options.dialog.showOpenDialog.bind(options.dialog)
-    : null);
-  if (!ipcMain || typeof ipcMain.handle !== "function" || !service || typeof showOpenDialog !== "function") {
+  const requireAuthenticated = options.requireAuthenticated;
+  const showOpenDialog =
+    options.showOpenDialog ||
+    (options.dialog && options.dialog.showOpenDialog
+      ? options.dialog.showOpenDialog.bind(options.dialog)
+      : null);
+  if (
+    !ipcMain ||
+    typeof ipcMain.handle !== "function" ||
+    !service ||
+    typeof showOpenDialog !== "function"
+  ) {
     throw new Error("Workspace bootstrap IPC dependencies are required");
   }
   const pickDirectory = createDialogPicker(showOpenDialog, service);
 
-  ipcMain.handle("workspace:get-bootstrap-state", function(event, input) {
-    return safeWrap(function() { noInput(input, "Bootstrap state"); return service.getBootstrapState(); });
-  });
-  ipcMain.handle("workspace:choose-directory", function(event, input) {
-    return safeWrap(async function() { noInput(input, "Choose directory"); return service.chooseDirectory(await pickDirectory()); });
-  });
-  ipcMain.handle("workspace:confirm-selection", function(event, input) {
-    return safeWrap(function() { return service.confirmSelection(tokenInput(input)); });
-  });
-  ipcMain.handle("workspace:cancel-selection", function(event, input) {
-    return safeWrap(function() { noInput(input, "Cancel selection"); return service.cancelSelection(); });
-  });
-  ipcMain.handle("workspace:get-current", function(event, input) {
-    return safeWrap(function() { noInput(input, "Current workspace"); return service.getCurrent(); });
-  });
-  ipcMain.handle("workspace:open-current", function(event, input) {
-    return safeWrap(function() { noInput(input, "Open current workspace"); return service.openCurrent(); });
-  });
-  ipcMain.handle("workspace:request-switch", function(event, input) {
-    return safeWrap(async function() {
-      noInput(input, "Request switch");
-      return service.requestSwitch(await pickDirectory());
+  function handle(channel, operation, project) {
+    const contract = productionIpcRegistry.byChannel(channel);
+    if (!contract)
+      throw new Error("Workspace IPC contract is required: " + channel);
+    ipcMain.handle(channel, async function (event, input) {
+      if (typeof requireAuthenticated === "function") {
+        try {
+          await requireAuthenticated();
+        } catch (_) {
+          return productionIpcRegistry.failure(contract, {
+            code: "AUTH_REQUIRED",
+          });
+        }
+      }
+      let payload;
+      try {
+        payload = productionIpcRegistry.parseRequest(contract, input);
+      } catch (_) {
+        return productionIpcRegistry.failure(contract, {
+          code: "IPC_REQUEST_INVALID",
+        });
+      }
+      try {
+        const result = await operation(payload);
+        return productionIpcRegistry.success(contract, project(result));
+      } catch (error) {
+        return productionIpcRegistry.failure(contract, error);
+      }
     });
-  });
+  }
+
+  handle(
+    "workspace:get-bootstrap-state",
+    () => service.getBootstrapState(),
+    rendererWorkspaceState,
+  );
+  handle(
+    "workspace:choose-directory",
+    async () => service.chooseDirectory(await pickDirectory()),
+    rendererWorkspaceState,
+  );
+  handle(
+    "workspace:confirm-selection",
+    (payload) => service.confirmSelection({ token: payload.token }),
+    rendererWorkspaceState,
+  );
+  handle(
+    "workspace:cancel-selection",
+    () => service.cancelSelection(),
+    rendererWorkspaceState,
+  );
+  handle(
+    "workspace:get-current",
+    () => service.getCurrent(),
+    rendererWorkspaceState,
+  );
+  handle(
+    "workspace:open-current",
+    () => service.openCurrent(),
+    () => ({ opened: true }),
+  );
+  handle(
+    "workspace:request-switch",
+    async () => service.requestSwitch(await pickDirectory()),
+    rendererWorkspaceState,
+  );
 }
 
-module.exports = { registerWorkspaceBootstrapIpc };
+module.exports = { registerWorkspaceBootstrapIpc, rendererWorkspaceState };

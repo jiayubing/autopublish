@@ -1,35 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
-import App from '../App';
-import ConfirmationHost from './ConfirmationHost';
-import { getWorkspaceBootstrapState } from '../bridge/workspace';
-import { WorkspaceBootstrapState } from '../types';
-import { createBootstrapGateController, getBootstrapView } from '../workspace-ui-logic.js';
-import WorkspaceWelcome from './WorkspaceWelcome';
+import React from "react";
+import App from "../App";
+import { getBootstrapView } from "../workspace-ui-logic.js";
+import { useWorkspaceFeature } from "../features/workspace/workspace-feature-context";
+import WorkspaceWelcome from "./WorkspaceWelcome";
 
 export default function WorkspaceBootstrapGate() {
-  const controllerRef = useRef<ReturnType<typeof createBootstrapGateController> | null>(null);
-  if (!controllerRef.current) {
-    controllerRef.current = createBootstrapGateController({ getBootstrapState: getWorkspaceBootstrapState });
-  }
-  const controller = controllerRef.current;
-  const [state, setState] = useState<WorkspaceBootstrapState>(controller.getState());
-
-  useEffect(() => {
-    let active = true;
-    controller.start().then((nextState) => {
-      if (active) setState(nextState);
-    });
-    return () => {
-      active = false;
-    };
-  }, [controller]);
-
+  const { snapshot } = useWorkspaceFeature();
+  const state = snapshot.bootstrap.data || { state: "checking" };
   const view = getBootstrapView(state);
-  if (view.kind === 'checking') {
-    return <div className="min-h-screen flex items-center justify-center text-slate-600">{view.text}</div>;
+  if (view.kind === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-600">
+        {view.text}
+      </div>
+    );
   }
 
-  if (view.kind === 'app') return <ConfirmationHost><App /></ConfirmationHost>;
+  if (view.kind === "app") return <App />;
 
-  return <WorkspaceWelcome state={state} onStateChange={setState} />;
+  return <WorkspaceWelcome />;
 }

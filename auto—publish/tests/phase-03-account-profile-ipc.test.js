@@ -17,12 +17,12 @@ test("account profile IPC requires explicit confirmation and never accepts a cal
     listAccountProfiles: () => profiles,
   } });
   const listed = await handlers.get("platforms:list-account-profiles")({}, undefined);
-  assert.deepEqual(listed, { ok: true, data: profiles });
+  assert.deepEqual(listed, { ok: true, data: { profiles } });
   const handler = handlers.get("platforms:confirm-account-profile");
   const rejected = await handler({}, { platformId: "toutiao", displayName: "fixture", accountProfileId: "caller-value", confirmed: true });
   assert.equal(rejected.ok, false);
   const accepted = await handler({}, { platformId: "toutiao", displayName: "fixture", confirmed: true });
-  assert.equal(accepted.data.accountProfileId, "account-generated");
+  assert.equal(accepted.data.profile.accountProfileId, "account-generated");
   assert.deepEqual(created, [{ platformId: "toutiao", displayName: "fixture" }]);
 });
 

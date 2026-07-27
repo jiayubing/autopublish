@@ -2,23 +2,8 @@ import React, {
   useState,
   useEffect,
   useCallback,
-  useRef,
-  useSyncExternalStore,
 } from "react";
-import { PlatformArticle, PlatformSubmitResult } from "../types";
-import {
-  getPlatformSettingsStatus,
-  openPlatformLogin,
-  checkPlatformLogin,
-  submitPlatformSelection,
-  pausePlatformSubmit,
-  stopPlatformSubmit,
-  previewTrashedArticleQueueResidue,
-  cleanupTrashedArticleQueueResidue,
-} from "../bridge/platform";
-import { usePlatformQueue } from "../workspace-data-store";
-import { usePlatformTask } from "../platform-task-store";
-import type { HepanProviderStatus } from "../types";
+import { PlatformArticle } from "../types";
 import PlatformTaskIndicator from "./PlatformTaskIndicator";
 import {
   RefreshCw,
@@ -41,7 +26,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { createPlatformSubmissionController } from "../controllers/platform-submission-controller";
+import { usePlatformFeature } from "../features/platform/platform-feature-context";
+import { useConfirmation } from "../confirmation";
 
 // hepan is the technical ID for 蓝色河畔. We keep this mapping and do NOT
 // Platform display names and submission adaptation belong to the platform bridge.
@@ -49,12 +35,9 @@ import { createPlatformSubmissionController } from "../controllers/platform-subm
 const PLATFORM_ORDER = ["lieju", "toutiao", "hepan"] as const;
 
 function archiveErrorText(
-  value:
-    | PlatformArticle["archiveError"]
-    | PlatformSubmitResult["results"][number]["archiveError"],
+  value: string | null | undefined,
 ): string {
-  if (typeof value === "string") return value;
-  return value?.message || value?.code || "本地归档失败";
+  return value || "ARCHIVE_FAILED";
 }
 
 function articleSelectionKey(article: PlatformArticle): string {
@@ -64,8 +47,10 @@ function articleSelectionKey(article: PlatformArticle): string {
 export default function PlatformWorkbench({
   onOpenArticleManagement,
 }: { onOpenArticleManagement?: () => void } = {}) {
-  const { snapshot: queueSnapshot, refresh: refreshQueue } = usePlatformQueue();
-  const platformState = usePlatformTask();
+  const { confirm } = useConfirmation();
+  const { snapshot: platformSnapshot, feature: submissionController } = usePlatformFeature();
+  const queueSnapshot = platformSnapshot.queue;
+  const platformState = platformSnapshot.run;
   const queue = queueSnapshot.queue;
   const platforms = queueSnapshot.platforms;
   const loading = queueSnapshot.loading;
@@ -81,45 +66,20 @@ export default function PlatformWorkbench({
     }
   });
   const [submitStatus, setSubmitStatus] = useState<string>("");
-  const [loginStates, setLoginStates] = useState<
-    Record<string, { busy: boolean; message: string; authenticated?: boolean }>
-  >({});
-  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState<
-    number | null
-  >(null);
-  const submissionControllerRef = useRef<ReturnType<
-    typeof createPlatformSubmissionController
-  > | null>(null);
-  if (!submissionControllerRef.current) {
-    submissionControllerRef.current = createPlatformSubmissionController(
-      {
-        submit: submitPlatformSelection,
-        pause: pausePlatformSubmit,
-        stop: stopPlatformSubmit,
-        previewResidue: previewTrashedArticleQueueResidue,
-        cleanupResidue: cleanupTrashedArticleQueueResidue,
-      },
-      async (reason: string) => refreshQueue(reason),
-    );
-  }
-  const submissionController = submissionControllerRef.current;
-  const commandState = useSyncExternalStore(
-    submissionController.subscribe,
-    submissionController.getState,
-    submissionController.getState,
-  );
+  const loginStates = platformSnapshot.loginByPlatformId;
+  const commandState = platformSnapshot;
   const {
     selectedArticles,
     selectedPlatformIds,
-    submitting: isSubmitting,
-    stopping: isStopping,
     result: submitResult,
     showResult,
     error,
     residue,
+    commands,
   } = commandState;
-
-  useEffect(() => () => submissionController.dispose(), [submissionController]);
+  const isSubmitting = commands.submit.busy;
+  const isPausing = commands.pause.busy;
+  const isStopping = commands.stop.busy;
 
   useEffect(() => {
     try {
@@ -133,10 +93,8 @@ export default function PlatformWorkbench({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
-  const hasObservedRunningRef = useRef(false);
-
   const hasArchiveFailure = useCallback(
-    (article: PlatformArticle) => Boolean(article.archiveError),
+    (article: PlatformArticle) => Boolean(article.archiveErrorCode),
     [],
   );
   const isSelectableArticle = useCallback(
@@ -148,18 +106,18 @@ export default function PlatformWorkbench({
   const taskIsActive =
     platformState.isPlatformRunning ||
     ["running", "waiting-interval", "stopping"].includes(platformState.phase);
-  const taskBusy = isSubmitting || isStopping || taskIsActive;
+  const taskBusy = taskIsActive;
 
   const loadQueue = useCallback(async () => {
     try {
       submissionController.setError(null);
-      await refreshQueue("manual");
+      await submissionController.refreshQueue("manual");
     } catch (e: unknown) {
       submissionController.setError(
         e instanceof Error ? e.message : "Failed to load queue",
       );
     }
-  }, [refreshQueue]);
+  }, [submissionController]);
 
   useEffect(() => {
     submissionController.pruneArticles(
@@ -184,64 +142,15 @@ export default function PlatformWorkbench({
       if (!report.cleanableCount) {
         return;
       }
-      if (
-        !window.confirm(
-          `发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。确认清理？`,
-        )
-      )
-        return;
+      if (!(await confirm({
+        title: '清理已删除文章队列残留',
+        message: `发现 ${report.cleanableCount} 项可安全清理的已删除源文章队列残留。明确失败/queued 项会按身份和哈希校验处理，其他 ${report.reportedCount} 项只报告不更改。`,
+        confirmLabel: '确认清理',
+        tone: 'danger',
+      }))) return;
       await submissionController.cleanupResidue({ confirmed: true });
     } catch (_) {}
   };
-
-  useEffect(() => {
-    let active = true;
-    getPlatformSettingsStatus<HepanProviderStatus>("hepan")
-      .then((status) => {
-        if (active && Number.isInteger(status.publishIntervalSeconds))
-          setPublishIntervalSeconds(status.publishIntervalSeconds);
-      })
-      .catch(() => {
-        /* Settings may be unavailable for non-desktop fixtures. */
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const phase = platformState.phase || platformState.status || "";
-    const waiting =
-      phase === "waiting-interval" || phase === "waiting_interval";
-    const running =
-      phase === "running" ||
-      waiting ||
-      phase === "stopping" ||
-      platformState.isPlatformRunning === true;
-    if (running) hasObservedRunningRef.current = true;
-    if (waiting) setSubmitStatus("等待下一篇河畔文章…");
-    else if (phase === "running") setSubmitStatus("正在投稿…");
-    else if (phase === "stopping") setSubmitStatus("正在停止投稿…");
-    else if (
-      ["completed", "idle", "failed", "stopped", "interrupted"].includes(
-        phase,
-      ) &&
-      !running
-    ) {
-      if (!isSubmitting) setSubmitStatus("");
-      const queueRevision = platformState.queueRevision;
-      if (
-        hasObservedRunningRef.current &&
-        typeof queueRevision === "number" &&
-        Number.isFinite(queueRevision)
-      ) {
-        hasObservedRunningRef.current = false;
-        void submissionController
-          .refreshTerminal(queueRevision)
-          .catch(() => {});
-      }
-    }
-  }, [platformState, submissionController, isSubmitting]);
 
   const groupedArticles: Record<string, PlatformArticle[]> = {};
   for (const article of queue) {
@@ -295,9 +204,6 @@ export default function PlatformWorkbench({
   const taskCount = selectedArticleList.length * selectedPlatformIds.size;
   const selectedHepan = selectedPlatformIds.has("hepan");
   const hepanArticleCount = selectedHepan ? selectedArticleList.length : 0;
-  const effectivePublishIntervalSeconds = publishIntervalSeconds ?? 0;
-  const minimumHepanWaitSeconds =
-    Math.max(0, hepanArticleCount - 1) * effectivePublishIntervalSeconds;
   const canSubmit =
     selectedArticleList.length > 0 && selectedPlatformIds.size > 0;
 
@@ -316,60 +222,19 @@ export default function PlatformWorkbench({
   };
 
   const handleOpenLogin = async (platformId: string) => {
-    setLoginStates((current) => ({
-      ...current,
-      [platformId]: { busy: true, message: "正在打开登录页..." },
-    }));
     try {
-      await openPlatformLogin(platformId);
-      setLoginStates((current) => ({
-        ...current,
-        [platformId]: {
-          busy: false,
-          message: "登录页已打开，请完成登录后点击检查登录",
-        },
-      }));
-    } catch (error: unknown) {
-      setLoginStates((current) => ({
-        ...current,
-        [platformId]: {
-          busy: false,
-          message: error instanceof Error ? error.message : "登录页打开失败",
-          authenticated: false,
-        },
-      }));
-    }
+      await submissionController.openLogin(platformId);
+    } catch (_) {}
   };
 
   const handleCheckLogin = async (platformId: string) => {
-    setLoginStates((current) => ({
-      ...current,
-      [platformId]: { busy: true, message: "正在检查登录状态..." },
-    }));
     try {
-      const authenticated = await checkPlatformLogin(platformId);
-      setLoginStates((current) => ({
-        ...current,
-        [platformId]: {
-          busy: false,
-          message: authenticated ? "已登录，会话已保存" : "尚未检测到登录",
-          authenticated,
-        },
-      }));
-    } catch (error: unknown) {
-      setLoginStates((current) => ({
-        ...current,
-        [platformId]: {
-          busy: false,
-          message: error instanceof Error ? error.message : "登录检查失败",
-          authenticated: false,
-        },
-      }));
-    }
+      await submissionController.checkLogin(platformId);
+    } catch (_) {}
   };
 
   const handleSubmit = async () => {
-    if (!canSubmit || taskBusy) return;
+    if (!canSubmit || taskBusy || isSubmitting) return;
     setIsConfirming(false);
     setSubmitStatus(`正在提交 ${taskCount} 个任务，请稍候...`);
     try {
@@ -617,7 +482,7 @@ export default function PlatformWorkbench({
                               }
                               disabled={!isSelectableArticle(article)}
                               title={
-                                article.archiveError
+                                article.archiveErrorCode
                                   ? "远端已发布，本地归档待处理，禁止再次远端投稿"
                                   : article.sourceArticleState === "trashed"
                                     ? `源文章已删除，禁止投稿${article.reasonCode ? `：${article.reasonCode}` : ""}`
@@ -628,14 +493,14 @@ export default function PlatformWorkbench({
                                   articleSelectionKey(article),
                                 )
                                   ? "bg-blue-50/60"
-                                  : article.archiveError
+                                  : article.archiveErrorCode
                                     ? "bg-amber-50/60"
                                     : article.sourceArticleState === "trashed"
                                       ? "bg-rose-50/60"
                                       : "hover:bg-slate-50"
                               }`}
                             >
-                              {article.archiveError ? (
+                              {article.archiveErrorCode ? (
                                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                               ) : article.sourceArticleState === "trashed" ? (
                                 <XCircle className="w-4 h-4 text-rose-500 shrink-0" />
@@ -651,7 +516,7 @@ export default function PlatformWorkbench({
                                   {article.title || article.filename}
                                 </p>
                                 <p className="text-xs text-slate-400 truncate">
-                                  {article.archiveError
+                                  {article.archiveErrorCode
                                     ? "远端已发布，本地归档待处理（禁止重投）"
                                     : article.sourceArticleState === "trashed"
                                       ? `源文章已删除，禁止投稿${article.reasonCode ? ` · ${article.reasonCode}` : ""}`
@@ -713,9 +578,7 @@ export default function PlatformWorkbench({
                             <p className="text-sm font-semibold text-slate-700">
                               {platform.displayName}
                             </p>
-                            <p className="text-xs text-slate-400">
-                              扫描目录: {platform.scanDir}
-                            </p>
+                            <p className="text-xs text-slate-400">投稿目标</p>
                           </div>
                         </div>
                       </button>
@@ -811,10 +674,11 @@ export default function PlatformWorkbench({
           <div className="flex items-center space-x-1.5">
             <button
               onClick={handlePause}
-              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-md shadow-sm transition-all active:scale-95 flex items-center space-x-1"
+              disabled={isPausing}
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-xs font-bold rounded-md shadow-sm transition-all active:scale-95 flex items-center space-x-1"
             >
               <Pause className="w-3 h-3" />
-              <span>暂停</span>
+              <span>{isPausing ? '暂停中...' : '暂停'}</span>
             </button>
             <button
               onClick={handleStop}
@@ -837,11 +701,11 @@ export default function PlatformWorkbench({
         </div>
         <button
           onClick={() => setIsConfirming(true)}
-          disabled={!canSubmit || taskBusy}
+          disabled={!canSubmit || taskBusy || isSubmitting}
           className="flex items-center space-x-1.5 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95 disabled:pointer-events-none disabled:shadow-none"
         >
           <Send className="w-4 h-4" />
-          <span>{taskBusy ? "提交中..." : `确认提交 (${taskCount} 任务)`}</span>
+          <span>{taskBusy || isSubmitting ? "提交中..." : `确认提交 (${taskCount} 任务)`}</span>
         </button>
       </div>
 
@@ -920,16 +784,7 @@ export default function PlatformWorkbench({
                   </p>
                   {selectedHepan && (
                     <p className="mt-1 text-xs text-indigo-700">
-                      河畔文章：{hepanArticleCount} 篇 · 配置间隔：
-                      {publishIntervalSeconds === null
-                        ? "读取中"
-                        : `${publishIntervalSeconds} 秒`}{" "}
-                      · 最少等待：{minimumHepanWaitSeconds} 秒（第一篇立即执行）
-                    </p>
-                  )}
-                  {selectedHepan && publishIntervalSeconds === 0 && (
-                    <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                      0 秒不增加等待，但存在河畔频率限制风险。
+                      河畔文章：{hepanArticleCount} 篇 · 投稿间隔由配置中心控制，实际等待以运行进度为准。
                     </p>
                   )}
                 </div>
@@ -972,10 +827,10 @@ export default function PlatformWorkbench({
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={!canSubmit || taskBusy}
+                  disabled={!canSubmit || taskBusy || isSubmitting}
                   className="flex items-center space-x-1.5 px-4.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg shadow-sm transition-all active:scale-95 disabled:pointer-events-none"
                 >
-                  {taskBusy ? (
+                  {taskBusy || isSubmitting ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>提交中...</span>
@@ -1115,15 +970,15 @@ export default function PlatformWorkbench({
                         </p>
                         <p className="text-slate-400">
                           → {r.task.targetPlatformId}
-                          {r.error && (
+                          {r.errorCode && (
                             <span className="text-red-500 ml-1">
-                              - {r.error}
+                              - {r.errorCode}
                             </span>
                           )}
-                          {r.archiveError && (
+                          {r.archiveErrorCode && (
                             <span className="text-amber-600 ml-1">
                               - 远端成功，本地归档待处理：
-                              {archiveErrorText(r.archiveError)}
+                              {archiveErrorText(r.archiveErrorCode)}
                             </span>
                           )}
                         </p>

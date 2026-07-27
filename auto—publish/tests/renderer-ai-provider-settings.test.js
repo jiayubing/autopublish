@@ -16,12 +16,17 @@ function readFunction(source, name) {
   return source.slice(start, end === -1 ? source.length : end);
 }
 
-describe("renderer AI provider settings", function() {
-  it("exposes the Task 5 provider IPC through typed renderer helpers", function() {
+describe("renderer AI provider settings", function () {
+  it("exposes the Task 5 provider IPC through typed renderer helpers", function () {
     const api = readSource("bridge/settings.ts");
     const types = readSource("types.ts");
 
-    ["getAiProviderStatus", "saveAiProviderConfig", "testAiProviderConnection", "clearAiProviderConfig"].forEach(function(name) {
+    [
+      "getAiProviderStatus",
+      "saveAiProviderConfig",
+      "testAiProviderConnection",
+      "clearAiProviderConfig",
+    ].forEach(function (name) {
       assert.match(api, new RegExp(`export (async )?function ${name}`), name);
     });
     assert.match(api, /aiProvider/);
@@ -30,7 +35,7 @@ describe("renderer AI provider settings", function() {
     assert.match(types, /apiKeyMask: string/);
   });
 
-  it("keeps the provider UI on safe status fields and validates the URL locally", function() {
+  it("keeps the provider UI on safe status fields and validates the URL locally", function () {
     const settings = readSource("components/AiProviderSettings.tsx");
 
     assert.match(settings, /hasApiKey/);
@@ -44,7 +49,7 @@ describe("renderer AI provider settings", function() {
     assert.doesNotMatch(settings, /\bfetch\s*\(/);
   });
 
-  it("confirms only connection tests and clearing through the renderer host", function() {
+  it("confirms only connection tests and clearing through the renderer host", function () {
     const settings = readSource("components/AiProviderSettings.tsx");
     const save = readFunction(settings, "handleSave");
     const test = readFunction(settings, "handleTest");
@@ -58,41 +63,45 @@ describe("renderer AI provider settings", function() {
     assert.match(settings, /completion/);
   });
 
-  it("refreshes safe status after a rejected connection test while retaining the UI error", function() {
+  it("refreshes safe status after a rejected connection test while retaining the UI error", function () {
     const settings = readSource("components/AiProviderSettings.tsx");
+    const feature = readSource("features/settings/settings-feature.js");
     const test = readFunction(settings, "handleTest");
-    assert.match(test, /catch \(testError\)/);
-    assert.match(test, /getAiProviderStatus\(\)/);
-    assert.match(test, /setStatus\(nextStatus\)/);
-    assert.match(test, /setError\(safeErrorMessage\(testError\)\)/);
+    assert.match(test, /feature\.testAi\(currentInput\(\)\)/);
+    assert.match(feature, /owners\.testAi/);
+    assert.match(feature, /adapters\.testAi/);
+    assert.match(feature, /runQuery\(["']ai["'], ["']command-result["']\)/);
+    assert.match(feature, /owner\.finalize\(token,\s*\{\s*error: safeError/);
   });
 
-  it("guards generation state to the content channel", function() {
+  it("leaves generation runtime ownership in the generation feature", function () {
     const settings = readSource("components/AiProviderSettings.tsx");
-    const api = readSource("bridge/content.ts");
+    const context = readSource("features/settings/settings-context.tsx");
+    const feature = readSource("features/settings/settings-feature.js");
 
-    assert.match(settings, /running/);
-    assert.match(settings, /stopping/);
-    assert.match(settings, /content:generation-batch-state/);
-    assert.match(settings, /disabled=\{[^}]*busy/);
-    assert.match(api, /getGenerationBatchState/);
-    assert.doesNotMatch(api, /window\.desktopConsole!\.batch\.getState\(\)/);
-    assert.doesNotMatch(api, /window\.desktopConsole!\.batch\.onState\(listener\)/);
+    assert.doesNotMatch(settings, /snapshot\.generationBusy/);
+    assert.doesNotMatch(context, /getGenerationBatchState/);
+    assert.doesNotMatch(context, /subscribeGenerationBatchState/);
+    assert.doesNotMatch(feature, /isGenerationBusy|generationBusy/);
+    assert.doesNotMatch(
+      settings,
+      /bridge\/content|content:generation-batch-state/,
+    );
   });
 
-  it("keeps long provider URLs inside the settings layout", function() {
+  it("keeps long provider URLs inside the settings layout", function () {
     const css = readSource("index.css");
     assert.match(css, /overflow-wrap:\s*anywhere/);
     assert.match(css, /word-break:\s*break-all/);
   });
 
-  it("mounts provider settings as an independent Settings section", function() {
+  it("mounts provider settings as an independent Settings section", function () {
     const settingsView = readSource("components/SettingsView.tsx");
     assert.match(settingsView, /AiProviderSettings/);
     assert.match(settingsView, /<AiProviderSettings\s*\/>/);
   });
 
-  it("declares the optional content generation state channel", function() {
+  it("declares the optional content generation state channel", function () {
     const api = readSource("bridge/content.ts");
 
     assert.match(api, /getGenerationBatchState/);

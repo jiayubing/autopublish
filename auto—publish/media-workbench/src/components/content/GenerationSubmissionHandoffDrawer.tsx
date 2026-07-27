@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { commitGenerationSubmissionHandoff, listContentSubmissionPlatforms, previewGenerationSubmissionHandoff } from '../../bridge/content';
 import { ContentSubmissionPlatform, GenerationBatch, GenerationSubmissionHandoffPreview, GenerationSubmissionHandoffResult } from '../../types';
 import AccountProfileSelector from './AccountProfileSelector';
+import { useGenerationFeature } from '../../features/generation/use-generation-feature';
 
 interface GenerationSubmissionHandoffDrawerProps {
   batch: GenerationBatch;
@@ -11,6 +11,8 @@ interface GenerationSubmissionHandoffDrawerProps {
 }
 
 export default function GenerationSubmissionHandoffDrawer({ batch, onClose, onCommitted, onOpenOtherPlatform }: GenerationSubmissionHandoffDrawerProps) {
+  const generation = useGenerationFeature();
+  const { listSubmissionPlatforms, previewSubmissionHandoff, commitSubmissionHandoff } = generation;
   const [platforms, setPlatforms] = useState<ContentSubmissionPlatform[]>([]);
   const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
   const [accountProfiles, setAccountProfiles] = useState<Record<string, string>>({});
@@ -21,9 +23,9 @@ export default function GenerationSubmissionHandoffDrawer({ batch, onClose, onCo
 
   useEffect(() => {
     let active = true;
-    listContentSubmissionPlatforms().then((items) => { if (active) setPlatforms(items.filter((item) => item.contentQueueImport)); }).catch((value) => { if (active) setError(value instanceof Error ? value.message : '无法加载投稿目标'); });
+    listSubmissionPlatforms().then((items) => { if (active) setPlatforms(items.filter((item) => item.contentQueueImport)); }).catch((value) => { if (active) setError(value instanceof Error ? value.message : '无法加载投稿目标'); });
     return () => { active = false; };
-  }, []);
+  }, [listSubmissionPlatforms]);
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -42,7 +44,7 @@ export default function GenerationSubmissionHandoffDrawer({ batch, onClose, onCo
   async function inspect() {
     if (!targetPlatformIds.length) { setError('请先选择投稿目标'); return; }
     setBusy(true); setError(''); setResult(null);
-    try { setPreview(await previewGenerationSubmissionHandoff({ generationBatchId: batch.id, targetPlatformIds, accountProfiles })); }
+    try { setPreview(await previewSubmissionHandoff({ generationBatchId: batch.id, targetPlatformIds, accountProfiles })); }
     catch (value) { setError(value instanceof Error ? value.message : '投稿交接预检失败'); }
     finally { setBusy(false); }
   }
@@ -51,7 +53,7 @@ export default function GenerationSubmissionHandoffDrawer({ batch, onClose, onCo
     if (!preview) return;
     setBusy(true); setError('');
     try {
-      const next = await commitGenerationSubmissionHandoff({ generationBatchId: batch.id, targetPlatformIds, accountProfiles, previewToken: preview.previewToken, confirmed: true });
+      const next = await commitSubmissionHandoff({ generationBatchId: batch.id, targetPlatformIds, accountProfiles, previewToken: preview.previewToken, confirmed: true });
       setResult(next);
       onCommitted?.(next);
     } catch (value) { setError(value instanceof Error ? value.message : '投稿交接失败'); }

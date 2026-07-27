@@ -10,13 +10,47 @@ function noInput(input, label) {
 
 function safeFailure(error) {
   const code = error && typeof error.code === "string" ? error.code : "STORAGE_MAINTENANCE_FAILED";
-  const messages = {
-    STORAGE_MAINTENANCE_BUSY: "Cache cleanup is unavailable while a task is active",
-    STORAGE_MAINTENANCE_INPUT_INVALID: "Storage maintenance input is invalid",
-    STORAGE_MAINTENANCE_PATH_INVALID: "Storage maintenance path is invalid",
-    STORAGE_DELETE_FAILED: "Some cache files could not be deleted"
+  return { ok: false, error: { code: code } };
+}
+
+function count(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function safeCategory(value) {
+  const input = value || {};
+  return {
+    bytes: count(input.bytes),
+    files: count(input.files),
+    followedSymlinks: count(input.followedSymlinks),
+    skippedSymlinks: count(input.skippedSymlinks),
   };
-  return { ok: false, error: { code: code, message: messages[code] || "Storage maintenance failed" } };
+}
+
+function safeUsage(value) {
+  const input = value || {};
+  const temporary = safeCategory(input.temporary || input.tmp);
+  return {
+    logs: safeCategory(input.logs),
+    temporary,
+    docxCache: safeCategory(input.docxCache),
+    profiles: safeCategory(input.profiles),
+    tmp: temporary,
+    totalBytes: count(input.totalBytes),
+    removableBytes: count(input.removableBytes),
+    active: input.active === true,
+  };
+}
+
+function safeCleanup(value, usageFallback) {
+  const input = value || {};
+  return {
+    blocked: input.blocked === true,
+    reason: typeof input.reason === "string" ? input.reason : null,
+    deletedCount: Array.isArray(input.deleted) ? input.deleted.length : 0,
+    failedCount: Array.isArray(input.failed) ? input.failed.length : 0,
+    usage: safeUsage(input.usage || usageFallback),
+  };
 }
 
 function invoke(handler) {
@@ -31,10 +65,13 @@ function registerStorageMaintenanceIpc(deps) {
   if (!values.storageMaintenanceService) throw new TypeError("storage maintenance service is required");
   const service = values.storageMaintenanceService;
   values.ipcMain.handle("storage-maintenance:get-usage", function(event, input) {
-    return invoke(function() { noInput(input, "Storage usage"); return service.getUsage(); });
+    return invoke(function() { noInput(input, "Storage usage"); return safeUsage(service.getUsage()); });
   });
   values.ipcMain.handle("storage-maintenance:clean-caches", function(event, input) {
-    return invoke(function() { noInput(input, "Cache cleanup"); return service.cleanupCaches(); });
+    return invoke(function() {
+      noInput(input, "Cache cleanup");
+      return safeCleanup(service.cleanupCaches(), service.getUsage());
+    });
   });
   return { module: service, dispose: function() {
     if (typeof values.ipcMain.removeHandler === "function") {
@@ -44,4 +81,4 @@ function registerStorageMaintenanceIpc(deps) {
   } };
 }
 
-module.exports = { registerStorageMaintenanceIpc };
+module.exports = { registerStorageMaintenanceIpc, safeUsage, safeCleanup };

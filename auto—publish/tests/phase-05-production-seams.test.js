@@ -61,14 +61,13 @@ it("wires ArticleEditor to the tested authoritative session state machine", () =
   assert.doesNotMatch(editor, /setIsSaving|setSaveError|setSaveSuccess/);
 });
 
-it("routes App draft and resource mutations through the revision-safe controller", () => {
+it("routes App draft and resource mutations through the revision-safe media feature", () => {
   const app = read("media-workbench/src/App.tsx");
-  assert.match(app, /createAppDraftSaveController/);
-  assert.match(app, /draftSaveController\.current!\.saveDraft/);
-  assert.match(app, /draftSaveController\.current!\.toggleResource/);
-  assert.match(app, /draftSaveController\.current!\.addResource/);
-  assert.match(app, /draftSaveController\.current!\.removeResource/);
-  assert.doesNotMatch(app, /await setDraft\([\s\S]{0,800}activeArticle\.selectedResources/);
+  assert.match(app, /mediaFeature\.saveDraft/);
+  assert.match(app, /mediaFeature\.toggleSelectedResource/);
+  assert.doesNotMatch(app, /mediaFeature\.addSelectedResource/);
+  assert.match(app, /mediaFeature\.removeSelectedResource/);
+  assert.doesNotMatch(app, /app-draft-save-controller|setDraft\(/);
 });
 
 it("excludes one-shot content metadata and existing migration tools from installed resources", () => {

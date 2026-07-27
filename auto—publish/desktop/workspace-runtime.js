@@ -1,6 +1,8 @@
 "use strict";
 
 const { createWorkspaceDataInvalidation } = require("./workspace-data-invalidation");
+const { productionIpcRegistry } = require("./ipc/contracts/production-registry");
+const { projectArticleRemovalTransaction } = require("./ipc/contracts/content-core-contracts");
 
 function required(value, name) {
   if (!value) throw new Error("Workspace runtime requires " + name);
@@ -96,7 +98,11 @@ function createWorkspaceRuntime(deps) {
         const doubaoCollectionService = ownService(require("./services/doubao-collection-service").createDoubaoCollectionDesktopService({ workspaceRoot, paths: injectedPaths, onDataInvalidated: invalidation.invalidate }));
         const aiProviderService = ownService(require("./services/ai-provider-service").createAiProviderService({ userDataPath: options.userDataPath, paths: injectedPaths, safeStorage: options.safeStorage, getBatchState: function() { return generationState() || taskState() || {}; } }));
         const contentSubmissionService = ownService(require("./services/content-submission-service").createContentSubmissionService({ workspaceRoot, paths: injectedPaths, contentStore, operationalStore: publicationComposition.operationalStore, onDataInvalidated: invalidation.invalidate, getDataRevision: invalidation.getRevision }));
-        const aiContentService = ownService(require("./services/ai-content-service").createAiContentService({ workspaceRoot, paths: injectedPaths, contentStore, contentSubmissionService, onArticleRemovalTransaction: function(transaction) { options.sendToRenderer("content:article-removal-transaction", transaction); invalidation.invalidate("ARTICLE_REMOVAL_TRANSACTION_CHANGED"); }, onDataInvalidated: invalidation.invalidate, aiClientFactory: function() { return aiProviderService.createClient(); } }));
+        const aiContentService = ownService(require("./services/ai-content-service").createAiContentService({ workspaceRoot, paths: injectedPaths, contentStore, contentSubmissionService, onArticleRemovalTransaction: function(transaction) {
+          const eventContract = productionIpcRegistry.byChannel("content:article-removal-transaction");
+          options.sendToRenderer(eventContract.channel, productionIpcRegistry.event(eventContract, projectArticleRemovalTransaction(transaction)));
+          invalidation.invalidate("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
+        }, onDataInvalidated: invalidation.invalidate, aiClientFactory: function() { return aiProviderService.createClient(); } }));
         const attentionPorts = publicationComposition.createAttentionPorts({ contentSubmissionService, articleRemovalService: aiContentService, getRevision: invalidation.getRevision, onDataInvalidated: invalidation.invalidate, readers: { listTransactions: aiContentService.listArticleRemovalTransactions, getArticle: aiContentService.getGeneratedArticle, platformCapabilities: contentSubmissionService.listPlatforms } });
         if (aiContentService.recoverPendingArticleRemovals) {
           const removalRecoveryScheduler = ownService(require("../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler({ recover: aiContentService.recoverPendingArticleRemovals, onDiagnostic: function(diagnostic) { try { runtime.diagnosticsService && runtime.diagnosticsService.report && runtime.diagnosticsService.report(diagnostic); } catch (_) {} } }));
@@ -110,13 +116,18 @@ function createWorkspaceRuntime(deps) {
         const publicationSubmissionService = require("./services/publication-submission-service").createPublicationSubmissionService({ workflow: publicationComposition.publicationWorkflow, operationalStore: publicationComposition.operationalStore, workbench: platformWorkbenchService, workerPublisher });
         const mediaPublicationSubmissionService = require("./services/media-publication-submission-service").createMediaPublicationSubmissionService({ workflow: publicationComposition.publicationWorkflow, operationalStore: publicationComposition.operationalStore, workbench: platformWorkbenchService });
         modules = { taskService, platformSettingsService, doubaoCollectionService, aiProviderService, contentStore, contentSubmissionService, aiContentService, contentGenerationBatchService, generationSubmissionHandoffService, platformWorkbenchService, publicationComposition, attentionPorts, publicationSubmissionService, mediaPublicationSubmissionService };
-        ipcDeps = { ipcMain: options.ipcMain, taskService, sendToRenderer: options.sendToRenderer, rootDir: workspaceRoot, appRoot: runtime.appRoot, paths, doubaoCollectionService, aiProviderService, platformSettingsService, legacyProviderSettings, contentStore, aiContentService, contentSubmissionService, contentGenerationBatchService, generationSubmissionHandoffService, platformWorkbenchService, publicationSubmissionService, mediaPublicationSubmissionService, operationalStore: publicationComposition.operationalStore, publicationWorkflow: publicationComposition.publicationWorkflow, articleAttentionQuery: attentionPorts.attentionQuery, articleAttentionResolver: attentionPorts.attentionResolver, postProcessingPort: attentionPorts.postProcessingPort, runtimeDiagnosticsService: runtime.diagnosticsService, invalidateData: invalidation.invalidate, getWorkspaceDataRevision: invalidation.getRevision, authService: options.authService };
+        ipcDeps = { ipcMain: options.ipcMain, taskService, sendToRenderer: options.sendToRenderer, rootDir: workspaceRoot, appRoot: runtime.appRoot, paths, doubaoCollectionService, aiProviderService, platformSettingsService, legacyProviderSettings, contentStore, aiContentService, contentSubmissionService, contentGenerationBatchService, generationSubmissionHandoffService, platformWorkbenchService, publicationSubmissionService, mediaPublicationSubmissionService, operationalStore: publicationComposition.operationalStore, publicationWorkflow: publicationComposition.publicationWorkflow, articleAttentionQuery: attentionPorts.attentionQuery, articleAttentionResolver: attentionPorts.attentionResolver, postProcessingPort: attentionPorts.postProcessingPort, runtimeDiagnosticsService: runtime.diagnosticsService, invalidateData: invalidation.invalidate, getWorkspaceDataRevision: invalidation.getRevision, getWorkspaceRuntimeIdentity: invalidation.getRuntimeIdentity, authService: options.authService };
         if (paths && paths.localState) {
           const storageMaintenanceService = ownService(require("./services/storage-maintenance-service").createStorageMaintenanceService({ paths, getActivityState: function() { return { task: taskState(), collection: collectionState(), generation: generationState() }; } }));
           modules.storageMaintenanceService = storageMaintenanceService;
         }
-        ownDisposer(doubaoCollectionService.subscribe(function(value) { options.sendToRenderer("content:doubao-queue-state", value); }));
-        ownDisposer(require("../src/core/logger").subscribe(function(entry) { options.sendToRenderer("publish-log", entry); }));
+        const doubaoQueueContract = productionIpcRegistry.byChannel("content:doubao-queue-state");
+        ownDisposer(doubaoCollectionService.subscribe(function(value) {
+          options.sendToRenderer(
+            doubaoQueueContract.channel,
+            productionIpcRegistry.event(doubaoQueueContract, require("./ipc/contracts/doubao-contracts").projectQueue(value)),
+          );
+        }));
         generationSubmissionHandoffService = require("./services/generation-submission-handoff-service").createGenerationSubmissionHandoffService({ generationBatchService: contentGenerationBatchService, contentStore, contentSubmissionService });
         modules.generationSubmissionHandoffService = generationSubmissionHandoffService;
         ipcDeps.generationSubmissionHandoffService = generationSubmissionHandoffService;

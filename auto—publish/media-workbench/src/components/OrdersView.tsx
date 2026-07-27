@@ -1,6 +1,5 @@
 ﻿import React, { useState } from 'react';
 import { RealOrder } from '../types';
-import { syncOrder } from '../bridge/media';
 import { 
   ClipboardList, 
   CheckCircle2, 
@@ -9,7 +8,6 @@ import {
   Clock, 
   Search,
   RefreshCw,
-  Trash2,
   Calendar,
   Globe,
   ExternalLink
@@ -19,7 +17,9 @@ import { formatBeijingTime } from '../time-format';
 
 interface OrdersViewProps {
   orders: RealOrder[];
-  onClearOrders: () => void;
+  onSyncOrder: (orderNid: string) => Promise<unknown>;
+  syncingOrderNid?: string | null;
+  errorMessage?: string | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
@@ -41,12 +41,13 @@ function getStatusInfo(statusCode: string) {
 
 export default function OrdersView({
   orders,
-  onClearOrders
+  onSyncOrder,
+  syncingOrderNid = null,
+  errorMessage = null,
 }: OrdersViewProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrderNid, setExpandedOrderNid] = useState<string | null>(null);
-  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
 
   const filteredOrders = orders.filter(order => {
     const matchesTab = activeTab === 'all' || order.statusCode === activeTab;
@@ -60,18 +61,9 @@ export default function OrdersView({
 
   const handleSync = async (orderNid: string) => {
     if (!orderNid) return;
-    setSyncingIds(prev => new Set(prev).add(orderNid));
     try {
-      await syncOrder(orderNid);
-    } catch (e) {
-      console.error('syncOrder failed:', e);
-    } finally {
-      setSyncingIds(prev => {
-        const next = new Set(prev);
-        next.delete(orderNid);
-        return next;
-      });
-    }
+      await onSyncOrder(orderNid);
+    } catch (_) {}
   };
 
   const tabs = [
@@ -92,16 +84,9 @@ export default function OrdersView({
           <p className="text-xs text-slate-500 mt-1">查看自媒体平台 API 提交状态反馈、下发凭证与资金清算明细</p>
         </div>
 
-        {orders.length > 0 && (
-          <button
-            onClick={onClearOrders}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100/80 text-rose-600 hover:text-rose-700 text-xs font-semibold rounded-lg border border-rose-100 transition-all self-start sm:self-auto"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>清空记录</span>
-          </button>
-        )}
       </div>
+
+      {errorMessage && <div role="alert" className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">{errorMessage}</div>}
 
       {/* Orders Filter Toolbar */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -147,7 +132,7 @@ export default function OrdersView({
           {filteredOrders.map((order, index) => {
             const statusInfo = getStatusInfo(order.statusCode);
             const isExpanded = expandedOrderNid === order.orderNid;
-            const isSyncing = syncingIds.has(order.orderNid);
+            const isSyncing = syncingOrderNid === order.orderNid;
 
             return (
               <motion.div

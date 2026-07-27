@@ -20,7 +20,7 @@ describe("protected business IPC", function() {
     assert.equal(invoked, false);
   });
 
-  it("preserves the concrete temporary authentication error code", async function() {
+  it("closes temporary authentication failures to the typed business AUTH_REQUIRED error", async function() {
     let invoked = false;
     const guarded = createAuthenticatedIpcMain({ handle: (channel, handler) => handler }, () => {
       const error = new Error("认证服务暂时不可达，请检查网络后重试");
@@ -30,7 +30,12 @@ describe("protected business IPC", function() {
     guarded.handle("platforms:get-state", () => { invoked = true; return { ok: true }; });
     const response = await guarded.lastHandler({}, undefined);
     assert.equal(response.ok, false);
-    assert.equal(response.error.code, "AUTH_SERVICE_UNAVAILABLE");
+    assert.deepEqual(response.error, {
+      code: "AUTH_REQUIRED",
+      category: "authentication",
+      retryability: "never",
+      userMessage: "请先完成登录后再继续。",
+    });
     assert.equal(invoked, false);
   });
 });

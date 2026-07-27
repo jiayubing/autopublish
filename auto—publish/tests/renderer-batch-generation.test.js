@@ -40,11 +40,11 @@ describe("renderer content generation workflow", function() {
 
   it("offers one-material retry in the batch source step and updates only that client material", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /retryContentMaterial/);
+    assert.match(batch, /commands\.retryMaterial/);
     assert.match(batch, /retryMaterialItem/);
-    assert.match(batch, /setMaterialOverrides/);
+    assert.match(batch, /commands\.retryMaterial/);
     assert.match(batch, /actions=/);
-    assert.match(batch, /materialForClient\([^)]*materialOverrides/);
+    assert.match(batch, /materialForClient\(client/);
     assert.doesNotMatch(batch, /readFileSync|readdirSync|safeStorage|Playwright|playwright|fs\./i);
   });
 
@@ -82,7 +82,7 @@ describe("renderer content generation workflow", function() {
     const api = read("media-workbench/src/bridge/content.ts");
     const preload = read("desktop/preload.js");
     const ipc = read("desktop/ipc/ai-content-ipc.js");
-    assert.match(article, /retryContentMaterial/);
+    assert.match(article, /commands\.retryMaterial/);
     assert.doesNotMatch(article, /listContentClients\(\)/);
     assert.match(api, /export async function retryContentMaterial/);
     assert.match(preload, /retryMaterial/);
@@ -133,7 +133,8 @@ describe("renderer content generation workflow", function() {
   it("discovers every returned template platform and counts all selected templates", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     assert.doesNotMatch(batch, /const PLATFORMS =/);
-    assert.match(batch, /listContentTemplateCatalog\(\)/);
+    assert.doesNotMatch(batch, /listContentTemplateCatalog|listContentResearch/);
+    assert.match(batch, /templateCatalog \|\|/);
     assert.match(batch, /catalog\.templates/);
     assert.match(batch, /Object\.entries\(templateGroups\)/);
     assert.match(batch, /selectedTemplates\.length/);
@@ -151,6 +152,7 @@ describe("renderer content generation workflow", function() {
 
   it("renders the batch client, platform template, source and confirmation contracts", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const featureHook = read("media-workbench/src/features/generation/use-generation-feature.ts");
     assert.match(batch, /四步|步骤/);
     assert.match(batch, /全选客户/);
     assert.match(batch, /取消全选/);
@@ -162,13 +164,13 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /不可生成|排除/);
     assert.match(batch, /可执行任务数/);
     assert.match(batch, /确认.*启动|启动.*确认/);
-    assert.match(batch, /previewGenerationBatch/);
-    assert.match(batch, /createAndStartGenerationBatch/);
-    assert.match(batch, /getGenerationRuntimeSnapshot/);
-    assert.match(batch, /pauseGenerationBatch/);
-    assert.match(batch, /resumeGenerationBatch/);
-    assert.match(batch, /stopGenerationBatch/);
-    assert.match(batch, /retryFailedGenerationBatch/);
+    assert.match(batch, /generation\.previewBatch/);
+    assert.match(featureHook, /createAndStartGenerationBatch/);
+    assert.match(featureHook, /getGenerationRuntimeSnapshot/);
+    assert.match(featureHook, /pauseGenerationBatch/);
+    assert.match(featureHook, /resumeGenerationBatch/);
+    assert.match(featureHook, /stopGenerationBatch/);
+    assert.match(featureHook, /retryFailedGenerationBatch/);
   });
 
   it("exposes renderer-only generation batch wrappers through preload", function() {
@@ -204,13 +206,16 @@ describe("renderer content generation workflow", function() {
     assert.match(batch, /setViewMode\('monitoring'\)/);
     assert.match(batch, /viewMode === 'wizard'/);
     assert.match(batch, /data-view-mode=\{viewMode\}/);
-    assert.match(batch, /runtimeCursorRef/);
+    assert.doesNotMatch(batch, /runtimeCursorRef|createGenerationRuntimeCursor/);
+    assert.match(batch, /generation\.snapshot\.batch/);
   });
 
   it("rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const featureHook = read("media-workbench/src/features/generation/use-generation-feature.ts");
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(batch, /setBatch\(mergeRuntimeSnapshot\(snapshot\.batch, snapshot\.runtime\)\)/);
+    assert.match(featureHook, /feature\.hydrate/);
+    assert.match(batch, /generation\.snapshot\.batch/);
     assert.match(batch, /setViewMode\('monitoring'\)/);
     assert.match(batch, /onStartNew/);
     assert.match(detail, /onStartNew/);
@@ -228,18 +233,18 @@ describe("renderer content generation workflow", function() {
 
   it("does not let initial idle hydration overwrite a matching runtime batch state", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const ordering = read("media-workbench/src/generation-runtime-snapshot-logic.js");
-    assert.match(batch, /runtimeCursorRef/);
-    assert.match(batch, /runtimeCursorRef\.current\.bootstrap\(snapshot\)/);
-    assert.match(ordering, /snapshot\.runtimeId === runtimeId/);
-    assert.match(ordering, /event\.sequence <= sequence/);
+    const feature = read("media-workbench/src/features/generation/generation-feature.js");
+    assert.doesNotMatch(batch, /runtimeCursorRef|bootstrap\(snapshot\)/);
+    assert.match(feature, /next\.runtimeId !== runtimeId/);
+    assert.match(feature, /next\.sequence <= sequence/);
   });
 
-  it("keeps command pending separate from the live batch run and does not optimistically mark every command running", function() {
+  it("routes batch commands through the generation feature without a shared pending owner", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /commandPending/);
-    assert.match(batch, /setCommandPending\(true\)/);
-    assert.match(batch, /setCommandPending\(false\)/);
+    assert.match(batch, /useGenerationFeature/);
+    assert.doesNotMatch(batch, /commandPending|operationBusyRef/);
+    assert.match(batch, /generationCommands\.pause\.busy/);
+    assert.match(batch, /generationCommands\.stop\.busy/);
     assert.match(batch, /const batchRunning/);
     assert.doesNotMatch(batch, /setBatchState\(\(current\) => \(\{ \...current, batchId, state: 'running', status: 'running'/);
   });
@@ -252,18 +257,19 @@ describe("renderer content generation workflow", function() {
   it("keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(batch, /pauseGenerationBatch\(\{ batchId: batch\.id \}\)/);
-    assert.match(batch, /stopGenerationBatch\(\{ batchId: batch\.id \}\)/);
-    assert.match(detail, /disabled=\{busy \|\| !running\}/);
-    assert.match(detail, /disabled=\{busy \|\| active \|\| !unfinished\}/);
+    assert.match(batch, /generation\.pause\(\{ batchId: batch\.id \}\)/);
+    assert.match(batch, /generation\.stop\(\{ batchId: batch\.id \}\)/);
+    assert.match(detail, /disabled=\{busy\.pause \|\| !running\}/);
+    assert.match(detail, /disabled=\{busy\.resume \|\| active \|\| !unfinished\}/);
     assert.match(detail, /const canContinue = !active && unfinished/);
   });
 
   it("rehydrates the same live counts and status after returning to the page", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const types = read("media-workbench/src/types.ts");
-    assert.match(batch, /batchStateRef/);
-    assert.match(batch, /counts: runtime\.counts \|\| nextBatch\.counts/);
+    const feature = read("media-workbench/src/features/generation/generation-feature.js");
+    assert.doesNotMatch(batch, /batchStateRef|runtimeCursorRef/);
+    assert.match(feature, /counts: runtime\.counts \|\| batch\.counts/);
     assert.match(types, /updatedAt\?: string/);
     assert.match(types, /'pausing'/);
   });
@@ -277,7 +283,8 @@ describe("renderer content generation workflow", function() {
     assert.match(preload, /previewCancelPendingGenerationBatch/);
     assert.match(preload, /cancelPendingGenerationBatch/);
     assert.match(detail, /counts\.cancelled/);
-    assert.match(detail, /window\.confirm/);
+    assert.match(detail, /useConfirmation/);
+    assert.doesNotMatch(detail, /window\.confirm/);
     assert.match(detail, /pendingCount/);
   });
 });

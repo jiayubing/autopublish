@@ -1,0 +1,2247 @@
+"use strict";
+
+function contentMaterialFixture() { return { id: "material-1", name: "facts.txt", content: "第一行\n第二行", status: "ready" }; }
+function contentClientFixture() { return { id: "client-1", name: "测试客户", knowledgeFiles: [contentMaterialFixture()] }; }
+function contentResearchFixture() { return { id: "research-1", clientId: "client-1", answerText: "回答第一行\n回答第二行", references: [], collectionMethod: "manual" }; }
+function contentTemplateFixture() { return { id: "template-1", platform: "platform-1", scenario: "介绍", name: "模板", body: "正文第一行\n正文第二行" }; }
+function contentCatalogFixture() { return { revision: "revision-1", platforms: [], templates: [contentTemplateFixture()], diagnostics: [] }; }
+function contentArticleFixture() { return {
+  id: "article-1", clientId: "client-1", materialIds: ["material-1"], researchQueryIds: ["research-1"],
+  platform: "platform-1", scenario: "介绍", templateId: "template-1", title: "文章标题", content: "文章第一行\n文章第二行",
+  status: "generated", source: { client_material: true, doubao_answer: true, references: true, template: true }, createdAt: "2026-07-26T00:00:00.000Z",
+}; }
+function contentTrashFixture() { return { version: 1, deletedAt: "2026-07-26T00:00:00.000Z", clientId: "client-1", articleId: "article-1", status: "saved", references: [] }; }
+function contentImpactFixture() { return { articleCount: 1, queuedToCancel: [], failedToClean: [], blockedItems: [], canCommit: true }; }
+function contentManagementFixture() { return {
+  clientId: "client-1", revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [],
+  attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowItems: [], publicationSummaryItems: [],
+}; }
+
+const productionIpcContractFixtures = Object.freeze([
+  {
+    "capability": "workspace.getBootstrapState",
+    "channel": "workspace:get-bootstrap-state",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:get-bootstrap-state",
+    "request": {},
+    "result": {
+      "state": "checking",
+      "configured": false,
+      "environmentManaged": false,
+      "label": "fixture-1",
+      "selection": null,
+      "errorCode": null,
+      "changed": null
+    }
+  },
+  {
+    "capability": "workspace.chooseDirectory",
+    "channel": "workspace:choose-directory",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:choose-directory",
+    "request": {},
+    "result": {
+      "state": "checking",
+      "configured": false,
+      "environmentManaged": false,
+      "label": "fixture-1",
+      "selection": null,
+      "errorCode": null,
+      "changed": null
+    }
+  },
+  {
+    "capability": "workspace.confirmSelection",
+    "channel": "workspace:confirm-selection",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:confirm-selection",
+    "request": {
+      "token": "fixture-1"
+    },
+    "result": {
+      "state": "checking",
+      "configured": false,
+      "environmentManaged": false,
+      "label": "fixture-1",
+      "selection": null,
+      "errorCode": null,
+      "changed": null
+    }
+  },
+  {
+    "capability": "workspace.cancelSelection",
+    "channel": "workspace:cancel-selection",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:cancel-selection",
+    "request": {},
+    "result": {
+      "state": "checking",
+      "configured": false,
+      "environmentManaged": false,
+      "label": "fixture-1",
+      "selection": null,
+      "errorCode": null,
+      "changed": null
+    }
+  },
+  {
+    "capability": "workspace.getCurrent",
+    "channel": "workspace:get-current",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:get-current",
+    "request": {},
+    "result": {
+      "state": "checking",
+      "configured": false,
+      "environmentManaged": false,
+      "label": "fixture-1",
+      "selection": null,
+      "errorCode": null,
+      "changed": null
+    }
+  },
+  {
+    "capability": "workspace.openCurrent",
+    "channel": "workspace:open-current",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:open-current",
+    "request": {},
+    "result": {
+      "opened": false
+    }
+  },
+  {
+    "capability": "workspace.requestSwitch",
+    "channel": "workspace:request-switch",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:request-switch",
+    "request": {},
+    "result": {
+      "state": "checking",
+      "configured": false,
+      "environmentManaged": false,
+      "label": "fixture-1",
+      "selection": null,
+      "errorCode": null,
+      "changed": null
+    }
+  },
+  {
+    "capability": "settings.ai.getStatus",
+    "channel": "ai-provider:get-status",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:ai-provider:get-status",
+    "request": {},
+    "result": {
+      "source": "application",
+      "configured": false,
+      "baseUrl": "fixture-1",
+      "model": "fixture-1",
+      "timeoutMs": 1000,
+      "hasApiKey": false,
+      "apiKeyMask": "fixture-1",
+      "lastTest": null
+    }
+  },
+  {
+    "capability": "settings.ai.save",
+    "channel": "ai-provider:save",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:ai-provider:save",
+    "request": {
+      "baseUrl": "fixture-1",
+      "apiKey": "fixture-1",
+      "model": "fixture-1",
+      "timeoutMs": 1000
+    },
+    "result": {
+      "source": "application",
+      "configured": false,
+      "baseUrl": "fixture-1",
+      "model": "fixture-1",
+      "timeoutMs": 1000,
+      "hasApiKey": false,
+      "apiKeyMask": "fixture-1",
+      "lastTest": null
+    }
+  },
+  {
+    "capability": "settings.ai.test",
+    "channel": "ai-provider:test",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:ai-provider:test",
+    "request": {},
+    "result": {
+      "testedAt": "fixture-1",
+      "ok": false,
+      "code": "fixture-1"
+    }
+  },
+  {
+    "capability": "settings.ai.clear",
+    "channel": "ai-provider:clear",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:ai-provider:clear",
+    "request": {},
+    "result": {
+      "cleared": false
+    }
+  },
+  {
+    "capability": "settings.platform.getStatus",
+    "channel": "platform-settings:get-status",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:platform-settings:get-status",
+    "request": {
+      "platformId": "media"
+    },
+    "result": {
+      "platformId": "media",
+      "status": {
+        "source": "application",
+        "configured": false,
+        "baseUrl": "fixture-1",
+        "timeoutMs": 1000,
+        "allowInsecure": false,
+        "transport": "fixture-1",
+        "apiKeyMask": "fixture-1",
+        "lastTest": null
+      }
+    }
+  },
+  {
+    "capability": "settings.platform.save",
+    "channel": "platform-settings:save",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:platform-settings:save",
+    "request": {
+      "platformId": "media",
+      "draft": {}
+    },
+    "result": {
+      "platformId": "media",
+      "status": {
+        "source": "application",
+        "configured": false,
+        "baseUrl": "fixture-1",
+        "timeoutMs": 1000,
+        "allowInsecure": false,
+        "transport": "fixture-1",
+        "apiKeyMask": "fixture-1",
+        "lastTest": null
+      }
+    }
+  },
+  {
+    "capability": "settings.platform.test",
+    "channel": "platform-settings:test",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:platform-settings:test",
+    "request": {
+      "platformId": "media"
+    },
+    "result": {
+      "platformId": "media",
+      "result": {
+        "testedAt": "fixture-1",
+        "ok": false,
+        "code": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "settings.platform.clear",
+    "channel": "platform-settings:clear",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:platform-settings:clear",
+    "request": {
+      "platformId": "media"
+    },
+    "result": {
+      "platformId": "media",
+      "cleared": false
+    }
+  },
+  {
+    "capability": "settings.platform.getLegacyStatus",
+    "channel": "platform-settings:get-legacy-status",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:platform-settings:get-legacy-status",
+    "request": {},
+    "result": {
+      "discover": {
+        "media": {
+          "available": false,
+          "sources": []
+        },
+        "hepan": {
+          "available": false,
+          "sources": [],
+          "cookiePathAvailable": false
+        },
+        "sources": [],
+        "importable": false
+      },
+      "record": null
+    }
+  },
+  {
+    "capability": "settings.platform.importLegacy",
+    "channel": "platform-settings:import-legacy",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:platform-settings:import-legacy",
+    "request": {
+      "confirmed": true
+    },
+    "result": {
+      "imported": [],
+      "entries": [],
+      "record": {
+        "version": 1,
+        "updatedAt": null,
+        "entries": []
+      },
+      "legacyCookieFilesRemain": false
+    }
+  },
+  {
+    "capability": "settings.storage.getUsage",
+    "channel": "storage-maintenance:get-usage",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:storage-maintenance:get-usage",
+    "request": {},
+    "result": {
+      "logs": {
+        "bytes": 0,
+        "files": 0,
+        "followedSymlinks": 0,
+        "skippedSymlinks": 0
+      },
+      "temporary": {
+        "bytes": 0,
+        "files": 0,
+        "followedSymlinks": 0,
+        "skippedSymlinks": 0
+      },
+      "docxCache": {
+        "bytes": 0,
+        "files": 0,
+        "followedSymlinks": 0,
+        "skippedSymlinks": 0
+      },
+      "profiles": {
+        "bytes": 0,
+        "files": 0,
+        "followedSymlinks": 0,
+        "skippedSymlinks": 0
+      },
+      "tmp": {
+        "bytes": 0,
+        "files": 0,
+        "followedSymlinks": 0,
+        "skippedSymlinks": 0
+      },
+      "totalBytes": 0,
+      "removableBytes": 0,
+      "active": false
+    }
+  },
+  {
+    "capability": "settings.storage.cleanCaches",
+    "channel": "storage-maintenance:clean-caches",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:storage-maintenance:clean-caches",
+    "request": {},
+    "result": {
+      "blocked": false,
+      "reason": null,
+      "deletedCount": 0,
+      "failedCount": 0,
+      "usage": {
+        "logs": {
+          "bytes": 0,
+          "files": 0,
+          "followedSymlinks": 0,
+          "skippedSymlinks": 0
+        },
+        "temporary": {
+          "bytes": 0,
+          "files": 0,
+          "followedSymlinks": 0,
+          "skippedSymlinks": 0
+        },
+        "docxCache": {
+          "bytes": 0,
+          "files": 0,
+          "followedSymlinks": 0,
+          "skippedSymlinks": 0
+        },
+        "profiles": {
+          "bytes": 0,
+          "files": 0,
+          "followedSymlinks": 0,
+          "skippedSymlinks": 0
+        },
+        "tmp": {
+          "bytes": 0,
+          "files": 0,
+          "followedSymlinks": 0,
+          "skippedSymlinks": 0
+        },
+        "totalBytes": 0,
+        "removableBytes": 0,
+        "active": false
+      }
+    }
+  },
+  {
+    "capability": "settings.runtime.getDiagnostics",
+    "channel": "runtime-diagnostics:get",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:runtime-diagnostics:get",
+    "request": {},
+    "result": {
+      "ok": false,
+      "buildInfo": {
+        "version": "fixture-1",
+        "commit": "fixture-1",
+        "dirty": false
+      },
+      "browserChannel": {
+        "state": "ready",
+        "source": null,
+        "errorCode": null,
+        "lastCheckedAt": null,
+        "channel": null,
+        "configured": false,
+        "probed": false
+      },
+      "capabilities": {
+        "playwrightNode": {
+          "state": "ready",
+          "source": null,
+          "errorCode": null,
+          "lastCheckedAt": null
+        },
+        "playwrightCli": {
+          "state": "ready",
+          "source": null,
+          "errorCode": null,
+          "lastCheckedAt": null
+        },
+        "browserChannel": {
+          "state": "ready",
+          "source": null,
+          "errorCode": null,
+          "lastCheckedAt": null,
+          "channel": null,
+          "configured": false,
+          "probed": false
+        },
+        "docx": {
+          "state": "ready",
+          "source": null,
+          "errorCode": null,
+          "lastCheckedAt": null
+        },
+        "hepan": {
+          "state": "ready",
+          "source": null,
+          "errorCode": null,
+          "lastCheckedAt": null
+        }
+      },
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "capability": "settings.runtime.browserSmoke",
+    "channel": "runtime-diagnostics:browser-smoke",
+    "owner": "settings",
+    "productionCaller": "desktop/preload.js:runtime-diagnostics:browser-smoke",
+    "request": {},
+    "result": {
+      "ok": true,
+      "browserChannel": "fixture-1",
+      "session": "runtime-self-check"
+    }
+  },
+  {
+    "capability": "media.refreshResources",
+    "channel": "media:refresh-resources",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:refresh-resources",
+    "request": {},
+    "result": {
+      "status": "complete",
+      "complete": false,
+      "truncated": false,
+      "truncationReason": null,
+      "pageCount": 0,
+      "resourceCount": 0,
+      "diagnostics": [],
+      "refreshedAt": "fixture-1"
+    }
+  },
+  {
+    "capability": "media.getResourcePage",
+    "channel": "media:get-resource-page",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:get-resource-page",
+    "request": {
+      "page": 1,
+      "pageSize": 1
+    },
+    "result": {
+      "items": [],
+      "total": 0,
+      "page": 1,
+      "pageSize": 1,
+      "totalPages": 0,
+      "hasPrev": false,
+      "hasNext": false
+    }
+  },
+  {
+    "capability": "media.searchResourcePage",
+    "channel": "media:search-resource-page",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:search-resource-page",
+    "request": {
+      "query": "fixture-1",
+      "page": 1,
+      "pageSize": 1
+    },
+    "result": {
+      "items": [],
+      "total": 0,
+      "page": 1,
+      "pageSize": 1,
+      "totalPages": 0,
+      "hasPrev": false,
+      "hasNext": false
+    }
+  },
+  {
+    "capability": "media.getPool",
+    "channel": "media:get-pool",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:get-pool",
+    "request": {
+      "page": 1,
+      "pageSize": 50,
+      "resourceIds": ["fixture-1"]
+    },
+    "result": {
+      "items": [],
+      "memberResourceIds": [],
+      "total": 0,
+      "page": 1,
+      "pageSize": 50,
+      "totalPages": 0,
+      "hasPrev": false,
+      "hasNext": false
+    }
+  },
+  {
+    "capability": "media.addToPool",
+    "channel": "media:add-to-pool",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:add-to-pool",
+    "request": {
+      "resource": {
+        "resourceId": "fixture-1"
+      }
+    },
+    "result": {
+      "resource": {
+        "resourceId": "fixture-1",
+        "name": "fixture-1",
+        "price": 0,
+        "type": "image",
+        "createdAt": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "media.removeFromPool",
+    "channel": "media:remove-from-pool",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:remove-from-pool",
+    "request": {
+      "resourceId": "fixture-1"
+    },
+    "result": {
+      "completed": false
+    }
+  },
+  {
+    "capability": "media.getDrafts",
+    "channel": "media:get-drafts",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:get-drafts",
+    "request": {},
+    "result": {
+      "items": []
+    }
+  },
+  {
+    "capability": "media.getDraft",
+    "channel": "media:get-draft",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:get-draft",
+    "request": {
+      "filename": "fixture-1"
+    },
+    "result": {
+      "draft": null
+    }
+  },
+  {
+    "capability": "media.setDraft",
+    "channel": "media:set-draft",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:set-draft",
+    "request": {
+      "filename": "fixture-1",
+      "draft": {}
+    },
+    "result": {
+      "completed": false
+    }
+  },
+  {
+    "capability": "media.removeDraft",
+    "channel": "media:remove-draft",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:remove-draft",
+    "request": {
+      "filename": "fixture-1"
+    },
+    "result": {
+      "completed": false
+    }
+  },
+  {
+    "capability": "media.scanArticles",
+    "channel": "media:scan-articles",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:scan-articles",
+    "request": {},
+    "result": {
+      "items": []
+    }
+  },
+  {
+    "capability": "media.previewArticle",
+    "channel": "media:preview-article",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:preview-article",
+    "request": {
+      "filename": "fixture-1"
+    },
+    "result": {
+      "article": {
+        "filename": "fixture-1",
+        "title": "fixture-1",
+        "content": "fixture-1",
+        "selectedResources": []
+      }
+    }
+  },
+  {
+    "capability": "media.buildConfirmation",
+    "channel": "media:build-confirmation",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:build-confirmation",
+    "request": {
+      "submissions": [
+        {
+          "filename": "fixture-1",
+          "resourceIds": [
+            "fixture-1"
+          ]
+        }
+      ]
+    },
+    "result": {
+      "articleCount": 0,
+      "resourceCount": 0,
+      "submitableResourceCount": 0,
+      "blockedResourceCount": 0,
+      "estimatedTotalPrice": 0,
+      "actualPrice": 0,
+      "blockers": [],
+      "blockedResources": [],
+      "submitableResources": []
+    }
+  },
+  {
+    "capability": "media.submitSelected",
+    "channel": "media:submit-selected",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:submit-selected",
+    "request": {
+      "submissions": [
+        {
+          "filename": "fixture-1",
+          "resourceIds": [
+            "fixture-1"
+          ]
+        }
+      ]
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "publishedCount": 0,
+      "failedCount": 0,
+      "uncertainCount": 0,
+      "skippedCount": 0
+    }
+  },
+  {
+    "capability": "media.getOrders",
+    "channel": "media:get-orders",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:get-orders",
+    "request": {},
+    "result": {
+      "items": []
+    }
+  },
+  {
+    "capability": "media.syncOrder",
+    "channel": "media:sync-order",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:sync-order",
+    "request": {
+      "orderNid": "fixture-1"
+    },
+    "result": {
+      "order": {
+        "title": "fixture-1",
+        "filename": "fixture-1",
+        "orderNid": "fixture-1",
+        "statusCode": "fixture-1",
+        "statusLabel": "fixture-1",
+        "submittedAt": "fixture-1",
+        "publishedAt": "fixture-1",
+        "resourceId": "fixture-1",
+        "resourceName": "fixture-1",
+        "price": "fixture-1",
+        "orderUrl": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "platform.getQueue",
+    "channel": "platforms:get-queue",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:get-queue",
+    "request": {},
+    "result": {
+      "platforms": [],
+      "queue": []
+    }
+  },
+  {
+    "capability": "platform.listAccountProfiles",
+    "channel": "platforms:list-account-profiles",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:list-account-profiles",
+    "request": {},
+    "result": {
+      "profiles": []
+    }
+  },
+  {
+    "capability": "platform.confirmAccountProfile",
+    "channel": "platforms:confirm-account-profile",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:confirm-account-profile",
+    "request": {
+      "platformId": "fixture-1",
+      "displayName": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "profile": {
+        "accountProfileId": "fixture-1",
+        "platformId": "fixture-1",
+        "displayName": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "platform.openLogin",
+    "channel": "platforms:open-login",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:open-login",
+    "request": {
+      "platformId": "fixture-1"
+    },
+    "result": {
+      "platformId": "fixture-1",
+      "status": "opened"
+    }
+  },
+  {
+    "capability": "platform.checkLogin",
+    "channel": "platforms:check-login",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:check-login",
+    "request": {
+      "platformId": "fixture-1"
+    },
+    "result": {
+      "platformId": "fixture-1",
+      "authenticated": false
+    }
+  },
+  {
+    "capability": "platform.submitSelected",
+    "channel": "platforms:submit-selected",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:submit-selected",
+    "request": {
+      "submissions": [
+        {
+          "sourcePlatformId": "fixture-1",
+          "filename": "fixture-1",
+          "targetPlatformIds": [
+            "fixture-1"
+          ],
+          "accountProfiles": [
+            {
+              "platformId": "fixture-1",
+              "accountProfileId": "fixture-1"
+            }
+          ]
+        }
+      ],
+      "autoTrash": false
+    },
+    "result": {
+      "ok": 0,
+      "fail": 0,
+      "uncertain": 0,
+      "skipped": 0,
+      "results": [],
+      "archiveSummary": {
+        "attempted": 0,
+        "succeeded": 0,
+        "failed": 0
+      },
+      "trashDisposition": "keep_local",
+      "trashSummary": {
+        "offeredCount": 0,
+        "requestedCount": 0,
+        "movedCount": 0,
+        "recoveryCount": 0,
+        "blockedCount": 0,
+        "failedCount": 0,
+        "reasonCodes": []
+      }
+    }
+  },
+  {
+    "capability": "platform.pauseSubmit",
+    "channel": "platforms:pause-submit",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:pause-submit",
+    "request": {
+      "runId": null
+    },
+    "result": {
+      "accepted": false,
+      "alreadyStopped": false
+    }
+  },
+  {
+    "capability": "platform.stopSubmit",
+    "channel": "platforms:stop-submit",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:stop-submit",
+    "request": {
+      "runId": null
+    },
+    "result": {
+      "accepted": false,
+      "alreadyStopped": false
+    }
+  },
+  {
+    "capability": "platform.getState",
+    "channel": "platforms:get-state",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platforms:get-state",
+    "request": {},
+    "result": {
+      "runId": null,
+      "phase": "idle",
+      "total": 0,
+      "processed": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 0,
+      "uncertain": 0,
+      "currentTask": null,
+      "nextTask": null,
+      "waitRemainingMs": 0,
+      "startedAt": null,
+      "updatedAt": null,
+      "terminalResult": null,
+      "isBatchRunning": false,
+      "isStopPending": false,
+      "isPlatformRunning": false,
+      "queueRevision": null
+    }
+  },
+  {
+    "capability": "platform.stateChanged",
+    "channel": "platform-state",
+    "owner": "platform",
+    "productionCaller": "desktop/preload.js:platform-state",
+    "event": {
+      "runId": null,
+      "phase": "idle",
+      "total": 0,
+      "processed": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 0,
+      "uncertain": 0,
+      "currentTask": null,
+      "nextTask": null,
+      "waitRemainingMs": 0,
+      "startedAt": null,
+      "updatedAt": null,
+      "terminalResult": null,
+      "isBatchRunning": false,
+      "isStopPending": false,
+      "isPlatformRunning": false,
+      "queueRevision": null
+    }
+  },
+  {
+    "capability": "content.listClients",
+    "channel": "content:list-clients",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-clients",
+    "request": {},
+    "result": { "clients": [contentClientFixture()] }
+  },
+  {
+    "capability": "content.listResearch",
+    "channel": "content:list-research",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-research",
+    "request": { "clientId": "client-1" },
+    "result": { "research": [contentResearchFixture()] }
+  },
+  {
+    "capability": "content.listTemplates",
+    "channel": "content:list-templates",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-templates",
+    "request": { "platform": "platform-1" },
+    "result": { "templates": [contentTemplateFixture()] }
+  },
+  {
+    "capability": "content.listTemplateCatalog",
+    "channel": "content:list-template-catalog",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-template-catalog",
+    "request": {},
+    "result": contentCatalogFixture()
+  },
+  {
+    "capability": "content.retryMaterial",
+    "channel": "content:retry-material",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:retry-material",
+    "request": { "clientId": "client-1", "materialId": "material-1" },
+    "result": { "material": contentMaterialFixture() }
+  },
+  {
+    "capability": "content.generateArticle",
+    "channel": "content:generate-article",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:generate-article",
+    "request": { "clientId": "client-1", "materialIds": ["material-1"], "researchQueryIds": ["research-1"], "platform": "platform-1", "templateId": "template-1" },
+    "result": { "article": contentArticleFixture() }
+  },
+  {
+    "capability": "content.saveArticle",
+    "channel": "content:save-article",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:save-article",
+    "request": { "article": contentArticleFixture() },
+    "result": { "article": contentArticleFixture() }
+  },
+  {
+    "capability": "content.listGeneratedArticles",
+    "channel": "content:list-generated-articles",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-generated-articles",
+    "request": { "clientId": "client-1" },
+    "result": { "articles": [contentArticleFixture()] }
+  },
+  {
+    "capability": "content.copyArticleVersion",
+    "channel": "content:copy-article-version",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:copy-article-version",
+    "request": { "clientId": "client-1", "sourceArticleId": "article-1" },
+    "result": { "article": contentArticleFixture() }
+  },
+  {
+    "capability": "content.reviewArticles",
+    "channel": "content:review-articles",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:review-articles",
+    "request": { "articles": [{ "clientId": "client-1", "articleId": "article-1" }] },
+    "result": { "approved": ["article-1"], "rejected": [], "skipped": [] }
+  },
+  {
+    "capability": "content.listArticleTrash",
+    "channel": "content:list-article-trash",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-article-trash",
+    "request": { "clientId": "client-1" },
+    "result": { "trash": [contentTrashFixture()] }
+  },
+  {
+    "capability": "content.previewTrashArticles",
+    "channel": "content:preview-trash-articles",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-trash-articles",
+    "request": { "selections": [{ "clientId": "client-1", "articleId": "article-1" }] },
+    "result": contentImpactFixture()
+  },
+  {
+    "capability": "content.previewArticleRemovalImpact",
+    "channel": "content:preview-article-removal-impact",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-article-removal-impact",
+    "request": { "selections": [{ "clientId": "client-1", "articleId": "article-1" }] },
+    "result": contentImpactFixture()
+  },
+  {
+    "capability": "content.trashArticles",
+    "channel": "content:trash-articles",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:trash-articles",
+    "request": { "selections": [{ "clientId": "client-1", "articleId": "article-1" }], "token": "token-1", "confirmed": true },
+    "result": { "transactionId": "transaction-1", "status": "committed", "articleCount": 1 }
+  },
+  {
+    "capability": "content.restoreArticle",
+    "channel": "content:restore-article",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:restore-article",
+    "request": { "clientId": "client-1", "articleId": "article-1" },
+    "result": { "article": contentArticleFixture(), "restored": true, "queueRestored": false, "message": "文章已恢复" }
+  },
+  {
+    "capability": "content.preparePermanentDeleteArticle",
+    "channel": "content:prepare-permanent-delete-article",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:prepare-permanent-delete-article",
+    "request": { "clientId": "client-1", "articleId": "article-1" },
+    "result": { "token": "token-1", "clientId": "client-1", "articleId": "article-1", "deletedAt": "2026-07-26T00:00:00.000Z", "status": "saved" }
+  },
+  {
+    "capability": "content.permanentlyDeleteArticle",
+    "channel": "content:permanently-delete-article",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:permanently-delete-article",
+    "request": { "clientId": "client-1", "articleId": "article-1", "token": "token-1" },
+    "result": { "clientId": "client-1", "articleId": "article-1", "deleted": true, "deletedAt": "2026-07-26T00:00:00.000Z" }
+  },
+  {
+    "capability": "content.getArticleRemovalTransaction",
+    "channel": "content:get-article-removal-transaction",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:get-article-removal-transaction",
+    "request": {
+      "transactionId": "fixture-1"
+    },
+    "result": {
+      "transaction": {
+        "status": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "content.listArticleRemovalTransactions",
+    "channel": "content:list-article-removal-transactions",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-article-removal-transactions",
+    "request": {},
+    "result": {
+      "transactions": []
+    }
+  },
+  {
+    "capability": "content.retryArticleRemovalTransaction",
+    "channel": "content:retry-article-removal-transaction",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:retry-article-removal-transaction",
+    "request": {
+      "transactionId": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "transaction": {
+        "status": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "content.getArticleManagementSnapshot",
+    "channel": "content:get-article-management-snapshot",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:get-article-management-snapshot",
+    "request": { "clientId": "client-1" },
+    "result": contentManagementFixture()
+  },
+  {
+    "capability": "attention.listArticleAttention",
+    "channel": "content:list-article-attention",
+    "owner": "attention",
+    "productionCaller": "desktop/preload.js:content:list-article-attention",
+    "request": {},
+    "result": {
+      "revision": 0,
+      "items": [],
+      "counts": {
+        "total": 0,
+        "actionable": 0
+      }
+    }
+  },
+  {
+    "capability": "attention.getArticleAttention",
+    "channel": "content:get-article-attention",
+    "owner": "attention",
+    "productionCaller": "desktop/preload.js:content:get-article-attention",
+    "request": {
+      "attentionId": "fixture-1"
+    },
+    "result": {
+      "item": null
+    }
+  },
+  {
+    "capability": "attention.previewArticleAttention",
+    "channel": "content:preview-article-attention",
+    "owner": "attention",
+    "productionCaller": "desktop/preload.js:content:preview-article-attention",
+    "request": {
+      "attentionId": "fixture-1",
+      "action": "fixture-1"
+    },
+    "result": {
+      "attentionId": "fixture-1",
+      "revision": 0,
+      "action": "fixture-1",
+      "requiresConfirmation": false,
+      "message": "fixture-1",
+      "changedScopes": []
+    }
+  },
+  {
+    "capability": "attention.resolveArticleAttention",
+    "channel": "content:resolve-article-attention",
+    "owner": "attention",
+    "productionCaller": "desktop/preload.js:content:resolve-article-attention",
+    "request": {
+      "attentionId": "fixture-1",
+      "action": "fixture-1",
+      "expectedRevision": 0
+    },
+    "result": {
+      "outcome": "fixture-1",
+      "attentionId": "fixture-1",
+      "changedScopes": []
+    }
+  },
+  {
+    "capability": "content.articleRemovalTransactionChanged",
+    "channel": "content:article-removal-transaction",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:article-removal-transaction",
+    "event": {
+      "status": "fixture-1"
+    }
+  },
+  {
+    "capability": "generation.previewBatch",
+    "channel": "content:preview-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:preview-generation-batch",
+    "request": {
+      "clientIds": [
+        "fixture-1"
+      ],
+      "templates": [
+        {
+          "platform": "fixture-1",
+          "templateId": "fixture-1"
+        }
+      ]
+    },
+    "result": {
+      "clientCount": 0,
+      "executableClientCount": 0,
+      "taskCount": 0,
+      "executableTaskCount": 0,
+      "excludedTaskCount": 0,
+      "excludedClients": [],
+      "templates": [],
+      "clientSources": []
+    }
+  },
+  {
+    "capability": "generation.createBatch",
+    "channel": "content:create-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:create-generation-batch",
+    "request": {
+      "clientIds": [
+        "fixture-1"
+      ],
+      "templates": [
+        {
+          "platform": "fixture-1",
+          "templateId": "fixture-1"
+        }
+      ]
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.createAndStartBatch",
+    "channel": "content:create-and-start-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:create-and-start-generation-batch",
+    "request": {
+      "clientIds": [
+        "fixture-1"
+      ],
+      "templates": [
+        {
+          "platform": "fixture-1",
+          "templateId": "fixture-1"
+        }
+      ]
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.listBatches",
+    "channel": "content:list-generation-batches",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:list-generation-batches",
+    "request": {},
+    "result": {
+      "batches": []
+    }
+  },
+  {
+    "capability": "generation.getBatch",
+    "channel": "content:get-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:get-generation-batch",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.startBatch",
+    "channel": "content:start-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:start-generation-batch",
+    "request": {},
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.stopBatch",
+    "channel": "content:stop-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:stop-generation-batch",
+    "request": {},
+    "result": {
+      "batch": null
+    }
+  },
+  {
+    "capability": "generation.pauseBatch",
+    "channel": "content:pause-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:pause-generation-batch",
+    "request": {},
+    "result": {
+      "batch": null
+    }
+  },
+  {
+    "capability": "generation.continueBatch",
+    "channel": "content:continue-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:continue-generation-batch",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.resumeBatch",
+    "channel": "content:resume-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:resume-generation-batch",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.retryFailed",
+    "channel": "content:retry-failed-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:retry-failed-generation-batch",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.previewCancelPending",
+    "channel": "content:preview-cancel-pending-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:preview-cancel-pending-generation-batch",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "pendingCount": 0,
+      "runningCount": 0,
+      "cancelledCount": 0,
+      "canCancel": false
+    }
+  },
+  {
+    "capability": "generation.cancelPending",
+    "channel": "content:cancel-pending-generation-batch",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:cancel-pending-generation-batch",
+    "request": {
+      "batchId": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "batch": {
+        "id": "fixture-1",
+        "status": "pending",
+        "clientSources": [],
+        "templates": [],
+        "tasks": [],
+        "counts": {
+          "total": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "pending": 0,
+          "interrupted": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  },
+  {
+    "capability": "generation.getState",
+    "channel": "content:get-generation-batch-state",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:get-generation-batch-state",
+    "request": {},
+    "result": {
+      "state": "idle",
+      "status": "idle",
+      "batchId": null,
+      "counts": null,
+      "updatedAt": "fixture-1",
+      "runtimeId": "fixture-1",
+      "sequence": 0,
+      "isBatchRunning": false,
+      "isStopPending": false
+    }
+  },
+  {
+    "capability": "generation.getRuntimeSnapshot",
+    "channel": "content:get-generation-runtime-snapshot",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:get-generation-runtime-snapshot",
+    "request": {},
+    "result": {
+      "runtimeId": "fixture-1",
+      "sequence": 0,
+      "runtime": {
+        "state": "idle",
+        "status": "idle",
+        "batchId": null,
+        "counts": null,
+        "updatedAt": "fixture-1",
+        "runtimeId": "fixture-1",
+        "sequence": 0,
+        "isBatchRunning": false,
+        "isStopPending": false
+      },
+      "batch": null,
+      "capabilities": {
+        "canResume": false,
+        "canContinue": false,
+        "canRetry": false,
+        "canCancel": false
+      }
+    }
+  },
+  {
+    "capability": "generation.previewSubmissionHandoff",
+    "channel": "content:preview-generation-submission-handoff",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:preview-generation-submission-handoff",
+    "request": {
+      "generationBatchId": "fixture-1",
+      "targetPlatformIds": [
+        "fixture-1"
+      ],
+      "accountProfiles": [
+        {
+          "targetPlatformId": "fixture-1",
+          "accountProfileId": "fixture-1"
+        }
+      ]
+    },
+    "result": {
+      "generationBatchId": "fixture-1",
+      "previewToken": "fixture-1",
+      "articleCount": 0,
+      "clientCount": 0,
+      "targetPlatformIds": [],
+      "estimatedTaskCount": 0,
+      "queueableTaskCount": 0,
+      "idempotentCount": 0,
+      "blockedPublishedCount": 0,
+      "blockedUncertainCount": 0,
+      "blockedContentCount": 0,
+      "conflictCount": 0,
+      "unavailableArticleCount": 0,
+      "invalidArticles": [],
+      "clientGroups": []
+    }
+  },
+  {
+    "capability": "generation.commitSubmissionHandoff",
+    "channel": "content:commit-generation-submission-handoff",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:commit-generation-submission-handoff",
+    "request": {
+      "generationBatchId": "fixture-1",
+      "targetPlatformIds": [
+        "fixture-1"
+      ],
+      "accountProfiles": [
+        {
+          "targetPlatformId": "fixture-1",
+          "accountProfileId": "fixture-1"
+        }
+      ],
+      "previewToken": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "generationBatchId": "fixture-1",
+      "createdCount": 0,
+      "idempotentCount": 0,
+      "blockedCount": 0,
+      "conflictCount": 0,
+      "failedClientGroups": [],
+      "completedClientGroups": [],
+      "clientGroups": []
+    }
+  },
+  {
+    "capability": "content.previewExport",
+    "channel": "content:preview-export",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-export",
+    "request": {
+      "clientId": "fixture-1",
+      "generatedArticleId": "fixture-1",
+      "targetPlatform": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "filename": "fixture-1",
+      "targetPlatform": "fixture-1",
+      "contentHash": "fixture-1",
+      "markdown": "fixture-1",
+      "status": "queueable"
+    }
+  },
+  {
+    "capability": "content.previewSubmissionBatch",
+    "channel": "content:preview-submission-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-submission-batch",
+    "request": {
+      "clientId": "fixture-1",
+      "articleIds": [
+        "fixture-1"
+      ],
+      "targetPlatformIds": [
+        "fixture-1"
+      ],
+      "accountBindings": [
+        {
+          "platformId": "fixture-1",
+          "accountProfileId": "fixture-1"
+        }
+      ]
+    },
+    "result": {
+      "clientId": "fixture-1",
+      "articleIds": [
+        "fixture-1"
+      ],
+      "targetPlatformIds": [
+        "fixture-1"
+      ],
+      "totalTaskCount": 0,
+      "queueableTaskCount": 0,
+      "idempotentCount": 0,
+      "blockedContentCount": 0,
+      "conflictCount": 0,
+      "missingArticleIds": [],
+      "unsupportedPlatformIds": [],
+      "items": []
+    }
+  },
+  {
+    "capability": "content.listSubmissionPlatforms",
+    "channel": "content:list-submission-platforms",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-submission-platforms",
+    "request": {},
+    "result": {
+      "platforms": []
+    }
+  },
+  {
+    "capability": "content.listSubmissionBatches",
+    "channel": "content:list-submission-batches",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-submission-batches",
+    "request": {},
+    "result": {
+      "batches": []
+    }
+  },
+  {
+    "capability": "content.exportArticle",
+    "channel": "content:export-article",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:export-article",
+    "request": {
+      "clientId": "fixture-1",
+      "generatedArticleId": "fixture-1",
+      "targetPlatform": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "filename": "fixture-1",
+      "targetPlatform": "fixture-1",
+      "contentHash": "fixture-1",
+      "markdown": "fixture-1",
+      "status": "queueable",
+      "idempotent": false
+    }
+  },
+  {
+    "capability": "content.createSubmissionBatch",
+    "channel": "content:create-submission-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:create-submission-batch",
+    "request": {
+      "clientId": "fixture-1",
+      "articleIds": [
+        "fixture-1"
+      ],
+      "targetPlatformIds": [
+        "fixture-1"
+      ],
+      "accountBindings": [
+        {
+          "platformId": "fixture-1",
+          "accountProfileId": "fixture-1"
+        }
+      ],
+      "confirmed": true
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "clientId": "fixture-1",
+      "createdCount": 0,
+      "idempotentCount": 0,
+      "queueableTaskCount": 0,
+      "alreadyQueuedCount": 0,
+      "blockedContentCount": 0,
+      "conflictCount": 0,
+      "missingArticleIds": [],
+      "unsupportedPlatformIds": [],
+      "items": []
+    }
+  },
+  {
+    "capability": "content.previewCancelSubmissionBatch",
+    "channel": "content:preview-cancel-submission-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-cancel-submission-batch",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "planId": "fixture-1",
+      "allowedCount": 0,
+      "blockedCount": 0,
+      "items": []
+    }
+  },
+  {
+    "capability": "content.cancelSubmissionBatch",
+    "channel": "content:cancel-submission-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:cancel-submission-batch",
+    "request": {
+      "batchId": "fixture-1",
+      "planId": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "planId": "fixture-1",
+      "cancelledCount": 0,
+      "idempotentCount": 0,
+      "skippedCount": 0,
+      "batchStatus": "fixture-1",
+      "changedScopes": [],
+      "items": []
+    }
+  },
+  {
+    "capability": "content.previewCleanupFailedSubmissionItems",
+    "channel": "content:preview-cleanup-failed-submission-items",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-cleanup-failed-submission-items",
+    "request": {
+      "batchId": "fixture-1"
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "cleanableCount": 0,
+      "uncleanableCount": 0,
+      "items": []
+    }
+  },
+  {
+    "capability": "content.cleanupFailedSubmissionItems",
+    "channel": "content:cleanup-failed-submission-items",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:cleanup-failed-submission-items",
+    "request": {
+      "batchId": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "cleanedCount": 0,
+      "skippedCount": 0,
+      "items": []
+    }
+  },
+  {
+    "capability": "content.previewRetryFailedPublication",
+    "channel": "content:preview-retry-failed-publication",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-retry-failed-publication",
+    "request": {
+      "publicationId": "fixture-1"
+    },
+    "result": {
+      "publicationId": null,
+      "requiresConfirmation": false
+    }
+  },
+  {
+    "capability": "content.retryFailedPublication",
+    "channel": "content:retry-failed-publication",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:retry-failed-publication",
+    "request": {
+      "publicationId": "fixture-1",
+      "confirmed": true
+    },
+    "result": {
+      "batchId": "fixture-1",
+      "publicationId": "fixture-1",
+      "attemptId": null,
+      "clientId": "fixture-1",
+      "articleId": "fixture-1",
+      "targetPlatformId": "fixture-1",
+      "changedScopes": []
+    }
+  },
+  {
+    "capability": "content.previewTrashedArticleQueueResidue",
+    "channel": "content:preview-trashed-article-queue-residue",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-trashed-article-queue-residue",
+    "request": {},
+    "result": {
+      "items": [],
+      "cleanableItems": [],
+      "reportedItems": [],
+      "cleanableCount": 0,
+      "reportedCount": 0
+    }
+  },
+  {
+    "capability": "content.cleanupTrashedArticleQueueResidue",
+    "channel": "content:cleanup-trashed-article-queue-residue",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:cleanup-trashed-article-queue-residue",
+    "request": {
+      "confirmed": true
+    },
+    "result": {
+      "status": "failed",
+      "cleanedCount": 0,
+      "failedCount": 0,
+      "remainingCount": 0,
+      "cleanableCount": 0,
+      "reportedCount": 0,
+      "items": [],
+      "remainingItems": []
+    }
+  },
+  {
+    "capability": "content.listQuestions",
+    "channel": "content:list-questions",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:list-questions",
+    "request": {
+      "clientId": "fixture-1"
+    },
+    "result": {
+      "questions": []
+    }
+  },
+  {
+    "capability": "content.createQuestion",
+    "channel": "content:create-question",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:create-question",
+    "request": {
+      "clientId": "fixture-1",
+      "text": "fixture-1"
+    },
+    "result": {
+      "question": {
+        "id": "fixture-1",
+        "text": "fixture-1",
+        "enabled": false,
+        "createdAt": "fixture-1",
+        "updatedAt": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "content.updateQuestion",
+    "channel": "content:update-question",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:update-question",
+    "request": {
+      "clientId": "fixture-1",
+      "questionId": "fixture-1"
+    },
+    "result": {
+      "question": {
+        "id": "fixture-1",
+        "text": "fixture-1",
+        "enabled": false,
+        "createdAt": "fixture-1",
+        "updatedAt": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "content.deleteQuestion",
+    "channel": "content:delete-question",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:delete-question",
+    "request": {
+      "clientId": "fixture-1",
+      "questionId": "fixture-1"
+    },
+    "result": {
+      "question": {
+        "id": "fixture-1",
+        "text": "fixture-1",
+        "enabled": false,
+        "createdAt": "fixture-1",
+        "updatedAt": "fixture-1"
+      }
+    }
+  },
+  {
+    "capability": "content.getDoubaoLoginState",
+    "channel": "content:get-doubao-login-state",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:get-doubao-login-state",
+    "request": {},
+    "result": {
+      "loginState": {
+        "status": "unknown"
+      }
+    }
+  },
+  {
+    "capability": "content.openDoubaoLogin",
+    "channel": "content:open-doubao-login",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:open-doubao-login",
+    "request": {},
+    "result": {
+      "loginState": {
+        "status": "unknown"
+      }
+    }
+  },
+  {
+    "capability": "content.collectDoubaoOne",
+    "channel": "content:collect-doubao-one",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:collect-doubao-one",
+    "request": {
+      "clientId": "fixture-1",
+      "questionId": "fixture-1"
+    },
+    "result": {
+      "research": {
+        "id": "fixture-1",
+        "clientId": "fixture-1",
+        "references": [],
+        "collectionMethod": "automatic"
+      }
+    }
+  },
+  {
+    "capability": "content.previewDoubaoBatch",
+    "channel": "content:preview-doubao-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:preview-doubao-batch",
+    "request": {
+      "clientIds": [
+        "fixture-1"
+      ],
+      "mode": "missing"
+    },
+    "result": {
+      "preview": {
+        "mode": "missing",
+        "clientCount": 0,
+        "taskCount": 0,
+        "skippedExisting": 0,
+        "disabledQuestions": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.startDoubaoBatch",
+    "channel": "content:start-doubao-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:start-doubao-batch",
+    "request": {
+      "tasks": []
+    },
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.startPreparedDoubaoBatch",
+    "channel": "content:start-prepared-doubao-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:start-prepared-doubao-batch",
+    "request": {
+      "tasks": []
+    },
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.pauseDoubaoBatch",
+    "channel": "content:pause-doubao-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:pause-doubao-batch",
+    "request": {},
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.resumeDoubaoBatch",
+    "channel": "content:resume-doubao-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:resume-doubao-batch",
+    "request": {},
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.stopDoubaoBatch",
+    "channel": "content:stop-doubao-batch",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:stop-doubao-batch",
+    "request": {},
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.retryFailedDoubao",
+    "channel": "content:retry-failed-doubao",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:retry-failed-doubao",
+    "request": {},
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.getDoubaoQueueState",
+    "channel": "content:get-doubao-queue-state",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:get-doubao-queue-state",
+    "request": {},
+    "result": {
+      "queue": {
+        "status": "idle",
+        "currentTaskId": null,
+        "completed": 0,
+        "total": 0,
+        "waitRemainingMs": 0,
+        "tasks": []
+      }
+    }
+  },
+  {
+    "capability": "content.saveManualResearch",
+    "channel": "content:save-manual-research",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:save-manual-research",
+    "request": {
+      "clientId": "fixture-1",
+      "questionId": "fixture-1",
+      "answerText": "fixture-1"
+    },
+    "result": {
+      "research": {
+        "id": "fixture-1",
+        "clientId": "fixture-1",
+        "references": [],
+        "collectionMethod": "automatic"
+      }
+    }
+  },
+  {
+    "capability": "content.doubaoQueueChanged",
+    "channel": "content:doubao-queue-state",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:content:doubao-queue-state",
+    "event": {
+      "status": "idle",
+      "currentTaskId": null,
+      "completed": 0,
+      "total": 0,
+      "waitRemainingMs": 0,
+      "tasks": []
+    }
+  },
+  {
+    "capability": "publication.listForArticles",
+    "channel": "publication:list-for-articles",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:publication:list-for-articles",
+    "request": {
+      "clientId": "fixture-1",
+      "articleIds": []
+    },
+    "result": {
+      "records": []
+    }
+  },
+  {
+    "capability": "publication.reconcile",
+    "channel": "publication:reconcile",
+    "owner": "content",
+    "productionCaller": "desktop/preload.js:publication:reconcile",
+    "request": {
+      "publicationId": "fixture-1",
+      "status": "published",
+      "reasonCode": "A",
+      "confirmed": true
+    },
+    "result": {
+      "record": {
+        "publicationId": "fixture-1",
+        "clientId": "fixture-1",
+        "articleId": null,
+        "articleKey": "fixture-1",
+        "targetKey": "fixture-1",
+        "platformId": null,
+        "mediaResourceId": null,
+        "displayName": null,
+        "status": "queued",
+        "createdAt": "fixture-1",
+        "updatedAt": "fixture-1",
+        "attempts": [],
+        "attemptId": null,
+        "remoteId": null,
+        "remoteUrl": null,
+        "errorCode": null,
+        "reasonCode": null
+      }
+    }
+  },
+  {
+    "capability": "workspace.getRuntimeIdentity",
+    "channel": "workspace:get-runtime-identity",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:get-runtime-identity",
+    "request": {},
+    "result": {
+      "workspaceRuntimeId": "fixture-1",
+      "revision": 0
+    }
+  },
+  {
+    "capability": "media.getBalance",
+    "channel": "media:get-balance",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:get-balance",
+    "request": {},
+    "result": {
+      "balance": "fixture-1"
+    }
+  },
+  {
+    "capability": "media.stopSubmit",
+    "channel": "media:stop-submit",
+    "owner": "media",
+    "productionCaller": "desktop/preload.js:media:stop-submit",
+    "request": {},
+    "result": {
+      "stopped": false
+    }
+  },
+  {
+    "capability": "generation.runtimeChanged",
+    "channel": "content:generation-batch-state",
+    "owner": "generation",
+    "productionCaller": "desktop/preload.js:content:generation-batch-state",
+    "event": {
+      "runtimeId": "runner-1",
+      "sequence": 0,
+      "batchId": null,
+      "status": "idle",
+      "counts": null,
+      "updatedAt": "2026-07-26T00:00:00.000Z"
+    }
+  },
+  {
+    "capability": "workspace.invalidated",
+    "channel": "workspace:data-invalidated",
+    "owner": "workspace",
+    "productionCaller": "desktop/preload.js:workspace:data-invalidated",
+    "event": {
+      "workspaceRuntimeId": "fixture-1",
+      "revision": 1,
+      "scopes": [],
+      "reasonCode": "fixture-1"
+    }
+  }
+]);
+
+module.exports = { productionIpcContractFixtures };

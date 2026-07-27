@@ -2,10 +2,10 @@ export type MediaType = 'image' | 'video' | 'audio' | 'document';
 
 export interface IpcError {
   code: string;
-  message: string;
-  platformId?: string;
-  templateId?: string;
-  diagnosticCode?: string;
+  category: 'validation' | 'authentication' | 'transport' | 'remote' | 'storage' | 'conflict' | 'internal';
+  retryability: 'never' | 'safe' | 'manual-check';
+  userMessage: string;
+  diagnosticId?: string;
 }
 
 export type IpcResponse<T> =
@@ -165,35 +165,22 @@ export interface WorkspaceSelectionToken {
 
 export interface WorkspaceSelection {
   token: string;
-  path: string;
   kind: WorkspaceSelectionKind;
-}
-
-export interface WorkspaceValidation {
-  kind: WorkspaceSelectionKind;
-  error?: IpcError;
+  label: string;
 }
 
 export interface WorkspaceBootstrapState {
   state: WorkspaceBootstrapStatus;
-  workspacePath?: string | null;
-  envOverride?: boolean;
-  error?: IpcError;
-  selection?: WorkspaceSelection;
+  configured: boolean;
+  environmentManaged: boolean;
+  label: string;
+  selection: WorkspaceSelection | null;
+  errorCode: string | null;
+  changed: boolean | null;
 }
 
-export interface WorkspaceCurrent {
-  workspacePath: string | null;
-  envOverride: boolean;
-  validation: WorkspaceValidation | null;
-}
-
-export interface WorkspaceConfirmationResult {
-  state: WorkspaceBootstrapStatus;
-  workspacePath?: string | null;
-  envOverride?: boolean;
-  changed?: boolean;
-}
+export type WorkspaceCurrent = WorkspaceBootstrapState;
+export type WorkspaceConfirmationResult = WorkspaceBootstrapState;
 
 export interface MediaResource {
   resourceId: string;
@@ -215,8 +202,6 @@ export interface Article {
   tags: string[];
   selectedResources: MediaResource[];
   lastModified: string;
-  // IPC fields from scanArticles service
-  filePath: string;
   autoTitle: string;
   remark: string;
   hasImages: boolean;
@@ -769,8 +754,6 @@ export interface ContentSubmissionBatchItem {
   status: ContentSubmissionItemStatus;
   contentHash: string;
   filename?: string;
-  filePath?: string;
-  sidecarPath?: string;
   publicationId?: string | null;
   attemptId?: string | null;
   articleKey?: string;
@@ -813,7 +796,6 @@ export interface ContentSubmissionBatchRecord {
 export interface ContentSubmissionPlatform {
   id: string;
   displayName: string;
-  scanDir: string;
   contentQueueImport: boolean;
 }
 export interface ContentSubmissionActionPlanItem {
@@ -858,8 +840,7 @@ export interface PlatformArticle {
   accountProfileId?: string;
   sourceArticleState?: 'active' | 'trashed' | 'missing' | string | null;
   reasonCode?: string | null;
-  archiveError?:
-    string | { code?: string | null; message?: string | null } | null;
+  archiveErrorCode?: string | null;
   remoteStatus?: 'published' | 'failed' | 'uncertain' | string | null;
 }
 
@@ -887,9 +868,16 @@ export type WorkspaceDataInvalidationScope =
   | 'contentSources'
   | string;
 export interface WorkspaceDataInvalidatedEvent {
+  schemaVersion?: 1;
+  workspaceRuntimeId: string;
   revision: number;
   scopes: WorkspaceDataInvalidationScope[];
-  reasonCode?: string | null;
+  reasonCode: string;
+}
+
+export interface WorkspaceRuntimeIdentity {
+  workspaceRuntimeId: string;
+  revision: number;
 }
 
 export interface ArticleAttentionItem {
@@ -1005,7 +993,6 @@ export interface FailedPublicationRetryResult {
 export interface PlatformTarget {
   id: string;
   displayName: string;
-  scanDir: string;
   loginAvailable?: boolean;
 }
 
@@ -1058,7 +1045,7 @@ export interface PlatformTerminalResult {
     task: PlatformTaskReference;
     status: string;
     publicationStatus?: string | null;
-    error?: string | null;
+    errorCode?: string | null;
   }>;
 }
 
@@ -1085,13 +1072,13 @@ export interface PlatformSubmitPlan {
 export interface PlatformSubmitTask {
   sourcePlatformId: string;
   filename: string;
-  filePath?: string;
   targetPlatformId: string;
 }
 
 export interface PlatformSubmitResult {
   ok: number;
   fail: number;
+  uncertain: number;
   skipped: number;
   results: PlatformTaskResult[];
   archiveSummary?: {
@@ -1120,9 +1107,8 @@ export interface PlatformSubmitResult {
 
 export interface PlatformTaskResult {
   task: PlatformSubmitTask;
-  status: 'success' | 'failed' | 'pending';
+  status: 'success' | 'published' | 'submitted' | 'failed' | 'uncertain' | 'pending' | string;
   publicationStatus?: PublicationRecordStatus | null;
-  error?: string;
-  archiveError?:
-    string | { code?: string | null; message?: string | null } | null;
+  errorCode?: string | null;
+  archiveErrorCode?: string | null;
 }

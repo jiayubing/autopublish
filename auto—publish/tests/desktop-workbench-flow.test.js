@@ -11,7 +11,7 @@ describe("desktop workbench flow", function () {
   it("loads the React production renderer from the packaged dist entry", function () {
     const main = read("desktop/main.js");
     const packaging = read("electron-builder.alpha.yml");
-    assert.match(main, /media-workbench["\\']?, ["\\']dist["\\']?/);
+    assert.match(main, /media-workbench["\\']?,\s*["\\']dist["\\']?/);
     assert.match(main, /rendererEntryPath/);
     assert.match(packaging, /media-workbench\/dist/);
     assert.doesNotMatch(packaging, /desktop[\\/]renderer/);
@@ -39,7 +39,9 @@ describe("desktop workbench flow", function () {
     );
     assert.match(platform, /selectedArticles/);
     assert.match(platform, /selectedPlatformIds/);
-    assert.match(platform, /submitPlatformSelection/);
+    assert.match(platform, /usePlatformFeature/);
+    assert.match(platform, /submissionController\.submit/);
+    assert.doesNotMatch(platform, /submitPlatformSelection/);
     assert.match(platform, /isConfirming/);
     assert.match(platform, /accountProfiles: Object\.fromEntries/);
     assert.match(platform, /article\.accountProfileId/);
