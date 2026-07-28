@@ -31,14 +31,14 @@ Canonical registry：`auto—publish/desktop/ipc/contracts/production-registry.j
 | --- | ---: | ---: | ---: | ---: |
 | workspace | 3 | 5 | 1 | 9 |
 | settings | 5 | 9 | 0 | 14 |
-| media | 10 | 8 | 0 | 18 |
+| media | 10 | 9 | 0 | 19 |
 | platform | 4 | 5 | 1 | 10 |
 | content | 24 | 29 | 2 | 55 |
 | attention | 3 | 1 | 0 | 4 |
 | generation | 7 | 10 | 1 | 18 |
-| **合计** | **56** | **67** | **5** | **128** |
+| **合计** | **56** | **68** | **5** | **129** |
 
-128/128 每项包含独立 request/result（event项为event）fixture、owner和production caller；registry表驱动测试对全部 capability 遍历 unknown version、unknown field、missing required field、unsafe/raw error。destructive、event/dispose、scope identity、媒体容量与敏感边界另有纵向RED→GREEN测试。
+129/129 每项包含独立 request/result（event项为event）fixture、owner和production caller；registry表驱动测试对全部 capability 遍历 unknown version、unknown field、missing required field、unsafe/raw error。destructive、event/dispose、scope identity、媒体容量与敏感边界另有纵向RED→GREEN测试。
 
 Auth Phase 07豁免清单：invoke `auth:get-state`、`auth:login`、`auth:change-password`、`auth:refresh`、`auth:logout`；event `auth-state-changed`。它们只存在于显式 allowlist，不提供通用 invoke/on/channel。
 
@@ -199,9 +199,44 @@ ConfirmationHost 为 AuthGate 内根级单实例：FIFO、默认焦点取消、T
 
 - 现场订单标题带完整UUID文件名的RED已在公开`prepareMediaPublicationCommands()` seam用三个互异值稳定复现：Renderer保存标题、文件首行标题、文件basename。`resolveSubmissions`原本已正确合并`draft.title`，但media command preparation只把filename/fileBaseName传给parser，最终`title`必然退化为basename。现将已验证保存标题原样传入command，article identity继续按最终有效title+body派生。
 - 供应方`/api/media/send`契约要求`content`为HTML；旧PublicationWorkflow路径发送的是去掉首行后的原始Markdown/文本。main现将正文分块投影为有效HTML：段落为`p`、Markdown标题为`h1`至`h6`、段内换行为`br`，并转义`&<>\"`，不会把独立标题行、UUID文件名或可执行原始HTML混入正文。没有向Renderer暴露正文payload或放宽Typed IPC。
-- `third_id`来源已明确：`media-publication-submission-service`为每次尝试生成`attempt-${crypto.randomUUID()}`，PublicationWorkflow/MediaPublisher原样传入供应方`third_id`。它是我方幂等/追踪attempt identity，不是远端订单号；远端订单事实来自响应`order_nid/orderNid`并持久化为remote evidence。后续若修改展示值，应保持内部attempt identity唯一且不可与远端order ID混淆。
+- `third_id`默认来源为`media-publication-submission-service`为每次尝试生成的`attempt-${crypto.randomUUID()}`；若操作员保存了第三方标识，MediaPublisher只替换供应方multipart中的`third_id`。我方幂等/追踪attempt identity、OperationalStore evidence与重复发布保护始终保留内部唯一值；远端订单事实仍只来自响应`order_nid/orderNid`。
 - 合成multipart测试逐字段锁定`resource_id/title/content/third_id`；publisher fake同时核对完全相同的title、HTML body和attempt identity。全部使用临时Markdown与内存fetch/client，未调用真实`media/send`或产生费用。
 - 最终证据：媒体专项72/72；`npm test`221文件1222/1222、0 fail/skip；Auth16/16、links180/180、packaging33/33；三套typecheck、lint、format、Renderer build2153 modules、preload231,751 bytes、pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1和`git diff --check`通过。最新exe为225,485,824 bytes，2026-07-28 00:59:49。Phase 07未启动。
+
+### 第三方标识与投稿后文章预览状态收口（2026-07-28）
+
+- 付费媒体页新增由settings feature拥有的“第三方标识”控件，复用既有`platform-settings:get/save` Typed IPC；应用配置长期保存且可替换，最大128字符，环境变量`XQW_THIRD_ID`优先且只读。留空时继续使用每次投稿的内部唯一attempt ID。
+- workspace runtime只向MediaPublisher注入只读`thirdIdProvider`。供应方请求可使用操作员标识，但内部attempt token、busy/error/finalize owner、OperationalStore evidence与审计identity均不变；没有修改OperationalStore、ContentStore、Publisher Domain/Application冻结接口或增加兼容wrapper。
+- 投稿后预览只剩标题的根因是summary/detail语义在Renderer bridge被抹平：`media.scanArticles`合法不含正文，旧normalizer却补出`content:""`，重扫后覆盖已打开preview。bridge现拆分article summary与preview normalizer，media feature按同一article identity合并并保留已加载详情；文件不存在时仍关闭active article。
+- RED→GREEN使用真实Renderer build、内存desktop bridge和submit计数fake：投稿后summary重扫正文保留，第三方标识读取与替换成功且`submitCalls=0`，900/1180/1280视口无横向溢出。持久化/替换、129字符拒绝、自定义/回退`third_id`及内部attempt隔离均有独立fixture。
+- 完整验证：定向媒体/settings 23/23、Renderer responsive11/11；`npm test`221文件1226/1226、0 fail/skip；Auth16/16、links180/180、packaging33/33；lint、三套typecheck、format、Renderer build2154 modules、preload231,843 bytes、pack smoke、最新Renderer Electron focus1/1、packaged ASAR3/3及`git diff --check`通过。最新exe为225,485,824 bytes，2026-07-28 04:16:54。
+- 全部新增测试只使用临时合成配置/fixture和内存fake，未连接真实workspace、账号、Auth数据库、内容库或`media/send`；未stage/commit/push/PR。Phase 06保持`COMPLETE`，Phase 07保持`NOT_STARTED`。
+
+### 付费媒体订单快照与供应商状态显示收口（2026-07-28）
+
+- “金额为0、标题无标题”的根因不是历史客户资料不兼容，而是OperationalStore订单read model没有提交时展示事实，Renderer又把缺失金额强制显示为0。新提交现在把`titleSnapshot/filename/resourceNameSnapshot/quotedPrice`保存到既有submission item payload；订单服务按attempt identity只读关联。历史缺失值明确显示“未记录”，投稿报价不冒充最终扣款/结算金额。
+- 供应商状态与内部publication状态是两个不同事实。订单页严格显示供应商闭集：`0 待安排`、`1 已安排`、`2 已发布`、`4 已退稿`、`9 售后中`；内部canonical状态只供PublicationWorkflow控制，不再进入页面分类。
+- 为持久保留`0`与`1`的区别，Phase 03只窄修既有remote-order evidence projection：`reconcileRemoteOrder()`接受可选且严格验证的`remoteStatusCode`，保存进既有`payload_json`并由`listRemoteOrders()`返回。没有schema migration，没有兼容wrapper，没有修改Publisher、ContentStore或Domain/Application冻结接口；该窄修已验证完成，Phase 03恢复`COMPLETE`。
+- 回归使用临时SQLite与fake supplier response：五种状态逐项通过，状态`1`同步后关闭/重开store仍为`1/已安排`，真实Renderer使用供应商分类并显示保存标题与投稿报价。任何预检和同步fixture的真实付费submit计数均为0。
+- 最终证据：媒体/订单定向24/24、真实Renderer订单1/1、`npm test`221文件1230/1230、Auth16/16、links180/180、packaging33/33；lint、format、三套typecheck、Renderer build2154 modules、preload231,843 bytes、标准pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1与diff check通过。新制品`release-alpha/win-unpacked/鱼饼大王.exe`为225,485,824 bytes，2026-07-28 08:55:36。
+- 未stage/commit/push/PR，未连接真实workspace、账号、供应商或付费投稿服务。Phase 06保持`COMPLETE`，Phase 07保持`NOT_STARTED`。
+
+### 付费媒体订单报价关联、精简展示与发布链接收口（2026-07-28）
+
+- 新订单仍显示“未记录”的真实根因是attempt identity生成晚于submission batch创建：快照已保存标题/媒体/报价，但payload没有attemptId，订单read model无法把remote order与快照关联。现在每个command在batch创建前生成唯一attemptId，batch payload与PublicationWorkflow command共享同一值；没有用标题、文件名或资源ID做模糊关联。
+- 新增真实纵向fixture：付费提交只使用临时SQLite和fake workflow，经`media submission service → OperationalStore → listOrderViews()`后标题、媒体名和`36.5`投稿报价同时可见。旧历史订单若当时没有保存快照仍明确显示“未记录”，不伪造价格。
+- 订单页删除源文件、内部publication状态、内部记录ID和资源ID；只显示标题、媒体、供应商订单状态、投稿报价、订单号、必要时间与发布链接。搜索不再依赖源文件名。
+- 新增`media.openPublishedUrl`精确Typed IPC command，inventory更新为129/129（56 query、68 command、5 event；media 19项）。Renderer只提交orderNid；main从当前workspace OperationalStore解析已发布订单的持久HTTPS evidence，再调用`openExternal`。未发布、缺失URL、HTTP/带凭据URL及shell失败均返回SafeOperationalError；Renderer不能提供任意URL，也没有新增通用invoke/on/channel。
+- RED→GREEN覆盖报价真实链、HTTPS evidence边界、19项media contract、129项registry公共反例、media command owner及真实Renderer。页面回归确认“源文件”和“发布记录”均为0个，点击“打开发布链接”只传订单号。
+- 最终门禁：媒体/Typed IPC/API surface 38/38、workspace/composition/security 46/46、真实Renderer订单1/1；`npm test`221文件1232/1232、Auth16/16、links180/180、packaging33/33；lint、format、三套typecheck、Renderer build2154 modules、preload234,062 bytes、标准pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1及diff check通过。
+- 新制品`release-alpha/win-unpacked/鱼饼大王.exe`为225,485,824 bytes，2026-07-28 10:31:32。全部投稿/同步测试使用fake，真实付费submit为0；未stage/commit/push/PR。Phase 06保持`COMPLETE`，Phase 07保持`NOT_STARTED`。
+
+### 付费媒体供应商字符串报价收口（2026-07-28）
+
+- 新订单标题和媒体名正常而报价仍“未记录”的根因是供应商资源缓存中的`price`为数字字符串。预检会规范化它，但正式提交解析保留字符串，不可变报价快照此前只接受number，因此只丢报价；不是旧资料不兼容，也不是attempt identity再次失配。
+- `resolveSubmissions`现在按既有0..100,000,000边界把合法数字字符串规范化为number；submission snapshot owner复核相同边界。非法、缺失或超限报价不转成0，历史缺失快照不使用当前资源价格倒填。
+- RED→GREEN覆盖真实Typed IPC registrar提交形态和临时SQLite订单投影链。媒体/Renderer定向37/37、全仓221文件1233/1233、Auth16/16、links180/180、packaging33/33、三套typecheck、lint、format、Renderer2154 modules、preload234,062 bytes、pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1及diff check通过。
+- 新制品`release-alpha/win-unpacked/鱼饼大王.exe`为225,485,824 bytes，2026-07-28 10:59:58。测试只使用合成资源、临时SQLite和fake workflow，真实付费submit为0；未stage/commit/push/PR，Phase 06保持`COMPLETE`，Phase 07保持`NOT_STARTED`。
 
 ## 8. Phase 07入口
 

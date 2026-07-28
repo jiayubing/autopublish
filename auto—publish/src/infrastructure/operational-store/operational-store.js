@@ -1497,6 +1497,10 @@ function createOperationalStore(options) {
             articleId: row.article_id,
             mediaResourceId: target.mediaResourceId || null,
             status: row.status,
+            remoteStatusCode:
+              typeof evidence.remoteStatusCode === "string"
+                ? evidence.remoteStatusCode
+                : null,
             remoteUrl: evidence.remoteUrl || null,
             createdAt: row.created_at,
           });
@@ -1528,6 +1532,11 @@ function createOperationalStore(options) {
           throw fail("OPERATIONAL_ORDER_NOT_FOUND");
         const outcome = v.outcome;
         if (
+          outcome.remoteStatusCode !== undefined &&
+          !["0", "1", "2", "4", "9"].includes(outcome.remoteStatusCode)
+        )
+          throw fail("OPERATIONAL_ORDER_RECONCILE_INVALID");
+        if (
           outcome.status === "published" &&
           (typeof outcome.remoteUrl !== "string" ||
             !/^https:\/\//.test(outcome.remoteUrl))
@@ -1540,6 +1549,9 @@ function createOperationalStore(options) {
           throw fail("OPERATIONAL_ORDER_RECONCILE_INVALID");
         const evidence = {
           remoteId: row.remote_id,
+          ...(outcome.remoteStatusCode !== undefined
+            ? { remoteStatusCode: outcome.remoteStatusCode }
+            : {}),
           ...(outcome.status === "published"
             ? { remoteUrl: outcome.remoteUrl }
             : {}),

@@ -51,26 +51,46 @@ function assertContractError(action, expectedCodes, message) {
   assert.ok(expectedCodes.includes(caught.code), `${message}: ${caught.code}`);
 }
 
-test("all 128 production capabilities have independent legal fixtures, owners, and caller records", () => {
+test("all 129 production capabilities have independent legal fixtures, owners, and caller records", () => {
   const contracts = productionIpcRegistry.list();
-  const preload = fs.readFileSync(path.resolve(__dirname, "../desktop/preload.js"), "utf8");
-  assert.equal(contracts.length, 128);
-  assert.equal(productionIpcContractFixtures.length, 128);
-  assert.equal(new Set(productionIpcContractFixtures.map((entry) => entry.capability)).size, 128);
-  assert.equal(new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size, 128);
+  const preload = fs.readFileSync(
+    path.resolve(__dirname, "../desktop/preload.js"),
+    "utf8",
+  );
+  assert.equal(contracts.length, 129);
+  assert.equal(productionIpcContractFixtures.length, 129);
+  assert.equal(
+    new Set(productionIpcContractFixtures.map((entry) => entry.capability))
+      .size,
+    129,
+  );
+  assert.equal(
+    new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size,
+    129,
+  );
 
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);
     assert.ok(contract, fixture.capability);
     assert.equal(contract.channel, fixture.channel, fixture.capability);
-    assert.ok(FEATURE_OWNERS.has(fixture.owner), `${fixture.capability}: ${fixture.owner}`);
-    assert.equal(contract.feature, fixture.owner, `${fixture.capability}: contract owner`);
+    assert.ok(
+      FEATURE_OWNERS.has(fixture.owner),
+      `${fixture.capability}: ${fixture.owner}`,
+    );
+    assert.equal(
+      contract.feature,
+      fixture.owner,
+      `${fixture.capability}: contract owner`,
+    );
     assert.equal(
       fixture.productionCaller,
       `desktop/preload.js:${fixture.channel}`,
       fixture.capability,
     );
-    assert.ok(preload.includes(JSON.stringify(fixture.channel)), `${fixture.capability}:caller`);
+    assert.ok(
+      preload.includes(JSON.stringify(fixture.channel)),
+      `${fixture.capability}:caller`,
+    );
 
     if (contract.kind === "event") {
       const encoded = productionIpcRegistry.event(contract, fixture.event);
@@ -80,13 +100,19 @@ test("all 128 production capabilities have independent legal fixtures, owners, a
         fixture.capability,
       );
     } else {
-      const encodedRequest = productionIpcRegistry.encodeRequest(contract, fixture.request);
+      const encodedRequest = productionIpcRegistry.encodeRequest(
+        contract,
+        fixture.request,
+      );
       assert.deepEqual(
         productionIpcRegistry.parseRequest(contract, encodedRequest),
         fixture.request,
         `${fixture.capability}:request`,
       );
-      const encodedSuccess = productionIpcRegistry.success(contract, fixture.result);
+      const encodedSuccess = productionIpcRegistry.success(
+        contract,
+        fixture.result,
+      );
       assert.deepEqual(
         productionIpcRegistry.parseSuccess(contract, encodedSuccess),
         fixture.result,
@@ -102,44 +128,65 @@ test("shared registry matrix rejects unknown version and unknown fields for ever
     if (contract.kind === "event") {
       const encoded = productionIpcRegistry.event(contract, fixture.event);
       assertContractError(
-        () => productionIpcRegistry.parseEvent(contract, { ...encoded, schemaVersion: 2 }),
+        () =>
+          productionIpcRegistry.parseEvent(contract, {
+            ...encoded,
+            schemaVersion: 2,
+          }),
         ["IPC_SCHEMA_UNSUPPORTED", "IPC_EVENT_INVALID"],
         `${fixture.capability}:version`,
       );
       assertContractError(
-        () => productionIpcRegistry.parseEvent(contract, { ...encoded, unknownField: true }),
+        () =>
+          productionIpcRegistry.parseEvent(contract, {
+            ...encoded,
+            unknownField: true,
+          }),
         ["IPC_UNKNOWN_FIELD", "IPC_EVENT_INVALID"],
         `${fixture.capability}:unknown-field`,
       );
       continue;
     }
 
-    const request = productionIpcRegistry.encodeRequest(contract, fixture.request);
+    const request = productionIpcRegistry.encodeRequest(
+      contract,
+      fixture.request,
+    );
     assert.throws(
-      () => productionIpcRegistry.parseRequest(contract, { ...request, schemaVersion: 2 }),
+      () =>
+        productionIpcRegistry.parseRequest(contract, {
+          ...request,
+          schemaVersion: 2,
+        }),
       { code: "IPC_SCHEMA_UNSUPPORTED" },
       `${fixture.capability}:request-version`,
     );
     assert.throws(
-      () => productionIpcRegistry.parseRequest(contract, {
-        ...request,
-        payload: { ...request.payload, unknownField: true },
-      }),
+      () =>
+        productionIpcRegistry.parseRequest(contract, {
+          ...request,
+          payload: { ...request.payload, unknownField: true },
+        }),
       { code: "IPC_UNKNOWN_FIELD" },
       `${fixture.capability}:request-unknown-field`,
     );
 
     const success = productionIpcRegistry.success(contract, fixture.result);
     assert.throws(
-      () => productionIpcRegistry.parseSuccess(contract, { ...success, schemaVersion: 2 }),
+      () =>
+        productionIpcRegistry.parseSuccess(contract, {
+          ...success,
+          schemaVersion: 2,
+        }),
       { code: "IPC_SCHEMA_UNSUPPORTED" },
       `${fixture.capability}:result-version`,
     );
     assert.throws(
-      () => productionIpcRegistry.parseSuccess(contract, {
-        ...success,
-        data: { ...success.data, unknownField: true },
-      }),
+      () =>
+        productionIpcRegistry.parseSuccess(contract, {
+          ...success,
+          data: { ...success.data, unknownField: true },
+        }),
       { code: "IPC_UNKNOWN_FIELD" },
       `${fixture.capability}:result-unknown-field`,
     );
@@ -154,7 +201,8 @@ test("shared registry matrix rejects missing required fields where applicable", 
       if (!key) continue;
       const encoded = productionIpcRegistry.event(contract, fixture.event);
       assert.throws(
-        () => productionIpcRegistry.parseEvent(contract, withoutKey(encoded, key)),
+        () =>
+          productionIpcRegistry.parseEvent(contract, withoutKey(encoded, key)),
         { code: "IPC_EVENT_INVALID" },
         `${fixture.capability}:event-missing-${key}`,
       );
@@ -163,12 +211,16 @@ test("shared registry matrix rejects missing required fields where applicable", 
 
     const [requestKey] = requiredKeys(contract.request);
     if (requestKey) {
-      const encoded = productionIpcRegistry.encodeRequest(contract, fixture.request);
+      const encoded = productionIpcRegistry.encodeRequest(
+        contract,
+        fixture.request,
+      );
       assert.throws(
-        () => productionIpcRegistry.parseRequest(contract, {
-          ...encoded,
-          payload: withoutKey(encoded.payload, requestKey),
-        }),
+        () =>
+          productionIpcRegistry.parseRequest(contract, {
+            ...encoded,
+            payload: withoutKey(encoded.payload, requestKey),
+          }),
         { code: "IPC_REQUEST_INVALID" },
         `${fixture.capability}:request-missing-${requestKey}`,
       );
@@ -178,10 +230,11 @@ test("shared registry matrix rejects missing required fields where applicable", 
     if (resultKey) {
       const encoded = productionIpcRegistry.success(contract, fixture.result);
       assert.throws(
-        () => productionIpcRegistry.parseSuccess(contract, {
-          ...encoded,
-          data: withoutKey(encoded.data, resultKey),
-        }),
+        () =>
+          productionIpcRegistry.parseSuccess(contract, {
+            ...encoded,
+            data: withoutKey(encoded.data, resultKey),
+          }),
         { code: "IPC_RESULT_INVALID" },
         `${fixture.capability}:result-missing-${resultKey}`,
       );
@@ -215,13 +268,21 @@ test("shared registry matrix closes unsafe and raw errors for every invoke capab
 });
 
 test("the six Phase 07 Auth exemptions are explicit and absent from the production registry", () => {
-  const preload = fs.readFileSync(path.resolve(__dirname, "../desktop/preload.js"), "utf8");
+  const preload = fs.readFileSync(
+    path.resolve(__dirname, "../desktop/preload.js"),
+    "utf8",
+  );
   for (const channel of [...AUTH_INVOKE_EXEMPTIONS, ...AUTH_EVENT_EXEMPTIONS]) {
     assert.equal(productionIpcRegistry.byChannel(channel), null, channel);
-    assert.match(preload, new RegExp(`[` + "\\\"'" + `]${channel}[` + "\\\"'" + `]`), channel);
+    assert.match(
+      preload,
+      new RegExp(`[` + "\\\"'" + `]${channel}[` + "\\\"'" + `]`),
+      channel,
+    );
   }
-  const authChannels = [...preload.matchAll(/["'](auth:[a-z-]+|auth-state-changed)["']/g)]
-    .map((match) => match[1]);
+  const authChannels = [
+    ...preload.matchAll(/["'](auth:[a-z-]+|auth-state-changed)["']/g),
+  ].map((match) => match[1]);
   assert.deepEqual(
     [...new Set(authChannels)].sort(),
     [...AUTH_INVOKE_EXEMPTIONS, ...AUTH_EVENT_EXEMPTIONS].sort(),

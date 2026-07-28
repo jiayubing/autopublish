@@ -206,6 +206,9 @@ authenticatedRuntime = createAuthenticatedRuntime({
       userDataPath: runtimeContext.userDataPath,
       sessionDataPath: runtimeContext.sessionDataPath,
       authService: authService,
+      openExternal: function (url) {
+        return shell.openExternal(url);
+      },
     });
     workspaceRuntime = nextRuntime;
     await nextRuntime.start(bootstrapState);

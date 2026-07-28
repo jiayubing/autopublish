@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   addToPool,
   buildConfirmation,
@@ -6,6 +6,7 @@ import {
   getDraft,
   getDrafts,
   getOrders,
+  openPublishedUrl,
   getPoolPage,
   getResourcePage,
   previewArticle,
@@ -18,9 +19,9 @@ import {
   stopSubmit,
   submitSelected,
   syncOrder,
-} from '../../bridge/media';
-import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
-import { createMediaFeature } from './media-feature.js';
+} from "../../bridge/media";
+import { useWorkspaceScope } from "../workspace/workspace-coordinator-context";
+import { createMediaFeature } from "./media-feature.js";
 
 export function useMediaFeature() {
   const featureRef = useRef<ReturnType<typeof createMediaFeature> | null>(null);
@@ -44,24 +45,41 @@ export function useMediaFeature() {
       stopSubmit,
       getOrders,
       syncOrder,
+      openPublishedUrl,
     });
   }
   const feature = featureRef.current;
-  useWorkspaceScope('mediaWorkbench', (event) => {
+  useWorkspaceScope("mediaWorkbench", (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (event.kind === 'initial' || event.kind === 'identity' || event.kind === 'runtime-switch') {
+    if (
+      event.kind === "initial" ||
+      event.kind === "identity" ||
+      event.kind === "runtime-switch"
+    ) {
       void feature.refresh(event.kind);
       return;
     }
     void feature.refreshWorkbench(event.kind);
   });
-  useWorkspaceScope('orders', (event) => {
+  useWorkspaceScope("orders", (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (event.kind === 'initial' || event.kind === 'identity' || event.kind === 'runtime-switch') return;
+    if (
+      event.kind === "initial" ||
+      event.kind === "identity" ||
+      event.kind === "runtime-switch"
+    )
+      return;
     void feature.refreshOrders(event.kind);
   });
   useEffect(() => () => feature.dispose(), [feature]);
-  return { snapshot: useSyncExternalStore(feature.subscribe, feature.getSnapshot, feature.getSnapshot), feature };
+  return {
+    snapshot: useSyncExternalStore(
+      feature.subscribe,
+      feature.getSnapshot,
+      feature.getSnapshot,
+    ),
+    feature,
+  };
 }

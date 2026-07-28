@@ -82,6 +82,21 @@ const COMMON_ERRORS = {
     retryability: "manual-check",
     userMessage: "投稿工作流当前不可用，请检查诊断信息。",
   },
+  MEDIA_ORDER_NOT_PUBLISHED: {
+    category: "validation",
+    retryability: "manual-check",
+    userMessage: "该订单尚未发布，暂时没有可打开的发布页面。",
+  },
+  MEDIA_ORDER_URL_UNAVAILABLE: {
+    category: "validation",
+    retryability: "manual-check",
+    userMessage: "该订单没有可安全打开的发布链接，请先同步订单。",
+  },
+  MEDIA_ORDER_OPEN_FAILED: {
+    category: "transport",
+    retryability: "safe",
+    userMessage: "无法打开发布页面，请稍后重试。",
+  },
 };
 
 const BASE_ERROR_CODES = [
@@ -95,7 +110,9 @@ function errors(...codes) {
   const errorCodes = [...new Set([...BASE_ERROR_CODES, ...codes])];
   return {
     errorCodes,
-    errors: Object.fromEntries(errorCodes.map((code) => [code, COMMON_ERRORS[code]])),
+    errors: Object.fromEntries(
+      errorCodes.map((code) => [code, COMMON_ERRORS[code]]),
+    ),
   };
 }
 
@@ -308,7 +325,11 @@ const mediaContracts = [
       success: resourcePage,
       fromArgs: oneObject,
       toArgs: (payload) => [
-        { keyword: payload.query, page: payload.page, pageSize: payload.pageSize },
+        {
+          keyword: payload.query,
+          page: payload.page,
+          pageSize: payload.pageSize,
+        },
       ],
     },
     ["MEDIA_RESOURCE_PAGE_SIZE_INVALID"],
@@ -467,6 +488,22 @@ const mediaContracts = [
       toArgs: (payload) => [payload.orderNid],
     },
     ["MEDIA_CONFIG_NOT_SET"],
+  ),
+  contract(
+    {
+      capability: "media.openPublishedUrl",
+      channel: "media:open-published-url",
+      kind: "command",
+      request: exactObject({ orderNid: identifier }),
+      success: completed,
+      fromArgs: (args) => ({ orderNid: args[0] }),
+      toArgs: (payload) => [payload.orderNid],
+    },
+    [
+      "MEDIA_ORDER_NOT_PUBLISHED",
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+      "MEDIA_ORDER_OPEN_FAILED",
+    ],
   ),
 ];
 

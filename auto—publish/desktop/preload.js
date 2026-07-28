@@ -1,10 +1,16 @@
 const { contextBridge, ipcRenderer: electronIpcRenderer } = require("electron");
-const { productionIpcRegistry } = require("./ipc/contracts/production-registry");
+const {
+  productionIpcRegistry,
+} = require("./ipc/contracts/production-registry");
 
 // Phase 07 owns Auth IPC. These six capabilities are the only temporary raw
 // transport exemptions; every business capability must exist in the registry.
 const AUTH_INVOKE_EXEMPTIONS = new Set([
-  "auth:get-state", "auth:login", "auth:change-password", "auth:refresh", "auth:logout",
+  "auth:get-state",
+  "auth:login",
+  "auth:change-password",
+  "auth:refresh",
+  "auth:logout",
 ]);
 const AUTH_EVENT_EXEMPTIONS = new Set(["auth-state-changed"]);
 const UNREGISTERED_FAILURE = Object.freeze({
@@ -20,10 +26,11 @@ const UNREGISTERED_FAILURE = Object.freeze({
 
 const eventListeners = new Map();
 const ipcRenderer = {
-  invoke: async function(channel, ...args) {
+  invoke: async function (channel, ...args) {
     const contract = productionIpcRegistry.byChannel(channel);
     if (!contract) {
-      if (AUTH_INVOKE_EXEMPTIONS.has(channel)) return electronIpcRenderer.invoke(channel, ...args);
+      if (AUTH_INVOKE_EXEMPTIONS.has(channel))
+        return electronIpcRenderer.invoke(channel, ...args);
       return UNREGISTERED_FAILURE;
     }
     if (contract.kind === "event") return UNREGISTERED_FAILURE;
@@ -32,29 +39,32 @@ const ipcRenderer = {
       const payload = contract.fromArgs ? contract.fromArgs(args) : args[0];
       request = productionIpcRegistry.encodeRequest(contract, payload);
     } catch (_) {
-      return productionIpcRegistry.failure(contract, { code: "IPC_REQUEST_INVALID" });
+      return productionIpcRegistry.failure(contract, {
+        code: "IPC_REQUEST_INVALID",
+      });
     }
     try {
-      const result = await electronIpcRenderer.invoke(
-        channel,
-        request,
-      );
+      const result = await electronIpcRenderer.invoke(channel, request);
       productionIpcRegistry.parseResult(contract, result);
       return result;
     } catch (_) {
-      return productionIpcRegistry.failure(contract, { code: "IPC_RESULT_INVALID" });
+      return productionIpcRegistry.failure(contract, {
+        code: "IPC_RESULT_INVALID",
+      });
     }
   },
   on: function(channel, listener) {
     const contract = productionIpcRegistry.byChannel(channel);
     if (!contract) {
-      if (AUTH_EVENT_EXEMPTIONS.has(channel)) return electronIpcRenderer.on(channel, listener);
+      if (AUTH_EVENT_EXEMPTIONS.has(channel))
+        return electronIpcRenderer.on(channel, listener);
       return undefined;
     }
     if (contract.kind !== "event") return undefined;
-    const wrapped = function(event, payload) {
-      try { listener(event, productionIpcRegistry.parseEvent(contract, payload)); }
-      catch (_) {}
+    const wrapped = function (event, payload) {
+      try {
+        listener(event, productionIpcRegistry.parseEvent(contract, payload));
+      } catch (_) {}
     };
     eventListeners.set(listener, wrapped);
     return electronIpcRenderer.on(channel, wrapped);
@@ -69,197 +79,578 @@ const ipcRenderer = {
 };
 
 function confirmWorkspaceSelection(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 ||
-    typeof input.token !== "string" || input.token.trim() === "") {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).length !== 1 ||
+    typeof input.token !== "string" ||
+    input.token.trim() === ""
+  ) {
     return Promise.reject(new TypeError("Confirmation token is invalid"));
   }
-  return ipcRenderer.invoke("workspace:confirm-selection", { token: input.token });
+  return ipcRenderer.invoke("workspace:confirm-selection", {
+    token: input.token,
+  });
 }
 
 const api = {
   auth: {
-    getState: function() { return ipcRenderer.invoke("auth:get-state"); },
-    login: function(loginName, password) { return ipcRenderer.invoke("auth:login", { loginName: loginName, password: password }); },
-    changePassword: function(loginName, currentPassword, newPassword) { return ipcRenderer.invoke("auth:change-password", { loginName: loginName, currentPassword: currentPassword, newPassword: newPassword }); },
-    refresh: function() { return ipcRenderer.invoke("auth:refresh"); },
-    logout: function() { return ipcRenderer.invoke("auth:logout"); },
+    getState: function() {
+      return ipcRenderer.invoke("auth:get-state");
+    },
+    login: function(loginName, password) {
+      return ipcRenderer.invoke("auth:login", {
+        loginName: loginName,
+        password: password,
+      });
+    },
+    changePassword: function(loginName, currentPassword, newPassword) {
+      return ipcRenderer.invoke("auth:change-password", {
+        loginName: loginName,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      });
+    },
+    refresh: function() {
+      return ipcRenderer.invoke("auth:refresh");
+    },
+    logout: function() {
+      return ipcRenderer.invoke("auth:logout");
+    },
     onStateChanged: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
+      var handler = function (event, payload) {
+        listener(payload);
+      };
       ipcRenderer.on("auth-state-changed", handler);
-      return function() { ipcRenderer.removeListener("auth-state-changed", handler); };
-    }
+      return function () {
+        ipcRenderer.removeListener("auth-state-changed", handler);
+      };
+    },
   },
   workspace: {
-    getBootstrapState: function() { return ipcRenderer.invoke("workspace:get-bootstrap-state"); },
-    chooseDirectory: function() { return ipcRenderer.invoke("workspace:choose-directory"); },
+    getBootstrapState: function() {
+      return ipcRenderer.invoke("workspace:get-bootstrap-state");
+    },
+    chooseDirectory: function() {
+      return ipcRenderer.invoke("workspace:choose-directory");
+    },
     confirmSelection: confirmWorkspaceSelection,
-    cancelSelection: function() { return ipcRenderer.invoke("workspace:cancel-selection"); },
-    getCurrent: function() { return ipcRenderer.invoke("workspace:get-current"); },
-    openCurrent: function() { return ipcRenderer.invoke("workspace:open-current"); },
-    requestSwitch: function() { return ipcRenderer.invoke("workspace:request-switch"); }
+    cancelSelection: function() {
+      return ipcRenderer.invoke("workspace:cancel-selection");
+    },
+    getCurrent: function() {
+      return ipcRenderer.invoke("workspace:get-current");
+    },
+    openCurrent: function() {
+      return ipcRenderer.invoke("workspace:open-current");
+    },
+    requestSwitch: function() {
+      return ipcRenderer.invoke("workspace:request-switch");
+    },
   },
   workspaceData: {
-    getRuntimeIdentity: function() { return ipcRenderer.invoke("workspace:get-runtime-identity"); },
+    getRuntimeIdentity: function() {
+      return ipcRenderer.invoke("workspace:get-runtime-identity");
+    },
     onInvalidated: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
+      var handler = function (event, payload) {
+        listener(payload);
+      };
       ipcRenderer.on("workspace:data-invalidated", handler);
-      return function() { ipcRenderer.removeListener("workspace:data-invalidated", handler); };
-    }
+      return function () {
+        ipcRenderer.removeListener("workspace:data-invalidated", handler);
+      };
+    },
   },
   aiProvider: {
-    getStatus: function() { return ipcRenderer.invoke("ai-provider:get-status"); },
-    save: function(input) { return ipcRenderer.invoke("ai-provider:save", input || {}); },
-    testConnection: function(input) { return ipcRenderer.invoke("ai-provider:test", input || {}); },
-    clear: function() { return ipcRenderer.invoke("ai-provider:clear"); }
+    getStatus: function() {
+      return ipcRenderer.invoke("ai-provider:get-status");
+    },
+    save: function(input) {
+      return ipcRenderer.invoke("ai-provider:save", input || {});
+    },
+    testConnection: function(input) {
+      return ipcRenderer.invoke("ai-provider:test", input || {});
+    },
+    clear: function() {
+      return ipcRenderer.invoke("ai-provider:clear");
+    },
   },
   platformSettings: {
-    getStatus: function(platformId) { return ipcRenderer.invoke("platform-settings:get-status", { platformId: platformId }); },
-    save: function(platformId, draft) { return ipcRenderer.invoke("platform-settings:save", { platformId: platformId, draft: draft }); },
-    test: function(platformId, draft) { return ipcRenderer.invoke("platform-settings:test", { platformId: platformId, draft: draft }); },
-    clear: function(platformId) { return ipcRenderer.invoke("platform-settings:clear", { platformId: platformId }); },
-    getLegacyStatus: function() { return ipcRenderer.invoke("platform-settings:get-legacy-status"); },
-    importLegacy: function(input) { return ipcRenderer.invoke("platform-settings:import-legacy", input || {}); }
+    getStatus: function(platformId) {
+      return ipcRenderer.invoke("platform-settings:get-status", {
+        platformId: platformId,
+      });
+    },
+    save: function(platformId, draft) {
+      return ipcRenderer.invoke("platform-settings:save", {
+        platformId: platformId,
+        draft: draft,
+      });
+    },
+    test: function(platformId, draft) {
+      return ipcRenderer.invoke("platform-settings:test", {
+        platformId: platformId,
+        draft: draft,
+      });
+    },
+    clear: function(platformId) {
+      return ipcRenderer.invoke("platform-settings:clear", {
+        platformId: platformId,
+      });
+    },
+    getLegacyStatus: function() {
+      return ipcRenderer.invoke("platform-settings:get-legacy-status");
+    },
+    importLegacy: function(input) {
+      return ipcRenderer.invoke("platform-settings:import-legacy", input || {});
+    },
   },
   storageMaintenance: {
-    getUsage: function() { return ipcRenderer.invoke("storage-maintenance:get-usage"); },
-    cleanCaches: function() { return ipcRenderer.invoke("storage-maintenance:clean-caches"); }
+    getUsage: function() {
+      return ipcRenderer.invoke("storage-maintenance:get-usage");
+    },
+    cleanCaches: function() {
+      return ipcRenderer.invoke("storage-maintenance:clean-caches");
+    },
   },
   runtimeDiagnostics: {
-    get: function() { return ipcRenderer.invoke("runtime-diagnostics:get"); },
-    browserSmoke: function() { return ipcRenderer.invoke("runtime-diagnostics:browser-smoke"); }
+    get: function() {
+      return ipcRenderer.invoke("runtime-diagnostics:get");
+    },
+    browserSmoke: function() {
+      return ipcRenderer.invoke("runtime-diagnostics:browser-smoke");
+    },
   },
   media: {
-    scanArticles: function() { return ipcRenderer.invoke("media:scan-articles"); },
-    previewArticle: function(filename) { return ipcRenderer.invoke("media:preview-article", filename); },
-    getDrafts: function() { return ipcRenderer.invoke("media:get-drafts"); },
-    getDraft: function(filename) { return ipcRenderer.invoke("media:get-draft", filename); },
-    setDraft: function(filename, draft) { return ipcRenderer.invoke("media:set-draft", filename, draft); },
-    removeDraft: function(filename) { return ipcRenderer.invoke("media:remove-draft", filename); },
-    buildConfirmation: function(articles) { return ipcRenderer.invoke("media:build-confirmation", articles); },
-    submitSelected: function(articles) { return ipcRenderer.invoke("media:submit-selected", articles); },
-    stopSubmit: function() { return ipcRenderer.invoke("media:stop-submit"); },
-    refreshResources: function(opts) { return ipcRenderer.invoke("media:refresh-resources", opts || {}); },
-    getResourcePage: function(opts) { return ipcRenderer.invoke("media:get-resource-page", opts || {}); },
-    searchResourcePage: function(opts) { return ipcRenderer.invoke("media:search-resource-page", opts || {}); },
-    getPool: function(opts) { return ipcRenderer.invoke("media:get-pool", opts); },
-    addToPool: function(resource) { return ipcRenderer.invoke("media:add-to-pool", resource); },
-    removeFromPool: function(resourceId) { return ipcRenderer.invoke("media:remove-from-pool", resourceId); },
-    getBalance: function() { return ipcRenderer.invoke("media:get-balance"); }
+    scanArticles: function() {
+      return ipcRenderer.invoke("media:scan-articles");
+    },
+    previewArticle: function(filename) {
+      return ipcRenderer.invoke("media:preview-article", filename);
+    },
+    getDrafts: function() {
+      return ipcRenderer.invoke("media:get-drafts");
+    },
+    getDraft: function(filename) {
+      return ipcRenderer.invoke("media:get-draft", filename);
+    },
+    setDraft: function(filename, draft) {
+      return ipcRenderer.invoke("media:set-draft", filename, draft);
+    },
+    removeDraft: function(filename) {
+      return ipcRenderer.invoke("media:remove-draft", filename);
+    },
+    buildConfirmation: function(articles) {
+      return ipcRenderer.invoke("media:build-confirmation", articles);
+    },
+    submitSelected: function(articles) {
+      return ipcRenderer.invoke("media:submit-selected", articles);
+    },
+    stopSubmit: function() {
+      return ipcRenderer.invoke("media:stop-submit");
+    },
+    refreshResources: function(opts) {
+      return ipcRenderer.invoke("media:refresh-resources", opts || {});
+    },
+    getResourcePage: function(opts) {
+      return ipcRenderer.invoke("media:get-resource-page", opts || {});
+    },
+    searchResourcePage: function(opts) {
+      return ipcRenderer.invoke("media:search-resource-page", opts || {});
+    },
+    getPool: function(opts) {
+      return ipcRenderer.invoke("media:get-pool", opts);
+    },
+    addToPool: function(resource) {
+      return ipcRenderer.invoke("media:add-to-pool", resource);
+    },
+    removeFromPool: function(resourceId) {
+      return ipcRenderer.invoke("media:remove-from-pool", resourceId);
+    },
+    getBalance: function() {
+      return ipcRenderer.invoke("media:get-balance");
+    },
   },
   platforms: {
-    getQueue: function() { return ipcRenderer.invoke("platforms:get-queue"); },
-    listAccountProfiles: function() { return ipcRenderer.invoke("platforms:list-account-profiles"); },
-    confirmAccountProfile: function(input) { return ipcRenderer.invoke("platforms:confirm-account-profile", input); },
-    openLogin: function(platformId) { return ipcRenderer.invoke("platforms:open-login", platformId); },
-    checkLogin: function(platformId) { return ipcRenderer.invoke("platforms:check-login", platformId); },
-    submitSelected: function(input) { return ipcRenderer.invoke("platforms:submit-selected", input); },
-    pauseSubmit: function(runId) { return ipcRenderer.invoke("platforms:pause-submit", runId ? { runId: runId } : undefined); },
-    stopSubmit: function(runId) { return ipcRenderer.invoke("platforms:stop-submit", runId ? { runId: runId } : undefined); },
-    getState: function() { return ipcRenderer.invoke("platforms:get-state"); },
+    getQueue: function() {
+      return ipcRenderer.invoke("platforms:get-queue");
+    },
+    listAccountProfiles: function() {
+      return ipcRenderer.invoke("platforms:list-account-profiles");
+    },
+    confirmAccountProfile: function(input) {
+      return ipcRenderer.invoke("platforms:confirm-account-profile", input);
+    },
+    openLogin: function(platformId) {
+      return ipcRenderer.invoke("platforms:open-login", platformId);
+    },
+    checkLogin: function(platformId) {
+      return ipcRenderer.invoke("platforms:check-login", platformId);
+    },
+    submitSelected: function(input) {
+      return ipcRenderer.invoke("platforms:submit-selected", input);
+    },
+    pauseSubmit: function(runId) {
+      return ipcRenderer.invoke(
+        "platforms:pause-submit",
+        runId ? { runId: runId } : undefined,
+      );
+    },
+    stopSubmit: function(runId) {
+      return ipcRenderer.invoke(
+        "platforms:stop-submit",
+        runId ? { runId: runId } : undefined,
+      );
+    },
+    getState: function() {
+      return ipcRenderer.invoke("platforms:get-state");
+    },
     onState: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
+      var handler = function (event, payload) {
+        listener(payload);
+      };
       ipcRenderer.on("platform-state", handler);
-      return function() { ipcRenderer.removeListener("platform-state", handler); };
-    }
+      return function () {
+        ipcRenderer.removeListener("platform-state", handler);
+      };
+    },
   },
   content: {
-    listClients: function() { return ipcRenderer.invoke("content:list-clients"); },
-    listResearch: function(clientId) { return ipcRenderer.invoke("content:list-research", clientId); },
-    listTemplates: function(platform) { return ipcRenderer.invoke("content:list-templates", platform); },
-    listTemplateCatalog: function() { return ipcRenderer.invoke("content:list-template-catalog"); },
-    retryMaterial: function(input) { return ipcRenderer.invoke("content:retry-material", input); },
-    generateArticle: function(input) { return ipcRenderer.invoke("content:generate-article", input); },
-    saveArticle: function(article) { return ipcRenderer.invoke("content:save-article", article); },
-    listGeneratedArticles: function(clientId) { return ipcRenderer.invoke("content:list-generated-articles", clientId); },
-    getArticleManagementSnapshot: function(input) { return ipcRenderer.invoke("content:get-article-management-snapshot", input); },
-    copyArticleVersion: function(input) { return ipcRenderer.invoke("content:copy-article-version", input); },
-    reviewArticles: function(articles) { return ipcRenderer.invoke("content:review-articles", { articles: articles }); },
-    listArticleTrash: function(clientId) { return ipcRenderer.invoke("content:list-article-trash", clientId); },
-    previewTrashArticles: function(input) { return ipcRenderer.invoke("content:preview-trash-articles", input || {}); },
-    previewArticleRemovalImpact: function(input) { return ipcRenderer.invoke("content:preview-article-removal-impact", input || {}); },
-    applyArticleRemovalImpact: function(input) { return ipcRenderer.invoke("content:trash-articles", input || {}); },
-    trashArticles: function(input) { return ipcRenderer.invoke("content:trash-articles", input); },
-    restoreArticle: function(input) { return ipcRenderer.invoke("content:restore-article", input); },
-    preparePermanentDeleteArticle: function(input) { return ipcRenderer.invoke("content:prepare-permanent-delete-article", input); },
-    permanentlyDeleteArticle: function(input) { return ipcRenderer.invoke("content:permanently-delete-article", input); },
-    previewExport: function(input) { return ipcRenderer.invoke("content:preview-export", input); },
-    exportArticle: function(input) { return ipcRenderer.invoke("content:export-article", input); },
-    previewSubmissionBatch: function(input) { return ipcRenderer.invoke("content:preview-submission-batch", input); },
-    listSubmissionPlatforms: function() { return ipcRenderer.invoke("content:list-submission-platforms"); },
-    listSubmissionBatches: function(input) { return ipcRenderer.invoke("content:list-submission-batches", input); },
-    createSubmissionBatch: function(input) { return ipcRenderer.invoke("content:create-submission-batch", input); },
-    previewCancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:preview-cancel-submission-batch", input); },
-    cancelSubmissionBatch: function(input) { return ipcRenderer.invoke("content:cancel-submission-batch", input); },
-    previewCleanupFailedSubmissionItems: function(input) { return ipcRenderer.invoke("content:preview-cleanup-failed-submission-items", input); },
-    cleanupFailedSubmissionItems: function(input) { return ipcRenderer.invoke("content:cleanup-failed-submission-items", input); },
-    previewRetryFailedPublication: function(input) { return ipcRenderer.invoke("content:preview-retry-failed-publication", input || {}); },
-    retryFailedPublication: function(input) { return ipcRenderer.invoke("content:retry-failed-publication", input || {}); },
-    previewTrashedArticleQueueResidue: function() { return ipcRenderer.invoke("content:preview-trashed-article-queue-residue"); },
-    cleanupTrashedArticleQueueResidue: function(input) { return ipcRenderer.invoke("content:cleanup-trashed-article-queue-residue", input || {}); },
-    getArticleRemovalTransaction: function(transactionId) { return ipcRenderer.invoke("content:get-article-removal-transaction", { transactionId: transactionId }); },
-    listArticleRemovalTransactions: function() { return ipcRenderer.invoke("content:list-article-removal-transactions"); },
-    retryArticleRemovalTransaction: function(input) { return ipcRenderer.invoke("content:retry-article-removal-transaction", input || {}); },
-    listArticleAttention: function(input) { return ipcRenderer.invoke("content:list-article-attention", input || {}); },
-    getArticleAttention: function(input) { return ipcRenderer.invoke("content:get-article-attention", input || {}); },
-    previewArticleAttention: function(input) { return ipcRenderer.invoke("content:preview-article-attention", input || {}); },
-    resolveArticleAttention: function(input) { return ipcRenderer.invoke("content:resolve-article-attention", input || {}); },
+    listClients: function() {
+      return ipcRenderer.invoke("content:list-clients");
+    },
+    listResearch: function(clientId) {
+      return ipcRenderer.invoke("content:list-research", clientId);
+    },
+    listTemplates: function(platform) {
+      return ipcRenderer.invoke("content:list-templates", platform);
+    },
+    listTemplateCatalog: function() {
+      return ipcRenderer.invoke("content:list-template-catalog");
+    },
+    retryMaterial: function(input) {
+      return ipcRenderer.invoke("content:retry-material", input);
+    },
+    generateArticle: function(input) {
+      return ipcRenderer.invoke("content:generate-article", input);
+    },
+    saveArticle: function(article) {
+      return ipcRenderer.invoke("content:save-article", article);
+    },
+    listGeneratedArticles: function(clientId) {
+      return ipcRenderer.invoke("content:list-generated-articles", clientId);
+    },
+    getArticleManagementSnapshot: function(input) {
+      return ipcRenderer.invoke(
+        "content:get-article-management-snapshot",
+        input,
+      );
+    },
+    copyArticleVersion: function(input) {
+      return ipcRenderer.invoke("content:copy-article-version", input);
+    },
+    reviewArticles: function(articles) {
+      return ipcRenderer.invoke("content:review-articles", { articles: articles });
+    },
+    listArticleTrash: function(clientId) {
+      return ipcRenderer.invoke("content:list-article-trash", clientId);
+    },
+    previewTrashArticles: function(input) {
+      return ipcRenderer.invoke("content:preview-trash-articles", input || {});
+    },
+    previewArticleRemovalImpact: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-article-removal-impact",
+        input || {},
+      );
+    },
+    applyArticleRemovalImpact: function(input) {
+      return ipcRenderer.invoke("content:trash-articles", input || {});
+    },
+    trashArticles: function(input) {
+      return ipcRenderer.invoke("content:trash-articles", input);
+    },
+    restoreArticle: function(input) {
+      return ipcRenderer.invoke("content:restore-article", input);
+    },
+    preparePermanentDeleteArticle: function(input) {
+      return ipcRenderer.invoke(
+        "content:prepare-permanent-delete-article",
+        input,
+      );
+    },
+    permanentlyDeleteArticle: function(input) {
+      return ipcRenderer.invoke("content:permanently-delete-article", input);
+    },
+    previewExport: function(input) {
+      return ipcRenderer.invoke("content:preview-export", input);
+    },
+    exportArticle: function(input) {
+      return ipcRenderer.invoke("content:export-article", input);
+    },
+    previewSubmissionBatch: function(input) {
+      return ipcRenderer.invoke("content:preview-submission-batch", input);
+    },
+    listSubmissionPlatforms: function() {
+      return ipcRenderer.invoke("content:list-submission-platforms");
+    },
+    listSubmissionBatches: function(input) {
+      return ipcRenderer.invoke("content:list-submission-batches", input);
+    },
+    createSubmissionBatch: function(input) {
+      return ipcRenderer.invoke("content:create-submission-batch", input);
+    },
+    previewCancelSubmissionBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-cancel-submission-batch",
+        input,
+      );
+    },
+    cancelSubmissionBatch: function(input) {
+      return ipcRenderer.invoke("content:cancel-submission-batch", input);
+    },
+    previewCleanupFailedSubmissionItems: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-cleanup-failed-submission-items",
+        input,
+      );
+    },
+    cleanupFailedSubmissionItems: function(input) {
+      return ipcRenderer.invoke(
+        "content:cleanup-failed-submission-items",
+        input,
+      );
+    },
+    previewRetryFailedPublication: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-retry-failed-publication",
+        input || {},
+      );
+    },
+    retryFailedPublication: function(input) {
+      return ipcRenderer.invoke(
+        "content:retry-failed-publication",
+        input || {},
+      );
+    },
+    previewTrashedArticleQueueResidue: function() {
+      return ipcRenderer.invoke(
+        "content:preview-trashed-article-queue-residue",
+      );
+    },
+    cleanupTrashedArticleQueueResidue: function(input) {
+      return ipcRenderer.invoke(
+        "content:cleanup-trashed-article-queue-residue",
+        input || {},
+      );
+    },
+    getArticleRemovalTransaction: function(transactionId) {
+      return ipcRenderer.invoke("content:get-article-removal-transaction", {
+        transactionId: transactionId,
+      });
+    },
+    listArticleRemovalTransactions: function() {
+      return ipcRenderer.invoke("content:list-article-removal-transactions");
+    },
+    retryArticleRemovalTransaction: function(input) {
+      return ipcRenderer.invoke(
+        "content:retry-article-removal-transaction",
+        input || {},
+      );
+    },
+    listArticleAttention: function(input) {
+      return ipcRenderer.invoke("content:list-article-attention", input || {});
+    },
+    getArticleAttention: function(input) {
+      return ipcRenderer.invoke("content:get-article-attention", input || {});
+    },
+    previewArticleAttention: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-article-attention",
+        input || {},
+      );
+    },
+    resolveArticleAttention: function(input) {
+      return ipcRenderer.invoke(
+        "content:resolve-article-attention",
+        input || {},
+      );
+    },
     onArticleRemovalTransaction: function(listener) {
-      var handler = function(event, payload) { listener(payload); };
+      var handler = function (event, payload) {
+        listener(payload);
+      };
       ipcRenderer.on("content:article-removal-transaction", handler);
-      return function() { ipcRenderer.removeListener("content:article-removal-transaction", handler); };
+      return function () {
+        ipcRenderer.removeListener(
+          "content:article-removal-transaction",
+          handler,
+        );
+      };
     },
-    listQuestions: function(clientId) { return ipcRenderer.invoke("content:list-questions", { clientId: clientId }); },
-    createQuestion: function(input) { return ipcRenderer.invoke("content:create-question", input); },
-    updateQuestion: function(input) { return ipcRenderer.invoke("content:update-question", input); },
-    deleteQuestion: function(input) { return ipcRenderer.invoke("content:delete-question", input); },
-    getDoubaoLoginState: function() { return ipcRenderer.invoke("content:get-doubao-login-state"); },
-    openDoubaoLogin: function() { return ipcRenderer.invoke("content:open-doubao-login"); },
-    collectDoubaoOne: function(input) { return ipcRenderer.invoke("content:collect-doubao-one", input); },
+    listQuestions: function(clientId) {
+      return ipcRenderer.invoke("content:list-questions", {
+        clientId: clientId,
+      });
+    },
+    createQuestion: function(input) {
+      return ipcRenderer.invoke("content:create-question", input);
+    },
+    updateQuestion: function(input) {
+      return ipcRenderer.invoke("content:update-question", input);
+    },
+    deleteQuestion: function(input) {
+      return ipcRenderer.invoke("content:delete-question", input);
+    },
+    getDoubaoLoginState: function() {
+      return ipcRenderer.invoke("content:get-doubao-login-state");
+    },
+    openDoubaoLogin: function() {
+      return ipcRenderer.invoke("content:open-doubao-login");
+    },
+    collectDoubaoOne: function(input) {
+      return ipcRenderer.invoke("content:collect-doubao-one", input);
+    },
     previewDoubaoBatch: function(input) { return ipcRenderer.invoke("content:preview-doubao-batch", input); },
-    startDoubaoBatch: function(tasks) { return ipcRenderer.invoke("content:start-doubao-batch", { tasks: tasks }); },
-    startPreparedDoubaoBatch: function(input) { return ipcRenderer.invoke("content:start-prepared-doubao-batch", input); },
-    pauseDoubaoBatch: function() { return ipcRenderer.invoke("content:pause-doubao-batch"); },
-    resumeDoubaoBatch: function() { return ipcRenderer.invoke("content:resume-doubao-batch"); },
-    stopDoubaoBatch: function() { return ipcRenderer.invoke("content:stop-doubao-batch"); },
-    retryFailedDoubao: function() { return ipcRenderer.invoke("content:retry-failed-doubao"); },
-    getDoubaoQueueState: function() { return ipcRenderer.invoke("content:get-doubao-queue-state"); },
-    previewGenerationBatch: function(input) { return ipcRenderer.invoke("content:preview-generation-batch", input || {}); },
-    createGenerationBatch: function(input) { return ipcRenderer.invoke("content:create-generation-batch", input || {}); },
-    createAndStartGenerationBatch: function(input) { return ipcRenderer.invoke("content:create-and-start-generation-batch", input || {}); },
-    listGenerationBatches: function() { return ipcRenderer.invoke("content:list-generation-batches"); },
-    getGenerationBatch: function(batchId) { return ipcRenderer.invoke("content:get-generation-batch", { batchId: batchId }); },
-    startGenerationBatch: function(input) { return ipcRenderer.invoke("content:start-generation-batch", input || {}); },
-    pauseGenerationBatch: function(input) { return ipcRenderer.invoke("content:pause-generation-batch", input || {}); },
-    continueGenerationBatch: function(input) { return ipcRenderer.invoke("content:continue-generation-batch", input || {}); },
-    resumeGenerationBatch: function(input) { return ipcRenderer.invoke("content:resume-generation-batch", input || {}); },
-    stopGenerationBatch: function(input) { return ipcRenderer.invoke("content:stop-generation-batch", input || {}); },
-    retryFailedGenerationBatch: function(input) { return ipcRenderer.invoke("content:retry-failed-generation-batch", input || {}); },
-    previewCancelPendingGenerationBatch: function(input) { return ipcRenderer.invoke("content:preview-cancel-pending-generation-batch", input || {}); },
-    cancelPendingGenerationBatch: function(input) { return ipcRenderer.invoke("content:cancel-pending-generation-batch", input || {}); },
-    getGenerationBatchState: function() { return ipcRenderer.invoke("content:get-generation-batch-state"); },
-    getGenerationRuntimeSnapshot: function() { return ipcRenderer.invoke("content:get-generation-runtime-snapshot"); },
-    onGenerationBatchState: function(listener) {
-      const handler = function(event, payload) { listener(payload); };
-      ipcRenderer.on("content:generation-batch-state", handler);
-      return function() { ipcRenderer.removeListener("content:generation-batch-state", handler); };
+    startDoubaoBatch: function(tasks) {
+      return ipcRenderer.invoke("content:start-doubao-batch", { tasks: tasks });
     },
-    previewGenerationSubmissionHandoff: function(input) { return ipcRenderer.invoke("content:preview-generation-submission-handoff", input || {}); },
-    commitGenerationSubmissionHandoff: function(input) { return ipcRenderer.invoke("content:commit-generation-submission-handoff", input || {}); },
-    saveManualResearch: function(input) { return ipcRenderer.invoke("content:save-manual-research", input); },
+    startPreparedDoubaoBatch: function(input) { return ipcRenderer.invoke("content:start-prepared-doubao-batch", input); },
+    pauseDoubaoBatch: function() {
+      return ipcRenderer.invoke("content:pause-doubao-batch");
+    },
+    resumeDoubaoBatch: function() {
+      return ipcRenderer.invoke("content:resume-doubao-batch");
+    },
+    stopDoubaoBatch: function() {
+      return ipcRenderer.invoke("content:stop-doubao-batch");
+    },
+    retryFailedDoubao: function() {
+      return ipcRenderer.invoke("content:retry-failed-doubao");
+    },
+    getDoubaoQueueState: function() {
+      return ipcRenderer.invoke("content:get-doubao-queue-state");
+    },
+    previewGenerationBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-generation-batch",
+        input || {},
+      );
+    },
+    createGenerationBatch: function(input) {
+      return ipcRenderer.invoke("content:create-generation-batch", input || {});
+    },
+    createAndStartGenerationBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:create-and-start-generation-batch",
+        input || {},
+      );
+    },
+    listGenerationBatches: function() {
+      return ipcRenderer.invoke("content:list-generation-batches");
+    },
+    getGenerationBatch: function(batchId) {
+      return ipcRenderer.invoke("content:get-generation-batch", {
+        batchId: batchId,
+      });
+    },
+    startGenerationBatch: function(input) {
+      return ipcRenderer.invoke("content:start-generation-batch", input || {});
+    },
+    pauseGenerationBatch: function(input) {
+      return ipcRenderer.invoke("content:pause-generation-batch", input || {});
+    },
+    continueGenerationBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:continue-generation-batch",
+        input || {},
+      );
+    },
+    resumeGenerationBatch: function(input) {
+      return ipcRenderer.invoke("content:resume-generation-batch", input || {});
+    },
+    stopGenerationBatch: function(input) {
+      return ipcRenderer.invoke("content:stop-generation-batch", input || {});
+    },
+    retryFailedGenerationBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:retry-failed-generation-batch",
+        input || {},
+      );
+    },
+    previewCancelPendingGenerationBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-cancel-pending-generation-batch",
+        input || {},
+      );
+    },
+    cancelPendingGenerationBatch: function(input) {
+      return ipcRenderer.invoke(
+        "content:cancel-pending-generation-batch",
+        input || {},
+      );
+    },
+    getGenerationBatchState: function() {
+      return ipcRenderer.invoke("content:get-generation-batch-state");
+    },
+    getGenerationRuntimeSnapshot: function() {
+      return ipcRenderer.invoke("content:get-generation-runtime-snapshot");
+    },
+    onGenerationBatchState: function(listener) {
+      const handler = function (event, payload) {
+        listener(payload);
+      };
+      ipcRenderer.on("content:generation-batch-state", handler);
+      return function () {
+        ipcRenderer.removeListener("content:generation-batch-state", handler);
+      };
+    },
+    previewGenerationSubmissionHandoff: function(input) {
+      return ipcRenderer.invoke(
+        "content:preview-generation-submission-handoff",
+        input || {},
+      );
+    },
+    commitGenerationSubmissionHandoff: function(input) {
+      return ipcRenderer.invoke(
+        "content:commit-generation-submission-handoff",
+        input || {},
+      );
+    },
+    saveManualResearch: function(input) {
+      return ipcRenderer.invoke("content:save-manual-research", input);
+    },
     onDoubaoQueueState: function(listener) {
-      const handler = function(event, payload) { listener(payload); };
+      const handler = function (event, payload) {
+        listener(payload);
+      };
       ipcRenderer.on("content:doubao-queue-state", handler);
-      return function() { ipcRenderer.removeListener("content:doubao-queue-state", handler); };
-    }
+      return function () {
+        ipcRenderer.removeListener("content:doubao-queue-state", handler);
+      };
+    },
   },
   publication: {
-    listForArticles: function(input) { return ipcRenderer.invoke("publication:list-for-articles", input); },
-    reconcile: function(input) { return ipcRenderer.invoke("publication:reconcile", input); }
+    listForArticles: function(input) {
+      return ipcRenderer.invoke("publication:list-for-articles", input);
+    },
+    reconcile: function(input) {
+      return ipcRenderer.invoke("publication:reconcile", input);
+    },
   },
   orders: {
-    getOrders: function() { return ipcRenderer.invoke("media:get-orders"); },
-    syncOrder: function(orderNid) { return ipcRenderer.invoke("media:sync-order", orderNid); }
-  }
+    getOrders: function() {
+      return ipcRenderer.invoke("media:get-orders");
+    },
+    syncOrder: function(orderNid) {
+      return ipcRenderer.invoke("media:sync-order", orderNid);
+    },
+    openPublishedUrl: function(orderNid) {
+      return ipcRenderer.invoke("media:open-published-url", orderNid);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("desktopConsole", api);

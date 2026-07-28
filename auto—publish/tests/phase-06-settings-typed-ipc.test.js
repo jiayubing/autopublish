@@ -68,6 +68,7 @@ const mediaStatus = {
   allowInsecure: false,
   transport: "HTTPS",
   apiKeyMask: "medi****cret",
+  thirdPartyId: "长期第三方标识",
   lastTest: null,
 };
 const usageCategory = {
@@ -234,12 +235,21 @@ test("platform settings wire results retain platform identity and never echo dra
       baseUrl: mediaStatus.baseUrl,
       timeoutMs: mediaStatus.timeoutMs,
       allowInsecure: false,
+      thirdPartyId: "长期第三方标识",
     },
   });
   assert.deepEqual(result.parsed, { platformId: "media", status: mediaStatus });
   assert.equal(calls[0][0], "media");
   assert.equal(calls[0][1].apiKey, "media-write-only-secret");
+  assert.equal(calls[0][1].thirdPartyId, "长期第三方标识");
   assert.doesNotMatch(JSON.stringify(result.response), /media-write-only-secret/);
+  assert.throws(
+    () => productionIpcRegistry.encodeRequest(
+      productionIpcRegistry.byChannel("platform-settings:save"),
+      { platformId: "media", draft: { thirdPartyId: "x".repeat(129) } },
+    ),
+    (error) => /^IPC_/.test(error.code),
+  );
 });
 
 test("storage maintenance reports counts without returning deleted or failed paths", async () => {

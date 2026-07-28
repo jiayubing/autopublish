@@ -28,6 +28,14 @@ function normalizeTimeout(value) {
   return number;
 }
 
+function normalizeThirdPartyId(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (text.length > 128 || /[\x00-\x1f\x7f]/u.test(text)) {
+    throw adapterError("PLATFORM_CONFIG_INVALID", "Media provider configuration is invalid");
+  }
+  return text;
+}
+
 function createMediaSettingsAdapter(options) {
   const values = options || {};
   const io = values.fs || fs;
@@ -38,7 +46,8 @@ function createMediaSettingsAdapter(options) {
       apiKey: { type: "string", required: true, nonEmpty: true },
       baseUrl: { type: "string", required: true, nonEmpty: true },
       timeoutMs: { type: "integer", required: true, min: 1000, max: 300000 },
-      allowInsecure: { type: "boolean", default: false }
+      allowInsecure: { type: "boolean", default: false },
+      thirdPartyId: { type: "string", default: "", validate: normalizeThirdPartyId }
     },
     secretFields: ["apiKey"],
     createStore: (storeOptions) => createPlatformProviderConfigStore({
@@ -54,10 +63,11 @@ function createMediaSettingsAdapter(options) {
       const baseUrl = normalizeBaseUrl(value.baseUrl || DEFAULT_MEDIA_BASE_URL);
       const timeoutMs = normalizeTimeout(value.timeoutMs);
       const allowInsecure = value.allowInsecure === true;
+      const thirdPartyId = normalizeThirdPartyId(value.thirdPartyId);
       if (/^http:\/\//i.test(baseUrl) && !allowInsecure) {
         throw adapterError("MEDIA_HTTP_CONFIRMATION_REQUIRED", "HTTP media provider addresses require explicit confirmation");
       }
-      return { apiKey, baseUrl, timeoutMs, allowInsecure: /^http:\/\//i.test(baseUrl) };
+      return { apiKey, baseUrl, timeoutMs, allowInsecure: /^http:\/\//i.test(baseUrl), thirdPartyId };
     },
     environment(env) {
       const source = env || process.env;
@@ -66,7 +76,7 @@ function createMediaSettingsAdapter(options) {
       if (!hasKey && !hasBase) return null;
       if (!hasKey) throw adapterError("PLATFORM_CONFIG_INVALID", "Media provider environment configuration is invalid");
       const allowInsecure = /^(1|true)$/i.test(String(source.XQW_ALLOW_INSECURE == null ? "" : source.XQW_ALLOW_INSECURE).trim());
-      return adapter.validate({ apiKey: source.XQW_API_KEY, baseUrl: source.XQW_BASE_URL || DEFAULT_MEDIA_BASE_URL, timeoutMs: source.XQW_TIMEOUT_MS || DEFAULT_MEDIA_TIMEOUT_MS, allowInsecure });
+      return adapter.validate({ apiKey: source.XQW_API_KEY, baseUrl: source.XQW_BASE_URL || DEFAULT_MEDIA_BASE_URL, timeoutMs: source.XQW_TIMEOUT_MS || DEFAULT_MEDIA_TIMEOUT_MS, allowInsecure, thirdPartyId: source.XQW_THIRD_ID || "" });
     },
     status(config, context) {
       const value = config || {};
@@ -78,6 +88,7 @@ function createMediaSettingsAdapter(options) {
         allowInsecure: Boolean(value.allowInsecure),
         transport: value.baseUrl && /^http:\/\//i.test(value.baseUrl) ? "不加密连接" : "HTTPS",
         apiKeyMask: value.apiKey ? maskApiKey(value.apiKey) : "",
+        thirdPartyId: value.thirdPartyId || "",
         lastTest: context.lastTest || null
       };
     },

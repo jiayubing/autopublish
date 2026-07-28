@@ -78,6 +78,7 @@ const mediaDraft = exactObject({
   baseUrl: optionalField(text(2048, 1)),
   timeoutMs: optionalField(integerField({ min: 1000, max: 300000 })),
   allowInsecure: optionalField("boolean"),
+  thirdPartyId: optionalField(text(128)),
 });
 const hepanDraft = exactObject({
   pythonPath: optionalField(text(1024, 1)),
@@ -109,6 +110,7 @@ const mediaStatus = exactObject({
   allowInsecure: "boolean",
   transport: text(128),
   apiKeyMask: text(128),
+  thirdPartyId: optionalField(text(128)),
   lastTest: nullableField(testResult),
 });
 const hepanTestResult = exactObject({

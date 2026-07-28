@@ -56,6 +56,7 @@ export interface MediaProviderStatus {
   allowInsecure: boolean;
   transport: string;
   apiKeyMask: string;
+  thirdPartyId?: string;
   lastTest: PlatformProviderTestResult | null;
 }
 export interface HepanProviderStatus {

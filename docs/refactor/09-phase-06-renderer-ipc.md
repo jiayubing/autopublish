@@ -449,12 +449,42 @@ Phase 06 handoff必须列出：
 
 - media command preparation必须保留Renderer已保存的投稿标题，不得回退为带业务UUID的staging文件basename；文件名继续只作为main内部定位和post-processing identity。
 - 供应方`content`字段现为main投影的有效HTML正文，独立标题行不重复进入body，原始HTML字符被转义；multipart合成fixture逐字段验证`resource_id/title/content/third_id`且不联网。
-- `third_id`明确等于本地每次PublicationWorkflow尝试的`attempt-UUID`，远端订单号仍只来自响应`order_nid/orderNid`。媒体专项72/72、全仓1222/1222及完整门禁通过，证据见`handoffs/phase-06.md`。
+- `third_id`默认等于本地每次PublicationWorkflow尝试的`attempt-UUID`；若操作员在付费媒体页保存了第三方标识，则只替换供应方multipart中的`third_id`，内部attempt identity与evidence仍保持唯一且不变。远端订单号仍只来自响应`order_nid/orderNid`。媒体专项72/72、全仓1222/1222及完整门禁通过，证据见`handoffs/phase-06.md`。
+
+### 2026-07-28 第三方标识与投稿后预览补充验收
+
+- 付费媒体页通过既有settings feature与`platform-settings:get/save`精确capability提供第三方标识输入；应用配置可长期保存、最长128字符并可随时替换，`XQW_THIRD_ID`环境override时只读。未新增通用IPC或capability。
+- 保存值只作为供应方`third_id`；留空回退内部唯一attempt ID。OperationalStore、PublicationWorkflow evidence和重复投稿保护继续使用内部attempt identity，未改变冻结接口或把操作员字符串当作审计主键。
+- `media.scanArticles`的Typed IPC结果是无正文的article summary；Renderer bridge现将summary与preview detail分别规范化，投稿后重扫只更新摘要字段，不再把“正文缺失”伪造成空字符串覆盖已打开正文。文章被真实移除时仍按feature规则关闭。
+- 真实Renderer RED→GREEN覆盖投稿后summary重扫无需切换文章即可保留正文；第三方标识读取/替换及900/1180/1280宽度均通过，并断言付费submit调用为0。全部使用内存fake和临时合成fixture，未调用真实`media/send`。
+- 最新完整门禁：`npm test`221文件1226/1226、Auth16/16、links180/180、packaging33/33、Renderer responsive11/11；lint、三套typecheck、format、Renderer build2154 modules、preload231,843 bytes、pack smoke、最新Renderer Electron focus1/1、packaged ASAR3/3与`git diff --check`通过。Phase 07未启动。
+
+### 付费媒体订单展示快照与供应商状态投影收口（2026-07-28）
+
+- 订单页标题、文件名、媒体名和投稿报价来自提交时已验证的submission item不可变快照；历史记录缺少报价时显示“未记录”，不得读取当前资源价格倒填，也不得把缺失值伪装为`0`或最终结算金额。
+- 页面状态以供应商原始状态为唯一显示来源：`0=待安排`、`1=已安排`、`2=已发布`、`4=已退稿`、`9=售后中`。内部`submitted/published/failed/uncertain`只用于PublicationWorkflow流程控制，不能覆盖或冒充供应商状态。
+- 为使供应商状态跨进程重启保持一致，Phase 03 remote-order projection被窄范围重新打开并完成：未改schema、Publisher、ContentStore或Domain/Application接口，只在既有`remote_orders.payload_json` evidence中保存严格闭集`remoteStatusCode`并由`listRemoteOrders()`投影。未知状态拒绝；确实没有历史raw状态时才按既有publication事实安全回退。
+- RED→GREEN覆盖五状态表驱动、供应商`1`经fake `orderInfo`同步、store关闭/重开后仍显示“已安排”，以及真实Renderer订单分类。完整门禁：221文件1230/1230、Auth16/16、links180/180、packaging33/33、媒体定向24/24、Renderer订单1/1、三套typecheck、lint、format、Renderer build2154 modules、preload231,843 bytes、pack smoke、最新Renderer Electron focus1/1、packaged ASAR3/3与`git diff --check`通过。
+- 所有订单同步/投稿fixture均为临时SQLite和fake client；未连接真实供应商、账号或`media/send`，真实付费submit调用为0。新目录制品`release-alpha/win-unpacked/鱼饼大王.exe`为225,485,824 bytes，2026-07-28 08:55:36。Phase 03与Phase 06保持`COMPLETE`，Phase 07保持`NOT_STARTED`。
+
+### 付费媒体订单报价identity、精简视图与安全外链收口（2026-07-28）
+
+- 订单报价快照本身已存在，实际缺口是submission batch创建后才生成attemptId，导致remote order无法按attempt identity关联快照。attempt现在于batch创建前生成，并同时写入batch payload与workflow command；真实临时SQLite纵向fixture锁定新订单标题、媒体名和报价`36.5`均可恢复。
+- 订单View删除源文件、内部publication状态/ID及资源ID，不把内部流程事实重复展示为订单状态；保留供应商订单状态、标题、媒体、投稿报价、订单号、时间与发布链接。
+- 新增`media.openPublishedUrl`命名command，Typed IPC inventory为129/129。Renderer只发送orderNid；main只从OperationalStore已发布订单读取持久HTTPS evidence后调用Electron shell。HTTP、带凭据URL、未发布/缺失证据、打开失败均安全拒绝，不开放任意URL或通用IPC。
+- 最新门禁：媒体/Typed IPC/API surface38/38、workspace/composition/security46/46、真实Renderer订单1/1、全仓221文件1232/1232、Auth16/16、links180/180、packaging33/33；lint、format、三套typecheck、Renderer2154 modules、preload234,062 bytes、pack smoke、packaged ASAR3/3、Electron focus1/1和diff check通过。新exe为225,485,824 bytes，2026-07-28 10:31:32；真实付费submit为0，Phase 07未启动。
+
+### 付费媒体供应商字符串报价收口（2026-07-28）
+
+- 现场新订单仍显示“未记录”不是attempt identity再次失配；标题与媒体名已能关联，唯独供应商资源缓存把报价保存为数字字符串，而正式提交解析与不可变快照此前只接受JavaScript `number`。预检使用另一条数值规范化路径，因此会显示正确金额并掩盖该差异。
+- main的资源ID解析边界现在把合法、有限、非负且不超过既有contract上限的数字字符串规范化为number；不可变submission快照owner执行同一安全检查。缺失、非法或超限值仍保持缺失，不伪造为0，也不读取当前报价倒填历史订单。
+- 两条纵向RED→GREEN分别覆盖供应商字符串报价经Typed IPC registrar进入提交输入，以及`media submission service → OperationalStore → listOrderViews()`恢复`36.5`。全部使用临时SQLite、合成资源缓存和fake workflow，真实付费submit为0。
+- 最终门禁：媒体/Renderer定向37/37、三套typecheck；`npm test`221文件1233/1233、Auth16/16、links180/180、packaging33/33；lint、format、Renderer build2154 modules、preload234,062 bytes、标准pack smoke、packaged ASAR3/3、最新Renderer Electron focus1/1及`git diff --check`通过。新exe为225,485,824 bytes，2026-07-28 10:59:58；Phase 06保持`COMPLETE`，Phase 07未启动。
 
 ## 16. 实施完成记录（2026-07-26）
 
 - 七个 owner 已固定为 workspace、content、generation、platform、media、attention、settings；View 只消费 snapshot 和命名 command。
-- 非 Auth production Typed IPC 为 128/128：56 query、67 command、5 event；每项均有独立合法 fixture、owner、production caller、request/result/error/event validator。Auth 5 invoke + 1 event 明确留给 Phase 07。
+- 非 Auth production Typed IPC 为 129/129：56 query、68 command、5 event；每项均有独立合法 fixture、owner、production caller、request/result/error/event validator。新增项仅为按order identity安全打开已发布证据的`media.openPublishedUrl`命名command；Auth 5 invoke + 1 event 明确留给 Phase 07。
 - `workspace:data-invalidated` 只有一个 Renderer transport consumer；opaque runtime ID、revision gap、known scopes 全量刷新和安全 diagnostic 已实现。
 - 旧 controller/store/modal、原始页面订阅、native confirm、`pageSize:99999`、`publish-log` sender、无消费者 preload channel 均已删除。
 - 媒体默认页 50、IPC 页上限 100、远端上限 200 页/20,000 unique ID，第 20,001 项显式 truncated；1k/10k/13k/20k 合成容量数据已记录。

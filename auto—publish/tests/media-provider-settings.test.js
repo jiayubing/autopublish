@@ -57,6 +57,31 @@ describe("media provider settings", () => {
     assert.equal(JSON.stringify(service.getStatus("media")).includes("fixture-media-key"), false);
   });
 
+  it("persists a reusable third-party identity and lets the operator replace it", () => {
+    const saved = store();
+    const adapter = createMediaSettingsAdapter();
+    adapter.createStore = () => saved;
+    const service = createPlatformSettingsService({ adapters: [adapter] });
+
+    const first = service.save("media", {
+      apiKey: "fixture-media-key",
+      baseUrl: "https://media.example/api",
+      timeoutMs: 30000,
+      thirdPartyId: "长期标识-A",
+    });
+    assert.equal(first.thirdPartyId, "长期标识-A");
+    assert.equal(service.getRuntimeConfig("media").thirdPartyId, "长期标识-A");
+
+    const replaced = service.save("media", { thirdPartyId: "长期标识-B" });
+    assert.equal(replaced.thirdPartyId, "长期标识-B");
+    assert.equal(service.getRuntimeConfig("media").thirdPartyId, "长期标识-B");
+    assert.equal(saved.writes.at(-1).apiKey, "fixture-media-key");
+    assert.throws(
+      () => service.save("media", { thirdPartyId: "x".repeat(129) }),
+      (error) => error.code === "PLATFORM_CONFIG_INVALID",
+    );
+  });
+
   it("keeps environment credentials read-only and gives clear a stable missing-config runtime error", () => {
     const saved = store({ apiKey: "stored-key", baseUrl: "https://media.example/api", timeoutMs: 30000, allowInsecure: false });
     const adapter = createMediaSettingsAdapter();

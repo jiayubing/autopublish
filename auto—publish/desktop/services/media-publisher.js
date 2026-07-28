@@ -29,7 +29,9 @@ function createMediaPublisher(options) {
       if (target.kind !== "media") return { status: "failed", error: safeError("MEDIA_TARGET_REQUIRED", "validation", "never", "媒体目标无效") };
       let response;
       try {
-        response = await value.clientProvider().sendArticle({ resourceId: target.mediaResourceId, title: input.title, content: input.body, thirdId: input.attemptId });
+        const configuredThirdId = typeof value.thirdIdProvider === "function" ? value.thirdIdProvider() : null;
+        const thirdId = typeof configuredThirdId === "string" && configuredThirdId.trim() ? configuredThirdId.trim() : input.attemptId;
+        response = await value.clientProvider().sendArticle({ resourceId: target.mediaResourceId, title: input.title, content: input.body, thirdId });
       } catch (_) {
         return { status: "uncertain", error: safeError("MEDIA_REMOTE_UNCERTAIN", "transport", "manual-check", "无法确认媒体投稿结果") };
       }

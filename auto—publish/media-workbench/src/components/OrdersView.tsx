@@ -1,59 +1,103 @@
-﻿import React, { useState } from 'react';
-import { RealOrder } from '../types';
-import { 
-  ClipboardList, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  Clock, 
+﻿import React, { useState } from "react";
+import { RealOrder } from "../types";
+import {
+  ClipboardList,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
   Search,
   RefreshCw,
   Calendar,
   Globe,
-  ExternalLink
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { formatBeijingTime } from '../time-format';
+  ExternalLink,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { formatBeijingTime } from "../time-format";
 
 interface OrdersViewProps {
   orders: RealOrder[];
   onSyncOrder: (orderNid: string) => Promise<unknown>;
+  onOpenPublishedUrl: (orderNid: string) => Promise<unknown>;
   syncingOrderNid?: string | null;
   errorMessage?: string | null;
 }
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
-  '0': { label: '待安排', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', icon: <Clock className="w-3.5 h-3.5" /> },
-  '1': { label: '已安排', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: <Clock className="w-3.5 h-3.5 animate-pulse" /> },
-  '2': { label: '已发布', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
-  '4': { label: '已退稿', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: <XCircle className="w-3.5 h-3.5" /> },
-  '9': { label: '售后中', color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+const STATUS_MAP: Record<
+  string,
+  {
+    label: string;
+    color: string;
+    bg: string;
+    border: string;
+    icon: React.ReactNode;
+  }
+> = {
+  "0": {
+    label: "待安排",
+    color: "text-slate-600",
+    bg: "bg-blue-50",
+    border: "border-blue-200",
+    icon: <Clock className="w-3.5 h-3.5" />,
+  },
+  "1": {
+    label: "已安排",
+    color: "text-amber-600",
+    bg: "bg-amber-50",
+    border: "border-amber-200",
+    icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" />,
+  },
+  "2": {
+    label: "已发布",
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
+    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+  },
+  "4": {
+    label: "已退稿",
+    color: "text-rose-600",
+    bg: "bg-rose-50",
+    border: "border-rose-200",
+    icon: <AlertTriangle className="w-3.5 h-3.5" />,
+  },
+  "9": {
+    label: "售后中",
+    color: "text-purple-600",
+    bg: "bg-purple-50",
+    border: "border-purple-200",
+    icon: <AlertTriangle className="w-3.5 h-3.5" />,
+  },
 };
 
 function getStatusInfo(statusCode: string) {
-  if (statusCode === 'queued') return { label: '已入队', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', icon: <Clock className="w-3.5 h-3.5" /> };
-  if (statusCode === 'submitting') return { label: '投稿中', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" /> };
-  if (statusCode === 'submitted') return { label: '已提交', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', icon: <Clock className="w-3.5 h-3.5" /> };
-  if (statusCode === 'uncertain') return { label: '待确认', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> };
-  if (statusCode === 'failed') return { label: '失败', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', icon: <XCircle className="w-3.5 h-3.5" /> };
-  return STATUS_MAP[statusCode] || { label: statusCode ? `状态:${statusCode}` : '未知', color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', icon: <AlertTriangle className="w-3.5 h-3.5" /> };
+  return (
+    STATUS_MAP[statusCode] || {
+      label: statusCode ? `状态:${statusCode}` : "未知",
+      color: "text-slate-400",
+      bg: "bg-slate-50",
+      border: "border-slate-200",
+      icon: <AlertTriangle className="w-3.5 h-3.5" />,
+    }
+  );
 }
 
 export default function OrdersView({
   orders,
   onSyncOrder,
+  onOpenPublishedUrl,
   syncingOrderNid = null,
   errorMessage = null,
 }: OrdersViewProps) {
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedOrderNid, setExpandedOrderNid] = useState<string | null>(null);
+  const [openingOrderNid, setOpeningOrderNid] = useState<string | null>(null);
 
-  const filteredOrders = orders.filter(order => {
-    const matchesTab = activeTab === 'all' || order.statusCode === activeTab;
-    const matchesSearch = 
-      order.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      order.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const filteredOrders = orders.filter((order) => {
+    const matchesTab = activeTab === "all" || order.statusCode === activeTab;
+    const matchesSearch =
+      order.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.orderNid.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.resourceName.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
@@ -66,13 +110,24 @@ export default function OrdersView({
     } catch (_) {}
   };
 
+  const handleOpenPublishedUrl = async (orderNid: string) => {
+    if (!orderNid) return;
+    setOpeningOrderNid(orderNid);
+    try {
+      await onOpenPublishedUrl(orderNid);
+    } catch (_) {
+    } finally {
+      setOpeningOrderNid(null);
+    }
+  };
+
   const tabs = [
-    { id: 'all', label: '全部记录' },
-    { id: '2', label: '已发布' },
-    { id: '1', label: '已安排' },
-    { id: '0', label: '待安排' },
-    { id: '4', label: '已退稿' },
-    { id: '9', label: '售后中' },
+    { id: "all", label: "全部记录" },
+    { id: "0", label: "待安排" },
+    { id: "1", label: "已安排" },
+    { id: "2", label: "已发布" },
+    { id: "4", label: "已退稿" },
+    { id: "9", label: "售后中" },
   ];
 
   return (
@@ -80,13 +135,23 @@ export default function OrdersView({
       {/* Top action block */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">分发队列与订单追踪</h2>
-          <p className="text-xs text-slate-500 mt-1">查看自媒体平台 API 提交状态反馈、下发凭证与资金清算明细</p>
+          <h2 className="text-lg font-bold text-slate-800">
+            分发队列与订单追踪
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            查看付费媒体订单状态、投稿报价与发布结果
+          </p>
         </div>
-
       </div>
 
-      {errorMessage && <div role="alert" className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">{errorMessage}</div>}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+        >
+          {errorMessage}
+        </div>
+      )}
 
       {/* Orders Filter Toolbar */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -97,8 +162,8 @@ export default function OrdersView({
               onClick={() => setActiveTab(tab.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                 activeTab === tab.id
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+                  ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                  : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600"
               }`}
             >
               {tab.label}
@@ -124,7 +189,9 @@ export default function OrdersView({
           <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center">
             <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-3" />
             <p className="text-sm font-medium text-slate-500">暂无订单记录</p>
-            <p className="text-[11px] text-slate-400 mt-1">提交分发任务后，订单将自动出现在这里。</p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              提交分发任务后，订单将自动出现在这里。
+            </p>
           </div>
         )}
 
@@ -147,31 +214,39 @@ export default function OrdersView({
                 <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2.5 mb-1.5">
-                      <h3 className="text-sm font-bold text-slate-800 truncate">{order.title || order.filename || '(无标题)'}</h3>
-                      <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}>
+                      <h3 className="text-sm font-bold text-slate-800 truncate">
+                        {order.title || order.filename || "(无标题)"}
+                      </h3>
+                      <span
+                        className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}
+                      >
                         {statusInfo.icon}
                         <span>{statusInfo.label}</span>
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-                      {order.publicationStatus && <span className={`flex items-center space-x-1 ${order.publicationStatus === 'uncertain' ? 'text-rose-600' : 'text-blue-600'}`}><AlertTriangle className="w-3 h-3" /><span>发布记录: {getStatusInfo(order.publicationStatus).label}</span></span>}
-                      {order.publicationId && <span className="font-mono text-[10px] text-slate-400">记录 {order.publicationId.slice(0, 8)}</span>}
                       {order.resourceName && (
                         <span className="flex items-center space-x-1">
                           <Globe className="w-3 h-3" />
-                          <span className="font-medium text-slate-700">{order.resourceName}</span>
+                          <span className="font-medium text-slate-700">
+                            {order.resourceName}
+                          </span>
                         </span>
                       )}
                       {order.submittedAt && (
                         <span className="flex items-center space-x-1">
                           <Calendar className="w-3 h-3" />
-                          <span>提交: {formatBeijingTime(order.submittedAt)}</span>
+                          <span>
+                            提交: {formatBeijingTime(order.submittedAt)}
+                          </span>
                         </span>
                       )}
                       {order.publishedAt && (
                         <span className="flex items-center space-x-1 text-emerald-600">
                           <CheckCircle2 className="w-3 h-3" />
-                          <span>发布: {formatBeijingTime(order.publishedAt)}</span>
+                          <span>
+                            发布: {formatBeijingTime(order.publishedAt)}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -179,32 +254,34 @@ export default function OrdersView({
 
                   {/* Actions and price */}
                   <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-                    {order.price && (
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">费用</span>
-                        <span className="font-bold text-slate-800 font-mono text-sm">¥{order.price}</span>
-                      </div>
-                    )}
-                    {order.filename && (
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">源文件</span>
-                        <span className="font-mono text-[11px] font-semibold text-slate-600">{order.filename}</span>
-                      </div>
-                    )}
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">
+                        投稿报价
+                      </span>
+                      <span className="font-bold text-slate-800 font-mono text-sm">
+                        {order.price ? `¥${order.price}` : "未记录"}
+                      </span>
+                    </div>
                     <div className="flex items-center space-x-1.5">
                       <button
-                        onClick={() => setExpandedOrderNid(isExpanded ? null : order.orderNid)}
+                        onClick={() =>
+                          setExpandedOrderNid(
+                            isExpanded ? null : order.orderNid,
+                          )
+                        }
                         className="flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg border border-slate-200/60 transition-all text-xs"
                       >
                         <ClipboardList className="w-3.5 h-3.5" />
-                        <span>{isExpanded ? '收起详情' : '订单详情'}</span>
+                        <span>{isExpanded ? "收起详情" : "订单详情"}</span>
                       </button>
                       <button
                         onClick={() => handleSync(order.orderNid)}
                         disabled={!order.orderNid || isSyncing}
                         className="flex items-center space-x-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-lg border border-blue-200/60 transition-all disabled:opacity-50 text-xs"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`}
+                        />
                         <span>同步</span>
                       </button>
                     </div>
@@ -216,7 +293,7 @@ export default function OrdersView({
                   {isExpanded && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
+                      animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
@@ -224,45 +301,63 @@ export default function OrdersView({
                         <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 font-mono text-[10.5px] leading-relaxed text-slate-300 space-y-1.5">
                           <div className="flex items-center space-x-2 border-b border-slate-800 pb-2 mb-2">
                             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                            <span className="text-slate-500 uppercase font-bold tracking-wider text-[9px]">订单详情控制台</span>
+                            <span className="text-slate-500 uppercase font-bold tracking-wider text-[9px]">
+                              订单详情控制台
+                            </span>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                             <div className="flex justify-between">
                               <span className="text-slate-500">订单编号:</span>
-                              <span className="text-slate-300">{order.orderNid || '-'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">资源ID:</span>
-                              <span className="text-slate-300">{order.resourceId || '-'}</span>
+                              <span className="text-slate-300">
+                                {order.orderNid || "-"}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">状态码:</span>
-                              <span className={statusInfo.color}>{order.statusCode} ({statusInfo.label})</span>
+                              <span className={statusInfo.color}>
+                                {order.statusCode} ({statusInfo.label})
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">费用:</span>
-                              <span className="text-slate-300">¥{order.price || '0'}</span>
+                              <span className="text-slate-300">
+                                {order.price ? `¥${order.price}` : "未记录"}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">提交时间:</span>
-                              <span className="text-slate-300">{order.submittedAt ? formatBeijingTime(order.submittedAt) : '-'}</span>
+                              <span className="text-slate-300">
+                                {order.submittedAt
+                                  ? formatBeijingTime(order.submittedAt)
+                                  : "-"}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">发布时间:</span>
-                              <span className="text-emerald-400">{order.publishedAt ? formatBeijingTime(order.publishedAt) : '-'}</span>
+                              <span className="text-emerald-400">
+                                {order.publishedAt
+                                  ? formatBeijingTime(order.publishedAt)
+                                  : "-"}
+                              </span>
                             </div>
                           </div>
                           {order.orderUrl && (
                             <div className="pt-2 border-t border-slate-800 mt-2">
-                              <a
-                                href={order.orderUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center space-x-1.5 text-blue-400 hover:text-blue-300 transition-colors"
+                              <button
+                                type="button"
+                                disabled={openingOrderNid === order.orderNid}
+                                onClick={() =>
+                                  void handleOpenPublishedUrl(order.orderNid)
+                                }
+                                className="flex items-center space-x-1.5 text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
                               >
                                 <ExternalLink className="w-3 h-3" />
-                                <span className="truncate">{order.orderUrl}</span>
-                              </a>
+                                <span>
+                                  {openingOrderNid === order.orderNid
+                                    ? "正在打开…"
+                                    : "打开发布链接"}
+                                </span>
+                              </button>
                             </div>
                           )}
                         </div>

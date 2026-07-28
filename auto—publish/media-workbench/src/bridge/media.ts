@@ -91,6 +91,9 @@ type OrdersApi = {
   syncOrder: (
     orderNid: string,
   ) => Promise<IpcResponse<{ order: Record<string, unknown> }>>;
+  openPublishedUrl: (
+    orderNid: string,
+  ) => Promise<IpcResponse<{ completed: boolean }>>;
 };
 
 function mediaApi(): MediaApi | null {
@@ -115,7 +118,27 @@ async function unwrap<T>(
   return result.data;
 }
 
-function normalizeArticle(raw: Record<string, unknown>): Article {
+type ArticleSummary = Omit<
+  Article,
+  "content" | "words" | "tags" | "lastModified"
+>;
+
+function normalizeArticleSummary(raw: Record<string, unknown>): ArticleSummary {
+  return {
+    filename: String(raw.filename || ""),
+    title: String(raw.title || ""),
+    selectedResources: Array.isArray(raw.selectedResources)
+      ? (raw.selectedResources as MediaResource[])
+      : [],
+    autoTitle: String(raw.autoTitle || ""),
+    remark: String(raw.remark || ""),
+    hasImages: Boolean(raw.hasImages),
+    imageCount: typeof raw.imageCount === "number" ? raw.imageCount : 0,
+    ignoreImages: Boolean(raw.ignoreImages),
+  };
+}
+
+function normalizeArticlePreview(raw: Record<string, unknown>): Article {
   const content = typeof raw.content === "string" ? raw.content : "";
   return {
     filename: String(raw.filename || ""),
@@ -165,7 +188,7 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
     publishedAt: formatBeijingTime(raw.publishedAt || ""),
     resourceId: String(raw.resourceId || ""),
     resourceName: String(raw.resourceName || ""),
-    price: String(raw.price || "0"),
+    price: typeof raw.price === "string" ? raw.price : "",
     orderUrl: String(raw.orderUrl || ""),
     publicationId:
       typeof raw.publicationId === "string" ? raw.publicationId : undefined,
@@ -178,11 +201,11 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
   };
 }
 
-export async function scanArticles(): Promise<Article[]> {
+export async function scanArticles(): Promise<ArticleSummary[]> {
   const api = mediaApi();
   if (!api) return [];
   const data = await unwrap(api.scanArticles(), "scanArticles failed");
-  return data.items.map(normalizeArticle);
+  return data.items.map(normalizeArticleSummary);
 }
 export async function previewArticle(filename: string): Promise<Article> {
   const api = mediaApi();
@@ -191,7 +214,7 @@ export async function previewArticle(filename: string): Promise<Article> {
     api.previewArticle(filename),
     "previewArticle failed",
   );
-  return normalizeArticle(data.article);
+  return normalizeArticlePreview(data.article);
 }
 export async function getDrafts(): Promise<Draft[]> {
   const api = mediaApi();
@@ -378,4 +401,9 @@ export async function syncOrder(orderNid: string): Promise<unknown> {
   const api = ordersApi();
   if (!api) return null;
   return unwrap(api.syncOrder(orderNid), "syncOrder failed");
+}
+export async function openPublishedUrl(orderNid: string): Promise<void> {
+  const api = ordersApi();
+  if (!api) throw unavailable("openPublishedUrl");
+  await unwrap(api.openPublishedUrl(orderNid), "openPublishedUrl failed");
 }

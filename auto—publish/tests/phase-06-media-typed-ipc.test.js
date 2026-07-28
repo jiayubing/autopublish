@@ -6,9 +6,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const { registerMediaIpc } = require("../desktop/ipc/media-ipc");
-const {
-  createAuthenticatedIpcMain,
-} = require("../desktop/ipc/register");
+const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");
@@ -32,6 +30,7 @@ const MEDIA_CHANNELS = [
   "media:stop-submit",
   "media:get-orders",
   "media:sync-order",
+  "media:open-published-url",
 ];
 
 test("public media pool command projects a full Renderer resource to its exact selection DTO", async () => {
@@ -46,7 +45,9 @@ test("public media pool command projects a full Renderer resource to its exact s
       if (name === "electron") {
         return {
           contextBridge: {
-            exposeInMainWorld(name, api) { exposed[name] = api; },
+            exposeInMainWorld(name, api) {
+              exposed[name] = api;
+            },
           },
           ipcRenderer: {
             invoke(channel, request) {
@@ -93,11 +94,11 @@ test("public media pool command projects a full Renderer resource to its exact s
   );
 });
 
-test("all 18 media invokes have versioned exact contracts", () => {
+test("all 19 media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 18);
+  assert.equal(media.length, 19);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),
@@ -129,9 +130,7 @@ test("media page contracts fail closed above 100 and on unknown fields", () => {
     { code: "IPC_UNKNOWN_FIELD" },
   );
 
-  const search = productionIpcRegistry.byChannel(
-    "media:search-resource-page",
-  );
+  const search = productionIpcRegistry.byChannel("media:search-resource-page");
   assert.deepEqual(search.toArgs({ query: "hotel", page: 2, pageSize: 50 }), [
     { keyword: "hotel", page: 2, pageSize: 50 },
   ]);
@@ -147,21 +146,40 @@ test("media pool is a bounded page plus membership projection, never a full reso
   assert.equal(encoded.payload.pageSize, 50);
   assert.deepEqual(encoded.payload.resourceIds, ["resource-1"]);
   assert.throws(
-    () => productionIpcRegistry.encodeRequest(contract, { page: 1, pageSize: 101, resourceIds: [] }),
+    () =>
+      productionIpcRegistry.encodeRequest(contract, {
+        page: 1,
+        pageSize: 101,
+        resourceIds: [],
+      }),
     { code: "IPC_REQUEST_INVALID" },
   );
   const result = productionIpcRegistry.success(contract, {
-    items: [], memberResourceIds: ["resource-1"], total: 0, page: 1, pageSize: 50,
-    totalPages: 0, hasPrev: false, hasNext: false,
+    items: [],
+    memberResourceIds: ["resource-1"],
+    total: 0,
+    page: 1,
+    pageSize: 50,
+    totalPages: 0,
+    hasPrev: false,
+    hasNext: false,
   });
   assert.equal(result.data.items.length, 0);
   assert.equal(result.data.memberResourceIds.length, 1);
   assert.throws(
-    () => productionIpcRegistry.success(contract, {
-      items: Array.from({ length: 101 }, (_, index) => ({ resourceId: `r-${index}` })),
-      memberResourceIds: [], total: 101, page: 1, pageSize: 100,
-      totalPages: 2, hasPrev: false, hasNext: true,
-    }),
+    () =>
+      productionIpcRegistry.success(contract, {
+        items: Array.from({ length: 101 }, (_, index) => ({
+          resourceId: `r-${index}`,
+        })),
+        memberResourceIds: [],
+        total: 101,
+        page: 1,
+        pageSize: 100,
+        totalPages: 2,
+        hasPrev: false,
+        hasNext: true,
+      }),
     { code: "IPC_RESULT_INVALID" },
   );
 });
@@ -226,13 +244,16 @@ test("media registrar projects resources and articles before typed success valid
         {
           resourceId: "resource-1",
           name: "Fixture resource",
-          price: 12.5,
+          price: "12.5",
           raw: { apiKey: "provider-secret", path: "C:\\private" },
         },
       ],
     }),
   );
-  fs.writeFileSync(path.join(mediaInput, "article.md"), "# Fixture article\nBody");
+  fs.writeFileSync(
+    path.join(mediaInput, "article.md"),
+    "# Fixture article\nBody",
+  );
 
   const handlers = new Map();
   const ipcMain = createAuthenticatedIpcMain(
@@ -255,7 +276,9 @@ test("media registrar projects resources and articles before typed success valid
     getBalance: async () => ({ balance: "100" }),
   };
   let paidSubmitCalls = 0;
+  let submittedArticles = [];
   let publicationRecords = [];
+  const openedUrls = [];
   registerMediaIpc({
     ipcMain,
     paths: { data, mediaInput },
@@ -263,8 +286,19 @@ test("media registrar projects resources and articles before typed success valid
     mediaClientProvider: () => client,
     operationalStore: {
       listPublicationRecords: ({ articleIds }) =>
-        publicationRecords.filter((record) => articleIds.includes(record.articleId)),
+        publicationRecords.filter((record) =>
+          articleIds.includes(record.articleId),
+        ),
+      listRemoteOrders: () => [
+        {
+          orderId: "order-published",
+          status: "published",
+          remoteStatusCode: "2",
+          remoteUrl: "https://publisher.example/article/1",
+        },
+      ],
     },
+    openExternal: async (url) => openedUrls.push(url),
     platformWorkbenchService: {
       prepareMediaPublicationCommands: async (items) =>
         items.flatMap((item) =>
@@ -276,24 +310,35 @@ test("media registrar projects resources and articles before typed success valid
         ),
     },
     mediaPublicationSubmissionService: {
-      submit: async () => {
+      submit: async (articles) => {
         paidSubmitCalls += 1;
-        throw new Error("paid submission must not run during preflight");
+        submittedArticles = articles;
+        return {
+          batchId: "batch-fixture",
+          results: [{ status: "submitted" }],
+        };
       },
     },
   });
 
-  const pageContract = productionIpcRegistry.byChannel("media:get-resource-page");
+  const pageContract = productionIpcRegistry.byChannel(
+    "media:get-resource-page",
+  );
   const page = await handlers.get(pageContract.channel)(
     {},
-    productionIpcRegistry.encodeRequest(pageContract, { page: 1, pageSize: 50 }),
+    productionIpcRegistry.encodeRequest(pageContract, {
+      page: 1,
+      pageSize: 50,
+    }),
   );
   assert.equal(page.ok, true, JSON.stringify(page));
   assert.equal(page.schemaVersion, 1);
   assert.equal(page.data.items.length, 1);
   assert.equal("raw" in page.data.items[0], false);
 
-  const articleContract = productionIpcRegistry.byChannel("media:scan-articles");
+  const articleContract = productionIpcRegistry.byChannel(
+    "media:scan-articles",
+  );
   const articles = await handlers.get(articleContract.channel)(
     {},
     productionIpcRegistry.encodeRequest(articleContract, {}),
@@ -320,9 +365,7 @@ test("media registrar projects resources and articles before typed success valid
   const preflight = await handlers.get(preflightContract.channel)(
     {},
     productionIpcRegistry.encodeRequest(preflightContract, {
-      submissions: [
-        { filename: "article.md", resourceIds: ["resource-1"] },
-      ],
+      submissions: [{ filename: "article.md", resourceIds: ["resource-1"] }],
     }),
   );
   assert.equal(preflight.ok, true, JSON.stringify(preflight));
@@ -335,6 +378,19 @@ test("media registrar projects resources and articles before typed success valid
   assert.equal(preflight.data.actualPrice, 12.5);
   assert.equal(paidSubmitCalls, 0);
 
+  const submitContract = productionIpcRegistry.byChannel(
+    "media:submit-selected",
+  );
+  const submitted = await handlers.get(submitContract.channel)(
+    {},
+    productionIpcRegistry.encodeRequest(submitContract, {
+      submissions: [{ filename: "article.md", resourceIds: ["resource-1"] }],
+    }),
+  );
+  assert.equal(submitted.ok, true, JSON.stringify(submitted));
+  assert.equal(paidSubmitCalls, 1);
+  assert.equal(submittedArticles[0].selectedResources[0].price, 12.5);
+
   publicationRecords = [
     {
       publicationId: "publication-1",
@@ -344,12 +400,11 @@ test("media registrar projects resources and articles before typed success valid
       attempts: [],
     },
   ];
+  const submitCallsBeforeBlockedPreflight = paidSubmitCalls;
   const blockedPreflight = await handlers.get(preflightContract.channel)(
     {},
     productionIpcRegistry.encodeRequest(preflightContract, {
-      submissions: [
-        { filename: "article.md", resourceIds: ["resource-1"] },
-      ],
+      submissions: [{ filename: "article.md", resourceIds: ["resource-1"] }],
     }),
   );
   assert.equal(blockedPreflight.ok, true, JSON.stringify(blockedPreflight));
@@ -357,9 +412,23 @@ test("media registrar projects resources and articles before typed success valid
   assert.equal(blockedPreflight.data.blockedResourceCount, 1);
   assert.equal(blockedPreflight.data.blockedResources[0].status, "published");
   assert.equal(blockedPreflight.data.actualPrice, 0);
-  assert.equal(paidSubmitCalls, 0);
+  assert.equal(paidSubmitCalls, submitCallsBeforeBlockedPreflight);
 
-  const refreshContract = productionIpcRegistry.byChannel("media:refresh-resources");
+  const openContract = productionIpcRegistry.byChannel(
+    "media:open-published-url",
+  );
+  const opened = await handlers.get(openContract.channel)(
+    {},
+    productionIpcRegistry.encodeRequest(openContract, {
+      orderNid: "order-published",
+    }),
+  );
+  assert.equal(opened.ok, true, JSON.stringify(opened));
+  assert.deepEqual(openedUrls, ["https://publisher.example/article/1"]);
+
+  const refreshContract = productionIpcRegistry.byChannel(
+    "media:refresh-resources",
+  );
   const refresh = await handlers.get(refreshContract.channel)(
     {},
     productionIpcRegistry.encodeRequest(refreshContract, {}),
