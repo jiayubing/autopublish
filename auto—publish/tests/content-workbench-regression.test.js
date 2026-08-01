@@ -81,6 +81,11 @@ describe("content workbench regression", function() {
     assert.doesNotMatch(api, /export function startPreparedDoubaoBatch[\s\S]*return startDoubaoBatch\(tasks\)/);
   });
 
+  it("unwraps prepared batch command input before calling the task-array bridge", function() {
+    const feature = read("media-workbench/src/features/content/use-content-workbench-feature.ts");
+    assert.match(feature, /startPreparedDoubaoBatch:\s*\(input:\s*\{\s*tasks:\s*DoubaoBatchTask\[\]\s*\}\)\s*=>\s*startPreparedDoubaoBatch\(input\.tasks\)/);
+  });
+
   it("keeps batch selection and answer expansion as independent controls", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
     const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");

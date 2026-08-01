@@ -42,7 +42,7 @@ import {
   updateContentQuestion,
 } from '../../bridge/content';
 import { reconcilePublicationHistory } from '../../bridge/publication';
-import type { GeneratedContentArticle } from '../../types';
+import type { DoubaoBatchTask, GeneratedContentArticle } from '../../types';
 import { useWorkspaceRuntimeIdentity, useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { createContentWorkbenchFeature } from './content-workbench-feature.js';
 
@@ -67,7 +67,7 @@ export function useContentWorkbenchFeature() {
       previewExport,
       exportToSubmissionQueue,
       collectDoubaoQuestion,
-      startPreparedDoubaoBatch,
+      startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) => startPreparedDoubaoBatch(input.tasks),
       pauseDoubaoBatch,
       resumeDoubaoBatch,
       stopDoubaoBatch,
