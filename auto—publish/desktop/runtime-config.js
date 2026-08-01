@@ -292,7 +292,9 @@ function configureRuntimeEnvironment(options) {
   const applicationValues = loadApplicationEnvironment(roamingConfig, runtimeConfigStore);
   loadWorkspaceEnvironment(contentLibrary);
   ensureWorkspaceDirectories(paths);
-  [paths.logs, paths.cache, paths.tmp, paths.work, paths.browser].forEach(function(directory) {
+  // The diagnostic sink owns log-directory creation and cleanup so a symlinked
+  // local-state path cannot be followed by this generic bootstrap mkdir.
+  [paths.cache, paths.tmp, paths.work, paths.browser].forEach(function(directory) {
     fs.mkdirSync(directory, { recursive: true });
   });
 

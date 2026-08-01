@@ -10,6 +10,8 @@
     "migrate": "node scripts/migrate.js",
     "backup": "node scripts/backup.js",
     "restore-check": "node scripts/restore-check.js",
+    "recovery-drill": "node scripts/recovery-drill.js",
+    "integrity-check": "node scripts/integrity-check.js",
     "authctl": "node scripts/authctl.js",
     "apctl": "node scripts/apctl.js",
     "admin:create": "node scripts/authctl.js admin create",

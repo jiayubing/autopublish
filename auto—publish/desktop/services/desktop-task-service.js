@@ -118,15 +118,11 @@ function createDesktopTaskService(opts) {
 
       child.on("message", function(message) {
         if (!message || message.schemaVersion !== WORKER_SCHEMA_VERSION || message.runId !== expectedRunId ||
-          !["log", "state", "result", "error"].includes(message.type)) return;
+          !["state", "result"].includes(message.type)) return;
         var safePayload = message.type === "result" ? redactWorkerPayload(message.payload || {}) : message.payload || {};
         var serialized;
         try { serialized = JSON.stringify(safePayload); } catch (_) { return; }
         if (Buffer.byteLength(serialized, "utf8") > 32768 || (message.type !== "result" && /(?:cookie|api[_-]?key|contentHtml|filePath|body|accountName)/i.test(serialized))) return;
-        if (message.type === "log" && hooks && typeof hooks.onLog === "function") {
-          hooks.onLog(safePayload);
-          return;
-        }
         if (message.type === "state" && message.payload) {
           if (hooks && typeof hooks.onState === "function") hooks.onState(safePayload);
           return;
@@ -242,7 +238,6 @@ function closeBrowserSessions() {
           platformTaskStateStore.start({ runId: run.runId, tasks: run.command.tasks });
           sendPlatformState(platformTaskStateStore.getSnapshot());
           return spawnDesktopTask("platform-submit", Object.assign({}, payload, { plan: { tasks: run.command.tasks }, runId: run.runId }), {
-            onLog: hooks && hooks.onLog ? hooks.onLog : function() {},
             onState: function(state) { run.onMessage({ schemaVersion: WORKER_SCHEMA_VERSION, runId: run.runId, type: "state", payload: state }); }
           });
         },

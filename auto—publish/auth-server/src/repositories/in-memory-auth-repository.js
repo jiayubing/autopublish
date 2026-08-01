@@ -99,7 +99,8 @@ class InMemoryAuthRepository {
     return clone(events);
   }
 
-  healthCheck() { return true; }
+  probeReadiness() { return { ok: true, schemaVersion: 2, connection: "memory" }; }
+  healthCheck() { this.probeReadiness(); return true; }
   getData() { return clone(this.state); }
   close() {}
 }

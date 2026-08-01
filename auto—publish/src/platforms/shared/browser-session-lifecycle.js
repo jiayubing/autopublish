@@ -1,15 +1,25 @@
 const fs = require("node:fs");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 function createBrowserSessionLifecycle(options) {
   const opts = options || {};
   const session = opts.session;
   const run = opts.pwRun;
-  const logger = opts.log || function () {};
   const sleep = opts.sleep || function () {};
   const ensureDir = opts.ensureDir || function () {};
   const io = opts.fs || fs;
   if (!session || typeof run !== "function")
     throw new Error("Browser session lifecycle dependencies are required");
+
+  function diagnose(code, category, operation) {
+    reportDiagnostic({
+      code,
+      module: "browser-session",
+      category,
+      operationId: operation || "browser-session",
+      metadata: { session: session.session, action: operation || "lifecycle" },
+    });
+  }
 
   function isAlive() {
     try {
@@ -25,16 +35,16 @@ function createBrowserSessionLifecycle(options) {
 
   function ensureStarted() {
     if (isAlive()) {
-      logger("Browser daemon already running", "INFO");
+      diagnose("BROWSER_SESSION_ALREADY_RUNNING", "transport", "ensure");
       return;
     }
     if (typeof opts.start !== "function")
       throw new Error("Browser daemon start command is unavailable");
-    logger("Starting browser daemon...", "WARN");
+    diagnose("BROWSER_SESSION_STARTING", "transport", "start");
     try {
       opts.start();
     } catch (error) {
-      logger("Daemon start command returned: " + error.message, "WARN");
+      diagnose("BROWSER_SESSION_START_FAILED", "transport", "start");
     }
     for (
       let attempt = 0;
@@ -43,10 +53,11 @@ function createBrowserSessionLifecycle(options) {
     ) {
       sleep(Number(opts.pollMs || 1500));
       if (isAlive()) {
-        logger("Browser daemon ready", "INFO");
+        diagnose("BROWSER_SESSION_READY", "transport", "ready");
         return;
       }
     }
+    diagnose("BROWSER_SESSION_START_TIMEOUT", "transport", "start");
     throw new Error("Failed to start browser daemon");
   }
 
@@ -56,7 +67,7 @@ function createBrowserSessionLifecycle(options) {
       timeout: 20000,
       session: session,
     });
-    logger("Loaded saved login state", "INFO");
+    diagnose("BROWSER_SESSION_STATE_LOADED", "authentication", "state-load");
     return true;
   }
 
@@ -66,23 +77,20 @@ function createBrowserSessionLifecycle(options) {
       timeout: 20000,
       session: session,
     });
-    logger("Saved login state", "INFO");
+    diagnose("BROWSER_SESSION_STATE_SAVED", "authentication", "state-save");
   }
 
   function close() {
     try {
       saveState();
     } catch (error) {
-      logger(
-        "Failed to save login state before close: " + error.message,
-        "WARN",
-      );
+      diagnose("BROWSER_SESSION_STATE_SAVE_FAILED", "storage", "state-save");
     }
     try {
       run("close", { timeout: 15000, session: session });
-      logger("Browser session closed", "INFO");
+      diagnose("BROWSER_SESSION_CLOSED", "transport", "close");
     } catch (error) {
-      logger("Failed to close browser session: " + error.message, "WARN");
+      diagnose("BROWSER_SESSION_CLOSE_FAILED", "transport", "close");
     }
   }
 

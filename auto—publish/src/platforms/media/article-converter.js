@@ -2,6 +2,7 @@
 
 const { readFile } = require('node:fs/promises');
 const { extname, basename } = require('node:path');
+const { reportDiagnostic } = require('../../diagnostics/diagnostic-producer');
 
 /**
  * Convert a document file to HTML and plain-text representations.
@@ -111,7 +112,13 @@ async function convertDocxFile(filePath) {
       .filter(function (m) { return m.type === 'warning'; })
       .map(function (m) { return m.message; });
     if (warnings.length > 0) {
-      console.warn('[article-converter] mammoth warnings:', warnings.join('; '));
+      reportDiagnostic({
+        code: 'ARTICLE_CONVERTER_WARNINGS',
+        module: 'media-article-converter',
+        category: 'validation',
+        operationId: 'article-convert',
+        metadata: { itemCount: warnings.length },
+      });
     }
   }
 

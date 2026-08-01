@@ -1,4 +1,10 @@
 const task = process.argv[2];
+const path = require("node:path");
+const {
+  createDiagnosticRecord,
+} = require("../../src/diagnostics/diagnostic-schema");
+const { reportDiagnostic, setDiagnosticReporter } = require("../../src/diagnostics/diagnostic-producer");
+const { createDiagnosticFileSink } = require("../../src/diagnostics/diagnostic-file-sink");
 var stopRequested = false;
 var activeRunId = null;
 var activeAbortController = null;
@@ -6,7 +12,6 @@ var resultDisconnectScheduled = false;
 const WORKER_SCHEMA_VERSION = 1;
 
 if (!task) {
-  console.error("Missing desktop worker task.");
   process.exit(1);
 }
 
@@ -26,14 +31,44 @@ function send(type, payload) {
     return;
   }
 
-  if (type === "result") {
-    console.log(JSON.stringify(payload, null, 2));
-    return;
-  }
+  if (type === "result") process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 
-  if (type === "log" && payload && payload.line) {
-    console.log(payload.line);
+}
+
+function installWorkerDiagnosticReporter(paths) {
+  if (!paths || typeof paths.logs !== "string" || !paths.logs.trim()) return function () {};
+  let sink;
+  try {
+    sink = createDiagnosticFileSink({
+      directory: paths.logs,
+      root: paths.localState || paths.logs,
+    });
+    sink.initialize();
+  } catch (_) {
+    return function () {};
   }
+  return setDiagnosticReporter(function (record) {
+    try {
+      const correlated = record.runId === null && activeRunId
+        ? createDiagnosticRecord(Object.assign({}, record, { runId: activeRunId }))
+        : record;
+      sink.append(correlated);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
+function reportWorkerDiagnostic(code, category, operationId, metadata) {
+  reportDiagnostic({
+    code: code,
+    module: "desktop-worker",
+    category: category,
+    operationId: operationId,
+    runId: activeRunId,
+    metadata: metadata,
+  });
 }
 
 function configureWorkerEnvironment(paths) {
@@ -50,7 +85,7 @@ function configureWorkerEnvironment(paths) {
     AUTO_PUBLISH_LOGS_DIR: paths.logs,
     AUTO_PUBLISH_PLAYWRIGHT_HOME: paths.browser,
     AUTO_PUBLISH_PLAYWRIGHT_PROFILE_DIR: paths.doubaoBrowser,
-    AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: paths.browser && require("path").join(paths.browser, "state"),
+    AUTO_PUBLISH_PLAYWRIGHT_STATE_DIR: paths.browser && path.join(paths.browser, "state"),
     AUTO_PUBLISH_NODE_EXEC_PATH: paths.playwrightNodeExecPath,
     PLAYWRIGHT_CLI_JS: paths.playwrightCliJs,
     BROWSER_CHANNEL: paths.browserChannel,
@@ -68,25 +103,13 @@ process.on("message", function(message) {
   if (message.type === "stop" && !stopRequested) {
     stopRequested = true;
     if (activeAbortController) activeAbortController.abort("operator");
-    var ts = new Date().toISOString().replace("T", " ").substring(0, 19);
-    send("log", {
-      ts: ts,
-      level: "WARN",
-      message: "Stop requested; the current item will stop at the next safe point",
-      line: "[" + ts + "] [WARN] Stop requested; the current item will stop at the next safe point"
-    });
+    reportWorkerDiagnostic("PLATFORM_WORKER_STOP_REQUESTED", "conflict", "platform-stop", { action: "stop" });
     return;
   }
 
   if (message.type === "pause") {
     // Immediately close all browser sessions to break the current blocking pwRun call
-    var ts2 = new Date().toISOString().replace("T", " ").substring(0, 19);
-    send("log", {
-      ts: ts2,
-      level: "WARN",
-      message: "Pause requested; closing browser immediately",
-      line: "[" + ts2 + "] [WARN] Pause requested; closing browser immediately"
-    });
+    reportWorkerDiagnostic("PLATFORM_WORKER_PAUSE_REQUESTED", "conflict", "platform-pause", { action: "pause" });
     stopRequested = true;
     try {
       const { loadPlatforms } = require("../../src/core/platforms");
@@ -121,16 +144,14 @@ process.on("message", function(message) {
     if (task === "platform-submit") {
       const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
       configureWorkerEnvironment(options.paths);
-      const { loadPlatforms } = require("../../src/core/platforms");
       const { createWorkerPublisherExecutor } = require("./publisher-executor");
-      const { subscribe } = require("../../src/core/logger");
       const { clearStopSignal } = require("../../src/core/stop-signal");
-      const rootDir = options.paths && (options.paths.contentLibrary || options.paths.workspaceRoot) || process.env.AUTO_PUBLISH_WORKSPACE || require("path").resolve(__dirname, "..", "..");
       const plan = options.plan || { tasks: [] };
       const submitOptions = options.submitOptions || { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: 90000 };
       const runId = typeof options.runId === "string" ? options.runId : null;
       if (!runId) throw new Error("Platform worker runId is required");
       activeRunId = runId;
+      const restoreDiagnosticReporter = installWorkerDiagnosticReporter(options.paths);
 
       function sendPlatformState(state) {
         send("state", Object.assign({}, state || {}, {
@@ -142,18 +163,10 @@ process.on("message", function(message) {
       clearStopSignal();
       activeAbortController = new AbortController();
 
-      const unsubscribe = subscribe(function(entry) {
-        send("log", entry);
-      });
-
       try {
-        send("log", {
-          ts: new Date().toISOString(),
-          level: "INFO",
-          message: "Platform publish starting (" + plan.tasks.length + " tasks)",
-          line: "[" + new Date().toISOString().replace("T", " ").substring(0, 19) + "] [INFO] Platform publish starting (" + plan.tasks.length + " tasks)"
-        });
+        reportWorkerDiagnostic("PLATFORM_WORKER_STARTED", "transport", "platform-submit", { taskKind: "platform-submit", taskCount: plan.tasks.length });
 
+        const { loadPlatforms } = require("../../src/core/platforms");
         const loadedPlatforms = loadPlatforms();
       const adapters = {};
       loadedPlatforms.forEach(function(platform) { adapters[platform.id] = platform; });
@@ -181,10 +194,11 @@ process.on("message", function(message) {
           clearInterval(heartbeat);
         }
       } catch (error) {
+        reportWorkerDiagnostic("PLATFORM_WORKER_FAILED", "internal", "platform-submit", { outcome: "failed" });
         send("result", { ok: false, error: { code: error && error.code || "PLATFORM_WORKER_FAILED", category: "internal", retryability: "manual-check", userMessage: "投稿执行器未完成" } });
       } finally {
         activeAbortController = null;
-        unsubscribe();
+        restoreDiagnosticReporter();
         try {
           const loadedPlatforms = require("../../src/core/platforms").loadPlatforms();
           loadedPlatforms.forEach(function(platform) {

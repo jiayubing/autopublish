@@ -265,6 +265,14 @@ export interface RuntimeBrowserCapability extends RuntimeCapability {
   configured: boolean;
   probed: boolean;
 }
+export interface RuntimeDiagnosticEvent {
+  diagnosticId: string;
+  userMessage: string;
+  summary: {
+    code: string;
+    category: IpcError['category'];
+  };
+}
 export interface RuntimeDiagnostics {
   ok: boolean;
   buildInfo: { version: string; commit: string; dirty: boolean };
@@ -283,6 +291,7 @@ export interface RuntimeDiagnostics {
   };
   errors: Array<{ code: string; message: string }>;
   warnings: Array<{ code: string; message: string }>;
+  runtimeEvents?: RuntimeDiagnosticEvent[];
 }
 
 export type GenerationBatchLiveStatus =

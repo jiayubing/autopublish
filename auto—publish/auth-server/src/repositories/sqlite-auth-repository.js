@@ -1,14 +1,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync, backup } = require("node:sqlite");
-
-const CURRENT_SCHEMA_VERSION = 2;
-const MIGRATION_NAME = "002-multi-user";
-const REQUIRED_TABLES = ["users", "entitlements", "devices", "sessions", "used_refresh_tokens", "audit_events"];
-const REQUIRED_USER_COLUMNS = [
-  "id", "login_name", "password_hash", "role", "enabled", "must_change_password", "max_devices", "note",
-  "failed_login_count", "locked_until", "created_at", "updated_at", "last_login_at", "password_changed_at",
-];
+const { applyMigrations } = require("../auth-migration-guard");
+const {
+  CURRENT_SCHEMA_VERSION,
+  REQUIRED_TABLES,
+  REQUIRED_COLUMNS,
+  verifyOpenDatabase,
+  verifySchemaOnly,
+} = require("../auth-database-verifier");
 
 function ensureDirectory(filename) {
   if (filename === ":memory:" || filename.startsWith("file:")) return;
@@ -62,43 +62,18 @@ function auditFromRow(row) {
   return { id: row.id, eventCode: row.event_code, userId: row.user_id, deviceId: row.device_id, sourceFingerprint: row.source_fingerprint, resultCode: row.result_code, createdAt: row.created_at };
 }
 
-function applyMigrations(db, options) {
-  const opts = options || {};
-  db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
-  const versions = db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all();
-  const highest = versions.length ? Number(versions[versions.length - 1].version) : 0;
-  if (highest > CURRENT_SCHEMA_VERSION) throw Object.assign(new Error("unknown database schema"), { code: "AUTH_DB_UNKNOWN_SCHEMA" });
-  const existingUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-  if (existingUsers && highest === 0) throw Object.assign(new Error("legacy database schema is not supported"), { code: "AUTH_DB_LEGACY_SCHEMA" });
-  if (!versions.some((item) => Number(item.version) === CURRENT_SCHEMA_VERSION)) {
-    const migrationPath = opts.migrationPath || path.join(__dirname, "../../migrations/002-multi-user.sql");
-    const sql = fs.readFileSync(migrationPath, "utf8");
-    db.exec("BEGIN IMMEDIATE");
-    try {
-      db.exec(sql);
-      db.prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)").run(CURRENT_SCHEMA_VERSION, MIGRATION_NAME, new Date().toISOString());
-      db.exec("COMMIT");
-    } catch (error) {
-      try { db.exec("ROLLBACK"); } catch (_) { /* keep original migration failure */ }
-      throw error;
-    }
-  }
+function verifySchema(db) {
+  verifySchemaOnly(db);
+  return true;
 }
 
-function verifySchema(db) {
-  const migration = db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get();
-  if (!migration || Number(migration.version) !== CURRENT_SCHEMA_VERSION) throw Object.assign(new Error("unknown database schema"), { code: "AUTH_DB_UNKNOWN_SCHEMA" });
-  for (const table of REQUIRED_TABLES) {
-    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)) throw Object.assign(new Error("incomplete database schema"), { code: "AUTH_DB_UNKNOWN_SCHEMA" });
-  }
-  const columns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
-  if (REQUIRED_USER_COLUMNS.some((column) => !columns.includes(column))) throw Object.assign(new Error("incomplete database schema"), { code: "AUTH_DB_UNKNOWN_SCHEMA" });
-  const integrity = db.prepare("PRAGMA integrity_check").get();
-  if (!integrity || String(integrity.integrity_check).toLowerCase() !== "ok") throw Object.assign(new Error("database integrity check failed"), { code: "AUTH_DB_CORRUPT" });
+function configureConnection(db) {
+  db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;");
 }
 
 function configureDatabase(db) {
-  db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL; PRAGMA journal_mode = WAL;");
+  configureConnection(db);
+  db.exec("PRAGMA journal_mode = WAL;");
 }
 
 class SqliteAuthRepository {
@@ -109,8 +84,9 @@ class SqliteAuthRepository {
     let db;
     try {
       db = new DatabaseSync(this.filePath);
+      configureConnection(db);
+      this.migrationResult = applyMigrations(db, Object.assign({}, opts, { skipIntegrity: opts.skipIntegrity === true }));
       configureDatabase(db);
-      applyMigrations(db, opts);
       verifySchema(db);
     } catch (error) {
       if (db) { try { db.close(); } catch (_) { /* fail closed */ } }
@@ -223,8 +199,24 @@ class SqliteAuthRepository {
     return this.db.prepare(`SELECT * FROM audit_events${clauses.length ? ` WHERE ${clauses.join(" AND ")}` : ""} ORDER BY created_at DESC LIMIT ?`).all(...values, limit).map(auditFromRow);
   }
 
+  probeReadiness() {
+    const connection = this.db.prepare("SELECT 1 AS ok").get();
+    if (!connection || Number(connection.ok) !== 1) throw Object.assign(new Error("database connection unavailable"), { code: "AUTH_DB_UNAVAILABLE" });
+    const marker = this.db.prepare("SELECT version FROM schema_migrations WHERE version=?").get(CURRENT_SCHEMA_VERSION);
+    if (!marker) throw Object.assign(new Error("unknown database schema"), { code: "AUTH_DB_UNKNOWN_SCHEMA" });
+    const placeholders = REQUIRED_TABLES.map(() => "?").join(",");
+    const tables = this.db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN (${placeholders})`).get(...REQUIRED_TABLES);
+    if (!tables || Number(tables.count) !== REQUIRED_TABLES.length) throw Object.assign(new Error("incomplete database schema"), { code: "AUTH_DB_UNKNOWN_SCHEMA" });
+    return { ok: true, schemaVersion: CURRENT_SCHEMA_VERSION, connection: "open" };
+  }
+
   healthCheck() {
-    verifySchema(this.db);
+    this.probeReadiness();
+    return true;
+  }
+
+  integrityCheck() {
+    verifyOpenDatabase(this.db);
     return true;
   }
 
@@ -238,4 +230,4 @@ class SqliteAuthRepository {
 
 function createSqliteAuthRepository(options) { return new SqliteAuthRepository(options); }
 
-module.exports = { SqliteAuthRepository, createSqliteAuthRepository, applyMigrations, verifySchema, CURRENT_SCHEMA_VERSION };
+module.exports = { SqliteAuthRepository, createSqliteAuthRepository, applyMigrations, verifySchema, verifyOpenDatabase, CURRENT_SCHEMA_VERSION, REQUIRED_TABLES, REQUIRED_COLUMNS };

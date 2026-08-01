@@ -235,10 +235,22 @@ const browserCapability = exactObject({
   probed: "boolean",
 });
 const diagnosticItem = exactObject({ code: token(), message: text(512, 1) });
-const runtimeEvent = exactObject({
+const diagnosticSummary = exactObject({
   code: token(),
-  message: text(512, 1),
-  occurredAt: text(64, 1),
+  category: enumField([
+    "validation",
+    "authentication",
+    "transport",
+    "remote",
+    "storage",
+    "conflict",
+    "internal",
+  ]),
+});
+const runtimeEvent = exactObject({
+  diagnosticId: token(),
+  userMessage: text(256, 1),
+  summary: diagnosticSummary,
 });
 const runtimeDiagnostics = exactObject({
   ok: "boolean",
@@ -314,6 +326,21 @@ const PLATFORM_ERRORS = Object.fromEntries([
   retryability: code.includes("BUSY") || code.includes("FAILED") || code.includes("TIMEOUT") ? "safe" : "never",
   userMessage: "平台设置操作未完成，请检查配置后重试。",
 }]));
+Object.assign(PLATFORM_ERRORS, {
+  MEDIA_ENDPOINT_REQUIRED: { category: "validation", retryability: "never", userMessage: "尚未配置媒体服务 endpoint。" },
+  MEDIA_CONFIG_INVALID: { category: "validation", retryability: "never", userMessage: "媒体服务配置无效，请检查输入项。" },
+  MEDIA_HTTP_CONFIRMATION_REQUIRED: { category: "validation", retryability: "never", userMessage: "HTTP 媒体 endpoint 需要显式风险确认。" },
+  MEDIA_REDIRECT_REJECTED: { category: "transport", retryability: "never", userMessage: "媒体服务重定向已拒绝。" },
+  MEDIA_TLS_CERTIFICATE_ERROR: { category: "transport", retryability: "manual-check", userMessage: "媒体服务 TLS 证书校验失败。" },
+  MEDIA_TLS_HOSTNAME_MISMATCH: { category: "transport", retryability: "manual-check", userMessage: "媒体服务 TLS 主机名校验失败。" },
+  MEDIA_CONNECT_TIMEOUT: { category: "transport", retryability: "safe", userMessage: "媒体服务连接超时。" },
+  MEDIA_READ_TIMEOUT: { category: "transport", retryability: "manual-check", userMessage: "媒体服务读取超时。" },
+  MEDIA_NETWORK_ERROR: { category: "transport", retryability: "manual-check", userMessage: "媒体服务网络请求失败。" },
+  MEDIA_SERVER_ERROR: { category: "remote", retryability: "safe", userMessage: "媒体服务暂时异常。" },
+  MEDIA_REMOTE_REJECTED: { category: "remote", retryability: "never", userMessage: "媒体服务拒绝了请求。" },
+  MEDIA_PROTOCOL_ERROR: { category: "transport", retryability: "manual-check", userMessage: "媒体服务响应格式无效。" },
+  MEDIA_TRANSPORT_UNAVAILABLE: { category: "internal", retryability: "manual-check", userMessage: "媒体传输能力不可用。" },
+});
 const STORAGE_ERRORS = {
   STORAGE_MAINTENANCE_BUSY: { category: "conflict", retryability: "safe", userMessage: "任务运行期间不能清理缓存。" },
   STORAGE_MAINTENANCE_INPUT_INVALID: { category: "validation", retryability: "never", userMessage: "存储维护请求无效。" },

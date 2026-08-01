@@ -194,7 +194,15 @@ function createPlatformRun(options) {
     context.stopReason = reason || "operator";
     context.abortController.abort(context.stopReason);
     emit(context);
-    try { if (context.child && typeof context.child.send === "function") context.child.send({ schemaVersion: WORKER_SCHEMA_VERSION, runId: context.runId, type: "stop" }); } catch (_) {}
+    try {
+      if (context.child && typeof context.child.send === "function") {
+        context.child.send({
+          schemaVersion: WORKER_SCHEMA_VERSION,
+          runId: context.runId,
+          type: context.stopReason === "operator_pause" ? "pause" : "stop",
+        });
+      }
+    } catch (_) {}
     if (!context.remoteStarted) {
       try { if (context.child && typeof context.child.kill === "function") context.child.kill(); } catch (_) {}
     }

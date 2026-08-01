@@ -4,7 +4,7 @@ This directory is a deployment fixture and contract for the separately managed
 J4125 service. It is not part of the Electron installer and is not connected to
 the real server by local tests.
 
-The service exposes only `/healthz` and the versioned authentication/session
+The service exposes health endpoints and the versioned authentication/session
 endpoints. It stores only password hashes, opaque-token hashes, random device
 identity hashes, sessions, product entitlements, and minimal audit data. It
 does not migrate the historical `auth.json`; initialize a new SQLite database
@@ -21,6 +21,26 @@ Run the local contract tests with:
 node --test auth-server/tests/*.test.js
 ```
 
+Health endpoints are deliberately split. `/healthz` and `/healthz/live` only
+prove that the process can answer HTTP; `/healthz/ready` and `/readyz` perform
+the repository's lightweight connection and schema probe. Readiness never
+runs SQLite `integrity_check`, so the container liveness check does not scan
+the database every 30 seconds. Health responses contain only a status, stable
+code, timestamp, and safe metadata.
+
+Run the complete database integrity and maintenance diagnostic as a controlled
+operator command against an isolated or approved database path:
+
+```powershell
+node scripts/integrity-check.js <database-path> --timeout-ms 10000
+```
+
+The command is read-only, supports `SIGINT` cancellation, and returns exit
+code `0` for a clean check, `2` for actionable audit/capacity attention, and
+`1` for integrity, availability, timeout, cancellation, or input failures.
+It reports retention, rotation, and capacity summaries without database rows,
+SQL, paths, or raw exceptions.
+
 The service uses Node 22's built-in `node:sqlite` and has no runtime database
 dependency. Run the local migration and backup checks with:
 
@@ -29,6 +49,27 @@ node scripts/migrate.js
 node scripts/backup.js /data/auth.db /backup/auth-$(Get-Date -Format yyyyMMdd).db
 node scripts/restore-check.js /backup/auth-20260719.db
 ```
+
+Source address handling is direct-connection-only by default. The service
+ignores `Forwarded`, `X-Forwarded-*`, and provider-specific source headers
+unless `proxyConfig` is explicitly supplied to `createAuthServer`, or the
+deployment sets `AUTH_TRUST_PROXY_CONFIG` to a JSON object containing a
+supported `header`, `trustedHops`, and `trustedProxyCidrs` list. A bare boolean
+trust flag is rejected. The accepted rules are intentionally narrow:
+
+```json
+{
+  "header": "x-forwarded-for",
+  "trustedHops": 1,
+  "trustedProxyCidrs": ["10.0.0.0/8"]
+}
+```
+
+The source resolver only uses that header when the direct peer is inside the
+listed range. Diagnostics expose only whether the trusted-source configuration
+is missing or valid; raw request headers are never included. Cloudflare and
+Tunnel behavior remains a pending manual deployment acceptance; see
+`docs/proxy-source-manual-acceptance.md`.
 
 Manage accounts only over SSH, without putting passwords in arguments,
 environment variables, shell history, or logs:

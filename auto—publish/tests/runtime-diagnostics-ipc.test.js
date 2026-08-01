@@ -30,10 +30,14 @@ it("exposes bounded runtime lifecycle events through the diagnostics IPC", async
   const handlers = new Map();
   registerRuntimeDiagnosticsIpc({
     ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } },
-    runtimeDiagnosticsService: { safeDiagnostics: function() { return { ok: true, errors: [], warnings: [], runtimeEvents: [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "Removal recovery failed", occurredAt: "2026-07-25T00:00:00.000Z" }] }; }, probeBrowser: async function() { return {}; } }
+    runtimeDiagnosticsService: { safeDiagnostics: function() { return { ok: true, errors: [], warnings: [], runtimeEvents: [{ diagnosticId: "diag-recovery", occurredAt: "2026-07-25T00:00:00.000Z", code: "ARTICLE_REMOVAL_RECOVERY_FAILED", module: "article-removal-recovery", category: "storage", operationId: "article-removal-recovery", runId: null, metadata: { outcome: "failed" } }] }; }, probeBrowser: async function() { return {}; } }
   });
   const diagnostics = await handlers.get("runtime-diagnostics:get")();
-  assert.deepEqual(diagnostics.data.runtimeEvents, [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "运行期诊断事件，请检查诊断代码。", occurredAt: "2026-07-25T00:00:00.000Z" }]);
+  assert.deepEqual(diagnostics.data.runtimeEvents, [{
+    diagnosticId: "diag-recovery",
+    userMessage: "本地存储操作未完成，请检查诊断信息。",
+    summary: { code: "ARTICLE_REMOVAL_RECOVERY_FAILED", category: "storage" },
+  }]);
 });
 
 it("forwards the updated browser capability returned by a successful self-check", async function() {

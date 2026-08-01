@@ -1,19 +1,21 @@
 const path = require("node:path");
-const { SqliteAuthRepository } = require("../src/repositories/sqlite-auth-repository");
+const { backupAuthDatabase } = require("../src/auth-backup-orchestrator");
 
 async function main(argv) {
   const args = argv || [];
   const source = args[0] || process.env.AUTH_DB_PATH || path.join(process.cwd(), "data", "auth.db");
   const destination = args[1];
   if (!destination) throw new Error("backup destination is required");
-  const repository = new SqliteAuthRepository({ filePath: source });
-  try {
-    await repository.backupTo(destination);
-    repository.healthCheck();
-    process.stdout.write("SQLite auth backup completed\n");
-  } finally {
-    repository.close();
-  }
+  const result = await backupAuthDatabase({ source, destination });
+  process.stdout.write(`${JSON.stringify({
+    ok: true,
+    operation: "backup",
+    schemaVersion: result.verification.schemaVersion,
+    rowCounts: result.verification.rowCounts,
+    integrity: result.verification.integrity,
+    contentHash: result.verification.contentHash,
+  })}\n`);
+  return result;
 }
 
 if (require.main === module) {

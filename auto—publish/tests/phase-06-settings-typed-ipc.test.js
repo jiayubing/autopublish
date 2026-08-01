@@ -119,9 +119,14 @@ const runtimeDiagnostics = {
   }],
   warnings: [],
   runtimeEvents: [{
-    code: "ARTICLE_REMOVAL_RECOVERY_FAILED",
-    message: "C:\\secret\\article.db failed",
+    diagnosticId: "diag-recovery",
     occurredAt: "2026-07-26T00:00:00.000Z",
+    code: "ARTICLE_REMOVAL_RECOVERY_FAILED",
+    module: "article-removal-recovery",
+    category: "storage",
+    operationId: "article-removal-recovery",
+    runId: null,
+    metadata: { outcome: "failed" },
   }],
 };
 
@@ -299,9 +304,10 @@ test("runtime diagnostics expose bounded coded summaries without raw diagnostic 
     result.parsed.errors[0].message,
     "运行环境诊断项，请检查诊断代码。",
   );
-  assert.equal(
-    result.parsed.runtimeEvents[0].message,
-    "运行期诊断事件，请检查诊断代码。",
-  );
+  assert.deepEqual(result.parsed.runtimeEvents[0], {
+    diagnosticId: "diag-recovery",
+    userMessage: "本地存储操作未完成，请检查诊断信息。",
+    summary: { code: "ARTICLE_REMOVAL_RECOVERY_FAILED", category: "storage" },
+  });
   assert.doesNotMatch(JSON.stringify(result.response), /secret|playwright\.exe|article\.db/i);
 });

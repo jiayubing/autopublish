@@ -15,6 +15,18 @@ const ERROR_MESSAGES = Object.freeze({
   PLATFORM_CONFIG_NOT_SET: "尚未配置服务提供方。",
   MEDIA_HTTP_CONFIRMATION_REQUIRED:
     "该地址使用 HTTP。请勾选“允许批准的 HTTP 地址”并确认传输风险。",
+  MEDIA_ENDPOINT_REQUIRED: "尚未配置媒体服务 endpoint。",
+  MEDIA_CONFIG_INVALID: "媒体服务配置无效，请检查 endpoint 和超时时间。",
+  MEDIA_REDIRECT_REJECTED: "媒体服务重定向已拒绝，请配置最终 endpoint。",
+  MEDIA_TLS_CERTIFICATE_ERROR: "媒体服务 TLS 证书校验失败，请检查证书链。",
+  MEDIA_TLS_HOSTNAME_MISMATCH: "媒体服务 TLS 主机名校验失败，请检查 endpoint。",
+  MEDIA_CONNECT_TIMEOUT: "媒体服务连接超时，请检查网络或 endpoint。",
+  MEDIA_READ_TIMEOUT: "媒体服务读取超时，请检查服务状态。",
+  MEDIA_NETWORK_ERROR: "媒体服务网络请求失败，请检查网络。",
+  MEDIA_SERVER_ERROR: "媒体服务暂时异常，请稍后重试。",
+  MEDIA_REMOTE_REJECTED: "媒体服务拒绝了请求，请检查配置和权限。",
+  MEDIA_PROTOCOL_ERROR: "媒体服务响应格式无效，请检查供应商接口。",
+  MEDIA_TRANSPORT_UNAVAILABLE: "媒体传输能力不可用，请检查运行环境。",
   MEDIA_CONNECTION_FAILED: "连接测试失败，请检查地址和 API Key。",
   HEPAN_PYTHON_UNAVAILABLE: "Python 不可用，请检查可执行文件。",
   HEPAN_DEPENDENCY_MISSING:

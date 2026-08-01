@@ -9,7 +9,7 @@ const EMPTY: MediaProviderStatus = {
   baseUrl: "",
   timeoutMs: 0,
   allowInsecure: false,
-  transport: "未配置",
+  transport: "disabled",
   apiKeyMask: "",
   lastTest: null,
 };
@@ -113,8 +113,9 @@ export default function MediaProviderSettings() {
         </p>
       </div>
       <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-        配置来源：{readOnly ? "环境变量覆盖（只读）" : "应用级加密存储"}
-        {status.configured && ` · ${status.apiKeyMask}`}
+         配置来源：{readOnly ? "环境变量覆盖（只读）" : "应用级加密存储"}
+         <span> · 安全状态：{status.transport}</span>
+         {status.configured && ` · ${status.apiKeyMask}`}
       </div>
       <label className="grid gap-1 text-sm font-medium text-slate-700">
         API Key
@@ -142,7 +143,10 @@ export default function MediaProviderSettings() {
             API Base URL
             <input
               value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
+              onChange={(event) => {
+                setBaseUrl(event.target.value);
+                setAllowInsecure(false);
+              }}
               disabled={operationBusy || loading || readOnly}
               className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-xs"
             />
@@ -170,9 +174,14 @@ export default function MediaProviderSettings() {
           允许批准的 HTTP 地址（连接未加密，API Key 存在传输风险）
         </label>
       </details>
-      {status.transport === "不加密连接" && (
+      {status.transport === "insecure" && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
           当前地址使用 HTTP，连接未加密。服务器支持 HTTPS 时请优先切换。
+        </p>
+      )}
+      {status.transport === "invalid" && (
+        <p className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-900">
+          当前 endpoint 无效或尚未完成针对该地址的风险确认，联网操作已禁用。
         </p>
       )}
       <p className="text-xs text-slate-500">

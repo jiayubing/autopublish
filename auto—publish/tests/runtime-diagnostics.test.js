@@ -11,10 +11,24 @@ it("retains safe runtime diagnostic events reported by lifecycle services", () =
   const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-event-app-"));
   try {
     const service = createRuntimeDiagnosticsService({ workspaceRoot: workspace, appRoot });
-    assert.equal(service.report({ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "queue failed" }), true);
+    assert.equal(service.report({
+      code: "ARTICLE_REMOVAL_RECOVERY_FAILED",
+      module: "article-removal-recovery",
+      category: "storage",
+      operationId: "article-removal-recovery",
+      metadata: { outcome: "failed" },
+    }), true);
     const events = service.diagnose().runtimeEvents;
-    assert.equal(events.length, 1); assert.equal(events[0].code, "ARTICLE_REMOVAL_RECOVERY_FAILED"); assert.equal(events[0].message, "queue failed");
-    assert.equal(service.safeDiagnostics().runtimeEvents[0].code, "ARTICLE_REMOVAL_RECOVERY_FAILED");
+    assert.equal(events.length, 1); assert.equal(events[0].code, "ARTICLE_REMOVAL_RECOVERY_FAILED");
+    assert.equal(events[0].module, "article-removal-recovery");
+    assert.equal(events[0].metadata.outcome, "failed");
+    assert.equal("message" in events[0], false);
+    const safe = service.safeDiagnostics();
+    assert.equal(safe.runtimeEvents[0].code, "ARTICLE_REMOVAL_RECOVERY_FAILED");
+    assert.equal("workspaceRoot" in safe, false);
+    assert.equal("appRoot" in safe, false);
+    assert.equal(JSON.stringify(safe).includes(workspace), false);
+    assert.equal(JSON.stringify(safe).includes(appRoot), false);
   } finally { fs.rmSync(workspace, { recursive: true, force: true }); fs.rmSync(appRoot, { recursive: true, force: true }); }
 });
 const { createPlaywrightRuntime, pwSessionConfig, pwCmd, pwRun, runCode } = require("../src/core/playwright");

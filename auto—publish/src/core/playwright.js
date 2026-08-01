@@ -4,7 +4,7 @@ const { execSync, execFile, execFileSync } = require("child_process");
 
 const { DIRS, PW } = require("../../scripts/config");
 const { resolvePlaywrightRuntime } = require("../../desktop/services/runtime-diagnostics-service");
-const { log } = require("./logger");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 const { quoteArg } = require("./files");
 
 function unavailableError(code, message) {
@@ -78,7 +78,13 @@ function pwRun(args, opts) {
   var options = opts || {};
   var timeout = options.timeout || 30000;
   var sessionCtx = options.session || null;
-  log("PW: " + args.substring(0, 120), "DEBUG");
+  reportDiagnostic({
+    code: "PLAYWRIGHT_COMMAND_STARTED",
+    module: "core-playwright",
+    category: "transport",
+    operationId: "playwright-command",
+    metadata: { action: "invoke" },
+  });
   return (options.execSync || execSync)(pwCmd(args, sessionCtx), {
     encoding: "utf-8",
     timeout: timeout,

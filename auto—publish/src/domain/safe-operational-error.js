@@ -27,6 +27,15 @@ function safeString(value, max) {
     !/[\x00-\x1f\x7f]/.test(value)
   );
 }
+function safeDiagnosticId(value) {
+  return (
+    typeof value === "string" &&
+    value.length <= 128 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) &&
+    value !== "." &&
+    value !== ".."
+  );
+}
 function parseSafeOperationalError(input) {
   exact(input, [
     "code",
@@ -40,7 +49,7 @@ function parseSafeOperationalError(input) {
     !CATEGORIES.has(input.category) ||
     !RETRYABILITY.has(input.retryability) ||
     !safeString(input.userMessage, 512) ||
-    (input.diagnosticId !== undefined && !safeString(input.diagnosticId, 128))
+    (input.diagnosticId !== undefined && !safeDiagnosticId(input.diagnosticId))
   )
     throw dtoError("SAFE_ERROR_INVALID");
   const result = {

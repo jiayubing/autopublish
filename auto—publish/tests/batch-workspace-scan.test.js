@@ -21,6 +21,7 @@ describe("queue snapshot workspace scan", function() {
       const snapshot = require("../src/app/publish-batch").createQueueSnapshot({ platformIds: ["media"] });
       assert.equal(snapshot.queue[0].count, 1);
       assert.equal(snapshot.queue[0].articles[0].sourceFile, article);
+      assert.equal("logsFile" in snapshot, false);
     } finally {
       if (oldWorkspace === undefined) delete process.env.AUTO_PUBLISH_WORKSPACE; else process.env.AUTO_PUBLISH_WORKSPACE = oldWorkspace;
       if (oldRoot === undefined) delete process.env.AUTO_PUBLISH_ROOT_DIR; else process.env.AUTO_PUBLISH_ROOT_DIR = oldRoot;

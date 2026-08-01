@@ -4,7 +4,7 @@ const readline = require("readline");
 const { execSync } = require("child_process");
 
 const { DIRS, PW } = require("../../../scripts/config");
-const { log } = require("../../core/logger");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 const { ensureDir, sleep, quoteArg } = require("../../core/files");
 const {
   pwSessionConfig,
@@ -31,6 +31,16 @@ var LOGIN_STATE_SETTLE_MS = 5000;
 var PUBLISH_PAGE_LOGIN_CHECK_MS = 2500;
 var FAST_POLL_MS = 500;
 
+function diagnose(code, category, action) {
+  reportDiagnostic({
+    code,
+    module: "platform-toutiao",
+    category,
+    operationId: "platform-toutiao",
+    metadata: { platformId: "toutiao", action: action },
+  });
+}
+
 var TOUTIAO = {
   base: "https://mp.toutiao.com",
   loginUrl: "https://mp.toutiao.com",
@@ -46,7 +56,6 @@ var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
   quoteArg: quoteArg,
   ensureDir: ensureDir,
   sleep: sleep,
-  log: log,
   start: function () {
     execSync(
       pwCmd(
@@ -107,7 +116,7 @@ function openLogin() {
   try {
     loadSavedState();
   } catch (e) {
-    log("Failed to load login state: " + e.message, "WARN");
+    diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
   pwRun("goto " + TOUTIAO.loginUrl, { timeout: 15000, session: SESSION });
 }
@@ -162,16 +171,13 @@ function waitForLoginCompletion(timeoutMs) {
 function doLogin(options) {
   var opts = options || {};
   var interactive = resolveInteractive(opts);
-  log("Please log in to Toutiao in the opened browser...", "INFO");
+  diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "login-required");
   try {
     pwRun("goto " + TOUTIAO.loginUrl, { timeout: 15000, session: SESSION });
   } catch (e) {}
 
   if (!interactive) {
-    log(
-      "Desktop mode detected; the batch will resume automatically after login",
-      "INFO",
-    );
+    diagnose("PLATFORM_LOGIN_WAITING", "authentication", "login-wait");
     return Promise.resolve(waitForLoginCompletion(opts.timeoutMs));
   }
 
@@ -195,11 +201,11 @@ async function ensureLoggedIn(options) {
   try {
     loaded = loadSavedState();
   } catch (e) {
-    log("Failed to load login state: " + e.message, "WARN");
+    diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
 
   if (checkLogin()) {
-    log("Logged in", "INFO");
+    diagnose("PLATFORM_LOGIN_COMPLETED", "authentication", "login");
     return;
   }
 
@@ -212,7 +218,7 @@ async function ensureLoggedIn(options) {
   }
 
   saveCurrentState();
-  log("Logged in", "INFO");
+  diagnose("PLATFORM_LOGIN_COMPLETED", "authentication", "login");
 }
 
 function dismissAssistantDrawer() {
@@ -344,7 +350,7 @@ async function publishArticle(article, options) {
     throwIfStopped();
 
     if (!checkLoginInCurrentPage()) {
-      log("Toutiao publish page requires login", "WARN");
+      diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
       var relogged = await doLogin({
         interactive: interactive,
         timeoutMs: opts.timeoutMs,
@@ -368,15 +374,15 @@ async function publishArticle(article, options) {
     selectCoverMode(coverMode);
     throwIfStopped();
     selectAdEnabled(adEnabled);
-    log("Form filled", "INFO");
+    diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
 
     if (!autoSubmit) {
-      log("Form filled; waiting for manual submission", "INFO");
+      diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
       return { status: "submitted", legacyStatus: "pending" };
     }
 
     throwIfStopped();
-    log("Submitting automatically...", "INFO");
+    diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
     remoteCallStarted = true;
     try {
       clickPreviewAndPublish();
@@ -456,12 +462,9 @@ async function parseArticleFiles(articles) {
       data.normalizedFilename = article.filename;
       data.sidecar = loadSidecar(article.file);
       parsed.push(data);
-      log("Article: " + data.title, "INFO");
+      diagnose("PLATFORM_ARTICLE_PARSED", "validation", "article-parse");
     } catch (e) {
-      log(
-        "Conversion failed: " + article.filename + " - " + e.message,
-        "ERROR",
-      );
+      diagnose("PLATFORM_ARTICLE_PARSE_FAILED", "validation", "article-parse");
     }
   }
 
@@ -476,13 +479,7 @@ function loadSidecar(articleFile) {
   try {
     return JSON.parse(fs.readFileSync(sidecarPath, "utf-8")) || {};
   } catch (e) {
-    log(
-      "Failed to parse sidecar: " +
-        path.basename(sidecarPath) +
-        " - " +
-        e.message,
-      "WARN",
-    );
+    diagnose("PLATFORM_SIDECAR_PARSE_FAILED", "validation", "sidecar-parse");
     return {};
   }
 }

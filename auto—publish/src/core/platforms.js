@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const { log } = require("./logger");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function configPath() {
   return path.resolve(__dirname, "../../config/platforms.json");
@@ -72,13 +72,25 @@ function loadPlatforms(options) {
     try {
       adapter = require(adapterPath);
     } catch (e) {
-      log("无法加载平台 adapter: " + id + " (" + e.message + ")", "ERROR");
+      reportDiagnostic({
+        code: "PLATFORM_ADAPTER_LOAD_FAILED",
+        module: "core-platforms",
+        category: "internal",
+        operationId: "platform-loader",
+        metadata: { platformId: id, action: "load" },
+      });
       continue;
     }
 
     var error = validateAdapter(adapter, id);
     if (error) {
-      log(error, "ERROR");
+      reportDiagnostic({
+        code: "PLATFORM_ADAPTER_INVALID",
+        module: "core-platforms",
+        category: "validation",
+        operationId: "platform-loader",
+        metadata: { platformId: id, action: "validate" },
+      });
       continue;
     }
 

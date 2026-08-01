@@ -2,6 +2,7 @@ const { parseSafeOperationalError } = require("../../../src/domain/safe-operatio
 
 const SCHEMA_VERSION = 1;
 const SAFE_TOKEN = /^[A-Za-z0-9._:-]+$/;
+const SAFE_DIAGNOSTIC_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const CONTRACT_ERROR = Symbol("ipcContractError");
 
 function contractError(code, message) {
@@ -9,6 +10,12 @@ function contractError(code, message) {
   error.code = code;
   Object.defineProperty(error, CONTRACT_ERROR, { value: true });
   return error;
+}
+
+function safeDiagnosticId(value) {
+  return typeof value === "string" && SAFE_DIAGNOSTIC_ID.test(value) && value !== "." && value !== ".."
+    ? value
+    : null;
 }
 
 function rethrowContractError(error, code) {
@@ -481,17 +488,25 @@ function createContractRegistry(contracts) {
     failure(contract, error) {
       let safe = null;
       let errorCode = null;
+      let diagnosticId = null;
       try {
         if (error && !(error instanceof Error)) {
           const plainError = copyPlainDataObject(error, "IPC_RESULT_INVALID");
           errorCode = typeof plainError.code === "string" ? plainError.code : null;
+          diagnosticId = safeDiagnosticId(plainError.diagnosticId);
           const parsed = parseSafeOperationalError(plainError);
-          if (contract.errorCodes.includes(parsed.code))
-            safe = Object.freeze({ code: parsed.code, ...contract.errors[parsed.code] });
+          if (contract.errorCodes.includes(parsed.code)) {
+            safe = Object.freeze({
+              code: parsed.code,
+              ...contract.errors[parsed.code],
+              ...(parsed.diagnosticId ? { diagnosticId: parsed.diagnosticId } : {}),
+            });
+          }
         } else if (error instanceof Error) {
           const descriptor = Object.getOwnPropertyDescriptor(error, "code");
           if (descriptor && "value" in descriptor && typeof descriptor.value === "string")
             errorCode = descriptor.value;
+          diagnosticId = safeDiagnosticId(error.diagnosticId);
         }
       } catch (_) {}
       if (
@@ -499,7 +514,11 @@ function createContractRegistry(contracts) {
         errorCode &&
         Object.prototype.hasOwnProperty.call(contract.errors, errorCode)
       ) {
-        safe = Object.freeze({ code: errorCode, ...contract.errors[errorCode] });
+        safe = Object.freeze({
+          code: errorCode,
+          ...contract.errors[errorCode],
+          ...(diagnosticId ? { diagnosticId } : {}),
+        });
       }
       return {
         schemaVersion: SCHEMA_VERSION,

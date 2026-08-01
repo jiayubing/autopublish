@@ -3,7 +3,7 @@ const path = require("path");
 const { execSync } = require("child_process");
 
 const { DIRS, PW } = require("../../scripts/config");
-const { log } = require("./logger");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 const { createWorkspacePaths } = require("../../desktop/workspace-paths");
 
 var archiveSequence = 0;
@@ -231,7 +231,13 @@ function archivePublishedArticle(article, suppliedPaths) {
     throw createArchiveError("PUBLISHED_ARCHIVE_FAILED", "Published article archive failed");
   }
 
-  log("已移动到 published: " + path.basename(target), "INFO");
+  reportDiagnostic({
+    code: "PUBLISHED_ARCHIVE_COMPLETED",
+    module: "core-files",
+    category: "storage",
+    operationId: "published-archive",
+    metadata: { outcome: "completed" },
+  });
   return {
     target: target,
     sidecar: sidecars.filter(function(sidecar) { return sidecar.hasSource; }).map(function(sidecar) { return sidecar.target; })[0] || null,

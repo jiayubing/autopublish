@@ -2,7 +2,7 @@
 const path = require("path");
 
 const { DIRS } = require("../../scripts/config");
-const { log } = require("./logger");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 const { copyToFailed } = require("./files");
 const { extractDocxArticle } = require("./docx-text-extractor");
 const { parseArticle } = require("./article-text");
@@ -124,10 +124,22 @@ async function parseArticleFiles(articles) {
       data.filename = article.filename;
       data.normalizedFilename = buildNormalizedFilename(data);
       parsed.push(data);
-      log("文章: " + data.title + " [" + data.city + "/" + data.phone + "/" + data.contact + "]", "INFO");
+      reportDiagnostic({
+        code: "ARTICLE_PARSED",
+        module: "core-articles",
+        category: "validation",
+        operationId: "article-parse",
+        metadata: { outcome: "accepted" },
+      });
     } catch (e) {
       copyToFailed(article.file, article.filename);
-      log("转换失败: " + article.filename + " - " + e.message, "ERROR");
+      reportDiagnostic({
+        code: "ARTICLE_PARSE_FAILED",
+        module: "core-articles",
+        category: "validation",
+        operationId: "article-parse",
+        metadata: { outcome: "rejected" },
+      });
     }
   }
 

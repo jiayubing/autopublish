@@ -10,8 +10,15 @@ function databasePath(argument) {
 function main(argv) {
   const repository = new SqliteAuthRepository({ filePath: databasePath(argv && argv[0]) });
   try {
-    repository.healthCheck();
-    process.stdout.write("SQLite auth schema is current\n");
+    const result = repository.migrationResult || { migrated: false, schemaVersion: 2 };
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      operation: "migration",
+      migrated: result.migrated === true,
+      schemaVersion: result.schemaVersion,
+      integrity: result.verification && result.verification.integrity,
+    })}\n`);
+    return result;
   } finally {
     repository.close();
   }

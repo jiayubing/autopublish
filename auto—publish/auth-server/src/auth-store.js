@@ -6,7 +6,27 @@ const { AuthDomain } = require("./auth-domain");
 function createAuthStore(options) {
   const opts = options || {};
   const repository = opts.repository || new InMemoryAuthRepository();
-  const domain = opts.domain || new AuthDomain({ repository, now: opts.now, accessTtlMs: opts.accessTtlMs, refreshTtlMs: opts.refreshTtlMs });
+  const domain = opts.domain || new AuthDomain({
+    repository,
+    now: opts.now,
+    accessTtlMs: opts.accessTtlMs,
+    refreshTtlMs: opts.refreshTtlMs,
+    rateLimitWindowMs: opts.rateLimitWindowMs,
+    rateLimitMaxAttempts: opts.rateLimitMaxAttempts,
+    rateLimitCapacity: opts.rateLimitCapacity,
+    rateLimitMaxKeys: opts.rateLimitMaxKeys,
+    sourceRateLimitCapacity: opts.sourceRateLimitCapacity,
+    identityRateLimitCapacity: opts.identityRateLimitCapacity,
+    combinationRateLimitCapacity: opts.combinationRateLimitCapacity,
+    sourceRateLimitMaxAttempts: opts.sourceRateLimitMaxAttempts,
+    identityRateLimitMaxAttempts: opts.identityRateLimitMaxAttempts,
+    combinationRateLimitMaxAttempts: opts.combinationRateLimitMaxAttempts,
+    sourceRateLimitTtlMs: opts.sourceRateLimitTtlMs,
+    identityRateLimitTtlMs: opts.identityRateLimitTtlMs,
+    combinationRateLimitTtlMs: opts.combinationRateLimitTtlMs,
+    passwordVerifier: opts.passwordVerifier || opts.verifyPassword,
+    passwordHasher: opts.passwordHasher || opts.createPasswordHash,
+  });
   return {
     repository,
     domain,

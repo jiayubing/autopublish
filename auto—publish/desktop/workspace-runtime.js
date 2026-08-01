@@ -85,6 +85,14 @@ function createWorkspaceRuntime(deps) {
           roamingConfigRoot: options.userDataPath,
           localStateRoot: options.sessionDataPath,
         });
+        if (
+          runtime.diagnosticsService &&
+          typeof runtime.diagnosticsService.report === "function"
+        ) {
+          const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
+          const reporter = runtime.diagnosticsService.report;
+          ownDisposer(setDiagnosticReporter(reporter));
+        }
         const paths = runtime.paths;
         const injectedPaths = paths && paths.installation ? paths : undefined;
         const workspaceRoot = runtime.workspaceRoot;

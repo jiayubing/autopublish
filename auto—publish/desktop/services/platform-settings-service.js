@@ -125,8 +125,13 @@ function createPlatformSettingsService(options) {
 
   function environmentConfig(adapter) {
     if (typeof adapter.environment !== "function") return null;
-    const result = adapter.environment(env);
-    return result || null;
+    try {
+      const result = adapter.environment(env);
+      return result || null;
+    } catch (error) {
+      if (error && typeof error === "object") error.settingsSource = "environment";
+      throw error;
+    }
   }
 
   function applicationConfig(adapter) {
@@ -144,8 +149,8 @@ function createPlatformSettingsService(options) {
     return tests.get(adapter.id) || null;
   }
 
-  function safeStatus(adapter, config, source) {
-    const context = { source, lastTest: lastTest(adapter) };
+  function safeStatus(adapter, config, source, extraContext) {
+    const context = Object.assign({ source, lastTest: lastTest(adapter) }, extraContext || {});
     let result = typeof adapter.status === "function" ? adapter.status(config, context) : { configured: Boolean(config), source, lastTest: context.lastTest };
     result = isObject(result) ? Object.assign({}, result) : {};
     ["apiKey", "cookie", "cookieValue", "secret", "secrets", "decrypted", "buffer", "sourcePath", "cookiePath", "pythonPath"].forEach((key) => { delete result[key]; });
@@ -167,7 +172,7 @@ function createPlatformSettingsService(options) {
     if (typeof adapter.validate !== "function") return input || current || {};
     try {
       const draft = mergePatch(adapter, current, input);
-      return adapter.validate(draft, current || null);
+      return adapter.validate(draft, current || null, input);
     } catch (error) {
       if (error && (error.code === "PLATFORM_CONFIG_INVALID" || /^(HEPAN_|MEDIA_)/.test(error.code || ""))) throw error;
       throw settingsError("PLATFORM_CONFIG_INVALID", "Platform provider configuration is invalid");
@@ -176,8 +181,18 @@ function createPlatformSettingsService(options) {
 
   function getStatus(platformId) {
     const adapter = getAdapter(platformId);
-    const result = effective(adapter);
-    return safeStatus(adapter, result.config, result.source);
+    try {
+      const result = effective(adapter);
+      return safeStatus(adapter, result.config, result.source);
+    } catch (error) {
+      if (adapter.id !== "media" || typeof adapter.status !== "function") throw error;
+      return safeStatus(
+        adapter,
+        null,
+        error && error.settingsSource === "environment" ? "environment" : "application",
+        { invalid: true },
+      );
+    }
   }
 
   function save(platformId, input) {

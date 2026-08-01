@@ -25,7 +25,7 @@ const EMPTY_MEDIA: MediaProviderStatus = {
   baseUrl: "",
   timeoutMs: 0,
   allowInsecure: false,
-  transport: "未配置",
+  transport: "disabled",
   apiKeyMask: "",
   lastTest: null,
 };
@@ -93,7 +93,7 @@ export default function SettingsOverview({
     {
       id: "media",
       title: "付费媒体",
-      detail: media.configured ? `已配置 · ${media.transport}` : "尚未配置",
+      detail: media.apiKeyMask ? `${media.transport} · ${media.apiKeyMask}` : media.transport,
       configured: media.configured,
     },
     {

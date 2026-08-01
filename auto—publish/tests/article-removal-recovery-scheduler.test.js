@@ -12,5 +12,11 @@ it("captures recovery rejection as a diagnostic", async () => {
   const diagnostics = [];
   const scheduler = createArticleRemovalRecoveryScheduler({ delayMs: 1, recover: async () => { throw new Error("boom"); }, onDiagnostic: (item) => diagnostics.push(item) });
   scheduler.start(); await new Promise((resolve) => setTimeout(resolve, 10)); scheduler.dispose();
-  assert.deepEqual(diagnostics, [{ code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: "boom" }]);
+  assert.deepEqual(diagnostics, [{
+    code: "ARTICLE_REMOVAL_RECOVERY_FAILED",
+    module: "article-removal-recovery",
+    category: "storage",
+    operationId: "article-removal-recovery",
+    metadata: { outcome: "failed" },
+  }]);
 });

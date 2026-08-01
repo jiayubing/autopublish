@@ -226,8 +226,8 @@ test("every production capability rejects semantically sensitive but shape-valid
         userMessage,
         diagnosticId: "diag-unsafe-path",
       });
-      assert.doesNotMatch(JSON.stringify(response), /private|password|cookie|api key|原始投稿正文|diag-unsafe-path/i, `${contract.channel}:${userMessage}`);
-      assert.deepEqual(response.error, { code, ...contract.errors[code] });
+      assert.doesNotMatch(JSON.stringify(response), /private|password|cookie|api key|原始投稿正文/i, `${contract.channel}:${userMessage}`);
+      assert.deepEqual(response.error, { code, ...contract.errors[code], diagnosticId: "diag-unsafe-path" });
     }
   }
 });

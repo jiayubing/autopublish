@@ -9,8 +9,14 @@ function createArticleRemovalRecoveryScheduler(options) {
     if (disposed || running) return;
     running = true;
     try { await value.recover({ isDisposed: function() { return disposed; } }); }
-    catch (error) {
-      const diagnostic = { code: "ARTICLE_REMOVAL_RECOVERY_FAILED", message: error && error.message || "Removal recovery failed" };
+    catch (_) {
+      const diagnostic = {
+        code: "ARTICLE_REMOVAL_RECOVERY_FAILED",
+        module: "article-removal-recovery",
+        category: "storage",
+        operationId: "article-removal-recovery",
+        metadata: { outcome: "failed" },
+      };
       try { if (typeof value.onDiagnostic === "function") value.onDiagnostic(diagnostic); } catch (_) {}
     } finally {
       running = false;

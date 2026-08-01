@@ -22,11 +22,11 @@ describe("media provider settings", () => {
     const secure = adapter.validate({ apiKey: "fixture-media-key", baseUrl: "https://media.example.test", timeoutMs: 30000 });
     assert.equal(secure.timeoutMs, 30000);
     assert.equal(secure.allowInsecure, false);
-    assert.equal(adapter.status(secure, { source: "application", lastTest: null }).transport, "HTTPS");
+    assert.equal(adapter.status(secure, { source: "application", lastTest: null }).transport, "secure");
     assert.throws(() => adapter.validate({ apiKey: "fixture-media-key", baseUrl: "http://provider.example", timeoutMs: 30000 }), (error) => error.code === "MEDIA_HTTP_CONFIRMATION_REQUIRED");
     const approvedHttp = adapter.validate({ apiKey: "fixture-media-key", baseUrl: "http://provider.example", timeoutMs: 30000, allowInsecure: true });
     assert.equal(approvedHttp.allowInsecure, true);
-    assert.equal(adapter.status(approvedHttp, { source: "application", lastTest: null }).transport, "不加密连接");
+    assert.equal(adapter.status(approvedHttp, { source: "application", lastTest: null }).transport, "insecure");
     const saved = store();
     adapter.createStore = () => saved;
     const service = createPlatformSettingsService({ adapters: [adapter] });

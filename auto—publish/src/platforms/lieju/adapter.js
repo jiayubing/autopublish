@@ -4,7 +4,7 @@ const path = require("path");
 const { execSync } = require("child_process");
 
 const { DIRS, PW, LIEJU } = require("../../../scripts/config");
-const { log } = require("../../core/logger");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 const { ensureDir, sleep, quoteArg } = require("../../core/files");
 const {
   pwSessionConfig,
@@ -31,6 +31,16 @@ var LOGIN_STATE_SETTLE_MS = 5000;
 var PUBLISH_PAGE_LOGIN_CHECK_MS = 2500;
 var FAST_POLL_MS = 500;
 
+function diagnose(code, category, action) {
+  reportDiagnostic({
+    code,
+    module: "platform-lieju",
+    category,
+    operationId: "platform-lieju",
+    metadata: { platformId: "lieju", action: action },
+  });
+}
+
 var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
   session: SESSION,
   stateDir: DIRS.stateDir,
@@ -38,7 +48,6 @@ var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
   quoteArg: quoteArg,
   ensureDir: ensureDir,
   sleep: sleep,
-  log: log,
   start: function () {
     execSync(
       pwCmd(
@@ -102,7 +111,7 @@ function openLogin() {
   try {
     loadSavedState();
   } catch (e) {
-    log("Failed to load login state: " + e.message, "WARN");
+    diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
   pwRun("goto " + LIEJU.loginUrl, { timeout: 15000, session: SESSION });
 }
@@ -152,16 +161,13 @@ function waitForLoginCompletion(timeoutMs) {
 function doLogin(options) {
   var opts = options || {};
   var interactive = resolveInteractive(opts);
-  log("Please log in to Lieju in the opened browser...", "INFO");
+  diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "login-required");
   try {
     pwRun("goto " + LIEJU.loginUrl, { timeout: 15000, session: SESSION });
   } catch (e) {}
 
   if (!interactive) {
-    log(
-      "Desktop mode detected; the batch will resume automatically after login",
-      "INFO",
-    );
+    diagnose("PLATFORM_LOGIN_WAITING", "authentication", "login-wait");
     return Promise.resolve(waitForLoginCompletion(opts.timeoutMs));
   }
 
@@ -179,7 +185,7 @@ function doLogin(options) {
 
 function switchCity(cityName) {
   var targetCity = (cityName || "").trim() || DEFAULT_CITY;
-  log("Switching city to " + targetCity, "INFO");
+  diagnose("PLATFORM_CITY_SWITCH_STARTED", "remote", "city-switch");
 
   var switchedCity = runCode(
     "  var targetCity = " +
@@ -215,10 +221,10 @@ function switchCity(cityName) {
   }
 
   if (switchedCity !== targetCity) {
-    log("City not found, falling back to " + switchedCity, "WARN");
+    diagnose("PLATFORM_CITY_SWITCH_FALLBACK", "remote", "city-fallback");
   }
 
-  log("City switched to " + switchedCity, "INFO");
+  diagnose("PLATFORM_CITY_SWITCH_COMPLETED", "remote", "city-switch");
 }
 
 function buildFillScript(article) {
@@ -280,7 +286,7 @@ async function publishArticle(article, options) {
     throwIfStopped();
 
     if (!checkLoginInCurrentPage()) {
-      log("Lieju publish page requires login", "WARN");
+      diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
       var relogged = await doLogin({
         interactive: interactive,
         timeoutMs: opts.timeoutMs,
@@ -298,15 +304,15 @@ async function publishArticle(article, options) {
     switchCity(article.city);
     throwIfStopped();
     runCode(buildFillScript(article), SESSION_OPTS);
-    log("Form filled", "INFO");
+    diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
 
     if (!autoSubmit) {
-      log("Form filled; waiting for manual submission", "INFO");
+      diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
       return { status: "submitted", legacyStatus: "pending" };
     }
 
     throwIfStopped();
-    log("Submitting automatically...", "INFO");
+    diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
     remoteCallStarted = true;
     try {
       pwRun("click " + LIEJU.selectors.submitBtn, {
@@ -344,11 +350,11 @@ async function ensureLoggedIn(options) {
   try {
     loaded = loadSavedState();
   } catch (e) {
-    log("Failed to load login state: " + e.message, "WARN");
+    diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
 
   if (checkLogin()) {
-    log("Logged in", "INFO");
+    diagnose("PLATFORM_LOGIN_COMPLETED", "authentication", "login");
     return;
   }
 
@@ -361,7 +367,7 @@ async function ensureLoggedIn(options) {
   }
 
   saveCurrentState();
-  log("Logged in", "INFO");
+  diagnose("PLATFORM_LOGIN_COMPLETED", "authentication", "login");
 }
 
 module.exports = {

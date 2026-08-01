@@ -3,6 +3,15 @@ const path = require("node:path");
 const { AuthDomain, AuthError } = require("./auth-domain");
 const { AuthAdministration } = require("./auth-administration");
 const { SqliteAuthRepository } = require("./repositories/sqlite-auth-repository");
+const { proxyConfigurationFromOptions } = require("./security/proxy-config-adapter");
+const { SourceResolver } = require("./security/source-resolver");
+const { createHttpHealthHandler } = require("./health/http-health-handler");
+const { createLivenessProbe } = require("./health/liveness-probe");
+const { createRepositoryProbe } = require("./health/repository-probe");
+const { createIntegrityRunner } = require("./health/integrity-runner");
+const { classifyHealthError } = require("./health/health-diagnostic-mapper");
+
+const HEALTH_COMPATIBILITY_PATH = "/healthz";
 
 const SAFE_ERRORS = {
   AUTH_INVALID_CREDENTIALS: [401, "AUTH_INVALID_CREDENTIALS", "登录名或密码错误"],
@@ -77,15 +86,28 @@ function allowFields(input, fields) {
   return input;
 }
 
-function sourceAddress(request, trustProxy) {
-  if (trustProxy && typeof request.headers["cf-connecting-ip"] === "string") return request.headers["cf-connecting-ip"].slice(0, 128);
-  return request.socket && request.socket.remoteAddress ? request.socket.remoteAddress : "unknown";
+function unavailableRepository(filePath, startupError) {
+  const failure = Object.assign(new Error("database unavailable"), { code: classifyHealthError(startupError).code });
+  const fail = () => { throw failure; };
+  return new Proxy({ filePath, probeReadiness: fail, healthCheck: fail, close() {} }, {
+    get(target, property) {
+      if (property in target) return target[property];
+      if (typeof property === "symbol") return undefined;
+      return fail;
+    },
+  });
 }
 
 function createAuthServer(options) {
   const opts = options || {};
+  const proxyConfiguration = proxyConfigurationFromOptions(opts);
+  const sourceResolver = new SourceResolver(proxyConfiguration);
   const compatibilityStore = opts.store && opts.store.domain ? opts.store : null;
-  const repository = opts.repository || (compatibilityStore && compatibilityStore.repository) || new SqliteAuthRepository({ filePath: opts.filePath || process.env.AUTH_DB_PATH || path.join(process.cwd(), "data", "auth.db") });
+  const databasePath = opts.filePath || process.env.AUTH_DB_PATH || path.join(process.cwd(), "data", "auth.db");
+  let repository = opts.repository || (compatibilityStore && compatibilityStore.repository);
+  if (!repository) {
+    try { repository = new SqliteAuthRepository({ filePath: databasePath, skipIntegrity: true }); } catch (error) { repository = unavailableRepository(databasePath, error); }
+  }
   const domain = opts.domain || (compatibilityStore && compatibilityStore.domain) || new AuthDomain({
     repository,
     now: opts.now,
@@ -96,19 +118,49 @@ function createAuthServer(options) {
     loginLockMs: opts.loginLockMs,
     rateLimitWindowMs: opts.rateLimitWindowMs,
     rateLimitMaxAttempts: opts.rateLimitMaxAttempts,
+    rateLimitCapacity: opts.rateLimitCapacity,
+    rateLimitMaxKeys: opts.rateLimitMaxKeys,
+    sourceRateLimitCapacity: opts.sourceRateLimitCapacity,
+    identityRateLimitCapacity: opts.identityRateLimitCapacity,
+    combinationRateLimitCapacity: opts.combinationRateLimitCapacity,
+    sourceRateLimitMaxAttempts: opts.sourceRateLimitMaxAttempts,
+    identityRateLimitMaxAttempts: opts.identityRateLimitMaxAttempts,
+    combinationRateLimitMaxAttempts: opts.combinationRateLimitMaxAttempts,
+    sourceRateLimitTtlMs: opts.sourceRateLimitTtlMs,
+    identityRateLimitTtlMs: opts.identityRateLimitTtlMs,
+    combinationRateLimitTtlMs: opts.combinationRateLimitTtlMs,
+    passwordVerifier: opts.passwordVerifier || opts.verifyPassword,
+    passwordHasher: opts.passwordHasher || opts.createPasswordHash,
   });
   const administration = opts.administration || new AuthAdministration({ repository, domain });
   const logger = typeof opts.logger === "function" ? opts.logger : () => {};
-  const trustProxy = opts.trustProxy === true;
+  const livenessProbe = opts.livenessProbe || createLivenessProbe(opts.livenessOptions);
+  const repositoryProbe = opts.readinessProbe || createRepositoryProbe({ repository });
+  const healthHandler = opts.healthHandler || createHttpHealthHandler({
+    livenessProbe,
+    readinessProbe: repositoryProbe,
+    clock: opts.healthClock,
+    compatibilityPath: HEALTH_COMPATIBILITY_PATH,
+  });
+  const integrityRunner = opts.integrityRunner || createIntegrityRunner({
+    databasePath: repository.filePath || databasePath,
+    defaultTimeoutMs: opts.integrityTimeoutMs,
+    policy: opts.maintenancePolicy,
+  });
+
+  function getDiagnostics() {
+    return {
+      proxy: Object.assign({}, proxyConfiguration.diagnostic),
+      loginRateLimit: typeof domain.getLoginRateLimitStats === "function" ? domain.getLoginRateLimitStats() : null,
+    };
+  }
 
   async function handle(request, response) {
     const url = new URL(request.url, "http://127.0.0.1");
-    const sourceFingerprint = sourceAddress(request, trustProxy);
     try {
-      if (request.method === "GET" && url.pathname === "/healthz") {
-        if (!domain.healthCheck()) return errorResponse(response, "AUTH_SERVICE_UNAVAILABLE");
-        return json(response, 200, { ok: true, service: "autopublish-auth" });
-      }
+      const health = await healthHandler.handle(request.method, url.pathname);
+      if (health) return json(response, health.statusCode, health.body);
+      const sourceFingerprint = sourceResolver.resolve(request).sourceFingerprint;
       if (request.method === "POST" && url.pathname === "/v1/auth/login") {
         const input = allowFields(await readBody(request), ["loginName", "password", "deviceId", "deviceName", "appVersion"]);
         const session = await domain.login(Object.assign({}, input, { sourceFingerprint }));
@@ -143,7 +195,7 @@ function createAuthServer(options) {
   }
 
   const server = http.createServer((request, response) => { void handle(request, response); });
-  return { server, repository, domain, administration, handle };
+  return { server, repository, domain, administration, handle, sourceResolver, proxyConfiguration, getDiagnostics, diagnostics: getDiagnostics(), healthHandler, livenessProbe, repositoryProbe, integrityRunner };
 }
 
 if (require.main === module) {
@@ -158,4 +210,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { createAuthServer, SAFE_ERRORS, allowFields, errorResponse };
+module.exports = { createAuthServer, SAFE_ERRORS, allowFields, errorResponse, HEALTH_COMPATIBILITY_PATH };

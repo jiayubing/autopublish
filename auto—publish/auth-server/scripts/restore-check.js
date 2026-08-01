@@ -1,15 +1,21 @@
 const path = require("node:path");
-const { SqliteAuthRepository } = require("../src/repositories/sqlite-auth-repository");
+const { checkAuthRestore } = require("../src/auth-recovery-check");
 
 function main(argv) {
   const filePath = (argv && argv[0]) || process.env.AUTH_DB_PATH || path.join(process.cwd(), "data", "auth.db");
-  const repository = new SqliteAuthRepository({ filePath });
-  try {
-    repository.healthCheck();
-    process.stdout.write("SQLite auth restore check passed\n");
-  } finally {
-    repository.close();
-  }
+  const result = checkAuthRestore(filePath);
+  process.stdout.write(`${JSON.stringify({
+    ok: true,
+    operation: "restore-check",
+    isolated: result.isolated,
+    copiedWal: result.copiedWal,
+    copiedShm: result.copiedShm,
+    schemaVersion: result.verification.schemaVersion,
+    rowCounts: result.verification.rowCounts,
+    integrity: result.verification.integrity,
+    contentHash: result.verification.contentHash,
+  })}\n`);
+  return result;
 }
 
 if (require.main === module) {

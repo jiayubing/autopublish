@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 
 const { DIRS } = require("../../../scripts/config");
-const { log } = require("../../core/logger");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 const { parseArticle, scanArticles: scanArticleSources } = require("./article-source");
 const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("./runtime-paths");
 
@@ -151,6 +151,16 @@ function createHepanAdapter(options) {
   const script = values.scriptPath || scriptPath();
   const bundledVendorDir = resolveHepanVendorDir({ fs: io, path: pathApi, scriptPath: script, explicit: values.bundledVendorDir });
 
+  function diagnose(code, category, action) {
+    reportDiagnostic({
+      code,
+      module: "platform-hepan",
+      category,
+      operationId: "platform-hepan",
+      metadata: { platformId: "hepan", action: action },
+    });
+  }
+
   function runtime() {
     const value = getRuntime() || {};
     return {
@@ -223,14 +233,14 @@ function createHepanAdapter(options) {
   async function ensureLoggedIn() {
     const config = runtime();
     if (!config.pythonPath || !config.cookiePath || !io.existsSync(config.cookiePath)) {
-      log("[hepan] Cookie configuration is unavailable", "WARN");
+      diagnose("HEPAN_COOKIE_CONFIGURATION_UNAVAILABLE", "authentication", "cookie-check");
       return;
     }
     try { normalizeHepanCookie(io.readFileSync(config.cookiePath, "utf8")); } catch (_) {
-      log("[hepan] Cookie configuration is empty", "WARN");
+      diagnose("HEPAN_COOKIE_CONFIGURATION_EMPTY", "authentication", "cookie-check");
       return;
     }
-    log("[hepan] Cookie configuration is ready", "INFO");
+    diagnose("HEPAN_COOKIE_CONFIGURATION_READY", "authentication", "cookie-check");
   }
 
   async function inspectAccount() {
@@ -326,7 +336,7 @@ function createHepanAdapter(options) {
           normalizedFilename: article.filename || pathApi.basename(article.file)
         });
       } catch (error) {
-        log("[hepan] Article conversion failed: " + (article.filename || "article") + " - " + (error.code || "HEPAN_ARTICLE_INVALID"), "ERROR");
+        diagnose("HEPAN_ARTICLE_PARSE_FAILED", "validation", "article-parse");
         throw error;
       }
     });
@@ -335,8 +345,7 @@ function createHepanAdapter(options) {
   async function publishArticle(article, options) {
     const signal = options && options.signal;
     const config = runtime();
-    const filename = article && (article.filename || article.sourceFile) || "article";
-    log("[hepan] Publishing via HTTP: " + pathApi.basename(filename), "INFO");
+    diagnose("HEPAN_SUBMIT_STARTED", "remote", "submit");
     if (!config.pythonPath || !config.cookiePath) return { status: "failed", errorCode: "HEPAN_CONFIG_NOT_SET" };
 
     const sourceFile = article && (article.sourceFile || article.file || article.filePath);
@@ -366,7 +375,7 @@ function createHepanAdapter(options) {
         return { status: "failed", errorCode: payload.errorCode };
       }
       if (payload.needsLogin) {
-        log("[hepan] Cookie needs update", "WARN");
+        diagnose("HEPAN_COOKIE_REAUTH_REQUIRED", "authentication", "cookie-refresh");
         return { status: "submitted", legacyStatus: "pending", errorCode: "LOGIN_REQUIRED" };
       }
       if (!payload.ok) return { status: "failed", errorCode: "REMOTE_REJECTED" };
@@ -376,7 +385,7 @@ function createHepanAdapter(options) {
       const remoteIdMatch = remoteUrl.match(/[?&]aid=([A-Za-z0-9_-]+)/i) || remoteUrl.match(/\/(?:article|aid)\/([A-Za-z0-9_-]+)(?:$|[?#])/i);
       const remoteId = remoteIdMatch && remoteIdMatch[1];
       if (!remoteId) return { status: "uncertain", errorCode: "HEPAN_REMOTE_ID_MISSING" };
-      log("[hepan] Published: " + remoteUrl, "INFO");
+      diagnose("HEPAN_SUBMIT_COMPLETED", "remote", "submit");
       return { status: "published", remoteId: remoteId, remoteUrl: remoteUrl || undefined };
     } catch (error) {
       if (remoteCallStarted && error && ["HEPAN_PROCESS_TIMEOUT", "HEPAN_PROCESS_ABORTED", "HEPAN_PROTOCOL_ERROR"].includes(error.code)) {

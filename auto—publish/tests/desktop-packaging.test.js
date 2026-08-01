@@ -106,8 +106,7 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
         };
       }
     }],
-    ["./ipc/register", { registerIpc: function() {} }],
-    ["../src/core/logger", { subscribe: function() { return options.unsubscribeLogs || function() {}; } }]
+    ["./ipc/register", { registerIpc: function() {} }]
   ]);
   const originalLoad = Module._load;
   Module._load = function(request, parent, isMain) {
@@ -279,8 +278,7 @@ function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
         };
       }
     }],
-    ["./ipc/register", { registerIpc: function() { events.push(["business-ipc"]); } }],
-    ["../src/core/logger", { subscribe: function() { events.push(["logger"]); return function() {}; } }]
+    ["./ipc/register", { registerIpc: function() { events.push(["business-ipc"]); } }]
   ]);
   const originalLoad = Module._load;
   Module._load = function(request, parent, isMain) {
@@ -477,14 +475,12 @@ describe("source assembly and packaging contract", function() {
     assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "business-ipc"; }), false);
-    assert.equal(harness.events.some(function(event) { return event[0] === "logger"; }), false);
     for (const request of [
       "./runtime-paths",
       "./runtime-config",
       "./services/desktop-task-service",
       "./services/doubao-collection-service",
-      "./ipc/register",
-      "../src/core/logger"
+      "./ipc/register"
     ]) assert.equal(harness.requires.includes(request), false, request + " must not be required");
   });
 
@@ -496,7 +492,6 @@ describe("source assembly and packaging contract", function() {
       assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false, state);
       assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false, state);
       assert.equal(harness.events.some(function(event) { return event[0] === "business-ipc"; }), false, state);
-      assert.equal(harness.events.some(function(event) { return event[0] === "logger"; }), false, state);
     }
   });
 
@@ -731,11 +726,7 @@ describe("source assembly and packaging contract", function() {
   it("initializes runtime environment before loading config-dependent services", function() {
     const runtime = read("desktop/workspace-runtime.js");
     assert.ok(runtime.includes("configureRuntimeEnvironment"));
-    assert.doesNotMatch(
-      runtime,
-      /require\(["']\.\.\/src\/core\/logger["']\)/,
-      "workspace runtime must not restore the removed raw publish-log sender"
-    );
+    assert.doesNotMatch(runtime, /core[\\/]logger|publish-log|onLog/);
     assert.ok(
       runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf('require("./ipc/register")'),
       "IPC registration must be required after runtime environment configuration"
@@ -782,8 +773,7 @@ describe("source assembly and packaging contract", function() {
   it("continues runtime disposal and quits when either unsubscribe throws", async function() {
     let disposeCalls = 0;
     const harness = loadMainWithQuitHarness(function() { disposeCalls += 1; }, {
-      unsubscribeDoubaoQueue: function() { throw new Error("queue cleanup leaked details"); },
-      unsubscribeLogs: function() { throw new Error("log cleanup leaked details"); }
+      unsubscribeDoubaoQueue: function() { throw new Error("queue cleanup leaked details"); }
     });
     const event = { prevented: false, preventDefault: function() { this.prevented = true; } };
 

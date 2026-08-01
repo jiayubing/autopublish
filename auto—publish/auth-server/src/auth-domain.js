@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const { createOpaqueToken, hashToken } = require("./token-service");
+const { LoginPolicy } = require("./security/login-policy");
 
 const PASSWORD_SCHEME = "scrypt";
 const PASSWORD_COST = 32768;
@@ -163,11 +164,11 @@ class AuthDomain {
     this.refreshTtlMs = Number(opts.refreshTtlMs || 30 * 24 * 60 * 60 * 1000);
     this.loginFailureThreshold = Number(opts.loginFailureThreshold || 5);
     this.loginLockMs = Number(opts.loginLockMs || 15 * 60 * 1000);
-    this.rateLimitWindowMs = Number(opts.rateLimitWindowMs || 60 * 1000);
-    this.rateLimitMaxAttempts = Number(opts.rateLimitMaxAttempts || 12);
     this.maxSessionsPerUser = Number(opts.maxSessionsPerUser || 10);
     this.maxSessionsPerDevice = Number(opts.maxSessionsPerDevice || 3);
     this.passwordLimiter = opts.passwordLimiter || new ScryptLimiter(Number(opts.maxConcurrentPasswordComputations || 2));
+    this.passwordVerifier = opts.passwordVerifier || opts.verifyPassword || verifyPassword;
+    this.passwordHasher = opts.passwordHasher || opts.createPasswordHash || createPasswordHash;
     this.passwordOptions = {
       cost: Number(opts.passwordCost || PASSWORD_COST),
       blockSize: PASSWORD_BLOCK_SIZE,
@@ -175,7 +176,28 @@ class AuthDomain {
       maxmem: PASSWORD_MAX_MEMORY,
       limiter: this.passwordLimiter,
     };
-    this.sourceAttempts = new Map();
+    this.loginPolicy = opts.loginPolicy || new LoginPolicy({
+      now: this.now,
+      loginFailureThreshold: this.loginFailureThreshold,
+      loginLockMs: this.loginLockMs,
+      rateLimitWindowMs: opts.rateLimitWindowMs,
+      rateLimitMaxAttempts: opts.rateLimitMaxAttempts,
+      rateLimitCapacity: opts.rateLimitCapacity,
+      rateLimitMaxKeys: opts.rateLimitMaxKeys,
+      maxRateLimitKeys: opts.maxRateLimitKeys,
+      sourceRateLimitCapacity: opts.sourceRateLimitCapacity,
+      identityRateLimitCapacity: opts.identityRateLimitCapacity,
+      combinationRateLimitCapacity: opts.combinationRateLimitCapacity,
+      sourceRateLimitMaxAttempts: opts.sourceRateLimitMaxAttempts,
+      identityRateLimitMaxAttempts: opts.identityRateLimitMaxAttempts,
+      combinationRateLimitMaxAttempts: opts.combinationRateLimitMaxAttempts,
+      sourceRateLimitTtlMs: opts.sourceRateLimitTtlMs,
+      identityRateLimitTtlMs: opts.identityRateLimitTtlMs,
+      combinationRateLimitTtlMs: opts.combinationRateLimitTtlMs,
+      sourceLimiter: opts.sourceLimiter,
+      identityLimiter: opts.identityLimiter,
+      combinationLimiter: opts.combinationLimiter,
+    });
     this.mutationTail = Promise.resolve();
   }
 
@@ -194,22 +216,6 @@ class AuthDomain {
 
   _nowIso() { return iso(this.now); }
 
-  _sourceKey(loginName, sourceFingerprint) {
-    const source = safeText(sourceFingerprint || "unknown", 256) || "unknown";
-    return `${loginName}:${hashToken(source).slice(0, 24)}`;
-  }
-
-  _recordSourceAttempt(key) {
-    const current = this.sourceAttempts.get(key) || [];
-    const cutoff = this.now() - this.rateLimitWindowMs;
-    const next = current.filter((timestamp) => timestamp > cutoff);
-    next.push(this.now());
-    this.sourceAttempts.set(key, next);
-    return next.length;
-  }
-
-  _clearSourceAttempt(key) { this.sourceAttempts.delete(key); }
-
   _userByLogin(loginName) { return this.repository.findUserByLoginName(loginName); }
 
   _entitlements(userId) { return sanitizeEntitlements(this.repository.getEntitlements(userId)); }
@@ -222,8 +228,8 @@ class AuthDomain {
   }
 
   _assertEnabled(user) {
-    if (!user || !user.enabled) throw new AuthError("AUTH_ACCOUNT_DISABLED");
-    if (user.lockedUntil && Date.parse(user.lockedUntil) > this.now()) throw new AuthError("AUTH_ACCOUNT_LOCKED");
+    const code = this.loginPolicy.classifyAccount(user);
+    if (code) throw new AuthError(code);
   }
 
   _assertUserUsable(user, entitlements) {
@@ -345,26 +351,18 @@ class AuthDomain {
     const request = input || {};
     const loginName = normalizeLoginName(request.loginName);
     if (typeof request.password !== "string" || request.password.length === 0 || request.password.length > 256) throw new AuthError("AUTH_INPUT_INVALID");
-    const sourceKey = this._sourceKey(loginName, request.sourceFingerprint);
-    if (this._recordSourceAttempt(sourceKey) > this.rateLimitMaxAttempts) {
-      throw new AuthError("AUTH_RATE_LIMITED");
-    }
+    const attempt = this.loginPolicy.begin({ loginName, sourceFingerprint: request.sourceFingerprint });
+    if (!attempt.allowed) throw new AuthError("AUTH_RATE_LIMITED");
     const user = this._userByLogin(loginName);
     const passwordHash = user ? user.passwordHash : DUMMY_PASSWORD_HASH;
-    const validPassword = await verifyPassword(request.password, passwordHash, this.passwordOptions);
+    const validPassword = await this.passwordVerifier(request.password, passwordHash, this.passwordOptions);
     return this._withMutation(() => {
       const current = this._userByLogin(loginName);
       if (!current || !validPassword) {
-        if (current && current.enabled) {
-          const failedLoginCount = Number(current.failedLoginCount || 0) + 1;
-          const lockedUntil = failedLoginCount >= this.loginFailureThreshold ? new Date(this.now() + this.loginLockMs).toISOString() : null;
-          this.repository.updateUser(current.id, { failedLoginCount, lockedUntil, updatedAt: this._nowIso() });
-          this._audit(lockedUntil ? "ACCOUNT_LOCKED" : "LOGIN_FAILED", current.id, null, request.sourceFingerprint, lockedUntil ? "AUTH_ACCOUNT_LOCKED" : "AUTH_INVALID_CREDENTIALS");
-          if (lockedUntil) throw new AuthError("AUTH_ACCOUNT_LOCKED");
-        } else {
-          this._audit("LOGIN_FAILED", null, null, request.sourceFingerprint, "AUTH_INVALID_CREDENTIALS");
-        }
-        throw new AuthError("AUTH_INVALID_CREDENTIALS");
+        const failure = this.loginPolicy.recordFailure(current);
+        if (current && failure.update) this.repository.updateUser(current.id, Object.assign({}, failure.update, { updatedAt: this._nowIso() }));
+        this._audit(failure.eventCode, current && current.enabled ? current.id : null, null, request.sourceFingerprint, failure.code);
+        throw new AuthError(failure.code);
       }
       this._assertEnabled(current);
       const entitlements = this._entitlements(current.id);
@@ -376,7 +374,7 @@ class AuthDomain {
         lastLoginAt: updatedAt,
         updatedAt,
       });
-      this._clearSourceAttempt(sourceKey);
+      this.loginPolicy.onSuccess(attempt);
       if (current.mustChangePassword) {
         this._audit("LOGIN_SUCCEEDED", current.id, null, request.sourceFingerprint, "AUTH_PASSWORD_CHANGE_REQUIRED");
         return { passwordChangeRequired: true, user: current, entitlements };
@@ -505,7 +503,7 @@ class AuthDomain {
       const loginName = normalizeLoginName(request.loginName);
       if (typeof request.currentPassword !== "string") throw new AuthError("AUTH_INVALID_CREDENTIALS");
       const found = this._userByLogin(loginName);
-      const valid = await verifyPassword(request.currentPassword, found ? found.passwordHash : DUMMY_PASSWORD_HASH, this.passwordOptions);
+      const valid = await this.passwordVerifier(request.currentPassword, found ? found.passwordHash : DUMMY_PASSWORD_HASH, this.passwordOptions);
       if (!found || !valid) throw new AuthError("AUTH_INVALID_CREDENTIALS");
       this._assertEnabled(found);
       entitlements = this._entitlements(found.id);
@@ -514,11 +512,11 @@ class AuthDomain {
       currentUser = found;
     }
     if (typeof request.currentPassword === "string") {
-      const valid = await verifyPassword(request.currentPassword, currentUser.passwordHash, this.passwordOptions);
+      const valid = await this.passwordVerifier(request.currentPassword, currentUser.passwordHash, this.passwordOptions);
       if (!valid) throw new AuthError("AUTH_INVALID_CREDENTIALS");
     }
     if (request.currentPassword === newPassword) throw new AuthError("AUTH_INPUT_INVALID");
-    const passwordHash = await createPasswordHash(newPassword, this.passwordOptions);
+    const passwordHash = await this.passwordHasher(newPassword, this.passwordOptions);
     return this._withMutation(() => {
       const user = this.repository.findUserById(currentUser.id);
       if (!user) throw new AuthError("AUTH_SESSION_EXPIRED");
@@ -551,7 +549,7 @@ class AuthDomain {
     const permanent = request.permanent === true;
     if (!permanent && request.expiresAt === undefined) throw new AuthError("AUTH_EXPIRY_REQUIRED");
     const expiresAt = normalizeExpiry(permanent ? null : request.expiresAt, this.now, false);
-    const passwordHash = await createPasswordHash(password, this.passwordOptions);
+    const passwordHash = await this.passwordHasher(password, this.passwordOptions);
     return this._withMutation(() => {
       if (this._userByLogin(loginName)) throw new AuthError("AUTH_USER_EXISTS");
       const createdAt = this._nowIso();
@@ -594,7 +592,7 @@ class AuthDomain {
 
   async resetPassword(identifier, password) {
     const nextPassword = normalizePassword(password);
-    const passwordHash = await createPasswordHash(nextPassword, this.passwordOptions);
+    const passwordHash = await this.passwordHasher(nextPassword, this.passwordOptions);
     return this._withMutation(() => {
       const user = this._findManagedUser(identifier);
       const updatedAt = this._nowIso();
@@ -690,6 +688,14 @@ class AuthDomain {
   healthCheck() {
     return typeof this.repository.healthCheck === "function" ? this.repository.healthCheck() : true;
   }
+
+  getLoginRateLimitStats() {
+    return this.loginPolicy.getStats();
+  }
+
+  clearLoginRateLimitState() {
+    return this.loginPolicy.clear();
+  }
 }
 
 module.exports = {
@@ -703,4 +709,5 @@ module.exports = {
   DEFAULT_PRODUCT,
   PASSWORD_COST,
   MIN_PASSWORD_LENGTH,
+  LoginPolicy,
 };
