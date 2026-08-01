@@ -1,5 +1,7 @@
 # 阶段04交接：平台运行期与 Publisher Adapters
 
+> **2026-08-01 自动化收口（当前最高权威，覆盖下方历史状态）：** Phase 04 自动化整改和本地制品证据已收口，状态改为 `PENDING_HUMAN`。待人工的真实账号/remote ID、Hepan断连远端核对、媒体HTTP风险与测试资源、正式签名制品登录仍阻止正式 release，但不阻止 Phase 07 本地实施。Phase 03/06=`COMPLETE`，Phase 07=`READY`。
+
 > **2026-07-30 最终只读审计三项P1直接整改（当前唯一权威）：** 唯一`verifyCapabilityEvidence()`新增三项永久RED→GREEN反例：Renderer owner仅经未调用entry callback、owner仅作为未消费JSX prop、producer callback仅在`if(false)`中调用。入口现在只沿确证callback契约，JSX只接受intrinsic事件或闭合到子组件真实消费的prop，callback调用证明排除静态不可达分支；React `lazy`及既有React/标准异步集合边界按TypeChecker声明闭合。证据专项66/66、matrix33/33（109 capability、21 lifecycle、5 event）、fail-closed7/7，合计106/106；完整`npm test`225文件1366/1366，lint、定向Prettier与`git diff --check`通过。仅测试证据helper/test变化，Phase03/04/06 production、package input和既有制品未变；阶段继续`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待再次最终独立只读审计。**
 
 > **2026-07-30 计划21最终审查后TDD交接（当前唯一权威）：** Phase04 production未改。共享的唯一公开`verifyCapabilityEvidence()` seam已对追加审查的五项假阳性串行RED→GREEN；证据专项60/60、production matrix/fail-closed组合100/100、matrix109/109、lifecycle21/21、event5/5，inventory仍109。完整测试1360/1360，标准`pack:smoke`及其余门禁通过。`P1-CONVERGENCE-01=VERIFIED`；Phase04=`IN_PROGRESS`，Phase07=`NOT_STARTED`，人工验收仍阻止正式release。真实账号、投稿、同步、扣费与付费服务调用为0；以下旧统计均为历史记录。
@@ -8,8 +10,8 @@
 
 - 当前唯一权威制品：Renderer/preload/ASAR/exe SHA-256分别为`E1B965347C5BEA36B27006555E0DCFC5E380211A6BA39D925A7516FFD204A860`、`3F56D207A9FB3BFB8C807CFCCA5DF3F5F57CC93B7D38DC97A128840433BFB8EC`、`71CD2F7A24CC0106D712348835B1803F943C6BB36F18E41133E025B1CA6BF073`、`60E05AFB17FF24E541DC9AEDCB82B749D8024B15F46CF66D51688B017239AAF6`；exe 225,485,824 bytes。
 
-- 状态：`IN_PROGRESS`（2026-07-30 计划21整改已完成，等待最终独立只读审计；不得恢复`PENDING_HUMAN`或`COMPLETE`，四项人工验收继续阻止正式release。）
-- 分支/基线：`codex/refactor-program` / `8cbce7f1761c4e67baf4467d89f0a8397e93d9db`；等待本阶段里程碑提交。
+- 状态：`PENDING_HUMAN`（自动化范围已收口；四项受控人工验收继续阻止正式release。）
+- 分支/关闭基线：`codex/refactor-program` / `phase-03-06-closure`；自动化里程碑已收口。
 - 范围：仅阶段04；未访问真实账号、稿件、投稿、扣费或媒体API。
 
 2026-07-30 最终复验更正：补充导出入口内dead arrow producer回归后corpus33/33、production suite33/33、最终全仓225文件1333/1333（164.262秒）；取代下方同日中间计数，Phase04边界与状态不变。

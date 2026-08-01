@@ -1,5 +1,7 @@
 # Phase 06 最终独立审计整改计划（三）
 
+> **2026-08-01 计划关闭（当前最高权威）：** 用户接受 `af56c12` / `phase-06-audit-remediation-green` 的完整 GREEN 证据并终止开放式重复审计。本计划全部整改项已完成，`P1-CONVERGENCE-01=VERIFIED`；Phase 03/06=`COMPLETE`，Phase 04=`PENDING_HUMAN`，Phase 07=`READY`。下方“等待再次独立审计”及禁止关闭阶段的文字保留为执行历史，不再约束后续任务。关闭提交使用 `phase-03-06-closure` 标记。
+
 > **2026-08-01 checkpoint（最新执行标记）：** 在 Ticket 1→4 整改基础上，证据 helper 追加 callback `return`/`finally` 控制流最小收紧；动态提前 return 与同步必抛 callback 后 cleanup 均 fail-closed，normal `finally { return; }` 吞异常对照保持可达。symbol evidence `148/148`；production matrix `33/33`（109 capability、21 lifecycle、5 event）；inventory/bridge fail-closed `16/16`；完整 `npm test` `1453/1453`，0 fail/skip；main/renderer/bridge typecheck、定向 lint/Prettier 与 `git diff --check` 通过。`P1-CONVERGENCE-01=整改复验 GREEN，等待最终独立只读审计`；Phase 03/04/06=`IN_PROGRESS`，Phase 07=`NOT_STARTED`。本次提交使用 checkpoint tag `phase-06-audit-remediation-green`；后续计划从此处继续，最终独立审计前不得标记 Phase 06 `COMPLETE`。
 
 > 日期：2026-07-31 Asia/Shanghai  

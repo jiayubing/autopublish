@@ -1,12 +1,14 @@
 # 阶段03交接：Publication工作流与恢复
 
+> **2026-08-01 阶段关闭（当前最高权威，覆盖下方历史状态）：** 用户接受当前 migration/recovery、SQLite订单矩阵、容量与全量门禁证据并终止开放式重复审计。Phase 03=`COMPLETE`；完成基线为 `af56c12`，关闭标记为 `phase-03-06-closure`。Phase 04 人工项继续阻止正式 release，但不影响本阶段关闭或 Phase 07 本地实施。
+
 > **2026-07-30 最终只读审计三项P1直接整改（当前唯一权威）：** 唯一`verifyCapabilityEvidence()`新增三项永久RED→GREEN反例：Renderer owner仅经未调用entry callback、owner仅作为未消费JSX prop、producer callback仅在`if(false)`中调用。入口现在只沿确证callback契约，JSX只接受intrinsic事件或闭合到子组件真实消费的prop，callback调用证明排除静态不可达分支；React `lazy`及既有React/标准异步集合边界按TypeChecker声明闭合。证据专项66/66、matrix33/33（109 capability、21 lifecycle、5 event）、fail-closed7/7，合计106/106；完整`npm test`225文件1366/1366，lint、定向Prettier与`git diff --check`通过。仅测试证据helper/test变化，Phase03/04/06 production、package input和既有制品未变；阶段继续`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待再次最终独立只读审计。**
 
 > **2026-07-30 计划21最终审查后TDD交接（当前唯一权威）：** Phase03 production未改，订单SQLite34/34、capacity19/19及13k projection结论保持。跨阶段唯一证据核心已对五项追加假阳性串行RED→GREEN；证据专项60/60、production matrix/fail-closed组合100/100、matrix109/109、lifecycle21/21、event5/5。完整测试1360/1360，标准`pack:smoke`及其余门禁通过。`P2-FINAL-ORDER-01`、`P2-CONVERGENCE-02`、`P1-CONVERGENCE-01`均`VERIFIED`；Phase03=`IN_PROGRESS`，Phase07=`NOT_STARTED`。以下旧统计均为历史记录。
 
 > **当前唯一权威制品：** Renderer/preload/ASAR/exe SHA-256分别为`E1B965347C5BEA36B27006555E0DCFC5E380211A6BA39D925A7516FFD204A860`、`3F56D207A9FB3BFB8C807CFCCA5DF3F5F57CC93B7D38DC97A128840433BFB8EC`、`71CD2F7A24CC0106D712348835B1803F943C6BB36F18E41133E025B1CA6BF073`、`60E05AFB17FF24E541DC9AEDCB82B749D8024B15F46CF66D51688B017239AAF6`；exe 225,485,824 bytes。
 
-> 当前状态：Phase 03保持`IN_PROGRESS`。2026-07-30 计划21整改已完成，等待最终独立只读审计；不得恢复`COMPLETE`，Phase 07仍为`NOT_STARTED`。
+> 当前状态：Phase 03=`COMPLETE`；Phase 07=`READY`。历史执行记录中的 `IN_PROGRESS` 不再代表当前状态。
 
 > **2026-07-30 最终复验更正：** corpus33/33、production suite33/33、最终全仓225文件1333/1333（164.262秒）；取代下方同日中间计数。Phase03订单矩阵31/31及状态不变。
 

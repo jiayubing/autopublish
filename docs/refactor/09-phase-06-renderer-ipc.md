@@ -1,5 +1,7 @@
 # 阶段6：Renderer状态与Typed IPC
 
+> **2026-08-01 阶段关闭（当前最高权威，覆盖下方历史状态）：** 用户确认以 `af56c12` / `phase-06-audit-remediation-green` 为自动化收口基线并停止开放式重复审计。`P1-CONVERGENCE-01=VERIFIED`，Phase 06=`COMPLETE`；Phase 03=`COMPLETE`，Phase 04=`PENDING_HUMAN`，Phase 07=`READY`。后续 evidence-helper 理论反例与模块拆分按技术债处理；只有 production 可复现的 P0/P1 才重开本阶段。关闭提交使用 `phase-03-06-closure` 标记。
+
 > **2026-08-01 审计整改 checkpoint（当前权威）：** 证据 helper 现对同步必抛 callback 后的 `return`、动态提前 `return` 与 `finally { return; }` 分别执行 fail-closed/可达性判定，回归测试已固定。symbol evidence `148/148`；production matrix `33/33`（109 capability、21 lifecycle、5 event）；inventory/bridge fail-closed `16/16`；完整 `npm test` `1453/1453`，0 fail/skip；main/renderer/bridge typecheck、定向 lint/Prettier 与 `git diff --check` 通过。状态标记为 `P1-CONVERGENCE-01=整改复验 GREEN，等待最终独立只读审计`；Phase 03/04/06=`IN_PROGRESS`，Phase 07=`NOT_STARTED`。checkpoint tag：`phase-06-audit-remediation-green`；不提前宣称 Phase 06 `COMPLETE`，也未修改 production IPC、Renderer、订单或业务服务。
 
 > **2026-08-01 Phase 06 独立审计后最小修复复验（最新权威，覆盖以下历史统计）：** 独立只读复核发现证据 helper 对 const 对象属性、字面量 `.length` 与 `typeof` 的静态短路值解析不足；四个永久 RED 反例已以最小 GREEN 收口。`staticPrimitiveValue()` 仅增加确定属性/长度/typeof 求值，未知或动态值仍 fail-closed；未修改 production runtime、IPC contract、业务服务或制品输入。symbol evidence `144/144`，production matrix `33/33`（109 capability、21 lifecycle、5 event），Coordinator `7/7`、caller inventory `3/3`、bridge fail-closed `9/9`、capability inventory `4/4`。完整 `npm test` 为 225 文件、132 suites、`1449/1449` pass、0 fail、1 个既有 Electron focus skip；Auth `16/16`、links `180/180`、packaging `33/33`、Lint、三套 typecheck、format、定向 Prettier、Renderer build `2157` modules、标准 pack smoke、`git diff --check` 全绿。当前 Renderer/preload/ASAR/exe 分别为 `758842`/`222731`/`7214697`/`225485824` bytes，SHA-256 为 `048D72A0856D0F50B0A0FB241467B799EC17D0B7010AAEFFE904B54122B15641`、`0A8642AB024AD5061E8ACC71C42DB566C62DC8E9D443277C45F2EE0C41B177F4`、`709A7AF4E555076F4FF695331E1B3985C5A5EF419DF2BAA8054CCF401FC8AFEA`、`983EDAC6B0CC86DC6DD884B217AE471655E5A3943ED3FA13EFDC34953DA051D3`。`P1-CONVERGENCE-01=整改复验 GREEN，等待最终独立只读审计`；Phase 03/04/06=`IN_PROGRESS`，Phase 07=`NOT_STARTED`；未访问真实数据、账号、供应商或付费系统，未 stage/commit/push/PR。
@@ -24,7 +26,7 @@
 
 > **当前唯一权威制品：** Renderer 757,886 bytes/SHA-256 `E1B965347C5BEA36B27006555E0DCFC5E380211A6BA39D925A7516FFD204A860`；preload 222,057 bytes/SHA-256 `3F56D207A9FB3BFB8C807CFCCA5DF3F5F57CC93B7D38DC97A128840433BFB8EC`；ASAR 7,212,426 bytes（2026-07-30T14:07:52.2749266+08:00）/SHA-256 `71CD2F7A24CC0106D712348835B1803F943C6BB36F18E41133E025B1CA6BF073`；exe 225,485,824 bytes（2026-07-30T14:07:52.9803709+08:00）/SHA-256 `60E05AFB17FF24E541DC9AEDCB82B749D8024B15F46CF66D51688B017239AAF6`。
 
-> 当前状态：**IN_PROGRESS；2026-07-30 计划21整改已完成，等待最终独立只读审计。Phase 03、Phase 04、Phase 06保持`IN_PROGRESS`，不得恢复`COMPLETE`；Phase 07保持`NOT_STARTED`。**
+> 当前状态：**COMPLETE；自动化整改与收口证据以顶部 2026-08-01 阶段关闭记录为准。Phase 04=`PENDING_HUMAN`，Phase 07=`READY`。**
 >
 > **2026-07-30 最终复验更正：** 补充“导出producer入口内声明但未调用的arrow helper”反例后，当前实现只沿实际IIFE、调用参数callback、返回API与本地调用图；该回归RED→GREEN且5/5 production event不变。最终corpus33/33、production suite33/33（合计66/66），`npm test`225文件1333/1333、0 fail/skip（164.262秒），lint复验通过。本句取代紧随其后的32/32、1332/1332中间统计。
 >

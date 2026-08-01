@@ -1,5 +1,7 @@
 # 阶段7：Auth、构建、安全与可观测
 
+> **2026-08-01 入口状态（当前权威）：** `READY`。Phase 03/06 已按 `af56c12` 自动化基线关闭，Phase 04=`PENDING_HUMAN`；四项受控人工验收继续阻止正式 release，但不阻止本阶段本地重构。新任务应从 `phase-03-06-closure` 开始，保持 Core/Application/Renderer interfaces 冻结；长模块拆分与测试提速不得混入本阶段，除非它们是完成本阶段明确条目的最小必要改动。
+
 ## 1. 阶段目标
 
 补齐独立Auth、生产传输、备份恢复、运行诊断、CI/release和最终制品能力，使前六阶段的新架构在真实运行拓扑下可以安全发布。本阶段不再改变核心领域interface。
