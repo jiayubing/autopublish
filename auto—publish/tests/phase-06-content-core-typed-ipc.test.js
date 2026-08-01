@@ -22,33 +22,26 @@ const {
 const CHANNELS = [
   "content:list-clients",
   "content:list-research",
-  "content:list-templates",
   "content:list-template-catalog",
   "content:retry-material",
   "content:generate-article",
   "content:save-article",
-  "content:list-generated-articles",
   "content:copy-article-version",
-  "content:review-articles",
-  "content:list-article-trash",
-  "content:preview-trash-articles",
   "content:preview-article-removal-impact",
   "content:trash-articles",
   "content:restore-article",
   "content:prepare-permanent-delete-article",
   "content:permanently-delete-article",
   "content:get-article-removal-transaction",
-  "content:list-article-removal-transactions",
   "content:retry-article-removal-transaction",
   "content:get-article-management-snapshot",
   "content:list-article-attention",
-  "content:get-article-attention",
   "content:preview-article-attention",
   "content:resolve-article-attention",
   "content:article-removal-transaction",
 ].sort();
 
-test("content core declares exactly 26 versioned path-free capabilities", function () {
+test("content core declares exactly 19 versioned path-free capabilities", function () {
   const registry = createContractRegistry(contentCoreContracts);
   assert.deepEqual(
     contentCoreContracts.map((contract) => contract.channel).sort(),
@@ -140,40 +133,6 @@ test("article attention list crosses the authenticated IPC seam as an exact path
     JSON.stringify(result),
     /private|filePath|workspacePath/i,
   );
-});
-
-test("article attention lookup represents a missing item without a nullable top-level payload", async function () {
-  const handlers = new Map();
-  const ipcMain = createAuthenticatedIpcMain(
-    {
-      handle(channel, handler) {
-        handlers.set(channel, handler);
-      },
-    },
-    async function () {},
-  );
-  registerArticleAttentionIpc({
-    ipcMain,
-    articleAttentionQuery: {
-      list() {
-        return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
-      },
-      get() {
-        return null;
-      },
-    },
-    articleAttentionResolver: { preview() {}, resolve() {} },
-  });
-
-  const result = await handlers.get("content:get-article-attention")(null, {
-    schemaVersion: 1,
-    payload: { attentionId: "missing-attention" },
-  });
-  assert.deepEqual(result, {
-    schemaVersion: 1,
-    ok: true,
-    data: { item: null },
-  });
 });
 
 test("article attention preview exposes only the confirmation decision DTO", async function () {
@@ -286,7 +245,6 @@ test("renderer article attention uses only the named content capability surface"
   assert.doesNotMatch(preload, /\n\s*articleAttention\s*:/);
   for (const method of [
     "listArticleAttention",
-    "getArticleAttention",
     "previewArticleAttention",
     "resolveArticleAttention",
   ])

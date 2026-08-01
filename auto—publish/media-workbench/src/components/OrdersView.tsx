@@ -215,7 +215,7 @@ export default function OrdersView({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2.5 mb-1.5">
                       <h3 className="text-sm font-bold text-slate-800 truncate">
-                        {order.title || order.filename || "(无标题)"}
+                        {order.title || "(无标题)"}
                       </h3>
                       <span
                         className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}
@@ -341,7 +341,7 @@ export default function OrdersView({
                               </span>
                             </div>
                           </div>
-                          {order.orderUrl && (
+                          {order.hasPublishedUrl && (
                             <div className="pt-2 border-t border-slate-800 mt-2">
                               <button
                                 type="button"

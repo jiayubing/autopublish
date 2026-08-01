@@ -7,7 +7,7 @@ import GeneratedArticlesView from './content/GeneratedArticlesView';
 import QuestionCollectionView from './content/QuestionCollectionView';
 import { type ArticleWorkflowStage } from '../article-workflow';
 import ArticleStageTabs from './content/ArticleStageTabs';
-import { useConfirmation } from '../confirmation';
+import { useConfirmation, useConfirmationScope } from '../confirmation';
 import { useContentWorkbenchFeature } from '../features/content/use-content-workbench-feature';
 
 type RefreshState = 'idle' | 'refreshing' | 'success' | 'error';
@@ -21,6 +21,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
   const content = useContentWorkbenchFeature();
   const { confirm } = useConfirmation();
   const { clients, templateCatalog, selectedClientId: clientId, currentArticle: article, query, questions, research, researchByClient, management, clientQuery, managementQuery } = content.snapshot;
+  useConfirmationScope(content.snapshot.scope && clientId ? `${content.snapshot.scope.workspaceRuntimeId}:${clientId}` : null);
   const [historyEditingArticle, setHistoryEditingArticle] = useState<GeneratedContentArticle | null>(null);
   const [historyEditingPublished, setHistoryEditingPublished] = useState(false);
   const [tab, setTab] = useState<'questions' | 'generate' | 'history'>('questions');

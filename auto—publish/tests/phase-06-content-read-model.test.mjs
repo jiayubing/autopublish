@@ -67,6 +67,37 @@ test("content read model rejects stale selected-client queries through feature q
   assert.deepEqual(snapshot.research.map((item) => item.id), ["research-b"]);
 });
 
+test("content destructive command rejects an input client outside its current feature scope", async () => {
+  let executeCalls = 0;
+  const feature = createContentWorkbenchFeature(adapters({
+    permanentlyDeleteContentArticle: async () => { executeCalls += 1; return { deleted: true }; },
+  }));
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+
+  await assert.rejects(
+    feature.commands.permanentlyDeleteContentArticle({ clientId: "client-b", articleId: "article-client-b", token: "token-1" }),
+    (error) => error.code === "CONTENT_CLIENT_SCOPE_MISMATCH",
+  );
+  assert.equal(executeCalls, 0);
+  feature.dispose();
+});
+
+test("content feature fails closed when its production content capability is unavailable", async () => {
+  const feature = createContentWorkbenchFeature(adapters({
+    listClients: async () => { throw new Error("CONTENT_CAPABILITY_UNAVAILABLE"); },
+  }));
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+
+  const snapshot = feature.getSnapshot();
+  assert.equal(snapshot.clients.length, 0);
+  assert.equal(snapshot.query.loading, false);
+  assert.equal(snapshot.query.error.code, "CONTENT_SOURCES_QUERY_FAILED");
+  assert.notEqual(snapshot.query.reason, "renderer-fallback");
+  feature.dispose();
+});
+
 test("content ordinary mutations have independent command owners and refresh their authoritative query", async () => {
   let resolveSave;
   let questionReads = 0;

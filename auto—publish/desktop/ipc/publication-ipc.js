@@ -106,15 +106,6 @@ function safeRecord(record) {
 function registerPublicationIpc(deps) {
   const values = deps || {};
   const ledger = values.publicationLedger || null;
-  values.ipcMain.handle("publication:list-for-articles", function(event, input) {
-    return wrap(function() {
-      const request = validateListInput(input);
-      const records = values.operationalStore && typeof values.operationalStore.listPublicationRecords === "function"
-        ? values.operationalStore.listPublicationRecords({ articleIds: request.articleIds })
-        : ledger.listForArticles(request.clientId, request.articleIds);
-      return { records: records.map(safeRecord) };
-    });
-  });
   values.ipcMain.handle("publication:reconcile", function(event, input) {
     return wrap(function() {
       const request = validateReconcileInput(input);

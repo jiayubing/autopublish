@@ -1097,12 +1097,6 @@ function coreContract(channel, kind) {
       fromArgs: (args) => ({ clientId: args[0] }),
       toArgs: (payload) => [payload.clientId],
     },
-    "content:list-templates": {
-      request: exactObject({ platform: optionalField(id) }),
-      success: exactObject({ templates: arrayField(template, { max: 10000 }) }),
-      fromArgs: (args) => (args[0] === undefined ? {} : { platform: args[0] }),
-      toArgs: (payload) => [payload.platform],
-    },
     "content:list-template-catalog": {
       request: empty,
       success: templateCatalog,
@@ -1127,36 +1121,9 @@ function coreContract(channel, kind) {
       fromArgs: (args) => ({ article: args[0] }),
       toArgs: (payload) => [payload.article],
     },
-    "content:list-generated-articles": {
-      request: exactObject({ clientId: id }),
-      success: exactObject({
-        articles: arrayField(generatedArticle, { max: 10000 }),
-      }),
-      fromArgs: (args) => ({ clientId: args[0] }),
-      toArgs: (payload) => [payload.clientId],
-    },
     "content:copy-article-version": {
       request: exactObject({ clientId: id, sourceArticleId: id }),
       success: exactObject({ article: generatedArticle }),
-      fromArgs: direct,
-      toArgs: directInput,
-    },
-    "content:review-articles": {
-      request: exactObject({ articles: articleSelectionList }),
-      success: reviewResult,
-      fromArgs: (args) =>
-        Array.isArray(args[0]) ? { articles: args[0] } : args[0] || {},
-      toArgs: (payload) => [{ articles: payload.articles }],
-    },
-    "content:list-article-trash": {
-      request: exactObject({ clientId: id }),
-      success: exactObject({ trash: arrayField(trashRecord, { max: 10000 }) }),
-      fromArgs: (args) => ({ clientId: args[0] }),
-      toArgs: (payload) => [payload.clientId],
-    },
-    "content:preview-trash-articles": {
-      request: removalPreviewRequest,
-      success: impactPreview,
       fromArgs: direct,
       toArgs: directInput,
     },
@@ -1220,24 +1187,6 @@ function articleAttentionListContract() {
   });
 }
 
-function articleAttentionGetContract() {
-  return defineContract({
-    capability: "attention.getArticleAttention",
-    channel: "content:get-article-attention",
-    feature: "attention",
-    kind: "query",
-    request: exactObject({
-      attentionId: id,
-      clientId: optionalField(id),
-    }),
-    success: exactObject({ item: nullableField(articleAttentionItem) }),
-    fromArgs: (args) => args[0] || {},
-    toArgs: (payload) => [payload],
-    errorCodes,
-    errors,
-  });
-}
-
 function articleAttentionPreviewContract() {
   return defineContract({
     capability: "attention.previewArticleAttention",
@@ -1290,30 +1239,21 @@ function articleAttentionResolveContract() {
 }
 
 function articleRemovalContract(channel, kind) {
-  const list = channel === "content:list-article-removal-transactions";
   const retry = channel === "content:retry-article-removal-transaction";
   return defineContract({
-    capability: list
-      ? "content.listArticleRemovalTransactions"
-      : retry
-        ? "content.retryArticleRemovalTransaction"
-        : "content.getArticleRemovalTransaction",
+    capability: retry
+      ? "content.retryArticleRemovalTransaction"
+      : "content.getArticleRemovalTransaction",
     channel,
     feature: "content",
     kind,
-    request: list
-      ? empty
-      : exactObject({
-          transactionId: id,
-          ...(retry ? { confirmed: literalField(true) } : {}),
-        }),
-    success: list
-      ? exactObject({
-          transactions: arrayField(articleRemovalTransaction, { max: 10000 }),
-        })
-      : exactObject({ transaction: articleRemovalTransaction }),
-    fromArgs: (args) => (list ? {} : args[0] || {}),
-    toArgs: (payload) => [list ? undefined : payload],
+    request: exactObject({
+      transactionId: id,
+      ...(retry ? { confirmed: literalField(true) } : {}),
+    }),
+    success: exactObject({ transaction: articleRemovalTransaction }),
+    fromArgs: (args) => args[0] || {},
+    toArgs: (payload) => [payload],
     errorCodes,
     errors,
   });
@@ -1322,27 +1262,20 @@ function articleRemovalContract(channel, kind) {
 const invokeChannels = [
   ["content:list-clients", "query"],
   ["content:list-research", "query"],
-  ["content:list-templates", "query"],
   ["content:list-template-catalog", "query"],
   ["content:retry-material", "command"],
   ["content:generate-article", "command"],
   ["content:save-article", "command"],
-  ["content:list-generated-articles", "query"],
   ["content:copy-article-version", "command"],
-  ["content:review-articles", "command"],
-  ["content:list-article-trash", "query"],
-  ["content:preview-trash-articles", "query"],
   ["content:preview-article-removal-impact", "query"],
   ["content:trash-articles", "command"],
   ["content:restore-article", "command"],
   ["content:prepare-permanent-delete-article", "command"],
   ["content:permanently-delete-article", "command"],
   ["content:get-article-removal-transaction", "query"],
-  ["content:list-article-removal-transactions", "query"],
   ["content:retry-article-removal-transaction", "command"],
   ["content:get-article-management-snapshot", "query"],
   ["content:list-article-attention", "query"],
-  ["content:get-article-attention", "query"],
   ["content:preview-article-attention", "query"],
   ["content:resolve-article-attention", "command"],
 ];
@@ -1351,15 +1284,12 @@ const contentCoreContracts = Object.freeze([
   ...invokeChannels.map(([channel, kind]) =>
     channel === "content:list-article-attention"
       ? articleAttentionListContract()
-      : channel === "content:get-article-attention"
-        ? articleAttentionGetContract()
-        : channel === "content:preview-article-attention"
+      : channel === "content:preview-article-attention"
           ? articleAttentionPreviewContract()
           : channel === "content:resolve-article-attention"
             ? articleAttentionResolveContract()
             : [
                   "content:get-article-removal-transaction",
-                  "content:list-article-removal-transactions",
                   "content:retry-article-removal-transaction",
                 ].includes(channel)
               ? articleRemovalContract(channel, kind)

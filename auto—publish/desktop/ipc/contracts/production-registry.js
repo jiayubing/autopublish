@@ -248,30 +248,6 @@ const contracts = [
     },
   }),
   defineContract({
-    capability: "media.stopSubmit",
-    channel: "media:stop-submit",
-    feature: "media",
-    kind: "command",
-    request: emptyRequest,
-    success: exactObject({ stopped: "boolean" }),
-    fromArgs: noArgs,
-    toArgs: noLegacyInput,
-    errorCodes: [
-      "AUTH_REQUIRED",
-      "IPC_REQUEST_INVALID",
-      "IPC_RESULT_INVALID",
-      "IPC_INTERNAL",
-    ],
-    errors: {
-      ...COMMON_ERRORS,
-      IPC_INTERNAL: {
-        category: "internal",
-        retryability: "manual-check",
-        userMessage: "停止请求未能安全完成，请检查任务状态。",
-      },
-    },
-  }),
-  defineContract({
     capability: "generation.runtimeChanged",
     channel: "content:generation-batch-state",
     feature: "generation",

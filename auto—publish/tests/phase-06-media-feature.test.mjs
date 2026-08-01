@@ -81,9 +81,6 @@ describe("Phase 06 media feature", () => {
       setDraft: async (filename, draft) => {
         calls.push(["setDraft", filename, draft.title]);
       },
-      removeDraft: async (filename) => {
-        calls.push(["removeDraft", filename]);
-      },
       scanArticles: async () => [article],
       previewArticle: async () => ({ ...article, content: "preview" }),
       buildConfirmation: async () => ({
@@ -93,7 +90,6 @@ describe("Phase 06 media feature", () => {
         actualPrice: 10,
       }),
       submitSelected: async () => ({ accepted: true }),
-      stopSubmit: async () => ({ stopped: true }),
       getOrders: async () => [],
       syncOrder: async () => ({}),
       openPublishedUrl: async (orderNid) => {
@@ -212,12 +208,10 @@ describe("Phase 06 media feature", () => {
       getDrafts: async () => [],
       getDraft: async () => null,
       setDraft: async () => ({}),
-      removeDraft: async () => ({}),
       scanArticles: async () => [],
       previewArticle: async () => ({}),
       buildConfirmation: async () => ({}),
       submitSelected: async () => ({}),
-      stopSubmit: async () => ({}),
       getOrders: async () => [],
       syncOrder: async () => ({}),
       openPublishedUrl: async () => ({}),
@@ -242,7 +236,7 @@ describe("Phase 06 media feature", () => {
     assert.equal(feature.getSnapshot().resources.pageSize, 50);
   });
 
-  it("rejects stale resource responses and exposes order sync failures in the snapshot", async () => {
+  it("owns media Promise failures in the snapshot without rejected refresh or toggle callers", async () => {
     const oldPage = deferred();
     const nextPage = deferred();
     let pageCalls = 0;
@@ -255,20 +249,18 @@ describe("Phase 06 media feature", () => {
         page: 1,
         pageSize: 50,
       }),
-      refreshResources: async () => ({}),
+      refreshResources: async () => { throw Object.assign(new Error("刷新失败"), { code: "MEDIA_REFRESH_FAILED" }); },
       getPoolPage: emptyPoolPage,
-      addToPool: async () => ({}),
+      addToPool: async () => { throw Object.assign(new Error("收藏失败"), { code: "MEDIA_POOL_FAILED" }); },
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
       getDrafts: async () => [],
       getDraft: async () => null,
       setDraft: async () => ({}),
-      removeDraft: async () => ({}),
       scanArticles: async () => [],
       previewArticle: async () => ({}),
       buildConfirmation: async () => ({}),
       submitSelected: async () => ({}),
-      stopSubmit: async () => ({}),
       getOrders: async () => [{ orderNid: "order-1" }],
       syncOrder: async () => {
         throw Object.assign(new Error("同步暂时失败"), {
@@ -296,7 +288,7 @@ describe("Phase 06 media feature", () => {
     await first;
     assert.equal(feature.getSnapshot().resources.items[0].resourceId, "new");
     await feature.refreshOrders("initial");
-    await assert.rejects(feature.syncOrder("order-1"), /同步暂时失败/);
+    await feature.syncOrder("order-1");
     assert.deepEqual(feature.getSnapshot().orders.items, [
       { orderNid: "order-1" },
     ]);
@@ -304,5 +296,9 @@ describe("Phase 06 media feature", () => {
       feature.getSnapshot().commands.syncOrder.error.code,
       "ORDER_SYNC_FAILED",
     );
+    await assert.doesNotReject(feature.refreshResources());
+    await assert.doesNotReject(feature.togglePool({ resourceId: "resource-1" }));
+    assert.equal(feature.getSnapshot().commands.refreshResources.error.code, "MEDIA_REFRESH_FAILED");
+    assert.equal(feature.getSnapshot().commands.togglePool.error.code, "MEDIA_POOL_FAILED");
   });
 });

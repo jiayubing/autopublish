@@ -138,7 +138,7 @@ export default function ArticleEditor({
 
   const totalMediaPrice = activeArticle.selectedResources.reduce((sum, item) => {
     const status = resourceStates[item.resourceId]?.status;
-    return status && status !== 'available' ? sum : sum + Number(item.price || 0);
+    return status && status !== 'available' ? sum : sum + item.price;
   }, 0);
 
   return (
@@ -349,7 +349,7 @@ export default function ArticleEditor({
 
                           <div className="flex items-center space-x-2 flex-shrink-0">
                             <span className={`font-mono text-xs font-bold ${isBlocked ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                              ¥{Number(resource.price || 0).toFixed(1)}
+                              ¥{resource.price.toFixed(1)}
                             </span>
                             {isBlocked && <span className="text-[10px] font-semibold text-amber-700">{publicationState?.status === 'uncertain' ? '待确认' : '已阻止'}</span>}
                             <button

@@ -200,6 +200,7 @@ function installDesktopFixture(page, fixture) {
     window.desktopConsole = {
       auth: { getState: () => ok({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} },
       workspace,
+      workspaceData: { getRuntimeIdentity: () => ok({ workspaceRuntimeId: "history-runtime", revision: 1 }), onInvalidated: () => () => {} },
       runtimeDiagnostics: runtime,
       aiProvider,
       platformSettings,

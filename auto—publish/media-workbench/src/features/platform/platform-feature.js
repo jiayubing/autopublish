@@ -155,6 +155,7 @@ export function createPlatformFeature(bridge = {}) {
 
   function applyRunSnapshot(nextRun) {
     if (disposed || !scope || !nextRun || typeof nextRun !== 'object') return false;
+    if (nextRun.workspaceRuntimeId !== scope.workspaceRuntimeId) return false;
     const incoming = { ...IDLE_RUN, ...nextRun };
     if (run.runId && incoming.runId && run.runId !== incoming.runId) {
       if (isRunActive(run) || timestamp(incoming.updatedAt) <= timestamp(run.updatedAt)) return false;

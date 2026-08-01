@@ -24,7 +24,29 @@ type ArticleManagementReadModel = {
 type ArticleTrashImpactItem = { displayName?: string | null; targetPlatformId?: string | null; platformId?: string | null; articleId?: string; reasonCode?: string | null; status?: string | null };
 type ArticleTrashPreview = { token?: string; legacy?: boolean; canCommit: boolean; articleCount: number; queuedToCancel: ArticleTrashImpactItem[]; failedToClean: ArticleTrashImpactItem[]; publishedToClean?: ArticleTrashImpactItem[]; blockedItems: ArticleTrashImpactItem[]; selections?: Array<{ clientId: string; articleId: string }>; openTransaction?: ArticleRemovalTransaction | null; transaction?: ArticleRemovalTransaction | null; openTransactionId?: string | null; transactionId?: string | null };
 
-interface GeneratedArticlesViewProps { clientId: string; management: ArticleManagementReadModel; query: { loading: boolean; error?: { userMessage?: string } | null }; commands: Record<string, (input?: any) => Promise<any>>; commandStates: { copyArticleVersion: { busy: boolean }; reconcilePublication: { busy: boolean } }; refreshManagement: (reason?: string) => Promise<unknown>; subscribeRemovalTransaction: (transactionId: string, listener: (transaction: ArticleRemovalTransaction) => void) => () => void; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
+type GeneratedArticlesCommandName =
+  | 'cancelContentSubmissionBatch'
+  | 'cleanupFailedContentSubmissionItems'
+  | 'copyArticleVersion'
+  | 'createContentSubmissionBatch'
+  | 'exportToSubmissionQueue'
+  | 'getContentArticleRemovalTransaction'
+  | 'permanentlyDeleteContentArticle'
+  | 'preparePermanentDeleteContentArticle'
+  | 'previewCleanupFailedContentSubmissionItems'
+  | 'previewContentArticleRemoval'
+  | 'previewContentSubmissionBatch'
+  | 'previewExport'
+  | 'reconcilePublication'
+  | 'restoreContentArticle'
+  | 'retryContentArticleRemovalTransaction'
+  | 'trashContentArticles';
+type GeneratedArticlesCommands = Record<
+  GeneratedArticlesCommandName,
+  (input?: any) => Promise<any>
+>;
+
+interface GeneratedArticlesViewProps { clientId: string; management: ArticleManagementReadModel; query: { loading: boolean; error?: { userMessage?: string } | null }; commands: GeneratedArticlesCommands; commandStates: { copyArticleVersion: { busy: boolean }; reconcilePublication: { busy: boolean } }; refreshManagement: (reason?: string) => Promise<unknown>; subscribeRemovalTransaction: (transactionId: string, listener: (transaction: ArticleRemovalTransaction) => void) => () => void; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
 
 function selectionKey(article: GeneratedContentArticle) { return articleSelectionKey(article); }
 
@@ -489,6 +511,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
       if (isCurrentClient(requestedClientId)) setBusy(false);
     }
     if (!isCurrentClient(requestedClientId) || !(await confirm({ title: '确认永久删除文章', message: `永久删除“${entry.articleId}”？正文和 Markdown 将不可恢复。`, confirmLabel: '永久删除', tone: 'danger' }))) return;
+    if (!isCurrentClient(requestedClientId) || requestedClientId !== entry.clientId) return;
     setBusy(true); setError(''); try {
       await commands.permanentlyDeleteContentArticle({ clientId: entry.clientId, articleId: entry.articleId, token: prepared.token });
       await refreshHistoryData();

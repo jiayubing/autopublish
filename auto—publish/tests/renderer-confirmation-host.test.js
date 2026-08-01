@@ -32,9 +32,17 @@ describe("renderer confirmation host", () => {
 
   it("installs one host only after authentication and removes business native confirms", () => {
     const main = read("media-workbench/src/main.tsx");
+    const app = read("media-workbench/src/App.tsx");
+    const content = read("media-workbench/src/components/ContentWorkbench.tsx");
     const gate = read("media-workbench/src/components/WorkspaceBootstrapGate.tsx");
-    assert.equal((main.match(/<ConfirmationHost>/g) || []).length, 1);
-    assert.match(main, /<AuthGate>\s*<ConfirmationHost>/s);
+    assert.equal((app.match(/<ConfirmationHost/g) || []).length, 1);
+    assert.match(
+      main,
+      /<AuthGate>\s*<WorkspaceCoordinatorProvider>\s*<WorkspaceScopedConfirmationHost>\s*<WorkspaceFeatureProvider>/s,
+    );
+    assert.match(app, /useWorkspaceRuntimeIdentity/);
+    assert.match(app, /scopeKey=\{workspaceRuntimeId \|\| "workspace-bootstrap"\}/);
+    assert.match(content, /useConfirmationScope/);
     assert.doesNotMatch(gate, /ConfirmationHost/);
     for (const file of [
       "media-workbench/src/components/settings/HepanProviderSettings.tsx",

@@ -3,26 +3,26 @@
 const { randomUUID } = require("node:crypto");
 
 const ALLOWED_SCOPES = Object.freeze([
-  "platformQueue", "navigationSummary", "articleAttention", "articleManagement",
+  "platformQueue", "articleAttention", "articleManagement",
   "orders", "contentSources", "mediaWorkbench"
 ]);
 
 // The reason code is the command's domain fact.  Scopes are a presentation
 // concern and deliberately have one owner so mutations cannot drift apart.
 const SCOPES_BY_REASON = Object.freeze({
-  SUBMISSION_BATCH_CANCELLED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  SUBMISSION_BATCH_CREATED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  SUBMISSION_QUEUE_CANCELLED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  SUBMISSION_QUEUE_CLEANED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  CONTENT_EXPORT_QUEUED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary", "mediaWorkbench"],
-  PUBLICATION_RECONCILED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  MEDIA_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary", "orders"],
-  PLATFORM_AUTO_TRASH_APPLIED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  ARTICLE_REMOVAL_TRANSACTION_CHANGED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  GENERATION_SUBMISSION_HANDOFF_COMMITTED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  ARTICLE_ATTENTION_RESOLVED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  TRASHED_QUEUE_RESIDUE_RESOLVED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  FAILED_QUEUE_ITEMS_CLEANED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
+  SUBMISSION_BATCH_CANCELLED: ["articleManagement", "articleAttention", "platformQueue"],
+  SUBMISSION_BATCH_CREATED: ["articleManagement", "articleAttention", "platformQueue"],
+  SUBMISSION_QUEUE_CANCELLED: ["articleManagement", "articleAttention", "platformQueue"],
+  SUBMISSION_QUEUE_CLEANED: ["articleManagement", "articleAttention", "platformQueue"],
+  CONTENT_EXPORT_QUEUED: ["articleManagement", "articleAttention", "platformQueue", "mediaWorkbench"],
+  PUBLICATION_RECONCILED: ["articleManagement", "articleAttention", "platformQueue"],
+  MEDIA_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue", "orders"],
+  PLATFORM_AUTO_TRASH_APPLIED: ["articleManagement", "articleAttention", "platformQueue"],
+  ARTICLE_REMOVAL_TRANSACTION_CHANGED: ["articleManagement", "articleAttention", "platformQueue"],
+  GENERATION_SUBMISSION_HANDOFF_COMMITTED: ["articleManagement", "articleAttention", "platformQueue"],
+  ARTICLE_ATTENTION_RESOLVED: ["articleManagement", "articleAttention", "platformQueue"],
+  TRASHED_QUEUE_RESIDUE_RESOLVED: ["articleManagement", "articleAttention", "platformQueue"],
+  FAILED_QUEUE_ITEMS_CLEANED: ["articleManagement", "articleAttention", "platformQueue"],
   GENERATION_BATCH_CHANGED: ["articleManagement"],
   GENERATION_BATCH_CREATED: ["articleManagement"],
   GENERATION_BATCH_TERMINAL: ["articleManagement"],
@@ -35,9 +35,9 @@ const SCOPES_BY_REASON = Object.freeze({
   CONTENT_QUESTION_DELETED: ["contentSources"],
   CONTENT_RESEARCH_COLLECTED: ["contentSources"],
   CONTENT_RESEARCH_MANUAL_SAVED: ["contentSources"],
-  PLATFORM_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  PLATFORM_SUBMIT_FAILED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
-  PLATFORM_SUBMIT_STOPPED: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"]
+  PLATFORM_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue"],
+  PLATFORM_SUBMIT_FAILED: ["articleManagement", "articleAttention", "platformQueue"],
+  PLATFORM_SUBMIT_STOPPED: ["articleManagement", "articleAttention", "platformQueue"]
 });
 
 function safeReasonCode(value) {

@@ -54,6 +54,38 @@ const ORDINARY_COMMANDS = Object.freeze({
   previewDoubaoBatch: null,
 });
 
+const COMMAND_CLIENT_IDENTITY = Object.freeze({
+  createQuestion: (input) => [input?.clientId],
+  updateQuestion: (input) => [input?.clientId],
+  deleteQuestion: (input) => [input?.clientId],
+  saveManualResearch: (input) => [input?.clientId],
+  retryMaterial: (input) => [input?.clientId],
+  saveArticle: (input) => [input?.clientId],
+  copyArticleVersion: (input) => [input?.clientId],
+  reconcilePublication: (input) => [input?.clientId],
+  previewExport: (input) => [input?.clientId],
+  exportToSubmissionQueue: (input) => [input?.clientId],
+  collectDoubaoQuestion: (input) => [input?.clientId],
+  createContentSubmissionBatch: (input) => [input?.clientId],
+  previewContentArticleRemoval: (input) => (input?.selections || []).map((item) => item?.clientId),
+  trashContentArticles: (input) => (input?.articles || []).map((item) => item?.clientId),
+  restoreContentArticle: (input) => [input?.clientId],
+  preparePermanentDeleteContentArticle: (input) => [input?.clientId],
+  permanentlyDeleteContentArticle: (input) => [input?.clientId],
+});
+
+function assertCommandClientScope(name, input, selectedClientId) {
+  const extract = COMMAND_CLIENT_IDENTITY[name];
+  if (!extract) return;
+  for (const clientId of extract(input)) {
+    if (typeof clientId === 'string' && clientId && clientId !== selectedClientId) {
+      const mismatch = new Error('Content command client scope is invalid');
+      mismatch.code = 'CONTENT_CLIENT_SCOPE_MISMATCH';
+      throw mismatch;
+    }
+  }
+}
+
 function safeError(value) {
   return Object.freeze({
     code:
@@ -373,6 +405,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
             workspaceRuntimeId: scope.workspaceRuntimeId,
             clientId: selectedClientId,
           });
+    assertCommandClientScope(name, input, selectedClientId);
     const token = owner.begin(commandScope);
     publish();
     try {
@@ -402,14 +435,55 @@ export function createContentWorkbenchFeature(adapters = {}) {
     }
   };
 
-  const commands = Object.freeze(
-    Object.fromEntries(
-      Object.keys(ORDINARY_COMMANDS).map((name) => [
-        name,
-        (input) => runCommand(name, input),
-      ]),
-    ),
-  );
+  // Keep the public command surface explicit so the compiler can preserve
+  // symbol identity from each View call through its exact bridge binding.
+  const commands = Object.freeze({
+    createQuestion: (input) => runCommand('createQuestion', input),
+    updateQuestion: (input) => runCommand('updateQuestion', input),
+    deleteQuestion: (input) => runCommand('deleteQuestion', input),
+    saveManualResearch: (input) => runCommand('saveManualResearch', input),
+    retryMaterial: (input) => runCommand('retryMaterial', input),
+    saveArticle: (input) => runCommand('saveArticle', input),
+    copyArticleVersion: (input) => runCommand('copyArticleVersion', input),
+    reconcilePublication: (input) => runCommand('reconcilePublication', input),
+    previewExport: (input) => runCommand('previewExport', input),
+    exportToSubmissionQueue: (input) =>
+      runCommand('exportToSubmissionQueue', input),
+    collectDoubaoQuestion: (input) =>
+      runCommand('collectDoubaoQuestion', input),
+    startPreparedDoubaoBatch: (input) =>
+      runCommand('startPreparedDoubaoBatch', input),
+    pauseDoubaoBatch: (input) => runCommand('pauseDoubaoBatch', input),
+    resumeDoubaoBatch: (input) => runCommand('resumeDoubaoBatch', input),
+    stopDoubaoBatch: (input) => runCommand('stopDoubaoBatch', input),
+    retryFailedDoubao: (input) => runCommand('retryFailedDoubao', input),
+    previewContentSubmissionBatch: (input) =>
+      runCommand('previewContentSubmissionBatch', input),
+    createContentSubmissionBatch: (input) =>
+      runCommand('createContentSubmissionBatch', input),
+    cancelContentSubmissionBatch: (input) =>
+      runCommand('cancelContentSubmissionBatch', input),
+    previewCleanupFailedContentSubmissionItems: (input) =>
+      runCommand('previewCleanupFailedContentSubmissionItems', input),
+    cleanupFailedContentSubmissionItems: (input) =>
+      runCommand('cleanupFailedContentSubmissionItems', input),
+    previewContentArticleRemoval: (input) =>
+      runCommand('previewContentArticleRemoval', input),
+    trashContentArticles: (input) => runCommand('trashContentArticles', input),
+    getContentArticleRemovalTransaction: (input) =>
+      runCommand('getContentArticleRemovalTransaction', input),
+    retryContentArticleRemovalTransaction: (input) =>
+      runCommand('retryContentArticleRemovalTransaction', input),
+    restoreContentArticle: (input) => runCommand('restoreContentArticle', input),
+    preparePermanentDeleteContentArticle: (input) =>
+      runCommand('preparePermanentDeleteContentArticle', input),
+    permanentlyDeleteContentArticle: (input) =>
+      runCommand('permanentlyDeleteContentArticle', input),
+    getDoubaoQueueState: (input) => runCommand('getDoubaoQueueState', input),
+    getDoubaoLoginStatus: (input) => runCommand('getDoubaoLoginStatus', input),
+    openDoubaoLogin: (input) => runCommand('openDoubaoLogin', input),
+    previewDoubaoBatch: (input) => runCommand('previewDoubaoBatch', input),
+  });
 
   return Object.freeze({
     getSnapshot: () => snapshot,

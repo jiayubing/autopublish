@@ -15,10 +15,7 @@ import SettingsOverview from "./settings/SettingsOverview";
 import MediaProviderSettings from "./settings/MediaProviderSettings";
 import HepanProviderSettings from "./settings/HepanProviderSettings";
 import { useWorkspaceFeature } from "../features/workspace/workspace-feature-context";
-import {
-  SettingsFeatureProvider,
-  useSettingsFeature,
-} from "../features/settings/settings-context";
+import { useSettingsFeature } from "../features/settings/settings-context";
 
 type StorageUsageCategory = {
   bytes: number;
@@ -297,9 +294,5 @@ function SettingsViewContent() {
 }
 
 export default function SettingsView() {
-  return (
-    <SettingsFeatureProvider>
-      <SettingsViewContent />
-    </SettingsFeatureProvider>
-  );
+  return <SettingsViewContent />;
 }

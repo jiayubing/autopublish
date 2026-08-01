@@ -186,7 +186,7 @@ export type WorkspaceConfirmationResult = WorkspaceBootstrapState;
 export interface MediaResource {
   resourceId: string;
   name: string;
-  price: number;
+  price: number | null;
   type: MediaType;
   url?: string;
   duration?: string;
@@ -242,28 +242,13 @@ export interface SubmissionOrder {
 // RealOrder: matches the real order view shape from media-order-service.js
 export interface RealOrder {
   title: string;
-  filename: string;
   orderNid: string;
   statusCode: string;
-  statusLabel: string;
   submittedAt: string;
   publishedAt: string;
-  resourceId: string;
   resourceName: string;
   price: string;
-  orderUrl: string;
-  publicationId?: string;
-  attemptId?: string;
-  publicationStatus?:
-    | 'queued'
-    | 'submitting'
-    | 'submitted'
-    | 'published'
-    | 'uncertain'
-    | 'failed'
-    | 'cancelled'
-    | string;
-  errorCode?: string;
+  hasPublishedUrl: boolean;
 }
 
 export type RuntimeCapabilityState =
@@ -862,7 +847,6 @@ export interface PlatformQueueSnapshot {
 
 export type WorkspaceDataInvalidationScope =
   | 'platformQueue'
-  | 'navigationSummary'
   | 'articleAttention'
   | 'articleManagement'
   | 'orders'
@@ -998,6 +982,7 @@ export interface PlatformTarget {
 }
 
 export interface PlatformStatus {
+  workspaceRuntimeId?: string;
   isBatchRunning: boolean;
   isStopPending: boolean;
   isPlatformRunning: boolean;

@@ -4,8 +4,9 @@ import Sidebar from "./components/Sidebar";
 import ArticleList from "./components/ArticleList";
 import ArticleEditor from "./components/ArticleEditor";
 import PreflightModal from "./components/PreflightModal";
-import { WorkspaceCoordinatorProvider } from "./features/workspace/workspace-coordinator-context";
+import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
+import ConfirmationHost from "./components/ConfirmationHost";
 import {
   Database,
   HelpCircle,
@@ -32,11 +33,22 @@ const ContentWorkbench = lazy(() => import("./components/ContentWorkbench"));
 
 export default function App() {
   return (
-    <WorkspaceCoordinatorProvider>
-      <PlatformFeatureProvider>
-        <AppContent />
-      </PlatformFeatureProvider>
-    </WorkspaceCoordinatorProvider>
+    <PlatformFeatureProvider>
+      <AppContent />
+    </PlatformFeatureProvider>
+  );
+}
+
+export function WorkspaceScopedConfirmationHost({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { workspaceRuntimeId } = useWorkspaceRuntimeIdentity();
+  return (
+    <ConfirmationHost scopeKey={workspaceRuntimeId || "workspace-bootstrap"}>
+      <SettingsFeatureProvider>{children}</SettingsFeatureProvider>
+    </ConfirmationHost>
   );
 }
 
@@ -126,9 +138,7 @@ function AppContent() {
             </div>
             {currentView === 'workbench' && (
               <div className="flex min-w-0 items-center gap-3">
-                <SettingsFeatureProvider>
-                  <MediaThirdPartyIdControl />
-                </SettingsFeatureProvider>
+                <MediaThirdPartyIdControl />
                 {articles.some(
                   (a) => a.selectedResources && a.selectedResources.length > 0,
                 ) && (

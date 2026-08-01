@@ -47,12 +47,56 @@ test("renderer transport preserves only the validated SafeOperationalError proje
     path.join(bridgeDirectory, "..", "types.ts"),
     "utf8",
   );
-  const nonAuthTransport = transport.slice(0, transport.indexOf("export function authIpcError"));
+  const nonAuthTransport = transport.slice(
+    0,
+    transport.indexOf("export function authIpcError"),
+  );
   assert.match(nonAuthTransport, /error\?\.userMessage\s*\|\|\s*fallback/);
   assert.doesNotMatch(nonAuthTransport, /error\?\.message/);
   assert.match(transport, /Phase 07 owns the legacy auth envelope/);
-  for (const field of ["category", "retryability", "userMessage", "diagnosticId"]) {
+  for (const field of [
+    "category",
+    "retryability",
+    "userMessage",
+    "diagnosticId",
+  ]) {
     assert.match(types, new RegExp(`${field}\\??:`));
   }
-  assert.doesNotMatch(types.slice(0, types.indexOf("export type IpcResponse")), /platformId|templateId|diagnosticCode/);
+  assert.doesNotMatch(
+    types.slice(0, types.indexOf("export type IpcResponse")),
+    /platformId|templateId|diagnosticCode/,
+  );
+});
+
+test("production content bridge fails closed when a content capability or result is absent", () => {
+  const source = fs.readFileSync(
+    path.join(bridgeDirectory, "content.ts"),
+    "utf8",
+  );
+  for (const helper of [
+    "callCoreContent",
+    "callDoubao",
+    "callSubmission",
+    "callGeneration",
+  ]) {
+    const start = source.indexOf(`async function ${helper}`);
+    assert.notEqual(start, -1, helper);
+    const body = source.slice(start, start + 1800);
+    assert.match(body, /requireBridgeApi<[^>]+>\("content"\)/);
+    assert.match(
+      body,
+      /result\.data === undefined \|\| result\.data === null\)\s*throw/,
+    );
+    assert.doesNotMatch(body, /return (?:fallback|options\?\.fallback)/);
+  }
+  for (const retiredSymbol of [
+    "_fallback",
+    "_hasFallback",
+    "hasFallback",
+    "emptySnapshot",
+    "renderer-fallback",
+  ]) {
+    assert.doesNotMatch(source, new RegExp(retiredSymbol));
+  }
+  assert.doesNotMatch(source, /return \(\) => \{\}/);
 });

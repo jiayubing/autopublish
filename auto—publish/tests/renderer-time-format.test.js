@@ -28,4 +28,11 @@ describe("renderer Beijing time formatter", function() {
     assert.match(source, /formatBeijingTime\(order\.submittedAt\)/);
     assert.match(source, /formatBeijingTime\(order\.publishedAt\)/);
   });
+
+  it("keeps order instants unformatted through the Renderer bridge", function() {
+    const source = fs.readFileSync(path.resolve(__dirname, "../media-workbench/src/bridge/media.ts"), "utf8");
+    const normalizeOrder = source.slice(source.indexOf("function normalizeOrder"), source.indexOf("export async function scanArticles"));
+    assert.doesNotMatch(normalizeOrder, /formatBeijingTime|toLocale|new Date/);
+    assert.match(normalizeOrder, /publishedAt: String\(raw\.publishedAt \|\| ""\)/);
+  });
 });

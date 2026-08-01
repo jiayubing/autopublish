@@ -90,8 +90,8 @@ describe("renderer settings contract", function () {
     assert.match(context, /getStorageUsage/);
     assert.match(context, /cleanStorageCaches/);
     assert.doesNotMatch(context, /desktopConsole|storageMaintenance/);
-    assert.match(bridge, /storageMaintenanceApi\(\)!\.getUsage/);
-    assert.match(bridge, /storageMaintenanceApi\(\)!\.cleanCaches/);
+    assert.match(bridge, /storageMaintenanceApi\(\)\.getUsage/);
+    assert.match(bridge, /storageMaintenanceApi\(\)\.cleanCaches/);
     assert.match(source, /logs/);
     assert.match(source, /temporary/);
     assert.match(source, /docxCache|DOCX/);

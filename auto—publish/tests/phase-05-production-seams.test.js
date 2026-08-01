@@ -35,7 +35,6 @@ it("keeps the ContentStore caller seam free of legacy ArticleStore injection", (
     "desktop/services/generation-submission-handoff-service.js",
     "desktop/services/operational-content-submission-service.js",
     "desktop/services/platform-workbench-service.js",
-    "desktop/services/submission/submission-preparation.js",
     "src/content/article-removal-service.js",
     "src/content/article-review-service.js",
     "src/content/article-trash-service.js",

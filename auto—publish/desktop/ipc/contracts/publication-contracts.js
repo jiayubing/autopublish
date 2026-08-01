@@ -122,21 +122,6 @@ const directInput = (payload) => [payload];
 
 const publicationContracts = Object.freeze([
   defineContract({
-    capability: "publication.listForArticles",
-    channel: "publication:list-for-articles",
-    feature: "content",
-    kind: "query",
-    request: exactObject({
-      clientId: articleId,
-      articleIds: arrayField(articleId, { max: 2000 }),
-    }),
-    success: exactObject({ records: arrayField(record, { max: 2000 }) }),
-    fromArgs: directArgs,
-    toArgs: directInput,
-    errors,
-    errorCodes,
-  }),
-  defineContract({
     capability: "publication.reconcile",
     channel: "publication:reconcile",
     feature: "content",

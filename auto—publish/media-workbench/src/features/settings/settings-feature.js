@@ -239,9 +239,14 @@ export function createSettingsFeature(adapters = {}) {
       publish();
     },
     refresh(reason = "manual") {
-      return Promise.all(
-        Object.keys(QUERY_DEFINITIONS).map((name) => runQuery(name, reason)),
-      );
+      return Promise.all([
+        runQuery("ai", reason),
+        runQuery("media", reason),
+        runQuery("hepan", reason),
+        runQuery("legacy", reason),
+        runQuery("runtime", reason),
+        runQuery("storage", reason),
+      ]);
     },
     refreshAi: (reason = "manual") => runQuery("ai", reason),
     refreshMedia: (reason = "manual") => runQuery("media", reason),

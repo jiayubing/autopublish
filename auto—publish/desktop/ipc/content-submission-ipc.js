@@ -52,29 +52,10 @@ function registerContentSubmissionIpc(deps) {
   }
   deps.ipcMain.handle("content:preview-submission-batch", function(event, input) { return wrap(function() { return projectSubmissionResult("content:preview-submission-batch", workflow.preparation.previewBatch(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:list-submission-platforms", function() { return wrap(function() { return projectSubmissionResult("content:list-submission-platforms", workflow.preparation.listPlatforms()); }); });
-  deps.ipcMain.handle("content:list-submission-batches", function(event, input) { return wrap(function() {
-    if (input !== undefined && (!input || typeof input !== "object" || Array.isArray(input) || typeof input.clientId !== "string" || !input.clientId.trim() || Object.keys(input).some(function(key) { return key !== "clientId"; }))) {
-      const error = new Error("Invalid content submission batch input"); error.code = "CONTENT_SUBMISSION_BATCH_INPUT_INVALID"; throw error;
-    }
-    return projectSubmissionResult("content:list-submission-batches", workflow.batch.list(input && input.clientId));
-  }); });
   deps.ipcMain.handle("content:create-submission-batch", function(event, input) { return wrap(function() { return projectSubmissionResult("content:create-submission-batch", workflow.preparation.createBatch(batchInput(input, true))); }); });
-  deps.ipcMain.handle("content:preview-cancel-submission-batch", function(event, input) { return wrap(function() { return projectSubmissionResult("content:preview-cancel-submission-batch", workflow.batch.previewCancel(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:cancel-submission-batch", function(event, input) { return wrap(function() { return projectSubmissionResult("content:cancel-submission-batch", workflow.batch.cancel(batchInput(input, true))); }); });
   deps.ipcMain.handle("content:preview-cleanup-failed-submission-items", function(event, input) { return wrap(function() { return projectSubmissionResult("content:preview-cleanup-failed-submission-items", workflow.cleanup.previewFailed(batchInput(input, false))); }); });
   deps.ipcMain.handle("content:cleanup-failed-submission-items", function(event, input) { return wrap(function() { return projectSubmissionResult("content:cleanup-failed-submission-items", workflow.cleanup.cleanupFailed(batchInput(input, true))); }); });
-  deps.ipcMain.handle("content:preview-retry-failed-publication", function(event, input) { return wrap(function() {
-    if (!input || typeof input !== "object" || typeof input.publicationId !== "string" || Object.keys(input).some(function(key) { return key !== "publicationId"; })) {
-      const error = new Error("Invalid failed publication retry input"); error.code = "CONTENT_SUBMISSION_INPUT_INVALID"; throw error;
-    }
-    return projectSubmissionResult("content:preview-retry-failed-publication", workflow.retry.previewFailedPublication(input));
-  }); });
-  deps.ipcMain.handle("content:retry-failed-publication", function(event, input) { return wrap(function() {
-    if (!input || typeof input !== "object" || typeof input.publicationId !== "string" || input.confirmed !== true || Object.keys(input).some(function(key) { return !["publicationId", "expectedRevision", "confirmed"].includes(key); })) {
-      const error = new Error("Failed publication retry confirmation is required"); error.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED"; throw error;
-    }
-    return projectSubmissionResult("content:retry-failed-publication", workflow.retry.failedPublication(input));
-  }); });
   deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return projectSubmissionResult("content:preview-trashed-article-queue-residue", workflow.cleanup.previewResidue()); }); });
   deps.ipcMain.handle("content:cleanup-trashed-article-queue-residue", function(event, input) {
     return wrap(function() { return projectSubmissionResult("content:cleanup-trashed-article-queue-residue", workflow.cleanup.cleanupResidue(input)); });

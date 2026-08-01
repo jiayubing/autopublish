@@ -39,10 +39,13 @@ function createDesktopTaskService(opts) {
   var forkProcess = options.fork || fork;
   var execFileProcess = options.execFile || execFile;
   var platformSettingsService = options.platformSettingsService || null;
+  var workspaceRuntimeId = typeof options.workspaceRuntimeId === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(options.workspaceRuntimeId)
+    ? options.workspaceRuntimeId
+    : createRunId();
   var activeRuntimeCleanup = null;
 
   function sendPlatformState(snapshot) {
-    sendToRenderer("platform-state", encodePlatformStateEvent(snapshot));
+    sendToRenderer("platform-state", encodePlatformStateEvent(Object.assign({}, snapshot, { workspaceRuntimeId: workspaceRuntimeId })));
   }
 
   function stopSignalDirectory() {
@@ -321,6 +324,7 @@ function closeBrowserSessions() {
   function getState() {
     var snapshot = platformTaskStateStore.getSnapshot();
     return Object.assign(snapshot, {
+      workspaceRuntimeId: workspaceRuntimeId,
       isBatchRunning: false,
       isStopPending: snapshot.isStopPending,
       isPlatformRunning: Boolean(platformRun && platformRun.snapshot()) || snapshot.isPlatformRunning

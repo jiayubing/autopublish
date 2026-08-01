@@ -33,6 +33,7 @@ const workspaceBootstrapEnvironment = environmentFromCapturedValue(
 
 configureApplicationIdentity(app);
 
+/** @type {import("electron").BrowserWindow | null} */
 let mainWindow = null;
 let authService = null;
 let workspaceBootstrap = null;

@@ -17,14 +17,12 @@ const COMMAND_NAMES = [
   "scanArticles",
   "openArticle",
   "saveDraft",
-  "removeDraft",
   "selection",
   "refreshResources",
   "togglePool",
   "checkBalance",
   "prepareSubmission",
   "submitPrepared",
-  "stopSubmit",
   "syncOrder",
   "openPublishedUrl",
 ];
@@ -93,12 +91,10 @@ export function createMediaFeature(adapters = {}) {
     "getDrafts",
     "getDraft",
     "setDraft",
-    "removeDraft",
     "scanArticles",
     "previewArticle",
     "buildConfirmation",
     "submitSelected",
-    "stopSubmit",
     "getOrders",
     "syncOrder",
     "openPublishedUrl",
@@ -443,7 +439,7 @@ export function createMediaFeature(adapters = {}) {
         });
         publish();
       }
-      throw value;
+      return undefined;
     }
   }
 
@@ -622,15 +618,6 @@ export function createMediaFeature(adapters = {}) {
         },
       );
     },
-    removeDraft(filename) {
-      return runCommand(
-        "removeDraft",
-        () => adapters.removeDraft(filename),
-        "MEDIA_DRAFT_REMOVE_FAILED",
-        "删除媒体草稿失败。",
-        () => loadDrafts("command-result"),
-      );
-    },
     removeSelectedResource(resourceId) {
       updateSelectedResources((items) =>
         items.filter((item) => item.resourceId !== resourceId),
@@ -743,14 +730,6 @@ export function createMediaFeature(adapters = {}) {
         },
       );
     },
-    stopSubmit() {
-      return runCommand(
-        "stopSubmit",
-        () => adapters.stopSubmit(),
-        "MEDIA_SUBMISSION_STOP_FAILED",
-        "停止媒体投稿失败。",
-      );
-    },
     syncOrder(orderNid) {
       if (!orderNid) return undefined;
       syncingOrderNid = orderNid;
@@ -765,10 +744,10 @@ export function createMediaFeature(adapters = {}) {
           syncingOrderNid = null;
           publish();
         },
-      ).catch((value) => {
+      ).then((value) => {
         syncingOrderNid = null;
         publish();
-        throw value;
+        return value;
       });
     },
     openPublishedUrl(orderNid) {

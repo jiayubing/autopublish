@@ -82,7 +82,7 @@ export default function PreflightModal({
 
   const blocked = summary.blockedResources || [];
   const submitable = summary.submitableResources || summary.queueableResources || [];
-  const actualPrice = Number(summary.actualPrice ?? summary.estimatedTotalPrice ?? 0);
+  const actualPrice = summary.actualPrice ?? summary.estimatedTotalPrice ?? 0;
   const blockers = summary.blockers || [];
   const canSubmit = !isSubmitting && blockers.length === 0 && submitable.length > 0 && balance >= actualPrice;
 
@@ -130,7 +130,7 @@ export default function PreflightModal({
                 {submitable.map((item) => (
                   <div key={`${item.filename}:${item.resourceId}`} className="px-3 py-2.5 flex items-center justify-between text-xs">
                     <div className="min-w-0"><p className="font-semibold text-slate-700 truncate">{item.title || item.filename}</p><p className="text-[10px] text-slate-400">{item.resourceName || '媒体资源'} · {item.resourceId}</p></div>
-                    <span className="font-mono font-bold text-emerald-700">¥{Number(item.price || 0).toFixed(2)}</span>
+                    <span className="font-mono font-bold text-emerald-700">¥{item.price.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -146,7 +146,7 @@ export default function PreflightModal({
                 {blocked.map((item) => (
                   <div key={`${item.filename}:${item.resourceId}`} className="px-3 py-2.5 flex items-center justify-between text-xs">
                     <div className="min-w-0"><p className="font-semibold text-slate-700 truncate">{item.title || item.filename}</p><p className="text-[10px] text-amber-700">{item.resourceName || '媒体资源'} · {item.resourceId} · {statusText(item)}</p></div>
-                    <span className="font-mono text-slate-400 line-through">¥{Number(item.price || 0).toFixed(2)}</span>
+                    <span className="font-mono text-slate-400 line-through">¥{item.price.toFixed(2)}</span>
                   </div>
                 ))}
               </div>

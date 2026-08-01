@@ -253,7 +253,6 @@ function installDesktopFixture(page) {
       getDrafts: () => result({ items: [] }),
       getDraft: () => result({ draft: null }),
       setDraft: () => result({ completed: true }),
-      removeDraft: () => result({ completed: true }),
       refreshResources: () =>
         mediaSubmissionState.refreshShouldFail
           ? Promise.resolve({
@@ -376,10 +375,9 @@ function installDesktopFixture(page) {
                   statusLabel: "已发布",
                   submittedAt: "2026-07-27T00:00:00.000Z",
                   publishedAt: "2026-07-28T00:00:00.000Z",
-                  resourceId: "preflight-resource",
                   resourceName: "预检资源",
                   price: "1",
-                  orderUrl: "https://publisher.example/article/1",
+                  hasPublishedUrl: true,
                   publicationId: "publication-internal",
                   publicationStatus: "published",
                 },
@@ -396,10 +394,9 @@ function installDesktopFixture(page) {
             statusLabel: "已发布",
             submittedAt: "2026-07-27T00:00:00.000Z",
             publishedAt: "2026-07-28T00:00:00.000Z",
-            resourceId: "preflight-resource",
             resourceName: "预检资源",
             price: "1",
-            orderUrl: "https://publisher.example/article/1",
+            hasPublishedUrl: true,
             publicationId: "publication-internal",
             publicationStatus: "published",
           },

@@ -15,11 +15,9 @@ describe("content workbench regression", function() {
       'ipcRenderer.invoke("content:list-clients")',
       'ipcRenderer.invoke("content:generate-article", input)',
       'ipcRenderer.invoke("content:save-article", article)',
-      'ipcRenderer.invoke("content:review-articles", { articles: articles })',
       "export async function listContentClients",
       "export async function generateContentArticle",
       "export async function saveContentArticle",
-      "export async function reviewContentArticles"
     ].forEach(function(value) { assert.equal((preload + api).includes(value), true, "missing " + value); });
   });
 
@@ -60,7 +58,6 @@ describe("content workbench regression", function() {
       "getDoubaoLoginStatus",
       "openDoubaoLogin",
       "collectDoubaoQuestion",
-      "startDoubaoBatch",
       "pauseDoubaoBatch",
       "resumeDoubaoBatch",
       "stopDoubaoBatch",

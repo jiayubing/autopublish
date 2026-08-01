@@ -169,20 +169,44 @@ it("platform feature owns initial run, stale event rejection, and subscription d
     onRunState: (listener) => { emit = listener; return () => { disposed += 1; }; },
   }, () => {});
   const start = controller.start();
-  emit({ runId: "run-new", phase: "running", total: 2, processed: 1, succeeded: 1, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: "2026-07-26T01:00:00.000Z", updatedAt: "2026-07-26T01:00:02.000Z", terminalResult: null, isPlatformRunning: true });
-  resolveInitial({ runId: "run-old", phase: "running", total: 2, processed: 0, succeeded: 0, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: "2026-07-26T01:00:00.000Z", updatedAt: "2026-07-26T01:00:01.000Z", terminalResult: null, isPlatformRunning: true });
+  emit({ workspaceRuntimeId: "runtime-fixture", runId: "run-new", phase: "running", total: 2, processed: 1, succeeded: 1, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: "2026-07-26T01:00:00.000Z", updatedAt: "2026-07-26T01:00:02.000Z", terminalResult: null, isPlatformRunning: true });
+  resolveInitial({ workspaceRuntimeId: "runtime-fixture", runId: "run-old", phase: "running", total: 2, processed: 0, succeeded: 0, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: "2026-07-26T01:00:00.000Z", updatedAt: "2026-07-26T01:00:01.000Z", terminalResult: null, isPlatformRunning: true });
   await start;
   assert.equal(controller.getSnapshot().run.runId, "run-new");
   controller.dispose();
   assert.equal(disposed, 1);
-  emit({ runId: "run-late", phase: "completed", updatedAt: "2026-07-26T01:00:03.000Z" });
+  emit({ workspaceRuntimeId: "runtime-fixture", runId: "run-late", phase: "completed", updatedAt: "2026-07-26T01:00:03.000Z" });
   assert.equal(controller.getSnapshot().run.runId, "run-new");
+});
+
+it("rejects delayed platform heartbeat and terminal events from the previous workspace runtime", async () => {
+  let emit;
+  let refreshes = 0;
+  const feature = createPlatformFeature({
+    getRunState: async () => ({ workspaceRuntimeId: "runtime-b", runId: null, phase: "idle", total: 0, processed: 0, succeeded: 0, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: null, updatedAt: null, terminalResult: null, isBatchRunning: false, isStopPending: false, isPlatformRunning: false, waitRemainingMs: 0 }),
+    onRunState(listener) { emit = listener; return () => {}; },
+    loadQueue: async () => { refreshes += 1; return { revision: 0, platforms: [], queue: [] }; },
+  });
+  feature.setScope({ workspaceRuntimeId: "runtime-a" });
+  await feature.start();
+  feature.setScope({ workspaceRuntimeId: "runtime-b" });
+
+  emit({ workspaceRuntimeId: "runtime-a", runId: "run-a", phase: "running", total: 1, processed: 0, succeeded: 0, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: "2026-07-28T00:00:00.000Z", updatedAt: "2026-07-28T00:00:01.000Z", terminalResult: null, isPlatformRunning: true, queueRevision: null });
+  emit({ workspaceRuntimeId: "runtime-a", runId: "run-a", phase: "completed", total: 1, processed: 1, succeeded: 1, failed: 0, skipped: 0, uncertain: 0, currentTask: null, startedAt: "2026-07-28T00:00:00.000Z", updatedAt: "2026-07-28T00:00:02.000Z", terminalResult: { ok: 1, fail: 0, skipped: 0, uncertain: 0, results: [] }, isPlatformRunning: false, queueRevision: 11 });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(feature.getSnapshot().scope.workspaceRuntimeId, "runtime-b");
+  assert.equal(feature.getSnapshot().run.runId, null);
+  assert.equal(feature.getSnapshot().run.phase, "idle");
+  assert.equal(feature.getSnapshot().terminalRevision, null);
+  assert.equal(refreshes, 0);
+  feature.dispose();
 });
 
 it("a late event from an older run cannot replace the current terminal run", () => {
   const controller = createPlatformSubmissionController({}, () => {});
-  assert.equal(controller.applyRunSnapshot({ runId: "run-current", phase: "completed", updatedAt: "2026-07-26T01:00:03.000Z" }), true);
-  assert.equal(controller.applyRunSnapshot({ runId: "run-old", phase: "running", isPlatformRunning: true, updatedAt: "2026-07-26T01:00:02.000Z" }), false);
+  assert.equal(controller.applyRunSnapshot({ workspaceRuntimeId: "runtime-fixture", runId: "run-current", phase: "completed", updatedAt: "2026-07-26T01:00:03.000Z" }), true);
+  assert.equal(controller.applyRunSnapshot({ workspaceRuntimeId: "runtime-fixture", runId: "run-old", phase: "running", isPlatformRunning: true, updatedAt: "2026-07-26T01:00:02.000Z" }), false);
   assert.equal(controller.getSnapshot().run.runId, "run-current");
   assert.equal(controller.getSnapshot().run.phase, "completed");
 });

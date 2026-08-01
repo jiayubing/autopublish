@@ -306,7 +306,7 @@ function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
 }
 
 describe("source assembly and packaging contract", function() {
-  it("keeps legacy research, article, migration, submission, and media surfaces in the package boundary", function() {
+  it("keeps required research, article, migration, submission IPC, and media surfaces in the package boundary", function() {
     const config = read("electron-builder.alpha.yml");
     for (const legacySurface of [
       "src/content/research-store.js",
@@ -829,7 +829,6 @@ describe("source assembly and packaging contract", function() {
       "content:get-doubao-login-state",
       "content:open-doubao-login",
       "content:collect-doubao-one",
-      "content:start-doubao-batch",
       "content:pause-doubao-batch",
       "content:resume-doubao-batch",
       "content:stop-doubao-batch",

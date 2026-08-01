@@ -67,6 +67,11 @@ const COMMON_ERRORS = {
     retryability: "manual-check",
     userMessage: "资源池超过安全容量，请清理后重试。",
   },
+  MEDIA_RESOURCE_PRICE_INVALID: {
+    category: "validation",
+    retryability: "manual-check",
+    userMessage: "媒体报价无效，无法用于投稿。",
+  },
   SUBMISSION_INPUT_INVALID: {
     category: "validation",
     retryability: "never",
@@ -97,6 +102,11 @@ const COMMON_ERRORS = {
     retryability: "safe",
     userMessage: "无法打开发布页面，请稍后重试。",
   },
+  MEDIA_ORDER_SYNC_FAILED: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "订单同步未能安全完成，请稍后重试。",
+  },
 };
 
 const BASE_ERROR_CODES = [
@@ -119,7 +129,7 @@ function errors(...codes) {
 const resource = exactObject({
   resourceId: identifier,
   name: safeText(500),
-  price: numberField({ min: 0, max: 100000000 }),
+  price: nullableField(numberField({ min: 0, max: 100000000 })),
   type: enumField(["image", "video"]),
   url: optionalField(safeText(2048)),
   duration: optionalField(safeText(64)),
@@ -199,20 +209,13 @@ const preflight = exactObject({
 
 const order = exactObject({
   title: safeText(1000),
-  filename: safeText(255),
   orderNid: identifier,
   statusCode: safeText(64),
-  statusLabel: safeText(128),
   submittedAt: safeText(64),
   publishedAt: safeText(64),
-  resourceId: safeText(256),
   resourceName: safeText(500),
   price: safeText(128),
-  orderUrl: safeText(2048),
-  publicationId: optionalField(safeText(256)),
-  attemptId: optionalField(safeText(256)),
-  publicationStatus: optionalField(safeText(64)),
-  errorCode: optionalField(safeText(128)),
+  hasPublishedUrl: "boolean",
 });
 
 const resourcePage = exactObject({
@@ -401,18 +404,6 @@ const mediaContracts = [
     },
     ["SUBMISSION_INPUT_INVALID", "DRAFT_INVALID"],
   ),
-  contract(
-    {
-      capability: "media.removeDraft",
-      channel: "media:remove-draft",
-      kind: "command",
-      request: exactObject({ filename }),
-      success: completed,
-      fromArgs: (args) => ({ filename: args[0] }),
-      toArgs: (payload) => [payload.filename],
-    },
-    ["SUBMISSION_INPUT_INVALID"],
-  ),
   contract({
     capability: "media.scanArticles",
     channel: "media:scan-articles",
@@ -487,7 +478,7 @@ const mediaContracts = [
       fromArgs: (args) => ({ orderNid: args[0] }),
       toArgs: (payload) => [payload.orderNid],
     },
-    ["MEDIA_CONFIG_NOT_SET"],
+    ["MEDIA_CONFIG_NOT_SET", "MEDIA_ORDER_SYNC_FAILED"],
   ),
   contract(
     {

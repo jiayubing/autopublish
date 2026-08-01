@@ -338,15 +338,6 @@ const doubaoContracts = Object.freeze([
     toArgs: directInput,
   }),
   contract({
-    capability: "content.startDoubaoBatch",
-    channel: "content:start-doubao-batch",
-    kind: "command",
-    request: exactObject({ tasks: arrayField(batchTask, { max: 500 }) }),
-    success: inputResult("queue", queue),
-    fromArgs: (args) => ({ tasks: args[0] }),
-    toArgs: directInput,
-  }),
-  contract({
     capability: "content.startPreparedDoubaoBatch",
     channel: "content:start-prepared-doubao-batch",
     kind: "command",

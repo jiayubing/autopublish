@@ -486,7 +486,8 @@ function createContractRegistry(contracts) {
           const plainError = copyPlainDataObject(error, "IPC_RESULT_INVALID");
           errorCode = typeof plainError.code === "string" ? plainError.code : null;
           const parsed = parseSafeOperationalError(plainError);
-          if (contract.errorCodes.includes(parsed.code)) safe = parsed;
+          if (contract.errorCodes.includes(parsed.code))
+            safe = Object.freeze({ code: parsed.code, ...contract.errors[parsed.code] });
         } else if (error instanceof Error) {
           const descriptor = Object.getOwnPropertyDescriptor(error, "code");
           if (descriptor && "value" in descriptor && typeof descriptor.value === "string")
@@ -529,7 +530,7 @@ function createContractRegistry(contracts) {
       }
       if (!contract.errorCodes.includes(safe.code))
         throw contractError("IPC_RESULT_INVALID");
-      return safe;
+      return Object.freeze({ code: safe.code, ...contract.errors[safe.code] });
     },
     parseEvent(contract, input) {
       if (contract.kind !== "event") throw contractError("IPC_EVENT_INVALID");

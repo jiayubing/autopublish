@@ -25,8 +25,21 @@ const UNREGISTERED_FAILURE = Object.freeze({
 });
 
 const eventListeners = new Map();
+const eventDiagnosticListeners = new Map();
+function onEventDiagnostic(channel, listener) {
+  let listeners = eventDiagnosticListeners.get(channel);
+  if (!listeners) {
+    listeners = new Set();
+    eventDiagnosticListeners.set(channel, listeners);
+  }
+  listeners.add(listener);
+  return function() {
+    listeners.delete(listener);
+    if (listeners.size === 0) eventDiagnosticListeners.delete(channel);
+  };
+}
 const ipcRenderer = {
-  invoke: async function (channel, ...args) {
+  invoke: async function(channel, ...args) {
     const contract = productionIpcRegistry.byChannel(channel);
     if (!contract) {
       if (AUTH_INVOKE_EXEMPTIONS.has(channel))
@@ -61,10 +74,16 @@ const ipcRenderer = {
       return undefined;
     }
     if (contract.kind !== "event") return undefined;
-    const wrapped = function (event, payload) {
+    const wrapped = function(event, payload) {
+      let parsed;
       try {
-        listener(event, productionIpcRegistry.parseEvent(contract, payload));
-      } catch (_) {}
+        parsed = productionIpcRegistry.parseEvent(contract, payload);
+      } catch (_) {
+        for (const report of eventDiagnosticListeners.get(channel) || [])
+          report();
+        return;
+      }
+      listener(event, parsed);
     };
     eventListeners.set(listener, wrapped);
     return electronIpcRenderer.on(channel, wrapped);
@@ -119,11 +138,11 @@ const api = {
       return ipcRenderer.invoke("auth:logout");
     },
     onStateChanged: function(listener) {
-      var handler = function (event, payload) {
+      var handler = function(event, payload) {
         listener(payload);
       };
       ipcRenderer.on("auth-state-changed", handler);
-      return function () {
+      return function() {
         ipcRenderer.removeListener("auth-state-changed", handler);
       };
     },
@@ -154,13 +173,16 @@ const api = {
       return ipcRenderer.invoke("workspace:get-runtime-identity");
     },
     onInvalidated: function(listener) {
-      var handler = function (event, payload) {
+      var handler = function(event, payload) {
         listener(payload);
       };
       ipcRenderer.on("workspace:data-invalidated", handler);
-      return function () {
+      return function() {
         ipcRenderer.removeListener("workspace:data-invalidated", handler);
       };
+    },
+    onInvalidationDiagnostic: function(listener) {
+      return onEventDiagnostic("workspace:data-invalidated", listener);
     },
   },
   aiProvider: {
@@ -239,17 +261,11 @@ const api = {
     setDraft: function(filename, draft) {
       return ipcRenderer.invoke("media:set-draft", filename, draft);
     },
-    removeDraft: function(filename) {
-      return ipcRenderer.invoke("media:remove-draft", filename);
-    },
     buildConfirmation: function(articles) {
       return ipcRenderer.invoke("media:build-confirmation", articles);
     },
     submitSelected: function(articles) {
       return ipcRenderer.invoke("media:submit-selected", articles);
-    },
-    stopSubmit: function() {
-      return ipcRenderer.invoke("media:stop-submit");
     },
     refreshResources: function(opts) {
       return ipcRenderer.invoke("media:refresh-resources", opts || {});
@@ -308,13 +324,16 @@ const api = {
       return ipcRenderer.invoke("platforms:get-state");
     },
     onState: function(listener) {
-      var handler = function (event, payload) {
+      var handler = function(event, payload) {
         listener(payload);
       };
       ipcRenderer.on("platform-state", handler);
-      return function () {
+      return function() {
         ipcRenderer.removeListener("platform-state", handler);
       };
+    },
+    onStateDiagnostic: function(listener) {
+      return onEventDiagnostic("platform-state", listener);
     },
   },
   content: {
@@ -323,9 +342,6 @@ const api = {
     },
     listResearch: function(clientId) {
       return ipcRenderer.invoke("content:list-research", clientId);
-    },
-    listTemplates: function(platform) {
-      return ipcRenderer.invoke("content:list-templates", platform);
     },
     listTemplateCatalog: function() {
       return ipcRenderer.invoke("content:list-template-catalog");
@@ -339,9 +355,6 @@ const api = {
     saveArticle: function(article) {
       return ipcRenderer.invoke("content:save-article", article);
     },
-    listGeneratedArticles: function(clientId) {
-      return ipcRenderer.invoke("content:list-generated-articles", clientId);
-    },
     getArticleManagementSnapshot: function(input) {
       return ipcRenderer.invoke(
         "content:get-article-management-snapshot",
@@ -350,15 +363,6 @@ const api = {
     },
     copyArticleVersion: function(input) {
       return ipcRenderer.invoke("content:copy-article-version", input);
-    },
-    reviewArticles: function(articles) {
-      return ipcRenderer.invoke("content:review-articles", { articles: articles });
-    },
-    listArticleTrash: function(clientId) {
-      return ipcRenderer.invoke("content:list-article-trash", clientId);
-    },
-    previewTrashArticles: function(input) {
-      return ipcRenderer.invoke("content:preview-trash-articles", input || {});
     },
     previewArticleRemovalImpact: function(input) {
       return ipcRenderer.invoke(
@@ -396,17 +400,8 @@ const api = {
     listSubmissionPlatforms: function() {
       return ipcRenderer.invoke("content:list-submission-platforms");
     },
-    listSubmissionBatches: function(input) {
-      return ipcRenderer.invoke("content:list-submission-batches", input);
-    },
     createSubmissionBatch: function(input) {
       return ipcRenderer.invoke("content:create-submission-batch", input);
-    },
-    previewCancelSubmissionBatch: function(input) {
-      return ipcRenderer.invoke(
-        "content:preview-cancel-submission-batch",
-        input,
-      );
     },
     cancelSubmissionBatch: function(input) {
       return ipcRenderer.invoke("content:cancel-submission-batch", input);
@@ -421,18 +416,6 @@ const api = {
       return ipcRenderer.invoke(
         "content:cleanup-failed-submission-items",
         input,
-      );
-    },
-    previewRetryFailedPublication: function(input) {
-      return ipcRenderer.invoke(
-        "content:preview-retry-failed-publication",
-        input || {},
-      );
-    },
-    retryFailedPublication: function(input) {
-      return ipcRenderer.invoke(
-        "content:retry-failed-publication",
-        input || {},
       );
     },
     previewTrashedArticleQueueResidue: function() {
@@ -451,9 +434,6 @@ const api = {
         transactionId: transactionId,
       });
     },
-    listArticleRemovalTransactions: function() {
-      return ipcRenderer.invoke("content:list-article-removal-transactions");
-    },
     retryArticleRemovalTransaction: function(input) {
       return ipcRenderer.invoke(
         "content:retry-article-removal-transaction",
@@ -462,9 +442,6 @@ const api = {
     },
     listArticleAttention: function(input) {
       return ipcRenderer.invoke("content:list-article-attention", input || {});
-    },
-    getArticleAttention: function(input) {
-      return ipcRenderer.invoke("content:get-article-attention", input || {});
     },
     previewArticleAttention: function(input) {
       return ipcRenderer.invoke(
@@ -479,11 +456,11 @@ const api = {
       );
     },
     onArticleRemovalTransaction: function(listener) {
-      var handler = function (event, payload) {
+      var handler = function(event, payload) {
         listener(payload);
       };
       ipcRenderer.on("content:article-removal-transaction", handler);
-      return function () {
+      return function() {
         ipcRenderer.removeListener(
           "content:article-removal-transaction",
           handler,
@@ -514,9 +491,6 @@ const api = {
       return ipcRenderer.invoke("content:collect-doubao-one", input);
     },
     previewDoubaoBatch: function(input) { return ipcRenderer.invoke("content:preview-doubao-batch", input); },
-    startDoubaoBatch: function(tasks) {
-      return ipcRenderer.invoke("content:start-doubao-batch", { tasks: tasks });
-    },
     startPreparedDoubaoBatch: function(input) { return ipcRenderer.invoke("content:start-prepared-doubao-batch", input); },
     pauseDoubaoBatch: function() {
       return ipcRenderer.invoke("content:pause-doubao-batch");
@@ -539,25 +513,11 @@ const api = {
         input || {},
       );
     },
-    createGenerationBatch: function(input) {
-      return ipcRenderer.invoke("content:create-generation-batch", input || {});
-    },
     createAndStartGenerationBatch: function(input) {
       return ipcRenderer.invoke(
         "content:create-and-start-generation-batch",
         input || {},
       );
-    },
-    listGenerationBatches: function() {
-      return ipcRenderer.invoke("content:list-generation-batches");
-    },
-    getGenerationBatch: function(batchId) {
-      return ipcRenderer.invoke("content:get-generation-batch", {
-        batchId: batchId,
-      });
-    },
-    startGenerationBatch: function(input) {
-      return ipcRenderer.invoke("content:start-generation-batch", input || {});
     },
     pauseGenerationBatch: function(input) {
       return ipcRenderer.invoke("content:pause-generation-batch", input || {});
@@ -592,18 +552,15 @@ const api = {
         input || {},
       );
     },
-    getGenerationBatchState: function() {
-      return ipcRenderer.invoke("content:get-generation-batch-state");
-    },
     getGenerationRuntimeSnapshot: function() {
       return ipcRenderer.invoke("content:get-generation-runtime-snapshot");
     },
     onGenerationBatchState: function(listener) {
-      const handler = function (event, payload) {
+      const handler = function(event, payload) {
         listener(payload);
       };
       ipcRenderer.on("content:generation-batch-state", handler);
-      return function () {
+      return function() {
         ipcRenderer.removeListener("content:generation-batch-state", handler);
       };
     },
@@ -623,19 +580,16 @@ const api = {
       return ipcRenderer.invoke("content:save-manual-research", input);
     },
     onDoubaoQueueState: function(listener) {
-      const handler = function (event, payload) {
+      const handler = function(event, payload) {
         listener(payload);
       };
       ipcRenderer.on("content:doubao-queue-state", handler);
-      return function () {
+      return function() {
         ipcRenderer.removeListener("content:doubao-queue-state", handler);
       };
     },
   },
   publication: {
-    listForArticles: function(input) {
-      return ipcRenderer.invoke("publication:list-for-articles", input);
-    },
     reconcile: function(input) {
       return ipcRenderer.invoke("publication:reconcile", input);
     },

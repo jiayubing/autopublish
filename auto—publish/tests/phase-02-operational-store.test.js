@@ -128,7 +128,7 @@ test("backup verifier reads destination and missing or corrupt targets have no s
   const backup = path.join(dir, "backup.db");
   const result = store.backup(backup);
   assert.equal(result.rows, 1);
-  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 2);
+  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 3);
   const missing = path.join(dir, "missing.db");
   assert.throws(() => verifyOperationalDatabase(missing), {
     code: "OPERATIONAL_RESTORE_TARGET_INVALID",
@@ -161,7 +161,7 @@ test("database reopens after close and explicit batch writes stay isolated from 
   const db = store.databasePath;
   store.close();
   const reopened = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(reopened.verify().schemaVersion, 2);
+  assert.equal(reopened.verify().schemaVersion, 3);
   assert.equal(
     fs.existsSync(path.join(dir, ".autopublish", "publications")),
     false,
@@ -186,12 +186,12 @@ test("upgrades a real schema v1 database to the operation schema without changin
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(SCHEMA_VERSION, 2);
-  assert.equal(upgraded.verify().schemaVersion, 2);
+  assert.equal(SCHEMA_VERSION, 3);
+  assert.equal(upgraded.verify().schemaVersion, 3);
   upgraded.close();
 
   const verified = verifyOperationalDatabase(database);
-  assert.equal(verified.schemaVersion, 2);
+  assert.equal(verified.schemaVersion, 3);
   const reopened = new DatabaseSync(database, { readOnly: true });
   assert.deepEqual(
     reopened
@@ -204,7 +204,7 @@ test("upgrades a real schema v1 database to the operation schema without changin
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => ({ version: row.version })),
-    [{ version: 1 }, { version: 2 }],
+    [{ version: 1 }, { version: 2 }, { version: 3 }],
   );
   assert.ok(
     reopened
@@ -266,7 +266,7 @@ test("repairs the known v1 history plus legacy operation table left by an early 
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(upgraded.verify().schemaVersion, 2);
+  assert.equal(upgraded.verify().schemaVersion, 3);
   assert.deepEqual(
     upgraded.getSubmissionItemAction("operation-legacy-phase-05"),
     {
@@ -367,7 +367,7 @@ test("rejects a future operational schema before changing its database", () => {
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3],
+    [1, 2, 3, 4],
   );
   unchanged.close();
 });
@@ -559,13 +559,15 @@ test("v1 to v2 migration preserves every pre-v2 table and rolls back detected ol
   upgraded.close();
   const after = snapshotTables(database);
   delete after.submission_item_operations;
+  delete after.order_display_snapshots;
   const history = after.schema_migrations;
   delete after.schema_migrations;
   delete before.schema_migrations;
+  delete before.order_display_snapshots;
   assert.deepEqual(after, before);
   assert.deepEqual(
     history.map((row) => row.version),
-    [1, 2],
+    [1, 2, 3],
   );
   assert.equal(Number.isFinite(Date.parse(history[1].applied_at)), true);
 });

@@ -54,10 +54,6 @@ function createEventFixture(options) {
       deliveredEvents.push(payload);
       if (useSnapshotEvents) {
         consumedSnapshots.push(payload);
-      } else if (payload.batchId) {
-        // This is the current BatchGenerationView event path. It intentionally
-        // represents the missing renderer-side counter with an IPC fixture.
-        followUpIpc.push(handlers.get('content:get-generation-batch')(null, { batchId: payload.batchId }));
       }
     },
   });
@@ -81,41 +77,6 @@ function createEventFixture(options) {
 }
 
 describe('generation snapshot event baseline', () => {
-  it('records one current renderer follow-up IPC and batch read for every state event', async () => {
-    const fixture = createEventFixture();
-    const emit = await fixture.start();
-    assert.equal(typeof emit, 'function');
-
-    for (let index = 0; index < 100; index += 1) {
-      emit({
-        batchId: fixture.batch.id,
-        taskId: `task-${index + 1}`,
-        status: index === 99 ? 'completed' : 'running',
-        counts: {
-          total: 100,
-          succeeded: index,
-          failed: 0,
-          pending: 99 - index,
-          interrupted: 0,
-          cancelled: 0,
-        },
-        updatedAt: `2026-07-21T00:00:${String(index).padStart(2, '0')}.000Z`,
-      });
-    }
-    await Promise.all(fixture.followUpIpc);
-
-    assert.equal(fixture.deliveredEvents.length, 100);
-    assert.equal(fixture.followUpIpc.length, 100);
-    assert.equal(fixture.getBatchFileReads(), 100);
-    assert.ok(fixture.deliveredEvents.every((event) => event.batchId === fixture.batch.id));
-    assert.ok(fixture.deliveredEvents.every((event) => event.status && event.counts && event.updatedAt));
-    assert.equal(fixture.deliveredEvents.at(-1).status, 'completed');
-    assert.equal(JSON.stringify(fixture.deliveredEvents).includes('prompt'), false);
-    assert.equal(JSON.stringify(fixture.deliveredEvents).includes('apiKey'), false);
-
-    console.log(JSON.stringify({ events: 100, followUpIpc: fixture.followUpIpc.length, batchFileReads: fixture.getBatchFileReads() }));
-  });
-
   it('consumes complete snapshot events without renderer follow-up IPC or batch reads', async () => {
     const fixture = createEventFixture({ useSnapshotEvents: true });
     const emit = await fixture.start();

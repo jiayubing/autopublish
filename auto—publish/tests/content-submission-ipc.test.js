@@ -7,33 +7,16 @@ it("requires confirmed true and never accepts renderer paths", async function() 
   assert.deepStrictEqual(result, { ok: false, error: { code: "CONTENT_EXPORT_CONFIRMATION_REQUIRED", message: "Manual confirmation is required" } });
 });
 
-it("exposes current-client submission batch history without renderer paths", async function() {
-  const handlers = new Map();
-  registerContentSubmissionIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {
-      listBatches: (clientId) => [{ id: "batch-1", clientId, status: "queued", items: [{ filePath: "C:\\secret.md", status: "queued" }] }]
-    }
-  });
-
-  const result = await handlers.get("content:list-submission-batches")(null, { clientId: "client-1" });
-
-  assert.deepEqual(result, { ok: true, data: { batches: [{ id: "batch-1", clientId: "client-1", status: "queued", items: [{ status: "queued" }] }] } });
-});
-
 it("forwards only the preview action plan token for batch cancellation", async function() {
   const handlers = new Map();
   let received;
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     contentSubmissionService: {
-      previewCancelBatch: () => ({ batchId: "batch-1", planId: "plan-1", allowedCount: 1, blockedCount: 0, items: [{ articleId: "article-1", fingerprint: "item-1", filePath: "C:\\secret.md" }] }),
       cancelBatch: (input) => { received = input; return { batchId: input.batchId, planId: input.planId, cancelledCount: 1, blockedItems: [] }; }
     }
   });
-  const preview = await handlers.get("content:preview-cancel-submission-batch")(null, { batchId: "batch-1" });
   const result = await handlers.get("content:cancel-submission-batch")(null, { batchId: "batch-1", planId: "plan-1", confirmed: true });
-  assert.deepEqual(preview, { ok: true, data: { batchId: "batch-1", planId: "plan-1", allowedCount: 1, blockedCount: 0, items: [{ articleId: "article-1", fingerprint: "item-1" }] } });
   assert.deepEqual(received, { batchId: "batch-1", planId: "plan-1", confirmed: true });
   assert.deepEqual(result, { ok: true, data: { batchId: "batch-1", planId: "plan-1", cancelledCount: 1, blockedItems: [] } });
 });

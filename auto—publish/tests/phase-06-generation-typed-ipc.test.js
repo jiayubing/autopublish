@@ -15,11 +15,7 @@ const {
 
 const CHANNELS = [
   "content:preview-generation-batch",
-  "content:create-generation-batch",
   "content:create-and-start-generation-batch",
-  "content:list-generation-batches",
-  "content:get-generation-batch",
-  "content:start-generation-batch",
   "content:stop-generation-batch",
   "content:pause-generation-batch",
   "content:continue-generation-batch",
@@ -27,14 +23,13 @@ const CHANNELS = [
   "content:retry-failed-generation-batch",
   "content:preview-cancel-pending-generation-batch",
   "content:cancel-pending-generation-batch",
-  "content:get-generation-batch-state",
   "content:get-generation-runtime-snapshot",
   "content:preview-generation-submission-handoff",
   "content:commit-generation-submission-handoff",
 ];
 
-test("generation inventory has seventeen invoke contracts without duplicating its event", () => {
-  assert.equal(generationContracts.length, 17);
+test("generation inventory has twelve invokes with real feature consumers and one event", () => {
+  assert.equal(generationContracts.length, 12);
   assert.equal(generationContracts.every((contract) => contract.kind !== "event"), true);
   for (const channel of CHANNELS) {
     const contract = productionIpcRegistry.byChannel(channel);
@@ -59,11 +54,7 @@ test("generation main and Renderer callers do not use method-name dispatch", () 
   assert.doesNotMatch(registrar, /service\s*\[\s*method\s*\]/);
   for (const method of [
     "previewGenerationBatch",
-    "createGenerationBatch",
     "createAndStartGenerationBatch",
-    "listGenerationBatches",
-    "getGenerationBatch",
-    "startGenerationBatch",
     "pauseGenerationBatch",
     "stopGenerationBatch",
     "continueGenerationBatch",
@@ -71,7 +62,6 @@ test("generation main and Renderer callers do not use method-name dispatch", () 
     "retryFailedGenerationBatch",
     "previewCancelPendingGenerationBatch",
     "cancelPendingGenerationBatch",
-    "getGenerationBatchState",
     "getGenerationRuntimeSnapshot",
     "previewGenerationSubmissionHandoff",
     "commitGenerationSubmissionHandoff",
@@ -154,7 +144,7 @@ test("generation production wire validates exact input and projects task failure
   registerContentGenerationBatchIpc({
     ipcMain: ipc.ipcMain,
     contentGenerationBatchService: {
-      createBatch(input) {
+      createAndStartBatch(input) {
         createCalls += 1;
         assert.equal(input.clientIds[0], "client-1");
         return batchFixture;
@@ -171,7 +161,7 @@ test("generation production wire validates exact input and projects task failure
       researchQueryIds: ["research-1"],
     }],
   };
-  const response = await ipc.invoke("content:create-generation-batch", [input]);
+  const response = await ipc.invoke("content:create-and-start-generation-batch", [input]);
   assert.equal(response.schemaVersion, 1);
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.equal(response.data.batch.id, "batch-1");
@@ -186,7 +176,7 @@ test("generation production wire validates exact input and projects task failure
   );
 
   const contract = productionIpcRegistry.byChannel(
-    "content:create-generation-batch",
+    "content:create-and-start-generation-batch",
   );
   const rejected = await ipc.handlers.get(contract.channel)(null, {
     schemaVersion: 1,
@@ -302,12 +292,12 @@ test("generation service exceptions become SafeOperationalError without raw deta
   registerContentGenerationBatchIpc({
     ipcMain: ipc.ipcMain,
     contentGenerationBatchService: {
-      createBatch() {
+      createAndStartBatch() {
         throw new Error("C:\\private\\generation.db raw service failure");
       },
     },
   });
-  const response = await ipc.invoke("content:create-generation-batch", [{
+  const response = await ipc.invoke("content:create-and-start-generation-batch", [{
     clientIds: ["client-1"],
     templates: [{ platform: "media", templateId: "template-1" }],
   }]);

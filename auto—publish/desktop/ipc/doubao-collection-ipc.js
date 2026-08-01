@@ -129,20 +129,6 @@ function registerDoubaoCollectionIpc(deps) {
       return { preview: projectPreview(service.previewBatch({ clientIds: clientIds, mode: value.mode })) };
     });
   });
-  ipcMain.handle("content:start-doubao-batch", function(event, input) {
-    return safeWrap(function() {
-      const value = objectInput(input, ["tasks"], "Start batch input");
-      if (!Array.isArray(value.tasks) || value.tasks.length > 500) throw ipcError("Batch tasks are invalid or exceed 500 tasks");
-      const tasks = value.tasks.map(function(task) {
-        const item = objectInput(task, ["clientId", "questionId", "force"], "Batch task");
-        if (!isSafeId(item.clientId) || !isSafeId(item.questionId)) throw ipcError("Batch task ids are invalid");
-        optionalForce(item);
-        return { clientId: item.clientId, questionId: item.questionId, force: item.force };
-      });
-      assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
-      return Promise.resolve(service.startBatch(tasks)).then(function(result) { return { queue: projectQueue(result) }; });
-    });
-  });
   ipcMain.handle("content:start-prepared-doubao-batch", function(event, input) {
     return safeWrap(function() {
       const value = objectInput(input, ["tasks"], "Start prepared batch input");

@@ -551,7 +551,6 @@ function createOperationalContentSubmissionService(options) {
         "articleManagement",
         "articleAttention",
         "platformQueue",
-        "navigationSummary",
       ],
     };
   }
@@ -1327,7 +1326,6 @@ function createOperationalContentSubmissionService(options) {
         "articleManagement",
         "articleAttention",
         "platformQueue",
-        "navigationSummary",
       ],
       domainHandled: true,
     };
@@ -1745,7 +1743,6 @@ function createOperationalContentSubmissionService(options) {
               "articleManagement",
               "articleAttention",
               "platformQueue",
-              "navigationSummary",
             ]
           : [],
       items: after.items,

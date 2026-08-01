@@ -309,11 +309,7 @@ function contract(input, ownedErrors) {
 
 const generationContracts = Object.freeze([
   contract({ capability: "generation.previewBatch", channel: "content:preview-generation-batch", kind: "query", request: planRequest, success: preview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.createBatch", channel: "content:create-generation-batch", kind: "command", request: planRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.createAndStartBatch", channel: "content:create-and-start-generation-batch", kind: "command", request: planRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.listBatches", channel: "content:list-generation-batches", kind: "query", request: emptyRequest, success: batchListResult, fromArgs: noArgs, toArgs: noLegacyInput }, generationErrors),
-  contract({ capability: "generation.getBatch", channel: "content:get-generation-batch", kind: "query", request: batchIdRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.startBatch", channel: "content:start-generation-batch", kind: "command", request: startRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.stopBatch", channel: "content:stop-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.pauseBatch", channel: "content:pause-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.continueBatch", channel: "content:continue-generation-batch", kind: "command", request: continuationRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
@@ -321,7 +317,6 @@ const generationContracts = Object.freeze([
   contract({ capability: "generation.retryFailed", channel: "content:retry-failed-generation-batch", kind: "command", request: batchIdRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.previewCancelPending", channel: "content:preview-cancel-pending-generation-batch", kind: "query", request: batchIdRequest, success: cancelPreview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.cancelPending", channel: "content:cancel-pending-generation-batch", kind: "command", request: cancelRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.getState", channel: "content:get-generation-batch-state", kind: "query", request: emptyRequest, success: state, fromArgs: noArgs, toArgs: noLegacyInput }, generationErrors),
   contract({ capability: "generation.getRuntimeSnapshot", channel: "content:get-generation-runtime-snapshot", kind: "query", request: emptyRequest, success: runtimeSnapshot, fromArgs: noArgs, toArgs: noLegacyInput }, generationErrors),
   contract({ capability: "generation.previewSubmissionHandoff", channel: "content:preview-generation-submission-handoff", kind: "query", request: handoffPreviewRequest, success: handoffPreview, fromArgs: handoffArgs, toArgs: handoffInput }, handoffErrors),
   contract({ capability: "generation.commitSubmissionHandoff", channel: "content:commit-generation-submission-handoff", kind: "command", request: handoffCommitRequest, success: handoffResult, fromArgs: handoffArgs, toArgs: handoffInput }, handoffErrors),

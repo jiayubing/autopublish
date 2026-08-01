@@ -1,12 +1,60 @@
 # 阶段03交接：Publication工作流与恢复
 
+> **2026-07-30 最终只读审计三项P1直接整改（当前唯一权威）：** 唯一`verifyCapabilityEvidence()`新增三项永久RED→GREEN反例：Renderer owner仅经未调用entry callback、owner仅作为未消费JSX prop、producer callback仅在`if(false)`中调用。入口现在只沿确证callback契约，JSX只接受intrinsic事件或闭合到子组件真实消费的prop，callback调用证明排除静态不可达分支；React `lazy`及既有React/标准异步集合边界按TypeChecker声明闭合。证据专项66/66、matrix33/33（109 capability、21 lifecycle、5 event）、fail-closed7/7，合计106/106；完整`npm test`225文件1366/1366，lint、定向Prettier与`git diff --check`通过。仅测试证据helper/test变化，Phase03/04/06 production、package input和既有制品未变；阶段继续`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待再次最终独立只读审计。**
+
+> **2026-07-30 计划21最终审查后TDD交接（当前唯一权威）：** Phase03 production未改，订单SQLite34/34、capacity19/19及13k projection结论保持。跨阶段唯一证据核心已对五项追加假阳性串行RED→GREEN；证据专项60/60、production matrix/fail-closed组合100/100、matrix109/109、lifecycle21/21、event5/5。完整测试1360/1360，标准`pack:smoke`及其余门禁通过。`P2-FINAL-ORDER-01`、`P2-CONVERGENCE-02`、`P1-CONVERGENCE-01`均`VERIFIED`；Phase03=`IN_PROGRESS`，Phase07=`NOT_STARTED`。以下旧统计均为历史记录。
+
+> **当前唯一权威制品：** Renderer/preload/ASAR/exe SHA-256分别为`E1B965347C5BEA36B27006555E0DCFC5E380211A6BA39D925A7516FFD204A860`、`3F56D207A9FB3BFB8C807CFCCA5DF3F5F57CC93B7D38DC97A128840433BFB8EC`、`71CD2F7A24CC0106D712348835B1803F943C6BB36F18E41133E025B1CA6BF073`、`60E05AFB17FF24E541DC9AEDCB82B749D8024B15F46CF66D51688B017239AAF6`；exe 225,485,824 bytes。
+
+> 当前状态：Phase 03保持`IN_PROGRESS`。2026-07-30 计划21整改已完成，等待最终独立只读审计；不得恢复`COMPLETE`，Phase 07仍为`NOT_STARTED`。
+
+> **2026-07-30 最终复验更正：** corpus33/33、production suite33/33、最终全仓225文件1333/1333（164.262秒）；取代下方同日中间计数。Phase03订单矩阵31/31及状态不变。
+
+> **2026-07-30 当前权威交接：** 真实SQLite订单矩阵31/31：supplier `2+HTTPS→0/1/4/9`保持canonical published、按钮可见且main每例只打开一次；restart/backup/restore保持；未published、缺失/HTTP/credentials/query/fragment/超长/损坏URL全部隐藏并fail-closed。无需production修复，仅新增永久回归。跨阶段证据corpus32/32、production suite33/33；全仓225文件1332/1332及所有Auth/typecheck/lint/format/links/packaging/build/pack/ASAR/preload/Electron/diff门禁全绿。ASAR7,212,371 bytes/SHA-256 `399812E8617DE57994B8D810F9895293938FAF11A841479739BC0A0456120A19`，147条WIP保留、staged=0、真实外部/付费调用0。Phase03=`IN_PROGRESS`、Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-29 证据引擎与订单链接整改交接（最新当前权威，取代下方同日统计）：** 临时SQLite RED证明canonical `published`订单supplier `2→9`后投影仍显示按钮而旧main以supplier code拒绝；现`hasPublishedUrl`与`openPublishedUrl()`复用canonical published+安全持久HTTPS URL的唯一语义，supplier code仅展示，`P2-FINAL-ORDER-01=VERIFIED`。supplier/canonical冻结行为、restart/backup/restore和retired owner物理零路径保持，`P2-CONVERGENCE-02=VERIFIED`。跨阶段证据RED还证明旧production verifier放行不存在的lifecycle state source/event producer；唯一TypeChecker核心现闭合109项（43 query、61 command、5 event）、21 lifecycle、5 event及20 mutation，`P1-CONVERGENCE-01=VERIFIED`。完整225文件1318/1318；Auth16/16、links180/180、packaging33/33、capacity20/20（原19项均通过）、13k query/SQL=1/1、parsed=3、orders=3、paid send=0、三套typecheck/lint/format/build/pack、最新ASAR/order-owner parity、packaged preload3/3、Electron focus1/1与diff均通过。最新ASAR7,212,371 bytes/SHA-256 `399812E8617DE57994B8D810F9895293938FAF11A841479739BC0A0456120A19`；exe225,485,824 bytes/SHA-256 `FC6F03EE4CC60BC51D1C0CD95548A69999C8A4134A19C93DCA768A7C51AFDC49`。既有WIP保留、staged为空，真实数据与外部/付费调用为0。Phase03保持`IN_PROGRESS`、Phase07保持`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-29 最终审计收敛交接（当前权威）：** RED为完整canonical/supplier行为缺少syntax-independent总矩阵；正确owner是OperationalStore canonical事实与MediaOrderService supplier response。现临时SQLite覆盖四canonical无observation、0/1/2/4/9、`2+HTTPS`提升、无evidence不提升、published不可撤销及restart/backup/restore；28/28。删除旧fallback语法枚举，仅保留退休owner物理零路径和OperationalStore/MediaOrderService source↔最新ASAR逐字节parity。schema仍为既有v3，新表、retained methods及public interface本轮不变。完整1281/1281、13k projection、capacity、最新ASAR/Electron门禁全绿；下一动作仅为最终独立只读审计，Phase03保持`IN_PROGRESS`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-29 第三轮整改交接（当前权威）：** 同article/target跨batch反例先5/6 RED；OperationalStore现要求media item payload的durable `attemptId`与当前attempt精确相等，否则`OPERATIONAL_BATCH_ITEM_MISMATCH`并整体回滚。v3 6/6、Phase03 80/80。fallback回归已由距离正则改为AST，覆盖if/ternary、switch、canonical-status对象索引，重建后order/legacy/preload11/11。schema仍v3，新表与retained methods不变，public method集合未变，仅commit行为收紧。完整1267/1267，ASAR7,210,414 bytes。下一动作仅为最终独立只读审计，Phase03保持`IN_PROGRESS`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-29 追加整改交接（当前权威）：** RED发现`commitRemoteOutcome()`可用A attempt+B batch item跨聚合写入。现OperationalStore事务内比较双方`article_id/target_key`，不匹配抛`OPERATIONAL_BATCH_ITEM_MISMATCH`，remote order/snapshot/A-B item状态均保持原状。旧supplier fallback detector补齐`submitted/uncertain`，并对OperationalStore与MediaOrderService同时执行source↔最新ASAR精确parity；无wrapper或旧路径恢复。schema仍v3，新表和两个retained method不变；public method集合未变，仅收紧既有commit行为。v3 5/5、Phase03 79/79、ASAR/legacy/preload11/11、完整1265/1265与全部门禁通过，ASAR7,210,147 bytes。下一动作仅为最终独立只读审计，Phase03保持`IN_PROGRESS`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-29 第二轮整改检查点C最终交接：** 原17项`P1-01..P1-07`、`P2-08..P2-15`、`P3-16..P3-17`及三个audit项共20项均为`VERIFIED`。旧ASAR parity先7/8 RED，重建后source/export/import-call/test/ASAR 8/8；`P1-05`仅保留supplier response→`MediaOrderService.syncOrder()`→`recordRemoteOrderObservation()`，旧`reconcileRemoteOrder`定义/export/专用测试与canonical→supplier fallback物理删除且无wrapper。OperationalStore schema v2→v3、新表、两个retained public methods及migration/backup/restore/verify/fault证据完整，schema/public interface确有变化；PublicationWorkflow、Publisher、ContentStore、Domain/Application未变。专项131/131、capacity19/19、完整223文件1263/1263及全部typecheck/packaging/Electron门禁通过；最新ASAR7,209,908 bytes（12:37:55.544 +08:00），inventory109，真实外部/付费调用0。下一动作仅为最终独立只读审计，Phase03保持`IN_PROGRESS`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-29 第二轮整改检查点B当前权威交接：** Phase 03因`P1-05/P2-13`窄范围重开；当前Git差异确实将OperationalStore schema v2→v3，新增`order_display_snapshots`与retained public `listOrderDisplayViews()`/`recordRemoteOrderObservation()`，A另删除`reconcileRemoteOrder()`。本段取代下方历史“未改OperationalStore/schema/interface”、canonical缺observation时supplier fallback及inventory=110结论；历史原文保留但已失效，current inventory=109。
+>
+> 新表列为attempt_id TEXT PK NOT NULL FK→publication_attempts.attempt_id；title_snapshot/filename/resource_name_snapshot/created_at为TEXT NOT NULL；quoted_price REAL nullable。`commitRemoteOutcome()`在media evidence+batchItemId事务内写不可变snapshot。`listOrderDisplayViews()`唯一production caller为`MediaOrderService.listOrderViews()`，单SQL LEFT JOIN、LIMIT20000；`recordRemoteOrderObservation()`唯一caller为`MediaOrderService.syncOrder()`，事务保存0/1/2/4/9并复用安全HTTPS validator，只有2+evidence提升，9不撤销published。
+>
+> B RED2/4证明verifier漏检FK/required nullability和恢复fixture路径错误；修复后4/4，覆盖v2→v3、history[1,2,3]、重复启动、before-v3/after-v3-create/after-v3-record rollback+retry、损坏结构、backup verify和临时restore。扩展45/45；13k query/SQL=1/1、parsed=3、orders=3、heap143,288 bytes、0.471ms、paidSendCalls=0；三套typecheck、lint/format、links180/180、packaging33/33、diff通过。PublicationWorkflow/Publisher/ContentStore/Domain/Application无production差异，OperationalStore schema/interface确有变化。下一动作严格为C；Phase03保持`IN_PROGRESS`，真实外部/投稿/同步/付费submit=0。
+
+> 2026-07-29 最终独立审计第二轮整改检查点 A：永久 source/export/import-call/test/ASAR 回归先为0/4 RED；Phase 03 owner物理删除 OperationalStore `reconcileRemoteOrder`定义和public export、canonical publication status→supplier `2/4/0` fallback，删除只验证旧wrapper的测试并把URL evidence验证迁至`recordRemoteOrderObservation()`。删除后3/4，仅旧ASAR仍RED；重建后4/4，合并既有legacy path为7/7。A没有schema变化，但OperationalStore public interface确有删除，不能再声称interface未改；正式caller保持`MediaOrderService.syncOrder()`→`recordRemoteOrderObservation()`。supplier/order定向23/23、三套typecheck、lint/format、packaging33/33、Renderer/pack smoke与diff check通过；新ASAR 7,209,505 bytes（12:14:07 +08:00），真实投稿/同步/供应商/付费submit=0。下一动作严格为B：核对并如实交接schema v2→v3、新表、两个retained public methods和migration/backup/restore/verify/fault证据；Phase 03保持`IN_PROGRESS`。
+
+> 2026-07-29 P2-09 纠正交接：无 consumer 的 `media.removeDraft` 已由 Phase 06 owner 全链删除，canonical inventory 为109而非历史110。未修改PublicationWorkflow、OperationalStore、Publisher、schema或Phase 03冻结interface；13k SQLite仍为query/SQL=1/1、parsed=3、paidSendCalls=0，完整门禁1255/1255。Phase 03继续`IN_PROGRESS`，等待独立只读审计。
+
+> 2026-07-29 检查点 A：Phase 06 non-Auth bridge fail-closed 已完成 0/6 RED→6/6 GREEN、扩展定向97/97与三套typecheck；未触及 PublicationWorkflow、OperationalStore、Publisher、schema 或 Phase 03 冻结 interface。Phase 03继续`IN_PROGRESS`，真实投稿/同步/付费submit为0。
+>
+> 2026-07-29 检查点 B：110 项 capability-specific AST inventory 已完成，content 43 项及 publication 路径均有真实 View/root→feature→bridge→preload→registrar/application 证明；本轮没有新的无 consumer 项，未改 PublicationWorkflow、OperationalStore、Publisher、schema 或冻结 interface。定向89/89与三套typecheck通过；Phase 03保持`IN_PROGRESS`，真实投稿/同步/付费submit为0。
+>
+> 2026-07-29 检查点 C：无production caller的`src/core/jobs.js`与整个`desktop/services/submission/`（两条点名+六条等价legacy implementation）已物理删除；source/旧ASAR 1/3、2 fail转为新制品3/3，扩展定向95/95、packaging33/33、三套typecheck及pack smoke通过。没有re-export、wrapper或冻结interface变更；Phase 03保持`IN_PROGRESS`，真实投稿/同步/付费submit为0。
+>
+> 2026-07-29 最终交接：Phase 03 owner finding `P1-04`、`P1-05`、`P2-12`、`P2-13`、`P3-17` 及 `P2-AUDIT-02` 均已在当前 production tree 重验。13k临时SQLite指标为query=1、SQL=1、parsed=3、orders=3、heap=143,288 bytes、0.358ms、paidSendCalls=0；legacy source/import/本轮ASAR为3/3。完整门禁为222文件1252/1252、0 fail/skip（158.040秒），专项138/138及第10节其余门禁通过。未改PublicationWorkflow、OperationalStore、Publisher、schema或冻结interface；真实投稿/同步/供应商/付费submit=0。**整改完成，等待最终独立只读审计。**
+
 ## 1. 状态
 
-- 状态：COMPLETE
+- 状态：IN_PROGRESS
 - 开始分支与commit：`codex/refactor-program` / `7d8f81452f98c8211308ada0ffba7873428a764b`
 - 当前 commit：`7009a61b47ed3d5b6b6976e4f44fabab77ff1b93`
 - 工作区：干净（主里程碑验证完成后；后续仅创建本交接和账本文档收口提交）。
 - 执行日期与环境：2026-07-25，Windows PowerShell，`F:\官媒投稿-refactor`。
+
+### 2026-07-28 检查点B续记
+
+- P1-05：`OperationalStore.recordRemoteOrderObservation()`独立保存supplier `0/1/2/4/9`；`2`缺安全URL仍保存observation但不提升canonical publication，只有`2 + credential-free HTTPS evidence`可提升进行中状态，`9`不得撤销`published`，缺observation保持unknown。删除canonical状态推断supplier code、`remoteStatusCode`兼容读取和legacy ledger mutation。
+- P2-12：`MediaOrderService.syncOrder()`把supplier解析、临时SQLite写入、evidence冲突和observation冲突统一收口为固定`MEDIA_ORDER_SYNC_FAILED`；事务回滚后UI owner保留原订单且不声称同步成功，错误不包含SQL、路径、URL或原payload。
+- P2-13：唯一订单read model为`OperationalStore.listOrderDisplayViews()`；单条带`LIMIT 20000`的SQL join只解析返回订单。真实临时SQLite含13,000个历史submission batch及3个订单：service query=1、SQL=1、payload解析=3、返回=3、heap delta=143,376 bytes、elapsed=0.618ms、paid send=0；标题、媒体名和canonical报价由正式snapshot恢复，缺失报价保持“未记录”。service projection fallback已删除。
+- P3-17：OperationalStore/main/IPC/bridge传递timezone-bearing ISO instant；main不再删除`Z`，bridge不再格式化订单时间，只有`OrdersView`调用`formatBeijingTime()`。覆盖UTC跨日、`+08:00`输入规范化及空published evidence。
+- 本续记没有schema migration，没有修改Domain/Application、ContentStore或Publisher冻结接口；Phase 03继续`IN_PROGRESS`，等待检查点C与最终完整门禁。
 
 第2至12节是阶段执行期间逐轮追加的历史记录；其中的 `IN_PROGRESS`、"不可关闭"、"下一阶段不 READY" 和旧调用图均不代表当前结论。以本节和第13节的完成收口为准。
 

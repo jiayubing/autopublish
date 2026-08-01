@@ -1,4 +1,3 @@
-const { fail } = require("../services/ipc-response");
 const { productionIpcRegistry } = require("./contracts/production-registry");
 
 function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
@@ -6,17 +5,18 @@ function createAuthenticatedIpcMain(ipcMain, requireAuthenticated) {
     lastHandler: null,
     handle(channel, handler) {
       const contract = productionIpcRegistry.byChannel(channel);
+      if (!contract) {
+        const error = new Error("Non-Auth IPC channel must have a production contract");
+        error.code = "IPC_CONTRACT_REQUIRED";
+        throw error;
+      }
       const wrapped = async function(event, ...args) {
         if (typeof requireAuthenticated === "function") {
           try { await requireAuthenticated(); }
           catch (error) {
-            if (contract) {
-              return productionIpcRegistry.failure(contract, { code: "AUTH_REQUIRED" });
-            }
-            return fail(error);
+            return productionIpcRegistry.failure(contract, { code: "AUTH_REQUIRED" });
           }
         }
-        if (!contract) return handler(event, ...args);
         let payload;
         try {
           if (args.length !== 1) throw Object.assign(new Error("Invalid IPC request"), { code: "IPC_REQUEST_INVALID" });

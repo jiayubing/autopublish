@@ -36,7 +36,7 @@ import type {
   GenerationSubmissionHandoffPreview,
   GenerationSubmissionHandoffResult,
 } from "../types";
-import { ipcError, isElectron, unavailable } from "./transport";
+import { ipcError, requireBridgeApi } from "./transport";
 
 export type { ArticleTrashRecord } from "../types";
 
@@ -187,9 +187,6 @@ type CoreContentApi = {
   listResearch: (
     clientId: string,
   ) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
-  listTemplates: (
-    platform?: string,
-  ) => Promise<ContentIpcResponse<{ templates: ContentTemplate[] }>>;
   listTemplateCatalog: () => Promise<
     ContentIpcResponse<ContentTemplateCatalog>
   >;
@@ -208,9 +205,6 @@ type CoreContentApi = {
   saveArticle: (
     article: GeneratedContentArticle,
   ) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
-  listGeneratedArticles: (
-    clientId: string,
-  ) => Promise<ContentIpcResponse<{ articles: GeneratedContentArticle[] }>>;
   getArticleManagementSnapshot: (input: {
     clientId: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
@@ -218,16 +212,6 @@ type CoreContentApi = {
     clientId: string;
     sourceArticleId: string;
   }) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
-  reviewArticles: (
-    articles: ArticleReviewSelection[],
-  ) => Promise<ContentIpcResponse<ArticleReviewResult>>;
-  listArticleTrash: (
-    clientId: string,
-  ) => Promise<ContentIpcResponse<{ trash: ArticleTrashRecord[] }>>;
-  previewTrashArticles: (input: {
-    articles: ArticleReviewSelection[];
-    selections: ArticleReviewSelection[];
-  }) => Promise<ContentIpcResponse<ArticleTrashPreview>>;
   previewArticleRemovalImpact: (input: {
     articles: ArticleReviewSelection[];
     selections: ArticleReviewSelection[];
@@ -242,9 +226,6 @@ type CoreContentApi = {
     transactionId: string,
   ) => Promise<
     ContentIpcResponse<{ transaction: ArticleRemovalTransaction | null }>
-  >;
-  listArticleRemovalTransactions: () => Promise<
-    ContentIpcResponse<{ transactions: ArticleRemovalTransaction[] }>
   >;
   retryArticleRemovalTransaction: (input: {
     transactionId: string;
@@ -272,25 +253,13 @@ type CoreContentApi = {
 async function callCoreContent<TWire, TResult = TWire>(
   invoke: (api: CoreContentApi) => Promise<ContentIpcResponse<TWire>>,
   message: string,
-  fallback?: TResult,
-  hasFallback = false,
   map?: (wire: TWire) => TResult,
 ): Promise<TResult> {
-  if (!isElectron()) {
-    if (hasFallback) return fallback as TResult;
-    throw unavailable(message);
-  }
-  const api = window.desktopConsole?.content as CoreContentApi | undefined;
-  if (!api) {
-    if (hasFallback) return fallback as TResult;
-    throw unavailable(message);
-  }
+  const api = requireBridgeApi<CoreContentApi>("content");
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
-  if (result.data === undefined || result.data === null) {
-    if (hasFallback) return fallback as TResult;
+  if (result.data === undefined || result.data === null)
     throw ipcError(undefined, message);
-  }
   return map ? map(result.data) : (result.data as unknown as TResult);
 }
 type DoubaoContentApi = {
@@ -327,9 +296,6 @@ type DoubaoContentApi = {
     clientIds: string[];
     mode: DoubaoBatchMode;
   }) => Promise<ContentIpcResponse<{ preview: DoubaoBatchPreview }>>;
-  startDoubaoBatch: (
-    tasks: Array<{ clientId: string; questionId: string; force?: boolean }>,
-  ) => Promise<ContentIpcResponse<{ queue: DoubaoQueueState }>>;
   startPreparedDoubaoBatch: (input: {
     tasks: DoubaoBatchTask[];
   }) => Promise<ContentIpcResponse<{ queue: DoubaoQueueState }>>;
@@ -371,17 +337,9 @@ type SubmissionContentApi = {
   listSubmissionPlatforms: () => Promise<
     ContentIpcResponse<{ platforms: ContentSubmissionPlatform[] }>
   >;
-  listSubmissionBatches: (input: {
-    clientId: string;
-  }) => Promise<
-    ContentIpcResponse<{ batches: ContentSubmissionBatchRecord[] }>
-  >;
   createSubmissionBatch: (
     input: ContentSubmissionBatchInput & { confirmed: true },
   ) => Promise<ContentIpcResponse<ContentSubmissionBatchPreview>>;
-  previewCancelSubmissionBatch: (input: {
-    batchId: string;
-  }) => Promise<ContentIpcResponse<ContentSubmissionCancellationPreview>>;
   cancelSubmissionBatch: (input: {
     batchId: string;
     planId: string;
@@ -405,14 +363,6 @@ type SubmissionContentApi = {
     batchId: string;
     confirmed: true;
   }) => Promise<ContentIpcResponse<ContentSubmissionCleanupResult>>;
-  previewRetryFailedPublication: (input: {
-    publicationId: string;
-  }) => Promise<ContentIpcResponse<FailedPublicationRetryPreview>>;
-  retryFailedPublication: (input: {
-    publicationId: string;
-    expectedRevision?: number;
-    confirmed: true;
-  }) => Promise<ContentIpcResponse<FailedPublicationRetryResult>>;
   previewTrashedArticleQueueResidue: () => Promise<
     ContentIpcResponse<TrashedArticleQueueResiduePreview>
   >;
@@ -429,24 +379,12 @@ async function callDoubao<TWire, TResult>(
   invoke: (api: DoubaoContentApi) => Promise<ContentIpcResponse<TWire>>,
   message: string,
   map: (wire: TWire) => TResult,
-  fallback?: TResult,
-  hasFallback = false,
 ): Promise<TResult> {
-  if (!isElectron()) {
-    if (hasFallback) return fallback as TResult;
-    throw unavailable(message);
-  }
-  const api = window.desktopConsole?.content as DoubaoContentApi | undefined;
-  if (!api) {
-    if (hasFallback) return fallback as TResult;
-    throw unavailable(message);
-  }
+  const api = requireBridgeApi<DoubaoContentApi>("content");
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
-  if (result.data === undefined || result.data === null) {
-    if (hasFallback) return fallback as TResult;
+  if (result.data === undefined || result.data === null)
     throw ipcError(undefined, message);
-  }
   return map(result.data);
 }
 
@@ -455,26 +393,13 @@ async function callSubmission<TWire, TResult = TWire>(
   message: string,
   options?: {
     map?: (wire: TWire) => TResult;
-    fallback?: TResult;
-    hasFallback?: boolean;
   },
 ): Promise<TResult> {
-  if (!isElectron()) {
-    if (options?.hasFallback) return options.fallback as TResult;
-    throw unavailable(message);
-  }
-  const api = window.desktopConsole?.content as
-    SubmissionContentApi | undefined;
-  if (!api) {
-    if (options?.hasFallback) return options.fallback as TResult;
-    throw unavailable(message);
-  }
+  const api = requireBridgeApi<SubmissionContentApi>("content");
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
-  if (result.data === undefined || result.data === null) {
-    if (options?.hasFallback) return options.fallback as TResult;
+  if (result.data === undefined || result.data === null)
     throw ipcError(undefined, message);
-  }
   return options?.map
     ? options.map(result.data)
     : (result.data as unknown as TResult);
@@ -522,24 +447,9 @@ type GenerationContentApi = {
   previewGenerationBatch: (
     input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<GenerationBatchPreview>>;
-  createGenerationBatch: (
-    input: GenerationPlanInput,
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   createAndStartGenerationBatch: (
     input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  listGenerationBatches: () => Promise<
-    GenerationIpcResponse<{ batches: GenerationBatch[] }>
-  >;
-  getGenerationBatch: (
-    batchId: string,
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  startGenerationBatch: (input: {
-    batchId?: string;
-    clientIds?: string[];
-    templates?: GenerationBatchTemplateSelection[];
-    clientSources?: GenerationBatchSourceSelection[];
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   pauseGenerationBatch: (input?: {
     batchId?: string;
   }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
@@ -564,9 +474,6 @@ type GenerationContentApi = {
     batchId: string;
     confirmed: true;
   }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  getGenerationBatchState: () => Promise<
-    GenerationIpcResponse<GenerationBatchState>
-  >;
   getGenerationRuntimeSnapshot: () => Promise<
     GenerationIpcResponse<GenerationRuntimeSnapshot>
   >;
@@ -582,55 +489,24 @@ function generationIpcError(
   error: SafeGenerationIpcError | undefined,
   fallback: string,
 ): Error & { code?: string } {
-  return Object.assign(new Error(error?.userMessage || fallback), {
-    code: error?.code,
-  });
+  return ipcError(error, fallback);
 }
 
 async function callGeneration<TWire, TResult = TWire>(
   invoke: (api: GenerationContentApi) => Promise<GenerationIpcResponse<TWire>>,
   message: string,
   options?: {
-    fallback?: TResult;
-    hasFallback?: boolean;
     map?: (data: TWire) => TResult;
   },
 ): Promise<TResult> {
-  if (!isElectron()) {
-    if (options?.hasFallback) return options.fallback as TResult;
-    throw unavailable(message);
-  }
-  const api = window.desktopConsole?.content as
-    GenerationContentApi | undefined;
-  if (!api) {
-    if (options?.hasFallback) return options.fallback as TResult;
-    throw unavailable(message);
-  }
+  const api = requireBridgeApi<GenerationContentApi>("content");
   const result = await invoke(api);
   if (result.ok === false) throw generationIpcError(result.error, message);
-  if (result.data === undefined || result.data === null) {
-    if (options?.hasFallback) return options.fallback as TResult;
+  if (result.data === undefined || result.data === null)
     throw generationIpcError(undefined, message);
-  }
   return options?.map
     ? options.map(result.data)
     : (result.data as unknown as TResult);
-}
-
-function emptySnapshot(clientId: string): ArticleManagementSnapshot {
-  return {
-    clientId,
-    revision: 0,
-    articles: [],
-    trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
-    publicationRecords: [],
-    attention: { revision: 0, items: [], counts: { total: 0, actionable: 0 } },
-    submissionPlatforms: [],
-    workflowByArticle: {},
-    publicationSummaries: {},
-  };
 }
 
 function normalizeLoginState(
@@ -680,8 +556,6 @@ export async function listContentClients(): Promise<ContentClient[]> {
   return callCoreContent(
     (api) => api.listClients(),
     "Unable to load clients",
-    [],
-    true,
     (wire) => wire.clients,
   );
 }
@@ -691,8 +565,6 @@ export async function listContentResearch(
   return callCoreContent(
     (api) => api.listResearch(clientId),
     "Unable to load research",
-    [],
-    true,
     (wire) => wire.research,
   );
 }
@@ -703,8 +575,6 @@ export async function listContentQuestions(
     (api) => api.listQuestions(clientId),
     "Unable to load questions",
     (wire) => wire.questions,
-    [],
-    true,
   );
 }
 export async function createContentQuestion(input: {
@@ -746,8 +616,6 @@ export async function getDoubaoLoginStatus(): Promise<DoubaoLoginState> {
     (api) => api.getDoubaoLoginState(),
     "Unable to read Doubao login state",
     (wire) => wire.loginState,
-    { status: "unknown" },
-    true,
   );
   return normalizeLoginState(raw);
 }
@@ -779,15 +647,6 @@ export async function previewDoubaoBatch(input: {
     (api) => api.previewDoubaoBatch(input),
     "Unable to preview Doubao batch",
     (wire) => wire.preview,
-  );
-}
-export async function startDoubaoBatch(
-  tasks: Array<{ clientId: string; questionId: string; force?: boolean }>,
-): Promise<DoubaoQueueState> {
-  return callDoubao(
-    (api) => api.startDoubaoBatch(tasks),
-    "Unable to start Doubao batch",
-    (wire) => wire.queue,
   );
 }
 export async function startPreparedDoubaoBatch(
@@ -837,11 +696,9 @@ export async function getDoubaoQueueState(): Promise<DoubaoQueueState> {
 export function subscribeDoubaoQueue(
   listener: (state: DoubaoQueueState) => void,
 ): () => void {
-  if (!isElectron()) return () => {};
-  const subscribe = (
-    window.desktopConsole?.content as DoubaoContentApi | undefined
-  )?.onDoubaoQueueState;
-  return typeof subscribe === "function" ? subscribe(listener) : () => {};
+  const subscribe =
+    requireBridgeApi<DoubaoContentApi>("content").onDoubaoQueueState;
+  return subscribe(listener);
 }
 export async function saveManualResearch(input: {
   clientId: string;
@@ -856,44 +713,12 @@ export async function saveManualResearch(input: {
   );
 }
 
-export async function getGenerationBatchState(): Promise<GenerationBatchState> {
-  return callGeneration(
-    (api) => api.getGenerationBatchState(),
-    "Unable to read generation batch state",
-    {
-      fallback: { state: "idle", status: "idle" },
-      hasFallback: true,
-    },
-  );
-}
 export async function previewGenerationBatch(
   input: GenerationPlanInput,
 ): Promise<GenerationBatchPreview> {
   return callGeneration(
     (api) => api.previewGenerationBatch(input),
     "Unable to preview generation batch",
-    {
-      fallback: {
-        clientCount: input.clientIds.length,
-        executableClientCount: 0,
-        taskCount: 0,
-        executableTaskCount: 0,
-        excludedTaskCount: 0,
-        excludedClients: [],
-        templates: input.templates,
-        clientSources: [],
-      },
-      hasFallback: true,
-    },
-  );
-}
-export async function createGenerationBatch(
-  input: GenerationPlanInput,
-): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.createGenerationBatch(input),
-    "Unable to create generation batch",
-    { map: (data) => data.batch },
   );
 }
 export async function createAndStartGenerationBatch(
@@ -905,41 +730,13 @@ export async function createAndStartGenerationBatch(
     { map: (data) => data.batch },
   );
 }
-export async function listGenerationBatches(): Promise<GenerationBatch[]> {
-  return callGeneration(
-    (api) => api.listGenerationBatches(),
-    "Unable to list generation batches",
-    { fallback: [], hasFallback: true, map: (data) => data.batches },
-  );
-}
-export async function getGenerationBatch(
-  batchId: string,
-): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.getGenerationBatch(batchId),
-    "Unable to read generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export async function startGenerationBatch(input: {
-  batchId?: string;
-  clientIds?: string[];
-  templates?: GenerationBatchTemplateSelection[];
-  clientSources?: GenerationBatchSourceSelection[];
-}): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.startGenerationBatch(input),
-    "Unable to start generation batch",
-    { map: (data) => data.batch },
-  );
-}
 export async function pauseGenerationBatch(input?: {
   batchId?: string;
 }): Promise<GenerationBatch | null> {
   return callGeneration(
     (api) => api.pauseGenerationBatch(input),
     "Unable to pause generation batch",
-    { fallback: null, hasFallback: true, map: (data) => data.batch },
+    { map: (data) => data.batch },
   );
 }
 export async function stopGenerationBatch(input?: {
@@ -948,7 +745,7 @@ export async function stopGenerationBatch(input?: {
   return callGeneration(
     (api) => api.stopGenerationBatch(input),
     "Unable to stop generation batch",
-    { fallback: null, hasFallback: true, map: (data) => data.batch },
+    { map: (data) => data.batch },
   );
 }
 export async function resumeGenerationBatch(input: {
@@ -983,32 +780,17 @@ export async function retryFailedGenerationBatch(input: {
 export function subscribeGenerationBatchState(
   listener: (state: GenerationBatchState) => void,
 ): () => void {
-  if (!isElectron()) return () => {};
-  const subscribe = (
-    window.desktopConsole?.content as unknown as
-      | {
-          onGenerationBatchState?: (
-            value: (state: GenerationBatchState) => void,
-          ) => () => void;
-        }
-      | undefined
-  )?.onGenerationBatchState;
-  return typeof subscribe === "function" ? subscribe(listener) : () => {};
+  const subscribe = requireBridgeApi<{
+    onGenerationBatchState: (
+      value: (state: GenerationBatchState) => void,
+    ) => () => void;
+  }>("content").onGenerationBatchState;
+  return subscribe(listener);
 }
 export async function getGenerationRuntimeSnapshot(): Promise<GenerationRuntimeSnapshot> {
   return callGeneration(
     (api) => api.getGenerationRuntimeSnapshot(),
     "Unable to read generation runtime snapshot",
-    {
-      fallback: {
-        runtimeId: "renderer-fallback",
-        sequence: 0,
-        runtime: { state: "idle", status: "idle" },
-        batch: null,
-        capabilities: {},
-      },
-      hasFallback: true,
-    },
   );
 }
 export async function previewCancelPendingGenerationBatch(input: {
@@ -1017,16 +799,6 @@ export async function previewCancelPendingGenerationBatch(input: {
   return callGeneration(
     (api) => api.previewCancelPendingGenerationBatch(input),
     "Unable to preview pending generation cancellation",
-    {
-      fallback: {
-        batchId: input.batchId,
-        pendingCount: 0,
-        runningCount: 0,
-        cancelledCount: 0,
-        canCancel: false,
-      },
-      hasFallback: true,
-    },
   );
 }
 export async function cancelPendingGenerationBatch(input: {
@@ -1040,23 +812,10 @@ export async function cancelPendingGenerationBatch(input: {
   );
 }
 
-export async function listContentTemplates(
-  platform?: string,
-): Promise<ContentTemplate[]> {
-  return callCoreContent(
-    (api) => api.listTemplates(platform),
-    "Unable to load templates",
-    [],
-    true,
-    (wire) => wire.templates,
-  );
-}
 export async function listContentTemplateCatalog(): Promise<ContentTemplateCatalog> {
   return callCoreContent(
     (api) => api.listTemplateCatalog(),
     "Unable to load template catalog",
-    { revision: "", platforms: [], templates: [], diagnostics: [] },
-    true,
   );
 }
 export async function generateContentArticle(input: {
@@ -1070,8 +829,6 @@ export async function generateContentArticle(input: {
   return callCoreContent(
     (api) => api.generateArticle(input),
     "Unable to generate article",
-    undefined,
-    false,
     (wire) => wire.article,
   );
 }
@@ -1081,20 +838,7 @@ export async function saveContentArticle(
   return callCoreContent(
     (api) => api.saveArticle(article),
     "Unable to save article",
-    undefined,
-    false,
     (wire) => wire.article,
-  );
-}
-export async function listContentArticles(
-  clientId: string,
-): Promise<GeneratedContentArticle[]> {
-  return callCoreContent(
-    (api) => api.listGeneratedArticles(clientId),
-    "Unable to load generated articles",
-    [],
-    true,
-    (wire) => wire.articles,
   );
 }
 export async function retryContentMaterial(input: {
@@ -1104,28 +848,7 @@ export async function retryContentMaterial(input: {
   return callCoreContent(
     (api) => api.retryMaterial(input),
     "Unable to retry material",
-    undefined,
-    false,
     (wire) => wire.material,
-  );
-}
-export async function reviewContentArticles(
-  articles: ArticleReviewSelection[],
-): Promise<ArticleReviewResult> {
-  return callCoreContent(
-    (api) => api.reviewArticles(articles),
-    "Unable to review articles",
-  );
-}
-export async function listContentTrash(
-  clientId: string,
-): Promise<ArticleTrashRecord[]> {
-  return callCoreContent(
-    (api) => api.listArticleTrash(clientId),
-    "Unable to load article trash",
-    [],
-    true,
-    (wire) => wire.trash,
   );
 }
 export async function copyContentArticleVersion(input: {
@@ -1135,8 +858,6 @@ export async function copyContentArticleVersion(input: {
   return callCoreContent(
     (api) => api.copyArticleVersion(input),
     "Unable to copy article version",
-    undefined,
-    false,
     (wire) => wire.article,
   );
 }
@@ -1161,8 +882,6 @@ export async function getArticleManagementSnapshot(
   return callCoreContent(
     (api) => api.getArticleManagementSnapshot({ clientId }),
     "Unable to load article management snapshot",
-    emptySnapshot(clientId),
-    true,
     (wire) => {
       const { workflowItems, publicationSummaryItems, ...snapshot } = wire;
       return {
@@ -1190,16 +909,6 @@ export async function previewTrashedArticleQueueResidue(): Promise<TrashedArticl
   return callSubmission(
     (api) => api.previewTrashedArticleQueueResidue(),
     "Unable to inspect trashed article queue residue",
-    {
-      fallback: {
-        items: [],
-        cleanableItems: [],
-        reportedItems: [],
-        cleanableCount: 0,
-        reportedCount: 0,
-      },
-      hasFallback: true,
-    },
   );
 }
 export async function cleanupTrashedArticleQueueResidue(): Promise<
@@ -1208,17 +917,6 @@ export async function cleanupTrashedArticleQueueResidue(): Promise<
   return callSubmission(
     (api) => api.cleanupTrashedArticleQueueResidue({ confirmed: true }),
     "Unable to clean trashed article queue residue",
-    {
-      fallback: {
-        items: [],
-        cleanableItems: [],
-        reportedItems: [],
-        cleanableCount: 0,
-        reportedCount: 0,
-        cleanedCount: 0,
-      },
-      hasFallback: true,
-    },
   );
 }
 export async function getContentArticleRemovalTransaction(
@@ -1227,31 +925,15 @@ export async function getContentArticleRemovalTransaction(
   const result = await callCoreContent(
     (api) => api.getArticleRemovalTransaction(transactionId),
     "Unable to read article removal transaction",
-    { transaction: null },
-    true,
   );
   return result.transaction;
-}
-export async function listContentArticleRemovalTransactions(): Promise<
-  ArticleRemovalTransaction[]
-> {
-  const result = await callCoreContent(
-    (api) => api.listArticleRemovalTransactions(),
-    "Unable to list article removal transactions",
-    { transactions: [] },
-    true,
-  );
-  return result.transactions;
 }
 export function onContentArticleRemovalTransaction(
   transactionId: string,
   listener: (transaction: ArticleRemovalTransaction) => void,
 ): () => void {
-  if (!isElectron()) return () => {};
-  const subscribe = (
-    window.desktopConsole?.content as CoreContentApi | undefined
-  )?.onArticleRemovalTransaction;
-  if (typeof subscribe !== "function") return () => {};
+  const subscribe =
+    requireBridgeApi<CoreContentApi>("content").onArticleRemovalTransaction;
   return subscribe((transaction) => {
     const id =
       transaction.transactionId ||
@@ -1275,8 +957,6 @@ export async function restoreContentArticle(
   return callCoreContent(
     (api) => api.restoreArticle(input),
     "Unable to restore article",
-    undefined,
-    false,
     (wire) => wire.article,
   );
 }
@@ -1323,16 +1003,7 @@ export async function listContentSubmissionPlatforms(): Promise<
   return callSubmission(
     (api) => api.listSubmissionPlatforms(),
     "submission platform discovery failed",
-    { map: (wire) => wire.platforms, fallback: [], hasFallback: true },
-  );
-}
-export async function listContentSubmissionBatches(
-  clientId: string,
-): Promise<ContentSubmissionBatchRecord[]> {
-  return callSubmission(
-    (api) => api.listSubmissionBatches({ clientId }),
-    "submission batch history failed",
-    { map: (wire) => wire.batches, fallback: [], hasFallback: true },
+    { map: (wire) => wire.platforms },
   );
 }
 export async function createContentSubmissionBatch(
@@ -1359,14 +1030,6 @@ export async function cancelContentSubmissionBatch(
   return callSubmission(
     (api) => api.cancelSubmissionBatch({ batchId, planId, confirmed: true }),
     "submission batch cancellation failed",
-  );
-}
-export async function previewCancelContentSubmissionBatch(
-  batchId: string,
-): Promise<ContentSubmissionCancellationPreview> {
-  return callSubmission(
-    (api) => api.previewCancelSubmissionBatch({ batchId }),
-    "submission batch cancellation preview failed",
   );
 }
 export async function previewCleanupFailedContentSubmissionItems(
@@ -1399,23 +1062,5 @@ export async function commitGenerationSubmissionHandoff(
   return callGeneration(
     (api) => api.commitGenerationSubmissionHandoff(input),
     "Unable to commit generation submission handoff",
-  );
-}
-export async function previewRetryFailedPublication(input: {
-  publicationId: string;
-}): Promise<FailedPublicationRetryPreview> {
-  return callSubmission(
-    (api) => api.previewRetryFailedPublication(input),
-    "failed publication retry preview failed",
-  );
-}
-export async function retryFailedPublication(input: {
-  publicationId: string;
-  expectedRevision?: number;
-  confirmed: true;
-}): Promise<FailedPublicationRetryResult> {
-  return callSubmission(
-    (api) => api.retryFailedPublication(input),
-    "failed publication retry failed",
   );
 }

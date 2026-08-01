@@ -19,14 +19,10 @@ const SUBMISSION_CHANNELS = [
   "content:export-article",
   "content:preview-submission-batch",
   "content:list-submission-platforms",
-  "content:list-submission-batches",
   "content:create-submission-batch",
-  "content:preview-cancel-submission-batch",
   "content:cancel-submission-batch",
   "content:preview-cleanup-failed-submission-items",
   "content:cleanup-failed-submission-items",
-  "content:preview-retry-failed-publication",
-  "content:retry-failed-publication",
   "content:preview-trashed-article-queue-residue",
   "content:cleanup-trashed-article-queue-residue",
 ];
@@ -39,7 +35,6 @@ const DOUBAO_CHANNELS = [
   "content:open-doubao-login",
   "content:collect-doubao-one",
   "content:preview-doubao-batch",
-  "content:start-doubao-batch",
   "content:start-prepared-doubao-batch",
   "content:pause-doubao-batch",
   "content:resume-doubao-batch",
@@ -147,12 +142,6 @@ const DOUBAO_FIXTURES = {
     { clientIds: ["client-1"], mode: "missing" },
     { preview },
   ],
-  "content:start-doubao-batch": [
-    {
-      tasks: [{ clientId: "client-1", questionId: "question-1", force: false }],
-    },
-    { queue },
-  ],
   "content:start-prepared-doubao-batch": [
     {
       tasks: [{ clientId: "client-1", questionId: "question-1", force: false }],
@@ -175,8 +164,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 31 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 31);
+test("content operations inventory has 26 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 26);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);
@@ -245,7 +234,6 @@ test("Doubao production callers are fixed named methods owned by content", () =>
     "openDoubaoLogin",
     "collectDoubaoOne",
     "previewDoubaoBatch",
-    "startDoubaoBatch",
     "startPreparedDoubaoBatch",
     "pauseDoubaoBatch",
     "resumeDoubaoBatch",

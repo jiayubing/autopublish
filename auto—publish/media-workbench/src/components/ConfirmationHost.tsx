@@ -209,6 +209,7 @@ export default function ConfirmationHost({ children, portalContainer, settingsTi
   const nextIdRef = useRef(1);
   const mountedRef = useRef(true);
   const previousScopeRef = useRef(scopeKey);
+  const activeScopeRef = useRef(scopeKey);
   const finishRequestRef = useRef<(request: PendingConfirmation, approved: boolean) => void>(() => undefined);
   const titleId = `confirmation-title-${useId().replace(/:/g, '')}`;
   const messageId = `confirmation-message-${useId().replace(/:/g, '')}`;
@@ -255,6 +256,14 @@ export default function ConfirmationHost({ children, portalContainer, settingsTi
     for (const request of requests) resolveRequest(request, false);
   }, [resolveRequest]);
 
+  const setScopeKey = useCallback((nextScopeKey: string | null) => {
+    const next = nextScopeKey || scopeKey;
+    if (Object.is(activeScopeRef.current, next)) return;
+    activeScopeRef.current = next;
+    previousScopeRef.current = next;
+    cancelAll();
+  }, [cancelAll, scopeKey]);
+
   const request = useCallback((requester: ConfirmationRequester, options: ConfirmationOptions): Promise<boolean> => {
     if (options.signal?.aborted) return Promise.resolve(false);
     const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
@@ -295,6 +304,7 @@ export default function ConfirmationHost({ children, portalContainer, settingsTi
   useEffect(() => {
     if (Object.is(previousScopeRef.current, scopeKey)) return;
     previousScopeRef.current = scopeKey;
+    activeScopeRef.current = scopeKey;
     cancelAll();
   }, [cancelAll, scopeKey]);
 
@@ -306,7 +316,7 @@ export default function ConfirmationHost({ children, portalContainer, settingsTi
     };
   }, [cancelAll]);
 
-  const contextValue = useMemo(() => ({ request, cancelRequester }), [cancelRequester, request]);
+  const contextValue = useMemo(() => ({ request, cancelRequester, setScopeKey }), [cancelRequester, request, setScopeKey]);
   return (
     <ConfirmationContext.Provider value={contextValue}>
       {children}

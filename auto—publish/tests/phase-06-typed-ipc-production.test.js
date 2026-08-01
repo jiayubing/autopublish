@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
@@ -11,6 +12,38 @@ const {
   createWorkspaceDataInvalidation,
 } = require("../desktop/workspace-data-invalidation");
 
+function loadPreloadEventHarness() {
+  const exposed = {};
+  const listeners = new Map();
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../desktop/preload.js"),
+    "utf8",
+  );
+  vm.runInNewContext(source, {
+    require(name) {
+      if (name === "electron")
+        return {
+          contextBridge: {
+            exposeInMainWorld(name, api) {
+              exposed[name] = api;
+            },
+          },
+          ipcRenderer: {
+            invoke() {},
+            on(channel, listener) {
+              listeners.set(channel, listener);
+            },
+            removeListener() {},
+          },
+        };
+      if (name === "./ipc/contracts/production-registry")
+        return { productionIpcRegistry };
+      throw new Error(`Unexpected preload dependency: ${name}`);
+    },
+  });
+  return { api: exposed.desktopConsole, listeners };
+}
+
 test("production typed query and command reject legacy wire input and return versioned safe results", async () => {
   const handlers = new Map();
   const guarded = createAuthenticatedIpcMain(
@@ -18,10 +51,8 @@ test("production typed query and command reject legacy wire input and return ver
     async () => undefined,
   );
   guarded.handle("media:get-balance", async () => ({ ok: true, data: { balance: "12.50" } }));
-  guarded.handle("media:stop-submit", async () => ({ ok: true, data: { stopped: true } }));
 
   const balance = productionIpcRegistry.byChannel("media:get-balance");
-  const stop = productionIpcRegistry.byChannel("media:stop-submit");
   const rejected = await handlers.get(balance.channel)({});
   assert.equal(rejected.schemaVersion, 1);
   assert.equal(rejected.ok, false);
@@ -31,9 +62,16 @@ test("production typed query and command reject legacy wire input and return ver
     await handlers.get(balance.channel)({}, productionIpcRegistry.encodeRequest(balance, {})),
     { schemaVersion: 1, ok: true, data: { balance: "12.50" } },
   );
-  assert.deepEqual(
-    await handlers.get(stop.channel)({}, productionIpcRegistry.encodeRequest(stop, {})),
-    { schemaVersion: 1, ok: true, data: { stopped: true } },
+});
+
+test("authenticated registrar rejects an unregistered non-Auth channel before handler installation", () => {
+  const guarded = createAuthenticatedIpcMain(
+    { handle: () => { throw new Error("must not register"); } },
+    async () => undefined,
+  );
+  assert.throws(
+    () => guarded.handle("media:typo", async () => ({ ok: true, data: {} })),
+    { code: "IPC_CONTRACT_REQUIRED" },
   );
 });
 
@@ -117,6 +155,43 @@ test("preload raw transport is closed except for the explicit Phase 07 Auth exem
   assert.doesNotMatch(source, /!contract\s*\|\|\s*contract\.kind\s*!==\s*["']event["']\)\s*return electronIpcRenderer\.on/);
 });
 
+test("preload drops malformed typed content events before public listeners", () => {
+  const { api, listeners } = loadPreloadEventHarness();
+  const received = [];
+  api.content.onDoubaoQueueState((payload) => received.push(payload));
+  api.content.onGenerationBatchState((payload) => received.push(payload));
+  api.content.onArticleRemovalTransaction((payload) => received.push(payload));
+  for (const channel of [
+    "content:doubao-queue-state",
+    "content:generation-batch-state",
+    "content:article-removal-transaction",
+  ])
+    listeners.get(channel)({}, { schemaVersion: 1 });
+  assert.deepEqual(received, []);
+});
+
+test("preload invokes a throwing typed event listener exactly once", () => {
+  const { api, listeners } = loadPreloadEventHarness();
+  const failure = new Error("listener failed");
+  let calls = 0;
+  api.workspaceData.onInvalidated(() => {
+    calls += 1;
+    throw failure;
+  });
+  const payload = {
+    schemaVersion: 1,
+    workspaceRuntimeId: "runtime-1",
+    revision: 1,
+    scopes: ["contentSources"],
+    reasonCode: "CONTENT_SOURCE_CHANGED",
+  };
+  assert.throws(
+    () => listeners.get("workspace:data-invalidated")({}, payload),
+    (error) => error === failure,
+  );
+  assert.equal(calls, 1);
+});
+
 test("every production contract error closes to a parseable SafeOperationalError", () => {
   for (const contract of productionIpcRegistry.list()) {
     if (contract.kind === "event") continue;
@@ -128,6 +203,31 @@ test("every production contract error closes to a parseable SafeOperationalError
         JSON.stringify(response),
         /[A-Z]:\\|"stack"\s*:|"filePath"\s*:|"workspacePath"\s*:|"cookie"\s*:|"apiKey"\s*:/i,
       );
+    }
+  }
+});
+
+test("every production capability rejects semantically sensitive but shape-valid safe error text", () => {
+  const sensitive = [
+    "C:\\private\\workspace\\data.sqlite",
+    "https://user:password@example.test/published?token=secret#cookie",
+    "Cookie: session=secret; API key=secret",
+    "Error: remote failed\n    at publish (C:\\private\\worker.js:1:1)",
+    "原始投稿正文：仅供内部使用",
+  ];
+  for (const contract of productionIpcRegistry.list()) {
+    if (contract.kind === "event" || contract.errorCodes.length === 0) continue;
+    const code = contract.errorCodes[0];
+    for (const userMessage of sensitive) {
+      const response = productionIpcRegistry.failure(contract, {
+        code,
+        category: "internal",
+        retryability: "manual-check",
+        userMessage,
+        diagnosticId: "diag-unsafe-path",
+      });
+      assert.doesNotMatch(JSON.stringify(response), /private|password|cookie|api key|原始投稿正文|diag-unsafe-path/i, `${contract.channel}:${userMessage}`);
+      assert.deepEqual(response.error, { code, ...contract.errors[code] });
     }
   }
 });

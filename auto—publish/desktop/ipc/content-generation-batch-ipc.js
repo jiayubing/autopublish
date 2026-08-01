@@ -146,11 +146,7 @@ function registerContentGenerationBatchIpc(deps) {
   const service = values.contentGenerationBatchService;
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation batch IPC dependencies are required");
   ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(async function() { return safePreview(await service.preview(input(value))); }); });
-  ipcMain.handle("content:create-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createBatch(input(value))) }; }); });
   ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createAndStartBatch(input(value))) }; }); });
-  ipcMain.handle("content:list-generation-batches", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return { batches: service.list().map(safeBatch) }; }); });
-  ipcMain.handle("content:get-generation-batch", function(event, value) { return invoke(function() { return { batch: safeBatch(service.get(input(value).batchId)) }; }); });
-  ipcMain.handle("content:start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.startBatch(input(value))) }; }); });
   ipcMain.handle("content:stop-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.stopBatch(value === undefined ? undefined : input(value))) }; }); });
   ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.pauseBatch(value === undefined ? undefined : input(value))) }; }); });
   ipcMain.handle("content:continue-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.continueBatch(input(value))) }; }); });
@@ -158,7 +154,6 @@ function registerContentGenerationBatchIpc(deps) {
   ipcMain.handle("content:retry-failed-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.retryFailed(input(value))) }; }); });
   ipcMain.handle("content:preview-cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.previewCancelPending(input(value)); }); });
   ipcMain.handle("content:cancel-pending-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.cancelPending(input(value))) }; }); });
-  ipcMain.handle("content:get-generation-batch-state", function(event, value) { return invoke(function() { if (value !== undefined) input(value); return safeState(service.getState()); }); });
   ipcMain.handle("content:get-generation-runtime-snapshot", function() { return invoke(function() {
     if (typeof service.getRuntimeSnapshot === "function") return safeRuntimeSnapshot(service.getRuntimeSnapshot());
     const runtime = safeState(service.getState());

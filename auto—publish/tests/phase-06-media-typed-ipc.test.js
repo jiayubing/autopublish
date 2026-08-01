@@ -22,12 +22,10 @@ const MEDIA_CHANNELS = [
   "media:get-drafts",
   "media:get-draft",
   "media:set-draft",
-  "media:remove-draft",
   "media:scan-articles",
   "media:preview-article",
   "media:build-confirmation",
   "media:submit-selected",
-  "media:stop-submit",
   "media:get-orders",
   "media:sync-order",
   "media:open-published-url",
@@ -94,11 +92,41 @@ test("public media pool command projects a full Renderer resource to its exact s
   );
 });
 
-test("all 19 media invokes have versioned exact contracts", () => {
+test("order query DTO exposes only the published-link fact and never raw evidence or workflow identifiers", () => {
+  const contract = productionIpcRegistry.byCapability("media.getOrders");
+  const payload = productionIpcRegistry.success(contract, {
+    items: [
+      {
+        title: "Fixture",
+        orderNid: "order-1",
+        statusCode: "2",
+        submittedAt: "2026-07-28T00:00:00.000Z",
+        publishedAt: "2026-07-28T00:01:00.000Z",
+        resourceName: "媒体",
+        price: "1",
+        hasPublishedUrl: true,
+      },
+    ],
+  });
+  const order = payload.data.items[0];
+  for (const key of [
+    "orderUrl",
+    "publicationId",
+    "attemptId",
+    "publicationStatus",
+    "resourceId",
+    "filename",
+    "errorCode",
+  ])
+    assert.equal(key in order, false, key);
+  assert.equal(order.hasPublishedUrl, true);
+});
+
+test("all 17 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 19);
+  assert.equal(media.length, 17);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),
@@ -244,7 +272,7 @@ test("media registrar projects resources and articles before typed success valid
         {
           resourceId: "resource-1",
           name: "Fixture resource",
-          price: "12.5",
+          price: 12.5,
           raw: { apiKey: "provider-secret", path: "C:\\private" },
         },
       ],
@@ -293,7 +321,14 @@ test("media registrar projects resources and articles before typed success valid
         {
           orderId: "order-published",
           status: "published",
-          remoteStatusCode: "2",
+          supplierStatusCode: "2",
+          remoteUrl: "https://publisher.example/article/1",
+        },
+      ],
+      listOrderDisplayViews: () => [
+        {
+          orderId: "order-published",
+          supplierStatusCode: "2",
           remoteUrl: "https://publisher.example/article/1",
         },
       ],

@@ -17,7 +17,9 @@ let buildDir;
 
 function installDesktopFixture(page) {
   return page.addInitScript(() => {
+    const workspaceRuntimeId = 'fixture-runtime-1';
     const state = {
+      workspaceRuntimeId,
       queueCalls: 0,
       queueRevision: 0,
       phase: 'idle',
@@ -31,6 +33,7 @@ function installDesktopFixture(page) {
       queue: [],
     });
     const platformState = () => ({
+      workspaceRuntimeId: state.workspaceRuntimeId,
       isBatchRunning: state.phase === 'running',
       isStopPending: false,
       isPlatformRunning: state.phase === 'running',
@@ -55,6 +58,7 @@ function installDesktopFixture(page) {
       cancelSelection: () => response({ state: 'ready', workspacePath: 'fixture', envOverride: false }),
     };
     const workspaceData = {
+      getRuntimeIdentity: () => response({ workspaceRuntimeId: state.workspaceRuntimeId, revision: state.queueRevision }),
       onInvalidated: (listener) => {
         state.invalidationListeners.push(listener);
         return () => {
@@ -110,7 +114,13 @@ function installDesktopFixture(page) {
       state,
       emitWorkspaceInvalidated(revision) {
         state.queueRevision = revision;
-        const event = { schemaVersion: 1, workspaceRuntimeId: 'fixture-runtime-1', revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_TERMINAL' };
+        const event = { schemaVersion: 1, workspaceRuntimeId: state.workspaceRuntimeId, revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_TERMINAL' };
+        state.invalidationListeners.slice().forEach((listener) => listener(event));
+      },
+      switchWorkspace(nextRuntimeId, revision) {
+        state.workspaceRuntimeId = nextRuntimeId;
+        state.queueRevision = revision;
+        const event = { schemaVersion: 1, workspaceRuntimeId: nextRuntimeId, revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_RUNTIME_SWITCH' };
         state.invalidationListeners.slice().forEach((listener) => listener(event));
       },
       emitPlatformState(next) {
@@ -241,6 +251,44 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     }));
     await page.locator('#nav-item-platforms').click();
     await page.getByText('8 / 20').first().waitFor();
+    await page.close();
+  });
+
+  it('rejects delayed platform events from workspace A after the production runtime switches to B', async () => {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    page.setDefaultTimeout(10000);
+    await installDesktopFixture(page);
+    await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
+    await page.getByText('数据已就绪').waitFor();
+    await page.locator('#nav-item-platforms').click();
+    await page.getByRole('heading', { name: '其他平台投稿' }).waitFor();
+
+    const beforeSwitch = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
+    await page.evaluate(() => window.__platformQueueLifecycle.switchWorkspace('fixture-runtime-2', 60));
+    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() > expected, beforeSwitch);
+    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({
+      workspaceRuntimeId: 'fixture-runtime-2', runId: 'run-b', phase: 'running', total: 20, processed: 7,
+      succeeded: 6, failed: 1, skipped: 0, uncertain: 0,
+      updatedAt: new Date(Date.now() + 1000).toISOString(),
+    }));
+    await page.getByText('7 / 20').first().waitFor();
+
+    const beforeDelayedA = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
+    await page.evaluate(() => {
+      window.__platformQueueLifecycle.emitPlatformState({
+        workspaceRuntimeId: 'fixture-runtime-1', runId: 'run-a', phase: 'heartbeat', total: 20, processed: 19,
+        succeeded: 19, failed: 0, skipped: 0, uncertain: 0,
+        updatedAt: new Date(Date.now() + 2000).toISOString(),
+      });
+      window.__platformQueueLifecycle.emitPlatformState({
+        workspaceRuntimeId: 'fixture-runtime-1', runId: 'run-a', phase: 'completed', queueRevision: 61,
+        total: 20, processed: 20, succeeded: 20, failed: 0, skipped: 0, uncertain: 0,
+        updatedAt: new Date(Date.now() + 3000).toISOString(),
+      });
+    });
+    await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), beforeDelayedA, 'A terminal event must not refresh B queue');
+    await page.getByText('7 / 20').first().waitFor();
     await page.close();
   });
 });

@@ -1,5 +1,5 @@
 import type { AccountProfile, IpcResponse } from "../types";
-import { ipcError, isElectron, unavailable } from "./transport";
+import { ipcError, requireBridgeApi } from "./transport";
 
 type AccountProfileApi = {
   listAccountProfiles: () => Promise<
@@ -13,29 +13,21 @@ type AccountProfileApi = {
 };
 
 const accountProfileApi = () =>
-  window.desktopConsole?.platforms as AccountProfileApi | undefined;
+  requireBridgeApi<AccountProfileApi>("platforms");
 
 export async function listAccountProfiles(): Promise<AccountProfile[]> {
-  if (
-    !isElectron() ||
-    typeof accountProfileApi()?.listAccountProfiles !== "function"
-  )
-    throw unavailable("平台账号档案服务不可用");
-  const result = await accountProfileApi()!.listAccountProfiles();
+  const result = await accountProfileApi().listAccountProfiles();
   if (!result.ok) throw ipcError(result.error, "读取平台账号档案失败");
-  return Array.isArray(result.data?.profiles) ? result.data.profiles : [];
+  if (!Array.isArray(result.data?.profiles))
+    throw ipcError(undefined, "读取平台账号档案失败");
+  return result.data.profiles;
 }
 
 export async function confirmAccountProfile(input: {
   platformId: string;
   displayName: string;
 }): Promise<AccountProfile> {
-  if (
-    !isElectron() ||
-    typeof accountProfileApi()?.confirmAccountProfile !== "function"
-  )
-    throw unavailable("平台账号档案服务不可用");
-  const result = await accountProfileApi()!.confirmAccountProfile({
+  const result = await accountProfileApi().confirmAccountProfile({
     ...input,
     confirmed: true,
   });

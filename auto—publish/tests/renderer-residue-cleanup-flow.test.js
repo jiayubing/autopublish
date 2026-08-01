@@ -211,7 +211,6 @@ function installDesktopFixture(page, scenario) {
         getDrafts: () => ok({ items: [] }),
         getDraft: () => ok({ draft: null }),
         setDraft: () => ok({ completed: true }),
-        removeDraft: () => ok({ completed: true }),
         buildConfirmation: () =>
           ok({
             articleCount: 0,

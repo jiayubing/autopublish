@@ -3,10 +3,11 @@
 const crypto = require("node:crypto");
 
 function quotedPrice(value) {
-  if (value === undefined || value === null || value === "") return undefined;
-  const price = Number(value);
-  return Number.isFinite(price) && price >= 0 && price <= 100000000
-    ? price
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100000000
+    ? value
     : undefined;
 }
 

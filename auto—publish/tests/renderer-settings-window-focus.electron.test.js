@@ -38,7 +38,7 @@ function writeFixture(directory) {
     '  aiProvider: { getStatus: () => data({ source: "application", configured: false, baseUrl: "", model: "", timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: null }), save: () => data({}), testConnection: () => data({}), clear: () => data({ cleared: true }) },',
     '  platformSettings,',
     '  runtimeDiagnostics: { get: () => data({ ok: true, buildInfo: { version: "fixture", commit: "fixture", dirty: false }, capabilities: {}, errors: [], warnings: [] }) },',
-    '  content: { getGenerationBatchState: () => data({ state: "idle", status: "idle", isBatchRunning: false, isStopPending: false }), onGenerationBatchState: () => () => {}, listClients: () => data([]), listResearch: () => data([]), listQuestions: () => data([]), listTemplates: () => data([]), listTemplateCatalog: () => data({ revision: "fixture", platforms: [], templates: [], diagnostics: [] }) }',
+    '  content: { onGenerationBatchState: () => () => {}, listClients: () => data([]), listResearch: () => data([]), listQuestions: () => data([]), listTemplateCatalog: () => data({ revision: "fixture", platforms: [], templates: [], diagnostics: [] }) }',
     '});',
     'contextBridge.exposeInMainWorld("__focusTest", { getState: () => ({ saves, clears }) });'
   ].join("\n");
@@ -65,6 +65,9 @@ suite("Electron renderer settings focus regression", { concurrency: false }, () 
       app = await electron.launch({ executablePath: electronBinary, args: [main], env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
       const page = await app.firstWindow();
       page.setDefaultTimeout(10000);
+      page.on("pageerror", (error) =>
+        process.stderr.write(`focus renderer page error: ${error.stack || error.message}\n`),
+      );
       page.on("dialog", (dialog) => { throw new Error("native dialog opened: " + dialog.message()); });
       await page.waitForSelector("#nav-item-settings");
       await page.getByRole("button", { name: "配置中心" }).click();

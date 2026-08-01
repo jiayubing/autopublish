@@ -165,6 +165,7 @@ test("platform queue contract rejects scanDir and submission results reject path
 test("platform-state accepts a safe snapshot and rejects raw errors", () => {
   const contract = registry.byChannel("platform-state");
   const snapshot = {
+    workspaceRuntimeId: "runtime-1",
     runId: "run-1",
     phase: "running",
     total: 1,
@@ -278,7 +279,7 @@ test("authenticated platform and account registrars return path-free typed proje
 });
 
 test("desktop task service encodes every platform-state payload through the shared contract", () => {
-  const payload = encodePlatformStateEvent({ isPlatformRunning: false });
+  const payload = encodePlatformStateEvent({ workspaceRuntimeId: "runtime-1", isPlatformRunning: false });
   assert.equal(payload.schemaVersion, 1);
   const event = productionIpcRegistry.byChannel("platform-state");
   assert.equal(

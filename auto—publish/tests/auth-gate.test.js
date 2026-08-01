@@ -48,6 +48,7 @@ describe("renderer auth gate", { concurrency: false }, function() {
           onStateChanged: () => () => {},
         },
         workspace: { getBootstrapState: () => response({ state: "selection_required", workspacePath: null, envOverride: false }) },
+        workspaceData: { getRuntimeIdentity: () => response({ workspaceRuntimeId: "auth-recovery-runtime", revision: 1 }), onInvalidated: () => () => {} },
       };
     });
     await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });

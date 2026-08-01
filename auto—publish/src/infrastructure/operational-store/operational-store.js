@@ -5,12 +5,63 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 const domain = require("../../domain");
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const owners = new Map();
 function fail(code) {
   const e = new Error(code);
   e.code = code;
   return e;
+}
+function supplierStatusCode(value) {
+  const code =
+    typeof value === "string" ? value : String(value == null ? "" : value);
+  return ["0", "1", "2", "4", "9"].includes(code) ? code : null;
+}
+function supplierObservation(evidence) {
+  const value = evidence && evidence.supplierObservation;
+  const statusCode = value && supplierStatusCode(value.statusCode);
+  if (statusCode)
+    return {
+      statusCode,
+      observedAt: observationTimestamp(value.observedAt),
+      publishedAt: observationTimestamp(value.publishedAt),
+    };
+  return null;
+}
+function observationTimestamp(value) {
+  if (typeof value !== "string" || value.length > 64) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+function safeEvidenceUrl(value) {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+      ? url.href
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+function safeDisplayText(value, max) {
+  return typeof value === "string" &&
+    value.length <= max &&
+    !/[\x00-\x1f\x7f]/.test(value)
+    ? value
+    : "";
+}
+function canonicalDisplayPrice(value) {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100000000
+    ? value
+    : null;
 }
 function iso(clock) {
   const d = new Date(clock());
@@ -136,6 +187,7 @@ CREATE INDEX recovery_actionable ON recovery_intents(state,updated_at);
 CREATE INDEX job_actionable ON post_processing_jobs(status,claim_until);
 CREATE INDEX submission_claimable ON submission_items(batch_id,status,claim_until,item_id);`;
 const V2_SCHEMA = `CREATE TABLE submission_item_operations(operation_id TEXT PRIMARY KEY NOT NULL, batch_id TEXT NOT NULL REFERENCES submission_batches(batch_id), item_id TEXT NOT NULL REFERENCES submission_items(item_id), action TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN('prepared','main_staged','sidecar_staged','staged','state_applied','complete')), expected_fingerprint TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(batch_id,item_id,action));`;
+const V3_SCHEMA = `CREATE TABLE IF NOT EXISTS order_display_snapshots(attempt_id TEXT PRIMARY KEY NOT NULL REFERENCES publication_attempts(attempt_id), title_snapshot TEXT NOT NULL, filename TEXT NOT NULL, resource_name_snapshot TEXT NOT NULL, quoted_price REAL, created_at TEXT NOT NULL);`;
 function tableNames(db) {
   return db
     .prepare("SELECT name FROM sqlite_master WHERE type='table'")
@@ -307,6 +359,38 @@ INSERT INTO submission_item_operations(operation_id,batch_id,item_id,action,stat
 SELECT operation_id,batch_id,item_id,action,state,expected_fingerprint,payload_json,created_at,updated_at FROM submission_item_operations_legacy_phase_05;
 DROP TABLE submission_item_operations_legacy_phase_05;`);
 }
+function verifyV3Structure(db, errorCode) {
+  const columns = tableNames(db).includes("order_display_snapshots")
+    ? db.prepare("PRAGMA table_info(order_display_snapshots)").all()
+    : [];
+  const foreignKeys = tableNames(db).includes("order_display_snapshots")
+    ? db.prepare("PRAGMA foreign_key_list(order_display_snapshots)").all()
+    : [];
+  const required = [
+    ["attempt_id", "TEXT", 1, 1],
+    ["title_snapshot", "TEXT", 1, 0],
+    ["filename", "TEXT", 1, 0],
+    ["resource_name_snapshot", "TEXT", 1, 0],
+    ["quoted_price", "REAL", 0, 0],
+    ["created_at", "TEXT", 1, 0],
+  ];
+  if (
+    columns.length !== required.length ||
+    !required.every(
+      ([name, type, notnull, pk], index) =>
+        columns[index] &&
+        columns[index].name === name &&
+        columns[index].type.toUpperCase() === type &&
+        columns[index].notnull === notnull &&
+        columns[index].pk === pk,
+    ) ||
+    foreignKeys.length !== 1 ||
+    foreignKeys[0].table !== "publication_attempts" ||
+    foreignKeys[0].from !== "attempt_id" ||
+    foreignKeys[0].to !== "attempt_id"
+  )
+    throw fail(errorCode);
+}
 function migrationFault(hook, point, db) {
   if (hook) hook(point, db);
 }
@@ -330,7 +414,7 @@ function schema(db, migrationHook) {
   if (version < 1) throw fail("OPERATIONAL_SCHEMA_INVALID");
   verifyMigrationHistory(
     db,
-    version === 1 ? [1] : [1, 2],
+    version === 1 ? [1] : version === 2 ? [1, 2] : [1, 2, 3],
     "OPERATIONAL_SCHEMA_INVALID",
   );
   if (version === 1) {
@@ -362,9 +446,28 @@ function schema(db, migrationHook) {
     });
     version = 2;
   }
+  if (version === 2) {
+    transaction(db, () => {
+      migrationFault(migrationHook, "before-v3", db);
+      db.exec(V3_SCHEMA);
+      verifyV3Structure(db, "OPERATIONAL_SCHEMA_MIGRATION_INVALID");
+      migrationFault(migrationHook, "after-v3-create", db);
+      db.prepare("INSERT INTO schema_migrations VALUES(3,?)").run(
+        new Date().toISOString(),
+      );
+      migrationFault(migrationHook, "after-v3-record", db);
+      verifyMigrationHistory(
+        db,
+        [1, 2, 3],
+        "OPERATIONAL_SCHEMA_MIGRATION_INVALID",
+      );
+    });
+    version = 3;
+  }
   if (version !== SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_INVALID");
-  verifyMigrationHistory(db, [1, 2], "OPERATIONAL_SCHEMA_INVALID");
+  verifyMigrationHistory(db, [1, 2, 3], "OPERATIONAL_SCHEMA_INVALID");
   verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+  verifyV3Structure(db, "OPERATIONAL_SCHEMA_INVALID");
 }
 function integrityOk(db) {
   const result = db.prepare("PRAGMA integrity_check").all();
@@ -383,6 +486,10 @@ function createOperationalStore(options) {
     internalBeforeCommit =
       typeof o.internalBeforeCommit === "function"
         ? o.internalBeforeCommit
+        : null,
+    internalOrderProjectionObserver =
+      typeof o.internalOrderProjectionObserver === "function"
+        ? o.internalOrderProjectionObserver
         : null;
   if (owners.has(filename)) throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
   if (fs.existsSync(filename) && fs.lstatSync(filename).isSymbolicLink())
@@ -566,7 +673,7 @@ function createOperationalStore(options) {
       () => {
         const attempt = db
           .prepare(
-            "SELECT a.publication_id,p.target_json FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id WHERE a.attempt_id=?",
+            "SELECT a.publication_id,p.article_id,p.target_key,p.target_json FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id WHERE a.attempt_id=?",
           )
           .get(attemptId);
         if (!attempt) throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
@@ -604,17 +711,42 @@ function createOperationalStore(options) {
             throw fail("OPERATIONAL_BATCH_ITEM_INVALID");
           const item = db
             .prepare(
-              "SELECT payload_json FROM submission_items WHERE item_id=?",
+              "SELECT article_id,target_key,payload_json FROM submission_items WHERE item_id=?",
             )
             .get(v.batchItemId);
           if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
-          const payload = Object.assign({}, fromText(item.payload_json) || {}, {
+          const itemPayload = fromText(item.payload_json) || {};
+          if (
+            item.article_id !== attempt.article_id ||
+            item.target_key !== attempt.target_key ||
+            (target &&
+              target.kind === "media" &&
+              itemPayload.attemptId !== attemptId) ||
+            (itemPayload.attemptId !== undefined &&
+              itemPayload.attemptId !== attemptId)
+          )
+            throw fail("OPERATIONAL_BATCH_ITEM_MISMATCH");
+          const payload = Object.assign({}, itemPayload, {
             attemptId,
             outcomeStatus: outcome.status,
             ...(outcome.evidence
               ? { remoteId: outcome.evidence.remoteId }
               : {}),
           });
+          if (
+            outcome.evidence &&
+            (fromText(attempt.target_json) || {}).kind === "media"
+          )
+            db.prepare(
+              "INSERT OR REPLACE INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at) VALUES(?,?,?,?,?,?)",
+            ).run(
+              attemptId,
+              safeDisplayText(payload.titleSnapshot, 1000),
+              safeDisplayText(payload.filename, 255),
+              safeDisplayText(payload.resourceNameSnapshot, 500),
+              canonicalDisplayPrice(payload.quotedPrice),
+              stamp,
+            );
           db.prepare(
             "UPDATE submission_items SET status=?,revision=revision+1,payload_json=? WHERE item_id=?",
           ).run(
@@ -1488,6 +1620,7 @@ function createOperationalStore(options) {
         .map((row) => {
           const target = fromText(row.target_json) || {};
           const evidence = fromText(row.payload_json) || {};
+          const observation = supplierObservation(evidence);
           return Object.freeze({
             orderId: row.order_id,
             orderNid: row.order_id,
@@ -1497,95 +1630,140 @@ function createOperationalStore(options) {
             articleId: row.article_id,
             mediaResourceId: target.mediaResourceId || null,
             status: row.status,
-            remoteStatusCode:
-              typeof evidence.remoteStatusCode === "string"
-                ? evidence.remoteStatusCode
-                : null,
+            supplierStatusCode: observation ? observation.statusCode : null,
+            supplierObservedAt: observation ? observation.observedAt : null,
+            publishedAt: observation ? observation.publishedAt : null,
             remoteUrl: evidence.remoteUrl || null,
             createdAt: row.created_at,
           });
         }),
     );
   }
-  function reconcileRemoteOrder(input) {
+  // This is the only order-list read model.  It performs one bounded join for
+  // the current orders and parses only each matched display snapshot; callers
+  // must never rebuild it by walking every historical submission batch.
+  function listOrderDisplayViews() {
+    open();
+    const rows = db
+      .prepare(
+        "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id ORDER BY o.created_at DESC LIMIT 20000",
+      )
+      .all();
+    if (internalOrderProjectionObserver)
+      internalOrderProjectionObserver({
+        sqlCount: 1,
+        rowCount: rows.length,
+        parsedPayloadCount: rows.length,
+      });
+    return Object.freeze(
+      rows.map((row) => {
+        const evidence = fromText(row.payload_json) || {};
+        const observation = supplierObservation(evidence);
+        const target = fromText(row.target_json) || {};
+        return Object.freeze({
+          orderId: row.order_id,
+          orderNid: row.order_id,
+          attemptId: row.attempt_id,
+          publicationId: row.publication_id,
+          publicationStatus: row.status,
+          articleId: row.article_id,
+          mediaResourceId: target.mediaResourceId || null,
+          submittedAt: row.created_at,
+          supplierStatusCode: observation ? observation.statusCode : "",
+          supplierObservedAt: observation ? observation.observedAt : null,
+          publishedAt: observation ? observation.publishedAt : null,
+          remoteUrl: evidence.remoteUrl || null,
+          titleSnapshot: safeDisplayText(row.title_snapshot, 1000),
+          filename: safeDisplayText(row.filename, 255),
+          resourceNameSnapshot: safeDisplayText(
+            row.resource_name_snapshot,
+            500,
+          ),
+          quotedPrice: canonicalDisplayPrice(row.quoted_price),
+        });
+      }),
+    );
+  }
+  function recordRemoteOrderObservation(input) {
     open();
     const v = input || {};
     if (
       typeof v.orderId !== "string" ||
       !v.orderId ||
-      !v.outcome ||
-      !["published", "failed", "submitted", "uncertain"].includes(
-        v.outcome.status,
-      )
+      !v.observation ||
+      !supplierStatusCode(v.observation.statusCode)
     )
-      throw fail("OPERATIONAL_ORDER_RECONCILE_INVALID");
+      throw fail("OPERATIONAL_ORDER_OBSERVATION_INVALID");
     const stamp = iso(clock);
+    const publishedAt = observationTimestamp(v.observation.publishedAt);
+    if (v.observation.publishedAt !== undefined && !publishedAt)
+      throw fail("OPERATIONAL_ORDER_OBSERVATION_INVALID");
     return transaction(
       db,
       () => {
         const row = db
           .prepare(
-            "SELECT o.attempt_id,o.remote_id,p.publication_id,p.target_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE o.order_id=?",
+            "SELECT o.attempt_id,o.remote_id,o.payload_json,p.publication_id,p.target_json,p.status FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE o.order_id=?",
           )
           .get(v.orderId);
         if (!row || (fromText(row.target_json) || {}).kind !== "media")
           throw fail("OPERATIONAL_ORDER_NOT_FOUND");
-        const outcome = v.outcome;
-        if (
-          outcome.remoteStatusCode !== undefined &&
-          !["0", "1", "2", "4", "9"].includes(outcome.remoteStatusCode)
-        )
-          throw fail("OPERATIONAL_ORDER_RECONCILE_INVALID");
-        if (
-          outcome.status === "published" &&
-          (typeof outcome.remoteUrl !== "string" ||
-            !/^https:\/\//.test(outcome.remoteUrl))
-        )
-          throw fail("OPERATIONAL_ORDER_EVIDENCE_REQUIRED");
-        if (
-          outcome.status === "failed" &&
-          (!outcome.error || typeof outcome.error.code !== "string")
-        )
-          throw fail("OPERATIONAL_ORDER_RECONCILE_INVALID");
-        const evidence = {
-          remoteId: row.remote_id,
-          ...(outcome.remoteStatusCode !== undefined
-            ? { remoteStatusCode: outcome.remoteStatusCode }
+        const statusCode = supplierStatusCode(v.observation.statusCode);
+        let remoteUrl = null;
+        if (v.observation.remoteUrl !== undefined) {
+          remoteUrl = safeEvidenceUrl(v.observation.remoteUrl);
+          if (!remoteUrl) throw fail("OPERATIONAL_ORDER_EVIDENCE_REQUIRED");
+        }
+        const currentEvidence = fromText(row.payload_json) || {};
+        const previousObservation = supplierObservation(currentEvidence);
+        const observation = Object.freeze({
+          statusCode,
+          observedAt: stamp,
+          ...(publishedAt ||
+          (previousObservation && previousObservation.publishedAt)
+            ? { publishedAt: publishedAt || previousObservation.publishedAt }
             : {}),
-          ...(outcome.status === "published"
-            ? { remoteUrl: outcome.remoteUrl }
-            : {}),
-        };
-        db.prepare(
-          "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
-        ).run(outcome.status, stamp, row.attempt_id);
-        db.prepare(
-          "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
-        ).run(outcome.status, stamp, row.publication_id);
-        db.prepare(
-          "UPDATE remote_evidence SET remote_url=?,evidence_json=? WHERE attempt_id=? AND remote_id=?",
-        ).run(
-          evidence.remoteUrl || null,
-          text(evidence),
-          row.attempt_id,
-          row.remote_id,
-        );
+        });
+        const evidence = Object.assign({}, currentEvidence, {
+          supplierObservation: observation,
+          ...(remoteUrl ? { remoteUrl } : {}),
+        });
         db.prepare(
           "UPDATE remote_orders SET payload_json=? WHERE order_id=?",
         ).run(text(evidence), v.orderId);
-        db.prepare(
-          "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
-        ).run(
-          outcome.status === "uncertain" ? "manual_check" : "resolved",
-          text(outcome.error || evidence),
-          stamp,
-          row.attempt_id,
-        );
+        if (remoteUrl)
+          db.prepare(
+            "UPDATE remote_evidence SET remote_url=?,evidence_json=? WHERE attempt_id=? AND remote_id=?",
+          ).run(remoteUrl, text(evidence), row.attempt_id, row.remote_id);
+        // A supplier observation is not a canonical workflow transition.  The
+        // sole exception is status 2 accompanied by safe published evidence:
+        // that receipt may promote an in-flight attempt, but no supplier code
+        // (notably 9) may revoke an already published fact.
+        let publicationStatus = row.status;
+        if (
+          statusCode === "2" &&
+          remoteUrl &&
+          ["queued", "remote_started", "submitted", "uncertain"].includes(
+            row.status,
+          )
+        ) {
+          publicationStatus = "published";
+          db.prepare(
+            "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
+          ).run("published", stamp, row.attempt_id);
+          db.prepare(
+            "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
+          ).run("published", stamp, row.publication_id);
+          db.prepare(
+            "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
+          ).run("resolved", text(evidence), stamp, row.attempt_id);
+        }
         return Object.freeze({
           orderId: v.orderId,
           attemptId: row.attempt_id,
           publicationId: row.publication_id,
-          status: outcome.status,
+          publicationStatus,
+          supplierStatusCode: statusCode,
         });
       },
       internalBeforeCommit,
@@ -1603,8 +1781,9 @@ function createOperationalStore(options) {
       version !== SCHEMA_VERSION
     )
       throw fail("OPERATIONAL_VERIFY_FAILED");
-    verifyMigrationHistory(db, [1, 2], "OPERATIONAL_VERIFY_FAILED");
+    verifyMigrationHistory(db, [1, 2, 3], "OPERATIONAL_VERIFY_FAILED");
     verifyV2Structure(db, "OPERATIONAL_VERIFY_FAILED");
+    verifyV3Structure(db, "OPERATIONAL_VERIFY_FAILED");
     return {
       schemaVersion: version,
       databasePath: filename,
@@ -1663,7 +1842,8 @@ function createOperationalStore(options) {
     listPublicationAttention,
     listPublicationRecords,
     listRemoteOrders,
-    reconcileRemoteOrder,
+    listOrderDisplayViews,
+    recordRemoteOrderObservation,
     deriveAttentionInput: listActionableRecovery,
     verify,
     backup,
@@ -1691,8 +1871,9 @@ function verifyOperationalDatabase(filename) {
       version !== SCHEMA_VERSION
     )
       throw fail("OPERATIONAL_RESTORE_INVALID");
-    verifyMigrationHistory(db, [1, 2], "OPERATIONAL_RESTORE_INVALID");
+    verifyMigrationHistory(db, [1, 2, 3], "OPERATIONAL_RESTORE_INVALID");
     verifyV2Structure(db, "OPERATIONAL_RESTORE_INVALID");
+    verifyV3Structure(db, "OPERATIONAL_RESTORE_INVALID");
     return {
       schemaVersion: version,
       tables: tables.length,

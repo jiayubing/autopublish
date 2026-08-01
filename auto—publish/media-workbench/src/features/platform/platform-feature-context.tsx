@@ -6,6 +6,7 @@ import {
   getPlatformQueue,
   getPlatformState,
   onPlatformState,
+  onPlatformStateDiagnostic,
   openPlatformLogin,
   pausePlatformSubmit,
   previewTrashedArticleQueueResidue,
@@ -13,8 +14,10 @@ import {
   submitPlatformSelection,
 } from '../../bridge/platform';
 import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
+import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 import { confirmAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
 import { createPlatformFeature } from './platform-feature.js';
+import { routePlatformTransportEvent } from './platform-event-router.js';
 
 type PlatformFeature = ReturnType<typeof createPlatformFeature>;
 
@@ -24,7 +27,8 @@ function createProductionPlatformFeature(): PlatformFeature {
   return createPlatformFeature({
     loadQueue: (_reason: string) => getPlatformQueue(),
     getRunState: getPlatformState,
-    onRunState: onPlatformState,
+    onRunState: (listener) => onPlatformState((state) =>
+      routePlatformTransportEvent(state, listener, reportRuntimeDiagnostic)),
     submit: submitPlatformSelection,
     pause: pausePlatformSubmit,
     stop: stopPlatformSubmit,
@@ -50,8 +54,10 @@ export function PlatformFeatureProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    const disposeDiagnostic = onPlatformStateDiagnostic(() =>
+      reportRuntimeDiagnostic('PLATFORM_EVENT_TRANSPORT_REJECTED', 'platform-event'));
     void feature.start();
-    return () => feature.stopTransport();
+    return () => { disposeDiagnostic(); feature.stopTransport(); };
   }, [feature]);
 
   return <PlatformFeatureContext.Provider value={feature}>{children}</PlatformFeatureContext.Provider>;

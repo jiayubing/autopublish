@@ -86,15 +86,15 @@ it("workspace invalidation owns reason-to-scope policy and emits safe monotonic 
     schemaVersion: 1,
     workspaceRuntimeId: "runtime-fixture-1",
     revision: 1,
-    scopes: ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"],
+    scopes: ["articleManagement", "articleAttention", "platformQueue"],
     reasonCode: "PUBLICATION_RECONCILED"
   }]);
   assert.equal(sent[1][1].revision, 2);
-  assert.deepEqual(invalidation.scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "navigationSummary", "orders"]);
+  assert.deepEqual(invalidation.scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders"]);
 });
 
 it("maps every production workspace mutation reason explicitly without a broad fallback", function() {
-  const submissionScopes = ["articleManagement", "articleAttention", "platformQueue", "navigationSummary"];
+  const submissionScopes = ["articleManagement", "articleAttention", "platformQueue"];
   [
     "SUBMISSION_BATCH_CANCELLED",
     "SUBMISSION_BATCH_CREATED",

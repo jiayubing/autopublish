@@ -1,13 +1,192 @@
 # Phase 06 Renderer状态与Typed IPC交接
 
+> **2026-08-01 checkpoint（当前权威）：** 最小证据修复已完成并复验：同步 callback 的必然抛错路径、动态提前 return 与 `finally { return; }` 边界均有独立回归；symbol evidence `148/148`、production matrix `33/33`、inventory/bridge fail-closed `16/16`、全量 `npm test` `1453/1453`，三套 typecheck 与定向格式检查通过。状态：`P1-CONVERGENCE-01=整改复验 GREEN，等待最终独立只读审计`；Phase 03/04/06=`IN_PROGRESS`，Phase 07=`NOT_STARTED`。Git checkpoint：`phase-06-audit-remediation-green`。后续计划可从该 checkpoint 继续执行；不得把本 checkpoint 误写为 Phase 06 `COMPLETE`。
+
+> **2026-08-01 Phase 06 独立审计后最小修复复验（最新权威，覆盖以下历史统计）：** 独立只读复核发现证据 helper 对 const 对象属性、字面量 `.length` 与 `typeof` 的静态短路值解析不足；四个永久 RED 反例已以最小 GREEN 收口。未知/动态值继续 fail-closed，未修改 production runtime、IPC contract、业务服务或制品输入。symbol `144/144`；production matrix `33/33`（109 capability、21 lifecycle、5 event）；Coordinator `7/7`、caller `3/3`、bridge fail-closed `9/9`、capability inventory `4/4`。完整 `npm test` 为 225 文件、132 suites、`1449/1449` pass、0 fail、1 个既有 Electron focus skip；Auth `16/16`、links `180/180`、packaging `33/33`、Lint、三套 typecheck、format、定向 Prettier、Renderer build `2157` modules、标准 pack smoke、diff check 全绿。当前制品尺寸为 Renderer/preload/ASAR/exe `758842`/`222731`/`7214697`/`225485824` bytes，hash 已核验。`P1-CONVERGENCE-01=整改复验 GREEN，等待最终独立只读审计`；Phase 03/04/06=`IN_PROGRESS`，Phase 07=`NOT_STARTED`；仅使用合成/临时 fixture，未访问真实数据、账号、供应商或付费系统，未 stage/commit/push/PR。
+
+> **2026-07-31 独立审计整改最终交接（当前唯一权威，覆盖以下历史记录）：** 已按计划冻结现场并串行完成 Ticket 1→4 的 RED→最小 GREEN。五个公开 `verifyCapabilityEvidence()` 反例精确为：production entry 丢弃返回 snapshot 对象、snapshot 字段只写入局部非逃逸对象、局部 shadow `Object.freeze`、`return-finally` 后不可达 snapshot read、`throw-finally` 后不可达 snapshot read；前两/后三类分别稳定返回 `lifecycle snapshot field has no reachable production consumer` 或 `lifecycle query result does not reach the recorded snapshot field`。正常 try/finally 对照保持通过。Coordinator lifecycle seam 证明 StrictMode `setup→cleanup→setup` 在 terminal dispose 后失效，现由可重入幂等 `stop()` 和 Provider cleanup `stop()` 闭合，终态 `dispose()` 仍拒绝 post-dispose register/start。
+>
+> 证据/门禁：symbol `121/121`；production matrix `33/33`，其中 capability `109/109`（43 query、61 command、5 event）、lifecycle `21/21`、event `5/5`；Coordinator `7/7`、caller `3/3`、bridge fail-closed `9/9`；完整 `npm test` `225` 文件、`132` suites、`1426/1426`；Auth `16/16`、links `180/180`、packaging `33/33`、Lint、三套 typecheck、宽/定向 Prettier、Renderer build `2157` modules、pack smoke、ASAR/source parity `10/10`、packaged preload `3/3`、Electron focus `1/1` 和 `git diff --check` 全绿。
+>
+> 制品：Renderer `index-DmAGTIWM.js` `758842` bytes/SHA-256 `048D72A0856D0F50B0A0FB241467B799EC17D0B7010AAEFFE904B54122B15641`；preload `222731` bytes/SHA-256 `0A8642AB024AD5061E8ACC71C42DB566C62DC8E9D443277C45F2EE0C41B177F4`；ASAR `7214697` bytes/SHA-256 `709A7AF4E555076F4FF695331E1B3985C5A5EF419DF2BAA8054CCF401FC8AFEA`；exe `225485824` bytes/SHA-256 `983EDAC6B0CC86DC6DD884B217AE471655E5A3943ED3FA13EFDC34953DA051D3`。分支/HEAD=`codex/refactor-program`/`3992736d01413d83504253c7d905c21fcfe3183c`，status `M=117/D=14/??=21`，staged=0。
+>
+> 边界与状态：只使用合成/临时 fixture，无真实 workspace、内容库、Auth 数据库、账号、供应商或外部/付费系统访问；真实投稿、同步、扣费、付费 submit=`0`。`P1-CONVERGENCE-01=整改复验 GREEN，等待最终独立只读审计`；Phase 03/04/06=`IN_PROGRESS`；Phase 07=`NOT_STARTED`。不得在本线程宣布 Phase 06 `COMPLETE` 或恢复 `VERIFIED`；下一动作仅为再次独立只读审计。
+
+> **2026-07-31 本轮独立审计四项最小整改（当前唯一权威）：** 值流丢弃、伪 UI consumer、未调用 cleanup 和 preload typed event 诊断污染四项已按公共 seam 完成 RED→GREEN；production matrix 109/109、lifecycle 21/21、event 5/5，完整 `npm test` 225 文件 1415/1415，lint、三套 typecheck、`format:check` 与 `git diff --check` 通过。`P1-CONVERGENCE-01=RED`，Phase06 继续 `IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+> **2026-07-31 最终独立审计五项P1最小整改（当前唯一权威）：** 唯一公开`verifyCapabilityEvidence()` seam新增五个永久RED→GREEN反例，覆盖跨模块未调用返回API、未渲染intrinsic JSX handler、未调用application返回成员中的send、未由真实订阅返回的consumer disposer，以及从不可达JSX实例借用lifecycle snapshot。修复仅收紧entry级callsite可达性、渲染实例、application owner返回成员、精确subscription call/disposer类型及snapshot wiring；保留真实跨模块runtime API消费，未修改production runtime、IPC合约、业务服务、package输入或制品。Phase06证据组合152/152，production matrix109/109、lifecycle21/21、event5/5；完整`npm test`225文件1408/1408，lint、三套typecheck、定向Prettier与`git diff --check`通过。`P1-CONVERGENCE-01`整改复验为`VERIFIED`，Phase03/04/06继续`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待再次最终独立只读审计。**
+
+> **2026-07-30 本轮最终独立审计四项P1直接整改（当前唯一权威）：** 唯一公开`verifyCapabilityEvidence()` seam新增五项永久RED→GREEN反例：producer仅在`while(false)`中调用、正确feature实例仅由dead JSX wiring提供、registration receiver以`ipcMain || fake`进入错误运行时分支、preload `removeListener`仅在静态不可达分支、feature disposer仅在静态不可达分支调用。修复后静态循环与dispose证明均按可达控制流fail-closed，composition props/context wiring只接受从记录Renderer entry可达的callsite并按Program/entry缓存，registrar逻辑回退拒绝任何可提供错误receiver的运行时分支。证据核心、109项production matrix、21项lifecycle、5项event及bridge fail-closed组合111/111，capability inventory 4/4；完整`npm test`225文件1371/1371，lint、format、三套typecheck与`git diff --check`通过。仅证据helper/test与本轮记录变化，production runtime、package input和既有制品未变；`P1-CONVERGENCE-01`整改复验为`VERIFIED`，但Phase03/04/06继续`IN_PROGRESS`、Phase07=`NOT_STARTED`。**整改完成，等待再次最终独立只读审计。**
+
+> **2026-07-30 最终只读审计三项P1直接整改（当前唯一权威）：** 唯一`verifyCapabilityEvidence()`新增三项永久RED→GREEN反例：Renderer owner仅经未调用entry callback、owner仅作为未消费JSX prop、producer callback仅在`if(false)`中调用。入口现在只沿确证callback契约，JSX只接受intrinsic事件或闭合到子组件真实消费的prop，callback调用证明排除静态不可达分支；React `lazy`及既有React/标准异步集合边界按TypeChecker声明闭合。证据专项66/66、matrix33/33（109 capability、21 lifecycle、5 event）、fail-closed7/7，合计106/106；完整`npm test`225文件1366/1366，lint、定向Prettier与`git diff --check`通过。仅测试证据helper/test变化，Phase03/04/06 production、package input和既有制品未变；阶段继续`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待再次最终独立只读审计。**
+
+> **2026-07-30 本轮独立审计追加整改交接（当前唯一权威）：** 新增三个永久RED反例，分别覆盖未调用callback中的Renderer consumer、registration entry传入fake `ipcMain`、registration entry传入fake application；均直接调用与109项matrix相同的`verifyCapabilityEvidence()`并已串行RED→GREEN。修复后只承认symbol精确的React effect/`useWorkspaceScope`/标准回调边界，并从registration entry实际callsite传播receiver/application参数；未改production runtime。证据63/63、matrix33/33、fail-closed7/7，合计103/103；完整`npm test`225文件1363/1363，Auth16/16、links180/180、packaging33/33、Phase06组合32/32，lint/三套typecheck/format/diff全绿。制品输入未变且hash保持；Phase03/04/06=`IN_PROGRESS`、Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+>
+> **2026-07-30 计划21最终审查后TDD交接（当前唯一权威）：** 最终审查追加的五项假阳性已通过与109项production matrix相同的唯一公开`verifyCapabilityEvidence()` seam串行RED→GREEN：删除event application文本兜底，过滤静态不可达producer，条件factory实例fail-closed，preload精确比较Electron member symbol，registrar application改用callable-reachability。证据专项60/60，production matrix/fail-closed组合100/100，matrix109/109、lifecycle21/21、event5/5，inventory仍109。没有第二验证器或测试专用production export。`npm test`225文件1360/1360、Auth16/16、links180/180、packaging33/33，lint/format/三套typecheck、标准`pack:smoke`、alpha verifier与diff check通过。`P1-CONVERGENCE-01`、`P2-FINAL-ORDER-01`、`P2-CONVERGENCE-02`均`VERIFIED`；Phase03/04/06=`IN_PROGRESS`，Phase07=`NOT_STARTED`。以下旧统计均为历史记录。
+
 ## 1. 状态与边界
 
-- 状态：`COMPLETE`（2026-07-26 Asia/Shanghai）。
-- 分支/启动 HEAD：`codex/refactor-program` / `743571d9597ea2c68ab10a08da0914ccaed5352b`。
+- 当前唯一权威制品：Renderer/preload/ASAR/exe SHA-256分别为`E1B965347C5BEA36B27006555E0DCFC5E380211A6BA39D925A7516FFD204A860`、`3F56D207A9FB3BFB8C807CFCCA5DF3F5F57CC93B7D38DC97A128840433BFB8EC`、`71CD2F7A24CC0106D712348835B1803F943C6BB36F18E41133E025B1CA6BF073`、`60E05AFB17FF24E541DC9AEDCB82B749D8024B15F46CF66D51688B017239AAF6`；尺寸分别为757,886、222,057、7,212,426、225,485,824 bytes。
+
+- 状态：`IN_PROGRESS`（2026-07-30 Asia/Shanghai；计划21整改已完成，等待最终独立只读审计）。
+- 分支/启动 HEAD：`codex/refactor-program` / `3992736d01413d83504253c7d905c21fcfe3183c`。
 - Phase 05 completion `75dba966375302a99ebfd020c02ee6dd83930a9e` 与 milestone record `365df706af110a25f900f63f05406a50d7b5e3b9` 均已核验为祖先。
-- 本阶段未修改 OperationalStore、ContentStore、Publisher 或冻结 Domain/Application interface；未访问真实投稿、付费、生产账号、Auth数据库或内容库。
-- 用户于2026-07-28明确授权在安全检查点形成一次Phase 06里程碑commit；本handoff随同该单一commit收口。未授权push或PR。Phase 07=`NOT_STARTED`。
-- Phase 04 的四项 `PENDING_HUMAN` 继续阻止正式 release，不影响本阶段本地完成。
+- 检查点A/B/C及第10节最终完整门禁均已完成；原17项与`P1-AUDIT-01`、`P2-AUDIT-02`、`P1-AUDIT-03`共20项已按当前production tree复核。**整改完成，等待最终独立只读审计。** Phase 03、Phase 04、Phase 06保持`IN_PROGRESS`，不得恢复`COMPLETE`；Phase 07=`NOT_STARTED`。未访问真实投稿、付费、生产账号、Auth数据库或内容库，未stage、commit、push或创建PR。
+- Phase 04 的人工验收项继续阻止正式 release；其审计整改状态不得写回为`PENDING_HUMAN`或`COMPLETE`。
+
+> **2026-07-30 最终复验更正：** producer dead-helper再覆盖导出入口内未调用arrow函数，RED→GREEN且5/5 production event保持；corpus33/33、production suite33/33、合计66/66，最终`npm test`225文件1333/1333、0 fail/skip（164.262秒）。本句取代下方同日中间计数。
+
+### 2026-07-30 最终证据引擎整改交接（当前权威）
+
+- TDD：5个串行Ticket均先RED再最小GREEN；新增并冻结callable entry/精确feature实例、bridge/preload/registrar、lifecycle三类、event四类和真实SQLite订单三类回归。
+- 证据：唯一`verifyCapabilityEvidence()` corpus32/32；production suite33/33，109 capability、21 lifecycle、5 event全绿；订单/OperationalStore31/31。
+- 门禁：完整225文件1332/1332、Auth16/16、links180/180、packaging33/33、capacity19/19、三套typecheck、lint/format、Renderer2157 modules、preload222,057 bytes、pack smoke、order owner/ASAR parity、retired path zero、packaged preload3/3、Electron focus1/1、diff check全绿。
+- 制品/Git：ASAR7,212,371 bytes/SHA-256 `399812E8617DE57994B8D810F9895293938FAF11A841479739BC0A0456120A19`；exe225,485,824 bytes/SHA-256 `FC6F03EE4CC60BC51D1C0CD95548A69999C8A4134A19C93DCA768A7C51AFDC49`；147条WIP保留、staged=0，真实数据与外部/付费调用0。
+- 状态：`P1-CONVERGENCE-01`、`P2-FINAL-ORDER-01`、`P2-CONVERGENCE-02`均`VERIFIED`；Phase03/04/06=`IN_PROGRESS`、Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 2026-07-29 唯一证据核心整改交接（最新当前权威，取代下方同日统计）
+
+- RED：production matrix同入口错误放行不存在的lifecycle `stateSource`和event producer；独立mutation还覆盖receiver/shadow/scope、binding/props/factory、registrar/application、dead export、lifecycle update/consumer及event producer/channel/unique consumer/dispose断链。Phase03临时SQLite复现canonical published订单supplier `2→9`后按钮可见但main拒绝。
+- GREEN：109项production matrix与20项mutation/acceptance直接共享唯一`verifyCapabilityEvidence()` TypeChecker symbol-identity核心；receiver与production reachability闭合，21项lifecycle逐项闭合query→state→snapshot consumer，5项event逐项闭合producer→唯一consumer→dispose。订单打开权限统一为canonical published+安全持久URL，supplier code只展示。`P1-CONVERGENCE-01=VERIFIED`、`P2-FINAL-ORDER-01=VERIFIED`、`P2-CONVERGENCE-02=VERIFIED`。
+- inventory/门禁：109（43 query、61 command、5 event）；matrix109/109、lifecycle21/21、event5/5、mutation/acceptance20/20；完整225文件1318/1318、Auth16/16、links180/180、packaging33/33、capacity20/20（原冻结19项全通过）、13k SQLite query/SQL=1/1、parsed=3、orders=3、paid send=0，三套typecheck、lint/format、Renderer2157 modules、preload222,057 bytes、pack smoke、最新ASAR/order-owner parity、packaged preload3/3、Electron focus1/1与diff均通过。移除producer channel恒真比较后相关组合54/54与lint复验通过。
+- 制品/Git：ASAR7,212,371 bytes（2026-07-29 23:29:01.007 +08:00），SHA-256 `399812E8617DE57994B8D810F9895293938FAF11A841479739BC0A0456120A19`；exe225,485,824 bytes（23:29:01.819 +08:00），SHA-256 `FC6F03EE4CC60BC51D1C0CD95548A69999C8A4134A19C93DCA768A7C51AFDC49`；Renderer `index-DQopcXb_.js`。`codex/refactor-program`/`3992736d01413d83504253c7d905c21fcfe3183c`，147条既有WIP保留且staged为空；真实数据、账号、供应商、投稿、同步、扣费和付费submit为0。
+- 状态：Phase03/04/06保持`IN_PROGRESS`，Phase07保持`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 2026-07-29 最终审计收敛整改交接（当前权威）
+
+- RED/owner：第4.1节connected baseline 1/1 GREEN，12类断链mutation 12/12 RED；正确owner为Phase06 evidence matrix。B的canonical/supplier隔离正确owner为Phase03 OperationalStore/MediaOrderService。
+- 修改/删除：新增单一Program/TypeChecker证据器，以symbol identity、alias resolution、作用域调用图、参数/常量传播、JSX wiring和registrar handler闭合109项；正式matrix删除名字/receiver文本/全文件同名/shortcut/`endsWith`/跨call旧helper。显式化动态content command、settings refresh和GeneratedArticles Commands类型，纠正14个application owner与1个preload member fixture。B删除fallback语法枚举，保留退休owner物理零路径和两个order owner exact parity。
+- schema/interface：Phase03 schema仍v3、public methods本轮不变；Phase04 interface不变；Phase06 non-Auth inventory仍109（43 query、61 command、5 event），Typed IPC/preload/registrar/public transport schema不变，仅Renderer内部Commands类型收紧。
+- 测试：109/109 symbol matrix、mutation13/13、B行为/legacy/v3/order28/28；完整225文件1281/1281、Auth16/16、links180/180、packaging33/33、capacity19/19、ASAR/legacy/preload12/12、Electron focus1/1、三套typecheck、lint/format、Renderer2157 modules、preload222,057 bytes、pack smoke、diff全绿。
+- 制品/Git：ASAR7,212,213 bytes（2026-07-29 22:16:41.498 +08:00），SHA-256 `DB9DB4FC1629A59CE4534D1EC65937337B6C14D3BCB540C8CCB5FACA574C9F7F`，exe225,485,824 bytes，Renderer `index-DQopcXb_.js`；分支/HEAD不变，146条WIP保留且staged为空。真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、扣费、付费submit均为0。
+- 下一动作仅为最终独立只读审计；Phase03/04/06保持`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 2026-07-29 独立只读审计第三轮整改最终交接（当前权威）
+
+- RED：v3同article/target跨batch为5/6；inventory断链same-name mutation使matrix5/6；fallback object-map/switch/numeric-ternary detector mutation失败，且production修改后旧ASAR parity保持RED。
+- 修复：OperationalStore按media item durable `attemptId`精确归属并事务回滚；109项fixture逐项显式receiver、完整`receiver.method`、member可达局部声明/显式commands/direct lifecycle证据，两个文件级binding兜底删除；fallback改为TypeScript AST覆盖if/ternary、switch与canonical-status对象索引。无wrapper、re-export、测试专用production caller或legacy路径恢复。
+- schema/interface：schema仍v3，public method集合未变，`commitRemoteOutcome()`行为前置条件继续收紧；Phase04/06 production interface无变化，inventory仍109（43 query、61 command、5 event）。
+- 门禁：v3 6/6、Phase03 80/80、capability20/20、capacity19/19、ASAR/legacy/preload11/11、完整223文件1267/1267、Auth16/16、links180/180、packaging33/33、三套typecheck、lint/format、Renderer2157 modules、preload222,057 bytes、pack smoke、最新Renderer focus1/1、diff全绿。
+- 制品/Git：ASAR7,210,414 bytes（2026-07-29 20:16:29 +08:00），exe225,485,824 bytes；`codex/refactor-program`/`3992736d01413d83504253c7d905c21fcfe3183c`，140条既有WIP保留且staged为空。真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、扣费、付费submit均为0。
+- 下一动作仅为最终独立只读审计；Phase03/04/06保持`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 2026-07-29 追加审计整改最终交接（当前权威）
+
+- RED：定向15项先12 pass/3 fail，覆盖跨稿件/target batch item、漏检`submitted/uncertain` fallback、以及109项matrix仍含同名/任意identifier/registrar分离匹配弱证据。
+- 修复/删除：OperationalStore事务归属校验不匹配即`OPERATIONAL_BATCH_ITEM_MISMATCH`并无部分写；fallback detector覆盖全部旧mapping且OperationalStore/MediaOrderService均与ASAR精确一致；inventory以结构化AST闭合consumer method、feature member、recorded bridge binding和同一registrar call，旧`invokesMethod`/`containsNamedFeatureMember`被meta门禁拒绝。没有wrapper、re-export、测试专用production caller或legacy路径恢复。
+- schema/interface：OperationalStore仍为schema v3，`order_display_snapshots`及两个retained method不变；public method集合未变，`commitRemoteOutcome()`行为前置条件收紧。Phase04与Phase06 production interface无变化，inventory仍109（43 query、61 command、5 event）。
+- 门禁：v3 5/5、Phase03 79/79、capability/caller/fail-closed19/19、capacity19/19；旧ASAR parity5/6 RED→新制品order/legacy/preload11/11；完整223文件1265/1265、Auth16/16、links180/180、packaging33/33、三套typecheck、lint/format、Renderer2157 modules、preload222,057 bytes、pack smoke、最新Renderer focus1/1、diff check全绿。
+- 制品/Git：ASAR7,210,147 bytes（2026-07-29 18:12:40 +08:00），exe225,485,824 bytes；`codex/refactor-program`/`3992736d01413d83504253c7d905c21fcfe3183c`，staged为空。真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、扣费、付费submit均为0。
+- 下一动作仅为最终独立只读审计；Phase03/04/06保持`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 2026-07-29 最终独立审计第二轮整改检查点 C 最终权威交接
+
+- 逐项状态：`P1-01`、`P1-02`、`P1-03`、`P1-04`、`P1-05`、`P1-06`、`P1-07`、`P2-08`、`P2-09`、`P2-10`、`P2-11`、`P2-12`、`P2-13`、`P2-14`、`P2-15`、`P3-16`、`P3-17`、`P1-AUDIT-01`、`P2-AUDIT-02`、`P1-AUDIT-03`共20项均为`VERIFIED`。
+- RED/删除：C新增packaged OperationalStore与current source精确一致性断言，旧ASAR时为7/8、1 fail；重建后8/8。`P1-05`正式observation行为正确，旧`reconcileRemoteOrder`定义/public export/专用测试、canonical publication status→supplier code fallback均从source与ASAR物理消失，没有wrapper、re-export或测试专用caller；此前四条点名与六条等价legacy路径删除证据保持有效。
+- schema/interface：OperationalStore确为v2→v3，新增`order_display_snapshots`和retained `listOrderDisplayViews()`/`recordRemoteOrderObservation()`，A删除`reconcileRemoteOrder()`；migration/backup/restore/verify/三个fault point与损坏结构拒绝全部复核。PublicationWorkflow、Publisher、ContentStore、Domain/Application、Phase04冻结interface及Phase06 IPC/Renderer interface无当前production差异；inventory保持109（43 query、61 command、5 event）。
+- 测试/容量：原17项+audit专项131/131、capacity19/19；完整`npm test`223文件1263/1263、0 fail/skip、170.554秒；Auth16/16、links180/180、packaging33/33、三套typecheck、lint、format、Renderer build2157 modules、pack smoke、packaged preload3/3、最新Renderer Electron focus1/1及`git diff --check`全部通过。Main 1k/10k/13k/20k请求10/100/130/200、payload44,603/464,188/610,078/950,488 bytes；Renderer均1请求、payload4,279/4,280/4,280/4,280 bytes，第20,001项明确truncated。
+- 制品/Git/边界：最新`release-alpha/win-unpacked/resources/app.asar`为7,209,908 bytes，2026-07-29 12:37:55.544 +08:00，Renderer asset `index-cypc4NxJ.js`。终检仍为`codex/refactor-program`/`3992736d01413d83504253c7d905c21fcfe3183c`且staged为空。全部使用临时SQLite/fake/VM/合成fixture/本地Electron，真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、扣费与付费submit均为0。
+- 下一动作仅为最终独立只读审计；Phase03/04/06保持`IN_PROGRESS`，Phase07保持`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 2026-07-29 最终独立审计第二轮整改检查点 B 当前权威交接
+
+- 文档RED：代码/Git差异明确包含Phase03 OperationalStore schema v2→v3、`order_display_snapshots`、`listOrderDisplayViews()`、`recordRemoteOrderObservation()`，而下方历史仍写“未改schema/interface”并保留110 inventory；这些历史结论现明确失效，canonical inventory为109。
+- schema/写入：attempt_id为TEXT PK NOT NULL FK到publication_attempts；title/filename/resource name/created time必填，quoted_price REAL可空。`commitRemoteOutcome()`仅在media evidence+正式batch item事务内写不可变snapshot。
+- retained interface/caller：`MediaOrderService.listOrderViews()`→`listOrderDisplayViews()`（单SQL LEFT JOIN、LIMIT20000）；`MediaOrderService.syncOrder()`→`recordRemoteOrderObservation()`（事务、0/1/2/4/9、安全HTTPS与promotion规则）。A已删除`reconcileRemoteOrder()`。
+- RED→GREEN：v3专项2/4暴露verifier漏检FK/required nullability及恢复fixture路径错误；修复后4/4，覆盖migration history、重复启动、三个fault point rollback/retry、损坏structure、backup verify和临时restore。扩展45/45，13k query/SQL=1/1、parsed3、heap143,288 bytes、0.471ms、paidSendCalls=0；三套typecheck、lint、format、links180/180、packaging33/33、diff通过。
+- interface判断：OperationalStore schema/public interface确有变化；PublicationWorkflow/Publisher/ContentStore/Domain/Application和Phase06 IPC/Renderer interface未变。真实外部/投稿/同步/付费submit=0。`P1-AUDIT-03`检查点级VERIFIED；下一动作严格为C，Phase03/04/06保持`IN_PROGRESS`，Phase07=`NOT_STARTED`。
+
+### 2026-07-29 最终独立审计第二轮整改检查点 A
+
+- RED：新增永久 source/export/import-call/test/packaged-ASAR 门禁在当前工作树为0/4；删除production wrapper和旧测试后为3/4，精确保留旧ASAR失败。
+- 修改/删除：Phase 03 owner物理删除OperationalStore `reconcileRemoteOrder`定义/public export及canonical publication status→supplier `2/4/0` fallback；删除只验证旧wrapper的`phase-03-media-order-reconcile.test.js`，URL evidence回归迁至`recordRemoteOrderObservation()`。没有compatibility wrapper、re-export或测试专用caller。
+- schema/interface：A没有schema变化；OperationalStore public interface确有删除。retained正式链为supplier response→`MediaOrderService.syncOrder()`→`recordRemoteOrderObservation()`；Phase 06 Typed IPC/Renderer interface和canonical 109项inventory均未变化。
+- GREEN/门禁：本轮pack smoke后4/4，合并legacy path为7/7；supplier/order定向23/23；三套typecheck、lint、format、packaging33/33、Renderer2157 modules、preload222,057 bytes、pack smoke、diff check通过。新ASAR7,209,505 bytes（12:14:07 +08:00）；真实workspace/内容库/Auth/账号/供应商/投稿/同步/扣费/付费submit=0。
+- 下一动作：严格进入检查点B，核对Phase 03 schema v2→v3、新表、retained public methods与migration/backup/restore/verify/fault证据。Phase 03/04/06保持`IN_PROGRESS`，Phase 07保持`NOT_STARTED`。
+
+### 2026-07-29 P2-09 最终证据纠正
+
+- `media.removeDraft` registry absence 测试先 RED，确认 Renderer production 中只有定义、没有 consumer；现已从 contract、registrar、preload、bridge、feature、fixture 与测试 fake 全链物理删除。
+- inventory 为 109 项（43 query、61 command、5 event；workspace9/settings14/media17/platform10/content43/attention3/generation13）。109/109 显式记录 consumer kind/source/method 与 feature source/public method；AST 从 `main.tsx`（含 lazy dynamic import）验证可达性和真实调用，21 lifecycle query 验证 snapshot 消费，4 props 链验证 wiring，5 event 验证 producer/唯一consumer/dispose。
+- owner/interface：整改属于 Phase 06 Typed IPC/feature composition；未重开 Phase 03/04 冻结 interface。Auth 5 invoke+1 event豁免、SafeOperationalError、workspace/platform identity 与统一 diagnostic sink 保持原闭合证据。
+- 门禁：`npm test`222文件1255/1255、0 fail/skip、160.808秒；专项39/39、Auth16/16、links180/180、packaging33/33；lint、format、三套typecheck、Renderer2157 modules、preload222,057 bytes、pack smoke、packaged source/import/ASAR5/5、Electron focus1/1、容量与diff check全绿。
+- 新制品：ASAR7,210,485 bytes（11:05:55）、exe225,485,824 bytes（11:05:56）、Renderer `index-cypc4NxJ.js`。真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、扣费与付费submit均为0；staged diff为空，未stage/commit/push/PR。Phase 03/04/06保持`IN_PROGRESS`，Phase07=`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+### 审计整改状态账本（2026-07-28）
+
+#### 2026-07-29 检查点 A：`P1-AUDIT-01`
+
+- 状态：`VERIFIED（检查点A）`。RED为`tests/phase-06-production-bridge-fail-closed.test.js`旧实现0/6、6 fail；GREEN为6/6。真实执行覆盖非Electron、`desktopConsole`、namespace、具体query/command/event capability，以及成功envelope `data:null/undefined`。
+- 正确owner：Phase 06 Renderer bridge/transport；未重开Domain/Application、OperationalStore、ContentStore、Publisher、schema或Phase 03/04冻结interface。
+- production修改：`bridge/transport.ts`统一稳定`OperationalError`；media/platform/settings/workspace/publication/account-profile/content移除synthetic empty/idle/false/null/resolved-void/noop event，具体capability缺失也稳定拒绝。Auth 5 invoke + 1 event仍为Phase 07精确豁免。
+- 显式mock：测试内`mockAdapter`提供fixture数据；production bridge在同一非Electron条件下保持fail-closed。旧production fallback symbols与同类返回经静态清点为0（Auth豁免除外）。
+- 验证：行为6/6；扩展定向14文件97/97，0 fail/skip；main/renderer/bridge三套typecheck、lint、format与`git diff --check`通过。真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步与付费submit调用均为0。
+- 下一动作：严格进入检查点B；旧110项通用caller证据失效，必须逐capability建立结构化View/root→feature→bridge→preload→registrar/application inventory。
+
+#### 2026-07-29 检查点 B：`P2-09` / `P2-AUDIT-02` inventory 复核
+
+- RED：`tests/phase-06-capability-specific-inventory.test.js` 在旧通用 `productionCallerTrace`、owner推导 hook 与 matrix `source.includes` 下为0/1（1 fail）。
+- GREEN：110/110 capability 改为显式 caller；TypeScript AST 逐项验证 View/root 实际调用或渲染、feature export及capability-specific bridge binding/调用、bridge export、preload method→channel、registrar/application。owner 为 workspace 9、settings 14、media 18、platform 10、content 43、attention 3、generation 13。
+- Event：5项均验证 producer、唯一直接 bridge consumer、channel 与 `removeListener` dispose。Auth 5 invoke + 1 event豁免未扩大；本轮未发现新的无consumer能力，旧18项未恢复。
+- 验证：inventory/matrix及纵向composition/packaging定向15 files、89/89，0 fail/skip；main/renderer/bridge三套typecheck、lint、format和diff check通过。全部使用静态AST、VM、内存fake或合成fixture，真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步和付费submit均为0。
+- 状态：`VERIFIED（检查点B复核）`；Phase 03/04/06保持`IN_PROGRESS`，Phase 07保持`NOT_STARTED`。下一动作严格进入检查点C。
+
+#### 2026-07-29 检查点 C：`P2-AUDIT-02` legacy source / ASAR
+
+- RED：`tests/phase-06-legacy-path-absence.test.js` 在删除前当前source与旧ASAR为1/3、2 fail；import graph 1/1已绿，证明文件无caller但仍被打包。
+- 删除：四条点名production文件与`desktop/services/submission/`六条等价dead implementation全部物理删除；仅执行旧query/preflight实现的测试删除，jobs远端协调旧用例删除。没有重命名迁移、re-export、compatibility wrapper或package例外；单资源media preflight fallback物理消失。
+- GREEN：source/import graph/本轮新ASAR为3/3，四点名+六等价路径在source和ASAR均为零。Phase 03/04扩展定向25 files、95/95；packaging33/33；三套typecheck、lint、format、Renderer2157 modules、preload222,542 bytes、pack smoke与diff check通过。
+- 制品：`release-alpha/win-unpacked/resources/app.asar` 7,211,917 bytes、exe 225,485,824 bytes，2026-07-29 08:32:10。真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、付费submit均为0。
+- 状态：`VERIFIED（检查点C）`；Phase 03/04/06保持`IN_PROGRESS`，Phase 07保持`NOT_STARTED`。下一动作仅为19项finding复核与第10节最终门禁。
+
+#### 2026-07-29 最终终态
+
+- A补充Electron composition RED：真实`contextBridge`冻结namespace下旧transport绑定函数导致行为集6/7、1 fail；保持缺namespace/capability/result拒绝并返回原始函数引用后为7/7。production bridge无synthetic success/noop event，测试数据仍只经显式`mockAdapter`注入。
+- B终态：110/110 non-Auth capability逐项AST链完整（43 query、62 command、5 event；workspace9/settings14/media18/platform10/content43/attention3/generation13），5项event的producer、唯一consumer、dispose闭合；Auth仅5 invoke+1 event；无新增无consumer能力。
+- C终态：source/import graph/本轮ASAR为3/3；四条点名及六条等价submission路径物理消失，无wrapper、re-export、迁移副本或package例外。
+- 完整门禁：`npm test`222文件、1252/1252、0 fail/skip、158.040秒；最终专项138/138、Auth16/16、links180/180、packaging33/33；lint、format、三套typecheck、Renderer build（2157 modules）、preload（222,542 bytes）、pack smoke、packaged preload+legacy ASAR 6/6、最新Renderer Electron focus1/1和`git diff --check`全部通过。
+- 最新制品：`release-alpha/win-unpacked/resources/app.asar` 7,211,886 bytes（2026-07-29 08:58:01）；`release-alpha/win-unpacked/鱼饼大王.exe` 225,485,824 bytes（2026-07-29 08:58:02）；Renderer asset `index-DVe8E-ba.js`。
+- 容量：Main 1k/10k/13k/20k请求10/100/130/200、payload 44,603/464,188/610,078/950,488 bytes；Renderer均1请求、payload 4,279/4,280/4,280/4,280 bytes；第20,001项明确truncated。13k临时SQLite为query=1、SQL=1、parsed=3、orders=3、heap=143,288 bytes、0.358ms、paidSendCalls=0。
+- fixture仅为fake client、临时SQLite、VM、内存adapter、合成workspace/resource及本地Electron；真实workspace、内容库、Auth数据库、账号、供应商、投稿、同步、扣费与付费submit调用为0。Phase 03/04/06保持`IN_PROGRESS`，Phase 07保持`NOT_STARTED`。**整改完成，等待最终独立只读审计。**
+
+启动门禁：`codex/refactor-program` / `3992736d01413d83504253c7d905c21fcfe3183c`；已完整记录`status --short --untracked-files=all`、未暂存差异和最近五个提交。工作树含本整改的既有 WIP，未reset、checkout、clean或覆盖。Phase 03/04/06=`IN_PROGRESS`，Phase 07=`NOT_STARTED`；未连接真实workspace、内容库、Auth数据库、账号或付费服务；不stage、commit、push或创建PR。
+
+| Finding | 状态 | 目标阶段/owner | RED / 修改 / 验证 |
+| --- | --- | --- | --- |
+| P1-01 Platform event workspace identity | VERIFIED（检查点A） | Phase 06 + Phase 04（`IN_PROGRESS`） | RED：A→B 后 A event写入 B `run-a`。修改：`platform-contracts`、`desktop-task-service`、`workspace-runtime`、platform feature/type DTO；真实Renderer fixture现以同一runtime identity覆盖A→B及A迟到heartbeat/terminal拒绝，B的`7 / 20`与queue refresh不变。 |
+| P1-02 ConfirmationHost/destructive scope | VERIFIED | Phase 06 | root绑定runtime+client scope并取消FIFO；确认后identity复验，feature拒绝跨client input。content/confirmation定向20/20及三套typecheck通过。 |
+| P1-03 SafeOperationalError语义安全 | VERIFIED（检查点A） | Phase 06 IPC registry | registry按contract code重建固定安全error并丢弃路径、URL credentials、Cookie、stack和正文等不可信语义；已恢复冻结的Phase 01 domain DTO合约。 |
+| P1-04 raw URL/内部订单字段退出Renderer | VERIFIED（检查点A） | Phase 06 + Phase 03（`IN_PROGRESS`） | DTO仅含`hasPublishedUrl`；移除raw URL/workflow/internal字段，evidence写入拒绝credentials/query/fragment/non-HTTPS。 |
+| P1-05 supplier/canonical状态解耦 | VERIFIED（检查点B） | Phase 03 + Phase 06 projection | RED：supplier `2`缺URL触发整体sync失败。GREEN：`0/1/2/4/9`独立observation持久化；`2`缺URL不提升，`2 + 安全HTTPS`才提升，`9`不撤销published，缺observation保持unknown；删除canonical fallback、remoteStatusCode兼容读取和legacy ledger mutation。 |
+| P1-06 媒体价格canonical化 | VERIFIED（检查点B） | Phase 06 MediaResourceService | RED：绕过摄取的字符串`"36.50"`在submission owner被二次转换成`36.5`，cache保留raw非法报价。GREEN：仅MediaResourceService摄取字符串并生成finite non-negative canonical number或unknown；cache/pool raw副本及workbench/submission/IPC/Renderer二次转换物理删除。 |
+| P1-07 production bridge synthetic fallback | VERIFIED（检查点A+终态） | Phase 06 | 初始0/6 RED→6/6；Electron frozen namespace补充RED为6/7→7/7。全部non-Auth bridge的transport/namespace/capability/result/event缺失fail-closed，显式mock只在测试，production synthetic success/noop event为零。 |
+| P2-08 registrar fail-closed | VERIFIED（检查点C） | Phase 06 | RED：未登记`media:typo`此前可安装handler。`ipc/register.js`注册前拒绝所有未列入production registry的非Auth channel；真实registrar定向复核继续fail-closed。 |
+| P2-09 production caller traceability | VERIFIED（终态） | Phase 06 | 先前18项无consumer能力已全链删除；本轮旧`productionCallerTrace`/owner通用hook/`source.includes`形成0/1 RED。现110/110逐capability TypeScript AST验证真实View/root→feature→bridge→preload→registrar/application链，event另含producer、唯一consumer及dispose。 |
+| P2-10 invalid event diagnostic sink | VERIFIED（检查点C） | Phase 06，预留Phase 07 seam | VM执行真实`desktop/preload.js`，malformed `workspace:data-invalidated`与`platform-state`经真实解析失败路径、workspace coordinator/platform router进入同一个有界diagnostic store；仅保留固定code/source，不含路径、URL credentials、Cookie、stack、正文或unknown scope，并验证read/subscribe/dispose。 |
+| P2-11 唯一SettingsFeatureProvider | VERIFIED（检查点C） | Phase 06 | production静态composition只有一个`<SettingsFeatureProvider>`实例；Settings页和媒体第三方标识共用该owner，Auth recovery回归仍通过。 |
+| P2-12 sync reconcile错误传播 | VERIFIED（检查点B） | Phase 03/Phase 06 application boundary | RED：supplier observation getter异常泄漏原payload/路径。GREEN：supplier解析、SQLite before-commit、evidence URL冲突和observation冲突均成为固定`MEDIA_ORDER_SYNC_FAILED`，事务回滚，UI保留订单且不显示成功。 |
+| P2-13 有界订单projection | VERIFIED（检查点B） | Phase 03 | RED：13k真实SQLite fixture无法取得SQL/payload有界观测。GREEN：正式projection单SQL、`LIMIT 20000`且只解析3个订单payload；service fallback删除。指标：query=1、SQL=1、parsed=3、heap=143,376 bytes、elapsed=0.618ms。 |
+| P2-14 dead media.stopSubmit | VERIFIED（检查点C） | Phase 06 | contract、fixture、preload、bridge、feature、registrar与无读取service flag均已删除；production与canonical fixture中`media.stopSubmit`/`media:stop-submit`零引用。 |
+| P2-15 media Promise/error owner | VERIFIED（检查点C） | Phase 06 | refresh/toggle失败由media feature snapshot owner收敛为安全UI错误且不rethrow；void caller纵向测试以`doesNotReject`证明无unhandled rejection。 |
+| P3-16 navigationSummary dead scope | VERIFIED（检查点C） | Phase 06 | protocol/main invalidation/Renderer known scope中的`navigationSummary`零引用；Sidebar的`deriveNavigationSummary`仅为本地derived view，不是协议scope。 |
+| P3-17 publishedAt真实性 | VERIFIED（检查点B） | Phase 03 projection + Phase 06 DTO | RED：main把`2026-07-28T12:00:00.000Z`改成无timezone文本，bridge再次格式化。GREEN：main/IPC/bridge保留ISO instant，OrdersView唯一格式化；UTC跨日、`+08:00`和空值回归通过。 |
+| P1-AUDIT-01 production bridge fail-closed | VERIFIED（终态） | Phase 06 Renderer bridge/transport | 所有non-Auth query/command/event/result缺失统一稳定拒绝；0/6→6/6及frozen namespace 6/7→7/7两轮production-level RED→GREEN，测试数据仅显式mock adapter。 |
+| P2-AUDIT-02 legacy source/ASAR物理删除 | VERIFIED（终态） | Phase 03/04，Phase 06 packaging evidence | source/旧ASAR为1/3、2 fail；物理删除四条点名和六条等价路径后source/import/本轮ASAR为3/3，无迁移、re-export、wrapper或package例外。 |
+| P1-AUDIT-03 OperationalStore schema/interface重开记录 | VERIFIED（第二轮B/C） | Phase 03 OperationalStore | 文档RED确认历史“未改schema/interface”不实；已如实记录v2→v3、新表、两个retained methods、A删除public reconcile method及migration/backup/restore/verify/fault证据。 |
+
+检查点A完成记录：P1-01、P1-02、P1-03、P1-04、P1-07均为`VERIFIED（检查点A）`；RED、修改和删除项见上表。本轮在进入B前重新执行 platform/content/confirmation/workspace/IPC/security 定向门禁（82 pass、0 fail、0 skip），其中包含真实Renderer A→B迟到事件、客户切换、FIFO confirmation、历史删除恢复和问题编辑；订单evidence边界、packaging VM registry require和publish-log logger断言也通过。`typecheck:main`、`typecheck:renderer`、`typecheck:bridge`与`git diff --check`通过。全部使用fake、临时SQLite或隔离Renderer fixture，真实付费submit为0；A证据仍有效。
+
+检查点B完成记录：P1-05、P1-06、P2-12、P2-13、P3-17均为`VERIFIED（检查点B）`。RED包括supplier `2`缺URL整体失败、submission二次转换字符串报价、supplier异常泄漏、缺少大历史SQL观测以及publishedAt重复格式化；均已转绿。物理删除`MediaOrderService` JSONL/legacy ledger/raw DTO/status fallback、本地订单mutation，资源cache/pool raw副本、workbench legacy ledger和所有下游报价转换，main/bridge订单时间格式化及service projection fallback。Phase 03/media/order/evidence/workflow定向79 pass、0 fail、0 skip；真实13k临时SQLite为query=1、SQL=1、parsed payload=3、orders=3、heap delta=143,376 bytes、elapsed=0.618ms；fake supplier付费send=0。检查点A复跑82/82；三套typecheck与`git diff --check`通过。未触及Domain/Application、ContentStore、Publisher或schema；Phase 03/04/06保持`IN_PROGRESS`，Phase07=`NOT_STARTED`。该段为B结束时历史边界；随后C与最终完整门禁均已完成。
+
+检查点C完成记录：P2-08、P2-09、P2-10、P2-11、P2-14、P2-15、P3-16均为`VERIFIED（检查点C）`。进入C前复验A/B定向124/124，三套typecheck通过，未发现回归。C实施定向集为21文件129 pass、0 fail、0 skip；文档写回后的独立21文件复核集为128/128，核心110/110 matrix与纵向测试均重复覆盖；packaging 33/33；三套typecheck与`git diff --check`通过。真实inventory为110项；逐项fixture/matrix验证完整View→feature→bridge→preload→registrar链，event另验证producer/唯一consumer/dispose。malformed workspace/platform event经真实preload进入统一安全diagnostic store。Settings owner唯一、registrar对未登记非Auth channel fail-closed、media Promise错误所有权明确，`media.stopSubmit`和协议`navigationSummary`生产旧引用均为0。全部测试使用VM、内存fake或合成fixture，真实付费submit为0。该段为C结束时历史边界；最终完整门禁见下文，Phase 07仍不得启动。
+
+### 最终完整门禁与production composition重验（2026-07-28）
+
+- 初始完整`npm test`真实RED为221文件、1247项中1244 pass/3 fail：两个陈旧测试要求已删除`getGenerationBatchState`，一个Renderer订单fixture仍传raw `orderUrl`。另有format RED：OperationalStore projection与content bridge两文件。分别归属P2-09、P1-04、P2-13/P1-07；只修正旧测试/机械格式，不恢复production seam。定向45/45后，当前工作树完整`npm test`为1247/1247、0 fail/skip（159.306秒）。
+- 其余完整门禁：Auth16/16、links180/180、packaging33/33；lint、main/renderer/bridge typecheck、format、Renderer build（2157 modules）、pack smoke（38.3秒，preload 222,542 bytes）与`git diff --check`通过。
+- 专项71/71：110/110真实View→feature→bridge→preload→registrar inventory与Auth六项豁免；workspace/platform迟到及malformed event；ConfirmationHost FIFO/scope/focus/exactly-once；supplier/order/price/SQLite故障注入与13k历史单SQL projection（query/SQL=1/1、parsed=3、paidSendCalls=0）；publish-log零引用。
+- 容量终态：main 1k/10k/13k/20k请求10/100/130/200，payload 44,603/464,188/610,078/950,488 B，heap 0/2,137,320/5,329,640/2,106,760 B，延迟1.219/4.245/4.644/5.708ms；Renderer请求均1，payload 4,279/4,280/4,280/4,280 B，heap 351,688/1,268,472/480,912/407,160 B，延迟1.001/1.059/1.074/1.525ms。第20,001项明确`truncated/max-resources`。
+- packaging VM registry require与logger断言通过；packaged ASAR preload 3/3；基于本轮最新Renderer的Electron focus 1/1。所有执行均为临时SQLite/VM/本地Electron/内存fake/合成fixture，真实付费submit调用为0。
 
 ## 2. Feature owner与production composition
 
@@ -31,14 +210,16 @@ Canonical registry：`auto—publish/desktop/ipc/contracts/production-registry.j
 | --- | ---: | ---: | ---: | ---: |
 | workspace | 3 | 5 | 1 | 9 |
 | settings | 5 | 9 | 0 | 14 |
-| media | 10 | 9 | 0 | 19 |
+| media | 10 | 7 | 0 | 17 |
 | platform | 4 | 5 | 1 | 10 |
-| content | 24 | 29 | 2 | 55 |
-| attention | 3 | 1 | 0 | 4 |
-| generation | 7 | 10 | 1 | 18 |
-| **合计** | **56** | **68** | **5** | **129** |
+| content | 15 | 26 | 2 | 43 |
+| attention | 2 | 1 | 0 | 3 |
+| generation | 4 | 8 | 1 | 13 |
+| **合计** | **43** | **61** | **5** | **109** |
 
-129/129 每项包含独立 request/result（event项为event）fixture、owner和production caller；registry表驱动测试对全部 capability 遍历 unknown version、unknown field、missing required field、unsafe/raw error。destructive、event/dispose、scope identity、媒体容量与敏感边界另有纵向RED→GREEN测试。
+109/109每项包含独立request/result（event项为event）fixture、owner和真实production caller。`productionCaller`逐项记录并验证可达consumer文件与实际调用、feature public surface、bridge import/wiring symbol、bridge export、preload命名方法与精确channel、invoke registrar；lifecycle query另验证UI snapshot消费，props链验证父子wiring，event另验证producer、唯一直接bridge consumer和removeListener dispose。registry表驱动测试继续遍历unknown version、unknown field、missing required field、unsafe/raw error。
+
+检查点C及后续P2-09纠正共物理删除19项无真实consumer的能力：`attention.getArticleAttention`、`content.listTemplates`、`content.listGeneratedArticles`、`content.reviewArticles`、`content.listArticleTrash`、`content.previewTrashArticles`、`content.listArticleRemovalTransactions`、`content.listSubmissionBatches`、`content.previewCancelSubmissionBatch`、`content.previewRetryFailedPublication`、`content.retryFailedPublication`、`content.startDoubaoBatch`、`generation.createBatch`、`generation.listBatches`、`generation.getBatch`、`generation.startBatch`、`generation.getState`、`publication.listForArticles`、`media.removeDraft`。删除覆盖contract、registrar、preload、bridge、feature、fixture及只服务这些能力的旧测试；没有保留兼容wrapper。
 
 Auth Phase 07豁免清单：invoke `auth:get-state`、`auth:login`、`auth:change-password`、`auth:refresh`、`auth:logout`；event `auth-state-changed`。它们只存在于显式 allowlist，不提供通用 invoke/on/channel。
 

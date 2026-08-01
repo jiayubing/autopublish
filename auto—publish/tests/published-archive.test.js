@@ -5,7 +5,6 @@ const { afterEach, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { configureRuntimePaths, archivePublishedArticle } = require("../src/core/files");
-const { createJob, runJob, STATUSES } = require("../src/core/jobs");
 
 const tempRoots = [];
 
@@ -93,31 +92,4 @@ it("rolls the complete source pair back when the sidecar archive step fails", fu
   assert.equal(fs.readFileSync(article.sourceFile + ".meta.json", "utf8"), JSON.stringify({ articleId: "article-1" }));
   assert.equal(fs.existsSync(target), false);
   assert.equal(fs.existsSync(targetSidecar), false);
-});
-
-it("keeps a remote success distinct from an archive failure so it is not retryable as publish failure", async function() {
-  const paths = makeWorkspace();
-  const article = makeArticle(paths);
-  const targetSidecar = path.join(paths.published, article.normalizedFilename + ".meta.json");
-  const originalRename = fs.renameSync;
-  let injected = false;
-  fs.renameSync = function(source, destination) {
-    if (!injected && destination === targetSidecar) {
-      injected = true;
-      throw new Error("sidecar move failed");
-    }
-    return originalRename(source, destination);
-  };
-
-  try {
-    const job = createJob(article, { id: "test-platform", publishArticle: async function() { return true; } });
-    const result = await runJob(job, { autoSubmit: true });
-    assert.equal(result.status, STATUSES.PUBLISHED_ARCHIVE_FAILED);
-    assert.equal(result.error, "PUBLISHED_ARCHIVE_FAILED");
-  } finally {
-    fs.renameSync = originalRename;
-  }
-
-  assert.equal(fs.existsSync(article.sourceFile), true);
-  assert.equal(fs.existsSync(article.sourceFile + ".meta.json"), true);
 });

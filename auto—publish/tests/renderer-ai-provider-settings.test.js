@@ -101,10 +101,11 @@ describe("renderer AI provider settings", function () {
     assert.match(settingsView, /<AiProviderSettings\s*\/>/);
   });
 
-  it("declares the optional content generation state channel", function () {
+  it("keeps generation runtime state on the event-backed generation feature API", function () {
     const api = readSource("bridge/content.ts");
 
-    assert.match(api, /getGenerationBatchState/);
+    assert.doesNotMatch(api, /getGenerationBatchState/);
+    assert.match(api, /getGenerationRuntimeSnapshot/);
     assert.match(api, /subscribeGenerationBatchState/);
   });
 });

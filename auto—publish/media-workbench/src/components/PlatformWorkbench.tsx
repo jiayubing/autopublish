@@ -3,7 +3,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { PlatformArticle } from "../types";
+import type { PlatformArticle, PlatformTarget } from "../types";
 import PlatformTaskIndicator from "./PlatformTaskIndicator";
 import {
   RefreshCw,
@@ -52,7 +52,7 @@ export default function PlatformWorkbench({
   const queueSnapshot = platformSnapshot.queue;
   const platformState = platformSnapshot.run;
   const queue = queueSnapshot.queue;
-  const platforms = queueSnapshot.platforms;
+  const platforms: PlatformTarget[] = queueSnapshot.platforms;
   const loading = queueSnapshot.loading;
   const [isConfirming, setIsConfirming] = useState(false);
   const [autoTrashRequested, setAutoTrashRequested] = useState(() => {

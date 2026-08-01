@@ -9,6 +9,10 @@ const {
 const {
   productionIpcContractFixtures,
 } = require("./fixtures/phase-06-production-ipc-contract-fixtures");
+const {
+  createProductionProgram,
+  verifyCapabilityEvidence,
+} = require("./helpers/typescript-symbol-evidence");
 
 const FEATURE_OWNERS = new Set([
   "workspace",
@@ -51,45 +55,47 @@ function assertContractError(action, expectedCodes, message) {
   assert.ok(expectedCodes.includes(caught.code), `${message}: ${caught.code}`);
 }
 
-test("all 129 production capabilities have independent legal fixtures, owners, and caller records", () => {
+let cachedProductionContext = null;
+function productionContext() {
+  if (cachedProductionContext) return cachedProductionContext;
+  const applicationRoot = path.resolve(__dirname, "..");
+  cachedProductionContext = {
+    ...createProductionProgram(applicationRoot),
+    applicationRoot,
+  };
+  return cachedProductionContext;
+}
+
+test("all 109 production capabilities close by TypeChecker symbol identity", () => {
+  const context = productionContext();
   const contracts = productionIpcRegistry.list();
-  const preload = fs.readFileSync(
-    path.resolve(__dirname, "../desktop/preload.js"),
-    "utf8",
-  );
-  assert.equal(contracts.length, 129);
-  assert.equal(productionIpcContractFixtures.length, 129);
+
+  assert.equal(contracts.length, 109);
+  assert.equal(productionIpcContractFixtures.length, 109);
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.capability))
       .size,
-    129,
+    109,
   );
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size,
-    129,
+    109,
   );
 
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);
     assert.ok(contract, fixture.capability);
     assert.equal(contract.channel, fixture.channel, fixture.capability);
-    assert.ok(
-      FEATURE_OWNERS.has(fixture.owner),
-      `${fixture.capability}: ${fixture.owner}`,
-    );
+    assert.ok(FEATURE_OWNERS.has(fixture.owner), fixture.capability);
+    assert.equal(contract.feature, fixture.owner, fixture.capability);
+    const result = verifyCapabilityEvidence(context, {
+      ...fixture,
+      kind: contract.kind,
+    });
     assert.equal(
-      contract.feature,
-      fixture.owner,
-      `${fixture.capability}: contract owner`,
-    );
-    assert.equal(
-      fixture.productionCaller,
-      `desktop/preload.js:${fixture.channel}`,
-      fixture.capability,
-    );
-    assert.ok(
-      preload.includes(JSON.stringify(fixture.channel)),
-      `${fixture.capability}:caller`,
+      result.ok,
+      true,
+      `${fixture.capability}: ${result.reasons.join("; ")}\n${JSON.stringify(result.trace)}`,
     );
 
     if (contract.kind === "event") {
@@ -100,21 +106,18 @@ test("all 129 production capabilities have independent legal fixtures, owners, a
         fixture.capability,
       );
     } else {
-      const encodedRequest = productionIpcRegistry.encodeRequest(
+      const request = productionIpcRegistry.encodeRequest(
         contract,
         fixture.request,
       );
       assert.deepEqual(
-        productionIpcRegistry.parseRequest(contract, encodedRequest),
+        productionIpcRegistry.parseRequest(contract, request),
         fixture.request,
         `${fixture.capability}:request`,
       );
-      const encodedSuccess = productionIpcRegistry.success(
-        contract,
-        fixture.result,
-      );
+      const success = productionIpcRegistry.success(contract, fixture.result);
       assert.deepEqual(
-        productionIpcRegistry.parseSuccess(contract, encodedSuccess),
+        productionIpcRegistry.parseSuccess(contract, success),
         fixture.result,
         `${fixture.capability}:result`,
       );
@@ -122,7 +125,82 @@ test("all 129 production capabilities have independent legal fixtures, owners, a
   }
 });
 
-test("shared registry matrix rejects unknown version and unknown fields for every capability", () => {
+const lifecycleFixtures = productionIpcContractFixtures.filter(
+  (entry) => entry.productionCaller.consumer.kind === "lifecycle",
+);
+const eventFixtures = productionIpcContractFixtures.filter(
+  (entry) => entry.event,
+);
+
+assert.equal(lifecycleFixtures.length, 21);
+assert.equal(eventFixtures.length, 5);
+
+for (const fixture of lifecycleFixtures) {
+  test(`lifecycle query closes query-to-state-to-snapshot consumer: ${fixture.capability}`, () => {
+    const result = verifyCapabilityEvidence(productionContext(), {
+      ...fixture,
+      kind: "invoke",
+    });
+    assert.equal(result.ok, true, result.reasons.join("\n"));
+  });
+}
+
+for (const fixture of eventFixtures) {
+  test(`event closes producer-to-unique-consumer-to-dispose: ${fixture.capability}`, () => {
+    const result = verifyCapabilityEvidence(productionContext(), {
+      ...fixture,
+      kind: "event",
+    });
+    assert.equal(result.ok, true, result.reasons.join("\n"));
+  });
+}
+
+test("production evidence rejects a lifecycle fixture whose recorded state source does not exist", () => {
+  const fixture = productionIpcContractFixtures.find(
+    (entry) => entry.productionCaller.consumer.kind === "lifecycle",
+  );
+  assert.ok(fixture);
+
+  const result = verifyCapabilityEvidence(productionContext(), {
+    ...fixture,
+    kind: "invoke",
+    productionCaller: {
+      ...fixture.productionCaller,
+      consumer: {
+        ...fixture.productionCaller.consumer,
+        stateSource: "media-workbench/src/does-not-exist.ts",
+      },
+    },
+  });
+
+  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
+  assert.ok(
+    result.reasons.includes("lifecycle state source is missing"),
+    result.reasons.join("\n"),
+  );
+});
+
+test("production evidence rejects an event fixture whose recorded producer does not exist", () => {
+  const fixture = productionIpcContractFixtures.find((entry) => entry.event);
+  assert.ok(fixture);
+
+  const result = verifyCapabilityEvidence(productionContext(), {
+    ...fixture,
+    kind: "event",
+    productionCaller: {
+      ...fixture.productionCaller,
+      producer: "desktop/does-not-exist.js",
+    },
+  });
+
+  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
+  assert.ok(
+    result.reasons.includes("event producer source is missing"),
+    result.reasons.join("\n"),
+  );
+});
+
+test("shared registry rejects unknown versions and fields for every capability", () => {
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);
     if (contract.kind === "event") {
@@ -147,7 +225,6 @@ test("shared registry matrix rejects unknown version and unknown fields for ever
       );
       continue;
     }
-
     const request = productionIpcRegistry.encodeRequest(
       contract,
       fixture.request,
@@ -170,7 +247,6 @@ test("shared registry matrix rejects unknown version and unknown fields for ever
       { code: "IPC_UNKNOWN_FIELD" },
       `${fixture.capability}:request-unknown-field`,
     );
-
     const success = productionIpcRegistry.success(contract, fixture.result);
     assert.throws(
       () =>
@@ -193,7 +269,7 @@ test("shared registry matrix rejects unknown version and unknown fields for ever
   }
 });
 
-test("shared registry matrix rejects missing required fields where applicable", () => {
+test("shared registry rejects missing required fields where applicable", () => {
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);
     if (contract.kind === "event") {
@@ -208,7 +284,6 @@ test("shared registry matrix rejects missing required fields where applicable", 
       );
       continue;
     }
-
     const [requestKey] = requiredKeys(contract.request);
     if (requestKey) {
       const encoded = productionIpcRegistry.encodeRequest(
@@ -225,7 +300,6 @@ test("shared registry matrix rejects missing required fields where applicable", 
         `${fixture.capability}:request-missing-${requestKey}`,
       );
     }
-
     const [resultKey] = requiredKeys(contract.success);
     if (resultKey) {
       const encoded = productionIpcRegistry.success(contract, fixture.result);
@@ -242,7 +316,7 @@ test("shared registry matrix rejects missing required fields where applicable", 
   }
 });
 
-test("shared registry matrix closes unsafe and raw errors for every invoke capability", () => {
+test("shared registry closes unsafe and raw errors for every invoke capability", () => {
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);
     if (contract.kind === "event") continue;
@@ -257,7 +331,6 @@ test("shared registry matrix closes unsafe and raw errors for every invoke capab
     assert.equal(
       productionIpcRegistry.parseResult(contract, response).code,
       "IPC_INTERNAL",
-      fixture.capability,
     );
     assert.doesNotMatch(
       JSON.stringify(response),
@@ -267,18 +340,14 @@ test("shared registry matrix closes unsafe and raw errors for every invoke capab
   }
 });
 
-test("the six Phase 07 Auth exemptions are explicit and absent from the production registry", () => {
+test("the six Phase 07 Auth exemptions stay explicit and outside the registry", () => {
   const preload = fs.readFileSync(
     path.resolve(__dirname, "../desktop/preload.js"),
     "utf8",
   );
   for (const channel of [...AUTH_INVOKE_EXEMPTIONS, ...AUTH_EVENT_EXEMPTIONS]) {
     assert.equal(productionIpcRegistry.byChannel(channel), null, channel);
-    assert.match(
-      preload,
-      new RegExp(`[` + "\\\"'" + `]${channel}[` + "\\\"'" + `]`),
-      channel,
-    );
+    assert.match(preload, new RegExp(`[\\"']${channel}[\\"']`), channel);
   }
   const authChannels = [
     ...preload.matchAll(/["'](auth:[a-z-]+|auth-state-changed)["']/g),

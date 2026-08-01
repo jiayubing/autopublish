@@ -23,16 +23,16 @@ const {
 } = require("../services/submission-boundary");
 
 function finitePrice(value) {
-  var price = Number(value);
-  return Number.isFinite(price) && price >= 0 ? price : 0;
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100000000
+    ? value
+    : undefined;
 }
 
 function optionalSubmissionPrice(value) {
-  if (value === undefined || value === null || value === "") return undefined;
-  var price = Number(value);
-  return Number.isFinite(price) && price >= 0 && price <= 100000000
-    ? price
-    : undefined;
+  return finitePrice(value);
 }
 
 function safeResource(value) {
@@ -44,7 +44,10 @@ function safeResource(value) {
     name: String(
       resource.name || resource.title || resource.resourceName || "",
     ),
-    price: finitePrice(resource.price),
+    price:
+      finitePrice(resource.price) === undefined
+        ? null
+        : finitePrice(resource.price),
     type: resource.type === "video" ? "video" : "image",
     createdAt: String(resource.createdAt || resource.updatedAt || ""),
   };
@@ -330,22 +333,14 @@ function safeOrder(value) {
   var order = value || {};
   var result = {
     title: String(order.title || ""),
-    filename: String(order.filename || ""),
     orderNid: String(order.orderNid || ""),
     statusCode: String(order.statusCode || ""),
-    statusLabel: String(order.statusLabel || ""),
     submittedAt: String(order.submittedAt || ""),
     publishedAt: String(order.publishedAt || ""),
-    resourceId: String(order.resourceId || ""),
     resourceName: String(order.resourceName || ""),
     price: String(order.price || ""),
-    orderUrl: String(order.orderUrl || ""),
+    hasPublishedUrl: order.hasPublishedUrl === true,
   };
-  ["publicationId", "attemptId", "publicationStatus", "errorCode"].forEach(
-    function (key) {
-      if (typeof order[key] === "string") result[key] = order[key];
-    },
-  );
   return result;
 }
 
@@ -540,14 +535,6 @@ function registerMediaIpc(deps) {
     });
   });
 
-  ipcMain.handle("media:remove-draft", function (event, filename) {
-    return wrap(function () {
-      resolveDraftFilename(filename);
-      mediaDraftStore.remove(filename);
-      return { completed: true };
-    });
-  });
-
   ipcMain.handle("media:scan-articles", function () {
     return wrap(function () {
       return Promise.resolve(mediaWorkbenchService.scanArticles()).then(
@@ -613,13 +600,6 @@ function registerMediaIpc(deps) {
         uncertainCount: result.uncertain,
         skippedCount: result.skipped,
       };
-    });
-  });
-
-  ipcMain.handle("media:stop-submit", function () {
-    return wrap(function () {
-      mediaWorkbenchService.requestStop();
-      return { stopped: true };
     });
   });
 

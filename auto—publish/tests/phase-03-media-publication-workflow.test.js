@@ -163,6 +163,7 @@ test("a newly submitted paid-media order keeps its quoted price through the real
           });
           store.commitRemoteOutcome({
             attemptId: command.attemptId,
+            batchItemId: command.batchItemId,
             outcome: {
               status: "submitted",
               evidence: {
@@ -199,7 +200,7 @@ test("a newly submitted paid-media order keeps its quoted price through the real
   }
 });
 
-test("a provider string price is preserved as the immutable paid-media quote", async () => {
+test("the submission owner does not recanonicalize a price that bypassed MediaResourceService", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "phase-03-media-order-string-price-"),
   );
@@ -228,6 +229,7 @@ test("a provider string price is preserved as the immutable paid-media quote", a
           });
           store.commitRemoteOutcome({
             attemptId: command.attemptId,
+            batchItemId: command.batchItemId,
             outcome: {
               status: "submitted",
               evidence: {
@@ -259,7 +261,7 @@ test("a provider string price is preserved as the immutable paid-media quote", a
     const order = createMediaOrderService({
       operationalStore: store,
     }).listOrderViews()[0];
-    assert.equal(order.price, "36.5");
+    assert.equal(order.price, "");
   } finally {
     store.close();
   }

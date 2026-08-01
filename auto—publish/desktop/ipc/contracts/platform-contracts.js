@@ -150,6 +150,7 @@ const terminalResult = exactObject({
 });
 
 const snapshot = exactObject({
+  workspaceRuntimeId: identifier,
   runId: nullableField(identifier),
   phase: enumField([
     "idle",
@@ -307,6 +308,9 @@ function projectPlatformSnapshot(value) {
   const integer = (candidate) =>
     Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : 0;
   return {
+    workspaceRuntimeId: typeof input.workspaceRuntimeId === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(input.workspaceRuntimeId)
+      ? input.workspaceRuntimeId
+      : "runtime-unavailable",
     runId: typeof input.runId === "string" && input.runId ? input.runId : null,
     phase: typeof input.phase === "string" && input.phase ? input.phase : "idle",
     total: integer(input.total),

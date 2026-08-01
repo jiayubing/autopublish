@@ -21,6 +21,7 @@ export type ConfirmationRequester = object;
 export type ConfirmationHostContextValue = {
   request: (requester: ConfirmationRequester, options: ConfirmationOptions) => Promise<boolean>;
   cancelRequester: (requester: ConfirmationRequester) => void;
+  setScopeKey: (scopeKey: string | null) => void;
 };
 
 export type ConfirmationPortalProps = {
@@ -47,6 +48,15 @@ export function useConfirmation(): ConfirmationContextValue {
     throw new Error('useConfirmation must be used inside ConfirmationHost');
   }
   return value;
+}
+
+export function useConfirmationScope(scopeKey: string | null) {
+  const context = useContext(ConfirmationContext);
+  useEffect(() => {
+    if (!context) throw new Error('useConfirmationScope must be used inside ConfirmationHost');
+    context.setScopeKey(scopeKey);
+    return () => context.setScopeKey(null);
+  }, [context, scopeKey]);
 }
 
 export function ConfirmationPortal({ children, container }: ConfirmationPortalProps) {

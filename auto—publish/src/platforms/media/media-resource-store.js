@@ -83,8 +83,8 @@ class MediaResourceStore {
     if (!data || !data.resources) return [];
 
     return data.resources.filter(function (r) {
-      var price = Number(r.price);
-      if (!Number.isFinite(price)) return false;
+      var price = r.price;
+      if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return false;
       if (minPrice != null && price < minPrice) return false;
       if (maxPrice != null && price > maxPrice) return false;
       return true;

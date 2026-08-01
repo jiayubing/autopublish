@@ -125,6 +125,7 @@ function createWorkspaceRuntime(deps) {
             paths: injectedPaths,
             sendToRenderer: options.sendToRenderer,
             invalidateData: invalidation.invalidate,
+            workspaceRuntimeId: invalidation.getWorkspaceRuntimeId(),
             platformSettingsService,
           }),
         );

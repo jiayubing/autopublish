@@ -6,6 +6,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const MAX_REMOTE_PAGES = 200;
 const MAX_RESOURCE_IDS = 20000;
+const MAX_CANONICAL_PRICE = 100000000;
 
 function createMediaResourceService(opts) {
   opts = opts || {};
@@ -31,12 +32,11 @@ function createMediaResourceService(opts) {
     return {
       resourceId: resourceId,
       name: firstText(input.name, input.title, input.resource_name, input.resourceName),
-      price: pickValue(input.price, input.cost, input.amount, input.fee),
+      price: canonicalPrice(pickValue(input.price, input.cost, input.amount, input.fee)),
       remarks: pickValue(input.remarks, input.remark, input.note),
       publishRate: pickValue(input.publishRate, input.publish_rate),
       publishTime: pickValue(input.publishTime, input.publish_time),
-      caseLink: pickValue(input.caseLink, input.case_link),
-      raw: cloneRaw(input)
+      caseLink: pickValue(input.caseLink, input.case_link)
     };
   }
 
@@ -85,7 +85,12 @@ function createMediaResourceService(opts) {
 
     while (page <= MAX_REMOTE_PAGES) {
       var response = await client.mediaList({ page: page, pageSize: pageSizeHint });
-      var pageItems = extractResourceItems(response).map(normalizeResource).filter(hasResourceId);
+      var normalizedItems = extractResourceItems(response).map(normalizeResource);
+      var invalidPriceCount = normalizedItems.filter(function(resource) {
+        return resource.resourceId && resource.price === undefined;
+      }).length;
+      if (invalidPriceCount) diagnostics.push({ code: "MEDIA_RESOURCE_PRICE_INVALID", page: page, count: invalidPriceCount });
+      var pageItems = normalizedItems.filter(hasResourceId);
       var paginationMetadata = extractPaginationMetadata(response);
       pageCount += 1;
       var fingerprint = pageItems.map(function(resource) { return resource.resourceId; }).join("\u001f");
@@ -232,6 +237,8 @@ function createMediaResourceService(opts) {
 
   function addToPool(resource) {
     var normalized = normalizeResource(resource);
+    if (normalized.price === undefined)
+      throw serviceError("MEDIA_RESOURCE_PRICE_INVALID", "Media resource price is invalid");
     poolStore.add(toPoolStoreShape(normalized), { note: normalized.remarks });
     return normalized;
   }
@@ -274,7 +281,7 @@ function createClient(opts) {
 function readCachedResources(store) {
   var data = store ? store.getAll() : null;
   var resources = Array.isArray(data && data.resources) ? data.resources : [];
-  return resources.map(normalizeResourceShape);
+  return resources.map(normalizeResourceShape).filter(hasResourceId);
 }
 
 function readPoolEntries(store) {
@@ -290,25 +297,24 @@ function normalizeResourceShape(resource) {
   return {
     resourceId: firstText(resource && (resource.resourceId || resource.resource_id || resource.id || resource.nid)),
     name: firstText(resource && (resource.name || resource.title || resource.resource_name || resource.resourceName)),
-    price: resource && resource.price,
+    price: canonicalPrice(resource && resource.price),
     remarks: resource && (resource.remarks !== undefined ? resource.remarks : resource.remark),
     publishRate: resource && (resource.publishRate !== undefined ? resource.publishRate : resource.publish_rate),
     publishTime: resource && (resource.publishTime !== undefined ? resource.publishTime : resource.publish_time),
-    caseLink: resource && (resource.caseLink !== undefined ? resource.caseLink : resource.case_link),
-    raw: resource && resource.raw !== undefined ? cloneRaw(resource.raw) : cloneRaw(resource)
+    caseLink: resource && (resource.caseLink !== undefined ? resource.caseLink : resource.case_link)
   };
 }
 
 function normalizePoolEntry(entry) {
+  var name = entry && (entry.name || entry.title || entry.resource_name || entry.resourceName);
   return {
     resourceId: poolEntryId(entry),
-    name: firstText(entry && (entry.name || entry.title || entry.resource_name || entry.resourceName)),
-    price: entry && entry.price,
+    name: firstText(name),
+    price: canonicalPrice(entry && entry.price),
     remarks: entry && (entry.remarks !== undefined ? entry.remarks : entry.remark !== undefined ? entry.remark : entry.note),
     publishRate: entry && (entry.publishRate !== undefined ? entry.publishRate : entry.publish_rate),
     publishTime: entry && (entry.publishTime !== undefined ? entry.publishTime : entry.publish_time),
-    caseLink: entry && (entry.caseLink !== undefined ? entry.caseLink : entry.case_link),
-    raw: cloneRaw(entry)
+    caseLink: entry && (entry.caseLink !== undefined ? entry.caseLink : entry.case_link)
   };
 }
 
@@ -323,8 +329,7 @@ function toPoolStoreShape(resource) {
     remarks: resource.remarks,
     publishRate: resource.publishRate,
     publishTime: resource.publishTime,
-    caseLink: resource.caseLink,
-    raw: resource.raw
+    caseLink: resource.caseLink
   };
 }
 
@@ -421,8 +426,19 @@ function pickValue() {
   return undefined;
 }
 
-function cloneRaw(value) {
-  return value && typeof value === "object" ? JSON.parse(JSON.stringify(value)) : value;
+function canonicalPrice(value) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number")
+    return Number.isFinite(value) && value >= 0 && value <= MAX_CANONICAL_PRICE
+      ? value
+      : undefined;
+  if (typeof value !== "string") return undefined;
+  var text = value.trim();
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return undefined;
+  var price = Number(text);
+  return Number.isFinite(price) && price >= 0 && price <= MAX_CANONICAL_PRICE
+    ? price
+    : undefined;
 }
 
 function hasResourceId(resource) {

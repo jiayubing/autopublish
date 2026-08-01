@@ -183,10 +183,10 @@ describe("renderer content generation workflow", function() {
       "resumeGenerationBatch",
       "stopGenerationBatch",
       "retryFailedGenerationBatch",
-      "getGenerationBatchState",
       "getGenerationRuntimeSnapshot",
       "subscribeGenerationBatchState"
     ].forEach(function(name) { assert.match(api, new RegExp(name)); });
+    assert.doesNotMatch(api, /getGenerationBatchState/);
     assert.match(preload, /previewGenerationBatch/);
     assert.doesNotMatch(read("media-workbench/src/components/content/BatchGenerationView.tsx"), /safeStorage|Playwright|playwright|readFileSync|fs\./i);
   });

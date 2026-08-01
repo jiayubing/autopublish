@@ -234,7 +234,7 @@ export default function ResourceLibrary({
                     {poolResourceIds.includes(resource.resourceId) ? <BookmarkMinus className="w-3.5 h-3.5" /> : <BookmarkPlus className="w-3.5 h-3.5" />}
                   </button>
                   <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200/50 px-1.5 py-0.5 rounded-full">
-                    ¥{resource.price.toFixed(1)}
+                    {typeof resource.price === 'number' ? `¥${resource.price.toFixed(1)}` : '未记录'}
                   </span>
                 </div>
               </div>

@@ -9,7 +9,7 @@ import type {
   PublicationTargetDto,
   SafeOperationalErrorDto,
 } from "../contracts/phase-01-domain";
-import { ipcError, isElectron, unavailable } from "./transport";
+import { ipcError, requireBridgeApi } from "./transport";
 
 export type { PublicationTargetDto, SafeOperationalErrorDto };
 
@@ -18,7 +18,6 @@ type PublicationIpcResponse<T> = {
   data?: T;
   error?: SafeOperationalErrorDto;
 };
-type PublicationListInput = { clientId: string; articleIds: string[] };
 type PublicationReconcileInput = {
   publicationId: string;
   status: "published" | "failed";
@@ -26,9 +25,6 @@ type PublicationReconcileInput = {
   confirmed: true;
 };
 type PublicationApi = {
-  listForArticles?: (
-    input: PublicationListInput,
-  ) => Promise<PublicationIpcResponse<{ records: PublicationHistoryRecord[] }>>;
   reconcile?: (
     input: PublicationReconcileInput,
   ) => Promise<PublicationIpcResponse<{ record: PublicationHistoryRecord }>>;
@@ -37,9 +33,6 @@ type AttentionContentApi = {
   listArticleAttention?: (input?: {
     clientId: string;
   }) => Promise<PublicationIpcResponse<ArticleAttentionList>>;
-  getArticleAttention?: (input: {
-    attentionId: string;
-  }) => Promise<PublicationIpcResponse<{ item: ArticleAttentionItem | null }>>;
   previewArticleAttention?: (input: {
     attentionId: string;
     action: string;
@@ -52,49 +45,28 @@ type AttentionContentApi = {
   }) => Promise<PublicationIpcResponse<ArticleAttentionResolution>>;
 };
 
-function publicationApi(): PublicationApi | undefined {
-  return window.desktopConsole?.publication as PublicationApi | undefined;
+function publicationApi(): PublicationApi {
+  return requireBridgeApi<PublicationApi>("publication");
 }
 
-function attentionContentApi(): AttentionContentApi | undefined {
-  return window.desktopConsole?.content as AttentionContentApi | undefined;
+function attentionContentApi(): AttentionContentApi {
+  return requireBridgeApi<AttentionContentApi>("content");
 }
 
 function publicationError(
   error: SafeOperationalErrorDto | undefined,
   fallback: string,
 ): Error & { code?: string } {
-  return Object.assign(new Error(error?.userMessage || fallback), {
-    code: error?.code,
-  });
+  return ipcError(error, fallback);
 }
 
-export async function listPublicationHistory(
-  clientId: string,
-  articleIds: string[],
-): Promise<PublicationHistoryRecord[]> {
-  if (!isElectron()) return [];
-  const api = publicationApi();
-  if (typeof api?.listForArticles !== "function") return [];
-  const result = await api.listForArticles({
-    clientId,
-    articleIds,
-  });
-  if (result.ok === false)
-    throw publicationError(result.error, "publication history failed");
-  return result.data?.records || [];
-}
 export async function reconcilePublicationHistory(input: {
   publicationId: string;
   status: "published" | "failed";
   reasonCode: string;
 }): Promise<PublicationHistoryRecord> {
-  if (!isElectron())
-    throw unavailable("Publication reconciliation requires the desktop app");
   const api = publicationApi();
-  if (typeof api?.reconcile !== "function")
-    throw unavailable("Publication reconciliation requires the desktop app");
-  const result = await api.reconcile({
+  const result = await api.reconcile!({
     ...input,
     confirmed: true,
   });
@@ -110,12 +82,8 @@ export async function reconcilePublicationHistory(input: {
 export async function listArticleAttentionSnapshot(
   clientId?: string,
 ): Promise<ArticleAttentionList> {
-  if (!isElectron())
-    return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
   const content = attentionContentApi();
-  if (typeof content?.listArticleAttention !== "function")
-    return { revision: 0, items: [], counts: { total: 0, actionable: 0 } };
-  const result = await content.listArticleAttention(
+  const result = await content.listArticleAttention!(
     clientId ? { clientId } : undefined,
   );
   if (!result.ok || !result.data)
@@ -127,25 +95,12 @@ export async function listArticleAttention(
 ): Promise<ArticleAttentionItem[]> {
   return (await listArticleAttentionSnapshot(clientId)).items;
 }
-export async function getArticleAttention(
-  attentionId: string,
-): Promise<ArticleAttentionItem | null> {
-  if (!isElectron()) return null;
-  const content = attentionContentApi();
-  if (typeof content?.getArticleAttention !== "function") return null;
-  const result = await content.getArticleAttention({ attentionId });
-  if (!result.ok) throw ipcError(result.error, "getArticleAttention failed");
-  return result.data?.item || null;
-}
 export async function previewArticleAttention(input: {
   attentionId: string;
   action: string;
 }): Promise<ArticleAttentionPreview> {
-  if (!isElectron()) throw unavailable("需处理中心不可用");
   const content = attentionContentApi();
-  if (typeof content?.previewArticleAttention !== "function")
-    throw unavailable("需处理中心不可用");
-  const result = await content.previewArticleAttention(input);
+  const result = await content.previewArticleAttention!(input);
   if (!result.ok || !result.data)
     throw ipcError(result.error, "previewArticleAttention failed");
   return result.data;
@@ -156,11 +111,8 @@ export async function resolveArticleAttention(input: {
   expectedRevision: number;
   confirmed?: boolean;
 }): Promise<ArticleAttentionResolution> {
-  if (!isElectron()) throw unavailable("需处理中心不可用");
   const content = attentionContentApi();
-  if (typeof content?.resolveArticleAttention !== "function")
-    throw unavailable("需处理中心不可用");
-  const result = await content.resolveArticleAttention(input);
+  const result = await content.resolveArticleAttention!(input);
   if (!result.ok || !result.data)
     throw ipcError(result.error, "resolveArticleAttention failed");
   return result.data;

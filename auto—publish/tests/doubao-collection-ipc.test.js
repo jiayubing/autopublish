@@ -13,7 +13,6 @@ const CHANNELS = [
   "content:open-doubao-login",
   "content:collect-doubao-one",
   "content:preview-doubao-batch",
-  "content:start-doubao-batch",
   "content:start-prepared-doubao-batch",
   "content:pause-doubao-batch",
   "content:resume-doubao-batch",
@@ -343,19 +342,4 @@ describe("Doubao desktop IPC", function() {
     }
   });
 
-  it("rejects batches larger than 500 tasks and batch task fields outside the API", async function() {
-    const handlers = registered();
-    const tasks = Array.from({ length: 501 }, function(_, index) {
-      return { clientId: "client-a", questionId: "question-" + index };
-    });
-    const tooMany = await handlers.get("content:start-doubao-batch")(null, { tasks: tasks });
-    assert.equal(tooMany.ok, false);
-    assert.match(tooMany.error.code, /INVALID|LIMIT/);
-
-    const extraField = await handlers.get("content:start-doubao-batch")(null, {
-      tasks: [{ clientId: "client-a", questionId: "question-a", force: false, path: "C:\\private" }]
-    });
-    assert.equal(extraField.ok, false);
-    assert.match(extraField.error.code, /INVALID/);
-  });
 });

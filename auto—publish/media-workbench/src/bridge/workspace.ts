@@ -9,7 +9,7 @@ import type {
   WorkspaceRuntimeIdentity,
   WorkspaceSelectionToken,
 } from "../types";
-import { ipcError, isElectron, unavailable } from "./transport";
+import { ipcError, requireBridgeApi, requireDisposer } from "./transport";
 
 type WorkspaceResponse<T> = {
   ok: boolean;
@@ -37,13 +37,14 @@ type WorkspaceApi = {
   ) => Promise<WorkspaceResponse<WorkspaceConfirmationResult>>;
   cancelSelection: () => Promise<WorkspaceResponse<WorkspaceBootstrapState>>;
   getCurrent: () => Promise<WorkspaceResponse<WorkspaceCurrent>>;
-  openCurrent: () => Promise<WorkspaceResponse<void>>;
+  openCurrent: () => Promise<WorkspaceResponse<{ opened: boolean }>>;
   requestSwitch: () => Promise<WorkspaceResponse<WorkspaceBootstrapState>>;
 };
 type WorkspaceDataApi = {
   onInvalidated: (
     listener: (event: WorkspaceDataInvalidatedEvent) => void,
   ) => () => void;
+  onInvalidationDiagnostic?: (listener: () => void) => () => void;
   getRuntimeIdentity: () => Promise<
     WorkspaceResponse<WorkspaceRuntimeIdentity>
   >;
@@ -60,157 +61,108 @@ type RuntimeDiagnosticsApi = {
   >;
 };
 
-const workspaceApi = () =>
-  window.desktopConsole?.workspace as WorkspaceApi | undefined;
+const workspaceApi = () => requireBridgeApi<WorkspaceApi>("workspace");
 const workspaceDataApi = () =>
-  window.desktopConsole?.workspaceData as WorkspaceDataApi | undefined;
+  requireBridgeApi<WorkspaceDataApi>("workspaceData");
 const runtimeDiagnosticsApi = () =>
-  window.desktopConsole?.runtimeDiagnostics as
-    RuntimeDiagnosticsApi | undefined;
+  requireBridgeApi<RuntimeDiagnosticsApi>("runtimeDiagnostics");
 
 export type { RuntimeCapability, RuntimeDiagnostics };
-const selectionRequired = (): WorkspaceBootstrapState => ({
-  state: "selection_required",
-  configured: false,
-  environmentManaged: false,
-  label: "尚未配置工作区",
-  selection: null,
-  errorCode: null,
-  changed: null,
-});
 export async function getWorkspaceBootstrapState(): Promise<WorkspaceBootstrapState> {
-  if (!isElectron()) return selectionRequired();
-  const result = await workspaceApi()!.getBootstrapState();
+  const result = await workspaceApi().getBootstrapState();
   if (!result.ok)
     throw ipcError(result.error, "Unable to read workspace bootstrap state");
-  return result.data || selectionRequired();
+  if (!result.data)
+    throw ipcError(undefined, "Unable to read workspace bootstrap state");
+  return result.data;
 }
 export async function chooseWorkspaceDirectory(): Promise<WorkspaceBootstrapState> {
-  if (!isElectron()) return selectionRequired();
-  const result = await workspaceApi()!.chooseDirectory();
+  const result = await workspaceApi().chooseDirectory();
   if (!result.ok) throw ipcError(result.error, "Unable to choose a workspace");
-  return result.data || selectionRequired();
+  if (!result.data) throw ipcError(undefined, "Unable to choose a workspace");
+  return result.data;
 }
 export async function confirmWorkspaceSelection(
   input: WorkspaceSelectionToken,
 ): Promise<WorkspaceConfirmationResult> {
-  if (!isElectron())
-    throw unavailable("Workspace selection requires the desktop app");
-  const result = await workspaceApi()!.confirmSelection(input);
+  const result = await workspaceApi().confirmSelection(input);
   if (!result.ok)
     throw ipcError(result.error, "Unable to confirm workspace selection");
-  return result.data || { ...selectionRequired(), state: "relaunching" };
+  if (!result.data)
+    throw ipcError(undefined, "Unable to confirm workspace selection");
+  return result.data;
 }
 export async function cancelWorkspaceSelection(): Promise<WorkspaceBootstrapState> {
-  if (!isElectron()) return selectionRequired();
-  const result = await workspaceApi()!.cancelSelection();
+  const result = await workspaceApi().cancelSelection();
   if (!result.ok)
     throw ipcError(result.error, "Unable to cancel workspace selection");
-  return result.data || selectionRequired();
+  if (!result.data)
+    throw ipcError(undefined, "Unable to cancel workspace selection");
+  return result.data;
 }
 export async function getCurrentWorkspace(): Promise<WorkspaceCurrent> {
-  if (!isElectron()) return selectionRequired();
-  const result = await workspaceApi()!.getCurrent();
+  const result = await workspaceApi().getCurrent();
   if (!result.ok)
     throw ipcError(result.error, "Unable to read the current workspace");
-  return result.data || selectionRequired();
+  if (!result.data)
+    throw ipcError(undefined, "Unable to read the current workspace");
+  return result.data;
 }
 export async function openCurrentWorkspace(): Promise<void> {
-  if (!isElectron())
-    throw unavailable("Opening a workspace requires the desktop app");
-  const result = await workspaceApi()!.openCurrent();
+  const result = await workspaceApi().openCurrent();
   if (!result.ok)
     throw ipcError(result.error, "Unable to open the current workspace");
+  if (!result.data)
+    throw ipcError(undefined, "Unable to open the current workspace");
 }
 export async function requestWorkspaceSwitch(): Promise<WorkspaceBootstrapState> {
-  if (!isElectron()) return selectionRequired();
-  const result = await workspaceApi()!.requestSwitch();
+  const result = await workspaceApi().requestSwitch();
   if (!result.ok) throw ipcError(result.error, "Unable to switch workspace");
-  return result.data || selectionRequired();
+  if (!result.data) throw ipcError(undefined, "Unable to switch workspace");
+  return result.data;
 }
 export function onWorkspaceDataInvalidated(
   listener: (event: WorkspaceDataInvalidatedEvent) => void,
 ): () => void {
-  if (!isElectron() || typeof workspaceDataApi()?.onInvalidated !== "function")
+  return requireDisposer(
+    workspaceDataApi().onInvalidated(listener),
+    "Workspace invalidation subscription failed",
+  );
+}
+export function onWorkspaceInvalidationDiagnostic(
+  listener: () => void,
+): () => void {
+  let subscribe: WorkspaceDataApi["onInvalidationDiagnostic"];
+  try {
+    subscribe = workspaceDataApi().onInvalidationDiagnostic;
+  } catch {
     return () => {};
-  return workspaceDataApi()!.onInvalidated(listener);
+  }
+  if (typeof subscribe !== "function") return () => {};
+  return requireDisposer(
+    subscribe(listener),
+    "Workspace invalidation diagnostic subscription failed",
+  );
 }
 export async function getWorkspaceRuntimeIdentity(): Promise<WorkspaceRuntimeIdentity> {
-  if (
-    !isElectron() ||
-    typeof workspaceDataApi()?.getRuntimeIdentity !== "function"
-  ) {
-    return { workspaceRuntimeId: "renderer-fixture", revision: 0 };
-  }
-  const result = await workspaceDataApi()!.getRuntimeIdentity();
+  const result = await workspaceDataApi().getRuntimeIdentity();
   if (!result.ok || !result.data)
     throw ipcError(result.error, "Unable to read workspace runtime identity");
   return result.data as WorkspaceRuntimeIdentity;
 }
-const emptyDiagnostics: RuntimeDiagnostics = {
-  ok: false,
-  buildInfo: { version: "unknown", commit: "unknown", dirty: false },
-  browserChannel: {
-    channel: "msedge",
-    configured: true,
-    state: "not_checked",
-    probed: false,
-    source: "default",
-    errorCode: null,
-    lastCheckedAt: null,
-  },
-  capabilities: {
-    playwrightNode: {
-      state: "unavailable",
-      source: null,
-      errorCode: "PLAYWRIGHT_NODE_UNAVAILABLE",
-      lastCheckedAt: null,
-    },
-    playwrightCli: {
-      state: "unavailable",
-      source: null,
-      errorCode: "PLAYWRIGHT_CLI_UNAVAILABLE",
-      lastCheckedAt: null,
-    },
-    browserChannel: {
-      channel: "msedge",
-      configured: true,
-      state: "not_checked",
-      probed: false,
-      source: "default",
-      errorCode: null,
-      lastCheckedAt: null,
-    },
-    docx: {
-      state: "unavailable",
-      source: "bundled",
-      errorCode: "DOCX_RUNTIME_UNAVAILABLE",
-      lastCheckedAt: null,
-    },
-    hepan: {
-      state: "optional_unconfigured",
-      source: "optional",
-      errorCode: "HEPAN_PYTHON_UNAVAILABLE",
-      lastCheckedAt: null,
-    },
-  },
-  errors: [],
-  warnings: [],
-};
 function runtimeIpcError(
   error: { code?: string; userMessage?: string } | undefined,
   fallback: string,
 ) {
-  return Object.assign(new Error(error?.userMessage || fallback), {
-    code: error?.code,
-  });
+  return ipcError(error, fallback);
 }
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
-  if (!isElectron()) return emptyDiagnostics;
-  const result = await runtimeDiagnosticsApi()!.get();
+  const result = await runtimeDiagnosticsApi().get();
   if (!result.ok)
     throw runtimeIpcError(result.error, "Unable to read runtime diagnostics");
-  return result.data || emptyDiagnostics;
+  if (!result.data)
+    throw runtimeIpcError(undefined, "Unable to read runtime diagnostics");
+  return result.data;
 }
 export async function runBrowserSelfCheck(): Promise<{
   ok: boolean;
@@ -218,9 +170,7 @@ export async function runBrowserSelfCheck(): Promise<{
   session: string;
   capability?: RuntimeBrowserCapability;
 }> {
-  if (!isElectron())
-    throw unavailable("Browser self-check requires the desktop app");
-  const result = await runtimeDiagnosticsApi()!.browserSmoke();
+  const result = await runtimeDiagnosticsApi().browserSmoke();
   if (!result.ok || !result.data)
     throw runtimeIpcError(result.error, "Browser self-check failed");
   return result.data;
