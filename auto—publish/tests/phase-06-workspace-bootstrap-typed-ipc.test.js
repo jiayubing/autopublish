@@ -22,6 +22,9 @@ test("workspace bootstrap exposes seven versioned path-free contracts", function
   const registry = createContractRegistry(workspaceContracts);
   assert.deepEqual(workspaceContracts.map((contract) => contract.channel).sort(), CHANNELS);
   assert.equal(workspaceContracts.every((contract) => contract.schemaVersion === 1), true);
+  for (const code of ["WORKSPACE_SCHEMA_FUTURE", "WORKSPACE_SCHEMA_OLDER_UNSUPPORTED"]) {
+    assert.equal(workspaceContracts.every((contract) => contract.errorCodes.includes(code)), true);
+  }
   assert.doesNotMatch(JSON.stringify(workspaceContracts), /workspacePath|filePath|sidecarPath|database|cookie|secret|\bpath\b/i);
 
   const empty = registry.byChannel("workspace:get-current");

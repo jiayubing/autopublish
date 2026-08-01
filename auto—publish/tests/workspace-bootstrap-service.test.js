@@ -184,6 +184,20 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
+  it("preserves workspace schema incompatibility errors during bootstrap", function() {
+    for (const code of ["WORKSPACE_SCHEMA_FUTURE", "WORKSPACE_SCHEMA_OLDER_UNSUPPORTED"]) {
+      const harness = createHarness({
+        env: { AUTO_PUBLISH_WORKSPACE: path.join(process.cwd(), "schema-marker") },
+        validator: { validate: function() { return { kind: "invalid", error: { code: code } }; } }
+      });
+      try {
+        const state = harness.service.bootstrap();
+        assert.equal(state.state, "invalid", code);
+        assert.equal(state.error.code, code, code);
+      } finally { harness.cleanup(); }
+    }
+  });
+
   it("does not fall back when the environment override itself is invalid", function() {
     const harness = createHarness();
     const saved = path.join(harness.root, "saved");

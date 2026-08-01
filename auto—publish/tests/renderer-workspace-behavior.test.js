@@ -61,6 +61,14 @@ describe("executable renderer workspace behavior", function () {
       getWorkspaceErrorMessage("WORKSPACE_LOCATION_INVALID"),
       "已保存的工作区配置无效，请重新选择",
     );
+    assert.equal(
+      getWorkspaceErrorMessage("WORKSPACE_SCHEMA_FUTURE"),
+      "工作区由更新版本创建，请升级应用后再使用。",
+    );
+    assert.equal(
+      getWorkspaceErrorMessage("WORKSPACE_SCHEMA_OLDER_UNSUPPORTED"),
+      "工作区版本过旧，需要显式升级后才能使用。",
+    );
   });
 
   it("derives Settings command state from configured and environment ownership", async function () {

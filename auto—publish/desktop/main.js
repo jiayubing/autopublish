@@ -21,6 +21,9 @@ const {
   createAuthenticatedRuntime,
 } = require("./services/authenticated-runtime");
 const { createWorkspaceRuntime } = require("./workspace-runtime");
+const {
+  createRendererSmokeProbeSource,
+} = require("./packaging/renderer-smoke-probe");
 
 const startupWorkspaceEnvironment = captureEnvironmentValue(
   process.env,
@@ -44,6 +47,8 @@ let quitPromise = null;
 let quitReady = false;
 let startupStatus = "starting";
 let isQuitting = false;
+const PACKAGED_SMOKE = process.argv.includes("--offline-packaging-smoke");
+let packagedSmokeFinished = false;
 const EXTERNAL_LINK_HOSTS = new Set([
   "www.toutiao.com",
   "mp.weixin.qq.com",
@@ -66,6 +71,30 @@ function isAllowedExternalUrl(value) {
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function finishPackagedSmoke(result) {
+  if (!PACKAGED_SMOKE || packagedSmokeFinished) return;
+  packagedSmokeFinished = true;
+  const ok = result && result.ok === true;
+  const output =
+    JSON.stringify({
+      ok,
+      checks: {
+        main: true,
+        preload: result && result.preload === true,
+        renderer: result && result.renderer === true,
+      },
+    }) + "\n";
+  const exit = function () {
+    if (typeof app.exit === "function") app.exit(ok ? 0 : 1);
+    else app.quit();
+  };
+  try {
+    process.stdout.write(output, exit);
+  } catch (_) {
+    exit();
   }
 }
 
@@ -112,6 +141,31 @@ function createMainWindow() {
       callback(false);
     },
   );
+  if (PACKAGED_SMOKE) {
+    mainWindow.webContents.once("did-fail-load", function () {
+      finishPackagedSmoke({ ok: false, preload: false, renderer: false });
+    });
+    mainWindow.webContents.once("did-finish-load", function () {
+      Promise.resolve(
+        mainWindow.webContents.executeJavaScript(
+          createRendererSmokeProbeSource(),
+        ),
+      ).then(
+        function (readiness) {
+          const preloadReady = readiness && readiness.preload === true;
+          const rendererReady = readiness && readiness.renderer === true;
+          finishPackagedSmoke({
+            ok: preloadReady && rendererReady,
+            preload: preloadReady,
+            renderer: rendererReady,
+          });
+        },
+        function () {
+          finishPackagedSmoke({ ok: false, preload: false, renderer: true });
+        },
+      );
+    });
+  }
   mainWindow.loadFile(rendererEntryPath);
   mainWindow.on("closed", function () {
     mainWindow = null;
@@ -336,7 +390,8 @@ function failStartup() {
   return disposeRuntime()
     .catch(function () {})
     .then(function () {
-      app.quit();
+      if (PACKAGED_SMOKE) finishPackagedSmoke({ ok: false });
+      else app.quit();
     });
 }
 

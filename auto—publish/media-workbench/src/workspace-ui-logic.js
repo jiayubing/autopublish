@@ -5,6 +5,8 @@ const ERROR_MESSAGES = Object.freeze({
   WORKSPACE_CONFIRMATION_REQUIRED: '请确认后再初始化工作区。',
   WORKSPACE_PATH_INVALID: '所选目录无效，请重新选择。',
   WORKSPACE_PATH_FORBIDDEN: '出于安全原因，不能使用该目录。',
+  WORKSPACE_SCHEMA_FUTURE: '工作区由更新版本创建，请升级应用后再使用。',
+  WORKSPACE_SCHEMA_OLDER_UNSUPPORTED: '工作区版本过旧，需要显式升级后才能使用。',
   WORKSPACE_NOT_WRITABLE: '所选目录不可写，请选择其他目录。',
   WORKSPACE_MARKER_INVALID: '工作区标记无效，请重新选择目录。',
   WORKSPACE_SELECTION_EXPIRED: '选择已过期，请重新选择目录。',

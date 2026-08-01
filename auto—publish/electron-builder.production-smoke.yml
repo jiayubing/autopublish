@@ -1,0 +1,14 @@
+extends: ./electron-builder.production.yml
+
+# This directory-only configuration exercises the production file boundary in
+# CI without pretending that an unsigned artifact passed the release gate.
+directories:
+  output: release-production-smoke
+
+forceCodeSigning: false
+
+win:
+  signAndEditExecutable: false
+  signtoolOptions: null
+
+artifactName: "${productName}-Production-Smoke-${version}-${arch}.${ext}"

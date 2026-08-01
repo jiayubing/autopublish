@@ -8,6 +8,8 @@ const {
 } = require("../../src/diagnostics/diagnostic-schema");
 const { createDiagnosticMemorySink } = require("../../src/diagnostics/diagnostic-memory-sink");
 const { createDiagnosticFileSink } = require("../../src/diagnostics/diagnostic-file-sink");
+const { createPackagedRuntimeResolver } = require("../packaging/packaged-runtime-resolver");
+const { resolvePlaywrightRuntimePaths } = require("../packaging/playwright-runtime-paths");
 
 const DIAGNOSTIC_EVENT_FIELDS = new Set([
   "diagnosticId",
@@ -99,6 +101,45 @@ function resolvePlaywrightRuntime(options) {
   const config = opts.applicationTools || readApplicationTools(appRoot, opts);
   const env = opts.env || process.env;
   const packaged = opts.packaged === undefined ? env.AUTO_PUBLISH_PACKAGED === "1" : opts.packaged === true;
+  if (packaged) {
+    const packagedPaths = resolvePlaywrightRuntimePaths(Object.assign({}, opts, {
+      appRoot: appRoot,
+      packaged: true,
+    }));
+    let hepanPython = { command: null, source: "optional" };
+    let providerConfig = null;
+    if (typeof opts.hepanProvider === "function") {
+      try { providerConfig = opts.hepanProvider(); } catch (_) { providerConfig = null; }
+    }
+    const configuredPython = providerConfig && providerConfig.pythonPath
+      ? providerConfig.pythonPath
+      : configuredValue(config, opts.applicationValues || {}, "hepanPython", "HEPAN_PYTHON");
+    if (configuredPython) {
+      const resolver = createPackagedRuntimeResolver({
+        appRoot: appRoot,
+        resourcesPath: opts.resourcesPath,
+        packaged: true,
+        env: env,
+      });
+      const checked = resolver.tryResolve({
+        name: "Hepan Python",
+        explicit: configuredPython,
+        allowExplicitPackaged: true,
+        executable: true,
+        errorCode: "HEPAN_PYTHON_UNAVAILABLE",
+        message: "Hepan Python is unavailable",
+      });
+      if (checked.ok) hepanPython = { command: checked.value.path, source: "application-config" };
+    }
+    return {
+      appRoot: appRoot,
+      packaged: true,
+      playwrightNode: packagedPaths.playwrightNode,
+      playwrightCli: packagedPaths.playwrightCli,
+      browserChannel: resolveBrowserChannel({ config: config, applicationValues: opts.applicationValues, env: env }),
+      hepanPython: hepanPython,
+    };
+  }
   const appRootName = path.basename(appRoot).toLowerCase();
   const inferredResourcesPath = packaged && (appRootName === "app.asar" || appRootName === "app.asar.unpacked") ? path.dirname(appRoot) : appRoot;
   const resourcesPath = path.resolve(opts.resourcesPath || inferredResourcesPath);

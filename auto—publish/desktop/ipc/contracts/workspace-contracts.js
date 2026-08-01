@@ -85,6 +85,16 @@ const ERROR_DETAILS = Object.freeze({
     "never",
     "出于安全原因，不能使用所选目录。",
   ],
+  WORKSPACE_SCHEMA_FUTURE: [
+    "validation",
+    "manual-check",
+    "工作区由更新版本创建，请升级应用后再使用。",
+  ],
+  WORKSPACE_SCHEMA_OLDER_UNSUPPORTED: [
+    "validation",
+    "manual-check",
+    "工作区版本过旧，需要显式升级后才能使用。",
+  ],
   WORKSPACE_NOT_WRITABLE: [
     "validation",
     "manual-check",

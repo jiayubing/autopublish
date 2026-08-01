@@ -274,6 +274,25 @@ describe("workspace bootstrap IPC", function () {
     }
   });
 
+  it("propagates workspace schema incompatibility errors through the typed contract", async function () {
+    let code;
+    const handlers = harness(
+      {
+        chooseDirectory() {
+          throw Object.assign(new Error("schema mismatch"), { code });
+        },
+      },
+      async () => ({ canceled: false, filePaths: ["C:\\selected"] }),
+    );
+    for (const expected of ["WORKSPACE_SCHEMA_FUTURE", "WORKSPACE_SCHEMA_OLDER_UNSUPPORTED"]) {
+      code = expected;
+      const result = await handlers.get("workspace:choose-directory")({}, emptyRequest);
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, expected);
+      assert.equal(result.error.category, "validation");
+    }
+  });
+
   it("delegates open and switch commands after exact decoding", async function () {
     let opened = 0;
     const switched = [];

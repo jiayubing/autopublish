@@ -6,12 +6,22 @@ directories:
   output: release
 
 asar: true
+forceCodeSigning: true
+
+# The manifest and one-shot migration tool are operator resources, not app
+# modules. Keeping them outside app.asar makes their paths explicit and lets
+# the offline verifier hash the exact files shipped in a release.
+extraResources:
+  - from: build/production-artifact-manifest.json
+    to: production-artifact-manifest.json
+  - from: scripts/migrate-content-library-v2.js
+    to: migration/migrate-content-library-v2.js
 
 win:
   signAndEditExecutable: true
-  forceCodeSigning: true
-  certificateFile: "${env.WIN_CSC_LINK}"
-  certificatePassword: "${env.WIN_CSC_KEY_PASSWORD}"
+  signtoolOptions:
+    certificateFile: "${env.WIN_CSC_LINK}"
+    certificatePassword: "${env.WIN_CSC_KEY_PASSWORD}"
   target:
     - target: portable
       arch:

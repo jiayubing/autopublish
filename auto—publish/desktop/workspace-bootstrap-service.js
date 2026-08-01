@@ -14,6 +14,8 @@ const ERROR_MESSAGES = {
   WORKSPACE_PATH_INVALID: "Workspace path is invalid",
   WORKSPACE_PATH_FORBIDDEN: "Workspace path is forbidden",
   WORKSPACE_LOCATION_INVALID: "\u5df2\u4fdd\u5b58\u7684\u5de5\u4f5c\u533a\u914d\u7f6e\u65e0\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9",
+  WORKSPACE_SCHEMA_FUTURE: "Workspace schema is newer than this application supports",
+  WORKSPACE_SCHEMA_OLDER_UNSUPPORTED: "Workspace schema requires an explicit upgrade",
   WORKSPACE_NOT_WRITABLE: "Workspace path is not writable",
   WORKSPACE_MARKER_INVALID: "Workspace marker is invalid",
   WORKSPACE_SELECTION_EXPIRED: "Workspace selection has expired",

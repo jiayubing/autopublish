@@ -17,10 +17,15 @@ data/*
 
 # Alpha packaging output
 release-alpha/
+release/
+release-production-smoke/
 
 # Downloaded/extracted runtime tools are reproducible build outputs.
 build/runtime-tools/
 build/runtime-tools-cache/
 /build/preload/
+/build/production-artifact-manifest.json
+/build/release-evidence-manifest.json
+/build/test-evidence.json
 /build/build-info.json
 /config/build-info.json
