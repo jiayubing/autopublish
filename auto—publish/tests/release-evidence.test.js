@@ -22,6 +22,14 @@ const {
 const {
   createAuthTestSummary,
 } = require("../auth-server/scripts/create-test-summary-evidence");
+const {
+  REQUIRED_ARTIFACTS,
+} = require("../scripts/production-artifact-contract");
+const {
+  buildReleaseEvidenceManifest,
+  checklistEntries,
+} = require("../scripts/release-evidence-writer");
+const applicationVersion = require("../package.json").version;
 
 const repositoryRoot = path.resolve(__dirname, "..", "..");
 
@@ -46,6 +54,30 @@ function allStatuses(names, status) {
   return Object.fromEntries(names.map((name) => [name, status]));
 }
 
+function artifactManifestValue(packageVersion = "1.0.1") {
+  return {
+    manifestVersion: 1,
+    packageVersion,
+    workspaceSchemaVersion: 1,
+    artifacts: REQUIRED_ARTIFACTS.map((artifact, index) => ({
+      name: artifact.name,
+      location: artifact.location,
+      path: artifact.path,
+      sha256: String(index + 1)
+        .padStart(2, "0")
+        .repeat(32),
+      bytes: 12,
+      ...(artifact.executable ? { executable: true } : {}),
+      ...(artifact.versionFrom
+        ? {
+            version: "v1.0.0",
+            versionFrom: { ...artifact.versionFrom },
+          }
+        : {}),
+    })),
+  };
+}
+
 function writeEvidenceReports(root) {
   const files = {};
   EVIDENCE_FIELDS.filter((name) => name !== "artifact").forEach((name) => {
@@ -66,21 +98,7 @@ test("release evidence records safe artifact hashes and fixed check names", () =
     const artifactManifest = path.join(fixture.root, "artifact.json");
     fs.writeFileSync(
       artifactManifest,
-      JSON.stringify({
-        manifestVersion: 1,
-        packageVersion: "1.0.1",
-        workspaceSchemaVersion: 1,
-        artifacts: [
-          {
-            name: "node",
-            location: "resources",
-            path: "tools/node/node.exe",
-            sha256: "a".repeat(64),
-            bytes: 12,
-            version: "v24.18.0",
-          },
-        ],
-      }),
+      JSON.stringify(artifactManifestValue()),
       "utf8",
     );
     const output = path.join(fixture.root, "evidence.json");
@@ -115,7 +133,11 @@ test("release evidence records safe artifact hashes and fixed check names", () =
     const value = JSON.parse(fs.readFileSync(output, "utf8"));
     assert.equal(value.releaseState, "READY_FOR_HUMAN_RELEASE");
     assert.deepEqual(Object.keys(value.requiredChecks), [...REQUIRED_CHECKS]);
-    assert.equal(value.artifact.artifacts[0].path, "tools/node/node.exe");
+    assert.equal(
+      value.artifact.artifacts.find((item) => item.name === "playwright-node")
+        .path,
+      "tools/node/node.exe",
+    );
     assert.equal(value.rollbackPackage, "rollback.zip");
     assert.equal(value.rollback.sha256, "c".repeat(64));
     assert.equal(value.offlineSelfTest.status, "PASSED");
@@ -139,25 +161,45 @@ test("release evidence records safe artifact hashes and fixed check names", () =
   }
 });
 
+test("release evidence rejects an incomplete production artifact inventory", () => {
+  const fixture = tempRoot();
+  try {
+    const artifactManifest = path.join(fixture.root, "artifact.json");
+    const incomplete = artifactManifestValue();
+    incomplete.artifacts = incomplete.artifacts.slice(0, 1);
+    fs.writeFileSync(artifactManifest, JSON.stringify(incomplete), "utf8");
+    assert.throws(
+      () => summarizeArtifactManifest(artifactManifest),
+      (error) => error.code === "RELEASE_ARTIFACT_MANIFEST_INVALID",
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("release evidence rejects an artifact application version mismatch", () => {
+  const fixture = tempRoot();
+  try {
+    const artifactManifest = path.join(fixture.root, "artifact.json");
+    fs.writeFileSync(
+      artifactManifest,
+      JSON.stringify(artifactManifestValue(applicationVersion + "-mismatch")),
+      "utf8",
+    );
+    assert.throws(
+      () => buildReleaseEvidenceManifest({ artifactManifest }),
+      (error) => error.code === "RELEASE_ARTIFACT_VERSION_MISMATCH",
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("release evidence rejects unsafe artifact metadata and detached commits", () => {
   const fixture = tempRoot();
   try {
     const artifactManifest = path.join(fixture.root, "artifact.json");
-    const base = {
-      manifestVersion: 1,
-      packageVersion: "1.0.1",
-      workspaceSchemaVersion: 1,
-      artifacts: [
-        {
-          name: "node",
-          location: "resources",
-          path: "tools/node/node.exe",
-          sha256: "a".repeat(64),
-          bytes: 12,
-          version: "v24.18.0",
-        },
-      ],
-    };
+    const base = artifactManifestValue();
     fs.writeFileSync(artifactManifest, JSON.stringify(base), "utf8");
     assert.throws(
       () =>
@@ -168,11 +210,11 @@ test("release evidence rejects unsafe artifact metadata and detached commits", (
       (error) => error.code === "RELEASE_EVIDENCE_COMMIT_MISMATCH",
     );
     const unsafePath = Object.assign({}, base, {
-      artifacts: [
-        Object.assign({}, base.artifacts[0], {
-          path: "C:/Users/alice/private.txt",
-        }),
-      ],
+      artifacts: base.artifacts.map((artifact) =>
+        artifact.name === "electron-main"
+          ? Object.assign({}, artifact, { path: "C:/Users/alice/private.txt" })
+          : artifact,
+      ),
     });
     fs.writeFileSync(artifactManifest, JSON.stringify(unsafePath), "utf8");
     assert.throws(
@@ -180,9 +222,11 @@ test("release evidence rejects unsafe artifact metadata and detached commits", (
       (error) => error.code === "RELEASE_ARTIFACT_MANIFEST_INVALID",
     );
     const unsafeVersion = Object.assign({}, base, {
-      artifacts: [
-        Object.assign({}, base.artifacts[0], { version: "token=leak" }),
-      ],
+      artifacts: base.artifacts.map((artifact) =>
+        artifact.name === "playwright-node"
+          ? Object.assign({}, artifact, { version: "token=leak" })
+          : artifact,
+      ),
     });
     fs.writeFileSync(artifactManifest, JSON.stringify(unsafeVersion), "utf8");
     assert.throws(
@@ -234,12 +278,82 @@ test("release checklist keeps human gates separate from automated pass state", (
     releaseState: "BLOCKED_RELEASE",
   };
   assert.throws(
-    () => validateReleaseChecklist(value),
+    () => validateReleaseChecklist(value, { allowBlocked: true }),
     (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+  );
+  value.checklist = checklistEntries(
+    checks,
+    value.manualGates,
+    Object.fromEntries(EVIDENCE_FIELDS.map((name) => [name, value[name]])),
+    value.rollback,
   );
   assert.deepEqual(
     validateReleaseChecklist(value, { allowBlocked: true }).status,
     "BLOCKED_RELEASE",
+  );
+  const mismatched = Object.assign({}, value, {
+    checklist: value.checklist.map((entry) =>
+      entry.id === REQUIRED_CHECKS[0]
+        ? Object.assign({}, entry, { status: "FAILED", state: "FAILED" })
+        : entry,
+    ),
+  });
+  assert.throws(
+    () => validateReleaseChecklist(mismatched, { allowBlocked: true }),
+    (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+  );
+  const assertInvalidChecklist = (checklist) => {
+    assert.throws(
+      () =>
+        validateReleaseChecklist(Object.assign({}, value, { checklist }), {
+          allowBlocked: true,
+        }),
+      (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+    );
+  };
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 0 ? Object.assign({}, entry, { id: "unknown/check" }) : entry,
+    ),
+  );
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 0 ? Object.assign({}, entry, { kind: "EVIDENCE" }) : entry,
+    ),
+  );
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 0 ? Object.assign({}, entry, { state: "FAILED" }) : entry,
+    ),
+  );
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 1
+        ? Object.assign({}, entry, { id: value.checklist[0].id })
+        : entry,
+    ),
+  );
+  const mutateChecklistEntry = (id, changes) =>
+    value.checklist.map((entry) =>
+      entry.id === id ? Object.assign({}, entry, changes) : entry,
+    );
+  assertInvalidChecklist(
+    mutateChecklistEntry("evidence/migration", {
+      status: "PASSED",
+      state: "PASSED",
+    }),
+  );
+  assertInvalidChecklist(
+    mutateChecklistEntry("manual/signing-certificate", {
+      status: "PASSED",
+      state: "PASSED",
+    }),
+  );
+  assertInvalidChecklist(
+    mutateChecklistEntry("manual/rollback-evidence", {
+      status: "PASSED",
+      state: "PASSED",
+    }),
   );
 });
 

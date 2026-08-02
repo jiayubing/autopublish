@@ -1,14 +1,33 @@
-const fs = require("node:fs");
-const os = require("node:os");
+"use strict";
+
 const path = require("node:path");
 const childProcess = require("node:child_process");
 const {
   createDiagnosticRecord,
-  parseDiagnosticRecord,
 } = require("../../src/diagnostics/diagnostic-schema");
-const { createDiagnosticMemorySink } = require("../../src/diagnostics/diagnostic-memory-sink");
-const { createDiagnosticFileSink } = require("../../src/diagnostics/diagnostic-file-sink");
-const { resolvePlaywrightRuntime } = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
+const {
+  createDiagnosticMemorySink,
+} = require("../../src/diagnostics/diagnostic-memory-sink");
+const {
+  createDiagnosticFileSink,
+} = require("../../src/diagnostics/diagnostic-file-sink");
+const {
+  initializeDiagnosticSink,
+} = require("../../src/diagnostics/diagnostic-startup-cleanup");
+const {
+  capability,
+  safeDiagnostics,
+} = require("../../src/diagnostics/runtime-diagnostic-snapshot");
+const {
+  resolvePlaywrightRuntime,
+} = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
+const {
+  hasBundledMammoth,
+  readBuildInfo,
+  diagnosticErrors,
+  diagnosticWarnings,
+} = require("./runtime-diagnostics-probes");
+const { probeBrowserRuntime } = require("./runtime-browser-smoke");
 
 const DIAGNOSTIC_EVENT_FIELDS = new Set([
   "diagnosticId",
@@ -21,308 +40,147 @@ const DIAGNOSTIC_EVENT_FIELDS = new Set([
   "metadata",
 ]);
 
-function existing(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function hasBundledMammoth(appRoot, override) {
-  if (override !== undefined) return override === true;
-  try {
-    require.resolve("mammoth", { paths: [appRoot] });
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function readBuildInfo(appRoot, environment) {
-  const env = environment || process.env;
-  let value = {};
-  try { value = JSON.parse(fs.readFileSync(path.join(appRoot, "config", "build-info.json"), "utf8")); } catch (_) {
-    try { value = JSON.parse(fs.readFileSync(path.join(appRoot, "build-info.json"), "utf8")); } catch (_) {}
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) value = {};
-  let version = existing(value.version);
-  if (!version) {
-    try { version = existing(JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8")).version); } catch (_) {}
-  }
-  return {
-    version: version || "unknown",
-    commit: existing(value.commit) || existing(env.AUTO_PUBLISH_COMMIT_SHA) || "unknown",
-    dirty: value.dirty === true || env.AUTO_PUBLISH_DIRTY === "1"
-  };
-}
-
-function capability(state, source, errorCode, lastCheckedAt) {
-  return {
-    state: state,
-    source: source || null,
-    errorCode: errorCode || null,
-    lastCheckedAt: lastCheckedAt || null
-  };
-}
-
-function diagnosticErrors(tools, capabilities) {
-  const errors = [];
-  if (!tools.playwrightNode.command) errors.push({ code: "PLAYWRIGHT_NODE_UNAVAILABLE", message: "Bundled Playwright Node is unavailable" });
-  if (!tools.playwrightCli.command) errors.push({ code: "PLAYWRIGHT_CLI_UNAVAILABLE", message: "Bundled Playwright CLI is unavailable" });
-  if (!tools.browserChannel.configured) errors.push({ code: tools.browserChannel.errorCode || "BROWSER_CHANNEL_INVALID", message: "Browser channel configuration is invalid" });
-  if (capabilities.browserChannel.state === "unavailable") errors.push({ code: capabilities.browserChannel.errorCode || "BROWSER_CHANNEL_UNAVAILABLE", message: "Browser channel is unavailable" });
-  if (capabilities.docx.state === "unavailable") errors.push({ code: "DOCX_RUNTIME_UNAVAILABLE", message: "Built-in DOCX parsing is unavailable" });
-  return errors;
-}
-
-function diagnosticWarnings(tools, capabilities) {
-  const warnings = [];
-  if (capabilities.browserChannel.state === "not_checked") warnings.push({ code: "BROWSER_CHANNEL_NOT_CHECKED", message: "Browser channel has not been checked in this process" });
-  if (!tools.hepanPython.command) warnings.push({ code: "HEPAN_PYTHON_UNAVAILABLE", message: "Hepan is not configured; only Hepan publishing is affected" });
-  return warnings;
-}
-
-function safeTool(tool) {
-  const available = Boolean(tool && (tool.command || tool.available));
-  return { state: available ? "ready" : "unavailable", available: available, source: tool && tool.source || null, errorCode: available ? null : null, lastCheckedAt: null };
-}
-
-const SAFE_CAPABILITY_STATES = new Set([
-  "ready",
-  "not_checked",
-  "optional_unconfigured",
-  "unavailable",
-]);
-const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const SAFE_CODE = /^[A-Z][A-Z0-9_]{1,127}$/;
-
-function safeToken(value, fallback) {
-  return typeof value === "string" && SAFE_TOKEN.test(value) ? value : fallback;
-}
-
-function safeCode(value, fallback) {
-  return typeof value === "string" && SAFE_CODE.test(value) ? value : fallback;
-}
-
-function safeTime(value) {
-  if (typeof value !== "string" || value.length > 64 || !SAFE_TOKEN.test(value)) return null;
-  return value;
-}
-
-function safeCapability(value) {
-  const input = value || {};
-  return {
-    state: SAFE_CAPABILITY_STATES.has(input.state) ? input.state : "unavailable",
-    source: safeToken(input.source, null),
-    errorCode: safeCode(input.errorCode, null),
-    lastCheckedAt: safeTime(input.lastCheckedAt),
-    ...(input.available !== undefined ? { available: input.available === true } : {}),
-  };
-}
-
-function safeBrowserCapability(value) {
-  const input = value || {};
-  return {
-    ...safeCapability(input),
-    channel: safeToken(input.channel, null),
-    configured: input.configured === true,
-    probed: input.probed === true,
-  };
-}
-
-function safeBuildInfo(value) {
-  const input = value || {};
-  return {
-    version: safeToken(input.version, "unknown"),
-    commit: safeToken(input.commit, "unknown"),
-    dirty: input.dirty === true,
-  };
-}
-
-function safeDiagnosticItems(items, fallbackMessage) {
-  return (Array.isArray(items) ? items : []).slice(0, 100).map(function (item) {
-    return {
-      code: safeCode(item && item.code, "RUNTIME_DIAGNOSTIC"),
-      message: fallbackMessage,
-    };
-  });
-}
-
-function safeRuntimeEvents(items) {
-  const result = [];
-  (Array.isArray(items) ? items : []).slice(-100).forEach(function (item) {
-    try { result.push(parseDiagnosticRecord(item)); } catch (_) {}
-  });
-  return result;
-}
-
-function safeDiagnostics(diagnostics) {
-  const source = diagnostics || {};
-  const tools = source.tools || {};
-  const capabilities = source.capabilities || {};
-  const browser = capabilities.browserChannel || source.browserChannel || {};
-  const safeBrowser = safeBrowserCapability({
-    channel: browser.channel,
-    configured: browser.configured,
-    state: browser.state || (browser.probed ? "ready" : "not_checked"),
-    probed: browser.state === "ready" || browser.probed === true,
-    source: browser.source,
-    errorCode: browser.errorCode,
-    lastCheckedAt: browser.lastCheckedAt,
-  });
-  const safeCapabilities = {
-    playwrightNode: safeCapability(capabilities.playwrightNode || safeTool(tools.playwrightNode)),
-    playwrightCli: safeCapability(capabilities.playwrightCli || safeTool(tools.playwrightCli)),
-    browserChannel: safeBrowser,
-    docx: safeCapability(capabilities.docx || capability("unavailable", "bundled", "DOCX_RUNTIME_UNAVAILABLE")),
-    hepan: safeCapability(capabilities.hepan || capability("optional_unconfigured", "optional", "HEPAN_PYTHON_UNAVAILABLE"))
-  };
-  return {
-    ok: source.ok === true,
-    buildInfo: safeBuildInfo(source.buildInfo),
-    capabilities: safeCapabilities,
-    browserChannel: safeBrowser,
-    tools: {
-      playwrightNode: safeCapabilities.playwrightNode,
-      playwrightCli: safeCapabilities.playwrightCli,
-      hepanPython: safeCapabilities.hepan
-    },
-    errors: safeDiagnosticItems(source.errors, "运行环境诊断项，请检查诊断代码。"),
-    warnings: safeDiagnosticItems(source.warnings, "运行环境诊断项，请检查诊断代码。"),
-    runtimeEvents: safeRuntimeEvents(source.runtimeEvents),
-  };
-}
-
-function safeProbeError(code) {
-  const messages = {
-    PLAYWRIGHT_NODE_UNAVAILABLE: "Bundled Playwright Node is unavailable",
-    PLAYWRIGHT_CLI_UNAVAILABLE: "Bundled Playwright CLI is unavailable",
-    BROWSER_CHANNEL_UNAVAILABLE: "Browser channel is unavailable; check Edge or Chrome",
-    PLAYWRIGHT_TIMEOUT: "Browser self-check timed out",
-    PLAYWRIGHT_EXEC_FAILED: "Browser self-check failed"
-  };
-  const error = new Error(messages[code] || messages.PLAYWRIGHT_EXEC_FAILED);
-  error.code = code;
-  return error;
-}
-
-function execFileAsync(executor, file, args, options) {
-  return new Promise(function(resolve, reject) {
-    executor(file, args, options, function(error, stdout, stderr) {
-      if (error) {
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
-        return;
-      }
-      resolve({ stdout: stdout, stderr: stderr });
-    });
-  });
-}
-
 function createRuntimeDiagnosticsService(options) {
   const opts = options || {};
-  const workspaceValue = opts.workspaceRoot || process.env.AUTO_PUBLISH_WORKSPACE;
+  const workspaceValue =
+    opts.workspaceRoot || process.env.AUTO_PUBLISH_WORKSPACE;
   const appValue = opts.appRoot || process.env.AUTO_PUBLISH_APP_ROOT;
-  if (typeof workspaceValue !== "string" || !workspaceValue.trim()) throw new Error("workspaceRoot is required");
-  if (typeof appValue !== "string" || !appValue.trim()) throw new Error("appRoot is required");
+  if (typeof workspaceValue !== "string" || !workspaceValue.trim())
+    throw new Error("workspaceRoot is required");
+  if (typeof appValue !== "string" || !appValue.trim())
+    throw new Error("appRoot is required");
   const workspaceRoot = path.resolve(workspaceValue);
   const appRoot = path.resolve(appValue);
   const execFile = opts.execFile || childProcess.execFile;
   let platformSettingsService = opts.platformSettingsService || null;
-  let browserProbe = { channel: null, state: "not_checked", lastCheckedAt: null, errorCode: null };
-  const memorySink = opts.memorySink || createDiagnosticMemorySink({ maxRecords: 100 });
-  const fileSink = opts.fileSink || (opts.paths && opts.paths.logs ? createDiagnosticFileSink({
-    directory: opts.paths.logs,
-    root: opts.paths.localState || opts.paths.logs,
-  }) : null);
-  if (fileSink && opts.initializeFileSink !== false) {
-    try { fileSink.initialize(); } catch (_) {}
-  }
+  let browserProbe = {
+    channel: null,
+    state: "not_checked",
+    lastCheckedAt: null,
+    errorCode: null,
+  };
+  const memorySink =
+    opts.memorySink || createDiagnosticMemorySink({ maxRecords: 100 });
+  const fileSink =
+    opts.fileSink ||
+    (opts.paths && opts.paths.logs
+      ? createDiagnosticFileSink({
+          directory: opts.paths.logs,
+          root: opts.paths.localState || opts.paths.logs,
+        })
+      : null);
+  const startupCleanup =
+    fileSink && opts.initializeFileSink !== false
+      ? initializeDiagnosticSink(fileSink)
+      : { status: "NOT_CONFIGURED" };
 
   function currentBrowserCapability(browserChannel) {
     if (!browserChannel.configured) {
-      browserProbe = { channel: null, state: "unavailable", lastCheckedAt: null, errorCode: browserChannel.errorCode || "BROWSER_CHANNEL_INVALID" };
-      return Object.assign({}, capability("unavailable", browserChannel.source, browserChannel.errorCode || "BROWSER_CHANNEL_INVALID"), browserChannel);
+      browserProbe = {
+        channel: null,
+        state: "unavailable",
+        lastCheckedAt: null,
+        errorCode: browserChannel.errorCode || "BROWSER_CHANNEL_INVALID",
+      };
+      return Object.assign(
+        {},
+        capability(
+          "unavailable",
+          browserChannel.source,
+          browserChannel.errorCode || "BROWSER_CHANNEL_INVALID",
+        ),
+        browserChannel,
+      );
     }
-    if (browserProbe.channel !== browserChannel.channel) {
-      browserProbe = { channel: browserChannel.channel, state: "not_checked", lastCheckedAt: null, errorCode: null };
-    }
+    if (browserProbe.channel !== browserChannel.channel)
+      browserProbe = {
+        channel: browserChannel.channel,
+        state: "not_checked",
+        lastCheckedAt: null,
+        errorCode: null,
+      };
     return Object.assign({}, browserProbe, browserChannel);
   }
 
   function diagnose() {
-    const tools = resolvePlaywrightRuntime(Object.assign({}, opts, {
-      appRoot: appRoot,
-      hepanProvider: platformSettingsService ? function() { return platformSettingsService.getRuntimeConfig("hepan"); } : opts.hepanProvider
-    }));
+    const tools = resolvePlaywrightRuntime(
+      Object.assign({}, opts, {
+        appRoot,
+        hepanProvider: platformSettingsService
+          ? function () {
+              return platformSettingsService.getRuntimeConfig("hepan");
+            }
+          : opts.hepanProvider,
+      }),
+    );
+    const mammoth = hasBundledMammoth(appRoot, opts.docxAvailable);
     const capabilities = {
-      playwrightNode: capability(tools.playwrightNode.command ? "ready" : "unavailable", tools.playwrightNode.source, tools.playwrightNode.command ? null : "PLAYWRIGHT_NODE_UNAVAILABLE"),
-      playwrightCli: capability(tools.playwrightCli.command ? "ready" : "unavailable", tools.playwrightCli.source, tools.playwrightCli.command ? null : "PLAYWRIGHT_CLI_UNAVAILABLE"),
+      playwrightNode: capability(
+        tools.playwrightNode.command ? "ready" : "unavailable",
+        tools.playwrightNode.source,
+        tools.playwrightNode.command ? null : "PLAYWRIGHT_NODE_UNAVAILABLE",
+      ),
+      playwrightCli: capability(
+        tools.playwrightCli.command ? "ready" : "unavailable",
+        tools.playwrightCli.source,
+        tools.playwrightCli.command ? null : "PLAYWRIGHT_CLI_UNAVAILABLE",
+      ),
       browserChannel: currentBrowserCapability(tools.browserChannel),
-      docx: capability(hasBundledMammoth(appRoot, opts.docxAvailable) ? "ready" : "unavailable", "bundled", hasBundledMammoth(appRoot, opts.docxAvailable) ? null : "DOCX_RUNTIME_UNAVAILABLE"),
-      hepan: capability(tools.hepanPython.command ? "ready" : "optional_unconfigured", tools.hepanPython.source || "optional", tools.hepanPython.command ? null : "HEPAN_PYTHON_UNAVAILABLE")
+      docx: capability(
+        mammoth ? "ready" : "unavailable",
+        "bundled",
+        mammoth ? null : "DOCX_RUNTIME_UNAVAILABLE",
+      ),
+      hepan: capability(
+        tools.hepanPython.command ? "ready" : "optional_unconfigured",
+        tools.hepanPython.source || "optional",
+        tools.hepanPython.command ? null : "HEPAN_PYTHON_UNAVAILABLE",
+      ),
     };
     const errors = diagnosticErrors(tools, capabilities);
     const warnings = diagnosticWarnings(tools, capabilities);
-    return { ok: errors.length === 0, workspaceRoot: workspaceRoot, appRoot: appRoot, buildInfo: readBuildInfo(appRoot, opts.env), tools: tools, capabilities: capabilities, errors: errors, warnings: warnings, runtimeEvents: memorySink.getSnapshot() };
+    return {
+      ok: errors.length === 0,
+      workspaceRoot,
+      appRoot,
+      buildInfo: readBuildInfo(appRoot, opts.env),
+      tools,
+      capabilities,
+      errors,
+      warnings,
+      runtimeEvents: memorySink.getSnapshot(),
+    };
   }
 
-  async function probeBrowser() {
-    const diagnostics = diagnose();
-    const node = diagnostics.tools.playwrightNode.command;
-    const cli = diagnostics.tools.playwrightCli.command;
-    const browser = diagnostics.tools.browserChannel.channel;
-    if (!node) throw safeProbeError("PLAYWRIGHT_NODE_UNAVAILABLE");
-    if (!cli) throw safeProbeError("PLAYWRIGHT_CLI_UNAVAILABLE");
-    if (!browser) throw safeProbeError("BROWSER_CHANNEL_UNAVAILABLE");
-    const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "autopublish-runtime-self-check-"));
-    const daemonDirectory = path.join(temporaryRoot, "daemon");
-    const profileDirectory = path.join(temporaryRoot, "profile");
-    const env = Object.assign({}, process.env, {
-      PATH: process.env.PATH || "",
-      PLAYWRIGHT_DAEMON_SESSION_DIR: daemonDirectory,
-      AUTO_PUBLISH_NODE_EXEC_PATH: node,
-      PLAYWRIGHT_CLI_JS: cli,
-      BROWSER_CHANNEL: browser
+  function probeBrowser() {
+    return probeBrowserRuntime({
+      diagnose,
+      execFile,
+      env: opts.env,
+      onState: function (state) {
+        browserProbe = state;
+      },
+      readSafeDiagnostics: function () {
+        return safeDiagnostics(diagnose());
+      },
     });
-    let opened = false;
-    async function invoke(args, timeout) {
-      try {
-        return await execFileAsync(execFile, node, [cli].concat(args), { encoding: "utf8", timeout: timeout || 30000, windowsHide: true, env: env });
-      } catch (error) {
-        const text = String(error && (error.stdout || "")) + "\n" + String(error && (error.stderr || ""));
-        if (error && (error.code === "ETIMEDOUT" || error.killed)) throw safeProbeError("PLAYWRIGHT_TIMEOUT");
-        if (/browser|channel|executable|msedge|chrome/i.test(text) && /not found|does not exist|unable|launch|executable/i.test(text)) throw safeProbeError("BROWSER_CHANNEL_UNAVAILABLE");
-        throw safeProbeError("PLAYWRIGHT_EXEC_FAILED");
-      }
-    }
-    try {
-      await invoke(["-s=runtime-self-check", "open", "about:blank", "--browser=" + browser, "--headed", "--persistent", "--profile=" + profileDirectory], 60000);
-      opened = true;
-      await invoke(["-s=runtime-self-check", "list"], 30000);
-      await invoke(["-s=runtime-self-check", "close"], 30000);
-      opened = false;
-      browserProbe = { channel: browser, state: "ready", lastCheckedAt: new Date().toISOString(), errorCode: null };
-      return { ok: true, browserChannel: browser, session: "runtime-self-check", capability: safeDiagnostics(diagnose()).browserChannel };
-    } catch (error) {
-      const safe = error && error.code ? error : safeProbeError("PLAYWRIGHT_EXEC_FAILED");
-      browserProbe = { channel: browser, state: "unavailable", lastCheckedAt: new Date().toISOString(), errorCode: safe.code };
-      throw safe;
-    } finally {
-      if (opened) {
-        try { await invoke(["-s=runtime-self-check", "close"], 10000); } catch (_) {}
-      }
-      fs.rmSync(temporaryRoot, { recursive: true, force: true });
-    }
   }
 
-  return {
-    diagnose: diagnose,
-    probeBrowser: probeBrowser,
-    safeDiagnostics: function() { return safeDiagnostics(diagnose()); },
-    report: function(event) {
+  return Object.freeze({
+    diagnose,
+    probeBrowser,
+    safeDiagnostics: function () {
+      return safeDiagnostics(diagnose());
+    },
+    startupCleanup,
+    report: function (event) {
       if (!event || typeof event !== "object") return false;
       try {
-        if (Object.keys(event).some((key) => !DIAGNOSTIC_EVENT_FIELDS.has(key))) return false;
-      } catch (_) { return false; }
+        if (Object.keys(event).some((key) => !DIAGNOSTIC_EVENT_FIELDS.has(key)))
+          return false;
+      } catch (_) {
+        return false;
+      }
       let record;
       try {
         record = createDiagnosticRecord({
@@ -335,15 +193,25 @@ function createRuntimeDiagnosticsService(options) {
           occurredAt: event.occurredAt,
           metadata: event.metadata,
         });
-      } catch (_) { return false; }
-      try { memorySink.append(record); } catch (_) { return false; }
-      try { if (fileSink) fileSink.append(record); } catch (_) {}
+      } catch (_) {
+        return false;
+      }
+      try {
+        memorySink.append(record);
+      } catch (_) {
+        return false;
+      }
+      try {
+        if (fileSink) fileSink.append(record);
+      } catch (_) {}
       return true;
     },
-    memorySink: memorySink,
-    fileSink: fileSink,
-    setPlatformSettingsService: function(service) { platformSettingsService = service || null; }
-  };
+    memorySink,
+    fileSink,
+    setPlatformSettingsService: function (service) {
+      platformSettingsService = service || null;
+    },
+  });
 }
 
 module.exports = { createRuntimeDiagnosticsService, safeDiagnostics };

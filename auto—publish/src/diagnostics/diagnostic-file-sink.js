@@ -2,8 +2,15 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { createDiagnosticDirectoryPolicy } = require("./diagnostic-directory-policy");
+const {
+  createDiagnosticDirectoryPolicy,
+} = require("./diagnostic-directory-policy");
 const { parseDiagnosticRecord } = require("./diagnostic-schema");
+const {
+  createDiagnosticRotation,
+  filenameFor,
+  fileIndex,
+} = require("./diagnostic-rotation");
 
 const DEFAULTS = Object.freeze({
   maxFileBytes: 1024 * 1024,
@@ -34,33 +41,29 @@ function ageLimit(value) {
     : DEFAULTS.maxAgeMs;
 }
 
-function filenameFor(index) {
-  return index === 0 ? "diagnostics.jsonl" : "diagnostics." + index + ".jsonl";
-}
-
-function fileIndex(filename) {
-  const match = path.basename(filename).match(/^diagnostics(?:\.(\d+))?\.jsonl$/);
-  if (!match) return null;
-  const index = Number(match[1] || 0);
-  return Number.isSafeInteger(index) ? index : null;
-}
-
 function timestampMs(value) {
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) throw sinkError("DIAGNOSTIC_CLEANUP_TIME_INVALID");
+  if (Number.isNaN(date.getTime()))
+    throw sinkError("DIAGNOSTIC_CLEANUP_TIME_INVALID");
   return date.getTime();
 }
 
 function createDiagnosticFileSink(options) {
   const opts = options || {};
   const io = opts.fs || fs;
-  const policy = opts.policy || createDiagnosticDirectoryPolicy({
-    fs: io,
-    directory: opts.directory,
-    root: opts.root,
-    mode: opts.mode,
-  });
-  const maxTotalBytes = limit(opts.maxTotalBytes, DEFAULTS.maxTotalBytes, 512 * 1024 * 1024);
+  const policy =
+    opts.policy ||
+    createDiagnosticDirectoryPolicy({
+      fs: io,
+      directory: opts.directory,
+      root: opts.root,
+      mode: opts.mode,
+    });
+  const maxTotalBytes = limit(
+    opts.maxTotalBytes,
+    DEFAULTS.maxTotalBytes,
+    512 * 1024 * 1024,
+  );
   const maxFileBytes = Math.min(
     limit(opts.maxFileBytes, DEFAULTS.maxFileBytes, 64 * 1024 * 1024),
     maxTotalBytes,
@@ -84,9 +87,11 @@ function createDiagnosticFileSink(options) {
       try {
         handle = io.openSync(lockPath, "wx", 0o600);
       } catch (error) {
-        const contended = error && ["EEXIST", "EACCES", "EPERM"].includes(error.code);
+        const contended =
+          error && ["EEXIST", "EACCES", "EPERM"].includes(error.code);
         if (!contended) {
-          if (permissionError(error)) throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+          if (permissionError(error))
+            throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
           throw sinkError("DIAGNOSTIC_LOCK_FAILED");
         }
         try {
@@ -98,15 +103,20 @@ function createDiagnosticFileSink(options) {
         } catch (statError) {
           if (statError && statError.code === "ENOENT") continue;
         }
-        if (Date.now() - startedAt >= 5000) throw sinkError("DIAGNOSTIC_LOCK_TIMEOUT");
+        if (Date.now() - startedAt >= 5000)
+          throw sinkError("DIAGNOSTIC_LOCK_TIMEOUT");
         pause(5);
       }
     }
     try {
       return callback();
     } finally {
-      try { io.closeSync(handle); } catch (_) {}
-      try { io.unlinkSync(lockPath); } catch (_) {}
+      try {
+        io.closeSync(handle);
+      } catch (_) {}
+      try {
+        io.unlinkSync(lockPath);
+      } catch (_) {}
     }
   }
 
@@ -134,20 +144,6 @@ function createDiagnosticFileSink(options) {
     return { record, line, bytes };
   }
 
-  function listFiles() {
-    return policy.listRegularFiles().files
-      .map((item) => ({ ...item, index: fileIndex(item.path) }))
-      .filter((item) => item.index !== null)
-      .sort((left, right) => left.index - right.index);
-  }
-
-  function oldestFirst(files) {
-    return files.slice().sort((left, right) => {
-      if (left.index !== right.index) return right.index - left.index;
-      return Number(left.stat.mtimeMs || 0) - Number(right.stat.mtimeMs || 0);
-    });
-  }
-
   function remove(filename) {
     let candidate;
     try {
@@ -156,7 +152,8 @@ function createDiagnosticFileSink(options) {
     } catch (error) {
       if (error && error.code === "ENOENT") return 0;
       if (error && /^DIAGNOSTIC_/.test(error.code || "")) throw error;
-      if (permissionError(error)) throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+      if (permissionError(error))
+        throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
       throw sinkError("DIAGNOSTIC_CLEANUP_FAILED");
     }
     return 1;
@@ -167,66 +164,34 @@ function createDiagnosticFileSink(options) {
       io.renameSync(safePath(from), safePath(to));
     } catch (error) {
       if (error && /^DIAGNOSTIC_/.test(error.code || "")) throw error;
-      if (permissionError(error)) throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+      if (permissionError(error))
+        throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
       throw sinkError("DIAGNOSTIC_ROTATION_FAILED");
     }
   }
 
-  function exists(filename) {
-    return io.existsSync(safePath(filename));
-  }
-
-  function rotate() {
-    policy.ensureDirectory();
-    if (maxFiles === 1) {
-      if (exists(filenameFor(0))) remove(filenameFor(0));
-      return;
-    }
-    for (let index = maxFiles - 1; index >= 1; index -= 1) {
-      const source = filenameFor(index - 1);
-      const target = filenameFor(index);
-      if (!exists(source)) continue;
-      if (exists(target)) remove(target);
-      rename(source, target);
-    }
-  }
-
-  function usage(files) {
-    return (files || listFiles()).reduce(
-      (total, item) => total + Number(item.stat.size || 0),
-      0,
-    );
-  }
-
-  function enforceCapacity() {
-    let removed = 0;
-    let files = listFiles();
-    while (files.length > maxFiles) {
-      const candidate = oldestFirst(files)[0];
-      removed += remove(candidate.path);
-      files = listFiles();
-    }
-    while (usage(files) > maxTotalBytes && files.length > 1) {
-      const rotated = oldestFirst(files).find((item) => item.index > 0);
-      if (!rotated) break;
-      removed += remove(rotated.path);
-      files = listFiles();
-    }
-    if (usage(files) > maxTotalBytes && files.length === 1)
-      removed += remove(files[0].path);
-    return removed;
-  }
+  const rotation = createDiagnosticRotation({
+    fs: io,
+    policy,
+    maxFiles,
+    maxTotalBytes,
+    remove,
+    rename,
+  });
 
   function validLogFile(filename) {
     let content;
     try {
       content = io.readFileSync(safePath(filename), "utf8");
     } catch (error) {
-      if (permissionError(error)) throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+      if (permissionError(error))
+        throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
       throw sinkError("DIAGNOSTIC_FILE_READ_FAILED");
     }
     if (Buffer.byteLength(String(content), "utf8") > maxFileBytes) return false;
-    const lines = String(content).split(/\r?\n/).filter((line) => line.trim() !== "");
+    const lines = String(content)
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== "");
     try {
       lines.forEach((line) => parseDiagnosticRecord(JSON.parse(line)));
       return true;
@@ -255,7 +220,7 @@ function createDiagnosticFileSink(options) {
         result.removed += remove(item.path);
       }
     });
-    result.removed += enforceCapacity();
+    result.removed += rotation.enforceCapacity();
     return result;
   }
 
@@ -279,21 +244,29 @@ function createDiagnosticFileSink(options) {
       size = io.statSync(current).size;
     } catch (error) {
       if (!error || error.code !== "ENOENT") {
-        if (permissionError(error)) throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+        if (permissionError(error))
+          throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
         throw sinkError("DIAGNOSTIC_FILE_READ_FAILED");
       }
     }
-    if (size + encoded.bytes > maxFileBytes || usage() + encoded.bytes > maxTotalBytes)
-      rotate();
+    if (
+      size + encoded.bytes > maxFileBytes ||
+      rotation.usage() + encoded.bytes > maxTotalBytes
+    )
+      rotation.rotate();
     current = policy.resolveChild(filenameFor(0));
     try {
-      io.appendFileSync(current, encoded.line, { encoding: "utf8", mode: 0o600 });
+      io.appendFileSync(current, encoded.line, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
       if (typeof io.chmodSync === "function") io.chmodSync(current, 0o600);
     } catch (error) {
-      if (permissionError(error)) throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+      if (permissionError(error))
+        throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
       throw sinkError("DIAGNOSTIC_FILE_WRITE_FAILED");
     }
-    enforceCapacity();
+    rotation.enforceCapacity();
     return encoded.record;
   }
 
@@ -307,8 +280,8 @@ function createDiagnosticFileSink(options) {
     write: append,
     initialize,
     cleanup,
-    usage: () => usage(),
-    listFiles,
+    usage: () => rotation.usage(),
+    listFiles: rotation.listFiles,
     directory: policy.directory,
     maxFileBytes,
     maxFiles,
@@ -317,4 +290,9 @@ function createDiagnosticFileSink(options) {
   });
 }
 
-module.exports = { createDiagnosticFileSink, filenameFor, fileIndex, sinkError };
+module.exports = {
+  createDiagnosticFileSink,
+  filenameFor,
+  fileIndex,
+  sinkError,
+};

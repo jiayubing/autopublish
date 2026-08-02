@@ -33,9 +33,9 @@ function within(parent, child) {
 function symbolic(stat) {
   return Boolean(
     stat &&
-      ((typeof stat.isSymbolicLink === "function" && stat.isSymbolicLink()) ||
-        (typeof stat.isJunction === "function" && stat.isJunction()) ||
-        stat.isJunction === true),
+    ((typeof stat.isSymbolicLink === "function" && stat.isSymbolicLink()) ||
+      (typeof stat.isJunction === "function" && stat.isJunction()) ||
+      stat.isJunction === true),
   );
 }
 
@@ -63,7 +63,8 @@ function checkSegments(io, filename) {
 
 function safeRealpath(io, filename) {
   try {
-    const realpath = io.realpathSync && (io.realpathSync.native || io.realpathSync);
+    const realpath =
+      io.realpathSync && (io.realpathSync.native || io.realpathSync);
     return realpath ? realpath.call(io, filename) : path.resolve(filename);
   } catch (_) {
     throw policyError("DIAGNOSTIC_DIRECTORY_CANONICAL_PATH_INVALID");
@@ -81,8 +82,14 @@ function permissionError(error) {
 function createDiagnosticDirectoryPolicy(options) {
   const opts = options || {};
   const io = opts.fs || fs;
-  const directory = absolute(opts.directory, "DIAGNOSTIC_DIRECTORY_PATH_INVALID");
-  const root = absolute(opts.root || directory, "DIAGNOSTIC_DIRECTORY_ROOT_INVALID");
+  const directory = absolute(
+    opts.directory,
+    "DIAGNOSTIC_DIRECTORY_PATH_INVALID",
+  );
+  const root = absolute(
+    opts.root || directory,
+    "DIAGNOSTIC_DIRECTORY_ROOT_INVALID",
+  );
   if (!within(root, directory))
     throw policyError("DIAGNOSTIC_DIRECTORY_PATH_ESCAPE");
   const mode = Number.isInteger(opts.mode) ? opts.mode : 0o700;
@@ -98,7 +105,10 @@ function createDiagnosticDirectoryPolicy(options) {
     try {
       checkSegments(io, root);
       const existingRoot = existingStat(io, root);
-      if (existingRoot && (symbolic(existingRoot) || !existingRoot.isDirectory()))
+      if (
+        existingRoot &&
+        (symbolic(existingRoot) || !existingRoot.isDirectory())
+      )
         throw policyError("DIAGNOSTIC_DIRECTORY_NOT_DIRECTORY");
       io.mkdirSync(root, { recursive: true, mode });
       if (typeof io.chmodSync === "function") io.chmodSync(root, mode);
@@ -110,7 +120,10 @@ function createDiagnosticDirectoryPolicy(options) {
 
       checkSegments(io, directory);
       const existingDirectory = existingStat(io, directory);
-      if (existingDirectory && (symbolic(existingDirectory) || !existingDirectory.isDirectory()))
+      if (
+        existingDirectory &&
+        (symbolic(existingDirectory) || !existingDirectory.isDirectory())
+      )
         throw policyError("DIAGNOSTIC_DIRECTORY_NOT_DIRECTORY");
       io.mkdirSync(directory, { recursive: true, mode });
       if (typeof io.chmodSync === "function") io.chmodSync(directory, mode);
@@ -172,7 +185,8 @@ function createDiagnosticDirectoryPolicy(options) {
       try {
         candidate = resolveChild(name);
       } catch (error) {
-        if (error && error.code === "DIAGNOSTIC_DIRECTORY_PERMISSION_DENIED") throw error;
+        if (error && error.code === "DIAGNOSTIC_DIRECTORY_PERMISSION_DENIED")
+          throw error;
         skipped += 1;
         return;
       }
@@ -220,4 +234,9 @@ function createDiagnosticDirectoryPolicy(options) {
   });
 }
 
-module.exports = { createDiagnosticDirectoryPolicy, within, policyError, canonicalWithin };
+module.exports = {
+  createDiagnosticDirectoryPolicy,
+  within,
+  policyError,
+  canonicalWithin,
+};

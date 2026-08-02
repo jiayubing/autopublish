@@ -22,15 +22,6 @@ function resolveMigrationCliPath(options) {
         "scripts",
         "migrate-content-library-v2.js",
       ),
-      ...(path.basename(resolver.appRoot).toLowerCase() === "app.asar"
-        ? []
-        : [
-            path.join(
-              resolver.appRoot,
-              "scripts",
-              "migrate-content-library-v2.js",
-            ),
-          ]),
     ],
     developmentCandidates: [
       path.join(resolver.appRoot, "scripts", "migrate-content-library-v2.js"),
