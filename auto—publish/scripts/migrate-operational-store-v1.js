@@ -7,6 +7,10 @@ const {
   createOperationalStore,
   verifyOperationalDatabase,
 } = require("../src/infrastructure/operational-store/operational-store");
+const {
+  isRecoveryGuardBusy,
+  withRecoveryGuard,
+} = require("../src/infrastructure/operational-store/internal/operational-store-recovery-guard");
 const VERSION = 1;
 
 function fail(code, report) {
@@ -14,6 +18,40 @@ function fail(code, report) {
   error.code = code;
   if (report) error.migrationReport = report;
   return error;
+}
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error && error.code === "EPERM";
+  }
+}
+function readLease(filename) {
+  try {
+    const stat = fs.lstatSync(filename);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    const value = JSON.parse(fs.readFileSync(filename, "utf8"));
+    return value && Number.isInteger(value.pid) ? value : null;
+  } catch (_) {
+    return null;
+  }
+}
+function sameFile(left, right) {
+  return Boolean(
+    left && right && left.dev === right.dev && left.ino === right.ino,
+  );
+}
+function removeIncompleteLease(filename, token, identity) {
+  try {
+    const stat = fs.lstatSync(filename);
+    if (!stat.isFile() || stat.isSymbolicLink() || !sameFile(stat, identity))
+      return;
+    const lease = readLease(filename);
+    if (lease && lease.token !== token) return;
+    fs.unlinkSync(filename);
+  } catch (_) {}
 }
 function digest(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -466,6 +504,7 @@ function createMigration(options) {
   function execute() {
     const p = plan();
     let fd;
+    let leaseToken = null;
     let temp = null;
     let installed = false;
     try {
@@ -475,12 +514,67 @@ function createMigration(options) {
         throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
       if (fs.existsSync(target))
         throw fail("MIGRATION_TARGET_EXISTS", p.report);
-      fd = fs.openSync(lock, "wx");
-      fs.writeFileSync(
-        fd,
-        JSON.stringify({ version: VERSION, pid: process.pid }),
-      );
-      fault("after_lease", p.report);
+      try {
+        withRecoveryGuard(target, () => {
+          if (fs.existsSync(runtimeLock))
+            throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
+          if (fs.existsSync(target))
+            throw fail("MIGRATION_TARGET_EXISTS", p.report);
+          for (;;) {
+            const token = crypto.randomUUID();
+            try {
+              fd = fs.openSync(lock, "wx");
+            } catch (error) {
+              if (!error || error.code !== "EEXIST") throw error;
+              const lease = readLease(lock);
+              if (!lease || processAlive(lease.pid))
+                throw fail("MIGRATION_LEASE_ACTIVE", p.report);
+              const currentLease = readLease(lock);
+              if (!currentLease || currentLease.token !== lease.token)
+                throw fail("MIGRATION_LEASE_ACTIVE", p.report);
+              try {
+                fs.unlinkSync(lock);
+              } catch (_) {
+                throw fail("MIGRATION_LEASE_ACTIVE", p.report);
+              }
+              continue;
+            }
+            leaseToken = token;
+            const leaseIdentity = fs.fstatSync(fd);
+            try {
+              fs.writeFileSync(
+                fd,
+                JSON.stringify({
+                  version: VERSION,
+                  pid: process.pid,
+                  token,
+                }),
+              );
+            } catch (error) {
+              try {
+                fs.closeSync(fd);
+              } catch (_) {}
+              fd = undefined;
+              removeIncompleteLease(lock, token, leaseIdentity);
+              leaseToken = null;
+              throw error;
+            }
+            fault("after_lease", p.report);
+            if (fs.existsSync(runtimeLock))
+              throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
+            break;
+          }
+        });
+      } catch (error) {
+        if (isRecoveryGuardBusy(error)) {
+          if (fs.existsSync(runtimeLock))
+            throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
+          throw fail("MIGRATION_LEASE_ACTIVE", p.report);
+        }
+        if (error && error.code === "OPERATIONAL_RECOVERY_GUARD_UNAVAILABLE")
+          throw fail("MIGRATION_EXECUTE_FAILED", p.report);
+        throw error;
+      }
       temp = path.join(
         operations,
         `operations.migration-${crypto.randomUUID()}.db`,
@@ -561,9 +655,21 @@ function createMigration(options) {
       throw error.code ? error : fail("MIGRATION_EXECUTE_FAILED", p.report);
     } finally {
       if (fd !== undefined) fs.closeSync(fd);
-      try {
-        fs.unlinkSync(lock);
-      } catch (_) {}
+      if (leaseToken) {
+        try {
+          withRecoveryGuard(
+            target,
+            () => {
+              const lease = readLease(lock);
+              if (lease && lease.token === leaseToken)
+                try {
+                  fs.unlinkSync(lock);
+                } catch (_) {}
+            },
+            5000,
+          );
+        } catch (_) {}
+      }
       if (temp && !installed)
         for (const suffix of ["", "-wal", "-shm"])
           try {
