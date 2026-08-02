@@ -235,7 +235,7 @@ Ticket 02 开始时必须重新运行精确静态查询并先写一条任一上�
 | `src/content/article-removal-service.js` | 852 | 删除会把 preview/commit/recovery/token/queue residue 变成多个不一致 caller | 按 removal plan、state transition、recovery 内拆，保留 lifecycle owner | 04 | 02 |
 | `desktop/services/platform-workbench-service.js` | 770 | 删除会把 adapter parsing、article source、account/target 规则散到 IPC | 按 platform read model、source normalization、target policy 内拆 | 05 | 03、04 |
 | `media-workbench/src/features/media/media-feature.js` | 752 | 删除会让 media query/command/request identity/busy/invalidation 分散到 Views | 保留 feature 深模块，拆内部 resource/order/settings collaborators | 09 | 07 |
-| `auth-server/src/auth-domain.js` | 658 | 删除会让 HTTP/repository 重新掌握 password/session/entitlement 顺序 | 保留 AuthDomain facade，拆 policy internals | 11 | 02 |
+| `auth-server/src/auth-domain.js` | 453 | 删除会让 HTTP/repository 重新掌握 password/session/entitlement 顺序 | 保留 AuthDomain facade；Password/Account/Device/Session/Entitlement/Projection 已迁入 `src/domain/*` 内部策略 | 11 | 02 |
 | `desktop/preload.js` | 605 | 删除会让各 IPC registrar 直接暴露 Electron transport，破坏 sandbox boundary | 按 namespace 组合生成单一 preload artifact | 06/07/10 | 05、06 |
 | `desktop/ipc/media-ipc.js` | 598 | 删除会把 media preflight/order projection/request checks散回多个 caller | 拆 transport decode、projection、submission adapter；不把业务编排留在 registrar | 06/09 | 05 |
 | `media-workbench/src/features/content/content-workbench-feature.js` | 592 | 删除会让 content snapshot/commands/request identity 回到组件 | 保留 content feature owner，拆 article/removal/query collaborators | 08 | 07 |

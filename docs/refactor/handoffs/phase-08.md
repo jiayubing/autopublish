@@ -1,5 +1,63 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 11 执行交接（2026-08-02，Auth policy internals）
+
+- 状态：代码与 Auth 专项自动化 `GREEN`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。
+- 分支：`codex/phase-08-ticket-11`；未 stage、commit、push 或创建 PR。
+- 修改边界：仅拆分 AuthDomain 内部策略、移除无 production caller 的 `auth-store` 兼容测试入口、补充 facade/projection contract test；未修改 Auth schema v2、HTTP routes/status、稳定错误码、token/hash/device contract、desktop Auth IPC 或真实数据。
+
+### Auth 模块图与责任
+
+```mermaid
+flowchart LR
+  HTTP["server HTTP adapter"] --> F["AuthDomain facade"]
+  CLI["AuthAdministration / authctl"] --> F
+  F --> LP["LoginPolicy\nsource/identity/combination limiter + lock"]
+  F --> PP["PasswordPolicy\nscrypt + bounded computation"]
+  F --> AP["AccountPolicy\naccount lifecycle + password state"]
+  F --> DP["DevicePolicy\ndevice hash + device limit"]
+  F --> SP["SessionPolicy\naccess/refresh/family/revoke"]
+  F --> EP["EntitlementPolicy\nauthorization fact + expiry"]
+  F --> PROJ["Projection\nsafe DTOs"]
+  AP --> EP
+  AP --> DP
+  AP --> SP
+  F --> TX["repository.transaction\nmutation serialization"]
+  TX --> R["SQLite/In-memory repository"]
+```
+
+- `AuthDomain` 是唯一组合 facade：负责 mutation serialization、登录成功/失败顺序、锁定与授权不变量、refresh reuse 的安全响应以及稳定结果投影；不解析 proxy header、不写 HTTP response、不持有 SQL handle。
+- `PasswordPolicy`、`AccountPolicy`、`DevicePolicy`、`SessionPolicy`、`EntitlementPolicy` 和 `auth-projection` 隐藏各自算法与 raw row/token 边界；`SourceResolver`、`LoginPolicy`、`BoundedWindowLimiter` 仍是独立来源解析/限速职责，不向 HTTP caller 泄漏组合顺序。
+- Repository 继续拥有 SQLite 事务、WAL、migration 和持久化；HTTP 只负责 body/field validation、source resolution、route dispatch 和安全错误映射。
+
+### Public facade 与 schema 证据
+
+- Facade 保留 login、refresh、inspect、logout、changePassword，以及既有 administration/query 方法；`/v1/auth/login`、`refresh`、`logout`、`change-password`、`session`、`entitlements` 路由和 `SAFE_ERRORS` 未改变。
+- 运行时 session 仍使用 `token-service.hashToken` 与 repository 的 `access_token_hash`/`refresh_token_hash`；device 仍使用同一 `deviceKeyHash`；schema marker 仍为 `2`。
+- DTO 只通过 projection 输出，contract test 覆盖 password hash、device hash、access/refresh hash 和 entitlement token 不出现在安全 DTO；没有新增测试专用 public setter 或 raw Map/SQL seam。
+- `auth-server/src/auth-store.js` 已删除；HTTP test 改用 `InMemoryAuthRepository + AuthDomain`，不再通过旧 compatibility helper 或 `opts.store` 进入 production composition。
+
+### Ticket 11 自动证据
+
+| 命令 | 结果 |
+|---|---:|
+| `npm run test:auth` | Auth `49/49`，14 suites；包含 facade/projection contract、migration/session、device、entitlement、health 和 concurrent login |
+| `npm run test:health-rate-limit` | health `9/9`；source resolver/limiter `9/9`，覆盖 100k identity、TTL/LRU、trusted proxy 和 restart |
+| `node --test auth-server/tests/backup-restore-migration.test.js` | `13/13`，覆盖 backup destination、restore zero-side-effect、v1/v2 migration、WAL、跨进程 snapshot |
+| `npm run test:migration` | `56/56` |
+| `npm run test:packaging` / `test:diagnostics` / `test:links` | `46/46` / `32/32` / `181/181` |
+| `npm run test:legacy-absence` | source named matches `0`、archive named matches `0`（archive `NOT_APPLICABLE`） |
+| `npm run lint`、`typecheck:main`、`typecheck:renderer`、`typecheck:bridge`、`format:check` | 全部通过；renderer 在补齐其独立 lockfile 依赖后通过 |
+| `node --test tests/j4125-auth-contract.test.js tests/phase-08-reverse-dependencies.test.js` | `4/4` |
+| `git diff --check` | 通过 |
+
+Root `npm test` / `npm run test:desktop-core` 已在本机安装两套 lockfile 依赖后尝试；Windows Node test runner 在 400 秒以上仍未返回最终 summary，工具以 `-1` 结束，现场只看到持续通过的 Phase 06 测试输出，未形成可归因于本 Ticket 的失败断言。该全量 runner 证据保持 `PENDING_ENVIRONMENT`，不能标为通过，也不改变上表 Auth/相关定向证据。
+
+### 安全、恢复与人工门
+
+- 所有自动化继续只使用 in-memory/临时 SQLite、合成身份和临时目录；未访问真实 Auth DB、账号、Cookie、token、生产服务或外部投稿/付费系统。
+- Phase 7 的 Auth RPO/RTO numeric target、trusted proxy source chain、Docker container、TLS/DNS、签名、installer/rollback 和 external E2E 人工门继续为 `PENDING_HUMAN`，正式 release 继续 `BLOCKED_RELEASE`。
+
 ## Ticket 02 执行交接（2026-08-02，当前记录）
 
 - 状态：Ticket 02 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。
