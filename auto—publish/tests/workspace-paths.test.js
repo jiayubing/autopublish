@@ -5,9 +5,9 @@ const os = require("node:os");
 const path = require("node:path");
 const childProcess = require("node:child_process");
 
-const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../desktop/workspace-paths");
+const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../src/infrastructure/workspace/workspace-paths");
 const { configureRuntimeEnvironment } = require("../desktop/runtime-config");
-const { createStoragePaths, ensureContentLibrary } = require("../desktop/storage-paths");
+const { createStoragePaths, ensureContentLibrary } = require("../src/infrastructure/workspace/storage-paths");
 
 const RUNTIME_ENV_KEYS = [
   "AUTO_PUBLISH_ROOT_DIR",

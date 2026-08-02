@@ -3,7 +3,7 @@
 const path = require("node:path");
 const {
   createPackagedRuntimeResolver,
-} = require("./packaged-runtime-resolver");
+} = require("../../src/infrastructure/runtime/packaged-runtime-resolver");
 
 function resolveMigrationCliPath(options) {
   const opts = options || {};

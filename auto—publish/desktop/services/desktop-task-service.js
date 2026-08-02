@@ -4,6 +4,7 @@ const { createPlatformTaskStateStore, createRunId } = require("./platform-task-s
 const { createPlatformRun, WORKER_SCHEMA_VERSION } = require("./platform-run");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapter");
+const { resolvePlaywrightRuntime } = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
 const { productionIpcRegistry } = require("../ipc/contracts/production-registry");
 const { projectPlatformSnapshot } = require("../ipc/contracts/platform-contracts");
 
@@ -153,8 +154,7 @@ function createDesktopTaskService(opts) {
   }
 
 function closeBrowserSessions() {
-    var resolver = require("./runtime-diagnostics-service").resolvePlaywrightRuntime;
-    var resolved = resolver({
+    var resolved = resolvePlaywrightRuntime({
       appRoot: storagePaths.installation || process.env.AUTO_PUBLISH_APP_ROOT || cwd,
       paths: storagePaths,
       applicationTools: {

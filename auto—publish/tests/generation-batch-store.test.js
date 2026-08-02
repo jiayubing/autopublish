@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createGenerationBatchStore } = require("../src/content/generation-batch-store");
-const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../desktop/workspace-paths");
+const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../src/infrastructure/workspace/workspace-paths");
 
 function source(clientId, researchQueryId) {
   return {

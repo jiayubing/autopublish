@@ -8,7 +8,7 @@ const {
   createStoragePaths,
   validateStoragePaths,
   ensureContentLibrary
-} = require("../desktop/storage-paths");
+} = require("../src/infrastructure/workspace/storage-paths");
 
 function roots() {
   return {

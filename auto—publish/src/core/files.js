@@ -4,7 +4,7 @@ const { execSync } = require("child_process");
 
 const { DIRS, PW } = require("../../scripts/config");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
-const { createWorkspacePaths } = require("../../desktop/workspace-paths");
+const { createWorkspacePaths } = require("../infrastructure/workspace/workspace-paths");
 
 var archiveSequence = 0;
 

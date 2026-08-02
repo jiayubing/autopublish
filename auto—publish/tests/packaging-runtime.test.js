@@ -11,7 +11,7 @@ const asar = require("@electron/asar");
 const {
   createPackagedRuntimeResolver,
   validateCandidate,
-} = require("../desktop/packaging/packaged-runtime-resolver");
+} = require("../src/infrastructure/runtime/packaged-runtime-resolver");
 const {
   resolveMigrationCliPath,
 } = require("../desktop/packaging/migration-runtime-paths");

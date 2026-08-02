@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { extractDocxText } = require("../core/docx-text-extractor");
-const { createWorkspacePaths } = require("../../desktop/workspace-paths");
+const { createWorkspacePaths } = require("../infrastructure/workspace/workspace-paths");
 const { getClient } = require("./client-knowledge");
 
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx"]);

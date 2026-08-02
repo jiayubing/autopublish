@@ -3,7 +3,7 @@ const path = require("path");
 const { execSync, execFile, execFileSync } = require("child_process");
 
 const { DIRS, PW } = require("../../scripts/config");
-const { resolvePlaywrightRuntime } = require("../../desktop/services/runtime-diagnostics-service");
+const { resolvePlaywrightRuntime } = require("../infrastructure/runtime/playwright-runtime-resolver");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 const { quoteArg } = require("./files");
 

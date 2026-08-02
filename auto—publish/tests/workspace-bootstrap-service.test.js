@@ -7,7 +7,7 @@ const path = require("node:path");
 const { createWorkspaceBootstrapService } = require("../desktop/workspace-bootstrap-service");
 const { createWorkspaceValidator } = require("../desktop/workspace-validator");
 const { createWorkspaceLocationStore } = require("../desktop/workspace-location-store");
-const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../desktop/workspace-paths");
+const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../src/infrastructure/workspace/workspace-paths");
 
 function tempDirectory(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

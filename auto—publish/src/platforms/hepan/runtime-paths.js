@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   createPackagedRuntimeResolver,
-} = require("../../../desktop/packaging/packaged-runtime-resolver");
+} = require("../../infrastructure/runtime/packaged-runtime-resolver");
 const HEPAN_SITE_ORIGIN = "https://www.hepan.com";
 
 function isPackagedContext(options) {

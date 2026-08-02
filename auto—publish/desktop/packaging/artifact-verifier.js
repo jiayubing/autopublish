@@ -3,7 +3,10 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { executableFile, isWithin } = require("./packaged-runtime-resolver");
+const {
+  executableFile,
+  isWithin,
+} = require("../../src/infrastructure/runtime/packaged-runtime-resolver");
 const {
   DEFINITIONS,
 } = require("../../scripts/create-production-artifact-manifest");

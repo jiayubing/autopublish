@@ -17,18 +17,20 @@ const {
 } = require("../desktop/packaging/artifact-verifier");
 const {
   createPackagedRuntimeResolver,
-} = require("../desktop/packaging/packaged-runtime-resolver");
+} = require("../src/infrastructure/runtime/packaged-runtime-resolver");
 const {
   resolveMigrationCliPath,
 } = require("../desktop/packaging/migration-runtime-paths");
 const {
   resolvePlaywrightRuntimePaths,
-} = require("../desktop/packaging/playwright-runtime-paths");
+} = require("../src/infrastructure/runtime/playwright-runtime-paths");
 const {
   CURRENT_WORKSPACE_SCHEMA_VERSION,
   readWorkspaceSchemaMarker,
 } = require("../desktop/workspace-schema-gate");
-const { createStoragePaths } = require("../desktop/storage-paths");
+const {
+  createStoragePaths,
+} = require("../src/infrastructure/workspace/storage-paths");
 
 const SAFE_ENV_KEYS = [
   "SystemRoot",

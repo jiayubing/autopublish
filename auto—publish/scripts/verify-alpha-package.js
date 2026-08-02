@@ -139,7 +139,7 @@ function verifyRuntimeSmoke(appDir, resourcesPath) {
       moduleRoot = extractedRoot;
       runtimeAppRoot = archive;
     }
-    const paths = require(path.join(moduleRoot, "desktop", "workspace-paths"));
+    const paths = require(path.join(moduleRoot, "src", "infrastructure", "workspace", "workspace-paths"));
     const runtime = require(path.join(moduleRoot, "desktop", "services", "runtime-diagnostics-service"));
     const workspacePaths = paths.ensureWorkspaceDirectories(paths.createWorkspacePaths(workspace));
     [workspacePaths.mediaInput, workspacePaths.liejuInput, workspacePaths.toutiaoInput, workspacePaths.hepanInput].forEach((dir) => {

@@ -1,8 +1,8 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const dotenv = require("dotenv");
-const { createStoragePaths } = require("./storage-paths");
-const { createWorkspacePaths, ensureWorkspaceDirectories } = require("./workspace-paths");
+const { createStoragePaths } = require("../src/infrastructure/workspace/storage-paths");
+const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../src/infrastructure/workspace/workspace-paths");
 const { createRuntimeConfigStore, SUPPORTED_RUNTIME_CONFIG_KEYS, LEGACY_RUNTIME_CONFIG_KEYS } = require("./runtime-config-store");
 const { createRuntimeDiagnosticsService } = require("./services/runtime-diagnostics-service");
 

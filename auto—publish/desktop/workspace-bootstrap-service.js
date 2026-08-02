@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const { createWorkspaceValidator } = require("./workspace-validator");
 const { createWorkspaceLocationStore } = require("./workspace-location-store");
-const { createWorkspacePaths, ensureWorkspaceDirectories } = require("./workspace-paths");
+const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../src/infrastructure/workspace/workspace-paths");
 
 const WORKSPACE_MARKER_FILE = ".autopublish-workspace.json";
 const BUSY_STATES = new Set(["running", "waiting", "paused", "stopping", "stop_pending", "stopping_pending"]);

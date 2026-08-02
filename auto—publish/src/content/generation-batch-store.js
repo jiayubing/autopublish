@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const { createWorkspacePaths } = require("../../desktop/workspace-paths");
+const { createWorkspacePaths } = require("../infrastructure/workspace/workspace-paths");
 
 const BATCH_VERSION = 1;
 const MAX_TASKS = 1000;
