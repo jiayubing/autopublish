@@ -1,5 +1,73 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 04 执行交接（2026-08-02，Content storage and lifecycle internals）
+
+- 状态：Ticket 04 `COMPLETE`；代码与 Content 专项自动化 `GREEN`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。
+- 分支：`codex/phase-08-ticket-04` 已提交 `d4510bf`，并已由 merge commit `d60424a` 合并回 `codex/refactor-program`；未 push 或创建 PR。
+- 修改边界：保留既有 Content application facade、Content IDs、article DTO、Markdown/sidecar 格式、generation batch schema、removal token/fingerprint/TTL 与 error codes；仅把内部身份、序列化、路径、文件事务和生命周期恢复职责移入协作者。未修改 Domain/Application interface、Publication/OperationalStore schema 或真实数据。
+- 追加最小修复：trash listing/recovery 现在与 restore 共用 per-article lock；shared `content-path-policy` 的 workspace-root boundary 已接入 research、question 与 legacy migration；generation batch 列表会从合法 `.journal/.bak/.tmp` artifact 推导 canonical 文件并先 recovery。接口、DTO、schema、token/fingerprint/TTL 与 error codes 均未改变。
+
+### Content 模块图与责任
+
+```mermaid
+flowchart LR
+  CALLER["Content services / generation / workbench\nidentity + command only"] --> AF["ArticleStore facade"]
+  CALLER --> CF["ContentStore facade"]
+  CALLER --> GF["GenerationBatchStore facade"]
+  CALLER --> RF["ArticleRemovalService facade"]
+  AF --> ID["ContentIdentity + path policy"]
+  AF --> SER["Article serialization\nMarkdown + JSON + snapshots"]
+  AF --> TX["Article file transaction\nwrite / trash / restore / delete staging"]
+  AF --> LOCK["Article lock"]
+  CF --> IDX["Content identity index\nnone / one / many"]
+  GF --> BSER["Batch serialization + file store"]
+  RF --> PLAN["Removal plan + cursor"]
+  RF --> STATE["Removal state + recovery"]
+  RF --> CONF["Trash confirmation\ntoken / fingerprint / TTL"]
+  TX --> FS["Workspace-bounded regular files"]
+```
+
+- `ContentIdentity` 只校验逻辑 identity 和安全 segment；`content-path-policy` 统一 workspace、client、generated article、template、batch、trash、cache 的 lexical/canonical/link boundary 检查，不读取业务正文。
+- `ArticleStore` 仍是文章文件的唯一 facade；`article-serialization` 负责 normalization、JSON/Markdown 和 snapshot 契约，`article-file-transaction` 负责临时文件、rename、pair rollback/recovery，`article-lock` 负责 `.article-lock` ownership 与 stale/unknown fail-closed。
+- `ContentStore` 仍提供稳定列表、snapshot、fingerprint 和 0/1/many identity 结果；`content-identity-index` 只负责索引，不成为第二 writer。Material/template/catalog facades 复用同一 path policy；generation batch 由 serialization/file-store 隐藏文件名、revision 和写入顺序。
+- `ArticleRemovalService` 仍是唯一 lifecycle owner；plan、cursor、state、confirmation 只拆内部职责。Trash move/restore/permanent-delete 继续由同一 transaction/recovery 状态收敛，queue residue 仍通过既有 application service action 处理。
+
+### 路径与兼容边界复核
+
+- 生产 Content/generation/trash caller 只传 client/article/batch identity 和 command；没有 caller 侧客户目录拼接、optional unique finder 或临时文件顺序。Article `findByGenerationTaskId` 仍保留 `none/one/many` 语义，因为它是既有稳定 application surface。
+- `client-knowledge.js` 的 metadata identity reader、`question-store.js`/`research-store.js` 的 legacy 内容 reader，以及 `legacy-migration.js` 的受支持旧格式解释器仍包含各自 module-internal `path.join`。这些不是 caller 侧 path API，也没有把物理布局暴露给 IPC/View；迁移 adapter 仍是一次性、受控输入的 reader/writer 边界，unknown/corrupt 输入保持 fail-closed。它们没有被伪装为新的通用 path seam，也没有访问真实内容库。
+- symlink/junction、普通文件、path traversal、canonical workspace escape 和缺失/损坏状态均在 shared policy 或既有 reader boundary 拒绝；测试使用临时合成 workspace。没有执行真实 trash、restore 或不可恢复删除。
+
+### 事务与恢复不变量
+
+- 普通文章/Batch/Material 写入先写唯一临时文件，必要时 fsync，再 rename 到目标；失败时清理临时文件并保留原目标。article pair、trash pair 和 sidecar/tombstone journal 的拓扑或 fingerprint 不可证明时停止并保留可恢复状态。
+- Article lock 的 owner、路径和 operation identity 必须匹配当前 runner；live、dead、unknown、corrupt 或 ABA lock 不会被盲目回收。重复 runner 通过 transaction cursor/fence fail-closed，重启后由原 operation 恢复。
+- Trash move/restore 采用 journal/tombstone 与 pair checkpoint；permanent-delete 先校验 version、token、fingerprint、TTL 和确认上下文，再进入 staging；staging 中断可从 cursor 恢复，冲突或外部篡改转入 repair，不直接扩大删除范围。
+- Trash 的公开 tombstone/read/list 路径在 recovery 前获取与 restore 相同的 article lock；restore 持锁期间的 list 不会进入 unlocked recovery。新增真实子进程暂停测试证明竞态返回 `ARTICLE_STORE_BUSY`，不会拆散 JSON/Markdown pair。
+- workspace root 本身为 junction/symlink 时，research、question 和 migration 在写入前以既有安全 error code fail-closed；batch 启动列表只接受合法事务后缀，不猜测非法 artifact 的身份。
+- Generation/removal junction、rename、临时文件和 recovery cursor fault 不会绕过 workspace boundary；恢复动作只使用原 operation identity，不重新猜测目录布局。
+
+### 自动化证据
+
+| 命令 / 证据 | 结果 |
+|---|---:|
+| `tests/phase-08-content-lifecycle.test.js` | 5/5；另覆盖 restore 持锁期间 trash listing 的并发保护 |
+| Article/batch/path/migration 回归定向组合 | 28/28 article、6/6 batch、96/96 content/link/migration、33/33 lifecycle/removal |
+| Content/lifecycle 定向与拆分组合 | 147/147、69/69 |
+| `npm run test:links` / `npm run test:migration` | 184/184、57/57；file-symlink=yes、directory-junction=yes |
+| Phase 02/05/06/08 architecture/caller 组合 | 168/168 |
+| `npm run lint`、main/renderer/bridge typecheck、定向 Prettier、`git diff --check` | 全部通过 |
+| alpha packaging、`verify-alpha-package`、alpha smoke/ASAR/retired-path 组合 | 46/46、通过、8/8 |
+| 完整 `npm test` / `node scripts/run-tests.js` | 230 个测试文件、133 suites、1500/1500 pass、0 fail、0 skip；约 317 秒 |
+
+完整 root suite 通过前使用了 dirty alpha package 作为本地验证制品；构建输出、release 目录和临时日志均未进入 source diff。所有 fault/migration/link/security fixture 都是临时合成目录；未访问真实内容库、未执行真实永久删除、未连接外部投稿或付费系统。
+
+### 删除记录与停止条件
+
+- ArticleStore、ContentStore、GenerationBatchStore、Template/Material facade 和 Removal/Trash facade 中的长职责已拆为上述内部模块；旧 helper 的实现穿透不再是生产 caller 的依赖。当前保留的 client/research/question/migration path 代码属于 reader/compatibility owner，后续只能在有 production/migration caller=0 的证据后由专门 ticket 删除。
+- 未改变 Content application interface、业务 identity、schema、DTO、token/fingerprint/TTL 或 error code，因此没有触发重开 Phase 1/5。正式 release 的人工账号、远端、签名、安装器、真实恢复等 gates 仍为 `PENDING_HUMAN`/`BLOCKED_RELEASE`，本 Ticket 不将其标为通过。
+- 本交接记录的验证结果已固化于 Ticket 04 commit `d4510bf` 与主分支 merge commit `d60424a`；未 push 或创建 PR。
+
 ## Ticket 11 执行交接（2026-08-02，Auth policy internals）
 
 - 状态：代码与 Auth 专项自动化 `GREEN`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。
