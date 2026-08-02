@@ -59,6 +59,113 @@ Root `npm test` / `npm run test:desktop-core` 已在本机安装两套 lockfile 
 - Phase 7 的 Auth RPO/RTO numeric target、trusted proxy source chain、Docker container、TLS/DNS、签名、installer/rollback 和 external E2E 人工门继续为 `PENDING_HUMAN`，正式 release 继续 `BLOCKED_RELEASE`。
 
 ## Ticket 02 执行交接（2026-08-02，当前记录）
+## Ticket 03 最小修复与专项复验收口（2026-08-03，最新记录）
+
+- 状态：Ticket 03=`COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。本轮没有自动提交。
+- 修复范围：针对独立 `sol` subagent（中等推理强度）确认的 migration payload 失败清理误删 live-B 与 importer allow-list 过宽，migration 仅在当前路径仍对应原 fd 文件身份且 token 未变时清理不完整 lease；结构门禁对 migration importer 使用精确 importer→specifier allow-list，仅允许 recovery guard。前一轮的 `operational-store-recovery-guard.js` 继续以 SQLite `BEGIN IMMEDIATE` 串行化 runtime/migration 的 acquisition、失活回收与 release。未改变 OperationalStore facade、public surface、schema、caller 或业务语义。
+- 回归：live-B replacement、ENOSPC 空锁清理、精确 allow-list 和静态副作用 import 回归均通过；本地定向 lease/migration/facade/结构组合20/20，独立 subagent 专项相关回归45/45，P0/P1/P2/P3均为0。最终完整 root suite 本轮为230个测试文件、132 suites、1501/1502 pass，唯一失败仍为既有 offline Electron storage-boundary 波动；隔离 `tests/packaging-runtime.test.js` 为7/7通过。
+- 质量门禁：`npm run format:check`、`npm run lint`、`npm run typecheck:main`、`npm run typecheck:renderer`、`npm run typecheck:bridge` 与 `git diff --check` 全部通过。subagent 只读、未修改、未 stage、未 commit、未 push、未 PR；本轮仍只使用临时/合成 fixture，未访问真实 workspace、Auth 数据、账号、Cookie、供应商或外部平台。
+
+## Ticket 03 专项复验整改交接（2026-08-02，最新记录）
+
+- 状态：Ticket 03 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。本轮没有自动提交。
+- 专项复验：独立 `sol` subagent（中等推理强度）发现 2 个 P1 与 1 个 P2：未取得 migration lease 的 contender 会在 `finally` 删除他人锁；runtime/migration 失活锁回收存在 ABA 删除窗口；importer 门禁遗漏 `auth-server` 且漏判恰好指向 internal 目录的导入。subagent 只读复验，未修改、stage 或 commit。
+- 最小修复：migration 仅在本次 token 成功取得且当前锁仍匹配时清理；失活 runtime/migration lease 删除前重新确认 token，invalid runtime lock fail-closed；结构门禁加入 `auth-server/src`、`auth-server/scripts`，并把 internal 判断收紧为目录本身或其子路径。新增“contender 不得删除他人 migration lock”回归。
+
+### 专项复验后的证据
+
+| 命令 / 证据 | 结果 |
+|---|---:|
+| lease、migration、OperationalStore、facade、结构与 reverse-dependency 定向组合 | 33/33 |
+| `npm test` | 230 个测试文件、132 suites、1497/1497 pass、0 fail、0 skip（300.188 秒） |
+| `npm run format:check`、`npm run lint`、`typecheck:main`、`typecheck:renderer`、`typecheck:bridge` | 全部通过 |
+| `git diff --check` | 通过 |
+
+本轮仍只使用临时/合成 fixture，未访问真实 workspace、Auth 数据、账号、Cookie、供应商或外部平台；工作树保持未 stage、未 commit、未 push、未 PR。
+
+## Ticket 03 独立审计整改交接（2026-08-02，最新记录）
+
+- 状态：Ticket 03 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。本轮没有自动提交。
+- 审计：按用户要求由独立 subagent（`sol`，中等推理强度）只读审计；主线程复核确认 3 项发现成立：runtime/migration lease 检查与创建存在 TOCTOU 窗口（P1）、migration 被强杀后 `migration.lock` 无失活回收（P1）、缺少 production caller 直导 internal module 的结构门禁（P2）。subagent 未修改、stage 或 commit。
+- 最小修复：`operational-store-owner-lease.js` 在原子取得 `runtime.lock` 后重新检查 migration lease，失败时按 token 释放刚取得的 owner，并保留失活 runtime owner 回收；`migrate-operational-store-v1.js` 为 migration lease 写入 token、仅回收可确认已退出 PID 的失活锁，并在取得 migration lock 后、构建临时库前重新检查 runtime owner；`phase-08-operational-store-internals.test.js` 增加 production-root importer 门禁。同步补充两侧 lease 二次检查、强杀恢复回归。
+- 分支/HEAD：`codex/phase-08-ticket-03` / `bcaba68b47681f3dd6b1e5c2b1141f1ce242725b`；工作树保持未 stage、未 commit、未 push、未 PR。
+
+### 独立审计整改复验
+
+| 命令 / 证据 | 结果 |
+|---|---:|
+| lease、migration、OperationalStore、facade、结构与 reverse-dependency 定向组合 | 32/32 |
+| `npm test` | 230 个测试文件、132 suites、1496/1496 pass、0 fail、0 skip（395.916 秒） |
+| `npm run format:check`、`npm run lint`、`typecheck:main`、`typecheck:renderer`、`typecheck:bridge` | 全部通过 |
+| `git diff --check` | 通过 |
+
+本轮验证覆盖 migration 强杀后的失活 lock 回收、runtime/migration 双侧取得锁后的二次检查和内部 importer 门禁；仍只使用临时/合成 fixture，未访问真实 workspace、Auth 数据、账号、Cookie、供应商或外部平台。
+
+## Ticket 03 执行交接（2026-08-02，审计前基线）
+
+- 状态：Ticket 03 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。完整 root suite 已取得最终汇总并通过。
+- 分支/HEAD：`codex/phase-08-ticket-03` / `bcaba68b47681f3dd6b1e5c2b1141f1ce242725b`；未 stage、commit、push 或 PR。
+- 修改边界：仅拆分 `OperationalStore` 内部实现、增加 facade/结构门禁、扩大 format 检查 glob；没有改变 public method surface、schema version、error code、caller、PublicationWorkflow 语义或真实数据。
+
+### Facade contract 与内部模块图
+
+`src/infrastructure/operational-store/operational-store.js` 现为 82 行 facade，只负责组装受控 context、聚合协作者和冻结既有 35 个 public keys；caller 仍只获得业务意图方法，不获得 `db`、statement、SQL、表名或 transaction helper。`SCHEMA_VERSION` 仍为 `3`，facade 仍导出 `createOperationalStore` 与 `verifyOperationalDatabase`。
+
+```text
+createOperationalStore (facade)
+  -> operational-store-runtime
+       -> owner-lease + schema/migration + verifier
+  -> operational-store-context
+       -> transaction (BEGIN IMMEDIATE / beforeCommit / COMMIT|ROLLBACK)
+       -> utils (safe serialization, evidence/display validation, stable errors)
+  -> publication-aggregate   (account profile, target reservation, outcome, publication read model)
+  -> submission-aggregate    (batch/item claim, revision, checkpoint, archive eligibility)
+  -> recovery-aggregate      (recovery intent, post-processing, publication attention)
+  -> order-aggregate         (remote order evidence, observation, bounded display projection)
+  -> maintenance-aggregate  (verify, backup)
+```
+
+| 内部职责 | owner | 关键不变量 |
+|---|---|---|
+| runtime / owner lease | `operational-store-runtime.js` + `operational-store-owner-lease.js` | `runtime.lock` 与 migration lease 互斥；单 production write owner；失活 owner 才可回收 |
+| schema / migration / verification | `operational-store-schema.js` + `operational-store-verifier.js` | v1→v2→v3 连续历史；数据 hash、列/约束/FK、WAL integrity 和 future schema fail-closed |
+| transaction / context | `operational-store-context.js` + `operational-store-transaction.js` | 聚合只能共享受控 transaction context；`beforeCommit` 位于 COMMIT 前；异常统一 rollback |
+| publication | `operational-store-publication-aggregate.js` | durable reservation、remote outcome、attempt/recovery 关系保持原子 |
+| submission batch | `operational-store-submission-aggregate.js` | batch revision、claim/fence、operation checkpoint 与 cleanup action 原子化 |
+| recovery / post-processing | `operational-store-recovery-aggregate.js` | uncertain/recovery intent、attention 和 post-processing 状态不散到 caller |
+| order | `operational-store-order-aggregate.js` | remote order observation 不伪造 canonical outcome；display snapshot 使用有界 join/read model |
+| maintenance / safe primitives | `operational-store-maintenance.js` + `operational-store-utils.js` | backup destination、HTTPS evidence、敏感字段和展示值 fail-closed |
+
+### 删除项与引用证据
+
+- 从 facade 中删除了原巨型实现的 `DatabaseSync`、schema SQL、owner map/lock 细节、transaction choreography、表级 publication/batch/order/recovery 查询和 verifier 实现；这些实现分别进入上述 internal owner。
+- `operational-store-submission-aggregate.js` 仍为 585 行，是唯一超过 400 行的新增 functional internal；它完整拥有 batch/item claim、revision、checkpoint、cleanup 和 archive eligibility 的同一事务聚合。按 Ticket 01“行数是警报、不得把深模块复杂性散回 caller”的书面决定保留，不对 caller 暴露第二个 writer 或表级 seam。
+- 没有删除或恢复任何旧 production writer、legacy migration reader 或 caller；旧 publication/batch/order JSON writer 继续由 source/ASAR absence gate 保护，worker/adapter 仍不持有 OperationalStore handle。
+- 生产 caller 仍只引用 `createOperationalStore`；`tests/phase-08-operational-store-internals.test.js` 固化 public surface、schema v3、facade 无 SQL/表名/事务 choreography、internal module presence 和 frozen object。`phase-08-reverse-dependencies` 继续证明 production `src → desktop` 为 0。
+- `package.json` 的 `format:check` 从单层 glob 扩大到 `src/infrastructure/operational-store/**/*.js`，覆盖新 internal modules；未改依赖或 lockfile。
+
+### Ticket 03 自动证据
+
+| 命令 / 证据 | 结果 |
+|---|---:|
+| Phase 2/3 OperationalStore、migration、capacity、fault、backup/restore、publication/order/batch/attention 定向组合 | 112/112 |
+| facade、结构、reverse-dependency、alpha smoke 组合 | 6/6 |
+| `npm run format:check`、`npm run lint`、`typecheck:main`、`typecheck:renderer`、`typecheck:bridge` | 全部通过 |
+| `npm run pack:smoke` | 通过 |
+| `npm run test:packaging` | 46/46 |
+| `npm run test:links` | 181/181，file-symlink=yes、directory-junction=yes |
+| `npm run test:diagnostics` | 32/32 |
+| `npm run test:migration` | 56/56 |
+| `npm run test:legacy-absence` | source 0 / archive 0 |
+| `npm run test:discover` | 230 个测试文件 |
+| `git diff --check` | 通过 |
+| `npm test` | 230 个测试文件、132 suites、1493/1493 pass、0 fail、0 skip（386.270 秒） |
+
+所有测试和 smoke 使用合成/临时/离线 fixture；未打开真实 workspace、Auth 数据、Cookie、账号、供应商或外部平台。强杀、WAL/concurrent writer、SQLITE_FULL 等效故障、corruption、migration rollback、backup/restore 已由定向矩阵覆盖；正式真实恢复、RPO/RTO 和 release 人工门仍保持 `PENDING_HUMAN`。
+
+> Ticket 02 的交接记录保留如下，作为本 Ticket 的前置输入和历史证据。
+
+## Ticket 02 执行交接（2026-08-02，历史记录）
 
 - 状态：Ticket 02 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。
 - 分支/HEAD：`codex/refactor-program` / Ticket 01/02 固化 commit；未 push 或 PR。

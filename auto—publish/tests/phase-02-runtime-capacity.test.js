@@ -11,6 +11,9 @@ const {
   createOperationalStore,
   verifyOperationalDatabase,
 } = require("../src/infrastructure/operational-store/operational-store");
+const {
+  acquireRuntimeOwner,
+} = require("../src/infrastructure/operational-store/internal/operational-store-owner-lease");
 const { createMigration } = require("../scripts/migrate-operational-store-v1");
 
 const childScript = path.join(
@@ -89,11 +92,14 @@ test("real child processes enforce runtime writer and migration lease ownership,
       () => createOperationalStore({ workspaceRoot: migrationRoot }),
       { code: "OPERATIONAL_MIGRATION_LEASE_ACTIVE" },
     );
-    await new Promise((resolve) => migration.once("exit", resolve));
-    const afterMigration = createOperationalStore({
+    await stop(migration, "SIGKILL");
+    const afterMigration = createMigration({
       workspaceRoot: migrationRoot,
-    });
-    afterMigration.close();
+    }).execute();
+    assert.equal(
+      verifyOperationalDatabase(afterMigration.databasePath).schemaVersion,
+      3,
+    );
     cleanup(migrationRoot);
 
     const crashed = spawn("writer-commit", workspaceRoot);
@@ -124,6 +130,87 @@ test("real child processes enforce runtime writer and migration lease ownership,
     recoveredRollback.close();
   } finally {
     cleanup(workspaceRoot);
+  }
+});
+
+test("runtime lease rechecks migration ownership after its atomic lock is acquired", () => {
+  const workspaceRoot = root();
+  const operations = path.join(workspaceRoot, ".autopublish", "operations");
+  const filename = path.join(operations, "operations.db");
+  const migrationLock = path.join(operations, "migration.lock");
+  const fail = (code) => Object.assign(new Error(code), { code });
+  fs.mkdirSync(operations, { recursive: true });
+  try {
+    assert.throws(
+      () =>
+        acquireRuntimeOwner(
+          filename,
+          fail,
+          () => {},
+          () => {
+            fs.writeFileSync(
+              migrationLock,
+              JSON.stringify({ pid: process.pid }),
+              { flag: "wx" },
+            );
+          },
+        ),
+      { code: "OPERATIONAL_MIGRATION_LEASE_ACTIVE" },
+    );
+    assert.equal(fs.existsSync(path.join(operations, "runtime.lock")), false);
+  } finally {
+    cleanup(workspaceRoot);
+  }
+});
+
+test("migration rechecks runtime ownership after its atomic lock is acquired", () => {
+  const workspaceRoot = root();
+  const operations = path.join(workspaceRoot, ".autopublish", "operations");
+  const runtimeLock = path.join(operations, "runtime.lock");
+  try {
+    assert.throws(
+      () =>
+        createMigration({
+          workspaceRoot,
+          fault(point) {
+            if (point === "after_lease")
+              fs.writeFileSync(
+                runtimeLock,
+                JSON.stringify({ pid: process.pid, token: "test" }),
+                { flag: "wx" },
+              );
+          },
+        }).execute(),
+      { code: "MIGRATION_RUNTIME_OWNER_ACTIVE" },
+    );
+    assert.equal(fs.existsSync(path.join(operations, "migration.lock")), false);
+  } finally {
+    cleanup(workspaceRoot);
+  }
+});
+
+test("a migration contender never removes a lease it did not acquire", () => {
+  for (const value of [
+    JSON.stringify({ version: 1, pid: process.pid, token: "live" }),
+    "not-json",
+  ]) {
+    const workspaceRoot = root();
+    const lock = path.join(
+      workspaceRoot,
+      ".autopublish",
+      "operations",
+      "migration.lock",
+    );
+    try {
+      fs.mkdirSync(path.dirname(lock), { recursive: true });
+      fs.writeFileSync(lock, value);
+      assert.throws(() => createMigration({ workspaceRoot }).execute(), {
+        code: "MIGRATION_LEASE_ACTIVE",
+      });
+      assert.equal(fs.readFileSync(lock, "utf8"), value);
+    } finally {
+      cleanup(workspaceRoot);
+    }
   }
 });
 

@@ -7,6 +7,9 @@ const path = require("node:path");
 const test = require("node:test");
 const { createMigration } = require("../scripts/migrate-operational-store-v1");
 const {
+  withRecoveryGuard,
+} = require("../src/infrastructure/operational-store/internal/operational-store-recovery-guard");
+const {
   createOperationalStore,
   verifyOperationalDatabase,
 } = require("../src/infrastructure/operational-store/operational-store");
@@ -280,6 +283,114 @@ test("every migration lifecycle fault leaves source and existing target safe, re
     } finally {
       cleanup(root);
     }
+  }
+});
+
+test("migration payload write failure removes its own incomplete lease", () => {
+  const root = fixture();
+  const originalWriteFileSync = fs.writeFileSync;
+  let failLeaseWrite = true;
+  try {
+    fs.writeFileSync = function patchedWriteFileSync(filename, ...args) {
+      if (failLeaseWrite && typeof filename === "number") {
+        failLeaseWrite = false;
+        throw Object.assign(new Error("no space"), { code: "ENOSPC" });
+      }
+      return originalWriteFileSync.call(fs, filename, ...args);
+    };
+    assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
+      code: "ENOSPC",
+    });
+    assert.equal(
+      fs.existsSync(
+        path.join(root, ".autopublish", "operations", "migration.lock"),
+      ),
+      false,
+    );
+    assert.doesNotThrow(() =>
+      createMigration({ workspaceRoot: root }).execute(),
+    );
+  } finally {
+    fs.writeFileSync = originalWriteFileSync;
+    cleanup(root);
+  }
+});
+
+test("migration payload write failure never removes a replacement lease", () => {
+  const root = fixture();
+  const lock = path.join(root, ".autopublish", "operations", "migration.lock");
+  const originalWriteFileSync = fs.writeFileSync;
+  let injected = false;
+  try {
+    fs.writeFileSync = function patchedWriteFileSync(filename, ...args) {
+      if (!injected && typeof filename === "number") {
+        injected = true;
+        fs.closeSync(filename);
+        fs.unlinkSync(lock);
+        fs.writeFileSync(
+          lock,
+          JSON.stringify({ version: 1, pid: process.pid, token: "live-B" }),
+        );
+        throw Object.assign(new Error("no space"), { code: "ENOSPC" });
+      }
+      return originalWriteFileSync.call(fs, filename, ...args);
+    };
+    assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
+      code: "ENOSPC",
+    });
+    assert.deepEqual(JSON.parse(fs.readFileSync(lock, "utf8")), {
+      version: 1,
+      pid: process.pid,
+      token: "live-B",
+    });
+    assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
+      code: "MIGRATION_LEASE_ACTIVE",
+    });
+  } finally {
+    fs.writeFileSync = originalWriteFileSync;
+    cleanup(root);
+  }
+});
+
+test("recovery guard serializes recovery critical sections across processes", () => {
+  const root = fixture();
+  const filename = path.join(
+    root,
+    ".autopublish",
+    "operations",
+    "operations.db",
+  );
+  const guardModule = path.join(
+    __dirname,
+    "..",
+    "src",
+    "infrastructure",
+    "operational-store",
+    "internal",
+    "operational-store-recovery-guard.js",
+  );
+  const childScript = [
+    "const { withRecoveryGuard } = require(process.argv[1]);",
+    "try {",
+    "  withRecoveryGuard(process.argv[2], () => {});",
+    "} catch (error) {",
+    "  process.stdout.write(error.code || 'UNKNOWN');",
+    "  process.exitCode = 1;",
+    "}",
+  ].join("\n");
+  try {
+    fs.mkdirSync(path.dirname(filename), { recursive: true });
+    withRecoveryGuard(filename, () => {
+      const child = require("node:child_process").spawnSync(
+        process.execPath,
+        ["-e", childScript, guardModule, filename],
+        { encoding: "utf8" },
+      );
+      assert.equal(child.status, 1, child.stderr);
+      assert.equal(child.stdout, "OPERATIONAL_RECOVERY_GUARD_BUSY");
+    });
+  } finally {
+    cleanup(root);
   }
 });
 
