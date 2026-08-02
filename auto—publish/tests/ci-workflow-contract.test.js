@@ -1,51 +1,181 @@
+"use strict";
+
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const {
+  REQUIRED_CHECKS,
+} = require("../scripts/create-release-evidence-manifest");
 
 const repositoryRoot = path.resolve(__dirname, "..", "..");
-const workflowPath = path.join(repositoryRoot, ".github", "workflows", "ci.yml");
+const workflowPath = path.join(
+  repositoryRoot,
+  ".github",
+  "workflows",
+  "ci.yml",
+);
 
 function job(source, name) {
-  const match = source.match(new RegExp(`^  ${name}:\\r?\\n([\\s\\S]*?)(?=^  [A-Za-z][A-Za-z0-9_-]*:|(?![\\s\\S]))`, "m"));
-  assert.ok(match, `missing ${name} job`);
-  return match[1];
+  const lines = source.split(/\r?\n/);
+  const start = lines.indexOf("  " + name + ":");
+  assert.ok(start >= 0, "missing " + name + " job");
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^  [A-Za-z][A-Za-z0-9_-]*:$/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
 }
 
-test("root CI workflow has the required local-layout command contracts", () => {
+function assertStep(source, name) {
+  assert.ok(source.includes("- name: " + name), name);
+}
+
+test("root CI workflow fixes required checks, isolation, and command ownership", () => {
   assert.equal(fs.existsSync(workflowPath), true);
   assert.equal(
-    fs.existsSync(path.join(repositoryRoot, "auto—publish", ".github", "workflows", "ci.yml")),
+    fs.existsSync(
+      path.join(
+        repositoryRoot,
+        "auto—publish",
+        ".github",
+        "workflows",
+        "ci.yml",
+      ),
+    ),
     false,
   );
   const workflow = fs.readFileSync(workflowPath, "utf8");
-  assert.match(workflow, /^name: CI\r?\n[\s\S]*^jobs:/m);
+  assert.ok(workflow.startsWith("name: CI"));
+  assert.ok(workflow.includes("\njobs:"));
 
   const desktop = job(workflow, "desktop");
-  assert.match(desktop, /name: required\/desktop-node24/);
-  assert.match(desktop, /node-version: 24/);
-  assert.match(desktop, /npm ci\r?\n        working-directory: auto—publish/);
-  assert.match(desktop, /npm ci\r?\n        working-directory: auto—publish\/media-workbench/);
-  for (const command of ["npm test", "npm run lint", "npm run typecheck:renderer", "npm run typecheck:bridge", "npm run build:renderer", "npm run test:links", "npm run format:check", "npm run test:packaging", "npm run pack:smoke"]) {
-    assert.match(desktop, new RegExp(`run: ${command.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\r?\\n        working-directory: auto—publish`));
-  }
-  for (const check of ["required/root-tests", "required/migration-roundtrip", "required/diagnostics-static", "required/production-directory-smoke"]) assert.match(desktop, new RegExp(check.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
-  assert.match(desktop, /run: npm audit --omit=dev --audit-level=high\r?\n        working-directory: auto—publish/);
-  assert.match(desktop, /name: Development dependency audit \(non-blocking known-risk report\)\r?\n        continue-on-error: true\r?\n        run: npm audit --audit-level=high/);
+  assert.ok(desktop.includes("name: required/desktop-node24"));
+  assert.ok(desktop.includes("node-version: 24"));
+  assert.ok(
+    desktop.includes("npm ci\n        working-directory: auto—publish"),
+  );
+  assert.ok(
+    desktop.includes(
+      "npm ci\n        working-directory: auto—publish/media-workbench",
+    ),
+  );
+  for (const check of [
+    "required/test-discovery",
+    "required/root-tests",
+    "required/migration-roundtrip",
+    "required/toolchain",
+    "required/packaging-contracts",
+    "required/production-directory-smoke",
+    "required/legacy-publish-log-absence",
+  ])
+    assertStep(desktop, check);
+  for (const command of [
+    "npm run test:discover",
+    "npm run test:desktop-core",
+    "npm run test:migration",
+    "npm run lint",
+    "npm run typecheck:renderer",
+    "npm run typecheck:bridge",
+    "npm run typecheck:main",
+    "npm run format:check",
+    "npm run build:renderer",
+    "npm run build:preload",
+    "npm run test:packaging",
+    "npm run pack:production:smoke",
+    "node scripts/verify-legacy-absence.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/legacy-publish-log.json",
+  ])
+    assert.ok(desktop.includes(command), command);
+  assert.equal(
+    desktop.includes("- name: required/root-tests\n        run: npm test"),
+    false,
+  );
+  assert.ok(desktop.includes("npm audit --omit=dev --audit-level=high"));
+  assert.ok(desktop.includes("continue-on-error: true"));
 
   const auth = job(workflow, "auth");
-  assert.match(auth, /name: required\/auth-node22/);
-  assert.match(auth, /node-version: 22/);
-  assert.match(auth, /npm ci\r?\n        working-directory: auto—publish\/auth-server/);
-  assert.match(auth, /run: npm test\r?\n        working-directory: auto—publish\/auth-server/);
-  assert.match(auth, /required\/backup-restore-fixture/);
-  assert.match(auth, /required\/rate-limit-capacity/);
+  assert.ok(auth.includes("name: required/auth-node22"));
+  assert.ok(auth.includes("node-version: 22"));
+  assert.ok(
+    auth.includes(
+      "npm ci\n        working-directory: auto—publish/auth-server",
+    ),
+  );
+  assert.ok(
+    auth.includes(
+      "run: npm test\n        working-directory: auto—publish/auth-server",
+    ),
+  );
+  assertStep(auth, "required/auth-tests");
+  assert.ok(auth.includes("create-test-summary-evidence.js --status PASSED"));
+
+  const container = job(workflow, "auth-container");
+  assert.ok(container.includes("name: required/auth-container-node22"));
+  assert.ok(
+    container.includes(
+      "docker build --file auto—publish/auth-server/Dockerfile",
+    ),
+  );
+  assertStep(container, "required/auth-container");
+  assert.ok(container.includes("docker run --rm --network=none"));
+  assert.ok(container.includes("CI_SYNTHETIC_ONLY=1"));
+
+  const verification = job(workflow, "auth-verification");
+  assert.ok(verification.includes("node-version: 22"));
+  for (const check of [
+    "required/auth-migration-roundtrip",
+    "required/backup-restore-fixture",
+    "required/health-semantics",
+    "required/rate-limit-capacity",
+  ])
+    assertStep(verification, check);
+  assert.ok(verification.includes("migration-roundtrip-evidence.js"));
+  assert.ok(verification.includes("backup-restore-evidence.js"));
+  assert.ok(verification.includes("run: npm run test:health"));
+  assert.ok(verification.includes("run: npm run test:rate-limit"));
+  assert.equal(verification.includes("test:health-rate-limit"), false);
+
+  const security = job(workflow, "desktop-security");
+  assert.ok(security.includes("name: required/desktop-security-node24"));
+  assertStep(security, "required/media-transport");
+  assertStep(security, "required/diagnostics-static");
+  assert.ok(security.includes("npm run test:media-transport"));
+  assert.ok(security.includes("npm run test:diagnostics"));
 
   const links = job(workflow, "link-security");
-  assert.match(links, /node-version: 24/);
-  assert.match(links, /run: npm run test:links\r?\n        working-directory: auto—publish/);
+  assert.ok(links.includes("name: required/link-security"));
+  assert.ok(links.includes("node-version: 24"));
+  assert.ok(links.includes("run: npm run test:links"));
+
   const evidence = job(workflow, "release-evidence");
-  assert.match(evidence, /needs: \[desktop, auth, link-security\]/);
-  assert.match(evidence, /create-release-evidence-manifest\.js/);
-  assert.match(evidence, /validate-release-checklist\.js .*--allow-blocked/);
+  assert.ok(evidence.includes("name: required/release-evidence"));
+  assert.ok(
+    evidence.includes(
+      "needs: [desktop, auth, auth-container, auth-verification, desktop-security, link-security]",
+    ),
+  );
+  assert.ok(evidence.includes("setup-node@v4"));
+  assert.ok(evidence.includes("node-version: 24"));
+  assert.ok(evidence.includes("create-release-evidence-manifest.js"));
+  assert.ok(
+    evidence.includes(
+      "validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked",
+    ),
+  );
+  for (const check of REQUIRED_CHECKS)
+    assert.ok(evidence.includes("--check " + check + "=PASSED"), check);
+
+  for (const check of REQUIRED_CHECKS)
+    assert.ok(workflow.includes(check), check);
+  assert.equal(workflow.includes("${{ secrets."), false);
+  assert.equal(workflow.includes("npm run verify"), false);
+  const runner = fs.readFileSync(
+    path.join(repositoryRoot, "auto—publish", "scripts", "run-tests.js"),
+    "utf8",
+  );
+  assert.ok(runner.includes(".test.js"));
+  assert.ok(runner.includes(".test.mjs"));
 });

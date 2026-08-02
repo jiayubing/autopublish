@@ -26,6 +26,8 @@ build/runtime-tools-cache/
 /build/preload/
 /build/production-artifact-manifest.json
 /build/release-evidence-manifest.json
+/build/evidence/
+/auth-server/build/evidence/
 /build/test-evidence.json
 /build/build-info.json
 /config/build-info.json

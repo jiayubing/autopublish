@@ -9,6 +9,7 @@ const {
   verifyOpenDatabase,
   verifyTargetSchema,
 } = require("./auth-database-verifier");
+const { hashToken } = require("./token-service");
 
 const LEGACY_TABLES = {
   users: "auth_legacy_users",
@@ -31,6 +32,7 @@ function renameLegacyTables(db) {
 }
 
 function migrateLegacyData(db) {
+  const legacyDevices = db.prepare("SELECT user_id, device_id FROM auth_legacy_sessions GROUP BY user_id, device_id").all();
   db.exec(`
     INSERT INTO users (
       id, login_name, password_hash, role, enabled, must_change_password, max_devices, note,
@@ -79,6 +81,13 @@ function migrateLegacyData(db) {
     DROP TABLE auth_legacy_sessions;
     DROP TABLE auth_legacy_audit_events;
   `);
+  for (const legacyDevice of legacyDevices) {
+    const deviceValue = legacyDevice.device_id === undefined || legacyDevice.device_id === null || legacyDevice.device_id === ""
+      ? "legacy-installation"
+      : String(legacyDevice.device_id);
+    db.prepare("UPDATE devices SET device_key_hash=? WHERE id=? AND user_id=?")
+      .run(hashToken(deviceValue), `legacy:${legacyDevice.user_id}:${legacyDevice.device_id}`, legacyDevice.user_id);
+  }
 }
 
 function targetSchema(db, state, options) {

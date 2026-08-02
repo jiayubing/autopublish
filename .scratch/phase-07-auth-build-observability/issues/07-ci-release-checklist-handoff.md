@@ -4,7 +4,7 @@
 
 **Blocked by:** None for repository automation. Formal release still depends on the human gates listed in `auto—publish/docs/release-checklist.md`.
 
-**Status:** completed — required CI contracts, evidence generation, and handoff documentation are in place; the generated evidence remains `BLOCKED_RELEASE` until human gates pass.
+**Status:** `COMPLETE` — required CI contracts, evidence generation, and handoff documentation are in place. The pre-closeout local evidence remains `DIRTY`/`BLOCKED_RELEASE`; formal release still requires evidence regenerated from the closeout commit plus the independent human gates.
 
 ## Scope
 
@@ -37,11 +37,14 @@
 
 ## Evidence
 
-- Root test suite: 228 test files, 1477/1477 passed.
-- Auth tests: 45/45 passed; migration tests: 56/56 passed; diagnostics tests: 32/32 passed; link-contract tests: 180/180 passed.
-- `npm run test:packaging` (42 tests), `npm run lint`, and the expanded `npm run format:check`: passed.
+- Root test suite: 228 test files, 132 suites, 1488/1488 passed, 0 failed; one pre-existing Electron focus case was explicitly skipped by its own condition.
+- Auth tests: 47/47 passed; migration tests: 56/56 passed; diagnostics tests: 32/32 passed; link-contract tests: 181/181 passed.
+- `npm run test:packaging` (46/46 tests), media transport (9/9), health (9/9), rate-limit/trusted-proxy (9/9), and link-contract (181/181) passed; `npm run lint`, all three typechecks, `npm run format:check`, renderer build (2157 modules), and preload build (226527 bytes) passed.
 - CI now exposes stable `required/*` job and step names for Node 24 desktop, Node 22 Auth, link security, migration, backup/restore, rate-limit capacity, diagnostics, and production directory smoke. The release-evidence job depends on all three required jobs and validates with `--allow-blocked` so human blockers remain visible.
-- `build/release-evidence-manifest.json`: all automated required checks are `PASSED`; manual gates, migration report, backup/restore report, and rollback package remain explicitly pending. It also records `sourceState.status` and a hash of the porcelain state; dirty local evidence cannot become release-ready, so `releaseState` is `BLOCKED_RELEASE`.
+- CI keeps test ownership non-overlapping: `required/root-tests` runs `npm run test:desktop-core` for 224 files, while `required/packaging-contracts` runs the four packaging contract files (46/46); local `npm test` remains the complete 228-file suite.
+- CI workflow contract plus release evidence/checklist validator regression tests: `node --test tests/ci-workflow-contract.test.js tests/release-evidence.test.js tests/packaging-runtime.test.js` passed 12/12; validator rejects the blocked manifest without `--allow-blocked` and accepts it with that explicit flag.
+- `build/release-evidence-manifest.json`: 16 fixed required checks are listed; local automated checks are `PASSED` except the unavailable Docker container check (`PENDING_HUMAN`). It records application `1.0.1`, Auth schema `2`, workspace schema `1`, 13 relative production artifact/resource entries with hashes, migration and backup/restore summaries, discovery counts (`216 .test.js`/`12 .test.mjs`), offline self-test `PASSED`, `sourceState.status=DIRTY`, and `releaseState=BLOCKED_RELEASE`.
+- Independent review remediation: migrated v1 session devices now use the runtime `hashToken(deviceId)` contract, and restore-check now serializes a coherent read-only SQLite snapshot instead of copying DB/WAL/SHM independently. The focused suite passed 13/13, the full Auth suite passed 47/47, and an independent cross-process writer check produced 250 coherent snapshots with 0 invariant mismatches.
 
 ## Implementation notes
 

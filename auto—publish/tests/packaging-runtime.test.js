@@ -21,6 +21,10 @@ const {
 } = require("../scripts/create-production-artifact-manifest");
 const { runOfflineSelfTest } = require("../scripts/offline-self-test");
 const {
+  summarizeChecks,
+  writeEvidenceReport,
+} = require("../scripts/verify-production-package");
+const {
   verifyArtifactPackage,
   validateManifest,
 } = require("../desktop/packaging/artifact-verifier");
@@ -351,6 +355,41 @@ test("offline self-test launches the packaged Electron executable when supplied"
     assert.equal(result.checks.electronApplication.status, 0);
     assert.ok(
       calls.some((call) => call.args.includes("--offline-packaging-smoke")),
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("production smoke evidence summarizes offline checks and rejects empty results", () => {
+  const fixture = temporaryRoot("autopublish-production-evidence-");
+  try {
+    const output = path.join(fixture.root, "production-smoke.json");
+    const passed = writeEvidenceReport(output, {
+      ok: true,
+      packageVersion: "1.0.1",
+      workspaceSchemaVersion: 1,
+      artifactCount: 13,
+      offline: {
+        main: { status: 0 },
+        storage: { cleanup: { status: "passed" } },
+      },
+    });
+    assert.equal(passed.status, "PASSED");
+    assert.equal(passed.checkCount, 2);
+    assert.equal(passed.passed, 2);
+    const failed = writeEvidenceReport(output, {
+      ok: true,
+      packageVersion: "1.0.1",
+      workspaceSchemaVersion: 1,
+      artifactCount: 13,
+      offline: { main: { status: "FAILED" } },
+    });
+    assert.equal(failed.status, "FAILED");
+    assert.equal(failed.failed, 1);
+    assert.throws(
+      () => summarizeChecks({}),
+      (error) => error.code === "PRODUCTION_PACKAGE_CHECKS_EMPTY",
     );
   } finally {
     fixture.cleanup();

@@ -1,14 +1,16 @@
 FROM node:22.16.0-alpine3.22 AS builder
 WORKDIR /app
 COPY package.json ./
+COPY package-lock.json ./
 COPY src ./src
 COPY scripts ./scripts
 COPY migrations ./migrations
-RUN node --check src/server.js && node --check src/auth-domain.js
+RUN node --check src/server.js && node --check src/auth-domain.js && node --check scripts/container-smoke.js && node --check scripts/backup-restore-evidence.js && node --check scripts/migration-roundtrip-evidence.js
 
-FROM node:22.16.0-alpine3.22
+FROM node:22.16.0-alpine3.22 AS runtime
 WORKDIR /app
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/migrations ./migrations

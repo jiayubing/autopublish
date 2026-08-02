@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { DatabaseSync } = require("node:sqlite");
 const {
   assertRegularReadableFile,
   verifyDatabaseFile,
@@ -16,37 +17,38 @@ function tempParent(options) {
   return path.resolve(candidate);
 }
 
-function copyCompanion(source, isolatedRoot, suffix) {
-  const companion = `${source}${suffix}`;
-  let stats;
-  try { stats = fs.lstatSync(companion); } catch (error) {
-    if (error && error.code === "ENOENT") return false;
-    throw databaseError("AUTH_RESTORE_COMPANION_UNREADABLE");
-  }
-  if (!stats.isFile()) throw databaseError("AUTH_RESTORE_COMPANION_NOT_REGULAR");
-  try {
-    fs.copyFileSync(companion, path.join(isolatedRoot, `${path.basename(source)}${suffix}`));
-    return true;
-  } catch (error) {
-    if (error && ["EACCES", "EPERM"].includes(error.code)) throw databaseError("AUTH_RESTORE_COMPANION_UNREADABLE");
-    throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
-  }
-}
-
 function copyToIsolation(source, parent) {
   let isolatedRoot;
   try { isolatedRoot = fs.mkdtempSync(path.join(parent, "autopublish-auth-restore-")); } catch (_) {
     throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
   }
   const isolatedFile = path.join(isolatedRoot, path.basename(source));
+  let sourceDb;
   try {
-    fs.copyFileSync(source, isolatedFile);
-    const wal = copyCompanion(source, isolatedRoot, "-wal");
-    const shm = copyCompanion(source, isolatedRoot, "-shm");
-    return { isolatedRoot, isolatedFile, wal, shm };
-  } catch (error) {
+    sourceDb = new DatabaseSync(source, { readOnly: true });
+    sourceDb.exec("BEGIN");
+    let snapshot;
+    try {
+      snapshot = sourceDb.serialize();
+    } catch (error) {
+      try { sourceDb.exec("ROLLBACK"); } catch (_) { /* preserve the verification result */ }
+      if (!/not a database|malformed/i.test(String(error && error.message))) throw error;
+      try {
+        fs.copyFileSync(source, isolatedFile);
+        return { isolatedRoot, isolatedFile, wal: false, shm: false };
+      } catch (_) {
+        throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
+      }
+    }
+    sourceDb.exec("COMMIT");
+    fs.writeFileSync(isolatedFile, snapshot);
+    return { isolatedRoot, isolatedFile, wal: false, shm: false };
+  } catch (_) {
+    try { if (sourceDb) sourceDb.exec("ROLLBACK"); } catch (_) { /* preserve the isolation failure */ }
     try { fs.rmSync(isolatedRoot, { recursive: true, force: true }); } catch (_) { /* preserve the isolation failure */ }
-    throw error;
+    throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
+  } finally {
+    if (sourceDb) { try { sourceDb.close(); } catch (_) { /* preserve the isolation result */ } }
   }
 }
 

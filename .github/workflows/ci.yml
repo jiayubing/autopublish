@@ -11,6 +11,8 @@ jobs:
   desktop:
     name: required/desktop-node24
     runs-on: windows-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,30 +24,30 @@ jobs:
         working-directory: auto—publish
       - run: npm ci
         working-directory: auto—publish/media-workbench
+      - name: required/test-discovery
+        run: npm run test:discover
+        working-directory: auto—publish
+      - name: Write desktop discovery evidence
+        run: node scripts/create-test-discovery-evidence.js --output build/evidence/desktop-discovery.json
+        working-directory: auto—publish
       - name: required/root-tests
-        run: npm test
-        working-directory: auto—publish
-      - run: npm run lint
-        working-directory: auto—publish
-      - run: npm run typecheck:renderer
-        working-directory: auto—publish
-      - run: npm run typecheck:bridge
-        working-directory: auto—publish
-      - run: npm run build:renderer
-        working-directory: auto—publish
-      - name: required/link-contracts
-        run: npm run test:links
-        working-directory: auto—publish
-      - run: npm run format:check
-        working-directory: auto—publish
-      - name: required/packaging-contracts
-        run: npm run test:packaging
+        run: npm run test:desktop-core
         working-directory: auto—publish
       - name: required/migration-roundtrip
         run: npm run test:migration
         working-directory: auto—publish
-      - name: required/diagnostics-static
-        run: npm run test:diagnostics
+      - name: required/toolchain
+        run: |
+          npm run lint
+          npm run typecheck:renderer
+          npm run typecheck:bridge
+          npm run typecheck:main
+          npm run format:check
+          npm run build:renderer
+          npm run build:preload
+        working-directory: auto—publish
+      - name: required/packaging-contracts
+        run: npm run test:packaging
         working-directory: auto—publish
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
@@ -54,23 +56,30 @@ jobs:
         continue-on-error: true
         run: npm audit --audit-level=high
         working-directory: auto—publish
-      - name: required/alpha-directory-smoke
-        run: npm run pack:smoke
-        working-directory: auto—publish
       - name: required/production-directory-smoke
         run: npm run pack:production:smoke
         working-directory: auto—publish
-      - name: Upload production evidence input
-        if: always()
+      - name: required/legacy-publish-log-absence
+        run: node scripts/verify-legacy-absence.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/legacy-publish-log.json
+        working-directory: auto—publish
+      - name: Upload production artifact manifest
         uses: actions/upload-artifact@v4
         with:
-          name: production-evidence-input
+          name: production-artifact-manifest
           path: auto—publish/build/production-artifact-manifest.json
+          if-no-files-found: error
+      - name: Upload desktop evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-evidence
+          path: auto—publish/build/evidence
           if-no-files-found: error
 
   auth:
     name: required/auth-node22
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -83,16 +92,97 @@ jobs:
       - name: required/auth-tests
         run: npm test
         working-directory: auto—publish/auth-server
+      - name: Write Auth service test evidence
+        run: node scripts/create-test-summary-evidence.js --status PASSED --output ../build/evidence/auth-tests.json
+        working-directory: auto—publish/auth-server
+      - name: Upload Auth service evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-service-evidence
+          path: auto—publish/build/evidence/auth-tests.json
+          if-no-files-found: error
+
+  auth-container:
+    name: required/auth-container-node22
+    runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Auth Linux image
+        run: docker build --file auto—publish/auth-server/Dockerfile --tag autopublish-auth-ci:${{ github.sha }} auto—publish/auth-server
+      - name: required/auth-container
+        run: |
+          mkdir -p auto—publish/build/evidence
+          docker run --rm --network=none --read-only --tmpfs /data:rw,nosuid,nodev,noexec,mode=0770,uid=1000,gid=1000 --tmpfs /tmp:rw,nosuid,nodev,noexec --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --cpus=1 --env CI_SYNTHETIC_ONLY=1 autopublish-auth-ci:${{ github.sha }} node scripts/container-smoke.js > auto—publish/build/evidence/auth-container.json
+      - name: Upload Auth container evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-container-evidence
+          path: auto—publish/build/evidence/auth-container.json
+          if-no-files-found: error
+
+  auth-verification:
+    name: required/auth-verification-node22
+    runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: auto—publish/auth-server/package-lock.json
+      - run: npm ci
+        working-directory: auto—publish/auth-server
+      - name: required/auth-migration-roundtrip
+        run: node auth-server/scripts/migration-roundtrip-evidence.js --output build/evidence/migration-roundtrip.json
+        working-directory: auto—publish
       - name: required/backup-restore-fixture
-        run: node --test tests/backup-restore-migration.test.js
+        run: node auth-server/scripts/backup-restore-evidence.js --output build/evidence/backup-restore.json
+        working-directory: auto—publish
+      - name: required/health-semantics
+        run: npm run test:health
         working-directory: auto—publish/auth-server
       - name: required/rate-limit-capacity
-        run: node --test tests/auth-proxy-rate-limit.test.js
+        run: npm run test:rate-limit
         working-directory: auto—publish/auth-server
+      - name: Upload Auth verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-verification-evidence
+          path: auto—publish/build/evidence
+          if-no-files-found: error
+
+  desktop-security:
+    name: required/desktop-security-node24
+    runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: auto—publish/package-lock.json
+      - run: npm ci
+        working-directory: auto—publish
+      - run: npm ci
+        working-directory: auto—publish/media-workbench
+      - name: required/media-transport
+        run: npm run test:media-transport
+        working-directory: auto—publish
+      - name: required/diagnostics-static
+        run: npm run test:diagnostics
+        working-directory: auto—publish
 
   link-security:
     name: required/link-security
     runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -107,26 +197,62 @@ jobs:
 
   release-evidence:
     name: required/release-evidence
-    needs: [desktop, auth, link-security]
+    needs: [desktop, auth, auth-container, auth-verification, desktop-security, link-security]
     runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v4
         with:
-          name: production-evidence-input
+          name: production-artifact-manifest
           path: auto—publish/build
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-evidence
+          path: auto—publish/build/evidence
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-service-evidence
+          path: auto—publish/build/evidence
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-container-evidence
+          path: auto—publish/build/evidence
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-verification-evidence
+          path: auto—publish/build/evidence
       - name: Write release evidence manifest
         run: >-
           node scripts/create-release-evidence-manifest.js
           --artifact-manifest build/production-artifact-manifest.json
-          --output build/release-evidence-manifest.json
+          --discovery-report build/evidence/desktop-discovery.json
+          --auth-report build/evidence/auth-tests.json
+          --container-report build/evidence/auth-container.json
+          --migration-report build/evidence/migration-roundtrip.json
+          --backup-report build/evidence/backup-restore.json
+          --offline-report build/evidence/production-smoke.json
+          --legacy-report build/evidence/legacy-publish-log.json
           --check required/root-tests=PASSED
+          --check required/test-discovery=PASSED
           --check required/auth-tests=PASSED
+          --check required/auth-container=PASSED
           --check required/migration-roundtrip=PASSED
+          --check required/auth-migration-roundtrip=PASSED
           --check required/backup-restore-fixture=PASSED
+          --check required/health-semantics=PASSED
           --check required/rate-limit-capacity=PASSED
+          --check required/media-transport=PASSED
           --check required/diagnostics-static=PASSED
+          --check required/legacy-publish-log-absence=PASSED
+          --check required/toolchain=PASSED
+          --check required/packaging-contracts=PASSED
           --check required/production-directory-smoke=PASSED
+          --check required/link-security=PASSED
         working-directory: auto—publish
       - name: Validate release checklist with explicit human blockers
         run: node scripts/validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked

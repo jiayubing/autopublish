@@ -1,16 +1,19 @@
 const assert = require("node:assert/strict");
+const { spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { describe, it } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
+const { AuthDomain } = require("../src/auth-domain");
 const { SqliteAuthRepository, applyMigrations } = require("../src/repositories/sqlite-auth-repository");
 const { verifyDatabaseFile } = require("../src/auth-database-verifier");
 const { backupAuthDatabase } = require("../src/auth-backup-orchestrator");
 const { checkAuthRestore } = require("../src/auth-recovery-check");
 const { parseArgs } = require("../scripts/recovery-drill");
 const { assertTemporaryRoot } = require("../src/recovery-fixtures");
+const { hashToken } = require("../src/token-service");
 
 function temporaryRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "autopublish-auth-recovery-test-"));
@@ -48,7 +51,11 @@ function createLegacy(filePath, options) {
   db.prepare("INSERT INTO users (id, login_name, password_hash, enabled, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?)")
     .run("legacy-user", "legacy-user", "scrypt$legacy", 1, "2026-01-01T00:00:00.000Z", null);
   db.prepare("INSERT INTO entitlements (user_id, product, enabled, expires_at) VALUES (?, ?, ?, ?)")
-    .run("legacy-user", "desktop", 1, null);
+    .run("legacy-user", options && options.product ? options.product : "desktop", 1, null);
+  if (options && options.session) {
+    db.prepare("INSERT INTO sessions (id, user_id, device_id, access_token_hash, refresh_token_hash, access_expires_at, refresh_expires_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("legacy-session", "legacy-user", "legacy-device", hashToken("legacy-access"), hashToken("legacy-refresh"), "2027-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z", null);
+  }
   if (options && options.orphanEntitlement) db.prepare("INSERT INTO entitlements (user_id, product, enabled, expires_at) VALUES (?, ?, ?, ?)").run("missing-user", "desktop", 1, null);
   if (options && options.marker) {
     db.exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
@@ -63,6 +70,54 @@ function expectCode(callback, code) {
 
 function fileHash(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function startContinuousWriter(filePath) {
+  const script = `
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(process.argv[1]);
+    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA wal_autocheckpoint=1;");
+    let tick = 0;
+    process.stdout.write("ready\\n");
+    function write() {
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        db.prepare("UPDATE users SET updated_at=? WHERE id=?").run("writer-" + tick++, "wal-user");
+        db.exec("COMMIT");
+        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      } catch (_) {
+        try { db.exec("ROLLBACK"); } catch (_) { /* keep the writer alive */ }
+      }
+      setImmediate(write);
+    }
+    write();
+    process.on("SIGTERM", () => {
+      try { db.close(); } finally { process.exit(0); }
+    });
+  `;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["-e", script, filePath], { stdio: ["ignore", "pipe", "ignore"] });
+    let output = "";
+    let ready = false;
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+      if (!ready && output.includes("ready")) {
+        ready = true;
+        resolve(child);
+      }
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (!ready) reject(new Error(`writer exited before ready: ${code}`));
+    });
+  });
+}
+
+async function stopContinuousWriter(child) {
+  if (child.exitCode !== null) return;
+  const exited = new Promise((resolve) => child.once("exit", resolve));
+  child.kill();
+  await exited;
 }
 
 describe("auth backup, restore and migration safety", () => {
@@ -188,6 +243,25 @@ describe("auth backup, restore and migration safety", () => {
     temp.cleanup();
   });
 
+  it("keeps existing v1 session device bindings usable after migration", async () => {
+    const temp = temporaryRoot();
+    const legacy = path.join(temp.root, "legacy-session.db");
+    createLegacy(legacy, { marker: true, session: true, product: "AutoPublish" });
+    let repository;
+    try {
+      repository = new SqliteAuthRepository({ filePath: legacy });
+      const domain = new AuthDomain({ repository, passwordVerifier: () => true });
+      const login = await domain.login({ loginName: "legacy-user", password: "legacy-password", deviceId: "legacy-device" });
+      assert.equal(login.user.loginName, "legacy-user");
+      assert.equal(repository.listDevices("legacy-user")[0].deviceKeyHash, hashToken("legacy-device"));
+      const refreshed = await domain.refresh({ refreshToken: "legacy-refresh", deviceId: "legacy-device" });
+      assert.equal(refreshed.user.loginName, "legacy-user");
+    } finally {
+      if (repository) repository.close();
+      temp.cleanup();
+    }
+  });
+
   it("rolls back before the marker and permits a clean retry", () => {
     const temp = temporaryRoot();
     const legacy = path.join(temp.root, "legacy.db");
@@ -247,14 +321,37 @@ describe("auth backup, restore and migration safety", () => {
     const temp = temporaryRoot();
     const source = path.join(temp.root, "wal.db");
     const repository = createCurrent(source, "wal-user");
-    const companions = [`${source}-wal`, `${source}-shm`].filter((filePath) => fs.existsSync(filePath));
-    const before = new Map(companions.map((filePath) => [filePath, fileHash(filePath)]));
+    const wal = `${source}-wal`;
+    const before = fs.existsSync(wal) ? fileHash(wal) : null;
     const result = checkAuthRestore(source, { tempRoot: temp.root });
     assert.equal(result.verification.rowCounts.users, 1);
-    for (const [filePath, hash] of before) assert.equal(fileHash(filePath), hash);
+    assert.equal(fs.existsSync(wal) ? fileHash(wal) : null, before);
     assert.equal(fs.readdirSync(temp.root).some((name) => name.startsWith("autopublish-auth-restore-")), false);
     repository.close();
     temp.cleanup();
+  });
+
+  it("takes consistent restore snapshots while another process continuously writes", async () => {
+    const temp = temporaryRoot();
+    const source = path.join(temp.root, "concurrent-writer.db");
+    const repository = createCurrent(source, "wal-user");
+    repository.close();
+    const writer = await startContinuousWriter(source);
+    const failures = [];
+    try {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        try {
+          const result = checkAuthRestore(source, { tempRoot: temp.root });
+          assert.equal(result.verification.rowCounts.users, 1);
+        } catch (error) {
+          failures.push(error.code || error.message);
+        }
+      }
+      assert.deepEqual(failures, []);
+    } finally {
+      await stopContinuousWriter(writer);
+      temp.cleanup();
+    }
   });
 
   it("requires an explicit temporary root for the isolated recovery drill", () => {

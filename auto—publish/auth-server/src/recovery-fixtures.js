@@ -1,25 +1,43 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { SqliteAuthRepository } = require("./repositories/sqlite-auth-repository");
+const {
+  SqliteAuthRepository,
+} = require("./repositories/sqlite-auth-repository");
 const { backupAuthDatabase } = require("./auth-backup-orchestrator");
 const { checkAuthRestore } = require("./auth-recovery-check");
 const { databaseError } = require("./auth-database-verifier");
 
 function within(parent, child) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative))
+  );
 }
 
 function assertTemporaryRoot(root) {
-  if (typeof root !== "string" || !path.isAbsolute(root)) throw databaseError("AUTH_RECOVERY_TEMP_ROOT_REQUIRED");
-  if (process.env.NODE_ENV === "production" || process.env.AUTH_ENV === "production" || process.env.AUTOPUBLISH_ENV === "production") {
+  if (typeof root !== "string" || !path.isAbsolute(root))
+    throw databaseError("AUTH_RECOVERY_TEMP_ROOT_REQUIRED");
+  if (
+    process.env.NODE_ENV === "production" ||
+    process.env.AUTH_ENV === "production" ||
+    process.env.AUTOPUBLISH_ENV === "production"
+  ) {
     throw databaseError("AUTH_RECOVERY_PRODUCTION_ENV_REJECTED");
   }
-  if (process.env.AUTH_DB_PATH || process.env.AUTH_DB_DIR) throw databaseError("AUTH_RECOVERY_DATABASE_ENV_REJECTED");
+  if (process.env.AUTH_DB_PATH || process.env.AUTH_DB_DIR)
+    throw databaseError("AUTH_RECOVERY_DATABASE_ENV_REJECTED");
   let stats;
-  try { stats = fs.lstatSync(root); } catch (_) { throw databaseError("AUTH_RECOVERY_TEMP_ROOT_INVALID"); }
-  if (!stats.isDirectory() || !within(os.tmpdir(), root)) throw databaseError("AUTH_RECOVERY_TEMP_ROOT_INVALID");
+  try {
+    stats = fs.lstatSync(root);
+  } catch (_) {
+    throw databaseError("AUTH_RECOVERY_TEMP_ROOT_INVALID");
+  }
+  if (!stats.isDirectory() || !within(os.tmpdir(), root))
+    throw databaseError("AUTH_RECOVERY_TEMP_ROOT_INVALID");
   return path.resolve(root);
 }
 
@@ -47,7 +65,9 @@ async function runRecoveryDrill(root) {
   let runRoot;
   let repository;
   try {
-    runRoot = fs.mkdtempSync(path.join(temporaryRoot, "autopublish-auth-drill-"));
+    runRoot = fs.mkdtempSync(
+      path.join(temporaryRoot, "autopublish-auth-drill-"),
+    );
     const sourceDirectory = path.join(runRoot, "source");
     fs.mkdirSync(sourceDirectory);
     const source = path.join(sourceDirectory, "auth.db");
@@ -64,20 +84,45 @@ async function runRecoveryDrill(root) {
     const corrupt = path.join(runRoot, "corrupt.db");
     fs.writeFileSync(corrupt, "not a sqlite database");
     let corruptCode = null;
-    try { checkAuthRestore(corrupt, { tempRoot: runRoot }); } catch (error) { corruptCode = error.code || "AUTH_DB_OPEN_FAILED"; }
-    if (!corruptCode) throw databaseError("AUTH_RECOVERY_DRILL_CORRUPT_CASE_PASSED");
+    try {
+      checkAuthRestore(corrupt, { tempRoot: runRoot });
+    } catch (error) {
+      corruptCode = error.code || "AUTH_DB_OPEN_FAILED";
+    }
+    if (!corruptCode)
+      throw databaseError("AUTH_RECOVERY_DRILL_CORRUPT_CASE_PASSED");
     return {
       ok: true,
       temporaryOnly: true,
       walPresentBeforeCheck,
       restoreWhileOpen: restoreWhileOpen.verification.schemaVersion,
-      backup: { schemaVersion: backup.verification.schemaVersion, integrity: backup.verification.integrity },
-      restoredBackup: { schemaVersion: restoredBackup.verification.schemaVersion, integrity: restoredBackup.verification.integrity },
+      backup: {
+        schemaVersion: backup.verification.schemaVersion,
+        integrity: backup.verification.integrity,
+        contentHash: backup.verification.contentHash,
+      },
+      restoredBackup: {
+        schemaVersion: restoredBackup.verification.schemaVersion,
+        integrity: restoredBackup.verification.integrity,
+        contentHash: restoredBackup.verification.contentHash,
+      },
       corruptCode,
     };
   } finally {
-    if (repository) { try { repository.close(); } catch (_) { /* cleanup still runs */ } }
-    if (runRoot) { try { fs.rmSync(runRoot, { recursive: true, force: true }); } catch (_) { /* caller receives the drill result */ } }
+    if (repository) {
+      try {
+        repository.close();
+      } catch (_) {
+        /* cleanup still runs */
+      }
+    }
+    if (runRoot) {
+      try {
+        fs.rmSync(runRoot, { recursive: true, force: true });
+      } catch (_) {
+        /* caller receives the drill result */
+      }
+    }
   }
 }
 

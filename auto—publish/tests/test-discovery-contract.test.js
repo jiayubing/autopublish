@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { collectTestFiles } = require("../scripts/run-tests");
+const { collectTestFiles, parseArguments } = require("../scripts/run-tests");
 
 const root = path.resolve(__dirname, "..");
 
@@ -29,4 +29,26 @@ test("default test discovery collects both JavaScript module extensions", () => 
     fs.readFileSync(path.join(root, "scripts", "run-tests.js"), "utf8"),
     /--test-concurrency=1/,
   );
+});
+
+test("desktop core test collection excludes only delegated packaging contracts", () => {
+  const allFiles = collectTestFiles();
+  const excluded = [
+    "tests/production-packaging.test.js",
+    "tests/desktop-packaging.test.js",
+    "tests/packaging-runtime.test.js",
+    "tests/release-evidence.test.js",
+  ];
+  const coreFiles = collectTestFiles(excluded);
+  assert.equal(coreFiles.length, allFiles.length - excluded.length);
+  excluded.forEach((file) =>
+    assert.equal(
+      coreFiles.some((candidate) => candidate.replaceAll("\\", "/") === file),
+      false,
+    ),
+  );
+  assert.deepEqual(parseArguments(["--exclude", excluded[0]]), {
+    excludedFiles: [excluded[0]],
+    list: false,
+  });
 });
