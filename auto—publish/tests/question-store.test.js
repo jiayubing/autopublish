@@ -374,4 +374,23 @@ describe("question store", function() {
       fs.rmSync(outsideClients, { recursive: true, force: true });
     }
   });
+
+  it("rejects a linked workspace root before writing questions", function(t) {
+    const linkedRoot = path.join(root, "linked-workspace");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "question-root-outside-"));
+    fs.mkdirSync(path.join(outside, "clients", "client-1"), { recursive: true });
+    try {
+      if (!createLinkOrSkip(t, outside, linkedRoot, "junction")) return;
+      const linkedStore = createQuestionStore(linkedRoot, {
+        createId: function() { return "question-outside"; },
+        now: function() { return "2026-07-12T00:00:00.000Z"; }
+      });
+      assert.throws(function() {
+        linkedStore.createQuestion("client-1", { text: "外部问题" });
+      }, function(error) { return error.code === "CLIENT_PATH_OUT_OF_BOUNDS"; });
+      assert.equal(fs.existsSync(path.join(outside, "clients", "client-1", "questions.json")), false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });

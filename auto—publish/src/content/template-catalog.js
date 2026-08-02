@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { getContentWorkspace } = require("../core/files");
+const { createContentPathPolicy } = require("./content-path-policy");
 
 function catalogError(code, message) { const error = new Error(message); error.code = code; return error; }
 function isObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
@@ -37,8 +37,11 @@ function parseDocument(source) {
   return { fields, body: match[2].trim(), legacy: Boolean(fields.platform || fields.scenario || fields.name) };
 }
 
-function safeDirectory(root, platform, code) {
+function safeDirectory(root, platform, code, pathPolicy) {
   assertSegment(platform, code, "platform");
+  if (pathPolicy && path.resolve(root) === path.resolve(pathPolicy.workspace.templates)) {
+    return pathPolicy.templateDirectory(platform, false);
+  }
   const directory = path.resolve(root, platform);
   assertInside(root, directory, code);
   if (!fs.existsSync(directory)) return directory;
@@ -103,7 +106,8 @@ function sourcePlatforms(root) {
 
 function createTemplateCatalog(workspaceRoot, options) {
   const opts = options || {};
-  const workspace = getContentWorkspace(workspaceRoot, opts.paths);
+  const pathPolicy = createContentPathPolicy(workspaceRoot, { paths: opts.paths });
+  const workspace = pathPolicy.workspace;
   const customRoot = path.resolve(workspace.templates);
   const builtinRoot = opts.builtinRoot === false || opts.builtinRoot === null
     ? null
@@ -122,7 +126,7 @@ function createTemplateCatalog(workspaceRoot, options) {
       if (builtinRoot && sourcePlatforms(builtinRoot).includes(platformId)) sources.push({ root: builtinRoot, source: "builtin" });
       sources.forEach(({ root, source }) => {
         let directory;
-        try { directory = safeDirectory(root, platformId, "TEMPLATE_INVALID_PLATFORM"); } catch (error) { diagnostics.push({ code: error.code, message: error.message, platformId, source }); return; }
+        try { directory = safeDirectory(root, platformId, "TEMPLATE_INVALID_PLATFORM", pathPolicy); } catch (error) { diagnostics.push({ code: error.code, message: error.message, platformId, source }); return; }
         try {
           const metadata = readPlatformMetadata(directory, platformId, source);
           const previous = platformMetadata.get(platformId);

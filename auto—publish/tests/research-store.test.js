@@ -116,6 +116,29 @@ describe("research store", function() {
     }
   });
 
+  it("rejects a linked workspace root before writing research", function(t) {
+    const linkedRoot = path.join(root, "linked-workspace");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "research-root-outside-"));
+    try {
+      try {
+        fs.symlinkSync(outside, linkedRoot, "junction");
+      } catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+          t.skip("symlinks or junctions are unavailable in this environment");
+          return;
+        }
+        throw error;
+      }
+      const linkedStore = createResearchStore(linkedRoot);
+      assert.throws(function() {
+        linkedStore.saveResearch("client-1", valid("query-1", "answer"));
+      }, function(error) { return error.code === "RESEARCH_PATH_OUT_OF_BOUNDS"; });
+      assert.equal(fs.existsSync(path.join(outside, "research", "client-1", "query-1.json")), false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it("stores records below the workspace research directory", function() {
     store.saveResearch("client-2", valid("query-3", "answer"));
     assert.equal(fs.existsSync(path.join(root, "research", "client-2", "query-3.json")), true);

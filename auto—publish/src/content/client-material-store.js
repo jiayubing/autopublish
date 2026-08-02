@@ -3,7 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { extractDocxText } = require("../core/docx-text-extractor");
-const { createWorkspacePaths } = require("../infrastructure/workspace/workspace-paths");
+const { createContentPathPolicy } = require("./content-path-policy");
+const { createAtomicFileWriter } = require("./content-file-transaction");
 const { getClient } = require("./client-knowledge");
 
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx"]);
@@ -27,15 +28,7 @@ function pathError() {
 }
 
 function assertClientId(clientId) {
-  if (typeof clientId !== "string" || !clientId || clientId === "." || clientId === ".." ||
-      clientId.includes("/") || clientId.includes("\\") || path.isAbsolute(clientId) || path.win32.isAbsolute(clientId)) {
-    throw pathError();
-  }
-}
-
-function isWithin(parent, child) {
-  const relative = path.relative(parent, child);
-  return relative && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
+  if (typeof clientId !== "string" || !clientId || clientId === "." || clientId === ".." || clientId.includes("/") || clientId.includes("\\") || path.isAbsolute(clientId) || path.win32.isAbsolute(clientId)) throw pathError();
 }
 
 function isMissing(error) {
@@ -79,8 +72,9 @@ function createClientMaterialStore(options) {
   if (typeof opts.workspaceRoot !== "string" || !opts.workspaceRoot) throw pathError();
 
   const workspaceRoot = path.resolve(opts.workspaceRoot);
-  const paths = opts.paths || createWorkspacePaths(workspaceRoot);
-  const clientsRoot = paths.clients;
+  const pathPolicy = opts.pathPolicy || createContentPathPolicy(workspaceRoot, { paths: opts.paths });
+  const workspace = pathPolicy.workspace;
+  const paths = opts.paths || workspace;
   const cacheBoundary = path.resolve(paths.localState || workspaceRoot);
   const cacheRoot = path.resolve(paths.clientMaterialCache || path.join(paths.work || path.join(workspaceRoot, "work"), "client-material-cache"));
   const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
@@ -89,23 +83,12 @@ function createClientMaterialStore(options) {
     : function(buffer) { return extractDocxText({ buffer: buffer }); };
   const hash = typeof opts.hash === "function" ? opts.hash : defaultHash;
   const cacheVersion = opts.cacheVersion === undefined ? 2 : opts.cacheVersion;
+  const atomicWriter = opts.atomicWriter || createAtomicFileWriter({ fs: fs });
+
+  pathPolicy.assertLexicalInside(cacheBoundary, cacheRoot, "CLIENT_PATH_OUT_OF_BOUNDS", "Material cache is outside its boundary");
 
   function getClientDirectory(clientId) {
     assertClientId(clientId);
-    let realWorkspaceRoot;
-    try { realWorkspaceRoot = fs.realpathSync(workspaceRoot); } catch (_) { throw pathError(); }
-    let realClientsRoot;
-    try {
-      const clientsStats = fs.lstatSync(clientsRoot);
-      if (!clientsStats.isDirectory() || clientsStats.isSymbolicLink()) throw pathError();
-      realClientsRoot = fs.realpathSync(clientsRoot);
-    } catch (error) {
-      if (error && error.code === "CLIENT_PATH_OUT_OF_BOUNDS") throw error;
-      if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
-      throw pathError();
-    }
-    if (!isWithin(realWorkspaceRoot, realClientsRoot)) throw pathError();
-
     let client;
     try {
       client = clientKnowledge.getClient(clientId);
@@ -114,42 +97,26 @@ function createClientMaterialStore(options) {
       if (error && error.code === "CLIENT_NOT_FOUND") throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
       throw pathError();
     }
-    const directory = client && typeof client.directory === "string" ? path.resolve(client.directory) : null;
-    if (!directory || !isWithin(path.resolve(clientsRoot), directory)) throw pathError();
-    let stats;
-    try { stats = fs.lstatSync(directory); } catch (error) {
-      if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
+    try {
+      const location = pathPolicy.clientDirectory(clientId, client && client.directory);
+      return { directory: location.directory, realDirectory: location.realDirectory, realClientsRoot: location.realClientsRoot };
+    } catch (error) {
+      if (error && error.code === "CLIENT_NOT_FOUND") throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
       throw pathError();
     }
-    if (!stats.isDirectory() || stats.isSymbolicLink()) throw pathError();
-    let realDirectory;
-    try { realDirectory = fs.realpathSync(directory); } catch (_) { throw pathError(); }
-    if (!isWithin(realClientsRoot, realDirectory)) throw pathError();
-    return { directory: directory, realDirectory: realDirectory, realClientsRoot: realClientsRoot };
   }
 
   function getCacheDirectory(clientId) {
     try {
-      fs.mkdirSync(cacheBoundary, { recursive: true });
-      const boundaryStats = fs.lstatSync(cacheBoundary);
-      if (!boundaryStats.isDirectory() || boundaryStats.isSymbolicLink()) throw pathError();
-      const realCacheBoundary = fs.realpathSync(cacheBoundary);
-      if (!isWithin(path.resolve(cacheBoundary), cacheRoot)) throw pathError();
-      const cacheStats = fs.existsSync(cacheRoot) ? fs.lstatSync(cacheRoot) : null;
-      if (cacheStats && (!cacheStats.isDirectory() || cacheStats.isSymbolicLink())) throw pathError();
-      fs.mkdirSync(cacheRoot, { recursive: true });
-      const realCacheRoot = fs.realpathSync(cacheRoot);
-      if (!isWithin(realCacheBoundary, realCacheRoot)) throw pathError();
+      pathPolicy.assertDirectory(cacheBoundary, { boundary: cacheBoundary, create: true, code: "CLIENT_PATH_OUT_OF_BOUNDS", label: "Material cache boundary" });
+      pathPolicy.assertDirectory(cacheRoot, { boundary: cacheBoundary, create: true, code: "CLIENT_PATH_OUT_OF_BOUNDS", label: "Material cache root" });
+      const directory = pathPolicy.cacheDirectory(cacheRoot, encodeMaterialId(clientId), true);
+      if (!directory) throw pathError();
+      return directory;
     } catch (error) {
       if (error && error.code === "CLIENT_PATH_OUT_OF_BOUNDS") throw error;
       throw pathError();
     }
-    const directory = path.join(cacheRoot, encodeMaterialId(clientId));
-    fs.mkdirSync(directory, { recursive: true });
-    const realCacheRoot = fs.realpathSync(cacheRoot);
-    const realDirectory = fs.realpathSync(directory);
-    if (!isWithin(path.resolve(cacheBoundary), realCacheRoot) || !isWithin(realCacheRoot, realDirectory)) throw pathError();
-    return directory;
   }
 
   function materialErrorDto(name, extension, error) {
@@ -165,7 +132,7 @@ function createClientMaterialStore(options) {
   }
 
   function readMaterialFile(client, name) {
-    const filePath = path.join(client.directory, name);
+    const filePath = pathPolicy.materialFile(client, name);
     let stats;
     try { stats = fs.lstatSync(filePath); } catch (error) {
       if (isMissing(error)) throw materialError("MATERIAL_READ_FAILED", "Client material could not be read");
@@ -173,7 +140,7 @@ function createClientMaterialStore(options) {
     }
     if (!stats.isFile() || stats.isSymbolicLink()) throw pathError();
     const realFile = fs.realpathSync(filePath);
-    if (!isWithin(client.realDirectory, realFile)) throw pathError();
+    if (!pathPolicy.sameOrWithin(client.realDirectory, realFile)) throw pathError();
     try { return fs.readFileSync(filePath); } catch (error) {
       const failure = materialError("MATERIAL_READ_FAILED", "Client material could not be read");
       failure.cause = error;
@@ -200,16 +167,7 @@ function createClientMaterialStore(options) {
   }
 
   function writeAtomic(filename, document) {
-    const temporary = filename + ".tmp-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-    try {
-      fs.writeFileSync(temporary, JSON.stringify(document) + "\n", "utf8");
-      try { fs.renameSync(temporary, filename); } catch (error) {
-        if (!fs.existsSync(filename)) throw error;
-        fs.unlinkSync(temporary);
-      }
-    } finally {
-      try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
-    }
+    atomicWriter.write(filename, JSON.stringify(document) + "\n", { keepExisting: true });
   }
 
   async function loadEntry(clientId, client, entry, forceConversion) {

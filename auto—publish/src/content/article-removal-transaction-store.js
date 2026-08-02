@@ -1,6 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { createContentPathPolicy } = require("./content-path-policy");
+const { createAtomicFileWriter } = require("./content-file-transaction");
 
 function removalError(code, message) {
   const error = new Error(message);
@@ -23,16 +25,34 @@ function createArticleRemovalTransactionStore(options) {
   if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
     throw removalError("ARTICLE_REMOVAL_PATH_INVALID", "Transaction storage must be inside the workspace");
   }
-  fs.mkdirSync(directory, { recursive: true });
+  const pathPolicy = createContentPathPolicy(workspaceRoot);
+  pathPolicy.assertDirectory(directory, {
+    boundary: workspaceRoot,
+    create: true,
+    code: "ARTICLE_REMOVAL_PATH_INVALID",
+    label: "Removal transaction directory",
+  });
   const createId = opts.createId || function() { return crypto.randomUUID(); };
   const now = opts.now || function() { return new Date().toISOString(); };
   const lockTtlMs = Number.isFinite(opts.lockTtlMs) ? Math.max(1000, opts.lockTtlMs) : 5 * 60 * 1000;
+  const atomicWriter = opts.atomicWriter || createAtomicFileWriter({ fs: fs });
 
   function filename(id) {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]+$/.test(id)) {
       throw removalError("ARTICLE_REMOVAL_TRANSACTION_ID_INVALID", "Removal transaction id is invalid");
     }
     return path.join(directory, "removal-" + id + ".json");
+  }
+
+  function assertRegularFile(filenameValue) {
+    let stats;
+    try { stats = fs.lstatSync(filenameValue); }
+    catch (error) {
+      if (error && error.code === "ENOENT") return false;
+      throw removalError("ARTICLE_REMOVAL_PATH_INVALID", "Removal transaction path is unsafe");
+    }
+    if (!stats.isFile() || stats.isSymbolicLink()) throw removalError("ARTICLE_REMOVAL_PATH_INVALID", "Removal transaction path is unsafe");
+    return true;
   }
 
   function save(transaction) {
@@ -44,19 +64,14 @@ function createArticleRemovalTransactionStore(options) {
       throw removalError("ARTICLE_REMOVAL_RESOLUTION_INVALID", "Removal resolution code is invalid");
     }
     const file = filename(transaction.id);
-    const temporary = file + ".tmp-" + process.pid + "-" + crypto.randomUUID();
-    try {
-      fs.writeFileSync(temporary, JSON.stringify(transaction, null, 2) + "\n", "utf8");
-      fs.renameSync(temporary, file);
-    } finally {
-      try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
-    }
+    atomicWriter.write(file, JSON.stringify(transaction, null, 2) + "\n", { keepExisting: false });
     return clone(transaction);
   }
 
   function get(id) {
     const file = filename(id);
     if (!fs.existsSync(file)) throw removalError("ARTICLE_REMOVAL_TRANSACTION_NOT_FOUND", "Removal transaction was not found");
+    assertRegularFile(file);
     try { return JSON.parse(fs.readFileSync(file, "utf8")); }
     catch (_) { throw removalError("ARTICLE_REMOVAL_TRANSACTION_CORRUPT", "Removal transaction is corrupt"); }
   }
@@ -97,6 +112,7 @@ function createArticleRemovalTransactionStore(options) {
       if (!error || error.code !== "EEXIST") throw error;
       let stale = false; let info = null; let mtimeMs = 0;
       try {
+        assertRegularFile(lock);
         info = JSON.parse(fs.readFileSync(lock, "utf8"));
         mtimeMs = fs.statSync(lock).mtimeMs;
         const currentTime = Date.parse(typeof now === "function" ? now() : now);
@@ -110,6 +126,7 @@ function createArticleRemovalTransactionStore(options) {
       const quarantine = lock + ".reclaim-" + crypto.randomUUID();
       try { fs.renameSync(lock, quarantine); } catch (_) { return null; }
       try {
+        assertRegularFile(quarantine);
         const quarantined = JSON.parse(fs.readFileSync(quarantine, "utf8"));
         if (!quarantined || quarantined.token !== info.token) return null;
       } catch (_) { return null; }
@@ -131,6 +148,7 @@ function createArticleRemovalTransactionStore(options) {
     } finally {
       try { fs.closeSync(descriptor); } catch (_) {}
       try {
+        assertRegularFile(lock);
         const info = JSON.parse(fs.readFileSync(lock, "utf8"));
         if (info && info.token === lockToken) fs.unlinkSync(lock);
       } catch (_) {}
@@ -149,7 +167,7 @@ function createArticleRemovalTransactionStore(options) {
 
   function remove(id) {
     const file = filename(id);
-    if (fs.existsSync(file)) fs.unlinkSync(file);
+    if (fs.existsSync(file)) { assertRegularFile(file); fs.unlinkSync(file); }
     return true;
   }
 

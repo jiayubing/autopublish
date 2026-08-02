@@ -195,6 +195,27 @@ describe("legacy GEO migration", function() {
     }
   });
 
+  it("rejects a linked workspace root before copying legacy files", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "legacy-migration-root-outside-"));
+    try {
+      try {
+        fs.symlinkSync(outside, workspaceRoot, "junction");
+      } catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+          t.skip("symlinks or junctions are unavailable in this environment");
+          return;
+        }
+        throw error;
+      }
+      assert.throws(function() { migrator().migrate(); }, function(error) {
+        return error.code === "CLIENT_PATH_OUT_OF_BOUNDS";
+      });
+      assert.equal(fs.existsSync(path.join(outside, "clients", "travel-client", "brand.md")), false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it("rejects schemas that omit required columns without exposing SQLite details", function() {
     fs.unlinkSync(path.join(sourceRoot, "data", "geo_data.db"));
     const db = new DatabaseSync(path.join(sourceRoot, "data", "geo_data.db"));
