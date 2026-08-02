@@ -56,7 +56,9 @@ function createDiagnosticMemorySink(options) {
     if (values.runId !== undefined)
       result = result.filter((record) => record.runId === values.runId);
     if (values.operationId !== undefined)
-      result = result.filter((record) => record.operationId === values.operationId);
+      result = result.filter(
+        (record) => record.operationId === values.operationId,
+      );
     if (values.code !== undefined)
       result = result.filter((record) => record.code === values.code);
     const limit = boundedLimit(values.limit, result.length || 1, maxRecords);

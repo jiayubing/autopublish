@@ -10,16 +10,20 @@ let activeReporter = NOOP;
 
 function createDiagnosticProducer(options) {
   const opts = options || {};
-  const sinks = (Array.isArray(opts.sinks) ? opts.sinks : [opts.sink])
-    .filter((sink) => sink && typeof sink.append === "function");
+  const sinks = (Array.isArray(opts.sinks) ? opts.sinks : [opts.sink]).filter(
+    (sink) => sink && typeof sink.append === "function",
+  );
   const failOnSinkError = opts.failOnSinkError === true;
 
   function append(input) {
     const record = parseDiagnosticRecord(input);
     let firstError = null;
     for (const sink of sinks) {
-      try { sink.append(record); }
-      catch (error) { if (!firstError) firstError = error; }
+      try {
+        sink.append(record);
+      } catch (error) {
+        if (!firstError) firstError = error;
+      }
     }
     if (firstError && failOnSinkError) throw firstError;
     return record;

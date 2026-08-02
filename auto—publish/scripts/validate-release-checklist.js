@@ -6,17 +6,10 @@ const {
   EVIDENCE_FIELDS,
   MANUAL_GATES,
   REQUIRED_CHECKS,
-} = require("./create-release-evidence-manifest");
+  STATUSES,
+} = require("./release-evidence-contract");
 
-const ALLOWED_STATES = new Set([
-  "PASSED",
-  "FAILED",
-  "PENDING_HUMAN",
-  "BLOCKED_RELEASE",
-  "NOT_APPLICABLE",
-  "SKIPPED",
-  "SKIPPED_OPTIONAL",
-]);
+const ALLOWED_STATES = STATUSES;
 
 function checklistError(message) {
   const error = new Error(message);
@@ -47,10 +40,41 @@ function statusOf(value, label) {
   return value.status;
 }
 
-function validateChecklistEntries(value) {
-  if (!value) return;
+function validateChecklistEntries(value, manifest, rollbackStatus) {
   if (!Array.isArray(value))
     throw checklistError("Checklist entries are invalid");
+  const expected = new Map();
+  REQUIRED_CHECKS.forEach((name) => {
+    const status = statusOf(manifest.requiredChecks[name], name);
+    expected.set(name, {
+      kind: "AUTOMATED",
+      status,
+      state: status === "PASSED" ? "AUTOMATED_PASS" : status,
+    });
+  });
+  EVIDENCE_FIELDS.forEach((name) => {
+    const status = statusOf(manifest[name], "Evidence " + name);
+    expected.set("evidence/" + name, {
+      kind: "EVIDENCE",
+      status,
+      state: status,
+    });
+  });
+  MANUAL_GATES.forEach((name) => {
+    const status = statusOf(manifest.manualGates[name], name);
+    expected.set("manual/" + name, {
+      kind: "MANUAL",
+      status,
+      state: status,
+    });
+  });
+  expected.set("manual/rollback-evidence", {
+    kind: "MANUAL",
+    status: rollbackStatus,
+    state: rollbackStatus,
+  });
+  if (value.length !== expected.size)
+    throw checklistError("Checklist entries are incomplete");
   const ids = new Set();
   value.forEach((entry) => {
     if (
@@ -64,12 +88,15 @@ function validateChecklistEntries(value) {
       !["AUTOMATED_PASS", ...ALLOWED_STATES].includes(entry.state)
     )
       throw checklistError("Checklist entry is invalid");
-    statusOf(entry.status, "Checklist entry");
+    const expectedEntry = expected.get(entry.id);
+    if (
+      !expectedEntry ||
+      expectedEntry.kind !== entry.kind ||
+      expectedEntry.status !== statusOf(entry.status, "Checklist entry") ||
+      expectedEntry.state !== entry.state
+    )
+      throw checklistError("Checklist entry disagrees with release evidence");
     ids.add(entry.id);
-  });
-  REQUIRED_CHECKS.forEach((name) => {
-    if (!ids.has(name))
-      throw checklistError("Checklist is missing a required check");
   });
 }
 
@@ -138,7 +165,7 @@ function validateReleaseChecklist(value, options) {
       !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(rollback.plan))
   )
     throw checklistError("Passed rollback evidence is incomplete");
-  validateChecklistEntries(value.checklist);
+  validateChecklistEntries(value.checklist, value, rollbackStatus);
 
   if (
     !value.releaseState ||

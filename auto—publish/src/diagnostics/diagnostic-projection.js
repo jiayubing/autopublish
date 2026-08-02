@@ -17,9 +17,7 @@ const DEFAULT_MESSAGES = Object.freeze({
 });
 
 function safeMessage(value, fallback) {
-  return isSafeDiagnosticText(value, 256)
-    ? value.trim()
-    : fallback;
+  return isSafeDiagnosticText(value, 256) ? value.trim() : fallback;
 }
 
 function projectDiagnostic(input, options) {
@@ -42,12 +40,15 @@ function projectDiagnostic(input, options) {
 
 function projectDiagnostics(records, options) {
   if (!Array.isArray(records)) return Object.freeze([]);
-  const limit = Number.isSafeInteger(options && options.limit) && options.limit > 0
-    ? Math.min(options.limit, 100)
-    : 100;
+  const limit =
+    Number.isSafeInteger(options && options.limit) && options.limit > 0
+      ? Math.min(options.limit, 100)
+      : 100;
   const result = [];
   records.slice(-limit).forEach(function (record) {
-    try { result.push(projectDiagnostic(record, options)); } catch (_) {}
+    try {
+      result.push(projectDiagnostic(record, options));
+    } catch (_) {}
   });
   return Object.freeze(result);
 }
