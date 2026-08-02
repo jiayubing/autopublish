@@ -1,86 +1,21 @@
 const crypto = require("node:crypto");
 const { createArticleRemovalTransactionStore } = require("./article-removal-transaction-store");
-
-function removalError(code, message) {
-  const error = new Error(message);
-  error.code = code;
-  return error;
-}
-
-function clone(value) { return value === undefined ? value : JSON.parse(JSON.stringify(value)); }
-
-function selection(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value) ||
-      typeof value.clientId !== "string" || !value.clientId.trim() ||
-      typeof value.articleId !== "string" || !value.articleId.trim()) {
-    throw removalError("CONTENT_INPUT_INVALID", "Article selection is invalid");
-  }
-  return { clientId: value.clientId, articleId: value.articleId };
-}
-
-function selections(input) {
-  const values = Array.isArray(input) ? input : input && (input.selections || input.articles);
-  if (!Array.isArray(values) || !values.length) throw removalError("CONTENT_INPUT_INVALID", "At least one article is required");
-  const result = values.map(selection);
-  const seen = new Set();
-  result.forEach(function(value) {
-    const key = value.clientId + "\0" + value.articleId;
-    if (seen.has(key)) throw removalError("CONTENT_INPUT_INVALID", "Article selection contains duplicates");
-    seen.add(key);
-  });
-  return result;
-}
-
-function fingerprint(value) {
-  return crypto.createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
-}
-
-function actionIdentity(action) {
-  return {
-    clientId: action.clientId,
-    articleId: action.articleId,
-    batchId: action.batchId || null,
-    publicationId: action.publicationId || null,
-    targetPlatformId: action.targetPlatformId || null,
-    attemptId: action.attemptId || null,
-    action: action.action || null
-  };
-}
-
-function transactionFingerprint(selectionsValue, queueActions) {
-  const selectionKeys = selectionsValue.map(function(item) { return item.clientId + "\0" + item.articleId; }).sort();
-  const actionKeys = (queueActions || []).map(actionIdentity).sort(function(left, right) { return JSON.stringify(left).localeCompare(JSON.stringify(right)); });
-  return fingerprint({ selections: selectionKeys, actions: actionKeys });
-}
-
-function isOpenStatus(status) {
-  return ["pending_auto_recovery", "pending_recovery", "needs_repair"].includes(status);
-}
-
-function isRepairableError(error) {
-  return !!error && [
-    "SUBMISSION_QUEUE_CHANGED",
-    "SUBMISSION_IDENTITY_CONFLICT",
-    "SUBMISSION_CONTENT_CHANGED",
-    "PUBLICATION_REMOTE_STARTED",
-    "SUBMISSION_QUEUE_ITEM_NOT_FOUND",
-    "SUBMISSION_ACTION_STALE",
-    "PUBLICATION_ATTEMPT_MISMATCH",
-    "PUBLICATION_ATTEMPT_NOT_FAILED",
-    "PUBLICATION_STATUS_NOT_FAILED",
-    "PUBLICATION_STATUS_NOT_QUEUED",
-    "SUBMISSION_STATUS_CONFLICT",
-    "SUBMISSION_BATCH_ITEM_NOT_FOUND",
-    "SUBMISSION_BATCH_REBIND_CONFLICT",
-    "SUBMISSION_ACTION_OPERATION_CONFLICT",
-    "SUBMISSION_ACTION_PROTOCOL_UNAVAILABLE"
-    ,"ARTICLE_REMOVAL_OPERATION_IN_FLIGHT"
-  ].includes(error.code);
-}
-
-function titleSnapshot(article) {
-  return typeof article.title === "string" && article.title.trim() ? article.title.trim().slice(0, 200) : null;
-}
+const { createArticleRemovalCursor } = require("./article-removal-cursor");
+const { createArticleRemovalStateMachine } = require("./article-removal-state");
+const {
+  removalError,
+  clone,
+  selections,
+  fingerprint,
+  actionIdentity,
+  transactionFingerprint,
+  isOpenStatus,
+  isRepairableError,
+  titleSnapshot,
+  sameQueueAction,
+  submissionServiceActions,
+  tombstoneReferences,
+} = require("./article-removal-plan");
 
 function createArticleRemovalService(options) {
   const opts = options || {};
@@ -133,12 +68,21 @@ function createArticleRemovalService(options) {
     return saved;
   }
 
-  function validAutomaticState(transaction) {
-    return !!transaction && (
-      (transaction.status === "pending_auto_recovery" && ["intent", "queue-actions", "articles", "committed"].includes(transaction.phase)) ||
-      (transaction.status === "pending_recovery" && ["intent", "queue-actions", "articles", "committed"].includes(transaction.phase))
-    );
-  }
+  const removalCursor = createArticleRemovalCursor({ runnerId: runnerId, persist: persist, error: removalError });
+  const removalState = createArticleRemovalStateMachine({
+    nowIso: nowIso,
+    persist: persist,
+    maxRecoveryAttempts: maxRecoveryAttempts,
+    recoveryBackoffMs: recoveryBackoffMs,
+    isRepairableError: isRepairableError,
+    error: removalError,
+  });
+  const validAutomaticState = removalState.validAutomaticState;
+  const transitionToRepair = removalState.transitionToRepair;
+  const recordRetry = removalState.recordRetry;
+  const operationId = removalCursor.operationId;
+  const beginOperation = removalCursor.begin;
+  const finishOperation = removalCursor.finish;
 
   function contentIdentity(article) {
     if (!article || article.missing) return { missing: true, clientId: article && article.clientId, articleId: article && article.articleId };
@@ -164,32 +108,6 @@ function createArticleRemovalService(options) {
     return fingerprint(contentIdentity(article));
   }
 
-  function operationId(transaction, kind, index) {
-    return transaction.id + ":" + kind + ":" + index;
-  }
-
-  function beginOperation(transaction, kind, index, item) {
-    const expected = operationId(transaction, kind, index);
-    if (transaction.activeOperation) {
-      if (transaction.activeOperation.operationId === expected && transaction.activeOperation.owner === runnerId) return transaction;
-      throw removalError("ARTICLE_REMOVAL_OPERATION_IN_FLIGHT", "Removal operation is already in flight");
-    }
-    transaction.activeOperation = {
-      operationId: expected,
-      kind: kind,
-      cursor: index,
-      owner: runnerId,
-      clientId: item && item.clientId || null,
-      articleId: item && (item.articleId || item.id) || null
-    };
-    persist(transaction);
-    return transaction;
-  }
-
-  function finishOperation(transaction) {
-    delete transaction.activeOperation;
-  }
-
   function claim(transaction) {
     if (!transactionStore.compareAndUpdate) return transaction;
     const now = Date.parse(nowIso());
@@ -204,18 +122,6 @@ function createArticleRemovalService(options) {
       current.claimedAt = nowIso();
       return current;
     });
-  }
-
-  function transitionToRepair(transaction, code, resolutionCode) {
-    if (transaction.phase !== "needs_repair") transaction.resumePhase = transaction.phase;
-    if (transaction.resumePhase === "needs_repair" || !["intent", "queue-actions", "articles", "committed"].includes(transaction.resumePhase)) transaction.resumePhase = "articles";
-    transaction.status = "needs_repair";
-    transaction.phase = "needs_repair";
-    transaction.errorCode = code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
-    transaction.resolutionCode = resolutionCode || "REMOVAL_REVALIDATION_FAILED";
-    transaction.updatedAt = nowIso();
-    persist(transaction);
-    return transaction;
   }
 
   function revalidate(transaction) {
@@ -423,17 +329,13 @@ function createArticleRemovalService(options) {
   }
 
   function tombstoneFor(article, operationId) {
-    const references = [];
-    ["generationBatchId", "generationTaskId"].forEach(function(field) {
-      if (typeof article[field] === "string" && article[field].trim()) references.push({ type: field === "generationBatchId" ? "generation-batch" : "generation-task", id: article[field] });
-    });
     return {
       version: 1,
       deletedAt: nowIso(),
       clientId: article.clientId,
       articleId: article.id,
       status: article.status,
-      references: references,
+      references: tombstoneReferences(article),
       titleSnapshot: titleSnapshot(article),
       contentFingerprint: articleFingerprint(article),
       operationId: operationId
@@ -441,14 +343,11 @@ function createArticleRemovalService(options) {
   }
 
   function operationItem(transaction, operation) {
-    const expected = operationId(transaction, operation.kind, operation.cursor);
-    const items = operation.kind === "queue" ? transaction.queueActions : transaction.articles;
-    const item = Array.isArray(items) ? items[Number(operation.cursor)] : null;
-    if (!item || operation.operationId !== expected || Number(operation.cursor) < 0 ||
-        operation.clientId !== item.clientId || operation.articleId !== (item.articleId || item.id)) {
+    const located = removalCursor.locate(transaction, operation);
+    if (located.error) {
       return { error: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_ID_CONFLICT") };
     }
-    return { expected, item };
+    return located;
   }
 
   function matchingTombstone(transaction, item, tombstone, expected) {
@@ -558,13 +457,6 @@ function createArticleRemovalService(options) {
     return { status: "resolved", transaction };
   }
 
-  function sameQueueAction(left, right) {
-    return left && right && left.clientId === right.clientId && left.articleId === right.articleId &&
-      left.batchId === right.batchId && left.publicationId === right.publicationId &&
-      left.targetPlatformId === right.targetPlatformId && left.attemptId === right.attemptId &&
-      left.action === right.action;
-  }
-
   function refreshQueueActions(transaction) {
     if (!transaction || !Array.isArray(transaction.selections) || typeof submissionService.previewArticleRemovalImpact !== "function") return transaction;
     const impact = submissionService.previewArticleRemovalImpact({ selections: transaction.selections });
@@ -577,13 +469,6 @@ function createArticleRemovalService(options) {
       return copy;
     });
     return transaction;
-  }
-
-  function submissionServiceActions(impact) {
-    return clone((impact.queuedToCancel || []).map(function(item) { return Object.assign({}, item, { action: "cancel" }); })
-      .concat((impact.failedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanup" }); }))
-      .concat((impact.publishedToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanupPublishedLocal" }); }))
-      .concat((impact.cancelledToClean || []).map(function(item) { return Object.assign({}, item, { action: "cleanupCancelledLocal" }); })));
   }
 
   function performSteps(transaction, requireRevalidation) {
@@ -750,27 +635,6 @@ function createArticleRemovalService(options) {
       completedTransactions.set(current.id, clone(current));
     }
     return current;
-  }
-
-  function recordRetry(transaction, error, resolutionCode) {
-    if (isRepairableError(error)) return transitionToRepair(transaction, error && error.code, "REMOVAL_MANUAL_REPAIR_REQUIRED");
-    transaction.updatedAt = nowIso();
-    transaction.errorCode = error && error.code || "ARTICLE_REMOVAL_RECOVERY_REQUIRED";
-    transaction.resolutionCode = resolutionCode || "RECOVERY_RETRY_REQUIRED";
-    transaction.retryCount = Number(transaction.retryCount || 0) + 1;
-    transaction.attempt = transaction.retryCount;
-    if (transaction.retryCount >= maxRecoveryAttempts) {
-      if (transaction.phase !== "needs_repair") transaction.resumePhase = transaction.phase;
-      transaction.status = "needs_repair";
-      transaction.phase = "needs_repair";
-      transaction.resolutionCode = "RECOVERY_ATTEMPTS_EXHAUSTED";
-    } else {
-      transaction.status = "pending_auto_recovery";
-      if (transaction.phase === "committed") transaction.phase = "articles";
-      transaction.nextAttemptAt = new Date(Date.parse(transaction.updatedAt) + recoveryBackoffMs * Math.pow(2, transaction.retryCount - 1)).toISOString();
-    }
-    try { persist(transaction); } catch (_) {}
-    return transaction;
   }
 
   function perform(transaction, requireRevalidation) {

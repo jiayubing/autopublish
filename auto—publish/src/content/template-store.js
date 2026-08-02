@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { getContentWorkspace } = require("../core/files");
+const { createContentPathPolicy } = require("./content-path-policy");
 const { createTemplateCatalog } = require("./template-catalog");
 
 function templateError(code, message) {
@@ -81,17 +82,7 @@ function assertInside(root, target, code, message) {
 }
 
 function getTemplateDirectory(workspaceRoot, platform, paths) {
-  assertSegment(platform, "TEMPLATE_INVALID_PLATFORM", "platform");
-  const workspace = getContentWorkspace(workspaceRoot, paths);
-  const templatesDirectory = path.resolve(workspace.templates);
-  const directory = path.resolve(templatesDirectory, platform);
-  assertInside(templatesDirectory, directory, "TEMPLATE_INVALID_PLATFORM", "Template platform is outside workspace");
-  if (!fs.existsSync(directory)) return directory;
-
-  const realTemplatesDirectory = fs.realpathSync(templatesDirectory);
-  const realDirectory = fs.realpathSync(directory);
-  assertInside(realTemplatesDirectory, realDirectory, "TEMPLATE_INVALID_PLATFORM", "Template platform is outside workspace");
-  return realDirectory;
+  return createContentPathPolicy(workspaceRoot, { paths: paths }).templateDirectory(platform, false);
 }
 
 function getBuiltinTemplateDirectory(builtinRoot, platform) {
@@ -122,7 +113,15 @@ function listDirectories(directory) {
 }
 
 function listTemplatePlatforms(workspaceRoot, options) {
-  return listDirectories(path.resolve(getContentWorkspace(workspaceRoot, options && options.paths).templates));
+  const policy = createContentPathPolicy(workspaceRoot, { paths: options && options.paths });
+  const root = policy.assertDirectory(policy.workspace.templates, {
+    boundary: policy.workspace.root,
+    create: false,
+    returnMissing: true,
+    code: "TEMPLATE_INVALID_PLATFORM",
+    label: "Template directory",
+  });
+  return listDirectories(path.resolve(root));
 }
 
 function listBuiltinTemplatePlatforms(builtinRoot) {
@@ -190,9 +189,9 @@ function writeCustomTemplate(workspaceRoot, template, options) {
   if (typeof template.scenario !== "string" || !template.scenario.trim() || typeof template.body !== "string" || !template.body.trim()) {
     throw templateError("TEMPLATE_INPUT_INVALID", "Custom template scenario and body are required");
   }
-  const directory = getTemplateDirectory(workspaceRoot, template.platform, options && options.paths);
-  const filename = path.join(directory, template.id + ".md");
-  assertInside(directory, filename, "TEMPLATE_INVALID_ID", "Template id is outside workspace");
+  const policy = createContentPathPolicy(workspaceRoot, { paths: options && options.paths });
+  const directory = policy.templateDirectory(template.platform, true);
+  const filename = policy.templateFile(template.platform, template.id, true);
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(filename, "---\nplatform: " + template.platform + "\nscenario: " + template.scenario + "\nname: " + template.id + "\n---\n" + template.body.trim() + "\n", "utf8");
   return readTemplate(filename, template.platform, "custom");

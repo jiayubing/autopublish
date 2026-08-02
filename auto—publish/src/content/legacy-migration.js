@@ -4,6 +4,7 @@ const path = require("path");
 const { getContentWorkspace, getClientWorkspace } = require("../core/files");
 const { createResearchStore } = require("./research-store");
 const { createArticleStore } = require("./article-store");
+const { createContentPathPolicy } = require("./content-path-policy");
 
 const KNOWLEDGE_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json"]);
 const REQUIRED_SCHEMA = {
@@ -74,6 +75,11 @@ function createLegacyMigrator(options) {
   const workspaceRoot = path.resolve(options.workspaceRoot);
   const sourceClients = path.join(sourceRoot, "clients");
   const databasePath = path.join(sourceRoot, "data", "geo_data.db");
+  const pathPolicy = createContentPathPolicy(workspaceRoot, { error: migrationError });
+
+  function assertWorkspaceRoot() {
+    pathPolicy.assertWorkspaceRoot({ code: "CLIENT_PATH_OUT_OF_BOUNDS", label: "Workspace root" });
+  }
 
   function databaseSync() {
     try {
@@ -88,6 +94,7 @@ function createLegacyMigrator(options) {
   }
 
   function copyDestination(client) {
+    assertWorkspaceRoot();
     const clientsRoot = getContentWorkspace(workspaceRoot).clients;
     fs.mkdirSync(clientsRoot, { recursive: true });
     const clientsStats = fs.lstatSync(clientsRoot);
@@ -311,6 +318,7 @@ function createLegacyMigrator(options) {
   }
 
   function countOperations(plan) {
+    assertWorkspaceRoot();
     const researchStore = createResearchStore(workspaceRoot);
     const articleStore = createArticleStore(workspaceRoot);
     plan.clients.forEach(function(client) {

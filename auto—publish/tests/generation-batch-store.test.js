@@ -115,6 +115,177 @@ describe("generation batch store", function() {
     });
   });
 
+  it("discovers a batch whose transaction artifacts survived restart", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-artifact"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const persisted = fs.readFileSync(filename, "utf8");
+    fs.renameSync(filename, filename + ".bak");
+    fs.writeFileSync(filename + ".tmp", persisted, "utf8");
+    fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
+
+    const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+    assert.deepStrictEqual(restarted.listBatches().map(function(item) { return item.id; }), [batch.id]);
+    assert.equal(fs.existsSync(filename), true);
+    assert.equal(fs.existsSync(filename + ".bak"), false);
+    assert.equal(fs.existsSync(filename + ".tmp"), false);
+    assert.equal(fs.existsSync(filename + ".journal"), false);
+  });
+
+  it("leaves transaction artifacts uninstalled when the journal is invalid", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-invalid-journal"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    fs.renameSync(filename, filename + ".tmp");
+    fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 999, kind: "unknown" }) + "\n", "utf8");
+
+    const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+    assert.deepStrictEqual(restarted.listBatches(), []);
+    assert.equal(fs.existsSync(filename), false);
+    assert.equal(fs.existsSync(filename + ".tmp"), true);
+    assert.equal(fs.existsSync(filename + ".journal"), true);
+  });
+
+  it("does not install an artifact whose persisted id differs from its filename", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-artifact-id"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const persisted = JSON.parse(fs.readFileSync(filename, "utf8"));
+    persisted.id = "other-batch";
+    fs.renameSync(filename, filename + ".tmp");
+    fs.writeFileSync(filename + ".tmp", JSON.stringify(persisted) + "\n", "utf8");
+    fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
+
+    const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+    assert.deepStrictEqual(restarted.listBatches(), []);
+    assert.equal(fs.existsSync(filename), false);
+    assert.equal(fs.existsSync(filename + ".tmp"), true);
+  });
+
+  it("preserves transaction evidence when the canonical batch id is invalid", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-canonical-id"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const canonical = JSON.parse(fs.readFileSync(filename, "utf8"));
+    fs.copyFileSync(filename, filename + ".bak");
+    canonical.id = "other-batch";
+    fs.writeFileSync(filename, JSON.stringify(canonical) + "\n", "utf8");
+    fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
+
+    const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+    assert.deepStrictEqual(restarted.listBatches(), []);
+    assert.equal(fs.existsSync(filename), true);
+    assert.equal(fs.existsSync(filename + ".bak"), true);
+    assert.equal(fs.existsSync(filename + ".journal"), true);
+  });
+
+  it("skips unsafe artifact names without hiding valid batches", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-good"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const directory = createWorkspacePaths(workspaceRoot).generationBatches;
+    const invalidArtifact = path.join(directory, "batch-CON.json.tmp");
+    fs.writeFileSync(invalidArtifact, "residue", "utf8");
+
+    const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+    assert.deepStrictEqual(restarted.listBatches().map(function(item) { return item.id; }), [batch.id]);
+    assert.equal(fs.existsSync(invalidArtifact), true);
+  });
+
+  it("preserves recovery artifacts when the canonical batch is a link", function(t) {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "generation-batch-store-link-"));
+    try {
+      [
+        { id: "batch-link-journal", journal: true },
+        { id: "batch-link-no-journal", journal: false }
+      ].forEach(function(item) {
+        const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return item.id; } });
+        const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+        const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+        const target = path.join(outside, item.id + ".json");
+        fs.copyFileSync(filename, target);
+        fs.copyFileSync(filename, filename + ".bak");
+        fs.unlinkSync(filename);
+        try {
+          fs.symlinkSync(target, filename, "file");
+        } catch (error) {
+          if (["EPERM", "EACCES", "ENOTSUP", "EINVAL"].includes(error.code)) {
+            t.skip("file symlinks are unavailable");
+            return;
+          }
+          throw error;
+        }
+        if (item.journal) fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
+
+        assert.throws(function() { store.getBatch(batch.id); }, { code: "GENERATION_BATCH_PATH_UNSAFE" });
+        assert.equal(fs.existsSync(filename + ".bak"), true);
+        assert.equal(fs.existsSync(filename + ".journal"), item.journal);
+        fs.unlinkSync(filename);
+        fs.unlinkSync(filename + ".bak");
+        if (item.journal) fs.unlinkSync(filename + ".journal");
+      });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves the path error code for an unsafe journal", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-journal-path"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const journal = filename + ".journal";
+    fs.mkdirSync(journal);
+
+    assert.throws(function() { store.getBatch(batch.id); }, { code: "GENERATION_BATCH_PATH_UNSAFE" });
+    assert.equal(fs.existsSync(journal), true);
+  });
+
+  it("rejects an unsafe temporary artifact beside a canonical batch", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-temporary-path"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const temporary = filename + ".tmp";
+    fs.mkdirSync(temporary);
+
+    assert.throws(function() { store.getBatch(batch.id); }, { code: "GENERATION_BATCH_PATH_UNSAFE" });
+    assert.equal(fs.existsSync(temporary), true);
+  });
+
+  it("does not install a temporary batch before validating its backup path", function() {
+    [false, true].forEach(function(journalPresent) {
+      const id = journalPresent ? "batch-backup-path-journal" : "batch-backup-path";
+      const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return id; } });
+      const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+      const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+      const temporary = filename + ".tmp";
+      const backup = filename + ".bak";
+      const persisted = fs.readFileSync(filename, "utf8");
+      fs.unlinkSync(filename);
+      fs.writeFileSync(temporary, persisted, "utf8");
+      fs.mkdirSync(backup);
+      if (journalPresent) fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
+
+      assert.throws(function() { store.getBatch(batch.id); }, { code: "GENERATION_BATCH_PATH_UNSAFE" });
+      assert.equal(fs.existsSync(filename), false);
+      assert.equal(fs.existsSync(temporary), true);
+      assert.equal(fs.existsSync(backup), true);
+      if (journalPresent) assert.equal(fs.existsSync(filename + ".journal"), true);
+
+      fs.unlinkSync(temporary);
+      fs.rmSync(backup, { recursive: true, force: true });
+      if (journalPresent) fs.unlinkSync(filename + ".journal");
+    });
+  });
+
+  it("discovers and recovers batches with Unicode and internal-space ids", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "批次 1"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    store.markTaskRunning(batch.id, batch.tasks[0].id);
+
+    const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
+    assert.deepStrictEqual(restarted.listBatches().map(function(item) { return item.id; }), [batch.id]);
+    assert.equal(restarted.getBatch(batch.id).tasks[0].status, "interrupted");
+  });
+
   it("only returns resumable tasks and reports corrupt batches without hiding valid batches", function() {
     const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-3"; } });
     const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });

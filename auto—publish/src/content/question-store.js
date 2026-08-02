@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { resolveClientIdentity } = require("./client-knowledge");
+const { createContentPathPolicy } = require("./content-path-policy");
 
 function questionError(code, message) {
   const error = new Error(message);
@@ -63,11 +64,13 @@ function createQuestionStore(workspaceRoot, options) {
   options = options || {};
   const root = path.resolve(workspaceRoot);
   const clientsRoot = path.join(root, "clients");
+  const pathPolicy = createContentPathPolicy(root, { error: questionError });
   const createId = typeof options.createId === "function" ? options.createId : function() { return crypto.randomUUID(); };
   const now = typeof options.now === "function" ? options.now : function() { return new Date().toISOString(); };
 
   function clientDirectory(clientId) {
     assertPathSegment(clientId, "CLIENT_ID_INVALID", "client id");
+    pathPolicy.assertWorkspaceRoot({ code: "CLIENT_PATH_OUT_OF_BOUNDS", label: "Workspace root" });
     // A legacy physical directory that happens to match the logical id must
     // still be rejected when it is a link; metadata discovery intentionally
     // skips it, which would otherwise turn a safety violation into not-found.

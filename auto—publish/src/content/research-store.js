@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { getContentWorkspace } = require("../core/files");
+const { createContentPathPolicy } = require("./content-path-policy");
 
 const COLLECTION_METHODS = new Set(["automatic", "manual", "legacy"]);
 
@@ -119,8 +120,13 @@ function assertRegularFile(filename) {
 
 function createResearchStore(workspaceRoot, options) {
   const workspace = getContentWorkspace(workspaceRoot, options && options.paths);
+  const pathPolicy = createContentPathPolicy(workspaceRoot, {
+    paths: options && options.paths,
+    error: storeError
+  });
 
   function researchDirectory(create) {
+    pathPolicy.assertWorkspaceRoot({ code: "RESEARCH_PATH_OUT_OF_BOUNDS", label: "Workspace root" });
     if (!pathExists(workspace.research)) {
       if (!create) return null;
       fs.mkdirSync(workspace.research, { recursive: true });
