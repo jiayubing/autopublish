@@ -1,5 +1,5 @@
 appId: com.autopublish.desktop
-productName: 鱼饼大王
+productName: ETO—001
 copyright: "Copyright © 2026"
 
 directories:
@@ -115,7 +115,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: 鱼饼大王 Alpha
+  shortcutName: ETO—001 Alpha
 
 portable:
   artifactName: "${productName}-Alpha-${version}-portable.${ext}"

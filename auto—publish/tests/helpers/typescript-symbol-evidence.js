@@ -3201,6 +3201,17 @@ function registrarEvidence(
         return left;
       return null;
     }
+    if (ts.isCallExpression(current) && suffix.length === 0) {
+      const calleeName = ts.isIdentifier(current.expression)
+        ? current.expression.text
+        : null;
+      if (
+        (calleeName === "createTypedIpcMain" ||
+          calleeName === "createAuthenticatedIpcMain") &&
+        current.arguments.length > 0
+      )
+        return dependencyFromExpression(current.arguments[0], suffix, visited);
+    }
     if (!ts.isIdentifier(current)) return null;
     return parameterDependency(
       canonicalSymbol(checker, current),

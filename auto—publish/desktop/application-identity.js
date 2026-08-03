@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const APPLICATION_NAME = "AutoPublish";
 const APPLICATION_ID = "com.autopublish.desktop";
-const DISPLAY_NAME_ZH = "鱼饼大王";
+const DISPLAY_NAME_ZH = "ETO—001";
 const DISPLAY_NAME_EN = "Auto Publish";
 const LEGACY_PACKAGE_NAMES = Object.freeze(["auto-publish-desktop", "AutoPublish Desktop"]);
 const IMPORTABLE_FILES = Object.freeze(["workspace-location.json", "runtime-config.json", "ai-provider.json"]);

@@ -2,6 +2,7 @@ const {
   defineContract,
   exactObject,
   stringField,
+  integerField,
   enumField,
   nullableField,
 } = require("./registry");
@@ -45,6 +46,19 @@ const workspaceState = exactObject({
   ),
   errorCode: nullableField(safeCode),
   changed: nullableField("boolean"),
+});
+const workspaceRuntimeIdentity = exactObject({
+  workspaceRuntimeId: stringField({
+    max: 128,
+    pattern: /^[A-Za-z0-9._:-]+$/,
+  }),
+  revision: integerField({ min: 0 }),
+});
+const workspaceInvalidationEvent = exactObject({
+  workspaceRuntimeId: stringField({ max: 128 }),
+  revision: integerField({ min: 1 }),
+  scopes: { arrayOf: stringField({ max: 64 }), max: 32 },
+  reasonCode: stringField({ max: 128 }),
 });
 
 const ERROR_DETAILS = Object.freeze({
@@ -161,6 +175,25 @@ const errors = Object.freeze(
   ),
 );
 const errorCodes = Object.freeze(Object.keys(errors));
+const runtimeIdentityErrors = Object.freeze({
+  ...errors,
+  AUTH_REQUIRED: Object.freeze({
+    ...errors.AUTH_REQUIRED,
+    userMessage: "请先完成登录后再继续。",
+  }),
+  IPC_REQUEST_INVALID: Object.freeze({
+    ...errors.IPC_REQUEST_INVALID,
+    userMessage: "请求数据无效，请刷新页面后重试。",
+  }),
+  IPC_RESULT_INVALID: Object.freeze({
+    ...errors.IPC_RESULT_INVALID,
+    userMessage: "操作结果未通过安全校验，请刷新后重试。",
+  }),
+  IPC_INTERNAL: Object.freeze({
+    ...errors.IPC_INTERNAL,
+    userMessage: "无法读取当前工作区运行身份，请刷新后重试。",
+  }),
+});
 
 function stateContract(capability, channel, kind, request, fromArgs, toArgs) {
   return defineContract({
@@ -242,4 +275,40 @@ const workspaceContracts = Object.freeze([
   ),
 ]);
 
-module.exports = { workspaceContracts, workspaceState, errors };
+const workspaceRuntimeContracts = Object.freeze([
+  defineContract({
+    capability: "workspace.getRuntimeIdentity",
+    channel: "workspace:get-runtime-identity",
+    feature: "workspace",
+    kind: "query",
+    request: emptyRequest,
+    success: workspaceRuntimeIdentity,
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+    errorCodes,
+    errors: runtimeIdentityErrors,
+  }),
+]);
+const workspaceEventContracts = Object.freeze([
+  defineContract({
+    capability: "workspace.invalidated",
+    channel: "workspace:data-invalidated",
+    feature: "workspace",
+    kind: "event",
+    event: workspaceInvalidationEvent,
+    errorCodes: [],
+  }),
+]);
+const workspaceLifecycleContracts = Object.freeze([
+  ...workspaceRuntimeContracts,
+  ...workspaceEventContracts,
+]);
+
+module.exports = {
+  workspaceContracts,
+  workspaceLifecycleContracts,
+  workspaceRuntimeContracts,
+  workspaceEventContracts,
+  workspaceState,
+  errors,
+};

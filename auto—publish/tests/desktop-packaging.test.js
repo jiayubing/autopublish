@@ -613,10 +613,15 @@ describe("source assembly and packaging contract", function() {
   });
 
   it("configures a writable runtime workspace before IPC registration", function() {
-    const runtime = read("desktop/workspace-runtime.js");
+    const runtime = read(
+      "desktop/composition/workspace-runtime-composition.js",
+    );
     assert.ok(runtime.includes("configureRuntimeEnvironment"));
     assert.ok(runtime.includes("rootDir: workspaceRoot"));
-    assert.ok(runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf("registerIpc"));
+    assert.ok(
+      runtime.indexOf("configureRuntimeEnvironment") <
+        runtime.indexOf("createDesktopTaskService"),
+    );
   });
 
   it("excludes private runtime data from alpha package config", function() {
@@ -726,17 +731,22 @@ describe("source assembly and packaging contract", function() {
   });
 
   it("initializes runtime environment before loading config-dependent services", function() {
-    const runtime = read("desktop/workspace-runtime.js");
+    const runtime = read(
+      "desktop/composition/workspace-runtime-composition.js",
+    );
     assert.ok(runtime.includes("configureRuntimeEnvironment"));
     assert.doesNotMatch(runtime, /core[\\/]logger|publish-log|onLog/);
     assert.ok(
-      runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf('require("./ipc/register")'),
+      runtime.indexOf("configureRuntimeEnvironment") <
+        runtime.indexOf("createPlatformSettingsService"),
       "IPC registration must be required after runtime environment configuration"
     );
   });
 
   it("checks the Doubao service source assembly contract", function() {
-    const runtime = read("desktop/workspace-runtime.js");
+    const runtime = read(
+      "desktop/composition/workspace-runtime-composition.js",
+    );
     assert.match(runtime, /createDoubaoCollection/);
     assert.match(runtime, /content:doubao-queue-state/);
     assert.match(runtime, /doubaoCollectionService/);

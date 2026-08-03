@@ -34,7 +34,6 @@ function sanitizePlatformPlan(plan) {
 function createDesktopTaskService(opts) {
   var options = opts || {};
   var cwd = options.cwd || path.resolve(__dirname, "..", "..");
-  var sendToRenderer = options.sendToRenderer || function() {};
   var invalidateData = options.invalidateData || function() {};
   var storagePaths = options.paths || {};
   var forkProcess = options.fork || fork;
@@ -45,9 +44,13 @@ function createDesktopTaskService(opts) {
     : createRunId();
   var activeRuntimeCleanup = null;
   var stopRequested = false;
+  var stateListeners = new Set();
 
-  function sendPlatformState(snapshot) {
-    sendToRenderer("platform-state", encodePlatformStateEvent(Object.assign({}, snapshot, { workspaceRuntimeId: workspaceRuntimeId })));
+  function publishPlatformState(snapshot) {
+    var value = Object.assign({}, snapshot, { workspaceRuntimeId: workspaceRuntimeId });
+    stateListeners.forEach(function(listener) {
+      try { listener(value); } catch (_) {}
+    });
   }
 
   function stopSignalDirectory() {
@@ -66,10 +69,10 @@ function createDesktopTaskService(opts) {
         isStopPending: false,
         isPlatformRunning: Boolean(platformRun && platformRun.snapshot())
       }, extra || {}));
-      sendPlatformState(platformTaskStateStore.getSnapshot());
+      publishPlatformState(platformTaskStateStore.getSnapshot());
       return;
     }
-    sendPlatformState(Object.assign({
+    publishPlatformState(Object.assign({
       isBatchRunning: false,
       isStopPending: false,
       isPlatformRunning: Boolean(platformRun && platformRun.snapshot())
@@ -238,7 +241,7 @@ function closeBrowserSessions() {
         watchdogMs: watchdogMs,
         launch: function(run) {
           platformTaskStateStore.start({ runId: run.runId, tasks: run.command.tasks });
-          sendPlatformState(platformTaskStateStore.getSnapshot());
+          publishPlatformState(platformTaskStateStore.getSnapshot());
           return spawnDesktopTask("platform-submit", Object.assign({}, payload, { plan: { tasks: run.command.tasks }, runId: run.runId }), {
             onState: function(state) { run.onMessage({ schemaVersion: WORKER_SCHEMA_VERSION, runId: run.runId, type: "state", payload: state }); }
           });
@@ -246,7 +249,7 @@ function closeBrowserSessions() {
         onSnapshot: function(snapshot) {
           if (snapshot.phase === "running" || snapshot.phase === "stopping") {
             var value = platformTaskStateStore.applyWorkerState({ runId: snapshot.runId, phase: snapshot.phase === "stopping" ? "stopping" : "heartbeat" });
-            sendPlatformState(value);
+            publishPlatformState(value);
             if (hooks && typeof hooks.onState === "function") hooks.onState(value);
           }
         }
@@ -262,7 +265,7 @@ function closeBrowserSessions() {
         onMessage: function(message) {
           if (!message || message.type !== "state") return;
           var snapshot = platformTaskStateStore.applyWorkerState(Object.assign({}, message.payload || {}, { runId: message.runId }));
-          sendPlatformState(snapshot);
+          publishPlatformState(snapshot);
           if (hooks && typeof hooks.onState === "function") hooks.onState(snapshot);
         }
       });
@@ -275,7 +278,7 @@ function closeBrowserSessions() {
         : "failed";
       var queueRevision = invalidateData("PLATFORM_SUBMIT_" + terminalPhase.toUpperCase());
       var terminalSnapshot = platformTaskStateStore.finish(result || { errorCode: "PLATFORM_SUBMIT_FAILED" }, terminalPhase, { queueRevision: queueRevision });
-      sendPlatformState(terminalSnapshot);
+      publishPlatformState(terminalSnapshot);
       if (hooks && typeof hooks.onState === "function") hooks.onState(terminalSnapshot);
     }
   }
@@ -312,12 +315,19 @@ function closeBrowserSessions() {
     return stopped;
   }
 
+  function subscribe(listener) {
+    if (typeof listener !== "function") throw new Error("Platform state listener is invalid");
+    stateListeners.add(listener);
+    return function() { stateListeners.delete(listener); };
+  }
+
   function dispose() {
     if (activeRuntimeCleanup) {
       try { activeRuntimeCleanup(); } catch (_) {}
       activeRuntimeCleanup = null;
     }
     if (platformRun && platformRun.snapshot()) { platformTaskStateStore.markInterrupted(); platformRun.stop(null, "dispose"); }
+    stateListeners.clear();
   }
 
   function getState() {
@@ -331,7 +341,8 @@ function closeBrowserSessions() {
   }
 
   return {
-    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState, isStopRequested: function() { return stopRequested; }, dispose
+    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState, subscribe,
+    isStopRequested: function() { return stopRequested; }, dispose
   };
 }
 

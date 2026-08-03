@@ -498,4 +498,188 @@ const mediaContracts = [
   ),
 ];
 
-module.exports = { mediaContracts };
+const mediaLifecycleContracts = Object.freeze([
+  contract(
+    {
+      capability: "media.getBalance",
+      channel: "media:get-balance",
+      kind: "query",
+      request: emptyRequest,
+      success: exactObject({ balance: safeText(128, 0) }),
+      fromArgs: noArgs,
+      toArgs: noLegacyInput,
+    },
+    ["MEDIA_CONFIG_NOT_SET"],
+  ),
+]);
+
+function finiteMediaPrice(value) {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100000000
+    ? value
+    : undefined;
+}
+
+function projectMediaResource(value) {
+  const resource = value || {};
+  const result = {
+    resourceId: String(resource.resourceId || resource.id || resource.resource_id || ""),
+    name: String(resource.name || resource.title || resource.resourceName || ""),
+    price: finiteMediaPrice(resource.price) === undefined ? null : finiteMediaPrice(resource.price),
+    type: resource.type === "video" ? "video" : "image",
+    createdAt: String(resource.createdAt || resource.updatedAt || ""),
+  };
+  for (const key of ["url", "duration", "resolution", "size"])
+    if (typeof resource[key] === "string") result[key] = resource[key];
+  return result;
+}
+
+function projectMediaDraft(filename, value) {
+  const draft = value || {};
+  const result = {
+    filename: String(filename || draft.filename || ""),
+    title: String(draft.title || ""),
+    remark: String(draft.remark || ""),
+    ignoreImages: draft.ignoreImages === true,
+    selectedResources: Array.isArray(draft.selectedResources)
+      ? draft.selectedResources.map(projectMediaResource)
+      : [],
+  };
+  if (typeof draft.updatedAt === "string") result.updatedAt = draft.updatedAt;
+  return result;
+}
+
+function projectMediaArticleSummary(value) {
+  const article = value || {};
+  return {
+    filename: String(article.filename || ""),
+    title: String(article.title || ""),
+    autoTitle: String(article.autoTitle || article.title || ""),
+    remark: String(article.remark || ""),
+    hasImages: article.hasImages === true,
+    imageCount: Number.isSafeInteger(article.imageCount) && article.imageCount >= 0
+      ? article.imageCount
+      : 0,
+    ignoreImages: article.ignoreImages === true,
+    selectedResources: Array.isArray(article.selectedResources)
+      ? article.selectedResources.map(projectMediaResource)
+      : [],
+  };
+}
+
+function projectMediaArticlePreview(value) {
+  const article = value || {};
+  return {
+    filename: String(article.filename || ""),
+    title: String(article.title || ""),
+    content: String(article.content || ""),
+    selectedResources: Array.isArray(article.selectedResources)
+      ? article.selectedResources.map(projectMediaResource)
+      : [],
+  };
+}
+
+function projectMediaResourcePage(value) {
+  const page = value || {};
+  return {
+    items: Array.isArray(page.items) ? page.items.map(projectMediaResource) : [],
+    total: Number.isSafeInteger(page.total) && page.total >= 0 ? page.total : 0,
+    page: Number.isSafeInteger(page.page) && page.page > 0 ? page.page : 1,
+    pageSize: Number.isSafeInteger(page.pageSize) && page.pageSize > 0 ? page.pageSize : 50,
+    totalPages: Number.isSafeInteger(page.totalPages) && page.totalPages >= 0 ? page.totalPages : 0,
+    hasPrev: page.hasPrev === true,
+    hasNext: page.hasNext === true,
+  };
+}
+
+function projectMediaPoolPage(value) {
+  const page = projectMediaResourcePage(value);
+  page.memberResourceIds = Array.isArray(value && value.memberResourceIds)
+    ? value.memberResourceIds.filter((resourceId) => typeof resourceId === "string").slice(0, 100)
+    : [];
+  return page;
+}
+
+function projectMediaRefreshResult(value) {
+  const result = value || {};
+  return {
+    status: result.truncated === true ? "truncated" : "complete",
+    complete: result.complete === true,
+    truncated: result.truncated === true,
+    truncationReason: typeof result.truncationReason === "string" ? result.truncationReason : null,
+    pageCount: Number.isSafeInteger(result.pageCount) && result.pageCount >= 0 ? result.pageCount : 0,
+    resourceCount: Number.isSafeInteger(result.resourceCount) && result.resourceCount >= 0 ? result.resourceCount : 0,
+    diagnostics: (Array.isArray(result.diagnostics) ? result.diagnostics : []).map((value) => {
+      const diagnostic = { code: String((value && value.code) || "MEDIA_RESOURCE_DIAGNOSTIC") };
+      for (const key of ["page", "count", "loadedCount"])
+        if (Number.isSafeInteger(value && value[key]) && value[key] >= 0) diagnostic[key] = value[key];
+      return diagnostic;
+    }),
+    refreshedAt: String(result.refreshedAt || new Date().toISOString()),
+  };
+}
+
+function projectMediaPreflightItem(value) {
+  const item = value || {};
+  const result = {
+    filename: String(item.filename || ""),
+    title: String(item.title || ""),
+    resourceId: String(item.resourceId || ""),
+    resourceName: String(item.resourceName || ""),
+    price: finiteMediaPrice(item.price),
+    status: String(item.status || "available"),
+  };
+  if (typeof item.reasonCode === "string") result.reasonCode = item.reasonCode;
+  if (typeof item.publicationId === "string") result.publicationId = item.publicationId;
+  return result;
+}
+
+function projectMediaPreflight(value) {
+  const result = value || {};
+  const submitable = Array.isArray(result.submitableResources)
+    ? result.submitableResources
+    : Array.isArray(result.queueableResources) ? result.queueableResources : [];
+  const blocked = Array.isArray(result.blockedResources) ? result.blockedResources : [];
+  return {
+    articleCount: Number.isSafeInteger(result.articleCount) ? result.articleCount : 0,
+    resourceCount: Number.isSafeInteger(result.resourceCount) ? result.resourceCount : submitable.length + blocked.length,
+    submitableResourceCount: Number.isSafeInteger(result.submitableResourceCount) ? result.submitableResourceCount : submitable.length,
+    blockedResourceCount: Number.isSafeInteger(result.blockedResourceCount) ? result.blockedResourceCount : blocked.length,
+    estimatedTotalPrice: finiteMediaPrice(result.estimatedTotalPrice),
+    actualPrice: finiteMediaPrice(result.actualPrice === undefined ? result.estimatedTotalPrice : result.actualPrice),
+    blockers: (Array.isArray(result.blockers) ? result.blockers : []).map(String),
+    blockedResources: blocked.map(projectMediaPreflightItem),
+    submitableResources: submitable.map(projectMediaPreflightItem),
+  };
+}
+
+function projectMediaOrder(value) {
+  const order = value || {};
+  return {
+    title: String(order.title || ""),
+    orderNid: String(order.orderNid || ""),
+    statusCode: String(order.statusCode || ""),
+    submittedAt: String(order.submittedAt || ""),
+    publishedAt: String(order.publishedAt || ""),
+    resourceName: String(order.resourceName || ""),
+    price: String(order.price || ""),
+    hasPublishedUrl: order.hasPublishedUrl === true,
+  };
+}
+
+module.exports = {
+  mediaContracts,
+  mediaLifecycleContracts,
+  finiteMediaPrice,
+  projectMediaResource,
+  projectMediaDraft,
+  projectMediaArticleSummary,
+  projectMediaArticlePreview,
+  projectMediaResourcePage,
+  projectMediaPoolPage,
+  projectMediaRefreshResult,
+  projectMediaPreflight,
+  projectMediaOrder,
+};

@@ -36,7 +36,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: 鱼饼大王
+  shortcutName: ETO—001
 
 portable:
   artifactName: "${productName}-${version}-portable.${ext}"

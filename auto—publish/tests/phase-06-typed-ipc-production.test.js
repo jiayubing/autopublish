@@ -4,7 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
+const {
+  createAuthenticatedIpcMain,
+  registerIpc,
+} = require("../desktop/ipc/register");
 const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");
@@ -75,6 +78,45 @@ test("authenticated registrar rejects an unregistered non-Auth channel before ha
   );
 });
 
+test("authenticated IPC registration removes handlers when a later registrar fails", () => {
+  const handlers = new Map();
+  const accountProfilePath = require.resolve("../desktop/ipc/account-profile-ipc");
+  const originalAccountProfileModule = require.cache[accountProfilePath];
+  require.cache[accountProfilePath] = {
+    id: accountProfilePath,
+    filename: accountProfilePath,
+    loaded: true,
+    exports: {
+      registerAccountProfileIpc() {
+        throw new Error("account profile registrar failed");
+      },
+    },
+  };
+  try {
+    assert.throws(
+      () => registerIpc({
+        ipcMain: {
+          handle(channel, handler) {
+            handlers.set(channel, handler);
+          },
+          removeHandler(channel) {
+            handlers.delete(channel);
+          },
+        },
+        operationalStore: { listPublicationRecords() { return []; } },
+        getWorkspaceRuntimeIdentity() {
+          return { workspaceRuntimeId: "runtime-1", revision: 0 };
+        },
+      }),
+      /account profile registrar failed/,
+    );
+    assert.deepEqual([...handlers.keys()], []);
+  } finally {
+    if (originalAccountProfileModule) require.cache[accountProfilePath] = originalAccountProfileModule;
+    else delete require.cache[accountProfilePath];
+  }
+});
+
 test("production typed IPC converts authentication, handler, and result failures without raw details", async () => {
   const handlers = new Map();
   const guarded = createAuthenticatedIpcMain(
@@ -136,6 +178,24 @@ test("workspace runtime identity is a versioned path-free query", async () => {
     },
   );
   assert.doesNotMatch(JSON.stringify(contract), /workspacePath|filePath|database|cookie/i);
+});
+
+test("workspace runtime identity retains its established safe error messages", () => {
+  const contract = productionIpcRegistry.byCapability("workspace.getRuntimeIdentity");
+  assert.deepEqual(
+    Object.fromEntries([
+      "AUTH_REQUIRED",
+      "IPC_REQUEST_INVALID",
+      "IPC_RESULT_INVALID",
+      "IPC_INTERNAL",
+    ].map((code) => [code, contract.errors[code].userMessage])),
+    {
+      AUTH_REQUIRED: "请先完成登录后再继续。",
+      IPC_REQUEST_INVALID: "请求数据无效，请刷新页面后重试。",
+      IPC_RESULT_INVALID: "操作结果未通过安全校验，请刷新后重试。",
+      IPC_INTERNAL: "无法读取当前工作区运行身份，请刷新后重试。",
+    },
+  );
 });
 
 test("preload consumes the shared registry without exposing invoke, on, or channel names", () => {

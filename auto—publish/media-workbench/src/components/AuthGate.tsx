@@ -45,7 +45,7 @@ function LoginView() {
   return (
     <main className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
       <section className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-7 shadow-2xl">
-        <h1 className="text-2xl font-bold text-white">鱼饼大王</h1>
+        <h1 className="text-2xl font-bold text-white">ETO—001</h1>
         <p className="text-xs text-slate-300">Auto Publish</p>
         <p className="mt-2 text-sm text-slate-400">登录后才能使用工作区和投稿功能</p>
         <form onSubmit={submit} className="mt-6 space-y-4">

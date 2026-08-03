@@ -41,6 +41,46 @@ function assertEnvelope(result) {
 }
 
 describe("workspace bootstrap IPC", function () {
+  it("registers bootstrap handlers through the typed IPC adapter", function () {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "desktop", "ipc", "workspace-bootstrap-ipc.js"),
+      "utf8",
+    );
+    assert.match(source, /typedIpcMain\.handle\(/);
+    assert.doesNotMatch(source, /\bipcMain\.handle\(/);
+  });
+
+  it("rolls back bootstrap handlers when registration fails mid-sequence", function () {
+    const handlers = new Map();
+    const existingHandler = function () {};
+    handlers.set("workspace:cancel-selection", existingHandler);
+    let calls = 0;
+    assert.throws(() => registerWorkspaceBootstrapIpc({
+      ipcMain: {
+        handle(channel, handler) {
+          calls += 1;
+          if (calls === 4) throw new Error("bootstrap registration failed");
+          handlers.set(channel, handler);
+        },
+        removeHandler(channel) {
+          handlers.delete(channel);
+        },
+      },
+      workspaceBootstrapService: {
+        getBootstrapState() {},
+        chooseDirectory() {},
+        confirmSelection() {},
+        cancelSelection() {},
+        getCurrent() {},
+        openCurrent() {},
+        requestSwitch() {},
+      },
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+    }), /bootstrap registration failed/);
+    assert.deepEqual([...handlers.keys()], ["workspace:cancel-selection"]);
+    assert.equal(handlers.get("workspace:cancel-selection"), existingHandler);
+  });
+
   it("gives the workspace registrar sole ownership of auth and typed wire validation", function () {
     const main = fs.readFileSync(
       path.join(__dirname, "..", "desktop", "main.js"),

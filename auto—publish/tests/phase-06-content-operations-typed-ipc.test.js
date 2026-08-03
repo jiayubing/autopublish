@@ -179,10 +179,13 @@ test("content operations inventory has 26 exact versioned contracts", () => {
 
 test("Doubao event sender uses the shared contract encoder", () => {
   const source = fs.readFileSync(
-    path.resolve(__dirname, "../desktop/workspace-runtime.js"),
+    path.resolve(
+      __dirname,
+      "../desktop/composition/workspace-runtime-composition.js",
+    ),
     "utf8",
   );
-  assert.match(source, /productionIpcRegistry\.event\(doubaoQueueContract/);
+  assert.match(source, /productionIpcRegistry\.event\(\s*doubaoQueueContract/);
   assert.doesNotMatch(
     source,
     /sendToRenderer\("content:doubao-queue-state",\s*value\)/,

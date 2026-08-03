@@ -64,7 +64,7 @@ export default function WorkspaceSelectionPanel({
       <section className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
         {showAppName && (
           <div>
-            <p className="text-xl font-bold text-blue-600">鱼饼大王</p>
+            <p className="text-xl font-bold text-blue-600">ETO—001</p>
             <p className="text-xs text-slate-500">Auto Publish</p>
           </div>
         )}

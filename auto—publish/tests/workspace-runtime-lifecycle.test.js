@@ -138,6 +138,58 @@ it("workspace runtime validates lifecycle dependencies before a workspace can st
   assert.throws(function() { createWorkspaceRuntime({ ipcMain: {} }); }, /sendToRenderer/);
 });
 
+it("disposes a workspace composition that resolves after runtime disposal", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-dispose-race-"));
+  let resolveComposition;
+  let compositionResolved = false;
+  let compositionCalls = 0;
+  let compositionDisposals = 0;
+  const runtime = createWorkspaceRuntime(Object.assign(workspaceRuntimeOptions(root), {
+    createWorkspaceRuntimeComposition: function() {
+      compositionCalls += 1;
+      if (compositionCalls > 1) {
+        return {
+          runtime: {},
+          modules: {},
+          ipcDeps: {},
+          dispose: async function() { compositionDisposals += 1; }
+        };
+      }
+      return new Promise(function(resolve) {
+        resolveComposition = function() {
+          compositionResolved = true;
+          resolve({
+            dispose: async function() { compositionDisposals += 1; }
+          });
+        };
+      });
+    }
+  }));
+  try {
+    const startPromise = runtime.start({ workspacePath: path.join(root, "workspace-a") });
+    assert.equal(typeof resolveComposition, "function");
+    let disposalSettled = false;
+    const disposePromise = runtime.dispose().then(function(value) {
+      disposalSettled = true;
+      return value;
+    });
+    const restartPromise = runtime.start({ workspacePath: path.join(root, "workspace-b") });
+    await Promise.resolve();
+    assert.equal(disposalSettled, false);
+    resolveComposition();
+    assert.equal((await disposePromise).phase, "stopped");
+    await startPromise;
+    assert.equal((await restartPromise).phase, "running");
+    assert.equal(compositionCalls, 2);
+    assert.equal(compositionDisposals, 1);
+    assert.equal(runtime.getState().workspacePath, path.join(root, "workspace-b"));
+  } finally {
+    if (!compositionResolved && resolveComposition) resolveComposition();
+    await runtime.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("article management reads only the newly started workspace when client ids overlap", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-isolation-"));
   const workspaceA = path.join(root, "workspace-a");
@@ -157,6 +209,8 @@ it("article management reads only the newly started workspace when client ids ov
   try {
     await runtime.start({ workspacePath: workspaceA });
     runtime.registerIpc();
+    assert.equal(ipcMain.handlers.has("storage-maintenance:get-usage"), true);
+    assert.equal(ipcMain.handlers.has("storage-maintenance:clean-caches"), true);
     let response = await ipcMain.handlers.get("content:get-article-management-snapshot")(null, {
       schemaVersion: 1,
       payload: { clientId: "shared-client" }

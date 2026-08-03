@@ -1,4 +1,5 @@
 const { productionIpcRegistry } = require("./contracts/production-registry");
+const { createTypedIpcMain } = require("./register");
 
 const STATE_VALUES = new Set([
   "checking",
@@ -8,6 +9,15 @@ const STATE_VALUES = new Set([
   "invalid",
   "relaunching",
 ]);
+const BOOTSTRAP_CHANNELS = [
+  "workspace:get-bootstrap-state",
+  "workspace:choose-directory",
+  "workspace:confirm-selection",
+  "workspace:cancel-selection",
+  "workspace:get-current",
+  "workspace:open-current",
+  "workspace:request-switch",
+];
 
 function selectionLabel(kind) {
   if (kind === "existing_workspace") return "已有工作区";
@@ -97,72 +107,50 @@ function registerWorkspaceBootstrapIpc(deps) {
   }
   const pickDirectory = createDialogPicker(showOpenDialog, service);
 
-  function handle(channel, operation, project) {
-    const contract = productionIpcRegistry.byChannel(channel);
-    if (!contract)
-      throw new Error("Workspace IPC contract is required: " + channel);
-    ipcMain.handle(channel, async function (event, input) {
-      if (typeof requireAuthenticated === "function") {
-        try {
-          await requireAuthenticated();
-        } catch (_) {
-          return productionIpcRegistry.failure(contract, {
-            code: "AUTH_REQUIRED",
-          });
-        }
-      }
-      let payload;
-      try {
-        payload = productionIpcRegistry.parseRequest(contract, input);
-      } catch (_) {
-        return productionIpcRegistry.failure(contract, {
-          code: "IPC_REQUEST_INVALID",
-        });
-      }
-      try {
-        const result = await operation(payload);
-        return productionIpcRegistry.success(contract, project(result));
-      } catch (error) {
-        return productionIpcRegistry.failure(contract, error);
-      }
-    });
+  const typedIpcMain = createTypedIpcMain(ipcMain, requireAuthenticated);
+  for (const channel of BOOTSTRAP_CHANNELS) {
+    if (productionIpcRegistry.byChannel(channel)) continue;
+    const error = new Error("Non-Auth IPC channel must have a production contract");
+    error.code = "IPC_CONTRACT_REQUIRED";
+    throw error;
   }
-
-  handle(
-    "workspace:get-bootstrap-state",
-    () => service.getBootstrapState(),
-    rendererWorkspaceState,
-  );
-  handle(
-    "workspace:choose-directory",
-    async () => service.chooseDirectory(await pickDirectory()),
-    rendererWorkspaceState,
-  );
-  handle(
-    "workspace:confirm-selection",
-    (payload) => service.confirmSelection({ token: payload.token }),
-    rendererWorkspaceState,
-  );
-  handle(
-    "workspace:cancel-selection",
-    () => service.cancelSelection(),
-    rendererWorkspaceState,
-  );
-  handle(
-    "workspace:get-current",
-    () => service.getCurrent(),
-    rendererWorkspaceState,
-  );
-  handle(
-    "workspace:open-current",
-    () => service.openCurrent(),
-    () => ({ opened: true }),
-  );
-  handle(
-    "workspace:request-switch",
-    async () => service.requestSwitch(await pickDirectory()),
-    rendererWorkspaceState,
-  );
+  const registeredChannels = [];
+  try {
+    typedIpcMain.handle("workspace:get-bootstrap-state", async function () {
+      return rendererWorkspaceState(await service.getBootstrapState());
+    });
+    registeredChannels.push("workspace:get-bootstrap-state");
+    typedIpcMain.handle("workspace:choose-directory", async function () {
+      return rendererWorkspaceState(await service.chooseDirectory(await pickDirectory()));
+    });
+    registeredChannels.push("workspace:choose-directory");
+    typedIpcMain.handle("workspace:confirm-selection", async function (event, payload) {
+      return rendererWorkspaceState(await service.confirmSelection({ token: payload.token }));
+    });
+    registeredChannels.push("workspace:confirm-selection");
+    typedIpcMain.handle("workspace:cancel-selection", async function () {
+      return rendererWorkspaceState(await service.cancelSelection());
+    });
+    registeredChannels.push("workspace:cancel-selection");
+    typedIpcMain.handle("workspace:get-current", async function () {
+      return rendererWorkspaceState(await service.getCurrent());
+    });
+    registeredChannels.push("workspace:get-current");
+    typedIpcMain.handle("workspace:open-current", async function () {
+      await service.openCurrent();
+      return { opened: true };
+    });
+    registeredChannels.push("workspace:open-current");
+    typedIpcMain.handle("workspace:request-switch", async function () {
+      return rendererWorkspaceState(await service.requestSwitch(await pickDirectory()));
+    });
+    registeredChannels.push("workspace:request-switch");
+  } catch (error) {
+    registeredChannels.reverse().forEach(function(channel) {
+      try { typedIpcMain.removeHandler(channel); } catch (_) {}
+    });
+    throw error;
+  }
 }
 
 module.exports = { registerWorkspaceBootstrapIpc, rendererWorkspaceState };

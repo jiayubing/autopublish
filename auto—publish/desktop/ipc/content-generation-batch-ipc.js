@@ -161,7 +161,8 @@ function registerContentGenerationBatchIpc(deps) {
   }); });
   const sendToRenderer = values.sendToRenderer;
   const runtimeEvent = productionIpcRegistry.byCapability("generation.runtimeChanged");
-  const unsubscribe = typeof service.subscribe === "function" ? service.subscribe(function(state) {
+  const publishEvents = values.publishEvents !== false;
+  const unsubscribe = publishEvents && typeof service.subscribe === "function" ? service.subscribe(function(state) {
     if (typeof sendToRenderer !== "function") return;
     try {
       sendToRenderer(runtimeEvent.channel, productionIpcRegistry.event(runtimeEvent, state));

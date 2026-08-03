@@ -410,7 +410,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.refreshResources",
     channel: "media:refresh-resources",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.refreshResources",
+    application: "application.refreshResources",
     featureBinding: "refreshResources",
   }),
   "media.getResourcePage": Object.freeze({
@@ -424,7 +424,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.getResourcePage",
     channel: "media:get-resource-page",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.getCachedResourcePage",
+    application: "application.getResourcePage",
     featureBinding: "getResourcePage",
   }),
   "media.searchResourcePage": Object.freeze({
@@ -438,7 +438,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.searchResourcePage",
     channel: "media:search-resource-page",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.searchResourcePage",
+    application: "application.searchResourcePage",
     featureBinding: "searchResourcePage",
   }),
   "media.getPool": Object.freeze({
@@ -452,7 +452,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.getPool",
     channel: "media:get-pool",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.getPoolPage",
+    application: "application.getPool",
     featureBinding: "getPoolPage",
   }),
   "media.addToPool": Object.freeze({
@@ -466,7 +466,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.addToPool",
     channel: "media:add-to-pool",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.addToPool",
+    application: "application.addToPool",
     featureBinding: "addToPool",
   }),
   "media.removeFromPool": Object.freeze({
@@ -480,7 +480,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.removeFromPool",
     channel: "media:remove-from-pool",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.removeFromPool",
+    application: "application.removeFromPool",
     featureBinding: "removeFromPool",
   }),
   "media.getDrafts": Object.freeze({
@@ -494,7 +494,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.getDrafts",
     channel: "media:get-drafts",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaDraftStore.getAll",
+    application: "application.getDrafts",
     featureBinding: "getDrafts",
   }),
   "media.getDraft": Object.freeze({
@@ -508,7 +508,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.getDraft",
     channel: "media:get-draft",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaDraftStore.get",
+    application: "application.getDraft",
     featureBinding: "getDraft",
   }),
   "media.setDraft": Object.freeze({
@@ -522,7 +522,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.setDraft",
     channel: "media:set-draft",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaDraftStore.set",
+    application: "application.setDraft",
     featureBinding: "setDraft",
   }),
   "media.scanArticles": Object.freeze({
@@ -536,7 +536,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.scanArticles",
     channel: "media:scan-articles",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaWorkbenchService.scanArticles",
+    application: "application.scanArticles",
     featureBinding: "scanArticles",
   }),
   "media.previewArticle": Object.freeze({
@@ -550,7 +550,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.previewArticle",
     channel: "media:preview-article",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaWorkbenchService.previewArticle",
+    application: "application.previewArticle",
     featureBinding: "previewArticle",
   }),
   "media.buildConfirmation": Object.freeze({
@@ -564,7 +564,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.buildConfirmation",
     channel: "media:build-confirmation",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaWorkbenchService.buildConfirmationSummary",
+    application: "application.buildConfirmation",
     featureBinding: "buildConfirmation",
   }),
   "media.submitSelected": Object.freeze({
@@ -578,7 +578,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.submitSelected",
     channel: "media:submit-selected",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "deps.mediaPublicationSubmissionService.submit",
+    application: "application.submitSelected",
     featureBinding: "submitSelected",
   }),
   "media.getOrders": Object.freeze({
@@ -592,7 +592,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.getOrders",
     channel: "media:get-orders",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaOrderService.listOrderViews",
+    application: "application.getOrders",
     featureBinding: "getOrders",
   }),
   "media.syncOrder": Object.freeze({
@@ -606,7 +606,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.syncOrder",
     channel: "media:sync-order",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaOrderService.syncOrder",
+    application: "application.syncOrder",
     featureBinding: "syncOrder",
   }),
   "media.openPublishedUrl": Object.freeze({
@@ -620,7 +620,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.openPublishedUrl",
     channel: "media:open-published-url",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaOrderService.openPublishedUrl",
+    application: "application.openPublishedUrl",
     featureBinding: "openPublishedUrl",
   }),
   "platform.getQueue": Object.freeze({
@@ -635,7 +635,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.getQueue",
     channel: "platforms:get-queue",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "service.scanQueue",
+    application: "application.getQueue",
     featureBinding: "loadQueue",
   }),
   "platform.listAccountProfiles": Object.freeze({
@@ -680,7 +680,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.openLogin",
     channel: "platforms:open-login",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "platformSessionService.openLogin",
+    application: "application.openLogin",
     featureBinding: "openLogin",
   }),
   "platform.checkLogin": Object.freeze({
@@ -695,7 +695,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.checkLogin",
     channel: "platforms:check-login",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "platformSessionService.checkLogin",
+    application: "application.checkLogin",
     featureBinding: "checkLogin",
   }),
   "platform.submitSelected": Object.freeze({
@@ -710,7 +710,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.submitSelected",
     channel: "platforms:submit-selected",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "deps.publicationSubmissionService.submit",
+    application: "application.submitSelected",
     featureBinding: "submit",
   }),
   "platform.pauseSubmit": Object.freeze({
@@ -725,7 +725,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.pauseSubmit",
     channel: "platforms:pause-submit",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "taskService.pausePlatformSubmit",
+    application: "application.pauseSubmit",
     featureBinding: "pause",
   }),
   "platform.stopSubmit": Object.freeze({
@@ -740,7 +740,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.stopSubmit",
     channel: "platforms:stop-submit",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "taskService.stopPlatformSubmit",
+    application: "application.stopSubmit",
     featureBinding: "stop",
   }),
   "platform.getState": Object.freeze({
@@ -755,7 +755,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.getState",
     channel: "platforms:get-state",
     registrar: "desktop/ipc/platform-ipc.js",
-    application: "taskService.getState",
+    application: "application.getState",
     featureBinding: "getRunState",
   }),
   "platform.stateChanged": Object.freeze({
@@ -771,7 +771,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     channel: "platform-state",
     registrar: "desktop/ipc/contracts/production-registry.js",
     application: "webContents.send",
-    producer: "desktop/services/desktop-task-service.js",
+    producer: "desktop/composition/workspace-runtime-composition.js",
     producerApplication: "sendToRenderer",
     dispose: "ipcRenderer.removeListener",
     featureBinding: "onRunState",
@@ -1056,8 +1056,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     channel: "content:article-removal-transaction",
     registrar: "desktop/ipc/contracts/production-registry.js",
     application: "webContents.send",
-    producer: "desktop/workspace-runtime.js",
-    producerApplication: "options.sendToRenderer",
+    producer: "desktop/composition/workspace-runtime-composition.js",
+    producerApplication: "sendToRenderer",
     dispose: "ipcRenderer.removeListener",
     featureBinding: "subscribeRemovalTransaction",
   }),
@@ -1629,8 +1629,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     channel: "content:doubao-queue-state",
     registrar: "desktop/ipc/contracts/production-registry.js",
     application: "webContents.send",
-    producer: "desktop/workspace-runtime.js",
-    producerApplication: "options.sendToRenderer",
+    producer: "desktop/composition/workspace-runtime-composition.js",
+    producerApplication: "sendToRenderer",
     dispose: "ipcRenderer.removeListener",
     featureBinding: "subscribeDoubaoQueue",
   }),
@@ -1675,7 +1675,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "media.getBalance",
     channel: "media:get-balance",
     registrar: "desktop/ipc/media-ipc.js",
-    application: "mediaResourceService.getBalance",
+    application: "application.getBalance",
     featureBinding: "getBalance",
   }),
   "generation.runtimeChanged": Object.freeze({
@@ -1691,7 +1691,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     channel: "content:generation-batch-state",
     registrar: "desktop/ipc/contracts/production-registry.js",
     application: "webContents.send",
-    producer: "desktop/ipc/content-generation-batch-ipc.js",
+    producer: "desktop/composition/workspace-runtime-composition.js",
     producerApplication: "sendToRenderer",
     dispose: "ipcRenderer.removeListener",
     featureBinding: "subscribeRuntime",
@@ -2558,35 +2558,36 @@ const PRODUCTION_EVENT_CLEANUP_METHODS = Object.freeze({
 
 const PRODUCTION_EVENT_PRODUCERS = Object.freeze({
   "platform.stateChanged": Object.freeze({
-    producerEntry: "desktop/workspace-runtime.js",
-    producerEntryOwner: "createWorkspaceRuntime",
-    producerOwner: "createDesktopTaskService",
+    producerEntry: "desktop/composition/workspace-runtime-composition.js",
+    producerEntryOwner: "createWorkspaceRuntimeComposition",
+    producerOwner: "subscribePlatformState",
+    producerCallback: "taskService.subscribe",
     applicationSource: "desktop/main.js",
     applicationOwner: "sendToRenderer",
     applicationReceiver: "mainWindow.webContents",
   }),
   "content.articleRemovalTransactionChanged": Object.freeze({
-    producerEntry: "desktop/workspace-runtime.js",
-    producerEntryOwner: "createWorkspaceRuntime",
+    producerEntry: "desktop/composition/workspace-runtime-composition.js",
+    producerEntryOwner: "createWorkspaceRuntimeComposition",
     producerOwner: "onArticleRemovalTransaction",
     applicationSource: "desktop/main.js",
     applicationOwner: "sendToRenderer",
     applicationReceiver: "mainWindow.webContents",
   }),
   "content.doubaoQueueChanged": Object.freeze({
-    producerEntry: "desktop/workspace-runtime.js",
-    producerEntryOwner: "createWorkspaceRuntime",
-    producerOwner: "start",
+    producerEntry: "desktop/composition/workspace-runtime-composition.js",
+    producerEntryOwner: "createWorkspaceRuntimeComposition",
+    producerOwner: "createWorkspaceRuntimeComposition",
     producerCallback: "doubaoCollectionService.subscribe",
     applicationSource: "desktop/main.js",
     applicationOwner: "sendToRenderer",
     applicationReceiver: "mainWindow.webContents",
   }),
   "generation.runtimeChanged": Object.freeze({
-    producerEntry: "desktop/ipc/register.js",
-    producerEntryOwner: "registerIpc",
-    producerOwner: "registerContentGenerationBatchIpc",
-    producerCallback: "service.subscribe",
+    producerEntry: "desktop/composition/workspace-runtime-composition.js",
+    producerEntryOwner: "createWorkspaceRuntimeComposition",
+    producerOwner: "subscribeGenerationRuntimeState",
+    producerCallback: "contentGenerationBatchService.subscribe",
     applicationSource: "desktop/main.js",
     applicationOwner: "sendToRenderer",
     applicationReceiver: "mainWindow.webContents",
@@ -2604,7 +2605,7 @@ const PRODUCTION_EVENT_PRODUCERS = Object.freeze({
 const PRODUCTION_REGISTRARS = Object.freeze({
   "desktop/ipc/workspace-bootstrap-ipc.js": [
     "registerWorkspaceBootstrapIpc",
-    "ipcMain",
+    "typedIpcMain",
   ],
   "desktop/ipc/ai-provider-ipc.js": ["registerAiProviderIpc", "ipcMain"],
   "desktop/ipc/platform-settings-ipc.js": [
@@ -2668,10 +2669,10 @@ const PRODUCTION_REGISTRATION_ENTRIES = Object.freeze({
     "workspaceBootstrapService",
   ],
   "desktop/ipc/storage-maintenance-ipc.js": [
-    "desktop/workspace-runtime.js",
+    "desktop/ipc/register.js",
     "registerIpc",
-    "options.ipcMain",
-    "modules.storageMaintenanceService",
+    "guardedIpcMain",
+    "values.storageMaintenanceService",
   ],
 });
 
