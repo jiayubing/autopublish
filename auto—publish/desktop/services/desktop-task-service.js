@@ -44,6 +44,7 @@ function createDesktopTaskService(opts) {
     ? options.workspaceRuntimeId
     : createRunId();
   var activeRuntimeCleanup = null;
+  var stopRequested = false;
 
   function sendPlatformState(snapshot) {
     sendToRenderer("platform-state", encodePlatformStateEvent(Object.assign({}, snapshot, { workspaceRuntimeId: workspaceRuntimeId })));
@@ -183,6 +184,7 @@ function closeBrowserSessions() {
       throw alreadyActive;
     }
     var workerPlan = sanitizePlatformPlan(plan);
+    stopRequested = false;
 
     var hepanRuntime = null;
     var hepanCleanup = null;
@@ -291,6 +293,7 @@ function closeBrowserSessions() {
     assertActivePlatformRun(runId);
     if (!platformRun || !platformRun.snapshot()) return { ok: true };
 
+    stopRequested = true;
     closeBrowserSessions();
     requestStopSignal("operator_pause", stopSignalDirectory());
 
@@ -302,6 +305,7 @@ function closeBrowserSessions() {
   function stopPlatformSubmit(runId) {
     assertActivePlatformRun(runId);
     if (!platformRun || !platformRun.snapshot()) return { alreadyStopped: true };
+    stopRequested = true;
     requestStopSignal("desktop_stop_button", stopSignalDirectory());
     var stopped = platformRun.stop(runId, "operator_stop");
     emitPlatformState();
@@ -327,7 +331,7 @@ function closeBrowserSessions() {
   }
 
   return {
-    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState, dispose
+    startPlatformSubmit, pausePlatformSubmit, stopPlatformSubmit, getState, isStopRequested: function() { return stopRequested; }, dispose
   };
 }
 

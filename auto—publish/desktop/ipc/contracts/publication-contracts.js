@@ -58,7 +58,7 @@ const attempt = exactObject({
 const record = exactObject({
   version: optionalField(integerField({ min: 1, max: 100 })),
   publicationId: id,
-  clientId: articleId,
+  clientId: nullableField(articleId),
   articleId: nullableField(articleId),
   articleKey: id,
   targetKey: id,
@@ -106,6 +106,8 @@ const OWNED_ERRORS = {
   PUBLICATION_RECONCILE_CONFIRMATION_REQUIRED: "发布核对需要明确确认。",
   PUBLICATION_ID_INVALID: "发布记录标识无效。",
   PUBLICATION_RECONCILE_EVIDENCE_REQUIRED: "发布核对缺少可靠远端证据。",
+  PUBLICATION_RECONCILE_NOT_FOUND: "发布记录不存在。",
+  PUBLICATION_RECONCILE_NOT_ACTIONABLE: "发布记录当前不可核对。",
 };
 const errors = Object.freeze({
   ...COMMON_ERRORS,

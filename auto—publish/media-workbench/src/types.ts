@@ -653,7 +653,7 @@ export interface PublicationHistoryAttempt {
 export interface PublicationHistoryRecord {
   version?: number;
   publicationId: string;
-  clientId: string;
+  clientId: string | null;
   articleId: string | null;
   articleKey: string;
   targetKey: string;

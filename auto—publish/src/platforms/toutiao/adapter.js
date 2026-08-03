@@ -378,7 +378,7 @@ async function publishArticle(article, options) {
 
     if (!autoSubmit) {
       diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
-      return { status: "submitted", legacyStatus: "pending" };
+      return { status: "submitted" };
     }
 
     throwIfStopped();

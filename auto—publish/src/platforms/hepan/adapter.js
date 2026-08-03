@@ -376,7 +376,7 @@ function createHepanAdapter(options) {
       }
       if (payload.needsLogin) {
         diagnose("HEPAN_COOKIE_REAUTH_REQUIRED", "authentication", "cookie-refresh");
-        return { status: "submitted", legacyStatus: "pending", errorCode: "LOGIN_REQUIRED" };
+        return { status: "submitted", errorCode: "LOGIN_REQUIRED" };
       }
       if (!payload.ok) return { status: "failed", errorCode: "REMOTE_REJECTED" };
       article.title = payload.title || article.title;

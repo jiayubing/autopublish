@@ -20,6 +20,36 @@ function createPublicationPostProcessor(options) {
   if (typeof inputRoot !== "string" || typeof publishedRoot !== "string")
     throw new Error("Publication post-processor paths are required");
 
+  async function autoTrash(payload) {
+    if (payload.autoTrash !== true) return null;
+    if (
+      typeof payload.clientId !== "string" ||
+      !payload.clientId ||
+      typeof payload.articleId !== "string" ||
+      !payload.articleId
+    )
+      return { status: "blocked", reasonCode: "IDENTITY_MISSING" };
+    if (typeof value.autoTrashArticle !== "function")
+      return { status: "blocked", reasonCode: "REMOVAL_BLOCKED" };
+    try {
+      const result = await value.autoTrashArticle({
+        clientId: payload.clientId,
+        articleId: payload.articleId,
+      });
+      if (!result || typeof result.status !== "string")
+        return { status: "blocked", reasonCode: "REMOVAL_BLOCKED" };
+      return result;
+    } catch (error) {
+      return {
+        status: "failed",
+        reasonCode:
+          typeof error.code === "string" && error.code
+            ? error.code
+            : "REMOVAL_NEEDS_REPAIR",
+      };
+    }
+  }
+
   function sourceFile(payload) {
     if (!payload || typeof payload.sourcePlatformId !== "string" || typeof payload.filename !== "string")
       throw invalid("POST_PROCESSING_PAYLOAD_INVALID");
@@ -41,15 +71,29 @@ function createPublicationPostProcessor(options) {
         sourcePlatformId: payload.sourcePlatformId,
         filename: payload.filename,
       });
-      if (!eligibility.eligible) throw invalid("POST_PROCESSING_ARCHIVE_NOT_ELIGIBLE");
+      if (!eligibility.eligible)
+        throw invalid(
+          eligibility.retryable === false
+            ? "POST_PROCESSING_ARCHIVE_BLOCKED"
+            : "POST_PROCESSING_ARCHIVE_NOT_ELIGIBLE",
+        );
       const source = sourceFile(payload);
       // A completed prior archive may be observed after a process crash
       // before its job completion transaction.  Treat precisely that state as
       // idempotent; any partial/conflicting target remains a safe failure.
       const target = path.join(publishedRoot, payload.filename);
-      if (!fs.existsSync(source) && fs.existsSync(target)) return { archived: true, idempotent: true };
-      archivePublishedArticle({ sourceFile: source, filename: payload.filename }, { published: publishedRoot });
-      return { archived: true, idempotent: false };
+      const idempotent = !fs.existsSync(source) && fs.existsSync(target);
+      if (!idempotent)
+        archivePublishedArticle(
+          { sourceFile: source, filename: payload.filename },
+          { published: publishedRoot },
+        );
+      const trash = await autoTrash(payload);
+      return {
+        archived: true,
+        idempotent,
+        ...(trash ? { autoTrash: trash } : {}),
+      };
     },
   });
 }

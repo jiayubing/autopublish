@@ -34,6 +34,7 @@ function createWorkspaceRuntime(deps) {
   let ownedServices = [];
   let startPromise = null;
   let disposePromise = null;
+  let articleLifecycleOwner = null;
   const invalidation = createWorkspaceDataInvalidation({
     sendToRenderer: options.sendToRenderer,
   });
@@ -167,6 +168,48 @@ function createWorkspaceRuntime(deps) {
           require("./services/desktop-publisher-router").createDesktopPublisherRouter(
             { workerPublisher, mediaPublisher },
           );
+        const autoTrashArticle = async function (selection) {
+          if (
+            contentStore &&
+            typeof contentStore.isArticleTrashed === "function" &&
+            contentStore.isArticleTrashed(
+              selection.clientId,
+              selection.articleId,
+            )
+          )
+            return { status: "committed", idempotent: true };
+          if (
+            !articleLifecycleOwner ||
+            typeof articleLifecycleOwner.previewArticleRemovalImpact !==
+              "function" ||
+            typeof articleLifecycleOwner.trashArticles !== "function"
+          )
+            return { status: "blocked", reasonCode: "REMOVAL_BLOCKED" };
+          const preview =
+            articleLifecycleOwner.previewArticleRemovalImpact({
+              selections: [selection],
+            });
+          if (!preview || preview.canCommit !== true) {
+            const reason =
+              preview &&
+              Array.isArray(preview.blockedItems) &&
+              preview.blockedItems[0] &&
+              preview.blockedItems[0].reasonCode;
+            return {
+              status: "blocked",
+              reasonCode:
+                reason === "IDENTITY_MISSING" ||
+                reason === "REMOVAL_NEEDS_REPAIR"
+                  ? reason
+                  : "REMOVAL_BLOCKED",
+            };
+          }
+          return articleLifecycleOwner.trashArticles({
+            selections: [selection],
+            token: preview.token,
+            confirmed: true,
+          });
+        };
         const publicationComposition = ownService(
           require("./composition/publication-workflow-composition").createPublicationWorkflowComposition(
             {
@@ -181,6 +224,7 @@ function createWorkspaceRuntime(deps) {
                       return { id: platform.id, scanDir: platform.scanDir };
                     }),
                     operationalStore,
+                    autoTrashArticle,
                   },
                 );
               },
@@ -271,6 +315,8 @@ function createWorkspaceRuntime(deps) {
             },
           }),
         );
+        articleLifecycleOwner = aiContentService;
+        await publicationComposition.publicationWorkflow.recover();
         const attentionPorts = publicationComposition.createAttentionPorts({
           contentSubmissionService,
           articleRemovalService: aiContentService,
@@ -328,21 +374,26 @@ function createWorkspaceRuntime(deps) {
             },
           ),
         );
-        const publicationSubmissionService =
-          require("./services/publication-submission-service").createPublicationSubmissionService(
+        const publicationSubmissionOrchestrator =
+          require("./services/publication-submission-orchestrator").createPublicationSubmissionOrchestrator(
             {
               workflow: publicationComposition.publicationWorkflow,
               operationalStore: publicationComposition.operationalStore,
-              workbench: platformWorkbenchService,
               workerPublisher,
+            },
+          );
+        const publicationSubmissionService =
+          require("./services/publication-submission-service").createPublicationSubmissionService(
+            {
+              workbench: platformWorkbenchService,
+              orchestrator: publicationSubmissionOrchestrator,
             },
           );
         const mediaPublicationSubmissionService =
           require("./services/media-publication-submission-service").createMediaPublicationSubmissionService(
             {
-              workflow: publicationComposition.publicationWorkflow,
-              operationalStore: publicationComposition.operationalStore,
               workbench: platformWorkbenchService,
+              orchestrator: publicationSubmissionOrchestrator,
             },
           );
         modules = {
@@ -468,6 +519,7 @@ function createWorkspaceRuntime(deps) {
         } catch (_) {}
       }
       modules = null;
+      articleLifecycleOwner = null;
       ipc = null;
       ipcDeps = null;
       runtime = null;

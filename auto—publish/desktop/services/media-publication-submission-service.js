@@ -1,6 +1,8 @@
 "use strict";
 
-const crypto = require("node:crypto");
+const {
+  createPublicationSubmissionOrchestrator,
+} = require("./publication-submission-orchestrator");
 
 function quotedPrice(value) {
   return typeof value === "number" &&
@@ -34,49 +36,26 @@ function submissionDisplayPayload(command, articles) {
 
 function createMediaPublicationSubmissionService(options) {
   const value = options || {};
-  if (!value.workflow || !value.operationalStore || !value.workbench)
+  if (!value.workbench || (!value.orchestrator && !value.workflow))
     throw new Error("Media publication submission dependencies are required");
+  const orchestrator =
+    value.orchestrator ||
+    createPublicationSubmissionOrchestrator({
+      workflow: value.workflow,
+      operationalStore: value.operationalStore,
+      workerPublisher: value.workerPublisher,
+    });
   return Object.freeze({
     submit: async function (articles) {
       const commands =
         await value.workbench.prepareMediaPublicationCommands(articles);
-      if (!commands.length)
-        return Object.freeze({ batchId: null, results: [] });
-      const attemptedCommands = commands.map((command) =>
-        Object.assign({}, command, {
-          attemptId: `attempt-${crypto.randomUUID()}`,
-        }),
-      );
-      const batch = value.operationalStore.createSubmissionBatch({
-        batchId: `batch-${crypto.randomUUID()}`,
-        items: attemptedCommands.map((command) => ({
-          articleId: command.articleId,
-          target: command.target,
-          payload: submissionDisplayPayload(command, articles),
-        })),
-      });
-      const results = [];
-      for (let index = 0; index < attemptedCommands.length; index += 1) {
-        const command = attemptedCommands[index];
-        results.push(
-          await value.workflow.publish(
-            Object.assign({}, command, {
-              batchItemId: batch.items[index].itemId,
-              postProcessingPayload: Object.assign(
-                {},
-                command.postProcessingPayload,
-                {
-                  batchId: batch.batchId,
-                  batchItemId: batch.items[index].itemId,
-                },
-              ),
-            }),
+      return orchestrator.submit(commands, {
+        createBatch: true,
+        itemPayload: (command, attemptId) =>
+          submissionDisplayPayload(
+            Object.assign({}, command, { attemptId }),
+            articles,
           ),
-        );
-      }
-      return Object.freeze({
-        batchId: batch.batchId,
-        results: Object.freeze(results),
       });
     },
   });

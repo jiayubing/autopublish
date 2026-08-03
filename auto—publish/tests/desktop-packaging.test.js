@@ -366,6 +366,8 @@ describe("source assembly and packaging contract", function() {
     assert.match(packageJson.scripts["pack:alpha"], /prepare:runtime-tools/);
     assert.match(packageJson.scripts["pack:smoke"], /prepare:runtime-tools/);
     assert.match(packageJson.scripts["pack:smoke"], /verify-alpha-package\.js\s+release-alpha\/win-unpacked\/resources/);
+    for (const scriptName of ["dist:alpha", "dist:alpha:dirty"])
+      assert.match(packageJson.scripts[scriptName], /verify-alpha-package\.js\s+release-alpha\/win-unpacked\/resources/);
     assert.match(config, /asarUnpack:/);
     assert.doesNotMatch(config, /asarUnpack:\s*\r?\n\s*-\s+["']?\*\*\/\*["']?/);
     for (const runtimeBoundary of [

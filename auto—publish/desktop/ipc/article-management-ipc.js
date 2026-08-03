@@ -19,7 +19,6 @@ function registerArticleManagementIpc(deps) {
     getRevision: values.getWorkspaceDataRevision,
     aiContentService: values.aiContentService,
     contentSubmissionService: values.contentSubmissionService,
-    publicationLedger: values.publicationLedger,
     operationalStore: values.operationalStore,
     articleAttentionQuery: values.articleAttentionQuery
   });

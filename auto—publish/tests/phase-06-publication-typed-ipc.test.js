@@ -33,41 +33,6 @@ function typedIpc() {
   };
 }
 
-const recordFixture = {
-  version: 1,
-  publicationId: "publication-1",
-  clientId: "client-1",
-  articleId: "article-1",
-  articleKey: "generated:client-1:article-1",
-  targetKey: "platform:toutiao",
-  platformId: "toutiao",
-  mediaResourceId: null,
-  displayName: "头条",
-  status: "uncertain",
-  createdAt: "2026-07-26T00:00:00.000Z",
-  updatedAt: "2026-07-26T00:01:00.000Z",
-  attempts: [
-    {
-      attemptId: "attempt-1",
-      status: "uncertain",
-      createdAt: "2026-07-26T00:00:00.000Z",
-      updatedAt: "2026-07-26T00:01:00.000Z",
-      startedAt: "2026-07-26T00:00:10.000Z",
-      finishedAt: null,
-      remoteId: "remote-1",
-      remoteUrl:
-        "https://publisher.example/posts/remote-1?token=secret-query#private",
-      errorCode: "REMOTE_RESULT_UNKNOWN",
-      reasonCode: null,
-      rawResponse: "provider secret",
-      stack: "provider stack",
-    },
-  ],
-  accountFingerprint: "private-account-fingerprint",
-  contentHash: "private-content-hash",
-  workspacePath: "C:\\private\\workspace",
-};
-
 test("publication inventory keeps only the reconciler with a real feature consumer", () => {
   assert.equal(publicationContracts.length, 1);
   for (const channel of CHANNELS) {
@@ -91,26 +56,8 @@ test("publication Renderer uses a fixed named API and SafeOperationalError messa
 
 test("publication reconcile preserves confirmation and returns SafeOperationalError", async () => {
   const ipc = typedIpc();
-  const calls = [];
   registerPublicationIpc({
     ipcMain: ipc.ipcMain,
-    publicationLedger: {
-      reconcile(publicationId, decision) {
-        calls.push({ publicationId, decision });
-        if (decision.reasonCode === "FORCE_FAILURE") {
-          throw new Error("C:\\private\\publication.db raw ledger failure");
-        }
-        return {
-          ...recordFixture,
-          status: decision.status,
-          attempts: recordFixture.attempts.map((attempt) => ({
-            ...attempt,
-            status: decision.status,
-            reasonCode: decision.reasonCode,
-          })),
-        };
-      },
-    },
   });
 
   const response = await ipc.invoke(CHANNELS[0], [
@@ -122,13 +69,8 @@ test("publication reconcile preserves confirmation and returns SafeOperationalEr
     },
   ]);
   assert.equal(response.schemaVersion, 1);
-  assert.equal(response.ok, true, JSON.stringify(response));
-  assert.equal(response.data.record.status, "failed");
-  assert.equal(response.data.record.reasonCode, "CONFIRMED_NOT_PUBLISHED");
-  assert.deepEqual(calls[0], {
-    publicationId: "publication-1",
-    decision: { status: "failed", reasonCode: "CONFIRMED_NOT_PUBLISHED" },
-  });
+  assert.equal(response.ok, false, JSON.stringify(response));
+  assert.equal(response.error.code, "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED");
 
   const failed = await ipc.invoke(CHANNELS[0], [
     {
@@ -140,10 +82,57 @@ test("publication reconcile preserves confirmation and returns SafeOperationalEr
   ]);
   assert.equal(failed.schemaVersion, 1);
   assert.equal(failed.ok, false);
-  assert.equal(failed.error.code, "IPC_INTERNAL");
+  assert.equal(failed.error.code, "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED");
   assert.equal(typeof failed.error.userMessage, "string");
   assert.doesNotMatch(
     JSON.stringify(failed),
     /private|publication\.db|raw ledger/i,
   );
+});
+
+test("publication reconcile accepts a null client identity from OperationalStore", async () => {
+  const ipc = typedIpc();
+  let reads = 0;
+  const uncertain = {
+    version: 1,
+    publicationId: "publication-null-client",
+    clientId: null,
+    articleId: "article-null-client",
+    articleKey: "article-null-client",
+    targetKey: "media-resource:resource-null-client",
+    status: "uncertain",
+    createdAt: "2026-08-03T00:00:00.000Z",
+    updatedAt: "2026-08-03T00:00:01.000Z",
+    attempts: [
+      {
+        attemptId: "attempt-null-client",
+        status: "uncertain",
+        createdAt: "2026-08-03T00:00:00.000Z",
+        updatedAt: "2026-08-03T00:00:01.000Z",
+      },
+    ],
+  };
+  const published = {
+    ...uncertain,
+    status: "published",
+    attempts: [{ ...uncertain.attempts[0], status: "published" }],
+  };
+  registerPublicationIpc({
+    ipcMain: ipc.ipcMain,
+    operationalStore: {
+      listPublicationRecords: () => (++reads === 1 ? [uncertain] : [published]),
+    },
+    publicationWorkflow: { reconcile: async () => undefined },
+  });
+
+  const response = await ipc.invoke("publication:reconcile", [
+    {
+      publicationId: "publication-null-client",
+      status: "published",
+      reasonCode: "CONFIRMED_PUBLISHED",
+      confirmed: true,
+    },
+  ]);
+  assert.equal(response.ok, true, JSON.stringify(response));
+  assert.equal(response.data.record.clientId, null);
 });

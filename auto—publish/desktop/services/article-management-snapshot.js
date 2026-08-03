@@ -152,7 +152,6 @@ function createArticleManagementSnapshot(options) {
   const getRevision = typeof opts.getRevision === "function" ? opts.getRevision : function() { return 0; };
   const ai = opts.aiContentService || {};
   const submission = opts.contentSubmissionService || {};
-  const ledger = opts.publicationLedger || {};
   const operationalStore = opts.operationalStore || null;
   const attention = opts.articleAttentionQuery || null;
 
@@ -181,7 +180,7 @@ function createArticleManagementSnapshot(options) {
     const articleIds = articleList.map(function(article) { return article.id; }).filter(Boolean);
     const recordsRaw = await read("listPublications", function() {
       if (operationalStore && typeof operationalStore.listPublicationRecords === "function") return operationalStore.listPublicationRecords({ articleIds });
-      return typeof ledger.listForArticles === "function" ? ledger.listForArticles(clientId, articleIds) : [];
+      return [];
     }, clientId);
     const articleIdSet = new Set(articleIds);
     const publicationRecords = (Array.isArray(recordsRaw) ? recordsRaw : [])

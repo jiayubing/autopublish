@@ -126,3 +126,118 @@ test("platform submission accepts the durable profile mapping and forwards it un
     },
   ]);
 });
+
+test("platform submission projects the durable auto-trash outcome instead of dropping the request", async () => {
+  let submitOptions = null;
+  const value = register(
+    {
+      buildSelectedSubmissionsPlan: () => ({
+        tasks: [
+          {
+            sourcePlatformId: "toutiao",
+            filename: "fixture.md",
+            targetPlatformId: "toutiao",
+            postProcessingPayload: { batchId: "batch-auto-trash" },
+          },
+        ],
+      }),
+    },
+    {
+      publicationSubmissionService: {
+        submit: async (_plan, options) => {
+          submitOptions = options;
+          return {
+            results: [
+              {
+                status: "published",
+                postProcessing: [
+                  {
+                    jobId: "job-auto-trash",
+                    batchId: "batch-auto-trash",
+                    sourcePlatformId: "toutiao",
+                    filename: "fixture.md",
+                    status: "completed",
+                    output: {
+                      autoTrash: { status: "committed" },
+                    },
+                  },
+                ],
+              },
+            ],
+          };
+        },
+      },
+    },
+  );
+  const result = await value.handlers.get("platforms:submit-selected")(null, {
+    submissions: [
+      {
+        sourcePlatformId: "toutiao",
+        filename: "fixture.md",
+        targetPlatformIds: ["toutiao"],
+        accountProfiles: { toutiao: "account-toutiao" },
+      },
+    ],
+    autoTrash: true,
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(submitOptions, { autoTrash: true });
+  assert.equal(result.data.trashDisposition, "auto_trash_requested");
+  assert.equal(result.data.trashSummary.movedCount, 1);
+});
+
+test("platform submission maps a durable needs-repair auto-trash result", async () => {
+  const value = register(
+    {
+      buildSelectedSubmissionsPlan: () => ({
+        tasks: [
+          {
+            sourcePlatformId: "toutiao",
+            filename: "fixture.md",
+            targetPlatformId: "toutiao",
+            postProcessingPayload: { batchId: "batch-auto-trash-repair" },
+          },
+        ],
+      }),
+    },
+    {
+      publicationSubmissionService: {
+        submit: async () => ({
+          results: [
+            {
+              status: "published",
+              postProcessing: [
+                {
+                  jobId: "job-auto-trash-repair",
+                  batchId: "batch-auto-trash-repair",
+                  sourcePlatformId: "toutiao",
+                  filename: "fixture.md",
+                  status: "completed",
+                  output: {
+                    autoTrash: { status: "needs_repair" },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+  );
+  const result = await value.handlers.get("platforms:submit-selected")(null, {
+    submissions: [
+      {
+        sourcePlatformId: "toutiao",
+        filename: "fixture.md",
+        targetPlatformIds: ["toutiao"],
+        accountProfiles: { toutiao: "account-toutiao" },
+      },
+    ],
+    autoTrash: true,
+  });
+  assert.equal(result.data.trashDisposition, "auto_trash_blocked");
+  assert.equal(result.data.trashSummary.failedCount, 1);
+  assert.deepEqual(result.data.trashSummary.reasonCodes, [
+    "REMOVAL_NEEDS_REPAIR",
+  ]);
+});

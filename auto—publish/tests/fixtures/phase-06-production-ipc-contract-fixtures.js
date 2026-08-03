@@ -1646,7 +1646,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "publication.reconcile",
     channel: "publication:reconcile",
     registrar: "desktop/ipc/publication-ipc.js",
-    application: "ledger.reconcile",
+    application: "deps.publicationWorkflow.reconcile",
     featureBinding: "reconcilePublication",
   }),
   "workspace.getRuntimeIdentity": Object.freeze({

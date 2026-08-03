@@ -8,8 +8,84 @@ const {
   text,
 } = require("./operational-store-utils");
 
+function publicationIntentPayload(context, detail) {
+  if (!context) return detail === undefined ? null : detail;
+  return {
+    submission: context,
+    detail: detail === undefined ? null : detail,
+  };
+}
+
+function parsePublicationIntentPayload(value) {
+  const parsed = fromText(value);
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    parsed.submission &&
+    typeof parsed.submission === "object" &&
+    !Array.isArray(parsed.submission)
+  )
+    return { context: parsed.submission, detail: parsed.detail };
+  return { context: null, detail: parsed };
+}
+
 function createPublicationAggregate(context) {
   const { db, open, transaction, clock, randomUUID, fail, iso } = context;
+
+  function submissionContext(input) {
+    const value = input || {};
+    if (
+      value.batchItemId === undefined &&
+      value.postProcessingPayload === undefined
+    )
+      return null;
+    if (
+      value.batchItemId !== undefined &&
+      (typeof value.batchItemId !== "string" || !value.batchItemId)
+    )
+      throw fail("OPERATIONAL_BATCH_ITEM_INVALID");
+    const postProcessingPayload =
+      value.postProcessingPayload === undefined
+        ? {}
+        : value.postProcessingPayload;
+    rejectSensitive(postProcessingPayload);
+    return {
+      ...(value.batchItemId !== undefined
+        ? { batchItemId: value.batchItemId }
+        : {}),
+      postProcessingPayload,
+    };
+  }
+
+  function refreshSubmissionBatchStatus(dbHandle, batchId, stamp) {
+    const rows = dbHandle
+      .prepare("SELECT status FROM submission_items WHERE batch_id=?")
+      .all(batchId);
+    if (!rows.length) return;
+    const statuses = rows.map((row) => row.status);
+    let status = "queued";
+    if (statuses.some((value) => ["queued", "claimed"].includes(value))) {
+      status = "queued";
+    } else if (statuses.some((value) => ["failed", "failed-cleaned"].includes(value))) {
+      status = "failed";
+    } else if (
+      statuses.every((value) =>
+        ["cancelled", "cancelled-cleaned", "completed", "published-cleaned"].includes(value),
+      )
+    ) {
+      status = statuses.some((value) => ["completed", "published-cleaned"].includes(value))
+        ? "completed"
+        : "cancelled";
+    } else {
+      return;
+    }
+    dbHandle
+      .prepare(
+        "UPDATE submission_batches SET status=?,revision=revision+1,updated_at=? WHERE batch_id=?",
+      )
+      .run(status, stamp, batchId);
+  }
 
   function createAccountProfile(input) {
     open();
@@ -91,6 +167,7 @@ function createPublicationAggregate(context) {
   function reservePublicationTarget(input) {
     open();
     const value = input || {};
+    const submission = submissionContext(value);
     const articleId = domain.ArticleId.serialize(
         domain.ArticleId.parse(value.articleId),
       ),
@@ -135,7 +212,7 @@ function createPublicationAggregate(context) {
         randomUUID(),
         attemptId,
         "remote_started",
-        null,
+        text(publicationIntentPayload(submission)),
         stamp,
         stamp,
       );
@@ -157,16 +234,46 @@ function createPublicationAggregate(context) {
       )
     )
       throw fail("OPERATIONAL_OUTCOME_INVALID");
+    if (
+      value.batchClaimToken !== undefined &&
+      (typeof value.batchClaimToken !== "string" || !value.batchClaimToken)
+    )
+      throw fail("OPERATIONAL_CLAIM_INVALID");
     rejectSensitive(outcome);
     rejectSensitive(value.postProcessingPayload || {});
     const stamp = iso(clock);
     return transaction(() => {
       const attempt = db
         .prepare(
-          "SELECT a.publication_id,p.article_id,p.target_key,p.target_json FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id WHERE a.attempt_id=?",
+          "SELECT a.publication_id,p.article_id,p.target_key,p.target_json,i.payload_json AS intent_payload FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE a.attempt_id=?",
         )
         .get(attemptId);
       if (!attempt) throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
+      const persisted = parsePublicationIntentPayload(
+        attempt.intent_payload,
+      );
+      const persistedSubmission = persisted.context || {};
+      const batchItemId =
+        value.batchItemId !== undefined
+          ? value.batchItemId
+          : persistedSubmission.batchItemId;
+      const postProcessingPayload =
+        value.postProcessingPayload !== undefined
+          ? value.postProcessingPayload
+          : persistedSubmission.postProcessingPayload || {};
+      if (
+        batchItemId !== undefined &&
+        (typeof batchItemId !== "string" || !batchItemId)
+      )
+        throw fail("OPERATIONAL_BATCH_ITEM_INVALID");
+      const submission =
+        batchItemId !== undefined || value.postProcessingPayload !== undefined
+          ? {
+              ...(batchItemId !== undefined ? { batchItemId } : {}),
+              postProcessingPayload,
+            }
+          : persisted.context;
+      rejectSensitive(postProcessingPayload);
       db.prepare(
         "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
       ).run(outcome.status, stamp, attemptId);
@@ -191,15 +298,18 @@ function createPublicationAggregate(context) {
           text(outcome.evidence),
           stamp,
         );
-      if (value.batchItemId !== undefined) {
-        if (typeof value.batchItemId !== "string" || !value.batchItemId)
-          throw fail("OPERATIONAL_BATCH_ITEM_INVALID");
+      if (batchItemId !== undefined) {
         const item = db
           .prepare(
-            "SELECT article_id,target_key,payload_json FROM submission_items WHERE item_id=?",
+            "SELECT batch_id,article_id,target_key,payload_json,claim_token FROM submission_items WHERE item_id=?",
           )
-          .get(value.batchItemId);
+          .get(batchItemId);
         if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+        if (
+          value.batchClaimToken !== undefined &&
+          item.claim_token !== value.batchClaimToken
+        )
+          throw fail("OPERATIONAL_CLAIM_CONFLICT");
         const itemPayload = fromText(item.payload_json) || {};
         if (
           item.article_id !== attempt.article_id ||
@@ -211,7 +321,7 @@ function createPublicationAggregate(context) {
             itemPayload.attemptId !== attemptId)
         )
           throw fail("OPERATIONAL_BATCH_ITEM_MISMATCH");
-        const payload = Object.assign({}, itemPayload, {
+        const payload = Object.assign({}, itemPayload, postProcessingPayload, {
           attemptId,
           outcomeStatus: outcome.status,
           ...(outcome.evidence ? { remoteId: outcome.evidence.remoteId } : {}),
@@ -230,21 +340,39 @@ function createPublicationAggregate(context) {
             canonicalDisplayPrice(payload.quotedPrice),
             stamp,
           );
-        db.prepare(
-          "UPDATE submission_items SET status=?,revision=revision+1,payload_json=? WHERE item_id=?",
-        ).run(
-          ["published", "submitted"].includes(outcome.status)
-            ? "completed"
-            : "failed",
-          text(payload),
-          value.batchItemId,
-        );
+        const itemStatus = ["published", "submitted"].includes(outcome.status)
+          ? "completed"
+          : "failed";
+        const updateItem =
+          value.batchClaimToken === undefined
+            ? db.prepare(
+                "UPDATE submission_items SET status=?,claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=?",
+              )
+            : db.prepare(
+                "UPDATE submission_items SET status=?,claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND claim_token=?",
+              );
+        const changed =
+          value.batchClaimToken === undefined
+            ? updateItem.run(itemStatus, text(payload), batchItemId).changes
+            : updateItem.run(
+                itemStatus,
+                text(payload),
+                batchItemId,
+                value.batchClaimToken,
+              ).changes;
+        if (changed !== 1) throw fail("OPERATIONAL_CLAIM_CONFLICT");
+        refreshSubmissionBatchStatus(db, item.batch_id, stamp);
       }
       db.prepare(
         "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
       ).run(
         outcome.status === "uncertain" ? "manual_check" : "resolved",
-        text(outcome.error || outcome.evidence || null),
+        text(
+          publicationIntentPayload(
+            submission,
+            outcome.error || outcome.evidence || null,
+          ),
+        ),
         stamp,
         attemptId,
       );
@@ -259,7 +387,7 @@ function createPublicationAggregate(context) {
           0,
           null,
           null,
-          text(value.postProcessingPayload || {}),
+          text(postProcessingPayload),
           stamp,
           stamp,
         );
@@ -270,19 +398,39 @@ function createPublicationAggregate(context) {
   function listPublicationRecords(input) {
     open();
     const value = input || {};
-    if (!Array.isArray(value.articleIds) || !value.articleIds.length)
+    const articleIds = Array.isArray(value.articleIds)
+      ? value.articleIds.map((articleId) =>
+          domain.ArticleId.serialize(domain.ArticleId.parse(articleId)),
+        )
+      : [];
+    const publicationIds = Array.isArray(value.publicationIds)
+      ? value.publicationIds.map((publicationId) =>
+          domain.PublicationId.serialize(
+            domain.PublicationId.parse(publicationId),
+          ),
+        )
+      : [];
+    if (!articleIds.length && !publicationIds.length)
       return Object.freeze([]);
-    const articleIds = value.articleIds.map((articleId) =>
-      domain.ArticleId.serialize(domain.ArticleId.parse(articleId)),
-    );
-    const marks = articleIds.map(() => "?").join(",");
+    const clauses = [];
+    const params = [];
+    if (articleIds.length) {
+      clauses.push(`article_id IN(${articleIds.map(() => "?").join(",")})`);
+      params.push(...articleIds);
+    }
+    if (publicationIds.length) {
+      clauses.push(
+        `publication_id IN(${publicationIds.map(() => "?").join(",")})`,
+      );
+      params.push(...publicationIds);
+    }
     const records = db
       .prepare(
-        "SELECT publication_id,article_id,target_key,status,created_at,updated_at FROM publication_records WHERE article_id IN(" +
-          marks +
-          ") ORDER BY created_at",
+        "SELECT publication_id,article_id,target_key,status,created_at,updated_at FROM publication_records WHERE " +
+          clauses.map((clause) => `(${clause})`).join(" OR ") +
+          " ORDER BY created_at",
       )
-      .all(...articleIds);
+      .all(...params);
     return Object.freeze(
       records.map((record) => {
         const attempts = db

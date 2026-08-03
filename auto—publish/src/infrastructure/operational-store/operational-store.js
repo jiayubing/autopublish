@@ -47,6 +47,7 @@ function createOperationalStore(options) {
       checkpointSubmissionItemAction: submission.checkpointSubmissionItemAction,
       claimSubmissionItem: submission.claimSubmissionItem,
       claimSubmissionItemById: submission.claimSubmissionItemById,
+      renewSubmissionItemClaim: submission.renewSubmissionItemClaim,
       updateSubmissionItem: submission.updateSubmissionItem,
       cancelQueuedSubmissionItem: submission.cancelQueuedSubmissionItem,
       markSubmissionItemCleaned: submission.markSubmissionItemCleaned,

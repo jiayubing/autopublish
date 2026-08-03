@@ -1,9 +1,81 @@
 const domain = require("../../../domain");
 
-const { fromText, text } = require("./operational-store-utils");
+const { fromText, rejectSensitive, text } = require("./operational-store-utils");
+
+function recoveryDetail(value) {
+  const payload = fromText(value);
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    payload.submission &&
+    typeof payload.submission === "object" &&
+    !Array.isArray(payload.submission)
+  )
+    return payload.detail;
+  return payload;
+}
+
+function recoverySubmission(value) {
+  const payload = fromText(value);
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    payload.submission &&
+    typeof payload.submission === "object" &&
+    !Array.isArray(payload.submission)
+  )
+    return payload.submission;
+  return null;
+}
+
+function safePostProcessingErrorCode(value) {
+  return typeof value === "string" && /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value)
+    ? value
+    : null;
+}
 
 function createRecoveryAggregate(context) {
   const { db, open, transaction, clock, fail, iso } = context;
+
+  function refreshSubmissionBatchStatus(dbHandle, batchId, stamp) {
+    const rows = dbHandle
+      .prepare("SELECT status FROM submission_items WHERE batch_id=?")
+      .all(batchId);
+    if (!rows.length) return;
+    const statuses = rows.map((row) => row.status);
+    let status = "queued";
+    if (statuses.some((value) => ["queued", "claimed"].includes(value))) {
+      status = "queued";
+    } else if (
+      statuses.some((value) => ["failed", "failed-cleaned"].includes(value))
+    ) {
+      status = "failed";
+    } else if (
+      statuses.every((value) =>
+        [
+          "cancelled",
+          "cancelled-cleaned",
+          "completed",
+          "published-cleaned",
+        ].includes(value),
+      )
+    ) {
+      status = statuses.some((value) =>
+        ["completed", "published-cleaned"].includes(value),
+      )
+        ? "completed"
+        : "cancelled";
+    } else {
+      return;
+    }
+    dbHandle
+      .prepare(
+        "UPDATE submission_batches SET status=?,revision=revision+1,updated_at=? WHERE batch_id=?",
+      )
+      .run(status, stamp, batchId);
+  }
 
   function listActionableRecovery() {
     open();
@@ -19,7 +91,7 @@ function createRecoveryAggregate(context) {
         articleId: row.article_id,
         targetKey: row.target_key,
         status: row.status,
-        detail: fromText(row.payload_json),
+        detail: recoveryDetail(row.payload_json),
       }));
   }
 
@@ -34,15 +106,45 @@ function createRecoveryAggregate(context) {
     return transaction(() => {
       const attempt = db
         .prepare(
-          "SELECT publication_id FROM publication_attempts WHERE attempt_id=?",
+          "SELECT a.publication_id,p.article_id,p.target_key,i.payload_json AS intent_payload FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE a.attempt_id=?",
         )
         .get(attemptId);
       if (!attempt) throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
+      const submission = recoverySubmission(attempt.intent_payload);
+      const batchItemId = submission ? submission.batchItemId : undefined;
+      if (batchItemId !== undefined) {
+        if (typeof batchItemId !== "string" || !batchItemId)
+          throw fail("OPERATIONAL_BATCH_ITEM_INVALID");
+        const item = db
+          .prepare(
+            "SELECT batch_id,article_id,target_key,status,payload_json FROM submission_items WHERE item_id=?",
+          )
+          .get(batchItemId);
+        if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+        if (
+          item.article_id !== attempt.article_id ||
+          item.target_key !== attempt.target_key
+        )
+          throw fail("OPERATIONAL_BATCH_ITEM_MISMATCH");
+        if (["queued", "claimed", "failed"].includes(item.status)) {
+          const payload = Object.assign({}, fromText(item.payload_json) || {}, {
+            outcomeStatus: "uncertain",
+            recoveryState: "manual_check",
+          });
+          db.prepare(
+            "UPDATE submission_items SET status='failed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status IN('queued','claimed','failed')",
+          ).run(text(payload), batchItemId);
+          refreshSubmissionBatchStatus(db, item.batch_id, stamp);
+        }
+      }
+      const intentPayload = submission
+        ? { submission, detail: error }
+        : error;
       const changed = db
         .prepare(
           "UPDATE recovery_intents SET state='manual_check',payload_json=?,updated_at=? WHERE attempt_id=? AND state IN('remote_started','outcome_pending')",
         )
-        .run(text(error), stamp, attemptId).changes;
+        .run(text(intentPayload), stamp, attemptId).changes;
       if (changed !== 1) throw fail("OPERATIONAL_RECOVERY_NOT_ACTIONABLE");
       db.prepare(
         "UPDATE publication_attempts SET status='uncertain',finished_at=? WHERE attempt_id=?",
@@ -94,12 +196,36 @@ function createRecoveryAggregate(context) {
   function completePostProcessing(input) {
     open();
     const value = input || {};
+    const current = db
+      .prepare(
+        "SELECT payload_json FROM post_processing_jobs WHERE job_id=? AND claim_token=?",
+      )
+      .get(value.jobId, value.claimToken);
+    if (!current) throw fail("OPERATIONAL_CLAIM_CONFLICT");
+    let payload = fromText(current.payload_json) || {};
+    if (value.output !== undefined) {
+      rejectSensitive(value.output);
+      payload = Object.assign({}, payload, {
+        postProcessingOutput: value.output,
+      });
+      delete payload.postProcessingErrorCode;
+    }
+    const errorCode = safePostProcessingErrorCode(value.errorCode);
+    if (errorCode)
+      payload = Object.assign({}, payload, {
+        postProcessingErrorCode: errorCode,
+      });
     const changed = db
       .prepare(
-        "UPDATE post_processing_jobs SET status=?,claim_token=NULL,claim_until=NULL,updated_at=? WHERE job_id=? AND claim_token=?",
+        "UPDATE post_processing_jobs SET status=?,claim_token=NULL,claim_until=NULL,payload_json=?,updated_at=? WHERE job_id=? AND claim_token=?",
       )
       .run(
-        value.success === false ? "failed" : "completed",
+        value.retry === true
+          ? "queued"
+          : value.success === false
+            ? "failed"
+            : "completed",
+        text(payload),
         iso(clock),
         value.jobId,
         value.claimToken,
@@ -128,8 +254,14 @@ function createRecoveryAggregate(context) {
           "SELECT j.job_id,j.attempt_id,j.kind,j.attempts,j.payload_json,j.updated_at,p.article_id,p.target_key FROM post_processing_jobs j JOIN publication_attempts a ON a.attempt_id=j.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE j.status='failed' ORDER BY j.updated_at",
         )
         .all()
-        .map((row) =>
-          Object.freeze({
+        .map((row) => {
+          const payload = fromText(row.payload_json);
+          const autoTrash =
+            payload && payload.postProcessingOutput && payload.postProcessingOutput.autoTrash;
+          const errorCode =
+            (payload && safePostProcessingErrorCode(payload.postProcessingErrorCode)) ||
+            (autoTrash && safePostProcessingErrorCode(autoTrash.reasonCode));
+          return Object.freeze({
             jobId: row.job_id,
             attemptId: row.attempt_id,
             platformId: /^platform:([^:]+):/.exec(row.target_key)?.[1] || null,
@@ -139,10 +271,12 @@ function createRecoveryAggregate(context) {
             attempts: row.attempts,
             articleId: row.article_id,
             targetKey: row.target_key,
-            payload: fromText(row.payload_json),
+            payload,
+            errorCode: errorCode || null,
+            reasonCode: errorCode || null,
             updatedAt: row.updated_at,
-          }),
-        ),
+          });
+        }),
     );
   }
 

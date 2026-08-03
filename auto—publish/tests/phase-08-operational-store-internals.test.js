@@ -38,6 +38,7 @@ const PUBLIC_SURFACE = [
   "checkpointSubmissionItemAction",
   "claimSubmissionItem",
   "claimSubmissionItemById",
+  "renewSubmissionItemClaim",
   "updateSubmissionItem",
   "cancelQueuedSubmissionItem",
   "markSubmissionItemCleaned",

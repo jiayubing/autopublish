@@ -5,6 +5,7 @@ const path = require("node:path");
 const { it } = require("node:test");
 const { createWorkspaceDataInvalidation, scopesForReason } = require("../desktop/workspace-data-invalidation");
 const { createWorkspaceRuntime } = require("../desktop/workspace-runtime");
+const { createOperationalStore } = require("../src/infrastructure/operational-store/operational-store");
 
 function replaceModules(replacements) {
   const originals = replacements.map(function(replacement) {
@@ -173,6 +174,37 @@ it("article management reads only the newly started workspace when client ids ov
     });
     assert.equal(response.ok, true, JSON.stringify(response));
     assert.deepEqual(response.data.articles.map(function(article) { return article.id; }), ["article-b"]);
+  } finally {
+    await runtime.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("workspace startup recovers stranded publication intents before becoming available", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-publication-recovery-"));
+  const workspace = path.join(root, "workspace");
+  fs.mkdirSync(workspace, { recursive: true });
+  const store = createOperationalStore({ workspaceRoot: workspace });
+  const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "Fixture account" });
+  store.reservePublicationTarget({
+    articleId: "article-recovery",
+    publicationId: "publication-recovery",
+    attemptId: "attempt-recovery",
+    target: { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId },
+  });
+  store.close();
+
+  const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
+  try {
+    await runtime.start({ workspacePath: workspace });
+    await runtime.dispose();
+    const reopened = createOperationalStore({ workspaceRoot: workspace });
+    try {
+      assert.equal(reopened.listActionableRecovery()[0].state, "manual_check");
+      assert.equal(reopened.listPublicationAttention()[0].status, "uncertain");
+    } finally {
+      reopened.close();
+    }
   } finally {
     await runtime.dispose();
     fs.rmSync(root, { recursive: true, force: true });

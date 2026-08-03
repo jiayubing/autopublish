@@ -9,6 +9,44 @@ const {
 function createSubmissionAggregate(context) {
   const { db, open, transaction, clock, randomUUID, fail, iso } = context;
 
+  function refreshSubmissionBatchStatus(dbHandle, batchId, stamp) {
+    const rows = dbHandle
+      .prepare("SELECT status FROM submission_items WHERE batch_id=?")
+      .all(batchId);
+    if (!rows.length) return;
+    const statuses = rows.map((row) => row.status);
+    let status = "queued";
+    if (statuses.some((value) => ["queued", "claimed"].includes(value))) {
+      status = "queued";
+    } else if (
+      statuses.some((value) => ["failed", "failed-cleaned"].includes(value))
+    ) {
+      status = "failed";
+    } else if (
+      statuses.every((value) =>
+        [
+          "cancelled",
+          "cancelled-cleaned",
+          "completed",
+          "published-cleaned",
+        ].includes(value),
+      )
+    ) {
+      status = statuses.some((value) =>
+        ["completed", "published-cleaned"].includes(value),
+      )
+        ? "completed"
+        : "cancelled";
+    } else {
+      return;
+    }
+    dbHandle
+      .prepare(
+        "UPDATE submission_batches SET status=?,revision=revision+1,updated_at=? WHERE batch_id=?",
+      )
+      .run(status, stamp, batchId);
+  }
+
   function createSubmissionBatch(input) {
     open();
     const value = input || {};
@@ -68,7 +106,7 @@ function createSubmissionAggregate(context) {
     return transaction(() => {
       const row = db
         .prepare(
-          "SELECT * FROM submission_items WHERE batch_id=? AND (status='queued' OR(status='claimed' AND claim_until<?)) ORDER BY item_id LIMIT 1",
+          "SELECT s.* FROM submission_items s WHERE s.batch_id=? AND (s.status='queued' OR(s.status='claimed' AND s.claim_until<?)) AND NOT EXISTS (SELECT 1 FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE p.article_id=s.article_id AND p.target_key=s.target_key AND i.state IN('remote_started','outcome_pending') AND i.payload_json LIKE '%\"batchItemId\":\"' || s.item_id || '\"%') ORDER BY s.item_id LIMIT 1",
         )
         .get(value.batchId, stamp);
       if (!row) return null;
@@ -109,9 +147,19 @@ function createSubmissionAggregate(context) {
         )
         .get(value.itemId, value.batchId);
       if (!row) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+      const activePublication = db
+        .prepare(
+          "SELECT 1 FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE p.article_id=? AND p.target_key=? AND i.state IN('remote_started','outcome_pending') AND i.payload_json LIKE ? LIMIT 1",
+        )
+        .get(
+          row.article_id,
+          row.target_key,
+          `%"batchItemId":"${row.item_id}"%`,
+        );
       if (
-        row.status !== "queued" &&
-        !(row.status === "claimed" && row.claim_until < stamp)
+        activePublication ||
+        (row.status !== "queued" &&
+          !(row.status === "claimed" && row.claim_until < stamp))
       )
         throw fail("OPERATIONAL_BATCH_ITEM_NOT_EXECUTABLE");
       const until = new Date(
@@ -135,26 +183,74 @@ function createSubmissionAggregate(context) {
     });
   }
 
+  function renewSubmissionItemClaim(input) {
+    open();
+    const value = input || {};
+    const stamp = iso(clock);
+    if (
+      typeof value.claimToken !== "string" ||
+      !value.claimToken ||
+      typeof value.itemId !== "string" ||
+      !value.itemId ||
+      typeof value.batchId !== "string" ||
+      !value.batchId
+    )
+      throw fail("OPERATIONAL_CLAIM_INVALID");
+    const leaseMs =
+      Number.isFinite(value.leaseMs) && value.leaseMs > 0
+        ? value.leaseMs
+        : 30000;
+    const claimUntil = new Date(
+      Date.parse(stamp) + leaseMs,
+    ).toISOString();
+    const changed = db
+      .prepare(
+        "UPDATE submission_items SET claim_until=? WHERE item_id=? AND batch_id=? AND status='claimed' AND claim_token=? AND claim_until>=?",
+      )
+      .run(
+        claimUntil,
+        value.itemId,
+        value.batchId,
+        value.claimToken,
+        stamp,
+      ).changes;
+    if (changed !== 1) throw fail("OPERATIONAL_CLAIM_CONFLICT");
+    return Object.freeze({
+      itemId: value.itemId,
+      batchId: value.batchId,
+      claimToken: value.claimToken,
+      claimUntil,
+    });
+  }
+
   function updateSubmissionItem(input) {
     open();
     const value = input || {};
+    const stamp = iso(clock);
     if (
       !Number.isInteger(value.revision) ||
       !["queued", "completed", "failed"].includes(value.status)
     )
       throw fail("OPERATIONAL_BATCH_UPDATE_INVALID");
-    const changed = db
-      .prepare(
-        "UPDATE submission_items SET status=?,claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND revision=? AND claim_token=?",
-      )
-      .run(
-        value.status,
-        text(value.payload || {}),
-        value.itemId,
-        value.revision,
-        value.claimToken,
-      ).changes;
-    if (changed !== 1) throw fail("OPERATIONAL_BATCH_REVISION_CONFLICT");
+    return transaction(() => {
+      const item = db
+        .prepare("SELECT batch_id FROM submission_items WHERE item_id=?")
+        .get(value.itemId);
+      if (!item) throw fail("OPERATIONAL_BATCH_ITEM_NOT_FOUND");
+      const changed = db
+        .prepare(
+          "UPDATE submission_items SET status=?,claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND revision=? AND claim_token=?",
+        )
+        .run(
+          value.status,
+          text(value.payload || {}),
+          value.itemId,
+          value.revision,
+          value.claimToken,
+        ).changes;
+      if (changed !== 1) throw fail("OPERATIONAL_BATCH_REVISION_CONFLICT");
+      refreshSubmissionBatchStatus(db, item.batch_id, stamp);
+    });
   }
 
   function cancelQueuedSubmissionItem(input) {
@@ -561,6 +657,7 @@ function createSubmissionAggregate(context) {
           item.status === "completed" &&
           item.payload.outcomeStatus === "published",
       ),
+      retryable: items.some((item) => ["queued", "claimed"].includes(item.status)),
       items: Object.freeze(items),
     });
   }
@@ -569,6 +666,7 @@ function createSubmissionAggregate(context) {
     createSubmissionBatch,
     claimSubmissionItem,
     claimSubmissionItemById,
+    renewSubmissionItemClaim,
     updateSubmissionItem,
     cancelQueuedSubmissionItem,
     markSubmissionItemCleaned,
