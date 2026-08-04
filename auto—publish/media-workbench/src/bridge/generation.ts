@@ -27,8 +27,7 @@ type SafeGenerationIpcError = {
   diagnosticId?: string;
 };
 type GenerationIpcResponse<T> =
-  | { ok: true; data?: T }
-  | { ok: false; error?: SafeGenerationIpcError };
+  { ok: true; data?: T } | { ok: false; error?: SafeGenerationIpcError };
 
 type GenerationPlanInput = {
   clientIds: string[];

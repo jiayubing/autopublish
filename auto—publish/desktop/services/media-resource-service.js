@@ -7,6 +7,7 @@ const MAX_PAGE_SIZE = 100;
 const MAX_REMOTE_PAGES = 200;
 const MAX_RESOURCE_IDS = 20000;
 const MAX_CANONICAL_PRICE = 100000000;
+const MEDIA_RESOURCE_TYPES = new Set(["image", "video", "audio", "document"]);
 
 function createMediaResourceService(opts) {
   opts = opts || {};
@@ -29,7 +30,7 @@ function createMediaResourceService(opts) {
   function normalizeResource(resource) {
     var input = resource || {};
     var resourceId = firstText(input.resourceId, input.resource_id, input.id, input.nid, input.resource_id_str);
-    return {
+    var normalized = {
       resourceId: resourceId,
       name: firstText(input.name, input.title, input.resource_name, input.resourceName),
       price: canonicalPrice(pickValue(input.price, input.cost, input.amount, input.fee)),
@@ -38,6 +39,9 @@ function createMediaResourceService(opts) {
       publishTime: pickValue(input.publishTime, input.publish_time),
       caseLink: pickValue(input.caseLink, input.case_link)
     };
+    var type = firstText(input.type, input.mediaType, input.channelType);
+    if (MEDIA_RESOURCE_TYPES.has(type)) normalized.type = type;
+    return normalized;
   }
 
   function getCachedResourcePage(opts) {
@@ -294,7 +298,7 @@ function poolEntryId(entry) {
 }
 
 function normalizeResourceShape(resource) {
-  return {
+  var normalized = {
     resourceId: firstText(resource && (resource.resourceId || resource.resource_id || resource.id || resource.nid)),
     name: firstText(resource && (resource.name || resource.title || resource.resource_name || resource.resourceName)),
     price: canonicalPrice(resource && resource.price),
@@ -303,11 +307,14 @@ function normalizeResourceShape(resource) {
     publishTime: resource && (resource.publishTime !== undefined ? resource.publishTime : resource.publish_time),
     caseLink: resource && (resource.caseLink !== undefined ? resource.caseLink : resource.case_link)
   };
+  var type = firstText(resource && (resource.type || resource.mediaType || resource.channelType));
+  if (MEDIA_RESOURCE_TYPES.has(type)) normalized.type = type;
+  return normalized;
 }
 
 function normalizePoolEntry(entry) {
   var name = entry && (entry.name || entry.title || entry.resource_name || entry.resourceName);
-  return {
+  var normalized = {
     resourceId: poolEntryId(entry),
     name: firstText(name),
     price: canonicalPrice(entry && entry.price),
@@ -316,10 +323,13 @@ function normalizePoolEntry(entry) {
     publishTime: entry && (entry.publishTime !== undefined ? entry.publishTime : entry.publish_time),
     caseLink: entry && (entry.caseLink !== undefined ? entry.caseLink : entry.case_link)
   };
+  var type = firstText(entry && (entry.type || entry.mediaType || entry.channelType));
+  if (MEDIA_RESOURCE_TYPES.has(type)) normalized.type = type;
+  return normalized;
 }
 
 function toPoolStoreShape(resource) {
-  return {
+  var normalized = {
     resourceId: resource.resourceId,
     id: resource.resourceId,
     resource_id: resource.resourceId,
@@ -331,6 +341,8 @@ function toPoolStoreShape(resource) {
     publishTime: resource.publishTime,
     caseLink: resource.caseLink
   };
+  if (MEDIA_RESOURCE_TYPES.has(resource.type)) normalized.type = resource.type;
+  return normalized;
 }
 
 function extractResourceItems(response) {

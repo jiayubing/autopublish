@@ -10,6 +10,13 @@ const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");
+const {
+  projectMediaDraft,
+  projectMediaResource,
+} = require("../desktop/ipc/contracts/media-contracts");
+const {
+  createMediaWorkbenchApplication,
+} = require("../desktop/services/media-workbench-application");
 
 const MEDIA_CHANNELS = [
   "media:refresh-resources",
@@ -30,6 +37,73 @@ const MEDIA_CHANNELS = [
   "media:sync-order",
   "media:open-published-url",
 ];
+
+test("media projections and draft requests preserve all supported resource types", () => {
+  const types = ["image", "video", "audio", "document"];
+  assert.deepEqual(
+    types.map((type) => projectMediaResource({ resourceId: type, type }).type),
+    types,
+  );
+  assert.deepEqual(
+    projectMediaDraft("article.md", {
+      title: "Fixture",
+      remark: "",
+      ignoreImages: false,
+      selectedResources: types.map((type) => ({ resourceId: type, type })),
+    }).selectedResources.map((resource) => resource.type),
+    types,
+  );
+
+  const contract = productionIpcRegistry.byChannel("media:set-draft");
+  const request = productionIpcRegistry.encodeRequest(contract, {
+    filename: "article.md",
+    draft: {
+      selectedResources: [{ resourceId: "audio", type: "audio" }],
+    },
+  });
+  assert.equal(request.payload.draft.selectedResources[0].type, "audio");
+});
+
+test("media submission rehydrates audio and document types from authoritative resources", async () => {
+  let submittedArticles = [];
+  const application = createMediaWorkbenchApplication({
+    mediaClientProvider: () => ({}),
+    mediaResourceService: {},
+    mediaOrderService: { listOrderViews: () => [] },
+    resourceStore: {
+      getAll: () => ({
+        resources: [
+          { resourceId: "audio-1", name: "Audio", price: 1, type: "audio" },
+          { resourceId: "document-1", name: "Document", price: 2, type: "document" },
+        ],
+      }),
+    },
+    poolStore: { getAll: () => [] },
+    draftStore: { get: () => null },
+    mediaWorkbenchService: {
+      scanArticles: async () => [],
+      resolveSubmissionFile: (filename) => filename,
+    },
+    mediaPublicationSubmissionService: {
+      submit: async (articles) => {
+        submittedArticles = articles;
+        return { batchId: "batch-typed", results: [] };
+      },
+    },
+  });
+
+  await application.submitSelected([
+    {
+      filename: "article.md",
+      resourceIds: ["audio-1", "document-1"],
+    },
+  ]);
+
+  assert.deepEqual(
+    submittedArticles[0].selectedResources.map((resource) => resource.type),
+    ["audio", "document"],
+  );
+});
 
 test("public media pool command projects a full Renderer resource to its exact selection DTO", async () => {
   const calls = [];
@@ -88,7 +162,12 @@ test("public media pool command projects a full Renderer resource to its exact s
   const contract = productionIpcRegistry.byChannel("media:add-to-pool");
   assert.deepEqual(
     { ...productionIpcRegistry.parseRequest(contract, calls[0][1]).resource },
-    { resourceId: "resource-1", name: "Fixture resource", price: 12.5 },
+    {
+      resourceId: "resource-1",
+      name: "Fixture resource",
+      price: 12.5,
+      type: "image",
+    },
   );
 });
 

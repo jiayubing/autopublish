@@ -10,11 +10,13 @@ function normalizeResource(resource) {
   if (!resource) return null;
   var resourceId = resource.resourceId || resource.id || resource.resource_id;
   if (!resourceId) return null;
-  return {
+  var normalized = {
     resourceId: String(resourceId),
     name: resource.name || resource.title || resource.resourceName || "",
     price: resource.price
   };
+  if (["image", "video", "audio", "document"].includes(resource.type)) normalized.type = resource.type;
+  return normalized;
 }
 
 function normalizeDraft(draft) {

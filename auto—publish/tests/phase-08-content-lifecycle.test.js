@@ -126,7 +126,9 @@ function pauseRestoreAfterFileStep(root, point) {
   const readyPromise = (async function () {
     for (let attempt = 0; attempt < 200; attempt += 1) {
       if (fs.existsSync(ready)) return;
-      await new Promise(function (resolve) { setTimeout(resolve, 5); });
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 5);
+      });
     }
     child.kill();
     throw new Error("Restore child did not reach the fault boundary");
@@ -184,7 +186,9 @@ describe("phase 08 content lifecycle seams", function () {
   });
 
   it("does not let trash listing recover a pair while restore owns its article lock", async function () {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase08-trash-list-race-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "phase08-trash-list-race-"),
+    );
     let running;
     try {
       const store = createArticleStore(root);
@@ -194,12 +198,17 @@ describe("phase 08 content lifecycle seams", function () {
       running = pauseRestoreAfterFileStep(root, "after-restore-json");
       await running.ready;
       assert.throws(
-        function () { createArticleStore(root).listTrashedArticles("client-1"); },
-        function (error) { return error.code === "ARTICLE_STORE_BUSY"; },
+        function () {
+          createArticleStore(root).listTrashedArticles("client-1");
+        },
+        function (error) {
+          return error.code === "ARTICLE_STORE_BUSY";
+        },
       );
     } finally {
       if (running) {
-        if (!fs.existsSync(running.proceed)) fs.writeFileSync(running.proceed, "continue");
+        if (!fs.existsSync(running.proceed))
+          fs.writeFileSync(running.proceed, "continue");
         await running.done;
       }
       fs.rmSync(root, { recursive: true, force: true });

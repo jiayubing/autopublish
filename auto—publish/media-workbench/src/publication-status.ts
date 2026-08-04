@@ -1,4 +1,4 @@
-import { PublicationHistoryRecord, PublicationHistorySummary, PublicationRecordStatus } from './types';
+import type { PublicationHistoryRecord, PublicationHistorySummary, PublicationRecordStatus } from './types/publication';
 
 export const PUBLICATION_STATUS_LABELS: Record<PublicationHistorySummary['status'], string> = {
   not_submitted: '未投稿',

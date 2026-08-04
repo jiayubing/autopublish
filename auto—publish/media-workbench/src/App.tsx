@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState } from "react";
-import { ViewMode } from "./types";
+import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ArticleList from "./components/ArticleList";
 import ArticleEditor from "./components/ArticleEditor";

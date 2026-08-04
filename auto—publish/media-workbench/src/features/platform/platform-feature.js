@@ -108,6 +108,7 @@ export function createPlatformFeature(bridge = {}) {
   let scope = null;
   let queue = EMPTY_QUEUE;
   let run = IDLE_RUN;
+  let runQueryState = Object.freeze({ loading: false, error: null, reason: null });
   let loginByPlatformId = Object.freeze({});
   let accountProfiles = Object.freeze({
     items: Object.freeze([]),
@@ -127,6 +128,7 @@ export function createPlatformFeature(bridge = {}) {
       scope,
       queue,
       run,
+      runQuery: runQueryState,
       loginByPlatformId,
       accountProfiles,
       selectedArticles,
@@ -167,6 +169,7 @@ export function createPlatformFeature(bridge = {}) {
     }
     const wasActive = isRunActive(run);
     run = Object.freeze({ ...run, ...incoming });
+    runQueryState = Object.freeze({ loading: false, error: null, reason: "event" });
     publish();
     if (wasActive && !isRunActive(run) && Number.isFinite(run.queueRevision)) {
       void feature.refreshTerminal(run.queueRevision).catch(() => undefined);
@@ -220,6 +223,7 @@ export function createPlatformFeature(bridge = {}) {
       COMMAND_NAMES.forEach((name) => owners[name].invalidate());
       queue = EMPTY_QUEUE;
       run = IDLE_RUN;
+      runQueryState = Object.freeze({ loading: false, error: null, reason: null });
       loginByPlatformId = Object.freeze({});
       accountProfiles = Object.freeze({
         items: Object.freeze([]),
@@ -231,6 +235,7 @@ export function createPlatformFeature(bridge = {}) {
       showResult = false;
       terminalRevision = null;
       error = null;
+      residue = { phase: "idle", cleanableCount: 0, reportedCount: 0, feedback: null };
       publish();
       if (started) {
         void feature.refreshRun('runtime-switch').catch(() => undefined);
@@ -258,16 +263,36 @@ export function createPlatformFeature(bridge = {}) {
       started = false;
       runLifecycle += 1;
       runQuery.invalidate();
+      runQueryState = Object.freeze({ ...runQueryState, loading: false });
+      publish();
       if (typeof unsubscribeRun === 'function') unsubscribeRun();
       unsubscribeRun = null;
     },
     async refreshRun(reason = 'manual') {
       requireScope();
       const token = runQuery.begin(undefined, reason);
-      const next = await bridge.getRunState();
-      if (!runQuery.isCurrent(token)) return run;
-      applyRunSnapshot(next);
-      return run;
+      runQueryState = Object.freeze({ loading: true, error: null, reason });
+      publish();
+      try {
+        const next = await bridge.getRunState();
+        if (!runQuery.isCurrent(token)) return run;
+        applyRunSnapshot(next);
+        runQueryState = Object.freeze({ loading: false, error: null, reason });
+        publish();
+        return run;
+      } catch (value) {
+        if (!runQuery.isCurrent(token)) return run;
+        runQueryState = Object.freeze({
+          loading: false,
+          error: {
+            code: errorCode(value, "PLATFORM_RUN_QUERY_FAILED"),
+            userMessage: message(value, "无法读取平台运行状态"),
+          },
+          reason,
+        });
+        publish();
+        throw value;
+      }
     },
     applyRunSnapshot,
     async refreshQueue(reason = 'manual') {
@@ -371,6 +396,7 @@ export function createPlatformFeature(bridge = {}) {
     },
     async cleanupResidue({ confirmed } = {}) {
       const commandScope = requireScope();
+      const commandRuntimeId = commandScope.workspaceRuntimeId;
       if (!confirmed || owners.cleanupResidue.getSnapshot().busy) return { ignored: true };
       const token = owners.cleanupResidue.begin(commandScope);
       updateResidue({ phase: 'cleaning', feedback: { kind: 'status', text: '清理中…' } });
@@ -387,6 +413,7 @@ export function createPlatformFeature(bridge = {}) {
           feedback: residueFeedback(cleaned, report),
         };
         publish();
+        if (disposed || scope?.workspaceRuntimeId !== commandRuntimeId) return undefined;
         await feature.refreshQueue('residue-cleanup');
         return cleaned;
       } catch (value) {

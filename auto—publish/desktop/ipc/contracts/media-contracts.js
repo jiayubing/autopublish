@@ -25,6 +25,13 @@ const identifier = stringField({
 });
 const emptyRequest = exactObject({});
 const completed = exactObject({ completed: "boolean" });
+const MEDIA_RESOURCE_TYPES = Object.freeze([
+  "image",
+  "video",
+  "audio",
+  "document",
+]);
+const mediaResourceType = enumField(MEDIA_RESOURCE_TYPES);
 
 const COMMON_ERRORS = {
   AUTH_REQUIRED: {
@@ -130,7 +137,7 @@ const resource = exactObject({
   resourceId: identifier,
   name: safeText(500),
   price: nullableField(numberField({ min: 0, max: 100000000 })),
-  type: enumField(["image", "video"]),
+  type: mediaResourceType,
   url: optionalField(safeText(2048)),
   duration: optionalField(safeText(64)),
   resolution: optionalField(safeText(64)),
@@ -142,6 +149,7 @@ const selectedResource = exactObject({
   resourceId: identifier,
   name: optionalField(safeText(500)),
   price: optionalField(numberField({ min: 0, max: 100000000 })),
+  type: optionalField(mediaResourceType),
 });
 
 const draftInput = exactObject({
@@ -263,6 +271,7 @@ function selectedResourceFromArgs(args) {
   const resource = { resourceId: value.resourceId };
   if (value.name !== undefined) resource.name = value.name;
   if (value.price !== undefined) resource.price = value.price;
+  if (value.type !== undefined) resource.type = value.type;
   return { resource };
 }
 
@@ -524,11 +533,14 @@ function finiteMediaPrice(value) {
 
 function projectMediaResource(value) {
   const resource = value || {};
+  const type = MEDIA_RESOURCE_TYPES.includes(resource.type)
+    ? resource.type
+    : "image";
   const result = {
     resourceId: String(resource.resourceId || resource.id || resource.resource_id || ""),
     name: String(resource.name || resource.title || resource.resourceName || ""),
     price: finiteMediaPrice(resource.price) === undefined ? null : finiteMediaPrice(resource.price),
-    type: resource.type === "video" ? "video" : "image",
+    type,
     createdAt: String(resource.createdAt || resource.updatedAt || ""),
   };
   for (const key of ["url", "duration", "resolution", "size"])

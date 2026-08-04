@@ -1,4 +1,5 @@
-import { Article, MediaResource, Order } from './types';
+import type { Article, MediaResource } from './types/media';
+import type { Order } from './types/view';
 
 type MockArticle = Omit<Article, 'autoTitle' | 'remark' | 'hasImages' | 'imageCount' | 'ignoreImages'>;
 

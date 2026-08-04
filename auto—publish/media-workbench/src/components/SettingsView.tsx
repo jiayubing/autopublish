@@ -1,9 +1,6 @@
 import React, { useState } from "react";
 import { ExternalLink, FolderOpen, Info, RefreshCw } from "lucide-react";
-import type {
-  RuntimeCapability,
-  RuntimeDiagnostics,
-} from "../bridge/workspace";
+import type { RuntimeCapability, RuntimeDiagnostics } from "../types/workspace";
 import { getSettingsCommandState } from "../workspace-ui-logic.js";
 import { mapRuntimeCapabilityState } from "../runtime-capability-state.cjs";
 import AiProviderSettings from "./AiProviderSettings";

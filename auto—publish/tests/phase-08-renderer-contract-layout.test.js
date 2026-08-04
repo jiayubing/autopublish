@@ -289,7 +289,10 @@ test("renderer bridges expose named domain entries without method dispatch", () 
   for (const symbol of generationBridgeExports) {
     assert.match(generation, new RegExp(`\\b${symbol}\\b`), symbol);
   }
-  assert.match(generation, /requireBridgeApi<GenerationContentApi>\("content"\)/);
+  assert.match(
+    generation,
+    /requireBridgeApi<GenerationContentApi>\("content"\)/,
+  );
   assert.match(
     read("media-workbench/src/features/generation/use-generation-feature.ts"),
     /bridge\/generation/,

@@ -1,4 +1,4 @@
-import type { PlatformQueueSnapshot } from './types';
+import type { PlatformQueueSnapshot } from './types/platform';
 
 export interface NavigationSummary {
   platformQueue: {

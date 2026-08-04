@@ -4,7 +4,7 @@ const { after, before } = require("node:test");
 const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
 
-async function changeClientByPointer(page, select, key) {
+async function changeClientByKeyboard(page, select, key) {
   const box = await select.boundingBox();
   assert.ok(box, "客户选择器应有可点击的布局盒");
   const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, {
@@ -12,7 +12,6 @@ async function changeClientByPointer(page, select, key) {
     y: box.y + box.height / 2,
   });
   assert.equal(hit, "SELECT", "客户选择器中心不能被内容区编辑器或忙碌遮罩覆盖");
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await select.focus();
   await page.keyboard.press(key);
   await page.keyboard.press("Enter");
@@ -150,7 +149,7 @@ describe("renderer content client switching", function() {
       assert.equal(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.length), 0);
       await page.getByRole("button", { name: "确认加入投稿队列" }).click();
       await page.waitForFunction(() => window.__clientSwitchFlow.queueCalls.length === 1);
-      await changeClientByPointer(page, clientSelect, "ArrowDown");
+      await changeClientByKeyboard(page, clientSelect, "ArrowDown");
       assert.equal(await clientSelect.inputValue(), "client-b");
       await page.evaluate(() => window.__clientSwitchFlow.resolveQueue());
       assert.equal(await page.getByText("客户 B 文章", { exact: true }).count(), 1);
@@ -158,7 +157,7 @@ describe("renderer content client switching", function() {
       assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.map((item) => item.clientId)), ["client-a"]);
       assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls[0].accountProfiles), { "fixture-platform": "account-fixture" });
       assert.equal(await page.getByRole("button", { name: "加入投稿队列" }).isDisabled(), true);
-      await changeClientByPointer(page, clientSelect, "ArrowUp");
+      await changeClientByKeyboard(page, clientSelect, "ArrowUp");
       assert.equal(await clientSelect.inputValue(), "client-a");
       await page.getByRole("button", { name: /撤销未开始投稿/ }).waitFor();
       assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.cancelPreviewCalls), []);
@@ -168,10 +167,10 @@ describe("renderer content client switching", function() {
       await page.getByRole("button", { name: "确认撤销" }).click();
       await page.waitForFunction(() => window.__clientSwitchFlow.cancellationCalls.length === 1);
       assert.equal(await page.getByRole("button", { name: /正在撤销/ }).isDisabled(), true);
-      await changeClientByPointer(page, clientSelect, "ArrowDown");
+      await changeClientByKeyboard(page, clientSelect, "ArrowDown");
       assert.equal(await clientSelect.inputValue(), "client-b");
       await page.evaluate(() => window.__clientSwitchFlow.resolveCancellation());
-      await changeClientByPointer(page, clientSelect, "ArrowUp");
+      await changeClientByKeyboard(page, clientSelect, "ArrowUp");
       await page.waitForFunction(() => !document.body.innerText.includes("正在撤销"));
       assert.equal(await page.getByRole("button", { name: /撤销未开始投稿/ }).count(), 0);
       assert.equal(await page.getByRole("button", { name: /正在撤销/ }).count(), 0);
@@ -184,7 +183,7 @@ describe("renderer content client switching", function() {
       await page.getByRole("button", { name: "检查并确认" }).click();
       await page.getByRole("button", { name: "一次确认并加入投稿队列" }).click();
       await page.getByTestId("generation-handoff-summary").waitFor();
-      await changeClientByPointer(page, clientSelect, "ArrowDown");
+      await changeClientByKeyboard(page, clientSelect, "ArrowDown");
       assert.equal(await clientSelect.inputValue(), "client-b");
       assert.equal(await page.getByTestId("generation-handoff-summary").count(), 1);
     } finally {

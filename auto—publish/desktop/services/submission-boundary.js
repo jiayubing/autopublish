@@ -62,13 +62,15 @@ function validateDraft(value) {
   if (value.selectedResources !== undefined) {
     if (!Array.isArray(value.selectedResources)) throw inputError("DRAFT_INVALID", "Invalid draft");
     draft.selectedResources = value.selectedResources.map(function(resource) {
-      if (!resource || typeof resource !== "object" || Array.isArray(resource) || !hasOnlyKeys(resource, ["resourceId", "name", "price"]) ||
+      if (!resource || typeof resource !== "object" || Array.isArray(resource) || !hasOnlyKeys(resource, ["resourceId", "name", "price", "type"]) ||
           typeof resource.resourceId !== "string" || !resource.resourceId ||
           (resource.name !== undefined && typeof resource.name !== "string") ||
-          (resource.price !== undefined && typeof resource.price !== "number")) throw inputError("DRAFT_INVALID", "Invalid draft");
+          (resource.price !== undefined && typeof resource.price !== "number") ||
+          (resource.type !== undefined && !["image", "video", "audio", "document"].includes(resource.type))) throw inputError("DRAFT_INVALID", "Invalid draft");
       var result = { resourceId: resource.resourceId };
       if (resource.name !== undefined) result.name = resource.name;
       if (resource.price !== undefined) result.price = resource.price;
+      if (resource.type !== undefined) result.type = resource.type;
       return result;
     });
   }

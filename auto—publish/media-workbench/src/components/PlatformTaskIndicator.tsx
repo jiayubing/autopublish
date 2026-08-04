@@ -1,5 +1,5 @@
 import React from "react";
-import type { PlatformTaskSnapshot } from "../types";
+import type { PlatformTaskSnapshot } from "../types/platform";
 
 function phaseLabel(phase: string): string {
   const labels: Record<string, string> = {

@@ -25,7 +25,9 @@ const {
 const {
   createDesktopTaskService,
 } = require("../desktop/services/desktop-task-service");
-const { createWorkerPublisher } = require("../desktop/services/worker-publisher");
+const {
+  createWorkerPublisher,
+} = require("../desktop/services/worker-publisher");
 const {
   createPublicationPostProcessor,
 } = require("../desktop/services/publication-post-processor");
@@ -250,7 +252,10 @@ test("renewed submission claims cannot be taken over during a long remote call",
         },
       },
     });
-    assert.equal(store.getSubmissionBatch(batch.batchId).items[0].status, "completed");
+    assert.equal(
+      store.getSubmissionBatch(batch.batchId).items[0].status,
+      "completed",
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -258,7 +263,9 @@ test("renewed submission claims cannot be taken over during a long remote call",
 });
 
 test("startup recovery closes a stranded submission claim with its publication intent", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-recovery-claim-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-recovery-claim-"),
+  );
   let store = createOperationalStore({ workspaceRoot: root });
   try {
     const batch = store.createSubmissionBatch({
@@ -295,14 +302,20 @@ test("startup recovery closes a stranded submission claim with its publication i
           archived.push(job.payload);
         },
       },
-      publisher: { inspectAccount: async () => ({ verified: false }), publish: async () => ({ status: "failed" }) },
+      publisher: {
+        inspectAccount: async () => ({ verified: false }),
+        publish: async () => ({ status: "failed" }),
+      },
     });
     assert.deepEqual(await workflow.recover(), {
       recoveryCount: 1,
       postProcessingCount: 0,
     });
     assert.equal(store.getSubmissionBatch(batch.batchId).status, "failed");
-    assert.equal(store.getSubmissionBatch(batch.batchId).items[0].status, "failed");
+    assert.equal(
+      store.getSubmissionBatch(batch.batchId).items[0].status,
+      "failed",
+    );
     const reconciled = await workflow.reconcile({
       attemptId: "attempt-recovery-claim",
       outcome: {
@@ -317,12 +330,17 @@ test("startup recovery closes a stranded submission claim with its publication i
     });
     assert.equal(reconciled.status, "published");
     assert.equal(store.getSubmissionBatch(batch.batchId).status, "completed");
-    assert.equal(store.getSubmissionBatch(batch.batchId).items[0].status, "completed");
+    assert.equal(
+      store.getSubmissionBatch(batch.batchId).items[0].status,
+      "completed",
+    );
     assert.deepEqual(archived, [{ batchId: batch.batchId }]);
     const database = new DatabaseSync(store.databasePath, { readOnly: true });
     try {
       const lease = database
-        .prepare("SELECT claim_token,claim_until FROM submission_items WHERE item_id=?")
+        .prepare(
+          "SELECT claim_token,claim_until FROM submission_items WHERE item_id=?",
+        )
         .get(claim.itemId);
       assert.equal(lease.claim_token, null);
       assert.equal(lease.claim_until, null);
@@ -336,7 +354,9 @@ test("startup recovery closes a stranded submission claim with its publication i
 });
 
 test("blocked auto-trash remains attention-visible and durable across restart", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-auto-trash-recovery-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-auto-trash-recovery-"),
+  );
   const input = path.join(root, "input");
   const published = path.join(root, "published");
   fs.mkdirSync(path.join(input, "media"), { recursive: true });
@@ -348,7 +368,10 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
       items: [
         {
           articleId: "article-auto-trash-recovery",
-          target: { kind: "media", mediaResourceId: "resource-auto-trash-recovery" },
+          target: {
+            kind: "media",
+            mediaResourceId: "resource-auto-trash-recovery",
+          },
           payload: {
             attemptId: "attempt-auto-trash-recovery",
             batchId: "batch-auto-trash-recovery",
@@ -370,7 +393,10 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
       articleId: "article-auto-trash-recovery",
       publicationId: "publication-auto-trash-recovery",
       attemptId: "attempt-auto-trash-recovery",
-      target: { kind: "media", mediaResourceId: "resource-auto-trash-recovery" },
+      target: {
+        kind: "media",
+        mediaResourceId: "resource-auto-trash-recovery",
+      },
       batchItemId: claim.itemId,
       postProcessingPayload: {
         batchId: batch.batchId,
@@ -421,12 +447,18 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
     assert.equal(result.results[0].status, "failed");
     assert.equal(result.results[0].output.autoTrash.status, "blocked");
     assert.equal(store.listPostProcessingAttention().length, 1);
-    assert.equal(store.listPostProcessingAttention()[0].reasonCode, "REMOVAL_BLOCKED");
+    assert.equal(
+      store.listPostProcessingAttention()[0].reasonCode,
+      "REMOVAL_BLOCKED",
+    );
     store.close();
     store = createOperationalStore({ workspaceRoot: root });
     const attention = store.listPostProcessingAttention();
     assert.equal(attention.length, 1);
-    assert.equal(attention[0].payload.postProcessingOutput.autoTrash.status, "blocked");
+    assert.equal(
+      attention[0].payload.postProcessingOutput.autoTrash.status,
+      "blocked",
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -434,15 +466,23 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
 });
 
 test("terminal multi-target archive blocking becomes attention instead of an infinite retry", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-terminal-archive-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-terminal-archive-"),
+  );
   const input = path.join(root, "input");
   const published = path.join(root, "published");
   fs.mkdirSync(path.join(input, "media"), { recursive: true });
   fs.writeFileSync(path.join(input, "media", "fixture.md"), "# title\n\nbody");
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const targetOne = { kind: "media", mediaResourceId: "resource-terminal-one" };
-    const targetTwo = { kind: "media", mediaResourceId: "resource-terminal-two" };
+    const targetOne = {
+      kind: "media",
+      mediaResourceId: "resource-terminal-one",
+    };
+    const targetTwo = {
+      kind: "media",
+      mediaResourceId: "resource-terminal-two",
+    };
     const batch = store.createSubmissionBatch({
       batchId: "batch-terminal-archive",
       items: [
@@ -550,7 +590,10 @@ test("terminal multi-target archive blocking becomes attention instead of an inf
       operationalStore: store,
       postProcessor: processor,
     }).drain({ collectResults: true });
-    assert.equal(result.results[0].errorCode, "POST_PROCESSING_ARCHIVE_BLOCKED");
+    assert.equal(
+      result.results[0].errorCode,
+      "POST_PROCESSING_ARCHIVE_BLOCKED",
+    );
     assert.equal(store.listPostProcessingAttention().length, 1);
   } finally {
     store.close();
@@ -597,7 +640,10 @@ test("real platform stop and pause do not claim the next submission item", async
                   results: [
                     {
                       task,
-                      outcome: { status: "failed", errorCode: "UNEXPECTED_NEXT_RUN" },
+                      outcome: {
+                        status: "failed",
+                        errorCode: "UNEXPECTED_NEXT_RUN",
+                      },
                     },
                   ],
                 },
@@ -711,7 +757,9 @@ test("real platform stop and pause do not claim the next submission item", async
 });
 
 test("ordinary archive error code survives post-processing restart", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-archive-error-recovery-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-archive-error-recovery-"),
+  );
   const input = path.join(root, "input");
   const published = path.join(root, "published");
   fs.mkdirSync(path.join(input, "toutiao"), { recursive: true });
@@ -789,9 +837,18 @@ test("ordinary archive error code survives post-processing restart", async () =>
     });
     const result = await coordinator.drain({ collectResults: true });
     assert.equal(result.results[0].errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(store.listPostProcessingAttention()[0].errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(store.listPostProcessingAttention()[0].reasonCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(store.listPostProcessingAttention()[0].payload.postProcessingErrorCode, "PUBLISHED_ARCHIVE_CONFLICT");
+    assert.equal(
+      store.listPostProcessingAttention()[0].errorCode,
+      "PUBLISHED_ARCHIVE_CONFLICT",
+    );
+    assert.equal(
+      store.listPostProcessingAttention()[0].reasonCode,
+      "PUBLISHED_ARCHIVE_CONFLICT",
+    );
+    assert.equal(
+      store.listPostProcessingAttention()[0].payload.postProcessingErrorCode,
+      "PUBLISHED_ARCHIVE_CONFLICT",
+    );
 
     store.close();
     store = createOperationalStore({ workspaceRoot: root });
@@ -799,7 +856,10 @@ test("ordinary archive error code survives post-processing restart", async () =>
     assert.equal(attention.length, 1);
     assert.equal(attention[0].errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
     assert.equal(attention[0].reasonCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(attention[0].payload.postProcessingErrorCode, "PUBLISHED_ARCHIVE_CONFLICT");
+    assert.equal(
+      attention[0].payload.postProcessingErrorCode,
+      "PUBLISHED_ARCHIVE_CONFLICT",
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -807,7 +867,9 @@ test("ordinary archive error code survives post-processing restart", async () =>
 });
 
 test("latest retry error code overrides stale auto-trash output after restart", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-retry-error-recovery-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-retry-error-recovery-"),
+  );
   let store = createOperationalStore({ workspaceRoot: root });
   try {
     const profile = store.createAccountProfile({
@@ -924,10 +986,15 @@ test("latest retry error code overrides stale auto-trash output after restart", 
 });
 
 test("duplicate media publication is rejected before creating a zombie batch", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-duplicate-media-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-duplicate-media-"),
+  );
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const target = { kind: "media", mediaResourceId: "resource-duplicate-media" };
+    const target = {
+      kind: "media",
+      mediaResourceId: "resource-duplicate-media",
+    };
     store.reservePublicationTarget({
       articleId: "article-duplicate-media",
       publicationId: "publication-duplicate-media",
@@ -1268,20 +1335,23 @@ function orchestratorCommand(overrides) {
 
 test("submission claim is released when worker registration fails", async () => {
   let published = false;
-  const { orchestrator, released } = orchestratorFixture({
-    publish: async () => {
-      published = true;
-      return { status: "submitted" };
-    },
-  }, {
-    workerPublisher: {
-      registerAttempt: () => {
-        throw Object.assign(new Error("worker registration failed"), {
-          code: "WORKER_REGISTER_FAILED",
-        });
+  const { orchestrator, released } = orchestratorFixture(
+    {
+      publish: async () => {
+        published = true;
+        return { status: "submitted" };
       },
     },
-  });
+    {
+      workerPublisher: {
+        registerAttempt: () => {
+          throw Object.assign(new Error("worker registration failed"), {
+            code: "WORKER_REGISTER_FAILED",
+          });
+        },
+      },
+    },
+  );
   await assert.rejects(
     () =>
       orchestrator.submit([
@@ -1301,10 +1371,9 @@ test("submission claim is released for pre-intent duplicate and uncertain errors
         throw Object.assign(new Error(code), { code });
       },
     });
-    await assert.rejects(
-      () => orchestrator.submit([orchestratorCommand()]),
-      { code },
-    );
+    await assert.rejects(() => orchestrator.submit([orchestratorCommand()]), {
+      code,
+    });
     assert.equal(released.length, 1, code);
     assert.equal(released[0].status, "failed", code);
   }

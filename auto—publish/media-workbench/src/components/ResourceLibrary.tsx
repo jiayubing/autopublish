@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { MediaResource, MediaType } from '../types';
+import type { MediaResource, MediaType } from '../types/media';
 import { 
   Search, 
   FolderOpen, 

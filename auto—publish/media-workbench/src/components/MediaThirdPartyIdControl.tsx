@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSettingsFeature } from "../features/settings/settings-context";
-import type { MediaProviderStatus } from "../types";
+import type { MediaProviderStatus } from "../types/settings";
 
 export default function MediaThirdPartyIdControl() {
   const { feature, snapshot } = useSettingsFeature();

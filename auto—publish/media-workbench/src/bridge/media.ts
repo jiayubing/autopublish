@@ -119,9 +119,7 @@ function normalizeArticleSummary(raw: Record<string, unknown>): ArticleSummary {
   return {
     filename: String(raw.filename || ""),
     title: String(raw.title || ""),
-    selectedResources: Array.isArray(raw.selectedResources)
-      ? (raw.selectedResources as MediaResource[])
-      : [],
+    selectedResources: normalizeResources(raw.selectedResources),
     autoTitle: String(raw.autoTitle || ""),
     remark: String(raw.remark || ""),
     hasImages: Boolean(raw.hasImages),
@@ -141,9 +139,7 @@ function normalizeArticlePreview(raw: Record<string, unknown>): Article {
         ? raw.words
         : content.replace(/\s/g, "").length,
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
-    selectedResources: Array.isArray(raw.selectedResources)
-      ? (raw.selectedResources as MediaResource[])
-      : [],
+    selectedResources: normalizeResources(raw.selectedResources),
     lastModified: formatBeijingTime(
       raw.lastModified || new Date().toISOString(),
     ),
@@ -156,6 +152,11 @@ function normalizeArticlePreview(raw: Record<string, unknown>): Article {
 }
 
 function normalizeResource(raw: Record<string, unknown>): MediaResource {
+  const type = ["image", "video", "audio", "document"].includes(
+    String(raw.type),
+  )
+    ? (raw.type as MediaResource["type"])
+    : "image";
   return {
     resourceId: String(raw.resourceId || raw.id || ""),
     name: String(raw.name || ""),
@@ -163,13 +164,22 @@ function normalizeResource(raw: Record<string, unknown>): MediaResource {
       typeof raw.price === "number" && Number.isFinite(raw.price)
         ? raw.price
         : null,
-    type: (raw.type === "video" ? "video" : "image") as MediaResource["type"],
+    type,
     url: typeof raw.url === "string" ? raw.url : undefined,
     duration: typeof raw.duration === "string" ? raw.duration : undefined,
     resolution: typeof raw.resolution === "string" ? raw.resolution : undefined,
     size: typeof raw.size === "string" ? raw.size : undefined,
     createdAt: String(raw.createdAt || ""),
   };
+}
+
+function normalizeResources(value: unknown): MediaResource[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> =>
+      Boolean(item && typeof item === "object"),
+    )
+    .map(normalizeResource);
 }
 
 function normalizeOrder(raw: Record<string, unknown>): RealOrder {
@@ -200,7 +210,12 @@ export async function previewArticle(filename: string): Promise<Article> {
 }
 export async function getDrafts(): Promise<Draft[]> {
   const api = mediaApi();
-  return (await unwrap(api.getDrafts(), "getDrafts failed")).items;
+  return (await unwrap(api.getDrafts(), "getDrafts failed")).items.map(
+    (draft) => ({
+      ...draft,
+      selectedResources: normalizeResources(draft.selectedResources),
+    }),
+  );
 }
 export async function getDraft(filename: string): Promise<Draft> {
   const api = mediaApi();
@@ -209,7 +224,10 @@ export async function getDraft(filename: string): Promise<Draft> {
     "getDraft failed: " + filename,
   );
   if (!data.draft) throw unavailable("Draft is unavailable");
-  return data.draft;
+  return {
+    ...data.draft,
+    selectedResources: normalizeResources(data.draft.selectedResources),
+  };
 }
 export async function setDraft(filename: string, draft: Draft): Promise<void> {
   const api = mediaApi();
@@ -221,6 +239,7 @@ export async function setDraft(filename: string, draft: Draft): Promise<void> {
         resourceId: resource.resourceId,
         name: resource.name,
         price: resource.price,
+        type: resource.type,
       })) as MediaResource[],
     }),
     "setDraft failed",

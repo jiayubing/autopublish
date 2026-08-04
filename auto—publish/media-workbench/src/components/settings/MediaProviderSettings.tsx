@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { MediaProviderStatus } from "../../types";
+import type { MediaProviderStatus } from "../../types/settings";
 import { useConfirmation } from "../../confirmation";
 import { useSettingsFeature } from "../../features/settings/settings-context";
 

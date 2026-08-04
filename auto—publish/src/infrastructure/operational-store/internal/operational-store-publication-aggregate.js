@@ -67,14 +67,23 @@ function createPublicationAggregate(context) {
     let status = "queued";
     if (statuses.some((value) => ["queued", "claimed"].includes(value))) {
       status = "queued";
-    } else if (statuses.some((value) => ["failed", "failed-cleaned"].includes(value))) {
+    } else if (
+      statuses.some((value) => ["failed", "failed-cleaned"].includes(value))
+    ) {
       status = "failed";
     } else if (
       statuses.every((value) =>
-        ["cancelled", "cancelled-cleaned", "completed", "published-cleaned"].includes(value),
+        [
+          "cancelled",
+          "cancelled-cleaned",
+          "completed",
+          "published-cleaned",
+        ].includes(value),
       )
     ) {
-      status = statuses.some((value) => ["completed", "published-cleaned"].includes(value))
+      status = statuses.some((value) =>
+        ["completed", "published-cleaned"].includes(value),
+      )
         ? "completed"
         : "cancelled";
     } else {
@@ -249,9 +258,7 @@ function createPublicationAggregate(context) {
         )
         .get(attemptId);
       if (!attempt) throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
-      const persisted = parsePublicationIntentPayload(
-        attempt.intent_payload,
-      );
+      const persisted = parsePublicationIntentPayload(attempt.intent_payload);
       const persistedSubmission = persisted.context || {};
       const batchItemId =
         value.batchItemId !== undefined
@@ -410,8 +417,7 @@ function createPublicationAggregate(context) {
           ),
         )
       : [];
-    if (!articleIds.length && !publicationIds.length)
-      return Object.freeze([]);
+    if (!articleIds.length && !publicationIds.length) return Object.freeze([]);
     const clauses = [];
     const params = [];
     if (articleIds.length) {

@@ -23,9 +23,7 @@ import type {
   DoubaoLoginState,
   DoubaoQueueState,
 } from "../types/content";
-import type {
-  GeneratedContentArticle,
-} from "../types/generation";
+import type { GeneratedContentArticle } from "../types/generation";
 import { ipcError, requireBridgeApi } from "./transport";
 
 export interface ContentExportInput {

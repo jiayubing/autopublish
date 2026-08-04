@@ -178,6 +178,8 @@ function createMediaWorkbenchApplication(options) {
       };
       const price = finiteMediaPrice(resource.price);
       if (price !== undefined) selectedResource.price = price;
+      if (["image", "video", "audio", "document"].includes(resource.type))
+        selectedResource.type = resource.type;
       resourceById[String(resourceId)] = selectedResource;
     });
     const articles = await workbenchService.scanArticles();

@@ -4,7 +4,7 @@ import type {
   HepanProviderStatus,
   LegacyProviderSettingsStatus,
   MediaProviderStatus,
-} from "../../types";
+} from "../../types/settings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useConfirmation } from "../../confirmation";
 import { useSettingsFeature } from "../../features/settings/settings-context";

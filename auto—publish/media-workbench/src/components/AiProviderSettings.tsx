@@ -12,7 +12,7 @@ import {
   AiProviderConfigInput,
   AiProviderStatus,
   AiProviderTestResult,
-} from "../types";
+} from "../types/settings";
 import { formatBeijingTime } from "../time-format";
 import { useConfirmation } from "../confirmation";
 import { useSettingsFeature } from "../features/settings/settings-context";

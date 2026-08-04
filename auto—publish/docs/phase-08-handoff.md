@@ -128,3 +128,90 @@ collection, verification, orchestration, and serialization separate.
   Its artifact section is `PENDING_HUMAN` with no entries because no
   production artifact exists; this snapshot is evidence of the blocker, not a
   release approval.
+
+## Ticket 09 handoff: Platform, Media, Settings, Workspace Renderer slice
+
+Ticket 09 is complete at the Renderer source and contract level. No IPC
+channel name or public business interface was changed; the main-side media
+DTO projections and submission rehydration were extended so every supported
+resource type remains explicit across the boundary.
+
+### Domain ownership and migration
+
+- Platform/publication queue, PlatformRun projection, account-login state,
+  residue inspection/cleanup, terminal queue refresh, selection, and command
+  lifecycles are owned by
+  `media-workbench/src/features/platform/platform-feature.js` and consumed by
+  `platform-feature-context.tsx` and the platform Views.
+- Media articles, drafts, bounded resource/pool pages, balance, orders,
+  preflight, submission, and order sync are owned by
+  `media-workbench/src/features/media/media-feature.js` and consumed through
+  `use-media-feature.ts`. The media bridge normalizes selected resources and
+  preserves the `image`, `video`, `audio`, and `document` media types.
+- Settings remains independently owned by `settings-feature.js`; its named
+  query and command owners are consumed by `SettingsView` and provider
+  sections without secret state in the Renderer.
+- Workspace bootstrap/runtime state remains owned by the workspace feature;
+  authentication is an independent external store in `auth-store.tsx` with
+  query state, per-command state, request sequence/lifecycle fencing,
+  subscription cleanup, and stale response rejection.
+- Renderer imports now use domain type files (`types/platform`, `types/media`,
+  `types/publication`, `types/settings`, `types/workspace`, `types/auth`, and
+  `types/view`). `media-workbench/src/types.ts` is now only the Ticket 10
+  compatibility re-export and has no production caller.
+
+### Lifecycle contracts
+
+- Platform and media queries use `createQueryIdentity`; commands use
+  `createCommandOwner`. Scope changes invalidate all affected requests and
+  clear the old snapshot. Platform transport callbacks are fenced by
+  `runLifecycle`; dispose invalidates subscriptions and owners.
+- Media closes invalidate an in-flight article open, resource pages are
+  bounded/deduplicated, and order sync uses a revision so a late response
+  cannot clear a newer workspace indicator.
+- Workspace changes clear platform residue/run/query state and media/order
+  projections. Cleanup refreshes the queue only after its runtime identity
+  guard passes.
+- Diagnostics remain safe summaries; no raw error, URL credential, Cookie,
+  filesystem path, or screenshot data is added to the Renderer surface.
+
+### View and feature scale ledger
+
+- `PlatformWorkbench.tsx` was reduced to a 353-line coordination View.
+  `PlatformQueuePanel.tsx`, `PlatformSubmitPanel.tsx`, and
+  `PlatformSubmissionOverlays.tsx` own only cohesive rendering and UI event
+  forwarding; the feature remains the sole mutable business-state owner.
+- `SettingsView.tsx`, `OrdersView.tsx`, and `App.tsx` remain cohesive View/root
+  composition modules. App keeps navigation state in one root, while Settings
+  and Orders are below the 400-line warning threshold.
+- `media-feature.js` remains a deliberately deep 793-line media/order owner.
+  Its query identities, command owners, projection mutations, and dispose
+  contract are kept together so splitting them would require a broad mutable
+  state interface or a second owner. This is an explicit Ticket 01 exception,
+  not an unreviewed long file; a future split must preserve the single
+  media/order snapshot owner.
+
+### Verification
+
+- Full root suite passed: `236` test files, `134` suites, `1593` tests,
+  `1593` passed, `0` failed (`npm test`, approximately `589.7s`).
+- Renderer/bridge type checks, lint, Renderer/preload builds, packaging
+  contracts, and the Platform/Media/Settings/Workspace/Auth and Renderer
+  acceptance tests passed.
+- The client-switch acceptance test now avoids opening Chromium's native
+  `<select>` popup before sending keyboard input; its layout hit check remains,
+  and the production `onChange` path is exercised without the prior flaky
+  pointer/keyboard timing.
+
+### Remaining work and human gates
+
+- Ticket 10 owns deletion of the compatibility `types.ts` re-export after a
+  final repository-wide caller/fixture audit.
+- `npm run format:check` passes across all configured files after formatting
+  the 11 repository baseline files; `git diff --check` also passes. The
+  current alpha ASAR copy of the operational store was synchronized with
+  the formatted production source so the packaging parity check remains
+  byte-exact.
+- Real account login, provider HTTPS/TLS/redirect behavior, paid media orders,
+  external publication E2E, signing, installer/upgrade/rollback, and physical
+  Electron package smoke remain `PENDING_HUMAN` / `BLOCKED_RELEASE`.

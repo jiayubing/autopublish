@@ -30,8 +30,7 @@ type SafeContentIpcError = {
   diagnosticId?: string;
 };
 type ContentIpcResponse<T> =
-  | { ok: true; data?: T }
-  | { ok: false; error?: SafeContentIpcError };
+  { ok: true; data?: T } | { ok: false; error?: SafeContentIpcError };
 
 type CoreContentRemovalApi = {
   previewArticleRemovalImpact: (input: {
@@ -86,9 +85,7 @@ type SubmissionContentRemovalApi = {
 };
 
 async function callCoreRemoval<TWire, TResult = TWire>(
-  invoke: (
-    api: CoreContentRemovalApi,
-  ) => Promise<ContentIpcResponse<TWire>>,
+  invoke: (api: CoreContentRemovalApi) => Promise<ContentIpcResponse<TWire>>,
   message: string,
   map?: (wire: TWire) => TResult,
 ): Promise<TResult> {
@@ -170,8 +167,9 @@ export function onContentArticleRemovalTransaction(
   listener: (transaction: ArticleRemovalTransaction) => void,
 ): () => void {
   const subscribe =
-    requireBridgeApi<CoreContentRemovalApi>("content")
-      .onArticleRemovalTransaction;
+    requireBridgeApi<CoreContentRemovalApi>(
+      "content",
+    ).onArticleRemovalTransaction;
   return subscribe((transaction) => {
     const id =
       transaction.transactionId ||

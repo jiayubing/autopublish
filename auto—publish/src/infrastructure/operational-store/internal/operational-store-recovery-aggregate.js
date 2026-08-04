@@ -1,6 +1,10 @@
 const domain = require("../../../domain");
 
-const { fromText, rejectSensitive, text } = require("./operational-store-utils");
+const {
+  fromText,
+  rejectSensitive,
+  text,
+} = require("./operational-store-utils");
 
 function recoveryDetail(value) {
   const payload = fromText(value);
@@ -31,7 +35,8 @@ function recoverySubmission(value) {
 }
 
 function safePostProcessingErrorCode(value) {
-  return typeof value === "string" && /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value)
+  return typeof value === "string" &&
+    /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value)
     ? value
     : null;
 }
@@ -137,9 +142,7 @@ function createRecoveryAggregate(context) {
           refreshSubmissionBatchStatus(db, item.batch_id, stamp);
         }
       }
-      const intentPayload = submission
-        ? { submission, detail: error }
-        : error;
+      const intentPayload = submission ? { submission, detail: error } : error;
       const changed = db
         .prepare(
           "UPDATE recovery_intents SET state='manual_check',payload_json=?,updated_at=? WHERE attempt_id=? AND state IN('remote_started','outcome_pending')",
@@ -257,9 +260,12 @@ function createRecoveryAggregate(context) {
         .map((row) => {
           const payload = fromText(row.payload_json);
           const autoTrash =
-            payload && payload.postProcessingOutput && payload.postProcessingOutput.autoTrash;
+            payload &&
+            payload.postProcessingOutput &&
+            payload.postProcessingOutput.autoTrash;
           const errorCode =
-            (payload && safePostProcessingErrorCode(payload.postProcessingErrorCode)) ||
+            (payload &&
+              safePostProcessingErrorCode(payload.postProcessingErrorCode)) ||
             (autoTrash && safePostProcessingErrorCode(autoTrash.reasonCode));
           return Object.freeze({
             jobId: row.job_id,

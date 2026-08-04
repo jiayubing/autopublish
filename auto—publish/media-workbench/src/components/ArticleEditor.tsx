@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { Article, Draft, MediaResource } from '../types';
+import type { Article, Draft, MediaResource } from '../types/media';
 import { 
   FileText, 
   Trash2, 

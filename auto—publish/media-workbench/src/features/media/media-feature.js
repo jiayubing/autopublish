@@ -53,7 +53,25 @@ function safeError(value, fallbackCode, fallbackMessage) {
 }
 
 function boundedItems(value) {
-  return Array.isArray(value) ? value.slice(0, DEFAULT_RESOURCE_PAGE_SIZE) : [];
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value
+    .filter((item) => {
+      const resourceId = item && typeof item.resourceId === "string"
+        ? item.resourceId
+        : null;
+      if (!resourceId) return true;
+      if (seen.has(resourceId)) return false;
+      seen.add(resourceId);
+      return true;
+    })
+    .slice(0, DEFAULT_RESOURCE_PAGE_SIZE);
+}
+
+function boundedResourceIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((resourceId) => typeof resourceId === "string"))]
+    .slice(0, 100);
 }
 
 function emptyQuery() {
@@ -129,6 +147,7 @@ export function createMediaFeature(adapters = {}) {
   let preparedArticles = [];
   let selectionRevision = 0;
   let syncingOrderNid = null;
+  let syncingOrderRevision = 0;
   let snapshot;
 
   const publish = () => {
@@ -325,11 +344,7 @@ export function createMediaFeature(adapters = {}) {
         ...pool,
         ...result,
         items: boundedItems(result.items),
-        memberResourceIds: Array.isArray(result.memberResourceIds)
-          ? result.memberResourceIds
-              .filter((resourceId) => typeof resourceId === "string")
-              .slice(0, 100)
-          : [],
+        memberResourceIds: boundedResourceIds(result.memberResourceIds),
         pageSize: DEFAULT_RESOURCE_PAGE_SIZE,
         query: Object.freeze({ loading: false, error: null, reason }),
       };
@@ -496,6 +511,7 @@ export function createMediaFeature(adapters = {}) {
       preparedArticles = [];
       selectionRevision = 0;
       syncingOrderNid = null;
+      syncingOrderRevision += 1;
       publish();
     },
     async refresh(reason = "manual") {
@@ -573,6 +589,7 @@ export function createMediaFeature(adapters = {}) {
       );
     },
     closeArticle() {
+      owners.openArticle.invalidate();
       articles = { ...articles, activeArticle: null };
       publish();
     },
@@ -732,6 +749,7 @@ export function createMediaFeature(adapters = {}) {
     },
     syncOrder(orderNid) {
       if (!orderNid) return undefined;
+      const requestRevision = ++syncingOrderRevision;
       syncingOrderNid = orderNid;
       publish();
       return runCommand(
@@ -745,8 +763,10 @@ export function createMediaFeature(adapters = {}) {
           publish();
         },
       ).then((value) => {
-        syncingOrderNid = null;
-        publish();
+        if (requestRevision === syncingOrderRevision && syncingOrderNid === orderNid) {
+          syncingOrderNid = null;
+          publish();
+        }
         return value;
       });
     },
@@ -764,6 +784,7 @@ export function createMediaFeature(adapters = {}) {
       disposed = true;
       for (const query of Object.values(queries)) query.dispose();
       for (const owner of Object.values(owners)) owner.dispose();
+      publish();
       listeners.clear();
     },
   };

@@ -1,9 +1,9 @@
 import type {
   ArticleRemovalTransaction,
   ContentSubmissionBatchRecord,
-  GeneratedContentArticle,
   PublicationHistoryRecord,
-} from './types';
+} from './types/publication';
+import type { GeneratedContentArticle } from './types/generation';
 
 export type ArticleWorkflowStage = 'pending_submission' | 'queued' | 'published' | 'failed' | 'trash';
 export type ArticleWorkflowAction = 'queue' | 'view_progress' | 'open_attention' | 'view_publication' | 'trash' | 'restore';

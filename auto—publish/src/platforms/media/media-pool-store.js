@@ -57,11 +57,12 @@ class MediaPoolStore {
       // Update existing
       existing.name = resource.name || resource.title || existing.name;
       existing.price = resource.price !== undefined ? resource.price : existing.price;
+      if (resource.type !== undefined) existing.type = resource.type;
       existing.updatedAt = new Date().toISOString();
       if (opts.note !== undefined) existing.note = opts.note;
       if (opts.tags) existing.tags = opts.tags;
     } else {
-      entries.push({
+      var entry = {
         resourceId: rid,
         name: resource.name || resource.title || '',
         price: resource.price,
@@ -71,7 +72,9 @@ class MediaPoolStore {
         note: opts.note || '',
         tags: opts.tags || [],
         enabled: true
-      });
+      };
+      if (resource.type !== undefined) entry.type = resource.type;
+      entries.push(entry);
     }
 
     this._write(entries);

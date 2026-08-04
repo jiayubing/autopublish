@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ViewMode } from '../types';
+import type { ViewMode } from '../types/view';
 import { 
   Files, 
   FolderOpen, 

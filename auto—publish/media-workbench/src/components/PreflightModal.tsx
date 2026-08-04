@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Article } from '../types';
+import type { Article } from '../types/media';
 import { AlertTriangle, CheckCircle2, DollarSign, Loader2, ShieldCheck, X } from 'lucide-react';
 import { motion } from 'motion/react';
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { HepanProviderStatus } from "../../types";
+import type { HepanProviderStatus } from "../../types/settings";
 import { useConfirmation } from "../../confirmation";
 import { formatBeijingTime } from "../../time-format";
 import { useSettingsFeature } from "../../features/settings/settings-context";

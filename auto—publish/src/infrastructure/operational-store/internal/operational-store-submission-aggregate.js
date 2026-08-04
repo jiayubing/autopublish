@@ -200,9 +200,7 @@ function createSubmissionAggregate(context) {
       Number.isFinite(value.leaseMs) && value.leaseMs > 0
         ? value.leaseMs
         : 30000;
-    const claimUntil = new Date(
-      Date.parse(stamp) + leaseMs,
-    ).toISOString();
+    const claimUntil = new Date(Date.parse(stamp) + leaseMs).toISOString();
     const changed = db
       .prepare(
         "UPDATE submission_items SET claim_until=? WHERE item_id=? AND batch_id=? AND status='claimed' AND claim_token=? AND claim_until>=?",
@@ -657,7 +655,9 @@ function createSubmissionAggregate(context) {
           item.status === "completed" &&
           item.payload.outcomeStatus === "published",
       ),
-      retryable: items.some((item) => ["queued", "claimed"].includes(item.status)),
+      retryable: items.some((item) =>
+        ["queued", "claimed"].includes(item.status),
+      ),
       items: Object.freeze(items),
     });
   }

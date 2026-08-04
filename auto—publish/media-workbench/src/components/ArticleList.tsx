@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { Article } from '../types';
+import type { Article } from '../types/media';
 import { 
   FileText, 
   Calendar, 
