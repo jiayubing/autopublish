@@ -62,6 +62,7 @@ export default function BatchGenerationView({ clients, currentClientId, research
   const clientSelectionTouchedRef = useRef(false);
   const templateSelectionTouchedRef = useRef(false);
   const clientSelectionInitializedRef = useRef(false);
+  const newBatchWizardRef = useRef(false);
   const generation = useGenerationFeature();
   const batch = generation.snapshot.batch as GenerationBatch | null;
   const batchState = (generation.snapshot.runtime || EMPTY_STATE) as GenerationBatchState;
@@ -146,7 +147,7 @@ export default function BatchGenerationView({ clients, currentClientId, research
   }, [clients, currentClientId, researchByClient]);
 
   useEffect(() => {
-    if (batch) setViewMode('monitoring');
+    if (batch && !newBatchWizardRef.current) setViewMode('monitoring');
   }, [batch]);
 
   function toggleAllClients() {
@@ -192,6 +193,7 @@ export default function BatchGenerationView({ clients, currentClientId, research
     try {
       const accepted = await generation.start({ clientIds: selectedClientIds, templates: selectedTemplates, clientSources: currentSources, templateCatalogRevision: catalog.revision });
       if (!accepted || 'ignored' in accepted) return;
+      newBatchWizardRef.current = false;
       setViewMode('monitoring');
     } catch (value) { setError(value instanceof Error ? value.message : '无法启动批量生成'); }
     finally { setLoading(false); }
@@ -239,6 +241,7 @@ export default function BatchGenerationView({ clients, currentClientId, research
   }
 
   function startNewBatch() {
+    newBatchWizardRef.current = true;
     setPreviewResult(null);
     setError('');
     setStep(0);
@@ -280,6 +283,6 @@ export default function BatchGenerationView({ clients, currentClientId, research
       </div>}
       {viewMode === 'wizard' && error && <div ref={preflightErrorRef} tabIndex={-1} role="alert" aria-live="assertive" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     </div>
-    {!batch && <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 py-3"><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" />上一步</button><button type="button" onClick={() => { if (step === 2) void preview(); else setStep((current) => Math.min(3, current + 1)); }} disabled={loading || (step === 0 && !selectedCount) || (step === 1 && !selectedTemplates.length) || (step === 2 && !selectedClientIds.length)} className="inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{step === 2 ? (loading ? '预览中…' : '检查并确认') : '下一步'}<ChevronRight className="h-3.5 w-3.5" /></button></div>}
+    {viewMode === 'wizard' && <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 py-3"><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" />上一步</button><button type="button" onClick={() => { if (step === 2) void preview(); else setStep((current) => Math.min(3, current + 1)); }} disabled={loading || (step === 0 && !selectedCount) || (step === 1 && !selectedTemplates.length) || (step === 2 && !selectedClientIds.length)} className="inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{step === 2 ? (loading ? '预览中…' : '检查并确认') : '下一步'}<ChevronRight className="h-3.5 w-3.5" /></button></div>}
   </div>;
 }

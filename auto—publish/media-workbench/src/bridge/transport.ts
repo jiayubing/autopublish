@@ -25,6 +25,13 @@ export function isElectron(): boolean {
   return typeof window !== "undefined" && Boolean(window.desktopConsole);
 }
 
+export function requireDesktopConsole(): DesktopConsoleApi {
+  const desktopConsole =
+    typeof window === "undefined" ? undefined : window.desktopConsole;
+  if (!desktopConsole) throw unavailable();
+  return desktopConsole;
+}
+
 export function ipcError(
   error: Partial<IpcError> | undefined,
   fallback: string,
@@ -44,21 +51,64 @@ export function ipcError(
   return value;
 }
 
-export function requireBridgeApi<T extends object>(namespace: string): T {
-  const desktopConsole =
-    typeof window === "undefined" ? undefined : window.desktopConsole;
-  const raw = desktopConsole?.[namespace as keyof DesktopConsoleApi];
-  if (!raw || typeof raw !== "object") throw unavailable();
+export function requireBridgeCapability<T extends object>(value: unknown): T {
+  if (!value || typeof value !== "object") throw unavailable();
+  return value as T;
+}
 
-  return new Proxy(raw as T, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver) as unknown;
-      if (typeof property === "string" && typeof value !== "function") {
-        throw unavailable();
-      }
-      return value;
-    },
-  });
+export function requireBridgeMethod<T extends (...args: never[]) => unknown>(
+  value: T | null | undefined,
+): T {
+  if (typeof value !== "function") throw unavailable();
+  return value;
+}
+
+export function requireAuthApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().auth);
+}
+
+export function requireContentApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().content);
+}
+
+export function requirePlatformsApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().platforms);
+}
+
+export function requireMediaApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().media);
+}
+
+export function requireOrdersApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().orders);
+}
+
+export function requirePublicationApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().publication);
+}
+
+export function requireWorkspaceApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().workspace);
+}
+
+export function requireWorkspaceDataApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().workspaceData);
+}
+
+export function requireRuntimeDiagnosticsApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().runtimeDiagnostics);
+}
+
+export function requireAiProviderApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().aiProvider);
+}
+
+export function requirePlatformSettingsApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().platformSettings);
+}
+
+export function requireStorageMaintenanceApi<T extends object>(): T {
+  return requireBridgeCapability<T>(requireDesktopConsole().storageMaintenance);
 }
 
 // Phase 07 owns the legacy auth envelope. Keep its message-shaped error

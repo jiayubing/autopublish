@@ -177,11 +177,461 @@ function verify(files, fixture) {
   return verifyCapabilityEvidence(context, fixture);
 }
 
+function transportQueryFiles(transportSource, preloadSource) {
+  return queryFiles({
+    "/preload.ts": preloadSource || queryFiles()["/preload.ts"],
+    "/bridge.ts": `
+      import { requireMediaApi } from "./media-workbench/src/bridge/transport";
+      type MediaApi = { loadOrders: () => Promise<unknown> };
+      export async function loadOrders() { return requireMediaApi<MediaApi>().loadOrders(); }
+      export function onChanged(listener) { return listener; }
+    `,
+    "/media-workbench/src/bridge/transport.ts":
+      transportSource ||
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+  });
+}
+
 test("the single TypeChecker evidence core accepts connected query and event capabilities", () => {
   const queryResult = verify(queryFiles(), queryFixture);
   const eventResult = verify(eventFiles(), eventFixture);
   assert.equal(queryResult.ok, true, queryResult.reasons.join("\n"));
   assert.equal(eventResult.ok, true, eventResult.reasons.join("\n"));
+});
+
+test("production evidence follows the actual static transport accessor namespace", () => {
+  const result = verify(transportQueryFiles(), queryFixture);
+  assert.equal(result.ok, true, result.reasons.join("\n"));
+});
+
+test("production evidence rejects a static accessor wired to the wrong namespace", () => {
+  const result = verify(
+    transportQueryFiles(`
+      interface DesktopConsoleApi { media?: unknown; content?: unknown; }
+      declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+      function unavailable() { return new Error(); }
+      export function requireBridgeCapability<T extends object>(value: unknown): T {
+        if (!value || typeof value !== "object") throw unavailable();
+        return value as T;
+      }
+      export function requireDesktopConsole(): DesktopConsoleApi {
+        const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+        if (!desktopConsole) throw unavailable();
+        return desktopConsole;
+      }
+      export function requireMediaApi<T extends object>(): T {
+        return requireBridgeCapability<T>(requireDesktopConsole().content);
+      }
+    `),
+    queryFixture,
+  );
+  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
+  assert.ok(
+    result.reasons.includes(
+      "bridge export does not call the recorded preload member symbol",
+    ),
+    result.reasons.join("\n"),
+  );
+});
+
+test("production evidence rejects a static accessor with mixed return namespaces", () => {
+  const result = verify(
+    transportQueryFiles(`
+      interface DesktopConsoleApi { media?: unknown; content?: unknown; }
+      declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+      declare const useWrong: boolean;
+      function unavailable() { return new Error(); }
+      export function requireBridgeCapability<T extends object>(value: unknown): T {
+        if (!value || typeof value !== "object") throw unavailable();
+        return value as T;
+      }
+      export function requireDesktopConsole(): DesktopConsoleApi {
+        const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+        if (!desktopConsole) throw unavailable();
+        return desktopConsole;
+      }
+      export function requireMediaApi<T extends object>(): T {
+        if (useWrong)
+          return requireBridgeCapability<T>(requireDesktopConsole().content);
+        return requireBridgeCapability<T>(requireDesktopConsole().media);
+      }
+    `),
+    queryFixture,
+  );
+  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
+  assert.ok(
+    result.reasons.includes(
+      "bridge export does not call the recorded preload member symbol",
+    ),
+    result.reasons.join("\n"),
+  );
+});
+
+test("production evidence rejects a guarded desktop console accessor with a fake conditional branch", () => {
+  const result = verify(
+    transportQueryFiles(`
+      interface DesktopConsoleApi { media?: unknown; }
+      declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+      declare const useFake: boolean;
+      declare const fakeDesktopConsole: DesktopConsoleApi;
+      function unavailable() { return new Error(); }
+      export function requireBridgeCapability<T extends object>(value: unknown): T {
+        if (!value || typeof value !== "object") throw unavailable();
+        return value as T;
+      }
+      export function requireDesktopConsole(): DesktopConsoleApi {
+        const desktopConsole = useFake ? fakeDesktopConsole : window.desktopConsole;
+        if (!desktopConsole) throw unavailable();
+        return desktopConsole;
+      }
+      export function requireMediaApi<T extends object>(): T {
+        return requireBridgeCapability<T>(requireDesktopConsole().media);
+      }
+    `),
+    queryFixture,
+  );
+  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
+  assert.ok(
+    result.reasons.includes(
+      "bridge export does not call the recorded preload member symbol",
+    ),
+    result.reasons.join("\n"),
+  );
+});
+
+test("production evidence rejects control-flow and write mutations in transport helpers", () => {
+  const cases = [
+    [
+      "reversed typeof window conditional",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? window.desktopConsole : undefined;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "guard after return",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          return desktopConsole;
+          if (!desktopConsole) throw unavailable();
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "desktop console reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeDesktopConsole: DesktopConsoleApi;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          let desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          desktopConsole = fakeDesktopConsole;
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "desktop console destructuring reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeDesktopConsole: DesktopConsoleApi;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          let desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          ({ desktopConsole } = { desktopConsole: fakeDesktopConsole });
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "desktop console IIFE reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeDesktopConsole: DesktopConsoleApi;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          let desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          (() => { desktopConsole = fakeDesktopConsole; })();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "desktop console call IIFE reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeDesktopConsole: DesktopConsoleApi;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          let desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          (function () { desktopConsole = fakeDesktopConsole; }).call(undefined);
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "desktop console comma IIFE reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeDesktopConsole: DesktopConsoleApi;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          let desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          (0, () => { desktopConsole = fakeDesktopConsole; })();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "capability parameter reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeValue: unknown;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          value = fakeValue;
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "capability parameter destructuring reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeValue: unknown;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          ({ value } = { value: fakeValue });
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "capability parameter IIFE reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeValue: unknown;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          (() => { value = fakeValue; })();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "capability parameter call IIFE reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeValue: unknown;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          (function () { value = fakeValue; }).call(undefined);
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+    [
+      "capability parameter comma IIFE reassignment",
+      `
+        interface DesktopConsoleApi { media?: unknown; }
+        declare global { interface Window { desktopConsole?: DesktopConsoleApi; } }
+        declare const fakeValue: unknown;
+        function unavailable() { return new Error(); }
+        export function requireBridgeCapability<T extends object>(value: unknown): T {
+          if (!value || typeof value !== "object") throw unavailable();
+          (0, () => { value = fakeValue; })();
+          return value as T;
+        }
+        export function requireDesktopConsole(): DesktopConsoleApi {
+          const desktopConsole = typeof window === "undefined" ? undefined : window.desktopConsole;
+          if (!desktopConsole) throw unavailable();
+          return desktopConsole;
+        }
+        export function requireMediaApi<T extends object>(): T {
+          return requireBridgeCapability<T>(requireDesktopConsole().media);
+        }
+      `,
+    ],
+  ];
+  for (const [name, source] of cases) {
+    const result = verify(transportQueryFiles(source), queryFixture);
+    assert.equal(result.ok, false, `${name}: ${JSON.stringify(result.trace)}`);
+    assert.ok(
+      result.reasons.includes(
+        "bridge export does not call the recorded preload member symbol",
+      ),
+      `${name}: ${result.reasons.join("\n")}`,
+    );
+  }
+});
+
+test("production evidence rejects a same-name local transport helper", () => {
+  const localHelperFiles = {
+    ...queryFiles(),
+    "/bridge.ts": `
+      import { desktopConsole } from "./preload";
+      function requireMediaApi() { return desktopConsole.media; }
+      export async function loadOrders() { return requireMediaApi().loadOrders(); }
+      export function onChanged(listener) { return listener; }
+    `,
+  };
+  const localResult = verify(localHelperFiles, queryFixture);
+  assert.equal(
+    localResult.ok,
+    false,
+    JSON.stringify(localResult.trace, null, 2),
+  );
+  assert.ok(
+    localResult.reasons.includes(
+      "bridge export does not call the recorded preload member symbol",
+    ),
+    localResult.reasons.join("\n"),
+  );
+});
+
+test("production evidence rejects a preload accessor using the wrong channel", () => {
+  const result = verify(
+    transportQueryFiles(
+      undefined,
+      queryFiles()["/preload.ts"].replace(
+        'ipcRenderer.invoke("media:get-orders")',
+        'ipcRenderer.invoke("media:other")',
+      ),
+    ),
+    queryFixture,
+  );
+  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
+  assert.ok(
+    result.reasons.includes(
+      "preload member does not invoke the recorded Electron ipcRenderer symbol",
+    ),
+    result.reasons.join("\n"),
+  );
 });
 
 test("single production evidence core rejects an event feature cleanup that production never calls", () => {

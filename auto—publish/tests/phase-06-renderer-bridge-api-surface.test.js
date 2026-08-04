@@ -24,6 +24,22 @@ test("renderer desktopConsole uses a fixed named top-level API", () => {
     transport,
     /\[\s*(?:key|channel|method|name)\s*:\s*string\s*\]/,
   );
+  assert.doesNotMatch(transport, /requireBridgeApi|new Proxy|Reflect\.get/);
+  for (const accessor of [
+    "requireContentApi",
+    "requirePlatformsApi",
+    "requireMediaApi",
+    "requireOrdersApi",
+    "requirePublicationApi",
+    "requireWorkspaceApi",
+    "requireWorkspaceDataApi",
+    "requireRuntimeDiagnosticsApi",
+    "requireAiProviderApi",
+    "requirePlatformSettingsApi",
+    "requireStorageMaintenanceApi",
+  ]) {
+    assert.match(transport, new RegExp(`export function ${accessor}`));
+  }
 });
 
 test("renderer bridge files do not recover a top-level untyped desktop API", () => {
@@ -79,7 +95,7 @@ test("production content bridge fails closed when a content capability or result
       const start = source.indexOf(`async function ${helper}`);
     assert.notEqual(start, -1, helper);
     const body = source.slice(start, start + 1800);
-      assert.match(body, /requireBridgeApi<[^>]+>\("content"\)/);
+      assert.match(body, /requireContentApi<[^>]+>\(\)/);
       assert.match(
         body,
         /result\.data === undefined \|\| result\.data === null\)\s*throw/,

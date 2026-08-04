@@ -1,5 +1,11 @@
 import type { AuthState } from "../types/auth";
-import { authIpcError, isElectron, unavailable } from "./transport";
+import {
+  authIpcError,
+  isElectron,
+  requireAuthApi,
+  requireBridgeMethod,
+  unavailable,
+} from "./transport";
 
 type LegacyAuthResponse<T> = {
   ok: boolean;
@@ -24,7 +30,11 @@ type AuthApi = {
 };
 
 function authApi(): AuthApi | undefined {
-  return window.desktopConsole?.auth as AuthApi | undefined;
+  try {
+    return requireAuthApi<AuthApi>();
+  } catch {
+    return undefined;
+  }
 }
 
 export function createUnauthenticatedState(): AuthState {
@@ -39,7 +49,7 @@ export function createUnauthenticatedState(): AuthState {
 export async function getAuthState(): Promise<AuthState> {
   const api = authApi();
   if (!isElectron() || !api) return createUnauthenticatedState();
-  const result = await api.getState();
+  const result = await requireBridgeMethod(api.getState)();
   return result.ok && result.data
     ? result.data
     : {
@@ -65,7 +75,10 @@ export function login(loginName: string, password: string): Promise<AuthState> {
   const api = authApi();
   if (!isElectron() || !api)
     return Promise.reject(unavailable("桌面认证不可用"));
-  return confirmedAuthCall(api.login(loginName, password), "登录失败");
+  return confirmedAuthCall(
+    requireBridgeMethod(api.login)(loginName, password),
+    "登录失败",
+  );
 }
 
 export function changeAuthPassword(
@@ -77,7 +90,11 @@ export function changeAuthPassword(
   if (!isElectron() || !api)
     return Promise.reject(unavailable("桌面认证不可用"));
   return confirmedAuthCall(
-    api.changePassword(loginName, currentPassword, newPassword),
+    requireBridgeMethod(api.changePassword)(
+      loginName,
+      currentPassword,
+      newPassword,
+    ),
     "修改密码失败",
   );
 }
@@ -85,14 +102,14 @@ export function changeAuthPassword(
 export async function refreshAuth(): Promise<AuthState> {
   const api = authApi();
   if (!isElectron() || !api) return createUnauthenticatedState();
-  const result = await api.refresh();
+  const result = await requireBridgeMethod(api.refresh)();
   return result.ok && result.data ? result.data : createUnauthenticatedState();
 }
 
 export async function logout(): Promise<AuthState> {
   const api = authApi();
   if (!isElectron() || !api) return createUnauthenticatedState();
-  const result = await api.logout();
+  const result = await requireBridgeMethod(api.logout)();
   return result.ok && result.data ? result.data : createUnauthenticatedState();
 }
 
@@ -100,7 +117,7 @@ export function onAuthStateChanged(
   listener: (state: AuthState) => void,
 ): () => void {
   const api = authApi();
-  if (!isElectron() || typeof api?.onStateChanged !== "function")
+  if (!isElectron() || !api || typeof api.onStateChanged !== "function")
     return () => {};
-  return api.onStateChanged(listener);
+  return requireBridgeMethod(api.onStateChanged)(listener);
 }

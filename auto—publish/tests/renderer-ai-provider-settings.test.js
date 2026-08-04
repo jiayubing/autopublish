@@ -102,7 +102,7 @@ describe("renderer AI provider settings", function () {
   });
 
   it("keeps generation runtime state on the event-backed generation feature API", function () {
-    const api = readSource("bridge/content.ts");
+    const api = readSource("bridge/generation.ts");
 
     assert.doesNotMatch(api, /getGenerationBatchState/);
     assert.match(api, /getGenerationRuntimeSnapshot/);

@@ -112,7 +112,6 @@ export interface ArticleTrashPreview {
   canCommit: boolean;
   selections?: ArticleReviewSelection[];
   expiresAt?: string;
-  legacy?: boolean;
   transactionId?: string | null;
   openTransactionId?: string | null;
   transaction?: ArticleRemovalTransaction | null;
@@ -120,10 +119,8 @@ export interface ArticleTrashPreview {
 }
 
 export interface ArticleTrashCommitInput {
-  articles?: ArticleReviewSelection[];
   selections?: ArticleReviewSelection[];
   token?: string;
-  legacy?: boolean;
   confirmed: true;
 }
 

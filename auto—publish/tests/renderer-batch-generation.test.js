@@ -174,7 +174,7 @@ describe("renderer content generation workflow", function() {
   });
 
   it("exposes renderer-only generation batch wrappers through preload", function() {
-    const api = read("media-workbench/src/bridge/content.ts");
+    const api = read("media-workbench/src/bridge/generation.ts");
     const preload = read("desktop/preload.js");
     [
       "previewGenerationBatch",
@@ -275,7 +275,7 @@ describe("renderer content generation workflow", function() {
   });
 
   it("exposes cancelled counts and a preview-confirmed pending cancellation action", function() {
-    const api = read("media-workbench/src/bridge/content.ts");
+    const api = read("media-workbench/src/bridge/generation.ts");
     const preload = read("desktop/preload.js");
     const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
     assert.match(api, /previewCancelPendingGenerationBatch/);

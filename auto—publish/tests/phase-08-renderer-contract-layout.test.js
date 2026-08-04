@@ -190,9 +190,17 @@ const generationBridgeExports = [
   "listContentSubmissionPlatforms",
 ];
 
-test("renderer shared types have one domain owner and a pure legacy barrel", () => {
-  const barrel = read("media-workbench/src/types.ts").trim();
-  assert.equal(barrel, 'export type * from "./types/index";');
+test("renderer shared types have one domain owner and no legacy barrel", () => {
+  assert.equal(fs.existsSync(path.join(rendererRoot, "types.ts")), false);
+  assert.equal(
+    fs.existsSync(path.join(rendererRoot, "types", "index.ts")),
+    false,
+  );
+  assert.doesNotMatch(
+    read("tests/renderer-history-editor-flow.test.js"),
+    /(?:^|[,{])\s*(?:["']trashArticles["']|trashArticles)\s*:/m,
+    "Renderer fixtures must not expose the retired preload alias",
+  );
 
   const expectedOwners = new Map();
   for (const [relative, symbols] of Object.entries(domainTypeSymbols)) {
@@ -289,10 +297,8 @@ test("renderer bridges expose named domain entries without method dispatch", () 
   for (const symbol of generationBridgeExports) {
     assert.match(generation, new RegExp(`\\b${symbol}\\b`), symbol);
   }
-  assert.match(
-    generation,
-    /requireBridgeApi<GenerationContentApi>\("content"\)/,
-  );
+  assert.match(generation, /requireContentApi<GenerationContentApi>\(\)/);
+  assert.doesNotMatch(generation, /requireBridgeApi|new Proxy|Reflect\.get/);
   assert.match(
     read("media-workbench/src/features/generation/use-generation-feature.ts"),
     /bridge\/generation/,

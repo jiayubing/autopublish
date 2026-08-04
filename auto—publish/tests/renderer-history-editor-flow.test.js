@@ -185,7 +185,6 @@ function installDesktopFixture(page, fixture) {
       previewCancelSubmissionBatch: () => ok({ allowedCount: 0, blockedCount: 0, items: [] }),
       cancelSubmissionBatch: () => { state.calls.submission.push("cancelSubmissionBatch"); return ok({}); },
       restoreArticle: () => ok({}),
-      trashArticles: () => ok({ moved: [], skipped: [], rejected: [] }),
       preparePermanentDeleteArticle: () => ok({ token: "fixture-token" }),
       permanentlyDeleteArticle: () => ok({ deleted: true })
     };

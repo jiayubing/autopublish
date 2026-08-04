@@ -48,7 +48,7 @@ test("generation main and Renderer callers do not use method-name dispatch", () 
     "utf8",
   );
   const bridge = fs.readFileSync(
-    path.resolve(__dirname, "..", "media-workbench/src/bridge/content.ts"),
+    path.resolve(__dirname, "..", "media-workbench/src/bridge/generation.ts"),
     "utf8",
   );
   assert.doesNotMatch(registrar, /service\s*\[\s*method\s*\]/);
@@ -320,7 +320,7 @@ test("handoff wire converts bounded account profiles and omits private preview i
         return {
           generationBatchId: input.generationBatchId,
           batchRevision: 3,
-          previewToken: "preview-token-1",
+          previewToken: "handoff:00000000-0000-4000-8000-000000000001",
           articleCount: 1,
           clientCount: 1,
           targetPlatformIds: input.targetPlatformIds,

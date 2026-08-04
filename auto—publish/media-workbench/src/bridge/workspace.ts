@@ -9,7 +9,14 @@ import type {
   WorkspaceRuntimeIdentity,
   WorkspaceSelectionToken,
 } from "../types/workspace";
-import { ipcError, requireBridgeApi, requireDisposer } from "./transport";
+import {
+  ipcError,
+  requireBridgeMethod,
+  requireDisposer,
+  requireRuntimeDiagnosticsApi,
+  requireWorkspaceApi,
+  requireWorkspaceDataApi,
+} from "./transport";
 
 type WorkspaceResponse<T> = {
   ok: boolean;
@@ -61,15 +68,14 @@ type RuntimeDiagnosticsApi = {
   >;
 };
 
-const workspaceApi = () => requireBridgeApi<WorkspaceApi>("workspace");
-const workspaceDataApi = () =>
-  requireBridgeApi<WorkspaceDataApi>("workspaceData");
+const workspaceApi = () => requireWorkspaceApi<WorkspaceApi>();
+const workspaceDataApi = () => requireWorkspaceDataApi<WorkspaceDataApi>();
 const runtimeDiagnosticsApi = () =>
-  requireBridgeApi<RuntimeDiagnosticsApi>("runtimeDiagnostics");
+  requireRuntimeDiagnosticsApi<RuntimeDiagnosticsApi>();
 
 export type { RuntimeCapability, RuntimeDiagnostics };
 export async function getWorkspaceBootstrapState(): Promise<WorkspaceBootstrapState> {
-  const result = await workspaceApi().getBootstrapState();
+  const result = await requireBridgeMethod(workspaceApi().getBootstrapState)();
   if (!result.ok)
     throw ipcError(result.error, "Unable to read workspace bootstrap state");
   if (!result.data)
@@ -77,7 +83,7 @@ export async function getWorkspaceBootstrapState(): Promise<WorkspaceBootstrapSt
   return result.data;
 }
 export async function chooseWorkspaceDirectory(): Promise<WorkspaceBootstrapState> {
-  const result = await workspaceApi().chooseDirectory();
+  const result = await requireBridgeMethod(workspaceApi().chooseDirectory)();
   if (!result.ok) throw ipcError(result.error, "Unable to choose a workspace");
   if (!result.data) throw ipcError(undefined, "Unable to choose a workspace");
   return result.data;
@@ -85,7 +91,9 @@ export async function chooseWorkspaceDirectory(): Promise<WorkspaceBootstrapStat
 export async function confirmWorkspaceSelection(
   input: WorkspaceSelectionToken,
 ): Promise<WorkspaceConfirmationResult> {
-  const result = await workspaceApi().confirmSelection(input);
+  const result = await requireBridgeMethod(workspaceApi().confirmSelection)(
+    input,
+  );
   if (!result.ok)
     throw ipcError(result.error, "Unable to confirm workspace selection");
   if (!result.data)
@@ -93,7 +101,7 @@ export async function confirmWorkspaceSelection(
   return result.data;
 }
 export async function cancelWorkspaceSelection(): Promise<WorkspaceBootstrapState> {
-  const result = await workspaceApi().cancelSelection();
+  const result = await requireBridgeMethod(workspaceApi().cancelSelection)();
   if (!result.ok)
     throw ipcError(result.error, "Unable to cancel workspace selection");
   if (!result.data)
@@ -101,7 +109,7 @@ export async function cancelWorkspaceSelection(): Promise<WorkspaceBootstrapStat
   return result.data;
 }
 export async function getCurrentWorkspace(): Promise<WorkspaceCurrent> {
-  const result = await workspaceApi().getCurrent();
+  const result = await requireBridgeMethod(workspaceApi().getCurrent)();
   if (!result.ok)
     throw ipcError(result.error, "Unable to read the current workspace");
   if (!result.data)
@@ -109,14 +117,14 @@ export async function getCurrentWorkspace(): Promise<WorkspaceCurrent> {
   return result.data;
 }
 export async function openCurrentWorkspace(): Promise<void> {
-  const result = await workspaceApi().openCurrent();
+  const result = await requireBridgeMethod(workspaceApi().openCurrent)();
   if (!result.ok)
     throw ipcError(result.error, "Unable to open the current workspace");
   if (!result.data)
     throw ipcError(undefined, "Unable to open the current workspace");
 }
 export async function requestWorkspaceSwitch(): Promise<WorkspaceBootstrapState> {
-  const result = await workspaceApi().requestSwitch();
+  const result = await requireBridgeMethod(workspaceApi().requestSwitch)();
   if (!result.ok) throw ipcError(result.error, "Unable to switch workspace");
   if (!result.data) throw ipcError(undefined, "Unable to switch workspace");
   return result.data;
@@ -125,7 +133,7 @@ export function onWorkspaceDataInvalidated(
   listener: (event: WorkspaceDataInvalidatedEvent) => void,
 ): () => void {
   return requireDisposer(
-    workspaceDataApi().onInvalidated(listener),
+    requireBridgeMethod(workspaceDataApi().onInvalidated)(listener),
     "Workspace invalidation subscription failed",
   );
 }
@@ -134,7 +142,9 @@ export function onWorkspaceInvalidationDiagnostic(
 ): () => void {
   let subscribe: WorkspaceDataApi["onInvalidationDiagnostic"];
   try {
-    subscribe = workspaceDataApi().onInvalidationDiagnostic;
+    subscribe = requireBridgeMethod(
+      workspaceDataApi().onInvalidationDiagnostic,
+    );
   } catch {
     return () => {};
   }
@@ -145,7 +155,9 @@ export function onWorkspaceInvalidationDiagnostic(
   );
 }
 export async function getWorkspaceRuntimeIdentity(): Promise<WorkspaceRuntimeIdentity> {
-  const result = await workspaceDataApi().getRuntimeIdentity();
+  const result = await requireBridgeMethod(
+    workspaceDataApi().getRuntimeIdentity,
+  )();
   if (!result.ok || !result.data)
     throw ipcError(result.error, "Unable to read workspace runtime identity");
   return result.data as WorkspaceRuntimeIdentity;
@@ -157,7 +169,7 @@ function runtimeIpcError(
   return ipcError(error, fallback);
 }
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
-  const result = await runtimeDiagnosticsApi().get();
+  const result = await requireBridgeMethod(runtimeDiagnosticsApi().get)();
   if (!result.ok)
     throw runtimeIpcError(result.error, "Unable to read runtime diagnostics");
   if (!result.data)
@@ -170,9 +182,10 @@ export async function runBrowserSelfCheck(): Promise<{
   session: string;
   capability?: RuntimeBrowserCapability;
 }> {
-  const result = await runtimeDiagnosticsApi().browserSmoke();
+  const result = await requireBridgeMethod(
+    runtimeDiagnosticsApi().browserSmoke,
+  )();
   if (!result.ok || !result.data)
     throw runtimeIpcError(result.error, "Browser self-check failed");
   return result.data;
 }
-export { getPlatformQueue } from "./platform";

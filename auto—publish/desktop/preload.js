@@ -373,9 +373,6 @@ const api = {
     applyArticleRemovalImpact: function(input) {
       return ipcRenderer.invoke("content:trash-articles", input || {});
     },
-    trashArticles: function(input) {
-      return ipcRenderer.invoke("content:trash-articles", input);
-    },
     restoreArticle: function(input) {
       return ipcRenderer.invoke("content:restore-article", input);
     },

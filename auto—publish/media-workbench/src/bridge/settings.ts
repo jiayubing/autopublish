@@ -7,7 +7,13 @@ import type {
   PlatformProviderStatus,
   PlatformProviderTestResult,
 } from "../types/settings";
-import { ipcError, requireBridgeApi } from "./transport";
+import {
+  ipcError,
+  requireAiProviderApi,
+  requireBridgeMethod,
+  requirePlatformSettingsApi,
+  requireStorageMaintenanceApi,
+} from "./transport";
 
 type SafeIpcError = { code?: string; userMessage?: string } | undefined;
 type SettingsResponse<T> = {
@@ -54,11 +60,11 @@ type StorageMaintenanceApi = {
   >;
 };
 
-const aiProviderApi = () => requireBridgeApi<AiProviderApi>("aiProvider");
+const aiProviderApi = () => requireAiProviderApi<AiProviderApi>();
 const platformSettingsApi = () =>
-  requireBridgeApi<PlatformSettingsApi>("platformSettings");
+  requirePlatformSettingsApi<PlatformSettingsApi>();
 const storageMaintenanceApi = () =>
-  requireBridgeApi<StorageMaintenanceApi>("storageMaintenance");
+  requireStorageMaintenanceApi<StorageMaintenanceApi>();
 function settingsIpcError(error: SafeIpcError, fallback: string) {
   return ipcError(error, fallback);
 }
@@ -72,7 +78,7 @@ export type StorageUsage = {
 };
 
 export async function getAiProviderStatus(): Promise<AiProviderStatus> {
-  const result = await aiProviderApi().getStatus();
+  const result = await requireBridgeMethod(aiProviderApi().getStatus)();
   if (!result.ok)
     throw settingsIpcError(result.error, "Unable to read AI provider settings");
   if (!result.data)
@@ -82,7 +88,7 @@ export async function getAiProviderStatus(): Promise<AiProviderStatus> {
 export async function saveAiProviderConfig(
   input: AiProviderConfigInput,
 ): Promise<AiProviderStatus> {
-  const result = await aiProviderApi().save(input);
+  const result = await requireBridgeMethod(aiProviderApi().save)(input);
   if (!result.ok || !result.data)
     throw settingsIpcError(result.error, "Unable to save AI provider settings");
   return result.data;
@@ -90,7 +96,9 @@ export async function saveAiProviderConfig(
 export async function testAiProviderConnection(
   input: AiProviderConfigInput,
 ): Promise<AiProviderTestResult> {
-  const result = await aiProviderApi().testConnection(input);
+  const result = await requireBridgeMethod(aiProviderApi().testConnection)(
+    input,
+  );
   if (!result.ok || !result.data)
     throw settingsIpcError(
       result.error,
@@ -99,7 +107,7 @@ export async function testAiProviderConnection(
   return result.data;
 }
 export async function clearAiProviderConfig(): Promise<AiProviderClearResult> {
-  const result = await aiProviderApi().clear();
+  const result = await requireBridgeMethod(aiProviderApi().clear)();
   if (!result.ok || !result.data)
     throw settingsIpcError(
       result.error,
@@ -110,7 +118,9 @@ export async function clearAiProviderConfig(): Promise<AiProviderClearResult> {
 export async function getPlatformSettingsStatus<
   T extends PlatformProviderStatus = PlatformProviderStatus,
 >(platformId: string): Promise<T> {
-  const result = await platformSettingsApi().getStatus(platformId);
+  const result = await requireBridgeMethod(platformSettingsApi().getStatus)(
+    platformId,
+  );
   if (!result.ok)
     throw settingsIpcError(result.error, "Unable to read platform settings");
   if (!result.data)
@@ -121,7 +131,10 @@ export async function savePlatformSettings(
   platformId: string,
   draft: Record<string, unknown>,
 ): Promise<PlatformProviderStatus> {
-  const result = await platformSettingsApi().save(platformId, draft);
+  const result = await requireBridgeMethod(platformSettingsApi().save)(
+    platformId,
+    draft,
+  );
   if (!result.ok || !result.data)
     throw settingsIpcError(result.error, "Unable to save platform settings");
   return result.data.status;
@@ -130,7 +143,10 @@ export async function testPlatformSettings(
   platformId: string,
   draft?: Record<string, unknown>,
 ): Promise<PlatformProviderTestResult> {
-  const result = await platformSettingsApi().test(platformId, draft);
+  const result = await requireBridgeMethod(platformSettingsApi().test)(
+    platformId,
+    draft,
+  );
   if (!result.ok || !result.data)
     throw settingsIpcError(result.error, "Platform connection test failed");
   return result.data.result;
@@ -138,13 +154,17 @@ export async function testPlatformSettings(
 export async function clearPlatformSettings(
   platformId: string,
 ): Promise<{ cleared: boolean }> {
-  const result = await platformSettingsApi().clear(platformId);
+  const result = await requireBridgeMethod(platformSettingsApi().clear)(
+    platformId,
+  );
   if (!result.ok || !result.data)
     throw settingsIpcError(result.error, "Unable to clear platform settings");
   return { cleared: result.data.cleared };
 }
 export async function getLegacyPlatformSettingsStatus(): Promise<LegacyProviderSettingsStatus> {
-  const result = await platformSettingsApi().getLegacyStatus();
+  const result = await requireBridgeMethod(
+    platformSettingsApi().getLegacyStatus,
+  )();
   if (!result.ok || !result.data)
     throw settingsIpcError(
       result.error,
@@ -153,7 +173,7 @@ export async function getLegacyPlatformSettingsStatus(): Promise<LegacyProviderS
   return result.data;
 }
 export async function importLegacyPlatformSettings(): Promise<unknown> {
-  const result = await platformSettingsApi().importLegacy({
+  const result = await requireBridgeMethod(platformSettingsApi().importLegacy)({
     confirmed: true,
   });
   if (!result.ok || result.data === undefined || result.data === null)
@@ -165,14 +185,16 @@ export async function importLegacyPlatformSettings(): Promise<unknown> {
 }
 
 export async function getStorageUsage(): Promise<StorageUsage | null> {
-  const result = await storageMaintenanceApi().getUsage();
+  const result = await requireBridgeMethod(storageMaintenanceApi().getUsage)();
   if (!result.ok || !result.data)
     throw settingsIpcError(result.error, "Unable to read storage usage");
   return result.data;
 }
 
 export async function cleanStorageCaches(): Promise<{ blocked: boolean }> {
-  const result = await storageMaintenanceApi().cleanCaches();
+  const result = await requireBridgeMethod(
+    storageMaintenanceApi().cleanCaches,
+  )();
   if (!result.ok || !result.data || result.data.blocked)
     throw settingsIpcError(
       result.error || { code: result.data?.reason },

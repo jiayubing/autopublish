@@ -9,7 +9,12 @@ import type {
   PublicationTargetDto,
   SafeOperationalErrorDto,
 } from "../contracts/phase-01-domain";
-import { ipcError, requireBridgeApi } from "./transport";
+import {
+  ipcError,
+  requireBridgeMethod,
+  requireContentApi,
+  requirePublicationApi,
+} from "./transport";
 
 export type { PublicationTargetDto, SafeOperationalErrorDto };
 
@@ -46,11 +51,11 @@ type AttentionContentApi = {
 };
 
 function publicationApi(): PublicationApi {
-  return requireBridgeApi<PublicationApi>("publication");
+  return requirePublicationApi<PublicationApi>();
 }
 
 function attentionContentApi(): AttentionContentApi {
-  return requireBridgeApi<AttentionContentApi>("content");
+  return requireContentApi<AttentionContentApi>();
 }
 
 function publicationError(
@@ -66,7 +71,7 @@ export async function reconcilePublicationHistory(input: {
   reasonCode: string;
 }): Promise<PublicationHistoryRecord> {
   const api = publicationApi();
-  const result = await api.reconcile!({
+  const result = await requireBridgeMethod(api.reconcile)({
     ...input,
     confirmed: true,
   });
@@ -83,7 +88,7 @@ export async function listArticleAttentionSnapshot(
   clientId?: string,
 ): Promise<ArticleAttentionList> {
   const content = attentionContentApi();
-  const result = await content.listArticleAttention!(
+  const result = await requireBridgeMethod(content.listArticleAttention)(
     clientId ? { clientId } : undefined,
   );
   if (!result.ok || !result.data)
@@ -100,7 +105,9 @@ export async function previewArticleAttention(input: {
   action: string;
 }): Promise<ArticleAttentionPreview> {
   const content = attentionContentApi();
-  const result = await content.previewArticleAttention!(input);
+  const result = await requireBridgeMethod(content.previewArticleAttention)(
+    input,
+  );
   if (!result.ok || !result.data)
     throw ipcError(result.error, "previewArticleAttention failed");
   return result.data;
@@ -112,7 +119,9 @@ export async function resolveArticleAttention(input: {
   confirmed?: boolean;
 }): Promise<ArticleAttentionResolution> {
   const content = attentionContentApi();
-  const result = await content.resolveArticleAttention!(input);
+  const result = await requireBridgeMethod(content.resolveArticleAttention)(
+    input,
+  );
   if (!result.ok || !result.data)
     throw ipcError(result.error, "resolveArticleAttention failed");
   return result.data;

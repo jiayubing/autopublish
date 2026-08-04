@@ -7,7 +7,7 @@
   },
   "include": [
     "src/bridge/**/*.ts",
-    "src/types.ts",
+    "src/types/**/*.ts",
     "src/contracts/**/*.ts"
   ]
 }

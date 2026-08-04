@@ -887,7 +887,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "previewContentArticleRemoval",
     preloadMethod: "previewArticleRemovalImpact",
     command: "content.previewArticleRemovalImpact",
@@ -902,9 +902,9 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "trashContentArticles",
-    preloadMethod: "trashArticles",
+    preloadMethod: "applyArticleRemovalImpact",
     command: "content.trashArticles",
     channel: "content:trash-articles",
     registrar: "desktop/ipc/ai-content-ipc.js",
@@ -917,7 +917,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "restoreContentArticle",
     preloadMethod: "restoreArticle",
     command: "content.restoreArticle",
@@ -932,7 +932,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "preparePermanentDeleteContentArticle",
     preloadMethod: "preparePermanentDeleteArticle",
     command: "content.preparePermanentDeleteArticle",
@@ -947,7 +947,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "permanentlyDeleteContentArticle",
     preloadMethod: "permanentlyDeleteArticle",
     command: "content.permanentlyDeleteArticle",
@@ -962,7 +962,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "getContentArticleRemovalTransaction",
     preloadMethod: "getArticleRemovalTransaction",
     command: "content.getArticleRemovalTransaction",
@@ -977,7 +977,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "retryContentArticleRemovalTransaction",
     preloadMethod: "retryArticleRemovalTransaction",
     command: "content.retryArticleRemovalTransaction",
@@ -1049,7 +1049,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "onContentArticleRemovalTransaction",
     preloadMethod: "onArticleRemovalTransaction",
     command: "content.articleRemovalTransactionChanged",
@@ -1067,7 +1067,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "previewGenerationBatch",
     preloadMethod: "previewGenerationBatch",
     command: "generation.previewBatch",
@@ -1082,7 +1082,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "createAndStartGenerationBatch",
     preloadMethod: "createAndStartGenerationBatch",
     command: "generation.createAndStartBatch",
@@ -1097,7 +1097,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "stopGenerationBatch",
     preloadMethod: "stopGenerationBatch",
     command: "generation.stopBatch",
@@ -1112,7 +1112,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "pauseGenerationBatch",
     preloadMethod: "pauseGenerationBatch",
     command: "generation.pauseBatch",
@@ -1127,7 +1127,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "continueGenerationBatch",
     preloadMethod: "continueGenerationBatch",
     command: "generation.continueBatch",
@@ -1142,7 +1142,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "resumeGenerationBatch",
     preloadMethod: "resumeGenerationBatch",
     command: "generation.resumeBatch",
@@ -1157,7 +1157,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "retryFailedGenerationBatch",
     preloadMethod: "retryFailedGenerationBatch",
     command: "generation.retryFailed",
@@ -1172,7 +1172,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "previewCancelPendingGenerationBatch",
     preloadMethod: "previewCancelPendingGenerationBatch",
     command: "generation.previewCancelPending",
@@ -1187,7 +1187,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "cancelPendingGenerationBatch",
     preloadMethod: "cancelPendingGenerationBatch",
     command: "generation.cancelPending",
@@ -1202,7 +1202,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "getGenerationRuntimeSnapshot",
     preloadMethod: "getGenerationRuntimeSnapshot",
     command: "generation.getRuntimeSnapshot",
@@ -1217,7 +1217,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "previewGenerationSubmissionHandoff",
     preloadMethod: "previewGenerationSubmissionHandoff",
     command: "generation.previewSubmissionHandoff",
@@ -1232,7 +1232,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "commitGenerationSubmissionHandoff",
     preloadMethod: "commitGenerationSubmissionHandoff",
     command: "generation.commitSubmissionHandoff",
@@ -1367,7 +1367,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "previewTrashedArticleQueueResidue",
     preloadMethod: "previewTrashedArticleQueueResidue",
     command: "content.previewTrashedArticleQueueResidue",
@@ -1382,7 +1382,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
+    bridge: "media-workbench/src/bridge/content-removal.ts",
     bridgeSymbol: "cleanupTrashedArticleQueueResidue",
     preloadMethod: "cleanupTrashedArticleQueueResidue",
     command: "content.cleanupTrashedArticleQueueResidue",
@@ -1684,7 +1684,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "subscribeGenerationBatchState",
     preloadMethod: "onGenerationBatchState",
     command: "generation.runtimeChanged",

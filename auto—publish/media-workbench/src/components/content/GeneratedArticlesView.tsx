@@ -406,7 +406,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     setError('');
     try {
       const selections = activePreview.selections || selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id }));
-        const result = await commands.trashContentArticles({ articles: selections, selections, token: activePreview.token, legacy: activePreview.legacy, confirmed: true });
+      const result = await commands.trashContentArticles({ selections, token: activePreview.token, confirmed: true });
         if (isContentCommandStaleResult(result) || !isCurrentClient(requestedClientId)) return;
       const resultTransaction = result.transaction || (result.transactionId ? {
         transactionId: result.transactionId,

@@ -1,7 +1,13 @@
 import type { Article, Draft, MediaResource, RealOrder } from "../types/media";
 import type { IpcResponse } from "../types/ipc";
 import { formatBeijingTime } from "../time-format";
-import { ipcError, requireBridgeApi, unavailable } from "./transport";
+import {
+  ipcError,
+  requireBridgeMethod,
+  requireMediaApi,
+  requireOrdersApi,
+  unavailable,
+} from "./transport";
 
 type MediaRefreshResult = {
   status: "complete" | "truncated";
@@ -88,11 +94,11 @@ type OrdersApi = {
 };
 
 function mediaApi(): MediaApi {
-  return requireBridgeApi<MediaApi>("media");
+  return requireMediaApi<MediaApi>();
 }
 
 function ordersApi(): OrdersApi {
-  return requireBridgeApi<OrdersApi>("orders");
+  return requireOrdersApi<OrdersApi>();
 }
 
 async function unwrap<T>(
@@ -197,30 +203,33 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
 
 export async function scanArticles(): Promise<ArticleSummary[]> {
   const api = mediaApi();
-  const data = await unwrap(api.scanArticles(), "scanArticles failed");
+  const data = await unwrap(
+    requireBridgeMethod(api.scanArticles)(),
+    "scanArticles failed",
+  );
   return data.items.map(normalizeArticleSummary);
 }
 export async function previewArticle(filename: string): Promise<Article> {
   const api = mediaApi();
   const data = await unwrap(
-    api.previewArticle(filename),
+    requireBridgeMethod(api.previewArticle)(filename),
     "previewArticle failed",
   );
   return normalizeArticlePreview(data.article);
 }
 export async function getDrafts(): Promise<Draft[]> {
   const api = mediaApi();
-  return (await unwrap(api.getDrafts(), "getDrafts failed")).items.map(
-    (draft) => ({
-      ...draft,
-      selectedResources: normalizeResources(draft.selectedResources),
-    }),
-  );
+  return (
+    await unwrap(requireBridgeMethod(api.getDrafts)(), "getDrafts failed")
+  ).items.map((draft) => ({
+    ...draft,
+    selectedResources: normalizeResources(draft.selectedResources),
+  }));
 }
 export async function getDraft(filename: string): Promise<Draft> {
   const api = mediaApi();
   const data = await unwrap(
-    api.getDraft(filename),
+    requireBridgeMethod(api.getDraft)(filename),
     "getDraft failed: " + filename,
   );
   if (!data.draft) throw unavailable("Draft is unavailable");
@@ -233,7 +242,7 @@ export async function setDraft(filename: string, draft: Draft): Promise<void> {
   const api = mediaApi();
   const { filename: _filename, selectedResources, ...fields } = draft;
   await unwrap(
-    api.setDraft(filename, {
+    requireBridgeMethod(api.setDraft)(filename, {
       ...fields,
       selectedResources: selectedResources.map((resource) => ({
         resourceId: resource.resourceId,
@@ -248,7 +257,7 @@ export async function setDraft(filename: string, draft: Draft): Promise<void> {
 export async function buildConfirmation(articles: Article[]): Promise<unknown> {
   const api = mediaApi();
   return unwrap(
-    api.buildConfirmation(
+    requireBridgeMethod(api.buildConfirmation)(
       articles.map((article) => ({
         filename: article.filename,
         resourceIds: article.selectedResources.map(
@@ -262,7 +271,7 @@ export async function buildConfirmation(articles: Article[]): Promise<unknown> {
 export async function submitSelected(articles: Article[]): Promise<unknown> {
   const api = mediaApi();
   return unwrap(
-    api.submitSelected(
+    requireBridgeMethod(api.submitSelected)(
       articles.map((article) => ({
         filename: article.filename,
         resourceIds: article.selectedResources.map(
@@ -277,7 +286,10 @@ export async function refreshResources(): Promise<
   MediaRefreshResult | undefined
 > {
   const api = mediaApi();
-  return unwrap(api.refreshResources({}), "refreshResources failed");
+  return unwrap(
+    requireBridgeMethod(api.refreshResources)({}),
+    "refreshResources failed",
+  );
 }
 export async function getResourcePage(opts: {
   page?: number;
@@ -291,7 +303,7 @@ export async function getResourcePage(opts: {
   const api = mediaApi();
   const input = { page: opts.page || 1, pageSize: opts.pageSize || 50 };
   const raw = await unwrap(
-    api.getResourcePage(input),
+    requireBridgeMethod(api.getResourcePage)(input),
     "getResourcePage failed",
   );
   return {
@@ -318,7 +330,7 @@ export async function searchResourcePage(opts: {
     pageSize: opts.pageSize || 50,
   };
   const raw = await unwrap(
-    api.searchResourcePage(input),
+    requireBridgeMethod(api.searchResourcePage)(input),
     "searchResourcePage failed",
   );
   return {
@@ -343,34 +355,55 @@ export async function getPoolPage(input: {
   hasNext: boolean;
 }> {
   const api = mediaApi();
-  const data = await unwrap(api.getPool(input), "getPool failed");
+  const data = await unwrap(
+    requireBridgeMethod(api.getPool)(input),
+    "getPool failed",
+  );
   return { ...data, items: data.items.map(normalizeResource) };
 }
 export async function addToPool(resource: MediaResource): Promise<void> {
   const api = mediaApi();
-  await unwrap(api.addToPool(resource), "addToPool failed");
+  await unwrap(
+    requireBridgeMethod(api.addToPool)(resource),
+    "addToPool failed",
+  );
 }
 export async function removeFromPool(resourceId: string): Promise<void> {
   const api = mediaApi();
-  await unwrap(api.removeFromPool(resourceId), "removeFromPool failed");
+  await unwrap(
+    requireBridgeMethod(api.removeFromPool)(resourceId),
+    "removeFromPool failed",
+  );
 }
 export async function getBalance(): Promise<number> {
   const api = mediaApi();
-  const raw = await unwrap(api.getBalance(), "getBalance failed");
+  const raw = await unwrap(
+    requireBridgeMethod(api.getBalance)(),
+    "getBalance failed",
+  );
   const balance = Number(raw.balance);
   if (!Number.isFinite(balance)) throw ipcError(undefined, "getBalance failed");
   return balance;
 }
 export async function getOrders(): Promise<RealOrder[]> {
   const api = ordersApi();
-  const data = await unwrap(api.getOrders(), "getOrders failed");
+  const data = await unwrap(
+    requireBridgeMethod(api.getOrders)(),
+    "getOrders failed",
+  );
   return data.items.map(normalizeOrder);
 }
 export async function syncOrder(orderNid: string): Promise<unknown> {
   const api = ordersApi();
-  return unwrap(api.syncOrder(orderNid), "syncOrder failed");
+  return unwrap(
+    requireBridgeMethod(api.syncOrder)(orderNid),
+    "syncOrder failed",
+  );
 }
 export async function openPublishedUrl(orderNid: string): Promise<void> {
   const api = ordersApi();
-  await unwrap(api.openPublishedUrl(orderNid), "openPublishedUrl failed");
+  await unwrap(
+    requireBridgeMethod(api.openPublishedUrl)(orderNid),
+    "openPublishedUrl failed",
+  );
 }

@@ -6,7 +6,12 @@ import type {
   PlatformTaskSnapshot,
 } from "../types/platform";
 import type { IpcResponse } from "../types/ipc";
-import { ipcError, requireBridgeApi, requireDisposer } from "./transport";
+import {
+  ipcError,
+  requireBridgeMethod,
+  requireDisposer,
+  requirePlatformsApi,
+} from "./transport";
 
 type PlatformApi = {
   getQueue: () => Promise<IpcResponse<PlatformQueueData>>;
@@ -36,7 +41,7 @@ type PlatformApi = {
   onStateDiagnostic?: (listener: () => void) => () => void;
 };
 
-const platformApi = () => requireBridgeApi<PlatformApi>("platforms");
+const platformApi = () => requirePlatformsApi<PlatformApi>();
 
 const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   lieju: "列举网",
@@ -49,7 +54,7 @@ export function getPlatformDisplayName(id: string): string {
 }
 
 export async function getPlatformQueue(): Promise<PlatformQueueData> {
-  const result = await platformApi().getQueue();
+  const result = await requireBridgeMethod(platformApi().getQueue)();
   if (!result.ok) throw ipcError(result.error, "getPlatformQueue failed");
   if (!result.data) throw ipcError(undefined, "getPlatformQueue failed");
   const data = result.data as {
@@ -69,13 +74,15 @@ export async function getPlatformQueue(): Promise<PlatformQueueData> {
 }
 
 export async function openPlatformLogin(platformId: string): Promise<void> {
-  const result = await platformApi().openLogin(platformId);
+  const result = await requireBridgeMethod(platformApi().openLogin)(platformId);
   if (!result.ok) throw ipcError(result.error, "openPlatformLogin failed");
   if (!result.data) throw ipcError(undefined, "openPlatformLogin failed");
 }
 
 export async function checkPlatformLogin(platformId: string): Promise<boolean> {
-  const result = await platformApi().checkLogin(platformId);
+  const result = await requireBridgeMethod(platformApi().checkLogin)(
+    platformId,
+  );
   if (!result.ok) throw ipcError(result.error, "checkPlatformLogin failed");
   if (!result.data) throw ipcError(undefined, "checkPlatformLogin failed");
   return result.data.authenticated;
@@ -90,7 +97,7 @@ export async function submitPlatformSelection(input: {
   }>;
   autoTrash?: boolean;
 }): Promise<PlatformSubmitResult> {
-  const result = await platformApi().submitSelected(input);
+  const result = await requireBridgeMethod(platformApi().submitSelected)(input);
   if (!result.ok)
     throw ipcError(result.error, "submitPlatformSelection failed");
   if (!result.data) throw ipcError(undefined, "submitPlatformSelection failed");
@@ -98,7 +105,7 @@ export async function submitPlatformSelection(input: {
 }
 
 export async function getPlatformState(): Promise<PlatformTaskSnapshot> {
-  const result = await platformApi().getState();
+  const result = await requireBridgeMethod(platformApi().getState)();
   if (!result.ok) throw ipcError(result.error, "getPlatformState failed");
   if (!result.data) throw ipcError(undefined, "getPlatformState failed");
   return result.data;
@@ -107,13 +114,13 @@ export async function getPlatformState(): Promise<PlatformTaskSnapshot> {
 export async function pausePlatformSubmit(
   runId?: string | null,
 ): Promise<void> {
-  const result = await platformApi().pauseSubmit(runId);
+  const result = await requireBridgeMethod(platformApi().pauseSubmit)(runId);
   if (!result.ok) throw ipcError(result.error, "pausePlatformSubmit failed");
   if (!result.data) throw ipcError(undefined, "pausePlatformSubmit failed");
 }
 
 export async function stopPlatformSubmit(runId?: string | null): Promise<void> {
-  const result = await platformApi().stopSubmit(runId);
+  const result = await requireBridgeMethod(platformApi().stopSubmit)(runId);
   if (!result.ok) throw ipcError(result.error, "stopPlatformSubmit failed");
   if (!result.data) throw ipcError(undefined, "stopPlatformSubmit failed");
 }
@@ -122,7 +129,7 @@ export function onPlatformState(
   listener: (state: PlatformSubmitState) => void,
 ): () => void {
   return requireDisposer(
-    platformApi().onState(listener),
+    requireBridgeMethod(platformApi().onState)(listener),
     "onPlatformState failed",
   );
 }
@@ -130,7 +137,7 @@ export function onPlatformState(
 export function onPlatformStateDiagnostic(listener: () => void): () => void {
   let subscribe: PlatformApi["onStateDiagnostic"];
   try {
-    subscribe = platformApi().onStateDiagnostic;
+    subscribe = requireBridgeMethod(platformApi().onStateDiagnostic);
   } catch {
     return () => {};
   }
@@ -140,8 +147,3 @@ export function onPlatformStateDiagnostic(listener: () => void): () => void {
     "onPlatformStateDiagnostic failed",
   );
 }
-
-export {
-  previewTrashedArticleQueueResidue,
-  cleanupTrashedArticleQueueResidue,
-} from "./content";

@@ -2720,6 +2720,446 @@ function bridgeCallsPreloadMember(
   const bridgeSymbol = exportedSymbol(checker, sourceFile, exportName);
   const declaration = declarationOf(bridgeSymbol, ts.isFunctionLike);
   if (!declaration) return null;
+  const staticNamespaceAccessors = new Map([
+    ["requireAuthApi", "auth"],
+    ["requireContentApi", "content"],
+    ["requirePlatformsApi", "platforms"],
+    ["requireMediaApi", "media"],
+    ["requireOrdersApi", "orders"],
+    ["requirePublicationApi", "publication"],
+    ["requireWorkspaceApi", "workspace"],
+    ["requireWorkspaceDataApi", "workspaceData"],
+    ["requireRuntimeDiagnosticsApi", "runtimeDiagnostics"],
+    ["requireAiProviderApi", "aiProvider"],
+    ["requirePlatformSettingsApi", "platformSettings"],
+    ["requireStorageMaintenanceApi", "storageMaintenance"],
+  ]);
+  function isTransportHelper(symbol) {
+    return (symbol?.declarations || []).some(
+      (candidate) =>
+        candidate
+          .getSourceFile()
+          .fileName.replaceAll("\\", "/")
+          .endsWith("/media-workbench/src/bridge/transport.ts") &&
+        ts.isFunctionDeclaration(candidate),
+    );
+  }
+
+  function transportFunction(symbol, name) {
+    return (
+      (symbol?.declarations || []).find(
+        (candidate) =>
+          candidate
+            .getSourceFile()
+            .fileName.replaceAll("\\", "/")
+            .endsWith("/media-workbench/src/bridge/transport.ts") &&
+          ts.isFunctionDeclaration(candidate) &&
+          candidate.name?.text === name,
+      ) || null
+    );
+  }
+
+  function unwrapExpression(expression) {
+    let current = expression;
+    while (
+      ts.isParenthesizedExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isAwaitExpression(current)
+    )
+      current = current.expression;
+    return current;
+  }
+
+  function returnStatements(callable) {
+    if (!callable?.body) return [];
+    if (!ts.isBlock(callable.body))
+      return [{ expression: callable.body, statement: null }];
+    return walk(
+      callable,
+      ts.isReturnStatement,
+      (node) => ts.isFunctionLike(node),
+      checker,
+    ).map((statement) => ({
+      expression: statement.expression || null,
+      statement,
+    }));
+  }
+
+  function returnExpressions(callable) {
+    return returnStatements(callable).map((entry) => entry.expression);
+  }
+
+  function assignmentTargetNodes(expression) {
+    let current = expression;
+    while (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current)
+    )
+      current = current.expression;
+    if (ts.isIdentifier(current)) return [current];
+    if (ts.isObjectLiteralExpression(current))
+      return current.properties.flatMap((property) => {
+        if (ts.isShorthandPropertyAssignment(property))
+          return [
+            checker.getShorthandAssignmentValueSymbol(property) ||
+              property.name,
+          ];
+        if (ts.isPropertyAssignment(property))
+          return assignmentTargetNodes(property.initializer);
+        if (ts.isSpreadAssignment(property))
+          return assignmentTargetNodes(property.expression);
+        return [];
+      });
+    if (ts.isArrayLiteralExpression(current))
+      return current.elements.flatMap((element) =>
+        ts.isOmittedExpression(element) ? [] : assignmentTargetNodes(element),
+      );
+    return [];
+  }
+
+  function assignmentTarget(node) {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    )
+      return node.left;
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken)
+    )
+      return node.operand;
+    return null;
+  }
+
+  function functionIsImmediatelyInvoked(callableNode) {
+    let current = callableNode;
+    let parent = current.parent;
+    while (parent) {
+      if (
+        ts.isParenthesizedExpression(parent) ||
+        ts.isAsExpression(parent) ||
+        ts.isTypeAssertionExpression(parent) ||
+        ts.isSatisfiesExpression(parent) ||
+        ts.isNonNullExpression(parent)
+      ) {
+        current = parent;
+        parent = current.parent;
+        continue;
+      }
+      if (
+        ts.isBinaryExpression(parent) &&
+        parent.operatorToken.kind === ts.SyntaxKind.CommaToken &&
+        parent.right === current
+      ) {
+        current = parent;
+        parent = current.parent;
+        continue;
+      }
+      if (ts.isCallExpression(parent) && parent.expression === current)
+        return true;
+      if (
+        ts.isPropertyAccessExpression(parent) &&
+        (parent.name.text === "call" || parent.name.text === "apply") &&
+        parent.expression === current &&
+        ts.isCallExpression(parent.parent) &&
+        parent.parent.expression === parent
+      )
+        return true;
+      return false;
+    }
+    return false;
+  }
+
+  function symbolHasWrites(callable, target, afterPosition = -1) {
+    if (!callable || !target) return false;
+    return walk(
+      callable,
+      (node) => {
+        const left = assignmentTarget(node);
+        return Boolean(
+          left &&
+            node.pos > afterPosition &&
+            assignmentTargetNodes(left).some(
+              (candidate) => canonicalSymbol(checker, candidate) === target,
+            ),
+        );
+      },
+      (node) =>
+        ts.isFunctionLike(node) &&
+        node !== callable &&
+        !functionIsImmediatelyInvoked(node),
+      checker,
+    ).length > 0;
+  }
+
+  function returnsParameter(callable, parameterIndex) {
+    const parameter = callable?.parameters?.[parameterIndex];
+    const target = parameter ? canonicalSymbol(checker, parameter.name) : null;
+    const returns = returnExpressions(callable);
+    return Boolean(
+      target &&
+      !symbolHasWrites(callable, target, parameter?.end ?? -1) &&
+      returns.length > 0 &&
+      returns.every(
+        (expression) =>
+          expression && effectiveValueSymbol(checker, expression) === target,
+      ),
+    );
+  }
+
+  function isUndefinedExpression(expression) {
+    const current = unwrapExpression(expression);
+    return (
+      (ts.isIdentifier(current) && current.text === "undefined") ||
+      ts.isVoidExpression(current)
+    );
+  }
+
+  function terminatesWithThrow(statement) {
+    let current = statement;
+    while (current && ts.isBlock(current)) {
+      const last = current.statements[current.statements.length - 1];
+      current = last || null;
+    }
+    return Boolean(current && ts.isThrowStatement(current));
+  }
+
+  function isNullishExpression(expression) {
+    const current = unwrapExpression(expression);
+    return (
+      (ts.isIdentifier(current) && current.text === "undefined") ||
+      current.kind === ts.SyntaxKind.NullKeyword
+    );
+  }
+
+  function isFalsyGuardFor(condition, target) {
+    const current = unwrapExpression(condition);
+    if (
+      ts.isPrefixUnaryExpression(current) &&
+      current.operator === ts.SyntaxKind.ExclamationToken
+    )
+      return canonicalSymbol(checker, current.operand) === target;
+    if (!ts.isBinaryExpression(current)) return false;
+    if (
+      current.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsToken &&
+      current.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
+    )
+      return false;
+    return (
+      (canonicalSymbol(checker, current.left) === target &&
+        isNullishExpression(current.right)) ||
+      (canonicalSymbol(checker, current.right) === target &&
+        isNullishExpression(current.left))
+    );
+  }
+
+  function typeofWindowUndefinedRelation(condition) {
+    const current = unwrapExpression(condition);
+    if (!ts.isBinaryExpression(current)) return null;
+    const isEquality =
+      current.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
+      current.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken;
+    const isInequality =
+      current.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken ||
+      current.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+    if (!isEquality && !isInequality) return null;
+    const isWindowTypeof = (expression) =>
+      ts.isTypeOfExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === "window";
+    const isUndefinedLiteral = (expression) =>
+      ts.isStringLiteral(expression) && expression.text === "undefined";
+    const leftMatches =
+      isWindowTypeof(current.left) && isUndefinedLiteral(current.right);
+    const rightMatches =
+      isUndefinedLiteral(current.left) && isWindowTypeof(current.right);
+    if (!leftMatches && !rightMatches) return null;
+    return isEquality ? "undefined-when-true" : "desktop-when-true";
+  }
+
+  function variableIsGuardedBeforeThrow(variable, callable) {
+    if (!variable || !callable?.body || !ts.isBlock(callable.body))
+      return false;
+    const declarationStatement = variable.parent?.parent;
+    if (!ts.isVariableStatement(declarationStatement)) return false;
+    const block = declarationStatement.parent;
+    if (!ts.isBlock(block)) return false;
+    const declarationIndex = block.statements.indexOf(declarationStatement);
+    const target = canonicalSymbol(checker, variable.name);
+    if (declarationIndex < 0 || !target) return false;
+    const returns = returnStatements(callable).filter(
+      (entry) => entry.statement,
+    );
+    return block.statements.slice(declarationIndex + 1).some((statement) => {
+      if (
+        !ts.isIfStatement(statement) ||
+        !isFalsyGuardFor(statement.expression, target) ||
+        !terminatesWithThrow(statement.thenStatement)
+      )
+        return false;
+      return (
+        returns.length > 0 &&
+        returns.every((entry) => entry.statement.pos >= statement.end)
+      );
+    });
+  }
+
+  function reachesDesktopConsole(
+    expression,
+    visited = new Set(),
+    callable = null,
+    allowUndefined = false,
+  ) {
+    const current = unwrapExpression(expression);
+    if (!current) return false;
+    const key = `${current.pos}:${current.end}:${allowUndefined}`;
+    if (visited.has(key)) return false;
+    visited.add(key);
+    if (allowUndefined && isUndefinedExpression(current)) return true;
+    if (
+      ts.isPropertyAccessExpression(current) &&
+      current.name.text === "desktopConsole" &&
+      ts.isIdentifier(current.expression) &&
+      current.expression.text === "window"
+    )
+      return true;
+    if (ts.isConditionalExpression(current)) {
+      const relation = typeofWindowUndefinedRelation(current.condition);
+      if (relation) {
+        const desktopWhenTrue = relation === "desktop-when-true";
+        return (
+          (desktopWhenTrue
+            ? reachesDesktopConsole(
+                current.whenTrue,
+                new Set(visited),
+                callable,
+                false,
+              )
+            : allowUndefined && isUndefinedExpression(current.whenTrue)) &&
+          (desktopWhenTrue
+            ? allowUndefined && isUndefinedExpression(current.whenFalse)
+            : reachesDesktopConsole(
+                current.whenFalse,
+                new Set(visited),
+                callable,
+                false,
+              ))
+        );
+      }
+      return (
+        reachesDesktopConsole(
+          current.whenTrue,
+          new Set(visited),
+          callable,
+          allowUndefined,
+        ) &&
+        reachesDesktopConsole(
+          current.whenFalse,
+          new Set(visited),
+          callable,
+          allowUndefined,
+        )
+      );
+    }
+    if (!ts.isIdentifier(current)) return false;
+    const symbol = canonicalSymbol(checker, current);
+    return (symbol?.declarations || []).some(
+      (candidate) =>
+        ts.isVariableDeclaration(candidate) &&
+        candidate.initializer &&
+        !symbolHasWrites(callable, symbol, candidate.end) &&
+        reachesDesktopConsole(
+          candidate.initializer,
+          new Set(visited),
+          callable,
+          allowUndefined || variableIsGuardedBeforeThrow(candidate, callable),
+        ),
+    );
+  }
+
+  function transportAccessorReturnsNamespace(
+    symbol,
+    name,
+    namespace,
+    visited = new Set(),
+  ) {
+    const accessor = transportFunction(symbol, name);
+    if (!accessor) return false;
+    const key = `${accessor.pos}:${accessor.end}:${namespace}`;
+    if (visited.has(key)) return false;
+    visited.add(key);
+    const returns = returnExpressions(accessor);
+    return (
+      returns.length > 0 &&
+      returns.every((expression) =>
+        transportExpressionReturnsNamespace(
+          expression,
+          namespace,
+          new Set(visited),
+        ),
+      )
+    );
+  }
+
+  function transportExpressionReturnsNamespace(
+    expression,
+    namespace,
+    visited = new Set(),
+  ) {
+    const current = unwrapExpression(expression);
+    if (!current) return false;
+    const key = `${current.pos}:${current.end}:${namespace}`;
+    if (visited.has(key)) return false;
+    visited.add(key);
+    if (
+      ts.isPropertyAccessExpression(current) &&
+      current.name.text === namespace &&
+      ts.isCallExpression(current.expression) &&
+      ts.isIdentifier(current.expression.expression) &&
+      current.expression.expression.text === "requireDesktopConsole"
+    ) {
+      const desktopConsole = transportFunction(
+        canonicalSymbol(checker, current.expression.expression),
+        "requireDesktopConsole",
+      );
+      const returns = desktopConsole ? returnStatements(desktopConsole) : [];
+      return Boolean(
+        desktopConsole &&
+          returns.length > 0 &&
+          returns.every(({ expression }) =>
+            reachesDesktopConsole(expression, new Set(visited), desktopConsole),
+          ),
+      );
+    }
+    if (
+      ts.isCallExpression(current) &&
+      ts.isIdentifier(current.expression) &&
+      current.expression.text === "requireBridgeCapability"
+    ) {
+      const capability = transportFunction(
+        canonicalSymbol(checker, current.expression),
+        "requireBridgeCapability",
+      );
+      return Boolean(
+        capability &&
+        returnsParameter(capability, 0) &&
+        current.arguments[0] &&
+        transportExpressionReturnsNamespace(
+          current.arguments[0],
+          namespace,
+          new Set(visited),
+        ),
+      );
+    }
+    return false;
+  }
 
   function receiverReachesNamespace(expression, visited = new Set()) {
     if (!expression) return false;
@@ -2793,21 +3233,20 @@ function bridgeCallsPreloadMember(
       return Boolean(canonicalSymbol(checker, expression.expression));
     }
     if (!ts.isCallExpression(expression)) return false;
-    if (
-      ts.isIdentifier(expression.expression) &&
-      expression.expression.text === "requireBridgeApi" &&
-      ts.isStringLiteral(expression.arguments[0]) &&
-      expression.arguments[0].text === preloadNamespace
-    ) {
+    if (ts.isIdentifier(expression.expression)) {
       const helper = canonicalSymbol(checker, expression.expression);
-      return (helper?.declarations || []).some(
-        (candidate) =>
-          candidate
-            .getSourceFile()
-            .fileName.replaceAll("\\", "/")
-            .endsWith("/media-workbench/src/bridge/transport.ts") &&
-          ts.isFunctionDeclaration(candidate),
-      );
+      if (
+        staticNamespaceAccessors.get(expression.expression.text) ===
+        preloadNamespace
+      )
+        return (
+          isTransportHelper(helper) &&
+          transportAccessorReturnsNamespace(
+            helper,
+            expression.expression.text,
+            preloadNamespace,
+          )
+        );
     }
     const local = canonicalSymbol(checker, expression.expression);
     for (const candidate of local?.declarations || []) {
@@ -2852,6 +3291,15 @@ function bridgeCallsPreloadMember(
         receiverReachesNamespace(node.expression),
       (node) => ts.isFunctionLike(node),
     )) {
+      if (
+        ts.isCallExpression(access.parent) &&
+        ts.isIdentifier(access.parent.expression) &&
+        access.parent.expression.text === "requireBridgeMethod" &&
+        ts.isCallExpression(access.parent.parent) &&
+        access.parent.parent.expression === access.parent &&
+        (!requireResult || !resultIsDiscarded(checker, access.parent.parent))
+      )
+        return canonicalSymbol(checker, access.name);
       let current = access.parent;
       while (current && current !== entry.body) {
         if (
@@ -2906,6 +3354,12 @@ function bridgeCallsPreloadMember(
         (!requireResult || !resultIsDiscarded(checker, call))
       )
         return canonicalSymbol(checker, expression.expression) || bridgeSymbol;
+      if (
+        ts.isIdentifier(expression) &&
+        (expression.text === "requireBridgeMethod" ||
+          staticNamespaceAccessors.has(expression.text))
+      )
+        continue;
       const local = ts.isIdentifier(expression)
         ? canonicalSymbol(checker, expression)
         : null;

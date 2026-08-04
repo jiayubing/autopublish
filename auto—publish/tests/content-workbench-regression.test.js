@@ -49,6 +49,31 @@ describe("content workbench regression", function() {
     assert.match(workbench, /onRefresh|refresh/);
   });
 
+  it("keeps the content view height chain constrained for batch wizard actions", function() {
+    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
+    assert.match(workbench, /<div className="flex min-h-0 flex-1 flex-col overflow-hidden">\s*\{tab === 'questions'/);
+  });
+
+  it("lets the batch generation branch fill the remaining article-generation height", function() {
+    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
+    assert.match(article, /\{mode === 'batch' \? <div className="min-h-0 flex-1">\s*<BatchGenerationView/);
+  });
+
+  it("keeps the batch wizard action bar visible when a previous batch snapshot exists", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    assert.match(batch, /\{viewMode === 'wizard' && <div className="flex shrink-0 items-center justify-between/);
+    assert.match(batch, /: '下一步'\}/);
+  });
+
+  it("keeps an explicitly opened new-batch wizard open across preview hydration", function() {
+    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+    const feature = read("media-workbench/src/features/generation/generation-feature.js");
+    assert.match(feature, /await hydrate\('command-result'\)/);
+    assert.match(batch, /const newBatchWizardRef = useRef\(false\)/);
+    assert.match(batch, /if \(batch && !newBatchWizardRef\.current\) setViewMode\('monitoring'\)/);
+    assert.match(batch, /newBatchWizardRef\.current = true/);
+  });
+
   it("exposes the collection API and multi-research generation contract", function() {
     const api = read("media-workbench/src/bridge/content.ts");
     const types = read("media-workbench/src/types/content.ts");
@@ -78,8 +103,8 @@ describe("content workbench regression", function() {
     const api = read("media-workbench/src/bridge/content.ts");
     assert.match(preload, /previewDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:preview-doubao-batch", input\); \}/);
     assert.match(preload, /startPreparedDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:start-prepared-doubao-batch", input\); \}/);
-    assert.match(api, /export async function previewDoubaoBatch[\s\S]*callDoubao\(\s*\(api\) => api\.previewDoubaoBatch\(input\)/);
-    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*callDoubao\(\s*\(api\) => api\.startPreparedDoubaoBatch\(\{ tasks \}\)/);
+    assert.match(api, /export async function previewDoubaoBatch[\s\S]*callDoubao\(\s*\(api\) => requireBridgeMethod\(api\.previewDoubaoBatch\)\(input\)/);
+    assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*callDoubao\(\s*\(api\) => requireBridgeMethod\(api\.startPreparedDoubaoBatch\)\(\{ tasks \}\)/);
     assert.doesNotMatch(api, /callContent\(\s*"(?:previewDoubaoBatch|startPreparedDoubaoBatch)"/);
     assert.doesNotMatch(api, /export function startPreparedDoubaoBatch[\s\S]*return startDoubaoBatch\(tasks\)/);
   });
@@ -106,7 +131,7 @@ describe("content workbench regression", function() {
     const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
     const generationFeature = read("media-workbench/src/features/generation/use-generation-feature.ts");
-    const api = read("media-workbench/src/bridge/content.ts");
+    const api = read("media-workbench/src/bridge/generation.ts");
     ["单篇生成", "批量生成", "CollapsibleSourceItem", "materialIds", "researchQueryIds"].forEach(function(value) {
       assert.equal(article.includes(value), true, "missing " + value);
     });

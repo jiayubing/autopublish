@@ -13,7 +13,7 @@ import type {
   TrashedArticleQueueResiduePreview,
 } from "../types/publication";
 import type { GeneratedContentArticle } from "../types/generation";
-import { ipcError, requireBridgeApi } from "./transport";
+import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
 
 type SafeContentIpcError = {
   code: string;
@@ -34,13 +34,9 @@ type ContentIpcResponse<T> =
 
 type CoreContentRemovalApi = {
   previewArticleRemovalImpact: (input: {
-    articles: ArticleReviewSelection[];
     selections: ArticleReviewSelection[];
   }) => Promise<ContentIpcResponse<ArticleTrashPreview>>;
   applyArticleRemovalImpact: (
-    input: ArticleTrashCommitInput,
-  ) => Promise<ContentIpcResponse<ArticleTrashResult>>;
-  trashArticles: (
     input: ArticleTrashCommitInput,
   ) => Promise<ContentIpcResponse<ArticleTrashResult>>;
   getArticleRemovalTransaction: (
@@ -89,7 +85,7 @@ async function callCoreRemoval<TWire, TResult = TWire>(
   message: string,
   map?: (wire: TWire) => TResult,
 ): Promise<TResult> {
-  const api = requireBridgeApi<CoreContentRemovalApi>("content");
+  const api = requireContentApi<CoreContentRemovalApi>();
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -103,7 +99,7 @@ async function callSubmissionRemoval<TWire, TResult = TWire>(
   ) => Promise<ContentIpcResponse<TWire>>,
   message: string,
 ): Promise<TResult> {
-  const api = requireBridgeApi<SubmissionContentRemovalApi>("content");
+  const api = requireContentApi<SubmissionContentRemovalApi>();
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -112,16 +108,10 @@ async function callSubmissionRemoval<TWire, TResult = TWire>(
 }
 
 export async function trashContentArticles(
-  input: ArticleTrashCommitInput & { articles: ArticleReviewSelection[] },
+  input: ArticleTrashCommitInput,
 ): Promise<ArticleTrashResult> {
-  const request: ArticleTrashCommitInput = input.legacy
-    ? { articles: input.articles, confirmed: true }
-    : { ...input, selections: input.articles };
   return callCoreRemoval(
-    (api) =>
-      input.legacy
-        ? api.trashArticles(request)
-        : api.applyArticleRemovalImpact(request),
+    (api) => requireBridgeMethod(api.applyArticleRemovalImpact)(input),
     "Unable to move articles to trash",
   );
 }
@@ -131,14 +121,16 @@ export async function previewContentArticleRemoval(
 ): Promise<ArticleTrashPreview> {
   return callCoreRemoval(
     (api) =>
-      api.previewArticleRemovalImpact({ selections: articles, articles }),
+      requireBridgeMethod(api.previewArticleRemovalImpact)({
+        selections: articles,
+      }),
     "Unable to preview moving articles to trash",
   );
 }
 
 export async function previewTrashedArticleQueueResidue(): Promise<TrashedArticleQueueResiduePreview> {
   return callSubmissionRemoval(
-    (api) => api.previewTrashedArticleQueueResidue(),
+    (api) => requireBridgeMethod(api.previewTrashedArticleQueueResidue)(),
     "Unable to inspect trashed article queue residue",
   );
 }
@@ -147,7 +139,10 @@ export async function cleanupTrashedArticleQueueResidue(): Promise<
   TrashedArticleQueueResiduePreview & { cleanedCount: number }
 > {
   return callSubmissionRemoval(
-    (api) => api.cleanupTrashedArticleQueueResidue({ confirmed: true }),
+    (api) =>
+      requireBridgeMethod(api.cleanupTrashedArticleQueueResidue)({
+        confirmed: true,
+      }),
     "Unable to clean trashed article queue residue",
   );
 }
@@ -156,7 +151,8 @@ export async function getContentArticleRemovalTransaction(
   transactionId: string,
 ): Promise<ArticleRemovalTransaction | null> {
   const result = await callCoreRemoval(
-    (api) => api.getArticleRemovalTransaction(transactionId),
+    (api) =>
+      requireBridgeMethod(api.getArticleRemovalTransaction)(transactionId),
     "Unable to read article removal transaction",
   );
   return result.transaction;
@@ -166,10 +162,9 @@ export function onContentArticleRemovalTransaction(
   transactionId: string,
   listener: (transaction: ArticleRemovalTransaction) => void,
 ): () => void {
-  const subscribe =
-    requireBridgeApi<CoreContentRemovalApi>(
-      "content",
-    ).onArticleRemovalTransaction;
+  const subscribe = requireBridgeMethod(
+    requireContentApi<CoreContentRemovalApi>().onArticleRemovalTransaction,
+  );
   return subscribe((transaction) => {
     const id =
       transaction.transactionId ||
@@ -183,7 +178,10 @@ export async function retryContentArticleRemovalTransaction(
 ): Promise<ArticleRemovalTransaction> {
   const result = await callCoreRemoval(
     (api) =>
-      api.retryArticleRemovalTransaction({ transactionId, confirmed: true }),
+      requireBridgeMethod(api.retryArticleRemovalTransaction)({
+        transactionId,
+        confirmed: true,
+      }),
     "Unable to repair article removal transaction",
   );
   return result.transaction;
@@ -193,7 +191,7 @@ export async function restoreContentArticle(
   input: ArticleReviewSelection,
 ): Promise<GeneratedContentArticle> {
   return callCoreRemoval(
-    (api) => api.restoreArticle(input),
+    (api) => requireBridgeMethod(api.restoreArticle)(input),
     "Unable to restore article",
     (wire) => wire.article,
   );
@@ -203,7 +201,7 @@ export async function preparePermanentDeleteContentArticle(
   input: ArticleReviewSelection,
 ): Promise<ArticlePermanentDeleteConfirmation> {
   return callCoreRemoval(
-    (api) => api.preparePermanentDeleteArticle(input),
+    (api) => requireBridgeMethod(api.preparePermanentDeleteArticle)(input),
     "Unable to prepare permanent article deletion",
   );
 }
@@ -212,7 +210,7 @@ export async function permanentlyDeleteContentArticle(
   input: ArticlePermanentDeleteRequest,
 ): Promise<ArticlePermanentDeleteResult> {
   return callCoreRemoval(
-    (api) => api.permanentlyDeleteArticle(input),
+    (api) => requireBridgeMethod(api.permanentlyDeleteArticle)(input),
     "Unable to permanently delete article",
   );
 }

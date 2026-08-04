@@ -10,7 +10,7 @@ import type {
   GenerationSubmissionHandoffResult,
 } from "../types/generation";
 import type { ContentSubmissionPlatform } from "../types/publication";
-import { ipcError, requireBridgeApi } from "./transport";
+import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
 
 type SafeGenerationIpcError = {
   code: string;
@@ -127,7 +127,7 @@ async function callGeneration<TWire, TResult = TWire>(
   message: string,
   options?: { map?: (data: TWire) => TResult },
 ): Promise<TResult> {
-  const api = requireBridgeApi<GenerationContentApi>("content");
+  const api = requireContentApi<GenerationContentApi>();
   const result = await invoke(api);
   if (result.ok === false) throw generationIpcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -142,7 +142,7 @@ async function callSubmission<TWire, TResult = TWire>(
   message: string,
   map?: (data: TWire) => TResult,
 ): Promise<TResult> {
-  const api = requireBridgeApi<SubmissionContentApi>("content");
+  const api = requireContentApi<SubmissionContentApi>();
   const result = await invoke(api);
   if (result.ok === false) throw generationIpcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -159,7 +159,7 @@ export async function generateContentArticle(input: {
   templateCatalogRevision?: string;
 }): Promise<GeneratedContentArticle> {
   return callGeneration(
-    (api) => api.generateArticle(input),
+    (api) => requireBridgeMethod(api.generateArticle)(input),
     "Unable to generate article",
     { map: (wire) => wire.article },
   );
@@ -169,7 +169,7 @@ export async function saveContentArticle(
   article: GeneratedContentArticle,
 ): Promise<GeneratedContentArticle> {
   return callGeneration(
-    (api) => api.saveArticle(article),
+    (api) => requireBridgeMethod(api.saveArticle)(article),
     "Unable to save article",
     { map: (wire) => wire.article },
   );
@@ -180,7 +180,7 @@ export async function copyContentArticleVersion(input: {
   sourceArticleId: string;
 }): Promise<GeneratedContentArticle> {
   return callGeneration(
-    (api) => api.copyArticleVersion(input),
+    (api) => requireBridgeMethod(api.copyArticleVersion)(input),
     "Unable to copy article version",
     { map: (wire) => wire.article },
   );
@@ -190,7 +190,7 @@ export async function previewGenerationBatch(
   input: GenerationPlanInput,
 ): Promise<GenerationBatchPreview> {
   return callGeneration(
-    (api) => api.previewGenerationBatch(input),
+    (api) => requireBridgeMethod(api.previewGenerationBatch)(input),
     "Unable to preview generation batch",
   );
 }
@@ -199,7 +199,7 @@ export async function createAndStartGenerationBatch(
   input: GenerationPlanInput,
 ): Promise<GenerationBatch> {
   return callGeneration(
-    (api) => api.createAndStartGenerationBatch(input),
+    (api) => requireBridgeMethod(api.createAndStartGenerationBatch)(input),
     "Unable to create and start generation batch",
     { map: (data) => data.batch },
   );
@@ -209,7 +209,7 @@ export async function pauseGenerationBatch(input?: {
   batchId?: string;
 }): Promise<GenerationBatch | null> {
   return callGeneration(
-    (api) => api.pauseGenerationBatch(input),
+    (api) => requireBridgeMethod(api.pauseGenerationBatch)(input),
     "Unable to pause generation batch",
     { map: (data) => data.batch },
   );
@@ -219,7 +219,7 @@ export async function stopGenerationBatch(input?: {
   batchId?: string;
 }): Promise<GenerationBatch | null> {
   return callGeneration(
-    (api) => api.stopGenerationBatch(input),
+    (api) => requireBridgeMethod(api.stopGenerationBatch)(input),
     "Unable to stop generation batch",
     { map: (data) => data.batch },
   );
@@ -230,7 +230,7 @@ export async function resumeGenerationBatch(input: {
   confirmConfigChange?: boolean;
 }): Promise<GenerationBatch> {
   return callGeneration(
-    (api) => api.resumeGenerationBatch(input),
+    (api) => requireBridgeMethod(api.resumeGenerationBatch)(input),
     "Unable to resume generation batch",
     { map: (data) => data.batch },
   );
@@ -241,7 +241,7 @@ export async function continueGenerationBatch(input: {
   confirmConfigChange?: boolean;
 }): Promise<GenerationBatch> {
   return callGeneration(
-    (api) => api.continueGenerationBatch(input),
+    (api) => requireBridgeMethod(api.continueGenerationBatch)(input),
     "Unable to continue generation batch",
     { map: (data) => data.batch },
   );
@@ -251,7 +251,7 @@ export async function retryFailedGenerationBatch(input: {
   batchId: string;
 }): Promise<GenerationBatch> {
   return callGeneration(
-    (api) => api.retryFailedGenerationBatch(input),
+    (api) => requireBridgeMethod(api.retryFailedGenerationBatch)(input),
     "Unable to retry failed generation batch",
     { map: (data) => data.batch },
   );
@@ -260,17 +260,19 @@ export async function retryFailedGenerationBatch(input: {
 export function subscribeGenerationBatchState(
   listener: (state: GenerationBatchState) => void,
 ): () => void {
-  const subscribe = requireBridgeApi<{
-    onGenerationBatchState: (
-      value: (state: GenerationBatchState) => void,
-    ) => () => void;
-  }>("content").onGenerationBatchState;
+  const subscribe = requireBridgeMethod(
+    requireContentApi<{
+      onGenerationBatchState: (
+        value: (state: GenerationBatchState) => void,
+      ) => () => void;
+    }>().onGenerationBatchState,
+  );
   return subscribe(listener);
 }
 
 export async function getGenerationRuntimeSnapshot(): Promise<GenerationRuntimeSnapshot> {
   return callGeneration(
-    (api) => api.getGenerationRuntimeSnapshot(),
+    (api) => requireBridgeMethod(api.getGenerationRuntimeSnapshot)(),
     "Unable to read generation runtime snapshot",
   );
 }
@@ -279,7 +281,8 @@ export async function previewCancelPendingGenerationBatch(input: {
   batchId: string;
 }): Promise<GenerationBatchCancelPreview> {
   return callGeneration(
-    (api) => api.previewCancelPendingGenerationBatch(input),
+    (api) =>
+      requireBridgeMethod(api.previewCancelPendingGenerationBatch)(input),
     "Unable to preview pending generation cancellation",
   );
 }
@@ -289,7 +292,7 @@ export async function cancelPendingGenerationBatch(input: {
   confirmed: true;
 }): Promise<GenerationBatch> {
   return callGeneration(
-    (api) => api.cancelPendingGenerationBatch(input),
+    (api) => requireBridgeMethod(api.cancelPendingGenerationBatch)(input),
     "Unable to cancel pending generation tasks",
     { map: (data) => data.batch },
   );
@@ -299,7 +302,7 @@ export async function previewGenerationSubmissionHandoff(
   input: GenerationHandoffPreviewInput,
 ): Promise<GenerationSubmissionHandoffPreview> {
   return callGeneration(
-    (api) => api.previewGenerationSubmissionHandoff(input),
+    (api) => requireBridgeMethod(api.previewGenerationSubmissionHandoff)(input),
     "Unable to preview generation submission handoff",
   );
 }
@@ -308,7 +311,7 @@ export async function commitGenerationSubmissionHandoff(
   input: GenerationHandoffCommitInput,
 ): Promise<GenerationSubmissionHandoffResult> {
   return callGeneration(
-    (api) => api.commitGenerationSubmissionHandoff(input),
+    (api) => requireBridgeMethod(api.commitGenerationSubmissionHandoff)(input),
     "Unable to commit generation submission handoff",
   );
 }
@@ -317,7 +320,7 @@ export async function listContentSubmissionPlatforms(): Promise<
   ContentSubmissionPlatform[]
 > {
   return callSubmission(
-    (api) => api.listSubmissionPlatforms(),
+    (api) => requireBridgeMethod(api.listSubmissionPlatforms)(),
     "submission platform discovery failed",
     (wire) => wire.platforms,
   );

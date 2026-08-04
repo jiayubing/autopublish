@@ -2,7 +2,11 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const { runOfflineSelfTest } = require("./offline-self-test");
+const {
+  verifyRendererContractAbsence,
+} = require("./verify-renderer-contract-absence");
 const {
   verifyArtifactPackage,
 } = require("../desktop/packaging/artifact-verifier");
@@ -77,16 +81,70 @@ function parseArguments(argv) {
   return { resourcesPath: path.resolve(resourcesPath), options };
 }
 
+function runPackagedPreloadSandbox(resourcesPath) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--test",
+      path.join(
+        __dirname,
+        "..",
+        "tests",
+        "production-preload-sandbox.electron.test.js",
+      ),
+    ],
+    {
+      cwd: path.resolve(__dirname, ".."),
+      env: {
+        ...process.env,
+        PACKAGED_RESOURCES: path.resolve(resourcesPath),
+      },
+      stdio: "inherit",
+      windowsHide: true,
+      timeout: 420000,
+    },
+  );
+  if (result.error || result.status !== 0)
+    throw Object.assign(
+      new Error("Packaged preload sandbox verification failed"),
+      { code: "PRODUCTION_PACKAGED_PRELOAD_FAILED", cause: result.error },
+    );
+  return { status: result.status, resourcesPath: path.resolve(resourcesPath) };
+}
+
 function verifyProductionPackage(resourcesPath, options) {
   const opts = Object.assign({}, options || {});
   const verification = verifyArtifactPackage(resourcesPath, opts);
+  let contractAbsence;
+  try {
+    contractAbsence = verifyRendererContractAbsence({
+      root: path.resolve(__dirname, ".."),
+      resourcesPath,
+    });
+  } catch (error) {
+    if (opts.output && error.report)
+      writeEvidenceReport(opts.output, {
+        ok: false,
+        packageVersion: verification.packageVersion,
+        workspaceSchemaVersion: verification.workspaceSchemaVersion,
+        artifactCount: verification.artifacts.length,
+        offline: {
+          rendererContractAbsence: error.report,
+          runtime: "not_run",
+        },
+      });
+    throw error;
+  }
   if (opts.staticOnly)
     return {
       ok: true,
       packageVersion: verification.packageVersion,
       workspaceSchemaVersion: verification.workspaceSchemaVersion,
       artifactCount: verification.artifacts.length,
-      offline: "not_run",
+      offline: {
+        rendererContractAbsence: contractAbsence,
+        runtime: "not_run",
+      },
     };
   const offline = runOfflineSelfTest(
     resourcesPath,
@@ -96,12 +154,17 @@ function verifyProductionPackage(resourcesPath, options) {
       requireApplication: true,
     }),
   );
+  const packagedPreload = runPackagedPreloadSandbox(resourcesPath);
   return {
     ok: true,
     packageVersion: verification.packageVersion,
     workspaceSchemaVersion: verification.workspaceSchemaVersion,
     artifactCount: verification.artifacts.length,
-    offline: offline.checks,
+    offline: {
+      ...offline.checks,
+      rendererContractAbsence: contractAbsence,
+      packagedPreloadSandbox: packagedPreload,
+    },
   };
 }
 
@@ -133,6 +196,7 @@ if (require.main === module) {
 module.exports = {
   findPackagedApplication,
   parseArguments,
+  runPackagedPreloadSandbox,
   summarizeChecks,
   verifyProductionPackage,
   writeEvidenceReport,

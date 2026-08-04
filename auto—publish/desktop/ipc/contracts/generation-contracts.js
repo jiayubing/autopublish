@@ -18,6 +18,11 @@ const id = stringField({
   max: 200,
   pattern: /^(?!\.{1,2}$)(?!.*[<>:"|?*\\/])(?=\S)[^\x00-\x1f\x7f]*[^\s.]$/u,
 });
+const opaqueToken = stringField({
+  min: 1,
+  max: 200,
+  pattern: /^[A-Za-z0-9._:-]+$/u,
+});
 const code = stringField({ min: 1, max: 128, pattern: /^[A-Z][A-Z0-9_]*$/u });
 const timestamp = text(64, 1);
 const emptyRequest = exactObject({});
@@ -310,7 +315,7 @@ const handoffBase = {
 const handoffPreviewRequest = exactObject(handoffBase);
 const handoffCommitRequest = exactObject({
   ...handoffBase,
-  previewToken: id,
+  previewToken: opaqueToken,
   confirmed: literalField(true),
 });
 function handoffArgs(args) {
@@ -371,7 +376,7 @@ const revision = oneOf([text(256, 1), integerField({ min: 0 })]);
 const handoffPreview = exactObject({
   generationBatchId: id,
   batchRevision: optionalField(revision),
-  previewToken: id,
+  previewToken: opaqueToken,
   articleCount: integerField({ min: 0 }),
   clientCount: integerField({ min: 0 }),
   targetPlatformIds: arrayField(id, { max: 32 }),

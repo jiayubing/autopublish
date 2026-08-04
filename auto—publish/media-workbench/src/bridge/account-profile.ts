@@ -1,6 +1,10 @@
 import type { AccountProfile } from "../types/platform";
 import type { IpcResponse } from "../types/ipc";
-import { ipcError, requireBridgeApi } from "./transport";
+import {
+  ipcError,
+  requireBridgeMethod,
+  requirePlatformsApi,
+} from "./transport";
 
 type AccountProfileApi = {
   listAccountProfiles: () => Promise<
@@ -13,11 +17,12 @@ type AccountProfileApi = {
   }) => Promise<IpcResponse<{ profile: AccountProfile }>>;
 };
 
-const accountProfileApi = () =>
-  requireBridgeApi<AccountProfileApi>("platforms");
+const accountProfileApi = () => requirePlatformsApi<AccountProfileApi>();
 
 export async function listAccountProfiles(): Promise<AccountProfile[]> {
-  const result = await accountProfileApi().listAccountProfiles();
+  const result = await requireBridgeMethod(
+    accountProfileApi().listAccountProfiles,
+  )();
   if (!result.ok) throw ipcError(result.error, "读取平台账号档案失败");
   if (!Array.isArray(result.data?.profiles))
     throw ipcError(undefined, "读取平台账号档案失败");
@@ -28,7 +33,9 @@ export async function confirmAccountProfile(input: {
   platformId: string;
   displayName: string;
 }): Promise<AccountProfile> {
-  const result = await accountProfileApi().confirmAccountProfile({
+  const result = await requireBridgeMethod(
+    accountProfileApi().confirmAccountProfile,
+  )({
     ...input,
     confirmed: true,
   });

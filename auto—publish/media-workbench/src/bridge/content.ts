@@ -23,8 +23,7 @@ import type {
   DoubaoLoginState,
   DoubaoQueueState,
 } from "../types/content";
-import type { GeneratedContentArticle } from "../types/generation";
-import { ipcError, requireBridgeApi } from "./transport";
+import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
 
 export interface ContentExportInput {
   clientId: string;
@@ -93,16 +92,9 @@ type CoreContentApi = {
     clientId: string;
     materialId: string;
   }) => Promise<ContentIpcResponse<{ material: ContentMaterial }>>;
-  saveArticle: (
-    article: GeneratedContentArticle,
-  ) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
   getArticleManagementSnapshot: (input: {
     clientId: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
-  copyArticleVersion: (input: {
-    clientId: string;
-    sourceArticleId: string;
-  }) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
 };
 
 async function callCoreContent<TWire, TResult = TWire>(
@@ -110,7 +102,7 @@ async function callCoreContent<TWire, TResult = TWire>(
   message: string,
   map?: (wire: TWire) => TResult,
 ): Promise<TResult> {
-  const api = requireBridgeApi<CoreContentApi>("content");
+  const api = requireContentApi<CoreContentApi>();
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -225,7 +217,7 @@ async function callDoubao<TWire, TResult>(
   message: string,
   map: (wire: TWire) => TResult,
 ): Promise<TResult> {
-  const api = requireBridgeApi<DoubaoContentApi>("content");
+  const api = requireContentApi<DoubaoContentApi>();
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -240,7 +232,7 @@ async function callSubmission<TWire, TResult = TWire>(
     map?: (wire: TWire) => TResult;
   },
 ): Promise<TResult> {
-  const api = requireBridgeApi<SubmissionContentApi>("content");
+  const api = requireContentApi<SubmissionContentApi>();
   const result = await invoke(api);
   if (result.ok === false) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null)
@@ -295,7 +287,7 @@ export function rememberDoubaoLoginState(state: DoubaoLoginState): void {
 
 export async function listContentClients(): Promise<ContentClient[]> {
   return callCoreContent(
-    (api) => api.listClients(),
+    (api) => requireBridgeMethod(api.listClients)(),
     "Unable to load clients",
     (wire) => wire.clients,
   );
@@ -304,7 +296,7 @@ export async function listContentResearch(
   clientId: string,
 ): Promise<ContentResearch[]> {
   return callCoreContent(
-    (api) => api.listResearch(clientId),
+    (api) => requireBridgeMethod(api.listResearch)(clientId),
     "Unable to load research",
     (wire) => wire.research,
   );
@@ -313,7 +305,7 @@ export async function listContentQuestions(
   clientId: string,
 ): Promise<ContentQuestion[]> {
   return callDoubao(
-    (api) => api.listQuestions(clientId),
+    (api) => requireBridgeMethod(api.listQuestions)(clientId),
     "Unable to load questions",
     (wire) => wire.questions,
   );
@@ -324,7 +316,7 @@ export async function createContentQuestion(input: {
   enabled?: boolean;
 }): Promise<ContentQuestion> {
   return callDoubao(
-    (api) => api.createQuestion(input),
+    (api) => requireBridgeMethod(api.createQuestion)(input),
     "Unable to create question",
     (wire) => wire.question,
   );
@@ -336,7 +328,7 @@ export async function updateContentQuestion(input: {
   enabled?: boolean;
 }): Promise<ContentQuestion> {
   return callDoubao(
-    (api) => api.updateQuestion(input),
+    (api) => requireBridgeMethod(api.updateQuestion)(input),
     "Unable to update question",
     (wire) => wire.question,
   );
@@ -346,7 +338,7 @@ export async function deleteContentQuestion(input: {
   questionId: string;
 }): Promise<ContentQuestion> {
   return callDoubao(
-    (api) => api.deleteQuestion(input),
+    (api) => requireBridgeMethod(api.deleteQuestion)(input),
     "Unable to delete question",
     (wire) => wire.question,
   );
@@ -354,16 +346,15 @@ export async function deleteContentQuestion(input: {
 
 export async function getDoubaoLoginStatus(): Promise<DoubaoLoginState> {
   const raw = await callDoubao(
-    (api) => api.getDoubaoLoginState(),
+    (api) => requireBridgeMethod(api.getDoubaoLoginState)(),
     "Unable to read Doubao login state",
     (wire) => wire.loginState,
   );
   return normalizeLoginState(raw);
 }
-export const getDoubaoLoginState = getDoubaoLoginStatus;
 export async function openDoubaoLogin(): Promise<DoubaoLoginState> {
   const raw = await callDoubao(
-    (api) => api.openDoubaoLogin(),
+    (api) => requireBridgeMethod(api.openDoubaoLogin)(),
     "Unable to open Doubao login",
     (wire) => wire.loginState,
   );
@@ -375,7 +366,7 @@ export async function collectDoubaoQuestion(input: {
   force?: boolean;
 }): Promise<ContentResearch> {
   return callDoubao(
-    (api) => api.collectDoubaoOne(input),
+    (api) => requireBridgeMethod(api.collectDoubaoOne)(input),
     "Unable to collect Doubao answer",
     (wire) => wire.research,
   );
@@ -385,7 +376,7 @@ export async function previewDoubaoBatch(input: {
   mode: DoubaoBatchMode;
 }): Promise<DoubaoBatchPreview> {
   return callDoubao(
-    (api) => api.previewDoubaoBatch(input),
+    (api) => requireBridgeMethod(api.previewDoubaoBatch)(input),
     "Unable to preview Doubao batch",
     (wire) => wire.preview,
   );
@@ -394,42 +385,42 @@ export async function startPreparedDoubaoBatch(
   tasks: DoubaoBatchTask[],
 ): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => api.startPreparedDoubaoBatch({ tasks }),
+    (api) => requireBridgeMethod(api.startPreparedDoubaoBatch)({ tasks }),
     "Unable to start prepared Doubao batch",
     (wire) => wire.queue,
   );
 }
 export async function pauseDoubaoBatch(): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => api.pauseDoubaoBatch(),
+    (api) => requireBridgeMethod(api.pauseDoubaoBatch)(),
     "Unable to pause Doubao batch",
     (wire) => wire.queue,
   );
 }
 export async function resumeDoubaoBatch(): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => api.resumeDoubaoBatch(),
+    (api) => requireBridgeMethod(api.resumeDoubaoBatch)(),
     "Unable to resume Doubao batch",
     (wire) => wire.queue,
   );
 }
 export async function stopDoubaoBatch(): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => api.stopDoubaoBatch(),
+    (api) => requireBridgeMethod(api.stopDoubaoBatch)(),
     "Unable to stop Doubao batch",
     (wire) => wire.queue,
   );
 }
 export async function retryFailedDoubao(): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => api.retryFailedDoubao(),
+    (api) => requireBridgeMethod(api.retryFailedDoubao)(),
     "Unable to retry Doubao tasks",
     (wire) => wire.queue,
   );
 }
 export async function getDoubaoQueueState(): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => api.getDoubaoQueueState(),
+    (api) => requireBridgeMethod(api.getDoubaoQueueState)(),
     "Unable to read Doubao queue",
     (wire) => wire.queue,
   );
@@ -437,8 +428,9 @@ export async function getDoubaoQueueState(): Promise<DoubaoQueueState> {
 export function subscribeDoubaoQueue(
   listener: (state: DoubaoQueueState) => void,
 ): () => void {
-  const subscribe =
-    requireBridgeApi<DoubaoContentApi>("content").onDoubaoQueueState;
+  const subscribe = requireBridgeMethod(
+    requireContentApi<DoubaoContentApi>().onDoubaoQueueState,
+  );
   return subscribe(listener);
 }
 export async function saveManualResearch(input: {
@@ -448,7 +440,7 @@ export async function saveManualResearch(input: {
   references: ContentResearch["references"];
 }): Promise<ContentResearch> {
   return callDoubao(
-    (api) => api.saveManualResearch(input),
+    (api) => requireBridgeMethod(api.saveManualResearch)(input),
     "Unable to save manual research",
     (wire) => wire.research,
   );
@@ -456,17 +448,8 @@ export async function saveManualResearch(input: {
 
 export async function listContentTemplateCatalog(): Promise<ContentTemplateCatalog> {
   return callCoreContent(
-    (api) => api.listTemplateCatalog(),
+    (api) => requireBridgeMethod(api.listTemplateCatalog)(),
     "Unable to load template catalog",
-  );
-}
-export async function saveContentArticle(
-  article: GeneratedContentArticle,
-): Promise<GeneratedContentArticle> {
-  return callCoreContent(
-    (api) => api.saveArticle(article),
-    "Unable to save article",
-    (wire) => wire.article,
   );
 }
 export async function retryContentMaterial(input: {
@@ -474,19 +457,9 @@ export async function retryContentMaterial(input: {
   materialId: string;
 }): Promise<ContentMaterial> {
   return callCoreContent(
-    (api) => api.retryMaterial(input),
+    (api) => requireBridgeMethod(api.retryMaterial)(input),
     "Unable to retry material",
     (wire) => wire.material,
-  );
-}
-export async function copyContentArticleVersion(input: {
-  clientId: string;
-  sourceArticleId: string;
-}): Promise<GeneratedContentArticle> {
-  return callCoreContent(
-    (api) => api.copyArticleVersion(input),
-    "Unable to copy article version",
-    (wire) => wire.article,
   );
 }
 
@@ -494,7 +467,8 @@ export async function getArticleManagementSnapshot(
   clientId: string,
 ): Promise<ArticleManagementSnapshot> {
   return callCoreContent(
-    (api) => api.getArticleManagementSnapshot({ clientId }),
+    (api) =>
+      requireBridgeMethod(api.getArticleManagementSnapshot)({ clientId }),
     "Unable to load article management snapshot",
     (wire) => {
       const { workflowItems, publicationSummaryItems, ...snapshot } = wire;
@@ -514,20 +488,23 @@ export async function previewExport(
   input: ContentExportInput,
 ): Promise<ContentExportPreview> {
   return callSubmission(
-    (api) => api.previewExport(input),
+    (api) => requireBridgeMethod(api.previewExport)(input),
     "preview export failed",
   );
 }
 export async function exportToSubmissionQueue(
   input: ContentExportInput,
 ): Promise<ContentExportPreview> {
-  return callSubmission((api) => api.exportArticle(input), "export failed");
+  return callSubmission(
+    (api) => requireBridgeMethod(api.exportArticle)(input),
+    "export failed",
+  );
 }
 export async function previewContentSubmissionBatch(
   input: ContentSubmissionBatchInput,
 ): Promise<ContentSubmissionBatchPreview> {
   return callSubmission(
-    (api) => api.previewSubmissionBatch(input),
+    (api) => requireBridgeMethod(api.previewSubmissionBatch)(input),
     "submission batch preview failed",
   );
 }
@@ -535,7 +512,7 @@ export async function createContentSubmissionBatch(
   input: ContentSubmissionBatchInput & { confirmed: true },
 ): Promise<ContentSubmissionBatchPreview> {
   return callSubmission(
-    (api) => api.createSubmissionBatch(input),
+    (api) => requireBridgeMethod(api.createSubmissionBatch)(input),
     "submission batch creation failed",
   );
 }
@@ -553,7 +530,12 @@ export async function cancelContentSubmissionBatch(
   items: ContentSubmissionBatchItem[];
 }> {
   return callSubmission(
-    (api) => api.cancelSubmissionBatch({ batchId, planId, confirmed: true }),
+    (api) =>
+      requireBridgeMethod(api.cancelSubmissionBatch)({
+        batchId,
+        planId,
+        confirmed: true,
+      }),
     "submission batch cancellation failed",
   );
 }
@@ -561,7 +543,8 @@ export async function previewCleanupFailedContentSubmissionItems(
   batchId: string,
 ): Promise<ContentSubmissionCleanupPreview> {
   return callSubmission(
-    (api) => api.previewCleanupFailedSubmissionItems({ batchId }),
+    (api) =>
+      requireBridgeMethod(api.previewCleanupFailedSubmissionItems)({ batchId }),
     "failed submission cleanup preview failed",
   );
 }
@@ -569,53 +552,11 @@ export async function cleanupFailedContentSubmissionItems(
   batchId: string,
 ): Promise<ContentSubmissionCleanupResult> {
   return callSubmission(
-    (api) => api.cleanupFailedSubmissionItems({ batchId, confirmed: true }),
+    (api) =>
+      requireBridgeMethod(api.cleanupFailedSubmissionItems)({
+        batchId,
+        confirmed: true,
+      }),
     "failed submission cleanup failed",
   );
 }
-
-// Compatibility exports remain until Ticket 10 deletes the shared barrel
-// after every production caller has moved to its domain bridge.
-export {
-  generateContentArticle,
-  previewGenerationBatch,
-  createAndStartGenerationBatch,
-  pauseGenerationBatch,
-  stopGenerationBatch,
-  resumeGenerationBatch,
-  continueGenerationBatch,
-  retryFailedGenerationBatch,
-  subscribeGenerationBatchState,
-  getGenerationRuntimeSnapshot,
-  previewCancelPendingGenerationBatch,
-  cancelPendingGenerationBatch,
-  previewGenerationSubmissionHandoff,
-  commitGenerationSubmissionHandoff,
-  listContentSubmissionPlatforms,
-} from "./generation";
-
-export {
-  trashContentArticles,
-  getContentArticleRemovalTransaction,
-  onContentArticleRemovalTransaction,
-  retryContentArticleRemovalTransaction,
-  restoreContentArticle,
-  preparePermanentDeleteContentArticle,
-  permanentlyDeleteContentArticle,
-  previewContentArticleRemoval,
-  previewTrashedArticleQueueResidue,
-  cleanupTrashedArticleQueueResidue,
-} from "./content-removal";
-
-export type * from "./content-removal";
-export type {
-  GeneratedContentArticle,
-  GenerationBatch,
-  GenerationBatchCancelPreview,
-  GenerationBatchPreview,
-  GenerationBatchSourceSelection,
-  GenerationBatchState,
-  GenerationBatchTemplateSelection,
-  GenerationSubmissionHandoffPreview,
-  GenerationSubmissionHandoffResult,
-} from "../types/generation";
