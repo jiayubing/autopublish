@@ -842,7 +842,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-generation-feature.ts",
     featureSymbol: "useContentGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "generateContentArticle",
     preloadMethod: "generateArticle",
     command: "content.generateArticle",
@@ -857,7 +857,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "saveContentArticle",
     preloadMethod: "saveArticle",
     command: "content.saveArticle",
@@ -872,7 +872,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "copyContentArticleVersion",
     preloadMethod: "copyArticleVersion",
     command: "content.copyArticleVersion",
@@ -969,7 +969,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     channel: "content:get-article-removal-transaction",
     registrar: "desktop/ipc/ai-content-ipc.js",
     application: "service.getArticleRemovalTransaction",
-    featureBinding: "getContentArticleRemovalTransaction",
+    featureBinding: "getRemovalTransaction",
   }),
   "content.retryArticleRemovalTransaction": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
@@ -1277,7 +1277,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
+    bridge: "media-workbench/src/bridge/generation.ts",
     bridgeSymbol: "listContentSubmissionPlatforms",
     preloadMethod: "listSubmissionPlatforms",
     command: "content.listSubmissionPlatforms",
@@ -1994,7 +1994,7 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   "content.getArticleRemovalTransaction": [
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "getContentArticleRemovalTransaction",
+    "watchRemovalTransaction",
   ],
   "content.retryArticleRemovalTransaction": [
     "direct",
@@ -2024,7 +2024,7 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   "content.articleRemovalTransactionChanged": [
     "event",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "subscribeRemovalTransaction",
+    "watchRemovalTransaction",
   ],
   "generation.previewBatch": [
     "direct",
@@ -2173,12 +2173,12 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.previewDoubaoBatch": [
     "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
+    "media-workbench/src/components/content/QuestionBatchControls.tsx",
     "previewDoubaoBatch",
   ],
   "content.startPreparedDoubaoBatch": [
     "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
+    "media-workbench/src/components/content/QuestionBatchControls.tsx",
     "startPreparedDoubaoBatch",
   ],
   "content.pauseDoubaoBatch": [
@@ -2202,9 +2202,9 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "retryFailedDoubao",
   ],
   "content.getDoubaoQueueState": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "getDoubaoQueueState",
+    "lifecycle",
+    "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    "refreshDoubaoQueue",
   ],
   "content.saveManualResearch": [
     "direct",
@@ -2213,8 +2213,8 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.doubaoQueueChanged": [
     "event",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "subscribeDoubaoQueue",
+    "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    "setScope",
   ],
   "publication.reconcile": [
     "direct",
@@ -2331,6 +2331,11 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "content.snapshot",
     "questions",
   ],
+  "content.getDoubaoQueueState": [
+    "media-workbench/src/components/ContentWorkbench.tsx",
+    "content.snapshot",
+    "doubaoQueue",
+  ],
   "workspace.getRuntimeIdentity": [
     "media-workbench/src/features/generation/use-generation-feature.ts",
     "workspace",
@@ -2369,16 +2374,161 @@ const PRODUCTION_FEATURE_METHOD_OVERRIDES = Object.freeze({
   "attention.resolveArticleAttention": "executePreview",
   "generation.previewCancelPending": "previewCancelPending",
   "generation.cancelPending": "cancelPending",
+  "content.articleRemovalTransactionChanged": "watchRemovalTransaction",
+  "content.doubaoQueueChanged": "setScope",
+  "content.getDoubaoQueueState": "refreshDoubaoQueue",
 });
 
 const PRODUCTION_FEATURE_SOURCE_OVERRIDES = Object.freeze({
-  "content.articleRemovalTransactionChanged":
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-  "content.doubaoQueueChanged":
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
   "workspace.getRuntimeIdentity":
     "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
 });
+
+const PRODUCTION_EVENT_CLEANUP_CONSUMERS = Object.freeze({
+  "content.articleRemovalTransactionChanged": Object.freeze({
+    cleanupSource:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    cleanupOwner: "useContentWorkbenchFeature",
+    cleanupReceiver: "feature",
+    allowCrossSourceCleanup: true,
+  }),
+  "content.doubaoQueueChanged": Object.freeze({
+    cleanupSource:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    cleanupOwner: "useContentWorkbenchFeature",
+    cleanupReceiver: "feature",
+    allowCrossSourceCleanup: true,
+  }),
+});
+
+// Content workbench is a composition feature. Keep the public consumer
+// evidence on the composed feature, while recording the nested owner that
+// actually invokes each content bridge dependency and owns its state write or
+// event disposer.
+const PRODUCTION_NESTED_FEATURES = Object.freeze({
+  "content.listClients": Object.freeze({
+    source: "media-workbench/src/features/content/content-sources-feature.js",
+    factory: "createContentSourcesFeature",
+    method: "refreshSources",
+    binding: "listClients",
+    stateField: "clients",
+  }),
+  "content.listResearch": Object.freeze({
+    source: "media-workbench/src/features/content/content-sources-feature.js",
+    factory: "createContentSourcesFeature",
+    method: "refreshClientData",
+    binding: "listResearch",
+    stateField: "research",
+  }),
+  "content.listTemplateCatalog": Object.freeze({
+    source: "media-workbench/src/features/content/content-sources-feature.js",
+    factory: "createContentSourcesFeature",
+    method: "refreshSources",
+    binding: "listTemplateCatalog",
+    stateField: "templateCatalog",
+  }),
+  "content.listQuestions": Object.freeze({
+    source: "media-workbench/src/features/content/content-sources-feature.js",
+    factory: "createContentSourcesFeature",
+    method: "refreshClientData",
+    binding: "listQuestions",
+    stateField: "questions",
+  }),
+  "content.getDoubaoQueueState": Object.freeze({
+    source: "media-workbench/src/features/content/content-sources-feature.js",
+    factory: "createContentSourcesFeature",
+    method: "refreshDoubaoQueue",
+    binding: "getDoubaoQueueState",
+    stateField: "doubaoQueue",
+  }),
+  "content.getArticleManagementSnapshot": Object.freeze({
+    source: "media-workbench/src/features/content/article-management-feature.js",
+    factory: "createArticleManagementFeature",
+    method: "refreshManagement",
+    binding: "loadManagement",
+    stateField: "management",
+  }),
+  "content.articleRemovalTransactionChanged": Object.freeze({
+    source: "media-workbench/src/features/content/article-management-feature.js",
+    factory: "createArticleManagementFeature",
+    method: "watchRemovalTransaction",
+    binding: "subscribeRemovalTransaction",
+    cleanupMethod: "dispose",
+  }),
+  "content.getArticleRemovalTransaction": Object.freeze({
+    source: "media-workbench/src/features/content/article-management-feature.js",
+    factory: "createArticleManagementFeature",
+    method: "watchRemovalTransaction",
+    binding: "getRemovalTransaction",
+  }),
+  "content.doubaoQueueChanged": Object.freeze({
+    source: "media-workbench/src/features/content/content-sources-feature.js",
+    factory: "createContentSourcesFeature",
+    method: "setScope",
+    binding: "subscribeDoubaoQueue",
+    cleanupMethod: "dispose",
+  }),
+});
+
+const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
+  Object.fromEntries(
+    [
+      [
+        "media-workbench/src/features/content/content-sources-feature.js",
+        "createContentSourcesFeature",
+        [
+          "content.retryMaterial",
+          "content.createQuestion",
+          "content.updateQuestion",
+          "content.deleteQuestion",
+          "content.getDoubaoLoginState",
+          "content.openDoubaoLogin",
+          "content.collectDoubaoOne",
+          "content.previewDoubaoBatch",
+          "content.startPreparedDoubaoBatch",
+          "content.pauseDoubaoBatch",
+          "content.resumeDoubaoBatch",
+          "content.stopDoubaoBatch",
+          "content.retryFailedDoubao",
+          "content.saveManualResearch",
+        ],
+      ],
+      [
+        "media-workbench/src/features/content/article-management-feature.js",
+        "createArticleManagementFeature",
+        [
+          "content.saveArticle",
+          "content.copyArticleVersion",
+          "content.previewArticleRemovalImpact",
+          "content.trashArticles",
+          "content.restoreArticle",
+          "content.preparePermanentDeleteArticle",
+          "content.permanentlyDeleteArticle",
+          "content.retryArticleRemovalTransaction",
+          "content.previewExport",
+          "content.previewSubmissionBatch",
+          "content.exportArticle",
+          "content.createSubmissionBatch",
+          "content.cancelSubmissionBatch",
+          "content.previewCleanupFailedSubmissionItems",
+          "content.cleanupFailedSubmissionItems",
+          "publication.reconcile",
+        ],
+      ],
+    ].flatMap(([source, factory, capabilities]) =>
+      capabilities.map((capability) => [
+        capability,
+        Object.freeze({
+          source,
+          factory,
+          method: PRODUCTION_CALLERS[capability].featureBinding,
+          binding: PRODUCTION_CALLERS[capability].featureBinding,
+          container: "commands",
+        }),
+      ]),
+    ),
+  ),
+);
 
 const PRODUCTION_PROP_WIRINGS = Object.freeze({
   "attention.previewArticleAttention": [
@@ -2441,6 +2591,8 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "generation.getRuntimeSnapshot",
           "content.listQuestions",
           "media.getBalance",
+          "content.doubaoQueueChanged",
+          "content.getDoubaoQueueState",
           "generation.runtimeChanged",
         ],
       ],
@@ -2485,7 +2637,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.restoreArticle",
           "content.preparePermanentDeleteArticle",
           "content.permanentlyDeleteArticle",
-          "content.getArticleRemovalTransaction",
           "content.retryArticleRemovalTransaction",
           "content.previewExport",
           "content.previewSubmissionBatch",
@@ -2506,7 +2657,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.resumeDoubaoBatch",
           "content.stopDoubaoBatch",
           "content.retryFailedDoubao",
-          "content.getDoubaoQueueState",
           "content.saveManualResearch",
           "publication.reconcile",
         ],
@@ -2519,12 +2669,12 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "attention.previewArticleAttention",
           "attention.resolveArticleAttention",
           "content.articleRemovalTransactionChanged",
+          "content.getArticleRemovalTransaction",
           "generation.previewCancelPending",
           "generation.cancelPending",
           "generation.previewSubmissionHandoff",
           "generation.commitSubmissionHandoff",
           "content.listSubmissionPlatforms",
-          "content.doubaoQueueChanged",
           "workspace.getRuntimeIdentity",
         ],
       ],
@@ -2716,6 +2866,8 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
     "GenerationSubmissionHandoffDrawer",
   "media-workbench/src/components/content/QuestionCollectionView.tsx":
     "QuestionCollectionView",
+  "media-workbench/src/components/content/QuestionBatchControls.tsx":
+    "QuestionBatchControls",
 });
 
 const PRODUCTION_OWNER_OVERRIDES = Object.freeze({
@@ -2745,6 +2897,9 @@ function productionConsumer(capability, productionFeatureSource) {
     productionFeatureSource;
   const [wiringSource, wiringProp] = PRODUCTION_PROP_WIRINGS[capability] || [];
   const receiver = PRODUCTION_CONSUMER_RECEIVERS[capability];
+  const nestedFeature =
+    PRODUCTION_NESTED_FEATURES[capability] ||
+    PRODUCTION_NESTED_COMMAND_FEATURES[capability];
   const owner =
     PRODUCTION_OWNER_OVERRIDES[capability] || PRODUCTION_SOURCE_OWNERS[source];
   const stateOwner =
@@ -2762,6 +2917,7 @@ function productionConsumer(capability, productionFeatureSource) {
     ...(PRODUCTION_EVENT_CLEANUP_METHODS[capability]
       ? { cleanupMethod: PRODUCTION_EVENT_CLEANUP_METHODS[capability] }
       : {}),
+    ...(PRODUCTION_EVENT_CLEANUP_CONSUMERS[capability] || {}),
     ...(receiver === "commands" || receiver === "content.commands"
       ? { featureContainer: "commands" }
       : {}),
@@ -2769,6 +2925,7 @@ function productionConsumer(capability, productionFeatureSource) {
       ? { featureDirect: true }
       : {}),
     ...(stateSource ? { stateSource, stateRoot, stateField, stateOwner } : {}),
+    ...(nestedFeature ? { nestedFeature } : {}),
     ...(wiringSource ? { wiringSource, wiringProp } : {}),
   });
 }

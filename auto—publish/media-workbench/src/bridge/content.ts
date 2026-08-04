@@ -1,13 +1,5 @@
 import type {
   ArticleManagementSnapshot,
-  ArticleRemovalTransaction,
-  ArticleReviewResult,
-  ArticleReviewSelection,
-  ArticleTrashRecord,
-  ContentClient,
-  ContentMaterial,
-  ContentQuestion,
-  ContentResearch,
   ContentSubmissionActionPlanItem,
   ContentSubmissionBatchInput,
   ContentSubmissionBatchItem,
@@ -17,6 +9,12 @@ import type {
   ContentSubmissionCleanupPreview,
   ContentSubmissionCleanupResult,
   ContentSubmissionPlatform,
+} from "../types/publication";
+import type {
+  ContentClient,
+  ContentMaterial,
+  ContentQuestion,
+  ContentResearch,
   ContentTemplate,
   ContentTemplateCatalog,
   DoubaoBatchMode,
@@ -24,21 +22,11 @@ import type {
   DoubaoBatchTask,
   DoubaoLoginState,
   DoubaoQueueState,
-  FailedPublicationRetryPreview,
-  FailedPublicationRetryResult,
+} from "../types/content";
+import type {
   GeneratedContentArticle,
-  GenerationBatch,
-  GenerationBatchCancelPreview,
-  GenerationBatchPreview,
-  GenerationBatchSourceSelection,
-  GenerationBatchState,
-  GenerationBatchTemplateSelection,
-  GenerationSubmissionHandoffPreview,
-  GenerationSubmissionHandoffResult,
-} from "../types";
+} from "../types/generation";
 import { ipcError, requireBridgeApi } from "./transport";
-
-export type { ArticleTrashRecord } from "../types";
 
 export interface ContentExportInput {
   clientId: string;
@@ -64,93 +52,6 @@ export interface ContentExportPreview {
   articleKey?: string;
   targetKey?: string;
   publicationStatus?: string | null;
-}
-export interface ArticleTrashImpactItem {
-  clientId?: string;
-  articleId?: string;
-  platformId?: string | null;
-  targetPlatformId?: string | null;
-  displayName?: string | null;
-  reasonCode?: string | null;
-  status?: string | null;
-  [key: string]: unknown;
-}
-export interface ArticleTrashPreview {
-  token?: string;
-  articleCount: number;
-  queuedToCancel: ArticleTrashImpactItem[];
-  failedToClean: ArticleTrashImpactItem[];
-  publishedToClean?: ArticleTrashImpactItem[];
-  cancelledToClean?: ArticleTrashImpactItem[];
-  terminalCleanupCount?: number;
-  blockedItems: ArticleTrashImpactItem[];
-  canCommit: boolean;
-  selections?: ArticleReviewSelection[];
-  expiresAt?: string;
-  legacy?: boolean;
-  transactionId?: string | null;
-  openTransactionId?: string | null;
-  transaction?: ArticleRemovalTransaction | null;
-  openTransaction?: ArticleRemovalTransaction | null;
-}
-export interface ArticleTrashCommitInput {
-  articles?: ArticleReviewSelection[];
-  selections?: ArticleReviewSelection[];
-  token?: string;
-  legacy?: boolean;
-  confirmed: true;
-}
-export interface ArticleTrashResult {
-  moved?: ArticleTrashRecord[];
-  skipped?: ArticleTrashRecord[];
-  rejected?: Array<{ clientId: string; articleId: string; code: string }>;
-  transactionId?: string;
-  status?: string;
-  articleCount?: number;
-  queueActions?: ArticleTrashImpactItem[];
-  errorCode?: string;
-  reasonCode?: string | null;
-  phase?: string | null;
-  transaction?: ArticleRemovalTransaction | null;
-}
-export interface TrashedArticleQueueResidueItem extends ArticleTrashImpactItem {
-  sourceArticleState: "trashed";
-  repairAction?:
-    | "cancel"
-    | "cleanup"
-    | "cleanupPublishedLocal"
-    | "cleanupCancelledLocal"
-    | null;
-}
-export interface TrashedArticleQueueResiduePreview {
-  items: TrashedArticleQueueResidueItem[];
-  cleanableItems: TrashedArticleQueueResidueItem[];
-  reportedItems: TrashedArticleQueueResidueItem[];
-  cleanableCount: number;
-  reportedCount: number;
-  failedCount?: number;
-  remainingCount?: number;
-  failedItems?: TrashedArticleQueueResidueItem[];
-  status?: string;
-  remainingItems?: TrashedArticleQueueResidueItem[];
-}
-export interface ArticlePermanentDeleteConfirmation {
-  token: string;
-  clientId: string;
-  articleId: string;
-  deletedAt: string;
-  status: string;
-}
-export interface ArticlePermanentDeleteRequest {
-  clientId: string;
-  articleId: string;
-  token: string;
-}
-export interface ArticlePermanentDeleteResult {
-  clientId: string;
-  articleId: string;
-  deleted: true;
-  deletedAt: string;
 }
 
 type SafeContentIpcError = {
@@ -194,14 +95,6 @@ type CoreContentApi = {
     clientId: string;
     materialId: string;
   }) => Promise<ContentIpcResponse<{ material: ContentMaterial }>>;
-  generateArticle: (input: {
-    clientId: string;
-    materialIds: string[];
-    researchQueryIds: string[];
-    platform: string;
-    templateId: string;
-    templateCatalogRevision?: string;
-  }) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
   saveArticle: (
     article: GeneratedContentArticle,
   ) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
@@ -212,42 +105,6 @@ type CoreContentApi = {
     clientId: string;
     sourceArticleId: string;
   }) => Promise<ContentIpcResponse<{ article: GeneratedContentArticle }>>;
-  previewArticleRemovalImpact: (input: {
-    articles: ArticleReviewSelection[];
-    selections: ArticleReviewSelection[];
-  }) => Promise<ContentIpcResponse<ArticleTrashPreview>>;
-  applyArticleRemovalImpact: (
-    input: ArticleTrashCommitInput,
-  ) => Promise<ContentIpcResponse<ArticleTrashResult>>;
-  trashArticles: (
-    input: ArticleTrashCommitInput,
-  ) => Promise<ContentIpcResponse<ArticleTrashResult>>;
-  getArticleRemovalTransaction: (
-    transactionId: string,
-  ) => Promise<
-    ContentIpcResponse<{ transaction: ArticleRemovalTransaction | null }>
-  >;
-  retryArticleRemovalTransaction: (input: {
-    transactionId: string;
-    confirmed: true;
-  }) => Promise<ContentIpcResponse<{ transaction: ArticleRemovalTransaction }>>;
-  restoreArticle: (input: ArticleReviewSelection) => Promise<
-    ContentIpcResponse<{
-      article: GeneratedContentArticle;
-      restored: boolean;
-      queueRestored: boolean;
-      message: string;
-    }>
-  >;
-  preparePermanentDeleteArticle: (
-    input: ArticleReviewSelection,
-  ) => Promise<ContentIpcResponse<ArticlePermanentDeleteConfirmation>>;
-  permanentlyDeleteArticle: (
-    input: ArticlePermanentDeleteRequest,
-  ) => Promise<ContentIpcResponse<ArticlePermanentDeleteResult>>;
-  onArticleRemovalTransaction: (
-    listener: (transaction: ArticleRemovalTransaction) => void,
-  ) => () => void;
 };
 
 async function callCoreContent<TWire, TResult = TWire>(
@@ -363,16 +220,6 @@ type SubmissionContentApi = {
     batchId: string;
     confirmed: true;
   }) => Promise<ContentIpcResponse<ContentSubmissionCleanupResult>>;
-  previewTrashedArticleQueueResidue: () => Promise<
-    ContentIpcResponse<TrashedArticleQueueResiduePreview>
-  >;
-  cleanupTrashedArticleQueueResidue: (input: {
-    confirmed: true;
-  }) => Promise<
-    ContentIpcResponse<
-      TrashedArticleQueueResiduePreview & { cleanedCount: number }
-    >
-  >;
 };
 
 async function callDoubao<TWire, TResult>(
@@ -400,110 +247,6 @@ async function callSubmission<TWire, TResult = TWire>(
   if (result.ok === false) throw ipcError(result.error, message);
   if (result.data === undefined || result.data === null)
     throw ipcError(undefined, message);
-  return options?.map
-    ? options.map(result.data)
-    : (result.data as unknown as TResult);
-}
-
-type SafeGenerationIpcError = {
-  code: string;
-  category:
-    | "validation"
-    | "authentication"
-    | "transport"
-    | "remote"
-    | "storage"
-    | "conflict"
-    | "internal";
-  retryability: "never" | "safe" | "manual-check";
-  userMessage: string;
-  diagnosticId?: string;
-};
-type GenerationIpcResponse<T> =
-  { ok: true; data?: T } | { ok: false; error?: SafeGenerationIpcError };
-type GenerationPlanInput = {
-  clientIds: string[];
-  templates: GenerationBatchTemplateSelection[];
-  clientSources?: GenerationBatchSourceSelection[];
-  templateCatalogRevision?: string;
-};
-type GenerationRuntimeSnapshot = {
-  runtimeId: string;
-  sequence: number;
-  runtime: GenerationBatchState;
-  batch: GenerationBatch | null;
-  capabilities: GenerationBatchState["capabilities"];
-};
-type GenerationHandoffPreviewInput = {
-  generationBatchId: string;
-  targetPlatformIds: string[];
-  accountProfiles: Record<string, string>;
-};
-type GenerationHandoffCommitInput = GenerationHandoffPreviewInput & {
-  previewToken: string;
-  confirmed: true;
-};
-type GenerationContentApi = {
-  previewGenerationBatch: (
-    input: GenerationPlanInput,
-  ) => Promise<GenerationIpcResponse<GenerationBatchPreview>>;
-  createAndStartGenerationBatch: (
-    input: GenerationPlanInput,
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  pauseGenerationBatch: (input?: {
-    batchId?: string;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
-  stopGenerationBatch: (input?: {
-    batchId?: string;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
-  continueGenerationBatch: (input: {
-    batchId: string;
-    confirmConfigChange?: boolean;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  resumeGenerationBatch: (input: {
-    batchId: string;
-    confirmConfigChange?: boolean;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  retryFailedGenerationBatch: (input: {
-    batchId: string;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  previewCancelPendingGenerationBatch: (input: {
-    batchId: string;
-  }) => Promise<GenerationIpcResponse<GenerationBatchCancelPreview>>;
-  cancelPendingGenerationBatch: (input: {
-    batchId: string;
-    confirmed: true;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  getGenerationRuntimeSnapshot: () => Promise<
-    GenerationIpcResponse<GenerationRuntimeSnapshot>
-  >;
-  previewGenerationSubmissionHandoff: (
-    input: GenerationHandoffPreviewInput,
-  ) => Promise<GenerationIpcResponse<GenerationSubmissionHandoffPreview>>;
-  commitGenerationSubmissionHandoff: (
-    input: GenerationHandoffCommitInput,
-  ) => Promise<GenerationIpcResponse<GenerationSubmissionHandoffResult>>;
-};
-
-function generationIpcError(
-  error: SafeGenerationIpcError | undefined,
-  fallback: string,
-): Error & { code?: string } {
-  return ipcError(error, fallback);
-}
-
-async function callGeneration<TWire, TResult = TWire>(
-  invoke: (api: GenerationContentApi) => Promise<GenerationIpcResponse<TWire>>,
-  message: string,
-  options?: {
-    map?: (data: TWire) => TResult;
-  },
-): Promise<TResult> {
-  const api = requireBridgeApi<GenerationContentApi>("content");
-  const result = await invoke(api);
-  if (result.ok === false) throw generationIpcError(result.error, message);
-  if (result.data === undefined || result.data === null)
-    throw generationIpcError(undefined, message);
   return options?.map
     ? options.map(result.data)
     : (result.data as unknown as TResult);
@@ -713,123 +456,10 @@ export async function saveManualResearch(input: {
   );
 }
 
-export async function previewGenerationBatch(
-  input: GenerationPlanInput,
-): Promise<GenerationBatchPreview> {
-  return callGeneration(
-    (api) => api.previewGenerationBatch(input),
-    "Unable to preview generation batch",
-  );
-}
-export async function createAndStartGenerationBatch(
-  input: GenerationPlanInput,
-): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.createAndStartGenerationBatch(input),
-    "Unable to create and start generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export async function pauseGenerationBatch(input?: {
-  batchId?: string;
-}): Promise<GenerationBatch | null> {
-  return callGeneration(
-    (api) => api.pauseGenerationBatch(input),
-    "Unable to pause generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export async function stopGenerationBatch(input?: {
-  batchId?: string;
-}): Promise<GenerationBatch | null> {
-  return callGeneration(
-    (api) => api.stopGenerationBatch(input),
-    "Unable to stop generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export async function resumeGenerationBatch(input: {
-  batchId: string;
-  confirmConfigChange?: boolean;
-}): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.resumeGenerationBatch(input),
-    "Unable to resume generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export async function continueGenerationBatch(input: {
-  batchId: string;
-  confirmConfigChange?: boolean;
-}): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.continueGenerationBatch(input),
-    "Unable to continue generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export async function retryFailedGenerationBatch(input: {
-  batchId: string;
-}): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.retryFailedGenerationBatch(input),
-    "Unable to retry failed generation batch",
-    { map: (data) => data.batch },
-  );
-}
-export function subscribeGenerationBatchState(
-  listener: (state: GenerationBatchState) => void,
-): () => void {
-  const subscribe = requireBridgeApi<{
-    onGenerationBatchState: (
-      value: (state: GenerationBatchState) => void,
-    ) => () => void;
-  }>("content").onGenerationBatchState;
-  return subscribe(listener);
-}
-export async function getGenerationRuntimeSnapshot(): Promise<GenerationRuntimeSnapshot> {
-  return callGeneration(
-    (api) => api.getGenerationRuntimeSnapshot(),
-    "Unable to read generation runtime snapshot",
-  );
-}
-export async function previewCancelPendingGenerationBatch(input: {
-  batchId: string;
-}): Promise<GenerationBatchCancelPreview> {
-  return callGeneration(
-    (api) => api.previewCancelPendingGenerationBatch(input),
-    "Unable to preview pending generation cancellation",
-  );
-}
-export async function cancelPendingGenerationBatch(input: {
-  batchId: string;
-  confirmed: true;
-}): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => api.cancelPendingGenerationBatch(input),
-    "Unable to cancel pending generation tasks",
-    { map: (data) => data.batch },
-  );
-}
-
 export async function listContentTemplateCatalog(): Promise<ContentTemplateCatalog> {
   return callCoreContent(
     (api) => api.listTemplateCatalog(),
     "Unable to load template catalog",
-  );
-}
-export async function generateContentArticle(input: {
-  clientId: string;
-  materialIds: string[];
-  researchQueryIds: string[];
-  platform: string;
-  templateId: string;
-  templateCatalogRevision?: string;
-}): Promise<GeneratedContentArticle> {
-  return callCoreContent(
-    (api) => api.generateArticle(input),
-    "Unable to generate article",
-    (wire) => wire.article,
   );
 }
 export async function saveContentArticle(
@@ -862,20 +492,6 @@ export async function copyContentArticleVersion(input: {
   );
 }
 
-export async function trashContentArticles(
-  input: ArticleTrashCommitInput & { articles: ArticleReviewSelection[] },
-): Promise<ArticleTrashResult> {
-  const request: ArticleTrashCommitInput = input.legacy
-    ? { articles: input.articles, confirmed: true }
-    : { ...input, selections: input.articles };
-  return callCoreContent(
-    (api) =>
-      input.legacy
-        ? api.trashArticles(request)
-        : api.applyArticleRemovalImpact(request),
-    "Unable to move articles to trash",
-  );
-}
 export async function getArticleManagementSnapshot(
   clientId: string,
 ): Promise<ArticleManagementSnapshot> {
@@ -894,86 +510,6 @@ export async function getArticleManagementSnapshot(
         ),
       };
     },
-  );
-}
-export async function previewContentArticleRemoval(
-  articles: ArticleReviewSelection[],
-): Promise<ArticleTrashPreview> {
-  return callCoreContent(
-    (api) =>
-      api.previewArticleRemovalImpact({ selections: articles, articles }),
-    "Unable to preview moving articles to trash",
-  );
-}
-export async function previewTrashedArticleQueueResidue(): Promise<TrashedArticleQueueResiduePreview> {
-  return callSubmission(
-    (api) => api.previewTrashedArticleQueueResidue(),
-    "Unable to inspect trashed article queue residue",
-  );
-}
-export async function cleanupTrashedArticleQueueResidue(): Promise<
-  TrashedArticleQueueResiduePreview & { cleanedCount: number }
-> {
-  return callSubmission(
-    (api) => api.cleanupTrashedArticleQueueResidue({ confirmed: true }),
-    "Unable to clean trashed article queue residue",
-  );
-}
-export async function getContentArticleRemovalTransaction(
-  transactionId: string,
-): Promise<ArticleRemovalTransaction | null> {
-  const result = await callCoreContent(
-    (api) => api.getArticleRemovalTransaction(transactionId),
-    "Unable to read article removal transaction",
-  );
-  return result.transaction;
-}
-export function onContentArticleRemovalTransaction(
-  transactionId: string,
-  listener: (transaction: ArticleRemovalTransaction) => void,
-): () => void {
-  const subscribe =
-    requireBridgeApi<CoreContentApi>("content").onArticleRemovalTransaction;
-  return subscribe((transaction) => {
-    const id =
-      transaction.transactionId ||
-      (transaction as ArticleRemovalTransaction & { id?: string }).id;
-    if (id === transactionId) listener(transaction);
-  });
-}
-export async function retryContentArticleRemovalTransaction(
-  transactionId: string,
-): Promise<ArticleRemovalTransaction> {
-  const result = await callCoreContent(
-    (api) =>
-      api.retryArticleRemovalTransaction({ transactionId, confirmed: true }),
-    "Unable to repair article removal transaction",
-  );
-  return result.transaction;
-}
-export async function restoreContentArticle(
-  input: ArticleReviewSelection,
-): Promise<GeneratedContentArticle> {
-  return callCoreContent(
-    (api) => api.restoreArticle(input),
-    "Unable to restore article",
-    (wire) => wire.article,
-  );
-}
-export async function preparePermanentDeleteContentArticle(
-  input: ArticleReviewSelection,
-): Promise<ArticlePermanentDeleteConfirmation> {
-  return callCoreContent(
-    (api) => api.preparePermanentDeleteArticle(input),
-    "Unable to prepare permanent article deletion",
-  );
-}
-export async function permanentlyDeleteContentArticle(
-  input: ArticlePermanentDeleteRequest,
-): Promise<ArticlePermanentDeleteResult> {
-  return callCoreContent(
-    (api) => api.permanentlyDeleteArticle(input),
-    "Unable to permanently delete article",
   );
 }
 export async function previewExport(
@@ -995,15 +531,6 @@ export async function previewContentSubmissionBatch(
   return callSubmission(
     (api) => api.previewSubmissionBatch(input),
     "submission batch preview failed",
-  );
-}
-export async function listContentSubmissionPlatforms(): Promise<
-  ContentSubmissionPlatform[]
-> {
-  return callSubmission(
-    (api) => api.listSubmissionPlatforms(),
-    "submission platform discovery failed",
-    { map: (wire) => wire.platforms },
   );
 }
 export async function createContentSubmissionBatch(
@@ -1048,19 +575,49 @@ export async function cleanupFailedContentSubmissionItems(
     "failed submission cleanup failed",
   );
 }
-export async function previewGenerationSubmissionHandoff(
-  input: GenerationHandoffPreviewInput,
-): Promise<GenerationSubmissionHandoffPreview> {
-  return callGeneration(
-    (api) => api.previewGenerationSubmissionHandoff(input),
-    "Unable to preview generation submission handoff",
-  );
-}
-export async function commitGenerationSubmissionHandoff(
-  input: GenerationHandoffCommitInput,
-): Promise<GenerationSubmissionHandoffResult> {
-  return callGeneration(
-    (api) => api.commitGenerationSubmissionHandoff(input),
-    "Unable to commit generation submission handoff",
-  );
-}
+
+// Compatibility exports remain until Ticket 10 deletes the shared barrel
+// after every production caller has moved to its domain bridge.
+export {
+  generateContentArticle,
+  previewGenerationBatch,
+  createAndStartGenerationBatch,
+  pauseGenerationBatch,
+  stopGenerationBatch,
+  resumeGenerationBatch,
+  continueGenerationBatch,
+  retryFailedGenerationBatch,
+  subscribeGenerationBatchState,
+  getGenerationRuntimeSnapshot,
+  previewCancelPendingGenerationBatch,
+  cancelPendingGenerationBatch,
+  previewGenerationSubmissionHandoff,
+  commitGenerationSubmissionHandoff,
+  listContentSubmissionPlatforms,
+} from "./generation";
+
+export {
+  trashContentArticles,
+  getContentArticleRemovalTransaction,
+  onContentArticleRemovalTransaction,
+  retryContentArticleRemovalTransaction,
+  restoreContentArticle,
+  preparePermanentDeleteContentArticle,
+  permanentlyDeleteContentArticle,
+  previewContentArticleRemoval,
+  previewTrashedArticleQueueResidue,
+  cleanupTrashedArticleQueueResidue,
+} from "./content-removal";
+
+export type * from "./content-removal";
+export type {
+  GeneratedContentArticle,
+  GenerationBatch,
+  GenerationBatchCancelPreview,
+  GenerationBatchPreview,
+  GenerationBatchSourceSelection,
+  GenerationBatchState,
+  GenerationBatchTemplateSelection,
+  GenerationSubmissionHandoffPreview,
+  GenerationSubmissionHandoffResult,
+} from "../types/generation";

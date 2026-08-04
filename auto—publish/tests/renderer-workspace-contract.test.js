@@ -61,7 +61,7 @@ describe("renderer workspace bootstrap contract", function () {
   });
 
   it("declares a token-only confirmation wrapper and exactly seven workspace methods", function () {
-    const types = readSource("types.ts");
+    const types = readSource("types/workspace.ts");
     const api = readSource("bridge/workspace.ts");
     assert.match(
       types,
@@ -86,7 +86,7 @@ describe("renderer workspace bootstrap contract", function () {
   it("keeps key renderer files UTF-8 readable without known mojibake markers", function () {
     [
       "main.tsx",
-      "types.ts",
+      "types/workspace.ts",
       "bridge/workspace.ts",
       "workspace-ui-logic.js",
       "components/WorkspaceBootstrapGate.tsx",

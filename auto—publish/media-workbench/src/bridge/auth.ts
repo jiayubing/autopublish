@@ -1,4 +1,4 @@
-import type { AuthState } from "../types";
+import type { AuthState } from "../types/auth";
 import { authIpcError, isElectron, unavailable } from "./transport";
 
 type LegacyAuthResponse<T> = {

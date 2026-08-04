@@ -10,6 +10,13 @@ let articleSelectionKey;
 let selectableArticles;
 let selectionState;
 
+function readHistoryView() {
+  return [
+    fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8"),
+    fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesList.tsx"), "utf8"),
+  ].join("\n");
+}
+
 function item(id, platform, templateId, createdAt, overrides) {
   return Object.assign({
     id: id,
@@ -69,7 +76,7 @@ describe("article history grouping", async function() {
   });
 
   it("keeps article opening separate from queue selection", function() {
-    const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
+    const view = readHistoryView();
     assert.doesNotMatch(view, /reviewContentArticles|审核已选|待审核/);
     assert.match(view, /useConfirmation/);
     assert.match(view, /const \{ confirm \} = useConfirmation\(\)/);
@@ -81,7 +88,7 @@ describe("article history grouping", async function() {
   });
 
   it("offers a current-client trash view with restore and confirmed permanent deletion", function() {
-    const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
+    const view = readHistoryView();
     assert.match(view, /management: ArticleManagementReadModel/);
     assert.doesNotMatch(view, /getArticleManagementSnapshot/);
     assert.match(view, /commands\.restoreContentArticle/);
@@ -93,7 +100,7 @@ describe("article history grouping", async function() {
   });
 
   it("keeps saved articles selectable for submission queueing", function() {
-    const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
+    const view = readHistoryView();
     assert.match(view, /const selectedQueueable = filtered\.filter/);
     assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'generated' \|\| article\.status === 'saved'\)/);
     assert.match(view, /状态：/);

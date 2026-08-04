@@ -1,4 +1,4 @@
-import type { IpcError } from "../types";
+import type { IpcError } from "../types/ipc";
 
 export interface DesktopConsoleApi {
   auth?: unknown;

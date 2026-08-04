@@ -19,7 +19,7 @@ function readFunction(source, name) {
 describe("renderer AI provider settings", function () {
   it("exposes the Task 5 provider IPC through typed renderer helpers", function () {
     const api = readSource("bridge/settings.ts");
-    const types = readSource("types.ts");
+    const types = readSource("types/settings.ts");
 
     [
       "getAiProviderStatus",

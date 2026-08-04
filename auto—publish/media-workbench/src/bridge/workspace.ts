@@ -8,7 +8,7 @@ import type {
   WorkspaceDataInvalidatedEvent,
   WorkspaceRuntimeIdentity,
   WorkspaceSelectionToken,
-} from "../types";
+} from "../types/workspace";
 import { ipcError, requireBridgeApi, requireDisposer } from "./transport";
 
 type WorkspaceResponse<T> = {

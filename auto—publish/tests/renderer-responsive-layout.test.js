@@ -1107,7 +1107,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
         "src",
         "components",
         "content",
-        "GeneratedArticlesView.tsx",
+        "GeneratedArticlesList.tsx",
       ),
       "utf8",
     );

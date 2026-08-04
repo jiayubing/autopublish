@@ -151,10 +151,9 @@ test("workspace commands accept only typed input and close operational failures"
 
 test("renderer workspace state and views are path-free", async function() {
   const sourceRoot = path.resolve(__dirname, "..", "media-workbench", "src");
-  const types = fs.readFileSync(path.join(sourceRoot, "types.ts"), "utf8");
-  const workspaceTypes = types.slice(
-    types.indexOf("export type WorkspaceBootstrapStatus"),
-    types.indexOf("export interface MediaResource"),
+  const workspaceTypes = fs.readFileSync(
+    path.join(sourceRoot, "types", "workspace.ts"),
+    "utf8",
   );
   const source = [
     "bridge/workspace.ts",

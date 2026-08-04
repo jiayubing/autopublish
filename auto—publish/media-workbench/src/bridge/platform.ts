@@ -1,11 +1,11 @@
 import type {
   PlatformArticle,
-  IpcResponse,
   PlatformQueueData,
   PlatformSubmitResult,
   PlatformSubmitState,
   PlatformTaskSnapshot,
-} from "../types";
+} from "../types/platform";
+import type { IpcResponse } from "../types/ipc";
 import { ipcError, requireBridgeApi, requireDisposer } from "./transport";
 
 type PlatformApi = {

@@ -1,6 +1,6 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { Save, X } from 'lucide-react';
-import { GeneratedContentArticle } from '../../types';
+import type { GeneratedContentArticle } from '../../types/generation';
 import { useConfirmation } from '../../confirmation';
 
 interface GeneratedArticleEditorPanelProps {

@@ -55,12 +55,16 @@ test("checkpoint C keeps one Settings owner and zero retired media/navigation pr
     1,
   );
 
+  const rendererTypeSources = fs
+    .readdirSync(path.resolve(__dirname, "../media-workbench/src/types"))
+    .filter((entry) => entry.endsWith(".ts"))
+    .map((entry) => `../media-workbench/src/types/${entry}`);
   const protocolSources = [
     "../desktop/ipc/contracts/production-registry.js",
     "../desktop/workspace-data-invalidation.js",
     "../desktop/preload.js",
-    "../media-workbench/src/types.ts",
     "../media-workbench/src/features/workspace/workspace-coordinator.js",
+    ...rendererTypeSources,
   ]
     .map((source) => fs.readFileSync(path.resolve(__dirname, source), "utf8"))
     .join("\n");

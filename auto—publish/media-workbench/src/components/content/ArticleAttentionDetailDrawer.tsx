@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
-import type { ArticleAttentionItem } from '../../types';
+import type { ArticleAttentionItem } from '../../types/publication';
 
 interface ArticleAttentionDetailDrawerProps {
   item: ArticleAttentionItem | null;

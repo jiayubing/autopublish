@@ -1,489 +1,76 @@
-import {
-  createCommandOwner,
-  createQueryIdentity,
-} from '../../infrastructure/query-identity/query-identity.js';
-
-const EMPTY_CATALOG = Object.freeze({
-  revision: '',
-  platforms: [],
-  templates: [],
-  diagnostics: [],
-});
-const EMPTY_MANAGEMENT = Object.freeze({
-  revision: 0,
-  articles: Object.freeze([]),
-  trash: Object.freeze([]),
-  submissionBatches: Object.freeze([]),
-  cancellationPlans: Object.freeze([]),
-  publicationRecords: Object.freeze([]),
-  workflowByArticle: Object.freeze({}),
-  submissionPlatforms: Object.freeze([]),
-});
-const ORDINARY_COMMANDS = Object.freeze({
-  createQuestion: 'client',
-  updateQuestion: 'client',
-  deleteQuestion: 'client',
-  saveManualResearch: 'client',
-  retryMaterial: 'sources',
-  saveArticle: 'management',
-  copyArticleVersion: 'management',
-  reconcilePublication: 'management',
-  previewExport: 'management',
-  exportToSubmissionQueue: 'management',
-  collectDoubaoQuestion: 'client',
-  startPreparedDoubaoBatch: 'sources',
-  pauseDoubaoBatch: 'sources',
-  resumeDoubaoBatch: 'sources',
-  stopDoubaoBatch: 'sources',
-  retryFailedDoubao: 'sources',
-  previewContentSubmissionBatch: null,
-  createContentSubmissionBatch: 'management',
-  cancelContentSubmissionBatch: 'management',
-  previewCleanupFailedContentSubmissionItems: null,
-  cleanupFailedContentSubmissionItems: 'management',
-  previewContentArticleRemoval: null,
-  trashContentArticles: 'management',
-  getContentArticleRemovalTransaction: null,
-  retryContentArticleRemovalTransaction: 'management',
-  restoreContentArticle: 'management',
-  preparePermanentDeleteContentArticle: null,
-  permanentlyDeleteContentArticle: 'management',
-  getDoubaoQueueState: null,
-  getDoubaoLoginStatus: null,
-  openDoubaoLogin: null,
-  previewDoubaoBatch: null,
-});
-
-const COMMAND_CLIENT_IDENTITY = Object.freeze({
-  createQuestion: (input) => [input?.clientId],
-  updateQuestion: (input) => [input?.clientId],
-  deleteQuestion: (input) => [input?.clientId],
-  saveManualResearch: (input) => [input?.clientId],
-  retryMaterial: (input) => [input?.clientId],
-  saveArticle: (input) => [input?.clientId],
-  copyArticleVersion: (input) => [input?.clientId],
-  reconcilePublication: (input) => [input?.clientId],
-  previewExport: (input) => [input?.clientId],
-  exportToSubmissionQueue: (input) => [input?.clientId],
-  collectDoubaoQuestion: (input) => [input?.clientId],
-  createContentSubmissionBatch: (input) => [input?.clientId],
-  previewContentArticleRemoval: (input) => (input?.selections || []).map((item) => item?.clientId),
-  trashContentArticles: (input) => (input?.articles || []).map((item) => item?.clientId),
-  restoreContentArticle: (input) => [input?.clientId],
-  preparePermanentDeleteContentArticle: (input) => [input?.clientId],
-  permanentlyDeleteContentArticle: (input) => [input?.clientId],
-});
-
-function assertCommandClientScope(name, input, selectedClientId) {
-  const extract = COMMAND_CLIENT_IDENTITY[name];
-  if (!extract) return;
-  for (const clientId of extract(input)) {
-    if (typeof clientId === 'string' && clientId && clientId !== selectedClientId) {
-      const mismatch = new Error('Content command client scope is invalid');
-      mismatch.code = 'CONTENT_CLIENT_SCOPE_MISMATCH';
-      throw mismatch;
-    }
-  }
-}
-
-function safeError(value) {
-  return Object.freeze({
-    code:
-      value && typeof value.code === 'string'
-        ? value.code
-        : 'CONTENT_SOURCES_QUERY_FAILED',
-    category: 'internal',
-    retryability: 'safe',
-    userMessage:
-      value instanceof Error && value.message
-        ? value.message
-        : '无法加载客户与模板。',
-  });
-}
+import { createArticleManagementFeature } from './article-management-feature.js';
+import { createContentSourcesFeature } from './content-sources-feature.js';
 
 export function createContentWorkbenchFeature(adapters = {}) {
-  if (
-    typeof adapters.listClients !== 'function' ||
-    typeof adapters.listTemplateCatalog !== 'function' ||
-    typeof adapters.listQuestions !== 'function' ||
-    typeof adapters.listResearch !== 'function' ||
-    typeof adapters.loadManagement !== 'function'
-  ) {
-    throw new TypeError('Content workbench feature dependencies are required');
-  }
-  const identity = createQueryIdentity({
-    feature: 'content',
-    query: 'workspaceSources',
-  });
-  const clientIdentity = createQueryIdentity({
-    feature: 'content',
-    query: 'clientSources',
-  });
-  const researchIndexIdentity = createQueryIdentity({
-    feature: 'content',
-    query: 'researchIndex',
-  });
-  const managementIdentity = createQueryIdentity({
-    feature: 'content',
-    query: 'articleManagement',
-  });
-  const commandOwners = Object.fromEntries(
-    Object.keys(ORDINARY_COMMANDS).map((name) => [
-      name,
-      createCommandOwner({ feature: 'content', command: name }),
-    ]),
-  );
+  const sources = createContentSourcesFeature(adapters);
+  const management = createArticleManagementFeature(adapters);
   const listeners = new Set();
   let disposed = false;
-  let scope = null;
-  let clients = [];
-  let templateCatalog = EMPTY_CATALOG;
-  let selectedClientId = '';
-  let currentArticle = null;
-  let query = Object.freeze({ loading: false, error: null, reason: null });
-  let clientQuery = Object.freeze({
-    loading: false,
-    error: null,
-    reason: null,
-  });
-  let researchIndexQuery = Object.freeze({
-    loading: false,
-    error: null,
-    reason: null,
-  });
-  let managementQuery = Object.freeze({
-    loading: false,
-    error: null,
-    reason: null,
-  });
-  let questions = [];
-  let research = [];
-  let researchByClient = Object.freeze({});
-  let management = EMPTY_MANAGEMENT;
-  let revision = 0;
   let snapshot;
 
+  const sourceScopeKey = (sourceSnapshot = sources.getSnapshot()) => [
+    sourceSnapshot.scope?.workspaceRuntimeId || '',
+    sourceSnapshot.selectedClientId || 'none',
+  ].join(':');
+
+  const syncManagementScope = () => {
+    const sourceSnapshot = sources.getSnapshot();
+    const workspaceRuntimeId = sourceSnapshot.scope?.workspaceRuntimeId;
+    if (!workspaceRuntimeId) return;
+    management.setScope({
+      workspaceRuntimeId,
+      clientId: sourceSnapshot.selectedClientId || 'none',
+    });
+  };
+
+  const refreshManagementAfterSourceRefresh = async (previousScopeKey, reason) => {
+    syncManagementScope();
+    const sourceSnapshot = sources.getSnapshot();
+    if (
+      previousScopeKey !== sourceScopeKey(sourceSnapshot) &&
+      sourceSnapshot.selectedClientId &&
+      !['initial', 'identity', 'runtime-switch'].includes(reason)
+    )
+      return management.refreshManagement('scope-change');
+    return true;
+  };
+
+  const refreshSources = async (reason = 'manual', options = {}) => {
+    const previousScopeKey = sourceScopeKey();
+    if (!(await sources.refreshSources(reason, options))) return false;
+    return refreshManagementAfterSourceRefresh(previousScopeKey, reason);
+  };
+
+  const refreshContentSources = async (reason = 'manual') => {
+    const previousScopeKey = sourceScopeKey();
+    if (!(await sources.refresh(reason))) return false;
+    return refreshManagementAfterSourceRefresh(previousScopeKey, reason);
+  };
+
   const publish = () => {
+    const sourceSnapshot = sources.getSnapshot();
+    const managementSnapshot = management.getSnapshot();
     snapshot = Object.freeze({
-      scope,
-      clients: Object.freeze([...clients]),
-      templateCatalog,
-      selectedClientId,
-      currentArticle,
-      query,
-      clientQuery,
-      researchIndexQuery,
-      managementQuery,
-      questions: Object.freeze([...questions]),
-      research: Object.freeze([...research]),
-      researchByClient,
-      management,
-      commands: Object.freeze(
-        Object.fromEntries(
-          Object.entries(commandOwners).map(([name, owner]) => [
-            name,
-            owner.getSnapshot(),
-          ]),
-        ),
-      ),
-      revision,
+      ...sourceSnapshot,
+      management: managementSnapshot.management,
+      managementQuery: managementSnapshot.query,
+      removal: managementSnapshot.removal,
+      commands: Object.freeze({
+        ...sourceSnapshot.commands,
+        ...managementSnapshot.commands,
+      }),
     });
     listeners.forEach((listener) => listener());
   };
-  publish();
 
-  const setClientQueryScope = () => {
-    if (!scope || !selectedClientId) return;
-    const clientScope = {
-      workspaceRuntimeId: scope.workspaceRuntimeId,
-      clientId: selectedClientId,
-    };
-    clientIdentity.setScope(clientScope);
-    managementIdentity.setScope(clientScope);
-  };
-
-  const refreshSources = async (reason = 'manual') => {
-    if (disposed || !scope) return false;
-    const token = identity.begin(undefined, reason);
-    query = Object.freeze({ loading: true, error: null, reason });
+  const unsubscribeSources = sources.subscribe(() => {
+    syncManagementScope();
     publish();
-    try {
-      const [nextClients, nextCatalog] = await Promise.all([
-        adapters.listClients(),
-        adapters.listTemplateCatalog(),
-      ]);
-      if (!identity.isCurrent(token)) return false;
-      clients = Array.isArray(nextClients) ? nextClients : [];
-      templateCatalog = nextCatalog || EMPTY_CATALOG;
-      selectedClientId = clients.some((item) => item.id === selectedClientId)
-        ? selectedClientId
-        : clients[0]?.id || '';
-      if (
-        currentArticle &&
-        !clients.some((item) => item.id === currentArticle.clientId)
-      )
-        currentArticle = null;
-      setClientQueryScope();
-      query = Object.freeze({ loading: false, error: null, reason });
-      revision += 1;
-      publish();
-      return true;
-    } catch (value) {
-      if (!identity.isCurrent(token)) return false;
-      query = Object.freeze({
-        loading: false,
-        error: safeError(value),
-        reason,
-      });
-      publish();
-      return false;
-    }
-  };
-
-  const refreshClientData = async (reason = 'manual') => {
-    if (disposed || !scope || !selectedClientId) return false;
-    const requestedClientId = selectedClientId;
-    const token = clientIdentity.begin(
-      {
-        workspaceRuntimeId: scope.workspaceRuntimeId,
-        clientId: requestedClientId,
-      },
-      reason,
-    );
-    clientQuery = Object.freeze({ loading: true, error: null, reason });
-    publish();
-    try {
-      const [nextQuestions, nextResearch] = await Promise.all([
-        adapters.listQuestions(requestedClientId),
-        adapters.listResearch(requestedClientId),
-      ]);
-      if (
-        !clientIdentity.isCurrent(token) ||
-        requestedClientId !== selectedClientId
-      )
-        return false;
-      questions = Array.isArray(nextQuestions) ? nextQuestions : [];
-      research = Array.isArray(nextResearch) ? nextResearch : [];
-      researchByClient = Object.freeze({
-        ...researchByClient,
-        [requestedClientId]: Object.freeze([...research]),
-      });
-      clientQuery = Object.freeze({ loading: false, error: null, reason });
-      publish();
-      return true;
-    } catch (value) {
-      if (
-        !clientIdentity.isCurrent(token) ||
-        requestedClientId !== selectedClientId
-      )
-        return false;
-      clientQuery = Object.freeze({
-        loading: false,
-        error: safeError(value),
-        reason,
-      });
-      publish();
-      return false;
-    }
-  };
-
-  const refreshResearchIndex = async (reason = 'manual') => {
-    if (disposed || !scope) return false;
-    const clientIds = clients.map((item) => item.id);
-    const token = researchIndexIdentity.begin(
-      {
-        workspaceRuntimeId: scope.workspaceRuntimeId,
-        clientSet: clientIds.join('|') || 'none',
-      },
-      reason,
-    );
-    researchIndexQuery = Object.freeze({ loading: true, error: null, reason });
-    publish();
-    try {
-      const entries = await Promise.all(
-        clientIds.map(async (clientId) => [
-          clientId,
-          await adapters.listResearch(clientId),
-        ]),
-      );
-      if (!researchIndexIdentity.isCurrent(token)) return false;
-      researchByClient = Object.freeze(
-        Object.fromEntries(
-          entries.map(([clientId, items]) => [
-            clientId,
-            Object.freeze(Array.isArray(items) ? [...items] : []),
-          ]),
-        ),
-      );
-      if (selectedClientId && researchByClient[selectedClientId])
-        research = [...researchByClient[selectedClientId]];
-      researchIndexQuery = Object.freeze({
-        loading: false,
-        error: null,
-        reason,
-      });
-      publish();
-      return true;
-    } catch (value) {
-      if (!researchIndexIdentity.isCurrent(token)) return false;
-      researchIndexQuery = Object.freeze({
-        loading: false,
-        error: safeError(value),
-        reason,
-      });
-      publish();
-      return false;
-    }
-  };
-
-  const refreshManagement = async (reason = 'manual') => {
-    if (disposed || !scope || !selectedClientId) return false;
-    const requestedClientId = selectedClientId;
-    const token = managementIdentity.begin(
-      {
-        workspaceRuntimeId: scope.workspaceRuntimeId,
-        clientId: requestedClientId,
-      },
-      reason,
-    );
-    managementQuery = Object.freeze({ loading: true, error: null, reason });
-    publish();
-    try {
-      const next = await adapters.loadManagement(requestedClientId);
-      if (
-        !managementIdentity.isCurrent(token) ||
-        requestedClientId !== selectedClientId
-      )
-        return false;
-      management = Object.freeze({ ...EMPTY_MANAGEMENT, ...(next || {}) });
-      managementQuery = Object.freeze({ loading: false, error: null, reason });
-      publish();
-      return true;
-    } catch (value) {
-      if (
-        !managementIdentity.isCurrent(token) ||
-        requestedClientId !== selectedClientId
-      )
-        return false;
-      managementQuery = Object.freeze({
-        loading: false,
-        error: safeError(value),
-        reason,
-      });
-      publish();
-      return false;
-    }
-  };
-
-  const refreshAfterCommand = async (name, reason = 'command-result') => {
-    const target = ORDINARY_COMMANDS[name];
-    if (target === 'client') {
-      await Promise.all([
-        refreshClientData(reason),
-        refreshResearchIndex(reason),
-      ]);
-    } else if (target === 'sources') {
-      await refreshSources(reason);
-    } else if (target === 'management') {
-      await refreshManagement(reason);
-    }
-  };
-
-  const runCommand = async (name, input) => {
-    const target = ORDINARY_COMMANDS[name];
-    if (disposed || !scope || (target !== null && !selectedClientId))
-      throw new Error('Content command is unavailable');
-    const adapter = adapters[name];
-    if (typeof adapter !== 'function')
-      throw new Error(`Content command is unavailable: ${name}`);
-    const owner = commandOwners[name];
-    if (owner.getSnapshot().busy) return { ignored: true };
-    const commandScope =
-      target === null
-        ? Object.freeze({ workspaceRuntimeId: scope.workspaceRuntimeId })
-        : Object.freeze({
-            workspaceRuntimeId: scope.workspaceRuntimeId,
-            clientId: selectedClientId,
-          });
-    assertCommandClientScope(name, input, selectedClientId);
-    const token = owner.begin(commandScope);
-    publish();
-    try {
-      const result = await adapter(input);
-      if (!owner.isCurrent(token)) {
-        await refreshAfterCommand(name, 'stale-command-result');
-        return undefined;
-      }
-      if (
-        (name === 'saveArticle' || name === 'copyArticleVersion') &&
-        result?.clientId === selectedClientId
-      )
-        currentArticle = result;
-      owner.finalize(token, { result });
-      publish();
-      await refreshAfterCommand(name);
-      return result;
-    } catch (value) {
-      if (!owner.isCurrent(token)) {
-        await refreshAfterCommand(name, 'stale-command-result');
-        return undefined;
-      }
-      const error = safeError(value);
-      owner.finalize(token, { error });
-      publish();
-      throw Object.assign(new Error(error.userMessage), error);
-    }
-  };
-
-  // Keep the public command surface explicit so the compiler can preserve
-  // symbol identity from each View call through its exact bridge binding.
-  const commands = Object.freeze({
-    createQuestion: (input) => runCommand('createQuestion', input),
-    updateQuestion: (input) => runCommand('updateQuestion', input),
-    deleteQuestion: (input) => runCommand('deleteQuestion', input),
-    saveManualResearch: (input) => runCommand('saveManualResearch', input),
-    retryMaterial: (input) => runCommand('retryMaterial', input),
-    saveArticle: (input) => runCommand('saveArticle', input),
-    copyArticleVersion: (input) => runCommand('copyArticleVersion', input),
-    reconcilePublication: (input) => runCommand('reconcilePublication', input),
-    previewExport: (input) => runCommand('previewExport', input),
-    exportToSubmissionQueue: (input) =>
-      runCommand('exportToSubmissionQueue', input),
-    collectDoubaoQuestion: (input) =>
-      runCommand('collectDoubaoQuestion', input),
-    startPreparedDoubaoBatch: (input) =>
-      runCommand('startPreparedDoubaoBatch', input),
-    pauseDoubaoBatch: (input) => runCommand('pauseDoubaoBatch', input),
-    resumeDoubaoBatch: (input) => runCommand('resumeDoubaoBatch', input),
-    stopDoubaoBatch: (input) => runCommand('stopDoubaoBatch', input),
-    retryFailedDoubao: (input) => runCommand('retryFailedDoubao', input),
-    previewContentSubmissionBatch: (input) =>
-      runCommand('previewContentSubmissionBatch', input),
-    createContentSubmissionBatch: (input) =>
-      runCommand('createContentSubmissionBatch', input),
-    cancelContentSubmissionBatch: (input) =>
-      runCommand('cancelContentSubmissionBatch', input),
-    previewCleanupFailedContentSubmissionItems: (input) =>
-      runCommand('previewCleanupFailedContentSubmissionItems', input),
-    cleanupFailedContentSubmissionItems: (input) =>
-      runCommand('cleanupFailedContentSubmissionItems', input),
-    previewContentArticleRemoval: (input) =>
-      runCommand('previewContentArticleRemoval', input),
-    trashContentArticles: (input) => runCommand('trashContentArticles', input),
-    getContentArticleRemovalTransaction: (input) =>
-      runCommand('getContentArticleRemovalTransaction', input),
-    retryContentArticleRemovalTransaction: (input) =>
-      runCommand('retryContentArticleRemovalTransaction', input),
-    restoreContentArticle: (input) => runCommand('restoreContentArticle', input),
-    preparePermanentDeleteContentArticle: (input) =>
-      runCommand('preparePermanentDeleteContentArticle', input),
-    permanentlyDeleteContentArticle: (input) =>
-      runCommand('permanentlyDeleteContentArticle', input),
-    getDoubaoQueueState: (input) => runCommand('getDoubaoQueueState', input),
-    getDoubaoLoginStatus: (input) => runCommand('getDoubaoLoginStatus', input),
-    openDoubaoLogin: (input) => runCommand('openDoubaoLogin', input),
-    previewDoubaoBatch: (input) => runCommand('previewDoubaoBatch', input),
   });
+  const unsubscribeManagement = management.subscribe(publish);
+  management.setArticleResultHandler((article) => sources.setCurrentArticle(article));
+  syncManagementScope();
+  publish();
 
   return Object.freeze({
     getSnapshot: () => snapshot,
@@ -493,115 +80,46 @@ export function createContentWorkbenchFeature(adapters = {}) {
     },
     setScope(nextScope) {
       if (disposed) return;
-      if (
-        !nextScope ||
-        typeof nextScope.workspaceRuntimeId !== 'string' ||
-        !nextScope.workspaceRuntimeId
-      ) {
-        throw new TypeError('Content workbench scope is invalid');
-      }
-      if (scope?.workspaceRuntimeId === nextScope.workspaceRuntimeId) return;
-      scope = Object.freeze({
-        workspaceRuntimeId: nextScope.workspaceRuntimeId,
-      });
-      identity.setScope(scope);
-      clients = [];
-      templateCatalog = EMPTY_CATALOG;
-      selectedClientId = '';
-      currentArticle = null;
-      query = Object.freeze({ loading: false, error: null, reason: null });
-      clientQuery = Object.freeze({
-        loading: false,
-        error: null,
-        reason: null,
-      });
-      researchIndexQuery = Object.freeze({
-        loading: false,
-        error: null,
-        reason: null,
-      });
-      managementQuery = Object.freeze({
-        loading: false,
-        error: null,
-        reason: null,
-      });
-      questions = [];
-      research = [];
-      researchByClient = Object.freeze({});
-      management = EMPTY_MANAGEMENT;
-      Object.values(commandOwners).forEach((owner) => owner.invalidate());
-      researchIndexIdentity.setScope({
-        workspaceRuntimeId: scope.workspaceRuntimeId,
-        clientSet: 'none',
-      });
+      sources.setScope(nextScope);
+      syncManagementScope();
       publish();
     },
     async refresh(reason = 'manual') {
-      if (!(await refreshSources(reason))) return false;
-      await Promise.all([
-        refreshClientData(reason),
-        refreshResearchIndex(reason),
-        refreshManagement(reason),
+      if (!(await sources.refreshSources(reason, { refreshFallbackData: false }))) return false;
+      syncManagementScope();
+      const hasSelectedClient = Boolean(sources.getSnapshot().selectedClientId);
+      const [clientResult, researchResult, managementResult] = await Promise.all([
+        hasSelectedClient ? sources.refreshClientData(reason) : true,
+        sources.refreshResearchIndex(reason),
+        hasSelectedClient ? management.refreshManagement(reason) : true,
       ]);
-      return true;
+      return clientResult && researchResult && managementResult;
     },
     refreshSources,
-    refreshClientData,
-    refreshResearchIndex,
-    refreshManagement,
+    refreshContentSources,
+    refreshClientData: sources.refreshClientData,
+    refreshResearchIndex: sources.refreshResearchIndex,
+    refreshManagement: management.refreshManagement,
+    refreshDoubaoQueue: sources.refreshDoubaoQueue,
     async selectClient(clientId) {
-      if (
-        disposed ||
-        !clients.some((item) => item.id === clientId) ||
-        clientId === selectedClientId
-      )
-        return false;
-      selectedClientId = clientId;
-      currentArticle = null;
-      questions = [];
-      research = researchByClient[clientId]
-        ? [...researchByClient[clientId]]
-        : [];
-      management = EMPTY_MANAGEMENT;
-      clientQuery = Object.freeze({
-        loading: false,
-        error: null,
-        reason: null,
-      });
-      managementQuery = Object.freeze({
-        loading: false,
-        error: null,
-        reason: null,
-      });
-      Object.values(commandOwners).forEach((owner) => owner.invalidate());
-      setClientQueryScope();
-      publish();
-      await Promise.all([
-        refreshClientData('scope-change'),
-        refreshManagement('scope-change'),
-      ]);
+      const changed = await sources.selectClient(clientId);
+      if (!changed) return false;
+      syncManagementScope();
+      await management.refreshManagement('scope-change');
       return true;
     },
-    setCurrentArticle(article) {
-      if (disposed) return false;
-      if (article && article.clientId !== selectedClientId) return false;
-      currentArticle = article || null;
-      publish();
-      return true;
-    },
-    commands,
+    setCurrentArticle: sources.setCurrentArticle,
+    watchRemovalTransaction: management.watchRemovalTransaction,
+    clearRemovalTransaction: management.clearRemovalTransaction,
+    commands: Object.freeze({ ...sources.commands, ...management.commands }),
     dispose() {
       if (disposed) return;
       disposed = true;
-      identity.dispose();
-      clientIdentity.dispose();
-      researchIndexIdentity.dispose();
-      managementIdentity.dispose();
-      Object.values(commandOwners).forEach((owner) => owner.dispose());
+      unsubscribeSources();
+      unsubscribeManagement();
+      sources.dispose();
+      management.dispose();
       listeners.clear();
-      scope = null;
-      clients = [];
-      currentArticle = null;
     },
   });
 }

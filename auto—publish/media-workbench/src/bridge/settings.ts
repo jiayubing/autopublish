@@ -6,7 +6,7 @@ import type {
   LegacyProviderSettingsStatus,
   PlatformProviderStatus,
   PlatformProviderTestResult,
-} from "../types";
+} from "../types/settings";
 import { ipcError, requireBridgeApi } from "./transport";
 
 type SafeIpcError = { code?: string; userMessage?: string } | undefined;

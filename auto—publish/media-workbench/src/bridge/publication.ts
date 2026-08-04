@@ -4,7 +4,7 @@ import type {
   ArticleAttentionPreview,
   ArticleAttentionResolution,
   PublicationHistoryRecord,
-} from "../types";
+} from "../types/publication";
 import type {
   PublicationTargetDto,
   SafeOperationalErrorDto,

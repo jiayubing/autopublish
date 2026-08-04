@@ -23,7 +23,10 @@ import {
   getRuntimeDiagnostics,
   runBrowserSelfCheck,
 } from "../../bridge/workspace";
-import type { HepanProviderStatus, MediaProviderStatus } from "../../types";
+import type {
+  HepanProviderStatus,
+  MediaProviderStatus,
+} from "../../types/settings";
 import { createSettingsFeature } from "./settings-feature.js";
 
 function createProductionSettingsFeature() {

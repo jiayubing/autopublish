@@ -1877,6 +1877,206 @@ function jsxReceiverWiresFeature(
   featureMember,
 ) {
   if (!ts.isIdentifier(receiver)) return false;
+
+  function unwrap(expression) {
+    let current = expression;
+    while (
+      current &&
+      (ts.isParenthesizedExpression(current) ||
+        ts.isAsExpression(current) ||
+        ts.isTypeAssertionExpression(current) ||
+        ts.isSatisfiesExpression(current) ||
+        ts.isNonNullExpression(current))
+    )
+      current = current.expression;
+    return current;
+  }
+
+  function typePathTargets(expression, propertyPath) {
+    if (!expression || !propertyPath.length) return false;
+    let type = checker.getTypeAtLocation(expression);
+    for (let index = 0; index < propertyPath.length; index += 1) {
+      const member = checker.getPropertyOfType(type, propertyPath[index]);
+      if (!member) return false;
+      if (
+        index === propertyPath.length - 1 &&
+        canonicalSymbol(checker, member) === featureMember
+      )
+        return true;
+      type = checker.getTypeOfSymbolAtLocation(member, expression);
+    }
+    return false;
+  }
+
+  function parameterCallsites(ownerSymbol, parameterIndex, parameterName, visit) {
+    for (const candidateSource of program.getSourceFiles()) {
+      if (candidateSource.isDeclarationFile) continue;
+      for (const candidate of walk(
+        candidateSource,
+        (node) =>
+          ts.isCallExpression(node) &&
+          canonicalSymbol(checker, node.expression) === ownerSymbol,
+      )) {
+        const argument = candidate.arguments[parameterIndex];
+        if (argument && visit(argument)) return true;
+      }
+      for (const element of walk(
+        candidateSource,
+        (node) =>
+          (ts.isJsxOpeningElement(node) ||
+            ts.isJsxSelfClosingElement(node)) &&
+          canonicalSymbol(checker, node.tagName) === ownerSymbol,
+      )) {
+        const attribute = element.attributes.properties.find(
+          (entry) =>
+            ts.isJsxAttribute(entry) && entry.name.text === parameterName,
+        );
+        const expression =
+          attribute?.initializer && ts.isJsxExpression(attribute.initializer)
+            ? attribute.initializer.expression
+            : null;
+        if (expression && visit(expression)) return true;
+      }
+    }
+    return false;
+  }
+
+  function expressionTargetsFeature(
+    expression,
+    propertyPath,
+    visited = new Set(),
+  ) {
+    const current = unwrap(expression);
+    if (!current) return false;
+    if (typePathTargets(current, propertyPath)) return true;
+    if (
+      !propertyPath.length &&
+      (canonicalSymbol(checker, current) === featureMember ||
+        effectiveValueSymbol(checker, current) === featureMember)
+    )
+      return true;
+
+    const symbol = canonicalSymbol(checker, current);
+    const key = `${symbol ? symbol.id : "expression"}:${propertyPath.join(".")}:${
+      current.getSourceFile().fileName
+    }:${current.pos}`;
+    if (visited.has(key)) return false;
+    visited.add(key);
+
+    if (ts.isObjectLiteralExpression(current) && propertyPath.length) {
+      const property = current.properties.find((entry) =>
+        namedProperty(entry, propertyPath[0]),
+      );
+      if (property) {
+        const value = ts.isShorthandPropertyAssignment(property)
+          ? property.name
+          : ts.isPropertyAssignment(property)
+            ? property.initializer
+            : null;
+        if (
+          value &&
+          expressionTargetsFeature(value, propertyPath.slice(1), visited)
+        )
+          return true;
+      }
+    }
+
+    if (ts.isPropertyAccessExpression(current))
+      return expressionTargetsFeature(
+        current.expression,
+        [current.name.text, ...propertyPath],
+        visited,
+      );
+    if (ts.isElementAccessExpression(current)) {
+      const name =
+        ts.isStringLiteral(current.argumentExpression) ||
+        ts.isNumericLiteral(current.argumentExpression)
+          ? current.argumentExpression.text
+          : null;
+      if (name)
+        return expressionTargetsFeature(
+          current.expression,
+          [name, ...propertyPath],
+          visited,
+        );
+    }
+
+    if (!symbol) return false;
+    for (const declaration of symbol.declarations || []) {
+      if (
+        (ts.isVariableDeclaration(declaration) ||
+          ts.isPropertyAssignment(declaration)) &&
+        declaration.initializer &&
+        expressionTargetsFeature(
+          declaration.initializer,
+          propertyPath,
+          visited,
+        )
+      )
+        return true;
+      if (ts.isParameter(declaration)) {
+        const owner = declaration.parent;
+        const ownerSymbol = canonicalSymbol(checker, owner.name || owner);
+        const parameterIndex = owner.parameters.indexOf(declaration);
+        const parameterName = ts.isIdentifier(declaration.name)
+          ? declaration.name.text
+          : null;
+        if (
+          ownerSymbol &&
+          parameterIndex >= 0 &&
+          parameterName &&
+          parameterCallsites(
+            ownerSymbol,
+            parameterIndex,
+            parameterName,
+            (argument) =>
+              expressionTargetsFeature(argument, propertyPath, visited),
+          )
+        )
+          return true;
+        continue;
+      }
+      if (!ts.isBindingElement(declaration)) continue;
+
+      const property = declaration.propertyName || declaration.name;
+      const propertyName =
+        ts.isIdentifier(property) || ts.isStringLiteral(property)
+          ? property.text
+          : null;
+      if (!propertyName) continue;
+      const pattern = declaration.parent;
+      const bindingOwner = pattern && pattern.parent;
+      if (ts.isVariableDeclaration(bindingOwner) && bindingOwner.initializer) {
+        if (
+          expressionTargetsFeature(
+            bindingOwner.initializer,
+            [propertyName, ...propertyPath],
+            visited,
+          )
+        )
+          return true;
+        continue;
+      }
+      if (!ts.isParameter(bindingOwner)) continue;
+      const owner = bindingOwner.parent;
+      const ownerSymbol = canonicalSymbol(checker, owner.name || owner);
+      const parameterIndex = owner.parameters.indexOf(bindingOwner);
+      if (
+        ownerSymbol &&
+        parameterIndex >= 0 &&
+        parameterCallsites(
+          ownerSymbol,
+          parameterIndex,
+          propertyName,
+          (argument) =>
+            expressionTargetsFeature(argument, propertyPath, visited),
+        )
+      )
+        return true;
+    }
+    return false;
+  }
+
   let owner = containingFunction(call);
   while (owner) {
     const ownerSymbol = canonicalSymbol(checker, owner.name);
@@ -1898,15 +2098,7 @@ function jsxReceiverWiresFeature(
             attribute?.initializer && ts.isJsxExpression(attribute.initializer)
               ? attribute.initializer.expression
               : null;
-          if (!value) continue;
-          const type = checker.getTypeAtLocation(value);
-          if (
-            canonicalSymbol(
-              checker,
-              checker.getPropertyOfType(type, method),
-            ) === featureMember
-          )
-            return true;
+          if (value && expressionTargetsFeature(value, [method])) return true;
         }
       }
     }
@@ -4856,7 +5048,13 @@ function callableHasOnlyConditionalEntry(
   return conditional && !unconditional;
 }
 
-function eventCleanupFollowsStart(checker, program, startCalls, cleanupCalls) {
+function eventCleanupFollowsStart(
+  checker,
+  program,
+  startCalls,
+  cleanupCalls,
+  allowCrossSource = false,
+) {
   const invocationSiteCache = new Map();
   let callsBySymbol = callSitesByProgram.get(program);
   if (!callsBySymbol) {
@@ -4920,6 +5118,17 @@ function eventCleanupFollowsStart(checker, program, startCalls, cleanupCalls) {
       }
     }
     return null;
+  }
+
+  function isReactEffectRegistration(call) {
+    if (!call || !ts.isCallExpression(call)) return false;
+    const expression = call.expression;
+    const name = ts.isIdentifier(expression)
+      ? expression.text
+      : ts.isPropertyAccessExpression(expression)
+        ? expression.name.text
+        : '';
+    return ['useEffect', 'useLayoutEffect', 'useInsertionEffect'].includes(name);
   }
 
   function invocationSites(call) {
@@ -5192,21 +5401,32 @@ function eventCleanupFollowsStart(checker, program, startCalls, cleanupCalls) {
         containingFunction(cleanupRegistration) === sharedScope &&
         cleanupRegistration.pos > start.pos &&
         callsCanSharePath(start, cleanupRegistration);
+      const crossSource =
+        allowCrossSource && cleanup.getSourceFile() !== start.getSourceFile();
       if (
-        cleanup.getSourceFile() !== start.getSourceFile() ||
-        (cleanup.pos <= start.pos && !registeredAfterStart) ||
+        (!allowCrossSource && cleanup.getSourceFile() !== start.getSourceFile()) ||
+        (!crossSource && cleanup.pos <= start.pos && !registeredAfterStart) ||
         !callsCanSharePath(start, cleanup) ||
         startMayRepeat(start) ||
         hasRecursiveInvocationBetween(start, cleanup) ||
         hasIndirectRecursiveInvocationBetween(start, cleanup)
       )
         return false;
+      const effectCleanup =
+        Boolean(cleanupRegistration && isReactEffectRegistration(cleanupRegistration));
       if (
         cleanupHasConditionalPath(cleanup) ||
         cleanupHasReachableExitBetween(start, cleanup) ||
-        hasUncleanedStartBetween(start, cleanup)
+        (hasUncleanedStartBetween(start, cleanup) &&
+          !(allowCrossSource && effectCleanup))
       )
         return false;
+      if (
+        allowCrossSource &&
+        cleanup.getSourceFile() !== start.getSourceFile()
+      ) {
+        return effectCleanup;
+      }
       const startSites = invocationSites(start);
       const cleanupSites = invocationSites(cleanup);
       if (!startSites.length || !cleanupSites.length) return false;
@@ -6832,6 +7052,152 @@ function lifecycleConsumerDerivesFromFeatureSnapshot(
   return false;
 }
 
+function factoryPassesParameterToNestedFactory(
+  checker,
+  factory,
+  nestedFactorySymbol,
+  outerParameter,
+) {
+  if (!factory || !nestedFactorySymbol || !outerParameter) return false;
+  const nestedFactory = declarationOf(
+    nestedFactorySymbol,
+    (candidate) => ts.isFunctionLike(candidate),
+  );
+  if (!nestedFactory) return false;
+  const nestedParameter = nestedFactory.parameters[0];
+  if (!nestedParameter) return false;
+  const nestedParameterIndex = 0;
+  return walk(
+    factory,
+    ts.isCallExpression,
+    (node) => node !== factory && ts.isFunctionLike(node),
+    checker,
+  ).some(
+    (call) =>
+      canonicalSymbol(checker, call.expression) === nestedFactorySymbol &&
+      canonicalSymbol(checker, call.arguments[nestedParameterIndex]) ===
+        outerParameter,
+  );
+}
+
+function nestedFeatureEvidence(
+  context,
+  outerFeatureEvidence,
+  caller,
+  bridgeExport,
+  nested,
+) {
+  if (!nested || !outerFeatureEvidence) return null;
+  const nestedSource = evidenceSource(context, nested.source);
+  if (!nestedSource)
+    return { ok: false, reasons: ["nested feature source is missing"] };
+  const nestedEvidence = featureMemberEvidence(
+    context.checker,
+    nestedSource,
+    nested.method,
+    nested.container,
+  );
+  if (!nestedEvidence)
+    return {
+      ok: false,
+      reasons: ["nested feature member has no TypeChecker symbol"],
+    };
+  const nestedParameter = factoryParameterReachesBinding(
+    context.checker,
+    nestedEvidence.factory,
+    nestedEvidence.memberSymbol,
+    nested.binding,
+  );
+  const outerParameter = parameterSymbol(
+    context.checker,
+    outerFeatureEvidence.factory,
+    "adapters",
+  );
+  const nestedReceivesOuter = factoryPassesParameterToNestedFactory(
+    context.checker,
+    outerFeatureEvidence.factory,
+    nestedEvidence.factorySymbol,
+    outerParameter,
+  );
+  const compositionBindsBridgeValue = compositionBindsBridge(
+    context.checker,
+    evidenceSource(context, caller.feature),
+    outerFeatureEvidence.factorySymbol,
+    outerParameter,
+    caller.featureBinding,
+    bridgeExport,
+  );
+  return {
+    source: nestedSource,
+    evidence: nestedEvidence,
+    parameter: nestedParameter,
+    bridgeBinding:
+      Boolean(nestedParameter) &&
+      nestedReceivesOuter &&
+      Boolean(compositionBindsBridgeValue),
+    compositionBindsBridgeValue,
+    stateUpdates: nested.stateField
+      ? lifecycleUpdatesField(
+          context.checker,
+          nestedEvidence.factory,
+          nestedEvidence.memberSymbol,
+          nested.stateField,
+        )
+      : false,
+    resultReachesState: nested.stateField
+      ? lifecycleQueryResultReachesField(
+          context.checker,
+          nestedEvidence.factory,
+          nestedEvidence.memberSymbol,
+          nestedParameter,
+          nested.binding,
+          nested.stateField,
+        )
+      : false,
+    eventDisposes: nested.cleanupMethod
+      ? eventFeatureDisposes(
+          context.checker,
+          nestedEvidence.factory,
+          nested.binding,
+          nestedEvidence.memberSymbol,
+          nested.cleanupMethod,
+        )
+      : false,
+    cleanupMember: nested.cleanupMethod
+      ? returnedMemberSymbol(
+          context.checker,
+          nestedEvidence.factory,
+          nested.cleanupMethod,
+        )
+      : null,
+  };
+}
+
+function cleanupMemberCallsNestedCleanup(
+  checker,
+  outerFactory,
+  outerCleanupMember,
+  nestedCleanupMember,
+) {
+  if (!outerCleanupMember || !nestedCleanupMember) return false;
+  const nested = canonicalSymbol(checker, nestedCleanupMember);
+  if (!nested) return false;
+  return memberReachableNodes(
+    checker,
+    outerFactory,
+    outerCleanupMember,
+    true,
+  ).some((node) => {
+    if (!ts.isCallExpression(node)) return false;
+    const callee = node.expression;
+    if (canonicalSymbol(checker, callee) === nested) return true;
+    return (
+      ts.isPropertyAccessExpression(callee) &&
+      canonicalSymbol(checker, callee.name) === nested
+    );
+  });
+}
+
 function verifyCapabilityEvidence(context, fixture) {
   const { applicationRoot, program, checker } = context;
   const caller = fixture.productionCaller;
@@ -6961,6 +7327,27 @@ function verifyCapabilityEvidence(context, fixture) {
   );
   trace.bridgeExport = symbolId(checker, bridgeExport);
   if (!bridgeExport) reasons.push("bridge export has no TypeChecker symbol");
+  const nestedEvidence =
+    featureEvidence && bridgeExport
+      ? nestedFeatureEvidence(
+          context,
+          featureEvidence,
+          caller,
+          bridgeExport,
+          consumer.nestedFeature,
+        )
+      : null;
+  trace.nestedFeature = nestedEvidence
+    ? {
+        member: symbolId(checker, nestedEvidence.evidence?.memberSymbol),
+        parameter: symbolId(checker, nestedEvidence.parameter),
+        bridgeBinding: nestedEvidence.bridgeBinding,
+        stateUpdates: nestedEvidence.stateUpdates,
+        resultReachesState: nestedEvidence.resultReachesState,
+        eventDisposes: nestedEvidence.eventDisposes,
+      }
+    : null;
+  const nestedBridgeBinding = nestedEvidence?.bridgeBinding === true;
   let compositionCall = null;
   let directBridgeBinding = false;
   let featureParameter = null;
@@ -6978,7 +7365,7 @@ function verifyCapabilityEvidence(context, fixture) {
       caller.featureBinding,
     );
     trace.featureParameter = symbolId(checker, featureParameter);
-    if (!featureParameter && !directBridgeBinding)
+    if (!featureParameter && !directBridgeBinding && !nestedBridgeBinding)
       reasons.push(
         "feature member symbol does not reach the bridge parameter binding",
       );
@@ -6990,7 +7377,7 @@ function verifyCapabilityEvidence(context, fixture) {
       caller.featureBinding,
       bridgeExport,
     );
-    if (!directBridgeBinding && !compositionCall)
+    if (!directBridgeBinding && !compositionCall && !nestedBridgeBinding)
       reasons.push(
         "bridge import symbol is not passed to the feature factory binding",
       );
@@ -7138,21 +7525,23 @@ function verifyCapabilityEvidence(context, fixture) {
           "lifecycle snapshot consumer is not derived from the recorded feature snapshot",
         );
     }
-    if (
+    const lifecycleUpdates =
       featureEvidence &&
-      !lifecycleUpdatesField(
+      (lifecycleUpdatesField(
         checker,
         featureEvidence.factory,
         featureMember,
         consumer.stateField,
-      )
-    )
+      ) ||
+        nestedEvidence?.stateUpdates === true);
+    if (featureEvidence && !lifecycleUpdates)
       reasons.push(
         "lifecycle query does not update the recorded snapshot field",
       );
     else if (
       featureEvidence &&
       !directBridgeBinding &&
+      !nestedBridgeBinding &&
       !lifecycleQueryResultReachesField(
         checker,
         featureEvidence.factory,
@@ -7270,13 +7659,25 @@ function verifyCapabilityEvidence(context, fixture) {
         featureEvidence.factory,
         cleanupMethod,
       );
-      const featureDisposes = eventFeatureDisposes(
+      const composedFeatureDisposes = eventFeatureDisposes(
         checker,
         featureEvidence.factory,
         caller.featureBinding,
         featureMember,
         cleanupMethod,
       );
+      const nestedFeatureDisposes = nestedEvidence?.eventDisposes === true;
+      const nestedCleanupForwarded =
+        !nestedFeatureDisposes ||
+        cleanupMemberCallsNestedCleanup(
+          checker,
+          featureEvidence.factory,
+          cleanupMember,
+          nestedEvidence.cleanupMember,
+        );
+      const featureDisposes =
+        composedFeatureDisposes ||
+        (nestedFeatureDisposes && nestedCleanupForwarded);
       if (
         !featureDisposes &&
         !(directBridgeBinding && eventConsumerDisposes(checker, calls[0]))
@@ -7289,11 +7690,22 @@ function verifyCapabilityEvidence(context, fixture) {
           "event subscription cleanup is not callable-reachable from the recorded renderer entry",
         );
       else if (featureDisposes) {
+        const cleanupSource = consumer.cleanupSource
+          ? evidenceSource(context, consumer.cleanupSource)
+          : consumerSource;
         const cleanupCalls = consumerCalls(
           checker,
           program,
-          consumerSource,
-          { ...consumer, method: cleanupMethod },
+          cleanupSource,
+          {
+            ...consumer,
+            owner: consumer.cleanupOwner || consumer.owner,
+            receiver:
+              consumer.cleanupReceiver === undefined
+                ? consumer.receiver
+                : consumer.cleanupReceiver,
+            method: cleanupMethod,
+          },
           cleanupMember,
         );
         if (!cleanupCalls.length)
@@ -7301,7 +7713,13 @@ function verifyCapabilityEvidence(context, fixture) {
             "event subscription cleanup is not callable-reachable from the recorded renderer entry",
           );
         else if (
-          !eventCleanupFollowsStart(checker, program, calls, cleanupCalls)
+          !eventCleanupFollowsStart(
+            checker,
+            program,
+            calls,
+            cleanupCalls,
+            consumer.allowCrossSourceCleanup === true,
+          )
         )
           reasons.push(
             "event cleanup is not ordered after the recorded subscription",
@@ -7318,7 +7736,7 @@ function walk(node, predicate, boundary, checker = null) {
   function visit(current) {
     const stopsHere = current !== node && boundary?.(current);
     if (
-      (!stopsHere || !isStaticallyUnreachableBranch(checker, current)) &&
+      (!stopsHere || !checker || !isStaticallyUnreachableBranch(checker, current)) &&
       predicate(current)
     )
       matches.push(current);
@@ -7485,6 +7903,7 @@ function mutableVariableHasPriorWrite(checker, declaration, useSite) {
 }
 
 function staticPrimitiveValue(checker, expression, visited = new Set()) {
+  if (!expression) return STATIC_UNKNOWN;
   let current = expression;
   while (
     ts.isParenthesizedExpression(current) ||

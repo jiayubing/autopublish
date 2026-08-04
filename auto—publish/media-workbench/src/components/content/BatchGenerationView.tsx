@@ -1,20 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
-import { ContentClient, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types';
+import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog } from '../../types/content';
+import type { GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types/generation';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import GenerationBatchDetail from './GenerationBatchDetail';
 import { BATCH_GENERATION_STEPS, countGenerationTasks, formatGenerationPreflightError, GENERATION_BATCH_RISK_THRESHOLD, getMaterialId, groupTemplatesByPlatform, isExecutableSource, isUsableMaterial, isUsableResearch, preserveSelection, reconcileSourceSelection, sourceCharacterCount, templatePlatformDisplayName, templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';
 import { useGenerationFeature } from '../../features/generation/use-generation-feature';
 import { useConfirmation } from '../../confirmation';
+import { isContentCommandStaleResult } from '../../content-command-result';
 
 interface BatchGenerationViewProps {
   clients: ContentClient[];
   currentClientId?: string;
   researchByClient: Record<string, ContentResearch[]>;
   templateCatalog?: ContentTemplateCatalog;
-  commands: { retryMaterial: (input: Record<string, unknown>) => Promise<ContentMaterial> };
+  commands: { retryMaterial: (input: Record<string, unknown>) => Promise<ContentMaterial | ContentCommandStaleResult> };
   commandStates: { retryMaterial: { busy: boolean } };
-  refreshManagement: (reason?: string) => Promise<unknown>;
 }
 
 type SourceState = Record<string, { materialIds: string[]; researchQueryIds: string[] }>;
@@ -45,7 +46,7 @@ function errorReason(code: string) {
   return labels[code] || code;
 }
 
-export default function BatchGenerationView({ clients, currentClientId, researchByClient, templateCatalog, commands, commandStates, refreshManagement }: BatchGenerationViewProps) {
+export default function BatchGenerationView({ clients, currentClientId, researchByClient, templateCatalog, commands, commandStates }: BatchGenerationViewProps) {
   const { confirm } = useConfirmation();
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
@@ -165,7 +166,8 @@ export default function BatchGenerationView({ clients, currentClientId, research
   async function retryMaterialItem(clientId: string, materialId: string) {
     setError('');
     try {
-      await commands.retryMaterial({ clientId, materialId });
+      const result = await commands.retryMaterial({ clientId, materialId });
+      if (isContentCommandStaleResult(result)) return;
     } catch (value) {
       setError(value instanceof Error ? value.message : '资料重试失败');
     } finally {}
@@ -273,7 +275,7 @@ export default function BatchGenerationView({ clients, currentClientId, research
       {step === 3 && <section className="rounded-md border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold">确认任务并启动</h2><p className="mt-1 text-xs text-slate-500">客户数 × 模板数 = AI 调用任务数</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded bg-slate-50 p-3 text-sm">{selectedCount} × {selectedTemplates.length} = {previewResult?.taskCount ?? potentialTaskCount}</div><div className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">可执行任务数：{executableTaskCount}</div><div className="rounded bg-rose-50 p-3 text-sm text-rose-700">排除客户/任务：{previewResult?.excludedClients.length ?? Math.max(0, selectedCount - executableClients.length)} / {previewResult?.excludedTaskCount ?? Math.max(0, potentialTaskCount - executableTaskCount)}</div></div>{riskWarning && <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">费用风险提示：任务数较多，启动前请再次确认。</div>}{previewResult?.excludedClients.length ? <div className="mt-4 rounded border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"><p className="font-semibold">被排除客户与原因</p>{previewResult.excludedClients.map((item) => <p key={item.clientId} className="mt-1">{clientMap.get(item.clientId)?.name || item.clientId}：{item.codes.map(errorReason).join('、')}</p>)}</div> : <p className="mt-4 text-xs text-emerald-700">没有被排除的客户。</p>}<button type="button" onClick={() => void start()} disabled={loading || !previewResult?.executableTaskCount} className="mt-4 h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40">{loading ? '启动中…' : '确认并启动批量生成'}</button></section>}
       </>}
       {viewMode === 'monitoring' && batch && <div className="generation-batch-control-area">
-         <GenerationBatchDetail batch={batch} state={batchState} busy={{ pause: generationCommands.pause.busy, resume: generationCommands.resume.busy, continue: generationCommands.continue.busy, stop: generationCommands.stop.busy, retry: generationCommands.retry.busy }} onPause={() => void pause()} onResume={() => void resume()} onContinue={() => void confirmContinueIncomplete()} onStop={() => void stop()} onRetry={() => void retryFailed()} onPreviewCancelPending={generation.previewCancelPending} onCancelPending={generation.cancelPending} refreshManagement={refreshManagement} onStartNew={startNewBatch} />
+         <GenerationBatchDetail batch={batch} state={batchState} busy={{ pause: generationCommands.pause.busy, resume: generationCommands.resume.busy, continue: generationCommands.continue.busy, stop: generationCommands.stop.busy, retry: generationCommands.retry.busy }} onPause={() => void pause()} onResume={() => void resume()} onContinue={() => void confirmContinueIncomplete()} onStop={() => void stop()} onRetry={() => void retryFailed()} onPreviewCancelPending={generation.previewCancelPending} onCancelPending={generation.cancelPending} onStartNew={startNewBatch} />
         {error && <div role="alert" aria-live="polite" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
       </div>}
       {viewMode === 'wizard' && error && <div ref={preflightErrorRef} tabIndex={-1} role="alert" aria-live="assertive" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}

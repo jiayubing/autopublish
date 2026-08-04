@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pause, Play, RotateCcw, Square } from 'lucide-react';
-import { DoubaoQueueState } from '../../types';
+import type { DoubaoQueueState } from '../../types/content';
 
 interface CollectionTaskBarProps {
   queue: DoubaoQueueState;

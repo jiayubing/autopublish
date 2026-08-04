@@ -31,7 +31,7 @@ describe("renderer question editor session", function() {
     assert.match(workbench, /useContentWorkbenchFeature/);
     assert.doesNotMatch(source, /onRefresh\(\)/);
     assert.match(contentFeature, /useWorkspaceScope\('contentSources'/);
-    assert.match(contentFeature, /feature\.refresh\(event\.kind\)/);
+    assert.match(contentFeature, /feature\.refreshContentSources\(event\.kind\)/);
   });
 
   it("contains the real renderer regression hooks for focus and pointer isolation", function() {
@@ -62,7 +62,7 @@ function installQuestionFixture(page, options = {}) {
       "client-b": [{ id: "question-b", question: "问题 B", answerText: "客户 B 的回答", references: [{ title: "引用 B", url: "https://example.com/b" }], collectionMethod: "manual", updatedAt: "2026-07-19T00:00:00.000Z" }]
     };
     const result = (data) => Promise.resolve({ ok: true, data });
-    const questionFlow = { previewCalls: 0, executeCalls: 0 };
+    const questionFlow = { previewCalls: 0, executeCalls: 0, resolvePreview: null };
     const content = {
       listClients: () => result({ clients }), listGeneratedArticles: () => result({ articles: [] }), getArticleManagementSnapshot: ({ clientId }) => result({ clientId, revision: 1, articles: [], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [], workflowItems: [], publicationSummaryItems: [] }), listSubmissionPlatforms: () => result({ platforms: [] }), listSubmissionBatches: () => result({ batches: [] }), listArticleTrash: () => result({ trash: [] }),
       listResearch: (clientId) => result({ research: research[clientId] || [] }), listQuestions: (clientId) => result({ questions: questions[clientId] || [] }), listTemplates: () => result({ templates: [] }), listTemplateCatalog: () => result({ revision: "fixture", platforms: [], templates: [], diagnostics: [] }),
@@ -71,6 +71,7 @@ function installQuestionFixture(page, options = {}) {
       previewDoubaoBatch: () => {
         questionFlow.previewCalls += 1;
         if (fixtureOptions.previewBatchFailure) return Promise.resolve({ ok: false, error: { code: "DOUBAO_PREVIEW_FAILED", message: "批次预览失败" } });
+        if (fixtureOptions.previewBatchPending) return new Promise((resolve) => { questionFlow.resolvePreview = () => resolve(result({ preview: { mode: "missing", clientCount: 1, taskCount: 1, skippedExisting: 0, disabledQuestions: 0, tasks: [{ clientId: "client-a", questionId: "question-1", force: true }] } })); });
         return result({ preview: { mode: "missing", clientCount: 1, taskCount: 1, skippedExisting: 0, disabledQuestions: 0, tasks: [{ clientId: "client-a", questionId: "question-1", force: true }] } });
       },
       startPreparedDoubaoBatch: () => { questionFlow.executeCalls += 1; return result({ queue: { status: "running", currentTaskId: "question-1", completed: 0, total: 1, waitRemainingMs: 0, tasks: [{ id: "task-1", clientId: "client-a", questionId: "question-1", status: "running" }] } }); },
@@ -171,7 +172,7 @@ describe("real renderer question editor interaction", { concurrency: false }, fu
     await recollect.click();
     await page.getByText("批次预览失败", { exact: true }).waitFor();
     assert.equal(await page.getByRole("dialog").count(), 0);
-    assert.deepEqual(await page.evaluate(() => window.__questionFixture), { previewCalls: 1, executeCalls: 0 });
+    assert.deepEqual(await page.evaluate(() => window.__questionFixture), { previewCalls: 1, executeCalls: 0, resolvePreview: null });
     assert.equal(await recollect.isEnabled(), true);
     assert.deepEqual(pageErrors, []);
     await page.close();
@@ -189,11 +190,58 @@ describe("real renderer question editor interaction", { concurrency: false }, fu
     await page.getByRole("button", { name: "重新采集选中客户" }).click();
     const confirmation = page.getByRole("dialog", { name: "重新采集选中客户" });
     await confirmation.waitFor();
-    assert.deepEqual(await page.evaluate(() => window.__questionFixture), { previewCalls: 1, executeCalls: 0 });
+    assert.deepEqual(await page.evaluate(() => window.__questionFixture), { previewCalls: 1, executeCalls: 0, resolvePreview: null });
     await confirmation.getByRole("button", { name: "开始重新采集" }).click();
     await page.waitForFunction(() => window.__questionFixture.executeCalls === 1);
-    assert.deepEqual(await page.evaluate(() => window.__questionFixture), { previewCalls: 1, executeCalls: 1 });
+    assert.deepEqual(await page.evaluate(() => window.__questionFixture), { previewCalls: 1, executeCalls: 1, resolvePreview: null });
     assert.deepEqual(nativeDialogs, []);
+    await page.close();
+  });
+
+  it("rejects a prepared batch when its client selection changes during deferred preview", async function() {
+    const page = await browser.newPage({ viewport: { width: 1024, height: 800 } });
+    page.setDefaultTimeout(8000);
+    await installQuestionFixture(page, { previewBatchPending: true });
+    await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#nav-item-content").click();
+    await page.getByRole("heading", { name: "问题与采集" }).waitFor();
+    const recollect = page.getByRole("button", { name: "重新采集选中客户" });
+    await recollect.click();
+    await page.waitForFunction(() => window.__questionFixture.previewCalls === 1 && typeof window.__questionFixture.resolvePreview === "function");
+    const clientB = page.getByRole("checkbox", { name: "客户 B" });
+    assert.equal(await clientB.isDisabled(), true);
+    await page.evaluate(() => {
+      const input = Array.from(document.querySelectorAll('input[type="checkbox"]')).find((item) => item.parentElement?.textContent?.includes("客户 B"));
+      if (!input) throw new Error("batch client B checkbox not found");
+      input.disabled = false;
+      input.click();
+    });
+    await page.evaluate(() => window.__questionFixture.resolvePreview());
+    await page.getByText("批次客户选择已变化，请重新预览", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.__questionFixture.executeCalls), 0);
+    await page.close();
+  });
+
+  it("ignores a deferred batch preview after the content view unmounts", async function() {
+    const page = await browser.newPage({ viewport: { width: 1024, height: 800 } });
+    page.setDefaultTimeout(8000);
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await installQuestionFixture(page, { previewBatchPending: true });
+    await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#nav-item-content").click();
+    await page.getByRole("heading", { name: "问题与采集" }).waitFor();
+    await page.getByRole("button", { name: "重新采集选中客户" }).click();
+    await page.waitForFunction(() => typeof window.__questionFixture.resolvePreview === "function");
+
+    await page.locator("#nav-item-settings").click();
+    await page.getByRole("heading", { name: "配置中心" }).waitFor();
+    await page.evaluate(() => window.__questionFixture.resolvePreview());
+    await page.waitForTimeout(100);
+
+    assert.equal(await page.evaluate(() => window.__questionFixture.executeCalls), 0);
+    assert.equal(await page.getByText("批次客户选择已变化，请重新预览", { exact: true }).count(), 0);
+    assert.deepEqual(pageErrors, []);
     await page.close();
   });
 });

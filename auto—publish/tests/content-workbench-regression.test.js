@@ -11,14 +11,16 @@ describe("content workbench regression", function() {
   it("exposes the content IPC API to the React renderer", function() {
     const preload = read("desktop/preload.js");
     const api = read("media-workbench/src/bridge/content.ts");
+    const generationApi = read("media-workbench/src/bridge/generation.ts");
     [
       'ipcRenderer.invoke("content:list-clients")',
       'ipcRenderer.invoke("content:generate-article", input)',
       'ipcRenderer.invoke("content:save-article", article)',
       "export async function listContentClients",
-      "export async function generateContentArticle",
-      "export async function saveContentArticle",
-    ].forEach(function(value) { assert.equal((preload + api).includes(value), true, "missing " + value); });
+    ].forEach(function(value) { assert.equal((preload + api + generationApi).includes(value), true, "missing " + value); });
+    ["export async function generateContentArticle", "export async function saveContentArticle"].forEach(function(value) {
+      assert.equal(generationApi.includes(value), true, "missing " + value);
+    });
   });
 
   it("keeps the AI content workspace reachable from navigation", function() {
@@ -49,7 +51,8 @@ describe("content workbench regression", function() {
 
   it("exposes the collection API and multi-research generation contract", function() {
     const api = read("media-workbench/src/bridge/content.ts");
-    const types = read("media-workbench/src/types.ts");
+    const types = read("media-workbench/src/types/content.ts");
+    const generationTypes = read("media-workbench/src/types/generation.ts");
     [
       "listContentQuestions",
       "createContentQuestion",
@@ -66,7 +69,7 @@ describe("content workbench regression", function() {
       "subscribeDoubaoQueue",
       "saveManualResearch",
       "researchQueryIds: string[]"
-    ].forEach(function(value) { assert.equal((api + types).includes(value), true, "missing " + value); });
+    ].forEach(function(value) { assert.equal((api + types + generationTypes).includes(value), true, "missing " + value); });
     assert.match(read("media-workbench/src/bridge/content.ts"), /subscribeDoubaoQueue[\s\S]*\(\) => void/);
   });
 
@@ -88,9 +91,10 @@ describe("content workbench regression", function() {
 
   it("keeps batch selection and answer expansion as independent controls", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const batch = read("media-workbench/src/components/content/QuestionBatchControls.tsx");
     const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");
     assert.doesNotMatch(questions, /onClientChange/);
-    assert.match(questions, /indeterminate/);
+    assert.match(batch, /indeterminate/);
     assert.match(questions, /二次确认|confirm/);
     assert.match(item, /defaultExpanded = false/);
     assert.match(item, /onSelectedChange/);

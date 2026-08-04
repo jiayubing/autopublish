@@ -23,11 +23,13 @@ describe("renderer content submission batch actions", () => {
 
   it("tracks cancellation pending state and refreshes authoritative management after stale plans", () => {
     const view = source();
+    const management = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench", "src", "features", "content", "article-management-feature.js"), "utf8");
     const cancel = view.slice(view.indexOf("async function cancelCancelableBatches"), view.indexOf("\n  async function cleanupFailedBatches"));
     assert.match(cancel, /setCancellationPending\(\{ clientId: requestedClientId, count: total \}\)/);
     assert.match(cancel, /SUBMISSION_ACTION_STALE/);
     assert.match(cancel, /队列已变化，请重新检查/);
-    assert.match(cancel, /refreshBatchAffectedArticles\(\)/);
+    assert.doesNotMatch(cancel, /refreshBatchAffectedArticles\(\)/);
+    assert.match(management, /await refreshAfterCommand\(name, 'command-error'\)/);
     assert.match(cancel, /cancellationRequestIdRef\.current === requestId/);
   });
 

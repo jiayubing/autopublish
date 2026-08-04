@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useConfirmation } from '../../confirmation';
 import type { createAttentionFeature } from '../../features/attention/attention-feature.js';
-import type { ArticleAttentionItem } from '../../types';
+import type { ArticleAttentionItem } from '../../types/publication';
 
 type AttentionFeature = ReturnType<typeof createAttentionFeature>;
 type ArticleAttentionSnapshot = ReturnType<AttentionFeature['getSnapshot']>;

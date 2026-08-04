@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { generateContentArticle } from '../../bridge/content';
-import type { GeneratedContentArticle } from '../../types';
+import { generateContentArticle } from '../../bridge/generation';
+import type { GeneratedContentArticle } from '../../types/generation';
 import { createContentGenerationFeature } from './content-generation-feature.js';
 import { useWorkspaceRuntimeIdentity } from '../workspace/workspace-coordinator-context';
 

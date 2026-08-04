@@ -2,17 +2,19 @@ import { createContext, useContext, useEffect, useRef, useSyncExternalStore } fr
 import type { ReactNode } from 'react';
 import {
   checkPlatformLogin,
-  cleanupTrashedArticleQueueResidue,
   getPlatformQueue,
   getPlatformState,
   onPlatformState,
   onPlatformStateDiagnostic,
   openPlatformLogin,
   pausePlatformSubmit,
-  previewTrashedArticleQueueResidue,
   stopPlatformSubmit,
   submitPlatformSelection,
 } from '../../bridge/platform';
+import {
+  cleanupTrashedArticleQueueResidue,
+  previewTrashedArticleQueueResidue,
+} from '../../bridge/content-removal';
 import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 import { confirmAccountProfile, listAccountProfiles } from '../../bridge/account-profile';

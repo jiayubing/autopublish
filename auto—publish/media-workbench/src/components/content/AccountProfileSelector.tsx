@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { ContentSubmissionPlatform } from '../../types';
+import type { ContentSubmissionPlatform } from '../../types/publication';
 import { usePlatformFeature } from '../../features/platform/platform-feature-context';
 
 interface AccountProfileSelectorProps {

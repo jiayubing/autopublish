@@ -1,10 +1,5 @@
-import type {
-  Article,
-  Draft,
-  IpcResponse,
-  MediaResource,
-  RealOrder,
-} from "../types";
+import type { Article, Draft, MediaResource, RealOrder } from "../types/media";
+import type { IpcResponse } from "../types/ipc";
 import { formatBeijingTime } from "../time-format";
 import { ipcError, requireBridgeApi, unavailable } from "./transport";
 

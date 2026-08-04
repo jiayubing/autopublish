@@ -142,8 +142,8 @@ describe("renderer content generation workflow", function() {
 
   it("labels builtin and custom templates with accurate source wording", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const types = read("media-workbench/src/types.ts");
-    assert.match(types, /source\?: 'builtin' \| 'custom'/);
+    const types = read("media-workbench/src/types/content.ts");
+    assert.match(types, /source\?: ["']builtin["'] \| ["']custom["']/);
     assert.match(types, /readOnly\?: boolean/);
     assert.match(batch, /templateSourceLabel/);
     assert.match(read("media-workbench/src/content-generation-ui-logic.js"), /内置模板 · 只读/);
@@ -266,12 +266,12 @@ describe("renderer content generation workflow", function() {
 
   it("rehydrates the same live counts and status after returning to the page", function() {
     const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const types = read("media-workbench/src/types.ts");
+    const types = read("media-workbench/src/types/generation.ts");
     const feature = read("media-workbench/src/features/generation/generation-feature.js");
     assert.doesNotMatch(batch, /batchStateRef|runtimeCursorRef/);
     assert.match(feature, /counts: runtime\.counts \|\| batch\.counts/);
     assert.match(types, /updatedAt\?: string/);
-    assert.match(types, /'pausing'/);
+    assert.match(types, /["']pausing["']/);
   });
 
   it("exposes cancelled counts and a preview-confirmed pending cancellation action", function() {

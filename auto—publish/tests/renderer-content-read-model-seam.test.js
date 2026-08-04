@@ -58,9 +58,13 @@ test("production content views call named ordinary content commands", () => {
 
 test("article management destructive commands and removal events stay behind the content feature seam", () => {
   const source = read("media-workbench/src/components/content/GeneratedArticlesView.tsx");
+  const feature = read("media-workbench/src/features/content/article-management-feature.js");
   assert.match(source, /commands\.preparePermanentDeleteContentArticle/);
   assert.match(source, /commands\.permanentlyDeleteContentArticle/);
-  assert.match(source, /subscribeRemovalTransaction/);
+  assert.match(source, /watchRemovalTransaction/);
+  assert.match(source, /removal/);
+  assert.match(feature, /subscribeRemovalTransaction/);
+  assert.match(feature, /removalIdentity/);
   assert.doesNotMatch(source, /bridge\/content|article-management-controller/);
 });
 

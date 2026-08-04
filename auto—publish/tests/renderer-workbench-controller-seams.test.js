@@ -27,10 +27,12 @@ describe("renderer workbench controller seams", () => {
       "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     );
     const feature = read("media-workbench/src/features/content/content-workbench-feature.js");
+    const managementFeature = read("media-workbench/src/features/content/article-management-feature.js");
     assert.equal(fs.existsSync(path.join(root, "media-workbench/src/article-management-controller.js")), false);
     assert.doesNotMatch(view, /createArticleManagementController/);
     assert.doesNotMatch(view, /getArticleManagementSnapshot|refreshToken/);
-    assert.match(feature, /query: 'articleManagement'/);
+    assert.match(feature, /createArticleManagementFeature/);
+    assert.match(managementFeature, /query: 'articleManagement'/);
   });
 
   it("account profile selection consumes the root platform feature", () => {

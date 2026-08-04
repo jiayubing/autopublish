@@ -9,7 +9,9 @@ function read(file) {
 
 describe("Doubao content workbench renderer contracts", function() {
   it("declares collection types and research provenance fields", function() {
-    const types = read("media-workbench/src/types.ts");
+    const types =
+      read("media-workbench/src/types/content.ts") +
+      read("media-workbench/src/types/generation.ts");
     [
       "ContentQuestion",
       "DoubaoLoginStatus",
@@ -38,10 +40,17 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("renders collection controls, explicit recollection confirmation, and task icons", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const batch = read("media-workbench/src/components/content/QuestionBatchControls.tsx");
+    const researchList = read("media-workbench/src/components/content/QuestionResearchList.tsx");
     const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
-    ["commands.createQuestion", "commands.updateQuestion", "commands.deleteQuestion", "confirm", "force: true", "commands.saveManualResearch", "collectionMethod", "references", "collectedAt", "不会修改已保存文章"].forEach(function(value) {
+    ["commands.createQuestion", "commands.updateQuestion", "commands.deleteQuestion", "confirm", "force: true", "commands.saveManualResearch", "不会修改已保存文章"].forEach(function(value) {
       assert.equal(questions.includes(value), true, "missing " + value);
     });
+    ["collectionMethod", "references", "collectedAt", "CollapsibleSourceItem"].forEach(function(value) {
+      assert.equal(researchList.includes(value), true, "missing " + value);
+    });
+    assert.match(batch, /previewDoubaoBatch/);
+    assert.match(batch, /startPreparedDoubaoBatch/);
     ["Pause", "Play", "Square", "RotateCcw", "title=", "width", "height"].forEach(function(value) {
       assert.equal(taskBar.includes(value), true, "missing " + value);
     });
@@ -50,27 +59,39 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("keeps one current-client selector and exposes independent batch commands", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const batch = read("media-workbench/src/components/content/QuestionBatchControls.tsx");
     const api = read("media-workbench/src/bridge/content.ts");
     assert.equal((questions.match(/onClientChange/g) || []).length, 0);
     ["全选客户", "取消全选", "采集选中客户", "重新采集选中客户"].forEach(function(value) {
-      assert.match(questions, new RegExp(value));
+      assert.match(batch, new RegExp(value));
     });
-    assert.match(questions, /previewDoubaoBatch/);
-    assert.match(questions, /startPreparedDoubaoBatch/);
+    assert.match(batch, /previewDoubaoBatch/);
+    assert.match(batch, /startPreparedDoubaoBatch/);
     assert.match(api, /previewDoubaoBatch|DoubaoBatchPreview/);
   });
 
   it("uses pure batch-selection helpers and keeps current-client changes isolated", function() {
+    const batch = read("media-workbench/src/components/content/QuestionBatchControls.tsx");
+    assert.match(batch, /export function toggleAllClientIds/);
+    assert.match(batch, /export function getBatchSelectionState/);
+    assert.match(batch, /selectedClientIds\.length/);
+    assert.match(batch, /useState<string\[\]>\(initialClientId \? \[initialClientId\] : \[\]\)/);
+    assert.match(batch, /setSelectedClientIds\(\(current\) => \{[\s\S]*current\.filter/);
+  });
+
+  it("does not start prepared tasks from a preview whose client selection changed", function() {
+    const batch = read("media-workbench/src/components/content/QuestionBatchControls.tsx");
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    assert.match(questions, /export function toggleAllClientIds/);
-    assert.match(questions, /export function getBatchSelectionState/);
-    assert.doesNotMatch(questions, /useEffect\(\(\) => \{ setSelectedClientIds[\s\S]*\[clientId\]/);
-    assert.match(questions, /selectedClientIds\.length/);
-    assert.match(questions, /useState<string\[\]>\(clientId \? \[clientId\] : \[\]\)/);
+    assert.match(batch, /selectionRevisionRef/);
+    assert.match(batch, /clientIdsRef/);
+    assert.match(batch, /selectionStillMatches\(previewRequest\)/);
+    assert.match(batch, /批次客户选择已变化，请重新预览/);
+    assert.match(batch, /disabled=\{batchActionBusy/);
+    assert.match(questions, /commandStates\.previewDoubaoBatch\.busy/);
   });
 
   it("renders collected answers through the shared collapsed source item", function() {
-    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const questions = read("media-workbench/src/components/content/QuestionResearchList.tsx");
     const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");
     assert.match(item, /defaultExpanded = false/);
     assert.match(item, /aria-expanded/);
@@ -96,24 +117,28 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("initializes the queue from feature commands and cleans up its feature subscription", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    const snapshotIndex = questions.lastIndexOf("commands.getDoubaoQueueState()");
-    const subscribeIndex = questions.lastIndexOf("subscribeDoubaoQueue");
-    assert.equal(snapshotIndex >= 0, true);
-    assert.match(questions, /subscribeDoubaoQueue[\s\S]*commands\.getDoubaoQueueState\(\)[\s\S]*catch/);
-    assert.match(questions, /queueEventReceived[\s\S]*subscribeDoubaoQueue[\s\S]*queueEventReceived = true/);
-    assert.match(questions, /!queueEventReceived[\s\S]*setQueue\(snapshot\)/);
-    assert.match(questions, /subscribeDoubaoQueue[\s\S]*return \(\) =>[\s\S]*unsubscribe/);
+    const feature = read("media-workbench/src/features/content/content-sources-feature.js");
+    assert.match(feature, /doubaoQueue/);
+    assert.match(feature, /subscribeDoubaoQueue/);
+    assert.match(feature, /getDoubaoQueueState/);
+    assert.match(feature, /clearQueueSubscription/);
+    assert.match(feature, /ensureQueueSubscription/);
+    assert.match(feature, /dispose\(\)[\s\S]*clearQueueSubscription/);
+    assert.match(questions, /queueQuery/);
+    assert.match(questions, /queue=\{queue\}/);
   });
 
   it("separates question research loading from login checking and preserves session errors", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    const types = read("media-workbench/src/types.ts");
-    assert.match(types, /DoubaoLoginStatus =[^;]*'checking'/);
-    assert.match(questions, /status: 'checking'/);
-    assert.match(questions, /setLogin\(\{ status: 'checking' \}\)/);
-    assert.match(questions, /status: 'session_error'/);
-    assert.match(questions, /refreshClientData\('command-result'\)/);
+    const feature = read("media-workbench/src/features/content/content-sources-feature.js");
+    const types = read("media-workbench/src/types/content.ts");
+    assert.match(types, /DoubaoLoginStatus =[^;]*["']checking["']/);
+    assert.match(feature, /doubaoLoginQuery/);
+    assert.match(feature, /LOGIN_COMMANDS/);
+    assert.match(questions, /loginQuery\.loading/);
+    assert.match(questions, /login\.status/);
     assert.doesNotMatch(questions, /listContentQuestions|listContentResearch/);
+    assert.doesNotMatch(questions, /setLogin|refreshClientData\('command-result'\)/);
     assert.doesNotMatch(questions, /Promise\.all\(\[listContentQuestions\(clientId\), listContentResearch\(clientId\), getDoubaoLoginStatus\(\)\]\)/);
   });
 
@@ -126,45 +151,48 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("restores the last stable login state when a passive session is unavailable", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const feature = read("media-workbench/src/features/content/content-sources-feature.js");
     const api = read("media-workbench/src/bridge/content.ts");
-    assert.match(questions, /getCachedDoubaoLoginState/);
-    assert.match(questions, /useState<DoubaoLoginState>\(\(\) => getCachedDoubaoLoginState\(\)\)/);
-    assert.match(questions, /rememberDoubaoLoginState/);
+    assert.match(feature, /getCachedDoubaoLoginState/);
+    assert.match(feature, /rememberDoubaoLoginState/);
+    assert.doesNotMatch(questions, /getCachedDoubaoLoginState|rememberDoubaoLoginState/);
     assert.match(questions, /PLAYWRIGHT_SESSION_NOT_OPEN/);
     assert.match(api, /ipcError/);
   });
 
   it("refreshes once after collection completion and prevents duplicate submissions", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
+    const feature = read("media-workbench/src/features/content/content-sources-feature.js");
+    const batch = read("media-workbench/src/components/content/QuestionBatchControls.tsx");
     const taskBar = read("media-workbench/src/components/content/CollectionTaskBar.tsx");
-    assert.match(questions, /useRef<Promise<void> \| null>/);
-    assert.match(questions, /activeQueueStatus[\s\S]*completed/);
-    assert.match(questions, /loadQuestions\(\)[\s\S]*onContentSourcesChangedRef\.current/);
+    assert.match(feature, /nextQueue\.status === 'completed'/);
+    assert.match(feature, /queueRefreshKey/);
+    assert.match(feature, /lastQueueRefreshKey/);
+    assert.match(feature, /refreshCompletedQueueData/);
     assert.match(questions, /isCollecting/);
-    assert.match(questions, /disabled=\{isCollecting\}/);
+    assert.match(batch, /disabled=\{batchActionBusy/);
     assert.match(taskBar, /disabled=\{busy\}/);
   });
 
   it("delegates queue-result refresh identity to the scoped content feature", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    assert.match(questions, /clientIdRef = useRef\(clientId\)/);
-    assert.match(questions, /onContentSourcesChangedRef = useRef\(onContentSourcesChanged\)/);
-    assert.match(questions, /clientIdRef\.current/);
-    assert.match(questions, /loadQuestions\(targetClientId/);
-    assert.match(questions, /refreshClientData\('command-result'\)/);
-    assert.doesNotMatch(questions, /loadSequence|refreshToken/);
-    assert.match(questions, /onContentSourcesChangedRef\.current/);
+    const feature = read("media-workbench/src/features/content/content-sources-feature.js");
+    assert.match(feature, /queueIdentity/);
+    assert.match(feature, /clientIdentity/);
+    assert.match(feature, /researchIndexIdentity/);
+    assert.match(feature, /requestedClientId !== selectedClientId/);
+    assert.match(feature, /queueIdentity\.isCurrent/);
+    assert.doesNotMatch(questions, /loadSequence|refreshToken|onContentSourcesChangedRef|subscribeDoubaoQueue/);
   });
 
   it("derives collection pending state from feature command state and clears its run token on every exit", function() {
     const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
     assert.match(questions, /const collectionPending = commandStates\.collectDoubaoQuestion\.busy/);
+    assert.match(questions, /commandStates\.previewDoubaoBatch\.busy/);
     assert.match(questions, /commandStates\.startPreparedDoubaoBatch\.busy/);
     assert.match(questions, /commandStates\.retryFailedDoubao\.busy/);
-    assert.match(questions, /tryBeginCollection/);
-    assert.match(questions, /pendingCollectionToken\.current = token/);
-    assert.match(questions, /pendingCollectionToken\.current = null/);
-    assert.match(questions, /finally \{ finishCollection\(\); \}/);
+    assert.match(questions, /const isCollecting = collectionPending/);
+    assert.doesNotMatch(questions, /pendingCollectionToken|tryBeginCollection|finishCollection/);
   });
 
   it("routes retry through the shared collection lock and surfaces rejected commands", function() {
@@ -173,17 +201,15 @@ describe("Doubao content workbench renderer contracts", function() {
     assert.match(questions, /async function retryFailed\(\)/);
     assert.match(questions, /retryFailedDoubao\(\)/);
     assert.match(questions, /retryFailedDoubao\(\)[\s\S]*catch \(value\)[\s\S]*setError/);
-    assert.match(questions, /retryFailed\(\)[\s\S]*finally \{ finishCollection\(\); \}/);
     assert.match(questions, /onRetry=\{retryFailed\}/);
   });
 
   it("deduplicates collection refreshes by run token and refreshes empty/external completions", function() {
-    const questions = read("media-workbench/src/components/content/QuestionCollectionView.tsx");
-    assert.match(questions, /queueRunToken/);
-    assert.match(questions, /refreshedCollectionToken/);
-    assert.match(questions, /queueRunToken\(state\)/);
-    assert.match(questions, /state\.total === 0/);
-    assert.doesNotMatch(questions, /skipNextCompletionRefresh/);
+    const feature = read("media-workbench/src/features/content/content-sources-feature.js");
+    assert.match(feature, /queueRefreshKey/);
+    assert.match(feature, /nextQueue\.total === 0/);
+    assert.match(feature, /key !== lastQueueRefreshKey/);
+    assert.doesNotMatch(feature, /skipNextCompletionRefresh/);
   });
 
   it("shows queue status, current question, wait seconds, and the latest safe failure", function() {
@@ -202,7 +228,7 @@ describe("Doubao content workbench renderer contracts", function() {
 
   it("clears article and research selection when the customer changes", function() {
     const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-    const contentFeature = read("media-workbench/src/features/content/content-workbench-feature.js");
+    const contentFeature = read("media-workbench/src/features/content/content-sources-feature.js");
     const generation = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
     assert.match(workbench, /content\.selectClient\(nextClientId\)/);
     assert.match(contentFeature, /selectClient\(clientId\)[\s\S]*currentArticle = null/);

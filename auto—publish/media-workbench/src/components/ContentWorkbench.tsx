@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
-import { ContentClient, ContentTemplateCatalog, GeneratedContentArticle } from '../types';
+import type { ContentClient, ContentTemplateCatalog } from '../types/content';
+import type { GeneratedContentArticle } from '../types/generation';
 import ArticleGenerationView from './content/ArticleGenerationView';
 import GeneratedArticleEditorPanel from './content/GeneratedArticleEditorPanel';
 import GeneratedArticlesView from './content/GeneratedArticlesView';
@@ -9,6 +10,7 @@ import { type ArticleWorkflowStage } from '../article-workflow';
 import ArticleStageTabs from './content/ArticleStageTabs';
 import { useConfirmation, useConfirmationScope } from '../confirmation';
 import { useContentWorkbenchFeature } from '../features/content/use-content-workbench-feature';
+import { isContentCommandStaleResult } from '../content-command-result';
 
 type RefreshState = 'idle' | 'refreshing' | 'success' | 'error';
 
@@ -20,7 +22,7 @@ interface ContentWorkbenchProps {
 export default function ContentWorkbench({ attentionIntent, onAttentionIntentConsumed }: ContentWorkbenchProps) {
   const content = useContentWorkbenchFeature();
   const { confirm } = useConfirmation();
-  const { clients, templateCatalog, selectedClientId: clientId, currentArticle: article, query, questions, research, researchByClient, management, clientQuery, managementQuery } = content.snapshot;
+  const { clients, templateCatalog, selectedClientId: clientId, currentArticle: article, query, questions, research, researchByClient, management, clientQuery, managementQuery, doubaoQueue, doubaoLogin, doubaoQueueQuery, doubaoLoginQuery } = content.snapshot;
   useConfirmationScope(content.snapshot.scope && clientId ? `${content.snapshot.scope.workspaceRuntimeId}:${clientId}` : null);
   const [historyEditingArticle, setHistoryEditingArticle] = useState<GeneratedContentArticle | null>(null);
   const [historyEditingPublished, setHistoryEditingPublished] = useState(false);
@@ -75,10 +77,10 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     if (!(await confirm({ title: '确认复制文章新版本', message: `确认复制“${sourceArticle.title}”为新版本？原文章和发布记录不会修改。新版本会生成新的 articleId，必须重新选择目标并投稿。`, confirmLabel: '确认复制' }))) return;
     try {
       const copied = await content.commands.copyArticleVersion({ clientId, sourceArticleId: sourceArticle.id });
+      if (isContentCommandStaleResult(copied)) return;
       setHistoryEditingPublished(false);
       setHistoryEditingArticle(copied);
       historyDirtyRef.current = false;
-      await content.refreshManagement('command-result');
     } catch (value) {
       setError(value instanceof Error ? value.message : '复制文章新版本失败');
     }
@@ -109,9 +111,9 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     {refreshState === 'success' && <div role="status" aria-live="polite" className="mx-3 mt-3 rounded border border-emerald-100 bg-emerald-50 p-2 text-xs text-emerald-700">客户与模板已刷新。</div>}
     {visibleError && <div role="alert" aria-live="assertive" className="m-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{visibleError}</div>}
     <div className="min-h-0 flex-1">
-      {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} questions={questions} research={research} query={clientQuery} commands={content.commands} commandStates={content.snapshot.commands} refreshClientData={content.refreshClientData} onContentSourcesChanged={() => void content.refresh('command-result')} subscribeDoubaoQueue={content.subscribeDoubaoQueue} getCachedDoubaoLoginState={content.getCachedDoubaoLoginState} rememberDoubaoLoginState={content.rememberDoubaoLoginState} />}
+      {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} questions={questions} research={research} query={clientQuery} commands={content.commands} commandStates={content.snapshot.commands} queue={doubaoQueue} login={doubaoLogin} queueQuery={doubaoQueueQuery} loginQuery={doubaoLoginQuery} />}
       {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} research={research} researchByClient={researchByClient} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={content.setCurrentArticle} commands={content.commands} commandStates={content.snapshot.commands} refreshManagement={content.refreshManagement} />}
-      {tab === 'history' && <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} management={management} query={managementQuery} commands={content.commands} commandStates={content.snapshot.commands} refreshManagement={content.refreshManagement} subscribeRemovalTransaction={content.subscribeRemovalTransaction} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} saving={content.snapshot.commands.saveArticle.busy} onSaveArticle={(draft) => content.commands.saveArticle({ ...draft, status: 'saved', updatedAt: new Date().toISOString() })} onSaved={(saved) => { setHistoryEditingArticle(saved); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div>}
+      {tab === 'history' && <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} management={management} query={managementQuery} commands={content.commands} commandStates={content.snapshot.commands} removal={content.snapshot.removal} watchRemovalTransaction={content.watchRemovalTransaction} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} saving={content.snapshot.commands.saveArticle.busy} onSaveArticle={(draft) => content.commands.saveArticle({ ...draft, status: 'saved', updatedAt: new Date().toISOString() })} onSaved={(saved) => { setHistoryEditingArticle(saved); }} onClose={() => closeHistoryEditor(true)} onCopyVersion={() => void copyHistoryVersion()} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div>}
     </div>
   </div>;
 }

@@ -9,7 +9,7 @@ const read = (file) => fs.readFileSync(path.join(root, "media-workbench/src", fi
 describe("renderer published article trash flow", () => {
   it("explains published retention and exposes confirmed trash disposition", () => {
     const view = read("components/content/GeneratedArticlesView.tsx");
-    const types = read("types.ts");
+    const types = read("types/platform.ts");
     const platform = read("components/PlatformWorkbench.tsx");
     assert.match(view, /远端已发布内容不会撤回/);
     assert.match(view, /发布记录和标题快照会保留/);

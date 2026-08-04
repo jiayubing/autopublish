@@ -1,7 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   getArticleManagementSnapshot,
-  copyContentArticleVersion,
   createContentQuestion,
   deleteContentQuestion,
   exportToSubmissionQueue,
@@ -13,22 +12,13 @@ import {
   previewExport,
   retryContentMaterial,
   retryFailedDoubao,
-  saveContentArticle,
   saveManualResearch,
   startPreparedDoubaoBatch,
   pauseDoubaoBatch,
-  getContentArticleRemovalTransaction,
-  onContentArticleRemovalTransaction,
-  permanentlyDeleteContentArticle,
-  preparePermanentDeleteContentArticle,
   previewCleanupFailedContentSubmissionItems,
-  previewContentArticleRemoval,
   previewContentSubmissionBatch,
-  retryContentArticleRemovalTransaction,
   resumeDoubaoBatch,
-  restoreContentArticle,
   stopDoubaoBatch,
-  trashContentArticles,
   cancelContentSubmissionBatch,
   cleanupFailedContentSubmissionItems,
   createContentSubmissionBatch,
@@ -41,8 +31,23 @@ import {
   subscribeDoubaoQueue,
   updateContentQuestion,
 } from '../../bridge/content';
+import {
+  copyContentArticleVersion,
+  saveContentArticle,
+} from '../../bridge/generation';
+import {
+  getContentArticleRemovalTransaction,
+  onContentArticleRemovalTransaction,
+  permanentlyDeleteContentArticle,
+  preparePermanentDeleteContentArticle,
+  previewContentArticleRemoval,
+  retryContentArticleRemovalTransaction,
+  restoreContentArticle,
+  trashContentArticles,
+} from '../../bridge/content-removal';
 import { reconcilePublicationHistory } from '../../bridge/publication';
-import type { DoubaoBatchTask, GeneratedContentArticle } from '../../types';
+import type { DoubaoBatchTask } from '../../types/content';
+import type { GeneratedContentArticle } from '../../types/generation';
 import { useWorkspaceRuntimeIdentity, useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { createContentWorkbenchFeature } from './content-workbench-feature.js';
 
@@ -84,10 +89,15 @@ export function useContentWorkbenchFeature() {
       restoreContentArticle,
       preparePermanentDeleteContentArticle,
       permanentlyDeleteContentArticle,
+      getRemovalTransaction: (input: { transactionId: string }) => getContentArticleRemovalTransaction(input.transactionId),
+      subscribeRemovalTransaction: onContentArticleRemovalTransaction,
       getDoubaoQueueState,
       getDoubaoLoginStatus,
       openDoubaoLogin,
       previewDoubaoBatch,
+      subscribeDoubaoQueue,
+      getCachedDoubaoLoginState,
+      rememberDoubaoLoginState,
     });
   }
   const feature = featureRef.current;
@@ -95,16 +105,25 @@ export function useContentWorkbenchFeature() {
     if (!workspace.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId });
     void feature.refresh('initial');
+    void feature.refreshDoubaoQueue('initial');
   }, [feature, workspace.workspaceRuntimeId]);
   useWorkspaceScope('contentSources', (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    void feature.refresh(event.kind);
+    if (!['initial', 'identity', 'runtime-switch'].includes(event.kind)) {
+      void feature.refreshContentSources(event.kind);
+      void feature.refreshDoubaoQueue(event.kind);
+    }
   });
   useWorkspaceScope('articleManagement', (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    void feature.refreshManagement(event.kind);
+    // The removal transaction event is the authoritative management refresh
+    // owner.  The paired workspace invalidation still refreshes attention and
+    // platform consumers, but must not issue a second management query.
+    if (!['initial', 'identity', 'runtime-switch'].includes(event.kind)
+      && event.reasonCode !== 'ARTICLE_REMOVAL_TRANSACTION_CHANGED')
+      void feature.refreshManagement(event.kind);
   });
   useEffect(() => () => feature.dispose(), [feature]);
   const snapshot = useSyncExternalStore(feature.subscribe, feature.getSnapshot, feature.getSnapshot);
@@ -113,12 +132,11 @@ export function useContentWorkbenchFeature() {
     refresh: (reason = 'manual') => feature.refresh(reason),
     refreshClientData: (reason = 'manual') => feature.refreshClientData(reason),
     refreshManagement: feature.refreshManagement,
+    refreshDoubaoQueue: feature.refreshDoubaoQueue,
     selectClient: feature.selectClient,
     setCurrentArticle: (article: GeneratedContentArticle | null) => feature.setCurrentArticle(article),
     commands: feature.commands,
-    subscribeRemovalTransaction: onContentArticleRemovalTransaction,
-    subscribeDoubaoQueue,
-    getCachedDoubaoLoginState,
-    rememberDoubaoLoginState,
+    watchRemovalTransaction: feature.watchRemovalTransaction,
+    clearRemovalTransaction: feature.clearRemovalTransaction,
   };
 }

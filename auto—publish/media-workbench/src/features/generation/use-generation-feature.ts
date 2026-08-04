@@ -14,7 +14,7 @@ import {
   commitGenerationSubmissionHandoff,
   stopGenerationBatch,
   subscribeGenerationBatchState,
-} from '../../bridge/content';
+} from '../../bridge/generation';
 import { useWorkspaceRuntimeIdentity } from '../workspace/workspace-coordinator-context';
 import { createGenerationFeature } from './generation-feature.js';
 

@@ -132,7 +132,7 @@ const eventFixtures = productionIpcContractFixtures.filter(
   (entry) => entry.event,
 );
 
-assert.equal(lifecycleFixtures.length, 21);
+assert.equal(lifecycleFixtures.length, 22);
 assert.equal(eventFixtures.length, 5);
 
 for (const fixture of lifecycleFixtures) {

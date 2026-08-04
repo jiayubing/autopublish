@@ -13,6 +13,7 @@ async function changeClientByPointer(page, select, key) {
   });
   assert.equal(hit, "SELECT", "客户选择器中心不能被内容区编辑器或忙碌遮罩覆盖");
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await select.focus();
   await page.keyboard.press(key);
   await page.keyboard.press("Enter");
 }

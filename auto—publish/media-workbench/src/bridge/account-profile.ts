@@ -1,4 +1,5 @@
-import type { AccountProfile, IpcResponse } from "../types";
+import type { AccountProfile } from "../types/platform";
+import type { IpcResponse } from "../types/ipc";
 import { ipcError, requireBridgeApi } from "./transport";
 
 type AccountProfileApi = {

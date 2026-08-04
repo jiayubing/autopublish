@@ -44,7 +44,7 @@ test("renderer transport preserves only the validated SafeOperationalError proje
     "utf8",
   );
   const types = fs.readFileSync(
-    path.join(bridgeDirectory, "..", "types.ts"),
+    path.join(bridgeDirectory, "..", "types", "ipc.ts"),
     "utf8",
   );
   const nonAuthTransport = transport.slice(
@@ -69,26 +69,26 @@ test("renderer transport preserves only the validated SafeOperationalError proje
 });
 
 test("production content bridge fails closed when a content capability or result is absent", () => {
-  const source = fs.readFileSync(
-    path.join(bridgeDirectory, "content.ts"),
-    "utf8",
-  );
-  for (const helper of [
-    "callCoreContent",
-    "callDoubao",
-    "callSubmission",
-    "callGeneration",
-  ]) {
-    const start = source.indexOf(`async function ${helper}`);
+  const helperSources = [
+    ["content.ts", ["callCoreContent", "callDoubao", "callSubmission"]],
+    ["generation.ts", ["callGeneration"]],
+  ];
+  for (const [filename, helpers] of helperSources) {
+    const source = fs.readFileSync(path.join(bridgeDirectory, filename), "utf8");
+    for (const helper of helpers) {
+      const start = source.indexOf(`async function ${helper}`);
     assert.notEqual(start, -1, helper);
     const body = source.slice(start, start + 1800);
-    assert.match(body, /requireBridgeApi<[^>]+>\("content"\)/);
-    assert.match(
-      body,
-      /result\.data === undefined \|\| result\.data === null\)\s*throw/,
-    );
-    assert.doesNotMatch(body, /return (?:fallback|options\?\.fallback)/);
+      assert.match(body, /requireBridgeApi<[^>]+>\("content"\)/);
+      assert.match(
+        body,
+        /result\.data === undefined \|\| result\.data === null\)\s*throw/,
+      );
+      assert.doesNotMatch(body, /return (?:fallback|options\?\.fallback)/);
+    }
   }
+  const content = fs.readFileSync(path.join(bridgeDirectory, "content.ts"), "utf8");
+  const generation = fs.readFileSync(path.join(bridgeDirectory, "generation.ts"), "utf8");
   for (const retiredSymbol of [
     "_fallback",
     "_hasFallback",
@@ -96,7 +96,9 @@ test("production content bridge fails closed when a content capability or result
     "emptySnapshot",
     "renderer-fallback",
   ]) {
-    assert.doesNotMatch(source, new RegExp(retiredSymbol));
+    assert.doesNotMatch(content, new RegExp(retiredSymbol));
+    assert.doesNotMatch(generation, new RegExp(retiredSymbol));
   }
-  assert.doesNotMatch(source, /return \(\) => \{\}/);
+  assert.doesNotMatch(content, /return \(\) => \{\}/);
+  assert.doesNotMatch(generation, /return \(\) => \{\}/);
 });

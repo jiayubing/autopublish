@@ -1,7 +1,8 @@
 import React from 'react';
 import { AlertTriangle, Check, Copy, ExternalLink, X, XCircle } from 'lucide-react';
 import { formatBeijingTime } from '../../time-format';
-import { PublicationHistoryRecord, GeneratedContentArticle } from '../../types';
+import type { PublicationHistoryRecord } from '../../types/publication';
+import type { GeneratedContentArticle } from '../../types/generation';
 import { latestPublicationAttempt, publicationRecordStatusLabel, publicationTargetLabel, summarizePublicationRecords } from '../../publication-status';
 
 interface PublicationHistoryDrawerProps {

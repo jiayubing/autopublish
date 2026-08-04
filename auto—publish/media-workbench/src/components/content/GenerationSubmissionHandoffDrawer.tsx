@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ContentSubmissionPlatform, GenerationBatch, GenerationSubmissionHandoffPreview, GenerationSubmissionHandoffResult } from '../../types';
+import type { ContentSubmissionPlatform } from '../../types/publication';
+import type { GenerationBatch, GenerationSubmissionHandoffPreview, GenerationSubmissionHandoffResult } from '../../types/generation';
 import AccountProfileSelector from './AccountProfileSelector';
 import { useGenerationFeature } from '../../features/generation/use-generation-feature';
 
