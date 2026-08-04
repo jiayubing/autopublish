@@ -194,7 +194,7 @@ describe("runtime diagnostics", function() {
     const session = pwSessionConfig("doubao");
     const runtime = createPlaywrightRuntime({ session: session });
 
-    assert.deepEqual(Object.keys(runtime).sort(), ["close", "evaluate", "open", "screenshot"]);
+    assert.deepEqual(Object.keys(runtime).sort(), ["close", "evaluate", "open"]);
     assert.equal(session.session, "doubao");
     assert.equal(session.profileId, "default");
     assert.match(session.profileDir, /profiles[\\/]doubao$/);
@@ -382,23 +382,23 @@ describe("runtime diagnostics", function() {
     });
   });
 
-  it("keeps the legacy synchronous pwCmd, pwRun, and runCode APIs working", function() {
+  it("keeps the synchronous Playwright adapter seam working", function() {
     const calls = [];
     const session = pwSessionConfig("legacy");
     const fakeExecSync = function(command, options) {
       calls.push({ command: command, options: options });
-      return "### Result\n{\"legacy\":true}\n";
+      return "### Result\n{\"ok\":true}\n";
     };
 
     const command = pwCmd("list", session);
     assert.match(command, /-s=legacy/);
     assert.match(command, new RegExp(session.daemonDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.equal(pwRun("list", { session: session, timeout: 4321, execSync: fakeExecSync }), "### Result\n{\"legacy\":true}\n");
-    assert.deepEqual(runCode("return { legacy: true };", {
+    assert.equal(pwRun("list", { session: session, timeout: 4321, execSync: fakeExecSync }), "### Result\n{\"ok\":true}\n");
+    assert.deepEqual(runCode("return { ok: true };", {
       session: session,
       timeout: 5432,
       execSync: fakeExecSync
-    }), { legacy: true });
+    }), { ok: true });
     assert.equal(calls.length, 2);
     assert.equal(calls[0].options.timeout, 4321);
     assert.equal(calls[1].options.timeout, 5432);

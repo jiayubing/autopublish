@@ -28,10 +28,6 @@ function fakeRuntime(snapshot, calls) {
       if (input.action === "send-question") return { ok: true };
       return snapshot;
     },
-    screenshot: async function(input) {
-      calls.push(["screenshot", input]);
-      fs.writeFileSync(input.path, "png", "utf8");
-    },
     close: async function(input) { calls.push(["close", input]); }
   };
 }
@@ -247,7 +243,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
           inspectCount += 1;
           return inspectCount === 1 ? currentMessageBeforeAnswer : currentMessageWithoutReferences;
         },
-        screenshot: async function() {}
       },
       timeoutMs: 100,
       intervalMs: 1,
@@ -296,7 +291,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
           inspectCount += 1;
           return inspectCount <= 4 ? oldSnapshot : newSnapshot;
         },
-        screenshot: async function() {}
       },
       timeoutMs: 100,
       intervalMs: 1,
@@ -368,7 +362,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
         calls.push(["evaluate", input]);
         return completeFixture;
       },
-      screenshot: async function() {},
       close: async function(input) { calls.push(["close", input]); }
     };
     const adapter = createDoubaoBrowserAdapter({ runtime: runtime, sleep: async function() {} });
@@ -397,7 +390,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
         calls.push(["evaluate", input]);
         return loginFixture;
       },
-      screenshot: async function() {},
       close: async function(input) { calls.push(["close", input]); }
     };
     const adapter = createDoubaoBrowserAdapter({ runtime: runtime, sleep: async function() {} });
@@ -442,7 +434,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
         }
         return loginFixture;
       },
-      screenshot: async function() {}
     };
     const adapter = createDoubaoBrowserAdapter({ runtime: runtime, sleep: async function() {} });
 
@@ -462,7 +453,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
         calls.push(["evaluate", input]);
         throw Object.assign(new Error("session closed"), { code: "PLAYWRIGHT_SESSION_NOT_OPEN" });
       },
-      screenshot: async function() {}
     };
     const adapter = createDoubaoBrowserAdapter({ runtime: runtime, sleep: async function() {} });
 
@@ -521,7 +511,6 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
           if (input.action === "send-question") return { ok: true };
           return streamingFixture;
         },
-        screenshot: async function() {}
       },
       timeoutMs: 100,
       intervalMs: 50,
@@ -553,14 +542,14 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     assert.ok(runtimeCalls.every(function(call) { return call[1].timeoutMs <= 120000; }));
   });
 
-  it("writes a structured diagnostic summary without an original screenshot", async function() {
+  it("writes a structured JSON diagnostic summary", async function() {
     const calls = [];
-    const diagnosticsDir = makeTemporaryDirectory("doubao-screenshot-timeout-");
+    const diagnosticsDir = makeTemporaryDirectory("doubao-json-timeout-");
+    fs.writeFileSync(path.join(diagnosticsDir, "legacy-screenshot.png"), "png");
     const runtime = fakeRuntime(challengeFixture, calls);
     const adapter = createDoubaoBrowserAdapter({ runtime: runtime, diagnosticsDir: diagnosticsDir, diagnosticTimeoutMs: 5, sleep: async function() {} });
 
     await assert.rejects(adapter.collect("test question"), function(error) { return error.code === "DOUBAO_CHALLENGE"; });
-    assert.equal(calls.some(function(call) { return call[0] === "screenshot"; }), false);
     const summaries = fs.readdirSync(diagnosticsDir).filter(function(name) { return name.endsWith(".json"); });
     assert.equal(summaries.length, 1);
     const summary = fs.readFileSync(path.join(diagnosticsDir, summaries[0]), "utf8");

@@ -9,6 +9,9 @@ const ROOT = path.resolve(__dirname, "..");
 const SOURCE_ROOTS = ["desktop", "src", path.join("media-workbench", "src")];
 const LEGACY_PATHS = [
   "src/core/jobs.js",
+  "src/infrastructure/publishers/legacy-adapter-publisher.js",
+  "src/infrastructure/publishers/publisher-router.js",
+  "scripts/cleanup-source-runtime.js",
   "desktop/services/submission/action.js",
   "desktop/services/submission/preparation.js",
   "desktop/services/submission/query.js",

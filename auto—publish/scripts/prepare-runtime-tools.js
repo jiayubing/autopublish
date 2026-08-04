@@ -5,7 +5,7 @@ const https = require("node:https");
 const http = require("node:http");
 const { spawnSync } = require("node:child_process");
 
-const DEFAULT_MANIFEST = path.resolve(__dirname, "..", "build", "runtime-tools-manifest.json");
+const DEFAULT_MANIFEST = path.resolve(__dirname, "..", "config", "runtime-tools-manifest.json");
 const DEFAULT_OUTPUT = path.resolve(__dirname, "..", "build", "runtime-tools", "node");
 const DEFAULT_CACHE = path.resolve(__dirname, "..", "build", "runtime-tools-cache");
 const DEFAULT_BUILD_INFO = path.resolve(__dirname, "..", "config", "build-info.json");

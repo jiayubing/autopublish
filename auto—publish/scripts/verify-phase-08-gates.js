@@ -1,0 +1,803 @@
+"use strict";
+
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const { builtinModules } = require("node:module");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const asar = require("@electron/asar");
+const {
+  LEGACY_PATHS,
+  scanArchive,
+  scanSourceTree,
+} = require("./verify-legacy-absence");
+const { MODULE_SIZE_EXCEPTIONS } = require("./module-size-exceptions");
+
+const ROOT = path.resolve(__dirname, "..");
+const SOURCE_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".ts", ".tsx"]);
+const SOURCE_ROOTS = [
+  "src",
+  "desktop",
+  "media-workbench/src",
+  "auth-server/src",
+];
+const ARCHITECTURE_ROOTS = [...SOURCE_ROOTS, "scripts", "auth-server/scripts"];
+const NODE_BUILTIN_SPECIFIERS = new Set([
+  ...builtinModules,
+  ...builtinModules.map((name) => `node:${name}`),
+]);
+const DEPENDENCY_RULES = [
+  {
+    name: "src-to-desktop",
+    roots: ["src"],
+    forbidden: (specifier) => /^desktop(?:\/|$)/.test(specifier),
+  },
+  {
+    name: "domain-application-to-implementation",
+    roots: ["src/domain", "src/application"],
+    forbidden: (specifier) =>
+      /^(?:desktop|media-workbench|src\/infrastructure|operational-store)(?:\/|$)/.test(
+        specifier,
+      ) || /^(?:electron|ipc|sqlite3?|better-sqlite3)$/.test(specifier),
+  },
+  {
+    name: "renderer-to-node-infrastructure",
+    roots: ["media-workbench/src"],
+    forbidden: (specifier) =>
+      isRendererNodeSpecifier(specifier) ||
+      /^(?:electron|sqlite3?|better-sqlite3)$/.test(specifier) ||
+      /^(?:desktop|src\/infrastructure)(?:\/|$)/.test(specifier),
+  },
+  {
+    name: "worker-adapter-to-operational-writer",
+    roots: ["desktop/worker", "src/platforms"],
+    forbidden: (specifier) =>
+      /^(?:operational-store|src\/infrastructure\/operational-store)(?:\/|$)/.test(
+        specifier,
+      ),
+  },
+];
+const IMPORT_PATTERNS = [
+  /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
+  /\bfrom\s*["']([^"']+)["']/g,
+  /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+  /\bimport\s+["']([^"']+)["']/g,
+];
+const INTERNAL_PREFIX = "src/infrastructure/operational-store/internal";
+const OPERATIONAL_FACADE =
+  "src/infrastructure/operational-store/operational-store.js";
+const MIGRATION_IMPORTER = "scripts/migrate-operational-store-v1.js";
+const RECOVERY_GUARD_IMPORT = `${INTERNAL_PREFIX}/operational-store-recovery-guard`;
+const INTERNAL_MODULES = Object.freeze([
+  "src/infrastructure/operational-store/internal/operational-store-context.js",
+  "src/infrastructure/operational-store/internal/operational-store-maintenance.js",
+  "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
+  "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-recovery-guard.js",
+  "src/infrastructure/operational-store/internal/operational-store-runtime.js",
+  "src/infrastructure/operational-store/internal/operational-store-schema.js",
+  "src/infrastructure/operational-store/internal/operational-store-submission-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-transaction.js",
+  "src/infrastructure/operational-store/internal/operational-store-utils.js",
+  "src/infrastructure/operational-store/internal/operational-store-verifier.js",
+]);
+const ALLOWED_INTERNAL_IMPORTERS = new Set([
+  OPERATIONAL_FACADE,
+  ...INTERNAL_MODULES,
+  MIGRATION_IMPORTER,
+]);
+const PUBLISHER_OWNER_FILES = Object.freeze([
+  "desktop/services/desktop-publisher-router.js",
+  "desktop/services/worker-publisher.js",
+  "desktop/services/media-publisher.js",
+]);
+const SQLITE_WRITER_OWNERS = new Set([
+  "auth-server/scripts/migration-roundtrip-evidence.js",
+]);
+const SQLITE_MODULE_IMPORT_PATTERN =
+  /(?:require\s*\(\s*["'](?:node:sqlite|sqlite3|better-sqlite3)["']\s*\)|from\s*["'](?:node:sqlite|sqlite3|better-sqlite3)["'])/;
+const PRIVATE_PACKAGE_PATHS = [
+  /(^|\/)(?:tests?|fixtures?|coverage|build|logs?|tmp|work|published|failed|input|research|generated)(?:\/|$)/i,
+  /(^|\/)(?:\.env(?:\.[^/]+)?|[^/]+\.db|[^/]+\.log)$/i,
+  /(^|\/)(?:ai-provider|media-provider|hepan-provider|platform-settings-migration|workspace-location|device-identity)\.json$/i,
+  /(?:publish-log|legacy-adapter-publisher|src\/infrastructure\/publishers\/publisher-router)/i,
+];
+const SENSITIVE_VALUE_PATTERN =
+  /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|cookie)\s*["']?\s*[:=]\s*["'][^"'\r\n]{6,}["']/i;
+const TEXT_FILE_PATTERN =
+  /\.(?:cjs|js|mjs|ts|tsx|json|env|log|md|txt|csv|yaml|yml|py|html|css|xml|sql|sh|bat|cmd|ps1)$/i;
+const TRACKED_GENERATED_PATTERN =
+  /(^|\/)(?:node_modules|dist|coverage|release(?:-|\/)|build|__pycache__)(?:\/|$)|\.(?:pyc|tsbuildinfo|map|log)$/i;
+const PACKAGE_ALLOWED_PATHS = new Set(["build/preload/preload.cjs"]);
+
+function gateError(code, message, details) {
+  const error = new Error(message);
+  error.code = code;
+  error.details = details;
+  return error;
+}
+
+function sourceFilesUnder(directory) {
+  if (!fs.existsSync(directory)) return [];
+  const result = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    if (entry.isDirectory()) result.push(...sourceFilesUnder(filename));
+    else if (SOURCE_EXTENSIONS.has(path.extname(entry.name)))
+      result.push(filename);
+  }
+  return result;
+}
+
+function sourceLineCount(filename) {
+  const source = fs.readFileSync(filename, "utf8");
+  const lines = source.split(/\r?\n/);
+  return source.endsWith("\n") ? lines.length - 1 : lines.length;
+}
+
+function productionSourceFiles() {
+  return SOURCE_ROOTS.flatMap((relative) =>
+    sourceFilesUnder(path.join(ROOT, relative)),
+  );
+}
+
+function architectureSourceFiles() {
+  return ARCHITECTURE_ROOTS.flatMap((relative) =>
+    sourceFilesUnder(path.join(ROOT, relative)),
+  );
+}
+
+function relative(filename) {
+  return path.relative(ROOT, filename).replaceAll("\\", "/");
+}
+
+function resolveImportSpecifier(filename, specifier) {
+  if (!specifier.startsWith(".")) return specifier;
+  return path
+    .relative(ROOT, path.resolve(path.dirname(filename), specifier))
+    .replaceAll("\\", "/");
+}
+
+function isRendererNodeSpecifier(specifier) {
+  return NODE_BUILTIN_SPECIFIERS.has(specifier);
+}
+
+function sqliteWriterOpenings(source) {
+  if (!SQLITE_MODULE_IMPORT_PATTERN.test(source)) return [];
+  const openings = [];
+  const patterns = [
+    /\bnew\s+(?:(?:[A-Za-z_$][\w$]*\.)*)Database(?:Sync)?\s*\(([^)]*)\)/g,
+    /\b[A-Za-z_$][\w$]*\.(?:open|openDatabase|connect)\s*\(([^)]*)\)/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const argumentsText = match[1] || "";
+      const constructor = match[0].startsWith("new ");
+      openings.push({
+        kind: constructor ? "constructor" : "open",
+        argumentsText,
+        writable: constructor
+          ? !/\breadOnly\s*:\s*true\b/.test(argumentsText)
+          : true,
+      });
+    }
+  }
+  return openings;
+}
+
+function publisherOwnerCandidates(fileRecords) {
+  return fileRecords
+    .filter(({ name, source }) => {
+      const normalized = name.replaceAll("\\", "/");
+      if (!normalized.startsWith("desktop/services/")) return false;
+      return (
+        /\bfunction\s+create[A-Za-z_$]*Publisher[A-Za-z_$]*\s*\(/.test(
+          source,
+        ) ||
+        /\bcreate[A-Za-z_$]*Publisher[A-Za-z_$]*\s*=\s*(?:async\s*)?(?:function|\()/.test(
+          source,
+        ) ||
+        /(?:^|[,{])\s*publish\s*(?:\(|:\s*(?:async\s*)?(?:function\s*)?\()/.test(
+          source,
+        )
+      );
+    })
+    .map(({ name }) => name.replaceAll("\\", "/"));
+}
+
+function findImports(source, filename, isForbidden) {
+  const violations = [];
+  for (const pattern of IMPORT_PATTERNS) {
+    let match;
+    while ((match = pattern.exec(source))) {
+      const specifier = match[1].replaceAll("\\", "/");
+      const resolved = resolveImportSpecifier(filename, specifier);
+      if (!isForbidden(resolved)) continue;
+      violations.push({
+        file: relative(filename),
+        line: source.slice(0, match.index).split(/\r?\n/).length,
+        specifier,
+      });
+    }
+  }
+  return violations;
+}
+
+function dependencyDirectionReport() {
+  const filesByRoot = new Map(
+    SOURCE_ROOTS.map((root) => [root, sourceFilesUnder(path.join(ROOT, root))]),
+  );
+  const violations = [];
+  for (const rule of DEPENDENCY_RULES) {
+    for (const root of rule.roots) {
+      for (const filename of filesByRoot.get(root) ||
+        sourceFilesUnder(path.join(ROOT, root))) {
+        violations.push(
+          ...findImports(
+            fs.readFileSync(filename, "utf8"),
+            filename,
+            rule.forbidden,
+          ).map((item) => Object.assign({ rule: rule.name }, item)),
+        );
+      }
+    }
+  }
+  return { status: violations.length ? "FAILED" : "PASSED", violations };
+}
+
+function isInternalImport(resolved) {
+  return (
+    resolved === INTERNAL_PREFIX || resolved.startsWith(`${INTERNAL_PREFIX}/`)
+  );
+}
+
+function isAllowedInternalImport(importer, resolved) {
+  if (importer === MIGRATION_IMPORTER)
+    return resolved === RECOVERY_GUARD_IMPORT;
+  return ALLOWED_INTERNAL_IMPORTERS.has(importer);
+}
+
+function operationalStoreBoundaryReport() {
+  const violations = [];
+  for (const filename of architectureSourceFiles()) {
+    const importer = relative(filename);
+    const source = fs.readFileSync(filename, "utf8");
+    for (const pattern of IMPORT_PATTERNS) {
+      let match;
+      while ((match = pattern.exec(source))) {
+        const resolved = resolveImportSpecifier(filename, match[1]);
+        if (
+          isInternalImport(resolved) &&
+          !isAllowedInternalImport(importer, resolved)
+        ) {
+          violations.push({
+            file: importer,
+            line: source.slice(0, match.index).split(/\r?\n/).length,
+            specifier: match[1],
+          });
+        }
+      }
+    }
+  }
+  return { status: violations.length ? "FAILED" : "PASSED", violations };
+}
+
+function ownershipReport() {
+  const files = productionSourceFiles();
+  const retiredWriterReferences = [];
+  const workerWriterReferences = [];
+  const directSqliteWriters = [];
+  const fileRecords = [];
+  for (const filename of files) {
+    const name = relative(filename);
+    const source = fs.readFileSync(filename, "utf8");
+    fileRecords.push({ name, source });
+    if (
+      /publish-log|publication-ledger|legacy-adapter-publisher|src\/infrastructure\/publishers\//i.test(
+        source,
+      )
+    )
+      retiredWriterReferences.push(name);
+    if (
+      (name.startsWith("desktop/worker/") ||
+        name.startsWith("src/platforms/")) &&
+      /operational-store|new\s+DatabaseSync|DatabaseSync\s*\(/.test(source)
+    )
+      workerWriterReferences.push(name);
+    const hasWritableDatabaseOpening = sqliteWriterOpenings(source).some(
+      (opening) => opening.writable,
+    );
+    if (
+      hasWritableDatabaseOpening &&
+      !name.startsWith("src/infrastructure/operational-store/") &&
+      !name.startsWith("auth-server/src/") &&
+      !SQLITE_WRITER_OWNERS.has(name)
+    )
+      directSqliteWriters.push(name);
+  }
+  const publisherOwners = publisherOwnerCandidates(fileRecords);
+  const unexpectedPublisherOwners = publisherOwners.filter(
+    (file) => !PUBLISHER_OWNER_FILES.includes(file),
+  );
+  const missingOwners = [];
+  for (const expected of [
+    ...PUBLISHER_OWNER_FILES,
+    "src/infrastructure/operational-store/operational-store.js",
+  ]) {
+    if (!fs.existsSync(path.join(ROOT, expected))) missingOwners.push(expected);
+  }
+  const violations = [
+    ...retiredWriterReferences.map((file) => ({
+      rule: "retired-writer-absence",
+      file,
+    })),
+    ...workerWriterReferences.map((file) => ({
+      rule: "worker-adapter-writer-boundary",
+      file,
+    })),
+    ...directSqliteWriters
+      .filter(
+        (file) => !file.startsWith("src/infrastructure/operational-store/"),
+      )
+      .map((file) => ({ rule: "single-sqlite-owner", file })),
+    ...unexpectedPublisherOwners.map((file) => ({
+      rule: "unexpected-publisher-owner",
+      file,
+    })),
+    ...missingOwners.map((file) => ({ rule: "required-owner-missing", file })),
+  ];
+  return {
+    status: violations.length ? "FAILED" : "PASSED",
+    uniqueOwners: {
+      publication: "src/infrastructure/operational-store/operational-store.js",
+      remotePublisher: "desktop/services/desktop-publisher-router.js",
+      publisherOwners,
+    },
+    violations,
+  };
+}
+
+function capabilityReachabilityReport() {
+  let fixtures;
+  let registry;
+  let createProductionProgram;
+  let verifyCapabilityEvidence;
+  try {
+    ({
+      productionIpcRegistry: registry,
+    } = require("../desktop/ipc/contracts/production-registry"));
+    ({
+      productionIpcContractFixtures: fixtures,
+    } = require("../tests/fixtures/phase-06-production-ipc-contract-fixtures"));
+    ({
+      createProductionProgram,
+      verifyCapabilityEvidence,
+    } = require("../tests/helpers/typescript-symbol-evidence"));
+  } catch (error) {
+    throw gateError(
+      "PHASE08_CAPABILITY_GATE_UNAVAILABLE",
+      "Capability inventory is unavailable",
+      { code: error.code || "LOAD_FAILED" },
+    );
+  }
+  let productionContext;
+  try {
+    productionContext = {
+      ...createProductionProgram(ROOT),
+      applicationRoot: ROOT,
+    };
+  } catch (error) {
+    throw gateError(
+      "PHASE08_CAPABILITY_GATE_UNAVAILABLE",
+      "Capability reachability verifier is unavailable",
+      { code: error.code || "PROGRAM_LOAD_FAILED" },
+    );
+  }
+  const missing = [];
+  const unowned = [];
+  const unreachable = [];
+  for (const fixture of fixtures || []) {
+    const capability = fixture && fixture.capability;
+    const contract = capability && registry.byCapability(capability);
+    if (!contract) {
+      missing.push(capability || "unknown-capability");
+      continue;
+    }
+    const consumer =
+      fixture.productionCaller && fixture.productionCaller.consumer;
+    const requiredConsumerFields = [
+      "kind",
+      "source",
+      "owner",
+      "method",
+      "featureSource",
+      "featureMethod",
+    ];
+    const missingFields = requiredConsumerFields.filter(
+      (field) =>
+        !consumer ||
+        typeof consumer[field] !== "string" ||
+        consumer[field].trim() === "",
+    );
+    if (
+      !consumer ||
+      !Object.prototype.hasOwnProperty.call(consumer, "receiver")
+    )
+      missingFields.push("receiver");
+    if (missingFields.length) unowned.push({ capability, missingFields });
+    else {
+      const evidence = verifyCapabilityEvidence(productionContext, {
+        ...fixture,
+        kind: contract.kind,
+      });
+      if (!evidence.ok)
+        unreachable.push({
+          capability,
+          reasons: evidence.reasons || ["symbol reachability failed"],
+        });
+    }
+  }
+  const violations = [
+    ...missing.map((capability) => ({ rule: "registry-missing", capability })),
+    ...unowned.map(({ capability, missingFields }) => ({
+      rule: "production-consumer-missing",
+      capability,
+      missingFields,
+    })),
+    ...unreachable.map(({ capability, reasons }) => ({
+      rule: "production-consumer-unreachable",
+      capability,
+      reasons,
+    })),
+  ];
+  return {
+    status: violations.length ? "FAILED" : "PASSED",
+    capabilityCount: (fixtures || []).length,
+    reachableCount:
+      (fixtures || []).length -
+      missing.length -
+      unowned.length -
+      unreachable.length,
+    violations,
+  };
+}
+
+function moduleSizeReport() {
+  const exceptions = new Map(
+    MODULE_SIZE_EXCEPTIONS.map(([filename, maxLines, reason]) => [
+      filename,
+      { maxLines, reason },
+    ]),
+  );
+  const overLimit = [];
+  const reviewed = [];
+  const files = [
+    "src",
+    "desktop",
+    "media-workbench/src",
+    "auth-server/src",
+  ].flatMap((root) => sourceFilesUnder(path.join(ROOT, root)));
+  for (const filename of files) {
+    const name = relative(filename);
+    const lineCount = sourceLineCount(filename);
+    if (lineCount <= 400) continue;
+    const exception = exceptions.get(name);
+    if (!exception) {
+      overLimit.push({
+        file: name,
+        lines: lineCount,
+        reason: "missing reviewed exception",
+      });
+      continue;
+    }
+    reviewed.push({
+      file: name,
+      lines: lineCount,
+      maxLines: exception.maxLines,
+      reason: exception.reason,
+    });
+    if (lineCount > exception.maxLines || !exception.reason)
+      overLimit.push({
+        file: name,
+        lines: lineCount,
+        maxLines: exception.maxLines,
+        reason: exception.reason || "missing reason",
+      });
+  }
+  const staleExceptionViolations = MODULE_SIZE_EXCEPTIONS.flatMap(
+    ([filename]) => {
+      const fullPath = path.join(ROOT, filename);
+      if (!fs.existsSync(fullPath))
+        return [
+          { file: filename, reason: "exception points to a missing module" },
+        ];
+      const lineCount = sourceLineCount(fullPath);
+      if (lineCount <= 400)
+        return [
+          {
+            file: filename,
+            lines: lineCount,
+            reason:
+              "exception is no longer required below the 400-line threshold",
+          },
+        ];
+      return [];
+    },
+  );
+  overLimit.push(...staleExceptionViolations);
+  return {
+    status: overLimit.length ? "FAILED" : "PASSED",
+    threshold: 400,
+    reviewed,
+    staleExceptions: staleExceptionViolations.map(({ file }) => file),
+    violations: overLimit,
+  };
+}
+
+function trackedGeneratedOutputReport() {
+  const rootResult = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (rootResult.status !== 0)
+    throw gateError("PHASE08_GIT_GATE_UNAVAILABLE", "Git root is unavailable");
+  const gitRoot = rootResult.stdout.trim();
+  const result = spawnSync("git", ["ls-files", "-z"], {
+    cwd: gitRoot,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.status !== 0)
+    throw gateError(
+      "PHASE08_GIT_GATE_UNAVAILABLE",
+      "Tracked file inventory is unavailable",
+    );
+  const matches = String(result.stdout || "")
+    .split("\0")
+    .filter(Boolean)
+    .map((filename) => filename.replaceAll("\\", "/"))
+    .filter((filename) => fs.existsSync(path.join(gitRoot, filename)))
+    .filter((filename) => TRACKED_GENERATED_PATTERN.test(filename));
+  return { status: matches.length ? "FAILED" : "PASSED", matches };
+}
+
+function isAppOwnedPackagePath(entry) {
+  return !/(^|\/)node_modules\//i.test(entry);
+}
+
+function isAllowedPackagePath(entry) {
+  return [...PACKAGE_ALLOWED_PATHS].some(
+    (allowed) => entry === allowed || entry.endsWith(`/${allowed}`),
+  );
+}
+
+function privatePackageMatches(entries) {
+  const directoryEntries = new Set(
+    entries.filter((entry) =>
+      entries.some((candidate) => candidate.startsWith(`${entry}/`)),
+    ),
+  );
+  return entries.filter(
+    (entry) =>
+      isAppOwnedPackagePath(entry) &&
+      !directoryEntries.has(entry) &&
+      !isAllowedPackagePath(entry) &&
+      PRIVATE_PACKAGE_PATHS.some((pattern) => pattern.test(entry)),
+  );
+}
+
+function sensitivePackageMatches(entries, readEntry) {
+  const matches = [];
+  for (const entry of entries) {
+    if (!isAppOwnedPackagePath(entry) || !TEXT_FILE_PATTERN.test(entry))
+      continue;
+    let content;
+    try {
+      content = readEntry(entry).toString("utf8");
+    } catch (_) {
+      continue;
+    }
+    if (SENSITIVE_VALUE_PATTERN.test(content)) matches.push(entry);
+  }
+  return matches;
+}
+
+function listRegularFiles(directory, prefix, output) {
+  if (!fs.existsSync(directory)) return output;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    const relativeName = `${prefix}/${entry.name}`.replace(/^\//, "");
+    if (entry.isDirectory()) listRegularFiles(filename, relativeName, output);
+    else if (entry.isSymbolicLink())
+      output.push({ path: relativeName, filename, link: true });
+    else if (entry.isFile())
+      output.push({ path: relativeName, filename, link: false });
+  }
+  return output;
+}
+
+function listExtraResourceFiles(resources) {
+  const output = [];
+  if (!fs.existsSync(resources)) return output;
+  for (const entry of fs.readdirSync(resources, { withFileTypes: true })) {
+    if (entry.name === "app.asar" || entry.name === "app.asar.unpacked")
+      continue;
+    const filename = path.join(resources, entry.name);
+    const relativeName = `extraResources/${entry.name}`;
+    if (entry.isDirectory()) listRegularFiles(filename, relativeName, output);
+    else if (entry.isSymbolicLink())
+      output.push({ path: relativeName, filename, link: true });
+    else if (entry.isFile())
+      output.push({ path: relativeName, filename, link: false });
+  }
+  return output;
+}
+
+function packageBoundaryReport(resourcesPath) {
+  const resources = path.resolve(resourcesPath);
+  const archive = path.join(resources, "app.asar");
+  let entries;
+  try {
+    entries = asar
+      .listPackage(archive)
+      .map((entry) => entry.replace(/^[/\\]+/, "").replaceAll("\\", "/"));
+  } catch (_) {
+    throw gateError(
+      "PHASE08_PACKAGE_UNAVAILABLE",
+      "Production app archive is unavailable",
+    );
+  }
+  const unpackedRoot = path.join(resources, "app.asar.unpacked");
+  const unpacked = listRegularFiles(unpackedRoot, "", []);
+  const unpackedPaths = unpacked.map((item) => item.path);
+  const extra = listExtraResourceFiles(resources);
+  const extraPaths = extra.map((item) => item.path);
+  const allEntries = [
+    ...entries,
+    ...unpackedPaths.map((entry) => `app.asar.unpacked/${entry}`),
+    ...extraPaths,
+  ];
+  const privateMatches = privatePackageMatches(allEntries);
+  const legacyMatches = allEntries.filter((entry) =>
+    LEGACY_PATHS.some(
+      (legacyPath) => entry === legacyPath || entry.endsWith(`/${legacyPath}`),
+    ),
+  );
+  const sensitiveMatches = sensitivePackageMatches(entries, (entry) =>
+    asar.extractFile(archive, entry),
+  );
+  const unpackedSensitiveMatches = sensitivePackageMatches(
+    unpackedPaths,
+    (entry) => fs.readFileSync(path.join(unpackedRoot, entry)),
+  );
+  const extraSensitiveMatches = sensitivePackageMatches(extraPaths, (entry) =>
+    fs.readFileSync(extra.find((item) => item.path === entry).filename),
+  );
+  const linkMatches = [...unpacked, ...extra]
+    .filter((item) => item.link)
+    .map((item) => item.path);
+  const violations = [
+    ...privateMatches.map((entry) => ({
+      rule: "private-or-test-content",
+      entry,
+    })),
+    ...legacyMatches.map((entry) => ({ rule: "retired-source", entry })),
+    ...sensitiveMatches
+      .concat(unpackedSensitiveMatches, extraSensitiveMatches)
+      .map((entry) => ({ rule: "sensitive-content", entry })),
+    ...linkMatches.map((entry) => ({ rule: "resource-link", entry })),
+  ];
+  return {
+    status: violations.length ? "FAILED" : "PASSED",
+    archiveEntries: entries.length,
+    unpackedEntries: unpackedPaths.length,
+    extraResourceEntries: extraPaths.length,
+    archiveSha256: crypto
+      .createHash("sha256")
+      .update(entries.join("\n"))
+      .digest("hex"),
+    violations,
+  };
+}
+
+function legacyReport(resourcesPath) {
+  const sourceMatches = scanSourceTree(ROOT);
+  const archiveMatches = resourcesPath
+    ? scanArchive(resourcesPath).matches
+    : [];
+  const violations = [...sourceMatches, ...archiveMatches];
+  return {
+    status: violations.length ? "FAILED" : "PASSED",
+    sourceMatches,
+    archiveMatches,
+    archiveStatus: resourcesPath
+      ? archiveMatches.length
+        ? "FAILED"
+        : "PASSED"
+      : "NOT_APPLICABLE",
+    violations,
+  };
+}
+
+function verifyPhase08Gates(options) {
+  const opts = options || {};
+  const checks = {
+    dependencyDirection: dependencyDirectionReport(),
+    operationalStoreBoundary: operationalStoreBoundaryReport(),
+    uniqueOwnersAndWriters: ownershipReport(),
+    capabilityReachability: capabilityReachabilityReport(),
+    legacyAbsence: legacyReport(opts.resourcesPath),
+    moduleSize: moduleSizeReport(),
+    trackedGeneratedOutput: trackedGeneratedOutputReport(),
+  };
+  if (opts.resourcesPath)
+    checks.packageBoundary = packageBoundaryReport(opts.resourcesPath);
+  else checks.packageBoundary = { status: "NOT_APPLICABLE", violations: [] };
+  const failures = Object.entries(checks).flatMap(([name, value]) =>
+    value.status === "FAILED"
+      ? [{ check: name, violations: value.violations || [] }]
+      : [],
+  );
+  return {
+    status: failures.length ? "FAILED" : "PASSED",
+    operation: "phase-08-architecture-and-package-gates",
+    checks,
+    failures,
+  };
+}
+
+function parseArguments(argv) {
+  const args = Array.from(argv || []);
+  const options = {};
+  while (args.length) {
+    const arg = args.shift();
+    if (arg === "--resources" || arg === "--output") {
+      const value = args.shift();
+      if (!value || value.startsWith("--"))
+        throw gateError("PHASE08_ARGUMENT_INVALID", `${arg} requires a value`);
+      options[arg.slice(2) + (arg === "--resources" ? "Path" : "")] =
+        path.resolve(value);
+    } else {
+      throw gateError("PHASE08_ARGUMENT_INVALID", "unknown option");
+    }
+  }
+  return options;
+}
+
+function writeReport(filename, report) {
+  const output = path.resolve(filename);
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, JSON.stringify(report, null, 2) + "\n", {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+}
+
+if (require.main === module) {
+  try {
+    const options = parseArguments(process.argv.slice(2));
+    const report = verifyPhase08Gates(options);
+    if (options.output) writeReport(options.output, report);
+    process.stdout.write(JSON.stringify(report) + "\n");
+    if (report.status !== "PASSED") process.exitCode = 1;
+  } catch (error) {
+    process.stderr.write(
+      `${error.code || "PHASE08_GATE_FAILED"}:phase-08 gate failed\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+
+module.exports = {
+  DEPENDENCY_RULES,
+  MODULE_SIZE_EXCEPTIONS,
+  isRendererNodeSpecifier,
+  packageBoundaryReport,
+  parseArguments,
+  publisherOwnerCandidates,
+  sqliteWriterOpenings,
+  verifyPhase08Gates,
+};

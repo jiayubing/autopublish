@@ -17,6 +17,7 @@ const REQUIRED_CHECKS = Object.freeze([
   "required/toolchain",
   "required/packaging-contracts",
   "required/link-security",
+  "required/phase-08-gates",
 ]);
 
 const MANUAL_GATES = Object.freeze([

@@ -43,7 +43,7 @@ function withTimeout(promise, milliseconds) {
   let timer;
   const timeout = new Promise(function(_, reject) {
     timer = setTimeout(function() {
-      reject(codedError("DOUBAO_DIAGNOSTIC_TIMEOUT", "Doubao diagnostic screenshot timed out"));
+      reject(codedError("DOUBAO_DIAGNOSTIC_TIMEOUT", "Doubao diagnostic collection timed out"));
     }, milliseconds);
   });
   return Promise.race([promise, timeout]).finally(function() { clearTimeout(timer); });
@@ -171,7 +171,7 @@ function trimDiagnostics(directory, limit) {
   if (!fs.existsSync(directory)) return;
   const groups = new Map();
   fs.readdirSync(directory).forEach(function(name) {
-    if (!name.endsWith(".png") && !name.endsWith(".json")) return;
+    if (name.endsWith(".png")) { try { fs.unlinkSync(path.join(directory, name)); } catch (_) {} return; } if (!name.endsWith(".json")) return;
     const stem = name.slice(0, -path.extname(name).length);
     const filePath = path.join(directory, name);
     let mtime = 0;

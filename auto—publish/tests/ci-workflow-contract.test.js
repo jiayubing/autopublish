@@ -70,6 +70,7 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
     "required/toolchain",
     "required/packaging-contracts",
     "required/production-directory-smoke",
+    "required/phase-08-gates",
     "required/legacy-publish-log-absence",
   ])
     assertStep(desktop, check);
@@ -86,6 +87,8 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
     "npm run build:preload",
     "npm run test:packaging",
     "npm run pack:production:smoke",
+    "npm run test:phase-08:gates",
+    "node scripts/verify-phase-08-gates.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/phase-08-gates.json",
     "node scripts/verify-legacy-absence.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/legacy-publish-log.json",
   ])
     assert.ok(desktop.includes(command), command);

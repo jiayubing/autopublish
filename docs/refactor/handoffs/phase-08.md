@@ -1,5 +1,72 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 13 执行交接（2026-08-05，旧测试、依赖、构建残余与门禁）
+
+- 状态：Ticket 13 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。本轮只完成 cleanup 与自动化验收，不批准后续功能、迁移容量或人工 release gates。
+- 分支：`codex/refactor-program`；工作树保持未 stage、未 commit、未 push、未创建 PR。未修改历史 review/OPT 文档，用户提供的 `.scratch/phase-08-cleanup-acceptance/issues/` 计划文件保留。
+- 修改边界：删除已证明无 production caller 的旧 publisher/router、旧 publisher 穿透测试和无 owner cleanup script；收缩 Playwright/Doubao 诊断 seam；迁移 runtime manifest source；移除 renderer production Vite 重复声明；新增 Phase 8 gate、测试、CI/release evidence。未改变稳定 IPC inventory（109 capability）、业务 schema、Domain/Application public contract、Auth schema 或真实数据。
+
+### 删除与替换记录
+
+| 删除/收缩对象 | 证据与替换 | 结果 |
+|---|---|---|
+| `src/infrastructure/publishers/legacy-adapter-publisher.js`、`publisher-router.js` | source/import/archive absence 扫描为 0；由 `desktop/services/desktop-publisher-router.js` 组合 `worker-publisher` 与 `media-publisher` | 旧 compatibility publisher 不再存在，生产路由有唯一 owner |
+| `tests/phase-03-publisher-adapter.test.js` | 删除旧 implementation 穿透测试；新增 `tests/desktop-publisher-router.test.js` 覆盖真实 desktop publisher owner、platform/media 委派与 evidence/outcome | replace-don't-layer |
+| `scripts/cleanup-source-runtime.js` | 无 production caller、无 owner；由现有 prepare/package 流程和 package boundary gate 负责生成物隔离 | 无 wrapper 回流 |
+| tracked `build/runtime-tools-manifest.json` | 新增 `config/runtime-tools-manifest.json` 作为唯一 source；`prepare-runtime-tools.js` 写入 build staging；pack config 排除 source/build manifest | generated output 不再 tracked/shipped |
+| `runCode(jsCode, numericTimeout)` 兼容分支、Playwright `screenshot` export | caller 只使用 options object 与 `open/evaluate/close`；Doubao 改为结构化 JSON diagnostic | 旧签名和 screenshot seam 归零 |
+| Doubao 新 PNG 诊断 | 保留 JSON summary；trim 阶段删除升级遗留 `.png`，并有 legacy PNG 回归 | 不继续产生原始截图，遗留敏感 artifact 可清理 |
+| renderer production `dependencies.vite` | Vite 保留为唯一 `devDependencies` 直接声明，`media-workbench/package-lock.json` 同步 | 构建不依赖 peer 间接安装，production dependency 收缩 |
+
+### Phase 8 gate 与模块例外
+
+`auto—publish/scripts/verify-phase-08-gates.js` 固化以下检查：
+
+| gate | 保护内容 |
+|---|---|
+| `dependencyDirection` | `src → desktop`、Domain/Application → implementation、Renderer → Node/infrastructure、worker/adapter → OperationalStore writer |
+| `operationalStoreBoundary` | internal OperationalStore 只能由 facade/internal owner 导入；migration 只允许 recovery guard 的精确 importer→specifier 例外 |
+| `uniqueOwnersAndWriters` | publication/remote publisher 唯一 owner、SQLite writer、worker/adapter 不写 store、退休 writer absence |
+| `capabilityReachability` | 109 项 registry capability 通过真实 TypeScript symbol/call reachability evidence；不再以 fixture 非空字段计数 |
+| `legacyAbsence` | source 与 production archive 的 retired path/旧 publisher/cleanup script absence |
+| `moduleSize` | 400 行阈值、已审查 ceiling、缺少/超限/已降到阈值以下但未删除的 stale exception |
+| `trackedGeneratedOutput` | tracked build/dist/release/coverage/map/log 等生成输出 absence |
+| `packageBoundary` | ASAR、unpacked 与 resources extraResources 的私有内容、旧 source、sensitive text（含 `.js/.cjs/.mjs`）、link absence；仅允许生成 preload |
+
+CI required check 为 `required/phase-08-gates`，release evidence contract 与 checklist 同步收录该 check。CI-only verifier、module exception 清单和 build-input runtime manifest 明确排除 production ASAR。
+
+模块规模例外共 37 项，完整的 `file / ceiling / reason` 表以 `auto—publish/scripts/module-size-exceptions.js` 固化；代表性深模块包括 submission owner（1980）、content IPC declarations（1328）、media feature（793）、article removal（764）、OperationalStore submission aggregate（683）、preload（607）、workspace composition（601）及 vendor adapters（502/429）。例外不是 waiver：文件删除、路径不存在、缺 reason、超过 ceiling 或降至 400 行以下而未移除条目均 fail。
+
+### 独立审计、最小修复与专项复验
+
+首轮独立 `sol`（medium）只读审计发现 1 个 P1、3 个 P2、1 个 P3：
+
+1. package sensitive scan 跳过生产 JavaScript；扩展文本文件集合到 `.js/.cjs/.mjs`，加入 ASAR 中 JS key 负例。
+2. Doubao 仅筛选 JSON 会遗留升级前 PNG；停止生成 PNG 但在 trim 时清除遗留 PNG，并加入 fixture 回归。
+3. renderer build 依赖 peer 间接提供 Vite；恢复为唯一直接 `devDependencies.vite` 并同步 lockfile。
+4. capability reachability 只校验 fixture metadata；改为消费真实 TypeScript symbol evidence，并以 109 项可达性计数。
+5. module exception 在降到 400 行以下后不会失效；stale exception 现在直接违规，要求删除条目。
+
+主线程未采用扩大接口或 wrapper 的方式修复。第二轮独立 `sol`（medium）复审未发现 P0/P1，但发现 3 个 P2 门禁覆盖缺口：package boundary 漏扫 resources 下 extraResources、Renderer 规则漏掉 bare Node builtins、owner/writer 规则漏掉 qualified SQLite writer 且只确认 publisher owner 文件存在。最小修复为递归纳入 extraResources、使用 `node:module` builtin 集合、识别 qualified `DatabaseSync`/SQLite open 并以受控 publisher owner inventory 检查唯一性；新增三类反例回归。
+
+第三轮也是约定的最后一轮独立只读 `sol`（medium）复审结果为 `P0=0、P1=0、P2=0、P3=2`：extraResources 敏感负例断言不独立、publisher inventory 原依赖文件名。主线程随后将两处敏感命中拆成独立断言，并让 owner 候选按 publisher surface 定义识别而不依赖文件名；未再启动第四轮。最终专项复验为 gate 测试 `3/3`、fresh package resources gate `PASSED`，三套 typecheck、lint、format、`git diff --check` 均通过；三轮 subagent 均只读，未修改、stage、commit 或 push。
+
+### 最终自动化证据
+
+| 命令 / 证据 | 结果 |
+|---|---:|
+| root suite | 238 个测试文件，1608/1608 pass，0 fail；最新 gate 专项 3/3 |
+| Auth suite | 49/49 pass |
+| `npm run pack:production:smoke:dirty` | 首次下载 Electron 时网络 `ETIMEDOUT`；重试成功，renderer 2171 modules、preload sandbox 3/3、production package verifier 通过 |
+| fresh Phase 8 package gate | `PASSED`；ASAR 1798 entries、unpacked 385、extraResources 5；private/legacy/sensitive/link violations 0；capability `109/109`，source/archive legacy absence `0/0`，module-size/stale `0/0` |
+| `npm run lint` | 通过 |
+| main/renderer/bridge typecheck | 全部通过 |
+| `npm run format:check` | 通过 |
+| renderer `npm ci --dry-run` | 通过 |
+| `git diff --check` | 通过 |
+
+所有测试和 package fixture 均为临时/合成/离线输入；未访问真实 workspace、Auth 数据、账号、Cookie、供应商、投稿、同步、扣费或外部平台。正式 release 的人工签名、installer、TLS/DNS、external E2E、RPO/RTO 与 rollback gates 继续保持 `PENDING_HUMAN`/`BLOCKED_RELEASE`。
+
 ## Ticket 04 执行交接（2026-08-02，Content storage and lifecycle internals）
 
 - 状态：Ticket 04 `COMPLETE`；代码与 Content 专项自动化 `GREEN`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。

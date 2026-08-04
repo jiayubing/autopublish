@@ -59,6 +59,11 @@ jobs:
       - name: required/production-directory-smoke
         run: npm run pack:production:smoke
         working-directory: auto—publish
+      - name: required/phase-08-gates
+        run: |
+          npm run test:phase-08:gates
+          node scripts/verify-phase-08-gates.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/phase-08-gates.json
+        working-directory: auto—publish
       - name: required/legacy-publish-log-absence
         run: node scripts/verify-legacy-absence.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/legacy-publish-log.json
         working-directory: auto—publish
@@ -253,6 +258,7 @@ jobs:
           --check required/packaging-contracts=PASSED
           --check required/production-directory-smoke=PASSED
           --check required/link-security=PASSED
+          --check required/phase-08-gates=PASSED
         working-directory: auto—publish
       - name: Validate release checklist with explicit human blockers
         run: node scripts/validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked

@@ -107,10 +107,6 @@ function extractResult(raw) {
 
 function runCode(jsCode, opts) {
   var options = opts || {};
-  if (typeof options === "number") {
-    // legacy signature: runCode(jsCode, timeout)
-    options = { timeout: options };
-  }
   var sessionCtx = options.session || null;
   var filePath = path.join(DIRS.tmpDir, "run-" + Date.now() + ".js");
   var wrapped = "async page => {\n" + jsCode + "\n}";
@@ -269,19 +265,11 @@ function createPlaywrightRuntime(options) {
     }
   }
 
-  async function screenshot(input) {
-    var value = input || {};
-    var filePath = String(value.path || "");
-    if (!filePath) throw new Error("Playwright screenshot requires a path");
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    return invoke(["screenshot", "--filename=" + filePath], value.timeoutMs || value.timeout);
-  }
-
   async function close(input) {
     return invoke(["close"], input && (input.timeoutMs || input.timeout));
   }
 
-  return { open: open, evaluate: evaluate, screenshot: screenshot, close: close };
+  return { open: open, evaluate: evaluate, close: close };
 }
 
 module.exports = { pwSessionConfig, pwEnv, pwCmd, pwRun, runCode, createPlaywrightRuntime };
