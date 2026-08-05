@@ -4,10 +4,10 @@
 
 ### 1. Status And Baseline
 
-- Status: `IN_PROGRESS`. Ticket 16's three admission simulations pass, but ordinary feature work remains frozen until the CI Linux/Docker `required/auth-container` check is `PASSED`. Formal release remains `BLOCKED_RELEASE`.
+- Status: `COMPLETE`. Ticket 16's three admission simulations and every fixed automated gate pass; ordinary local feature work is open. Formal release remains `BLOCKED_RELEASE`.
 - Start baseline: `codex/refactor-program` at `9dcab0194ccf3e4f8f8a90fb718ebadf64e55aa4`, clean before Ticket 17 documentation work.
-- Current baseline: Ticket 17 adds only the documentation, root-suite evidence generator, and its format-list entry. The captured evidence source state is `DIRTY`; the closeout is committed after user authorization, with no push or PR.
-- Evidence source state: `build/release-evidence-manifest.json` records that HEAD, `DIRTY`, 16/17 fixed checks passed, and `BLOCKED_RELEASE`. The sole non-passing fixed check is `required/auth-container`; the associated `containerTests` evidence is absent because Docker is unavailable locally.
+- Current automated baseline: GitHub Actions run `30987989761`, evidence commit `090258bbb01e9aa90bd345eb7de1c93129eb10f5`, source state `CLEAN`. The CI and release-evidence artifact are remote evidence; this documentation closeout is committed separately after user authorization.
+- Evidence state: all 17 fixed checks, including Linux/Docker `required/auth-container`, are `PASSED`; migration is 65/65, capacity is 20/20, and the production artifact manifest records 13 hashed entries. The aggregate manifest remains `BLOCKED_RELEASE` only for 12 `PENDING_HUMAN` gates and rollback evidence.
 
 ### 2. Production Map And Authority
 
@@ -47,17 +47,17 @@ no private, sensitive, link, or retired-path violation.
 
 | Command/report | Result | Fixture boundary |
 | --- | --- | --- |
-| `build/evidence/root-tests.json` | 239 files, 1621/1621 pass, 0 fail/skip | local synthetic suite |
+| GitHub `required/root-tests` | `PASSED` on the 239-file discovery baseline | CI synthetic suite |
 | `build/evidence/desktop-migration-roundtrip.json` | 65/65 pass | temporary workspace/SQLite |
 | `build/evidence/capacity.json` | 20/20 pass | synthetic capacity data |
 | diagnostics/media/links/gates | 32/32, 9/9, strict links, 3/3 | local fixtures/package |
-| production smoke/package gate | 13 artifacts, 109/109 capabilities, 0 violations | local unsigned `--dir` package |
+| production smoke/package gate | 13 artifacts, 10 passed / 0 failed / 1 explained optional skip | CI unsigned `--dir` package |
 | Ticket 16 admission | three fixture-only architecture simulations pass | no production registration |
 
 Production smoke has one `SKIPPED_OPTIONAL` Hepan-Python check because no
 packaged optional Python was supplied. It is explicitly optional and does not
-cover a real provider. The missing Auth container check is not a skip and
-blocks Phase 8 closure.
+cover a real provider. The Auth container check now passes in isolated Linux
+Docker CI and no longer blocks Phase 8 closure.
 
 ### 6. Traceability, ADR, And Documentation
 
@@ -67,7 +67,7 @@ OPT items with exact test/report references and named manual gates. Historical
 
 ### 7. Remaining Blockers And Next Action
 
-- Automatic blocker: obtain a passing CI Linux/Docker `required/auth-container` report and regenerate the release evidence manifest. Until then Phase 8 stays `IN_PROGRESS` and feature work remains frozen.
+- Automatic closeout is complete: retain the GitHub release-evidence artifact for run `30987989761` as the current automated baseline. A future source or workflow change must regenerate it.
 - Human release blockers: platform/account and Hepan reconciliation, media HTTP risk, signed login, TLS/DNS/proxy, signing, installer upgrade/rollback, external E2E, Auth backup policy/RPO/RTO/recovery drill, and signed rollback evidence.
 - On a later approved feature, first choose one domain/application owner, one typed contract and one Renderer feature; keep file, SQLite, browser and remote effects behind their current owner.
 

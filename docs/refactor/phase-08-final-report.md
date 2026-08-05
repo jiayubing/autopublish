@@ -4,14 +4,13 @@ Date: 2026-08-05
 
 ## Decision
 
-Phase 8 is `IN_PROGRESS`; ordinary feature development remains frozen. The
-desktop-side automated evidence is green, but the fixed CI automated check
-`required/auth-container` has no Linux/Docker pass and is recorded as
-`PENDING_HUMAN` only to describe unavailable local evidence, not as a pass.
-The baseline is `9dcab0194ccf3e4f8f8a90fb718ebadf64e55aa4` on
-`codex/refactor-program`; the Ticket 17 closeout is committed after explicit
-user authorization. The evidence captures the pre-commit dirty state and is
-not clean-release proof. Formal production release remains `BLOCKED_RELEASE`.
+Phase 8 is `COMPLETE`; ordinary local feature development is open. GitHub
+Actions run `30987989761` provides a clean-source automated baseline at
+`090258bbb01e9aa90bd345eb7de1c93129eb10f5` on
+`codex/refactor-program`: all 17 fixed checks, including Linux/Docker
+`required/auth-container`, passed. Formal production release remains
+`BLOCKED_RELEASE`; automated evidence does not pass the owner-controlled
+release gates.
 
 ## Current Production Map
 
@@ -70,12 +69,12 @@ restore, installer rollback, and RPO/RTO drill are still human gates.
 | Ticket 15 evidence | migration 65/65; capacity 20/20; production package capability 109/109 |
 | Ticket 16 admission | fake Publisher, query projection and Content command simulations pass |
 
-The local release manifest is bound to the same HEAD and records 16/17 fixed
-automated checks as `PASSED`; `required/auth-container` and
-`evidence/containerTests` are the only missing automated/container evidence.
-The production smoke reports 10 passed checks, 0 failed checks, and one
-explained `SKIPPED_OPTIONAL` Hepan-Python check. It does not change the Phase 8
-state or release decision.
+The GitHub release-evidence artifact for run `30987989761` is bound to the
+same HEAD with `sourceState=CLEAN`: all 17 fixed automated checks and the
+container evidence are `PASSED`. Production smoke reports 10 passed checks,
+0 failed checks, and one explained `SKIPPED_OPTIONAL` Hepan-Python check.
+The manifest records 13 hashed production artifact entries, migration 65/65
+and capacity 20/20. It closes Phase 8 engineering, not the release decision.
 
 The final package/release verification commands are in
 `auto—publish/docs/release-checklist.md`. A clean commit is required for
@@ -263,9 +262,8 @@ The following remain `PENDING_HUMAN` and therefore keep formal release
 media HTTP risk acceptance, signed browser login, endpoint DNS/TLS, trusted
 proxy headers, code signing, installer ACL/upgrade/rollback, controlled
 external E2E, Auth backup policy, RPO/RTO and recovery drill, and signed
-rollback evidence. The CI Linux/Docker `required/auth-container` check is a
-separate automatic blocker: it must produce a passing report before this phase
-can close; it is not a manual release gate.
+rollback evidence. The CI Linux/Docker `required/auth-container` check passed
+in the current automated baseline and is not a remaining manual release gate.
 
 The 37 reviewed module-size ceilings are enforced by `G`; they are explicit
 technical-debt records, not blanket waivers. Any future split must preserve a

@@ -107,8 +107,11 @@ finding 和 29 个 `OPT-*` 均有明确的自动证据、设计替代或
 `PENDING_HUMAN` release gate。其 `CLOSED for code` 表示工程边界已由
 自动证据覆盖，不表示真实账号、TLS、签名、安装器或灾备演练已经通过。
 
-Phase 8 的工程状态为 `IN_PROGRESS`，普通功能开发继续冻结：CI Linux/Docker
-的 `required/auth-container` 尚无通过证据。正式 release 继续为
-`BLOCKED_RELEASE`。追踪矩阵不改写 `docs/review/` 的历史判断，也不将人工项
-或未运行的自动项改记为通过。
+Phase 8 的工程状态为 `COMPLETE`，普通本地功能开发已开放。GitHub Actions
+run `30987989761`（evidence commit
+`090258bbb01e9aa90bd345eb7de1c93129eb10f5`）记录 17/17 固定自动检查、
+Auth Linux/Docker container、迁移、容量、production package 与离线 smoke
+均为 `PASSED`。正式 release 继续为 `BLOCKED_RELEASE`：12 项人工 gate 与
+rollback evidence 仍为 `PENDING_HUMAN`。追踪矩阵不改写 `docs/review/` 的
+历史判断，也不将人工项改记为通过。
 

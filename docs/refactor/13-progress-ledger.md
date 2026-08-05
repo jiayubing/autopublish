@@ -1,5 +1,16 @@
 # 重构工程进度账本
 
+> **2026-08-05 Phase 8 Ticket 17 CI closeout（当前最高权威）：** Phase
+> 8=`COMPLETE`，普通本地功能开发已开放；正式 release=`BLOCKED_RELEASE`。
+> GitHub Actions run `30987989761` 的 evidence commit 为
+> `090258bbb01e9aa90bd345eb7de1c93129eb10f5`，source state=`CLEAN`，17/17
+> 固定自动检查、Auth Linux/Docker container、迁移 65/65、容量 20/20、13 项
+> production artifact、offline smoke（10 passed、0 failed、1 explained
+> `SKIPPED_OPTIONAL`）和 legacy source/archive 0/0 均通过。release evidence
+> manifest 状态为 `BLOCKED_RELEASE`，仅因为 12 项 owner-controlled manual
+> gate 与 rollback evidence 仍为 `PENDING_HUMAN`；它们不再阻止工程收口，且
+> 不被自动 evidence 伪装为通过。
+
 > **2026-08-05 Phase 8 Ticket 17 审计后状态（当前最高权威）：** Phase 8=`IN_PROGRESS`，普通功能开发继续冻结，正式 release=`BLOCKED_RELEASE`。虽然 root suite、迁移、链接、安全、打包、准入模拟和 Phase 8 package gate 均通过，固定自动门 `required/auth-container` 仍无 CI Linux/Docker pass，不能改记为人工通过或据此关闭工程。evidence 绑定 `codex/refactor-program` 的 `9dcab0194ccf3e4f8f8a90fb718ebadf64e55aa4`，并保留提交前的 `DIRTY` source state；Ticket 17 closeout 已在用户授权后提交。37 条 finding、29 个 OPT、module/owner/dependency/legacy/package gates、schema/migration/recovery、三项准入模拟和所有人工 release blocker 的逐项证据见 `phase-08-final-report.md` 与 `handoffs/phase-08.md`。
 
 > **2026-08-05 Phase 8 Ticket 15 完成与专项复验（当前最高权威）：** Ticket 15=`COMPLETE`；第五轮独立 `sol`/medium 专项复验无新增 actionable finding，P0/P1/P2/P3 均为 `0`；Phase 8 仍=`IN_PROGRESS`，正式 release=`BLOCKED_RELEASE`。基线为 detached `HEAD` `fd47958bcac8296bb76b6c89a58c70e9aee87157`（`codex/refactor-program`）；修复范围包含 Content rollback API/fixture、bounded recovery page、generation IPC task projection、独立 migration/capacity evidence contract、CI 命令与既有 module-size exception；未 stage/commit/push/PR。只使用系统临时目录、仓库合成旧 workspace/Auth fixture、隔离 SQLite、合成容量数据和本地 production `--dir` 制品，未访问真实 workspace、内容库、Auth DB、账号、Cookie、供应商、投稿、同步、扣费或外部平台。

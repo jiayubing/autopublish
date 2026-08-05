@@ -1,17 +1,17 @@
 # Phase 8 Ticket 01：Production 基线与清理决策图
 
-> 本文件是 Phase 8 Ticket 01 的只读证据与边界文件。它冻结当前 production 调用链、owner/writer、依赖违规、兼容面、长模块和后续 ticket 归属；不代表 Phase 8 已完成，也不授权删除代码或修改业务接口。
+> 本文件是 Phase 8 Ticket 01 的只读基线与边界文件。其 Ticket 01 现场事实保留为历史证据；2026-08-05 Ticket 17 CI closeout 已以 GitHub Actions run `30987989761` 完成工程收口，不改写本文件记录的开始基线。
 
 ## 1. 结论与边界
 
-- 当前 Phase 8 状态：`IN_PROGRESS`。
+- 当前 Phase 8 工程状态：`COMPLETE`；正式 release 仍为 `BLOCKED_RELEASE`。
 - 当前分支：`codex/refactor-program`。
-- 当前 HEAD：`aff1dfd089aff2492f9054747ce55f94304cffdd`（Phase 7 closeout）。
+- 当前自动证据 HEAD：`090258bbb01e9aa90bd345eb7de1c93129eb10f5`（GitHub Actions run `30987989761`）。
 - Ticket 01 只新增本证据、Phase 8 handoff 和 progress ledger 记录；没有新增产品能力、schema、公共 Domain/Application interface、IPC capability 或 Renderer 行为。
 - 后续 ticket 必须以本文件的 production 可达性和阻塞边为准。测试 helper、旧审查路径和“看起来相似”的模块不能单独证明 production 引用。
 - 未访问真实 workspace、内容库、Auth 数据库、账号、Cookie、供应商、Cloudflare/Tunnel、投稿、同步、扣费、生产服务或付费系统。
 
-### 1.1 当前 Git 基线
+### 1.1 Ticket 01 开始时的 Git 基线
 
 | 项目 | 现场事实 | 处理 |
 |---|---|---|
@@ -393,7 +393,7 @@ Phase 8 不得用局部 wrapper 掩盖以下发现：
 - Content interface 不能表达 identity、article/removal/recovery 不变量：重开 Phase 1/5，Ticket 04 停止。
 - typed IPC capability、wire DTO、preload namespace 或 Renderer public feature surface 必须新增语义：重开 Phase 6，Ticket 06/07 停止。
 - Auth route、schema、token/hash/device contract 必须改变：重开 Phase 7，Ticket 11 停止。
-- 真实迁移冲突、备份/恢复不一致、生产旧 writer、无法归属的状态或错误：Phase 8 保持 `IN_PROGRESS`，按 owner 重开前序阶段。
+- 真实迁移冲突、备份/恢复不一致、生产旧 writer、无法归属的状态或错误：将已完成的 Phase 8 重开为 `IN_PROGRESS`，按 owner 重开前序阶段。
 - 外部账号、TLS、签名、installer、RPO/RTO 等未知事实：标为 `PENDING_HUMAN`，不得以合成测试或文档结论改写。
 
 ## 13. Ticket 02 的最小可执行 frontier

@@ -46,6 +46,8 @@ The fixed CI job display names are:
 - `required/auth-container-node22`
 - `required/auth-verification-node22`
 - `required/desktop-security-node24`
+- `required/desktop-capacity-node24`
+- `required/desktop-artifact-node24`
 - `required/link-security`
 - `required/release-evidence`
 
@@ -54,7 +56,7 @@ manifest writer, validator, this checklist and the Phase 7 handoff.
 
 ## Automated evidence
 
-- `required/root-tests`: desktop core suite; the four delegated packaging contract files run under `required/packaging-contracts`, so the two required checks together cover the full desktop suite without repeating a test file.
+- `required/root-tests`: fast desktop core suite. Packaging, capacity, production IPC matrix and alpha artifact checks are delegated to dedicated CI jobs so the same test file is not serialized twice.
 - `required/test-discovery`: both `.test.js` and `.test.mjs` collection.
 - `required/migration-roundtrip`: desktop Content/OperationalStore migration suite; its independent report is `build/evidence/desktop-migration-roundtrip.json`.
 - `required/toolchain`: lint, renderer/bridge/main typecheck, format, renderer build and preload build.
@@ -75,6 +77,12 @@ manifest writer, validator, this checklist and the Phase 7 handoff.
 The evidence manifest keeps desktop migration, Auth migration and Ticket 15
 capacity as separate evidence fields (`migration`, `authMigration`, and
 `capacity`); a required check cannot borrow a report from another boundary.
+
+`required/desktop-capacity-node24` writes the capacity evidence, and
+`required/desktop-artifact-node24` builds the alpha fixture and runs its
+artifact gates. `required/desktop-security-node24` also owns the production
+IPC matrix. These jobs run in parallel with the desktop core job; all must
+succeed before `required/release-evidence` aggregates the result.
 
 CI sets `CI_SYNTHETIC_ONLY=1`, uses pinned Node 24/22 runtimes, and never
 uses production secrets or accesses a real database, workspace, account,
@@ -159,11 +167,11 @@ signed installer, SmartScreen, ACL, DNS, TLS, proxy or external E2E result.
 
 ## Phase 8 engineering closeout
 
-The desktop-side Phase 8 evidence is collected, but Phase 8 remains
-`IN_PROGRESS` and ordinary feature development remains frozen until the CI
-Linux/Docker `required/auth-container` check has a passing report. This
-checklist remains the release authority: it is not changed to `PASSED` by
-desktop-side closeout evidence. Read
+Phase 8 engineering is `COMPLETE`: GitHub Actions run `30987989761` passed all
+fixed checks, including Linux/Docker `required/auth-container`, and ordinary
+local feature development is open. This checklist remains the release
+authority: release remains `BLOCKED_RELEASE` until every manual gate and
+rollback evidence are `PASSED`. Read
 `../../docs/refactor/phase-08-final-report.md` for the production module map,
 schema/migration evidence, and the exact separation between automated closure
 and owner-controlled release gates.
