@@ -22,12 +22,13 @@ npm run build:renderer
 npm run build:preload
 ```
 
-Migration and recovery procedures are in `docs/content-library-v2-migration.md`
-and `docs/publication-ledger-migration.md`. They require dry-run or explicit
-execution confirmation and should never be pointed at an unreviewed source.
+The authoritative business glossary is `../CONTEXT.md`, and the current article
+lifecycle and submission workflow are specified in
+`../ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md`. Historical pre-refactor material
+under this subproject is not an implementation source.
 
-For a release review, follow `docs/release-checklist.md`. A local dirty smoke
-package is diagnostic only; signing, installer rollback, real account/TLS
-checks, external E2E, and real Auth recovery are owner-controlled release
-gates. The Phase 8 closeout status and remaining CI container gate are documented in
-`../docs/refactor/phase-08-final-report.md`.
+Migration, recovery, release, signing, installer rollback, real account/TLS
+checks, external E2E, and real Auth recovery remain owner-controlled actions
+that require dry-run or explicit execution confirmation. Completed refactor
+branch plans and handoffs are historical Git evidence, not current operating
+instructions.

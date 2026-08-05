@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const TESTS_DIR = path.join(ROOT, 'tests');
-const OUTPUT_FILE = path.join(ROOT, 'docs', 'test-suite-inventory.md');
+const OUTPUT_FILE = path.join(ROOT, 'build', 'evidence', 'test-suite-inventory.md');
 const TEST_CALL_NAMES = new Set(['test', 'it', 'specify']);
 const TEST_CALL_MODIFIERS = new Set(['skip', 'todo', 'only', 'failing', 'if', 'unless']);
 
@@ -527,7 +527,7 @@ function main() {
   const markdown = renderInventory(inventory);
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
   fs.writeFileSync(OUTPUT_FILE, markdown, 'utf8');
-  process.stdout.write('Generated docs/test-suite-inventory.md from ' + inventory.records.length + ' test files and ' + inventory.allTests.length + ' statically parsed test declarations. Runtime baselines remain pending.\n');
+  process.stdout.write('Generated build/evidence/test-suite-inventory.md from ' + inventory.records.length + ' test files and ' + inventory.allTests.length + ' statically parsed test declarations. Runtime baselines remain pending.\n');
 }
 
 if (require.main === module) main();

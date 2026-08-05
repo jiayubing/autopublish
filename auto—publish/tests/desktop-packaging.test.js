@@ -452,18 +452,7 @@ describe("source assembly and packaging contract", function() {
     }
   });
 
-  it("documents the new workspace boundaries and generation operations without workspace AI assignments", function() {
-    const workspaceContract = read("docs/content-workspace-contract.md");
-    const collectionGuide = read("docs/doubao-collection-operations.md");
-    const generationGuidePath = path.resolve(__dirname, "..", "docs", "content-generation-operations.md");
-    assert.match(workspaceContract, /client-material-cache/);
-    assert.match(workspaceContract, /content-generation-batches/);
-    assert.match(workspaceContract, /snapshot/i);
-    assert.match(workspaceContract, /review status/i);
-    assert.match(collectionGuide, /missing/i);
-    assert.match(collectionGuide, /recollect/i);
-    assert.match(collectionGuide, /background/i);
-    assert.ok(fs.existsSync(generationGuidePath), "generation operations guide must exist");
+  it("keeps workspace AI assignments out of the environment contract", function() {
     const envExample = read(".env.example");
     assert.doesNotMatch(envExample, /^AI_[A-Z0-9_]+=/m, "workspace env must not configure AI provider");
   });
