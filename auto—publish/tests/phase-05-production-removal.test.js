@@ -36,6 +36,8 @@ test("production removal uses OperationalStore queue facts and cancels before tr
       platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }]
     });
     const batch = submission.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const filePath = path.join(input, "toutiao", batch.items[0].filename);
+    const sidecarPath = filePath + ".submission.json";
     const removal = createArticleRemovalService({ workspaceRoot: root, contentStore, submissionService: submission, tokenTtlMs: 5000 });
     const preview = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
     assert.equal(preview.canCommit, true);
@@ -44,8 +46,8 @@ test("production removal uses OperationalStore queue facts and cancels before tr
     assert.equal(result.status, "committed");
     assert.equal(contentStore.isArticleTrashed("client-1", "article-1"), true);
     assert.equal(operationalStore.getSubmissionBatch(batch.batchId).items[0].status, "cancelled");
-    assert.equal(fs.existsSync(batch.items[0].filePath), false);
-    assert.equal(fs.existsSync(batch.items[0].sidecarPath), false);
+    assert.equal(fs.existsSync(filePath), false);
+    assert.equal(fs.existsSync(sidecarPath), false);
   } finally {
     operationalStore.close();
     fs.rmSync(root, { recursive: true, force: true });

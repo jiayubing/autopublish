@@ -1,6 +1,9 @@
 "use strict";
 
 const { createOperationalContentSubmissionService } = require("./operational-content-submission-service");
+const {
+  createContentSubmissionApplication,
+} = require("./content-submission-application");
 
 // Production content submission state is exclusively owned by OperationalStore.
 // Legacy JSON batch/ledger behavior intentionally lives only in tests/helpers
@@ -12,7 +15,9 @@ function createContentSubmissionService(options) {
     error.code = "OPERATIONAL_STORE_REQUIRED";
     throw error;
   }
-  return createOperationalContentSubmissionService(value);
+  return createContentSubmissionApplication(
+    createOperationalContentSubmissionService(value),
+  );
 }
 
 module.exports = { createContentSubmissionService };

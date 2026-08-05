@@ -136,7 +136,7 @@ test("content queue execution claims and completes its original OperationalStore
     const plan = workbench.buildSelectedSubmissionsPlan([
       {
         sourcePlatformId: "toutiao",
-        filename: path.basename(queued.items[0].filePath),
+        filename: queued.items[0].filename,
         targetPlatformIds: ["toutiao"],
         accountProfiles: { toutiao: profile.accountProfileId },
       },
@@ -234,7 +234,7 @@ test("multiline platform content passes the operational DTO boundary and complet
     const plan = workbench.buildSelectedSubmissionsPlan([
       {
         sourcePlatformId: "hepan",
-        filename: path.basename(queued.items[0].filePath),
+        filename: queued.items[0].filename,
         targetPlatformIds: ["hepan"],
         accountProfiles: { hepan: profile.accountProfileId },
       },
@@ -323,13 +323,13 @@ test("an account verification failure does not claim later selected platform ite
     const plan = workbench.buildSelectedSubmissionsPlan([
       {
         sourcePlatformId: "toutiao",
-        filename: path.basename(byPlatform.get("toutiao").filePath),
+        filename: byPlatform.get("toutiao").filename,
         targetPlatformIds: ["toutiao"],
         accountProfiles: { toutiao: toutiaoProfile.accountProfileId },
       },
       {
         sourcePlatformId: "lieju",
-        filename: path.basename(byPlatform.get("lieju").filePath),
+        filename: byPlatform.get("lieju").filename,
         targetPlatformIds: ["lieju"],
         accountProfiles: { lieju: liejuProfile.accountProfileId },
       },
@@ -430,7 +430,7 @@ test("an expired local claim can be reclaimed instead of reporting that the queu
     const plan = workbench.buildSelectedSubmissionsPlan([
       {
         sourcePlatformId: "toutiao",
-        filename: path.basename(queued.items[0].filePath),
+        filename: queued.items[0].filename,
         targetPlatformIds: ["toutiao"],
         accountProfiles: { toutiao: profile.accountProfileId },
       },

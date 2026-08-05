@@ -6,8 +6,8 @@
 const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   [
     "desktop/services/operational-content-submission-service.js",
-    2031,
-    "deep application owner for claim/outcome/cleanup ordering",
+    1689,
+    "remaining claim/outcome/cleanup ordering owner pending ticket 2",
   ],
   [
     "desktop/ipc/contracts/content-core-contracts.js",

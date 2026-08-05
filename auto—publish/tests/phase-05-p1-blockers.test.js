@@ -155,6 +155,10 @@ function productionFixture() {
     contentStore,
     submission,
     batch,
+    queueFiles() {
+      const filePath = path.join(inputRoot, "toutiao", batch.items[0].filename);
+      return { filePath, sidecarPath: filePath + ".submission.json" };
+    },
     removal,
     failAfterStaging: () => {
       failAfterStaging = true;
@@ -201,8 +205,8 @@ test("production queue action survives an OperationalStore write failure after f
         .items[0].status,
       "queued",
     );
-    assert.equal(fs.existsSync(fixture.batch.items[0].filePath), false);
-    assert.equal(fs.existsSync(fixture.batch.items[0].sidecarPath), false);
+    assert.equal(fs.existsSync(fixture.queueFiles().filePath), false);
+    assert.equal(fs.existsSync(fixture.queueFiles().sidecarPath), false);
     const operation = fixture.operationalStore.getSubmissionItemAction({
       operationId: `${first.transactionId}:queue:0`,
     });
@@ -227,8 +231,8 @@ test("production queue action survives an OperationalStore write failure after f
       fixture.contentStore.isArticleTrashed("client-1", "article-1"),
       true,
     );
-    assert.equal(fs.existsSync(fixture.batch.items[0].filePath), false);
-    assert.equal(fs.existsSync(fixture.batch.items[0].sidecarPath), false);
+    assert.equal(fs.existsSync(fixture.queueFiles().filePath), false);
+    assert.equal(fs.existsSync(fixture.queueFiles().sidecarPath), false);
   } finally {
     closeProductionFixture(fixture);
   }
@@ -246,8 +250,8 @@ test("a checkpoint interruption after moving only the main queue file resumes th
       token: preview.token,
     });
     assert.equal(first.status, "pending_auto_recovery");
-    assert.equal(fs.existsSync(fixture.batch.items[0].filePath), false);
-    assert.equal(fs.existsSync(fixture.batch.items[0].sidecarPath), true);
+    assert.equal(fs.existsSync(fixture.queueFiles().filePath), false);
+    assert.equal(fs.existsSync(fixture.queueFiles().sidecarPath), true);
     const second = fixture.removal.retryArticleRemovalTransaction({
       transactionId: first.transactionId,
       confirmed: true,
@@ -274,7 +278,7 @@ test("external queue mutation after a staged operation remains fail-closed", () 
       confirmed: true,
       token: preview.token,
     });
-    fs.writeFileSync(fixture.batch.items[0].filePath, "external mutation");
+    fs.writeFileSync(fixture.queueFiles().filePath, "external mutation");
     const second = fixture.removal.retryArticleRemovalTransaction({
       transactionId: first.transactionId,
       confirmed: true,
@@ -301,8 +305,8 @@ test("partial or unexplained absent queue pairs are not treated as completed", (
       const preview = fixture.removal.previewArticleRemovalImpact({
         selections: [{ clientId: "client-1", articleId: "article-1" }],
       });
-      fs.unlinkSync(fixture.batch.items[0].filePath);
-      if (remove === "both") fs.unlinkSync(fixture.batch.items[0].sidecarPath);
+      fs.unlinkSync(fixture.queueFiles().filePath);
+      if (remove === "both") fs.unlinkSync(fixture.queueFiles().sidecarPath);
       assert.throws(
         () =>
           fixture.removal.applyArticleRemovalImpact({
@@ -694,7 +698,7 @@ test("state_applied staging tampering and unexpected entries fail closed", () =>
       if (mutation === "extra")
         fs.writeFileSync(path.join(stage, "unexpected"), "tampered");
       if (mutation === "source")
-        fs.writeFileSync(fixture.batch.items[0].filePath, "source duplicate");
+        fs.writeFileSync(fixture.queueFiles().filePath, "source duplicate");
       const retry = fixture.removal.retryArticleRemovalTransaction({
         transactionId: first.transactionId,
         confirmed: true,
