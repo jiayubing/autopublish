@@ -24,6 +24,9 @@ jobs:
         working-directory: auto—publish
       - run: npm ci
         working-directory: auto—publish/media-workbench
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+        working-directory: auto—publish
       - name: required/test-discovery
         run: npm run test:discover
         working-directory: auto—publish
