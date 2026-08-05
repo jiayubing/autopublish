@@ -21,13 +21,14 @@ const {
 
 test("media publisher emits receipt-bound outcome without an order JSON writer", async () => {
   const publisher = createMediaPublisher({
+    thirdIdProvider: () => "system-submission-1",
     clientProvider: () => ({
       sendArticle: async (input) => {
         assert.deepEqual(input, {
           resourceId: "resource-1",
           title: "投稿标题",
           content: "<p>投稿正文</p>",
-          thirdId: "attempt-1",
+          thirdId: "system-submission-1",
         });
         return { data: { order_nid: "order-1" } };
       },

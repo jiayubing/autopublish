@@ -163,6 +163,19 @@ test("multiple active targets fail closed instead of creating an ambiguous queue
   assert.equal(workflow.locks.canEdit, false);
 });
 
+test("active website media orders participate in the single-target freeze", () => {
+  for (const supplierStatusCode of ["0", "1"]) {
+    const workflow = deriveArticleLifecycle(facts({
+      submissionItems: [{ articleId: "article-1", status: "queued", targetKey: "platform:p1" }],
+      orders: [{ articleId: "article-1", orderId: "order-1", mediaResourceId: "resource-1", supplierStatusCode }],
+    }));
+
+    assert.equal(workflow.stage, "failed");
+    assert.equal(workflow.reasonCodes.includes("MULTIPLE_ACTIVE_TARGETS"), true);
+    assert.deepEqual(workflow.locks, { canEdit: false, canQueue: false, canCancel: false, canTrash: false });
+  }
+});
+
 test("uncertain results remain frozen even when the article is otherwise complete", () => {
   const workflow = deriveArticleLifecycle(facts({
     submissionItems: [{ articleId: "article-1", status: "uncertain", targetKey: "platform:p1" }],

@@ -56,6 +56,27 @@ test("refreshMediaResources maps supplier resource fields into a closed DTO", as
   assert.equal(Object.hasOwn(result.resources[0], "resource_id"), false);
 });
 
+test("refreshMediaResources accepts a successful paged data envelope without a code field", async () => {
+  const adapter = createMediaSupplierAdapter({
+    client: {
+      refreshMediaResources: async () => ({
+        data: [{ resource_id: "resource-page-1", title: "分页媒体", available: false }],
+        total: 3,
+        hasNext: true,
+      }),
+    },
+  });
+
+  assert.deepEqual(await adapter.refreshMediaResources({ page: 2, pageSize: 1 }), {
+    kind: "resources_refreshed",
+    resources: [{ resourceId: "resource-page-1", name: "分页媒体", price: null, available: false, remarks: "" }],
+    page: 2,
+    pageSize: 1,
+    total: 3,
+    hasNext: true,
+  });
+});
+
 test("createOrder maps the canonical application input and returns an order only with explicit success and an order id", async () => {
   let received;
   const adapter = createMediaSupplierAdapter({
@@ -245,6 +266,35 @@ test("the application publisher can consume the supplier port without reading pr
   });
 });
 
+test("the application publisher refuses a missing global submission id before supplier transport", async () => {
+  let providerCalls = 0;
+  const publisher = createMediaPublisher({
+    supplierProvider: () => {
+      providerCalls += 1;
+      return { createOrder: async () => ({ kind: "order_created", orderId: "must-not-exist" }) };
+    },
+  });
+
+  const result = await publisher.publish({
+    articleId: "article-1",
+    attemptId: "attempt-1",
+    target: { kind: "media", mediaResourceId: "resource-1" },
+    title: "标题",
+    body: "<p>正文</p>",
+  });
+
+  assert.deepEqual(result, {
+    status: "failed",
+    error: {
+      code: "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED",
+      category: "validation",
+      retryability: "never",
+      userMessage: "媒体投稿缺少全局系统投稿标识，已阻止下单",
+    },
+  });
+  assert.equal(providerCalls, 0);
+});
+
 test("the application publisher keeps supplier identity-provider failures uncertain", async () => {
   let called = false;
   const publisher = createMediaPublisher({
@@ -332,7 +382,7 @@ test("the application resource service refreshes through the canonical supplier 
             resourceId: "resource-1",
             name: "媒体甲",
             price: 12.5,
-            available: true,
+            available: false,
             remarks: "备注",
           }],
           page: 1,
@@ -347,5 +397,6 @@ test("the application resource service refreshes through the canonical supplier 
 
   assert.equal(result.ok, true);
   assert.equal(writes[0].resources[0].resourceId, "resource-1");
+  assert.equal(writes[0].resources[0].available, false);
   assert.equal(writes[0].resources[0].remarks, "备注");
 });

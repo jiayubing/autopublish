@@ -34,7 +34,7 @@ class MediaSupplierRejectedError extends Error {
 }
 
 function parseResourceResponse(response, request) {
-  const payload = requireSuccess(response);
+  const payload = isResourcePageEnvelope(response) ? response : requireSuccess(response);
   const values = request || {};
   const entries = extractItems(payload);
   const resources = entries
@@ -42,12 +42,28 @@ function parseResourceResponse(response, request) {
     .filter((resource) => resource !== null);
   const page = positiveInteger(values.page, 1);
   const pageSize = positiveInteger(values.pageSize, resources.length || 20);
-  return {
+  const result = {
     resources,
     page,
     pageSize,
     total: nonNegativeInteger(firstValue(payload, ["total", "total_count", "totalCount"]), resources.length),
   };
+  const hasNext = firstValue(response, ["hasNext", "has_next", "hasMore", "has_more"])
+    ?? firstValue(payload, ["hasNext", "has_next", "hasMore", "has_more"]);
+  if (typeof hasNext === "boolean") result.hasNext = hasNext;
+  return result;
+}
+
+function isResourcePageEnvelope(response) {
+  return Boolean(
+    response &&
+      typeof response === "object" &&
+      !Array.isArray(response) &&
+      Array.isArray(response.data) &&
+      !hasExplicitFailure(response) &&
+      ["total", "total_count", "totalCount", "hasNext", "has_next", "hasMore", "has_more"]
+        .some((key) => Object.prototype.hasOwnProperty.call(response, key)),
+  );
 }
 
 function parseCreatedOrderResponse(response) {

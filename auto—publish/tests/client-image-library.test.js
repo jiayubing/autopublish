@@ -7,6 +7,7 @@ const path = require("node:path");
 const {
   createClientImageLibrary,
 } = require("../src/content/client-image-library");
+const { createClientImageScanCache } = require("../src/content/client-image-cache");
 
 function png(width, height) {
   const value = Buffer.alloc(57);
@@ -327,6 +328,65 @@ describe("client image library", function () {
       "client-one",
       "client-one",
     ]);
+  });
+
+  it("bounds multi-client scans with LRU eviction while keeping cache instances isolated", function () {
+    const clientThree = path.join(workspaceRoot, "clients", "client-three");
+    fs.mkdirSync(clientThree, { recursive: true });
+    fs.writeFileSync(
+      path.join(clientThree, "client.json"),
+      JSON.stringify({ id: "client-three", name: "Three" }),
+    );
+    const calls = [];
+    const scanner = {
+      scan: function (client) {
+        calls.push(client.clientId);
+        return {
+          clientId: client.clientId,
+          revision: "scan-" + String(calls.length),
+          scannedAt: "2026-08-06T00:00:00.000Z",
+          images: [],
+          diagnostics: [],
+          summary: {
+            directoriesVisited: 1,
+            filesExamined: 0,
+            supportedCandidates: 0,
+            availableImages: 0,
+            skippedFiles: 0,
+            diagnosticCount: 0,
+          },
+        };
+      },
+    };
+    const firstCache = createClientImageScanCache({ capacity: 2 });
+    const firstLibrary = createClientImageLibrary({
+      workspaceRoot,
+      scanner,
+      cache: firstCache,
+    });
+
+    firstLibrary.scan("client-one");
+    firstLibrary.scan("client-two");
+    firstLibrary.scan("client-one");
+    firstLibrary.scan("client-three");
+    assert.equal(firstCache.size, 2);
+    assert.deepEqual(calls, ["client-one", "client-two", "client-three"]);
+
+    firstLibrary.scan("client-two");
+    assert.deepEqual(calls, ["client-one", "client-two", "client-three", "client-two"]);
+
+    const secondCache = createClientImageScanCache({ capacity: 1 });
+    const secondLibrary = createClientImageLibrary({
+      workspaceRoot,
+      scanner,
+      cache: secondCache,
+    });
+    secondLibrary.scan("client-one");
+    assert.equal(firstCache.size, 2);
+    assert.equal(secondCache.size, 1);
+    assert.equal(firstLibrary.invalidate("client-three"), 1);
+    assert.equal(firstCache.size, 1);
+    assert.equal(secondCache.size, 1);
   });
 
   it("scales a large image directory without rescanning it for every task", function () {

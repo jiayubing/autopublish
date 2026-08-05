@@ -53,6 +53,19 @@ describe("media-resource-service", function () {
     );
   });
 
+  it("preserves an explicit supplier availability flag through the application page", function () {
+    const serviceWithSupplierState = createMediaResourceService({
+      resourceStore: {
+        getAll: function () {
+          return { resources: [{ resourceId: "closed", name: "暂停接单", available: false }] };
+        },
+      },
+    });
+
+    assert.equal(serviceWithSupplierState.normalizeResource({ resourceId: "closed", available: false }).available, false);
+    assert.equal(serviceWithSupplierState.getCachedResourcePage({ page: 1, pageSize: 10 }).items[0].available, false);
+  });
+
   it("pages cached resources with metadata", function () {
     const store = {
       getAll: function () {
