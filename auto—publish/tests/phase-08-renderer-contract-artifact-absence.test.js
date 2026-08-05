@@ -45,7 +45,7 @@ async function createFixture(
 test("renderer contract absence gate scans source, generated artifacts, and same-build ASAR", async () => {
   const fixture = await createFixture();
   const archiveFixture = await createFixture(
-    'export * as generation from "./generation";\n',
+    "const local = () => {}; export { local as generateContentArticle };\n",
   );
   try {
     const result = verifyRendererContractAbsence(fixture);
