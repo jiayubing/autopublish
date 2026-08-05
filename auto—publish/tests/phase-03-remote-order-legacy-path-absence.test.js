@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -9,7 +10,7 @@ const asar = require("@electron/asar");
 const root = path.resolve(__dirname, "..");
 const artifact = path.join(
   root,
-  "release-alpha",
+  "release-production-smoke",
   "win-unpacked",
   "resources",
   "app.asar",
@@ -40,6 +41,10 @@ function assertOwnersAbsent(source, label) {
     assert.equal(source.includes(owner), false, `${label}:${owner}`);
 }
 
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 test("source, import, export, and tests physically omit retired remote-order owners", () => {
   const roots = ["desktop", "src", "scripts", "media-workbench/src", "tests"];
   for (const file of roots.flatMap((relative) => sourceFilesUnder(path.join(root, relative)))) {
@@ -61,9 +66,16 @@ test("the current packaged ASAR physically omits retired remote-order owners", (
 test("the two packaged order owners exactly match current production source", () => {
   assert.ok(fs.existsSync(artifact), `current artifact missing: ${artifact}`);
   for (const relative of [operationalStoreRelative, mediaOrderServiceRelative]) {
+    const packaged = asar.extractFile(artifact, relative);
+    const source = fs.readFileSync(path.join(root, relative));
+    assert.equal(
+      sha256(packaged),
+      sha256(source),
+      `${relative}: packaged owner hash differs from current source`,
+    );
     assert.deepEqual(
-      asar.extractFile(artifact, relative),
-      fs.readFileSync(path.join(root, relative)),
+      packaged,
+      source,
       relative,
     );
   }

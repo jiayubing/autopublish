@@ -61,12 +61,26 @@ describe("renderer content client switching", function() {
         counts: { total: 1, succeeded: 1, failed: 0, pending: 0, interrupted: 0, cancelled: 0 },
       };
       const platforms = [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }];
+      const pendingWorkflow = (articleId) => ({
+        articleId,
+        workflow: {
+          version: 1,
+          stage: "pending_submission",
+          label: "待投稿",
+          primaryAction: "queue",
+          allowedBulkActions: ["queue"],
+          locks: { canEdit: true, canQueue: true, canCancel: false, canTrash: true },
+          publicationSummary: { status: "not_submitted", label: "未投稿", records: 0, published: 0, uncertain: false },
+          targetFacts: [],
+        },
+      });
       const content = {
         listClients: () => ok({ clients }),
         listGeneratedArticles: (clientId) => ok({ articles: state.articles[clientId] || [] }),
         getArticleManagementSnapshot: ({ clientId }) => {
           const batches = state.batches[clientId] || [];
-          return ok({ clientId, revision: 1, articles: state.articles[clientId] || [], trash: [], submissionBatches: batches, cancellationPlans: batches.filter((batch) => batch.status === "queued").map((batch) => ({ batchId: batch.id, clientId, action: "cancel", planId: `plan-${batch.id}-${batch.status}`, fingerprint: batch.status, allowedCount: batch.items.length, blockedCount: 0, items: batch.items.map((item) => ({ articleId: item.articleId, targetPlatformId: item.targetPlatformId, action: "cancel", allowed: true })) })), publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: platforms, workflowItems: [], publicationSummaryItems: [] });
+          const workflowItems = (state.articles[clientId] || []).map((item) => pendingWorkflow(item.id));
+          return ok({ clientId, revision: 1, articles: state.articles[clientId] || [], trash: [], submissionBatches: batches, cancellationPlans: batches.filter((batch) => batch.status === "queued").map((batch) => ({ batchId: batch.id, clientId, action: "cancel", planId: `plan-${batch.id}-${batch.status}`, fingerprint: batch.status, allowedCount: batch.items.length, blockedCount: 0, items: batch.items.map((item) => ({ articleId: item.articleId, targetPlatformId: item.targetPlatformId, action: "cancel", allowed: true })) })), publicationRecords: [], attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: platforms, workflowItems, publicationSummaryItems: workflowItems.map((item) => ({ articleId: item.articleId, summary: item.workflow.publicationSummary })) });
         },
         listSubmissionPlatforms: () => ok({ platforms }),
         listSubmissionBatches: ({ clientId }) => ok({ batches: state.batches[clientId] || [] }),
