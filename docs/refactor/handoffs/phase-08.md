@@ -1,5 +1,15 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 14 执行交接（2026-08-05，功能、故障与安全最终验收）
+
+- 状态：Ticket 14 `IN_PROGRESS`；源码功能/故障/安全矩阵与 Electron boundary 自动项通过，但完整 root suite 仍有 4 个可归属的制品前置失败。Phase 8 保持 `IN_PROGRESS`，正式 release 保持 `BLOCKED_RELEASE`。
+- 证据：完整 ledger、逐 case traceability 与安全摘要见 [`phase-08-ticket-14-functional-fault-security.md`](phase-08-ticket-14-functional-fault-security.md)，机器可读的自包含 canonical manifest 见 [`phase-08-ticket-14.json`](../phase-08-ticket-14.json)。
+- 自动结果：root `1605/1609` pass、`4` artifact failures、`0` skip；Auth `49/49`；links `184/184`；media transport `9/9`；diagnostics `40/40`；architecture `74/74`；Phase 8 gates `3/3`；Electron focus `14/14`；packaging `48/48`；release evidence `6/6`。Gate capability `109/109` reachable，legacy source/archive `0/0`，archive 状态 `NOT_APPLICABLE`。
+- 制品失败：3 个物理 alpha archive 断言为 `ASSERTION_FAILURE`（归一化 owner category `ARCHIVE_MISSING`），另有 1 个 `PLAYWRIGHT_NODE_UNAVAILABLE`；4 项逐条记录测试文件/名称/行号，均为自动 `PENDING_ARTIFACT`、不需要人工复核，转交 Ticket 15，不在 Ticket 14 添加 wrapper 或伪造通过。
+- 工具链：lint、main/Renderer/bridge typecheck、format、Renderer build `2171` modules、preload build、`git diff --check` 全部通过；依赖只从本机 cache 离线安装，未访问真实 workspace/账号/外部平台。
+- 人工门：真实账号/签名登录、媒体 TLS/DNS/redirect、proxy source、签名、installer、external E2E、Auth RPO/RTO/backup/recovery drill 继续 `PENDING_HUMAN`；不标记为通过。
+- Git：Ticket 14 证据 manifest、专项交接和本节已 stage 以满足 canonical evidence 的 Git tracking 要求；未 commit、push 或创建 PR。历史 `docs/review/` 文档和 `.scratch` 计划文件未修改。
+
 ## Ticket 13 执行交接（2026-08-05，旧测试、依赖、构建残余与门禁）
 
 - 状态：Ticket 13 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。本轮只完成 cleanup 与自动化验收，不批准后续功能、迁移容量或人工 release gates。

@@ -1,0 +1,667 @@
+{
+  "schemaVersion": 1,
+  "ticket": "14",
+  "status": "IN_PROGRESS",
+  "sourceState": "DETACHED_HEAD",
+  "head": "fd47958bcac8296bb76b6c89a58c70e9aee87157",
+  "fixtureMode": "offline-synthetic-only",
+  "network": "disabled",
+  "externalCalls": false,
+  "aggregateCountsAreNonAdditive": true,
+  "canonicalEvidence": {
+    "source": "docs/refactor/phase-08-ticket-14.json",
+    "format": "self-contained-safe-summary",
+    "summaryHashAlgorithm": "sha256(id|tests|passed|failed|skipped|status)",
+    "exitCodeMeaning": "0 means the recorded command passed; 1 means the recorded command is pending an explicit artifact prerequisite",
+    "trackingRequirement": "This manifest and its handoff must be Git-tracked before Ticket 14 acceptance; the current worktree records them in the index but does not commit them."
+  },
+  "suites": [
+    {
+      "id": "root",
+      "category": "functional-fault-security",
+      "owner": "root test runner",
+      "status": "PENDING_ARTIFACT",
+      "tests": 1609,
+      "passed": 1605,
+      "failed": 4,
+      "skipped": 0,
+      "fixture": "synthetic source fixtures plus artifact-required assertions",
+      "command": "npm test",
+      "exitCode": 1,
+      "summaryHash": "d28cefbcadba08541bcea8eedfad24ff6339684979d9386fd795d4cd4b5f267c"
+    },
+    {
+      "id": "auth",
+      "category": "security-fault-recovery",
+      "owner": "AuthDomain and repository",
+      "status": "PASSED",
+      "tests": 49,
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "isolated Auth SQLite and in-memory fixtures",
+      "command": "npm run test:auth",
+      "exitCode": 0,
+      "summaryHash": "e04f1f5c20cfea4a320918069a04f615dc943ebdb055c8ed7b2fc66f4ea14240"
+    },
+    {
+      "id": "renderer-account-switch",
+      "category": "security-functional",
+      "owner": "Renderer scope and durable account binding",
+      "status": "PASSED",
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "temporary Renderer fixture and isolated durable queue fixture",
+      "command": "node --test tests/renderer-content-client-switch.test.js tests/phase-03-content-account-binding-execution.test.js",
+      "exitCode": 0,
+      "summaryHash": "5c8fae7364cec4286d38be3e02c262440affa31b3bbb7c49115d001272131614"
+    },
+    {
+      "id": "links",
+      "category": "functional-security",
+      "owner": "content path policy and stores",
+      "status": "PASSED",
+      "tests": 184,
+      "passed": 184,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "temporary workspace with symlink/junction/path fixtures",
+      "command": "npm run test:links",
+      "exitCode": 0,
+      "summaryHash": "0d041cb594a67b98c929814a73a19110d6a829636be24604013c55f91fe1e010"
+    },
+    {
+      "id": "media-transport",
+      "category": "security-fault",
+      "owner": "media transport boundary",
+      "status": "PASSED",
+      "tests": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "fake HTTP/TLS/redirect/timeout transport",
+      "command": "npm run test:media-transport",
+      "exitCode": 0,
+      "summaryHash": "1d9cf074c5460ebe66c16105f506c20c1352e9a7463fc2398d18cd4e8f66fc4e"
+    },
+    {
+      "id": "diagnostics",
+      "category": "fault-security",
+      "owner": "diagnostic schema, sinks, and runtime resolver",
+      "status": "PASSED",
+      "tests": 40,
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "temporary diagnostic directories and fake runtime tools",
+      "command": "node --test tests/structured-diagnostics.test.js tests/runtime-diagnostics.test.js tests/runtime-diagnostics-ipc.test.js tests/phase-06-legacy-path-absence.test.js tests/phase-08-diagnostics-artifact-toolchain.test.js",
+      "exitCode": 0,
+      "summaryHash": "2739e5645abc00724a41d85133b2533b54a1919fd280daab94f7264d5822a917"
+    },
+    {
+      "id": "phase-08-gates",
+      "category": "architecture-security",
+      "owner": "Phase 8 gate verifier",
+      "status": "PASSED",
+      "tests": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "source tree and fresh temporary package fixtures",
+      "command": "npm run test:phase-08:gates",
+      "exitCode": 0,
+      "summaryHash": "f36af44affb231a39d4c71e260bc73d10383e70100323ac3e0b1ba89ad7bd1b5"
+    },
+    {
+      "id": "architecture",
+      "category": "functional-fault-architecture",
+      "owner": "domain/application and operational owners",
+      "status": "PASSED",
+      "tests": 74,
+      "passed": 74,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "fake publishers, SQLite fixtures, and temporary lifecycle roots",
+      "command": "node --test tests/phase-03-content-publication-chain.test.js tests/phase-03-publication-workflow.test.js tests/phase-03-media-publication-workflow.test.js tests/phase-03-operational-content-submission.test.js tests/phase-04-platform-run.test.js tests/phase-04-platform-account-projection.test.js tests/phase-08-content-lifecycle.test.js tests/phase-08-publication-submission-orchestration.test.js tests/phase-08-operational-store-internals.test.js tests/generation-submission-handoff.test.js tests/generation-submission-handoff-ipc.test.js tests/phase-05-trash-confirmation.test.js tests/article-removal-recovery-scheduler.test.js",
+      "exitCode": 0,
+      "summaryHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628"
+    },
+    {
+      "id": "electron-focus",
+      "category": "security-functional",
+      "owner": "Electron main/preload and Renderer boundary",
+      "status": "PASSED",
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "temporary Electron app, bundled preload, and Renderer fixture",
+      "command": "set RUN_ELECTRON_FOCUS_TESTS=1 && node --test tests/electron-security.test.js tests/production-preload-sandbox.electron.test.js tests/renderer-settings-window-focus.electron.test.js tests/renderer-harness-lock.test.js tests/phase-08-renderer-contract-artifact-absence.test.js tests/phase-08-renderer-contract-layout.test.js",
+      "exitCode": 0,
+      "summaryHash": "f5912bdc3aeda18c58c67a66112fed74d15a7c75375f86e9856e05b6b89ff9f3"
+    },
+    {
+      "id": "packaging",
+      "category": "security-artifact-contract",
+      "owner": "package boundary and artifact verifier",
+      "status": "PASSED",
+      "tests": 48,
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "temporary ASAR and package directory fixtures",
+      "command": "npm run test:packaging",
+      "exitCode": 0,
+      "summaryHash": "f69be87b432990f0a13eb0db65cea63047d5eb3a2efcdfd8ee30bef0b2b42712"
+    },
+    {
+      "id": "release-evidence",
+      "category": "security-evidence-contract",
+      "owner": "release evidence contract and checklist validator",
+      "status": "PASSED",
+      "tests": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "fixture": "synthetic artifact metadata and checklist fixtures",
+      "command": "npm run test:release-evidence",
+      "exitCode": 0,
+      "summaryHash": "5fb133937383e8e8e4d93b53a6558a7946047f22185aa4346c3b4192a7de1933"
+    }
+  ],
+  "toolchain": [
+    { "id": "lint", "status": "PASSED", "fixture": "repository source" },
+    { "id": "typecheck-main", "status": "PASSED", "fixture": "main TypeScript config" },
+    { "id": "typecheck-renderer", "status": "PASSED", "fixture": "Renderer TypeScript config" },
+    { "id": "typecheck-bridge", "status": "PASSED", "fixture": "strict bridge TypeScript config" },
+    { "id": "format-check", "status": "PASSED", "fixture": "configured source and test set" },
+    { "id": "build-renderer", "status": "PASSED", "fixture": "offline Vite build" },
+    { "id": "build-preload", "status": "PASSED", "fixture": "offline preload bundle" },
+    { "id": "git-diff-check", "status": "PASSED", "fixture": "working tree" }
+  ],
+  "discovery": {
+    "status": "PASSED",
+    "testFiles": 238,
+    "jsFiles": 224,
+    "mjsFiles": 14,
+    "fixture": "repository test inventory",
+    "command": "node scripts/create-test-discovery-evidence.js --output build/evidence/ticket-14-discovery.json",
+    "exitCode": 0,
+    "extensions": [".test.js", ".test.mjs"],
+    "sha256": "fe6b79849f00e3376dc82908c24308cc0bad6fcf1e569eb7fd8999144baa0072"
+  },
+  "gateSummary": {
+    "status": "PASSED",
+    "capabilityCount": 109,
+    "reachableCount": 109,
+    "violations": 0,
+    "legacySourceMatches": 0,
+    "legacyArchiveMatches": 0,
+    "archiveStatus": "NOT_APPLICABLE",
+    "checks": {
+      "dependencyDirection": "PASSED",
+      "operationalStoreBoundary": "PASSED",
+      "uniqueOwnersAndWriters": "PASSED",
+      "capabilityReachability": "PASSED",
+      "legacyAbsence": "PASSED",
+      "moduleSize": "PASSED",
+      "trackedGeneratedOutput": "PASSED",
+      "packageBoundary": "NOT_APPLICABLE"
+    },
+    "command": "node scripts/verify-phase-08-gates.js --output build/evidence/ticket-14-gates.json",
+    "exitCode": 0,
+    "sha256": "4eb8642a7536eafe06f1d239ec7973e5c592db44fd4a16be6635993d8b23e23c"
+  },
+  "legacySummary": {
+    "status": "PASSED",
+    "sourceMatches": 0,
+    "archiveMatches": 0,
+    "archiveStatus": "NOT_APPLICABLE",
+    "archiveEntries": 0,
+    "command": "node scripts/verify-legacy-absence.js --output build/evidence/ticket-14-legacy.json",
+    "exitCode": 0,
+    "sha256": "046600bde55d62dae329b1e1981f0e4e38e9d160bd7cc7ec8a70807ee6e21a22"
+  },
+  "failureNormalization": {
+    "artifactPrerequisite": "The three physical ASAR tests assert artifact existence and therefore report ASSERTION_FAILURE; ARCHIVE_MISSING is only the normalized owner category.",
+    "runtimePrerequisite": "PLAYWRIGHT_NODE_UNAVAILABLE is already the stable runtime diagnostic code and is not normalized."
+  },
+  "failures": [
+    {
+      "id": "alpha-archive-remote-order-absence",
+      "owner": "production archive verifier",
+      "category": "artifact-precondition",
+      "code": "ASSERTION_FAILURE",
+      "normalizedCode": "ARCHIVE_MISSING",
+      "testFile": "auto—publish/tests/phase-03-remote-order-legacy-path-absence.test.js",
+      "status": "PENDING_ARTIFACT",
+      "testName": "the current packaged ASAR physically omits retired remote-order owners",
+      "line": 51,
+      "fixture": "source-only worktree without an alpha package",
+      "persistentFact": "the required packaged archive is absent",
+      "restartResult": "PENDING_ARTIFACT",
+      "manualReview": "NOT_REQUIRED",
+      "followUp": "Ticket 15"
+    },
+    {
+      "id": "alpha-archive-remote-order-parity",
+      "owner": "production archive verifier",
+      "category": "artifact-precondition",
+      "code": "ASSERTION_FAILURE",
+      "normalizedCode": "ARCHIVE_MISSING",
+      "testFile": "auto—publish/tests/phase-03-remote-order-legacy-path-absence.test.js",
+      "status": "PENDING_ARTIFACT",
+      "testName": "the two packaged order owners exactly match current production source",
+      "line": 61,
+      "fixture": "source-only worktree without an alpha package",
+      "persistentFact": "the required packaged archive is absent",
+      "restartResult": "PENDING_ARTIFACT",
+      "manualReview": "NOT_REQUIRED",
+      "followUp": "Ticket 15"
+    },
+    {
+      "id": "alpha-archive-media-remove-draft-absence",
+      "owner": "production archive verifier",
+      "category": "artifact-precondition",
+      "code": "ASSERTION_FAILURE",
+      "normalizedCode": "ARCHIVE_MISSING",
+      "testFile": "auto—publish/tests/phase-06-capability-specific-inventory.test.js",
+      "status": "PENDING_ARTIFACT",
+      "testName": "source and current ASAR physically omit the retired media.removeDraft path",
+      "line": 56,
+      "fixture": "source-only worktree without an alpha package",
+      "persistentFact": "the required packaged archive is absent",
+      "restartResult": "PENDING_ARTIFACT",
+      "manualReview": "NOT_REQUIRED",
+      "followUp": "Ticket 15"
+    },
+    {
+      "id": "packaged-runtime",
+      "owner": "runtime diagnostics and packaged runtime resolver",
+      "category": "artifact",
+      "code": "PLAYWRIGHT_NODE_UNAVAILABLE",
+      "testFile": "auto—publish/tests/alpha-smoke-verifier.test.js",
+      "status": "PENDING_ARTIFACT",
+      "testName": "alpha smoke verifier initializes a disposable workspace and checks diagnostics",
+      "line": 6,
+      "fixture": "source-only worktree without bundled runtime tools",
+      "persistentFact": "the bundled Playwright Node is absent",
+      "restartResult": "PENDING_ARTIFACT",
+      "manualReview": "NOT_REQUIRED",
+      "followUp": "Ticket 15"
+    }
+  ],
+  "caseMatrix": [
+    {
+      "id": "functional-content-generation-queue",
+      "category": "functional",
+      "owner": "ContentStore, GenerationBatchStore, and submission owner",
+      "command": "node --test tests/phase-03-content-publication-chain.test.js",
+      "tests": [
+        "content queue execution claims and completes its original OperationalStore item",
+        "an account verification failure does not claim later selected platform items",
+        "an expired local claim can be reclaimed instead of reporting that the queue is no longer executable"
+      ],
+      "faultPoint": "validation, account verification, and expired local claim",
+      "stableCodes": ["OPERATIONAL_BATCH_ITEM_NOT_EXECUTABLE"],
+      "durableFact": "article identity, queue item, claim, and completion state",
+      "restartResult": "store snapshot is reconstructed by the application owner",
+      "fixture": "synthetic clients, articles, templates, and queue items",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-03-content-publication-chain.test.js", "testName": "content queue execution claims and completes its original OperationalStore item" },
+        { "testFile": "auto—publish/tests/phase-03-content-publication-chain.test.js", "testName": "an account verification failure does not claim later selected platform items" },
+        { "testFile": "auto—publish/tests/phase-03-content-publication-chain.test.js", "testName": "an expired local claim can be reclaimed instead of reporting that the queue is no longer executable" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "functional-fake-publisher-contracts",
+      "category": "functional",
+      "owner": "PublicationWorkflow and publisher registry",
+      "command": "node --test tests/phase-03-publication-workflow.test.js tests/phase-03-media-publication-workflow.test.js",
+      "tests": [
+        "PublicationWorkflow durably reserves before publishing and commits an evidence-bound outcome",
+        "PublicationWorkflow converts a publisher crash to uncertain and never claims post-processing before outcome persistence",
+        "media publisher emits receipt-bound outcome without an order JSON writer",
+        "media submission service creates an OperationalStore batch and delegates each target to PublicationWorkflow"
+      ],
+      "faultPoint": "fake publisher result, crash, and media receipt",
+      "stableCodes": ["REMOTE_FAILED", "UNCERTAIN_OUTCOME"],
+      "durableFact": "publication intent, attempt, outcome/evidence, and attention are persisted",
+      "restartResult": "recovery reads the durable intent and does not infer success from a toast",
+      "fixture": "fake platform publishers and isolated OperationalStore",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-03-publication-workflow.test.js", "testName": "PublicationWorkflow durably reserves before publishing and commits an evidence-bound outcome" },
+        { "testFile": "auto—publish/tests/phase-03-publication-workflow.test.js", "testName": "PublicationWorkflow converts a publisher crash to uncertain and never claims post-processing before outcome persistence" },
+        { "testFile": "auto—publish/tests/phase-03-media-publication-workflow.test.js", "testName": "media publisher emits receipt-bound outcome without an order JSON writer" },
+        { "testFile": "auto—publish/tests/phase-03-media-publication-workflow.test.js", "testName": "media submission service creates an OperationalStore batch and delegates each target to PublicationWorkflow" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "functional-target-identity-and-duplicate-protection",
+      "category": "functional",
+      "owner": "publication target and submission aggregate",
+      "command": "node --test tests/phase-08-publication-submission-orchestration.test.js tests/phase-03-operational-content-submission.test.js tests/phase-04-platform-account-projection.test.js",
+      "tests": [
+        "duplicate media publication is rejected before creating a zombie batch",
+        "generic content queue lists only account-bound platform targets",
+        "platform submission accepts the durable profile mapping and forwards it unchanged"
+      ],
+      "faultPoint": "duplicate request and account/resource target mismatch",
+      "stableCodes": ["PUBLICATION_DUPLICATE", "LEGACY_UNKNOWN_ACCOUNT"],
+      "durableFact": "account profile and media resource identity remain in the target aggregate",
+      "restartResult": "retry reuses the same target identity and duplicate guard",
+      "fixture": "multi-account and media-resource synthetic targets",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-08-publication-submission-orchestration.test.js", "testName": "duplicate media publication is rejected before creating a zombie batch" },
+        { "testFile": "auto—publish/tests/phase-03-operational-content-submission.test.js", "testName": "generic content queue lists only account-bound platform targets" },
+        { "testFile": "auto—publish/tests/phase-04-platform-account-projection.test.js", "testName": "platform submission accepts the durable profile mapping and forwards it unchanged" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "functional-handoff-ordering-trash",
+      "category": "functional",
+      "owner": "generation handoff and ArticleRemovalService",
+      "command": "node --test tests/generation-submission-handoff.test.js tests/generation-submission-handoff-ipc.test.js tests/phase-05-trash-confirmation.test.js tests/phase-08-content-lifecycle.test.js",
+      "tests": [
+        "generation submission handoff",
+        "generation submission handoff IPC",
+        "invalidates all same-tombstone confirmations after the first successful delete",
+        "phase 08 content lifecycle seams"
+      ],
+      "faultPoint": "handoff validation, ordering, token reuse, and pair recovery",
+      "stableCodes": ["OPERATIONAL_BATCH_ITEM_NOT_EXECUTABLE", "ARTICLE_STORE_BUSY"],
+      "durableFact": "handoff link, tombstone token, article pair, and ordering state",
+      "restartResult": "journal/recovery owner rebuilds state without a second writer",
+      "fixture": "temporary content workspace and fake submission batch",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/generation-submission-handoff.test.js", "testName": "previews and commits 50 successful articles across two clients with one confirmation" },
+        { "testFile": "auto—publish/tests/generation-submission-handoff-ipc.test.js", "testName": "rejects renderer paths and unknown fields before invoking the service" },
+        { "testFile": "auto—publish/tests/phase-05-trash-confirmation.test.js", "testName": "invalidates all same-tombstone confirmations after the first successful delete" },
+        { "testFile": "auto—publish/tests/phase-08-content-lifecycle.test.js", "testName": "recovers a trash move journal after a process stops between renames" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "fault-remote-call-and-uncertain-outcome",
+      "category": "fault-recovery",
+      "owner": "PublicationWorkflow and platform adapter",
+      "command": "node --test tests/phase-03-publication-workflow.test.js tests/phase-08-publication-submission-orchestration.test.js",
+      "tests": [
+        "PublicationWorkflow converts a publisher crash to uncertain and never claims post-processing before outcome persistence",
+        "PublicationWorkflow recovery turns a stranded remote intent into a blocking uncertain record",
+        "startup recovery closes a stranded submission claim with its publication intent"
+      ],
+      "faultPoint": "remote call before/after handoff and weak remote evidence",
+      "stableCodes": ["REMOTE_CALL_FAILED", "REMOTE_FAILED", "UNCERTAIN_OUTCOME"],
+      "durableFact": "remote intent and outcome are written before archive/post-processing decisions",
+      "restartResult": "stranded intent becomes a durable blocking attention item",
+      "fixture": "fake publisher crash/disconnect and temporary OperationalStore",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-03-publication-workflow.test.js", "testName": "PublicationWorkflow converts a publisher crash to uncertain and never claims post-processing before outcome persistence" },
+        { "testFile": "auto—publish/tests/phase-03-publication-workflow.test.js", "testName": "PublicationWorkflow recovery turns a stranded remote intent into a blocking uncertain record" },
+        { "testFile": "auto—publish/tests/phase-08-publication-submission-orchestration.test.js", "testName": "startup recovery closes a stranded submission claim with its publication intent" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "fault-timeout-stop-start-and-old-message",
+      "category": "fault-recovery",
+      "owner": "PlatformRun and worker lifecycle",
+      "command": "node --test tests/phase-04-platform-run.test.js tests/phase-08-publication-submission-orchestration.test.js",
+      "tests": [
+        "PlatformRun rejects a replacement until a remote-started child has terminated and ignores old events",
+        "PlatformRun keeps the watchdog gate closed until its child exits",
+        "PlatformRun survives 100 stop-start interleavings without accepting an old run",
+        "real platform stop and pause do not claim the next submission item"
+      ],
+      "faultPoint": "timeout, stop/start race, and stale worker message",
+      "stableCodes": ["PLATFORM_WORKER_WATCHDOG_TIMEOUT", "STOP_REQUESTED", "PLATFORM_RUN_ACTIVE"],
+      "durableFact": "run identity, stop fence, and claim ownership",
+      "restartResult": "old events/finally paths cannot mutate the replacement run",
+      "fixture": "fake child processes and synthetic platform runs",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-04-platform-run.test.js", "testName": "PlatformRun rejects a replacement until a remote-started child has terminated and ignores old events" },
+        { "testFile": "auto—publish/tests/phase-04-platform-run.test.js", "testName": "PlatformRun keeps the watchdog gate closed until its child exits" },
+        { "testFile": "auto—publish/tests/phase-04-platform-run.test.js", "testName": "PlatformRun survives 100 stop-start interleavings without accepting an old run" },
+        { "testFile": "auto—publish/tests/phase-08-publication-submission-orchestration.test.js", "testName": "real platform stop and pause do not claim the next submission item" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "fault-archive-removal-and-recovery-runner",
+      "category": "fault-recovery",
+      "owner": "submission post-processing and ArticleRemovalService",
+      "command": "node --test tests/phase-08-publication-submission-orchestration.test.js tests/phase-08-content-lifecycle.test.js tests/article-removal-recovery-scheduler.test.js",
+      "tests": [
+        "ordinary archive error code survives post-processing restart",
+        "latest retry error code overrides stale auto-trash output after restart",
+        "blocked auto-trash remains attention-visible and durable across restart",
+        "serializes recovery and prevents an in-flight recovery from continuing IO after dispose"
+      ],
+      "faultPoint": "archive failure, removal retry, duplicate runner, and dispose",
+      "stableCodes": ["PUBLISHED_ARCHIVE_CONFLICT", "REMOVAL_RETRY_FAILED", "ARTICLE_REMOVAL_RECOVERY_FAILED", "ARTICLE_STORE_BUSY"],
+      "durableFact": "attention, journal, lock identity, and article pair remain coherent",
+      "restartResult": "retry/reconcile is bounded and fails closed on unknown ownership",
+      "fixture": "temporary article files, journals, locks, and fake submission state",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-08-publication-submission-orchestration.test.js", "testName": "ordinary archive error code survives post-processing restart" },
+        { "testFile": "auto—publish/tests/phase-08-publication-submission-orchestration.test.js", "testName": "latest retry error code overrides stale auto-trash output after restart" },
+        { "testFile": "auto—publish/tests/phase-08-publication-submission-orchestration.test.js", "testName": "blocked auto-trash remains attention-visible and durable across restart" },
+        { "testFile": "auto—publish/tests/article-removal-recovery-scheduler.test.js", "testName": "serializes recovery and prevents an in-flight recovery from continuing IO after dispose" }
+      ],
+      "evidenceHash": "97c8f2c0246c4477a9dd2b72924c284d64439b62fac277f124f9cf7205ab3628",
+      "evidenceScope": "architecture suite summary"
+    },
+    {
+      "id": "fault-sqlite-wal-disk-and-corruption",
+      "category": "fault-recovery",
+      "owner": "OperationalStore, Auth repository, and diagnostic sinks",
+      "command": "npm run test:auth && node --test tests/structured-diagnostics.test.js tests/runtime-diagnostics.test.js tests/runtime-diagnostics-ipc.test.js tests/phase-06-legacy-path-absence.test.js tests/phase-08-diagnostics-artifact-toolchain.test.js",
+      "tests": [
+        "auth backup, restore and migration safety",
+        "auth health semantics",
+        "diagnostic startup cleanup returns a safe failure owner without exposing the source error"
+      ],
+      "faultPoint": "transaction rollback, WAL snapshot, corruption, disk/permission failure",
+      "stableCodes": ["DIAGNOSTIC_FILE_PERMISSION_DENIED", "MIGRATION_CLI_UNAVAILABLE"],
+      "durableFact": "rollback/recovery facts and safe diagnostic records are persisted",
+      "restartResult": "reopen/recovery does not create a second business state",
+      "fixture": "isolated SQLite files, WAL writers, and temporary diagnostic roots",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/auth-server/tests/backup-restore-migration.test.js", "testName": "backs up a source and reopens the destination for structured verification" },
+        { "testFile": "auto—publish/auth-server/tests/health-semantics.test.js", "testName": "keeps liveness independent from a broken repository" },
+        { "testFile": "auto—publish/tests/phase-08-diagnostics-artifact-toolchain.test.js", "testName": "diagnostic startup cleanup returns a safe failure owner without exposing the source error" }
+      ],
+      "evidenceSuites": [
+        { "id": "auth", "summaryHash": "e04f1f5c20cfea4a320918069a04f615dc943ebdb055c8ed7b2fc66f4ea14240" },
+        { "id": "diagnostics", "summaryHash": "2739e5645abc00724a41d85133b2533b54a1919fd280daab94f7264d5822a917" }
+      ],
+      "evidenceScope": "Auth and diagnostics suite summaries"
+    },
+    {
+      "id": "fault-runtime-and-artifact-prerequisite",
+      "category": "fault-recovery",
+      "owner": "packaged runtime resolver and archive verifier",
+      "command": "npm test",
+      "tests": [
+        "alpha smoke verifier initializes a disposable workspace and checks diagnostics",
+        "the current packaged ASAR physically omits retired remote-order owners",
+        "the two packaged order owners exactly match current production source",
+        "source and current ASAR physically omit the retired media.removeDraft path"
+      ],
+      "faultPoint": "source-only worktree has no packaged ASAR or bundled runtime",
+      "stableCodes": ["ASSERTION_FAILURE", "PLAYWRIGHT_NODE_UNAVAILABLE"],
+      "durableFact": "the artifact prerequisite is absent and no production fact is inferred",
+      "restartResult": "PENDING_ARTIFACT",
+      "fixture": "source-only worktree",
+      "status": "PENDING_ARTIFACT",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/alpha-smoke-verifier.test.js", "testName": "alpha smoke verifier initializes a disposable workspace and checks diagnostics" },
+        { "testFile": "auto—publish/tests/phase-03-remote-order-legacy-path-absence.test.js", "testName": "the current packaged ASAR physically omits retired remote-order owners" },
+        { "testFile": "auto—publish/tests/phase-03-remote-order-legacy-path-absence.test.js", "testName": "the two packaged order owners exactly match current production source" },
+        { "testFile": "auto—publish/tests/phase-06-capability-specific-inventory.test.js", "testName": "source and current ASAR physically omit the retired media.removeDraft path" }
+      ],
+      "evidenceHash": "d28cefbcadba08541bcea8eedfad24ff6339684979d9386fd795d4cd4b5f267c",
+      "evidenceScope": "root suite summary"
+    },
+    {
+      "id": "security-electron-preload-ipc",
+      "category": "security",
+      "owner": "Electron main, preload, and typed IPC boundary",
+      "command": "set RUN_ELECTRON_FOCUS_TESTS=1 && node --test tests/electron-security.test.js tests/production-preload-sandbox.electron.test.js tests/renderer-settings-window-focus.electron.test.js",
+      "tests": [
+        "Electron security boundary",
+        "production preload sandbox boundary",
+        "Electron renderer settings focus regression"
+      ],
+      "faultPoint": "navigation, window creation, preload exposure, renderer auth gate",
+      "stableCodes": [],
+      "durableFact": "sandbox/isolation and safe API surface are enforced by source and real bundled preload",
+      "restartResult": "NOT_APPLICABLE",
+      "fixture": "temporary Electron app and Renderer fixture",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/electron-security.test.js", "testName": "permits navigation only to the exact packaged renderer entry" },
+        { "testFile": "auto—publish/tests/production-preload-sandbox.electron.test.js", "testName": "routes desktop and package startup through the sandbox-compatible preload bundle" },
+        { "testFile": "auto—publish/tests/renderer-settings-window-focus.electron.test.js", "testName": "keeps first save, confirmation cancel, success, failure, and clear immediately interactive" }
+      ],
+      "evidenceHash": "f5912bdc3aeda18c58c67a66112fed74d15a7c75375f86e9856e05b6b89ff9f3",
+      "evidenceScope": "Electron focus suite summary"
+    },
+    {
+      "id": "security-media-transport",
+      "category": "security",
+      "owner": "media transport boundary",
+      "command": "npm run test:media-transport",
+      "tests": [
+        "unconfirmed HTTP is rejected before API key or multipart body creation",
+        "all 3xx responses are rejected without following Location",
+        "TLS certificate and hostname failures have stable transport diagnostics",
+        "connect and read timeout failures remain distinguishable",
+        "settings projection exposes only safe transport state and a masked key"
+      ],
+      "faultPoint": "HTTP confirmation, redirect, TLS, connect/read timeout, DTO projection",
+      "stableCodes": ["MEDIA_HTTP_CONFIRMATION_REQUIRED", "MEDIA_REDIRECT_REJECTED", "MEDIA_TLS_CERTIFICATE_ERROR", "MEDIA_TLS_HOSTNAME_MISMATCH", "MEDIA_CONNECT_TIMEOUT", "MEDIA_READ_TIMEOUT"],
+      "durableFact": "endpoint consent, transport category, and masked settings projection",
+      "restartResult": "NOT_APPLICABLE",
+      "fixture": "fake HTTP/TLS/redirect/timeout transport",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/phase-04-media-transport.test.js", "testName": "unconfirmed HTTP is rejected before API key or multipart body creation" },
+        { "testFile": "auto—publish/tests/phase-04-media-transport.test.js", "testName": "all 3xx responses are rejected without following Location" },
+        { "testFile": "auto—publish/tests/phase-04-media-transport.test.js", "testName": "TLS certificate and hostname failures have stable transport diagnostics" },
+        { "testFile": "auto—publish/tests/phase-04-media-transport.test.js", "testName": "connect and read timeout failures remain distinguishable" },
+        { "testFile": "auto—publish/tests/phase-04-media-transport.test.js", "testName": "settings projection exposes only safe transport state and a masked key" }
+      ],
+      "evidenceHash": "1d9cf074c5460ebe66c16105f506c20c1352e9a7463fc2398d18cd4e8f66fc4e",
+      "evidenceScope": "media transport suite summary"
+    },
+    {
+      "id": "security-path-dto-log-package",
+      "category": "security",
+      "owner": "content path policy, diagnostics, package boundary, and evidence projection",
+      "command": "npm run test:links && node --test tests/structured-diagnostics.test.js tests/runtime-diagnostics.test.js tests/runtime-diagnostics-ipc.test.js tests/phase-06-legacy-path-absence.test.js tests/phase-08-diagnostics-artifact-toolchain.test.js && npm run test:packaging && npm run test:release-evidence",
+      "tests": [
+        "rejects a linked workspace root before writing research",
+        "diagnostic schema is exact, bounded, and rejects sensitive fields",
+        "package gate permits the generated preload but rejects private package content",
+        "release evidence records safe artifact hashes and fixed check names"
+      ],
+      "faultPoint": "path traversal/symlink, sensitive DTO/log/fixture/temp/package content",
+      "stableCodes": ["GENERATION_BATCH_PATH_UNSAFE", "ARTICLE_REMOVAL_PATH_INVALID", "DIAGNOSTIC_FILE_PERMISSION_DENIED"],
+      "durableFact": "only bounded safe DTOs, relative hashes, and workspace-contained regular files cross the boundary",
+      "restartResult": "NOT_APPLICABLE",
+      "fixture": "temporary workspace, diagnostic, ASAR, and evidence fixtures",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/client-material-store.test.js", "testName": "skips linked materials and rejects client paths outside the workspace" },
+        { "testFile": "auto—publish/tests/structured-diagnostics.test.js", "testName": "diagnostic schema is exact, bounded, and rejects sensitive fields" },
+        { "testFile": "auto—publish/tests/desktop-packaging.test.js", "testName": "excludes every private content and application configuration boundary" },
+        { "testFile": "auto—publish/tests/release-evidence.test.js", "testName": "release evidence records safe artifact hashes and fixed check names" }
+      ],
+      "evidenceSuites": [
+        { "id": "links", "summaryHash": "0d041cb594a67b98c929814a73a19110d6a829636be24604013c55f91fe1e010" },
+        { "id": "diagnostics", "summaryHash": "2739e5645abc00724a41d85133b2533b54a1919fd280daab94f7264d5822a917" },
+        { "id": "packaging", "summaryHash": "f69be87b432990f0a13eb0db65cea63047d5eb3a2efcdfd8ee30bef0b2b42712" },
+        { "id": "release-evidence", "summaryHash": "5fb133937383e8e8e4d93b53a6558a7946047f22185aa4346c3b4192a7de1933" }
+      ],
+      "evidenceScope": "links, diagnostics, packaging, and release-evidence suite summaries"
+    },
+    {
+      "id": "security-account-switch-and-auth",
+      "category": "security-functional",
+      "owner": "Renderer content feature and Auth source/limiter policy",
+      "command": "node --test tests/renderer-content-client-switch.test.js tests/phase-03-content-account-binding-execution.test.js && npm run test:auth",
+      "tests": [
+        "switches from a queued client to another client through the real Renderer",
+        "auth source resolver and proxy configuration",
+        "bounded login limiter",
+        "login policy integration"
+      ],
+      "faultPoint": "client/account switch, trusted proxy source, limiter capacity, secret projection",
+      "stableCodes": ["PLAYWRIGHT_SESSION_NOT_OPEN"],
+      "durableFact": "new client/account scope fences old state; source buckets and limiter state remain bounded",
+      "restartResult": "old scope cannot clear or mutate the new snapshot; limiter restarts empty",
+      "fixture": "temporary Renderer fixture and isolated Auth repository",
+      "status": "PASSED",
+      "manualReview": "NOT_REQUIRED",
+      "testBindings": [
+        { "testFile": "auto—publish/tests/renderer-content-client-switch.test.js", "testName": "switches from a queued client to another client through the real Renderer" },
+        { "testFile": "auto—publish/tests/phase-03-content-account-binding-execution.test.js", "testName": "main rejects a renderer account profile that differs from the durable queue binding" },
+        { "testFile": "auto—publish/auth-server/tests/auth-proxy-rate-limit.test.js", "testName": "ignores Forwarded and X-Forwarded-* when trust-proxy is missing" },
+        { "testFile": "auto—publish/auth-server/tests/auth-proxy-rate-limit.test.js", "testName": "keeps source, identity, and combination buckets bounded for 100k identities" },
+        { "testFile": "auto—publish/auth-server/tests/auth-proxy-rate-limit.test.js", "testName": "releases identity state on success, expires windows, supports manual clear, and restarts empty" }
+      ],
+      "evidenceSuites": [
+        { "id": "renderer-account-switch", "summaryHash": "5c8fae7364cec4286d38be3e02c262440affa31b3bbb7c49115d001272131614" },
+        { "id": "auth", "summaryHash": "e04f1f5c20cfea4a320918069a04f615dc943ebdb055c8ed7b2fc66f4ea14240" }
+      ],
+      "evidenceScope": "Renderer account-switch and Auth suite summaries"
+    }
+  ],
+  "manualGates": [
+    "phase4-platform-account-binding",
+    "phase4-hepan-reconciliation",
+    "phase4-media-http-risk",
+    "phase4-signed-browser-login",
+    "platform-endpoints-tls",
+    "proxy-source-headers",
+    "signing-certificate",
+    "installer-acl-upgrade-rollback",
+    "external-e2e-owner",
+    "auth-rpo-rto",
+    "auth-backup-policy",
+    "auth-recovery-drill"
+  ]
+}
