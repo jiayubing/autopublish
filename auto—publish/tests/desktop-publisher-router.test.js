@@ -100,12 +100,15 @@ test("desktop publisher owners preserve remote evidence and target-specific outc
     targetPlatformId: "toutiao",
     accountProfileId: "account-1",
   });
+  let receivedSupplierInput;
+  const systemSubmissionId = "system-submission-router-1";
   const mediaPublisher = createMediaPublisher({
-    clientProvider: () => ({
-      sendArticle: async () => ({
-        ok: true,
-        data: { order_nid: "media-order-1" },
-      }),
+    systemSubmissionIdProvider: () => systemSubmissionId,
+    supplierProvider: () => ({
+      createOrder: async (value) => {
+        receivedSupplierInput = value;
+        return { kind: "order_created", orderId: "media-order-1" };
+      },
     }),
   });
   const router = createDesktopPublisherRouter({
@@ -128,4 +131,35 @@ test("desktop publisher owners preserve remote evidence and target-specific outc
   assert.equal(platform.evidence.remoteId, "platform-remote-1");
   assert.equal(media.status, "submitted");
   assert.equal(media.evidence.remoteId, "media-order-1");
+  assert.equal(receivedSupplierInput.systemSubmissionId, systemSubmissionId);
+  assert.notEqual(receivedSupplierInput.systemSubmissionId, "attempt-1");
+});
+
+test("desktop publisher router fails closed before supplier transport when the global media submission id is missing", async () => {
+  let supplierProviderCalls = 0;
+  let createOrderCalls = 0;
+  const mediaPublisher = createMediaPublisher({
+    supplierProvider: () => {
+      supplierProviderCalls += 1;
+      return {
+        createOrder: async () => {
+          createOrderCalls += 1;
+          return { kind: "order_created", orderId: "must-not-exist" };
+        },
+      };
+    },
+  });
+  const router = createDesktopPublisherRouter({
+    workerPublisher: { publish: async () => ({ status: "published" }) },
+    mediaPublisher,
+  });
+
+  const result = await router.publish(
+    input({ kind: "media", mediaResourceId: "resource-1" }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.error.code, "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED");
+  assert.equal(supplierProviderCalls, 0);
+  assert.equal(createOrderCalls, 0);
 });
