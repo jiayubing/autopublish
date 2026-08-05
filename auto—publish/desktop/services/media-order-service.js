@@ -7,6 +7,8 @@ function createMediaOrderService(opts) {
 
   var clientProvider =
     typeof options.clientProvider === "function" ? options.clientProvider : null;
+  var supplierProvider =
+    typeof options.supplierProvider === "function" ? options.supplierProvider : null;
   var openExternal =
     typeof options.openExternal === "function" ? options.openExternal : null;
 
@@ -43,12 +45,26 @@ function createMediaOrderService(opts) {
   }
 
   async function syncOrder(orderNid) {
-    var client = clientProvider ? clientProvider() : null;
-    if (!client) throw orderError("MEDIA_CONFIG_NOT_SET", "付费媒体配置未设置");
+    var client = supplierProvider ? null : clientProvider ? clientProvider() : null;
+    if (!client && !supplierProvider) throw orderError("MEDIA_CONFIG_NOT_SET", "付费媒体配置未设置");
     try {
-      var response = await client.orderInfo(orderNid);
-      var item = firstOrderItem(response);
-      var statusCode = supplierOrderStatusCode(response);
+      var response;
+      var item;
+      var statusCode;
+      if (supplierProvider) {
+        var supplierResult = await supplierProvider().getOrderDetails([String(orderNid)]);
+        response = supplierResult;
+        if (!supplierResult || supplierResult.kind !== "order_details") throw orderError("MEDIA_ORDER_SYNC_FAILED");
+        item = (supplierResult.orders || []).find(function (order) {
+          return order && String(order.orderId || "") === String(orderNid);
+        });
+        statusCode = canonicalStatusCode(item && item.status);
+        if (!item || !statusCode) throw orderError("MEDIA_ORDER_SYNC_FAILED");
+      } else {
+        var response = await client.orderInfo(orderNid);
+        item = firstOrderItem(response);
+        statusCode = supplierOrderStatusCode(response);
+      }
       if (
         !statusCode ||
         typeof operationalStore.recordRemoteOrderObservation !== "function"
@@ -59,11 +75,14 @@ function createMediaOrderService(opts) {
         observation: {
           statusCode: statusCode,
           ...(statusCode === "2"
-            ? { remoteUrl: item.order_url || item.orderUrl }
+            ? { remoteUrl: item.remoteUrl || item.order_url || item.orderUrl }
             : {}),
-          ...(supplierPublishedAt(response)
-            ? { publishedAt: supplierPublishedAt(response) }
-            : {}),
+          ...(supplierProvider
+            ? (item.publishedAt ? { publishedAt: item.publishedAt } : {})
+            : (supplierPublishedAt(response)
+              ? { publishedAt: supplierPublishedAt(response) }
+              : {})
+          ),
         },
       });
     } catch (_) {
@@ -96,6 +115,16 @@ function createMediaOrderService(opts) {
     syncOrder: syncOrder,
     openPublishedUrl: openPublishedUrl,
   };
+}
+
+function canonicalStatusCode(value) {
+  return {
+    pending: "0",
+    scheduled: "1",
+    published: "2",
+    rejected: "4",
+    aftercare: "9",
+  }[String(value || "")] || "";
 }
 
 function orderError(code, message) {

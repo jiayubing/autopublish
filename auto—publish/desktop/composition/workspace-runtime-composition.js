@@ -204,12 +204,17 @@ async function createWorkspaceRuntimeComposition(deps) {
       });
     const mediaPublisher =
       require("../services/media-publisher").createMediaPublisher({
-        clientProvider: function () {
-          const mediaRuntime =
-            platformSettingsService.getAdapterForRuntime("media");
-          return mediaRuntime.adapter.createClient(mediaRuntime.config);
+        supplierProvider: function () {
+          const { createMediaSupplierAdapter } = require("../../src/platforms/media/media-supplier-adapter");
+          return createMediaSupplierAdapter({
+            clientProvider: function () {
+              const mediaRuntime =
+                platformSettingsService.getAdapterForRuntime("media");
+              return mediaRuntime.adapter.createClient(mediaRuntime.config);
+            },
+          });
         },
-        thirdIdProvider: function () {
+        systemSubmissionIdProvider: function () {
           return (
             platformSettingsService.getRuntimeConfig("media").thirdPartyId || ""
           );
