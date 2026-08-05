@@ -71,6 +71,31 @@ const MEDIA_ERROR_DEFINITIONS = Object.freeze({
     retryability: "safe",
     message: "媒体服务连接测试失败",
   },
+  MEDIA_SUPPLIER_INPUT_INVALID: {
+    category: "validation",
+    retryability: "never",
+    message: "媒体供应商请求参数无效",
+  },
+  MEDIA_SUPPLIER_PORT_UNAVAILABLE: {
+    category: "validation",
+    retryability: "manual-check",
+    message: "媒体供应商端口不可用",
+  },
+  MEDIA_SUPPLIER_PROTOCOL_ERROR: {
+    category: "transport",
+    retryability: "manual-check",
+    message: "媒体供应商响应格式无效",
+  },
+  MEDIA_SUPPLIER_REJECTED: {
+    category: "remote",
+    retryability: "never",
+    message: "媒体供应商拒绝了请求",
+  },
+  MEDIA_SUPPLIER_TRANSPORT_ERROR: {
+    category: "transport",
+    retryability: "manual-check",
+    message: "媒体供应商传输失败",
+  },
 });
 
 const MEDIA_ERROR_CODES = new Set(Object.keys(MEDIA_ERROR_DEFINITIONS));

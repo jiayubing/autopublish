@@ -13,6 +13,9 @@ function createMediaResourceService(opts) {
   opts = opts || {};
   var resourceStore = opts.resourceStore || new MediaResourceStore({ filePath: opts.resourceStorePath });
   var poolStore = opts.poolStore || new MediaPoolStore({ filePath: opts.poolStorePath });
+  var supplierProvider = typeof opts.supplierProvider === "function"
+    ? opts.supplierProvider
+    : null;
   var clientProvider = typeof opts.clientProvider === "function"
     ? opts.clientProvider
     : function() { return opts.client || (opts.apiKey ? createClient(opts) : null); };
@@ -68,7 +71,7 @@ function createMediaResourceService(opts) {
   }
 
   async function refreshResources(opts) {
-    var client = getClient();
+    var client = supplierProvider ? null : getClient();
 
     opts = opts || {};
     if (Object.prototype.hasOwnProperty.call(opts, "maxPages") || Object.prototype.hasOwnProperty.call(opts, "maxResources")) {
@@ -88,7 +91,7 @@ function createMediaResourceService(opts) {
     var observedProviderPageSize = null;
 
     while (page <= MAX_REMOTE_PAGES) {
-      var response = await client.mediaList({ page: page, pageSize: pageSizeHint });
+      var response = await fetchResourcePage(client, page, pageSizeHint);
       var normalizedItems = extractResourceItems(response).map(normalizeResource);
       var invalidPriceCount = normalizedItems.filter(function(resource) {
         return resource.resourceId && resource.price === undefined;
@@ -204,6 +207,20 @@ function createMediaResourceService(opts) {
       resourceCount: allResources.length,
       diagnostics: diagnostics,
       refreshedAt: refreshedAt
+    };
+  }
+
+  async function fetchResourcePage(client, page, pageSize) {
+    if (!supplierProvider) return client.mediaList({ page: page, pageSize: pageSize });
+    var result = await supplierProvider().refreshMediaResources({ page: page, pageSize: pageSize });
+    if (!result || result.kind !== "resources_refreshed") {
+      throw serviceError("MEDIA_RESOURCE_REFRESH_FAILED", "Media resource refresh failed");
+    }
+    return {
+      data: result.resources,
+      total: result.total,
+      page: result.page,
+      page_size: result.pageSize,
     };
   }
 

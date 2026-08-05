@@ -4,6 +4,7 @@
 // CommonJS port from root src/platforms/media/adapter.js.
 
 const { MediaClient } = require('./media-client');
+const { createMediaSupplierAdapter } = require('./media-supplier-adapter');
 const { convertArticle } = require('./article-converter');
 const { detectDocxImages } = require('./article-converter');
 const { MediaDraftStore } = require('./media-draft-store');
@@ -185,5 +186,6 @@ module.exports = {
     return { status: "failed", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" };
   },
 
-  createMediaAdapter: createMediaAdapter
+  createMediaAdapter: createMediaAdapter,
+  createMediaSupplierAdapter: createMediaSupplierAdapter,
 };

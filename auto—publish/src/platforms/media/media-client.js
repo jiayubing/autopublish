@@ -7,6 +7,7 @@ const { createEndpointPolicy } = require("./endpoint-policy");
 const { createMediaTransport } = require("./media-transport");
 
 const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_CANCEL_ORDER_PATH = "/api/media/order_cancel";
 
 /**
  * Media API client for interacting with the media submission platform.
@@ -45,6 +46,7 @@ class MediaClient {
     this.endpointPolicy.assertCanSend();
     this.baseUrl = this.endpointPolicy.endpoint;
     this.timeoutMs = clientTimeout(values.timeoutMs);
+    this.cancelOrderPath = supplierPath(values.cancelOrderPath || DEFAULT_CANCEL_ORDER_PATH);
     this.transport = values.transport || createMediaTransport({
       fetch: values.fetch || values.fetchImpl,
       timeoutMs: this.timeoutMs,
@@ -59,7 +61,7 @@ class MediaClient {
     });
   }
 
-  async mediaList(options) {
+  async refreshMediaResources(options) {
     const values = options || {};
     return this._post("/api/media/media_list", () => {
       const form = new FormData();
@@ -70,11 +72,15 @@ class MediaClient {
     });
   }
 
-  async sendArticle(options) {
+  async mediaList(options) {
+    return this.refreshMediaResources(options);
+  }
+
+  async createOrder(options) {
     const values = options || {};
-    const resourceId = requireText(values.resourceId, "resourceId");
+    const resourceId = requireText(values.mediaResourceId, "mediaResourceId");
     const title = requireText(values.title, "title");
-    const content = requireText(values.content, "content");
+    const content = requireText(values.htmlBody, "htmlBody");
     return this._post("/api/media/send", () => {
       const form = new FormData();
       form.append("api_key", this.apiKey);
@@ -82,12 +88,26 @@ class MediaClient {
       form.append("title", title);
       form.append("content", content);
       if (hasText(values.remark)) form.append("remark", String(values.remark).trim());
-      if (hasText(values.thirdId)) form.append("third_id", String(values.thirdId).trim());
+      if (hasText(values.systemSubmissionId)) form.append("third_id", String(values.systemSubmissionId).trim());
       return form;
     });
   }
 
-  async orderInfo(orderNids) {
+  async sendArticle(options) {
+    const values = options || {};
+    requireText(values.resourceId, "resourceId");
+    requireText(values.title, "title");
+    requireText(values.content, "content");
+    return this.createOrder({
+      mediaResourceId: values.resourceId,
+      title: values.title,
+      htmlBody: values.content,
+      remark: values.remark,
+      systemSubmissionId: values.thirdId,
+    });
+  }
+
+  async getOrderDetails(orderNids) {
     const nids = (Array.isArray(orderNids) ? orderNids : [orderNids])
       .map((nid) => String(nid == null ? "" : nid).trim())
       .filter(Boolean);
@@ -96,6 +116,20 @@ class MediaClient {
       const form = new FormData();
       form.append("api_key", this.apiKey);
       nids.forEach((nid) => form.append("order_nids[]", nid));
+      return form;
+    });
+  }
+
+  async orderInfo(orderNids) {
+    return this.getOrderDetails(orderNids);
+  }
+
+  async cancelOrder(orderNid) {
+    const nid = requireText(orderNid, "order_nid");
+    return this._post(this.cancelOrderPath, () => {
+      const form = new FormData();
+      form.append("api_key", this.apiKey);
+      form.append("order_nid", nid);
       return form;
     });
   }
@@ -134,4 +168,12 @@ function hasText(value) {
   return String(value == null ? "" : value).trim().length > 0;
 }
 
-module.exports = { MediaClient };
+function supplierPath(value) {
+  const path = String(value == null ? "" : value).trim();
+  if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,160}$/u.test(path)) {
+    throw createMediaError("MEDIA_CONFIG_INVALID");
+  }
+  return path;
+}
+
+module.exports = { MediaClient, DEFAULT_CANCEL_ORDER_PATH };

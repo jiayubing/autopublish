@@ -2,6 +2,7 @@ const path = require("path");
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 const { MediaDraftStore } = require("../../src/platforms/media/media-draft-store");
+const { createMediaSupplierAdapter } = require("../../src/platforms/media/media-supplier-adapter");
 const { createMediaOrderService } = require("./media-order-service");
 const { createMediaWorkbenchService } = require("./media-workbench-service");
 const { createMediaResourceService } = require("./media-resource-service");
@@ -140,6 +141,9 @@ function applyPublicationBlocks(summary, articles, values) {
 function createMediaWorkbenchApplication(options) {
   const values = options || {};
   const clientProvider = createMediaClientProvider(values);
+  const supplierProvider = typeof values.mediaSupplierProvider === "function"
+    ? values.mediaSupplierProvider
+    : function () { return createMediaSupplierAdapter({ clientProvider }); };
   const resourceStore = values.resourceStore || new MediaResourceStore({ paths: values.paths });
   const poolStore = values.poolStore || new MediaPoolStore({ paths: values.paths });
   const draftStore = values.draftStore || new MediaDraftStore({ paths: values.paths });
@@ -147,10 +151,12 @@ function createMediaWorkbenchApplication(options) {
     resourceStore,
     poolStore,
     clientProvider,
+    supplierProvider,
   });
   const orderService = values.mediaOrderService || createMediaOrderService({
     paths: values.paths,
     clientProvider,
+    supplierProvider,
     operationalStore: values.operationalStore,
     openExternal: values.openExternal,
   });
