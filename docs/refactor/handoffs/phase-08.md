@@ -1,5 +1,76 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 17 Final Closeout (2026-08-05)
+
+### 1. Status And Baseline
+
+- Status: `IN_PROGRESS`. Ticket 16's three admission simulations pass, but ordinary feature work remains frozen until the CI Linux/Docker `required/auth-container` check is `PASSED`. Formal release remains `BLOCKED_RELEASE`.
+- Start baseline: `codex/refactor-program` at `9dcab0194ccf3e4f8f8a90fb718ebadf64e55aa4`, clean before Ticket 17 documentation work.
+- Current baseline: Ticket 17 adds only the documentation, root-suite evidence generator, and its format-list entry. The captured evidence source state is `DIRTY`; the closeout is committed after user authorization, with no push or PR.
+- Evidence source state: `build/release-evidence-manifest.json` records that HEAD, `DIRTY`, 16/17 fixed checks passed, and `BLOCKED_RELEASE`. The sole non-passing fixed check is `required/auth-container`; the associated `containerTests` evidence is absent because Docker is unavailable locally.
+
+### 2. Production Map And Authority
+
+`desktop/main.js` starts authenticated workspace runtime. `desktop/workspace-runtime.js` owns one workspace lifecycle, and `desktop/composition/workspace-runtime-composition.js` owns service assembly. `desktop/ipc/register.js`, the production registry, and `desktop/preload.js` form the only Renderer transport boundary. `createOperationalStore` is the SQLite writer facade; `desktop-publisher-router` owns publisher routing; ContentStore/ArticleStore lifecycle services own content files; AuthDomain owns Auth mutations. The Renderer consumes typed bridge/feature modules only.
+
+### 3. Interfaces, Schema, And Migration
+
+| Boundary | Version | Tool and current evidence |
+| --- | ---: | --- |
+| Content workspace | 1 | `scripts/migrate-content-library-v2.js`; guarded rollback fixture |
+| Content metadata | 1 | metadata migration/recovery fixtures |
+| OperationalStore | 3 | `scripts/migrate-operational-store-v1.js`; import/recovery/backup fixtures |
+| Auth | 2 | `auth-server/scripts/migration-roundtrip-evidence.js`; backup/restore fixture |
+| Worker envelope | 1 | typed IPC and PlatformRun contracts |
+
+All migration tools require dry-run or explicit execution confirmation and
+fail closed on conflict, provenance, hash and path violations. Real production
+restore, installer rollback and RPO/RTO are not simulated passes.
+
+### 4. Deleted Seams And 0-Reference Evidence
+
+| Retired seam/writer | Replacement or disposition | Evidence |
+| --- | --- | --- |
+| file publication locks and writers | OperationalStore main-only SQLite writer | `build/evidence/phase-08-gates.json` |
+| `src/infrastructure/publishers/legacy-adapter-publisher.js` | desktop publisher router | source/archive legacy 0/0 |
+| `src/infrastructure/publishers/publisher-router.js` | desktop publisher router | source/archive legacy 0/0 |
+| `scripts/cleanup-source-runtime.js` | package build boundary and gate | source/archive legacy 0/0 |
+| numeric Playwright `runCode` and screenshot export | structured JSON diagnostics | diagnostics and retired-path gate |
+| tracked runtime build manifest | `config/runtime-tools-manifest.json` | generated-output gate |
+
+No shadow runtime, old writer or long-lived compatibility adapter is accepted
+by the Phase 8 gate. It reports dependency, owner/writer, legacy, module-size
+and package violations as zero; package scan reports 109/109 capabilities and
+no private, sensitive, link, or retired-path violation.
+
+### 5. Automated Evidence And Skip State
+
+| Command/report | Result | Fixture boundary |
+| --- | --- | --- |
+| `build/evidence/root-tests.json` | 239 files, 1621/1621 pass, 0 fail/skip | local synthetic suite |
+| `build/evidence/desktop-migration-roundtrip.json` | 65/65 pass | temporary workspace/SQLite |
+| `build/evidence/capacity.json` | 20/20 pass | synthetic capacity data |
+| diagnostics/media/links/gates | 32/32, 9/9, strict links, 3/3 | local fixtures/package |
+| production smoke/package gate | 13 artifacts, 109/109 capabilities, 0 violations | local unsigned `--dir` package |
+| Ticket 16 admission | three fixture-only architecture simulations pass | no production registration |
+
+Production smoke has one `SKIPPED_OPTIONAL` Hepan-Python check because no
+packaged optional Python was supplied. It is explicitly optional and does not
+cover a real provider. The missing Auth container check is not a skip and
+blocks Phase 8 closure.
+
+### 6. Traceability, ADR, And Documentation
+
+`../phase-08-final-report.md` records every one of the 37 findings and 29
+OPT items with exact test/report references and named manual gates. Historical
+`docs/review/` documents remain unchanged. `auto—publish/docs/adr/0004-record-publication-per-target.md` is now superseded, rather than rewritten, because normal-platform target identity is account-aware.
+
+### 7. Remaining Blockers And Next Action
+
+- Automatic blocker: obtain a passing CI Linux/Docker `required/auth-container` report and regenerate the release evidence manifest. Until then Phase 8 stays `IN_PROGRESS` and feature work remains frozen.
+- Human release blockers: platform/account and Hepan reconciliation, media HTTP risk, signed login, TLS/DNS/proxy, signing, installer upgrade/rollback, external E2E, Auth backup policy/RPO/RTO/recovery drill, and signed rollback evidence.
+- On a later approved feature, first choose one domain/application owner, one typed contract and one Renderer feature; keep file, SQLite, browser and remote effects behind their current owner.
+
 ## Ticket 16 Execution Handoff (2026-08-05, feature development admission simulations)
 
 - Status: Ticket 16 `COMPLETE`; Phase 8 remains `IN_PROGRESS` and release remains `BLOCKED_RELEASE` pending Ticket 17 traceability closeout and independent human release gates.

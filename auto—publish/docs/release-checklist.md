@@ -156,3 +156,14 @@ The local dirty evidence path is `build/release-evidence-manifest.json`; its
 `sourceState.status=DIRTY` and `releaseState=BLOCKED_RELEASE` are expected.
 The production smoke configuration is non-signing and is not evidence of a
 signed installer, SmartScreen, ACL, DNS, TLS, proxy or external E2E result.
+
+## Phase 8 engineering closeout
+
+The desktop-side Phase 8 evidence is collected, but Phase 8 remains
+`IN_PROGRESS` and ordinary feature development remains frozen until the CI
+Linux/Docker `required/auth-container` check has a passing report. This
+checklist remains the release authority: it is not changed to `PASSED` by
+desktop-side closeout evidence. Read
+`../../docs/refactor/phase-08-final-report.md` for the production module map,
+schema/migration evidence, and the exact separation between automated closure
+and owner-controlled release gates.

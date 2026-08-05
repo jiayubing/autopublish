@@ -100,3 +100,15 @@
 - OPT-013不再在JSON文件上增加CAS；batch revision/claim由SQLite事务承担。
 - 原“待决策”或“需要验证”中的真实生产账号、TLS、签名、RPO/RTO仍需人工证据；架构决定不等于外部环境已经验收。
 
+## 5. Phase 8 最终反查
+
+`phase-08-final-report.md` 是本矩阵的最终逐项处置记录：37 个 `F-*`
+finding 和 29 个 `OPT-*` 均有明确的自动证据、设计替代或
+`PENDING_HUMAN` release gate。其 `CLOSED for code` 表示工程边界已由
+自动证据覆盖，不表示真实账号、TLS、签名、安装器或灾备演练已经通过。
+
+Phase 8 的工程状态为 `IN_PROGRESS`，普通功能开发继续冻结：CI Linux/Docker
+的 `required/auth-container` 尚无通过证据。正式 release 继续为
+`BLOCKED_RELEASE`。追踪矩阵不改写 `docs/review/` 的历史判断，也不将人工项
+或未运行的自动项改记为通过。
+

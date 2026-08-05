@@ -1,7 +1,13 @@
 # ADR 0004：按发布目标记录文章发布结果
 
-- 状态：已接受
+- 状态：已废弃（2026-08-05）
 - 日期：2026-07-18
+
+> Superseded by the account-aware publication-target decision in
+> `docs/refactor/04-phase-01-domain-contracts.md` and the current business
+> definition in `CONTEXT.md`. This ADR is retained unchanged below as the
+> historical article-by-target cutover decision; it no longer defines the
+> normal-platform target key.
 
 ## 背景
 
