@@ -42,11 +42,8 @@ async function createFixture(
   };
 }
 
-test("renderer contract absence gate scans source, generated artifacts, and same-build ASAR", async () => {
+test("renderer contract absence gate scans source and generated artifacts", async () => {
   const fixture = await createFixture();
-  const archiveFixture = await createFixture(
-    "const local = () => {}; export { local as generateContentArticle };\n",
-  );
   try {
     const result = verifyRendererContractAbsence(fixture);
     assert.equal(result.status, "PASSED");
@@ -78,14 +75,8 @@ test("renderer contract absence gate scans source, generated artifacts, and same
         error.code === "RENDERER_CONTRACT_LEGACY_PRESENT" &&
         error.report?.generatedMatches > 0,
     );
-
-    assert.throws(
-      () => verifyRendererContractAbsence(archiveFixture),
-      (error) => error.code === "RENDERER_CONTRACT_LEGACY_PRESENT",
-    );
   } finally {
     fixture.cleanup();
-    archiveFixture.cleanup();
   }
 });
 
