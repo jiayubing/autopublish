@@ -2,11 +2,24 @@
 const { MediaResourceStore } = require("../../src/platforms/media/media-resource-store");
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 
+const {
+  boundedPageSize,
+  canonicalPrice,
+  extractBalanceValue,
+  extractPaginationMetadata,
+  extractResourceItems,
+  firstText,
+  hasResourceId,
+  normalizePositiveInteger,
+  paginate,
+  pickValue,
+  serviceError,
+} = require("./media-resource-helpers");
+
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const MAX_REMOTE_PAGES = 200;
 const MAX_RESOURCE_IDS = 20000;
-const MAX_CANONICAL_PRICE = 100000000;
 const MEDIA_RESOURCE_TYPES = new Set(["image", "video", "audio", "document"]);
 
 function createMediaResourceService(opts) {
@@ -44,7 +57,7 @@ function createMediaResourceService(opts) {
     };
     var type = firstText(input.type, input.mediaType, input.channelType);
     if (MEDIA_RESOURCE_TYPES.has(type)) normalized.type = type;
-    return normalized;
+    return preserveAvailability(normalized, input);
   }
 
   function getCachedResourcePage(opts) {
@@ -221,6 +234,7 @@ function createMediaResourceService(opts) {
       total: result.total,
       page: result.page,
       page_size: result.pageSize,
+      ...(typeof result.hasNext === "boolean" ? { hasNext: result.hasNext } : {}),
     };
   }
 
@@ -326,7 +340,7 @@ function normalizeResourceShape(resource) {
   };
   var type = firstText(resource && (resource.type || resource.mediaType || resource.channelType));
   if (MEDIA_RESOURCE_TYPES.has(type)) normalized.type = type;
-  return normalized;
+  return preserveAvailability(normalized, resource);
 }
 
 function normalizePoolEntry(entry) {
@@ -342,7 +356,7 @@ function normalizePoolEntry(entry) {
   };
   var type = firstText(entry && (entry.type || entry.mediaType || entry.channelType));
   if (MEDIA_RESOURCE_TYPES.has(type)) normalized.type = type;
-  return normalized;
+  return preserveAvailability(normalized, entry);
 }
 
 function toPoolStoreShape(resource) {
@@ -359,135 +373,13 @@ function toPoolStoreShape(resource) {
     caseLink: resource.caseLink
   };
   if (MEDIA_RESOURCE_TYPES.has(resource.type)) normalized.type = resource.type;
+  if (typeof resource.available === "boolean") normalized.available = resource.available;
   return normalized;
 }
 
-function extractResourceItems(response) {
-  if (Array.isArray(response)) return response;
-  if (response && Array.isArray(response.data)) return response.data;
-  if (response && response.data && Array.isArray(response.data.list)) return response.data.list;
-  if (response && response.data && Array.isArray(response.data.items)) return response.data.items;
-  if (response && Array.isArray(response.list)) return response.list;
-  if (response && Array.isArray(response.items)) return response.items;
-  return [];
-}
-
-function extractPaginationMetadata(response) {
-  var roots = [response];
-  if (response && response.data && !Array.isArray(response.data)) roots.push(response.data);
-  if (response && response.meta && !Array.isArray(response.meta)) roots.push(response.meta);
-  if (response && response.pagination && !Array.isArray(response.pagination)) roots.push(response.pagination);
-  var total = null;
-  var hasNext = null;
-  roots.forEach(function(root) {
-    if (!root || typeof root !== "object") return;
-    if (total === null) total = firstNonNegativeInteger(root.total, root.totalCount, root.total_count);
-    if (hasNext === null) hasNext = firstBoolean(root.hasNext, root.has_next, root.hasMore, root.has_more);
-  });
-  return { total: total, hasNext: hasNext };
-}
-
-function firstNonNegativeInteger() {
-  for (var index = 0; index < arguments.length; index++) {
-    if (arguments[index] === undefined || arguments[index] === null) continue;
-    var value = Number(arguments[index]);
-    if (Number.isSafeInteger(value) && value >= 0) return value;
-  }
-  return null;
-}
-
-function firstBoolean() {
-  for (var index = 0; index < arguments.length; index++) {
-    if (typeof arguments[index] === "boolean") return arguments[index];
-  }
-  return null;
-}
-
-function paginate(resources, page, pageSize) {
-  var total = resources.length;
-  var totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
-  var start = (page - 1) * pageSize;
-  return {
-    items: resources.slice(start, start + pageSize),
-    page: totalPages === 0 ? 1 : Math.min(page, totalPages),
-    pageSize: pageSize,
-    total: total,
-    totalPages: totalPages,
-    hasPrev: page > 1 && totalPages > 0,
-    hasNext: page < totalPages
-  };
-}
-
-function normalizePositiveInteger(value, fallback) {
-  var normalized = Number(value);
-  return Number.isInteger(normalized) && normalized > 0 ? normalized : fallback;
-}
-
-function boundedPageSize(value, fallback) {
-  if (value === undefined || value === null) return fallback;
-  var normalized = Number(value);
-  if (!Number.isInteger(normalized) || normalized < 1 || normalized > MAX_PAGE_SIZE) {
-    throw serviceError("MEDIA_RESOURCE_PAGE_SIZE_INVALID", "Media resource pageSize must be between 1 and 100");
-  }
+function preserveAvailability(normalized, resource) {
+  if (resource && typeof resource.available === "boolean") normalized.available = resource.available;
   return normalized;
-}
-
-function serviceError(code, message) {
-  var error = new Error(message);
-  error.code = code;
-  return error;
-}
-
-function firstText() {
-  for (var i = 0; i < arguments.length; i++) {
-    var value = arguments[i];
-    if (value == null) continue;
-    var text = String(value).trim();
-    if (text) return text;
-  }
-  return "";
-}
-
-function pickValue() {
-  for (var i = 0; i < arguments.length; i++) {
-    if (arguments[i] !== undefined) return arguments[i];
-  }
-  return undefined;
-}
-
-function canonicalPrice(value) {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value === "number")
-    return Number.isFinite(value) && value >= 0 && value <= MAX_CANONICAL_PRICE
-      ? value
-      : undefined;
-  if (typeof value !== "string") return undefined;
-  var text = value.trim();
-  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return undefined;
-  var price = Number(text);
-  return Number.isFinite(price) && price >= 0 && price <= MAX_CANONICAL_PRICE
-    ? price
-    : undefined;
-}
-
-function hasResourceId(resource) {
-  return !!(resource && resource.resourceId);
-}
-
-function extractBalanceValue(response) {
-  var data = response && response.data ? response.data : {};
-  var nested = data && data.data ? data.data : {};
-  return firstText(
-    data.balance,
-    data.money,
-    data.amount,
-    nested.balance,
-    nested.money,
-    nested.amount,
-    response && response.balance,
-    response && response.money,
-    response && response.amount
-  );
 }
 
 module.exports = { createMediaResourceService };

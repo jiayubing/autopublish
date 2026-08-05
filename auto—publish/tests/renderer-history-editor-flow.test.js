@@ -81,7 +81,7 @@ function makePublicationRecord(articleId) {
   };
 }
 
-function createFixture() {
+function createFixture({ missingWorkflowArticleId = null } = {}) {
   const longPrefix = "编辑上下文 长标题回归文章";
   const selectedArticle = makeArticle(
     selectedArticleId,
@@ -103,6 +103,8 @@ function createFixture() {
     articles,
     selectedArticle,
     publishedArticle,
+    publishedArticleId,
+    missingWorkflowArticleId,
     publicationRecords: [makePublicationRecord(publishedArticle.id)]
   };
 }
@@ -128,10 +130,30 @@ function installDesktopFixture(page, fixture) {
       bodyHash: "fixture-template-hash",
       source: "custom"
     };
+    const workflowFor = (article) => {
+      if (input.missingWorkflowArticleId === article.id) return null;
+      const published = article.id === input.publishedArticleId;
+      return {
+        version: 1,
+        stage: published ? "published" : "pending_submission",
+        label: published ? "已发布" : "待投稿",
+        primaryAction: published ? "copy" : "queue",
+        allowedBulkActions: published ? [] : ["queue", "trash"],
+        locks: {
+          canEdit: !published,
+          canQueue: !published,
+          canCancel: false,
+          canTrash: !published
+        },
+        publicationSummary: published
+          ? { status: "published", label: "已发布", records: 1, published: 1, uncertain: false }
+          : { status: "none", label: "未发布", records: 0, published: 0, uncertain: false }
+      };
+    };
     const content = {
       listClients: () => ok({ clients: [client] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
-      getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: state.publicationRecords, attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems: [], publicationSummaryItems: [] }),
+      getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: state.publicationRecords, attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems: state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []), publicationSummaryItems: [] }),
       listSubmissionPlatforms: () => ok({ platforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }] }),
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: [] }),
@@ -213,11 +235,11 @@ function installDesktopFixture(page, fixture) {
   }, fixture);
 }
 
-async function openHistory(width = 1128, height = 527) {
+async function openHistory(width = 1128, height = 527, fixtureOptions) {
   const page = await browser.newPage({ viewport: { width, height } });
   page.setDefaultTimeout(5000);
   page.on("pageerror", (error) => process.stderr.write(`renderer page error: ${error.message}\n`));
-  const fixture = createFixture();
+  const fixture = createFixture(fixtureOptions);
   await installDesktopFixture(page, fixture);
   await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
   await page.locator("#nav-item-content").waitFor();
@@ -270,6 +292,27 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       assert.equal(await checkbox.isChecked(), true);
       assert.equal(await sourceButton.evaluate((element) => document.activeElement === element), true, "closing restores focus to the source row");
       assert.ok(await pane.evaluate((element) => element.scrollTop > 0), "closing preserves the history scroll position");
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("fails closed when the authoritative workflow entry is missing", async () => {
+    const { page, fixture } = await openHistory(1128, 527, { missingWorkflowArticleId: selectedArticleId });
+    try {
+      await page.getByRole("textbox", { name: "筛选历史文章" }).fill("编辑上下文");
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      const sourceTitle = page.getByText(fixture.selectedArticle.title, { exact: true });
+      const sourceButton = sourceTitle.locator("..");
+
+      assert.equal(await sourceButton.isDisabled(), true);
+      assert.equal(await sourceButton.getAttribute("aria-disabled"), "true");
+      await sourceButton.dispatchEvent("click");
+      assert.equal(await page.getByRole("heading", { name: "编辑文章" }).count(), 0);
+      assert.equal(await page.getByLabel("文章标题", { exact: true }).count(), 0);
+      assert.equal(await page.getByLabel("文章正文", { exact: true }).count(), 0);
+      assert.equal(await page.getByRole("button", { name: "保存文章" }).count(), 0);
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
     } finally {
       await page.close();
     }

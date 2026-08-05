@@ -1,3 +1,5 @@
+import type { PublicationHistorySummary } from './types/publication';
+
 export type ArticleWorkflowStage = 'pending_submission' | 'queued' | 'paid_processing' | 'failed' | 'published' | 'trash';
 export type ArticleWorkflowAction = 'queue' | 'view_progress' | 'view_order' | 'open_attention' | 'view_publication' | 'trash' | 'restore';
 
@@ -25,6 +27,7 @@ export interface ArticleWorkflow {
   locks: ArticleWorkflowLocks;
   reasonCodes?: string[];
   reasonMessage?: string | null;
+  publicationSummary?: PublicationHistorySummary;
   targetFacts?: Array<{
     targetKey: string;
     status: string;

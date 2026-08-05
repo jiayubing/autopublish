@@ -1,7 +1,25 @@
+const DEFAULT_CLIENT_IMAGE_CACHE_CAPACITY = 32;
+const MAX_CLIENT_IMAGE_CACHE_CAPACITY = 10000;
+
+function cacheError(code, message) {
+  const error = new Error(message || code);
+  error.code = code;
+  return error;
+}
+
+function normalizeCapacity(value) {
+  const capacity = Number(value);
+  if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > MAX_CLIENT_IMAGE_CACHE_CAPACITY) {
+    throw cacheError("CLIENT_IMAGE_CACHE_CAPACITY_INVALID", "Client image cache capacity is invalid");
+  }
+  return capacity;
+}
+
 function createClientImageScanCache(options) {
   const opts = options || {};
-  const scope =
-    typeof opts.scope === "string" ? opts.scope : "client-image-library";
+  const scope = typeof opts.scope === "string" ? opts.scope : "client-image-library";
+  const configuredCapacity = opts.capacity === undefined ? opts.maxEntries : opts.capacity;
+  const capacity = normalizeCapacity(configuredCapacity === undefined ? DEFAULT_CLIENT_IMAGE_CACHE_CAPACITY : configuredCapacity);
   const entries = new Map();
 
   function key(clientKey) {
@@ -9,11 +27,19 @@ function createClientImageScanCache(options) {
   }
 
   function get(clientKey) {
-    return entries.get(key(clientKey)) || null;
+    const cacheKey = key(clientKey);
+    if (!entries.has(cacheKey)) return null;
+    const snapshot = entries.get(cacheKey);
+    entries.delete(cacheKey);
+    entries.set(cacheKey, snapshot);
+    return snapshot;
   }
 
   function set(clientKey, snapshot) {
-    entries.set(key(clientKey), snapshot);
+    const cacheKey = key(clientKey);
+    if (entries.has(cacheKey)) entries.delete(cacheKey);
+    entries.set(cacheKey, snapshot);
+    while (entries.size > capacity) entries.delete(entries.keys().next().value);
     return snapshot;
   }
 
@@ -36,7 +62,14 @@ function createClientImageScanCache(options) {
     get size() {
       return entries.size;
     },
+    get capacity() {
+      return capacity;
+    },
   };
 }
 
-module.exports = { createClientImageScanCache };
+module.exports = {
+  DEFAULT_CLIENT_IMAGE_CACHE_CAPACITY,
+  MAX_CLIENT_IMAGE_CACHE_CAPACITY,
+  createClientImageScanCache,
+};

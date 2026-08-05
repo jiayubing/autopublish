@@ -30,7 +30,6 @@ const OrdersView = lazy(() => import("./components/OrdersView"));
 const SettingsView = lazy(() => import("./components/SettingsView"));
 const PlatformWorkbench = lazy(() => import("./components/PlatformWorkbench"));
 const ContentWorkbench = lazy(() => import("./components/ContentWorkbench"));
-
 export default function App() {
   return (
     <PlatformFeatureProvider>

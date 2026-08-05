@@ -89,7 +89,10 @@ describe("publication history renderer boundary", async function() {
     assert.match(view, /commands\.copyArticleVersion/);
     assert.match(view, /commands\.reconcilePublication/);
     assert.match(view, /await confirm\(\{ title: label/);
-    assert.match(view, /summary=\{drawerArticle \? publicationSummaries\.get/);
+    assert.match(view, /summary=\{drawerArticle \? workflowByArticle\.get\(drawerArticle\.id\)\?\.publicationSummary/);
+    assert.doesNotMatch(view, /publicationSummaries/);
+    assert.doesNotMatch(view, /\|\| 'pending_submission'/);
+    assert.doesNotMatch(drawer, /summarizePublicationRecords/);
     assert.doesNotMatch(drawer, /审核状态与投稿状态分开维护/);
   });
 });

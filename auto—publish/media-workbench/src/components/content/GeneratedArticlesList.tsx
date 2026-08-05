@@ -2,7 +2,7 @@ import React from 'react';
 import { ChevronDown, FileText } from 'lucide-react';
 import { articleSelectionKey, selectableArticles, selectionState, summarizeTemplateSnapshot } from '../../article-history-logic';
 import type { GeneratedContentArticle } from '../../types/generation';
-import { ARTICLE_WORKFLOW_STAGES, type ArticleWorkflowStage } from '../../article-workflow';
+import type { ArticleWorkflowStage } from '../../article-workflow';
 import type { PublicationHistorySummary } from '../../types/publication';
 import { publicationStatusLabel } from '../../publication-status';
 import { formatBeijingTime } from '../../time-format';
@@ -21,7 +21,6 @@ interface GeneratedArticlesListProps {
   clientId: string;
   collapsed: Record<string, boolean>;
   selected: string[];
-  publicationSummaries: ReadonlyMap<string, PublicationHistorySummary>;
   workflowByArticle: ReadonlyMap<string, { stage: ArticleWorkflowStage; label?: string; publicationSummary?: PublicationHistorySummary } | undefined>;
   isArticleSelectable: (article: GeneratedContentArticle) => boolean;
   isArticleQueueable: (article: GeneratedContentArticle) => boolean;
@@ -35,7 +34,7 @@ interface GeneratedArticlesListProps {
   onOpenOrder?: () => void;
 }
 
-export default function GeneratedArticlesList({ groups, visibleError, clientId, collapsed, selected, publicationSummaries, workflowByArticle, isArticleSelectable, isArticleQueueable, removalSubmitDisabled, commandBusy, onToggleCollapsed, onToggleGroup, onToggleArticle, onOpenArticle, onOpenPublication, onOpenOrder }: GeneratedArticlesListProps) {
+export default function GeneratedArticlesList({ groups, visibleError, clientId, collapsed, selected, workflowByArticle, isArticleSelectable, isArticleQueueable, removalSubmitDisabled, commandBusy, onToggleCollapsed, onToggleGroup, onToggleArticle, onOpenArticle, onOpenPublication, onOpenOrder }: GeneratedArticlesListProps) {
   return <div className="grid gap-3">
     {groups.map((group) => {
       const groupSelectable = selectableArticles(group.articles, clientId).filter(isArticleSelectable);
@@ -52,13 +51,13 @@ export default function GeneratedArticlesList({ groups, visibleError, clientId, 
         </div>
         {!isCollapsed && <div className="min-w-0 divide-y divide-slate-100">{group.articles.map((article) => {
           const workflow = workflowByArticle.get(article.id);
-          const stageLabel = workflow?.label || ARTICLE_WORKFLOW_STAGES.find((stage) => stage.id === workflow?.stage)?.label || '待投稿';
-          const summary = publicationSummaries.get(article.id) || workflow?.publicationSummary;
-          const summaryLabel = summary ? (summary.label || publicationStatusLabel(summary.status)) : '未投稿';
+          const stageLabel = workflow?.label || '状态不可用';
+          const summary = workflow?.publicationSummary;
+          const summaryLabel = summary ? (summary.label || publicationStatusLabel(summary.status)) : '状态不可用';
           return <div key={article.id} className="flex min-w-0 flex-wrap items-start gap-3 p-3">
           <input type="checkbox" aria-label={`选择 ${article.title}`} checked={selected.includes(articleSelectionKey(article))} onChange={() => onToggleArticle(article)} disabled={!isArticleSelectable(article)} className="mt-1" />
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          <button type="button" onClick={(event) => onOpenArticle(article, event.currentTarget, workflow?.stage === 'published')} className="min-w-0 flex-[1_1_16rem] text-left hover:text-blue-700"><span className="block break-words text-sm font-semibold text-slate-800 sm:truncate">{article.title}</span><span className="mt-1 block break-words text-xs text-slate-500">阶段：{stageLabel} · 版本：{article.version || 1} · {formatBeijingTime(article.createdAt)} · 发布：{summaryLabel}</span></button>
+          <button type="button" disabled={!workflow} aria-disabled={!workflow} title={!workflow ? '文章流程状态不可用，暂不能打开编辑器' : undefined} onClick={(event) => { if (!workflow) return; onOpenArticle(article, event.currentTarget, workflow.stage === 'published'); }} className="min-w-0 flex-[1_1_16rem] text-left hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><span className="block break-words text-sm font-semibold text-slate-800 sm:truncate">{article.title}</span><span className="mt-1 block break-words text-xs text-slate-500">阶段：{stageLabel} · 版本：{article.version || 1} · {formatBeijingTime(article.createdAt)} · 发布：{summaryLabel}</span></button>
            <button type="button" onClick={() => workflow?.stage === 'paid_processing' && onOpenOrder ? onOpenOrder() : onOpenPublication(article)} className={`shrink-0 rounded border px-2 py-2 text-xs ${workflow?.stage === 'failed' ? 'border-amber-300 text-amber-700 hover:border-amber-400' : 'border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-700'}`}>{workflow?.stage === 'failed' ? '打开需处理' : workflow?.stage === 'paid_processing' ? '查看订单' : '发布详情'}</button>
         </div>})}</div>}
       </section>;

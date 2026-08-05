@@ -1,5 +1,4 @@
 "use strict";
-
 const {
   productionIpcRegistry,
 } = require("../ipc/contracts/production-registry");
@@ -9,7 +8,6 @@ const {
 const {
   projectPlatformSnapshot,
 } = require("../ipc/contracts/platform-contracts");
-
 function subscribePlatformState(taskService, sendToRenderer) {
   if (!taskService || typeof taskService.subscribe !== "function")
     return function () {};
@@ -26,7 +24,6 @@ function subscribePlatformState(taskService, sendToRenderer) {
     );
   });
 }
-
 function subscribeGenerationRuntimeState(
   contentGenerationBatchService,
   sendToRenderer,
@@ -46,7 +43,6 @@ function subscribeGenerationRuntimeState(
     );
   });
 }
-
 // This module owns construction and wiring of workspace-scoped services. The
 // runtime lifecycle module below owns only the returned composition's start /
 // dispose boundary; business operations remain behind application services.
@@ -58,7 +54,6 @@ async function createWorkspaceRuntimeComposition(deps) {
   const invalidation = values.invalidation;
   if (!invalidation || typeof invalidation.invalidate !== "function")
     throw new Error("Workspace composition requires invalidation");
-
   let runtime = null;
   let modules = null;
   let ipcDeps = null;

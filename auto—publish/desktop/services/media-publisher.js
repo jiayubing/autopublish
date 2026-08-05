@@ -5,6 +5,17 @@ const domain = require("../../src/domain");
 function safeError(code, category, retryability, userMessage) {
   return { code, category, retryability, userMessage };
 }
+function missingSystemSubmissionId() {
+  return {
+    status: "failed",
+    error: safeError(
+      "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED",
+      "validation",
+      "never",
+      "媒体投稿缺少全局系统投稿标识，已阻止下单",
+    ),
+  };
+}
 function remoteId(response) {
   const data = response && response.data || {};
   const nested = data && data.data || {};
@@ -33,7 +44,8 @@ function createMediaPublisher(options) {
       let response;
       try {
         const configuredThirdId = typeof value.thirdIdProvider === "function" ? value.thirdIdProvider() : null;
-        const thirdId = typeof configuredThirdId === "string" && configuredThirdId.trim() ? configuredThirdId.trim() : input.attemptId;
+        const thirdId = typeof configuredThirdId === "string" && configuredThirdId.trim() ? configuredThirdId.trim() : null;
+        if (!thirdId) return missingSystemSubmissionId();
         response = await value.clientProvider().sendArticle({ resourceId: target.mediaResourceId, title: input.title, content: input.body, thirdId });
       } catch (_) {
         return { status: "uncertain", error: safeError("MEDIA_REMOTE_UNCERTAIN", "transport", "manual-check", "无法确认媒体投稿结果") };
@@ -56,7 +68,8 @@ async function publishThroughSupplier(options, input, target) {
         : null;
     const systemSubmissionId = typeof configured === "string" && configured.trim()
       ? configured.trim()
-      : input.attemptId;
+      : null;
+    if (!systemSubmissionId) return missingSystemSubmissionId();
     const supplier = options.supplierProvider();
     if (!supplier || typeof supplier.createOrder !== "function") {
       return { status: "uncertain", error: safeError("MEDIA_REMOTE_UNCERTAIN", "transport", "manual-check", "无法确认媒体投稿结果") };

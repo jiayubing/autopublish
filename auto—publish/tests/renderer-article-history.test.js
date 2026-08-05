@@ -81,7 +81,9 @@ describe("article history grouping", async function() {
     assert.match(view, /useConfirmation/);
     assert.match(view, /const \{ confirm \} = useConfirmation\(\)/);
     assert.match(view, /isArticleSelectable/);
-    assert.match(view, /onArticleSelect\(article\)/);
+    assert.match(view, /function openArticle\(article: GeneratedContentArticle/);
+    assert.match(view, /if \(!workflow\) return/);
+    assert.doesNotMatch(view, /onArticleSelect\(article, null, false\)/);
     assert.match(view, /全选当前结果/);
     assert.match(view, /templateSnapshot/);
     assert.match(view, /正文解释|body/);
@@ -107,7 +109,7 @@ describe("article history grouping", async function() {
     assert.match(view, /撤销未开始投稿/);
     assert.match(view, /management: ArticleManagementReadModel/);
     assert.match(view, /const \[selected, setSelected\]/);
-    assert.match(view, /onArticleSelect\(article\)/);
+    assert.match(view, /function openArticle\(article: GeneratedContentArticle/);
     assert.match(view, /queueableTaskCount/);
     assert.match(view, /idempotentCount/);
     assert.match(view, /conflictCount/);
