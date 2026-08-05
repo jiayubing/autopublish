@@ -80,8 +80,6 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
     "node scripts/create-test-suite-evidence.js",
     "desktop-migration-roundtrip.json",
     "tests/content-library-migration.test.js",
-    "build/evidence/capacity.json",
-    "tests/phase-02-runtime-capacity.test.js",
     "npm run lint",
     "npm run typecheck:renderer",
     "npm run typecheck:bridge",
@@ -151,6 +149,18 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assertStep(security, "required/diagnostics-static");
   assert.ok(security.includes("npm run test:media-transport"));
   assert.ok(security.includes("npm run test:diagnostics"));
+  assert.ok(security.includes("npm run test:production-ipc-matrix"));
+
+  const capacity = job(workflow, "desktop-capacity");
+  assert.ok(capacity.includes("name: required/desktop-capacity-node24"));
+  assert.ok(capacity.includes("build/evidence/capacity.json"));
+  assert.ok(capacity.includes("tests/phase-02-runtime-capacity.test.js"));
+  assert.ok(capacity.includes("tests/phase-05-handoff-capacity.test.js"));
+
+  const artifact = job(workflow, "desktop-artifact");
+  assert.ok(artifact.includes("name: required/desktop-artifact-node24"));
+  assertStep(artifact, "required/alpha-artifact-gates");
+  assert.ok(artifact.includes("npm run pack:alpha:dirty"));
 
   const links = job(workflow, "link-security");
   assert.ok(links.includes("name: required/link-security"));
@@ -161,7 +171,7 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assert.ok(evidence.includes("name: required/release-evidence"));
   assert.ok(
     evidence.includes(
-      "needs: [desktop, auth, auth-container, auth-verification, desktop-security, link-security]",
+      "needs: [desktop, desktop-capacity, desktop-artifact, auth, auth-container, auth-verification, desktop-security, link-security]",
     ),
   );
   assert.ok(evidence.includes("setup-node@v4"));
@@ -180,6 +190,7 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assert.ok(
     evidence.includes("--capacity-report build/evidence/capacity.json"),
   );
+  assert.ok(evidence.includes("name: desktop-capacity-evidence"));
   assert.ok(
     evidence.includes(
       "validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked",

@@ -45,7 +45,7 @@ async function createFixture(
 test("renderer contract absence gate scans source, generated artifacts, and same-build ASAR", async () => {
   const fixture = await createFixture();
   const archiveFixture = await createFixture(
-    "const legacy = requireBridgeApi;\n",
+    'export * as generation from "./generation";\n',
   );
   try {
     const result = verifyRendererContractAbsence(fixture);
@@ -65,6 +65,18 @@ test("renderer contract absence gate scans source, generated artifacts, and same
         error.code === "RENDERER_CONTRACT_LEGACY_PRESENT" &&
         error.report?.status === "FAILED" &&
         error.report.generatedMatches > 0,
+    );
+
+    fs.writeFileSync(
+      path.join(fixture.root, "build", "preload", "preload.cjs"),
+      "const legacy = requireBridgeApi;\n",
+      "utf8",
+    );
+    assert.throws(
+      () => verifyRendererContractAbsence(fixture),
+      (error) =>
+        error.code === "RENDERER_CONTRACT_LEGACY_PRESENT" &&
+        error.report?.generatedMatches > 0,
     );
 
     assert.throws(
