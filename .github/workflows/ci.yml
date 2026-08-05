@@ -13,6 +13,7 @@ jobs:
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
+      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,6 +33,9 @@ jobs:
         working-directory: auto—publish
       - name: Write desktop discovery evidence
         run: node scripts/create-test-discovery-evidence.js --output build/evidence/desktop-discovery.json
+        working-directory: auto—publish
+      - name: Prepare alpha package fixture for artifact-dependent tests
+        run: npm run pack:alpha:dirty
         working-directory: auto—publish
       - name: required/root-tests
         run: npm run test:desktop-core
