@@ -130,6 +130,8 @@ test("publication reconcile accepts a null client identity from OperationalStore
       publicationId: "publication-null-client",
       status: "published",
       reasonCode: "CONFIRMED_PUBLISHED",
+      remoteId: "remote-null-client",
+      remoteUrl: "https://example.test/articles/remote-null-client",
       confirmed: true,
     },
   ]);

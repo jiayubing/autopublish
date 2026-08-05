@@ -132,6 +132,8 @@ const publicationContracts = Object.freeze([
       publicationId: id,
       status: enumField(["published", "failed"]),
       reasonCode: code,
+      remoteId: optionalField(safeText(512, 1)),
+      remoteUrl: optionalField(remoteUrl),
       confirmed: literalField(true),
     }),
     success: exactObject({ record }),
