@@ -26,12 +26,11 @@ function copyToIsolation(source, parent) {
   let sourceDb;
   try {
     sourceDb = new DatabaseSync(source, { readOnly: true });
-    sourceDb.exec("BEGIN");
-    let snapshot;
     try {
-      snapshot = sourceDb.serialize();
+      const quotedDestination = `'${isolatedFile.replaceAll("'", "''")}'`;
+      sourceDb.exec(`VACUUM INTO ${quotedDestination}`);
+      return { isolatedRoot, isolatedFile, wal: false, shm: false };
     } catch (error) {
-      try { sourceDb.exec("ROLLBACK"); } catch (_) { /* preserve the verification result */ }
       if (!/not a database|malformed/i.test(String(error && error.message))) throw error;
       try {
         fs.copyFileSync(source, isolatedFile);
@@ -40,11 +39,7 @@ function copyToIsolation(source, parent) {
         throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
       }
     }
-    sourceDb.exec("COMMIT");
-    fs.writeFileSync(isolatedFile, snapshot);
-    return { isolatedRoot, isolatedFile, wal: false, shm: false };
   } catch (_) {
-    try { if (sourceDb) sourceDb.exec("ROLLBACK"); } catch (_) { /* preserve the isolation failure */ }
     try { fs.rmSync(isolatedRoot, { recursive: true, force: true }); } catch (_) { /* preserve the isolation failure */ }
     throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
   } finally {

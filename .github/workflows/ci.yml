@@ -180,7 +180,7 @@ jobs:
 
   desktop-security:
     name: required/desktop-security-node24
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
     steps:
@@ -203,7 +203,7 @@ jobs:
 
   link-security:
     name: required/link-security
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
     steps:
