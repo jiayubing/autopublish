@@ -370,6 +370,7 @@ function AppContent() {
                     onAttentionIntentConsumed={() =>
                       setArticleAttentionIntent(null)
                     }
+                    onOpenOrders={() => setCurrentView("orders")}
                   />
                 </motion.div>
               )}

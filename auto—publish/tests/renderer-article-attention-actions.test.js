@@ -48,7 +48,7 @@ test('article attention actions produce visible publication/detail results', asy
       const content = {
         listClients: () => ok({ clients: [{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
         listGeneratedArticles: () => ok({ articles: [article] }),
-        getArticleManagementSnapshot: () => ok({ clientId: article.clientId, revision: 1, articles: [article], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [publication], attention: { revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }, submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }], workflowItems: [], publicationSummaryItems: [] }),
+         getArticleManagementSnapshot: () => ok({ clientId: article.clientId, revision: 1, articles: [article], trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: [publication], attention: { revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }, submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }], workflowItems: [{ articleId: article.id, workflow: { version: 1, stage: 'failed', label: '需处理', primaryAction: 'open_attention', allowedBulkActions: ['open_attention', 'trash'], reasonCodes: ['PUBLICATION_FAILED'], reasonMessage: '投稿明确失败，需要处理。', locks: { canEdit: true, canQueue: true, canCancel: false, canTrash: true }, publicationSummary: { status: 'failed', label: '失败', records: 1, published: 0, uncertain: false }, targetFacts: [] } }], publicationSummaryItems: [{ articleId: article.id, summary: { status: 'failed', label: '失败', records: 1, published: 0, uncertain: false } }] }),
         listArticleAttention: () => ok({ revision: 1, items: [attention, conflict], counts: { total: 2, actionable: 1 } }),
         getArticleAttention: ({ attentionId }) => ok({ item: attentionId === conflict.attentionId ? conflict : attention }), previewArticleAttention: ({ action }) => ok({ attentionId: attention.attentionId, revision: 1, action, requiresConfirmation: true, message: '投稿明确失败', changedScopes: [] }),
         resolveArticleAttention: ({ action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId: attention.attentionId, changedScopes: [] }); },
@@ -69,8 +69,8 @@ test('article attention actions produce visible publication/detail results', asy
     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'AI内容生成' }).click();
     await page.getByRole('button', { name: '历史文章' }).click();
-    await page.getByRole('tab', { name: '失败' }).click();
-    await page.getByRole('button', { name: '打开发布详情' }).click();
+     await page.getByRole('tab', { name: '需处理' }).click();
+     await page.getByRole('button', { name: '打开发布详情' }).click();
     await page.getByRole('dialog', { name: '文章 失败后可重新投稿 的发布详情' }).waitFor({ state: 'visible' });
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await page.getByRole('button', { name: '关闭发布详情' }).first().click();

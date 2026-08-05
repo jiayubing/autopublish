@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles } from '../../article-history-logic';
-import type { ArticleAttentionItem, ArticleRemovalTransaction, ArticleTrashImpactItem, ArticleTrashPreview, ArticleTrashRecord, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, PublicationHistoryRecord } from '../../types/publication';
+import type { ArticleAttentionItem, ArticleRemovalTransaction, ArticleTrashImpactItem, ArticleTrashPreview, ArticleTrashRecord, ContentSubmissionBatchRecord, ContentSubmissionCancellationPreview, ContentSubmissionPlatform, PublicationHistoryRecord, PublicationHistorySummary } from '../../types/publication';
 import type { GeneratedContentArticle } from '../../types/generation';
 import { type ArticleWorkflowStage } from '../../article-workflow';
 import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
-import { summarizePublicationRecords } from '../../publication-status';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
 import AccountProfileSelector from './AccountProfileSelector';
@@ -21,7 +20,16 @@ type ArticleManagementReadModel = {
   submissionBatches: ContentSubmissionBatchRecord[];
   cancellationPlans: ContentSubmissionCancellationPreview[];
   publicationRecords: PublicationHistoryRecord[];
-  workflowByArticle: Record<string, { stage: ArticleWorkflowStage }>;
+  workflowByArticle: Record<string, {
+    stage: ArticleWorkflowStage;
+    label?: string;
+    locks: { canEdit: boolean; canQueue: boolean; canCancel: boolean; canTrash: boolean };
+    primaryAction: string;
+    allowedBulkActions: string[];
+    reasonCodes?: string[];
+    reasonMessage?: string | null;
+  }>;
+  publicationSummaries: Record<string, PublicationHistorySummary>;
   submissionPlatforms: ContentSubmissionPlatform[];
 };
 
@@ -47,7 +55,7 @@ type GeneratedArticlesCommands = Record<
   (input?: any) => Promise<any>
 >;
 
-interface GeneratedArticlesViewProps { clientId: string; management: ArticleManagementReadModel; query: { loading: boolean; error?: { userMessage?: string } | null }; commands: GeneratedArticlesCommands; commandStates: Record<string, { busy: boolean; error?: { userMessage?: string } | null }>; removal: { transactionId: string | null; transaction: ArticleRemovalTransaction | null; query: { loading: boolean; error?: { userMessage?: string } | null } }; watchRemovalTransaction: (transactionId: string) => Promise<unknown>; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; }
+interface GeneratedArticlesViewProps { clientId: string; management: ArticleManagementReadModel; query: { loading: boolean; error?: { userMessage?: string } | null }; commands: GeneratedArticlesCommands; commandStates: Record<string, { busy: boolean; error?: { userMessage?: string } | null }>; removal: { transactionId: string | null; transaction: ArticleRemovalTransaction | null; query: { loading: boolean; error?: { userMessage?: string } | null } }; watchRemovalTransaction: (transactionId: string) => Promise<unknown>; stageFilter?: ArticleWorkflowStage | 'all'; selectedAttentionId?: string; onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void; onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void; onOpenOrders?: () => void; }
 
 function selectionKey(article: GeneratedContentArticle) { return articleSelectionKey(article); }
 
@@ -66,9 +74,9 @@ function transactionStatusOf(transaction: Pick<ArticleRemovalTransaction, 'statu
   return transaction?.reasonCode || transaction?.errorCode || '状态冲突';
 }
 
-export default function GeneratedArticlesView({ clientId, management, query, commands, commandStates, removal, watchRemovalTransaction, stageFilter = 'all', selectedAttentionId, onArticleSelect, onStageFilterChange }: GeneratedArticlesViewProps) {
+export default function GeneratedArticlesView({ clientId, management, query, commands, commandStates, removal, watchRemovalTransaction, stageFilter = 'all', selectedAttentionId, onArticleSelect, onStageFilterChange, onOpenOrders }: GeneratedArticlesViewProps) {
   const { confirm } = useConfirmation();
-  const { articles, trash, submissionBatches, cancellationPlans, publicationRecords, workflowByArticle: snapshotWorkflowByArticle, submissionPlatforms: allSubmissionPlatforms } = management;
+  const { articles, trash, submissionBatches, cancellationPlans, publicationRecords, workflowByArticle: snapshotWorkflowByArticle, publicationSummaries: snapshotPublicationSummaries, submissionPlatforms: allSubmissionPlatforms } = management;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('');
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowStage | 'all'>(stageFilter);
@@ -130,7 +138,6 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     resetClientState();
   }, [clientId, resetClientState]);
 
-  const queuedArticleIds = useMemo(() => new Set(submissionBatches.flatMap((batch) => batch.status === 'queued' ? batch.items.filter((item) => item.status === 'queued').map((item) => item.articleId) : [])), [submissionBatches]);
   const publicationRecordsByArticle = useMemo(() => {
     const grouped = new Map<string, PublicationHistoryRecord[]>();
     publicationRecords.forEach((record) => {
@@ -139,28 +146,47 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     });
     return grouped;
   }, [publicationRecords]);
-  const publicationSummaries = useMemo(() => {
-    const summaries = new Map<string, ReturnType<typeof summarizePublicationRecords>>();
-    articles.forEach((article) => {
-      const records = publicationRecordsByArticle.get(article.id) || [];
-      summaries.set(article.id, records.length ? summarizePublicationRecords(records) : queuedArticleIds.has(article.id) ? { status: 'queued', label: '已入队', records: 0, published: 0, uncertain: false } : summarizePublicationRecords([]));
-    });
-    return summaries;
-  }, [articles, publicationRecordsByArticle, queuedArticleIds]);
   const workflowByArticle = useMemo(() => new Map(articles.map((article) => [article.id, snapshotWorkflowByArticle[article.id]])), [articles, snapshotWorkflowByArticle]);
+  const publicationSummaries = useMemo(() => new Map<string, PublicationHistorySummary>(Object.entries(snapshotPublicationSummaries || {})), [snapshotPublicationSummaries]);
+
+  function workflowForArticle(article: GeneratedContentArticle) {
+    return workflowByArticle.get(article.id);
+  }
+
+  function canQueueArticle(article: GeneratedContentArticle): boolean {
+    const workflow = workflowForArticle(article);
+    // Older snapshots did not carry the projection. Preserve safe selection
+    // behavior until the next authoritative snapshot arrives.
+    return workflow ? workflow.locks.canQueue === true : !isPublishedArticle(article) && (article.status === 'generated' || article.status === 'saved');
+  }
+
+  function canTrashArticle(article: GeneratedContentArticle): boolean {
+    const workflow = workflowForArticle(article);
+    return workflow ? workflow.locks.canTrash === true : !isPublishedArticle(article) && (article.status === 'generated' || article.status === 'saved');
+  }
+
+  function isArticleSelectable(article: GeneratedContentArticle): boolean {
+    return selectableArticles([article], clientId).length > 0 && (canQueueArticle(article) || canTrashArticle(article));
+  }
+
+  function isPublishedArticle(article: GeneratedContentArticle): boolean {
+    const workflow = workflowForArticle(article);
+    return workflow?.stage === 'published' || (!workflow && publicationRecordsByArticle.get(article.id)?.some((record) => record.status === 'published' || (record.status === 'submitted' && !record.mediaResourceId)) === true);
+  }
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
     return articles.filter((article) => {
       // Older main-process snapshots did not include workflowByArticle. Treat
       // those articles as pending until a fresh authoritative snapshot arrives.
-      const stageMatches = selectedStage === 'all' || (snapshotWorkflowByArticle[article.id]?.stage || 'pending_submission') === selectedStage;
+      const stageMatches = selectedStage === 'all' || (workflowByArticle.get(article.id)?.stage || 'pending_submission') === selectedStage;
       const textMatches = !query || `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ''} ${article.templateSnapshot?.scenario || ''} ${article.templateSnapshot?.body || ''}`.toLowerCase().includes(query);
       return stageMatches && textMatches;
     });
-  }, [articles, filter, selectedStage, snapshotWorkflowByArticle]);
+  }, [articles, filter, selectedStage, workflowByArticle]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
-  const operable = useMemo(() => selectableArticles(filtered, clientId), [filtered, clientId]);
-  const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)));
+  const operable = useMemo(() => selectableArticles(filtered, clientId).filter(isArticleSelectable), [filtered, clientId, workflowByArticle]);
+  const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)) && isArticleSelectable(article));
+  const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
   // Batch order is an implementation detail.  Actions must cover every safe
   // item for this client so a newer completed batch cannot hide an older media
   // batch that is still staged locally.
@@ -191,13 +217,13 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   }
 
   function toggleArticle(article: GeneratedContentArticle) {
-    if (article.status !== 'generated' && article.status !== 'saved') return;
+    if (!isArticleSelectable(article)) return;
     const key = selectionKey(article);
     updateSelected((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   }
 
   function toggleGroup(groupArticles: GeneratedContentArticle[]) {
-    const ids = selectableArticles(groupArticles, clientId).map(selectionKey);
+    const ids = selectableArticles(groupArticles, clientId).filter(isArticleSelectable).map(selectionKey);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
     updateSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
@@ -205,7 +231,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   async function queueSelected() {
     const requestedClientId = clientId;
     if (commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')) return;
-    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && (article.status === 'generated' || article.status === 'saved'));
+    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && canQueueArticle(article));
     if (!selectedQueueable.length || !targetPlatformIds.length) return;
     setError('');
     try {
@@ -226,7 +252,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   async function handoffSelectedToMedia() {
     const requestedClientId = clientId;
     if (commandBusy('previewExport', 'exportToSubmissionQueue')) return;
-    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && (article.status === 'generated' || article.status === 'saved'));
+    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && canQueueArticle(article));
     if (!selectedQueueable.length) return;
     setError('');
     try {
@@ -257,7 +283,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   }
 
   async function copyPublishedVersion() {
-    if (!drawerArticle || !publicationRecordsByArticle.get(drawerArticle.id)?.some((record) => record.status === 'published')) return;
+    if (!drawerArticle || !isPublishedArticle(drawerArticle)) return;
     const source = drawerArticle; const requestedClientId = clientId;
     if (!(await confirm({ title: '确认复制文章新版本', message: `确认复制“${source.title}”为新版本？原文章和发布记录不会修改。新版本会生成新的 articleId，必须重新选择目标并投稿。`, confirmLabel: '确认复制' }))) return;
     setError(''); try {
@@ -391,11 +417,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   }
 
   async function trashSelected() {
-    await previewTrashSelections(selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id })));
-  }
-
-  async function trashPublishedArticle(article: GeneratedContentArticle) {
-    await previewTrashSelections([{ clientId: article.clientId, articleId: article.id }]);
+    await previewTrashSelections(selectedTrashableArticles.map((article) => ({ clientId: article.clientId, articleId: article.id })));
   }
 
   async function commitTrash(previewOverride?: ArticleTrashPreview) {
@@ -405,7 +427,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     if (commandBusy('trashContentArticles')) return;
     setError('');
     try {
-      const selections = activePreview.selections || selectedArticles.map((article) => ({ clientId: article.clientId, articleId: article.id }));
+      const selections = activePreview.selections || selectedTrashableArticles.map((article) => ({ clientId: article.clientId, articleId: article.id }));
       const result = await commands.trashContentArticles({ selections, token: activePreview.token, confirmed: true });
         if (isContentCommandStaleResult(result) || !isCurrentClient(requestedClientId)) return;
       const resultTransaction = result.transaction || (result.transactionId ? {
@@ -510,7 +532,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
 
        <div className="flex min-w-0 flex-wrap items-center gap-2">
          <button type="button" onClick={toggleAll} disabled={!operable.length} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
-         <button type="button" onClick={() => void trashSelected()} disabled={!selectedArticles.length || commandBusy('previewContentArticleRemoval', 'trashContentArticles') || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedArticles.length})</button>
+          <button type="button" onClick={() => void trashSelected()} disabled={!selectedTrashableArticles.length || commandBusy('previewContentArticleRemoval', 'trashContentArticles') || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedTrashableArticles.length})</button>
          {(cancelableCount > 0 || cancellationIsPending) && <button type="button" title={cancellationIsPending ? '正在撤销当前客户的未开始投稿内容' : `覆盖当前客户全部可撤销批次：${cancelableBatches.map(({ plan, batch, count }) => `${plan.items.find((item) => item.allowed)?.targetPlatformId || '未知目标'} ${formatBeijingTime(batch.createdAt)} (${count})`).join('；')}`} onClick={() => void cancelCancelableBatches()} disabled={cancellationIsPending || commandBusy('cancelContentSubmissionBatch')} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">{cancellationIsPending ? `正在撤销… (${cancellationPending.count})` : `撤销未开始投稿 (${cancelableCount})`}</button>}
          {cleanableCount > 0 && <button type="button" onClick={() => void cleanupFailedBatches()} disabled={commandBusy('previewCleanupFailedContentSubmissionItems', 'cleanupFailedContentSubmissionItems')} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({cleanableCount})</button>}
          {submissionBatches.length > 0 && !cancelableCount && !cleanableCount && <span role="status" className="text-xs text-slate-500">当前客户全部批次均无可撤销或可清理项。</span>}
@@ -526,16 +548,16 @@ export default function GeneratedArticlesView({ clientId, management, query, com
           <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
         </div>
-         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some((article) => article.status === 'generated' || article.status === 'saved') || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
-        <button type="button" onClick={() => void handoffSelectedToMedia()} disabled={!selectedArticles.some((article) => article.status === 'generated' || article.status === 'saved') || commandBusy('previewExport', 'exportToSubmissionQueue')} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
+         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some(canQueueArticle) || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+         <button type="button" onClick={() => void handoffSelectedToMedia()} disabled={!selectedArticles.some(canQueueArticle) || commandBusy('previewExport', 'exportToSubmissionQueue')} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
         <AccountProfileSelector platforms={submissionPlatforms} targetPlatformIds={targetPlatformIds} value={accountProfiles} onChange={setAccountProfiles} />
       </div>
     </div>
      {visibleError && <div role="alert" className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{visibleError}</div>}
      {selectedStage === 'failed' && <div className="mb-3"><ArticleAttentionPanel snapshot={attentionSnapshot} onRefresh={attentionFeature.refresh} onPreviewAction={attentionFeature.previewAction} onExecutePreview={attentionFeature.executePreview} selectedAttentionId={selectedAttentionId} onOpenPublication={(item) => { const article = articles.find((candidate) => candidate.id === item.articleId); if (article) setDrawerArticle(article); else setAttentionDetail(item); }} onInspect={(item) => setAttentionDetail(item)} onOpenArticle={(item) => { const article = articles.find((candidate) => candidate.id === item.articleId); if (article) onArticleSelect(article, null, false); else setAttentionDetail(item); }} /></div>}
-    <GeneratedArticlesList groups={groups} visibleError={visibleError} clientId={clientId} collapsed={collapsed} selected={selected} queuedArticleIds={queuedArticleIds} publicationRecordsByArticle={publicationRecordsByArticle} publicationSummaries={publicationSummaries} workflowByArticle={workflowByArticle} removalSubmitDisabled={removalSubmitDisabled} commandBusy={commandBusy} onToggleCollapsed={(key) => setCollapsed((current) => ({ ...current, [key]: current[key] === false }))} onToggleGroup={toggleGroup} onToggleArticle={toggleArticle} onOpenArticle={openArticle} onOpenPublication={(article) => setDrawerArticle(article)} onTrashPublishedArticle={(article) => void trashPublishedArticle(article)} />
+     <GeneratedArticlesList groups={groups} visibleError={visibleError} clientId={clientId} collapsed={collapsed} selected={selected} publicationSummaries={publicationSummaries} workflowByArticle={workflowByArticle} isArticleSelectable={isArticleSelectable} isArticleQueueable={canQueueArticle} removalSubmitDisabled={removalSubmitDisabled} commandBusy={commandBusy} onToggleCollapsed={(key) => setCollapsed((current) => ({ ...current, [key]: current[key] === false }))} onToggleGroup={toggleGroup} onToggleArticle={toggleArticle} onOpenArticle={(article, source) => openArticle(article, source, isPublishedArticle(article))} onOpenPublication={(article) => setDrawerArticle(article)} onOpenOrder={onOpenOrders} />
     {trashPreview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">远端已发布内容不会撤回；发布记录和标题快照会保留。本地文章正文和投稿队列副本会进入回收站/被清理，恢复文章不会自动恢复投稿队列。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={commandBusy('trashContentArticles')} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>已发布本地副本：{groupImpact(trashPreview.publishedToClean || []).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">{platform} {count}</span>)}{!(trashPreview.publishedToClean || []).length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>失败本地副本：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>仍在投稿/待确认：{trashPreview.blockedItems.length}</div><div>发布记录：保留</div></div>{(trashPreview.openTransaction || trashPreview.transaction) && <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">已存在相同删除事务，已复用现有事务；请查看上方状态，不会重复创建。</div>}{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && !removalSubmitDisabled && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理终结的 failed/published/cancelled 本地副本，并将文章移入回收站；远端已发布内容不会撤回。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={commandBusy('trashContentArticles')} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || commandBusy('trashContentArticles') || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{removalSubmitDisabled ? '已有开放删除事务' : '确认移入回收站'}</button></div></div></div>}
-    <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={commandStates.copyArticleVersion.busy || commandStates.reconcilePublication.busy} />
+    <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} summary={drawerArticle ? publicationSummaries.get(drawerArticle.id) : undefined} onClose={() => setDrawerArticle(null)} onCopyVersion={() => void copyPublishedVersion()} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={commandStates.copyArticleVersion.busy || commandStates.reconcilePublication.busy} />
     <ArticleAttentionDetailDrawer item={attentionDetail} onClose={() => setAttentionDetail(null)} />
   </div>;
 }
