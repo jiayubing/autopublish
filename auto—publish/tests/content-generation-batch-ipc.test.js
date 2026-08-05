@@ -1,7 +1,12 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { registerContentGenerationBatchIpc } = require("../desktop/ipc/content-generation-batch-ipc");
+const {
+  GENERATION_TASK_PAGE_SIZE,
+  registerContentGenerationBatchIpc,
+  safeBatch,
+  safePreview,
+} = require("../desktop/ipc/content-generation-batch-ipc");
 
 function fakeIpc() {
   const handlers = new Map();
@@ -9,6 +14,46 @@ function fakeIpc() {
 }
 
 describe("content generation batch IPC", function() {
+  it("bounds large task projections while preserving total-count evidence", function() {
+    const tasks = Array.from({ length: 5000 }, (_, index) => ({
+      id: `task-${index}`,
+      clientId: "client-1",
+      platform: "media",
+      templateId: "guide",
+      materialIds: ["material-1"],
+      researchQueryIds: ["research-1"],
+      status: "pending",
+      attempts: 0,
+    }));
+    const batch = safeBatch({
+      id: "batch-large",
+      status: "pending",
+      clientSources: [],
+      templates: [],
+      tasks,
+      counts: { total: 5000, succeeded: 0, failed: 0, pending: 5000, interrupted: 0, cancelled: 0 },
+    });
+    const preview = safePreview({
+      clientCount: 1,
+      executableClientCount: 1,
+      taskCount: 5000,
+      executableTaskCount: 5000,
+      excludedTaskCount: 0,
+      excludedClients: [],
+      templates: [],
+      clientSources: [],
+      tasks,
+    });
+    assert.equal(GENERATION_TASK_PAGE_SIZE, 256);
+    assert.equal(batch.tasks.length, GENERATION_TASK_PAGE_SIZE);
+    assert.equal(batch.taskCount, 5000);
+    assert.equal(batch.taskOffset, 0);
+    assert.equal(batch.tasksTruncated, true);
+    assert.equal(preview.tasks.length, GENERATION_TASK_PAGE_SIZE);
+    assert.equal(preview.taskCount, 5000);
+    assert.equal(preview.tasksTruncated, true);
+  });
+
   it("registers the complete safe batch surface and wraps successful calls", async function() {
     const { ipcMain, handlers } = fakeIpc();
     const service = {

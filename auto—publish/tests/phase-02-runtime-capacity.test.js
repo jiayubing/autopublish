@@ -14,6 +14,9 @@ const {
 const {
   acquireRuntimeOwner,
 } = require("../src/infrastructure/operational-store/internal/operational-store-owner-lease");
+const {
+  RECOVERY_PAGE_SIZE,
+} = require("../src/infrastructure/operational-store/internal/operational-store-recovery-aggregate");
 const { createMigration } = require("../scripts/migrate-operational-store-v1");
 
 const childScript = path.join(
@@ -364,10 +367,19 @@ test("10,000 publication baseline retains actionable recovery and closes with a 
       store.reservePublicationTarget(input(`capacity-${index}`));
     const writeMs = performance.now() - started,
       attention = store.listActionableRecovery();
-    assert.equal(attention.length, 10000);
+    assert.equal(attention.length, RECOVERY_PAGE_SIZE);
+    assert.equal(attention.hasMore, true);
     const databasePath = store.databasePath;
     store.close();
     assert.equal(verifyOperationalDatabase(databasePath).rows, 10000);
+    const db = new DatabaseSync(databasePath, { readOnly: true });
+    const recoveryCount = db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM recovery_intents WHERE state IN('remote_started','outcome_pending','manual_check')",
+      )
+      .get().count;
+    db.close();
+    assert.equal(recoveryCount, 10000);
     console.log(
       JSON.stringify({
         phase02PublicationBaseline: {
@@ -375,6 +387,8 @@ test("10,000 publication baseline retains actionable recovery and closes with a 
           writeMs: Math.round(writeMs),
           databaseBytes: fs.statSync(databasePath).size,
           actionableRecovery: attention.length,
+          actionableRecoveryTotal: recoveryCount,
+          recoveryPageSize: RECOVERY_PAGE_SIZE,
         },
       }),
     );

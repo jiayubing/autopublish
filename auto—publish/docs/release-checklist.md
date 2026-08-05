@@ -17,7 +17,7 @@ cannot become release-ready.
 
 ## Fixed required checks
 
-These 16 IDs are stable CI subcheck/evidence-contract names. GitHub branch
+These 17 IDs are stable CI subcheck/evidence-contract names. GitHub branch
 protection must require the seven job display names listed separately below;
 step IDs are not GitHub status checks by themselves.
 
@@ -37,6 +37,7 @@ step IDs are not GitHub status checks by themselves.
 - `required/media-transport`
 - `required/diagnostics-static`
 - `required/link-security`
+- `required/phase-08-gates`
 
 The fixed CI job display names are:
 
@@ -55,20 +56,25 @@ manifest writer, validator, this checklist and the Phase 7 handoff.
 
 - `required/root-tests`: desktop core suite; the four delegated packaging contract files run under `required/packaging-contracts`, so the two required checks together cover the full desktop suite without repeating a test file.
 - `required/test-discovery`: both `.test.js` and `.test.mjs` collection.
-- `required/migration-roundtrip`: desktop migration tests.
+- `required/migration-roundtrip`: desktop Content/OperationalStore migration suite; its independent report is `build/evidence/desktop-migration-roundtrip.json`.
 - `required/toolchain`: lint, renderer/bridge/main typecheck, format, renderer build and preload build.
 - `required/packaging-contracts`: production packaging, runtime and evidence contract tests.
 - `required/production-directory-smoke`: non-signing `electron-builder --dir` plus Ticket 06 offline self-test.
 - `required/legacy-publish-log-absence`: source and actual production archive absence scan.
 - `required/auth-tests`: Auth Linux service test suite.
 - `required/auth-container`: isolated Linux container smoke with no production data and no network.
-- `required/auth-migration-roundtrip`: isolated Auth schema v1 to v2 roundtrip and idempotent retry.
+- `required/auth-migration-roundtrip`: isolated Auth schema v1 to v2 roundtrip and idempotent retry; its independent report is `build/evidence/migration-roundtrip.json`.
 - `required/backup-restore-fixture`: temporary destination verification, restore-check and corruption gate.
 - `required/health-semantics`: liveness/readiness/integrity semantics and safe diagnostics.
 - `required/rate-limit-capacity`: trusted proxy, source/identity/combination buckets, TTL/LRU and 100k identity capacity.
 - `required/media-transport`: HTTPS/HTTP confirmation, redirect, TLS, timeout and sensitive payload gates.
 - `required/diagnostics-static`: structured diagnostic schema, redaction, rotation/capacity and legacy interface absence.
 - `required/link-security`: link capability and path-boundary checks.
+- `required/phase-08-gates`: dependency direction, unique owner/writer, capability reachability, legacy absence, module-size and production package boundary checks.
+
+The evidence manifest keeps desktop migration, Auth migration and Ticket 15
+capacity as separate evidence fields (`migration`, `authMigration`, and
+`capacity`); a required check cannot borrow a report from another boundary.
 
 CI sets `CI_SYNTHETIC_ONLY=1`, uses pinned Node 24/22 runtimes, and never
 uses production secrets or accesses a real database, workspace, account,
@@ -137,7 +143,7 @@ npm run format:check
 npm run build:renderer
 npm run build:preload
 npm run pack:production:smoke
-node scripts/create-release-evidence-manifest.js --artifact-manifest build/production-artifact-manifest.json
+node scripts/create-release-evidence-manifest.js --artifact-manifest build/production-artifact-manifest.json --migration-report build/evidence/desktop-migration-roundtrip.json --auth-migration-report build/evidence/migration-roundtrip.json --capacity-report build/evidence/capacity.json
 node scripts/validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked
 ```
 

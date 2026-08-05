@@ -1,5 +1,58 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 15 执行交接（2026-08-05，迁移、容量、制品与回滚证据）
+
+- 状态：Ticket 15 `COMPLETE`（第五轮独立 `sol`/medium 专项复验无新增 actionable finding，P0/P1/P2/P3 均为 `0`）；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。
+- 基线：detached `HEAD` `fd47958bcac8296bb76b6c89a58c70e9aee87157`（`codex/refactor-program`）；开始时 source worktree 为 clean。修复后的证据必须记录当前 Ticket 的实现、测试、CI 和文档未提交状态为 `DIRTY`；未 stage、commit、push 或创建 PR。
+- 范围：只使用系统临时目录、仓库合成旧 workspace/Auth fixture、隔离 SQLite、合成容量数据和本地 production `--dir` 制品；没有读取真实 workspace、内容库、Auth DB、账号、Cookie、供应商、投稿、同步、扣费或外部平台。
+- 版本冻结：workspace schema `1`，Auth schema `2`，OperationalStore `v3`，worker envelope `1`；当前/未来/旧版本规则由现有 schema gates 保持 fail-closed，旧 Auth schema 只允许显式 migration。
+
+### 迁移、备份与回滚矩阵
+
+| 边界 | 结果 | 覆盖的安全事实 |
+| --- | --- | --- |
+| Content library v2 | 通过 | dry-run 无写入；冲突、重复、缺失、损坏、路径越界和 symlink 拒绝；execute 需显式确认；atomic copy、独立 manifest/hash、断点恢复、重复执行与 byte-for-byte rollback 通过 |
+| Content metadata v1 | 通过 | 空库/当前与旧 marker、损坏/冲突、staging 中断、首次/中间/末次写入失败、重复执行、COMMITTING recovery、rollback switch interruption、repair intent 与 residual evidence 均有结果 |
+| OperationalStore v1 | 通过 | 合成旧 publication/batch/sidecar/JSONL dry-run→execute→verify→reopen→独立 backup/restore；corrupt、duplicate、unknown account、missing remote、target conflict、重复 migration、lease/rename/interruption fault 均 fail-closed；Operations DB 记录数与输入目标关系保持一致 |
+| Auth v1→v2 | 通过 | legacy schema 先拒绝；transactional migration、marker 前 schema/integrity 验证、损坏/未知 schema、rollback/retry、重复 migration、WAL-only change 和 active writer coherent snapshot 通过 |
+
+桌面 migration suite 为 `65/65`，包含 manifest ownership/hash、completion-marker hash、unexpected-backup 和 guarded byte-for-byte rollback fixture；Auth suite 为 `49/49`。desktop migration、Auth migration 和 capacity 已分别生成独立 evidence report，migration report hash 为 `6529ca719323db5c22b81ce76d2ff03f22c3745ad6d6910e9ca25f64204e052b`，capacity report hash 为 `a84ffdb258d4f78012f92fe15571798de75aadaa6de536ea9ec5066a2de6d3fe`；真实生产恢复、签名 rollback package、installer upgrade/rollback 和 RPO/RTO 仍未执行，保持人工门状态。
+
+### 容量与边界摘要
+
+| 数据集 | 结果与安全摘要 |
+| --- | --- |
+| 10,000 publications / multiple attempts | 通过；10,000 actionable recovery facts 保持在 SQLite 中，单次 recovery page 上限 `256` 且 `hasMore` 明确，SQLite verify 通过；本轮写入约 `6,035 ms`，DB 约 `7,421,952` bytes |
+| 500 / 5,000 submission items | 通过；claim/update/reopen 可恢复，查询计划使用 batch identity index，无全表 scan；本轮 claim/update 约 `1,109 / 14,679 ms`，DB 约 `335,872 / 2,035,712` bytes |
+| 500 / 5,000 generation tasks | 通过；production file adapter handoff 只做受控 identity scan，5000 fixture 用时约 `91 s`；generation command/preview/snapshot IPC task projection 固定最多 `256` 项并保留总数/截断元数据 |
+| 1,000 / 10,000 / 13,000 / 20,000 media resources | 通过；Renderer 每场景 1 request，snapshot 始终保留一页，payload `4,279/4,280/4,280/4,280` bytes；IPC/page-size boundary 保持 100 上限 |
+| 100,000 Auth limiter identities | 通过；source/identity/combination buckets 有界，identity/combination entries `<=128`，expiry heap `<=288`，TTL/LRU 与 success clear 通过 |
+
+容量输出只保留计数、查询计划、边界、payload/hash 和耗时摘要；没有据此做未经证据支持的全仓性能重写。
+
+### Production artifact 与 evidence
+
+- 本轮使用本地 Electron `43.1.1` distribution 完成 production `--dir` 验收；ASAR `1,799` entries、unpacked `385`、resources extraResources `6`，package boundary/private/legacy/sensitive/link violations 为 `0`；capability reachability `109/109`，legacy source/archive `0/0`。保留制品 `app.asar` SHA-256 为 `db6f984c9c268d33159a70842c7a06e0851c1dfea23bf011985dd40749ebb190`。
+- production artifact manifest 为 version `1`、application `1.0.1`、workspace schema `1`、`13` artifacts；manifest SHA-256 `35d35da19ce2fabc7dfc47457ee72f89a7c55a072ab697c1f8f32e78a5f0060e`。production smoke evidence 为 `10` passed、`0` failed、`1` `SKIPPED_OPTIONAL`，SHA-256 `84d4de538ffd02c45972be93ff6aeceae75c50cb6ca9311f4d1a86533dc3eb73`。
+- release evidence writer 现分别记录 desktop migration、Auth migration 和 Ticket 15 capacity report；最终 manifest 已重生成并由 checklist validator `--allow-blocked` 复验。`required/auth-container` 因本机无 Docker 明确为 `PENDING_HUMAN`，source state 保持 `DIRTY`，release state 保持 `BLOCKED_RELEASE`，没有把 dirty source 或 optional Python skip 伪装成 release approval。
+- 本 Ticket 同步 release checklist 的固定 required check 数为 `17`，补录 `required/phase-08-gates`，使文档与 Ticket 13 的 contract/CI 一致。
+
+### 必跑验证
+
+| 命令 / 证据 | 结果 |
+| --- | --- |
+| `npm test` | 最终为 238 files、134 suites、`1618/1618` pass，0 fail、0 skip |
+| Auth / migration / backup / health / rate-limit | Auth `49/49`；migration `PASSED`；backup/restore `PASSED`；health `9/9`；rate-limit `9/9` |
+| migration / capacity / media / links / diagnostics | desktop migration `65/65`；capacity `20/20`；generation handoff 500/5000 通过；media 4/4 capacity cases 通过；links `184/184`；diagnostics `32/32` |
+| packaging / gates / toolchain | packaging `48/48`；Phase 8 gate `3/3`；dependency/owner/capability/package gate `PASSED`；lint、三套 typecheck、format、renderer/preload build、`git diff --check` 通过 |
+
+### 未决人工门与停止条件
+
+- Docker 不在本机环境中，Auth Linux/container smoke 未伪造通过，保留 `PENDING_HUMAN`；CI 的 `network=none` container job 仍是后续环境门。
+- `SKIPPED_OPTIONAL` 仅表示本次没有提供 packaged Hepan Python；没有源码 fallback，也未访问供应商。
+- Phase 4 platform/account/Hepan reconciliation/media HTTP/signed browser gates，production TLS/proxy source/signing/installer/upgrade rollback/external E2E，Auth backup policy/recovery drill/RPO-RTO，以及真实 signed rollback package 全部保持 `PENDING_HUMAN`；release 保持 `BLOCKED_RELEASE`。
+- 合成 migration/backup/rollback 已证明可恢复；若后续真实恢复、未知远端事实或签名 rollback 证据失败，应按计划重开所属阶段，不在 Phase 8 添加 wrapper 或放宽边界。
+
 ## Ticket 13 执行交接（2026-08-05，旧测试、依赖、构建残余与门禁）
 
 - 状态：Ticket 13 `COMPLETE`；Phase 8 仍为 `IN_PROGRESS`，正式 release 仍为 `BLOCKED_RELEASE`。本轮只完成 cleanup 与自动化验收，不批准后续功能、迁移容量或人工 release gates。
@@ -55,10 +108,10 @@ CI required check 为 `required/phase-08-gates`，release evidence contract 与 
 
 | 命令 / 证据 | 结果 |
 |---|---:|
-| root suite | 238 个测试文件，1608/1608 pass，0 fail；最新 gate 专项 3/3 |
+| root suite | 238 个测试文件、134 suites，`1618/1618` pass，0 fail、0 skip；Phase 8 gate `3/3` |
 | Auth suite | 49/49 pass |
 | `npm run pack:production:smoke:dirty` | 首次下载 Electron 时网络 `ETIMEDOUT`；重试成功，renderer 2171 modules、preload sandbox 3/3、production package verifier 通过 |
-| fresh Phase 8 package gate | `PASSED`；ASAR 1798 entries、unpacked 385、extraResources 5；private/legacy/sensitive/link violations 0；capability `109/109`，source/archive legacy absence `0/0`，module-size/stale `0/0` |
+| final Phase 8 package gate | `PASSED`；ASAR 1799 entries、unpacked 385、extraResources 6；private/legacy/sensitive/link violations 0；capability `109/109`，source/archive legacy absence `0/0`，module-size/stale `0/0` |
 | `npm run lint` | 通过 |
 | main/renderer/bridge typecheck | 全部通过 |
 | `npm run format:check` | 通过 |

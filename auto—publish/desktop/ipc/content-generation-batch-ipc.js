@@ -2,6 +2,8 @@ const { wrap } = require("../services/ipc-response");
 const { SAFE_MESSAGES } = require("../services/content-generation-batch-service");
 const { productionIpcRegistry } = require("./contracts/production-registry");
 
+const GENERATION_TASK_PAGE_SIZE = 256;
+
 function safeFailure(error) {
   const code = error && typeof error.code === "string" && SAFE_MESSAGES[error.code] ? error.code : "GENERATION_INPUT_INVALID";
   const safeError = { code: code, message: SAFE_MESSAGES[code] || "Generation batch request failed" };
@@ -47,8 +49,18 @@ function safeTask(value) {
   return result;
 }
 
+function taskPage(values, projector) {
+  const source = Array.isArray(values) ? values : [];
+  return {
+    tasks: source.slice(0, GENERATION_TASK_PAGE_SIZE).map(projector),
+    truncated: source.length > GENERATION_TASK_PAGE_SIZE,
+    total: source.length,
+  };
+}
+
 function safeBatch(value) {
   if (value === null || value === undefined) return null;
+  const tasks = taskPage(value.tasks, safeTask);
   const batch = {
     id: value.id,
     status: value.status,
@@ -61,7 +73,7 @@ function safeBatch(value) {
       platform: item.platform,
       templateId: item.templateId,
     })) : [],
-    tasks: Array.isArray(value.tasks) ? value.tasks.map(safeTask) : [],
+    tasks: tasks.tasks,
     counts: value.counts,
   };
   for (const key of ["version", "concurrency", "createdAt", "updatedAt", "aiConfigFingerprint"])
@@ -70,11 +82,23 @@ function safeBatch(value) {
     clientId: item.clientId,
     codes: Array.isArray(item.codes) ? item.codes.slice() : [],
   }));
+  if (tasks.truncated) {
+    batch.taskCount = tasks.total;
+    batch.taskOffset = 0;
+    batch.tasksTruncated = true;
+  }
   return batch;
 }
 
 function safePreview(value) {
   const input = value || {};
+  const tasks = taskPage(input.tasks, (item) => ({
+    clientId: item.clientId,
+    platform: item.platform,
+    templateId: item.templateId,
+    materialIds: Array.isArray(item.materialIds) ? item.materialIds.slice() : [],
+    researchQueryIds: Array.isArray(item.researchQueryIds) ? item.researchQueryIds.slice() : [],
+  }));
   return {
     clientCount: input.clientCount,
     executableClientCount: input.executableClientCount,
@@ -94,13 +118,8 @@ function safePreview(value) {
       materialIds: Array.isArray(item.materialIds) ? item.materialIds.slice() : [],
       researchQueryIds: Array.isArray(item.researchQueryIds) ? item.researchQueryIds.slice() : [],
     })) : [],
-    tasks: Array.isArray(input.tasks) ? input.tasks.map((item) => ({
-      clientId: item.clientId,
-      platform: item.platform,
-      templateId: item.templateId,
-      materialIds: Array.isArray(item.materialIds) ? item.materialIds.slice() : [],
-      researchQueryIds: Array.isArray(item.researchQueryIds) ? item.researchQueryIds.slice() : [],
-    })) : [],
+    tasks: tasks.tasks,
+    ...(tasks.truncated ? { taskOffset: 0, tasksTruncated: true } : {}),
   };
 }
 
@@ -165,10 +184,11 @@ function registerContentGenerationBatchIpc(deps) {
   const unsubscribe = publishEvents && typeof service.subscribe === "function" ? service.subscribe(function(state) {
     if (typeof sendToRenderer !== "function") return;
     try {
-      sendToRenderer(runtimeEvent.channel, productionIpcRegistry.event(runtimeEvent, state));
+      const eventState = state && state.batch ? Object.assign({}, state, { batch: safeBatch(state.batch) }) : state;
+      sendToRenderer(runtimeEvent.channel, productionIpcRegistry.event(runtimeEvent, eventState));
     } catch (_) {}
   }) : function() {};
   return { dispose: unsubscribe };
 }
 
-module.exports = { registerContentGenerationBatchIpc, safeBatch, safePreview, safeState, safeRuntimeSnapshot };
+module.exports = { GENERATION_TASK_PAGE_SIZE, registerContentGenerationBatchIpc, safeBatch, safePreview, safeState, safeRuntimeSnapshot };

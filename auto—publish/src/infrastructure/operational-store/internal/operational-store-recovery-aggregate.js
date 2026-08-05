@@ -6,6 +6,8 @@ const {
   text,
 } = require("./operational-store-utils");
 
+const RECOVERY_PAGE_SIZE = 256;
+
 function recoveryDetail(value) {
   const payload = fromText(value);
   if (
@@ -82,22 +84,33 @@ function createRecoveryAggregate(context) {
       .run(status, stamp, batchId);
   }
 
-  function listActionableRecovery() {
+  function listActionableRecovery(options) {
     open();
-    return db
+    const includeManualCheck = !options || options.includeManualCheck !== false;
+    const states = includeManualCheck
+      ? "'remote_started','outcome_pending','manual_check'"
+      : "'remote_started','outcome_pending'";
+    const rows = db
       .prepare(
-        "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE i.state IN('remote_started','outcome_pending','manual_check') ORDER BY i.updated_at",
+        "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE i.state IN(" +
+          states +
+          ") ORDER BY i.updated_at,i.attempt_id LIMIT ?",
       )
-      .all()
-      .map((row) => ({
-        attemptId: row.attempt_id,
-        state: row.state,
-        publicationId: row.publication_id,
-        articleId: row.article_id,
-        targetKey: row.target_key,
-        status: row.status,
-        detail: recoveryDetail(row.payload_json),
-      }));
+      .all(RECOVERY_PAGE_SIZE);
+    const result = rows.map((row) => ({
+      attemptId: row.attempt_id,
+      state: row.state,
+      publicationId: row.publication_id,
+      articleId: row.article_id,
+      targetKey: row.target_key,
+      status: row.status,
+      detail: recoveryDetail(row.payload_json),
+    }));
+    Object.defineProperty(result, "hasMore", {
+      value: rows.length === RECOVERY_PAGE_SIZE,
+      enumerable: false,
+    });
+    return result;
   }
 
   function markRecoveryUncertain(input) {
@@ -321,4 +334,4 @@ function createRecoveryAggregate(context) {
   });
 }
 
-module.exports = { createRecoveryAggregate };
+module.exports = { createRecoveryAggregate, RECOVERY_PAGE_SIZE };

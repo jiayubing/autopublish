@@ -37,6 +37,7 @@ const source = exactObject({
   materialIds: arrayField(id, { min: 1, max: 1000 }),
   researchQueryIds: arrayField(id, { min: 1, max: 1000 }),
 });
+const GENERATION_TASK_PAGE_SIZE = 256;
 const excludedClient = exactObject({
   clientId: id,
   codes: arrayField(code, { min: 1, max: 64 }),
@@ -79,7 +80,10 @@ const batch = exactObject({
   aiConfigFingerprint: optionalField(text(256, 1)),
   clientSources: arrayField(source, { max: 1000 }),
   templates: arrayField(template, { max: 1000 }),
-  tasks: arrayField(task, { max: 10000 }),
+  tasks: arrayField(task, { max: GENERATION_TASK_PAGE_SIZE }),
+  taskCount: optionalField(integerField({ min: 0, max: 10000 })),
+  taskOffset: optionalField(integerField({ min: 0, max: 10000 })),
+  tasksTruncated: optionalField("boolean"),
   counts,
   excludedClients: optionalField(arrayField(excludedClient, { max: 1000 })),
 });
@@ -122,7 +126,9 @@ const preview = exactObject({
   excludedClients: arrayField(excludedClient, { max: 1000 }),
   templates: arrayField(template, { max: 1000 }),
   clientSources: arrayField(source, { max: 1000 }),
-  tasks: optionalField(arrayField(previewTask, { max: 10000 })),
+  tasks: optionalField(arrayField(previewTask, { max: GENERATION_TASK_PAGE_SIZE })),
+  taskOffset: optionalField(integerField({ min: 0, max: 10000 })),
+  tasksTruncated: optionalField("boolean"),
 });
 const batchResult = exactObject({ batch });
 const nullableBatchResult = exactObject({ batch: nullableField(batch) });
@@ -237,10 +243,10 @@ function generationTask(value) {
 
 function generationBatch(value) {
   if (value === undefined || value === null) return value;
-  const allowed = ["id", "status", "clientSources", "templates", "tasks", "counts", "excludedClients", "aiConfigFingerprint", "updatedAt"];
+  const allowed = ["id", "status", "clientSources", "templates", "tasks", "counts", "excludedClients", "aiConfigFingerprint", "updatedAt", "taskCount", "taskOffset", "tasksTruncated"];
   exactKeys(value, allowed, ["id", "status", "clientSources", "templates", "tasks", "counts"]);
   if (!GENERATION_STATUSES.has(value.status) || !Array.isArray(value.clientSources) || value.clientSources.length > 1000 ||
-      !Array.isArray(value.templates) || value.templates.length > 1000 || !Array.isArray(value.tasks) || value.tasks.length > 10000) generationEventError();
+      !Array.isArray(value.templates) || value.templates.length > 1000 || !Array.isArray(value.tasks) || value.tasks.length > GENERATION_TASK_PAGE_SIZE) generationEventError();
   const output = {
     id: generationText(value.id, 200),
     status: value.status,
@@ -255,6 +261,16 @@ function generationBatch(value) {
     tasks: value.tasks.map(generationTask),
     counts: generationCounts(value.counts),
   };
+  for (const key of ["taskCount", "taskOffset"]) {
+    if (value[key] !== undefined) {
+      if (!Number.isSafeInteger(value[key]) || value[key] < 0 || value[key] > 10000) generationEventError();
+      output[key] = value[key];
+    }
+  }
+  if (value.tasksTruncated !== undefined) {
+    if (typeof value.tasksTruncated !== "boolean") generationEventError();
+    output.tasksTruncated = value.tasksTruncated;
+  }
   if (value.excludedClients !== undefined) {
     if (!Array.isArray(value.excludedClients) || value.excludedClients.length > 1000) generationEventError();
     output.excludedClients = value.excludedClients.map((item) => {

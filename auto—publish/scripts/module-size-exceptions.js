@@ -135,8 +135,8 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
   [
     "desktop/ipc/contracts/generation-contracts.js",
-    489,
-    "generation batch and submission handoff declarations",
+    505,
+    "generation batch pagination metadata and submission handoff declarations",
   ],
   [
     "src/content/doubao-collection-queue.js",

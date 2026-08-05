@@ -29,6 +29,7 @@ const {
   buildReleaseEvidenceManifest,
   checklistEntries,
 } = require("../scripts/release-evidence-writer");
+const { currentSourceState } = require("../scripts/release-evidence-inputs");
 const applicationVersion = require("../package.json").version;
 
 const repositoryRoot = path.resolve(__dirname, "..", "..");
@@ -123,7 +124,9 @@ test("release evidence records safe artifact hashes and fixed check names", () =
       manualGates: allStatuses(MANUAL_GATES, "PASSED"),
       rollbackReport,
       migrationReport: reports.migration,
+      authMigrationReport: reports.authMigration,
       backupReport: reports.backupRestore,
+      capacityReport: reports.capacity,
       discoveryReport: reports.desktopTestDiscovery,
       authReport: reports.authTests,
       containerReport: reports.containerTests,
@@ -155,6 +158,54 @@ test("release evidence records safe artifact hashes and fixed check names", () =
     assert.throws(
       () => validateReleaseChecklist(incompleteRollback),
       (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("source-state evidence changes when tracked or untracked content changes", () => {
+  const fixture = tempRoot();
+  try {
+    execFileSync("git", ["init"], { cwd: fixture.root, stdio: "ignore" });
+    const tracked = path.join(fixture.root, "tracked.txt");
+    fs.writeFileSync(tracked, "one\n", "utf8");
+    execFileSync("git", ["add", "tracked.txt"], {
+      cwd: fixture.root,
+      stdio: "ignore",
+    });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-m",
+        "fixture",
+      ],
+      { cwd: fixture.root, stdio: "ignore" },
+    );
+    const clean = currentSourceState(fixture.root);
+    assert.equal(clean.status, "CLEAN");
+
+    fs.writeFileSync(tracked, "two\n", "utf8");
+    const trackedChange = currentSourceState(fixture.root);
+    fs.writeFileSync(tracked, "three\n", "utf8");
+    const trackedChangeAgain = currentSourceState(fixture.root);
+    assert.equal(trackedChange.status, "DIRTY");
+    assert.notEqual(trackedChange.diffSha256, trackedChangeAgain.diffSha256);
+
+    const untracked = path.join(fixture.root, "untracked.txt");
+    fs.writeFileSync(untracked, "alpha\n", "utf8");
+    const untrackedChange = currentSourceState(fixture.root);
+    fs.writeFileSync(untracked, "beta\n", "utf8");
+    const untrackedChangeAgain = currentSourceState(fixture.root);
+    assert.equal(untrackedChange.status, "DIRTY");
+    assert.notEqual(
+      untrackedChange.diffSha256,
+      untrackedChangeAgain.diffSha256,
     );
   } finally {
     fixture.cleanup();
@@ -267,7 +318,9 @@ test("release checklist keeps human gates separate from automated pass state", (
     requiredChecks: checks,
     manualGates: allStatuses(MANUAL_GATES, "PENDING_HUMAN"),
     migration: { status: "PENDING_HUMAN" },
+    authMigration: { status: "PENDING_HUMAN" },
     backupRestore: { status: "PENDING_HUMAN" },
+    capacity: { status: "PENDING_HUMAN" },
     authTests: { status: "PENDING_HUMAN" },
     containerTests: { status: "PENDING_HUMAN" },
     desktopTestDiscovery: { status: "PENDING_HUMAN" },

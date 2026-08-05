@@ -276,9 +276,50 @@ function currentSourceState(root) {
       ["status", "--porcelain=v1", "--untracked-files=all"],
       { cwd: root, encoding: "utf8" },
     );
+    const diff = execFileSync(
+      "git",
+      ["diff", "--binary", "--no-ext-diff", "HEAD"],
+      { cwd: root },
+    );
+    const untracked = execFileSync(
+      "git",
+      ["ls-files", "--others", "--exclude-standard", "-z"],
+      { cwd: root },
+    );
+    const digest = crypto.createHash("sha256");
+    digest.update("status\0");
+    digest.update(porcelain);
+    digest.update("\0diff\0");
+    digest.update(diff);
+    digest.update("\0untracked\0");
+    digest.update(untracked);
+    for (const relativePath of untracked
+      .toString("utf8")
+      .split("\0")
+      .filter(Boolean)) {
+      digest.update("\0path\0");
+      digest.update(relativePath);
+      digest.update("\0");
+      const filename = path.resolve(root, relativePath);
+      try {
+        const stats = fs.lstatSync(filename);
+        if (stats.isSymbolicLink()) {
+          digest.update("symlink\0");
+          digest.update(fs.readlinkSync(filename));
+        } else if (stats.isFile()) {
+          digest.update("file\0");
+          digest.update(fs.readFileSync(filename));
+        } else {
+          digest.update("other\0");
+        }
+      } catch (error) {
+        digest.update("unreadable\0");
+        digest.update(error.code || "UNKNOWN");
+      }
+    }
     return {
       status: porcelain.trim() === "" ? "CLEAN" : "DIRTY",
-      diffSha256: crypto.createHash("sha256").update(porcelain).digest("hex"),
+      diffSha256: digest.digest("hex"),
     };
   } catch (_) {
     return {
