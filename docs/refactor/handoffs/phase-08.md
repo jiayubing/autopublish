@@ -1,5 +1,12 @@
 # Phase 8 交接：旧架构删除与最终验收
 
+## Ticket 16 Execution Handoff (2026-08-05, feature development admission simulations)
+
+- Status: Ticket 16 `COMPLETE`; Phase 8 remains `IN_PROGRESS` and release remains `BLOCKED_RELEASE` pending Ticket 17 traceability closeout and independent human release gates.
+- Start gate: Ticket 15 remains `COMPLETE`; the pre-simulation root baseline passed `1618/1618` with zero failed/skipped, and the post-audit root suite passed `1621/1621` from 239 files with zero failed/skipped. The Phase 8 cleanup gate passed `3/3`. This supersedes the historical package precondition in Ticket 14's earlier manifest for the limited admission start gate only; no wrapper or production change was added.
+- Evidence: [`phase-08-ticket-16-feature-development-admission.md`](phase-08-ticket-16-feature-development-admission.md) and `auto—publish/tests/phase-08-feature-development-admission.test.mjs` record the three isolated fixture simulations, change surface, interface burden, executable without-boundary callers, and deletion-depth conclusion.
+- Scope: fake Publisher/registry, publication query DTO/projection, and content command IPC/feature are test-only fixtures. Production source, schema, typed IPC registry, preload, Renderer capability inventory, production package contents, and external systems were not changed. `package.json` only adds the admission `.test.mjs` file to the format gate.
+
 ## Ticket 14 执行交接（2026-08-05，功能、故障与安全最终验收）
 
 - 状态：Ticket 14 `IN_PROGRESS`；源码功能/故障/安全矩阵与 Electron boundary 自动项通过，但完整 root suite 仍有 4 个可归属的制品前置失败。Phase 8 保持 `IN_PROGRESS`，正式 release 保持 `BLOCKED_RELEASE`。
