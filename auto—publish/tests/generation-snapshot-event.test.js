@@ -124,6 +124,32 @@ describe('generation snapshot event baseline', () => {
 
     console.log(JSON.stringify({ events: 100, followUpIpc: fixture.followUpIpc.length, batchFileReads: fixture.getBatchFileReads() }));
   });
+
+  it('bounds oversized snapshot task payloads before Renderer delivery', async () => {
+    const fixture = createEventFixture({ useSnapshotEvents: true });
+    const emit = await fixture.start();
+    const tasks = Array.from({ length: 5000 }, (_, index) => ({
+      id: `task-${index}`,
+      clientId: 'client-1',
+      platform: 'media',
+      templateId: 'guide',
+      materialIds: ['material-1'],
+      researchQueryIds: ['research-1'],
+      status: 'pending',
+      attempts: 0,
+    }));
+    emit({
+      batchId: fixture.batch.id,
+      status: 'running',
+      counts: { total: 5000, succeeded: 0, failed: 0, pending: 5000, interrupted: 0, cancelled: 0 },
+      batch: { ...fixture.batch, tasks, counts: { total: 5000, succeeded: 0, failed: 0, pending: 5000, interrupted: 0, cancelled: 0 } },
+      updatedAt: '2026-07-21T00:01:00.000Z',
+    });
+    const delivered = fixture.deliveredEvents.at(-1);
+    assert.equal(delivered.batch.tasks.length, 256);
+    assert.equal(delivered.batch.taskCount, 5000);
+    assert.equal(delivered.batch.tasksTruncated, true);
+  });
 });
 
 module.exports = { createEventFixture };

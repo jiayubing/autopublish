@@ -200,6 +200,41 @@ test("PublicationWorkflow recovery and reconcile expose only safe manual outcome
   assert.equal(committed.length, 1);
 });
 
+test("PublicationWorkflow drains bounded recovery pages", async () => {
+  const pages = [
+    [{ attemptId: "attempt-1", state: "remote_started" }],
+    [{ attemptId: "attempt-2", state: "outcome_pending" }],
+  ];
+  Object.defineProperty(pages[0], "hasMore", { value: true, enumerable: false });
+  const marked = [];
+  let calls = 0;
+  const workflow = createPublicationWorkflow({
+    clock: () => new Date(),
+    operationalStore: {
+      listActionableRecovery: (options) => {
+        assert.deepEqual(options, { includeManualCheck: false });
+        calls += 1;
+        return pages.shift() || [];
+      },
+      markRecoveryUncertain: (value) => {
+        marked.push(value.attemptId);
+        return { status: "uncertain" };
+      },
+      claimPostProcessing: () => null,
+    },
+    publisher: {
+      inspectAccount: async () => ({}),
+      publish: async () => ({ status: "failed", error: error("UNUSED") }),
+    },
+  });
+  assert.deepEqual(await workflow.recover(), {
+    recoveryCount: 2,
+    postProcessingCount: 0,
+  });
+  assert.equal(calls, 2);
+  assert.deepEqual(marked, ["attempt-1", "attempt-2"]);
+});
+
 test("PublicationWorkflow keeps a submitted outcome durable but does not archive it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-workflow-"));
   const store = createOperationalStore({ workspaceRoot: root });

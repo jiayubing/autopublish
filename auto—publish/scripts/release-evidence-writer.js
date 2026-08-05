@@ -83,8 +83,16 @@ function buildReleaseEvidenceManifest(options) {
   });
   const artifact = summarizeArtifactManifest(opts.artifactManifest);
   const evidence = {
-    migration: summarizeReport(opts.migrationReport, "migration-report"),
+    migration: summarizeReport(
+      opts.migrationReport,
+      "desktop-migration-report",
+    ),
+    authMigration: summarizeReport(
+      opts.authMigrationReport,
+      "auth-migration-report",
+    ),
     backupRestore: summarizeReport(opts.backupReport, "backup-restore-report"),
+    capacity: summarizeReport(opts.capacityReport, "capacity-report"),
     artifact,
     desktopTestDiscovery: summarizeReport(
       opts.discoveryReport,
@@ -153,7 +161,9 @@ function buildReleaseEvidenceManifest(options) {
     sourceState,
     requiredChecks: checks,
     migration: evidence.migration,
+    authMigration: evidence.authMigration,
     backupRestore: evidence.backupRestore,
+    capacity: evidence.capacity,
     authTests: evidence.authTests,
     containerTests: evidence.containerTests,
     desktopTestDiscovery: evidence.desktopTestDiscovery,

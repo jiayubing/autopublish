@@ -37,7 +37,9 @@ const MANUAL_GATES = Object.freeze([
 
 const EVIDENCE_FIELDS = Object.freeze([
   "migration",
+  "authMigration",
   "backupRestore",
+  "capacity",
   "artifact",
   "desktopTestDiscovery",
   "authTests",

@@ -77,7 +77,11 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   for (const command of [
     "npm run test:discover",
     "npm run test:desktop-core",
-    "npm run test:migration",
+    "node scripts/create-test-suite-evidence.js",
+    "desktop-migration-roundtrip.json",
+    "tests/content-library-migration.test.js",
+    "build/evidence/capacity.json",
+    "tests/phase-02-runtime-capacity.test.js",
     "npm run lint",
     "npm run typecheck:renderer",
     "npm run typecheck:bridge",
@@ -163,6 +167,19 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assert.ok(evidence.includes("setup-node@v4"));
   assert.ok(evidence.includes("node-version: 24"));
   assert.ok(evidence.includes("create-release-evidence-manifest.js"));
+  assert.ok(
+    evidence.includes(
+      "--migration-report build/evidence/desktop-migration-roundtrip.json",
+    ),
+  );
+  assert.ok(
+    evidence.includes(
+      "--auth-migration-report build/evidence/migration-roundtrip.json",
+    ),
+  );
+  assert.ok(
+    evidence.includes("--capacity-report build/evidence/capacity.json"),
+  );
   assert.ok(
     evidence.includes(
       "validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked",

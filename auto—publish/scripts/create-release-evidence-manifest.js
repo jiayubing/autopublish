@@ -39,8 +39,14 @@ function parseArguments(argv) {
       options.migrationReport = path.resolve(
         valueFor(arg, "--migration-report"),
       );
+    else if (valueOption("--auth-migration-report"))
+      options.authMigrationReport = path.resolve(
+        valueFor(arg, "--auth-migration-report"),
+      );
     else if (valueOption("--backup-report"))
       options.backupReport = path.resolve(valueFor(arg, "--backup-report"));
+    else if (valueOption("--capacity-report"))
+      options.capacityReport = path.resolve(valueFor(arg, "--capacity-report"));
     else if (valueOption("--discovery-report"))
       options.discoveryReport = path.resolve(
         valueFor(arg, "--discovery-report"),

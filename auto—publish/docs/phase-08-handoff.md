@@ -80,7 +80,8 @@ collection, verification, orchestration, and serialization separate.
   `required/auth-container`, `required/auth-migration-roundtrip`,
   `required/health-semantics`, `required/media-transport`,
   `required/legacy-publish-log-absence`, `required/toolchain`,
-  `required/packaging-contracts`, and `required/link-security`.
+  `required/packaging-contracts`, `required/link-security`, and
+  `required/phase-08-gates`.
 - The fixed manual gates are `phase4-platform-account-binding`,
   `phase4-hepan-reconciliation`, `phase4-media-http-risk`,
   `phase4-signed-browser-login`, `platform-endpoints-tls`,

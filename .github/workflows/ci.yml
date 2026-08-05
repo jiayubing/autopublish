@@ -34,7 +34,25 @@ jobs:
         run: npm run test:desktop-core
         working-directory: auto—publish
       - name: required/migration-roundtrip
-        run: npm run test:migration
+        run: >-
+          node scripts/create-test-suite-evidence.js
+          --output build/evidence/desktop-migration-roundtrip.json
+          --operation desktop-migration-roundtrip
+          --test tests/content-library-migration.test.js
+          --test tests/content-metadata-migration.test.js
+          --test tests/legacy-migration.test.js
+          --test tests/phase-02-migration.test.js
+        working-directory: auto—publish
+      - name: Write desktop capacity evidence
+        run: >-
+          node scripts/create-test-suite-evidence.js
+          --output build/evidence/capacity.json
+          --operation ticket-15-capacity
+          --test tests/phase-02-runtime-capacity.test.js
+          --test tests/phase-05-handoff-capacity.test.js
+          --test tests/phase-06-media-renderer-capacity.test.mjs
+          --test tests/content-generation-batch-ipc.test.js
+          --test tests/generation-snapshot-event.test.js
         working-directory: auto—publish
       - name: required/toolchain
         run: |
@@ -238,8 +256,10 @@ jobs:
           --discovery-report build/evidence/desktop-discovery.json
           --auth-report build/evidence/auth-tests.json
           --container-report build/evidence/auth-container.json
-          --migration-report build/evidence/migration-roundtrip.json
+          --migration-report build/evidence/desktop-migration-roundtrip.json
+          --auth-migration-report build/evidence/migration-roundtrip.json
           --backup-report build/evidence/backup-restore.json
+          --capacity-report build/evidence/capacity.json
           --offline-report build/evidence/production-smoke.json
           --legacy-report build/evidence/legacy-publish-log.json
           --check required/root-tests=PASSED
