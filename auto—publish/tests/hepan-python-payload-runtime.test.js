@@ -11,6 +11,7 @@ const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
 
 const rootDir = path.resolve(__dirname, "..");
 const scriptPath = path.join(rootDir, "src", "platforms", "hepan", "hepan_publish.py");
+const vendorDir = path.join(rootDir, "resources", "hepan", "vendor-pure");
 
 function tempDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-hepan-python-runtime-"));
@@ -168,7 +169,7 @@ describe("Hepan Python payload runtime", () => {
       fs.writeFileSync(cookiePath, "sid=fixture");
       fs.mkdirSync(imageDir);
       const result = await new Promise((resolve) => {
-        const child = spawn(python, [scriptPath, "--payload-path", payloadPath, "--image-dir", imageDir, "--cookie-path", cookiePath, "--test-site-origin", `http://127.0.0.1:${address.port}`], { encoding: "utf8", windowsHide: true, env: Object.assign({}, process.env, { HEPAN_TEST_MODE: "1", PYTHONIOENCODING: "utf-8" }) });
+        const child = spawn(python, [scriptPath, "--payload-path", payloadPath, "--image-dir", imageDir, "--cookie-path", cookiePath, "--test-site-origin", `http://127.0.0.1:${address.port}`], { encoding: "utf8", windowsHide: true, env: Object.assign({}, process.env, { HEPAN_TEST_MODE: "1", HEPAN_VENDOR_DIR: vendorDir, PYTHONIOENCODING: "utf-8" }) });
         let stdout = "";
         child.stdout.on("data", (chunk) => { stdout += String(chunk); });
         child.once("close", (status) => resolve({ status, stdout }));
