@@ -724,6 +724,7 @@ const submissionPlatform = exactObject({
 });
 const publicationSummary = exactObject({
   status: text(80),
+  label: optionalField(text(80)),
   records: integerField({ min: 0, max: 10000 }),
   published: integerField({ min: 0, max: 10000 }),
   uncertain: boolean,
@@ -737,15 +738,20 @@ const targetFact = exactObject({
   batchId: optionalNullableText(200),
 });
 const workflow = exactObject({
+  version: optionalField(integerField({ min: 1, max: 100 })),
   stage: enumField([
     "pending_submission",
     "queued",
+    "paid_processing",
     "published",
     "failed",
     "trash",
   ]),
+  label: optionalField(text(80)),
   primaryAction: text(80),
   allowedBulkActions: arrayField(text(80), { max: 32 }),
+  reasonCodes: optionalField(arrayField(text(128), { max: 32 })),
+  reasonMessage: optionalField(nullableField(text(1000))),
   locks: exactObject({
     canEdit: boolean,
     canQueue: boolean,
@@ -772,6 +778,16 @@ const managementSnapshot = exactObject({
     exactObject({ articleId: id, summary: publicationSummary }),
     { max: 10000 },
   ),
+  lifecycleVersion: optionalField(integerField({ min: 1, max: 100 })),
+  lifecycleCounts: optionalField(exactObject({
+    pending_submission: integerField({ min: 0, max: 10000 }),
+    queued: integerField({ min: 0, max: 10000 }),
+    paid_processing: integerField({ min: 0, max: 10000 }),
+    failed: integerField({ min: 0, max: 10000 }),
+    published: integerField({ min: 0, max: 10000 }),
+    trash: integerField({ min: 0, max: 10000 }),
+    total: integerField({ min: 0, max: 10000 }),
+  })),
 });
 
 function projectSubmissionItem(value) {
@@ -828,7 +844,7 @@ function projectCancellationPlan(value) {
   };
 }
 function projectPublicationSummary(value) {
-  return projectFields(value, ["status", "records", "published", "uncertain"]);
+  return projectFields(value, ["status", "label", "records", "published", "uncertain"]);
 }
 function projectPublicationRecord(value) {
   const output = projectFields(value, [
@@ -871,10 +887,15 @@ function projectPublicationRecord(value) {
 }
 function projectWorkflow(value) {
   const output = projectFields(value, [
+    "version",
     "stage",
+    "label",
     "primaryAction",
     "allowedBulkActions",
+    "reasonCodes",
+    "reasonMessage",
   ]);
+  if (Array.isArray(value && value.reasonCodes)) output.reasonCodes = value.reasonCodes.map((item) => String(item));
   output.locks = projectFields(value && value.locks, [
     "canEdit",
     "canQueue",
@@ -945,6 +966,20 @@ function projectManagementSnapshot(value) {
       articleId,
       summary: projectPublicationSummary(value),
     })),
+    ...(snapshot.lifecycleVersion === undefined
+      ? {}
+      : { lifecycleVersion: snapshot.lifecycleVersion }),
+    ...(snapshot.lifecycleCounts === undefined
+      ? {}
+      : { lifecycleCounts: projectFields(snapshot.lifecycleCounts, [
+          "pending_submission",
+          "queued",
+          "paid_processing",
+          "failed",
+          "published",
+          "trash",
+          "total",
+        ]) }),
   };
 }
 const ARTICLE_REMOVAL_FIELDS = Object.freeze([

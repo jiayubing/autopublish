@@ -80,7 +80,7 @@ describe("article history grouping", async function() {
     assert.doesNotMatch(view, /reviewContentArticles|审核已选|待审核/);
     assert.match(view, /useConfirmation/);
     assert.match(view, /const \{ confirm \} = useConfirmation\(\)/);
-    assert.match(view, /article\.status !== 'generated'/);
+    assert.match(view, /isArticleSelectable/);
     assert.match(view, /onArticleSelect\(article\)/);
     assert.match(view, /全选当前结果/);
     assert.match(view, /templateSnapshot/);
@@ -102,8 +102,8 @@ describe("article history grouping", async function() {
   it("keeps saved articles selectable for submission queueing", function() {
     const view = readHistoryView();
     assert.match(view, /const selectedQueueable = filtered\.filter/);
-    assert.match(view, /disabled=\{!selectedArticles\.some\(\(article\) => article\.status === 'generated' \|\| article\.status === 'saved'\)/);
-    assert.match(view, /状态：/);
+    assert.match(view, /disabled=\{!selectedArticles\.some\(canQueueArticle\)/);
+    assert.match(view, /阶段：/);
     assert.match(view, /撤销未开始投稿/);
     assert.match(view, /management: ArticleManagementReadModel/);
     assert.match(view, /const \[selected, setSelected\]/);

@@ -11,8 +11,13 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
   [
     "desktop/ipc/contracts/content-core-contracts.js",
-    1328,
+    1363,
     "domain wire declarations and validators",
+  ],
+  [
+    "src/content/article-lifecycle-projection.js",
+    406,
+    "single article lifecycle classification and batch projection owner",
   ],
   [
     "media-workbench/src/features/media/media-feature.js",
@@ -82,7 +87,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
   [
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    541,
+    563,
     "article management and trash presentation boundary",
   ],
   ["src/platforms/toutiao/adapter.js", 502, "vendor browser protocol adapter"],
@@ -110,7 +115,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ["desktop/main.js", 441, "Electron security and application root"],
   [
     "media-workbench/src/App.tsx",
-    438,
+    439,
     "single renderer shell and feature composition root",
   ],
   [
@@ -151,7 +156,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ["media-workbench/src/bridge/media.ts", 409, "typed media bridge facade"],
   [
     "media-workbench/src/types/publication.ts",
-    406,
+    428,
     "publication wire type declarations",
   ],
   [

@@ -11,21 +11,13 @@ function runTs(source) {
   return execFileSync(process.execPath, ['--import', loader, '--input-type=module', '-e', source], { cwd: root, encoding: 'utf8' });
 }
 
-const article = (status = 'saved') => ({ id: 'article-1', clientId: 'client-1', title: '测试文章', content: '正文', status, researchQueryIds: [], platform: 'fixture', scenario: 'fixture', templateId: 'template', source: { client_material: true, doubao_answer: true, references: false, template: true }, createdAt: '2026-07-19T00:00:00.000Z' });
-
-describe('article workflow pure derivation', () => {
-  it('derives the five exclusive stages and preserves failure priority', () => {
+describe('article workflow renderer contract', () => {
+  it('exposes the six-stage renderer contract owned by the main-process projection', () => {
     runTs(`
       import assert from 'node:assert/strict';
-      import { deriveArticleWorkflow } from './media-workbench/src/article-workflow.ts';
-      const article = ${JSON.stringify(article())};
-      assert.equal(deriveArticleWorkflow({ ...article, status: 'generated' }).stage, 'pending_submission');
-      assert.equal(deriveArticleWorkflow(article).stage, 'pending_submission');
-      assert.equal(deriveArticleWorkflow(article, [], [{ id: 'batch', clientId: 'client-1', status: 'queued', createdAt: '', updatedAt: '', items: [{ articleId: 'article-1', targetPlatformId: 'fixture', status: 'queued', contentHash: 'hash' }] }]).stage, 'queued');
-      assert.equal(deriveArticleWorkflow(article, [{ articleId: 'article-1', status: 'failed' }]).stage, 'failed');
-      assert.equal(deriveArticleWorkflow({ ...article, status: 'generated' }, [{ articleId: 'article-1', status: 'failed' }]).stage, 'failed');
-      assert.equal(deriveArticleWorkflow({ ...article, status: 'saved' }, [{ articleId: 'article-1', status: 'published' }]).stage, 'published');
-      assert.equal(deriveArticleWorkflow({ ...article, status: 'trashed' }).primaryAction, 'restore');
+      import { ARTICLE_WORKFLOW_STAGES } from './media-workbench/src/article-workflow.ts';
+      assert.deepEqual(ARTICLE_WORKFLOW_STAGES.map((item) => item.id), ['pending_submission', 'queued', 'paid_processing', 'failed', 'published', 'trash']);
+      assert.deepEqual(ARTICLE_WORKFLOW_STAGES.map((item) => item.label), ['待投稿', '投稿队列', '付费处理中', '需处理', '已发布', '回收站']);
     `);
   });
 });

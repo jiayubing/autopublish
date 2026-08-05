@@ -7,12 +7,12 @@ const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, "media-workbench/src", file), "utf8");
 
 describe("renderer article management filters", () => {
-  it("uses one five-stage navigation axis and one recycle-bin entry", () => {
+  it("uses one six-stage navigation axis and one recycle-bin entry", () => {
     const workflow = read("article-workflow.ts");
     const content = read("components/ContentWorkbench.tsx");
     const list = read("components/content/GeneratedArticlesView.tsx");
     const tabs = read("components/content/ArticleStageTabs.tsx");
-    assert.match(workflow, /pending_submission.*queued.*published.*failed.*trash/s);
+    assert.match(workflow, /pending_submission.*queued.*paid_processing.*failed.*published.*trash/s);
     assert.doesNotMatch(workflow, /待审核|pending_review/);
     assert.doesNotMatch(content, /statusFilter|publicationFilter/);
     assert.doesNotMatch(list, /statusFilter|publicationFilter|PUBLICATION_STATUS_FILTERS|打开回收站|showTrash/);

@@ -36,8 +36,8 @@ function record(status, overrides) {
 
 describe("publication history renderer boundary", async function() {
   const status = runStatusModule(`
-    import { summarizePublicationRecords, publicationSummaryMatchesFilter } from './media-workbench/src/publication-status.ts';
-    const record = (status) => ({ status, attempts: [], createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' });
+    import { summarizePublicationRecords, publicationRecordStatusLabel, publicationSummaryMatchesFilter } from './media-workbench/src/publication-status.ts';
+    const record = (status, overrides = {}) => ({ status, targetKey: 'platform:fixture', mediaResourceId: null, platformId: 'fixture', attempts: [], createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z', ...overrides });
     const summary = (records) => summarizePublicationRecords(records);
     console.log(JSON.stringify({
       empty: summary([]),
@@ -45,12 +45,15 @@ describe("publication history renderer boundary", async function() {
       partial: summary([record('published'), record('queued')]),
       uncertain: summary([record('published'), record('uncertain')]),
       failed: summary([record('failed')]),
-      reviewing: summary([record('submitted')]),
+      ordinarySubmitted: summary([record('submitted')]),
+      mediaSubmitted: summary([record('submitted', { targetKey: 'media-resource:fixture', mediaResourceId: 'resource-1', platformId: 'media' })]),
+      ordinarySubmittedLabel: publicationRecordStatusLabel('submitted', record('submitted')),
+      mediaSubmittedLabel: publicationRecordStatusLabel('submitted', record('submitted', { mediaResourceId: 'resource-1', platformId: 'media' })),
       matches: publicationSummaryMatchesFilter(summary([record('published')]), 'published')
     }));
   `);
 
-  it("keeps no publication separate from the article review status", function() {
+  it("keeps no publication separate from the publication lifecycle summary", function() {
     assert.equal(status.empty.status, "not_submitted");
     assert.equal(status.empty.label, "未投稿");
     assert.equal(status.queued.label, "已入队");
@@ -60,7 +63,12 @@ describe("publication history renderer boundary", async function() {
     assert.equal(status.partial.status, "partial");
     assert.equal(status.uncertain.status, "uncertain");
     assert.equal(status.failed.status, "failed");
-    assert.equal(status.reviewing.status, "reviewing");
+    assert.equal(status.ordinarySubmitted.status, "published");
+    assert.equal(status.ordinarySubmitted.label, "已发布");
+    assert.equal(status.mediaSubmitted.status, "paid_processing");
+    assert.equal(status.mediaSubmitted.label, "付费处理中");
+    assert.equal(status.ordinarySubmittedLabel, "已发布");
+    assert.equal(status.mediaSubmittedLabel, "付费处理中");
     assert.equal(status.matches, true);
   });
 
@@ -81,5 +89,7 @@ describe("publication history renderer boundary", async function() {
     assert.match(view, /commands\.copyArticleVersion/);
     assert.match(view, /commands\.reconcilePublication/);
     assert.match(view, /await confirm\(\{ title: label/);
+    assert.match(view, /summary=\{drawerArticle \? publicationSummaries\.get/);
+    assert.doesNotMatch(drawer, /审核状态与投稿状态分开维护/);
   });
 });

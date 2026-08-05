@@ -12,8 +12,8 @@ export type PublicationRecordStatus =
 export type PublicationHistorySummaryStatus =
   | "not_submitted"
   | "queued"
+  | "paid_processing"
   | "submitting"
-  | "reviewing"
   | "partial"
   | "published"
   | "uncertain"
@@ -53,7 +53,7 @@ export interface PublicationHistoryRecord {
 }
 export interface PublicationHistorySummary {
   status: PublicationHistorySummaryStatus;
-  label: string;
+  label?: string;
   records: number;
   published: number;
   uncertain: boolean;
@@ -348,9 +348,21 @@ export interface ArticleManagementSnapshot {
   workflowByArticle: Record<
     string,
     {
-      stage: "pending_submission" | "queued" | "published" | "failed" | "trash";
+      version?: number;
+      stage: "pending_submission" | "queued" | "paid_processing" | "published" | "failed" | "trash";
+      label?: string;
       primaryAction: string;
       allowedBulkActions: string[];
+      reasonCodes?: string[];
+      reasonMessage?: string | null;
+      targetFacts?: Array<{
+        targetKey: string;
+        status: string;
+        canCancel: boolean;
+        publicationId?: string | null;
+        displayName?: string | null;
+        batchId?: string | null;
+      }>;
       locks: {
         canEdit: boolean;
         canQueue: boolean;
@@ -361,6 +373,16 @@ export interface ArticleManagementSnapshot {
     }
   >;
   publicationSummaries: Record<string, PublicationHistorySummary>;
+  lifecycleVersion?: number;
+  lifecycleCounts?: {
+    pending_submission: number;
+    queued: number;
+    paid_processing: number;
+    failed: number;
+    published: number;
+    trash: number;
+    total: number;
+  };
 }
 
 export interface ArticleAttentionPreview {

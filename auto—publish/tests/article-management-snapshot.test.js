@@ -35,8 +35,9 @@ describe("article management snapshot", function() {
     assert.equal(fixture.calls.publications, 1);
     assert.equal(fixture.calls.attention, 1);
     assert.equal(first.cancellationPlans.length, 1);
-    assert.equal(first.workflowByArticle["article-a"].stage, "queued");
+    assert.equal(first.workflowByArticle["article-a"].stage, "published");
     assert.equal(first.workflowByArticle["article-a"].locks.canTrash, false);
+    assert.equal(first.lifecycleCounts.published, 1);
   });
 
   it("isolates clients and invalidates only after the workspace revision changes", async function() {
@@ -75,7 +76,7 @@ describe("article management snapshot", function() {
     const fixture = createFixture();
     const snapshot = await fixture.service.get({ clientId: "client-a" });
     assert.deepEqual(snapshot.publicationRecords.map(function(record) { return [record.publicationId, record.status]; }), [["publication-a", "published"]]);
-    assert.equal(snapshot.workflowByArticle["article-a"].stage, "queued");
+    assert.equal(snapshot.workflowByArticle["article-a"].stage, "published");
   });
 
   it("does not offer cancellation for a published target when an old queued item remains", function() {
@@ -88,13 +89,30 @@ describe("article management snapshot", function() {
     assert.equal(workflow.locks.canCancel, false);
   });
 
-  it("keeps an article pending while another declared target remains available", function() {
+  it("keeps a published article published while another declared target remains available", function() {
     const workflow = deriveWorkflow({ id: "article-a", status: "saved" }, [], [], [], [], {
       targetFacts: {
         "platform:toutiao": { targetKey: "platform:toutiao", status: "published", canCancel: false },
         "platform:hepan": { targetKey: "platform:hepan", status: "not_submitted", canCancel: false }
       }
     });
-    assert.equal(workflow.stage, "pending_submission");
+    assert.equal(workflow.stage, "published");
+  });
+
+  it("loads publication facts for trash records before projecting lifecycle conflicts", async function() {
+    const service = createArticleManagementSnapshot({
+      getRevision: () => 1,
+      listArticles: () => [],
+      listTrash: () => [{ articleId: "trash-article", clientId: "client-a", title: "已发布", content: "正文" }],
+      listBatches: () => [],
+      listPublications: () => [{ publicationId: "publication-trash", clientId: "client-a", articleId: "trash-article", status: "published", targetKey: "platform:p1" }],
+      listAttention: () => ({ revision: 1, items: [], counts: { total: 0, actionable: 0 } }),
+      listPlatforms: () => [],
+    });
+
+    const snapshot = await service.get({ clientId: "client-a" });
+    assert.equal(snapshot.workflowByArticle["trash-article"].stage, "failed");
+    assert.equal(snapshot.lifecycleCounts.failed, 1);
+    assert.equal(snapshot.lifecycleCounts.trash, 0);
   });
 });
