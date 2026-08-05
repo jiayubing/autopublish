@@ -210,3 +210,19 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assert.ok(runner.includes(".test.js"));
   assert.ok(runner.includes(".test.mjs"));
 });
+
+test("Auth compose clean-machine storage and health are readiness-safe", () => {
+  const applicationRoot = path.resolve(__dirname, "..");
+  const compose = fs.readFileSync(
+    path.join(applicationRoot, "auth-server", "docker-compose.yml"),
+    "utf8",
+  );
+  const dockerfile = fs.readFileSync(
+    path.join(applicationRoot, "auth-server", "Dockerfile"),
+    "utf8",
+  );
+  assert.match(compose, /autopublish-auth-data:\/data/);
+  assert.doesNotMatch(compose, /\.\/data:\/data/);
+  assert.match(compose, /\nvolumes:\s*\n\s+autopublish-auth-data:/);
+  assert.match(dockerfile, /\/healthz\/ready/);
+});

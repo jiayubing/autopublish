@@ -594,6 +594,9 @@ function createMigration(options) {
               ? {
                   status: record.status,
                   evidence: {
+                    articleId: record.articleId,
+                    attemptId: reserved.attemptId,
+                    targetKey: reserved.targetKey,
                     remoteId: record.remoteId,
                     remoteUrl: record.remoteUrl || null,
                   },

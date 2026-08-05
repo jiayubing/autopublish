@@ -27,6 +27,44 @@ test("generic content queue lists only account-bound platform targets", () => {
   }
 });
 
+test("failed publication retry is eligible only for its intact durable batch item", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-content-retry-"));
+  const store = createOperationalStore({ workspaceRoot: root });
+  let retried = null;
+  try {
+    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
+    const service = createContentSubmissionService({
+      workspaceRoot: root,
+      operationalStore: store,
+      contentStore: { getArticle: () => article() },
+      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }],
+      retryFailedPublication: async (task) => { retried = task; return { status: "published" }; },
+    });
+    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const item = store.getSubmissionBatch(batch.batchId).items[0];
+    const claim = store.claimSubmissionItemById({ batchId: batch.batchId, itemId: item.itemId, claimToken: "claim-1" });
+    const target = { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId };
+    store.reservePublicationTarget({ articleId: "article-1", publicationId: "publication-1", attemptId: "attempt-1", target, batchItemId: item.itemId });
+    store.commitRemoteOutcome({ attemptId: "attempt-1", batchItemId: item.itemId, batchClaimToken: claim.claimToken, outcome: { status: "failed", error: { code: "REMOTE_REJECTED", category: "remote", retryability: "safe", userMessage: "Retry" } } });
+    const preview = service.previewRetryFailedPublication({ publicationId: "publication-1" });
+    assert.equal(preview.eligible, true);
+    const result = await service.retryFailedPublication({ publicationId: "publication-1", confirmed: true });
+    assert.equal(result.status, "published");
+    assert.deepEqual(retried, {
+      publicationId: "publication-1",
+      batchId: batch.batchId,
+      itemId: item.itemId,
+      filename: batch.items[0].filename,
+      sourcePlatformId: "toutiao",
+      targetPlatformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
+    });
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("production content service stages a generated article for the paid-media workbench", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-04-media-handoff-"));
   const store = createOperationalStore({ workspaceRoot: root });

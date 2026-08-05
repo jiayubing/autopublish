@@ -68,6 +68,10 @@ test("operational store owns an atomic publication outcome and derived recovery"
     outcome: {
       status: "published",
       evidence: {
+        articleId: "article-1",
+        attemptId: "attempt-1",
+        targetKey: "platform:toutiao:account:account-1",
+        accountProfileId: "account-1",
         remoteId: "remote-1",
         remoteUrl: "https://example.test/article",
       },
@@ -138,6 +142,24 @@ test("backup verifier reads destination and missing or corrupt targets have no s
   fs.writeFileSync(broken, "not sqlite");
   assert.throws(() => verifyOperationalDatabase(broken));
   store.close();
+});
+test("verification and open reject databases missing v1 core tables", () => {
+  for (const table of ["account_profiles", "publication_attempts"]) {
+    const dir = root();
+    const store = createOperationalStore({ workspaceRoot: dir });
+    const database = store.databasePath;
+    store.close();
+    const db = new DatabaseSync(database);
+    db.exec(`DROP TABLE ${table}`);
+    db.close();
+
+    assert.throws(() => verifyOperationalDatabase(database), {
+      code: "OPERATIONAL_RESTORE_INVALID",
+    });
+    assert.throws(() => createOperationalStore({ workspaceRoot: dir }), {
+      code: "OPERATIONAL_SCHEMA_INVALID",
+    });
+  }
 });
 test("database reopens after close and explicit batch writes stay isolated from legacy files", () => {
   const dir = root(),

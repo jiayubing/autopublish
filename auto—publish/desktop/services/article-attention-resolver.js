@@ -91,10 +91,27 @@ function createArticleAttentionResolver(options) {
     } else if (action === "retry-publication") {
       const service = opts.contentSubmissionService;
       if (!service || typeof service.retryFailedPublication !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "失败投稿重试服务不可用");
-      result = service.retryFailedPublication({ publicationId: entry.item.publicationId, expectedRevision: value.expectedRevision, confirmed: true });
+      result = await service.retryFailedPublication({ publicationId: entry.item.publicationId, expectedRevision: value.expectedRevision, confirmed: true });
     } else if (action === "reconcile-published" || action === "reconcile-failed") {
       if (!opts.publicationWorkflow || typeof opts.publicationWorkflow.reconcile !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "发布核对服务不可用");
-      result = await opts.publicationWorkflow.reconcile({ attemptId: entry.item.attemptId, outcome: { status: action === "reconcile-published" ? "published" : "failed", error: { code: action === "reconcile-published" ? "CONFIRMED_PUBLISHED" : "CONFIRMED_NOT_PUBLISHED", category: "remote", retryability: "never", userMessage: "Manual reconciliation" } } });
+      const published = action === "reconcile-published";
+      result = await opts.publicationWorkflow.reconcile({
+        attemptId: entry.item.attemptId,
+        outcome: published
+          ? {
+              status: "published",
+              evidence: {
+                articleId: entry.item.articleId,
+                attemptId: entry.item.attemptId,
+                targetKey: entry.item.targetKey,
+                ...(entry.item.accountProfileId ? { accountProfileId: entry.item.accountProfileId } : {}),
+                remoteId: entry.item.remoteId,
+                remoteUrl: entry.item.remoteUrl,
+              },
+            }
+          : { status: "failed", error: { code: "CONFIRMED_NOT_PUBLISHED", category: "remote", retryability: "never", userMessage: "Manual reconciliation" } },
+        reasonCode: published ? "CONFIRMED_PUBLISHED" : "CONFIRMED_NOT_PUBLISHED",
+      });
     } else if (action === "retry-archive") {
       if (entry.item.jobId && opts.postProcessingPort && typeof opts.postProcessingPort.retry === "function") {
         result = await opts.postProcessingPort.retry({ jobId: entry.item.jobId });

@@ -63,7 +63,7 @@ function validateReconcileInput(input) {
   if (
     keys.some(
       (key) =>
-        ["confirmed", "publicationId", "reasonCode", "status"].indexOf(key) ===
+        ["confirmed", "publicationId", "reasonCode", "remoteId", "remoteUrl", "status"].indexOf(key) ===
         -1,
     )
   ) {
@@ -94,10 +94,24 @@ function validateReconcileInput(input) {
       "Publication reconciliation decision is invalid",
     );
   }
+  if (
+    input.status === "published" &&
+    (typeof input.remoteId !== "string" ||
+      !/^[A-Za-z0-9_.:-]{1,512}$/.test(input.remoteId.trim()) ||
+      typeof input.remoteUrl !== "string" ||
+      !/^https:\/\//.test(input.remoteUrl))
+  )
+    throw inputError(
+      "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED",
+      "Published reconciliation requires remote evidence",
+    );
   return {
     publicationId: input.publicationId.trim(),
     status: input.status,
     reasonCode: input.reasonCode.trim(),
+    ...(input.status === "published"
+      ? { remoteId: input.remoteId.trim(), remoteUrl: input.remoteUrl }
+      : {}),
   };
 }
 
@@ -196,17 +210,32 @@ function registerPublicationIpc(deps) {
           "PUBLICATION_RECONCILE_NOT_ACTIONABLE",
           "Publication record is not awaiting reconciliation",
         );
+      const accountMatch = /^platform:[^:]+:account:(.+)$/.exec(record.targetKey);
       await deps.publicationWorkflow.reconcile({
         attemptId: attempt.attemptId,
         outcome: {
           status: request.status,
-          error: {
-            code: request.reasonCode,
-            category: "remote",
-            retryability: "never",
-            userMessage: "Manual reconciliation",
-          },
+          ...(request.status === "published"
+            ? {
+                evidence: {
+                  articleId: record.articleId,
+                  attemptId: attempt.attemptId,
+                  targetKey: record.targetKey,
+                  ...(accountMatch ? { accountProfileId: accountMatch[1] } : {}),
+                  remoteId: request.remoteId,
+                  remoteUrl: request.remoteUrl,
+                },
+              }
+            : {
+                error: {
+                  code: request.reasonCode,
+                  category: "remote",
+                  retryability: "never",
+                  userMessage: "Manual reconciliation",
+                },
+              }),
         },
+        reasonCode: request.reasonCode,
       });
       const updated = deps.operationalStore.listPublicationRecords({
         publicationIds: [request.publicationId],

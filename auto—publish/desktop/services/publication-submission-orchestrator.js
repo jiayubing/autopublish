@@ -190,6 +190,7 @@ function createPublicationSubmissionOrchestrator(options) {
         batchId: item.batchId || (durable.batch && durable.batch.batchId),
         itemId: item.itemId,
         claimToken,
+        ...(config.retryFailed === true ? { retryFailed: true } : {}),
       });
       if (!claimed) throw new Error("Submission item claim failed");
       const claimedBatchId =
@@ -225,7 +226,9 @@ function createPublicationSubmissionOrchestrator(options) {
           value.workerPublisher.registerAttempt(attemptId, command.workerTask);
           registered = true;
         }
-        results.push(await value.workflow.publish(workflowCommand));
+        const execute = config.retryFailed === true ? value.workflow.retry : value.workflow.publish;
+        if (typeof execute !== "function") throw new Error("Publication retry workflow is unavailable");
+        results.push(await execute(workflowCommand));
         if (command.workerTask && workerStopRequested()) stopRequested = true;
       } catch (error) {
         if (

@@ -10,8 +10,36 @@ function createMediaOrderService(opts) {
   var openExternal =
     typeof options.openExternal === "function" ? options.openExternal : null;
 
+  function trustedPublishedHosts() {
+    var hosts = new Set(
+      Array.isArray(options.allowedPublishedUrlHosts)
+        ? options.allowedPublishedUrlHosts
+            .filter(function (host) {
+              return typeof host === "string" && host.trim();
+            })
+            .map(function (host) {
+              return host.trim().toLowerCase();
+            })
+        : [],
+    );
+    try {
+      var client = clientProvider ? clientProvider() : null;
+      var policyHostname =
+        client && client.endpointPolicy && client.endpointPolicy.hostname;
+      if (policyHostname) hosts.add(String(policyHostname).toLowerCase());
+      else if (client && client.baseUrl)
+        hosts.add(new URL(client.baseUrl).hostname.toLowerCase());
+    } catch (_) {}
+    return hosts;
+  }
+
   function listOrderViews() {
-    return operationalStore.listOrderDisplayViews().map(toOperationalOrderView);
+    var allowedHosts = trustedPublishedHosts();
+    return operationalStore
+      .listOrderDisplayViews()
+      .map(function (order) {
+        return toOperationalOrderView(order, allowedHosts);
+      });
   }
 
   async function syncOrder(orderNid) {
@@ -52,7 +80,7 @@ function createMediaOrderService(opts) {
     });
     if (!order || String(order.status || "") !== "published")
       throw orderError("MEDIA_ORDER_NOT_PUBLISHED");
-    var url = publishedUrlForOrder(order);
+    var url = publishedUrlForOrder(order, trustedPublishedHosts());
     if (!url) throw orderError("MEDIA_ORDER_URL_UNAVAILABLE");
     if (!openExternal) throw orderError("MEDIA_ORDER_OPEN_FAILED");
     try {
@@ -76,7 +104,7 @@ function orderError(code, message) {
   return error;
 }
 
-function safePublishedUrl(value) {
+function safePublishedUrl(value, allowedHosts) {
   if (typeof value !== "string" || !value || value.length > 2048) return null;
   try {
     var url = new URL(value);
@@ -85,7 +113,9 @@ function safePublishedUrl(value) {
       url.username ||
       url.password ||
       url.search ||
-      url.hash
+      url.hash ||
+      !(allowedHosts instanceof Set) ||
+      !allowedHosts.has(url.hostname.toLowerCase())
     )
       return null;
     return url.href;
@@ -94,15 +124,15 @@ function safePublishedUrl(value) {
   }
 }
 
-function publishedUrlForOrder(order) {
+function publishedUrlForOrder(order, allowedHosts) {
   var value = order || {};
   var canonicalStatus = value.status || value.publicationStatus;
   return canonicalStatus === "published"
-    ? safePublishedUrl(value.remoteUrl)
+    ? safePublishedUrl(value.remoteUrl, allowedHosts)
     : null;
 }
 
-function toOperationalOrderView(order) {
+function toOperationalOrderView(order, allowedHosts) {
   var value = order || {};
   var quotedPrice =
     typeof value.quotedPrice === "number" &&
@@ -123,7 +153,7 @@ function toOperationalOrderView(order) {
         ? value.resourceNameSnapshot
         : "",
     price: quotedPrice,
-    hasPublishedUrl: Boolean(publishedUrlForOrder(value)),
+    hasPublishedUrl: Boolean(publishedUrlForOrder(value, allowedHosts)),
   };
 }
 

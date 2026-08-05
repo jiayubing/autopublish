@@ -34,6 +34,9 @@ function createOrder(store, suffix, status) {
         attemptId: `attempt-${suffix}`,
         targetKey: `media-resource:resource-${suffix}`,
         remoteId: `order-${suffix}`,
+        ...(status === "published"
+          ? { remoteUrl: `https://media.example.test/articles/order-${suffix}` }
+          : {}),
       },
     },
   });
@@ -149,7 +152,10 @@ test("canonical published order remains openable after supplier status changes f
     });
     await observe(store, orderId, { status: 9 });
 
-    const view = createMediaOrderService({ operationalStore: store }).listOrderViews()[0];
+    const view = createMediaOrderService({
+      operationalStore: store,
+      allowedPublishedUrlHosts: ["publisher.example"],
+    }).listOrderViews()[0];
     assert.deepEqual(
       [view.statusCode, view.hasPublishedUrl],
       ["9", true],
@@ -157,6 +163,7 @@ test("canonical published order remains openable after supplier status changes f
 
     const service = createMediaOrderService({
       operationalStore: store,
+      allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (url) => opened.push(url),
     });
     assert.deepEqual(await service.openPublishedUrl(orderId), { completed: true });
@@ -181,6 +188,7 @@ test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 obser
 
       const view = createMediaOrderService({
         operationalStore: store,
+        allowedPublishedUrlHosts: ["publisher.example"],
       }).listOrderViews().find((order) => order.orderNid === orderId);
       assert.deepEqual(
         [store.listRemoteOrders().find((order) => order.orderId === orderId).status, view.statusCode, view.hasPublishedUrl],
@@ -190,6 +198,7 @@ test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 obser
       const opened = [];
       const service = createMediaOrderService({
         operationalStore: store,
+        allowedPublishedUrlHosts: ["publisher.example"],
         openExternal: async (target) => opened.push(target),
       });
       assert.deepEqual(await service.openPublishedUrl(orderId), {
@@ -253,6 +262,7 @@ test("published HTTPS evidence remains visible and openable after restart, backu
     const opened = [];
     const service = createMediaOrderService({
       operationalStore: store,
+      allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (target) => opened.push(target),
     });
     assert.equal(service.listOrderViews()[0].hasPublishedUrl, true);
@@ -271,6 +281,7 @@ test("published HTTPS evidence remains visible and openable after restart, backu
     const opened = [];
     const service = createMediaOrderService({
       operationalStore: restored,
+      allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (target) => opened.push(target),
     });
     assert.equal(service.listOrderViews()[0].hasPublishedUrl, true);
@@ -317,6 +328,7 @@ test("real SQLite order projection hides and main rejects every unsafe published
     const opened = [];
     const service = createMediaOrderService({
       operationalStore: store,
+      allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (target) => opened.push(target),
     });
     const views = new Map(

@@ -2,7 +2,8 @@ const assert = require("node:assert/strict");
 const { describe, it } = require("node:test");
 const http = require("node:http");
 const { createAuthServer } = require("../src/server");
-const { temporaryDb } = require("./helpers");
+const { verifyPassword } = require("../src/auth-domain");
+const { createMemoryAuth, createUser, temporaryDb } = require("./helpers");
 
 function request(base, method, route, body) {
   return new Promise((resolve, reject) => {
@@ -34,5 +35,34 @@ describe("concurrent asynchronous login", () => {
       app.repository.close();
       temp.cleanup();
     }
+  });
+
+  it("rejects old credentials when the password changes during verification", async () => {
+    let blockNextVerification = false;
+    let blocked = false;
+    let signalStarted;
+    let releaseVerification;
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    const release = new Promise((resolve) => { releaseVerification = resolve; });
+    const passwordVerifier = async (password, passwordHash, options) => {
+      if (blockNextVerification && !blocked) {
+        blocked = true;
+        signalStarted();
+        await release;
+      }
+      return verifyPassword(password, passwordHash, options);
+    };
+    const { domain, administration } = createMemoryAuth({ passwordVerifier });
+    await createUser(administration, "password-race", { password: "old-password" });
+    const session = await domain.login({ loginName: "password-race", password: "old-password", deviceId: "race-device" });
+
+    blockNextVerification = true;
+    const staleLogin = domain.login({ loginName: "password-race", password: "old-password", deviceId: "race-device" });
+    await started;
+    await domain.changePassword({ accessToken: session.accessToken, currentPassword: "old-password", newPassword: "new-password", deviceId: "race-device" });
+    releaseVerification();
+
+    await assert.rejects(() => staleLogin, (error) => error.code === "AUTH_INVALID_CREDENTIALS");
+    assert.equal((await domain.login({ loginName: "password-race", password: "new-password", deviceId: "race-device" })).user.loginName, "password-race");
   });
 });

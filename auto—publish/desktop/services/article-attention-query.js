@@ -176,10 +176,13 @@ function createArticleAttentionQuery(options) {
       batchId: safeText(value.batchId, 160),
       publicationId: safeText(value.publicationId, 160),
       attemptId: safeText(value.attemptId, 160),
+      targetKey: safeText(value.targetKey, 512),
       jobId: safeText(value.jobId, 160),
       transactionId: safeText(value.transactionId || value.id, 160),
       status: safeText(value.status, 80),
       reasonCode: safeText(value.reasonCode || value.errorCode, 128),
+      remoteId: safeText(value.remoteId, 512),
+      remoteUrl: safeText(value.remoteUrl, 2048),
       pairState: safeText(value.pairState, 64),
       updatedAt: safeText(value.updatedAt, 64),
       message: policy.message || MESSAGES[kind] || "需处理项需要进一步核对",
@@ -235,6 +238,11 @@ function createArticleAttentionQuery(options) {
       const articleState = articleLookup(item);
       const platform = platforms.get(item.platformId);
       const kind = item.status === "uncertain" ? ATTENTION_KINDS.PUBLICATION_UNCERTAIN : ATTENTION_KINDS.FAILED_SUBMISSION;
+      let retryEligible = false;
+      if (item.status === "failed" && opts.contentSubmissionService && typeof opts.contentSubmissionService.previewRetryFailedPublication === "function") {
+        try { retryEligible = opts.contentSubmissionService.previewRetryFailedPublication({ publicationId: item.publicationId }).eligible === true; }
+        catch (_) { retryEligible = false; }
+      }
       return makeEntry(kind, Object.assign({}, item, {
         platformId: item.platformId,
         targetPlatformId: item.platformId,
@@ -249,8 +257,9 @@ function createArticleAttentionQuery(options) {
         hasResidue: false,
         hasRemovalTransaction: false,
         targetSupportsContentQueueImport: platform ? platform.contentQueueImport === true : item.contentQueueImport === true,
-        canRetryFailedPublication: item.status === "failed",
-        canReconcile: item.status === "uncertain"
+        canRetryFailedPublication: retryEligible,
+        canReconcile: item.status === "uncertain",
+        hasPublishedEvidence: Boolean(item.remoteId && item.remoteUrl)
       });
     });
   }

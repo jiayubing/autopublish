@@ -112,6 +112,35 @@ test("PlatformRun keeps the watchdog gate closed until its child exits", async (
   await next;
 });
 
+test("PlatformRun does not kill a worker between remote-finished and its durable result", async () => {
+  const worker = child();
+  let onMessage;
+  const run = createPlatformRun({
+    watchdogMs: 60000,
+    launch: (input) => {
+      onMessage = input.onMessage;
+      return { child: worker, promise: new Promise(() => {}) };
+    },
+  });
+  run.start({ runId: "run-remote-finished", tasks: [{}] });
+  onMessage({
+    schemaVersion: 1,
+    runId: "run-remote-finished",
+    type: "state",
+    payload: { phase: "remote-started", task: {} },
+  });
+  onMessage({
+    schemaVersion: 1,
+    runId: "run-remote-finished",
+    type: "state",
+    payload: { phase: "remote-finished", task: {} },
+  });
+
+  assert.equal(run.snapshot().remoteStarted, true);
+  run.stop("run-remote-finished");
+  assert.equal(worker.killCalls, 0);
+});
+
 test("PlatformRun terminates a short real local child without releasing the gate early", async () => {
   let childProcess;
   const run = createPlatformRun({

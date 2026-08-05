@@ -110,4 +110,48 @@ describe("isolated auth API", () => {
       200,
     );
   });
+
+  it("drains an oversized multi-chunk body without responding before upload completion", async () => {
+    const base = await baseUrl;
+    let responseStarted = false;
+    let resolveResponse;
+    let rejectResponse;
+    const responseResult = new Promise((resolve, reject) => {
+      resolveResponse = resolve;
+      rejectResponse = reject;
+    });
+    const request = http.request(
+      `${base}/v1/auth/login`,
+      { method: "POST", headers: { "content-type": "application/json" } },
+      (response) => {
+        responseStarted = true;
+        let text = "";
+        response.on("data", (chunk) => { text += chunk; });
+        response.on("end", () => resolveResponse({ status: response.statusCode, data: JSON.parse(text) }));
+      },
+    );
+    request.on("error", rejectResponse);
+
+    for (let index = 0; index < 9; index += 1) request.write("x".repeat(4096));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(responseStarted, false);
+    for (let index = 0; index < 64; index += 1) request.write("y".repeat(4096));
+    request.end();
+
+    const response = await responseResult;
+    assert.equal(response.status, 400);
+    assert.equal(response.data.error.code, "AUTH_INPUT_INVALID");
+    assert.equal((await requestApiHealth(base)).status, 200);
+  });
 });
+
+function requestApiHealth(base) {
+  return new Promise((resolve, reject) => {
+    const request = http.request(`${base}/healthz`, { method: "GET" }, (response) => {
+      response.resume();
+      response.on("end", () => resolve({ status: response.statusCode }));
+    });
+    request.on("error", reject);
+    request.end();
+  });
+}

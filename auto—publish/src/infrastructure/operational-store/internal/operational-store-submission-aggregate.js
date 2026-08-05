@@ -156,9 +156,21 @@ function createSubmissionAggregate(context) {
           row.target_key,
           `%"batchItemId":"${row.item_id}"%`,
         );
+      const retryFailed = value.retryFailed === true;
+      if (retryFailed) {
+        const payload = fromText(row.payload_json) || {};
+        const failed = db
+          .prepare(
+            "SELECT p.publication_id FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id WHERE p.article_id=? AND p.target_key=? AND p.status='failed' AND a.attempt_id=? AND a.status='failed' LIMIT 1",
+          )
+          .get(row.article_id, row.target_key, payload.attemptId || "");
+        if (!failed || row.status !== "failed")
+          throw fail("PUBLICATION_RETRY_NOT_ELIGIBLE");
+      }
       if (
         activePublication ||
-        (row.status !== "queued" &&
+        (!retryFailed &&
+          row.status !== "queued" &&
           !(row.status === "claimed" && row.claim_until < stamp))
       )
         throw fail("OPERATIONAL_BATCH_ITEM_NOT_EXECUTABLE");

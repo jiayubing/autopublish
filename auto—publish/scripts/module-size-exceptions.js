@@ -6,7 +6,7 @@
 const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   [
     "desktop/services/operational-content-submission-service.js",
-    1980,
+    2031,
     "deep application owner for claim/outcome/cleanup ordering",
   ],
   [
@@ -31,7 +31,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
   [
     "src/infrastructure/operational-store/internal/operational-store-submission-aggregate.js",
-    683,
+    695,
     "single SQLite aggregate for batch claims and cleanup",
   ],
   [
@@ -66,7 +66,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
   [
     "desktop/composition/workspace-runtime-composition.js",
-    601,
+    620,
     "composition root dependency graph",
   ],
   [
@@ -88,7 +88,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ["src/platforms/toutiao/adapter.js", 502, "vendor browser protocol adapter"],
   [
     "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
-    490,
+    599,
     "single SQLite publication aggregate",
   ],
   [
@@ -101,7 +101,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
     476,
     "media pagination, deduplication, and target projection",
   ],
-  ["auth-server/src/auth-domain.js", 453, "Auth mutation ordering facade"],
+  ["auth-server/src/auth-domain.js", 492, "Auth mutation ordering facade"],
   [
     "src/content/article-serialization.js",
     446,

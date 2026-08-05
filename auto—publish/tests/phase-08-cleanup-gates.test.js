@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -92,7 +93,15 @@ test("package gate permits the generated preload but rejects private package con
       "production-artifact-manifest.json",
       '{"status":"PASSED"}\n',
     );
-    assert.equal(packageBoundaryReport(resources).status, "PASSED");
+    const passedReport = packageBoundaryReport(resources);
+    assert.equal(passedReport.status, "PASSED");
+    assert.equal(
+      passedReport.archiveSha256,
+      crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(path.join(resources, "app.asar")))
+        .digest("hex"),
+    );
 
     const invalidAppRoot = path.join(temporaryRoot, "invalid-app");
     const invalidResources = path.join(temporaryRoot, "invalid-resources");

@@ -40,7 +40,8 @@ function actionList(facts, capabilities, actions) {
     if (action === ACTIONS.CLEANUP) return capabilities.canCleanup !== false && facts.canCleanup === true;
     if (action === ACTIONS.RETRY_REMOVAL) return capabilities.canRetryRemoval !== false && facts.canRetryRemoval !== false;
     if (action === ACTIONS.RETRY_PUBLICATION) return capabilities.canRetryFailedPublication === true && facts.canRetryFailedPublication !== false;
-    if (action === ACTIONS.RECONCILE_PUBLISHED || action === ACTIONS.RECONCILE_FAILED) return capabilities.canReconcile !== false && facts.canReconcile !== false;
+    if (action === ACTIONS.RECONCILE_PUBLISHED) return capabilities.canReconcile !== false && facts.canReconcile !== false && facts.hasPublishedEvidence === true;
+    if (action === ACTIONS.RECONCILE_FAILED) return capabilities.canReconcile !== false && facts.canReconcile !== false;
     if (action === ACTIONS.RETRY_ARCHIVE) return capabilities.canRetryArchive === true && facts.canRetryArchive !== false;
     return false;
   });

@@ -6,6 +6,7 @@ const {
   tableNames,
   schemaVersion,
   verifyMigrationHistory,
+  verifyV1Structure,
   verifyV2Structure,
   verifyV3Structure,
   integrityOk,
@@ -28,6 +29,7 @@ function createMaintenanceAggregate(context) {
     )
       throw fail("OPERATIONAL_VERIFY_FAILED");
     verifyMigrationHistory(db, [1, 2, 3], "OPERATIONAL_VERIFY_FAILED");
+    verifyV1Structure(db, "OPERATIONAL_VERIFY_FAILED");
     verifyV2Structure(db, "OPERATIONAL_VERIFY_FAILED");
     verifyV3Structure(db, "OPERATIONAL_VERIFY_FAILED");
     return {

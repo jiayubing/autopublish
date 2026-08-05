@@ -92,6 +92,60 @@ test("media submission uses the shared claim-to-workflow seam", async () => {
   assert.deepEqual(events, ["create-batch", "claim-item", "workflow-publish"]);
 });
 
+test("failed submission retry reclaims the existing item and calls PublicationWorkflow.retry", async () => {
+  let claimed = null;
+  let retried = null;
+  const orchestrator = createPublicationSubmissionOrchestrator({
+    operationalStore: {
+      findSubmissionItem: () => ({
+        itemId: "item-1",
+        batchId: "batch-1",
+        payload: {},
+      }),
+      claimSubmissionItemById: (input) => {
+        claimed = input;
+        return {
+          itemId: input.itemId,
+          batchId: input.batchId,
+          revision: 4,
+          claimToken: input.claimToken,
+          payload: {},
+        };
+      },
+    },
+    workflow: {
+      publish: async () => {
+        throw new Error("must not publish a retry as a new aggregate");
+      },
+      retry: async (command) => {
+        retried = command;
+        return { status: "published" };
+      },
+    },
+  });
+  const result = await orchestrator.submit(
+    [
+      {
+        publicationId: "publication-1",
+        articleId: "article-1",
+        target: {
+          kind: "platform",
+          platformId: "toutiao",
+          accountProfileId: "account-1",
+        },
+        title: "title",
+        body: "body",
+        postProcessingPayload: { batchId: "batch-1" },
+      },
+    ],
+    { retryFailed: true },
+  );
+  assert.equal(claimed.retryFailed, true);
+  assert.equal(retried.publicationId, "publication-1");
+  assert.equal(retried.batchItemId, "item-1");
+  assert.equal(result.results[0].status, "published");
+});
+
 test("auto-trash intent is retained in both the durable item and workflow payload", async () => {
   let durablePayload = null;
   let workflowPayload = null;
@@ -249,6 +303,7 @@ test("renewed submission claims cannot be taken over during a long remote call",
           attemptId: "attempt-claim-lease",
           targetKey: "media-resource:resource-claim-lease",
           remoteId: "remote-claim-lease",
+          remoteUrl: "https://example.test/remote-claim-lease",
         },
       },
     });
@@ -325,6 +380,7 @@ test("startup recovery closes a stranded submission claim with its publication i
           attemptId: "attempt-recovery-claim",
           targetKey: "media-resource:resource-recovery-claim",
           remoteId: "remote-recovery-claim",
+          remoteUrl: "https://example.test/remote-recovery-claim",
         },
       },
     });
@@ -418,6 +474,7 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
           attemptId: "attempt-auto-trash-recovery",
           targetKey: "media-resource:resource-auto-trash-recovery",
           remoteId: "remote-auto-trash-recovery",
+          remoteUrl: "https://example.test/remote-auto-trash-recovery",
         },
       },
       postProcessingPayload: {
@@ -536,6 +593,7 @@ test("terminal multi-target archive blocking becomes attention instead of an inf
           attemptId: "attempt-terminal-one",
           targetKey: "media-resource:resource-terminal-one",
           remoteId: "remote-terminal-one",
+          remoteUrl: "https://example.test/remote-terminal-one",
         },
       },
       postProcessingPayload: {
@@ -921,6 +979,7 @@ test("latest retry error code overrides stale auto-trash output after restart", 
           targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
           accountProfileId: profile.accountProfileId,
           remoteId: "remote-retry-error-recovery",
+          remoteUrl: "https://example.test/remote-retry-error-recovery",
         },
       },
       postProcessingPayload,
@@ -1010,6 +1069,7 @@ test("duplicate media publication is rejected before creating a zombie batch", a
           attemptId: "attempt-duplicate-media",
           targetKey: "media-resource:resource-duplicate-media",
           remoteId: "remote-duplicate-media",
+          remoteUrl: "https://example.test/remote-duplicate-media",
         },
       },
     });

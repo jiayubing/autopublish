@@ -18,6 +18,8 @@ const REQUIRED_CHECKS = Object.freeze([
   "required/packaging-contracts",
   "required/link-security",
   "required/phase-08-gates",
+  "required/production-ipc-matrix",
+  "required/alpha-artifact-gates",
 ]);
 
 const MANUAL_GATES = Object.freeze([

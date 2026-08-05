@@ -43,4 +43,38 @@ describe("multi-user accounts, entitlement and first password change", () => {
     assert.equal(changed.user.mustChangePassword, false);
     assert.equal((await domain.login({ loginName: "new-user", password: "permanent-password", deviceId: "new-device" })).user.loginName, "new-user");
   });
+
+  it("requires the current password when changing it with an access token", async () => {
+    const { domain, administration } = createMemoryAuth();
+    await createUser(administration, "password-owner", { password: "current-password" });
+    const session = await domain.login({ loginName: "password-owner", password: "current-password", deviceId: "owner-device" });
+
+    await assert.rejects(
+      () => domain.changePassword({ accessToken: session.accessToken, newPassword: "replacement-password" }),
+      (error) => error instanceof AuthError && error.code === "AUTH_INVALID_CREDENTIALS",
+    );
+    assert.equal((await domain.login({ loginName: "password-owner", password: "current-password", deviceId: "owner-device" })).user.loginName, "password-owner");
+  });
+
+  it("locks repeated temporary-password change failures like login failures", async () => {
+    const { domain, administration } = createMemoryAuth({ loginFailureThreshold: 2 });
+    await createUser(administration, "temporary-owner", { password: "temporary-password", mustChangePassword: true });
+    const request = { loginName: "temporary-owner", currentPassword: "wrong-password", newPassword: "replacement-password", deviceId: "temporary-device", sourceFingerprint: "test-source" };
+
+    await assert.rejects(() => domain.changePassword(request), (error) => error.code === "AUTH_INVALID_CREDENTIALS");
+    await assert.rejects(() => domain.changePassword(request), (error) => error.code === "AUTH_ACCOUNT_LOCKED");
+    await assert.rejects(
+      () => domain.changePassword({ ...request, currentPassword: "temporary-password" }),
+      (error) => error.code === "AUTH_ACCOUNT_LOCKED",
+    );
+  });
+
+  it("rate limits temporary-password changes like login attempts", async () => {
+    const { domain, administration } = createMemoryAuth({ loginFailureThreshold: 100, rateLimitMaxAttempts: 1 });
+    await createUser(administration, "rate-limited-owner", { password: "temporary-password", mustChangePassword: true });
+    const request = { loginName: "rate-limited-owner", currentPassword: "wrong-password", newPassword: "replacement-password", deviceId: "temporary-device", sourceFingerprint: "rate-limit-source" };
+
+    await assert.rejects(() => domain.changePassword(request), (error) => error.code === "AUTH_INVALID_CREDENTIALS");
+    await assert.rejects(() => domain.changePassword(request), (error) => error.code === "AUTH_RATE_LIMITED");
+  });
 });

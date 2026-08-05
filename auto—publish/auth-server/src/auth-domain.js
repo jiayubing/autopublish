@@ -127,7 +127,7 @@ class AuthDomain extends AuthDomainManagement {
     );
     return this._withMutation(() => {
       const current = this._userByLogin(loginName);
-      if (!current || !validPassword) {
+      if (!current || !validPassword || current.passwordHash !== passwordHash) {
         const failure = this.loginPolicy.recordFailure(current);
         if (current && failure.update)
           this.repository.updateUser(
@@ -360,36 +360,73 @@ class AuthDomain extends AuthDomainManagement {
     const request = input || {};
     const newPassword = this.passwordPolicy.normalize(request.newPassword);
     const accessToken = request.accessToken || null;
+    if (typeof request.currentPassword !== "string")
+      throw new AuthError("AUTH_INVALID_CREDENTIALS");
     let currentUser;
     let currentDevice;
+    let verifiedPasswordHash;
     if (accessToken) {
       const current = await this.inspectForPasswordChange(accessToken);
       currentUser = current.user;
       currentDevice = current.device;
     } else {
       const loginName = normalizeLoginName(request.loginName);
-      if (typeof request.currentPassword !== "string")
-        throw new AuthError("AUTH_INVALID_CREDENTIALS");
+      const attempt = this.loginPolicy.begin({
+        loginName,
+        sourceFingerprint: request.sourceFingerprint,
+      });
+      if (!attempt.allowed) throw new AuthError("AUTH_RATE_LIMITED");
       const found = this._userByLogin(loginName);
+      const checkedPasswordHash = found
+        ? found.passwordHash
+        : DUMMY_PASSWORD_HASH;
       const valid = await this.passwordVerifier(
         request.currentPassword,
-        found ? found.passwordHash : DUMMY_PASSWORD_HASH,
+        checkedPasswordHash,
         this.passwordOptions,
       );
-      if (!found || !valid) throw new AuthError("AUTH_INVALID_CREDENTIALS");
-      this._assertEnabled(found);
-      this._assertEntitled(this.entitlementPolicy.forUser(found.id));
-      if (!found.mustChangePassword)
-        throw new AuthError("AUTH_SESSION_EXPIRED");
-      currentUser = found;
+      const verification = await this._withMutation(() => {
+        const current = this._userByLogin(loginName);
+        if (
+          !current ||
+          !valid ||
+          current.passwordHash !== checkedPasswordHash
+        ) {
+          const failure = this.loginPolicy.recordFailure(current);
+          if (current && failure.update)
+            this.repository.updateUser(
+              current.id,
+              Object.assign({}, failure.update, { updatedAt: this._nowIso() }),
+            );
+          this._audit(
+            failure.eventCode,
+            current && current.enabled ? current.id : null,
+            null,
+            request.sourceFingerprint,
+            failure.code,
+          );
+          return { failureCode: failure.code };
+        }
+        this._assertEnabled(current);
+        this._assertEntitled(this.entitlementPolicy.forUser(current.id));
+        this.loginPolicy.onSuccess(attempt);
+        if (!current.mustChangePassword)
+          throw new AuthError("AUTH_SESSION_EXPIRED");
+        return { user: current };
+      });
+      if (verification.failureCode)
+        throw new AuthError(verification.failureCode);
+      currentUser = verification.user;
+      verifiedPasswordHash = checkedPasswordHash;
     }
-    if (typeof request.currentPassword === "string") {
+    if (!verifiedPasswordHash) {
       const valid = await this.passwordVerifier(
         request.currentPassword,
         currentUser.passwordHash,
         this.passwordOptions,
       );
       if (!valid) throw new AuthError("AUTH_INVALID_CREDENTIALS");
+      verifiedPasswordHash = currentUser.passwordHash;
     }
     if (request.currentPassword === newPassword)
       throw new AuthError("AUTH_INPUT_INVALID");
@@ -400,6 +437,8 @@ class AuthDomain extends AuthDomainManagement {
     return this._withMutation(() => {
       const user = this.repository.findUserById(currentUser.id);
       if (!user) throw new AuthError("AUTH_SESSION_EXPIRED");
+      if (user.passwordHash !== verifiedPasswordHash)
+        throw new AuthError("AUTH_INVALID_CREDENTIALS");
       this._assertEnabled(user);
       const entitlements = this.entitlementPolicy.forUser(user.id);
       this._assertEntitled(entitlements);

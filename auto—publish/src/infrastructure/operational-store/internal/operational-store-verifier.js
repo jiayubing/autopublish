@@ -7,6 +7,7 @@ const {
   tableNames,
   schemaVersion,
   verifyMigrationHistory,
+  verifyV1Structure,
   verifyV2Structure,
   verifyV3Structure,
   integrityOk,
@@ -34,6 +35,7 @@ function verifyOperationalDatabase(filename) {
     )
       throw fail("OPERATIONAL_RESTORE_INVALID");
     verifyMigrationHistory(db, [1, 2, 3], "OPERATIONAL_RESTORE_INVALID");
+    verifyV1Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV2Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV3Structure(db, "OPERATIONAL_RESTORE_INVALID");
     return {

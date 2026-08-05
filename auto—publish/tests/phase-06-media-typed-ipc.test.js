@@ -368,6 +368,7 @@ test("media registrar projects resources and articles before typed success valid
     async () => {},
   );
   const client = {
+    endpointPolicy: { hostname: "publisher.example" },
     mediaList: async () => ({
       data: [
         {

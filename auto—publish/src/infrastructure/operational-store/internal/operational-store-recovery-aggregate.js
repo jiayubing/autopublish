@@ -304,7 +304,7 @@ function createRecoveryAggregate(context) {
     return Object.freeze(
       db
         .prepare(
-          "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id WHERE p.status IN('uncertain','failed') AND a.finished_at IS NOT NULL ORDER BY p.updated_at",
+          "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id WHERE p.status IN('uncertain','failed') AND a.finished_at IS NOT NULL AND a.created_at=(SELECT MAX(latest.created_at) FROM publication_attempts latest WHERE latest.publication_id=p.publication_id) ORDER BY p.updated_at",
         )
         .all()
         .map((row) =>
@@ -315,6 +315,8 @@ function createRecoveryAggregate(context) {
             status: row.status,
             updatedAt: row.updated_at,
             attemptId: row.attempt_id,
+            remoteId: row.remote_id || null,
+            remoteUrl: row.remote_url || null,
             platformId: /^platform:([^:]+):/.exec(row.target_key)?.[1] || null,
             accountProfileId:
               /^platform:[^:]+:account:(.+)$/.exec(row.target_key)?.[1] || null,

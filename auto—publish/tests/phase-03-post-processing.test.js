@@ -20,6 +20,7 @@ function publishedOutcome(profile, attemptId, articleId) {
       targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
       accountProfileId: profile.accountProfileId,
       remoteId: `remote-${attemptId}`,
+      remoteUrl: `https://example.test/${attemptId}`,
     },
   };
 }

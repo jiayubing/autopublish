@@ -5,7 +5,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/data
+      - autopublish-auth-data:/data
     ports:
       - "127.0.0.1:3180:3180"
     expose:
@@ -24,3 +24,6 @@ services:
 
 networks:
   autopublish-internal:
+
+volumes:
+  autopublish-auth-data:

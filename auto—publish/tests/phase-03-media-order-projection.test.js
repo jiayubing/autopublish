@@ -522,6 +522,7 @@ test("published order opening resolves only its stored HTTPS evidence by order i
       listOrderDisplayViews: () => [],
       listRemoteOrders: () => orders,
     },
+    allowedPublishedUrlHosts: ["publisher.example"],
     openExternal: async (url) => opened.push(url),
   });
 
@@ -533,6 +534,16 @@ test("published order opening resolves only its stored HTTPS evidence by order i
     code: "MEDIA_ORDER_NOT_PUBLISHED",
   });
   await assert.rejects(() => service.openPublishedUrl("order-unsafe-url"), {
+    code: "MEDIA_ORDER_URL_UNAVAILABLE",
+  });
+  orders.push({
+    orderId: "order-untrusted-host",
+    attemptId: "attempt-untrusted-host",
+    status: "published",
+    supplierStatusCode: "2",
+    remoteUrl: "https://evil.example/phish",
+  });
+  await assert.rejects(() => service.openPublishedUrl("order-untrusted-host"), {
     code: "MEDIA_ORDER_URL_UNAVAILABLE",
   });
   assert.deepEqual(opened, ["https://publisher.example/article/1"]);

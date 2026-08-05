@@ -200,6 +200,60 @@ test("PublicationWorkflow recovery and reconcile expose only safe manual outcome
   assert.equal(committed.length, 1);
 });
 
+test("PublicationWorkflow cannot reconcile published without bound remote evidence", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-reconcile-evidence-"));
+  const store = createOperationalStore({ workspaceRoot: root });
+  try {
+    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "Fixture account" });
+    const target = { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId };
+    store.reservePublicationTarget({ articleId: "article-1", publicationId: "publication-1", attemptId: "attempt-1", target });
+    store.markRecoveryUncertain({ attemptId: "attempt-1", error: error("REMOTE_RESULT_UNKNOWN") });
+    const workflow = createPublicationWorkflow({
+      clock: () => new Date(), operationalStore: store,
+      publisher: { inspectAccount: async () => ({}), publish: async () => { throw new Error("not used"); } },
+    });
+    await assert.rejects(() => workflow.reconcile({
+      attemptId: "attempt-1",
+      outcome: { status: "published", error: error("CONFIRMED_PUBLISHED") },
+    }), { code: "OPERATIONAL_OUTCOME_EVIDENCE_REQUIRED" });
+    assert.equal(store.listPublicationRecords({ publicationIds: ["publication-1"] })[0].status, "uncertain");
+    assert.equal(store.claimPostProcessing({ claimToken: "post-1" }), null);
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("PublicationWorkflow retries a failed target by appending a new durable attempt", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-publication-retry-"));
+  const store = createOperationalStore({ workspaceRoot: root });
+  try {
+    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "Fixture account" });
+    const target = { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId };
+    let publishCount = 0;
+    const workflow = createPublicationWorkflow({
+      clock: () => new Date(), operationalStore: store,
+      publisher: {
+        inspectAccount: async () => ({ verified: true, accountProfileId: profile.accountProfileId }),
+        publish: async (input) => {
+          publishCount += 1;
+          if (publishCount === 1) return { status: "failed", error: error("REMOTE_REJECTED") };
+          return { status: "published", evidence: { articleId: input.articleId, attemptId: input.attemptId, targetKey: `platform:toutiao:account:${profile.accountProfileId}`, accountProfileId: profile.accountProfileId, remoteId: "remote-2", remoteUrl: "https://example.test/remote-2" } };
+        },
+      },
+    });
+    assert.equal((await workflow.publish(command({ target }))).status, "failed");
+    const retried = await workflow.retry(command({ target, attemptId: "attempt-2" }));
+    assert.equal(retried.status, "published");
+    const record = store.listPublicationRecords({ publicationIds: ["publication-1"] })[0];
+    assert.equal(record.status, "published");
+    assert.deepEqual(record.attempts.map((attempt) => [attempt.attemptId, attempt.status]), [["attempt-1", "failed"], ["attempt-2", "published"]]);
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("PublicationWorkflow drains bounded recovery pages", async () => {
   const pages = [
     [{ attemptId: "attempt-1", state: "remote_started" }],

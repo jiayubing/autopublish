@@ -117,7 +117,9 @@ function createPlatformRun(options) {
     const payload = message.payload && typeof message.payload === "object" ? message.payload : {};
     if (message.type === "state" || message.type === "progress" || message.type === "heartbeat") {
       if (payload.phase === "remote-started") context.remoteStarted = true;
-      if (payload.phase === "remote-finished") context.remoteStarted = false;
+      // Once a remote call may have executed, keep the safety gate closed until
+      // the durable terminal result is accepted. `remote-finished` is emitted
+      // before that result and must not make stop() kill the worker early.
       if (payload.task && typeof payload.task === "object") context.currentTask = payload.task;
       armWatchdog(context);
       emit(context);

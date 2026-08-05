@@ -9,7 +9,7 @@ function createPublicationExecution(options) {
   if (!value.operationalStore || !value.publisher || !value.postProcessing)
     throw new Error("Publication execution dependencies are required");
 
-  async function publish(command) {
+  async function execute(command, retry) {
     const inputValue = command || {};
     const publicationId =
       inputValue.publicationId || `publication-${crypto.randomUUID()}`;
@@ -53,9 +53,15 @@ function createPublicationExecution(options) {
     };
     if (inputValue.batchItemId !== undefined)
       reservation.batchItemId = inputValue.batchItemId;
+    if (inputValue.batchClaimToken !== undefined)
+      reservation.batchClaimToken = inputValue.batchClaimToken;
     if (inputValue.postProcessingPayload !== undefined)
       reservation.postProcessingPayload = inputValue.postProcessingPayload;
-    const reserved = value.operationalStore.reservePublicationTarget(reservation);
+    if (retry) reservation.retryFailed = true;
+    const reserve = value.operationalStore.reservePublicationTarget;
+    if (typeof reserve !== "function")
+      throw new Error("Publication reservation is unavailable");
+    const reserved = reserve(reservation);
     let outcome;
     try {
       outcome = domain.parsePublishOutcome(
@@ -91,6 +97,14 @@ function createPublicationExecution(options) {
     });
   }
 
+  async function publish(command) {
+    return execute(command, false);
+  }
+
+  async function retry(command) {
+    return execute(command, true);
+  }
+
   async function reconcile(command) {
     const input = command || {};
     if (typeof input.attemptId !== "string")
@@ -105,6 +119,15 @@ function createPublicationExecution(options) {
     value.operationalStore.commitRemoteOutcome({
       attemptId: input.attemptId,
       outcome: input.outcome,
+      ...(input.reasonCode
+        ? {
+            reconciliation: {
+              kind: "manual-reconciliation",
+              reasonCode: input.reasonCode,
+              evidence: input.outcome.evidence || null,
+            },
+          }
+        : {}),
     });
     const postProcessing = await value.postProcessing.drain({
       collectResults: true,
@@ -118,7 +141,7 @@ function createPublicationExecution(options) {
     });
   }
 
-  return Object.freeze({ publish, reconcile });
+  return Object.freeze({ publish, retry, reconcile });
 }
 
 module.exports = { createPublicationExecution };

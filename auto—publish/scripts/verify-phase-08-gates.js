@@ -697,7 +697,7 @@ function packageBoundaryReport(resourcesPath) {
     extraResourceEntries: extraPaths.length,
     archiveSha256: crypto
       .createHash("sha256")
-      .update(entries.join("\n"))
+      .update(fs.readFileSync(archive))
       .digest("hex"),
     violations,
   };

@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { DatabaseSync } = require("node:sqlite");
 
 const { fail, text } = require("./operational-store-utils");
 const { runTransaction } = require("./operational-store-transaction");
@@ -22,6 +23,65 @@ CREATE INDEX submission_claimable ON submission_items(batch_id,status,claim_unti
 const V2_SCHEMA = `CREATE TABLE submission_item_operations(operation_id TEXT PRIMARY KEY NOT NULL, batch_id TEXT NOT NULL REFERENCES submission_batches(batch_id), item_id TEXT NOT NULL REFERENCES submission_items(item_id), action TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN('prepared','main_staged','sidecar_staged','staged','state_applied','complete')), expected_fingerprint TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(batch_id,item_id,action));`;
 
 const V3_SCHEMA = `CREATE TABLE IF NOT EXISTS order_display_snapshots(attempt_id TEXT PRIMARY KEY NOT NULL REFERENCES publication_attempts(attempt_id), title_snapshot TEXT NOT NULL, filename TEXT NOT NULL, resource_name_snapshot TEXT NOT NULL, quoted_price REAL, created_at TEXT NOT NULL);`;
+
+let expectedV1Structure;
+
+const project = (row, fields) =>
+  Object.fromEntries(fields.map((field) => [field, row[field]]));
+
+const pragma = (db, kind, name) =>
+  db.prepare(`PRAGMA ${kind}(${JSON.stringify(name)})`).all();
+
+function tableStructure(db, name) {
+  const definition = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
+    .get(name);
+  if (!definition) return null;
+  const columns = pragma(db, "table_info", name).map((row) =>
+    project(row, "name type notnull dflt_value pk".split(" ")),
+  );
+  const foreignKeys = pragma(db, "foreign_key_list", name).map((row) =>
+    project(row, "id seq table from to on_update on_delete match".split(" ")),
+  );
+  const indexes = pragma(db, "index_list", name)
+    .map((index) => ({
+      name: index.origin === "c" ? index.name : null,
+      ...project(index, "unique origin partial".split(" ")),
+      columns: pragma(db, "index_info", index.name).map(
+        (column) => column.name,
+      ),
+    }))
+    .sort((left, right) =>
+      JSON.stringify(left).localeCompare(JSON.stringify(right)),
+    );
+  const sql = (definition.sql || "").replace(/\s+/g, "");
+  const checks = sql.match(/CHECK\((?:[^()]|\([^()]*\))*\)/gi);
+  return { columns, foreignKeys, indexes, checks: checks || [] };
+}
+
+function verifyV1Structure(db, errorCode) {
+  if (!expectedV1Structure) {
+    const expected = new DatabaseSync(":memory:");
+    try {
+      expected.exec(V1_SCHEMA);
+      expectedV1Structure = Object.fromEntries(
+        tableNames(expected).map((name) => [
+          name,
+          tableStructure(expected, name),
+        ]),
+      );
+    } finally {
+      expected.close();
+    }
+  }
+  if (
+    Object.entries(expectedV1Structure).some(
+      ([name, structure]) =>
+        JSON.stringify(tableStructure(db, name)) !== JSON.stringify(structure),
+    )
+  )
+    throw fail(errorCode);
+}
 
 function tableNames(db) {
   return db
@@ -261,6 +321,7 @@ function migrateSchema(db, migrationHook) {
     version === 1 ? [1] : version === 2 ? [1, 2] : [1, 2, 3],
     "OPERATIONAL_SCHEMA_INVALID",
   );
+  verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   if (version === 1) {
     runTransaction(db, () => {
       const before = tableDataHashes(db);
@@ -310,6 +371,7 @@ function migrateSchema(db, migrationHook) {
   }
   if (version !== SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_INVALID");
   verifyMigrationHistory(db, [1, 2, 3], "OPERATIONAL_SCHEMA_INVALID");
+  verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   verifyV3Structure(db, "OPERATIONAL_SCHEMA_INVALID");
 }
@@ -329,6 +391,7 @@ module.exports = {
   verifyMigrationHistory,
   tableDataHashes,
   verifyTableDataHashes,
+  verifyV1Structure,
   verifyV2Structure,
   installV2OperationSchema,
   verifyV3Structure,

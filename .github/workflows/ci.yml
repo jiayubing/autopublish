@@ -337,8 +337,10 @@ jobs:
           --check required/toolchain=PASSED
           --check required/packaging-contracts=PASSED
           --check required/production-directory-smoke=PASSED
-          --check required/link-security=PASSED
-          --check required/phase-08-gates=PASSED
+           --check required/link-security=PASSED
+           --check required/phase-08-gates=PASSED
+           --check required/production-ipc-matrix=PASSED
+           --check required/alpha-artifact-gates=PASSED
         working-directory: auto—publish
       - name: Validate release checklist with explicit human blockers
         run: node scripts/validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked

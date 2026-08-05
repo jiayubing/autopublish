@@ -176,6 +176,7 @@ function createPublicationAggregate(context) {
   function reservePublicationTarget(input) {
     open();
     const value = input || {};
+    if (value.retryFailed === true) return reservePublicationRetry(value);
     const submission = submissionContext(value);
     const articleId = domain.ArticleId.serialize(
         domain.ArticleId.parse(value.articleId),
@@ -229,6 +230,89 @@ function createPublicationAggregate(context) {
     });
   }
 
+  function reservePublicationRetry(input) {
+    open();
+    const value = input || {};
+    const submission = submissionContext(value);
+    const articleId = domain.ArticleId.serialize(
+      domain.ArticleId.parse(value.articleId),
+    );
+    const target = domain.parsePublicationTarget(value.target);
+    const targetKey = domain.publicationTargetKey(target);
+    const publicationId = domain.PublicationId.serialize(
+      domain.PublicationId.parse(value.publicationId),
+    );
+    const attemptId = domain.AttemptId.serialize(
+      domain.AttemptId.parse(value.attemptId),
+    );
+    const stamp = iso(clock);
+    return transaction(() => {
+      const record = db
+        .prepare(
+          "SELECT status FROM publication_records WHERE publication_id=? AND article_id=? AND target_key=?",
+        )
+        .get(publicationId, articleId, targetKey);
+      if (!record || record.status !== "failed")
+        throw fail("PUBLICATION_RETRY_NOT_ELIGIBLE");
+      const latest = db
+        .prepare(
+          "SELECT attempt_id,status FROM publication_attempts WHERE publication_id=? ORDER BY created_at DESC,attempt_id DESC LIMIT 1",
+        )
+        .get(publicationId);
+      if (!latest || latest.status !== "failed")
+        throw fail("PUBLICATION_RETRY_NOT_ELIGIBLE");
+      const active = db
+        .prepare(
+          "SELECT 1 FROM publication_attempts a JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE a.publication_id=? AND i.state IN('remote_started','outcome_pending') LIMIT 1",
+        )
+        .get(publicationId);
+      if (active) throw fail("PUBLICATION_RETRY_NOT_ELIGIBLE");
+      if (submission && submission.batchItemId) {
+        const item = db
+          .prepare(
+            "SELECT article_id,target_key,status,claim_token,payload_json FROM submission_items WHERE item_id=?",
+          )
+          .get(submission.batchItemId);
+        if (
+          !item ||
+          item.article_id !== articleId ||
+          item.target_key !== targetKey ||
+          item.status !== "claimed" ||
+          item.claim_token !== value.batchClaimToken
+        )
+          throw fail("OPERATIONAL_BATCH_ITEM_MISMATCH");
+        const payload = fromText(item.payload_json) || {};
+        if (payload.attemptId !== latest.attempt_id)
+          throw fail("OPERATIONAL_BATCH_ITEM_MISMATCH");
+        db.prepare(
+          "UPDATE submission_items SET payload_json=? WHERE item_id=?",
+        ).run(
+          text(Object.assign({}, payload, { attemptId })),
+          submission.batchItemId,
+        );
+      }
+      db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
+        attemptId,
+        publicationId,
+        "queued",
+        stamp,
+        null,
+      );
+      db.prepare("INSERT INTO recovery_intents VALUES(?,?,?,?,?,?)").run(
+        randomUUID(),
+        attemptId,
+        "remote_started",
+        text(publicationIntentPayload(submission)),
+        stamp,
+        stamp,
+      );
+      db.prepare(
+        "UPDATE publication_records SET status='queued',updated_at=? WHERE publication_id=?",
+      ).run(stamp, publicationId);
+      return { publicationId, attemptId, targetKey, status: "queued" };
+    });
+  }
+
   function commitRemoteOutcome(input) {
     open();
     const value = input || {};
@@ -249,6 +333,7 @@ function createPublicationAggregate(context) {
     )
       throw fail("OPERATIONAL_CLAIM_INVALID");
     rejectSensitive(outcome);
+    rejectSensitive(value.reconciliation || {});
     rejectSensitive(value.postProcessingPayload || {});
     const stamp = iso(clock);
     return transaction(() => {
@@ -258,6 +343,31 @@ function createPublicationAggregate(context) {
         )
         .get(attemptId);
       if (!attempt) throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
+      const target = fromText(attempt.target_json);
+      if (
+        ["published", "submitted"].includes(outcome.status) &&
+        !outcome.evidence
+      )
+        throw fail("OPERATIONAL_OUTCOME_EVIDENCE_REQUIRED");
+      if (outcome.evidence) {
+        const evidence = outcome.evidence;
+        const expectedAccount =
+          target && target.kind === "platform"
+            ? target.accountProfileId
+            : undefined;
+        if (
+          evidence.articleId !== attempt.article_id ||
+          evidence.attemptId !== attemptId ||
+          evidence.targetKey !== attempt.target_key ||
+          evidence.accountProfileId !== expectedAccount ||
+          typeof evidence.remoteId !== "string" ||
+          !evidence.remoteId ||
+          (outcome.status === "published" &&
+            (typeof evidence.remoteUrl !== "string" ||
+              !/^https:\/\//.test(evidence.remoteUrl)))
+        )
+          throw fail("OPERATIONAL_OUTCOME_EVIDENCE_MISMATCH");
+      }
       const persisted = parsePublicationIntentPayload(attempt.intent_payload);
       const persistedSubmission = persisted.context || {};
       const batchItemId =
@@ -296,7 +406,6 @@ function createPublicationAggregate(context) {
           text(outcome.evidence),
           stamp,
         );
-      const target = fromText(attempt.target_json);
       if (outcome.evidence && target && target.kind === "media")
         db.prepare("INSERT OR IGNORE INTO remote_orders VALUES(?,?,?,?,?)").run(
           outcome.evidence.remoteId,
@@ -377,7 +486,7 @@ function createPublicationAggregate(context) {
         text(
           publicationIntentPayload(
             submission,
-            outcome.error || outcome.evidence || null,
+            value.reconciliation || outcome.error || outcome.evidence || null,
           ),
         ),
         stamp,

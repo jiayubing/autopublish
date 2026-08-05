@@ -87,6 +87,8 @@ function errorResponse(response, errorOrCode) {
 function readBody(request) {
   return new Promise((resolve, reject) => {
     let body = "";
+    let bodyBytes = 0;
+    let oversized = false;
     let settled = false;
     const fail = (error) => {
       if (!settled) {
@@ -95,14 +97,18 @@ function readBody(request) {
       }
     };
     request.on("data", (chunk) => {
-      body += chunk;
-      if (Buffer.byteLength(body) > 32768) {
-        request.resume();
-        fail(new AuthError("AUTH_INPUT_INVALID"));
+      if (oversized) return;
+      bodyBytes += Buffer.byteLength(chunk);
+      if (bodyBytes > 32768) {
+        oversized = true;
+        body = "";
+        return;
       }
+      body += chunk;
     });
     request.on("end", () => {
       if (settled) return;
+      if (oversized) return fail(new AuthError("AUTH_INPUT_INVALID"));
       try {
         settled = true;
         resolve(body ? JSON.parse(body) : {});
