@@ -43,7 +43,7 @@ function safePostProcessingErrorCode(value) {
     : null;
 }
 
-function createRecoveryAggregate(context) {
+function createRecoveryAggregate(context, activeTarget) {
   const { db, open, transaction, clock, fail, iso } = context;
 
   function refreshSubmissionBatchStatus(dbHandle, batchId, stamp) {
@@ -168,6 +168,12 @@ function createRecoveryAggregate(context) {
       db.prepare(
         "UPDATE publication_records SET status='uncertain',updated_at=? WHERE publication_id=?",
       ).run(stamp, attempt.publication_id);
+      activeTarget.markUncertain({
+        articleId: attempt.article_id,
+        publicationId: attempt.publication_id,
+        attemptId,
+        stamp,
+      });
       return { attemptId, status: "uncertain" };
     });
   }

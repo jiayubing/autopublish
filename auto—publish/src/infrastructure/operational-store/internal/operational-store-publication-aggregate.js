@@ -1,5 +1,4 @@
 const domain = require("../../../domain");
-
 const {
   canonicalDisplayPrice,
   fromText,
@@ -7,7 +6,6 @@ const {
   safeDisplayText,
   text,
 } = require("./operational-store-utils");
-
 function publicationIntentPayload(context, detail) {
   if (!context) return detail === undefined ? null : detail;
   return {
@@ -15,7 +13,6 @@ function publicationIntentPayload(context, detail) {
     detail: detail === undefined ? null : detail,
   };
 }
-
 function parsePublicationIntentPayload(value) {
   const parsed = fromText(value);
   if (
@@ -30,9 +27,8 @@ function parsePublicationIntentPayload(value) {
   return { context: null, detail: parsed };
 }
 
-function createPublicationAggregate(context) {
+function createPublicationAggregate(context, activeTarget) {
   const { db, open, transaction, clock, randomUUID, fail, iso } = context;
-
   function submissionContext(input) {
     const value = input || {};
     if (
@@ -57,7 +53,6 @@ function createPublicationAggregate(context) {
       postProcessingPayload,
     };
   }
-
   function refreshSubmissionBatchStatus(dbHandle, batchId, stamp) {
     const rows = dbHandle
       .prepare("SELECT status FROM submission_items WHERE batch_id=?")
@@ -95,7 +90,6 @@ function createPublicationAggregate(context) {
       )
       .run(status, stamp, batchId);
   }
-
   function createAccountProfile(input) {
     open();
     const value = input || {};
@@ -191,6 +185,7 @@ function createPublicationAggregate(context) {
       ),
       stamp = iso(clock);
     return transaction(() => {
+      activeTarget.assertReservationAvailable(articleId);
       const old = db
         .prepare(
           "SELECT status FROM publication_records WHERE article_id=? AND target_key=?",
@@ -226,6 +221,7 @@ function createPublicationAggregate(context) {
         stamp,
         stamp,
       );
+      activeTarget.recordReservation({ articleId, publicationId, attemptId, targetKey, target, state: "queued", stamp });
       return { publicationId, attemptId, targetKey, status: "queued" };
     });
   }
@@ -309,6 +305,7 @@ function createPublicationAggregate(context) {
       db.prepare(
         "UPDATE publication_records SET status='queued',updated_at=? WHERE publication_id=?",
       ).run(stamp, publicationId);
+      activeTarget.recordReservation({ articleId, publicationId, attemptId, targetKey, target, state: "queued", stamp });
       return { publicationId, attemptId, targetKey, status: "queued" };
     });
   }
@@ -397,6 +394,7 @@ function createPublicationAggregate(context) {
       db.prepare(
         "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
       ).run(outcome.status, stamp, attempt.publication_id);
+      activeTarget.settle({ articleId: attempt.article_id, publicationId: attempt.publication_id, attemptId, target, status: outcome.status, stamp });
       if (outcome.evidence)
         db.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
           randomUUID(),
@@ -447,7 +445,7 @@ function createPublicationAggregate(context) {
           (fromText(attempt.target_json) || {}).kind === "media"
         )
           db.prepare(
-            "INSERT OR REPLACE INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at) VALUES(?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
           ).run(
             attemptId,
             safeDisplayText(payload.titleSnapshot, 1000),
@@ -455,6 +453,9 @@ function createPublicationAggregate(context) {
             safeDisplayText(payload.resourceNameSnapshot, 500),
             canonicalDisplayPrice(payload.quotedPrice),
             stamp,
+            safeDisplayText(payload.mediaResourceId, 128) || null,
+            canonicalDisplayPrice(payload.estimatedTotal),
+            safeDisplayText(payload.systemSubmissionCode, 128) || null,
           );
         const itemStatus = ["published", "submitted"].includes(outcome.status)
           ? "completed"
@@ -585,7 +586,6 @@ function createPublicationAggregate(context) {
       }),
     );
   }
-
   return Object.freeze({
     createAccountProfile,
     listAccountProfiles,

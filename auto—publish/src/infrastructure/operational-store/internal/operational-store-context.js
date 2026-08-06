@@ -25,6 +25,10 @@ function createOperationalStoreContext(runtime, options) {
       typeof value.internalOrderProjectionObserver === "function"
         ? value.internalOrderProjectionObserver
         : null,
+    internalLifecycleProjectionObserver:
+      typeof value.internalLifecycleProjectionObserver === "function"
+        ? value.internalLifecycleProjectionObserver
+        : null,
     open,
     transaction: transaction.run,
     fail,

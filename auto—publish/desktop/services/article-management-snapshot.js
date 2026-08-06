@@ -170,10 +170,17 @@ function createArticleManagementSnapshot(options) {
     const articleIds = [...articleList, ...trashList]
       .map(function(article) { return article && (article.id || article.articleId); })
       .filter(Boolean);
-    const recordsRaw = await read("listPublications", function() {
-      if (operationalStore && typeof operationalStore.listPublicationRecords === "function") return operationalStore.listPublicationRecords({ articleIds });
-      return [];
+    const lifecycleFactsRaw = await read("listLifecycleFacts", function() {
+      if (operationalStore && typeof operationalStore.listArticleLifecycleFacts === "function") return operationalStore.listArticleLifecycleFacts({ articleIds });
+      return null;
     }, clientId);
+    const lifecycleFacts = lifecycleFactsRaw && typeof lifecycleFactsRaw === "object" ? lifecycleFactsRaw : null;
+    const recordsRaw = lifecycleFacts && Array.isArray(lifecycleFacts.publications)
+      ? lifecycleFacts.publications
+      : await read("listPublications", function() {
+        if (operationalStore && typeof operationalStore.listPublicationRecords === "function") return operationalStore.listPublicationRecords({ articleIds });
+        return [];
+      }, clientId);
     const articleIdSet = new Set(articleIds);
     const publicationRecords = (Array.isArray(recordsRaw) ? recordsRaw : [])
       .filter(function(record) {
@@ -182,10 +189,12 @@ function createArticleManagementSnapshot(options) {
       .map(function(record) {
         return safeRecord(record, clientId);
       });
-    const ordersRaw = await read("listOrders", function() {
-      if (operationalStore && typeof operationalStore.listOrderDisplayViews === "function") return operationalStore.listOrderDisplayViews();
-      return [];
-    }, clientId);
+    const ordersRaw = lifecycleFacts && Array.isArray(lifecycleFacts.orders)
+      ? lifecycleFacts.orders
+      : await read("listOrders", function() {
+        if (operationalStore && typeof operationalStore.listOrderDisplayViews === "function") return operationalStore.listOrderDisplayViews();
+        return [];
+      }, clientId);
     const orders = (Array.isArray(ordersRaw) ? ordersRaw : [])
       .filter(function(order) { return order && articleIdSet.has(order.articleId); })
       .map(safeOrder);
@@ -199,6 +208,7 @@ function createArticleManagementSnapshot(options) {
       articles: articleList,
       trash: trashList,
       submissionBatches: batches,
+      submissionItems: lifecycleFacts && Array.isArray(lifecycleFacts.submissionItems) ? lifecycleFacts.submissionItems : undefined,
       publications: publicationRecords,
       orders,
       attentionItems,

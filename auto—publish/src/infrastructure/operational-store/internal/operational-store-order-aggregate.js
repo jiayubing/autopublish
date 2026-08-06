@@ -12,7 +12,7 @@ const {
   text,
 } = require("./operational-store-utils");
 
-function createOrderAggregate(context) {
+function createOrderAggregate(context, activeTarget) {
   const {
     db,
     open,
@@ -92,7 +92,7 @@ function createOrderAggregate(context) {
     open();
     const rows = db
       .prepare(
-        "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id ORDER BY o.created_at DESC LIMIT 20000",
+        "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id ORDER BY o.created_at DESC LIMIT 20000",
       )
       .all();
     if (internalOrderProjectionObserver)
@@ -126,6 +126,8 @@ function createOrderAggregate(context) {
             500,
           ),
           quotedPrice: canonicalDisplayPrice(row.quoted_price),
+          estimatedTotal: canonicalDisplayPrice(row.estimated_total),
+          systemSubmissionCode: safeDisplayText(row.system_submission_code, 128) || null,
         });
       }),
     );
@@ -148,7 +150,7 @@ function createOrderAggregate(context) {
     return transaction(() => {
       const row = db
         .prepare(
-          "SELECT o.attempt_id,o.remote_id,o.payload_json,p.publication_id,p.target_json,p.status FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE o.order_id=?",
+          "SELECT o.attempt_id,o.remote_id,o.payload_json,p.publication_id,p.article_id,p.target_json,p.status FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE o.order_id=?",
         )
         .get(value.orderId);
       if (!row || (fromText(row.target_json) || {}).kind !== "media")
@@ -201,6 +203,12 @@ function createOrderAggregate(context) {
           "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
         ).run("resolved", text(evidence), stamp, row.attempt_id);
       }
+      if (statusCode === "4" || (statusCode === "2" && remoteUrl))
+        activeTarget.release({
+          articleId: row.article_id,
+          publicationId: row.publication_id,
+          attemptId: row.attempt_id,
+        });
       return Object.freeze({
         orderId: value.orderId,
         attemptId: row.attempt_id,
