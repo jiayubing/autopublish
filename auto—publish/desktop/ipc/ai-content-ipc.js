@@ -40,9 +40,6 @@ function registerAiContentIpc(deps) {
   });
   ipcMain.handle("content:generate-article", function(event, input) { return wrap(async function() { return { article: projectArticle(await service.generateArticle(generationInput(input))) }; }); });
   ipcMain.handle("content:save-article", function(event, article) { return wrap(function() { return { article: projectArticle(service.saveArticle(article)) }; }); });
-  ipcMain.handle("content:copy-article-version", function(event, input) {
-    return wrap(function() { return { article: projectArticle(service.copyArticleVersion(input)) }; });
-  });
   ipcMain.handle("content:preview-article-removal-impact", function(event, input) {
     return wrap(function() { return projectImpactPreview(service.previewArticleRemovalImpact(input)); });
   });

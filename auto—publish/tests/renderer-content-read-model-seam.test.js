@@ -42,7 +42,6 @@ test("production content views call named ordinary content commands", () => {
     "saveManualResearch",
     "retryContentMaterial",
     "saveContentArticle",
-    "copyContentArticleVersion",
     "reconcilePublicationHistory",
   ]) assert.doesNotMatch(productionViews, new RegExp(`(?<![.\\w])${bridgeCall}\\s*\\(`), bridgeCall);
   for (const command of [
@@ -51,9 +50,9 @@ test("production content views call named ordinary content commands", () => {
     "commands.saveManualResearch",
     "commands.retryMaterial",
     "commands.saveArticle",
-    "commands.copyArticleVersion",
     "commands.reconcilePublication",
   ]) assert.equal(productionViews.includes(command), true, command);
+  assert.equal(productionViews.includes("commands.copyArticleVersion"), false);
 });
 
 test("article management destructive commands and removal events stay behind the content feature seam", () => {

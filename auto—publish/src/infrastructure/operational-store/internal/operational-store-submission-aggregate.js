@@ -7,7 +7,7 @@ const {
 } = require("./operational-store-utils");
 
 function createSubmissionAggregate(context) {
-  const { db, open, transaction, clock, randomUUID, fail, iso } = context;
+  const { db, open, transaction, clock, fail, iso } = context;
 
   function refreshSubmissionBatchStatus(dbHandle, batchId, stamp) {
     const rows = dbHandle
@@ -45,56 +45,6 @@ function createSubmissionAggregate(context) {
         "UPDATE submission_batches SET status=?,revision=revision+1,updated_at=? WHERE batch_id=?",
       )
       .run(status, stamp, batchId);
-  }
-
-  function createSubmissionBatch(input) {
-    open();
-    const value = input || {};
-    const batchId = domain.BatchId.serialize(
-      domain.BatchId.parse(value.batchId),
-    );
-    const stamp = iso(clock);
-    return transaction(() => {
-      db.prepare("INSERT INTO submission_batches VALUES(?,?,?,?,?)").run(
-        batchId,
-        "queued",
-        1,
-        stamp,
-        stamp,
-      );
-      const items = [];
-      for (const item of value.items || []) {
-        const target = domain.parsePublicationTarget(item.target);
-        const articleId = domain.ArticleId.serialize(
-          domain.ArticleId.parse(item.articleId),
-        );
-        rejectSensitive(item.payload || {});
-        const itemId = randomUUID();
-        const targetKey = domain.publicationTargetKey(target);
-        db.prepare(
-          "INSERT INTO submission_items VALUES(?,?,?,?,?,?,?,?,?)",
-        ).run(
-          itemId,
-          batchId,
-          articleId,
-          targetKey,
-          1,
-          "queued",
-          null,
-          null,
-          text(item.payload || {}),
-        );
-        items.push(
-          Object.freeze({
-            itemId,
-            articleId,
-            targetKey,
-            revision: 1,
-          }),
-        );
-      }
-      return Object.freeze({ batchId, items: Object.freeze(items) });
-    });
   }
 
   function claimSubmissionItem(input) {
@@ -675,7 +625,6 @@ function createSubmissionAggregate(context) {
   }
 
   return Object.freeze({
-    createSubmissionBatch,
     claimSubmissionItem,
     claimSubmissionItemById,
     renewSubmissionItemClaim,

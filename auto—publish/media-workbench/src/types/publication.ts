@@ -1,7 +1,23 @@
 import type { GeneratedContentArticle } from "./generation";
 
-export type PublicationRecordStatus = "queued" | "submitting" | "submitted" | "published" | "uncertain" | "failed" | "cancelled" | string;
-export type PublicationHistorySummaryStatus = "not_submitted" | "queued" | "paid_processing" | "submitting" | "partial" | "published" | "uncertain" | "failed";
+export type PublicationRecordStatus =
+  | "queued"
+  | "submitting"
+  | "submitted"
+  | "published"
+  | "uncertain"
+  | "failed"
+  | "cancelled"
+  | string;
+export type PublicationHistorySummaryStatus =
+  | "not_submitted"
+  | "queued"
+  | "paid_processing"
+  | "submitting"
+  | "partial"
+  | "published"
+  | "uncertain"
+  | "failed";
 export interface PublicationHistoryAttempt {
   attemptId: string | null;
   status: PublicationRecordStatus | null;
@@ -52,7 +68,13 @@ export interface ArticleReviewResult {
   rejected: Array<{ articleId: string; code: string }>;
   skipped: string[];
 }
-export type ArticleRemovalTransactionStatus = "pending_auto_recovery" | "needs_repair" | "committed" | "superseded" | "pending_recovery" | string;
+export type ArticleRemovalTransactionStatus =
+  | "pending_auto_recovery"
+  | "needs_repair"
+  | "committed"
+  | "superseded"
+  | "pending_recovery"
+  | string;
 export interface ArticleRemovalTransaction {
   id?: string;
   transactionId?: string;
@@ -327,7 +349,13 @@ export interface ArticleManagementSnapshot {
     string,
     {
       version?: number;
-      stage: "pending_submission" | "queued" | "paid_processing" | "published" | "failed" | "trash";
+      stage:
+        | "pending_submission"
+        | "queued"
+        | "paid_processing"
+        | "published"
+        | "failed"
+        | "trash";
       label?: string;
       primaryAction: string;
       allowedBulkActions: string[];

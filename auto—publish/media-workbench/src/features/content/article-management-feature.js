@@ -16,7 +16,6 @@ const EMPTY_MANAGEMENT = Object.freeze({
 
 const COMMAND_SCOPES = Object.freeze({
   saveArticle: 'management',
-  copyArticleVersion: 'management',
   reconcilePublication: 'management',
   previewExport: null,
   exportToSubmissionQueue: 'management',
@@ -44,7 +43,6 @@ const REMOVAL_EVENT_COMMANDS = new Set([
 
 const CLIENT_IDENTITY = Object.freeze({
   saveArticle: (input) => [input?.clientId],
-  copyArticleVersion: (input) => [input?.clientId],
   reconcilePublication: (input) => [input?.clientId],
   exportToSubmissionQueue: (input) => [input?.clientId],
   createContentSubmissionBatch: (input) => [input?.clientId],
@@ -337,7 +335,7 @@ export function createArticleManagementFeature(adapters = {}) {
       await refreshAfterCommand(name, 'command-result', result);
       if (!owner.isCurrent(token) || !isCommandScopeCurrent())
         return staleContentCommandResult();
-      if ((name === 'saveArticle' || name === 'copyArticleVersion') && typeof onArticleResult === 'function')
+      if (name === 'saveArticle' && typeof onArticleResult === 'function')
         onArticleResult(result);
       owner.finalize(token, { result });
       publish();
@@ -361,7 +359,6 @@ export function createArticleManagementFeature(adapters = {}) {
   // retain stable TypeChecker symbols for each management capability.
   const commands = Object.freeze({
     saveArticle: (input) => runCommand('saveArticle', input),
-    copyArticleVersion: (input) => runCommand('copyArticleVersion', input),
     reconcilePublication: (input) => runCommand('reconcilePublication', input),
     previewExport: (input) => runCommand('previewExport', input),
     exportToSubmissionQueue: (input) => runCommand('exportToSubmissionQueue', input),

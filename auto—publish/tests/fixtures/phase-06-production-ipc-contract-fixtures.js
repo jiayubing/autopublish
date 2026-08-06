@@ -866,21 +866,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.saveArticle",
     featureBinding: "saveArticle",
   }),
-  "content.copyArticleVersion": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "copyContentArticleVersion",
-    preloadMethod: "copyArticleVersion",
-    command: "content.copyArticleVersion",
-    channel: "content:copy-article-version",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.copyArticleVersion",
-    featureBinding: "copyArticleVersion",
-  }),
   "content.previewArticleRemovalImpact": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
@@ -1961,11 +1946,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/ArticleGenerationView.tsx",
     "saveArticle",
   ],
-  "content.copyArticleVersion": [
-    "direct",
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "copyArticleVersion",
-  ],
   "content.previewArticleRemovalImpact": [
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -2498,7 +2478,6 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
         "createArticleManagementFeature",
         [
           "content.saveArticle",
-          "content.copyArticleVersion",
           "content.previewArticleRemovalImpact",
           "content.trashArticles",
           "content.restoreArticle",
@@ -2662,7 +2641,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
         ],
       ],
       ["generationFeature", ["content.generateArticle"]],
-      ["content.commands", ["content.copyArticleVersion"]],
       [
         "",
         [
@@ -3882,14 +3860,6 @@ const rawProductionIpcContractFixtures = [
     owner: "content",
     productionCaller: "desktop/preload.js:content:save-article",
     request: { article: contentArticleFixture() },
-    result: { article: contentArticleFixture() },
-  },
-  {
-    capability: "content.copyArticleVersion",
-    channel: "content:copy-article-version",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:copy-article-version",
-    request: { clientId: "client-1", sourceArticleId: "article-1" },
     result: { article: contentArticleFixture() },
   },
   {

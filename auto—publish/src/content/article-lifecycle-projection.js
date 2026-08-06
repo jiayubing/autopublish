@@ -185,7 +185,25 @@ function projectArticleLifecycle(input) {
   submissionItems.forEach((item) => add(itemsByArticle, item));
   array(value.orders).forEach((item) => add(ordersByArticle, item));
   array(value.attentionItems).forEach((item) => add(attentionByArticle, item));
-  array(value.removalTransactions).forEach((item) => add(transactionsByArticle, item));
+  array(value.removalTransactions).forEach((transaction) => {
+    const references = [transaction]
+      .concat(array(transaction && transaction.selections))
+      .concat(array(transaction && transaction.articles));
+    const seenReferences = new Set();
+    references.forEach((reference) => {
+      const id = articleIdOf(reference);
+      if (!id) return;
+      const clientId = text(reference && reference.clientId);
+      const referenceKey = clientId + "\0" + id;
+      if (seenReferences.has(referenceKey)) return;
+      seenReferences.add(referenceKey);
+      const mapKey = referenceKey;
+      transactionsByArticle.set(mapKey, [
+        ...(transactionsByArticle.get(mapKey) || []),
+        transaction,
+      ]);
+    });
+  });
   const byArticle = Object.create(null);
   const counts = Object.fromEntries(ARTICLE_LIFECYCLE_STAGES.map((stage) => [stage, 0]));
   const seen = new Set();
@@ -200,7 +218,10 @@ function projectArticleLifecycle(input) {
       submissionItems: itemsByArticle.get(id),
       orders: ordersByArticle.get(id),
       attentionItems: attentionByArticle.get(id),
-      removalTransactions: transactionsByArticle.get(id),
+      removalTransactions: [...new Set([
+        ...(transactionsByArticle.get(text(article && article.clientId) + "\0" + id) || []),
+        ...(transactionsByArticle.get("\0" + id) || []),
+      ])],
     });
     byArticle[id] = workflow;
     counts[workflow.stage] += 1;

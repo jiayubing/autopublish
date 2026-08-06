@@ -278,6 +278,43 @@ test("trash records identified by articleId retain conflict facts in the batch p
   assert.equal(projection.counts.trash, 0);
 });
 
+test("persisted removal repair transactions freeze every affected article", () => {
+  const projection = projectArticleLifecycle({
+    articles: [article({ id: "repair-article" })],
+    removalTransactions: [{
+      id: "removal-1",
+      status: "needs_repair",
+      phase: "needs_repair",
+      selections: [{ clientId: "client-1", articleId: "repair-article" }],
+      articles: [{ clientId: "client-1", articleId: "repair-article" }],
+    }],
+  });
+
+  const workflow = projection.byArticle["repair-article"];
+  assert.equal(workflow.stage, "failed");
+  assert.equal(workflow.reasonCodes.includes("REMOVAL_REPAIR_REQUIRED"), true);
+  assert.deepEqual(workflow.locks, {
+    canEdit: false,
+    canQueue: false,
+    canCancel: false,
+    canTrash: false,
+  });
+});
+
+test("removal repair transaction membership remains isolated by client", () => {
+  const projection = projectArticleLifecycle({
+    articles: [article({ id: "shared-article", clientId: "client-1" })],
+    removalTransactions: [{
+      id: "other-client-removal",
+      status: "needs_repair",
+      phase: "needs_repair",
+      selections: [{ clientId: "client-2", articleId: "shared-article" }],
+    }],
+  });
+
+  assert.equal(projection.byArticle["shared-article"].stage, "pending_submission");
+});
+
 test("IPC projection preserves target facts from the unified workflow", () => {
   const snapshot = projectManagementSnapshot({
     clientId: "client-1",

@@ -361,9 +361,6 @@ const api = {
         input,
       );
     },
-    copyArticleVersion: function(input) {
-      return ipcRenderer.invoke("content:copy-article-version", input);
-    },
     previewArticleRemovalImpact: function(input) {
       return ipcRenderer.invoke(
         "content:preview-article-removal-impact",

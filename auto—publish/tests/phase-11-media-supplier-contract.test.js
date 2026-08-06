@@ -6,8 +6,12 @@ const {
   createMediaSupplierAdapter,
 } = require("../src/platforms/media/media-supplier-adapter");
 const { createMediaPublisher } = require("../desktop/services/media-publisher");
-const { createMediaOrderService } = require("../desktop/services/media-order-service");
-const { createMediaResourceService } = require("../desktop/services/media-resource-service");
+const {
+  createMediaOrderService,
+} = require("../desktop/services/media-order-service");
+const {
+  createMediaResourceService,
+} = require("../desktop/services/media-resource-service");
 
 function successful(value) {
   return { code: 0, data: value };
@@ -60,21 +64,38 @@ test("refreshMediaResources accepts a successful paged data envelope without a c
   const adapter = createMediaSupplierAdapter({
     client: {
       refreshMediaResources: async () => ({
-        data: [{ resource_id: "resource-page-1", title: "分页媒体", available: false }],
+        data: [
+          {
+            resource_id: "resource-page-1",
+            title: "分页媒体",
+            available: false,
+          },
+        ],
         total: 3,
         hasNext: true,
       }),
     },
   });
 
-  assert.deepEqual(await adapter.refreshMediaResources({ page: 2, pageSize: 1 }), {
-    kind: "resources_refreshed",
-    resources: [{ resourceId: "resource-page-1", name: "分页媒体", price: null, available: false, remarks: "" }],
-    page: 2,
-    pageSize: 1,
-    total: 3,
-    hasNext: true,
-  });
+  assert.deepEqual(
+    await adapter.refreshMediaResources({ page: 2, pageSize: 1 }),
+    {
+      kind: "resources_refreshed",
+      resources: [
+        {
+          resourceId: "resource-page-1",
+          name: "分页媒体",
+          price: null,
+          available: false,
+          remarks: "",
+        },
+      ],
+      page: 2,
+      pageSize: 1,
+      total: 3,
+      hasNext: true,
+    },
+  );
 });
 
 test("createOrder maps the canonical application input and returns an order only with explicit success and an order id", async () => {
@@ -152,14 +173,45 @@ test("createOrder preserves transport uncertainty without exposing provider erro
       retryability: "manual-check",
     },
   });
-  assert.equal(JSON.stringify(result).includes("private upstream response"), false);
+  assert.equal(
+    JSON.stringify(result).includes("private upstream response"),
+    false,
+  );
+});
+
+test("createOrder reports an unavailable supplier before transport as a definite configuration failure", async () => {
+  const adapter = createMediaSupplierAdapter({});
+
+  assert.deepEqual(
+    await adapter.createOrder({
+      mediaResourceId: "resource-1",
+      title: "标题",
+      htmlBody: "<p>正文</p>",
+      systemSubmissionId: "system-submission-1",
+    }),
+    {
+      kind: "configuration_error",
+      error: {
+        code: "MEDIA_SUPPLIER_PORT_UNAVAILABLE",
+        scope: "validation",
+        retryability: "manual-check",
+      },
+    },
+  );
 });
 
 test("getOrderDetails maps all supported status codes and keeps unknown status closed", async () => {
   const adapter = createMediaSupplierAdapter({
     client: {
       getOrderDetails: async (orderIds) => {
-        assert.deepEqual(orderIds, ["order-0", "order-1", "order-2", "order-4", "order-9", "order-x"]);
+        assert.deepEqual(orderIds, [
+          "order-0",
+          "order-1",
+          "order-2",
+          "order-4",
+          "order-9",
+          "order-x",
+        ]);
         return successful([
           { order_nid: "order-0", status: 0, resource_id: "resource-1" },
           { order_nid: "order-1", status: 1, resource_id: "resource-1" },
@@ -201,8 +253,12 @@ test("cancelOrder distinguishes explicit success, remote rejection, and transpor
     client: {
       cancelOrder: async (orderId) => {
         calls.push(orderId);
-        if (orderId === "order-rejected") return { code: 400, message: "private rejection" };
-        if (orderId === "order-unknown") throw Object.assign(new Error("network details"), { code: "MEDIA_NETWORK_ERROR" });
+        if (orderId === "order-rejected")
+          return { code: 400, message: "private rejection" };
+        if (orderId === "order-unknown")
+          throw Object.assign(new Error("network details"), {
+            code: "MEDIA_NETWORK_ERROR",
+          });
         return successful({ order_nid: orderId, cancelled: true });
       },
     },
@@ -266,12 +322,52 @@ test("the application publisher can consume the supplier port without reading pr
   });
 });
 
+test("the application publisher maps adapter input rejection to a definite validation failure", async () => {
+  let transportCalls = 0;
+  const supplier = createMediaSupplierAdapter({
+    client: {
+      createOrder: async () => {
+        transportCalls += 1;
+        return successful({ order_nid: "must-not-exist" });
+      },
+    },
+  });
+  const publisher = createMediaPublisher({
+    supplierProvider: () => supplier,
+    systemSubmissionIdProvider: () => "system-submission-invalid-input",
+  });
+
+  const result = await publisher.publish({
+    articleId: "article-1",
+    attemptId: "attempt-1",
+    target: { kind: "media", mediaResourceId: "resource-1" },
+    title: "标题",
+    body: "x".repeat(2_000_001),
+  });
+
+  assert.deepEqual(result, {
+    status: "failed",
+    error: {
+      code: "MEDIA_SUPPLIER_INPUT_INVALID",
+      category: "validation",
+      retryability: "never",
+      userMessage: "媒体投稿输入无效，未发起投稿请求",
+    },
+  });
+  assert.equal(transportCalls, 0);
+});
+
 test("the application publisher refuses a missing global submission id before supplier transport", async () => {
   let providerCalls = 0;
   const publisher = createMediaPublisher({
     supplierProvider: () => {
       providerCalls += 1;
-      return { createOrder: async () => ({ kind: "order_created", orderId: "must-not-exist" }) };
+      return {
+        createOrder: async () => ({
+          kind: "order_created",
+          orderId: "must-not-exist",
+        }),
+      };
     },
   });
 
@@ -295,12 +391,17 @@ test("the application publisher refuses a missing global submission id before su
   assert.equal(providerCalls, 0);
 });
 
-test("the application publisher keeps supplier identity-provider failures uncertain", async () => {
+test("the application publisher keeps supplier identity-provider failures definite", async () => {
   let called = false;
   const publisher = createMediaPublisher({
     supplierProvider: () => {
       called = true;
-      return { createOrder: async () => ({ kind: "order_created", orderId: "order-should-not-exist" }) };
+      return {
+        createOrder: async () => ({
+          kind: "order_created",
+          orderId: "order-should-not-exist",
+        }),
+      };
     },
     systemSubmissionIdProvider: () => {
       throw new Error("private configuration detail");
@@ -316,12 +417,12 @@ test("the application publisher keeps supplier identity-provider failures uncert
   });
 
   assert.deepEqual(result, {
-    status: "uncertain",
+    status: "failed",
     error: {
-      code: "MEDIA_REMOTE_UNCERTAIN",
-      category: "transport",
-      retryability: "manual-check",
-      userMessage: "无法确认媒体投稿结果",
+      code: "MEDIA_CONFIG_INVALID",
+      category: "validation",
+      retryability: "never",
+      userMessage: "媒体服务配置无效，未发起投稿请求",
     },
   });
   assert.equal(called, false);
@@ -342,13 +443,15 @@ test("the application order service consumes canonical order details from the su
         assert.deepEqual(orderIds, ["order-2"]);
         return {
           kind: "order_details",
-          orders: [{
-            orderId: "order-2",
-            status: "published",
-            resourceId: "resource-1",
-            remoteUrl: "https://publisher.example/article-2",
-            publishedAt: "2026-08-05T12:00:00.000Z",
-          }],
+          orders: [
+            {
+              orderId: "order-2",
+              status: "published",
+              resourceId: "resource-1",
+              remoteUrl: "https://publisher.example/article-2",
+              publishedAt: "2026-08-05T12:00:00.000Z",
+            },
+          ],
         };
       },
     }),
@@ -356,14 +459,16 @@ test("the application order service consumes canonical order details from the su
 
   await service.syncOrder("order-2");
 
-  assert.deepEqual(observations, [{
-    orderId: "order-2",
-    observation: {
-      statusCode: "2",
-      remoteUrl: "https://publisher.example/article-2",
-      publishedAt: "2026-08-05T12:00:00.000Z",
+  assert.deepEqual(observations, [
+    {
+      orderId: "order-2",
+      observation: {
+        statusCode: "2",
+        remoteUrl: "https://publisher.example/article-2",
+        publishedAt: "2026-08-05T12:00:00.000Z",
+      },
     },
-  }]);
+  ]);
 });
 
 test("the application resource service refreshes through the canonical supplier port", async () => {
@@ -378,13 +483,15 @@ test("the application resource service refreshes through the canonical supplier 
         assert.deepEqual(input, { page: 1, pageSize: 2 });
         return {
           kind: "resources_refreshed",
-          resources: [{
-            resourceId: "resource-1",
-            name: "媒体甲",
-            price: 12.5,
-            available: false,
-            remarks: "备注",
-          }],
+          resources: [
+            {
+              resourceId: "resource-1",
+              name: "媒体甲",
+              price: 12.5,
+              available: false,
+              remarks: "备注",
+            },
+          ],
           page: 1,
           pageSize: 2,
           total: 1,
@@ -393,7 +500,10 @@ test("the application resource service refreshes through the canonical supplier 
     }),
   });
 
-  const result = await service.refreshResources({ fetchAll: false, pageSizeHint: 2 });
+  const result = await service.refreshResources({
+    fetchAll: false,
+    pageSizeHint: 2,
+  });
 
   assert.equal(result.ok, true);
   assert.equal(writes[0].resources[0].resourceId, "resource-1");

@@ -11,6 +11,7 @@ const MIME_TYPES = Object.freeze({
   png: "image/png",
   webp: "image/webp",
 });
+const MAX_IMAGE_FILE_BYTES = 64 * 1024 * 1024;
 
 function metadataError(code, message) {
   const error = new Error(message || code);
@@ -184,7 +185,16 @@ function readImageMetadata(filename, fsApi) {
       "IMAGE_FORMAT_UNSUPPORTED",
       "Image format is unsupported",
     );
-  const buffer = (fsApi || require("node:fs")).readFileSync(filename);
+  const fileSystem = fsApi || require("node:fs");
+  const stats = fileSystem.statSync(filename);
+  if (!stats.isFile() || stats.size > MAX_IMAGE_FILE_BYTES)
+    throw metadataError(
+      stats.size > MAX_IMAGE_FILE_BYTES
+        ? "IMAGE_FILE_TOO_LARGE"
+        : "IMAGE_FORMAT_INVALID",
+      "Image file cannot be safely inspected",
+    );
+  const buffer = fileSystem.readFileSync(filename);
   if (!Buffer.isBuffer(buffer) || buffer.length === 0)
     throw metadataError("IMAGE_FORMAT_INVALID", "Image content is empty");
   const parsed =
@@ -211,6 +221,7 @@ function readImageMetadata(filename, fsApi) {
 
 module.exports = {
   SUPPORTED_IMAGE_EXTENSIONS,
+  MAX_IMAGE_FILE_BYTES,
   supportedImageExtension,
   readImageMetadata,
   metadataError,

@@ -200,7 +200,9 @@ async function createWorkspaceRuntimeComposition(deps) {
     const mediaPublisher =
       require("../services/media-publisher").createMediaPublisher({
         supplierProvider: function () {
-          const { createMediaSupplierAdapter } = require("../../src/platforms/media/media-supplier-adapter");
+          const {
+            createMediaSupplierAdapter,
+          } = require("../../src/platforms/media/media-supplier-adapter");
           return createMediaSupplierAdapter({
             clientProvider: function () {
               const mediaRuntime =

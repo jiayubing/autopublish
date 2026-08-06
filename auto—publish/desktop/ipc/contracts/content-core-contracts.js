@@ -1064,12 +1064,6 @@ function coreContract(channel, kind) {
       fromArgs: (args) => ({ article: args[0] }),
       toArgs: (payload) => [payload.article],
     },
-    "content:copy-article-version": {
-      request: exactObject({ clientId: id, sourceArticleId: id }),
-      success: exactObject({ article: generatedArticle }),
-      fromArgs: direct,
-      toArgs: directInput,
-    },
     "content:preview-article-removal-impact": {
       request: removalPreviewRequest,
       success: impactPreview,
@@ -1209,7 +1203,6 @@ const invokeChannels = [
   ["content:retry-material", "command"],
   ["content:generate-article", "command"],
   ["content:save-article", "command"],
-  ["content:copy-article-version", "command"],
   ["content:preview-article-removal-impact", "query"],
   ["content:trash-articles", "command"],
   ["content:restore-article", "command"],

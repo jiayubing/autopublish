@@ -75,18 +75,22 @@ describe("publication history renderer boundary", async function() {
   it("keeps the history detail target-oriented and visibly blocks uncertain direct retry", function() {
     const drawer = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/PublicationHistoryDrawer.tsx"), "utf8");
     const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
+    const editor = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx"), "utf8");
+    const workbench = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/ContentWorkbench.tsx"), "utf8");
     assert.match(drawer, /远端 URL/);
     assert.match(drawer, /订单号\/远端 ID/);
     assert.match(drawer, /安全错误码/);
     assert.match(drawer, /待确认/);
     assert.match(drawer, /不提供直接重试/);
-    assert.match(drawer, /复制为新版本/);
+    assert.doesNotMatch(drawer, /复制为新版本|onCopyVersion/);
+    assert.doesNotMatch(editor, /复制为新版本|onCopyVersion/);
+    assert.doesNotMatch(workbench, /复制文章新版本|copyArticleVersion|onCopyVersion/);
     assert.match(drawer, /确认已发布/);
     assert.match(drawer, /确认未发布/);
     assert.match(view, /PublicationHistoryDrawer/);
     assert.match(view, /management: ArticleManagementReadModel/);
     assert.doesNotMatch(view, /getArticleManagementSnapshot|bridge\/publication|bridge\/content/);
-    assert.match(view, /commands\.copyArticleVersion/);
+    assert.doesNotMatch(view, /commands\.copyArticleVersion|onCopyVersion/);
     assert.match(view, /commands\.reconcilePublication/);
     assert.match(view, /await confirm\(\{ title: label/);
     assert.match(view, /summary=\{drawerArticle \? workflowByArticle\.get\(drawerArticle\.id\)\?\.publicationSummary/);

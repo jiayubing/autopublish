@@ -150,6 +150,14 @@ test("persistence and query ports keep account-bound batch facts durable", () =>
           items: durable.items.map((item) => ({ itemId: item.itemId })),
         };
       },
+      queueSubmissionBatch(input) {
+        assert.equal(input.batchId, durable.batchId);
+        durable.status = "queued";
+        durable.items.forEach((item) => {
+          item.status = "queued";
+        });
+        return { batchId: input.batchId, status: "queued" };
+      },
       getSubmissionBatch() {
         return durable;
       },
@@ -186,6 +194,331 @@ test("persistence and query ports keep account-bound batch facts durable", () =>
       filename: created.items[0].filename,
       contentHash: created.items[0].contentHash,
     });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("persistence keeps the queue pair invisible until the prepared batch is durable", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "submission-prepared-visibility-"),
+  );
+  try {
+    const { value, targetCatalog } = planner();
+    const preview = value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    const filePath = path.join(root, "toutiao", preview.items[0].filename);
+    const sidecarPath = filePath + ".submission.json";
+    let prepared;
+    const operationalStore = {
+      createSubmissionBatch(input) {
+        prepared = input;
+        assert.equal(input.status, "prepared");
+        assert.equal(fs.existsSync(filePath), false);
+        assert.equal(fs.existsSync(sidecarPath), false);
+        return {
+          batchId: input.batchId,
+          items: input.items.map((item, index) => ({
+            itemId: "item-" + index,
+            articleId: item.articleId,
+          })),
+        };
+      },
+      queueSubmissionBatch(input) {
+        assert.equal(input.batchId, prepared.batchId);
+        assert.equal(fs.existsSync(filePath), true);
+        assert.equal(fs.existsSync(sidecarPath), true);
+        return { batchId: input.batchId, status: "queued" };
+      },
+      discardPreparedSubmissionBatch() {},
+      listSubmissionBatches() {
+        return [];
+      },
+    };
+    const persistence = createSubmissionBatchPersistence({
+      inputRoot: root,
+      operationalStore,
+      targetCatalog,
+      writePairAtomic,
+    });
+
+    const created = persistence.createBatch(preview);
+    assert.equal(prepared.status, "prepared");
+    assert.equal(fs.existsSync(filePath), true);
+    assert.equal(fs.existsSync(sidecarPath), true);
+    assert.equal(fs.existsSync(path.join(root, ".submission-staging")), false);
+    assert.equal(created.items[0].itemId, "item-0");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("persistence does not create queued database items when queue file creation fails", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "submission-compensation-"),
+  );
+  try {
+    const { value, targetCatalog } = planner();
+    const preview = value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    let createCalls = 0;
+    const operationalStore = {
+      createSubmissionBatch(input) {
+        createCalls += 1;
+        return {
+          batchId: input.batchId,
+          items: input.items.map((item, index) => ({
+            itemId: "item-" + index,
+            articleId: item.articleId,
+          })),
+        };
+      },
+    };
+    const persistence = createSubmissionBatchPersistence({
+      inputRoot: root,
+      operationalStore,
+      targetCatalog,
+      writePairAtomic() {
+        throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+      },
+    });
+
+    assert.throws(() => persistence.createBatch(preview), { code: "ENOSPC" });
+    assert.equal(createCalls, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("persistence removes prepared queue files when the database commit fails", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "submission-db-failure-"));
+  try {
+    const { value, targetCatalog } = planner();
+    const preview = value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    const persistence = createSubmissionBatchPersistence({
+      inputRoot: root,
+      operationalStore: {
+        createSubmissionBatch() {
+          throw Object.assign(new Error("database busy"), {
+            code: "SQLITE_BUSY",
+          });
+        },
+      },
+      targetCatalog,
+      writePairAtomic,
+    });
+
+    assert.throws(() => persistence.createBatch(preview), {
+      code: "SQLITE_BUSY",
+    });
+    assert.equal(
+      fs.existsSync(path.join(root, "toutiao", preview.items[0].filename)),
+      false,
+    );
+    assert.equal(fs.existsSync(path.join(root, ".submission-staging")), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("persistence preserves an existing queue pair when a new batch collides", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "submission-existing-pair-"),
+  );
+  try {
+    const { value, targetCatalog } = planner();
+    const preview = value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    const directory = path.join(root, "toutiao");
+    fs.mkdirSync(directory, { recursive: true });
+    const filePath = path.join(directory, preview.items[0].filename);
+    const sidecarPath = filePath + ".submission.json";
+    fs.writeFileSync(filePath, "existing article", "utf8");
+    fs.writeFileSync(sidecarPath, "existing sidecar", "utf8");
+    let createCalls = 0;
+    const persistence = createSubmissionBatchPersistence({
+      inputRoot: root,
+      operationalStore: {
+        createSubmissionBatch() {
+          createCalls += 1;
+          throw Object.assign(new Error("database busy"), {
+            code: "SQLITE_BUSY",
+          });
+        },
+      },
+      targetCatalog,
+      writePairAtomic,
+    });
+
+    assert.throws(() => persistence.createBatch(preview), {
+      code: "CONTENT_SUBMISSION_QUEUE_CONFLICT",
+    });
+    assert.equal(createCalls, 0);
+    assert.equal(fs.readFileSync(filePath, "utf8"), "existing article");
+    assert.equal(fs.readFileSync(sidecarPath, "utf8"), "existing sidecar");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("prepared batch recovery promotes staging evidence before queueing", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "submission-recovery-promote-"),
+  );
+  try {
+    const { value, targetCatalog } = planner();
+    const preview = value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    const candidate = preview.items[0];
+    const batchId = "batch-recovery-promote";
+    const payload = {
+      clientId: preview.clientId,
+      targetPlatformId: candidate.targetPlatformId,
+      accountProfileId: candidate.accountProfileId,
+      filename: candidate.filename,
+      contentHash: candidate.contentHash,
+    };
+    const batch = {
+      batchId,
+      status: "prepared",
+      items: [{ articleId: candidate.articleId, payload }],
+    };
+    const stagedFile = path.join(
+      root,
+      ".submission-staging",
+      batchId,
+      "toutiao",
+      candidate.filename,
+    );
+    const stagedSidecar = stagedFile + ".submission.json";
+    fs.mkdirSync(path.dirname(stagedFile), { recursive: true });
+    writePairAtomic(
+      stagedFile,
+      candidate.markdown,
+      stagedSidecar,
+      JSON.stringify(
+        {
+          version: 2,
+          submissionBatchId: batchId,
+          generatedArticleId: candidate.articleId,
+          clientId: preview.clientId,
+          targetPlatform: candidate.targetPlatformId,
+          targetPlatformId: candidate.targetPlatformId,
+          accountProfileId: candidate.accountProfileId,
+          filename: candidate.filename,
+          contentHash: candidate.contentHash,
+          status: "queued",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    const operationalStore = {
+      listSubmissionBatches: () => [batch],
+      queueSubmissionBatch(input) {
+        assert.equal(input.batchId, batchId);
+        assert.equal(
+          fs.existsSync(path.join(root, "toutiao", candidate.filename)),
+          true,
+        );
+        batch.status = "queued";
+        return { batchId, status: "queued" };
+      },
+      discardPreparedSubmissionBatch() {
+        throw new Error("must not discard recoverable batch");
+      },
+    };
+    const persistence = createSubmissionBatchPersistence({
+      inputRoot: root,
+      operationalStore,
+      targetCatalog,
+      writePairAtomic,
+    });
+
+    assert.deepEqual(persistence.recoverPreparedBatches(), [
+      { batchId, status: "queued" },
+    ]);
+    assert.equal(batch.status, "queued");
+    assert.equal(fs.existsSync(stagedFile), false);
+    assert.equal(
+      fs.existsSync(path.join(root, "toutiao", candidate.filename)),
+      true,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("prepared batch recovery discards a batch with no file evidence", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "submission-recovery-discard-"),
+  );
+  try {
+    const { value, targetCatalog } = planner();
+    const preview = value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["article-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    const batch = {
+      batchId: "batch-recovery-discard",
+      status: "prepared",
+      items: [
+        {
+          articleId: preview.items[0].articleId,
+          payload: {
+            clientId: preview.clientId,
+            targetPlatformId: preview.items[0].targetPlatformId,
+            accountProfileId: preview.items[0].accountProfileId,
+            filename: preview.items[0].filename,
+            contentHash: preview.items[0].contentHash,
+          },
+        },
+      ],
+    };
+    let discarded = 0;
+    const persistence = createSubmissionBatchPersistence({
+      inputRoot: root,
+      operationalStore: {
+        listSubmissionBatches: () => [batch],
+        discardPreparedSubmissionBatch(input) {
+          assert.equal(input.batchId, batch.batchId);
+          discarded += 1;
+          batch.status = "discarded";
+          return { batchId: batch.batchId, status: "discarded" };
+        },
+      },
+      targetCatalog,
+      writePairAtomic,
+    });
+
+    assert.deepEqual(persistence.recoverPreparedBatches(), [
+      { batchId: batch.batchId, status: "discarded" },
+    ]);
+    assert.equal(discarded, 1);
+    assert.equal(fs.existsSync(path.join(root, ".submission-staging")), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

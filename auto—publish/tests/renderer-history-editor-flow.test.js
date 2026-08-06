@@ -318,7 +318,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
-  it("guards unsaved edits and copies a published article as a new version", async () => {
+  it("guards unsaved edits and hides retired copy actions for published articles", async () => {
     const { page, fixture } = await openHistory();
     try {
       const filter = page.getByRole("textbox", { name: "筛选历史文章" });
@@ -336,17 +336,8 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
       await page.getByRole("dialog").getByRole("button", { name: "放弃修改" }).click();
       await page.getByText(fixture.publishedArticle.title, { exact: true }).locator("..").locator("..").getByRole("button", { name: "发布详情" }).click();
-      await page.getByRole("button", { name: "复制为新版本" }).click();
-      await page.getByRole("dialog", { name: "确认复制文章新版本" }).getByRole("button", { name: "确认复制" }).click();
-      await page.waitForFunction(() => window.__historyEditorFlow.calls.copyArticleVersion.length === 1);
-      assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.copyArticleVersion[0]), { clientId, sourceArticleId: publishedArticleId });
-      assert.equal(await page.getByRole("heading", { name: "历史文章" }).isVisible(), true, "copying a published article keeps the history list mounted");
-       assert.equal(await page.getByLabel("文章标题", { exact: true }).inputValue(), fixture.publishedArticle.title);
-      assert.equal(await page.getByText(fixture.publishedArticle.title, { exact: true }).count() > 0, true, "the original published article remains in history");
-      const copied = await page.evaluate(() => window.__historyEditorFlow.articles.find((article) => article.id === "copied-published-article"));
-      assert.equal(copied.status, "generated");
-      assert.equal(copied.sourceArticleId, publishedArticleId);
-      assert.equal(copied.version, 4);
+      assert.equal(await page.getByRole("button", { name: "复制为新版本" }).count(), 0);
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.copyArticleVersion.length), 0);
     } finally {
       await page.close();
     }

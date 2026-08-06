@@ -222,6 +222,22 @@ describe("client image library", function () {
     }
   });
 
+  it("skips oversized image candidates before reading their contents", function () {
+    const oversized = path.join(clientOne, "oversized.png");
+    const descriptor = fs.openSync(oversized, "w");
+    try {
+      fs.writeSync(descriptor, png(1, 1), 0, 57, 0);
+      fs.ftruncateSync(descriptor, 64 * 1024 * 1024 + 1);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+
+    const snapshot = createClientImageLibrary({ workspaceRoot }).scan("client-one");
+
+    assert.deepEqual(snapshot.images, []);
+    assert.equal(snapshot.diagnostics[0].code, "IMAGE_FILE_TOO_LARGE");
+  });
+
   it("selects at most five without consuming images and keeps zero-image work text-only", function () {
     fs.writeFileSync(path.join(clientOne, "one.png"), png(1, 1));
     fs.writeFileSync(path.join(clientOne, "two.png"), png(2, 2));

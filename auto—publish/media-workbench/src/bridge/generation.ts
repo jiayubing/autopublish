@@ -64,10 +64,6 @@ type GenerationContentApi = {
   saveArticle: (
     article: GeneratedContentArticle,
   ) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle }>>;
-  copyArticleVersion: (input: {
-    clientId: string;
-    sourceArticleId: string;
-  }) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle }>>;
   previewGenerationBatch: (
     input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<GenerationBatchPreview>>;
@@ -171,17 +167,6 @@ export async function saveContentArticle(
   return callGeneration(
     (api) => requireBridgeMethod(api.saveArticle)(article),
     "Unable to save article",
-    { map: (wire) => wire.article },
-  );
-}
-
-export async function copyContentArticleVersion(input: {
-  clientId: string;
-  sourceArticleId: string;
-}): Promise<GeneratedContentArticle> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.copyArticleVersion)(input),
-    "Unable to copy article version",
     { map: (wire) => wire.article },
   );
 }

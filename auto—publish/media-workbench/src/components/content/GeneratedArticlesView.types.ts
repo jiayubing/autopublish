@@ -33,7 +33,6 @@ export type ArticleManagementReadModel = {
 export type GeneratedArticlesCommandName =
   | 'cancelContentSubmissionBatch'
   | 'cleanupFailedContentSubmissionItems'
-  | 'copyArticleVersion'
   | 'createContentSubmissionBatch'
   | 'exportToSubmissionQueue'
   | 'getContentArticleRemovalTransaction'

@@ -31,10 +31,7 @@ import {
   subscribeDoubaoQueue,
   updateContentQuestion,
 } from '../../bridge/content';
-import {
-  copyContentArticleVersion,
-  saveContentArticle,
-} from '../../bridge/generation';
+import { saveContentArticle } from '../../bridge/generation';
 import {
   getContentArticleRemovalTransaction,
   onContentArticleRemovalTransaction,
@@ -67,7 +64,6 @@ export function useContentWorkbenchFeature() {
       saveManualResearch,
       retryMaterial: retryContentMaterial,
       saveArticle: saveContentArticle,
-      copyArticleVersion: copyContentArticleVersion,
       reconcilePublication: reconcilePublicationHistory,
       previewExport,
       exportToSubmissionQueue,

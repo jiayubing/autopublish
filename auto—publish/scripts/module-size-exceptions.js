@@ -6,7 +6,7 @@
 const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   [
     "desktop/services/operational-content-submission-service.js",
-    1689,
+    1690,
     "remaining claim/outcome/cleanup ordering owner pending ticket 2",
   ],
   [
@@ -66,7 +66,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
   [
     "desktop/composition/workspace-runtime-composition.js",
-    620,
+    622,
     "composition root dependency graph",
   ],
   [
@@ -146,7 +146,7 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ["media-workbench/src/bridge/media.ts", 409, "typed media bridge facade"],
   [
     "media-workbench/src/types/publication.ts",
-    406,
+    434,
     "publication wire type declarations",
   ],
   [

@@ -14,16 +14,15 @@ describe("ai content ipc", function() {
     const service = {
       listClients: function() { return [{ id: "client-1", name: "Client", knowledgeFiles: [] }]; }, retryMaterial: function() { return { id: "material-1", name: "facts.txt", content: "facts", status: "ready" }; },
       listResearch: function() { return []; },
-      generateArticle: async function() { return { id: "article-1" }; }, saveArticle: function(value) { return value; },
-      copyArticleVersion: function(input) { return { id: "article-copy", sourceArticleId: input.sourceArticleId, version: 2 }; }
+      generateArticle: async function() { return { id: "article-1" }; }, saveArticle: function(value) { return value; }
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
-    ["content:list-clients", "content:list-research", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article", "content:copy-article-version"].forEach(function(channel) {
+    ["content:list-clients", "content:list-research", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article"].forEach(function(channel) {
       assert.equal(ipc.handlers.has(channel), true, "missing " + channel);
     });
     assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: { clients: [{ id: "client-1", name: "Client", knowledgeFiles: [] }] } });
     assert.deepStrictEqual(await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1" }), { ok: true, data: { article: { id: "article-1" } } });
-    assert.deepStrictEqual(await ipc.handlers.get("content:copy-article-version")(null, { clientId: "client-1", sourceArticleId: "article-1" }), { ok: true, data: { article: { id: "article-copy", sourceArticleId: "article-1", version: 2 } } });
+    assert.equal(ipc.handlers.has("content:copy-article-version"), false);
     assert.deepStrictEqual(await ipc.handlers.get("content:retry-material")(null, { clientId: "client-1", materialId: "material-1" }), { ok: true, data: { material: { id: "material-1", name: "facts.txt", content: "facts", status: "ready" } } });
   });
 

@@ -61,6 +61,7 @@ function createOperationalContentSubmissionService(options) {
     writePairAtomic,
     onDataInvalidated: value.onDataInvalidated,
   });
+  batchPersistence.recoverPreparedBatches();
   const batchReader = createSubmissionBatchReader({
     operationalStore: value.operationalStore,
   });

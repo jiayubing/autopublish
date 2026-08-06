@@ -5,7 +5,6 @@ const { createArticleTrashService } = require("../../src/content/article-trash-s
 const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
-const { createArticleVersionService } = require("../../src/content/article-version-service");
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const crypto = require("crypto");
@@ -94,11 +93,6 @@ function createAiContentService(opts) {
     onTransactionStatus: notifyArticleRemovalTransaction
   })) || {};
   const articleReviewService = options.articleReviewService || (contentStore && typeof contentStore.getArticle === "function" && typeof contentStore.saveArticle === "function" ? createArticleReviewService({ contentStore: contentStore }) : null);
-  const articleVersionService = options.articleVersionService || (contentStore && typeof contentStore.getArticle === "function" ? createArticleVersionService({
-    contentStore: contentStore,
-    createId: options.createId,
-    now: options.now
-  }) : null);
   const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths }) : {
     getSelectedMaterials: async function(clientId, materialIds) {
       const client = clientKnowledge.getClient(clientId);
@@ -269,16 +263,6 @@ function createAiContentService(opts) {
     return contentStore.getArticle(clientId, articleId);
   }
 
-  function copyArticleVersion(input) {
-    const request = input || {};
-    assertId(request.clientId, "Client id");
-    assertId(request.sourceArticleId, "Source article id");
-    return articleVersionService.copyArticleVersion({
-      clientId: request.clientId,
-      sourceArticleId: request.sourceArticleId
-    });
-  }
-
   function reviewArticles(selections) {
     const result = articleReviewService.reviewMany(selections);
     notifyAttentionChange("ARTICLES_REVIEWED");
@@ -299,7 +283,6 @@ function createAiContentService(opts) {
     saveArticle: saveArticle,
     listGeneratedArticles: listGeneratedArticles,
     getGeneratedArticle: getGeneratedArticle,
-    copyArticleVersion: copyArticleVersion,
     reviewArticles: reviewArticles,
     listTrashedArticles: articleTrashService.listTrashedArticles,
     previewTrashArticles: articleTrashService.previewTrashArticles,

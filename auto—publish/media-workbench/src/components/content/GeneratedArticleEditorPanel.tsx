@@ -8,7 +8,6 @@ interface GeneratedArticleEditorPanelProps {
   published?: boolean;
   onSaved: (article: GeneratedContentArticle) => void;
   onClose: () => void;
-  onCopyVersion?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSaveArticle?: (article: GeneratedContentArticle) => Promise<GeneratedContentArticle>;
   saving?: boolean;
@@ -17,7 +16,7 @@ interface GeneratedArticleEditorPanelProps {
   sourceLabel?: string;
 }
 
-export default function GeneratedArticleEditorPanel({ article, published = false, onSaved, onClose, onCopyVersion, onDirtyChange, onSaveArticle, saving = false, footer, embedded = false, sourceLabel = '历史文章' }: GeneratedArticleEditorPanelProps) {
+export default function GeneratedArticleEditorPanel({ article, published = false, onSaved, onClose, onDirtyChange, onSaveArticle, saving = false, footer, embedded = false, sourceLabel = '历史文章' }: GeneratedArticleEditorPanelProps) {
   const { confirm } = useConfirmation();
   const [draft, setDraft] = useState(article);
   const [base, setBase] = useState(article);
@@ -79,7 +78,6 @@ export default function GeneratedArticleEditorPanel({ article, published = false
         <h2 id="generated-article-editor-title" className="truncate text-sm font-semibold text-slate-800">编辑文章</h2>
         <p className="mt-1 text-xs text-slate-500">{published ? '已发布文章不能原地覆盖，请复制新版本后编辑。' : (dirty ? '有未保存修改' : '所有修改已保存')}</p>
       </div>
-      {published && onCopyVersion && <button type="button" onClick={onCopyVersion} disabled={saving} className="shrink-0 rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 disabled:opacity-40">复制为新版本</button>}
       {!published && <button type="button" onClick={() => void save()} disabled={saving || (!dirty && !requiresInitialSave)} aria-label="保存文章" className="task-icon-button shrink-0"><Save className="h-4 w-4" /></button>}
       <button type="button" onClick={() => void close()} disabled={saving} aria-label="关闭文章编辑器" title="关闭文章编辑器" className="task-icon-button shrink-0"><X className="h-4 w-4" /></button>
     </div>

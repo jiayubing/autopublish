@@ -26,7 +26,6 @@ const CHANNELS = [
   "content:retry-material",
   "content:generate-article",
   "content:save-article",
-  "content:copy-article-version",
   "content:preview-article-removal-impact",
   "content:trash-articles",
   "content:restore-article",

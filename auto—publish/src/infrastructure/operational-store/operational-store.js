@@ -12,6 +12,9 @@ const {
   createSubmissionAggregate,
 } = require("./internal/operational-store-submission-aggregate");
 const {
+  createSubmissionPreparationAggregate,
+} = require("./internal/operational-store-submission-preparation");
+const {
   createRecoveryAggregate,
 } = require("./internal/operational-store-recovery-aggregate");
 const {
@@ -28,6 +31,7 @@ function createOperationalStore(options) {
   try {
     const publication = createPublicationAggregate(context);
     const submission = createSubmissionAggregate(context);
+    const submissionPreparation = createSubmissionPreparationAggregate(context);
     const recovery = createRecoveryAggregate(context);
     const order = createOrderAggregate(context);
     const maintenance = createMaintenanceAggregate(context);
@@ -41,7 +45,10 @@ function createOperationalStore(options) {
       commitRemoteOutcome: publication.commitRemoteOutcome,
       listActionableRecovery: recovery.listActionableRecovery,
       markRecoveryUncertain: recovery.markRecoveryUncertain,
-      createSubmissionBatch: submission.createSubmissionBatch,
+      createSubmissionBatch: submissionPreparation.createSubmissionBatch,
+      queueSubmissionBatch: submissionPreparation.queueSubmissionBatch,
+      discardPreparedSubmissionBatch:
+        submissionPreparation.discardPreparedSubmissionBatch,
       prepareSubmissionItemAction: submission.prepareSubmissionItemAction,
       getSubmissionItemAction: submission.getSubmissionItemAction,
       checkpointSubmissionItemAction: submission.checkpointSubmissionItemAction,

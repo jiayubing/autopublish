@@ -35,8 +35,22 @@ function createMediaSupplierAdapter(options) {
     let request;
     try {
       request = normalizeOrderInput(input);
-      const client = getClient();
-      if (!client) throw unavailable();
+    } catch (error) {
+      return invalidFailure(error);
+    }
+    let client;
+    try {
+      client = getClient();
+    } catch (error) {
+      return configurationFailure(error);
+    }
+    if (!client) return configurationFailure(unavailable());
+    if (
+      typeof client.createOrder !== "function" &&
+      typeof client.sendArticle !== "function"
+    )
+      return configurationFailure(unavailable());
+    try {
       let response;
       if (typeof client.createOrder === "function") {
         response = await client.createOrder(request);
@@ -48,8 +62,6 @@ function createMediaSupplierAdapter(options) {
           remark: request.remark,
           thirdId: request.systemSubmissionId,
         });
-      } else {
-        throw unavailable();
       }
       const created = parseCreatedOrderResponse(response);
       return created
@@ -203,6 +215,10 @@ function creationFailure(error) {
 }
 
 function invalidFailure(error) { return { kind: "invalid_input", error: safeError(error) }; }
+
+function configurationFailure(error) {
+  return { kind: "configuration_error", error: safeError(error) };
+}
 
 function uncertainFailure(error) {
   return {
