@@ -7,7 +7,7 @@
 在 `F:\官媒投稿-refactor` 项目中的任一新线程直接输入：
 
 ```text
-执行波次 2
+执行波次 3
 ```
 
 主线程必须读取本计划、根目录 `AGENTS.md`、权威规格和该波次 ticket，验证依赖与 Git 状态，然后为该波次每个可并行 ticket 创建一个独立 Codex worktree 线程。
@@ -72,6 +72,18 @@
 | 10 | 24 | 02、10、14、16、19、20、21、23 | `PENDING` |
 | 11 | 25 | 24 | `PENDING` |
 
+### 3.1 波次 3 的独立完成边界
+
+波次 3 只实施 Ticket 06，并且必须能在不提前实施 07 或 12 的前提下独立审计和完成：
+
+1. `article-lifecycle-projection.js` 对 `edit`、`queue`、`retarget`、`trash` 提供唯一公开权限投影和稳定拒绝原因。
+2. 既有文章编辑使用服务端签发的不透明 edit fingerprint 完成 read → save → next fingerprint 的 CAS 闭环；新建、既有编辑以及迁移/恢复内部写入使用不同命令边界。
+3. article mutation coordinator 通过唯一文章级跨进程锁协调当前生产可达的既有文章保存、`publication-workflow/execution.js` 活动目标 reserve 和现有回收入口；不得与 article store 形成嵌套锁或公开无锁写入口。
+4. 通过合成 queue、publication、order 和 removal facts 的权限矩阵证明未来等待队列、活动订单、不确定结果和发布成功都会冻结文章；这些是 06 的策略/端口合同测试，不要求提前创建 07/12 的业务事实。
+5. 07 和 12 分别负责把自己的 SQLite admission/removal 组合端口接入 06，并在各自 ticket 中完成真实普通平台队列和付费批次的端到端冻结/解冻回归。不得把这些未来接线作为 06 的完成前置条件。
+
+Ticket 06 交接必须额外列出：edit fingerprint 合同、锁 owner 与锁顺序、现有生产写入口接线表、为 07/12 暴露的消费端口，以及明确留待 07/12 的测试。
+
 权威 ticket 位于：
 
 ```text
@@ -116,7 +128,18 @@ startingState: branch codex/article-lifecycle-submission
 model: gpt-5.6-luna
 thinking: max
 title: Article lifecycle ticket NN
+prompt: |
+  在独立 worktree 中实施 Ticket NN。先读取根目录 AGENTS.md、CONTEXT.md、
+  ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md、ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md
+  和 .scratch/article-lifecycle-and-submission/issues/NN-*.md 全文。
+  验证当前 HEAD 精确等于主线程提供的 base integration commit，然后创建并切换到
+  codex/article-lifecycle-NN；若分支已存在、被占用或 HEAD 不一致，立即停止并报告。
+  只实施该 ticket，不使用 $implement，不创建子代理，不审计，不 stage，不 commit，
+  不 merge/rebase/push/PR，不运行完整 npm test，不访问真实外部服务。
+  保留用户改动，按 ticket 运行定向测试并按本计划第 6 节格式交接。
 ```
+
+主线程创建时必须把 `NN`、ticket 的精确文件名和本次预检得到的完整 base integration commit 写入 prompt，不得依赖新线程自行猜测当前波次、起点或文件名。`prompt` 是线程创建必填字段，不得省略或缩写为只有 ticket 标题。
 
 模型与强度是硬约束：
 
@@ -163,8 +186,8 @@ ticket 05 → codex/article-lifecycle-05
 
 - 严格遵守 ticket 的 What to build、执行过程、职责边界、架构硬门槛、Acceptance criteria 和 Non-goals。
 - 从唯一 owner 和稳定合同开始，闭合 domain/application/infrastructure/IPC/bridge/UI 调用链。
-- 新生产模块目标不超过 300 行、硬上限 400 行，禁止新增长度例外。
-- 保持深模块、窄而稳定接口、低耦合、单一规则所有者、可维护和可扩展。
+- 架构验收以职责内聚、唯一 owner、窄而稳定的接口、调用方认知负担、依赖方向、变更局部性和公开接口可测试性为准。
+- 保持深模块、低耦合、单一规则所有者、可维护和可扩展；不得为缩短文件拆出透传模块、重复 DTO/映射或把同一不变量分散到多个 owner。文件行数只作为审查信号和异常增长提示，不作为模块合格与否或 ticket 完成条件。
 - 不提前实现其他 ticket，不恢复已废止规则，不建立临时双路线。
 - 保留用户改动，不修改其他 worktree，不触碰真实外部服务和生产数据。
 
@@ -191,7 +214,7 @@ Ticket 线程不得：
 - 把自己的结果标记为审计通过；
 - 修改本计划中的波次完成状态；
 - 删除或归档自己的 worktree/线程；
-- 为通过测试排除测试、降低断言、提高业务超时或新增模块长度例外。
+- 为通过测试排除测试、降低断言或提高业务超时；不得静默忽略规模观察信号，触发显著增长时必须在交接中说明职责、接口、依赖和不拆分理由。
 
 ## 6. Ticket 执行交接
 
@@ -207,7 +230,8 @@ Working tree status:
 Files changed:
 Implemented responsibilities:
 Public interfaces / owner changes:
-Final module line counts:
+Module responsibilities / public interfaces / dependency direction:
+Notable size changes and rationale:
 Targeted tests (command + result + duration):
 Typecheck / lint / phase gates:
 Unrun tests and reason:

@@ -8,6 +8,7 @@ const path = require("node:path");
 const test = require("node:test");
 const asar = require("@electron/asar");
 const {
+  classifyModuleSizeSignals,
   isRendererNodeSpecifier,
   packageBoundaryReport,
   publisherOwnerCandidates,
@@ -40,6 +41,72 @@ test("Phase 8 cleanup gates pass against the current production tree", () => {
   );
   assert.equal(report.checks.capabilityReachability.reachableCount, 108);
   assert.equal(report.checks.moduleSize.violations.length, 0);
+});
+
+test("module size signals are advisory and preserve review-needed growth evidence", () => {
+  const report = classifyModuleSizeSignals(
+    [
+      { file: "src/small.js", lines: 400 },
+      { file: "src/new-large.js", lines: 401 },
+      { file: "src/reviewed-large.js", lines: 450 },
+    ],
+    [["src/reviewed-large.js", 425, "cohesive deep module"]],
+    400,
+  );
+  assert.equal(report.status, "PASSED");
+  assert.equal(report.enforcement, "advisory");
+  assert.equal(report.reviewSignalLines, 400);
+  assert.deepEqual(report.notable, [
+    {
+      file: "src/new-large.js",
+      lines: 401,
+      reviewStatus: "review-needed",
+    },
+    {
+      file: "src/reviewed-large.js",
+      lines: 450,
+      reviewStatus: "reviewed",
+    },
+  ]);
+  assert.deepEqual(report.growthSignals, [
+    {
+      file: "src/reviewed-large.js",
+      lines: 450,
+      baselineLines: 425,
+      reason: "cohesive deep module",
+      growthLines: 25,
+    },
+  ]);
+  assert.equal(report.violations.length, 0);
+});
+
+test("module size baseline registry fails closed for missing or invalid entries", () => {
+  const missing = classifyModuleSizeSignals(
+    [{ file: "src/present.js", lines: 10 }],
+    [["src/missing.js", 100, "reviewed owner"]],
+    400,
+  );
+  assert.equal(missing.status, "FAILED");
+  assert.deepEqual(missing.violations, [
+    {
+      file: "src/missing.js",
+      reason: "review baseline points to a missing module",
+    },
+  ]);
+
+  const invalid = classifyModuleSizeSignals(
+    [{ file: "src/present.js", lines: 10 }],
+    [["src/present.js", 0, ""]],
+    400,
+  );
+  assert.equal(invalid.status, "FAILED");
+  assert.deepEqual(invalid.violations, [
+    {
+      file: "src/present.js",
+      baselineLines: 0,
+      reason: "review baseline entry is invalid or duplicated",
+    },
+  ]);
 });
 
 test("Phase 8 static gates reject bare Node builtins and discover qualified writers/owners", () => {

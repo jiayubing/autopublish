@@ -11,7 +11,9 @@ const {
   scanArchive,
   scanSourceTree,
 } = require("./verify-legacy-absence");
-const { MODULE_SIZE_EXCEPTIONS } = require("./module-size-exceptions");
+const {
+  MODULE_SIZE_REVIEW_BASELINES,
+} = require("./module-size-review-baselines");
 
 const ROOT = path.resolve(__dirname, "..");
 const SOURCE_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".ts", ".tsx"]);
@@ -472,76 +474,105 @@ function capabilityReachabilityReport() {
   };
 }
 
-function moduleSizeReport() {
-  const exceptions = new Map(
-    MODULE_SIZE_EXCEPTIONS.map(([filename, maxLines, reason]) => [
-      filename,
-      { maxLines, reason },
-    ]),
-  );
-  const overLimit = [];
+function classifyModuleSizeSignals(files, baselines, reviewSignalLines) {
+  const signalLines = Number.isSafeInteger(reviewSignalLines)
+    ? reviewSignalLines
+    : 400;
+  const registryViolations = [];
+  const inventory = new Map();
+  for (const item of files || []) {
+    if (
+      !item ||
+      typeof item.file !== "string" ||
+      !item.file ||
+      !Number.isSafeInteger(item.lines) ||
+      item.lines < 0 ||
+      inventory.has(item.file)
+    ) {
+      registryViolations.push({
+        file: item && item.file,
+        lines: item && item.lines,
+        reason: "module size inventory entry is invalid or duplicated",
+      });
+      continue;
+    }
+    inventory.set(item.file, item.lines);
+  }
+  const reviewBaselines = new Map();
+  for (const entry of baselines || []) {
+    const [filename, baselineLines, reason] = Array.isArray(entry) ? entry : [];
+    if (
+      typeof filename !== "string" ||
+      !filename ||
+      !Number.isSafeInteger(baselineLines) ||
+      baselineLines < 1 ||
+      typeof reason !== "string" ||
+      !reason ||
+      reviewBaselines.has(filename)
+    ) {
+      registryViolations.push({
+        file: filename,
+        baselineLines,
+        reason: "review baseline entry is invalid or duplicated",
+      });
+      continue;
+    }
+    reviewBaselines.set(filename, { baselineLines, reason });
+    if (!inventory.has(filename))
+      registryViolations.push({
+        file: filename,
+        reason: "review baseline points to a missing module",
+      });
+  }
   const reviewed = [];
+  const notable = [];
+  const growthSignals = [];
+  for (const [filename, lineCount] of inventory) {
+    const baseline = reviewBaselines.get(filename);
+    if (lineCount > signalLines)
+      notable.push({
+        file: filename,
+        lines: lineCount,
+        reviewStatus: baseline ? "reviewed" : "review-needed",
+      });
+    if (!baseline) continue;
+    const item = {
+      file: filename,
+      lines: lineCount,
+      baselineLines: baseline.baselineLines,
+      reason: baseline.reason,
+    };
+    reviewed.push(item);
+    if (lineCount > baseline.baselineLines)
+      growthSignals.push({
+        ...item,
+        growthLines: lineCount - baseline.baselineLines,
+      });
+  }
+  return {
+    status: registryViolations.length ? "FAILED" : "PASSED",
+    enforcement: "advisory",
+    reviewSignalLines: signalLines,
+    reviewed,
+    notable,
+    growthSignals,
+    violations: registryViolations,
+  };
+}
+
+function moduleSizeReport() {
   const files = [
     "src",
     "desktop",
     "media-workbench/src",
     "auth-server/src",
-  ].flatMap((root) => sourceFilesUnder(path.join(ROOT, root)));
-  for (const filename of files) {
-    const name = relative(filename);
-    const lineCount = sourceLineCount(filename);
-    if (lineCount <= 400) continue;
-    const exception = exceptions.get(name);
-    if (!exception) {
-      overLimit.push({
-        file: name,
-        lines: lineCount,
-        reason: "missing reviewed exception",
-      });
-      continue;
-    }
-    reviewed.push({
-      file: name,
-      lines: lineCount,
-      maxLines: exception.maxLines,
-      reason: exception.reason,
-    });
-    if (lineCount > exception.maxLines || !exception.reason)
-      overLimit.push({
-        file: name,
-        lines: lineCount,
-        maxLines: exception.maxLines,
-        reason: exception.reason || "missing reason",
-      });
-  }
-  const staleExceptionViolations = MODULE_SIZE_EXCEPTIONS.flatMap(
-    ([filename]) => {
-      const fullPath = path.join(ROOT, filename);
-      if (!fs.existsSync(fullPath))
-        return [
-          { file: filename, reason: "exception points to a missing module" },
-        ];
-      const lineCount = sourceLineCount(fullPath);
-      if (lineCount <= 400)
-        return [
-          {
-            file: filename,
-            lines: lineCount,
-            reason:
-              "exception is no longer required below the 400-line threshold",
-          },
-        ];
-      return [];
-    },
+  ].flatMap((root) =>
+    sourceFilesUnder(path.join(ROOT, root)).map((filename) => ({
+      file: relative(filename),
+      lines: sourceLineCount(filename),
+    })),
   );
-  overLimit.push(...staleExceptionViolations);
-  return {
-    status: overLimit.length ? "FAILED" : "PASSED",
-    threshold: 400,
-    reviewed,
-    staleExceptions: staleExceptionViolations.map(({ file }) => file),
-    violations: overLimit,
-  };
+  return classifyModuleSizeSignals(files, MODULE_SIZE_REVIEW_BASELINES, 400);
 }
 
 function trackedGeneratedOutputReport() {
@@ -801,8 +832,10 @@ if (require.main === module) {
 
 module.exports = {
   DEPENDENCY_RULES,
-  MODULE_SIZE_EXCEPTIONS,
+  MODULE_SIZE_REVIEW_BASELINES,
+  classifyModuleSizeSignals,
   isRendererNodeSpecifier,
+  moduleSizeReport,
   packageBoundaryReport,
   parseArguments,
   publisherOwnerCandidates,

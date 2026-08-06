@@ -1,9 +1,11 @@
 "use strict";
 
-// These are reviewed deep modules, not a waiver for new growth. The gate
-// measures the real source files and fails if any approved module grows past
-// its recorded ceiling or if a new first-party module crosses 400 lines.
-const MODULE_SIZE_EXCEPTIONS = Object.freeze([
+// These are reviewed deep modules whose size is worth watching. The recorded
+// value is a review baseline, not a waiver or an architectural pass/fail rule.
+// The Phase 8 report surfaces noteworthy growth and unreviewed large modules;
+// module quality is judged by responsibility, interface depth, locality, and
+// testability rather than a mechanical line threshold.
+const MODULE_SIZE_REVIEW_BASELINES = Object.freeze([
   [
     "desktop/ipc/contracts/content-core-contracts.js",
     1328,
@@ -171,4 +173,4 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   ],
 ]);
 
-module.exports = { MODULE_SIZE_EXCEPTIONS };
+module.exports = { MODULE_SIZE_REVIEW_BASELINES };
