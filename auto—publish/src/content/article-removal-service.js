@@ -23,6 +23,7 @@ function createArticleRemovalService(options) {
   if (!opts.submissionService) throw removalError("ARTICLE_REMOVAL_SERVICE_INVALID", "Content submission service is required");
   const contentStore = opts.contentStore;
   const submissionService = opts.submissionService;
+  const mutationCoordinator = opts.mutationCoordinator || null;
   const transactionStore = opts.transactionStore || createArticleRemovalTransactionStore({
     workspaceRoot: opts.workspaceRoot,
     directory: opts.transactionDirectory,
@@ -123,10 +124,10 @@ function createArticleRemovalService(options) {
     });
   }
 
-  function revalidate(transaction) {
+  function revalidate(transaction, mutationPort) {
     if (!transaction.contentFingerprint) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_FINGERPRINT_MISSING", "LEGACY_CONTENT_FINGERPRINT_REQUIRED") };
     const impact = buildImpact(transaction.selections);
-    const resolvedArticles = transaction.selections.map(articleFor);
+    const resolvedArticles = transaction.selections.map(function (item) { return articleFor(item, mutationPort); });
     const unreadable = resolvedArticles.find(function(article) {
       return article.missing && article.code && article.code !== "ARTICLE_NOT_FOUND";
     });
@@ -161,7 +162,7 @@ function createArticleRemovalService(options) {
     return { ok: true, transaction: transaction };
   }
 
-  function revalidateContentRemaining(transaction) {
+  function revalidateContentRemaining(transaction, mutationPort) {
     if (!transaction.contentFingerprint || !Array.isArray(transaction.contentArticleFingerprints)) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_CONTENT_FINGERPRINT_MISSING", "LEGACY_CONTENT_FINGERPRINT_REQUIRED") };
     const impact = buildImpact(transaction.selections);
     if ((impact.blockedItems || []).length) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_BLOCKED", "REMOVAL_BLOCKED_REVALIDATION") };
@@ -185,7 +186,7 @@ function createArticleRemovalService(options) {
     if (fingerprint(remaining.map(actionIdentity).sort()) !== fingerprint(fresh.map(actionIdentity).sort())) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_FINGERPRINT_CHANGED", "QUEUE_FINGERPRINT_REVALIDATION_FAILED") };
     const start = Number(transaction.articleCursor || 0);
     for (let index = start; index < transaction.selections.length; index += 1) {
-      const article = articleFor(transaction.selections[index]);
+      const article = articleFor(transaction.selections[index], mutationPort);
       if (article.missing && article.code && article.code !== "ARTICLE_NOT_FOUND") {
         throw removalError(article.code, "Article content could not be revalidated");
       }
@@ -212,11 +213,44 @@ function createArticleRemovalService(options) {
     };
   }
 
-  function articleFor(item) {
-    try { return contentStore.getArticle(item.clientId, item.articleId); }
+  function articleFor(item, mutationPort) {
+    try {
+      if (mutationPort && typeof mutationPort.readArticle === "function") {
+        return mutationPort.readArticle({ clientId: item.clientId, articleId: item.articleId });
+      }
+      if (mutationCoordinator && typeof mutationCoordinator.readArticleForRemoval === "function") {
+        return mutationCoordinator.readArticleForRemoval({ articleRef: { clientId: item.clientId, articleId: item.articleId } });
+      }
+      return contentStore.getArticle(item.clientId, item.articleId);
+    }
     catch (error) {
+      if (mutationCoordinator && ["ARTICLE_MUTATION_BUSY", "ARTICLE_MUTATION_RESULT_UNCERTAIN"].includes(error && error.code)) throw error;
       return { missing: true, clientId: item.clientId, articleId: item.articleId, code: error && error.code || "ARTICLE_NOT_FOUND" };
     }
+  }
+
+  function articleForRequired(item, mutationPort) {
+    if (mutationPort && typeof mutationPort.readArticle === "function") {
+      return mutationPort.readArticle({ clientId: item.clientId, articleId: item.articleId });
+    }
+    if (mutationCoordinator && typeof mutationCoordinator.readArticleForRemoval === "function") {
+      return mutationCoordinator.readArticleForRemoval({ articleRef: { clientId: item.clientId, articleId: item.articleId } });
+    }
+    return contentStore.getArticle(item.clientId, item.articleId);
+  }
+
+  function articleIsTrashed(item, mutationPort) {
+    if (mutationPort && typeof mutationPort.isArticleTrashed === "function") {
+      return mutationPort.isArticleTrashed({ clientId: item.clientId, articleId: item.articleId });
+    }
+    return contentStore.isArticleTrashed && contentStore.isArticleTrashed(item.clientId, item.articleId);
+  }
+
+  function trashedTombstoneFor(item, mutationPort) {
+    if (mutationPort && typeof mutationPort.getTrashedTombstone === "function") {
+      return mutationPort.getTrashedTombstone({ clientId: item.clientId, articleId: item.articleId });
+    }
+    return contentStore.getTrashedTombstone(item.clientId, item.articleId);
   }
 
   function buildImpact(items) {
@@ -359,7 +393,7 @@ function createArticleRemovalService(options) {
     return true;
   }
 
-  function reconcileActiveOperation(transaction) {
+  function reconcileActiveOperation(transaction, mutationPort) {
     const operation = transaction && transaction.activeOperation;
     if (!operation) return { status: "none", transaction };
     const located = operationItem(transaction, operation);
@@ -381,6 +415,7 @@ function createArticleRemovalService(options) {
         persist(transaction);
         try {
           const command = Object.assign(clone(item), { operationId: expected });
+          if (mutationPort && typeof mutationPort.markSideEffect === "function") mutationPort.markSideEffect();
           if (item.action === "cancel") submissionService.cancelArticleSubmissionItem(command);
           else if (item.action === "cleanupPublishedLocal") submissionService.cleanupPublishedArticleLocal(command);
           else if (item.action === "cleanupCancelledLocal") submissionService.cleanupCancelledArticleLocal(command);
@@ -407,13 +442,13 @@ function createArticleRemovalService(options) {
     }
     let tombstone = null;
     let tombstoneMissing = false;
-    try { tombstone = typeof contentStore.getTrashedTombstone === "function" ? contentStore.getTrashedTombstone(item.clientId, item.articleId) : null; tombstoneMissing = !tombstone; }
+    try { tombstone = typeof contentStore.getTrashedTombstone === "function" || mutationPort ? trashedTombstoneFor(item, mutationPort) : null; tombstoneMissing = !tombstone; }
     catch (error) { if (error && error.code === "ARTICLE_NOT_FOUND") tombstoneMissing = true; else return { status: "retry", error }; }
     if (tombstone && !matchingTombstone(transaction, item, tombstone, expected)) {
       return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
     }
     if (tombstone && !tombstoneMissing) {
-      try { contentStore.getArticle(item.clientId, item.articleId); return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_SOURCE_AND_TRASH_BOTH_EXIST") }; }
+      try { articleForRequired(item, mutationPort); return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_SOURCE_AND_TRASH_BOTH_EXIST") }; }
       catch (error) { if (!error || error.code !== "ARTICLE_NOT_FOUND") return { status: "retry", error }; }
       transaction.articleCursor = Number(operation.cursor) + 1;
       finishOperation(transaction);
@@ -425,7 +460,7 @@ function createArticleRemovalService(options) {
       return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_RESULT_UNPROVABLE", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
     }
     let article;
-    try { article = contentStore.getArticle(item.clientId, item.articleId); }
+    try { article = articleFor(item, mutationPort); }
     catch (error) { return { status: "retry", error }; }
     const expectedFingerprint = Array.isArray(transaction.contentArticleFingerprints) ? transaction.contentArticleFingerprints[Number(operation.cursor)] : null;
     if (!expectedFingerprint || articleFingerprint(article) !== expectedFingerprint) {
@@ -434,17 +469,35 @@ function createArticleRemovalService(options) {
     transaction.activeOperation.owner = runnerId;
     persist(transaction);
     try {
-      contentStore.moveArticleToTrash(
-        item.clientId,
-        item.articleId,
-        tombstoneFor(article, expected),
-        expected,
-        expectedFingerprint,
-      );
+      if (mutationPort && typeof mutationPort.moveArticleToTrash === "function") {
+        mutationPort.moveArticleToTrash(
+          { clientId: item.clientId, articleId: item.articleId },
+          tombstoneFor(article, expected),
+          expected,
+          expectedFingerprint,
+        );
+      } else if (mutationCoordinator && typeof mutationCoordinator.executeArticleRemovalTransaction === "function") {
+        mutationCoordinator.executeArticleRemovalTransaction({
+          selections: transaction.selections,
+          selection: item,
+          transactionId: transaction.id,
+          operationId: expected,
+          tombstone: tombstoneFor(article, expected),
+          expectedFingerprint,
+        });
+      } else {
+        contentStore.moveArticleToTrash(
+          item.clientId,
+          item.articleId,
+          tombstoneFor(article, expected),
+          expected,
+          expectedFingerprint,
+        );
+      }
     }
     catch (error) { return { status: "retry", error }; }
     let completedTombstone;
-    try { completedTombstone = contentStore.getTrashedTombstone(item.clientId, item.articleId); }
+    try { completedTombstone = trashedTombstoneFor(item, mutationPort); }
     catch (error) { return { status: "retry", error }; }
     if (!matchingTombstone(transaction, item, completedTombstone, expected)) {
       return { status: "repair", transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_OPERATION_CONFLICT", "REMOVAL_OPERATION_RESULT_UNPROVABLE") };
@@ -470,7 +523,7 @@ function createArticleRemovalService(options) {
     return transaction;
   }
 
-  function performSteps(transaction, requireRevalidation) {
+  function performSteps(transaction, requireRevalidation, mutationPort) {
     let current = transaction;
     if (current.phase === "committed") {
       current.status = "committed";
@@ -485,7 +538,7 @@ function createArticleRemovalService(options) {
     let actions = Array.isArray(current.queueActions) ? current.queueActions : [];
     let reconciledOperation = false;
     if (current.activeOperation) {
-      const reconciliation = reconcileActiveOperation(current);
+      const reconciliation = reconcileActiveOperation(current, mutationPort);
       if (reconciliation.status === "retry") throw reconciliation.error;
       current = reconciliation.transaction;
       if (reconciliation.status === "repair") return current;
@@ -500,7 +553,7 @@ function createArticleRemovalService(options) {
       }
     }
     if (current.phase === "needs_repair") {
-      const validation = revalidate(current);
+      const validation = revalidate(current, mutationPort);
       current = validation.transaction;
       if (!validation.ok) return current;
       actions = Array.isArray(current.queueActions) ? current.queueActions : [];
@@ -516,11 +569,11 @@ function createArticleRemovalService(options) {
       persist(current);
     }
     if (reconciledOperation) {
-      const validation = revalidateContentRemaining(current);
+      const validation = revalidateContentRemaining(current, mutationPort);
       current = validation.transaction;
       if (!validation.ok) return current;
     } else if (requireRevalidation || current.phase === "intent") {
-      const validation = revalidate(current);
+      const validation = revalidate(current, mutationPort);
       current = validation.transaction;
       if (!validation.ok) return current;
     }
@@ -536,6 +589,7 @@ function createArticleRemovalService(options) {
           persist(current); // token-fenced checkpoint and lease renewal before I/O
           beginOperation(current, "queue", index, action);
           const actionWithOperation = Object.assign({}, action, { operationId: operationId(current, "queue", index) });
+          if (mutationPort && typeof mutationPort.markSideEffect === "function") mutationPort.markSideEffect();
           const result = action.action === "cancel"
             ? submissionService.cancelArticleSubmissionItem(actionWithOperation)
             : action.action === "cleanupPublishedLocal"
@@ -561,7 +615,7 @@ function createArticleRemovalService(options) {
       current.phase = "articles";
       current.status = "pending_auto_recovery";
       persist(current);
-      const validation = revalidateContentRemaining(current);
+      const validation = revalidateContentRemaining(current, mutationPort);
       current = validation.transaction;
       if (!validation.ok) return current;
     }
@@ -569,9 +623,9 @@ function createArticleRemovalService(options) {
       for (let index = current.articleCursor || 0; index < current.articles.length; index += 1) {
         const item = current.articles[index];
         let article;
-        try { article = contentStore.getArticle(item.clientId, item.articleId); }
+        try { article = articleFor(item, mutationPort); }
         catch (error) {
-          if (error && error.code === "ARTICLE_NOT_FOUND" && contentStore.isArticleTrashed && contentStore.isArticleTrashed(item.clientId, item.articleId)) {
+          if (error && error.code === "ARTICLE_NOT_FOUND" && articleIsTrashed(item, mutationPort)) {
             current.articleCursor = index + 1;
             persist(current);
             continue;
@@ -579,7 +633,7 @@ function createArticleRemovalService(options) {
           return recordRetry(current, error, "ARTICLE_READ_RETRY_REQUIRED");
         }
         try {
-          if (contentStore.isArticleTrashed && contentStore.isArticleTrashed(item.clientId, item.articleId)) {
+          if (articleIsTrashed(item, mutationPort)) {
             current.articleCursor = index + 1;
             persist(current);
             continue;
@@ -598,13 +652,32 @@ function createArticleRemovalService(options) {
           }
           persist(current);
           beginOperation(current, "article", index, item);
-          contentStore.moveArticleToTrash(
-            item.clientId,
-            item.articleId,
-            tombstoneFor(article, operationId(current, "article", index)),
-            operationId(current, "article", index),
-            expectedFingerprint,
-          );
+          const moveOperationId = operationId(current, "article", index);
+          if (mutationPort && typeof mutationPort.moveArticleToTrash === "function") {
+            mutationPort.moveArticleToTrash(
+              { clientId: item.clientId, articleId: item.articleId },
+              tombstoneFor(article, moveOperationId),
+              moveOperationId,
+              expectedFingerprint,
+            );
+          } else if (mutationCoordinator && typeof mutationCoordinator.executeArticleRemovalTransaction === "function") {
+            mutationCoordinator.executeArticleRemovalTransaction({
+              selections: current.selections,
+              selection: item,
+              transactionId: current.id,
+              operationId: moveOperationId,
+              tombstone: tombstoneFor(article, moveOperationId),
+              expectedFingerprint,
+            });
+          } else {
+            contentStore.moveArticleToTrash(
+              item.clientId,
+              item.articleId,
+              tombstoneFor(article, moveOperationId),
+              moveOperationId,
+              expectedFingerprint,
+            );
+          }
         }
         catch (error) {
           if (error && error.code === "ARTICLE_REMOVAL_CONTENT_CHANGED") {
@@ -636,14 +709,37 @@ function createArticleRemovalService(options) {
     return current;
   }
 
-  function perform(transaction, requireRevalidation) {
-    try { return performSteps(transaction, requireRevalidation); }
+  function perform(transaction, requireRevalidation, mutationPort) {
+    try { return performSteps(transaction, requireRevalidation, mutationPort); }
     catch (error) {
       // A failed attempt to persist a fail-closed revalidation result must not
       // turn it back into an automatically executable transaction in memory.
       if (transaction.phase === "needs_repair") return transaction;
       return recordRetry(transaction, error, "PERSISTENCE_RETRY_REQUIRED");
     }
+  }
+
+  function performThroughCoordinator(transaction, requireRevalidation) {
+    if (
+      mutationCoordinator &&
+      typeof mutationCoordinator.supportsArticleRemovalTransaction === "function" &&
+      mutationCoordinator.supportsArticleRemovalTransaction() &&
+      typeof mutationCoordinator.executeArticleRemovalTransaction === "function"
+    ) {
+      return mutationCoordinator.executeArticleRemovalTransaction({
+        selections: transaction.selections,
+        transaction,
+        requireRevalidation: requireRevalidation === true,
+      });
+    }
+    return perform(transaction, requireRevalidation);
+  }
+
+  if (opts.articleRemovalTransitionPort && typeof opts.articleRemovalTransitionPort === "object") {
+    opts.articleRemovalTransitionPort.execute = function (input) {
+      const value = input || {};
+      return perform(value.transaction, value.requireRevalidation === true, value.mutation);
+    };
   }
 
   function applyArticleRemovalImpact(input) {
@@ -694,7 +790,7 @@ function createArticleRemovalService(options) {
       const persisted = transactionStore.get(transaction.id);
       return { transactionId: transaction.id, status: persisted.status, articleCount: transaction.articles.length, queueActions: persisted.queueResults || [], errorCode: persisted.errorCode || "ARTICLE_REMOVAL_CLAIM_UNAVAILABLE" };
     }
-    const result = perform(claimed);
+    const result = performThroughCoordinator(claimed, false);
     return {
       transactionId: result.id,
       status: result.status,
@@ -713,7 +809,7 @@ function createArticleRemovalService(options) {
       if (lifecycle && lifecycle.isDisposed && lifecycle.isDisposed()) return transaction;
       const claimed = claim(transaction);
       if (!claimed) return transaction;
-      try { return perform(claimed, true); }
+      try { return performThroughCoordinator(claimed, true); }
       catch (error) {
         return recordRetry(claimed, error, "RECOVERY_IO_RETRY_REQUIRED");
       }
@@ -742,7 +838,7 @@ function createArticleRemovalService(options) {
     if (transaction.status === "committed" && transaction.phase === "committed") return transactionDto(transaction);
     const claimed = claim(transaction);
     if (!claimed) return transactionDto(transaction);
-    try { return transactionDto(perform(claimed, true)); }
+    try { return transactionDto(performThroughCoordinator(claimed, true)); }
     catch (_) {
       return transactionDto(transactionStore.get(transaction.id));
     }

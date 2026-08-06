@@ -68,7 +68,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
     publish();
   });
   const unsubscribeManagement = management.subscribe(publish);
-  management.setArticleResultHandler((article) => sources.setCurrentArticle(article));
+  management.setArticleResultHandler((result) => sources.setCurrentArticle(result?.article || result));
   syncManagementScope();
   publish();
 

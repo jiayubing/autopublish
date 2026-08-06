@@ -46,6 +46,66 @@ const errors = Object.freeze({
     retryability: "never",
     userMessage: "内容请求参数无效，请检查后重试。",
   }),
+  ARTICLE_EDIT_CONFLICT: Object.freeze({
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "文章已被其他编辑会话修改，请刷新后重试。",
+  }),
+  ARTICLE_EDIT_FINGERPRINT_REQUIRED: Object.freeze({
+    category: "validation",
+    retryability: "never",
+    userMessage: "文章编辑会话已失效，请重新打开文章。",
+  }),
+  ARTICLE_MUTATION_BUSY: Object.freeze({
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "文章正在被其他操作修改，请稍后重试。",
+  }),
+  ARTICLE_MUTATION_RESULT_UNCERTAIN: Object.freeze({
+    category: "storage",
+    retryability: "manual-check",
+    userMessage: "文章操作结果需要人工核对，请勿自动重试。",
+  }),
+  ARTICLE_IDENTITY_UNRESOLVED: Object.freeze({
+    category: "validation",
+    retryability: "manual-check",
+    userMessage: "文章身份无法安全解析，需要人工核对。",
+  }),
+  ARTICLE_IDENTITY_CONFLICT: Object.freeze({
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "文章身份存在冲突，需要人工核对。",
+  }),
+  ARTICLE_ACTIVE_TARGET_CONFLICT: Object.freeze({
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "文章已有活动投稿目标，请刷新后重试。",
+  }),
+  ARTICLE_CONTENT_INCOMPLETE: Object.freeze({
+    category: "validation",
+    retryability: "never",
+    userMessage: "文章标题和正文必须完整。",
+  }),
+  ARTICLE_PUBLISHED_IMMUTABLE: Object.freeze({
+    category: "conflict",
+    retryability: "never",
+    userMessage: "已发布文章永久只读。",
+  }),
+  ARTICLE_OPERATION_FROZEN: Object.freeze({
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "文章当前处于冻结阶段。",
+  }),
+  ARTICLE_IN_TRASH: Object.freeze({
+    category: "conflict",
+    retryability: "never",
+    userMessage: "回收站文章不能执行此操作。",
+  }),
+  ARTICLE_RETARGET_NO_TARGET: Object.freeze({
+    category: "validation",
+    retryability: "never",
+    userMessage: "文章没有可改投的既有目标。",
+  }),
 });
 const errorCodes = Object.freeze(Object.keys(errors));
 const id = stringField({
@@ -190,6 +250,32 @@ const generatedArticle = exactObject({
   sourceArticleId: optionalField(nullableField(id)),
   version: optionalField(integerField({ min: 1, max: 1000000 })),
 });
+const articleEditor = exactObject({
+  article: generatedArticle,
+  editFingerprint: opaqueToken,
+});
+const savedArticleResult = exactObject({
+  outcome: literalField("saved"),
+  article: generatedArticle,
+  editFingerprint: opaqueToken,
+});
+const editConflictResult = exactObject({
+  outcome: literalField("conflict"),
+  code: literalField("ARTICLE_EDIT_CONFLICT"),
+  articleId: id,
+  refreshRequired: literalField(true),
+});
+const uncertainArticleResult = exactObject({
+  outcome: literalField("result-uncertain"),
+  code: literalField("ARTICLE_MUTATION_RESULT_UNCERTAIN"),
+  articleId: id,
+  refreshRequired: literalField(true),
+});
+const saveArticleResult = oneOf([
+  savedArticleResult,
+  editConflictResult,
+  uncertainArticleResult,
+]);
 const selection = exactObject({ clientId: id, articleId: id });
 const trashReference = exactObject({ type: text(80), id });
 const trashRecord = exactObject({
@@ -736,6 +822,19 @@ const targetFact = exactObject({
   displayName: optionalNullableText(1000),
   batchId: optionalNullableText(200),
 });
+const operationDecision = exactObject({
+  allowed: boolean,
+  reasonCodes: arrayField(text(128), { max: 32 }),
+  safeMetadata: exactObject({
+    articleId: optionalField(id),
+    stage: optionalField(text(80)),
+    targetKeys: optionalField(arrayField(text(500), { max: 1000 })),
+    hasPublished: optionalField(boolean),
+    hasActiveTarget: optionalField(boolean),
+    hasUncertain: optionalField(boolean),
+    isTrash: optionalField(boolean),
+  }),
+});
 const workflow = exactObject({
   version: optionalField(integerField({ min: 1, max: 100 })),
   stage: enumField([
@@ -756,6 +855,12 @@ const workflow = exactObject({
     canQueue: boolean,
     canCancel: boolean,
     canTrash: boolean,
+  }),
+  operations: exactObject({
+    edit: operationDecision,
+    queue: operationDecision,
+    retarget: operationDecision,
+    trash: operationDecision,
   }),
   publicationSummary,
   targetFacts: optionalField(arrayField(targetFact, { max: 1000 })),
@@ -901,6 +1006,29 @@ function projectWorkflow(value) {
     "canCancel",
     "canTrash",
   ]);
+  const projectOperation = function (operation, fallbackAllowed) {
+    const source = operation && typeof operation === "object" ? operation : {};
+    const metadata = projectFields(source.safeMetadata, [
+      "articleId",
+      "stage",
+      "targetKeys",
+      "hasPublished",
+      "hasActiveTarget",
+      "hasUncertain",
+      "isTrash",
+    ]);
+    return {
+      allowed: source.allowed === undefined ? fallbackAllowed === true : source.allowed === true,
+      reasonCodes: Array.isArray(source.reasonCodes) ? source.reasonCodes.map((item) => String(item)) : [],
+      safeMetadata: metadata,
+    };
+  };
+  output.operations = {
+    edit: projectOperation(value && value.operations && value.operations.edit, output.locks.canEdit),
+    queue: projectOperation(value && value.operations && value.operations.queue, output.locks.canQueue),
+    retarget: projectOperation(value && value.operations && value.operations.retarget, false),
+    trash: projectOperation(value && value.operations && value.operations.trash, output.locks.canTrash),
+  };
   output.publicationSummary = projectPublicationSummary(
     value && value.publicationSummary,
   );
@@ -989,6 +1117,7 @@ const generationRequest = exactObject({
   templateId: id,
   templateCatalogRevision: optionalField(text(256)),
 });
+const articleEditorRequest = exactObject({ clientId: id, articleId: id });
 const articleSelectionList = arrayField(selection, { min: 1, max: 10000 });
 const removalPreviewRequest = exactObject({
   selections: optionalField(articleSelectionList),
@@ -1051,10 +1180,19 @@ function coreContract(channel, kind) {
       toArgs: directInput,
     },
     "content:save-article": {
-      request: exactObject({ article: generatedArticle }),
-      success: exactObject({ article: generatedArticle }),
-      fromArgs: (args) => ({ article: args[0] }),
-      toArgs: (payload) => [payload.article],
+      request: exactObject({
+        article: generatedArticle,
+        expectedFingerprint: opaqueToken,
+      }),
+      success: saveArticleResult,
+      fromArgs: (args) => args[0] || {},
+      toArgs: (payload) => [payload],
+    },
+    "content:get-article-editor": {
+      request: articleEditorRequest,
+      success: articleEditor,
+      fromArgs: direct,
+      toArgs: directInput,
     },
     "content:preview-article-removal-impact": {
       request: removalPreviewRequest,
@@ -1195,6 +1333,7 @@ const invokeChannels = [
   ["content:retry-material", "command"],
   ["content:generate-article", "command"],
   ["content:save-article", "command"],
+  ["content:get-article-editor", "query"],
   ["content:preview-article-removal-impact", "query"],
   ["content:trash-articles", "command"],
   ["content:restore-article", "command"],

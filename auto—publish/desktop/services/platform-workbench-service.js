@@ -31,6 +31,7 @@ function createPlatformWorkbenchService(options) {
     platforms,
     adapters,
     reader,
+    contentStore: value.contentStore,
   });
 
   return Object.freeze({

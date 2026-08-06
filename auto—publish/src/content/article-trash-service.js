@@ -1,6 +1,11 @@
 const crypto = require("crypto");
 const { createArticleRemovalService } = require("./article-removal-service");
 const { createArticleTrashConfirmation } = require("./article-trash-confirmation");
+const {
+  deriveArticleLifecycle,
+  removalTransactionMatchesArticle,
+  trashedArticleMutationBlockReason,
+} = require("./article-lifecycle-projection");
 
 function trashError(code, message) {
   const error = new Error(message);
@@ -27,6 +32,9 @@ function createArticleTrashService(options) {
   const opts = options || {};
   if (!opts.contentStore) throw trashError("ARTICLE_TRASH_SERVICE_INVALID", "Content store is required");
   const contentStore = opts.contentStore;
+  const mutationCoordinator = opts.mutationCoordinator || null;
+  const operationalStore = opts.operationalStore || null;
+  const transactionStore = opts.transactionStore || null;
   const now = opts.now || function() { return new Date().toISOString(); };
   const confirmations = createArticleTrashConfirmation({
     now: now,
@@ -37,6 +45,8 @@ function createArticleTrashService(options) {
     ? createArticleRemovalService({
       workspaceRoot: opts.workspaceRoot,
       contentStore: contentStore,
+      mutationCoordinator: opts.mutationCoordinator,
+      articleRemovalTransitionPort: opts.articleRemovalTransitionPort,
       submissionService: opts.submissionService,
       transactionStore: opts.transactionStore,
       transactionDirectory: opts.transactionDirectory,
@@ -47,6 +57,75 @@ function createArticleTrashService(options) {
       afterArticleMove: opts.afterArticleMove,
       onTransactionStatus: opts.onTransactionStatus
     }) : null);
+
+  function removalTransactionsForArticleRef(item) {
+    if (!transactionStore || typeof transactionStore.list !== "function") return [];
+    try {
+      return transactionStore.list().filter(function (transaction) {
+        return removalTransactionMatchesArticle(transaction, item);
+      });
+    } catch (_) {
+      throw trashError("ARTICLE_LIFECYCLE_FACTS_UNAVAILABLE", "文章删除事实不可用，操作已停止");
+    }
+  }
+
+  function lifecycleForArticleRef(item) {
+    if (!operationalStore || typeof operationalStore.listArticleLifecycleFacts !== "function") return null;
+    let facts;
+    try {
+      facts = operationalStore.listArticleLifecycleFacts({ articleIds: [item.articleId] });
+    } catch (_) {
+      throw trashError("ARTICLE_LIFECYCLE_FACTS_UNAVAILABLE", "文章生命周期事实不可用，操作已停止");
+    }
+    if (!facts || !Array.isArray(facts.publications) || !Array.isArray(facts.submissionItems) || !Array.isArray(facts.orders) || !Array.isArray(facts.attentionItems)) {
+      throw trashError("ARTICLE_LIFECYCLE_FACTS_UNAVAILABLE", "文章生命周期事实不可用，操作已停止");
+    }
+    const removalTransactions = removalTransactionsForArticleRef(item);
+    return deriveArticleLifecycle({
+      article: {
+        id: item.articleId,
+        clientId: item.clientId,
+        title: "trashed article",
+        content: "trashed article",
+        status: "trashed",
+      },
+      publications: facts.publications,
+      submissionItems: facts.submissionItems,
+      orders: facts.orders,
+      attentionItems: facts.attentionItems,
+      removalTransactions,
+    });
+  }
+
+  function assertLifecycleSafe(item, operation) {
+    if (mutationCoordinator && typeof mutationCoordinator.assertTrashedArticleMutationAllowed === "function") {
+      mutationCoordinator.assertTrashedArticleMutationAllowed({ articleRef: item, operation });
+      return;
+    }
+    const lifecycle = lifecycleForArticleRef(item);
+    if (!lifecycle) return;
+    const transactions = removalTransactionsForArticleRef(item);
+    const code = trashedArticleMutationBlockReason(lifecycle, transactions);
+    if (code) {
+      const error = trashError(code, operation === "restore"
+        ? "文章存在未结束的发布事实，不能恢复"
+        : "文章存在未结束的发布事实，不能永久删除");
+      Object.defineProperty(error, "safeMetadata", {
+        value: Object.freeze({ operation, articleId: item.articleId }),
+        enumerable: false,
+      });
+      throw error;
+    }
+  }
+
+  function uncertainAfterLifecycleChange(operation, cause) {
+    const error = trashError("ARTICLE_MUTATION_RESULT_UNCERTAIN", operation + "结果需要人工核对");
+    Object.defineProperty(error, "safeMetadata", {
+      value: Object.freeze({ operation, causeCode: cause && cause.code || "ARTICLE_LIFECYCLE_CHANGED" }),
+      enumerable: false,
+    });
+    return error;
+  }
 
   function buildTombstone(article) {
     const references = [];
@@ -125,7 +204,15 @@ function createArticleTrashService(options) {
 
   function restoreArticle(input) {
     const item = selection(input);
-    const restored = contentStore.restoreTrashedArticle(item.clientId, item.articleId);
+    assertLifecycleSafe(item, "restore");
+    let restored;
+    if (mutationCoordinator && typeof mutationCoordinator.restoreTrashedArticle === "function") {
+      restored = mutationCoordinator.restoreTrashedArticle({ articleRef: item }).article;
+    } else {
+      restored = contentStore.restoreTrashedArticle(item.clientId, item.articleId);
+      try { assertLifecycleSafe(item, "restore"); }
+      catch (error) { throw uncertainAfterLifecycleChange("restore", error); }
+    }
     confirmations.invalidateBinding(item);
     return removalService ? { article: restored, restored: true, queueRestored: false, message: "文章已恢复，投稿队列不会自动恢复" } : restored;
   }
@@ -134,8 +221,14 @@ function createArticleTrashService(options) {
     const item = selection(input);
     const tombstone = contentStore.getTrashedTombstone(item.clientId, item.articleId);
     if (!tombstone) throw trashError("ARTICLE_NOT_FOUND", "Trashed article was not found");
+    assertLifecycleSafe(item, "permanent-delete");
     const fingerprint = tombstoneFingerprint(tombstone);
     const confirmation = confirmations.issue({ clientId: item.clientId, articleId: item.articleId }, fingerprint);
+    try { assertLifecycleSafe(item, "permanent-delete"); }
+    catch (error) {
+      confirmations.remove(confirmation.token);
+      throw error;
+    }
     return { token: confirmation.token, clientId: item.clientId, articleId: item.articleId, deletedAt: tombstone.deletedAt, version: tombstone.version, fingerprint, issuedAt: confirmation.issuedAt, expiresAt: confirmation.expiresAt, status: tombstone.status, permanentlyDeleted: tombstone.permanentlyDeleted === true };
   }
 
@@ -155,7 +248,15 @@ function createArticleTrashService(options) {
       confirmations.remove(input.token);
       throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_STALE", "Permanent deletion confirmation is stale");
     }
-    const tombstone = contentStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId, now());
+    assertLifecycleSafe(item, "permanent-delete");
+    let tombstone;
+    if (mutationCoordinator && typeof mutationCoordinator.permanentlyDeleteTrashedArticle === "function") {
+      tombstone = mutationCoordinator.permanentlyDeleteTrashedArticle({ articleRef: item, purgedAt: now() }).tombstone;
+    } else {
+      tombstone = contentStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId, now());
+      try { assertLifecycleSafe(item, "permanent-delete"); }
+      catch (error) { throw uncertainAfterLifecycleChange("permanent-delete", error); }
+    }
     confirmations.invalidateBinding(item);
     return { clientId: item.clientId, articleId: item.articleId, deleted: true, deletedAt: tombstone.deletedAt };
   }

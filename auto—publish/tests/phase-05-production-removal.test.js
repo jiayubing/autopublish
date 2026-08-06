@@ -25,7 +25,7 @@ function article() {
 test("production removal uses OperationalStore queue facts and cancels before trashing", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-05-production-removal-"));
   const operationalStore = createOperationalStore({ workspaceRoot: root });
-  const composition = createContentLifecycleComposition({ workspaceRoot: root });
+  const composition = createContentLifecycleComposition({ workspaceRoot: root, operationalStore });
   try {
     const contentStore = composition.contentStore;
     contentStore.saveArticle(article());
@@ -38,7 +38,14 @@ test("production removal uses OperationalStore queue facts and cancels before tr
     const batch = submission.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
     const filePath = path.join(input, "toutiao", batch.items[0].filename);
     const sidecarPath = filePath + ".submission.json";
-    const removal = createArticleRemovalService({ workspaceRoot: root, contentStore, submissionService: submission, tokenTtlMs: 5000 });
+    const removal = createArticleRemovalService({
+      workspaceRoot: root,
+      contentStore,
+      mutationCoordinator: composition.articleMutationCoordinator,
+      transactionStore: composition.articleRemovalTransactionStore,
+      submissionService: submission,
+      tokenTtlMs: 5000,
+    });
     const preview = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
     assert.equal(preview.canCommit, true);
     assert.equal(preview.queuedToCancel.length, 1);

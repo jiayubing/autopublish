@@ -20,11 +20,13 @@ function createPublicationWorkflow(dependencies) {
   });
   const execution = createPublicationExecution({
     operationalStore: value.operationalStore,
+    articleMutationCoordinator: value.articleMutationCoordinator,
     publisher: value.publisher,
     postProcessing,
   });
   const recovery = createPublicationRecovery({
     operationalStore: value.operationalStore,
+    articleMutationCoordinator: value.articleMutationCoordinator,
     postProcessing,
   });
   return Object.freeze({

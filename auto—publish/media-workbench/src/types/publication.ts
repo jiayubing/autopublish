@@ -1,4 +1,5 @@
 import type { GeneratedContentArticle } from "./generation";
+import type { ArticleOperation } from "../article-workflow";
 
 export type PublicationRecordStatus =
   | "queued"
@@ -368,6 +369,12 @@ export interface ArticleManagementSnapshot {
         canQueue: boolean;
         canCancel: boolean;
         canTrash: boolean;
+      };
+      operations?: {
+        edit: ArticleOperation;
+        queue: ArticleOperation;
+        retarget: ArticleOperation;
+        trash: ArticleOperation;
       };
       publicationSummary: PublicationHistorySummary;
     }

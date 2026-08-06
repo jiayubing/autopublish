@@ -79,11 +79,16 @@ function createAiContentService(opts) {
   const researchStore = options.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
   const contentStore = options.contentStore;
+  const operationalStore = options.operationalStore || null;
+  const articleMutationCoordinator = options.articleMutationCoordinator || null;
   // WorkspaceRuntime injects the sole OperationalStore-backed submission
   // service. AI content never creates a legacy batch/ledger writer itself.
   const contentSubmissionService = options.contentSubmissionService || null;
   const articleTrashService = options.articleTrashService || (contentStore && createArticleTrashService({
     contentStore: contentStore,
+    operationalStore: operationalStore,
+    mutationCoordinator: articleMutationCoordinator,
+    articleRemovalTransitionPort: options.articleRemovalTransitionPort,
     workspaceRoot: workspaceRoot,
     submissionService: contentSubmissionService,
     transactionStore: options.articleRemovalTransactionStore,
@@ -239,21 +244,54 @@ function createAiContentService(opts) {
       seenIds: seenIds
     });
     const generated = await generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds }));
-    if (!contentStore || typeof contentStore.saveArticle !== "function") {
+    if (!contentStore || (typeof contentStore.createArticle !== "function" && typeof contentStore.saveArticle !== "function")) {
       throw contentError("CONTENT_STORE_REQUIRED", "Generated article cannot be persisted");
     }
-    const saved = contentStore.saveArticle(generated);
+    const saved = articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function"
+      ? articleMutationCoordinator.createArticle(generated)
+      : typeof contentStore.createArticle === "function"
+        ? contentStore.createArticle(generated)
+        : contentStore.saveArticle(generated);
     notifyAttentionChange("ARTICLE_SAVED");
     return saved === undefined ? generated : saved;
   }
 
-  function saveArticle(article) {
-    if (!article || typeof article !== "object" || Array.isArray(article)) {
+  function saveArticle(input) {
+    const request = input && input.article ? input : { article: input };
+    if (!request.article || typeof request.article !== "object" || Array.isArray(request.article)) {
       throw contentError("CONTENT_INPUT_INVALID", "Article is required");
     }
-    const saved = contentStore.saveArticle(article);
+    let saved;
+    try {
+      saved = articleMutationCoordinator && typeof articleMutationCoordinator.saveExistingArticle === "function"
+        ? articleMutationCoordinator.saveExistingArticle(request)
+        : contentStore.saveArticle(request.article);
+    } catch (error) {
+      if (error && error.code === "ARTICLE_EDIT_CONFLICT") {
+        return {
+          outcome: "conflict",
+          code: "ARTICLE_EDIT_CONFLICT",
+          articleId: request.article.id,
+          refreshRequired: true,
+        };
+      }
+      if (error && error.code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") {
+        return {
+          outcome: "result-uncertain",
+          code: "ARTICLE_MUTATION_RESULT_UNCERTAIN",
+          articleId: request.article.id,
+          refreshRequired: true,
+        };
+      }
+      throw error;
+    }
     notifyAttentionChange("ARTICLE_SAVED");
-    return saved;
+    if (saved && (saved.outcome === "saved" || saved.outcome === "conflict" || saved.outcome === "result-uncertain")) return saved;
+    return {
+      outcome: "saved",
+      article: saved,
+      editFingerprint: contentStore.fingerprintArticle(saved),
+    };
   }
 
   function listGeneratedArticles(clientId) {
@@ -265,6 +303,16 @@ function createAiContentService(opts) {
     assertId(clientId, "Client id");
     assertId(articleId, "Article id");
     return contentStore.getArticle(clientId, articleId);
+  }
+
+  function getArticleEditor(clientId, articleId) {
+    assertId(clientId, "Client id");
+    assertId(articleId, "Article id");
+    if (articleMutationCoordinator && typeof articleMutationCoordinator.readArticleForEdit === "function") {
+      return articleMutationCoordinator.readArticleForEdit({ articleRef: { clientId, articleId } });
+    }
+    const article = contentStore.getArticle(clientId, articleId);
+    return { article: article, editFingerprint: contentStore.fingerprintArticle(article) };
   }
 
   return {
@@ -279,6 +327,7 @@ function createAiContentService(opts) {
     saveCustomTemplate: saveCustomTemplate,
     generateArticle: generateArticle,
     saveArticle: saveArticle,
+    getArticleEditor: getArticleEditor,
     listGeneratedArticles: listGeneratedArticles,
     getGeneratedArticle: getGeneratedArticle,
     listTrashedArticles: articleTrashService.listTrashedArticles,

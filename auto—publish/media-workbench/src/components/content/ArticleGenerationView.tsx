@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog } from '../../types/content';
 import type { GeneratedContentArticle } from '../../types/generation';
+import type { SavedContentArticle } from '../../bridge/generation';
+import type { ArticleEditorSnapshot } from '../../bridge/content';
 import { resolveAvailableTemplateId } from '../../article-history-logic';
 import { templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
@@ -21,7 +23,8 @@ interface ArticleGenerationViewProps {
   onArticleChange: (article: GeneratedContentArticle | null) => void;
   commands: {
     retryMaterial: (input: Record<string, unknown>) => Promise<ContentMaterial | ContentCommandStaleResult>;
-    saveArticle: (input: Record<string, unknown>) => Promise<GeneratedContentArticle>;
+    saveArticle: (input: Record<string, unknown>) => Promise<GeneratedContentArticle | SavedContentArticle>;
+    getArticleEditor?: (input: { clientId: string; articleId: string }) => Promise<unknown>;
   };
   commandStates: { retryMaterial: { busy: boolean }; saveArticle: { busy: boolean } };
   refreshManagement: (reason?: string) => Promise<unknown>;
@@ -53,6 +56,9 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   const [platform, setPlatform] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [error, setError] = useState('');
+  const [editorArticle, setEditorArticle] = useState<GeneratedContentArticle | null>(selectedArticle);
+  const [editFingerprint, setEditFingerprint] = useState<string | null>(null);
+  const editorRequestRef = useRef(0);
   const selectedArticleRef = useRef<GeneratedContentArticle | null>(selectedArticle);
   const materialSelectionTouchedRef = useRef(false);
   const researchSelectionTouchedRef = useRef(false);
@@ -75,7 +81,35 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   const customTemplateCount = useMemo(() => catalogTemplates.filter((item) => item.source === 'custom').length, [catalogTemplates]);
   const visibleCatalogTemplates = useMemo(() => visibleGenerationTemplates({ templates: catalogTemplates }, showBuiltinTemplates), [catalogTemplates, showBuiltinTemplates]);
 
+  function articleEditorSnapshot(value: unknown): ArticleEditorSnapshot | null {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as { article?: unknown; editFingerprint?: unknown };
+    return candidate.article && typeof candidate.article === 'object' && typeof candidate.editFingerprint === 'string'
+      ? value as ArticleEditorSnapshot
+      : null;
+  }
+
   useEffect(() => { setMaterialItems(toMaterials(client)); }, [client]);
+  useEffect(() => {
+    const requestId = ++editorRequestRef.current;
+    if (!selectedArticle) {
+      setEditorArticle(null);
+      setEditFingerprint(null);
+      return;
+    }
+    setEditorArticle(selectedArticle);
+    setEditFingerprint(null);
+    const loadEditor = commands.getArticleEditor;
+    if (typeof loadEditor !== 'function') return;
+    void loadEditor({ clientId: selectedArticle.clientId || clientId, articleId: selectedArticle.id }).then((result: unknown) => {
+      const snapshot = articleEditorSnapshot(result);
+      if (requestId !== editorRequestRef.current || !snapshot) return;
+      setEditorArticle(snapshot.article);
+      setEditFingerprint(snapshot.editFingerprint);
+    }).catch(() => {
+      if (requestId === editorRequestRef.current) setError('无法读取文章编辑凭证，请重新打开文章后重试。');
+    });
+  }, [clientId, commands.getArticleEditor, selectedArticle?.clientId, selectedArticle?.id]);
   useEffect(() => {
     materialSelectionTouchedRef.current = false;
     researchSelectionTouchedRef.current = false;
@@ -173,9 +207,9 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
         <div className="mt-3 grid gap-2">{materials.map((item) => <CollapsibleSourceItem key={item.id || item.name} id={`material-${item.id || item.name}`} title={item.name} summary={`${item.extension || '资料'} · ${item.characterCount || 0} 字${item.status === 'error' ? ' · 错误' : ''}`} selected={materialIds.includes(item.id || item.name)} onSelectedChange={(selected) => setMaterialSelection((current) => selected ? [...new Set([...current, item.id || item.name])] : current.filter((value) => value !== (item.id || item.name)))} defaultExpanded={false} actions={<button type="button" onClick={() => void retryMaterialItem(item.id || item.name)} disabled={commandStates.retryMaterial.busy} title="预览或刷新资料" className="text-xs text-slate-500 underline disabled:opacity-40">{item.status === 'error' ? (commandStates.retryMaterial.busy ? '重试中…' : '重试') : '预览'}</button>}>{item.content || '资料转换失败，请点击重试。'}</CollapsibleSourceItem>)}{validResearch.map((item) => <CollapsibleSourceItem key={item.id} id={`research-${item.id}`} title={item.question || item.id} summary={`${item.answerText?.length || 0} 字 · GEO 调研回答`} selected={selectedIds.includes(item.id)} onSelectedChange={(selected) => setResearchSelection((current) => selected ? [...new Set([...current, item.id])] : current.filter((value) => value !== item.id))} defaultExpanded={false} actions={<span className="text-xs text-slate-400">预览</span>}>{item.answerText}</CollapsibleSourceItem>)}</div>
         <button type="button" onClick={generate} disabled={!materialIds.length || !selectedIds.length || !clientId || !templateId || generating} className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40"><Sparkles className="h-4 w-4" />{generating ? '生成中…' : '生成文章'}</button>
       </section>
-      <section className="min-h-[360px] flex-1 rounded-md">{selectedArticle ? <GeneratedArticleEditorPanel embedded sourceLabel="文章生成" article={selectedArticle} saving={commandStates.saveArticle.busy} onSaved={(saved) => { onArticleChange(saved); }} onClose={() => onArticleChange(null)} onSaveArticle={async (draft) => {
+      <section className="min-h-[360px] flex-1 rounded-md">{editorArticle ? <GeneratedArticleEditorPanel embedded sourceLabel="文章生成" article={editorArticle} editFingerprint={editFingerprint} onEditFingerprintChange={setEditFingerprint} saving={commandStates.saveArticle.busy} onConflict={async () => { const result = await commands.getArticleEditor?.({ clientId: editorArticle.clientId, articleId: editorArticle.id }); return articleEditorSnapshot(result); }} onSaved={(saved) => { setEditorArticle(saved); onArticleChange(saved); }} onClose={() => onArticleChange(null)} onSaveArticle={async (draft, expectedFingerprint) => {
         const resolvedTemplateId = resolveAvailableTemplateId({ ...draft, templateId }, templates) || draft.templateId;
-        return commands.saveArticle({ ...selectedArticle, templateId: resolvedTemplateId, title: draft.title, content: draft.content, materialIds, status: 'saved', updatedAt: new Date().toISOString() });
+        return commands.saveArticle({ article: { ...editorArticle, templateId: resolvedTemplateId, title: draft.title, content: draft.content, materialIds, status: 'saved', updatedAt: new Date().toISOString() }, expectedFingerprint });
       }} /> : <div className="flex h-full min-h-[360px] items-center justify-center rounded-md border border-slate-200 bg-white text-sm text-slate-400">选择资料与回答并生成文章，或从历史标签页打开文章</div>}</section>{error && <div role="alert" className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     </div>}
   </div>;

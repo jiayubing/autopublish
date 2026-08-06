@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   getArticleManagementSnapshot,
+  getArticleEditor,
   createContentQuestion,
   deleteContentQuestion,
   exportToSubmissionQueue,
@@ -63,7 +64,8 @@ export function useContentWorkbenchFeature() {
       deleteQuestion: deleteContentQuestion,
       saveManualResearch,
       retryMaterial: retryContentMaterial,
-      saveArticle: saveContentArticle,
+      getArticleEditor: (input: { clientId: string; articleId: string }) => getArticleEditor(input),
+      saveArticle: (input: { article: GeneratedContentArticle; expectedFingerprint: string }) => saveContentArticle(input.article, input.expectedFingerprint),
       reconcilePublication: reconcilePublicationHistory,
       previewExport,
       exportToSubmissionQueue,

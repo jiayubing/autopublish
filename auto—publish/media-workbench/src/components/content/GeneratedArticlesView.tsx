@@ -114,12 +114,14 @@ export default function GeneratedArticlesView({ clientId, management, query, com
 
   function canQueueArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
-    return workflow?.locks.canQueue === true && !(dirtyArticleId && article.id === dirtyArticleId);
+    const allowed = workflow?.operations?.queue?.allowed ?? workflow?.locks.canQueue;
+    return allowed === true && !(dirtyArticleId && article.id === dirtyArticleId);
   }
 
   function canTrashArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
-    return workflow?.locks.canTrash === true && !isPublishedArticle(article);
+    const allowed = workflow?.operations?.trash?.allowed ?? workflow?.locks.canTrash;
+    return allowed === true && !isPublishedArticle(article);
   }
 
   function isArticleSelectable(article: GeneratedContentArticle): boolean {

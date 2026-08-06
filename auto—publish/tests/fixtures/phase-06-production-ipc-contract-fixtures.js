@@ -866,6 +866,21 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.saveArticle",
     featureBinding: "saveArticle",
   }),
+  "content.getArticleEditor": Object.freeze({
+    view: "media-workbench/src/components/ContentWorkbench.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "getArticleEditor",
+    preloadMethod: "getArticleEditor",
+    command: "content.getArticleEditor",
+    channel: "content:get-article-editor",
+    registrar: "desktop/ipc/ai-content-ipc.js",
+    application: "service.getArticleEditor",
+    featureBinding: "getArticleEditor",
+  }),
   "content.previewArticleRemovalImpact": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
@@ -1946,6 +1961,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/ArticleGenerationView.tsx",
     "saveArticle",
   ],
+  "content.getArticleEditor": [
+    "direct",
+    "media-workbench/src/components/ContentWorkbench.tsx",
+    "getArticleEditor",
+  ],
   "content.previewArticleRemovalImpact": [
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -2478,6 +2498,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
         "createArticleManagementFeature",
         [
           "content.saveArticle",
+          "content.getArticleEditor",
           "content.previewArticleRemovalImpact",
           "content.trashArticles",
           "content.restoreArticle",
@@ -2611,6 +2632,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
         [
           "content.retryMaterial",
           "content.saveArticle",
+          "content.getArticleEditor",
           "content.previewArticleRemovalImpact",
           "content.trashArticles",
           "content.restoreArticle",
@@ -3859,8 +3881,26 @@ const rawProductionIpcContractFixtures = [
     channel: "content:save-article",
     owner: "content",
     productionCaller: "desktop/preload.js:content:save-article",
-    request: { article: contentArticleFixture() },
-    result: { article: contentArticleFixture() },
+    request: {
+      article: contentArticleFixture(),
+      expectedFingerprint: "fingerprint-1",
+    },
+    result: {
+      outcome: "saved",
+      article: contentArticleFixture(),
+      editFingerprint: "fingerprint-2",
+    },
+  },
+  {
+    capability: "content.getArticleEditor",
+    channel: "content:get-article-editor",
+    owner: "content",
+    productionCaller: "desktop/preload.js:content:get-article-editor",
+    request: { clientId: "client-1", articleId: "article-1" },
+    result: {
+      article: contentArticleFixture(),
+      editFingerprint: "fingerprint-1",
+    },
   },
   {
     capability: "content.previewArticleRemovalImpact",

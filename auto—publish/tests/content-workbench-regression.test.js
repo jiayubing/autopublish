@@ -15,12 +15,14 @@ describe("content workbench regression", function() {
     [
       'ipcRenderer.invoke("content:list-clients")',
       'ipcRenderer.invoke("content:generate-article", input)',
-      'ipcRenderer.invoke("content:save-article", article)',
+      'ipcRenderer.invoke("content:save-article", input)',
+      'ipcRenderer.invoke("content:get-article-editor", input)',
       "export async function listContentClients",
     ].forEach(function(value) { assert.equal((preload + api + generationApi).includes(value), true, "missing " + value); });
     ["export async function generateContentArticle", "export async function saveContentArticle"].forEach(function(value) {
       assert.equal(generationApi.includes(value), true, "missing " + value);
     });
+    assert.equal(api.includes("export async function getArticleEditor"), true, "missing getArticleEditor");
   });
 
   it("keeps the AI content workspace reachable from navigation", function() {

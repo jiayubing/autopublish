@@ -352,8 +352,11 @@ const api = {
     generateArticle: function(input) {
       return ipcRenderer.invoke("content:generate-article", input);
     },
-    saveArticle: function(article) {
-      return ipcRenderer.invoke("content:save-article", article);
+    saveArticle: function(input) {
+      return ipcRenderer.invoke("content:save-article", input);
+    },
+    getArticleEditor: function(input) {
+      return ipcRenderer.invoke("content:get-article-editor", input);
     },
     getArticleManagementSnapshot: function(input) {
       return ipcRenderer.invoke(

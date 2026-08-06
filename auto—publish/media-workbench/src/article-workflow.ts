@@ -18,6 +18,20 @@ export interface ArticleWorkflowLocks {
   canTrash: boolean;
 }
 
+export interface ArticleOperation {
+  allowed: boolean;
+  reasonCodes: string[];
+  safeMetadata: {
+    articleId?: string;
+    stage?: string;
+    targetKeys?: string[];
+    hasPublished?: boolean;
+    hasActiveTarget?: boolean;
+    hasUncertain?: boolean;
+    isTrash?: boolean;
+  };
+}
+
 export interface ArticleWorkflow {
   version?: number;
   stage: ArticleWorkflowStage;
@@ -25,6 +39,12 @@ export interface ArticleWorkflow {
   primaryAction: ArticleWorkflowAction;
   allowedBulkActions: ArticleWorkflowAction[];
   locks: ArticleWorkflowLocks;
+  operations?: {
+    edit: ArticleOperation;
+    queue: ArticleOperation;
+    retarget: ArticleOperation;
+    trash: ArticleOperation;
+  };
   reasonCodes?: string[];
   reasonMessage?: string | null;
   publicationSummary?: PublicationHistorySummary;

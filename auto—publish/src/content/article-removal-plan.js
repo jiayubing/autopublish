@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { canonicalArticleRefKey, normalizeArticleRef } = require("./article-ref");
 
 function removalError(code, message) {
   const error = new Error(message || code);
@@ -21,7 +22,11 @@ function selection(value) {
     !value.articleId.trim()
   )
     throw removalError("CONTENT_INPUT_INVALID", "Article selection is invalid");
-  return { clientId: value.clientId, articleId: value.articleId };
+  try {
+    return normalizeArticleRef(value, "CONTENT_INPUT_INVALID");
+  } catch (error) {
+    throw removalError("CONTENT_INPUT_INVALID", "Article selection is invalid");
+  }
 }
 
 function selections(input) {
@@ -36,7 +41,7 @@ function selections(input) {
   const result = values.map(selection);
   const seen = new Set();
   result.forEach(function (value) {
-    const key = value.clientId + "\0" + value.articleId;
+    const key = canonicalArticleRefKey(value);
     if (seen.has(key))
       throw removalError(
         "CONTENT_INPUT_INVALID",
@@ -68,9 +73,7 @@ function actionIdentity(action) {
 
 function transactionFingerprint(selectionsValue, queueActions) {
   const selectionKeys = selectionsValue
-    .map(function (item) {
-      return item.clientId + "\0" + item.articleId;
-    })
+    .map(canonicalArticleRefKey)
     .sort();
   const actionKeys = (queueActions || [])
     .map(actionIdentity)
@@ -106,6 +109,7 @@ function isRepairableError(error) {
       "SUBMISSION_ACTION_OPERATION_CONFLICT",
       "SUBMISSION_ACTION_PROTOCOL_UNAVAILABLE",
       "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT",
+      "ARTICLE_MUTATION_RESULT_UNCERTAIN",
     ].includes(error.code)
   );
 }

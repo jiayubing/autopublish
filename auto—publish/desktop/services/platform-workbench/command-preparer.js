@@ -40,6 +40,7 @@ function createPlatformCommandPreparer(options) {
   const platforms = Array.isArray(value.platforms) ? value.platforms : [];
   const adapters = value.adapters || {};
   const reader = value.reader;
+  const contentStore = value.contentStore || null;
   if (!reader) throw new Error("Platform queue reader is required");
 
   function validateTargetPlatformIds(targetPlatformIds) {
@@ -314,6 +315,7 @@ function createPlatformCommandPreparer(options) {
       filename: task.filename,
       batchId: submissionBatchId,
     };
+    let articleRef = null;
     if (
       metadata &&
       metadata.data &&
@@ -322,9 +324,22 @@ function createPlatformCommandPreparer(options) {
     ) {
       postProcessingPayload.clientId = metadata.data.clientId;
       postProcessingPayload.articleId = identity.articleId;
+      articleRef = {
+        clientId: metadata.data.clientId,
+        articleId: identity.articleId,
+      };
+      if (contentStore && typeof contentStore.getArticle === "function") {
+        try {
+          const persisted = contentStore.getArticle(articleRef.clientId, articleRef.articleId);
+          if (!persisted || persisted.clientId !== articleRef.clientId || persisted.id !== articleRef.articleId) articleRef = null;
+        } catch (_) {
+          articleRef = null;
+        }
+      }
     }
     return Object.freeze({
       articleId: identity.articleId || identity.articleKey,
+      ...(articleRef ? { articleRef } : {}),
       target: {
         kind: "platform",
         platformId: task.targetPlatformId,

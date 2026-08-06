@@ -105,6 +105,7 @@ function productionFixture() {
   });
   const composition = createContentLifecycleComposition({
     workspaceRoot: root,
+    operationalStore,
   });
   const contentStore = composition.contentStore;
   contentStore.saveArticle(article());
@@ -146,6 +147,8 @@ function productionFixture() {
   const removal = createArticleRemovalService({
     workspaceRoot: root,
     contentStore,
+    mutationCoordinator: composition.articleMutationCoordinator,
+    transactionStore: composition.articleRemovalTransactionStore,
     submissionService: submission,
     tokenTtlMs: 5000,
   });
@@ -171,6 +174,8 @@ function productionFixture() {
       return createArticleRemovalService({
         workspaceRoot: root,
         contentStore,
+        mutationCoordinator: composition.articleMutationCoordinator,
+        transactionStore: composition.articleRemovalTransactionStore,
         submissionService: createSubmission(),
         tokenTtlMs: 5000,
         now: () => new Date(Date.now() + 60000).toISOString(),

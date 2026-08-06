@@ -145,12 +145,27 @@ async function createWorkspaceRuntimeComposition(deps) {
     const paths = runtime.paths;
     const injectedPaths = paths && paths.installation ? paths : undefined;
     const workspaceRoot = runtime.workspaceRoot;
+    const operationalStore = require("../../src/infrastructure/operational-store/operational-store").createOperationalStore({
+      workspaceRoot,
+      clock: options.clock,
+    });
+    ownService({
+      dispose: function () {
+        operationalStore.close();
+      },
+    });
     const contentLifecycleComposition = ownService(
       require("./content-lifecycle-composition").createContentLifecycleComposition(
-        { workspaceRoot, paths: injectedPaths },
+        {
+          workspaceRoot,
+          paths: injectedPaths,
+          operationalStore,
+          clock: options.clock,
+        },
       ),
     );
     const contentStore = contentLifecycleComposition.contentStore;
+    const articleMutationCoordinator = contentLifecycleComposition.articleMutationCoordinator;
     const createPlatformSettingsService =
       require("../services/platform-settings-service").createPlatformSettingsService;
     const {
@@ -262,6 +277,8 @@ async function createWorkspaceRuntimeComposition(deps) {
       require("./publication-workflow-composition").createPublicationWorkflowComposition(
         {
           workspaceRoot,
+          operationalStore,
+          articleMutationCoordinator,
           publisher,
           createPostProcessor: function (operationalStore) {
             return require("../services/publication-post-processor").createPublicationPostProcessor(
@@ -354,6 +371,10 @@ async function createWorkspaceRuntimeComposition(deps) {
         workspaceRoot,
         paths: injectedPaths,
         contentStore,
+        operationalStore: publicationComposition.operationalStore,
+        articleMutationCoordinator,
+        articleRemovalTransactionStore: contentLifecycleComposition.articleRemovalTransactionStore,
+        articleRemovalTransitionPort: contentLifecycleComposition.articleRemovalTransitionPort,
         contentSubmissionService,
         onArticleRemovalTransaction: function (transaction) {
           const eventContract = productionIpcRegistry.byChannel(
@@ -410,6 +431,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           workspaceRoot,
           paths: injectedPaths,
           contentStore,
+          articleMutationCoordinator,
           aiProviderService,
           onDataInvalidated: invalidation.invalidate,
         },
@@ -545,6 +567,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       publicationSubmissionService,
       mediaPublicationSubmissionService,
       operationalStore: publicationComposition.operationalStore,
+      articleMutationCoordinator,
       publicationWorkflow: publicationComposition.publicationWorkflow,
       articleAttentionQuery: attentionPorts.attentionQuery,
       articleAttentionResolver: attentionPorts.attentionResolver,

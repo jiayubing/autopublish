@@ -473,7 +473,7 @@ function createContractRegistry(contracts) {
       return {
         schemaVersion: SCHEMA_VERSION,
         ok: true,
-        data: validateObject(contract.success, data, "IPC_RESULT_INVALID"),
+        data: validateValue(contract.success, data, "IPC_RESULT_INVALID"),
       };
     },
     parseSuccess(contract, input) {
@@ -483,7 +483,7 @@ function createContractRegistry(contracts) {
         "IPC_RESULT_INVALID",
       );
       if (parsed.ok !== true) throw contractError("IPC_RESULT_INVALID");
-      return validateObject(contract.success, parsed.data, "IPC_RESULT_INVALID");
+      return validateValue(contract.success, parsed.data, "IPC_RESULT_INVALID");
     },
     failure(contract, error) {
       let safe = null;
