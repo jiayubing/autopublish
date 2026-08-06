@@ -47,8 +47,11 @@
 | 波次 3 执行组 06 | `COMPLETE` | threadId `019fd707-7d7f-7981-bc13-240a8c0bd578`；source threadId `019fd703-97d7-73d2-878e-7e6eb0f99509`；hostId `local`；worktree `C:\Users\violet\.codex\worktrees\4550\官媒投稿-refactor`；branch `codex/article-lifecycle-06`；base `754e40c0a47a612dd6a2175de4f8f4a5126113b5`；ticket commit `7cf63681c4d782e35229c4e9410a2fac17753a37`；integration commit `775720b5480046998262da9992e93ccca34e9184` |
 | 波次 3 审计与修复 | `COMPLETE` | 独立审计 threadId `019fd791-0a55-73c2-8464-e8eba4c90544` 报告 3 P1、2 P2、1 P3；修复后由波次 4 启动前审计 threadId `019fd7be-e2f6-7a70-950c-28ad4d6bc239` 逐项核对已知 findings 的生产接线与回归证据，无遗留阻塞 finding |
 | 波次 3 合并后定向复验 | `COMPLETE` | `node --test tests/article-mutation-coordinator.test.js tests/phase-05-production-removal.test.js tests/phase-02-operational-store.test.js tests/phase-11-media-supplier-contract.test.js`：45/45，约 1.4s；`npm run lint`：通过，约 6.2s；`npm run typecheck:main`：通过，约 1.3s；`npm run typecheck:bridge`：通过，约 2.4s；`npm run typecheck:renderer`：通过，约 4.0s |
-| 当前执行波次 | `4` / `READY` | 首个执行组仅 Ticket 07；依赖 Ticket 02、06 均为当前集成 `HEAD` 的祖先；Ticket 12 必须等待 07 审计、提交、合并和定向复验后再调度 |
-| 下一执行基线 | 当前集成 `HEAD` | 波次 3 代码合并提交为 `775720b5480046998262da9992e93ccca34e9184`；实际创建 Ticket 07 时必须使用包含本状态记录的最新 Git `HEAD`，不得硬编码旧快照 |
+| 波次 4 执行组 07 | `COMPLETE` | threadId `019fd7f0-b064-7892-be0a-e7a7d4ccb987`；hostId `local`；worktree `C:\Users\violet\.codex\worktrees\f8f0\官媒投稿-refactor`；branch `codex/article-lifecycle-07`；base `e96f4e3eef238649ae81a1c398c39ed18e14d5ac`；ticket commit `690a29fbf6489c51ffc15b2c37f60f738405a178`；merge commit `ae12f36c37518ac66d9bf1ef703d8fdbbf0fca99`；integration fix `1298214c543a944ce388856cef88ce3d97d8d83b` |
+| 波次 4 Ticket 07 审计与修复 | `COMPLETE` | 深度独立审计报告 2 P1、1 P2：取消审计事实被删除、Renderer 成功路径变量错误、外部 `batchId` 可跨客户混批；均已修复并由公开合同、事实投影与定向测试逐项复核，无遗留阻塞 finding |
+| 波次 4 Ticket 07 合并后定向复验 | `COMPLETE` | 业务/IPC/真实 Renderer 定向回归 47/47；production IPC matrix 34/34；Phase 8 gate 5/5；lint、main/bridge/renderer typecheck 通过；本票触达文件格式检查通过 |
+| 当前执行波次 | `4` / `PARTIAL` | Ticket 07 已完成审计、提交、合并和定向复验；下一串行执行组仅 Ticket 12，依赖 Ticket 06、11 均已进入当前集成历史 |
+| 下一执行基线 | 当前集成 `HEAD` | 实际创建 Ticket 12 时必须使用包含本状态记录的最新 Git `HEAD`，不得硬编码 Ticket 07 合并前快照 |
 
 状态词只使用：
 
@@ -68,7 +71,7 @@
 | 1 | 01/03/11/17 | 无 | `COMPLETE` |
 | 2 | 02/04/05 | 02←01；04←03；05←03 | `COMPLETE` |
 | 3 | 06 | 04、05 | `COMPLETE` |
-| 4 | 07 → 12 | 07←02、06；12←06、11 | `READY` |
+| 4 | 07 → 12 | 07←02、06；12←06、11 | `PARTIAL` |
 | 5 | 08 → 13 | 08←07；13←02、04、12 | `PENDING` |
 | 6 | 09 → 14 → 15 | 09←08；14←13；15←09、11、13 | `PENDING` |
 | 7 | 10 → 16 | 10←09；16←15 | `PENDING` |
