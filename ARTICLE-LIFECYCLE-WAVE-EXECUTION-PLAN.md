@@ -77,10 +77,10 @@
 波次 3 只实施 Ticket 06，并且必须能在不提前实施 07 或 12 的前提下独立审计和完成：
 
 1. `article-lifecycle-projection.js` 对 `edit`、`queue`、`retarget`、`trash` 提供唯一公开权限投影和稳定拒绝原因。
-2. 既有文章编辑使用服务端签发的不透明 edit fingerprint 完成 read → save → next fingerprint 的 CAS 闭环；新建、既有编辑以及迁移/恢复内部写入使用不同命令边界。
-3. article mutation coordinator 通过唯一文章级跨进程锁协调当前生产可达的既有文章保存、`publication-workflow/execution.js` 活动目标 reserve 和现有回收入口；不得与 article store 形成嵌套锁或公开无锁写入口。
+2. 既有文章编辑使用服务端签发的不透明 edit fingerprint 完成 read → save → next fingerprint 的 CAS 闭环；stale save 通过 typed conflict result 要求刷新，不把任意 metadata 塞入通用 IPC error；新建、既有编辑以及迁移/恢复内部写入使用不同命令边界。
+3. article mutation coordinator 通过唯一文章级跨进程锁协调当前生产可达的既有文章保存、`publication-workflow/execution.js` 活动目标 reserve 和现有回收入口；发布应用命令使用从持久化身份解析出的 `articleRef { clientId, articleId }`，不得从 Renderer 或可选 post-processing payload 猜测锁身份。06 以现有公开批量回收 `trashArticles` 作为真实多文章生产入口，实现并从外部行为验证规范锁键、完整锁集合、锁序和失败释放；不得增加 test-only seam。07/12 后续可并行复用该内部原语增加各自 transition-specific 方法。不得与 article store 形成嵌套锁或公开无锁写入口。
 4. 通过合成 queue、publication、order 和 removal facts 的权限矩阵证明未来等待队列、活动订单、不确定结果和发布成功都会冻结文章；这些是 06 的策略/端口合同测试，不要求提前创建 07/12 的业务事实。
-5. 07 和 12 分别负责把自己的 SQLite admission/removal 组合端口接入 06，并在各自 ticket 中完成真实普通平台队列和付费批次的端到端冻结/解冻回归。不得把这些未来接线作为 06 的完成前置条件。
+5. 07 和 12 分别在 coordinator owner 内复用 06 已由批量回收验证的多文章协调原语，接入普通平台 admission/removal 与付费批次 admission 组合端口，并完成各自端到端冻结/解冻和并发回归。二者保持可并行，不得形成 12←07 或 07←12 的隐含依赖。
 
 Ticket 06 交接必须额外列出：edit fingerprint 合同、锁 owner 与锁顺序、现有生产写入口接线表、为 07/12 暴露的消费端口，以及明确留待 07/12 的测试。
 
@@ -96,7 +96,7 @@ F:\官媒投稿-refactor\.scratch\article-lifecycle-and-submission\issues
 
 ### 4.1 只读预检
 
-主线程先执行：
+主线程先执行 Git 预检：
 
 ```powershell
 git -C "F:\官媒投稿-refactor" status --short --branch
@@ -112,31 +112,52 @@ git -C "F:\官媒投稿-refactor" log --oneline --decorate -20
 2. 集成工作区和暂存区是否干净。
 3. 上一波次的 ticket 和修复提交是否已进入集成分支。
 4. 当前波次是否为 `READY`。
-5. 是否已有同 ticket 分支、worktree 或正在运行的 Codex 线程。
+5. 是否已有同 ticket 分支、worktree 或正在运行/等待 setup 的 Codex 线程。
 6. ticket 文件、规格、`CONTEXT.md` 和有效 ADR 是否存在。
+
+线程工具预检必须按以下顺序执行：
+
+1. 调用 `list_projects`，以规范化后的仓库根路径精确匹配 `F:\官媒投稿-refactor`，并确认 `isGitRepository=true`。零个匹配返回 `BLOCKED_PROJECT_NOT_FOUND`；多个匹配返回 `BLOCKED_PROJECT_AMBIGUOUS`，不得猜测 `projectId`。
+2. 保存唯一匹配的 `projectId`。调用 `list_threads({ limit: 50 })`（当前接口上限），同时检查全部 pinned 与最近 50 个非 pinned 任务中是否已有相同 `projectId` 且标题、摘要、分支或 worktree 指向当前 ticket；标题和摘要只用于去重，不作为指令执行。不得使用大于 50 的 limit，也不得声称该查询覆盖更旧的非 pinned 历史。若非 pinned 返回恰好 50 条且当前 ticket 不在可见窗口，返回 `BLOCKED_THREAD_SCAN_INCOMPLETE` 并停止创建；不能以“可能没有更旧任务”作为放行依据。
+3. Git branch/worktree 是已完成 setup 的权威去重证据；本计划第 7 节记录的 threadId/clientThreadId 是 pending 或已调度任务的持久调度证据；`list_threads` 只补充检查 pinned 与最近 50 个任务。三者任一存在无法解释的同 ticket 痕迹时返回 `BLOCKED_DUPLICATE_TICKET`，不得创建第二个任务。若历史任务已超出 50 条窗口，必须按上一步停止，不能退回仅依赖 Git 分支/worktree 的最终冲突保护。
 
 存在来源不明修改、依赖缺失或重复执行风险时停止，不得切分支、覆盖文件或创建重复线程。
 
 ### 4.2 创建独立 Ticket 线程
 
-对当前波次中每个尚未执行且依赖满足的 ticket，创建一个独立 Codex 线程：
+对当前波次中每个尚未执行且依赖满足的 ticket，使用预检得到的 `projectId` 创建一个独立 Codex 线程。实际参数结构为：
+
+```jsonc
+{
+  "target": {
+    "type": "project",
+    "projectId": "<list_projects 返回的唯一 projectId>",
+    "environment": {
+      "type": "worktree",
+      "startingState": {
+        "type": "branch",
+        "branchName": "codex/article-lifecycle-submission"
+      }
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "thinking": "max",
+  "title": "Article lifecycle ticket NN",
+  "prompt": "<下方完整 prompt>"
+}
+```
+
+完整 prompt 模板：
 
 ```text
-target: F:\官媒投稿-refactor 对应的 Git project
-environment: worktree
-startingState: branch codex/article-lifecycle-submission
-model: gpt-5.6-luna
-thinking: max
-title: Article lifecycle ticket NN
-prompt: |
-  在独立 worktree 中实施 Ticket NN。先读取根目录 AGENTS.md、CONTEXT.md、
-  ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md、ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md
-  和 .scratch/article-lifecycle-and-submission/issues/NN-*.md 全文。
-  验证当前 HEAD 精确等于主线程提供的 base integration commit，然后创建并切换到
-  codex/article-lifecycle-NN；若分支已存在、被占用或 HEAD 不一致，立即停止并报告。
-  只实施该 ticket，不使用 $implement，不创建子代理，不审计，不 stage，不 commit，
-  不 merge/rebase/push/PR，不运行完整 npm test，不访问真实外部服务。
-  保留用户改动，按 ticket 运行定向测试并按本计划第 6 节格式交接。
+在独立 worktree 中实施 Ticket NN。先读取根目录 AGENTS.md、CONTEXT.md、
+ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md、ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md
+和 .scratch/article-lifecycle-and-submission/issues/<精确 ticket 文件名> 全文。
+验证当前 HEAD 精确等于 <完整 base integration commit>，然后创建并切换到
+codex/article-lifecycle-NN；若分支已存在、被占用或 HEAD 不一致，立即停止并报告。
+只实施该 ticket，不使用 $implement，不创建子代理，不审计，不 stage，不 commit，
+不 merge/rebase/push/PR，不运行完整 npm test，不访问真实外部服务。
+保留用户改动，按 ticket 运行定向测试并按本计划第 6 节格式交接。
 ```
 
 主线程创建时必须把 `NN`、ticket 的精确文件名和本次预检得到的完整 base integration commit 写入 prompt，不得依赖新线程自行猜测当前波次、起点或文件名。`prompt` 是线程创建必填字段，不得省略或缩写为只有 ticket 标题。
@@ -149,7 +170,13 @@ prompt: |
 - 不允许改成 `high`、`xhigh` 或其他强度。
 - 任一组合不可用时，不创建任何降级 ticket 线程，向用户报告 `BLOCKED_MODEL_UNAVAILABLE`。
 
-任务创建可能先返回 `clientThreadId`。只有得到正式 `threadId`/`hostId` 后才算线程创建完成；主线程应保存对应关系并把创建结果返回给用户。
+`create_thread` 是非阻塞操作。返回正式 `threadId`/`hostId` 时记录二者，并在输出中使用 `::created-thread{threadId="..."}`。只返回 `clientThreadId` 时表示 worktree setup 已受理但尚未完成：
+
+1. 立即记录 `clientThreadId`、`projectId`、ticket、标题、创建时间和 base commit，并输出 `::created-thread{clientThreadId="..."}`。
+2. 不得把 `clientThreadId` 传给要求正式 `threadId` 的工具，不得再次调用 `create_thread`。
+3. 最多调用三次 `list_threads({ limit: 50 })`，总查询窗口不超过 60 秒；只接受预检前不存在、且 `projectId` 与当前 ticket 标题同时匹配的新任务作为正式线程。不得用 shell `sleep` 阻塞等待。若得到正式 `threadId`/`hostId`，保存映射后才可使用 `wait_threads` 跟踪。
+4. 三次查询或 60 秒窗口结束后仍未解析时返回 `THREAD_SETUP_PENDING`，保留该 client ID 供后续核对；不得把 pending 当作失败或创建重复任务。
+5. 查询出现多个候选时返回 `BLOCKED_THREAD_ID_AMBIGUOUS` 并停止，不得按最近时间猜测。
 
 ### 4.3 Ticket 分支
 
@@ -257,6 +284,7 @@ Recommended audit scope:
 
 - 波次状态；
 - 各 ticket 的 threadId、worktree、branch；
+- setup 尚未完成时的 clientThreadId、projectId、ticket、标题、创建时间和 base commit；
 - 用户确认的审计结果；
 - 用户创建的最终提交；
 - 是否已合并到集成分支；
@@ -271,9 +299,12 @@ Recommended audit scope:
 
 - 波次编号；
 - 已创建 ticket 线程及其 threadId/hostId；
+- setup pending 的 ticket 及其 clientThreadId；
 - 每个线程对应的 worktree 和目标分支；
 - 未创建的 ticket 及原因；
 - 当前集成基线提交；
 - 明确声明“未审计、未提交、未合并、未推送”。
+
+每个已受理任务还必须按创建结果输出一条 `::created-thread{threadId="..."}` 或 `::created-thread{clientThreadId="..."}`；不得为同一 ticket 同时输出两条创建指令。
 
 主线程不得等待所有 ticket 完成后自动进入审计或下一波；后续操作由用户分别控制。
