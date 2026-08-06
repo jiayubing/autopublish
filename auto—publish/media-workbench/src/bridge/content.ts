@@ -9,6 +9,11 @@ import type {
   ContentSubmissionCleanupPreview,
   ContentSubmissionCleanupResult,
   ContentSubmissionPlatform,
+  PendingQueueRemovalInput,
+  PendingQueueRemovalResult,
+  RegularQueueAdmissionInput,
+  RegularQueueAdmissionPreview,
+  RegularQueueAdmissionResult,
 } from "../types/publication";
 import type {
   ContentClient,
@@ -196,6 +201,15 @@ type SubmissionContentApi = {
   createSubmissionBatch: (
     input: ContentSubmissionBatchInput & { confirmed: true },
   ) => Promise<ContentIpcResponse<ContentSubmissionBatchPreview>>;
+  previewRegularQueueAdmission: (
+    input: RegularQueueAdmissionInput,
+  ) => Promise<ContentIpcResponse<RegularQueueAdmissionPreview>>;
+  admitRegularQueueItems: (
+    input: RegularQueueAdmissionInput & { confirmed: true },
+  ) => Promise<ContentIpcResponse<RegularQueueAdmissionResult>>;
+  removePendingQueueItems: (
+    input: PendingQueueRemovalInput,
+  ) => Promise<ContentIpcResponse<PendingQueueRemovalResult>>;
   cancelSubmissionBatch: (input: {
     batchId: string;
     planId: string;
@@ -533,6 +547,30 @@ export async function createContentSubmissionBatch(
   return callSubmission(
     (api) => requireBridgeMethod(api.createSubmissionBatch)(input),
     "submission batch creation failed",
+  );
+}
+export async function previewRegularQueueAdmission(
+  input: RegularQueueAdmissionInput,
+): Promise<RegularQueueAdmissionPreview> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.previewRegularQueueAdmission)(input),
+    "regular queue admission preview failed",
+  );
+}
+export async function admitRegularQueueItems(
+  input: RegularQueueAdmissionInput,
+): Promise<RegularQueueAdmissionResult> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.admitRegularQueueItems)({ ...input, confirmed: true }),
+    "regular queue admission failed",
+  );
+}
+export async function removePendingQueueItems(
+  input: Omit<PendingQueueRemovalInput, "confirmed">,
+): Promise<PendingQueueRemovalResult> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.removePendingQueueItems)({ ...input, confirmed: true }),
+    "pending queue removal failed",
   );
 }
 export async function cancelContentSubmissionBatch(

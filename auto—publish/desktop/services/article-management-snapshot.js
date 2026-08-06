@@ -77,6 +77,8 @@ function safeBatch(batch) {
   ["filePath", "sidecarPath", "path", "sourceFile"].forEach(function(key) { delete value[key]; });
   if (Array.isArray(value.items)) value.items.forEach(function(item) {
     ["filePath", "sidecarPath", "path", "sourceFile"].forEach(function(key) { delete item[key]; });
+    delete item.publicationSnapshot;
+    delete item.articleRef;
   });
   return value;
 }

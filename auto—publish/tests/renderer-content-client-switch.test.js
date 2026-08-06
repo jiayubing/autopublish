@@ -48,6 +48,9 @@ describe("renderer content client switching", function() {
         batches: { "client-a": [] },
         queueCalls: [],
         resolveQueue: null,
+        regularQueueCalls: [],
+        regularQueueBatchSequence: 0,
+        resolveRegularQueue: null,
         cancellationCalls: [],
         resolveCancellation: null,
         cancelPreviewCalls: [],
@@ -96,6 +99,15 @@ describe("renderer content client switching", function() {
         onGenerationBatchState: () => () => {},
         previewGenerationSubmissionHandoff: () => ok({ generationBatchId: generationBatch.id, previewToken: "handoff-preview", articleCount: 1, clientCount: 1, targetPlatformIds: ["fixture-platform"], estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }),
         commitGenerationSubmissionHandoff: () => ok({ generationBatchId: generationBatch.id, createdCount: 1, idempotentCount: 0, blockedCount: 0, conflictCount: 0, failedClientGroups: [], completedClientGroups: ["client-a"], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }] }),
+        previewRegularQueueAdmission: (input) => ok({ target: { platformId: input.platformId, accountProfileId: input.accountProfileId }, articleRefs: input.articleRefs, items: input.articleRefs.map((articleRef) => ({ articleRef, articleId: articleRef.articleId, status: "queueable" })), totalCount: input.articleRefs.length, queueableCount: input.articleRefs.length, idempotentCount: 0, missingCount: 0, conflictCount: 0 }),
+        admitRegularQueueItems: (input) => {
+          const clientId = input.articleRefs[0].clientId;
+          const batchId = `regular-batch-${++state.regularQueueBatchSequence}`;
+          const batch = { id: batchId, clientId, status: "queued", createdAt: "2026-07-20T00:00:01.000Z", updatedAt: "2026-07-20T00:00:01.000Z", items: input.articleRefs.map((articleRef, index) => ({ articleId: articleRef.articleId, itemId: `regular-item-${batchId}`, batchId, targetPlatformId: input.platformId, targetKey: `platform:${input.platformId}`, queueGroupId: `regular-group-${input.platformId}`, position: index + 1, status: "queued", canCancel: true })) };
+          state.regularQueueCalls.push(input);
+          state.batches[clientId] = [batch];
+          return new Promise((resolve) => { state.resolveRegularQueue = () => resolve(ok({ batchId, target: { platformId: input.platformId, accountProfileId: input.accountProfileId }, articleRefs: input.articleRefs, items: batch.items.map((item, index) => ({ articleRef: input.articleRefs[index], articleId: item.articleId, itemId: item.itemId, batchId, targetKey: item.targetKey, queueGroupId: item.queueGroupId, position: item.position, status: "queued" })), admittedCount: batch.items.length, idempotentCount: 0, missingCount: 0, conflictCount: 0 })); });
+        },
         previewSubmissionBatch: (input) => ok({ clientId: input.clientId, totalTaskCount: input.articleIds.length * input.targetPlatformIds.length, queueableTaskCount: input.articleIds.length * input.targetPlatformIds.length, idempotentCount: 0, conflictCount: 0, blockedContentCount: 0, missingArticleIds: [], unsupportedPlatformIds: [], items: [] }),
         createSubmissionBatch: (input) => {
           state.queueCalls.push(input);
@@ -160,16 +172,25 @@ describe("renderer content client switching", function() {
       await page.getByRole("button", { name: "测试投稿平台" }).click();
       await page.getByRole("button", { name: "加入投稿队列" }).click();
       await page.getByRole("dialog", { name: "确认加入投稿队列" }).waitFor();
-      assert.equal(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.length), 0);
+      assert.equal(await page.evaluate(() => window.__clientSwitchFlow.regularQueueCalls.length), 0);
       await page.getByRole("button", { name: "确认加入投稿队列" }).click();
-      await page.waitForFunction(() => window.__clientSwitchFlow.queueCalls.length === 1);
+      await page.waitForFunction(() => window.__clientSwitchFlow.regularQueueCalls.length === 1);
+      await page.evaluate(() => window.__clientSwitchFlow.resolveRegularQueue());
+      await page.getByText("已加入 1 项普通平台队列。", { exact: true }).waitFor();
+      assert.equal(await page.locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]').isChecked(), false);
+
+      await page.locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]').check();
+      await page.getByRole("button", { name: "加入投稿队列" }).click();
+      await page.getByRole("dialog", { name: "确认加入投稿队列" }).waitFor();
+      await page.getByRole("button", { name: "确认加入投稿队列" }).click();
+      await page.waitForFunction(() => window.__clientSwitchFlow.regularQueueCalls.length === 2);
       await changeClientByKeyboard(page, clientSelect, "ArrowDown");
       assert.equal(await clientSelect.inputValue(), "client-b");
-      await page.evaluate(() => window.__clientSwitchFlow.resolveQueue());
+      await page.evaluate(() => window.__clientSwitchFlow.resolveRegularQueue());
       assert.equal(await page.getByText("客户 B 文章", { exact: true }).count(), 1);
       assert.equal(await page.getByText("客户 A 文章", { exact: true }).count(), 0);
-      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls.map((item) => item.clientId)), ["client-a"]);
-      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.queueCalls[0].accountProfiles), { "fixture-platform": "account-fixture" });
+      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.regularQueueCalls.map((item) => item.articleRefs[0].clientId)), ["client-a", "client-a"]);
+      assert.equal(await page.evaluate(() => window.__clientSwitchFlow.regularQueueCalls[0].accountProfileId), "account-fixture");
       assert.equal(await page.getByRole("button", { name: "加入投稿队列" }).isDisabled(), true);
       await changeClientByKeyboard(page, clientSelect, "ArrowUp");
       assert.equal(await clientSelect.inputValue(), "client-a");
@@ -188,7 +209,7 @@ describe("renderer content client switching", function() {
       await page.waitForFunction(() => !document.body.innerText.includes("正在撤销"));
       assert.equal(await page.getByRole("button", { name: /撤销未开始投稿/ }).count(), 0);
       assert.equal(await page.getByRole("button", { name: /正在撤销/ }).count(), 0);
-      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.cancellationCalls.map((item) => item.batchId)), ["batch-a"]);
+      assert.deepEqual(await page.evaluate(() => window.__clientSwitchFlow.cancellationCalls.map((item) => item.batchId)), ["regular-batch-2"]);
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByRole("tab", { name: "批量生成" }).click();
       await page.getByRole("button", { name: "将成功文章加入投稿队列" }).waitFor();

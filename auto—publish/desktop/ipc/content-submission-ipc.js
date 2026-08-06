@@ -10,7 +10,8 @@ function bind(service, name) {
   return service[name].bind(service);
 }
 
-function createSubmissionInterface(service) {
+function createSubmissionInterface(service, regularQueueService) {
+  const regular = regularQueueService || service;
   return Object.freeze({
     preparation: {
       previewExport: bind(service, "previewExport"), exportArticle: bind(service, "exportArticle"), previewBatch: bind(service, "previewBatch"), createBatch: bind(service, "createBatch"), listPlatforms: bind(service, "listPlatforms")
@@ -21,8 +22,44 @@ function createSubmissionInterface(service) {
     cleanup: {
       previewFailed: bind(service, "previewCleanupFailedItems"), cleanupFailed: bind(service, "cleanupFailedItems"), previewResidue: bind(service, "previewTrashedArticleQueueResidue"), cleanupResidue: bind(service, "cleanupTrashedArticleQueueResidue")
     },
-    retry: { previewFailedPublication: bind(service, "previewRetryFailedPublication"), failedPublication: bind(service, "retryFailedPublication") }
+    retry: { previewFailedPublication: bind(service, "previewRetryFailedPublication"), failedPublication: bind(service, "retryFailedPublication") },
+    regularQueue: {
+      previewAdmission: bind(regular, "previewRegularQueueAdmission"),
+      admit: bind(regular, "admitRegularQueueItems"),
+      removePending: bind(regular, "removePendingQueueItems"),
+    },
   });
+}
+
+function regularAdmissionInput(input, confirmed) {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some(function (key) {
+        return ["articleRefs", "platformId", "accountProfileId", "queueConfig", "confirmed"].indexOf(key) === -1;
+      })) {
+    const error = new Error("Invalid regular queue admission input");
+    error.code = "REGULAR_QUEUE_INPUT_INVALID";
+    throw error;
+  }
+  if (confirmed && input.confirmed !== true) {
+    const error = new Error("Regular queue confirmation is required");
+    error.code = "REGULAR_QUEUE_CONFIRMATION_REQUIRED";
+    throw error;
+  }
+  return input;
+}
+
+function regularRemovalInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some(function (key) {
+        return ["items", "confirmed", "operationId"].indexOf(key) === -1;
+      }) || input.confirmed !== true) {
+    const error = new Error("Regular queue removal confirmation is required");
+    error.code = input && input.confirmed !== true
+      ? "REGULAR_QUEUE_CONFIRMATION_REQUIRED"
+      : "REGULAR_QUEUE_INPUT_INVALID";
+    throw error;
+  }
+  return input;
 }
 
 function registerContentSubmissionIpc(deps) {
@@ -32,7 +69,7 @@ function registerContentSubmissionIpc(deps) {
     error.code = "CONTENT_SUBMISSION_SERVICE_REQUIRED";
     throw error;
   }
-  const workflow = deps.submissionWorkflow || createSubmissionInterface(service);
+  const workflow = deps.submissionWorkflow || createSubmissionInterface(service, deps.regularQueueApplication);
   function checked(input) { if (!input || input.confirmed !== true || Object.keys(input).some(function(key) { return ["clientId", "generatedArticleId", "targetPlatform", "mediaResourceId", "confirmed"].indexOf(key) === -1; })) { const e = new Error("Manual confirmation is required"); e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED"; throw e; } return input; }
   deps.ipcMain.handle("content:preview-export", function(event, input) { return wrap(function() { return projectSubmissionResult("content:preview-export", workflow.preparation.previewExport(checked(input))); }); });
   deps.ipcMain.handle("content:export-article", function(event, input) { return wrap(function() { return projectSubmissionResult("content:export-article", workflow.preparation.exportArticle(checked(input))); }); });
@@ -59,6 +96,15 @@ function registerContentSubmissionIpc(deps) {
   deps.ipcMain.handle("content:preview-trashed-article-queue-residue", function() { return wrap(function() { return projectSubmissionResult("content:preview-trashed-article-queue-residue", workflow.cleanup.previewResidue()); }); });
   deps.ipcMain.handle("content:cleanup-trashed-article-queue-residue", function(event, input) {
     return wrap(function() { return projectSubmissionResult("content:cleanup-trashed-article-queue-residue", workflow.cleanup.cleanupResidue(input)); });
+  });
+  deps.ipcMain.handle("content:preview-regular-queue-admission", function(event, input) {
+    return wrap(function() { return projectSubmissionResult("content:preview-regular-queue-admission", workflow.regularQueue.previewAdmission(regularAdmissionInput(input, false))); });
+  });
+  deps.ipcMain.handle("content:admit-regular-queue-items", function(event, input) {
+    return wrap(function() { return projectSubmissionResult("content:admit-regular-queue-items", workflow.regularQueue.admit(regularAdmissionInput(input, true))); });
+  });
+  deps.ipcMain.handle("content:remove-pending-queue-items", function(event, input) {
+    return wrap(function() { return projectSubmissionResult("content:remove-pending-queue-items", workflow.regularQueue.removePending(regularRemovalInput(input))); });
   });
 }
 module.exports = { registerContentSubmissionIpc };

@@ -76,6 +76,20 @@ function fromText(value) {
   return value ? JSON.parse(value) : null;
 }
 
+function cancellationResolutionFromIntent(value) {
+  const parsed = typeof value === "string" ? fromText(value) : value;
+  const detail = parsed && parsed.detail;
+  const resolution = detail && detail.resolution;
+  if (
+    !resolution ||
+    typeof resolution !== "object" ||
+    Array.isArray(resolution) ||
+    resolution.status !== "cancelled"
+  )
+    return null;
+  return resolution;
+}
+
 function safeOperationalPayload(value) {
   const parsed = fromText(value);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -134,6 +148,7 @@ module.exports = {
   iso,
   text,
   fromText,
+  cancellationResolutionFromIntent,
   safeOperationalPayload,
   rejectSensitive,
 };

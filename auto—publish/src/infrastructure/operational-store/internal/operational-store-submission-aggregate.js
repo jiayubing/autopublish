@@ -512,7 +512,7 @@ function createSubmissionAggregate(context) {
     if (!batch) throw fail("OPERATIONAL_BATCH_NOT_FOUND");
     const items = db
       .prepare(
-        "SELECT item_id,article_id,target_key,revision,status,payload_json FROM submission_items WHERE batch_id=? ORDER BY item_id",
+        "SELECT s.item_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id WHERE s.batch_id=? ORDER BY s.item_id",
       )
       .all(batchId)
       .map((row) =>
@@ -522,6 +522,8 @@ function createSubmissionAggregate(context) {
           targetKey: row.target_key,
           revision: row.revision,
           status: row.status,
+          queueGroupId: row.queue_group_id || undefined,
+          position: row.position === null || row.position === undefined ? undefined : row.position,
           payload: fromText(row.payload_json),
         }),
       );

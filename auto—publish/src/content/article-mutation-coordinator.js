@@ -50,7 +50,13 @@ function createArticleMutationCoordinator(options) {
   if (!value.contentStore) throw mutationError("ARTICLE_MUTATION_COORDINATOR_INVALID", "Content store is required");
   const articleStore = value.articleStore;
   const contentStore = value.contentStore;
-  const operationalStore = value.operationalStore || null;
+  // Production composition supplies named transition capabilities.  The
+  // legacy aggregate option remains only for isolated pre-ticket callers;
+  // regular admission/removal never closes over it.
+  const legacyOperationalStore = value.operationalStore || null;
+  const publicationTransitions = value.publicationTransitions || legacyOperationalStore;
+  const lifecycleFacts = value.lifecycleFacts || publicationTransitions;
+  const regularQueueTransitions = value.regularQueueTransitions || null;
   const removalTransactionStore = value.removalTransactionStore || null;
   const articleRemovalTransitionPort = value.articleRemovalTransitionPort || null;
   const clock = value.clock || function () { return new Date().toISOString(); };
@@ -117,6 +123,15 @@ function createArticleMutationCoordinator(options) {
     return articleRefOf(article);
   }
 
+  function factsFrom(port, refs) {
+    if (!port || typeof port.listArticleLifecycleFacts !== "function") {
+      return { publications: [], submissionItems: [], orders: [], attentionItems: [] };
+    }
+    return port.listArticleLifecycleFacts({
+      articleIds: [...new Set(refs.map(function (ref) { return ref.articleId; }))],
+    }) || { publications: [], submissionItems: [], orders: [], attentionItems: [] };
+  }
+
   function factsFor(refs) {
     const allRemovalTransactions = removalTransactionStore && typeof removalTransactionStore.list === "function"
       ? removalTransactionStore.list()
@@ -124,12 +139,7 @@ function createArticleMutationCoordinator(options) {
     const removalTransactions = allRemovalTransactions.filter(function (transaction) {
       return refs.some(function (ref) { return removalTransactionMatchesArticle(transaction, ref); });
     });
-    if (!operationalStore || typeof operationalStore.listArticleLifecycleFacts !== "function") {
-      return { publications: [], submissionItems: [], orders: [], attentionItems: [], removalTransactions };
-    }
-    const facts = operationalStore.listArticleLifecycleFacts({
-      articleIds: [...new Set(refs.map(function (ref) { return ref.articleId; }))],
-    }) || { publications: [], submissionItems: [], orders: [], attentionItems: [] };
+    const facts = factsFrom(lifecycleFacts, refs);
     const operationalRemovalTransactions = Array.isArray(facts.removalTransactions)
       ? facts.removalTransactions
       : [];
@@ -137,6 +147,18 @@ function createArticleMutationCoordinator(options) {
       removalTransactions: operationalRemovalTransactions.filter(function (transaction) {
         return refs.some(function (ref) { return removalTransactionMatchesArticle(transaction, ref); });
       }).concat(removalTransactions),
+    });
+  }
+
+  function regularFactsFor(refs) {
+    const facts = factsFrom(regularQueueTransitions, refs);
+    const allRemovalTransactions = removalTransactionStore && typeof removalTransactionStore.list === "function"
+      ? removalTransactionStore.list()
+      : [];
+    return Object.assign({}, facts, {
+      removalTransactions: allRemovalTransactions.filter(function (transaction) {
+        return refs.some(function (ref) { return removalTransactionMatchesArticle(transaction, ref); });
+      }),
     });
   }
 
@@ -272,7 +294,7 @@ function createArticleMutationCoordinator(options) {
   }
 
   function reservePublicationTarget(input) {
-    if (!operationalStore || typeof operationalStore.reservePublicationTarget !== "function") {
+    if (!publicationTransitions || typeof publicationTransitions.reservePublicationTarget !== "function") {
       throw mutationError("PUBLICATION_RESERVATION_UNAVAILABLE");
     }
     const request = input || {};
@@ -319,7 +341,7 @@ function createArticleMutationCoordinator(options) {
       });
       let reserved;
       try {
-        reserved = operationalStore.reservePublicationTarget(Object.assign({}, request, {
+        reserved = publicationTransitions.reservePublicationTarget(Object.assign({}, request, {
           articleId: ref.articleId,
           target,
           postProcessingPayload,
@@ -340,30 +362,248 @@ function createArticleMutationCoordinator(options) {
   }
 
   function commitPublicationOutcome(input) {
-    if (!operationalStore || typeof operationalStore.commitRemoteOutcome !== "function") {
+    if (!publicationTransitions || typeof publicationTransitions.commitRemoteOutcome !== "function") {
       throw mutationError("PUBLICATION_OUTCOME_UNAVAILABLE");
     }
     const request = input || {};
     const ref = resolveTrustedArticleRef(request);
     return withArticleSet([ref], function (session, markSideEffect) {
       session.readArticle(ref);
-      const committed = operationalStore.commitRemoteOutcome(Object.assign({}, request, { articleId: ref.articleId }));
+      const committed = publicationTransitions.commitRemoteOutcome(Object.assign({}, request, { articleId: ref.articleId }));
       markSideEffect();
       return committed;
     });
   }
 
   function markRecoveryUncertain(input) {
-    if (!operationalStore || typeof operationalStore.markRecoveryUncertain !== "function") {
+    if (!publicationTransitions || typeof publicationTransitions.markRecoveryUncertain !== "function") {
       throw mutationError("PUBLICATION_RECOVERY_UNAVAILABLE");
     }
     const request = input || {};
     const ref = resolveTrustedArticleRef(request);
     return withArticleSet([ref], function (session, markSideEffect) {
       session.readArticle(ref);
-      const result = operationalStore.markRecoveryUncertain(Object.assign({}, request, { articleId: ref.articleId }));
+      const result = publicationTransitions.markRecoveryUncertain(Object.assign({}, request, { articleId: ref.articleId }));
       markSideEffect();
       return result;
+    });
+  }
+
+  function regularErrorCode(error) {
+    const code = safeErrorCode(error);
+    if (["PUBLICATION_DUPLICATE", "PUBLICATION_TARGET_CONFLICT"].includes(code))
+      return "ARTICLE_ACTIVE_TARGET_CONFLICT";
+    if (code === "PUBLICATION_UNCERTAIN") return "PUBLICATION_UNCERTAIN";
+    if (code === "ARTICLE_NOT_FOUND" || code === "REGULAR_QUEUE_ITEM_NOT_FOUND")
+      return code;
+    return code;
+  }
+
+  function regularAdmissionRefs(input) {
+    const request = input || {};
+    const refs = Array.isArray(request.articleRefs)
+      ? request.articleRefs
+      : Array.isArray(request.selections)
+        ? request.selections.map(function (selection) {
+          return selection && selection.articleRef ? selection.articleRef : selection;
+        })
+        : [];
+    if (!refs.length) throw mutationError("REGULAR_QUEUE_ARTICLES_REQUIRED");
+    const ordered = canonicalArticleRefs(refs);
+    if (new Set(ordered.map(function (ref) { return ref.clientId; })).size > 1)
+      throw mutationError("REGULAR_QUEUE_SINGLE_CLIENT_REQUIRED");
+    return ordered;
+  }
+
+  function regularRemovalSelections(input, ordered) {
+    const request = input || {};
+    const entries = Array.isArray(request.items)
+      ? request.items
+      : Array.isArray(request.selections)
+        ? request.selections
+        : request.item || request.selection
+          ? [request.item || request.selection]
+          : [];
+    if (!entries.length) throw mutationError("REGULAR_QUEUE_ITEMS_REQUIRED");
+    const byKey = new Map();
+    entries.forEach(function (entry) {
+      const value = entry || {};
+      const articleRef = normalizeArticleRef(value.articleRef || value);
+      const key = canonicalArticleRefKey(articleRef);
+      if (!byKey.has(key)) byKey.set(key, Object.freeze({
+        articleRef,
+        itemId: value.itemId,
+        batchId: value.batchId,
+        targetKey: value.targetKey,
+      }));
+    });
+    return ordered.map(function (ref) { return byKey.get(canonicalArticleRefKey(ref)); }).filter(Boolean);
+  }
+
+  function admitRegularQueueItems(input) {
+    if (!regularQueueTransitions || typeof regularQueueTransitions.admitRegularQueueItem !== "function")
+      throw mutationError("REGULAR_QUEUE_TRANSITION_UNAVAILABLE");
+    const request = input || {};
+    if (Object.prototype.hasOwnProperty.call(request, "batchId"))
+      throw mutationError("REGULAR_QUEUE_INPUT_INVALID");
+    let target;
+    try { target = domain.parsePublicationTarget(request.target); }
+    catch (_) { throw mutationError("REGULAR_QUEUE_TARGET_INVALID"); }
+    if (target.kind !== "platform") throw mutationError("REGULAR_QUEUE_PLATFORM_REQUIRED");
+    const ordered = regularAdmissionRefs(request);
+    const batchId = `regular-batch-${crypto.randomUUID()}`;
+    return withArticleSet(ordered, function (session, markSideEffect) {
+      const facts = regularFactsFor(ordered);
+      const items = ordered.map(function (ref) {
+        let article;
+        try { article = session.readArticle(ref); }
+        catch (error) {
+          if (error && error.code === "ARTICLE_NOT_FOUND")
+            return Object.freeze({ articleRef: ref, articleId: ref.articleId, status: "missing", reasonCode: "ARTICLE_NOT_FOUND" });
+          throw error;
+        }
+        try {
+          const workflow = workflowFor(article, [ref], facts);
+          const targetKey = domain.publicationTargetKey(target);
+          const existing = facts.submissionItems.find(function (candidate) {
+            return candidate.articleId === ref.articleId &&
+              candidate.targetKey === targetKey &&
+              candidate.status === "queued" &&
+              candidate.queueGroupId;
+          });
+          const activeTargetKeys = Object.keys(workflow.targetFacts || {});
+          if (activeTargetKeys.some(function (activeTargetKey) { return activeTargetKey !== targetKey; }))
+            throw mutationError("ARTICLE_ACTIVE_TARGET_CONFLICT", "Article already has another active publication target");
+          if (!existing) assertAllowed(workflow, "queue");
+          const fingerprint = fingerprintArticle(article);
+          const result = regularQueueTransitions.admitRegularQueueItem({
+            clientId: ref.clientId,
+            articleRef: ref,
+            articleId: ref.articleId,
+            batchId,
+            itemId: `regular-item-${crypto.randomUUID()}`,
+            publicationId: `publication-${crypto.randomUUID()}`,
+            attemptId: `attempt-${crypto.randomUUID()}`,
+            target,
+            publicationSnapshot: Object.freeze({
+              articleId: ref.articleId,
+              title: article.title,
+              body: article.content,
+              fingerprint,
+            }),
+            queueConfig: request.queueConfig,
+            payload: { clientId: ref.clientId },
+          });
+          if (!result.idempotent) markSideEffect();
+          return Object.freeze(Object.assign({}, result, {
+            articleRef: ref,
+            status: result.idempotent ? "idempotent" : "queued",
+          }));
+        } catch (error) {
+          const code = regularErrorCode(error);
+          if (code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") throw error;
+          return Object.freeze({
+            articleRef: ref,
+            articleId: ref.articleId,
+            status: "conflict",
+            reasonCode: code,
+            reasonCodes: Object.freeze([code]),
+          });
+        }
+      });
+      return Object.freeze({
+        batchId,
+        target,
+        items: Object.freeze(items),
+        admittedCount: items.filter(function (item) { return item.status === "queued"; }).length,
+        idempotentCount: items.filter(function (item) { return item.status === "idempotent"; }).length,
+        missingCount: items.filter(function (item) { return item.status === "missing"; }).length,
+        conflictCount: items.filter(function (item) { return item.status === "conflict"; }).length,
+      });
+    });
+  }
+
+  function removePendingQueueItems(input) {
+    if (!regularQueueTransitions || typeof regularQueueTransitions.removePendingQueueItem !== "function")
+      throw mutationError("REGULAR_QUEUE_TRANSITION_UNAVAILABLE");
+    const request = input || {};
+    const rawEntries = Array.isArray(request.items)
+      ? request.items
+      : Array.isArray(request.selections)
+        ? request.selections
+        : request.item || request.selection
+          ? [request.item || request.selection]
+          : [];
+    if (!rawEntries.length) throw mutationError("REGULAR_QUEUE_ITEMS_REQUIRED");
+    const refs = canonicalArticleRefs(rawEntries.map(function (entry) {
+      return entry && entry.articleRef ? entry.articleRef : entry;
+    }));
+    const selections = regularRemovalSelections(request, refs);
+    return withArticleSet(refs, function (session, markSideEffect) {
+      const facts = regularFactsFor(refs);
+      const items = selections.map(function (selection) {
+        const ref = selection.articleRef;
+        let article;
+        try { article = session.readArticle(ref); }
+        catch (error) {
+          if (error && error.code === "ARTICLE_NOT_FOUND")
+            return Object.freeze({ articleRef: ref, articleId: ref.articleId, status: "conflict", reasonCode: "ARTICLE_NOT_FOUND" });
+          throw error;
+        }
+        const fact = facts.submissionItems.find(function (candidate) {
+          return candidate.articleId === ref.articleId &&
+            (selection.itemId ? candidate.itemId === selection.itemId : candidate.status === "queued") &&
+            (!selection.targetKey || candidate.targetKey === selection.targetKey);
+        });
+        if (!fact || !fact.itemId || !fact.batchId)
+          return Object.freeze({ articleRef: ref, articleId: ref.articleId, status: "conflict", reasonCode: "REGULAR_QUEUE_ITEM_NOT_FOUND" });
+        if (fact.status === "cancelled") {
+          try {
+            const result = regularQueueTransitions.removePendingQueueItem({
+              articleRef: ref,
+              clientId: ref.clientId,
+              articleId: ref.articleId,
+              itemId: fact.itemId,
+              batchId: fact.batchId,
+              targetKey: fact.targetKey,
+              operationId: request.operationId,
+            });
+            if (result.idempotent) return Object.freeze(Object.assign({}, result, { articleRef: ref }));
+          } catch (error) {
+            const code = regularErrorCode(error);
+            if (code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") throw error;
+            return Object.freeze({ articleRef: ref, articleId: ref.articleId, itemId: fact.itemId, batchId: fact.batchId, status: "conflict", reasonCode: code });
+          }
+        }
+        if (fact.status !== "queued")
+          return Object.freeze({ articleRef: ref, articleId: ref.articleId, itemId: fact.itemId, batchId: fact.batchId, status: "conflict", reasonCode: "REGULAR_QUEUE_ITEM_NOT_REMOVABLE" });
+        try {
+          const workflow = workflowFor(article, [ref], facts);
+          if (workflow.operations.edit.allowed === true && workflow.operations.queue.allowed === true)
+            return Object.freeze({ articleRef: ref, articleId: ref.articleId, itemId: fact.itemId, batchId: fact.batchId, status: "conflict", reasonCode: "REGULAR_QUEUE_ITEM_NOT_FOUND" });
+          const result = regularQueueTransitions.removePendingQueueItem({
+            articleRef: ref,
+            clientId: ref.clientId,
+            articleId: ref.articleId,
+            itemId: fact.itemId,
+            batchId: fact.batchId,
+            targetKey: fact.targetKey,
+            operationId: request.operationId,
+          });
+          if (!result.idempotent) markSideEffect();
+          return Object.freeze(Object.assign({}, result, { articleRef: ref }));
+        } catch (error) {
+          const code = regularErrorCode(error);
+          if (code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") throw error;
+          return Object.freeze({ articleRef: ref, articleId: ref.articleId, itemId: fact.itemId, batchId: fact.batchId, status: "conflict", reasonCode: code });
+        }
+      });
+      return Object.freeze({
+        items: Object.freeze(items),
+        removedCount: items.filter(function (item) { return item.status === "cancelled" && item.idempotent !== true; }).length,
+        idempotentCount: items.filter(function (item) { return item.idempotent === true; }).length,
+        conflictCount: items.filter(function (item) { return item.status === "conflict"; }).length,
+      });
     });
   }
 
@@ -524,6 +764,8 @@ function createArticleMutationCoordinator(options) {
     reservePublicationTarget,
     commitPublicationOutcome,
     markRecoveryUncertain,
+    admitRegularQueueItems,
+    removePendingQueueItems,
     executeArticleRemovalTransaction,
     assertTrashedArticleMutationAllowed,
     restoreTrashedArticle,

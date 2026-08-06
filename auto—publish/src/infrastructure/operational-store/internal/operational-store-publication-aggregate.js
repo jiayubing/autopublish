@@ -1,6 +1,7 @@
 const domain = require("../../../domain");
 const {
   canonicalDisplayPrice,
+  cancellationResolutionFromIntent,
   fromText,
   rejectSensitive,
   safeDisplayText,
@@ -363,6 +364,8 @@ function createPublicationAggregate(context, activeTarget) {
         )
         .get(attemptId);
       if (!attempt) throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
+      if (cancellationResolutionFromIntent(attempt.intent_payload))
+        throw fail("PUBLICATION_CANCELLED");
       const target = fromText(attempt.target_json);
       if (
         ["published", "submitted"].includes(outcome.status) &&
@@ -551,10 +554,13 @@ function createPublicationAggregate(context, activeTarget) {
       records.map((record) => {
         const attempts = db
           .prepare(
-            "SELECT attempt_id,status,created_at,finished_at FROM publication_attempts WHERE publication_id=? ORDER BY created_at",
+            "SELECT a.attempt_id,a.status,a.created_at,a.finished_at,i.payload_json AS intent_payload FROM publication_attempts a LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE a.publication_id=? ORDER BY a.created_at",
           )
           .all(record.publication_id)
           .map((attempt) => {
+            const cancellation = cancellationResolutionFromIntent(
+              attempt.intent_payload,
+            );
             const evidence = db
               .prepare(
                 "SELECT remote_id,remote_url,created_at FROM remote_evidence WHERE attempt_id=? ORDER BY created_at DESC LIMIT 1",
@@ -562,15 +568,23 @@ function createPublicationAggregate(context, activeTarget) {
               .get(attempt.attempt_id);
             return Object.freeze({
               attemptId: attempt.attempt_id,
-              status: attempt.status,
+              status: cancellation ? "cancelled" : attempt.status,
               startedAt: attempt.created_at,
               finishedAt: attempt.finished_at,
               createdAt: attempt.created_at,
               updatedAt: attempt.finished_at || attempt.created_at,
               remoteId: (evidence && evidence.remote_id) || null,
               remoteUrl: (evidence && evidence.remote_url) || null,
+              ...(cancellation
+                ? {
+                    reasonCode:
+                      cancellation.reasonCode ||
+                      "REGULAR_QUEUE_ITEM_CANCELLED",
+                  }
+                : {}),
             });
           });
+        const latestAttempt = attempts[attempts.length - 1] || null;
         return Object.freeze({
           version: 1,
           publicationId: record.publication_id,
@@ -578,7 +592,15 @@ function createPublicationAggregate(context, activeTarget) {
           articleId: record.article_id,
           articleKey: record.article_id,
           targetKey: record.target_key,
-          status: record.status,
+          status: latestAttempt && latestAttempt.status === "cancelled"
+            ? "cancelled"
+            : record.status,
+          ...(latestAttempt && latestAttempt.status === "cancelled"
+            ? {
+                reasonCode:
+                  latestAttempt.reasonCode || "REGULAR_QUEUE_ITEM_CANCELLED",
+              }
+            : {}),
           createdAt: record.created_at,
           updatedAt: record.updated_at,
           attempts: Object.freeze(attempts),

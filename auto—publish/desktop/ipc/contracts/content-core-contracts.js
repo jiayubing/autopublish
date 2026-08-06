@@ -729,6 +729,7 @@ function projectPermanentDeleteResult(value) {
 }
 const submissionItem = exactObject({
   id: optionalField(id),
+  itemId: optionalField(id),
   articleId: id,
   targetPlatformId: optionalField(id),
   platformId: optionalField(id),
@@ -739,6 +740,8 @@ const submissionItem = exactObject({
   attemptId: optionalNullableText(200),
   articleKey: optionalField(text(500)),
   targetKey: optionalField(text(500)),
+  queueGroupId: optionalField(id),
+  position: optionalField(integerField({ min: 1, max: Number.MAX_SAFE_INTEGER })),
   publicationStatus: optionalNullableText(80),
   allowed: optionalField(boolean),
 });
@@ -897,6 +900,7 @@ const managementSnapshot = exactObject({
 function projectSubmissionItem(value) {
   return projectFields(value, [
     "id",
+    "itemId",
     "articleId",
     "targetPlatformId",
     "platformId",
@@ -907,6 +911,8 @@ function projectSubmissionItem(value) {
     "attemptId",
     "articleKey",
     "targetKey",
+    "queueGroupId",
+    "position",
     "publicationStatus",
     "allowed",
   ]);

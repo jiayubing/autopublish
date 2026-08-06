@@ -208,6 +208,7 @@ export type ContentSubmissionItemStatus =
   | "skipped"
   | string;
 export interface ContentSubmissionBatchItem {
+  itemId?: string;
   articleId: string;
   targetPlatformId: string;
   status: ContentSubmissionItemStatus;
@@ -217,6 +218,8 @@ export interface ContentSubmissionBatchItem {
   attemptId?: string | null;
   articleKey?: string;
   targetKey?: string;
+  queueGroupId?: string;
+  position?: number;
   publicationStatus?: string | null;
   reasonCode?: string | null;
   reasonCodes?: string[];
@@ -255,6 +258,77 @@ export interface ContentSubmissionPlatform {
   id: string;
   displayName: string;
   contentQueueImport: boolean;
+}
+
+export type RegularQueueItemStatus =
+  | "queueable"
+  | "queued"
+  | "idempotent"
+  | "missing"
+  | "conflict"
+  | "cancelled"
+  | string;
+export interface RegularQueueTarget {
+  platformId: string;
+  accountProfileId: string;
+}
+export interface RegularQueueItem {
+  articleRef: ArticleSelection;
+  articleId: string;
+  itemId?: string;
+  batchId?: string;
+  publicationId?: string | null;
+  attemptId?: string | null;
+  targetKey?: string;
+  queueGroupId?: string;
+  position?: number;
+  status: RegularQueueItemStatus;
+  idempotent?: boolean;
+  reasonCode?: string | null;
+  reasonCodes?: string[];
+}
+export interface RegularQueueAdmissionInput {
+  articleRefs: ArticleSelection[];
+  platformId: string;
+  accountProfileId: string;
+  queueConfig?: { queueGroupId?: string };
+}
+export interface RegularQueueAdmissionPreview {
+  target: RegularQueueTarget;
+  articleRefs: ArticleSelection[];
+  items: RegularQueueItem[];
+  totalCount: number;
+  queueableCount: number;
+  idempotentCount: number;
+  missingCount: number;
+  conflictCount: number;
+}
+export interface RegularQueueAdmissionResult {
+  batchId: string;
+  target: RegularQueueTarget;
+  articleRefs: ArticleSelection[];
+  items: RegularQueueItem[];
+  admittedCount: number;
+  idempotentCount: number;
+  missingCount: number;
+  conflictCount: number;
+}
+export interface PendingQueueRemovalItemInput {
+  articleRef: ArticleSelection;
+  itemId: string;
+  batchId: string;
+  targetKey?: string;
+}
+export interface PendingQueueRemovalInput {
+  items: PendingQueueRemovalItemInput[];
+  operationId?: string;
+  confirmed: true;
+}
+export interface PendingQueueRemovalResult {
+  items: RegularQueueItem[];
+  removedCount: number;
+  idempotentCount: number;
+  conflictCount: number;
 }
 export interface ContentSubmissionActionPlanItem {
   articleId: string;

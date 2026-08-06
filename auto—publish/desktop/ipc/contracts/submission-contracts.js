@@ -128,6 +128,67 @@ const residueItem = exactObject({
 });
 const residuePreview = exactObject({ items: arrayField(residueItem, { max: 10000 }), cleanableItems: arrayField(residueItem, { max: 10000 }), reportedItems: arrayField(residueItem, { max: 10000 }), cleanableCount: count, reportedCount: count });
 const residueResult = exactObject({ status: enumField(["failed", "completed", "no-op"]), cleanedCount: count, failedCount: count, remainingCount: count, cleanableCount: count, reportedCount: count, items: arrayField(residueItem, { max: 10000 }), remainingItems: arrayField(residueItem, { max: 10000 }) });
+const articleRef = exactObject({ clientId: clientIdentity, articleId: id });
+const regularQueueItem = exactObject({
+  articleRef,
+  articleId: id,
+  itemId: optionalField(id),
+  batchId: optionalField(id),
+  publicationId: optionalField(nullableField(id)),
+  attemptId: optionalField(nullableField(id)),
+  targetKey: optionalField(safeText(256, 1)),
+  queueGroupId: optionalField(id),
+  position: optionalField(integerField({ min: 1, max: Number.MAX_SAFE_INTEGER })),
+  status: safeText(64, 1),
+  idempotent: optionalField("boolean"),
+  reasonCode: optionalField(nullableField(code)),
+  reasonCodes: optionalField(arrayField(code, { max: 32 })),
+});
+const regularQueueTarget = exactObject({ platformId: id, accountProfileId: id });
+const regularQueueConfig = exactObject({ queueGroupId: optionalField(id) });
+const regularAdmissionFields = {
+  articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
+  platformId: id,
+  accountProfileId: id,
+  queueConfig: optionalField(regularQueueConfig),
+};
+const regularAdmissionPreview = exactObject({
+  target: regularQueueTarget,
+  articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
+  items: arrayField(regularQueueItem, { max: 1000 }),
+  totalCount: count,
+  queueableCount: count,
+  idempotentCount: count,
+  missingCount: count,
+  conflictCount: count,
+});
+const regularAdmissionResult = exactObject({
+  batchId: id,
+  target: regularQueueTarget,
+  articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
+  items: arrayField(regularQueueItem, { max: 1000 }),
+  admittedCount: count,
+  idempotentCount: count,
+  missingCount: count,
+  conflictCount: count,
+});
+const regularRemovalItemRequest = exactObject({
+  articleRef,
+  itemId: id,
+  batchId: id,
+  targetKey: optionalField(safeText(256, 1)),
+});
+const regularRemovalRequest = exactObject({
+  items: arrayField(regularRemovalItemRequest, { min: 1, max: 1000 }),
+  operationId: optionalField(id),
+  confirmed: literalField(true),
+});
+const regularRemovalResult = exactObject({
+  items: arrayField(regularQueueItem, { max: 1000 }),
+  removedCount: count,
+  idempotentCount: count,
+  conflictCount: count,
+});
 
 const COMMON_ERRORS = Object.freeze({
   AUTH_REQUIRED: { category: "authentication", retryability: "never", userMessage: "请先完成登录后再继续。" },
@@ -147,6 +208,34 @@ const COMMON_ERRORS = Object.freeze({
   SUBMISSION_ACTION_STALE: { category: "conflict", retryability: "safe", userMessage: "投稿状态已变化，请重新预检。" },
   PUBLICATION_RETRY_REQUIRES_WORKFLOW: { category: "conflict", retryability: "manual-check", userMessage: "请从失败投稿工作流发起重试。" },
   ARTICLE_ATTENTION_STALE: { category: "conflict", retryability: "safe", userMessage: "投稿状态已变化，请重新预检。" },
+  REGULAR_QUEUE_INPUT_INVALID: { category: "validation", retryability: "never", userMessage: "普通平台队列请求无效。" },
+  REGULAR_QUEUE_CONFIRMATION_REQUIRED: { category: "validation", retryability: "never", userMessage: "请确认加入或移除普通平台队列。" },
+  REGULAR_QUEUE_SINGLE_TARGET_REQUIRED: { category: "validation", retryability: "never", userMessage: "一次只能选择一个普通平台和账号。" },
+  REGULAR_QUEUE_PLATFORM_REQUIRED: { category: "validation", retryability: "never", userMessage: "请选择普通平台，不支持网站媒体目标。" },
+  REGULAR_QUEUE_PLATFORM_UNSUPPORTED: { category: "validation", retryability: "never", userMessage: "该平台当前不支持普通队列。" },
+  REGULAR_QUEUE_TARGET_INVALID: { category: "validation", retryability: "never", userMessage: "普通平台目标无效。" },
+  REGULAR_QUEUE_CONFIG_INVALID: { category: "validation", retryability: "never", userMessage: "普通平台队列配置无效。" },
+  REGULAR_QUEUE_ARTICLES_REQUIRED: { category: "validation", retryability: "never", userMessage: "请选择至少一篇文章。" },
+  REGULAR_QUEUE_ARTICLE_IDENTITY_INVALID: { category: "validation", retryability: "manual-check", userMessage: "文章身份无法安全解析。" },
+  REGULAR_QUEUE_ITEMS_REQUIRED: { category: "validation", retryability: "never", userMessage: "请选择至少一个待执行队列项。" },
+  REGULAR_QUEUE_ITEM_INVALID: { category: "validation", retryability: "never", userMessage: "普通平台队列项无效。" },
+  REGULAR_QUEUE_ITEM_NOT_FOUND: { category: "conflict", retryability: "safe", userMessage: "队列项已不存在，请刷新后重试。" },
+  REGULAR_QUEUE_ITEM_NOT_REMOVABLE: { category: "conflict", retryability: "never", userMessage: "该队列项已经开始或结果需要核对，不能本地移除。" },
+  REGULAR_QUEUE_FACT_CONFLICT: { category: "conflict", retryability: "manual-check", userMessage: "普通平台队列事实不一致，需要刷新或人工核对。" },
+  REGULAR_QUEUE_TRANSITION_UNAVAILABLE: { category: "internal", retryability: "manual-check", userMessage: "普通平台队列事务当前不可用。" },
+  REGULAR_QUEUE_SNAPSHOT_INVALID: { category: "internal", retryability: "manual-check", userMessage: "投稿快照未通过安全校验。" },
+  REGULAR_QUEUE_ADMISSION_INVALID: { category: "validation", retryability: "never", userMessage: "普通平台入队事实无效。" },
+  REGULAR_QUEUE_BATCH_CONFLICT: { category: "conflict", retryability: "safe", userMessage: "普通平台入队批次已变化，请刷新后重试。" },
+  REGULAR_QUEUE_ITEM_CONFLICT: { category: "conflict", retryability: "safe", userMessage: "普通平台队列项发生冲突，请刷新后重试。" },
+  ACCOUNT_PROFILE_NOT_FOUND: { category: "validation", retryability: "never", userMessage: "平台账号档案不存在。" },
+  ACCOUNT_PROFILE_PLATFORM_MISMATCH: { category: "validation", retryability: "never", userMessage: "平台账号档案与普通平台不匹配。" },
+  ARTICLE_ACTIVE_TARGET_CONFLICT: { category: "conflict", retryability: "safe", userMessage: "文章已有活动投稿目标，请刷新后重试。" },
+  ARTICLE_OPERATION_FROZEN: { category: "conflict", retryability: "safe", userMessage: "文章当前处于冻结阶段。" },
+  ARTICLE_CONTENT_INCOMPLETE: { category: "validation", retryability: "never", userMessage: "文章标题和正文必须完整。" },
+  ARTICLE_NOT_FOUND: { category: "validation", retryability: "never", userMessage: "所选文章不存在。" },
+  PUBLICATION_UNCERTAIN: { category: "conflict", retryability: "manual-check", userMessage: "投稿结果不确定，需要人工核对。" },
+  PUBLICATION_CANCELLED: { category: "conflict", retryability: "never", userMessage: "该投稿事实已终止，不能继续写入远端结果。" },
+  REGULAR_QUEUE_SINGLE_CLIENT_REQUIRED: { category: "validation", retryability: "never", userMessage: "一次普通平台入队只能包含同一客户的文章。" },
 });
 const errorCodes = Object.freeze(Object.keys(COMMON_ERRORS));
 function contract(input) { return defineContract({ feature: "content", ...input, errorCodes, errors: COMMON_ERRORS }); }
@@ -190,6 +279,9 @@ const submissionContracts = Object.freeze([
   contract({ capability: "content.cleanupFailedSubmissionItems", channel: "content:cleanup-failed-submission-items", kind: "command", request: exactObject({ batchId: id, confirmed: literalField(true) }), success: cleanupResult, fromArgs: directArgs, toArgs: directInput }),
   contract({ capability: "content.previewTrashedArticleQueueResidue", channel: "content:preview-trashed-article-queue-residue", kind: "query", request: emptyRequest, success: residuePreview, fromArgs: noArgs, toArgs: noLegacyInput }),
   contract({ capability: "content.cleanupTrashedArticleQueueResidue", channel: "content:cleanup-trashed-article-queue-residue", kind: "command", request: exactObject({ confirmed: literalField(true) }), success: residueResult, fromArgs: directArgs, toArgs: directInput }),
+  contract({ capability: "content.previewRegularQueueAdmission", channel: "content:preview-regular-queue-admission", kind: "query", request: exactObject(regularAdmissionFields), success: regularAdmissionPreview, fromArgs: directArgs, toArgs: directInput }),
+  contract({ capability: "content.admitRegularQueueItems", channel: "content:admit-regular-queue-items", kind: "command", request: exactObject(Object.assign({}, regularAdmissionFields, { confirmed: literalField(true) })), success: regularAdmissionResult, fromArgs: directArgs, toArgs: directInput }),
+  contract({ capability: "content.removePendingQueueItems", channel: "content:remove-pending-queue-items", kind: "command", request: regularRemovalRequest, success: regularRemovalResult, fromArgs: directArgs, toArgs: directInput }),
 ]);
 
 function include(output, input, key) { if (input[key] !== undefined) output[key] = input[key]; }
@@ -197,7 +289,7 @@ function projectBatchItem(value) {
   const input = value || {};
   const output = {};
   for (const key of ["articleId", "targetPlatformId", "status"]) include(output, input, key);
-  for (const key of ["itemId", "accountProfileId", "filename", "contentHash", "revision", "publicationId", "attemptId", "reasonCode", "reasonCodes", "reasons", "cleanable", "allowed", "fingerprint", "repairAction", "evaluationFingerprint", "action", "resultStatus"]) include(output, input, key);
+  for (const key of ["itemId", "accountProfileId", "filename", "contentHash", "revision", "queueGroupId", "position", "publicationId", "attemptId", "reasonCode", "reasonCodes", "reasons", "cleanable", "allowed", "fingerprint", "repairAction", "evaluationFingerprint", "action", "resultStatus"]) include(output, input, key);
   return output;
 }
 function projectBatch(value) {
@@ -216,6 +308,43 @@ function projectBatchPreview(value) {
     unsupportedPlatformIds: input.unsupportedPlatformIds || [], items: Array.isArray(input.items) ? input.items.map(projectBatchItem) : [],
   };
   for (const key of ["alreadyQueuedCount", "blockedPublishedCount", "blockedUncertainCount", "ineligibleArticleIds"]) include(output, input, key);
+  return output;
+}
+function projectArticleRef(value) {
+  const input = value || {};
+  return { clientId: input.clientId, articleId: input.articleId };
+}
+function projectRegularQueueItem(value) {
+  const input = value || {};
+  const output = {
+    articleRef: projectArticleRef(input.articleRef || input),
+    articleId: input.articleId,
+    status: input.status,
+  };
+  for (const key of ["itemId", "batchId", "publicationId", "attemptId", "targetKey", "queueGroupId", "position", "idempotent", "reasonCode", "reasonCodes"]) include(output, input, key);
+  return output;
+}
+function projectRegularTarget(value) {
+  const target = value && value.kind === "platform" ? value : value || {};
+  return { platformId: target.platformId, accountProfileId: target.accountProfileId };
+}
+function projectRegularAdmission(value, kind) {
+  const input = value || {};
+  const output = {
+    target: projectRegularTarget(input.target),
+    articleRefs: (input.articleRefs || []).map(projectArticleRef),
+    items: (input.items || []).map(projectRegularQueueItem),
+    idempotentCount: input.idempotentCount,
+    missingCount: input.missingCount,
+    conflictCount: input.conflictCount,
+  };
+  if (kind === "preview") {
+    output.totalCount = input.totalCount;
+    output.queueableCount = input.queueableCount;
+  } else {
+    output.batchId = input.batchId;
+    output.admittedCount = input.admittedCount;
+  }
   return output;
 }
 function projectResidueItem(value) {
@@ -242,6 +371,14 @@ function projectSubmissionResult(channel, value) {
   if (channel === "content:cleanup-failed-submission-items") return { batchId: value.batchId, cleanedCount: value.cleanedCount, skippedCount: value.skippedCount, items: (value.items || []).map(projectBatchItem) };
   if (channel === "content:preview-trashed-article-queue-residue") { const result = { items: (value.items || []).map(projectResidueItem), cleanableCount: value.cleanableCount, reportedCount: value.reportedCount }; if (Array.isArray(value.cleanableItems)) result.cleanableItems = value.cleanableItems.map(projectResidueItem); if (Array.isArray(value.reportedItems)) result.reportedItems = value.reportedItems.map(projectResidueItem); return result; }
   if (channel === "content:cleanup-trashed-article-queue-residue") { const result = { status: value.status, cleanedCount: value.cleanedCount, failedCount: value.failedCount, remainingCount: value.remainingCount, items: (value.items || []).map(projectResidueItem) }; for (const key of ["cleanableCount", "reportedCount"]) include(result, value, key); if (Array.isArray(value.remainingItems)) result.remainingItems = value.remainingItems.map(projectResidueItem); return result; }
+  if (channel === "content:preview-regular-queue-admission") return projectRegularAdmission(value, "preview");
+  if (channel === "content:admit-regular-queue-items") return projectRegularAdmission(value, "admit");
+  if (channel === "content:remove-pending-queue-items") return {
+    items: (value.items || []).map(projectRegularQueueItem),
+    removedCount: value.removedCount,
+    idempotentCount: value.idempotentCount,
+    conflictCount: value.conflictCount,
+  };
   return value;
 }
 
@@ -256,6 +393,9 @@ const submissionContractFixtures = Object.freeze([
   { channel: "content:cleanup-failed-submission-items", owner: "content", productionCaller: "desktopConsole.content.cleanupFailedSubmissionItems", request: { batchId: "batch-1", confirmed: true }, result: { batchId: "batch-1", cleanedCount: 1, skippedCount: 0, items: [{ articleId: "article-1", targetPlatformId: "toutiao", status: "failed-cleaned" }] } },
   { channel: "content:preview-trashed-article-queue-residue", owner: "content", productionCaller: "desktopConsole.content.previewTrashedArticleQueueResidue", request: {}, result: { items: [{ publicationId: "publication-1", targetPlatformId: "toutiao", status: "failed", reasonCode: "SOURCE_ARTICLE_TRASHED", repairAction: "cleanup", evaluationFingerprint: "fingerprint-1" }], cleanableItems: [{ publicationId: "publication-1", targetPlatformId: "toutiao", status: "failed", reasonCode: "SOURCE_ARTICLE_TRASHED", repairAction: "cleanup", evaluationFingerprint: "fingerprint-1" }], reportedItems: [], cleanableCount: 1, reportedCount: 0 } },
   { channel: "content:cleanup-trashed-article-queue-residue", owner: "content", productionCaller: "desktopConsole.content.cleanupTrashedArticleQueueResidue", request: { confirmed: true }, result: { status: "completed", cleanedCount: 1, failedCount: 0, remainingCount: 0, cleanableCount: 0, reportedCount: 0, items: [{ publicationId: "publication-1", targetPlatformId: "toutiao", status: "cleaned", reasonCode: null, action: "cleanup", resultStatus: "failed-cleaned" }], remainingItems: [] } },
+  { channel: "content:preview-regular-queue-admission", owner: "content", productionCaller: "desktopConsole.content.previewRegularQueueAdmission", request: { articleRefs: [{ clientId: "client-1", articleId: "article-1" }], platformId: "toutiao", accountProfileId: "profile-1" }, result: { target: { platformId: "toutiao", accountProfileId: "profile-1" }, articleRefs: [{ clientId: "client-1", articleId: "article-1" }], items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", status: "queueable" }], totalCount: 1, queueableCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: 0 } },
+  { channel: "content:admit-regular-queue-items", owner: "content", productionCaller: "desktopConsole.content.admitRegularQueueItems", request: { articleRefs: [{ clientId: "client-1", articleId: "article-1" }], platformId: "toutiao", accountProfileId: "profile-1", confirmed: true }, result: { batchId: "regular-batch-1", target: { platformId: "toutiao", accountProfileId: "profile-1" }, articleRefs: [{ clientId: "client-1", articleId: "article-1" }], items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", itemId: "regular-item-1", batchId: "regular-batch-1", status: "queued" }], admittedCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: 0 } },
+  { channel: "content:remove-pending-queue-items", owner: "content", productionCaller: "desktopConsole.content.removePendingQueueItems", request: { items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, itemId: "regular-item-1", batchId: "regular-batch-1" }], confirmed: true }, result: { items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", itemId: "regular-item-1", batchId: "regular-batch-1", status: "cancelled", idempotent: false }], removedCount: 1, idempotentCount: 0, conflictCount: 0 } },
 ]);
 
 module.exports = {
