@@ -37,11 +37,13 @@
 | 项目 | 当前状态 | 证据/说明 |
 | --- | --- | --- |
 | 集成工作树 | `F:\官媒投稿-refactor` | 固定用于 `codex/article-lifecycle-submission` |
-| 当前集成提交 | `6a563a7` | `docs: add project agent instructions` |
+| 波次 2 验收基线 | `3516fb5` | `fix: close wave 02 integration findings` |
 | 波次 1 | `COMPLETE` | 01、03、11、17 已进入集成分支，波次审计修复已合并 |
 | 波次 1 审计修复 | `COMPLETE` | 集成历史包含 `e02e6b3` 及其前置修复提交 |
 | 全量测试运行器优化 | `COMPLETE` | 集成历史包含 `651654c perf: optimize full test execution` |
-| 当前待执行波次 | `2` | 02、04、05 的依赖均已进入集成分支 |
+| 波次 2 | `COMPLETE` | 02、04、05 已进入集成分支；集成审计修复提交为 `3516fb5` |
+| 波次 2 验收 | `COMPLETE` | Phase 8、production-smoke、格式门禁与完整 `npm test`（1706/1706）通过 |
+| 当前待执行波次 | `3` | Ticket 06 的依赖 04、05 均已进入集成分支 |
 
 状态词只使用：
 
@@ -59,8 +61,8 @@
 | 波次 | 可并行 Ticket | 依赖 | 当前状态 |
 | --- | --- | --- | --- |
 | 1 | 01、03、11、17 | 无 | `COMPLETE` |
-| 2 | 02、04、05 | 02←01；04←03；05←03 | `READY` |
-| 3 | 06 | 04、05 | `PENDING` |
+| 2 | 02、04、05 | 02←01；04←03；05←03 | `COMPLETE` |
+| 3 | 06 | 04、05 | `READY` |
 | 4 | 07、12 | 07←02、06；12←06、11 | `PENDING` |
 | 5 | 08、13 | 08←07；13←02、04、12 | `PENDING` |
 | 6 | 09、14、15 | 09←08；14←13；15←11、13 | `PENDING` |
