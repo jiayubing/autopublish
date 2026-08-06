@@ -24,7 +24,7 @@
 
 - 入队用例拥有选择验证；OperationalStore admission/removal 组合端口拥有活动目标与队列项的一致性事务，调用方不得用多个公开写操作拼接。
 - 06 coordinator 拥有文章锁、规范锁顺序和锁内事实复核；本 ticket 只在该 owner 内增加普通平台具名方法并注入 admission/removal 端口，不自行取得锁或接收通用 callback。
-- composition 只向 coordinator 注入 `regularQueueTransitions` 最小 capability，包含普通队列 admission/removal 所需的事实读取和两个具名事务操作；不得注入完整 OperationalStore，也不得暴露订单、付费、迁移或通用 claim/release 写能力。
+- composition 向同一个共享 coordinator 运行时实例增加 `regularQueueTransitions` 最小 capability，包含普通队列 admission/removal 所需的事实读取和两个具名事务操作；coordinator 可继续持有既有 publication/recovery 等方法各自所需的其他具名最小 capability，并由 12 在同一实例增加独立 `paidAdmissionTransitions`，但不得注入完整 OperationalStore、通用 claim/release 或任意写能力。`admitRegularQueueItems` / `removePendingQueueItems` 只能闭包消费 `regularQueueTransitions` 和共享文章锁/策略端口，不能访问付费、订单 outcome 或迁移 capability；composition 只向普通队列应用服务暴露包含这两个普通平台命令的冻结 facade。
 - 队列存储拥有任务身份、FIFO 序号和领取状态，不保存可编辑文章副本。
 - 移除用例只处理 pending 项，不承担远端取消。
 - 平台账号解析是独立端口，不能由 Renderer 名称代替稳定账号身份。
@@ -35,7 +35,7 @@
 - 用例、存储和投影边界职责清晰，公开接口保持窄小；不得为缩短文件拆出透传层或复制活动目标不变量。
 - 禁止在 UI 中复制入队资格或可移除判断；提交时必须服务器侧复核。
 - 不新增队列文件/数据库双写所有者；SQLite 是运行事实权威源。
-- `regularQueueTransitions` 由 OperationalStore owner 直接提供或在 composition 冻结选取，不创建只做同名参数转发的 wrapper。
+- `regularQueueTransitions` 由 OperationalStore owner 直接提供或在 composition 冻结选取，不创建只做同名参数转发的 wrapper；普通队列 facade 只做能力收窄，不重新实现状态转换或事务。
 
 ## Acceptance criteria
 
@@ -47,7 +47,7 @@
 - [ ] 已领取、远端开始、活动订单或不确定项不能按本地移除处理。
 - [ ] 重复入队/移除幂等，失败不会留下孤立活动目标或无主队列项。
 - [ ] 交接记录包含命令契约、状态转换、兼容入口、模块职责、依赖方向及显著规模变化说明。
-- [ ] composition/架构测试证明普通队列用例看不到无关 OperationalStore 写能力，且 admission/removal 事务不能由调用方拆开拼接。
+- [ ] composition/架构测试证明共享 coordinator 未获得完整 OperationalStore 或通用写能力，`admitRegularQueueItems` / `removePendingQueueItems` 只能消费 `regularQueueTransitions`；普通队列应用服务获得的冻结 facade 看不到付费、订单 outcome、迁移或其他无关命令，且 admission/removal 事务不能由调用方拆开拼接。
 
 ## 审计建议
 

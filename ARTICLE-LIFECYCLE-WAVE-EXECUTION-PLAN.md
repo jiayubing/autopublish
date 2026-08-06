@@ -52,7 +52,7 @@
 
 状态词只使用：
 
-- `COMPLETE`：该波次全部执行组和 ticket 已由用户确认审计、提交、合并、定向集成复验及波次集成验收完成；仅有 ticket 提交进入分支不足以标记完成。
+- `COMPLETE`：该波次全部执行组和 ticket 已由用户确认审计、提交、合并、定向集成复验及波次增量集成验收完成，并且合并后最终集成 `HEAD` 的完整 `npm test` 已通过；仅有 ticket 提交进入分支或只有定向测试通过不足以标记完成。
 - `READY`：上一波次已为 `COMPLETE`，且本波次首个执行组的全部直接依赖已合并，可以创建 ticket 线程；波次 1 没有上一波次，只检查自身依赖。
 - `RUNNING`：至少一个 ticket 线程正在实施或等待用户处理。
 - `PARTIAL`：前序执行组已完成，仍有后续执行组未调度或未完成；若下一组依赖满足，可继续同一波次。
@@ -85,7 +85,7 @@
 2. 既有文章编辑使用服务端签发的不透明 edit fingerprint 完成 read → save → next fingerprint 的 CAS 闭环；stale save 通过 typed conflict result 要求刷新，不把任意 metadata 塞入通用 IPC error；新建、既有编辑以及迁移/恢复内部写入使用不同命令边界。
 3. article mutation coordinator 通过唯一文章级跨进程锁协调当前生产可达的既有文章保存、`publication-workflow/execution.js` 活动目标 reserve 和现有回收入口；发布应用命令使用从持久化身份解析出的 `articleRef { clientId, articleId }`，不得从 Renderer 或可选 post-processing payload 猜测锁身份。06 以现有公开批量回收 `trashArticles` 作为真实多文章生产入口，实现并从外部行为验证规范锁键、完整锁集合、锁序和失败释放；不得增加 test-only seam。07/12 业务上互不依赖，后续分别复用该内部原语增加各自 transition-specific 方法，但按 3.2 的共享 owner 规则串行调度。不得与 article store 形成嵌套锁或公开无锁写入口。
 4. 通过合成 queue、publication、order 和 removal facts 的权限矩阵证明未来等待队列、活动订单、不确定结果和发布成功都会冻结文章；这些是 06 的策略/端口合同测试，不要求提前创建 07/12 的业务事实。
-5. 07 和 12 分别在 coordinator owner 内复用 06 已由批量回收验证的多文章协调原语，接入普通平台 admission/removal 与付费批次 admission 组合端口，并完成各自端到端冻结/解冻和并发回归。二者没有业务依赖，但因共享 coordinator/OperationalStore 文件范围按 `07 → 12` 串行调度；不得把调度顺序实现成 12←07 的业务调用或语义依赖。
+5. 07 和 12 分别在同一个 coordinator owner 和运行时实例内复用 06 已由批量回收验证的多文章协调原语，接入普通平台 admission/removal 与付费批次 admission 组合端口，并完成各自端到端冻结/解冻和并发回归。coordinator 可以同时持有其各个具名方法所需的多个最小 capability，但不得持有完整 OperationalStore、通用写 capability 或让一个方法消费另一渠道的 capability；composition 分别向普通平台与付费应用服务暴露只含本渠道命令的冻结 facade。二者没有业务依赖，但因共享 coordinator/OperationalStore 文件范围按 `07 → 12` 串行调度；不得把调度顺序实现成 12←07 的业务调用或语义依赖，也不得为隔离 capability 创建互不共享锁 owner 的 coordinator 实例。
 
 Ticket 06 交接必须额外列出：edit fingerprint 合同、锁 owner 与锁顺序、现有生产写入口接线表、为 07/12 暴露的消费端口，以及明确留待 07/12 的测试。
 
@@ -93,7 +93,7 @@ Ticket 06 交接必须额外列出：edit fingerprint 合同、锁 owner 与锁�
 
 此前把同一依赖层误当成可安全并行层。后续 ticket 虽然在业务依赖图上可能互不依赖，但仍会修改相同 owner 或集成文件，因此按以下边界调度：
 
-1. 07 与 12 都扩展 06 的 article mutation coordinator 和 OperationalStore admission 门面，必须串行并从新的集成基线启动。
+1. 07 与 12 都扩展 06 的同一个 article mutation coordinator owner、同一个运行时协调实例和 OperationalStore admission 门面，必须串行并从新的集成基线启动。07 完成后 coordinator 已持有 `regularQueueTransitions`；12 在同一实例上增加独立的 `paidAdmissionTransitions`，不得以“付费服务不应看到普通能力”为由复制 coordinator 或锁 owner。能力隔离发生在 transition-specific 方法及其对外冻结 facade，而不是要求共享 coordinator 实例只能持有一种渠道能力。
 2. 08 与 13、09/14/15、10 与 16、18 与 22 分别会在运行事实门面、生命周期投影、IPC/bridge 或 Renderer 集成面发生可预见重叠；在 ticket 尚未给出不重叠文件证据前按串行处理。
 3. 19、20、21 的业务 owner 分别限定在三个平台 adapter，但其 adapter 注册、composition、共享合同与测试接线无法在创建线程前证明完全不重叠；当前协议又要求 ticket 勘察后直接实施，没有可可靠阻止其他已启动线程的整组暂停点。因此按 `19 → 20 → 21` 串行并逐个从新的集成基线启动。它们仍不得修改通用图片准备器、队列状态机或共享结果策略；若某个 ticket 的实施前勘察发现必须修改这些共享 owner，停止该 ticket 并报告重新切分范围，不创建后续 adapter ticket。
 4. 串行并不表示后一 ticket 依赖前一 ticket 的业务语义；它只保证共享 owner/文件基线稳定，禁止为了制造依赖而让普通平台和网站媒体互相调用。
@@ -251,7 +251,7 @@ ticket 05 → codex/article-lifecycle-05
 - 从唯一 owner 和稳定合同开始，闭合 domain/application/infrastructure/IPC/bridge/UI 调用链。
 - 架构验收以职责内聚、唯一 owner、窄而稳定的接口、调用方认知负担、依赖方向、变更局部性和公开接口可测试性为准。
 - 保持深模块、低耦合、单一规则所有者、可维护和可扩展；不得为缩短文件拆出透传模块、重复 DTO/映射或把同一不变量分散到多个 owner。文件行数只作为审查信号和异常增长提示，不作为模块合格与否或 ticket 完成条件。
-- OperationalStore 保持公共持久化门面，但 composition 不得把拥有全部方法的 store 对象注入业务服务。每个调用方只能获得 ticket 指定的最小具名 capability view，例如 regular admission、regular queue-group、regular outcome、paid admission、paid execution、order-creation resolution、order observation/cancellation 或 migration import。capability 直接由 owner 聚合导出或在 composition 中冻结选取，不为此创建纯参数转发文件，也不得让调用方据此重新拼接跨表事务。
+- OperationalStore 保持公共持久化门面，但 composition 不得把拥有全部方法的 store 对象注入业务服务。每个普通用例调用方只能获得 ticket 指定的最小具名 capability view，例如 regular admission、regular queue-group、regular outcome、paid admission、paid execution、order-creation resolution、order observation/cancellation 或 migration import。跨多种文章 transition 的共享 article mutation coordinator 是唯一允许聚合多个具名最小 capability 的协调 owner：它仍不得获得完整 store、通用 claim/release/任意写能力；每个公开协调方法只能闭包消费本 transition 对应的 capability，composition 必须分别向普通平台与付费应用服务暴露只含其本渠道命令的冻结 facade。capability 直接由 owner 聚合导出或在 composition 中冻结选取，不为此创建纯参数转发文件，也不得让调用方据此重新拼接跨表事务。
 - 不提前实现其他 ticket，不恢复已废止规则，不建立临时双路线。
 - 保留用户改动，不修改其他 worktree，不触碰真实外部服务和生产数据。
 
@@ -264,7 +264,7 @@ Ticket 01–24 的执行线程只运行：
 3. 与改动范围对应的 lint、typecheck、phase gate、迁移、IPC、Renderer、容量或打包合同测试。
 4. ticket 明确要求的故障、并发、幂等、恢复和安全场景。
 
-Ticket 01–24 的执行线程不运行完整 `npm test`。全量测试由用户在完成各 ticket 的独立审计、提交、合并和波次修复后单独控制。不得因为不跑全量而省略专项测试。
+Ticket 01–24 的执行线程不运行完整 `npm test`。全量测试由用户在完成各 ticket 的独立审计、提交、合并和波次修复后，在该波次合并后的最终集成 `HEAD` 上单独控制运行；它是该波次标记 `COMPLETE` 和放行下一波的硬门禁。若全量测试失败，波次保持 `RUNNING` 或 `BLOCKED`，完成修复并合并后必须在新的集成 `HEAD` 重跑。不得因为不跑全量而省略专项测试，也不得用各 ticket 定向测试或增量矩阵替代该全量门禁。
 
 Ticket 25 是唯一例外：用户执行 Ticket 25 即授权其按 ticket 合同运行完整 `npm test`、Renderer/Preload build、类型/架构/安全门禁和 `pack:production:smoke:dirty` 诊断打包。它仍不得访问真实账号、创建真实订单、发布内容或运行签名/release 上传；高成本命令及生成物必须逐项记录和按仓库生成物规则处理。正式 `pack:production:smoke` 的 clean-build 证据必须在 Ticket 25 修复经用户审计、提交并合并后的干净集成工作树中单独运行，属于波次 11 标记 `COMPLETE` 的前置证据，而不是 dirty ticket 线程可伪造或跳过的结果。
 
@@ -335,13 +335,13 @@ Recommended audit scope:
 | 轻量定向复核并入波次复验 | 10 | typed bridge/UI 行为、动作投影、加载/错误/窄屏和直接 Renderer 测试 | 在串行组继续前完成 UI smoke 和合同核对；证据可与波次集成复验合并 |
 | 已完成，不重复 | 11、17 | 只有依赖合同变化、回归或用户明确要求时重新审计 | 不因进入后续依赖而重新完整审计 |
 
-每个 Ticket 的审计等级是最低要求，不禁止用户对高风险变更增加审计。波次结束仍必须进行一次增量集成复验，但复验只覆盖共享 owner、跨 Ticket 状态转换、依赖方向和关键故障矩阵，不重复逐 Ticket 全量深审。波次 10 的 Ticket 24 深审可同时作为该波主要审计；波次 11 由 Ticket 25 执行线程产出最终验收证据，再由用户另派深度独立审计 subagent 审查其 diff、证据真实性和遗漏项，不再追加第三轮内容相同的全量审计。Ticket 25 合并后的 clean `pack:production:smoke` 仍由用户单独执行。
+每个 Ticket 的审计等级是最低要求，不禁止用户对高风险变更增加审计。波次结束仍必须进行一次增量集成复验，但复验只覆盖共享 owner、跨 Ticket 状态转换、依赖方向和关键故障矩阵，不重复逐 Ticket 全量深审；该增量矩阵不能替代合并后最终集成 `HEAD` 必须通过的完整 `npm test`。波次 10 的 Ticket 24 深审可同时作为该波主要审计；波次 11 由 Ticket 25 执行线程产出最终验收证据，再由用户另派深度独立审计 subagent 审查其 diff、证据真实性和遗漏项，不再追加第三轮内容相同的全量审计。Ticket 25 合并后的 clean `pack:production:smoke` 仍由用户单独执行。
 
 各波次增量集成复验的最低矩阵：
 
 | 波次 | 必须复验 | 明确不重复 |
 | --- | --- | --- |
-| 4 | 07/12 共享 coordinator 锁序、普通/付费 admission 原子性、单活动目标与渠道隔离 | 06 已确认的全部编辑/CAS 私有细节 |
+| 4 | 07/12 共享 coordinator 实例与锁序、普通/付费 admission 原子性和冻结 facade 能力隔离；对同一文章并发发起普通入队与付费确认时必须恰好一个建立活动目标，失败方返回稳定冲突且两侧都无孤立队列项、批次或快照 | 06 已确认的全部编辑/CAS 私有细节 |
 | 5 | 08 普通组编排与 13 付费批次共享运行事实时互不启动、暂停或恢复对方；两类 attempt 的 prepared/submission-start 边界、明确拒绝事务及重启恢复均失败关闭 | 07/12 的完整 admission 审计 |
 | 6 | 纯文本 08→09 的 prepared evidence、submission-start、adapter outcome/orphan、人工 resolution 完整交接；09/15 唯一 publication-success primitive；13/14 attempt guard 优先级；09/14/15 事实一致性和订单缺失收口 | 三个平台 DOM、图片扩展和订单页纯展示细节 |
 | 7 | 10 typed UI 动作与 16 取消命令接线；订单同步/取消并发、发布成功优先级和 cancellation-uncertain 两种收口 | 10 的全部视觉细节及 15 的全部筛选测试 |
@@ -368,7 +368,7 @@ Recommended audit scope:
 - 当前集成 HEAD；
 - 下一可执行波次。
 
-只有上述执行组证据已记录，后续串行组才能从新的集成 `HEAD` 调度。只有用户确认一个波次的全部 ticket 已按各自最低审计等级完成复核、提交、合并，并完成增量波次集成验收，才能把该波次标记为 `COMPLETE` 并把下一波改为 `READY`。波次 11 还必须同时包含：合并后干净集成工作树上的正式 `pack:production:smoke`；用户明确授权并实际执行的真实普通平台两组并行、网站媒体真实订单状态刷新和一次图片专项验证证据。Ticket 25 只生成安全清单，不授权真实登录、发布、付费或订单操作；任一真实证据缺失时波次 11 保持 `BLOCKED` 并记录 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得以模拟结果或清单替代，也不得把图片专项验证误报为已实现网站媒体本地图片传输。
+只有上述执行组证据已记录，后续串行组才能从新的集成 `HEAD` 调度。只有用户确认一个波次的全部 ticket 已按各自最低审计等级完成复核、提交、合并，完成增量波次集成验收，并在波次修复全部合并后的最终集成 `HEAD` 上通过完整 `npm test`，才能把该波次标记为 `COMPLETE` 并把下一波改为 `READY`。完整测试失败后不得沿用旧 `HEAD` 的通过结果；修复合并后必须重跑。波次 11 还必须同时包含：合并后干净集成工作树上的正式 `pack:production:smoke`；用户明确授权并实际执行的真实普通平台两组并行、网站媒体真实订单状态刷新和一次图片专项验证证据。Ticket 25 只生成安全清单，不授权真实登录、发布、付费或订单操作；任一真实证据缺失时波次 11 保持 `BLOCKED` 并记录 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得以模拟结果或清单替代，也不得把图片专项验证误报为已实现网站媒体本地图片传输。
 
 ## 8. 调度完成时主线程的输出
 
