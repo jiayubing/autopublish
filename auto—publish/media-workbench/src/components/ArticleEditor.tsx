@@ -265,7 +265,7 @@ export default function ArticleEditor({
                       value={editorState.draft?.remark ?? ''}
                       onChange={(e) => updateDraft({ remark: e.target.value })}
                       rows={4}
-                      placeholder="可填写给审核编辑的留言或渠道定制参数..."
+                      placeholder="可填写给渠道编辑的留言或渠道定制参数..."
                       className="w-full px-3 py-2 text-xs bg-white text-slate-800 border border-slate-200 rounded-lg focus:border-blue-500 focus:outline-hidden transition-all resize-none shadow-2xs"
                     />
                   </div>

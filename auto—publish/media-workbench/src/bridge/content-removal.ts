@@ -3,7 +3,7 @@ import type {
   ArticlePermanentDeleteRequest,
   ArticlePermanentDeleteResult,
   ArticleRemovalTransaction,
-  ArticleReviewSelection,
+  ArticleSelection,
   ArticleTrashCommitInput,
   ArticleTrashImpactItem,
   ArticleTrashPreview,
@@ -34,7 +34,7 @@ type ContentIpcResponse<T> =
 
 type CoreContentRemovalApi = {
   previewArticleRemovalImpact: (input: {
-    selections: ArticleReviewSelection[];
+    selections: ArticleSelection[];
   }) => Promise<ContentIpcResponse<ArticleTrashPreview>>;
   applyArticleRemovalImpact: (
     input: ArticleTrashCommitInput,
@@ -48,7 +48,7 @@ type CoreContentRemovalApi = {
     transactionId: string;
     confirmed: true;
   }) => Promise<ContentIpcResponse<{ transaction: ArticleRemovalTransaction }>>;
-  restoreArticle: (input: ArticleReviewSelection) => Promise<
+  restoreArticle: (input: ArticleSelection) => Promise<
     ContentIpcResponse<{
       article: GeneratedContentArticle;
       restored: boolean;
@@ -57,7 +57,7 @@ type CoreContentRemovalApi = {
     }>
   >;
   preparePermanentDeleteArticle: (
-    input: ArticleReviewSelection,
+    input: ArticleSelection,
   ) => Promise<ContentIpcResponse<ArticlePermanentDeleteConfirmation>>;
   permanentlyDeleteArticle: (
     input: ArticlePermanentDeleteRequest,
@@ -117,7 +117,7 @@ export async function trashContentArticles(
 }
 
 export async function previewContentArticleRemoval(
-  articles: ArticleReviewSelection[],
+  articles: ArticleSelection[],
 ): Promise<ArticleTrashPreview> {
   return callCoreRemoval(
     (api) =>
@@ -188,7 +188,7 @@ export async function retryContentArticleRemovalTransaction(
 }
 
 export async function restoreContentArticle(
-  input: ArticleReviewSelection,
+  input: ArticleSelection,
 ): Promise<GeneratedContentArticle> {
   return callCoreRemoval(
     (api) => requireBridgeMethod(api.restoreArticle)(input),
@@ -198,7 +198,7 @@ export async function restoreContentArticle(
 }
 
 export async function preparePermanentDeleteContentArticle(
-  input: ArticleReviewSelection,
+  input: ArticleSelection,
 ): Promise<ArticlePermanentDeleteConfirmation> {
   return callCoreRemoval(
     (api) => requireBridgeMethod(api.preparePermanentDeleteArticle)(input),
@@ -220,7 +220,7 @@ export type {
   ArticlePermanentDeleteRequest,
   ArticlePermanentDeleteResult,
   ArticleRemovalTransaction,
-  ArticleReviewSelection,
+  ArticleSelection,
   ArticleTrashCommitInput,
   ArticleTrashImpactItem,
   ArticleTrashPreview,

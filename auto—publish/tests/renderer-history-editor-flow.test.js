@@ -32,7 +32,6 @@ function makeArticle(id, title, index, overrides) {
     source: { client_material: true, doubao_answer: true, references: false, template: true },
     createdAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
     updatedAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
-    reviewedAt: null,
     version: 1,
     sourceArticleId: null,
     templateSnapshot: {
@@ -171,11 +170,10 @@ function installDesktopFixture(page, fixture) {
         state.articles = state.articles.map((item) => item.id === article.id ? article : item);
         return ok({ article });
       },
-      reviewArticles: () => ok({ reviewed: [], rejected: [] }),
       copyArticleVersion: (request) => {
         state.calls.copyArticleVersion.push(request);
         const source = state.articles.find((article) => article.id === request.sourceArticleId);
-        const copied = { ...source, id: "copied-published-article", sourceArticleId: source.id, version: (source.version || 1) + 1, status: "generated", reviewedAt: null };
+        const copied = { ...source, id: "copied-published-article", sourceArticleId: source.id, version: (source.version || 1) + 1, status: "generated" };
         state.articles = [...state.articles, copied];
         return ok({ article: copied });
       },
@@ -228,7 +226,7 @@ function installDesktopFixture(page, fixture) {
       storageMaintenance,
       media,
       orders,
-      platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} },
+      platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {}, listAccountProfiles: () => ok({ profiles: [{ accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" }] }), confirmAccountProfile: () => ok({ profile: { accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" } }) },
       publication: { listForArticles: ({ articleIds }) => ok(state.publicationRecords.filter((record) => articleIds.includes(record.articleId))), reconcile: () => ok(state.publicationRecords[0]) },
       content
     };
@@ -335,9 +333,31 @@ describe("renderer history editor flow", { concurrency: false }, () => {
 
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
       await page.getByRole("dialog").getByRole("button", { name: "放弃修改" }).click();
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
       await page.getByText(fixture.publishedArticle.title, { exact: true }).locator("..").locator("..").getByRole("button", { name: "发布详情" }).click();
       assert.equal(await page.getByRole("button", { name: "复制为新版本" }).count(), 0);
       assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.copyArticleVersion.length), 0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("blocks both submission entry points while the selected article has unsaved edits", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板/ }).click();
+      await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
+      await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
+      await page.getByLabel("文章标题", { exact: true }).fill("未保存后不得投稿");
+      await page.getByRole("button", { name: "测试投稿平台" }).click();
+
+      const queueButton = page.getByRole("button", { name: "加入投稿队列" });
+      const mediaButton = page.getByRole("button", { name: "加入付费媒体投稿" });
+      assert.equal(await queueButton.isDisabled(), true);
+      assert.equal(await mediaButton.isDisabled(), true);
+      assert.equal(await queueButton.getAttribute("title"), "当前编辑文章有未保存修改，请先保存后投稿。");
+      assert.equal(await mediaButton.getAttribute("title"), "当前编辑文章有未保存修改，请先保存后投稿。");
+      assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.submission), []);
     } finally {
       await page.close();
     }

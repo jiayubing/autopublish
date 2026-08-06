@@ -226,7 +226,7 @@ describe("article generator", function() {
     assert.equal(article.templateSnapshot.bodyHash, "template-hash");
     assert.equal(article.generationBatchId, "batch-1");
     assert.equal(article.generationTaskId, "task-1");
-    assert.equal(article.reviewedAt, null);
+    assert.equal(Object.prototype.hasOwnProperty.call(article, "reviewedAt"), false);
   });
 
   it("rejects missing or damaged selected materials before AI access", async function() {

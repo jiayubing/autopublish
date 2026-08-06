@@ -36,7 +36,6 @@ it("keeps the ContentStore caller seam free of legacy ArticleStore injection", (
     "desktop/services/operational-content-submission-service.js",
     "desktop/services/platform-workbench-service.js",
     "src/content/article-removal-service.js",
-    "src/content/article-review-service.js",
     "src/content/article-trash-service.js",
     "src/content/article-version-service.js"
   ];

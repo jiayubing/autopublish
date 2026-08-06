@@ -326,7 +326,6 @@ describe("source assembly and packaging contract", function() {
       "src/core/docx-text-extractor.js",
       "src/content/generation-batch-store.js",
       "src/content/generation-batch-runner.js",
-      "src/content/article-review-service.js",
       "desktop/ai-provider-config-store.js",
       "desktop/services/ai-provider-service.js",
       "desktop/services/content-generation-batch-service.js",

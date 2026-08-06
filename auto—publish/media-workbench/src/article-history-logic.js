@@ -33,7 +33,7 @@ export function articleSelectionKey(article) {
 
 export function selectableArticles(articles, clientId) {
   return (Array.isArray(articles) ? articles : []).filter(function(article) {
-    return (!clientId || article?.clientId === clientId) && (article?.status === "generated" || article?.status === "saved");
+    return (!clientId || article?.clientId === clientId) && typeof article?.id === "string" && Boolean(article.id.trim());
   });
 }
 

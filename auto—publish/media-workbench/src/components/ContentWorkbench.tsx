@@ -29,7 +29,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
   const [tab, setTab] = useState<'questions' | 'generate' | 'history'>('questions');
   const [articleStageFilter, setArticleStageFilter] = useState<ArticleWorkflowStage | 'all'>('all');
   const [error, setError] = useState('');
-  const historyDirtyRef = useRef(false);
+  const historyDirtyRef = useRef(false); const [historyDirtyArticleId, setHistoryDirtyArticleId] = useState<string | null>(null);
   const historySourceRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -59,14 +59,14 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     if (!skipGuard && historyDirtyRef.current) { requestHistoryLeave(() => closeHistoryEditor(true)); return; }
     const source = historySourceRef.current;
     historySourceRef.current = null;
-    historyDirtyRef.current = false;
+    historyDirtyRef.current = false; setHistoryDirtyArticleId(null);
     setHistoryEditingArticle(null);
     source?.focus();
     requestAnimationFrame(() => source?.focus());
   }
 
   function openHistoryEditor(nextArticle: GeneratedContentArticle, source?: HTMLElement | null, published = false) {
-    const open = () => { historySourceRef.current = source || null; setHistoryEditingPublished(published); setHistoryEditingArticle(nextArticle); };
+    const open = () => { historySourceRef.current = source || null; historyDirtyRef.current = false; setHistoryDirtyArticleId(null); setHistoryEditingPublished(published); setHistoryEditingArticle(nextArticle); };
     if (historyEditingArticle && historyEditingArticle.id !== nextArticle.id) requestHistoryLeave(open);
     else open();
   }
@@ -98,7 +98,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} questions={questions} research={research} query={clientQuery} commands={content.commands} commandStates={content.snapshot.commands} queue={doubaoQueue} login={doubaoLogin} queueQuery={doubaoQueueQuery} loginQuery={doubaoLoginQuery} />}
       {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} research={research} researchByClient={researchByClient} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={content.setCurrentArticle} commands={content.commands} commandStates={content.snapshot.commands} refreshManagement={content.refreshManagement} />}
-      {tab === 'history' && <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} counts={management.lifecycleCounts} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} management={management} query={managementQuery} commands={content.commands} commandStates={content.snapshot.commands} removal={content.snapshot.removal} watchRemovalTransaction={content.watchRemovalTransaction} stageFilter={articleStageFilter} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} onOpenOrders={onOpenOrders} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} saving={content.snapshot.commands.saveArticle.busy} onSaveArticle={(draft) => content.commands.saveArticle({ ...draft, status: 'saved', updatedAt: new Date().toISOString() })} onSaved={(saved) => { setHistoryEditingArticle(saved); }} onClose={() => closeHistoryEditor(true)} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; }} />}</div></div>}
+      {tab === 'history' && <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} counts={management.lifecycleCounts} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} management={management} query={managementQuery} commands={content.commands} commandStates={content.snapshot.commands} removal={content.snapshot.removal} watchRemovalTransaction={content.watchRemovalTransaction} stageFilter={articleStageFilter} dirtyArticleId={historyDirtyArticleId} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} onOpenOrders={onOpenOrders} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} saving={content.snapshot.commands.saveArticle.busy} onSaveArticle={(draft) => content.commands.saveArticle({ ...draft, status: 'saved', updatedAt: new Date().toISOString() })} onSaved={(saved) => { setHistoryEditingArticle(saved); }} onClose={() => closeHistoryEditor(true)} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; setHistoryDirtyArticleId(dirty ? historyEditingArticle?.id || null : null); }} />}</div></div>}
     </div>
   </div>;
 }

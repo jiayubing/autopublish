@@ -98,7 +98,6 @@ function createArticleRemovalService(options) {
       ...(Object.prototype.hasOwnProperty.call(article, "materialSnapshots") ? { materialSnapshots: article.materialSnapshots } : {}),
       ...(Object.prototype.hasOwnProperty.call(article, "researchSnapshots") ? { researchSnapshots: article.researchSnapshots } : {}),
       ...(Object.prototype.hasOwnProperty.call(article, "templateSnapshot") ? { templateSnapshot: article.templateSnapshot } : {}),
-      ...(Object.prototype.hasOwnProperty.call(article, "reviewedAt") ? { reviewedAt: article.reviewedAt } : {}),
       ...(Object.prototype.hasOwnProperty.call(article, "updatedAt") ? { updatedAt: article.updatedAt } : {})
     };
   }

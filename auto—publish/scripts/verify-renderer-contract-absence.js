@@ -220,7 +220,7 @@ const LEGACY_RULES = Object.freeze([
     filePattern: RENDERER_CONTENT_REMOVAL_BRIDGE,
     sourceAstOnly: true,
     pattern:
-      /\b(?:input|request)\.articles\b|\b(?:const|let|var)\s*\{[^}]*\barticles\b[^}]*\}\s*=\s*(?:input|request|payload)\b|\bArticleTrashCommitInput\s*&\s*\{\s*articles\s*:\s*|\bpreviewArticleRemovalImpact\s*\([\s\S]{0,500}?\barticles\s*:\s*ArticleReviewSelection\[\]/,
+      /\b(?:input|request)\.articles\b|\b(?:const|let|var)\s*\{[^}]*\barticles\b[^}]*\}\s*=\s*(?:input|request|payload)\b|\bArticleTrashCommitInput\s*&\s*\{\s*articles\s*:\s*|\bpreviewArticleRemovalImpact\s*\([\s\S]{0,500}?\barticles\s*:\s*Article\w*Selection\[\]/,
   },
   {
     name: "retired removal DTO compatibility field",

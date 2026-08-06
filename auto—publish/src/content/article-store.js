@@ -118,13 +118,6 @@ function createArticleStore(workspaceRoot, options) {
     });
   }
 
-  function reviewArticle(clientId, articleId, reviewedAt) {
-    const article = getArticle(clientId, articleId);
-    if (article.status === "saved") return article;
-    if (article.status !== "generated") throw storeError("ARTICLE_NOT_GENERATED", "Article is not generated");
-    return saveArticle(Object.assign({}, article, { status: "saved", reviewedAt: reviewedAt }));
-  }
-
   function getTrashedPaths(clientId, articleId, create) {
     const files = policy.trashPaths(clientId, articleId, create);
     if (!files) throw storeError("ARTICLE_NOT_FOUND", "Trashed article was not found");
@@ -266,7 +259,6 @@ function createArticleStore(workspaceRoot, options) {
     saveArticle,
     getArticle,
     listArticles,
-    reviewArticle,
     moveArticleToTrash,
     restoreTrashedArticle,
     listTrashedArticles,

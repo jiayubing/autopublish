@@ -182,7 +182,7 @@ test("renderer contract absence inventory rejects each retired surface without b
     ],
     [
       "media-workbench/src/types/publication.ts",
-      "interface ArticleTrashCommitInput { articles?: ArticleReviewSelection[]; legacy?: boolean; }\n",
+      "interface ArticleTrashCommitInput { articles?: ArticleSelection[]; legacy?: boolean; }\n",
     ],
     [
       "media-workbench/src/types/publication.ts",

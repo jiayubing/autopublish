@@ -34,7 +34,7 @@ function transactionStatusOf(transaction: Pick<ArticleRemovalTransaction, 'statu
   return transaction?.reasonCode || transaction?.errorCode || '状态冲突';
 }
 
-export default function GeneratedArticlesView({ clientId, management, query, commands, commandStates, removal, watchRemovalTransaction, stageFilter = 'all', selectedAttentionId, onArticleSelect, onStageFilterChange, onOpenOrders }: GeneratedArticlesViewProps) {
+export default function GeneratedArticlesView({ clientId, management, query, commands, commandStates, removal, watchRemovalTransaction, stageFilter = 'all', dirtyArticleId, selectedAttentionId, onArticleSelect, onStageFilterChange, onOpenOrders }: GeneratedArticlesViewProps) {
   const { confirm } = useConfirmation();
   const { articles, trash, submissionBatches, cancellationPlans, publicationRecords, workflowByArticle: snapshotWorkflowByArticle, submissionPlatforms: allSubmissionPlatforms } = management;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -114,7 +114,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
 
   function canQueueArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
-    return workflow?.locks.canQueue === true;
+    return workflow?.locks.canQueue === true && !(dirtyArticleId && article.id === dirtyArticleId);
   }
 
   function canTrashArticle(article: GeneratedContentArticle): boolean {
@@ -140,8 +140,8 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     });
   }, [articles, filter, selectedStage, workflowByArticle]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
-  const operable = useMemo(() => selectableArticles(filtered, clientId).filter(isArticleSelectable), [filtered, clientId, workflowByArticle]);
-  const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)) && isArticleSelectable(article));
+  const operable = useMemo(() => selectableArticles(filtered, clientId).filter(isArticleSelectable), [filtered, clientId, workflowByArticle, dirtyArticleId]);
+  const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)) && isArticleSelectable(article)); const selectedDirtyArticle = selectedArticles.find((article) => Boolean(dirtyArticleId && article.id === dirtyArticleId)); const selectedQueueableArticles = selectedDirtyArticle ? [] : selectedArticles.filter(canQueueArticle);
   const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
   // Batch order is an implementation detail.  Actions must cover every safe
   // item for this client so a newer completed batch cannot hide an older media
@@ -187,7 +187,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   async function queueSelected() {
     const requestedClientId = clientId;
     if (commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')) return;
-    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && canQueueArticle(article));
+    const selectedQueueable = selectedQueueableArticles;
     if (!selectedQueueable.length || !targetPlatformIds.length) return;
     setError('');
     try {
@@ -208,7 +208,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   async function handoffSelectedToMedia() {
     const requestedClientId = clientId;
     if (commandBusy('previewExport', 'exportToSubmissionQueue')) return;
-    const selectedQueueable = filtered.filter((article) => selected.includes(selectionKey(article)) && canQueueArticle(article));
+    const selectedQueueable = selectedQueueableArticles;
     if (!selectedQueueable.length) return;
     setError('');
     try {
@@ -488,13 +488,13 @@ export default function GeneratedArticlesView({ clientId, management, query, com
            {removalStatus === 'pending_auto_recovery' || removalStatus === 'pending_recovery' ? `删除事务正在自动恢复${removalTransaction.updatedAt ? ` · 最近更新：${formatBeijingTime(removalTransaction.updatedAt)}` : ''}` : removalStatus === 'needs_repair' ? <><span>删除事务需要修复：{transactionReason(removalTransaction)}</span><button type="button" onClick={() => void retryRemovalTransaction()} disabled={commandBusy('retryContentArticleRemovalTransaction')} className="ml-2 rounded border border-rose-300 px-2 py-1 text-xs disabled:opacity-40">重试修复删除事务</button></> : removalStatus === 'superseded' ? '删除事务已由现有事务复用并归档。' : '删除事务已完成。'}
          </div>}
 
-       <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
+         <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+           <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
-        </div>
-         <button type="button" onClick={() => void queueSelected()} disabled={!selectedArticles.some(canQueueArticle) || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
-         <button type="button" onClick={() => void handoffSelectedToMedia()} disabled={!selectedArticles.some(canQueueArticle) || commandBusy('previewExport', 'exportToSubmissionQueue')} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
+         </div>
+          <button type="button" onClick={() => void queueSelected()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+          <button type="button" onClick={() => void handoffSelectedToMedia()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || commandBusy('previewExport', 'exportToSubmissionQueue')} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
         <AccountProfileSelector platforms={submissionPlatforms} targetPlatformIds={targetPlatformIds} value={accountProfiles} onChange={setAccountProfiles} />
       </div>
     </div>
