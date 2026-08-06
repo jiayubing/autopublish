@@ -228,6 +228,33 @@ describe("media-resource-service", function () {
     assert.strictEqual(paged.items[0].resourceId, "1");
   });
 
+  it("re-queries one current remote resource and returns a stable fingerprint", async function () {
+    let calls = 0;
+    const current = createMediaResourceService({
+      client: {
+        mediaList: async function (input) {
+          calls += 1;
+          if (input.page === 1) return { data: [{ resource_id: "other", title: "其他", price: "1" }], total: 2, hasNext: true };
+          return { data: [{ resource_id: "target", title: "目标媒体", price: "12.5", available: true, remark: "备注" }], total: 2, hasNext: false };
+        },
+      },
+    });
+    const resource = await current.queryCurrentResource("target");
+    assert.equal(calls, 2);
+    assert.deepEqual(resource, {
+      resourceId: "target",
+      name: "目标媒体",
+      price: 12.5,
+      remarks: "备注",
+      publishRate: undefined,
+      publishTime: undefined,
+      caseLink: undefined,
+      available: true,
+      fingerprint: require("node:crypto").createHash("sha256").update(JSON.stringify({ resourceId: "target", name: "目标媒体", price: 12.5, available: true, remarks: "备注", publishRate: null, publishTime: null, caseLink: null })).digest("hex"),
+    });
+    await assert.rejects(current.queryCurrentResource("missing"), { code: "MEDIA_RESOURCE_NOT_FOUND" });
+  });
+
   it("refreshes all pages until the api returns a short page and writes the cache", async function () {
     const written = [];
     const resourceStore = {

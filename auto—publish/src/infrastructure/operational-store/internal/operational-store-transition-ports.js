@@ -17,6 +17,10 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     admitRegularQueueItem: queue.admitRegularQueueItem,
     removePendingQueueItem: queue.removePendingQueueItem,
   });
+  holder.paidAdmissionTransitions = Object.freeze({
+    listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
+    admitPaidBatch: queue.admitPaidBatch,
+  });
 }
 
 module.exports = { exposeOperationalStoreTransitionPorts };

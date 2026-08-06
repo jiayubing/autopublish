@@ -409,6 +409,12 @@ const api = {
     removePendingQueueItems: function(input) {
       return ipcRenderer.invoke("content:remove-pending-queue-items", input);
     },
+    previewPaidMediaPreflight: function(input) {
+      return ipcRenderer.invoke("content:preview-paid-media-preflight", input);
+    },
+    confirmPaidMediaBatch: function(input) {
+      return ipcRenderer.invoke("content:confirm-paid-media-batch", input);
+    },
     cancelSubmissionBatch: function(input) {
       return ipcRenderer.invoke("content:cancel-submission-batch", input);
     },

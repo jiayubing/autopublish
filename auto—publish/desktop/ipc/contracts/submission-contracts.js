@@ -6,6 +6,7 @@ const {
   integerField,
   literalField,
   multilineStringField,
+  numberField,
   nullableField,
   optionalField,
   stringField,
@@ -189,6 +190,66 @@ const regularRemovalResult = exactObject({
   idempotentCount: count,
   conflictCount: count,
 });
+const paidArticleSummary = exactObject({
+  articleRef,
+  articleId: id,
+  title: safeText(1000),
+  contentFingerprint: optionalField(nullableField(id)),
+  status: enumField(["ready", "blocked"]),
+  reasonCodes: arrayField(code, { max: 32 }),
+  riskCodes: arrayField(code, { max: 8 }),
+});
+const paidRiskWarning = exactObject({
+  code,
+  message: safeText(500, 1),
+  count,
+});
+const paidPreflightResult = exactObject({
+  version: integerField({ min: 1, max: 10 }),
+  status: enumField(["ready", "blocked"]),
+  canConfirm: "boolean",
+  confirmationToken: id,
+  confirmationFingerprint: id,
+  articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
+  articleCount: count,
+  articles: arrayField(paidArticleSummary, { max: 1000 }),
+  mediaResourceId: id,
+  mediaName: safeText(500),
+  mediaRemarks: safeText(10000),
+  resourceFingerprint: id,
+  resourceAvailable: "boolean",
+  quotedPrice: nullableField(numberField({ min: 0, max: 100000000 })),
+  estimatedTotal: nullableField(numberField({ min: 0, max: 1000000000 })),
+  systemSubmissionCode: safeText(128),
+  blockers: arrayField(code, { max: 64 }),
+  risks: arrayField(paidRiskWarning, { max: 8 }),
+  createdAt: safeText(64, 1),
+  expiresAt: safeText(64, 1),
+});
+const paidAdmissionItem = exactObject({
+  articleRef,
+  articleId: id,
+  itemId: id,
+  batchId: id,
+  publicationId: id,
+  attemptId: id,
+  targetKey: safeText(256, 1),
+  status: safeText(64, 1),
+  idempotent: "boolean",
+});
+const paidAdmissionResult = exactObject({
+  batchId: id,
+  targetKey: safeText(256, 1),
+  mediaResourceId: id,
+  status: safeText(64, 1),
+  articleCount: count,
+  idempotent: "boolean",
+  items: arrayField(paidAdmissionItem, { min: 1, max: 1000 }),
+  articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
+  confirmationFingerprint: id,
+  quotedPrice: numberField({ min: 0, max: 100000000 }),
+  estimatedTotal: numberField({ min: 0, max: 1000000000 }),
+});
 
 const COMMON_ERRORS = Object.freeze({
   AUTH_REQUIRED: { category: "authentication", retryability: "never", userMessage: "请先完成登录后再继续。" },
@@ -236,6 +297,42 @@ const COMMON_ERRORS = Object.freeze({
   PUBLICATION_UNCERTAIN: { category: "conflict", retryability: "manual-check", userMessage: "投稿结果不确定，需要人工核对。" },
   PUBLICATION_CANCELLED: { category: "conflict", retryability: "never", userMessage: "该投稿事实已终止，不能继续写入远端结果。" },
   REGULAR_QUEUE_SINGLE_CLIENT_REQUIRED: { category: "validation", retryability: "never", userMessage: "一次普通平台入队只能包含同一客户的文章。" },
+  PAID_MEDIA_ARTICLES_REQUIRED: { category: "validation", retryability: "never", userMessage: "请至少选择一篇文章进行付费预检。" },
+  PAID_MEDIA_ARTICLE_IDENTITY_INVALID: { category: "validation", retryability: "never", userMessage: "付费投稿文章身份无效。" },
+  PAID_MEDIA_ARTICLE_NOT_FOUND: { category: "validation", retryability: "never", userMessage: "所选付费文章不存在。" },
+  PAID_MEDIA_RESOURCE_REQUIRED: { category: "validation", retryability: "never", userMessage: "请选择一个媒体资源。" },
+  PAID_MEDIA_RESOURCE_QUERY_FAILED: { category: "transport", retryability: "safe", userMessage: "媒体资源状态读取失败，请重新预检。" },
+  PAID_MEDIA_RESOURCE_RECHECK_FAILED: { category: "transport", retryability: "safe", userMessage: "媒体资源复核失败，请重新预检。" },
+  PAID_MEDIA_RESOURCE_UNAVAILABLE: { category: "conflict", retryability: "safe", userMessage: "媒体资源当前不可接单，请重新选择资源。" },
+  PAID_MEDIA_RESOURCE_PRICE_INVALID: { category: "validation", retryability: "never", userMessage: "媒体资源报价无效，无法确认费用。" },
+  PAID_MEDIA_ARTICLE_CONTENT_REQUIRED: { category: "validation", retryability: "never", userMessage: "文章标题和正文必须完整。" },
+  PAID_MEDIA_TITLE_TOO_LONG: { category: "validation", retryability: "never", userMessage: "网站媒体标题不能超过 30 个字符。" },
+  PAID_MEDIA_SYSTEM_SUBMISSION_CODE_REQUIRED: { category: "validation", retryability: "never", userMessage: "请先配置系统投稿标识码。" },
+  PAID_MEDIA_SYSTEM_SUBMISSION_CODE_CHANGED: { category: "conflict", retryability: "safe", userMessage: "系统投稿标识码已变化，请重新预检。" },
+  PAID_MEDIA_CONFIRMATION_REQUIRED: { category: "validation", retryability: "never", userMessage: "请先完成付费费用预检。" },
+  PAID_MEDIA_CONFIRMATION_BLOCKED: { category: "validation", retryability: "never", userMessage: "当前内容或媒体资源不满足付费确认条件。" },
+  PAID_MEDIA_CONFIRMATION_STALE: { category: "conflict", retryability: "safe", userMessage: "付费确认已过期，请重新预检。" },
+  PAID_ADMISSION_TRANSITION_UNAVAILABLE: { category: "internal", retryability: "manual-check", userMessage: "付费批次事务当前不可用。" },
+  PAID_ADMISSION_CONFIRMATION_FINGERPRINT_REQUIRED: { category: "validation", retryability: "never", userMessage: "付费确认指纹缺失，请重新预检。" },
+  PAID_ADMISSION_CONFIRMATION_INVALID: { category: "validation", retryability: "never", userMessage: "付费确认快照无效，请重新预检。" },
+  PAID_ADMISSION_TARGET_INVALID: { category: "validation", retryability: "never", userMessage: "付费媒体资源目标无效。" },
+  PAID_ADMISSION_MEDIA_REQUIRED: { category: "validation", retryability: "never", userMessage: "付费批次必须绑定一个媒体资源。" },
+  PAID_ADMISSION_ARTICLES_REQUIRED: { category: "validation", retryability: "never", userMessage: "付费批次至少需要一篇文章。" },
+  PAID_ADMISSION_ARTICLE_INVALID: { category: "validation", retryability: "never", userMessage: "付费批次文章身份无效。" },
+  PAID_ADMISSION_ITEM_INVALID: { category: "validation", retryability: "never", userMessage: "付费批次项无效，请重新预检。" },
+  PAID_ADMISSION_SNAPSHOT_INVALID: { category: "validation", retryability: "never", userMessage: "付费文章快照无效，请重新预检。" },
+  PAID_ADMISSION_ARTICLE_DUPLICATE: { category: "validation", retryability: "never", userMessage: "同一付费批次不能重复选择文章。" },
+  PAID_ADMISSION_ARTICLE_COUNT_INVALID: { category: "validation", retryability: "never", userMessage: "付费批次文章数量已变化，请重新预检。" },
+  PAID_ADMISSION_PRICE_INVALID: { category: "validation", retryability: "never", userMessage: "付费确认金额无效，请重新预检。" },
+  PAID_ADMISSION_BATCH_CONFLICT: { category: "conflict", retryability: "safe", userMessage: "付费批次已发生变化，请刷新后重新预检。" },
+  PAID_ADMISSION_TRANSACTION_FAILED: { category: "storage", retryability: "safe", userMessage: "付费批次事务已回滚，请重试确认。" },
+  PAID_ADMISSION_FAILED: { category: "internal", retryability: "manual-check", userMessage: "付费批次未能安全建立，请检查诊断信息。" },
+  OPERATIONAL_SYSTEM_SUBMISSION_CODE_REQUIRED: { category: "validation", retryability: "never", userMessage: "请先配置系统投稿标识码。" },
+  PUBLICATION_DUPLICATE: { category: "conflict", retryability: "safe", userMessage: "文章已有该媒体资源的发布记录。" },
+  PUBLICATION_TARGET_CONFLICT: { category: "conflict", retryability: "safe", userMessage: "文章已有其他活动投稿目标。" },
+  ARTICLE_MUTATION_BUSY: { category: "conflict", retryability: "safe", userMessage: "文章正在被其他操作修改，请稍后重试。" },
+  ARTICLE_MUTATION_RESULT_UNCERTAIN: { category: "conflict", retryability: "manual-check", userMessage: "付费文章状态需要人工核对。" },
+  PAID_MEDIA_PREFLIGHT_UNAVAILABLE: { category: "internal", retryability: "manual-check", userMessage: "付费媒体预检当前不可用。" },
 });
 const errorCodes = Object.freeze(Object.keys(COMMON_ERRORS));
 function contract(input) { return defineContract({ feature: "content", ...input, errorCodes, errors: COMMON_ERRORS }); }
@@ -282,6 +379,8 @@ const submissionContracts = Object.freeze([
   contract({ capability: "content.previewRegularQueueAdmission", channel: "content:preview-regular-queue-admission", kind: "query", request: exactObject(regularAdmissionFields), success: regularAdmissionPreview, fromArgs: directArgs, toArgs: directInput }),
   contract({ capability: "content.admitRegularQueueItems", channel: "content:admit-regular-queue-items", kind: "command", request: exactObject(Object.assign({}, regularAdmissionFields, { confirmed: literalField(true) })), success: regularAdmissionResult, fromArgs: directArgs, toArgs: directInput }),
   contract({ capability: "content.removePendingQueueItems", channel: "content:remove-pending-queue-items", kind: "command", request: regularRemovalRequest, success: regularRemovalResult, fromArgs: directArgs, toArgs: directInput }),
+  contract({ capability: "content.previewPaidMediaPreflight", channel: "content:preview-paid-media-preflight", kind: "query", request: exactObject({ articleRefs: arrayField(articleRef, { min: 1, max: 1000 }), mediaResourceId: id }), success: paidPreflightResult, fromArgs: directArgs, toArgs: directInput }),
+  contract({ capability: "content.confirmPaidMediaBatch", channel: "content:confirm-paid-media-batch", kind: "command", request: exactObject({ confirmationToken: id, confirmed: literalField(true) }), success: paidAdmissionResult, fromArgs: directArgs, toArgs: directInput }),
 ]);
 
 function include(output, input, key) { if (input[key] !== undefined) output[key] = input[key]; }
@@ -347,6 +446,69 @@ function projectRegularAdmission(value, kind) {
   }
   return output;
 }
+function projectPaidArticleSummary(value) {
+  const input = value || {};
+  return {
+    articleRef: projectArticleRef(input.articleRef || input),
+    articleId: input.articleId,
+    title: input.title || "",
+    contentFingerprint: input.contentFingerprint === undefined ? null : input.contentFingerprint,
+    status: input.status,
+    reasonCodes: Array.isArray(input.reasonCodes) ? input.reasonCodes : [],
+    riskCodes: Array.isArray(input.riskCodes) ? input.riskCodes : [],
+  };
+}
+function projectPaidPreflight(value) {
+  const input = value || {};
+  return {
+    version: input.version,
+    status: input.status,
+    canConfirm: input.canConfirm === true,
+    confirmationToken: input.confirmationToken,
+    confirmationFingerprint: input.confirmationFingerprint,
+    articleRefs: (input.articleRefs || []).map(projectArticleRef),
+    articleCount: input.articleCount,
+    articles: (input.articles || []).map(projectPaidArticleSummary),
+    mediaResourceId: input.mediaResourceId,
+    mediaName: input.mediaName || "",
+    mediaRemarks: input.mediaRemarks || "",
+    resourceFingerprint: input.resourceFingerprint,
+    resourceAvailable: input.resourceAvailable === true,
+    quotedPrice: input.quotedPrice,
+    estimatedTotal: input.estimatedTotal,
+    systemSubmissionCode: input.systemSubmissionCode || "",
+    blockers: input.blockers || [],
+    risks: (input.risks || []).map((risk) => ({ code: risk.code, message: risk.message, count: risk.count })),
+    createdAt: input.createdAt,
+    expiresAt: input.expiresAt,
+  };
+}
+function projectPaidAdmission(value) {
+  const input = value || {};
+  return {
+    batchId: input.batchId,
+    targetKey: input.targetKey,
+    mediaResourceId: input.mediaResourceId,
+    status: input.status,
+    articleCount: input.articleCount,
+    idempotent: input.idempotent === true,
+    items: (input.items || []).map((item) => ({
+      articleRef: projectArticleRef(item.articleRef || item),
+      articleId: item.articleId,
+      itemId: item.itemId,
+      batchId: item.batchId || input.batchId,
+      publicationId: item.publicationId,
+      attemptId: item.attemptId,
+      targetKey: item.targetKey || input.targetKey,
+      status: item.status,
+      idempotent: item.idempotent === true,
+    })),
+    articleRefs: (input.articleRefs || []).map(projectArticleRef),
+    confirmationFingerprint: input.confirmationFingerprint,
+    quotedPrice: input.quotedPrice,
+    estimatedTotal: input.estimatedTotal,
+  };
+}
 function projectResidueItem(value) {
   const input = value || {};
   const output = { status: input.status, reasonCode: input.reasonCode == null ? null : input.reasonCode };
@@ -379,6 +541,8 @@ function projectSubmissionResult(channel, value) {
     idempotentCount: value.idempotentCount,
     conflictCount: value.conflictCount,
   };
+  if (channel === "content:preview-paid-media-preflight") return projectPaidPreflight(value);
+  if (channel === "content:confirm-paid-media-batch") return projectPaidAdmission(value);
   return value;
 }
 
@@ -396,6 +560,8 @@ const submissionContractFixtures = Object.freeze([
   { channel: "content:preview-regular-queue-admission", owner: "content", productionCaller: "desktopConsole.content.previewRegularQueueAdmission", request: { articleRefs: [{ clientId: "client-1", articleId: "article-1" }], platformId: "toutiao", accountProfileId: "profile-1" }, result: { target: { platformId: "toutiao", accountProfileId: "profile-1" }, articleRefs: [{ clientId: "client-1", articleId: "article-1" }], items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", status: "queueable" }], totalCount: 1, queueableCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: 0 } },
   { channel: "content:admit-regular-queue-items", owner: "content", productionCaller: "desktopConsole.content.admitRegularQueueItems", request: { articleRefs: [{ clientId: "client-1", articleId: "article-1" }], platformId: "toutiao", accountProfileId: "profile-1", confirmed: true }, result: { batchId: "regular-batch-1", target: { platformId: "toutiao", accountProfileId: "profile-1" }, articleRefs: [{ clientId: "client-1", articleId: "article-1" }], items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", itemId: "regular-item-1", batchId: "regular-batch-1", status: "queued" }], admittedCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: 0 } },
   { channel: "content:remove-pending-queue-items", owner: "content", productionCaller: "desktopConsole.content.removePendingQueueItems", request: { items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, itemId: "regular-item-1", batchId: "regular-batch-1" }], confirmed: true }, result: { items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", itemId: "regular-item-1", batchId: "regular-batch-1", status: "cancelled", idempotent: false }], removedCount: 1, idempotentCount: 0, conflictCount: 0 } },
+  { channel: "content:preview-paid-media-preflight", owner: "content", productionCaller: "desktopConsole.content.previewPaidMediaPreflight", request: { articleRefs: [{ clientId: "client-1", articleId: "article-1" }], mediaResourceId: "media-1" }, result: { version: 1, status: "ready", canConfirm: true, confirmationToken: "token-1", confirmationFingerprint: "fingerprint-1", articleRefs: [{ clientId: "client-1", articleId: "article-1" }], articleCount: 1, articles: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", title: "标题", contentFingerprint: "content-fingerprint-1", status: "ready", reasonCodes: [], riskCodes: [] }], mediaResourceId: "media-1", mediaName: "媒体一", mediaRemarks: "备注", resourceFingerprint: "resource-fingerprint-1", resourceAvailable: true, quotedPrice: 12.5, estimatedTotal: 12.5, systemSubmissionCode: "system-id", blockers: [], risks: [], createdAt: "2026-08-07T00:00:00.000Z", expiresAt: "2026-08-07T00:05:00.000Z" } },
+  { channel: "content:confirm-paid-media-batch", owner: "content", productionCaller: "desktopConsole.content.confirmPaidMediaBatch", request: { confirmationToken: "token-1", confirmed: true }, result: { batchId: "paid-batch-1", targetKey: "media-resource:media-1", mediaResourceId: "media-1", status: "queued", articleCount: 1, idempotent: false, items: [{ articleRef: { clientId: "client-1", articleId: "article-1" }, articleId: "article-1", itemId: "paid-item-1", batchId: "paid-batch-1", publicationId: "paid-publication-1", attemptId: "paid-attempt-1", targetKey: "media-resource:media-1", status: "queued", idempotent: false }], articleRefs: [{ clientId: "client-1", articleId: "article-1" }], confirmationFingerprint: "fingerprint-1", quotedPrice: 12.5, estimatedTotal: 12.5 } },
 ]);
 
 module.exports = {

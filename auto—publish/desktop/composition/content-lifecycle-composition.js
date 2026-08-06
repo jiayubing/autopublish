@@ -43,6 +43,8 @@ function createContentLifecycleComposition(options) {
       value.publicationTransitions ||
       value.operationalStore,
     regularQueueTransitions: value.regularQueueTransitions,
+    paidAdmissionTransitions: value.paidAdmissionTransitions,
+    systemSubmissionCodeProvider: value.systemSubmissionCodeProvider,
     removalTransactionStore: articleRemovalTransactionStore,
     articleRemovalTransitionPort,
     clock: value.clock,
