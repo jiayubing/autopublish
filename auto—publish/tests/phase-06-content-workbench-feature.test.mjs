@@ -202,6 +202,42 @@ test('content workspace owns single-article submission preview and enqueue separ
   );
 });
 
+test('content workspace keeps paid-media preflight and confirmation as named commands', async () => {
+  const calls = [];
+  let managementLoads = 0;
+  const feature = createContentWorkbenchFeature({
+    listClients: async () => [{ id: 'a', name: 'A' }],
+    listTemplateCatalog: async () => ({ revision: 'r1', platforms: [], templates: [], diagnostics: [] }),
+    listQuestions: async () => [],
+    listResearch: async () => [],
+    loadManagement: async () => {
+      managementLoads += 1;
+      return {};
+    },
+    previewPaidMediaPreflight: async (input) => {
+      calls.push(['preview', input]);
+      return { confirmationToken: 'token-1', canConfirm: true };
+    },
+    confirmPaidMediaBatch: async (input) => {
+      calls.push(['confirm', input]);
+      return { batchId: 'batch-1', articleCount: 1 };
+    },
+  });
+  feature.setScope({ workspaceRuntimeId: 'runtime-1' });
+  await feature.refresh('initial');
+  await feature.commands.previewPaidMediaPreflight({
+    articleRefs: [{ clientId: 'a', articleId: 'article-a' }],
+    mediaResourceId: 'media-1',
+  });
+  await feature.commands.confirmPaidMediaBatch({ confirmationToken: 'token-1' });
+  assert.deepEqual(calls, [
+    ['preview', { articleRefs: [{ clientId: 'a', articleId: 'article-a' }], mediaResourceId: 'media-1' }],
+    ['confirm', { confirmationToken: 'token-1' }],
+  ]);
+  assert.ok(managementLoads >= 2);
+  assert.equal(feature.getSnapshot().commands.confirmPaidMediaBatch.busy, false);
+});
+
 test('workspace-level content commands remain available when source loading has no selected client', async () => {
   const calls = [];
   const feature = createContentWorkbenchFeature({

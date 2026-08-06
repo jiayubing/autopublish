@@ -6,6 +6,7 @@ const { createMediaSupplierAdapter } = require("../../src/platforms/media/media-
 const { createMediaOrderService } = require("./media-order-service");
 const { createMediaWorkbenchService } = require("./media-workbench-service");
 const { createMediaResourceService } = require("./media-resource-service");
+const { createPaidMediaPreflightService } = require("./paid-media-preflight-service");
 const {
   validateMediaSubmission,
   validateDraft,
@@ -166,6 +167,18 @@ function createMediaWorkbenchApplication(options) {
     paths: values.paths,
     clientProvider,
   });
+  const paidMediaPreflightService = values.paidMediaPreflightService || (
+    values.contentStore && values.paidAdmissionFacade
+      ? createPaidMediaPreflightService({
+        contentStore: values.contentStore,
+        paidAdmission: values.paidAdmissionFacade,
+        lifecycleFacts: values.paidLifecycleFacts,
+        resourceService,
+        systemSubmissionCodeProvider: values.systemSubmissionCodeProvider,
+        clock: values.clock,
+      })
+      : null
+  );
 
   async function resolveSubmissions(submissions) {
     if (!Array.isArray(submissions) || !submissions.length) throw inputError();
@@ -248,6 +261,22 @@ function createMediaWorkbenchApplication(options) {
       const articles = await resolveSubmissions(submissions);
       const summary = workbenchService.buildConfirmationSummary(articles);
       return projectMediaPreflight(await applyPublicationBlocks(summary, articles, values));
+    },
+    preflightPaidMedia: async (input) => {
+      if (!paidMediaPreflightService || typeof paidMediaPreflightService.preflight !== "function") {
+        const error = new Error("Paid media preflight is unavailable");
+        error.code = "PAID_MEDIA_PREFLIGHT_UNAVAILABLE";
+        throw error;
+      }
+      return paidMediaPreflightService.preflight(input || {});
+    },
+    confirmPaidMedia: async (input) => {
+      if (!paidMediaPreflightService || typeof paidMediaPreflightService.confirm !== "function") {
+        const error = new Error("Paid media confirmation is unavailable");
+        error.code = "PAID_MEDIA_PREFLIGHT_UNAVAILABLE";
+        throw error;
+      }
+      return paidMediaPreflightService.confirm(input || {});
     },
     submitSelected: async (submissions) => {
       const prepared = await resolveSubmissions(submissions);

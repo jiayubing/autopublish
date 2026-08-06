@@ -22,6 +22,23 @@ const MAX_REMOTE_PAGES = 200;
 const MAX_RESOURCE_IDS = 20000;
 const MEDIA_RESOURCE_TYPES = new Set(["image", "video", "audio", "document"]);
 
+function canonicalResourceFingerprint(resource) {
+  const value = resource || {};
+  return require("node:crypto")
+    .createHash("sha256")
+    .update(JSON.stringify({
+      resourceId: String(value.resourceId || ""),
+      name: String(value.name || ""),
+      price: value.price === undefined ? null : value.price,
+      available: value.available !== false,
+      remarks: String(value.remarks || ""),
+      publishRate: value.publishRate === undefined ? null : value.publishRate,
+      publishTime: value.publishTime === undefined ? null : value.publishTime,
+      caseLink: value.caseLink === undefined ? null : value.caseLink,
+    }))
+    .digest("hex");
+}
+
 function createMediaResourceService(opts) {
   opts = opts || {};
   var resourceStore = opts.resourceStore || new MediaResourceStore({ filePath: opts.resourceStorePath });
@@ -223,6 +240,30 @@ function createMediaResourceService(opts) {
     };
   }
 
+  async function queryCurrentResource(resourceId) {
+    var requestedId = firstText(resourceId);
+    if (!requestedId || requestedId.length > 128) {
+      throw serviceError("MEDIA_RESOURCE_ID_INVALID", "Media resource identity is invalid");
+    }
+    var client = supplierProvider ? null : getClient();
+    for (var page = 1; page <= MAX_REMOTE_PAGES; page += 1) {
+      var response = await fetchResourcePage(client, page, DEFAULT_PAGE_SIZE);
+      var resources = extractResourceItems(response)
+        .map(normalizeResource)
+        .filter(hasResourceId);
+      var found = resources.find(function(resource) { return resource.resourceId === requestedId; });
+      if (found) return Object.freeze(Object.assign({}, found, {
+        fingerprint: canonicalResourceFingerprint(found),
+      }));
+      var metadata = extractPaginationMetadata(response);
+      var hasNext = metadata.hasNext === true ||
+        (metadata.hasNext === null && metadata.total !== null && page * DEFAULT_PAGE_SIZE < metadata.total) ||
+        (metadata.hasNext === null && metadata.total === null && resources.length >= DEFAULT_PAGE_SIZE);
+      if (!hasNext) break;
+    }
+    throw serviceError("MEDIA_RESOURCE_NOT_FOUND", "Media resource is unavailable");
+  }
+
   async function fetchResourcePage(client, page, pageSize) {
     if (!supplierProvider) return client.mediaList({ page: page, pageSize: pageSize });
     var result = await supplierProvider().refreshMediaResources({ page: page, pageSize: pageSize });
@@ -296,6 +337,7 @@ function createMediaResourceService(opts) {
     getCachedResourcePage: getCachedResourcePage,
     searchResourcePage: searchResourcePage,
     refreshResources: refreshResources,
+    queryCurrentResource: queryCurrentResource,
     getPoolPage: getPoolPage,
     addToPool: addToPool,
     removeFromPool: removeFromPool,
@@ -382,4 +424,4 @@ function preserveAvailability(normalized, resource) {
   return normalized;
 }
 
-module.exports = { createMediaResourceService };
+module.exports = { createMediaResourceService, resourceFingerprint: canonicalResourceFingerprint };

@@ -55,8 +55,13 @@ function createArticleMutationCoordinator(options) {
   // regular admission/removal never closes over it.
   const legacyOperationalStore = value.operationalStore || null;
   const publicationTransitions = value.publicationTransitions || legacyOperationalStore;
-  const lifecycleFacts = value.lifecycleFacts || publicationTransitions;
+  const lifecycleFacts = value.lifecycleFacts || publicationTransitions || value.paidAdmissionTransitions;
   const regularQueueTransitions = value.regularQueueTransitions || null;
+  const paidAdmissionTransitions = value.paidAdmissionTransitions || null;
+  const systemSubmissionCodeProvider =
+    typeof value.systemSubmissionCodeProvider === "function"
+      ? value.systemSubmissionCodeProvider
+      : null;
   const removalTransactionStore = value.removalTransactionStore || null;
   const articleRemovalTransitionPort = value.articleRemovalTransitionPort || null;
   const clock = value.clock || function () { return new Date().toISOString(); };
@@ -132,14 +137,14 @@ function createArticleMutationCoordinator(options) {
     }) || { publications: [], submissionItems: [], orders: [], attentionItems: [] };
   }
 
-  function factsFor(refs) {
+  function factsFor(refs, sourcePort) {
     const allRemovalTransactions = removalTransactionStore && typeof removalTransactionStore.list === "function"
       ? removalTransactionStore.list()
       : [];
     const removalTransactions = allRemovalTransactions.filter(function (transaction) {
       return refs.some(function (ref) { return removalTransactionMatchesArticle(transaction, ref); });
     });
-    const facts = factsFrom(lifecycleFacts, refs);
+    const facts = factsFrom(sourcePort || lifecycleFacts, refs);
     const operationalRemovalTransactions = Array.isArray(facts.removalTransactions)
       ? facts.removalTransactions
       : [];
@@ -415,6 +420,58 @@ function createArticleMutationCoordinator(options) {
     return ordered;
   }
 
+  function paidAdmissionRefs(input) {
+    const request = input || {};
+    const refs = Array.isArray(request.articleRefs)
+      ? request.articleRefs
+      : Array.isArray(request.selections)
+        ? request.selections.map(function (selection) {
+          return selection && selection.articleRef ? selection.articleRef : selection;
+        })
+        : [];
+    if (!refs.length) throw mutationError("PAID_ADMISSION_ARTICLES_REQUIRED");
+    return canonicalArticleRefs(refs);
+  }
+
+  function paidFingerprintFor(request, ref) {
+    const entries = request && request.articleFingerprints;
+    if (Array.isArray(entries)) {
+      const match = entries.find(function (entry) {
+        return entry && entry.articleRef &&
+          canonicalArticleRefKey(entry.articleRef) === canonicalArticleRefKey(ref);
+      });
+      return match && match.fingerprint;
+    }
+    if (entries && typeof entries === "object" && !Array.isArray(entries)) {
+      return entries[canonicalArticleRefKey(ref)] || entries[ref.articleId];
+    }
+    return undefined;
+  }
+
+  function currentSystemSubmissionCode(request) {
+    let value = request && request.systemSubmissionCode;
+    if (systemSubmissionCodeProvider) {
+      const provided = systemSubmissionCodeProvider();
+      value = provided && typeof provided === "object"
+        ? provided.systemSubmissionCode || provided.thirdPartyId
+        : provided;
+    }
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function paidAdmissionTarget(input) {
+    let target;
+    try {
+      target = domain.parsePublicationTarget(input && input.target
+        ? input.target
+        : { kind: "media", mediaResourceId: input && input.mediaResourceId });
+    } catch (_) {
+      throw mutationError("PAID_ADMISSION_TARGET_INVALID");
+    }
+    if (target.kind !== "media") throw mutationError("PAID_ADMISSION_MEDIA_REQUIRED");
+    return target;
+  }
+
   function regularRemovalSelections(input, ordered) {
     const request = input || {};
     const entries = Array.isArray(request.items)
@@ -520,6 +577,115 @@ function createArticleMutationCoordinator(options) {
         missingCount: items.filter(function (item) { return item.status === "missing"; }).length,
         conflictCount: items.filter(function (item) { return item.status === "conflict"; }).length,
       });
+    });
+  }
+
+  function admitPaidBatch(input) {
+    if (!paidAdmissionTransitions || typeof paidAdmissionTransitions.admitPaidBatch !== "function")
+      throw mutationError("PAID_ADMISSION_TRANSITION_UNAVAILABLE");
+    const request = input || {};
+    const target = paidAdmissionTarget(request);
+    const ordered = paidAdmissionRefs(request);
+    const batchId = request.batchId || `paid-batch-${crypto.randomUUID()}`;
+    const confirmationFingerprint = request.confirmationFingerprint;
+    if (typeof confirmationFingerprint !== "string" || !confirmationFingerprint.trim())
+      throw mutationError("PAID_ADMISSION_CONFIRMATION_FINGERPRINT_REQUIRED");
+    const resourceSnapshot = request.resourceSnapshot || {};
+    if (
+      resourceSnapshot.resourceId !== target.mediaResourceId ||
+      resourceSnapshot.available !== true ||
+      typeof resourceSnapshot.fingerprint !== "string" ||
+      !resourceSnapshot.fingerprint.trim() ||
+      typeof resourceSnapshot.price !== "number" ||
+      !Number.isFinite(resourceSnapshot.price) ||
+      resourceSnapshot.price < 0
+    )
+      throw mutationError("PAID_MEDIA_CONFIRMATION_STALE");
+    if (
+      typeof request.quotedPrice !== "number" ||
+      !Number.isFinite(request.quotedPrice) ||
+      request.quotedPrice !== resourceSnapshot.price ||
+      typeof request.estimatedTotal !== "number" ||
+      !Number.isFinite(request.estimatedTotal) ||
+      request.estimatedTotal < 0
+    )
+      throw mutationError("PAID_MEDIA_CONFIRMATION_STALE");
+    if (!request.confirmation || typeof request.confirmation !== "object" || Array.isArray(request.confirmation))
+      throw mutationError("PAID_ADMISSION_CONFIRMATION_INVALID");
+
+    return withArticleSet(ordered, function (session, markSideEffect) {
+      const systemSubmissionCode = currentSystemSubmissionCode(request);
+      if (!systemSubmissionCode || systemSubmissionCode !== String(request.systemSubmissionCode || "").trim())
+        throw mutationError("PAID_MEDIA_SYSTEM_SUBMISSION_CODE_CHANGED");
+      if (request.confirmation.systemSubmissionCode !== undefined &&
+          request.confirmation.systemSubmissionCode !== systemSubmissionCode)
+        throw mutationError("PAID_MEDIA_CONFIRMATION_STALE");
+      const facts = factsFor(ordered, paidAdmissionTransitions);
+      const items = ordered.map(function (ref) {
+        const article = session.readArticle(ref);
+        const workflow = workflowFor(article, [ref], facts);
+        assertAllowed(workflow, "queue");
+        const fingerprint = fingerprintArticle(article);
+        const expectedFingerprint = paidFingerprintFor(request, ref);
+        if (typeof expectedFingerprint !== "string" || expectedFingerprint !== fingerprint)
+          throw mutationError("PAID_MEDIA_CONFIRMATION_STALE", "Article changed after paid-media preflight", {
+            articleId: ref.articleId,
+            refreshRequired: true,
+          });
+        const title = typeof article.title === "string" ? article.title : "";
+        const body = typeof article.content === "string" ? article.content : "";
+        if (Array.from(title.trim()).length > 30)
+          throw mutationError("PAID_MEDIA_TITLE_TOO_LONG");
+        if (!title.trim() || !body.trim())
+          throw mutationError("PAID_MEDIA_ARTICLE_CONTENT_REQUIRED");
+        return Object.freeze({
+          clientId: ref.clientId,
+          articleRef: ref,
+          articleId: ref.articleId,
+          itemId: `paid-item-${crypto.randomUUID()}`,
+          publicationId: `paid-publication-${crypto.randomUUID()}`,
+          attemptId: `paid-attempt-${crypto.randomUUID()}`,
+          target,
+          publicationSnapshot: Object.freeze({
+            articleId: ref.articleId,
+            title: title.trim(),
+            body,
+            fingerprint,
+          }),
+          resourceNameSnapshot: typeof resourceSnapshot.name === "string" ? resourceSnapshot.name : "",
+          payload: {
+            sourcePlatformId: "media",
+            filename: typeof request.confirmation.filename === "string" ? request.confirmation.filename : undefined,
+          },
+        });
+      });
+      const result = paidAdmissionTransitions.admitPaidBatch({
+        batchId,
+        target,
+        mediaResourceId: target.mediaResourceId,
+        confirmationFingerprint: confirmationFingerprint.trim(),
+        confirmation: request.confirmation,
+        systemSubmissionCode,
+        quotedPrice: request.quotedPrice,
+        estimatedTotal: request.estimatedTotal,
+        articleCount: items.length,
+        items,
+      });
+      if (!result || typeof result !== "object")
+        throw mutationError("PAID_ADMISSION_FAILED");
+      if (result.idempotent !== true) markSideEffect();
+      const resultItems = Array.isArray(result.items)
+        ? result.items.map(function (item) {
+          const ref = ordered.find(function (candidate) { return candidate.articleId === item.articleId; });
+          return Object.freeze(Object.assign({}, item, ref ? { articleRef: ref } : {}));
+        })
+        : [];
+      return Object.freeze(Object.assign({}, result, {
+        target,
+        articleRefs: Object.freeze(ordered),
+        confirmationFingerprint: confirmationFingerprint.trim(),
+        items: Object.freeze(resultItems),
+      }));
     });
   }
 
@@ -765,6 +931,7 @@ function createArticleMutationCoordinator(options) {
     commitPublicationOutcome,
     markRecoveryUncertain,
     admitRegularQueueItems,
+    admitPaidBatch,
     removePendingQueueItems,
     executeArticleRemovalTransaction,
     assertTrashedArticleMutationAllowed,

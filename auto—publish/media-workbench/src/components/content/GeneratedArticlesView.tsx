@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { articleSelectionKey, groupArticlesByTemplate, selectableArticles } from '../../article-history-logic';
-import type { ArticleAttentionItem, ArticleRemovalTransaction, ArticleTrashImpactItem, ArticleTrashPreview, ArticleTrashRecord, PublicationHistoryRecord } from '../../types/publication';
+import type { ArticleAttentionItem, ArticleRemovalTransaction, ArticleTrashImpactItem, ArticleTrashPreview, ArticleTrashRecord, PaidMediaPreflight, PublicationHistoryRecord } from '../../types/publication';
 import type { GeneratedContentArticle } from '../../types/generation';
 import { type ArticleWorkflowStage } from '../../article-workflow';
 import type { ArticleManagementReadModel, GeneratedArticlesViewProps as GeneratedArticlesViewPropsBase } from './GeneratedArticlesView.types';
@@ -8,6 +8,7 @@ import { formatBeijingTime } from '../../time-format';
 import PublicationHistoryDrawer from './PublicationHistoryDrawer';
 import ArticleAttentionPanel from './ArticleAttentionPanel';
 import ArticleAttentionDetailDrawer from './ArticleAttentionDetailDrawer';
+import PaidMediaPreflightDialog from './PaidMediaPreflightDialog';
 import AccountProfileSelector from './AccountProfileSelector';
 import GeneratedArticlesList from './GeneratedArticlesList';
 import ArticleTrashPanel from './ArticleTrashPanel';
@@ -56,6 +57,9 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   const [cancellationPending, setCancellationPending] = useState<{ clientId: string; count: number } | null>(null);
   const [batchFeedback, setBatchFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
   const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(null);
+  const [paidMediaResourceId, setPaidMediaResourceId] = useState('');
+  const [paidMediaPreflight, setPaidMediaPreflight] = useState<PaidMediaPreflight | null>(null);
+  const [paidMediaError, setPaidMediaError] = useState('');
   const [trashFeedback, setTrashFeedback] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
   const removalTransaction = removal.transaction;
   const removalTransactionId = removal.transactionId;
@@ -84,6 +88,8 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     setBatchFeedback(null);
     setTrashFeedback(null);
     setTrashPreview(null);
+    setPaidMediaPreflight(null);
+    setPaidMediaError('');
     setDrawerArticle(null);
     setAttentionDetail(null);
     cancellationRequestIdRef.current += 1;
@@ -92,6 +98,8 @@ export default function GeneratedArticlesView({ clientId, management, query, com
 
   const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
     setSelected((current) => typeof next === 'function' ? next(current) : next);
+    setPaidMediaPreflight(null);
+    setPaidMediaError('');
   }, []);
 
   useEffect(() => {
@@ -282,6 +290,41 @@ export default function GeneratedArticlesView({ clientId, management, query, com
         setBatchFeedback({ kind: 'status', text: '已加入付费媒体工作台，请前往付费媒体投稿选择资源。' });
       } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '加入付费媒体工作台失败'); }
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '付费媒体投稿预检失败'); }
+  }
+
+  async function previewPaidMedia() {
+    const requestedClientId = clientId;
+    const selectedQueueable = selectedQueueableArticles;
+    const mediaResourceId = paidMediaResourceId.trim();
+    if (!selectedQueueable.length || !mediaResourceId || commandBusy('previewPaidMediaPreflight', 'confirmPaidMediaBatch')) return;
+    setError('');
+    setPaidMediaError('');
+    try {
+      const preview = await commands.previewPaidMediaPreflight({
+        articleRefs: selectedQueueable.map((article) => ({ clientId: requestedClientId, articleId: article.id })),
+        mediaResourceId,
+      });
+      if (isContentCommandStaleResult(preview) || !isCurrentClient(requestedClientId)) return;
+      setPaidMediaPreflight(preview);
+    } catch (value) {
+      if (isCurrentClient(requestedClientId)) setPaidMediaError(value instanceof Error ? value.message : '付费媒体预检失败');
+    }
+  }
+
+  async function confirmPaidMedia() {
+    const requestedClientId = clientId;
+    const preview = paidMediaPreflight;
+    if (!preview || commandBusy('confirmPaidMediaBatch')) return;
+    setPaidMediaError('');
+    try {
+      const result = await commands.confirmPaidMediaBatch({ confirmationToken: preview.confirmationToken });
+      if (isContentCommandStaleResult(result) || !isCurrentClient(requestedClientId)) return;
+      setPaidMediaPreflight(null);
+      updateSelected([]);
+      setBatchFeedback({ kind: 'status', text: `已确认付费媒体投稿 ${result.articleCount || preview.articleCount} 篇，资源 ${result.mediaResourceId}。` });
+    } catch (value) {
+      if (isCurrentClient(requestedClientId)) setPaidMediaError(value instanceof Error ? value.message : '付费媒体确认失败');
+    }
   }
 
   function openArticle(article: GeneratedContentArticle, source?: HTMLElement | null) {
@@ -546,6 +589,10 @@ export default function GeneratedArticlesView({ clientId, management, query, com
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
          </div>
           <button type="button" onClick={() => void queueSelected()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewRegularQueueAdmission', 'admitRegularQueueItems', 'previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <input value={paidMediaResourceId} onChange={(event) => setPaidMediaResourceId(event.target.value)} placeholder="媒体资源 ID" aria-label="付费媒体资源 ID" className="h-8 w-36 min-w-0 rounded border border-slate-300 px-2 text-xs" />
+            <button type="button" onClick={() => void previewPaidMedia()} title="服务端会重新读取媒体状态和价格；预检不会创建订单" disabled={!selectedQueueableArticles.length || !paidMediaResourceId.trim() || commandBusy('previewPaidMediaPreflight', 'confirmPaidMediaBatch')} className="shrink-0 rounded border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-40">付费媒体预检</button>
+          </div>
           <button type="button" onClick={() => void handoffSelectedToMedia()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || commandBusy('previewExport', 'exportToSubmissionQueue')} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
         <AccountProfileSelector platforms={submissionPlatforms} targetPlatformIds={targetPlatformIds} value={accountProfiles} onChange={setAccountProfiles} />
       </div>
@@ -556,5 +603,6 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     {trashPreview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4" role="dialog" aria-modal="true" aria-label="移入回收站预检"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="text-base font-semibold text-slate-800">移入回收站预检</h3><p className="mt-1 text-xs leading-5 text-slate-500">远端已发布内容不会撤回；发布记录和标题快照会保留。本地文章正文和投稿队列副本会进入回收站/被清理，恢复文章不会自动恢复投稿队列。</p></div><button type="button" onClick={() => setTrashPreview(null)} disabled={commandBusy('trashContentArticles')} aria-label="关闭回收站预检" className="rounded p-1 text-slate-400 hover:bg-slate-100">×</button></div><div className="mt-4 grid gap-2 text-sm text-slate-700"><div>文章数：<strong>{trashPreview.articleCount}</strong></div><div>已发布本地副本：{groupImpact(trashPreview.publishedToClean || []).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">{platform} {count}</span>)}{!(trashPreview.publishedToClean || []).length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>失败本地副本：{groupImpact(trashPreview.failedToClean).map(([platform, count]) => <span key={platform} className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800">{platform} {count}</span>)}{!trashPreview.failedToClean.length && <span className="ml-2 text-xs text-slate-400">无</span>}</div><div>仍在投稿/待确认：{trashPreview.blockedItems.length}</div><div>发布记录：保留</div></div>{(trashPreview.openTransaction || trashPreview.transaction) && <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">已存在相同删除事务，已复用现有事务；请查看上方状态，不会重复创建。</div>}{trashPreview.blockedItems.length > 0 && <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><div className="text-sm font-semibold text-rose-800">阻止项（整批不可提交）</div><ul className="mt-2 grid gap-1 text-xs text-rose-700">{trashPreview.blockedItems.map((item, index) => <li key={`${item.articleId || 'article'}-${index}`}>{item.articleId || '文章'} · {impactPlatform(item)} · {item.reasonCode || item.status || '状态冲突'}</li>)}</ul><p className="mt-2 text-xs text-rose-700">请取消选择风险文章后重新预检。</p></div>}{trashPreview.canCommit && !removalSubmitDisabled && <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">确认后会撤销可撤销的 queued、清理终结的 failed/published/cancelled 本地副本，并将文章移入回收站；远端已发布内容不会撤回。</div>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setTrashPreview(null)} disabled={commandBusy('trashContentArticles')} className="rounded border border-slate-300 px-3 py-2 text-xs">取消</button><button type="button" onClick={() => void commitTrash()} disabled={!trashPreview.canCommit || commandBusy('trashContentArticles') || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{removalSubmitDisabled ? '已有开放删除事务' : '确认移入回收站'}</button></div></div></div>}
     <PublicationHistoryDrawer article={drawerArticle} records={drawerArticle ? (publicationRecordsByArticle.get(drawerArticle.id) || []) : []} summary={drawerArticle ? workflowByArticle.get(drawerArticle.id)?.publicationSummary : undefined} onClose={() => setDrawerArticle(null)} onReconcile={(record, status) => void reconcilePublication(record, status)} busy={commandStates.reconcilePublication.busy} />
     <ArticleAttentionDetailDrawer item={attentionDetail} onClose={() => setAttentionDetail(null)} />
+    {paidMediaPreflight && <PaidMediaPreflightDialog model={paidMediaPreflight} busy={commandStates.confirmPaidMediaBatch?.busy === true} error={paidMediaError} onClose={() => { if (!commandStates.confirmPaidMediaBatch?.busy) { setPaidMediaPreflight(null); setPaidMediaError(''); } }} onConfirm={confirmPaidMedia} />}
   </div>;
 }

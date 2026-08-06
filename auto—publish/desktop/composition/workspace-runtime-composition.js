@@ -172,6 +172,15 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.publicationTransitions,
           regularQueueTransitions:
             operationalStoreTransitionPorts.regularQueueTransitions,
+          paidAdmissionTransitions:
+            operationalStoreTransitionPorts.paidAdmissionTransitions,
+          systemSubmissionCodeProvider: function () {
+            try {
+              return platformSettingsService.getRuntimeConfig("media").thirdPartyId || "";
+            } catch (_) {
+              return "";
+            }
+          },
           clock: options.clock,
         },
       ),
@@ -544,6 +553,19 @@ async function createWorkspaceRuntimeComposition(deps) {
           rootDir: workspaceRoot,
           platformSettingsService,
           operationalStore: publicationComposition.operationalStore,
+          contentStore,
+          paidAdmissionFacade: Object.freeze({
+            admitPaidBatch: articleMutationCoordinator.admitPaidBatch,
+          }),
+          paidLifecycleFacts:
+            operationalStoreTransitionPorts.paidAdmissionTransitions,
+          systemSubmissionCodeProvider: function () {
+            try {
+              return platformSettingsService.getRuntimeConfig("media").thirdPartyId || "";
+            } catch (_) {
+              return "";
+            }
+          },
           platformWorkbenchService,
           mediaPublicationSubmissionService,
           openExternal: options.openExternal,
@@ -591,6 +613,10 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformWorkbenchService,
       platformApplication,
       mediaApplication,
+      paidMediaPreflightService: Object.freeze({
+        preflight: mediaApplication.preflightPaidMedia,
+        confirm: mediaApplication.confirmPaidMedia,
+      }),
       loadedPlatforms,
       platformSessionService,
       publicationSubmissionService,

@@ -9,6 +9,10 @@ import type {
   ContentSubmissionCleanupPreview,
   ContentSubmissionCleanupResult,
   ContentSubmissionPlatform,
+  PaidMediaAdmissionResult,
+  PaidMediaConfirmationInput,
+  PaidMediaPreflight,
+  PaidMediaPreflightInput,
   PendingQueueRemovalInput,
   PendingQueueRemovalResult,
   RegularQueueAdmissionInput,
@@ -207,6 +211,12 @@ type SubmissionContentApi = {
   admitRegularQueueItems: (
     input: RegularQueueAdmissionInput & { confirmed: true },
   ) => Promise<ContentIpcResponse<RegularQueueAdmissionResult>>;
+  previewPaidMediaPreflight: (
+    input: PaidMediaPreflightInput,
+  ) => Promise<ContentIpcResponse<PaidMediaPreflight>>;
+  confirmPaidMediaBatch: (
+    input: PaidMediaConfirmationInput & { confirmed: true },
+  ) => Promise<ContentIpcResponse<PaidMediaAdmissionResult>>;
   removePendingQueueItems: (
     input: PendingQueueRemovalInput,
   ) => Promise<ContentIpcResponse<PendingQueueRemovalResult>>;
@@ -567,6 +577,26 @@ export async function admitRegularQueueItems(
         confirmed: true,
       }),
     "regular queue admission failed",
+  );
+}
+export async function previewPaidMediaPreflight(
+  input: PaidMediaPreflightInput,
+): Promise<PaidMediaPreflight> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.previewPaidMediaPreflight)(input),
+    "paid media preflight failed",
+  );
+}
+export async function confirmPaidMediaBatch(
+  input: PaidMediaConfirmationInput,
+): Promise<PaidMediaAdmissionResult> {
+  return callSubmission(
+    (api) =>
+      requireBridgeMethod(api.confirmPaidMediaBatch)({
+        ...input,
+        confirmed: true,
+      }),
+    "paid media confirmation failed",
   );
 }
 export async function removePendingQueueItems(

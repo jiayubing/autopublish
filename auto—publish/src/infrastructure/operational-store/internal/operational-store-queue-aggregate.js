@@ -454,6 +454,390 @@ function createOperationalStoreQueueAggregate(context) {
     };
   }
 
+  function paidTarget(input) {
+    let target;
+    try {
+      target = domain.parsePublicationTarget(input);
+    } catch (_) {
+      throw fail("PAID_ADMISSION_TARGET_INVALID");
+    }
+    if (target.kind !== "media") throw fail("PAID_ADMISSION_MEDIA_REQUIRED");
+    return target;
+  }
+
+  function paidSnapshot(input) {
+    const value = input || {};
+    const snapshot = value.publicationSnapshot;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot))
+      throw fail("PAID_ADMISSION_SNAPSHOT_INVALID");
+    if (
+      typeof snapshot.articleId !== "string" ||
+      typeof snapshot.title !== "string" ||
+      typeof snapshot.body !== "string" ||
+      !FINGERPRINT.test(snapshot.fingerprint) ||
+      snapshot.title.trim() === "" ||
+      snapshot.body.trim() === "" ||
+      snapshot.title.length > 256 ||
+      snapshot.body.length > 200000 ||
+      /[\x00-\x1f\x7f]/.test(snapshot.title) ||
+      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(snapshot.body)
+    )
+      throw fail("PAID_ADMISSION_SNAPSHOT_INVALID");
+    return Object.freeze({
+      articleId: domain.ArticleId.serialize(
+        domain.ArticleId.parse(snapshot.articleId),
+      ),
+      title: snapshot.title.trim(),
+      body: snapshot.body,
+      fingerprint: snapshot.fingerprint,
+    });
+  }
+
+  function paidAdmissionItem(
+    input,
+    target,
+    mediaResourceId,
+    quotedPrice,
+    estimatedTotal,
+    systemSubmissionCode,
+    batchId,
+  ) {
+    const value = input || {};
+    if (
+      typeof value.articleId !== "string" ||
+      typeof value.clientId !== "string"
+    )
+      throw fail("PAID_ADMISSION_ARTICLE_INVALID");
+    const articleId = domain.ArticleId.serialize(
+      domain.ArticleId.parse(value.articleId),
+    );
+    const clientId = domain.ClientId.serialize(
+      domain.ClientId.parse(value.clientId),
+    );
+    const publicationId = domain.PublicationId.serialize(
+      domain.PublicationId.parse(value.publicationId),
+    );
+    const attemptId = domain.AttemptId.serialize(
+      domain.AttemptId.parse(value.attemptId),
+    );
+    const itemId = requiredText(
+      value.itemId,
+      128,
+      "PAID_ADMISSION_ITEM_INVALID",
+    );
+    const snapshot = paidSnapshot(value);
+    if (snapshot.articleId !== articleId)
+      throw fail("PAID_ADMISSION_SNAPSHOT_INVALID");
+    const payload =
+      value.payload &&
+      typeof value.payload === "object" &&
+      !Array.isArray(value.payload)
+        ? Object.assign({}, value.payload)
+        : {};
+    const storedPayload = Object.assign({}, payload, {
+      clientId,
+      articleRef: value.articleRef || { clientId, articleId },
+      attemptId,
+      batchItemId: itemId,
+      paidBatchId: batchId,
+      sourcePlatformId: "media",
+      targetPlatformId: "media",
+      mediaResourceId,
+      titleSnapshot: snapshot.title,
+      resourceNameSnapshot: value.resourceNameSnapshot || "",
+      quotedPrice,
+      estimatedTotal,
+      systemSubmissionCode,
+      publicationSnapshot: snapshot,
+    });
+    rejectSensitive(storedPayload);
+    return Object.freeze({
+      articleId,
+      clientId,
+      articleRef: Object.freeze({ clientId, articleId }),
+      publicationId,
+      attemptId,
+      itemId,
+      target,
+      targetKey: domain.publicationTargetKey(target),
+      snapshot,
+      payload: storedPayload,
+    });
+  }
+
+  function paidBatchResult(
+    batchId,
+    targetKey,
+    mediaResourceId,
+    rows,
+    idempotent,
+  ) {
+    return Object.freeze({
+      batchId,
+      targetKey,
+      mediaResourceId,
+      status: "queued",
+      articleCount: rows.length,
+      idempotent: idempotent === true,
+      items: Object.freeze(
+        rows.map((row) =>
+          Object.freeze({
+            itemId: row.item_id || row.itemId,
+            batchId: row.batch_id || row.batchId || batchId,
+            articleId: row.article_id || row.articleId,
+            publicationId: row.publication_id || row.publicationId,
+            attemptId: row.attempt_id || row.attemptId,
+            targetKey: row.target_key || row.targetKey || targetKey,
+            status: row.status || "queued",
+            idempotent: idempotent === true,
+          }),
+        ),
+      ),
+    });
+  }
+
+  function admitPaidBatch(input) {
+    open();
+    const value = input || {};
+    const target = paidTarget(
+      value.target || { kind: "media", mediaResourceId: value.mediaResourceId },
+    );
+    const mediaResourceId = target.mediaResourceId;
+    const batchId = domain.BatchId.serialize(
+      domain.BatchId.parse(value.batchId),
+    );
+    const confirmationFingerprint = requiredText(
+      value.confirmationFingerprint,
+      128,
+      "PAID_ADMISSION_CONFIRMATION_FINGERPRINT_INVALID",
+    );
+    const systemSubmissionCode = requiredText(
+      value.systemSubmissionCode,
+      128,
+      "OPERATIONAL_SYSTEM_SUBMISSION_CODE_REQUIRED",
+    );
+    const confirmation = value.confirmation;
+    if (
+      !confirmation ||
+      typeof confirmation !== "object" ||
+      Array.isArray(confirmation)
+    )
+      throw fail("PAID_ADMISSION_CONFIRMATION_INVALID");
+    rejectSensitive(confirmation);
+    if (text(confirmation).length > 32768)
+      throw fail("PAID_ADMISSION_CONFIRMATION_INVALID");
+    const quotedPrice = value.quotedPrice;
+    const estimatedTotal = value.estimatedTotal;
+    if (
+      ![quotedPrice, estimatedTotal].every(
+        (number) =>
+          typeof number === "number" &&
+          Number.isFinite(number) &&
+          number >= 0 &&
+          number <= 100000000,
+      )
+    )
+      throw fail("PAID_ADMISSION_PRICE_INVALID");
+    if (
+      !Array.isArray(value.items) ||
+      value.items.length < 1 ||
+      value.items.length > 1000
+    )
+      throw fail("PAID_ADMISSION_ARTICLES_REQUIRED");
+    const seenArticleIds = new Set();
+    const items = value.items.map((item) => {
+      const parsed = paidAdmissionItem(
+        item,
+        target,
+        mediaResourceId,
+        quotedPrice,
+        estimatedTotal,
+        systemSubmissionCode,
+        batchId,
+      );
+      if (seenArticleIds.has(parsed.articleId))
+        throw fail("PAID_ADMISSION_ARTICLE_DUPLICATE");
+      seenArticleIds.add(parsed.articleId);
+      if (parsed.targetKey !== `media-resource:${mediaResourceId}`)
+        throw fail("PAID_ADMISSION_TARGET_INVALID");
+      return parsed;
+    });
+    if (value.articleCount !== undefined && value.articleCount !== items.length)
+      throw fail("PAID_ADMISSION_ARTICLE_COUNT_INVALID");
+    const stamp = iso(clock);
+    const targetKey = `media-resource:${mediaResourceId}`;
+    try {
+      return transaction(() => {
+        const existingPaid = db
+          .prepare("SELECT * FROM paid_submission_batches WHERE batch_id=?")
+          .get(batchId);
+        if (existingPaid) {
+          if (
+            existingPaid.media_resource_id !== mediaResourceId ||
+            existingPaid.confirmation_fingerprint !== confirmationFingerprint ||
+            existingPaid.system_submission_code !== systemSubmissionCode ||
+            existingPaid.quoted_price !== quotedPrice ||
+            existingPaid.estimated_total !== estimatedTotal ||
+            existingPaid.article_count !== items.length
+          )
+            throw fail("PAID_ADMISSION_BATCH_CONFLICT");
+          const existingItems = db
+            .prepare(
+              "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,p.publication_id,a.attempt_id,s.status FROM submission_items s JOIN publication_records p ON p.article_id=s.article_id AND p.target_key=s.target_key JOIN publication_attempts a ON a.publication_id=p.publication_id WHERE s.batch_id=? ORDER BY s.item_id",
+            )
+            .all(batchId);
+          if (
+            existingItems.length !== items.length ||
+            existingItems.some(
+              (row) =>
+                !seenArticleIds.has(row.article_id) ||
+                row.target_key !== targetKey,
+            )
+          )
+            throw fail("PAID_ADMISSION_BATCH_CONFLICT");
+          return paidBatchResult(
+            batchId,
+            targetKey,
+            mediaResourceId,
+            existingItems,
+            true,
+          );
+        }
+        const existingBatch = db
+          .prepare("SELECT batch_id FROM submission_batches WHERE batch_id=?")
+          .get(batchId);
+        if (existingBatch) throw fail("PAID_ADMISSION_BATCH_CONFLICT");
+
+        for (const item of items) {
+          const active = db
+            .prepare(
+              "SELECT state FROM article_active_targets WHERE article_id=?",
+            )
+            .get(item.articleId);
+          if (active) throw fail("PUBLICATION_TARGET_CONFLICT");
+          const oldPublication = db
+            .prepare(
+              "SELECT status FROM publication_records WHERE article_id=? AND target_key=?",
+            )
+            .get(item.articleId, targetKey);
+          if (oldPublication)
+            throw fail(
+              oldPublication.status === "uncertain"
+                ? "PUBLICATION_UNCERTAIN"
+                : "PUBLICATION_DUPLICATE",
+            );
+        }
+
+        db.prepare("INSERT INTO submission_batches VALUES(?,?,?,?,?)").run(
+          batchId,
+          "queued",
+          1,
+          stamp,
+          stamp,
+        );
+        for (const item of items) {
+          db.prepare(
+            "INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)",
+          ).run(
+            item.publicationId,
+            item.articleId,
+            targetKey,
+            text(target),
+            "queued",
+            stamp,
+            stamp,
+          );
+          db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
+            item.attemptId,
+            item.publicationId,
+            "queued",
+            stamp,
+            null,
+          );
+          db.prepare("INSERT INTO recovery_intents VALUES(?,?,?,?,?,?)").run(
+            randomUUID(),
+            item.attemptId,
+            "resolved",
+            text({
+              submission: {
+                batchItemId: item.itemId,
+                postProcessingPayload: { articleRef: item.articleRef },
+              },
+              detail: { phase: "paid-admitted", batchId },
+            }),
+            stamp,
+            stamp,
+          );
+          db.prepare(
+            "INSERT INTO submission_items VALUES(?,?,?,?,?,?,?,?,?)",
+          ).run(
+            item.itemId,
+            batchId,
+            item.articleId,
+            targetKey,
+            1,
+            "queued",
+            null,
+            null,
+            text(item.payload),
+          );
+          db.prepare(
+            "INSERT INTO article_active_targets(article_id,publication_id,attempt_id,target_key,target_json,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+          ).run(
+            item.articleId,
+            item.publicationId,
+            item.attemptId,
+            targetKey,
+            text(target),
+            "queued",
+            stamp,
+            stamp,
+          );
+        }
+        db.prepare(
+          "INSERT INTO paid_submission_batches(batch_id,media_resource_id,confirmation_fingerprint,confirmation_json,system_submission_code,quoted_price,estimated_total,article_count,pause_intent,created_at,confirmed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        ).run(
+          batchId,
+          mediaResourceId,
+          confirmationFingerprint,
+          text(confirmation),
+          systemSubmissionCode,
+          quotedPrice,
+          estimatedTotal,
+          items.length,
+          "manual",
+          stamp,
+          stamp,
+          stamp,
+        );
+        return paidBatchResult(
+          batchId,
+          targetKey,
+          mediaResourceId,
+          items.map((item) => ({
+            itemId: item.itemId,
+            batchId,
+            articleId: item.articleId,
+            publicationId: item.publicationId,
+            attemptId: item.attemptId,
+            targetKey,
+            status: "queued",
+          })),
+          false,
+        );
+      });
+    } catch (error) {
+      const code = String((error && error.code) || "");
+      const message = String((error && error.message) || "");
+      if (
+        code.startsWith("SQLITE_CONSTRAINT") ||
+        message.includes("constraint failed")
+      )
+        throw fail("PAID_ADMISSION_TRANSACTION_FAILED");
+      throw error;
+    }
+  }
+
   function existingRegularAdmission(dbHandle, articleId, targetKey, snapshot) {
     const active = dbHandle
       .prepare(
@@ -979,6 +1363,7 @@ function createOperationalStoreQueueAggregate(context) {
     listSubmissionQueueItems,
     admitRegularQueueItem,
     removePendingQueueItem,
+    admitPaidBatch,
     createPaidSubmissionBatch,
     getPaidSubmissionBatch,
     listPaidSubmissionBatches,

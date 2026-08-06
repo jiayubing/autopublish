@@ -313,6 +313,81 @@ export interface RegularQueueAdmissionResult {
   missingCount: number;
   conflictCount: number;
 }
+
+export interface PaidMediaPreflightInput {
+  articleRefs: ArticleSelection[];
+  mediaResourceId: string;
+}
+
+export interface PaidMediaRiskWarning {
+  code: string;
+  message: string;
+  count: number;
+}
+
+export interface PaidMediaPreflightArticle {
+  articleRef: ArticleSelection;
+  articleId: string;
+  title: string;
+  contentFingerprint: string | null;
+  status: "ready" | "blocked";
+  reasonCodes: string[];
+  riskCodes: string[];
+}
+
+export interface PaidMediaPreflight {
+  version: number;
+  status: "ready" | "blocked";
+  canConfirm: boolean;
+  confirmationToken: string;
+  confirmationFingerprint: string;
+  articleRefs: ArticleSelection[];
+  articleCount: number;
+  articles: PaidMediaPreflightArticle[];
+  mediaResourceId: string;
+  mediaName: string;
+  mediaRemarks: string;
+  resourceFingerprint: string;
+  resourceAvailable: boolean;
+  quotedPrice: number | null;
+  estimatedTotal: number | null;
+  systemSubmissionCode: string;
+  blockers: string[];
+  risks: PaidMediaRiskWarning[];
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface PaidMediaConfirmationInput {
+  confirmationToken: string;
+}
+
+export interface PaidMediaAdmissionItem {
+  articleRef: ArticleSelection;
+  articleId: string;
+  itemId: string;
+  batchId: string;
+  publicationId: string;
+  attemptId: string;
+  targetKey: string;
+  status: string;
+  idempotent: boolean;
+}
+
+export interface PaidMediaAdmissionResult {
+  batchId: string;
+  targetKey: string;
+  mediaResourceId: string;
+  status: string;
+  articleCount: number;
+  idempotent: boolean;
+  items: PaidMediaAdmissionItem[];
+  articleRefs: ArticleSelection[];
+  confirmationFingerprint: string;
+  quotedPrice: number;
+  estimatedTotal: number;
+}
+
 export interface PendingQueueRemovalItemInput {
   articleRef: ArticleSelection;
   itemId: string;
