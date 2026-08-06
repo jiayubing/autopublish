@@ -96,7 +96,7 @@ describe("article version service", function() {
     assert.equal(copied.sourceArticleId, "article-root");
     assert.equal(copied.version, 5);
     assert.equal(copied.status, "generated");
-    assert.equal(copied.reviewedAt, null);
+    assert.equal(Object.prototype.hasOwnProperty.call(copied, "reviewedAt"), false);
     assert.equal(copied.createdAt, "2026-07-18T00:00:00.000Z");
     assert.equal(copied.updatedAt, "2026-07-18T00:00:00.000Z");
     assert.equal(copied.title, source.title);

@@ -65,6 +65,7 @@ export interface GeneratedArticlesViewProps {
   };
   watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
   stageFilter?: ArticleWorkflowStage | 'all';
+  dirtyArticleId?: string | null;
   selectedAttentionId?: string;
   onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void;
   onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void;

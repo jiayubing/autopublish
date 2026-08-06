@@ -27,7 +27,7 @@ const ARCHIVE_FILES = [
   "src/diagnostics/diagnostic-directory-policy.js", "src/diagnostics/diagnostic-projection.js",
   "src/core/docx-text-extractor.js", "src/content/client-material-store.js",
   "src/content/generation-batch-store.js", "src/content/generation-batch-runner.js",
-  "src/content/article-review-service.js", "src/content/article-version-service.js", "scripts/config.js",
+  "src/content/article-version-service.js", "scripts/config.js",
   "config/platforms.json", "config/build-info.json", "resources/hepan/requirements.txt",
   "media-workbench/dist/index.html", "build/preload/preload.cjs", "node_modules/mammoth/LICENSE"
 ];

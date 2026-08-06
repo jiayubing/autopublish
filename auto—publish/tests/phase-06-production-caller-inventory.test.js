@@ -13,7 +13,6 @@ const RETIRED_WITHOUT_PRODUCTION_CONSUMER = Object.freeze([
   "attention.getArticleAttention",
   "content.listTemplates",
   "content.listGeneratedArticles",
-  "content.reviewArticles",
   "content.listArticleTrash",
   "content.previewTrashArticles",
   "content.listArticleRemovalTransactions",

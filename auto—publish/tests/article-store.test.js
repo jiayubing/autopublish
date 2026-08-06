@@ -62,6 +62,26 @@ describe("article store", function () {
     assert.deepStrictEqual(store.getArticle("client-1", "article-1"), article);
   });
 
+  it("saves and reads a manual article without generation provenance", function () {
+    const article = {
+      id: "manual-1",
+      clientId: "client-1",
+      title: "手工文章",
+      content: "手工正文",
+      status: "saved",
+      createdAt: "2026-07-11T00:00:00.000Z",
+    };
+    assert.deepStrictEqual(store.saveArticle(article), article);
+    assert.deepStrictEqual(store.getArticle("client-1", "manual-1"), article);
+    const persisted = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "generated", "client-1", "manual-1.json"),
+        "utf8",
+      ),
+    );
+    assert.deepStrictEqual(persisted, article);
+  });
+
   it("writes editable markdown alongside full JSON metadata", function () {
     const article = valid("article-1");
     store.saveArticle(article);
@@ -207,7 +227,7 @@ describe("article store", function () {
     });
   });
 
-  it("rejects articles missing required content or provenance fields", function () {
+  it("rejects articles with incomplete content or malformed provenance", function () {
     [
       valid("empty-title", { title: "  " }),
       valid("empty-content", { content: "  " }),
@@ -569,15 +589,15 @@ describe("article store", function () {
       },
       generationBatchId: "batch-1",
       generationTaskId: "task-1",
-      reviewedAt: null,
+      reviewedAt: "2026-07-15T00:00:00.000Z",
     });
-    assert.deepStrictEqual(store.saveArticle(article), article);
-    assert.deepStrictEqual(store.getArticle("client-1", "provenance"), article);
+    const saved = store.saveArticle(article);
+    assert.equal(Object.prototype.hasOwnProperty.call(saved, "reviewedAt"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(store.getArticle("client-1", "provenance"), "reviewedAt"), false);
     for (const invalid of [
       { materialSnapshots: [{ id: "brand.md" }] },
       { templateSnapshot: { platform: "ctrip", id: "template-1", body: "" } },
       { generationBatchId: 1 },
-      { reviewedAt: "not-a-date" },
     ]) {
       assert.throws(
         function () {
@@ -588,27 +608,6 @@ describe("article store", function () {
         },
       );
     }
-  });
-
-  it("reviews an article in its existing customer directory without changing creation metadata", function () {
-    const original = valid("reviewable", {
-      createdAt: "2026-07-11T00:00:00.000Z",
-      updatedAt: "2026-07-11T01:00:00.000Z",
-    });
-    store.saveArticle(original);
-    const reviewed = store.reviewArticle(
-      "client-1",
-      "reviewable",
-      "2026-07-15T00:00:00.000Z",
-    );
-    assert.equal(reviewed.status, "saved");
-    assert.equal(reviewed.reviewedAt, "2026-07-15T00:00:00.000Z");
-    assert.equal(reviewed.createdAt, original.createdAt);
-    assert.equal(reviewed.updatedAt, original.updatedAt);
-    assert.deepStrictEqual(
-      store.getArticle("client-1", "reviewable"),
-      reviewed,
-    );
   });
 
   it("rejects mixed legacy and new research metadata instead of dropping new ids", function () {

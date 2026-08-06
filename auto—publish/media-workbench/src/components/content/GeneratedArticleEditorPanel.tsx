@@ -24,7 +24,6 @@ export default function GeneratedArticleEditorPanel({ article, published = false
   const saveInFlightRef = useRef(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const dirty = draft.title !== base.title || draft.content !== base.content;
-  const requiresInitialSave = base.status === 'generated';
 
   useEffect(() => {
     setDraft(article);
@@ -56,7 +55,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
   }
 
   async function save() {
-    if (published || (!dirty && !requiresInitialSave) || saveInFlightRef.current) return;
+    if (published || !dirty || saveInFlightRef.current) return;
     saveInFlightRef.current = true;
     setError('');
     try {
@@ -78,7 +77,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
         <h2 id="generated-article-editor-title" className="truncate text-sm font-semibold text-slate-800">编辑文章</h2>
         <p className="mt-1 text-xs text-slate-500">{published ? '已发布文章不能原地覆盖，请复制新版本后编辑。' : (dirty ? '有未保存修改' : '所有修改已保存')}</p>
       </div>
-      {!published && <button type="button" onClick={() => void save()} disabled={saving || (!dirty && !requiresInitialSave)} aria-label="保存文章" className="task-icon-button shrink-0"><Save className="h-4 w-4" /></button>}
+      {!published && <button type="button" onClick={() => void save()} disabled={saving || !dirty} aria-label="保存文章" className="task-icon-button shrink-0"><Save className="h-4 w-4" /></button>}
       <button type="button" onClick={() => void close()} disabled={saving} aria-label="关闭文章编辑器" title="关闭文章编辑器" className="task-icon-button shrink-0"><X className="h-4 w-4" /></button>
     </div>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -88,10 +87,10 @@ export default function GeneratedArticleEditorPanel({ article, published = false
       <label className="grid min-h-64 gap-1 text-xs font-medium text-slate-600">文章正文
         <textarea aria-label="文章正文" value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} disabled={published || saving} className="min-h-64 w-full resize-none rounded-md border border-slate-300 p-3 text-sm leading-6 disabled:bg-slate-50" />
       </label>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>文章状态：{draft.status}</span><span>版本：{draft.version || 1}</span><span>来源：{sourceLabel}</span></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>版本：{draft.version || 1}</span><span>来源：{sourceLabel}</span></div>
       {footer}
       {error && <p role="alert" aria-live="assertive" className="rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
-      {!published && <button type="button" onClick={() => void save()} disabled={saving || (!dirty && !requiresInitialSave)} className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Save className="h-3.5 w-3.5" />{saving ? '保存中…' : '保存文章'}</button>}
+      {!published && <button type="button" onClick={() => void save()} disabled={saving || !dirty} className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Save className="h-3.5 w-3.5" />{saving ? '保存中…' : '保存文章'}</button>}
     </div>
   </section>;
 }

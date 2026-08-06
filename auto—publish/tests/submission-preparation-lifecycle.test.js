@@ -27,9 +27,14 @@ const {
 const {
   createSubmissionTargetCatalog,
 } = require("../desktop/services/submission-target-catalog");
+const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
+const { registerAiContentIpc } = require("../desktop/ipc/ai-content-ipc");
+const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
+const { contentCoreContracts } = require("../desktop/ipc/contracts/content-core-contracts");
+const { createArticleStore } = require("../src/content/article-store");
 
-function article() {
-  return {
+function article(overrides) {
+  return Object.assign({
     id: "article-1",
     clientId: "client-1",
     status: "saved",
@@ -51,10 +56,10 @@ function article() {
       body: "Body",
       bodyHash: "hash",
     },
-  };
+  }, overrides || {});
 }
 
-function planner() {
+function planner(articleValue) {
   let reads = 0;
   const targetCatalog = createSubmissionTargetCatalog({
     platforms: [
@@ -80,7 +85,7 @@ function planner() {
     contentStore: {
       getArticle() {
         reads += 1;
-        return article();
+        return articleValue || article();
       },
     },
   });
@@ -115,6 +120,96 @@ test("preflight and planning are side-effect-free application ports", () => {
     targetCatalog.list().map((item) => item.id),
     ["toutiao"],
   );
+});
+
+test("complete manual content without AI provenance is queueable and reports content gaps in Chinese", () => {
+  const manual = {
+    id: "manual-1",
+    clientId: "client-1",
+    status: "saved",
+    title: "手工文章",
+    content: "手工正文",
+    reviewedAt: "2026-07-15T00:00:00.000Z",
+  };
+  const manualPlanner = planner(manual);
+  const preview = manualPlanner.value.previewBatch({
+    clientId: "client-1",
+    articleIds: ["manual-1"],
+    targetPlatformIds: ["toutiao"],
+    accountProfiles: { toutiao: "account-1" },
+  });
+  assert.equal(preview.queueableTaskCount, 1);
+  assert.equal("reviewedAt" in preview.items[0], false);
+
+  for (const [field, code, reason] of [
+    ["title", "ARTICLE_TITLE_EMPTY", "标题为空"],
+    ["content", "ARTICLE_CONTENT_EMPTY", "正文为空"],
+  ]) {
+    const incompletePlanner = planner(Object.assign({}, manual, { [field]: "" }));
+    const incomplete = incompletePlanner.value.previewBatch({
+      clientId: "client-1",
+      articleIds: ["manual-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    assert.equal(incomplete.queueableTaskCount, 0);
+    assert.equal(incomplete.items[0].status, "blocked");
+    assert.deepEqual(incomplete.items[0].reasonCodes, [code]);
+    assert.deepEqual(incomplete.items[0].reasons, [reason]);
+  }
+});
+
+test("manual content crosses typed save IPC and the real article store into submission planning", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "manual-article-submission-chain-"));
+  try {
+    const articleStore = createArticleStore(root);
+    const handlers = new Map();
+    const ipcMain = createAuthenticatedIpcMain(
+      { handle(channel, handler) { handlers.set(channel, handler); } },
+      async function () {},
+    );
+    registerAiContentIpc({
+      ipcMain,
+      aiContentService: {
+        saveArticle(articleValue) { return articleStore.saveArticle(articleValue); },
+      },
+    });
+    const manual = {
+      id: "manual-chain-1",
+      clientId: "client-1",
+      title: "手工投稿文章",
+      content: "没有 AI 来源的手工正文。",
+      status: "saved",
+      createdAt: "2026-08-06T00:00:00.000Z",
+    };
+    const registry = createContractRegistry(contentCoreContracts);
+    const contract = registry.byChannel("content:save-article");
+    const request = registry.encodeRequest(contract, contract.fromArgs([manual]));
+    const response = await handlers.get("content:save-article")(null, request);
+    const saved = registry.parseSuccess(contract, response).article;
+    assert.deepEqual(saved, manual);
+    assert.deepEqual(articleStore.getArticle("client-1", "manual-chain-1"), manual);
+
+    const targetCatalog = createSubmissionTargetCatalog({
+      platforms: [{ id: "toutiao", displayName: "头条", scanDir: "toutiao", contentQueueImport: true }],
+    });
+    const plannerValue = createSubmissionBatchPlanner({
+      targetCatalog,
+      preflight: createSubmissionPreflight(),
+      articleMarkdown,
+      contentStore: articleStore,
+    });
+    const preview = plannerValue.previewBatch({
+      clientId: "client-1",
+      articleIds: ["manual-chain-1"],
+      targetPlatformIds: ["toutiao"],
+      accountProfiles: { toutiao: "account-1" },
+    });
+    assert.equal(preview.queueableTaskCount, 1);
+    assert.deepEqual(preview.items[0].reasonCodes, undefined);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("persistence and query ports keep account-bound batch facts durable", () => {

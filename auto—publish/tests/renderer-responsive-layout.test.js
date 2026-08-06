@@ -950,7 +950,6 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       },
       createdAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
       updatedAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
-      reviewedAt: null,
       version: 1,
       templateSnapshot: {
         platform: "fixture-responsive-platform",

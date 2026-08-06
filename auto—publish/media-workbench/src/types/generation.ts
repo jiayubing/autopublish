@@ -171,16 +171,16 @@ export interface GeneratedContentArticle {
   id: string;
   clientId: string;
   materialIds?: string[];
-  researchQueryIds: string[];
+  researchQueryIds?: string[];
   researchQueryId?: string;
   researchSnapshots?: ResearchSnapshot[];
-  platform: string;
-  scenario: string;
-  templateId: string;
+  platform?: string;
+  scenario?: string;
+  templateId?: string;
   title: string;
   content: string;
   status: "generated" | "saved" | string;
-  source: {
+  source?: {
     client_material: boolean;
     doubao_answer: boolean;
     references: boolean;
@@ -188,7 +188,6 @@ export interface GeneratedContentArticle {
   };
   createdAt: string;
   updatedAt?: string;
-  reviewedAt?: string | null;
   materialSnapshots?: Array<{
     id: string;
     name: string;

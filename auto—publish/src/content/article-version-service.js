@@ -84,7 +84,6 @@ function copyContentFields(source, clientId, articleId, lineageId, version, time
   copy.sourceArticleId = lineageId;
   copy.version = version;
   copy.status = "generated";
-  copy.reviewedAt = null;
   copy.createdAt = timestamp;
   copy.updatedAt = timestamp;
   return copy;

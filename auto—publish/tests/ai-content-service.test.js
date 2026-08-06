@@ -37,8 +37,7 @@ function createService(overrides) {
     contentStore: {
       saveArticle: function(value) { calls.push("saveArticle"); return value; },
       listArticles: function(id) { calls.push("listArticles:" + id); return [article]; },
-      getArticle: function(clientId, id) { calls.push("getArticle:" + clientId + ":" + id); return article; },
-      reviewArticle: function(clientId, id, reviewedAt) { calls.push("reviewArticle:" + clientId + ":" + id); return Object.assign({}, article, { status: "saved", reviewedAt: reviewedAt }); }
+      getArticle: function(clientId, id) { calls.push("getArticle:" + clientId + ":" + id); return article; }
     },
     aiClientFactory: function() { calls.push("aiClientFactory"); return { complete: async function() { return "# Title\nBody"; } }; },
     articleGeneratorFactory: function(deps) { calls.push("articleGeneratorFactory"); return { generateArticle: async function(input) { calls.push("generate:" + input.clientId); return article; } }; },
@@ -62,6 +61,7 @@ describe("ai content service", function() {
       const service = createAiContentService({
         workspaceRoot: workspaceRoot,
         clientKnowledge: { getClient: function(id) { return getClient(workspaceRoot, id); } },
+        contentStore: { saveArticle: function(value) { return value; } },
         materialStore: materialStore,
         researchStore: { getResearch: function() { return { id: "q1", answerText: "answer" }; } },
         templateStore: { getTemplate: function() { return { id: "template-1", body: "body", scenario: "guide" }; } },
@@ -96,13 +96,13 @@ describe("ai content service", function() {
     assert.equal(setup.service.listTemplateCatalog().revision, "fixture-revision");
   });
 
-  it("creates the AI client only while generating and saves separately", async function() {
+  it("creates the AI client only while generating and persists the generated article", async function() {
     const setup = createService();
     const generated = await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
     assert.equal(generated.id, "article-1");
+    assert.equal(Object.prototype.hasOwnProperty.call(generated, "reviewedAt"), false);
     assert.equal(setup.calls.includes("aiClientFactory"), true);
-    assert.deepStrictEqual(setup.service.saveArticle(generated), generated);
-    assert.equal(setup.calls.includes("saveArticle"), true);
+    assert.equal(setup.calls.filter(function(value) { return value === "saveArticle"; }).length, 1);
   });
 
   it("preserves safe AI configuration failures without touching local reads", async function() {
@@ -178,11 +178,10 @@ describe("ai content service", function() {
     });
   });
 
-  it("reviews explicitly selected articles through the main content service", function() {
+  it("does not expose a review or batch-review operation", function() {
     const setup = createService();
-    const result = setup.service.reviewArticles([{ clientId: "client-1", articleId: "article-1" }]);
-    assert.deepStrictEqual(result.approved, ["article-1"]);
-    assert.equal(setup.calls.includes("reviewArticle:client-1:article-1"), true);
+    assert.equal("reviewArticles" in setup.service, false);
+    assert.equal(setup.calls.some(function(value) { return value.includes("review"); }), false);
   });
 
   it("requires explicit material and research selections and forwards provenance ids", async function() {

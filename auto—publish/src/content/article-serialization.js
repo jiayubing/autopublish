@@ -35,6 +35,7 @@ function normalizeResearchQueryIds(article) {
     Array.isArray(article.researchQueryIds) &&
     article.researchQueryIds.length === 1 &&
     article.researchQueryIds[0] === article.researchQueryId;
+  if (!hasResearchQueryIds && !hasLegacyResearchQueryId && !hasResearchSnapshots) return { ids: undefined, legacy: false };
   if (!hasResearchQueryIds && hasResearchSnapshots) {
     throw storeError(
       "ARTICLE_INVALID",
@@ -52,8 +53,7 @@ function normalizeResearchQueryIds(article) {
       "Article mixes legacy and new research metadata",
     );
   }
-  const legacy =
-    !hasResearchQueryIds || normalizedLegacy || isRoundtrippedLegacy;
+  const legacy = hasLegacyResearchQueryId && (!hasResearchQueryIds || normalizedLegacy || isRoundtrippedLegacy);
   const ids = legacy ? [article.researchQueryId] : article.researchQueryIds;
   if (
     legacy &&
@@ -232,19 +232,6 @@ function normalizeOptionalProvenance(value, label) {
   return value;
 }
 
-function normalizeReviewedAt(value) {
-  if (value === undefined) return undefined;
-  if (
-    value !== null &&
-    (typeof value !== "string" ||
-      !value.trim() ||
-      Number.isNaN(Date.parse(value)))
-  ) {
-    throw storeError("ARTICLE_INVALID", "Article reviewedAt is invalid");
-  }
-  return value;
-}
-
 function normalizeArticle(article) {
   if (!article || typeof article !== "object" || Array.isArray(article)) {
     throw storeError("ARTICLE_INVALID", "Article is invalid");
@@ -253,9 +240,6 @@ function normalizeArticle(article) {
   assertArticleSegment(article.clientId, "client id");
   const researchIds = normalizeResearchQueryIds(article);
   [
-    "platform",
-    "scenario",
-    "templateId",
     "title",
     "content",
     "status",
@@ -267,25 +251,37 @@ function normalizeArticle(article) {
     throw storeError("ARTICLE_INVALID", "Article createdAt is invalid");
   if (article.status !== "generated" && article.status !== "saved")
     throw storeError("ARTICLE_INVALID", "Article status is invalid");
+  ["platform", "scenario", "templateId"].forEach(function (field) { if (article[field] !== undefined) assertNonEmptyString(article[field], field); });
   if (article.updatedAt !== undefined)
     assertNonEmptyString(article.updatedAt, "updatedAt");
-  if (
-    !article.source ||
-    typeof article.source !== "object" ||
-    Array.isArray(article.source)
-  )
-    throw storeError("ARTICLE_INVALID", "Article source is invalid");
-  ["client_material", "doubao_answer", "references", "template"].forEach(
-    function (field) {
-      if (typeof article.source[field] !== "boolean")
-        throw storeError("ARTICLE_INVALID", "Article source is invalid");
-    },
-  );
+  if (article.source !== undefined) {
+    if (
+      !article.source ||
+      typeof article.source !== "object" ||
+      Array.isArray(article.source)
+    )
+      throw storeError("ARTICLE_INVALID", "Article source is invalid");
+    ["client_material", "doubao_answer", "references", "template"].forEach(
+      function (field) {
+        if (typeof article.source[field] !== "boolean")
+          throw storeError("ARTICLE_INVALID", "Article source is invalid");
+      },
+    );
+  }
 
-  const normalized = Object.assign({}, article, {
-    researchQueryIds: researchIds.ids,
-    source: Object.assign({}, article.source),
+  const normalized = Object.assign({}, article);
+  ["platform", "scenario", "templateId"].forEach(function (field) {
+    if (normalized[field] === undefined) delete normalized[field];
   });
+  if (article.source === undefined) delete normalized.source;
+  else normalized.source = Object.assign({}, article.source);
+  if (researchIds.ids === undefined) {
+    delete normalized.researchQueryIds;
+    delete normalized.researchQueryId;
+    delete normalized.researchSnapshots;
+  } else {
+    normalized.researchQueryIds = researchIds.ids;
+  }
   const materialSnapshots = normalizeMaterialSnapshots(
     article.materialSnapshots,
   );
@@ -298,7 +294,6 @@ function normalizeArticle(article) {
     article.generationTaskId,
     "generationTaskId",
   );
-  const reviewedAt = normalizeReviewedAt(article.reviewedAt);
   if (materialSnapshots !== undefined)
     normalized.materialSnapshots = materialSnapshots;
   if (templateSnapshot !== undefined)
@@ -307,14 +302,17 @@ function normalizeArticle(article) {
     normalized.generationBatchId = generationBatchId;
   if (generationTaskId !== undefined)
     normalized.generationTaskId = generationTaskId;
-  if (reviewedAt !== undefined) normalized.reviewedAt = reviewedAt;
+  // Legacy article files may still contain the retired review timestamp. It
+  // is deliberately ignored at this read boundary and never enters the new
+  // article model or persistence payload.
+  delete normalized.reviewedAt;
   if (researchIds.legacy) {
     assertNonEmptyString(article.researchQueryId, "researchQueryId");
     Object.defineProperty(normalized, LEGACY_ARTICLE, {
       value: true,
       enumerable: false,
     });
-  } else {
+  } else if (researchIds.ids !== undefined) {
     normalized.researchSnapshots = normalizeResearchSnapshots(
       article.researchSnapshots,
       researchIds.ids,
@@ -325,6 +323,7 @@ function normalizeArticle(article) {
 
 function articleForPersistence(article) {
   const persisted = clone(article);
+  delete persisted.reviewedAt;
   if (article && article[LEGACY_ARTICLE]) {
     delete persisted.researchQueryIds;
     delete persisted.researchSnapshots;

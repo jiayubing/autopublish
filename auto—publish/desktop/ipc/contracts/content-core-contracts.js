@@ -171,19 +171,18 @@ const generatedArticle = exactObject({
   id,
   clientId: id,
   materialIds: optionalField(ids(1000)),
-  researchQueryIds: ids(1000),
+  researchQueryIds: optionalField(ids(1000)),
   researchQueryId: optionalField(id),
   researchSnapshots: optionalField(arrayField(researchSnapshot, { max: 1000 })),
-  platform: id,
-  scenario: text(1000),
-  templateId: id,
+  platform: optionalField(id),
+  scenario: optionalField(text(1000)),
+  templateId: optionalField(id),
   title: multiline(10000),
   content: multiline(5000000),
   status: text(80),
-  source: articleSource,
+  source: optionalField(articleSource),
   createdAt: timestamp,
   updatedAt: optionalField(timestamp),
-  reviewedAt: optionalField(nullableField(timestamp)),
   materialSnapshots: optionalField(arrayField(materialSnapshot, { max: 1000 })),
   templateSnapshot: optionalField(templateSnapshot),
   generationBatchId: optionalField(nullableField(id)),
@@ -192,12 +191,6 @@ const generatedArticle = exactObject({
   version: optionalField(integerField({ min: 1, max: 1000000 })),
 });
 const selection = exactObject({ clientId: id, articleId: id });
-const rejection = exactObject({ articleId: id, code: text(128) });
-const reviewResult = exactObject({
-  approved: ids(10000),
-  rejected: arrayField(rejection, { max: 10000 }),
-  skipped: ids(10000),
-});
 const trashReference = exactObject({ type: text(80), id });
 const trashRecord = exactObject({
   version: literalField(1),
@@ -476,7 +469,6 @@ function projectArticle(value) {
     "source",
     "createdAt",
     "updatedAt",
-    "reviewedAt",
     "generationBatchId",
     "generationTaskId",
     "sourceArticleId",

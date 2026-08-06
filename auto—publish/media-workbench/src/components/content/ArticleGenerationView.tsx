@@ -109,7 +109,7 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
   useEffect(() => {
     const currentArticle = selectedArticleRef.current?.platform === platform ? selectedArticleRef.current : null;
     let nextTemplates = visibleGenerationTemplates({ templates: catalogTemplates }, showBuiltinTemplates).filter((item) => item.platform === platform);
-    if (currentArticle && !nextTemplates.some((item) => item.id === currentArticle.templateId) && currentArticle.templateSnapshot) {
+    if (currentArticle && currentArticle.templateId && currentArticle.platform && !nextTemplates.some((item) => item.id === currentArticle.templateId) && currentArticle.templateSnapshot) {
       nextTemplates = [...nextTemplates, {
         id: currentArticle.templateId,
         platform: currentArticle.platform,
@@ -141,8 +141,8 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
     researchSelectionTouchedRef.current = true;
     setSelectedIds(selectedArticle.researchQueryIds || (selectedArticle.researchQueryId ? [selectedArticle.researchQueryId] : []));
     setMaterialIds(selectedArticle.materialIds || validMaterials.map((item) => item.id || item.name));
-    setPlatform(selectedArticle.platform);
-    setTemplateId(selectedArticle.templateId);
+    setPlatform(selectedArticle.platform || '');
+    setTemplateId(selectedArticle.templateId || '');
   }, [selectedArticle, validMaterials]);
 
   function setMaterialSelection(next: React.SetStateAction<string[]>) { materialSelectionTouchedRef.current = true; setMaterialIds(next); }

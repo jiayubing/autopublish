@@ -59,14 +59,9 @@ export interface PublicationHistorySummary {
   uncertain: boolean;
 }
 
-export interface ArticleReviewSelection {
+export interface ArticleSelection {
   clientId: string;
   articleId: string;
-}
-export interface ArticleReviewResult {
-  approved: string[];
-  rejected: Array<{ articleId: string; code: string }>;
-  skipped: string[];
 }
 export type ArticleRemovalTransactionStatus =
   | "pending_auto_recovery"
@@ -110,7 +105,7 @@ export interface ArticleTrashPreview {
   terminalCleanupCount?: number;
   blockedItems: ArticleTrashImpactItem[];
   canCommit: boolean;
-  selections?: ArticleReviewSelection[];
+  selections?: ArticleSelection[];
   expiresAt?: string;
   transactionId?: string | null;
   openTransactionId?: string | null;
@@ -119,7 +114,7 @@ export interface ArticleTrashPreview {
 }
 
 export interface ArticleTrashCommitInput {
-  selections?: ArticleReviewSelection[];
+  selections?: ArticleSelection[];
   token?: string;
   confirmed: true;
 }
@@ -243,7 +238,6 @@ export interface ContentSubmissionBatchPreview {
   blockedContentCount?: number;
   conflictCount: number;
   ineligibleArticleIds?: string[];
-  unreviewedArticleIds: string[];
   missingArticleIds: string[];
   unsupportedPlatformIds: string[];
   items: ContentSubmissionBatchItem[];

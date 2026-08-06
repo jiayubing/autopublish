@@ -39,7 +39,7 @@ describe("renderer content client switching", function() {
         id, clientId, researchQueryIds: [], platform: "fixture-platform", scenario: "客户切换回归",
         templateId: "fixture-template", title, content: `${title} 正文`, status: "generated",
         source: { client_material: true, doubao_answer: true, references: false, template: true },
-        createdAt: "2026-07-20T00:00:00.000Z", updatedAt: "2026-07-20T00:00:00.000Z", reviewedAt: null,
+        createdAt: "2026-07-20T00:00:00.000Z", updatedAt: "2026-07-20T00:00:00.000Z",
         version: 1, sourceArticleId: null,
         templateSnapshot: { platform: "fixture-platform", id: "fixture-template", name: "测试模板", scenario: "客户切换回归", body: "fixture", bodyHash: "fixture", source: "custom" },
       });
@@ -96,7 +96,7 @@ describe("renderer content client switching", function() {
         onGenerationBatchState: () => () => {},
         previewGenerationSubmissionHandoff: () => ok({ generationBatchId: generationBatch.id, previewToken: "handoff-preview", articleCount: 1, clientCount: 1, targetPlatformIds: ["fixture-platform"], estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }),
         commitGenerationSubmissionHandoff: () => ok({ generationBatchId: generationBatch.id, createdCount: 1, idempotentCount: 0, blockedCount: 0, conflictCount: 0, failedClientGroups: [], completedClientGroups: ["client-a"], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }] }),
-        previewSubmissionBatch: (input) => ok({ clientId: input.clientId, totalTaskCount: input.articleIds.length * input.targetPlatformIds.length, queueableTaskCount: input.articleIds.length * input.targetPlatformIds.length, idempotentCount: 0, conflictCount: 0, blockedContentCount: 0, unreviewedArticleIds: [], missingArticleIds: [], unsupportedPlatformIds: [], items: [] }),
+        previewSubmissionBatch: (input) => ok({ clientId: input.clientId, totalTaskCount: input.articleIds.length * input.targetPlatformIds.length, queueableTaskCount: input.articleIds.length * input.targetPlatformIds.length, idempotentCount: 0, conflictCount: 0, blockedContentCount: 0, missingArticleIds: [], unsupportedPlatformIds: [], items: [] }),
         createSubmissionBatch: (input) => {
           state.queueCalls.push(input);
           state.batches[input.clientId] = [{ id: "batch-a", clientId: input.clientId, status: "queued", createdAt: "2026-07-20T00:00:01.000Z", updatedAt: "2026-07-20T00:00:01.000Z", items: input.articleIds.map((articleId) => ({ articleId, targetPlatformId: input.targetPlatformIds[0], status: "queued", canCancel: true })) }];

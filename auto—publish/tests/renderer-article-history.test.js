@@ -42,7 +42,7 @@ describe("article history grouping", async function() {
   selectionState = historyLogic.selectionState;
   it("groups by platform and template snapshot, sorting groups and articles by createdAt", function() {
     const groups = groupArticlesByTemplate([
-      item("old-a", "ctrip", "a", "2026-07-10T00:00:00.000Z", { reviewedAt: "2026-07-15T00:00:00.000Z" }),
+      item("old-a", "ctrip", "a", "2026-07-10T00:00:00.000Z"),
       item("new-b", "toutiao", "b", "2026-07-14T00:00:00.000Z"),
       item("new-a", "ctrip", "a", "2026-07-13T00:00:00.000Z", { updatedAt: "2026-07-15T00:00:00.000Z" }),
       item("old-b", "toutiao", "b", "2026-07-11T00:00:00.000Z")
@@ -103,8 +103,8 @@ describe("article history grouping", async function() {
 
   it("keeps saved articles selectable for submission queueing", function() {
     const view = readHistoryView();
-    assert.match(view, /const selectedQueueable = filtered\.filter/);
-    assert.match(view, /disabled=\{!selectedArticles\.some\(canQueueArticle\)/);
+    assert.match(view, /selectedQueueableArticles = selectedDirtyArticle \? \[\] : selectedArticles\.filter\(canQueueArticle\)/);
+    assert.match(view, /disabled=\{!selectedQueueableArticles\.length/);
     assert.match(view, /阶段：/);
     assert.match(view, /撤销未开始投稿/);
     assert.match(view, /management: ArticleManagementReadModel/);
@@ -119,8 +119,16 @@ describe("article history grouping", async function() {
 
   });
 
-  it("selects a saved-only filtered result", function() {
-    const saved = item("saved", "ctrip", "guide", "2026-07-15T00:00:00.000Z", { status: "saved" });
+  it("blocks ordinary and paid submission together for a dirty editor article", function() {
+    const view = readHistoryView();
+    assert.match(view, /dirtyArticleId/);
+    assert.match(view, /const selectedDirtyArticle = selectedArticles\.find/);
+    assert.match(view, /当前编辑文章有未保存修改，请先保存后投稿/);
+    assert.match(view, /selectedQueueableArticles/);
+  });
+
+  it("selects a manually saved result without a review status gate", function() {
+    const saved = item("saved", "ctrip", "guide", "2026-07-15T00:00:00.000Z", { status: "manual" });
     assert.deepStrictEqual(selectableArticles([saved], "c1"), [saved]);
     assert.deepStrictEqual(selectionState([saved], [articleSelectionKey(saved)], "c1"), {
       total: 1, selected: 1, checked: true, indeterminate: false, disabled: false

@@ -607,7 +607,6 @@ test("article management preserves a saved article when a legacy publication lac
         template: true,
       },
       createdAt: "2026-07-27T00:00:00.000Z",
-      reviewedAt: null,
     }],
     trash: [],
     submissionBatches: [],
@@ -682,7 +681,6 @@ test("article management safely bounds a generated article reference accepted by
         template: true,
       },
       createdAt: "2026-07-27T00:00:00.000Z",
-      reviewedAt: null,
     }],
     trash: [],
     submissionBatches: [],
@@ -747,7 +745,6 @@ test("generated articles normalize legacy research provenance at the production 
             template: true,
           },
           createdAt: "2026-07-27T00:00:00.000Z",
-          reviewedAt: null,
         };
       },
     },
@@ -810,11 +807,15 @@ test("generated articles omit structured research snippets at the production IPC
       template: true,
     },
     createdAt: "2026-07-27T00:00:00.000Z",
-    reviewedAt: null,
+    reviewedAt: "2026-07-15T00:00:00.000Z",
   });
 
   const response = registry.success(contract, { article: projected });
   assert.equal(response.ok, true, JSON.stringify(response));
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(response.data.article, "reviewedAt"),
+    false,
+  );
   assert.deepEqual(response.data.article.researchSnapshots[0].references[0], {
     title: "结构化摘要",
     url: "https://example.com/reference",
@@ -875,7 +876,6 @@ test("article management binds client identity to real OperationalStore publicat
               template: true,
             },
             createdAt: "2026-07-27T00:00:00.000Z",
-            reviewedAt: null,
           };
           return [
             article,

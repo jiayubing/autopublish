@@ -2,7 +2,6 @@ const { listClients, getClient } = require("../../src/content/client-knowledge")
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleTrashService } = require("../../src/content/article-trash-service");
-const { createArticleReviewService } = require("../../src/content/article-review-service");
 const { createAiClient } = require("../../src/content/ai-client");
 const { createArticleGenerator } = require("../../src/content/article-generator");
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
@@ -92,7 +91,6 @@ function createAiContentService(opts) {
     tokenTtlMs: options.articleRemovalTokenTtlMs,
     onTransactionStatus: notifyArticleRemovalTransaction
   })) || {};
-  const articleReviewService = options.articleReviewService || (contentStore && typeof contentStore.getArticle === "function" && typeof contentStore.saveArticle === "function" ? createArticleReviewService({ contentStore: contentStore }) : null);
   const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths }) : {
     getSelectedMaterials: async function(clientId, materialIds) {
       const client = clientKnowledge.getClient(clientId);
@@ -240,7 +238,13 @@ function createAiContentService(opts) {
       createId: createId,
       seenIds: seenIds
     });
-    return generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds }));
+    const generated = await generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds }));
+    if (!contentStore || typeof contentStore.saveArticle !== "function") {
+      throw contentError("CONTENT_STORE_REQUIRED", "Generated article cannot be persisted");
+    }
+    const saved = contentStore.saveArticle(generated);
+    notifyAttentionChange("ARTICLE_SAVED");
+    return saved === undefined ? generated : saved;
   }
 
   function saveArticle(article) {
@@ -263,12 +267,6 @@ function createAiContentService(opts) {
     return contentStore.getArticle(clientId, articleId);
   }
 
-  function reviewArticles(selections) {
-    const result = articleReviewService.reviewMany(selections);
-    notifyAttentionChange("ARTICLES_REVIEWED");
-    return result;
-  }
-
   return {
     listClients: listClientsSafe,
     getClient: getClientSafe,
@@ -283,7 +281,6 @@ function createAiContentService(opts) {
     saveArticle: saveArticle,
     listGeneratedArticles: listGeneratedArticles,
     getGeneratedArticle: getGeneratedArticle,
-    reviewArticles: reviewArticles,
     listTrashedArticles: articleTrashService.listTrashedArticles,
     previewTrashArticles: articleTrashService.previewTrashArticles,
     previewArticleRemovalImpact: articleTrashService.previewArticleRemovalImpact,

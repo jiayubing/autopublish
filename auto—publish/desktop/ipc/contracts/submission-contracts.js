@@ -74,7 +74,6 @@ const batchPreview = exactObject({
   blockedContentCount: count,
   conflictCount: count,
   ineligibleArticleIds: optionalField(arrayField(id, { max: 1000 })),
-  unreviewedArticleIds: optionalField(arrayField(id, { max: 1000 })),
   missingArticleIds: arrayField(id, { max: 1000 }),
   unsupportedPlatformIds: arrayField(id, { max: 32 }),
   items: arrayField(batchItem, { max: 32000 }),
@@ -216,7 +215,7 @@ function projectBatchPreview(value) {
     conflictCount: input.conflictCount, missingArticleIds: input.missingArticleIds || [],
     unsupportedPlatformIds: input.unsupportedPlatformIds || [], items: Array.isArray(input.items) ? input.items.map(projectBatchItem) : [],
   };
-  for (const key of ["alreadyQueuedCount", "blockedPublishedCount", "blockedUncertainCount", "ineligibleArticleIds", "unreviewedArticleIds"]) include(output, input, key);
+  for (const key of ["alreadyQueuedCount", "blockedPublishedCount", "blockedUncertainCount", "ineligibleArticleIds"]) include(output, input, key);
   return output;
 }
 function projectResidueItem(value) {
