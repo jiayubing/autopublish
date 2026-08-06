@@ -53,7 +53,9 @@ async function observe(store, orderId, response) {
 }
 
 function orderMap(store) {
-  return new Map(store.listOrderDisplayViews().map((order) => [order.orderId, order]));
+  return new Map(
+    store.listOrderDisplayViews().map((order) => [order.orderId, order]),
+  );
 }
 
 test("canonical outcomes never backfill a supplier observation", () => {
@@ -79,7 +81,7 @@ test("canonical outcomes never backfill a supplier observation", () => {
   }
 });
 
-test("supplier responses preserve 0/1/2/4/9 independently and 2 without evidence cannot promote", async () => {
+test("supplier responses preserve 0/1/2/4/9 independently, rejection closes unpublished work, and 2 without evidence cannot promote", async () => {
   const store = createOperationalStore({
     workspaceRoot: temporaryWorkspace("supplier-corpus"),
   });
@@ -92,7 +94,10 @@ test("supplier responses preserve 0/1/2/4/9 independently and 2 without evidence
     for (const code of ["0", "1", "2", "4", "9"]) {
       const order = views.get(`order-supplier-${code}`);
       assert.equal(order.supplierStatusCode, code);
-      assert.equal(order.publicationStatus, "submitted");
+      assert.equal(
+        order.publicationStatus,
+        code === "4" ? "failed" : "submitted",
+      );
     }
   } finally {
     store.close();
@@ -112,11 +117,24 @@ test("only supplier 2 plus safe HTTPS evidence promotes an in-flight canonical o
         order_url: `https://publisher.example/${status}`,
       });
     const views = orderMap(store);
-    assert.equal(views.get("order-evidence-submitted").publicationStatus, "published");
-    assert.equal(views.get("order-evidence-uncertain").publicationStatus, "published");
-    assert.equal(views.get("order-evidence-failed").publicationStatus, "failed");
-    assert.equal(views.get("order-evidence-published").publicationStatus, "published");
-    for (const order of views.values()) assert.equal(order.supplierStatusCode, "2");
+    assert.equal(
+      views.get("order-evidence-submitted").publicationStatus,
+      "published",
+    );
+    assert.equal(
+      views.get("order-evidence-uncertain").publicationStatus,
+      "published",
+    );
+    assert.equal(
+      views.get("order-evidence-failed").publicationStatus,
+      "failed",
+    );
+    assert.equal(
+      views.get("order-evidence-published").publicationStatus,
+      "published",
+    );
+    for (const order of views.values())
+      assert.equal(order.supplierStatusCode, "2");
   } finally {
     store.close();
   }
@@ -156,17 +174,16 @@ test("canonical published order remains openable after supplier status changes f
       operationalStore: store,
       allowedPublishedUrlHosts: ["publisher.example"],
     }).listOrderViews()[0];
-    assert.deepEqual(
-      [view.statusCode, view.hasPublishedUrl],
-      ["9", true],
-    );
+    assert.deepEqual([view.statusCode, view.hasPublishedUrl], ["9", true]);
 
     const service = createMediaOrderService({
       operationalStore: store,
       allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (url) => opened.push(url),
     });
-    assert.deepEqual(await service.openPublishedUrl(orderId), { completed: true });
+    assert.deepEqual(await service.openPublishedUrl(orderId), {
+      completed: true,
+    });
     assert.deepEqual(opened, [
       "https://publisher.example/article/persistent-evidence",
     ]);
@@ -189,9 +206,16 @@ test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 obser
       const view = createMediaOrderService({
         operationalStore: store,
         allowedPublishedUrlHosts: ["publisher.example"],
-      }).listOrderViews().find((order) => order.orderNid === orderId);
+      })
+        .listOrderViews()
+        .find((order) => order.orderNid === orderId);
       assert.deepEqual(
-        [store.listRemoteOrders().find((order) => order.orderId === orderId).status, view.statusCode, view.hasPublishedUrl],
+        [
+          store.listRemoteOrders().find((order) => order.orderId === orderId)
+            .status,
+          view.statusCode,
+          view.hasPublishedUrl,
+        ],
         ["published", String(code), true],
       );
 
@@ -223,7 +247,10 @@ test("supplier observation survives restart, backup, and restored temporary SQLi
   store = createOperationalStore({ workspaceRoot });
   try {
     assert.deepEqual(
-      [orderMap(store).get(orderId).publicationStatus, orderMap(store).get(orderId).supplierStatusCode],
+      [
+        orderMap(store).get(orderId).publicationStatus,
+        orderMap(store).get(orderId).supplierStatusCode,
+      ],
       ["submitted", "1"],
     );
   } finally {
@@ -231,7 +258,11 @@ test("supplier observation survives restart, backup, and restored temporary SQLi
   }
 
   const restoredRoot = temporaryWorkspace("supplier-restored");
-  const restoredDirectory = path.join(restoredRoot, ".autopublish", "operations");
+  const restoredDirectory = path.join(
+    restoredRoot,
+    ".autopublish",
+    "operations",
+  );
   fs.mkdirSync(restoredDirectory, { recursive: true });
   fs.copyFileSync(backupPath, path.join(restoredDirectory, "operations.db"));
   const restored = createOperationalStore({ workspaceRoot: restoredRoot });
@@ -266,14 +297,20 @@ test("published HTTPS evidence remains visible and openable after restart, backu
       openExternal: async (target) => opened.push(target),
     });
     assert.equal(service.listOrderViews()[0].hasPublishedUrl, true);
-    assert.deepEqual(await service.openPublishedUrl(orderId), { completed: true });
+    assert.deepEqual(await service.openPublishedUrl(orderId), {
+      completed: true,
+    });
     assert.deepEqual(opened, [url]);
   } finally {
     store.close();
   }
 
   const restoredRoot = temporaryWorkspace("published-url-restored");
-  const restoredDirectory = path.join(restoredRoot, ".autopublish", "operations");
+  const restoredDirectory = path.join(
+    restoredRoot,
+    ".autopublish",
+    "operations",
+  );
   fs.mkdirSync(restoredDirectory, { recursive: true });
   fs.copyFileSync(backupPath, path.join(restoredDirectory, "operations.db"));
   const restored = createOperationalStore({ workspaceRoot: restoredRoot });
@@ -285,7 +322,9 @@ test("published HTTPS evidence remains visible and openable after restart, backu
       openExternal: async (target) => opened.push(target),
     });
     assert.equal(service.listOrderViews()[0].hasPublishedUrl, true);
-    assert.deepEqual(await service.openPublishedUrl(orderId), { completed: true });
+    assert.deepEqual(await service.openPublishedUrl(orderId), {
+      completed: true,
+    });
     assert.deepEqual(opened, [url]);
   } finally {
     restored.close();
@@ -296,14 +335,49 @@ test("real SQLite order projection hides and main rejects every unsafe published
   const workspaceRoot = temporaryWorkspace("published-url-fail-closed");
   let store = createOperationalStore({ workspaceRoot });
   const cases = [
-    ["unpublished", "submitted", "https://publisher.example/article/unpublished", "MEDIA_ORDER_NOT_PUBLISHED"],
+    [
+      "unpublished",
+      "submitted",
+      "https://publisher.example/article/unpublished",
+      "MEDIA_ORDER_NOT_PUBLISHED",
+    ],
     ["missing", "published", null, "MEDIA_ORDER_URL_UNAVAILABLE"],
-    ["http", "published", "http://publisher.example/article/http", "MEDIA_ORDER_URL_UNAVAILABLE"],
-    ["credentials", "published", "https://user:secret@publisher.example/article/credentials", "MEDIA_ORDER_URL_UNAVAILABLE"],
-    ["query", "published", "https://publisher.example/article/query?token=secret", "MEDIA_ORDER_URL_UNAVAILABLE"],
-    ["fragment", "published", "https://publisher.example/article/fragment#secret", "MEDIA_ORDER_URL_UNAVAILABLE"],
-    ["oversized", "published", `https://publisher.example/article/${"x".repeat(2048)}`, "MEDIA_ORDER_URL_UNAVAILABLE"],
-    ["malformed", "published", "not a valid URL", "MEDIA_ORDER_URL_UNAVAILABLE"],
+    [
+      "http",
+      "published",
+      "http://publisher.example/article/http",
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+    ],
+    [
+      "credentials",
+      "published",
+      "https://user:secret@publisher.example/article/credentials",
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+    ],
+    [
+      "query",
+      "published",
+      "https://publisher.example/article/query?token=secret",
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+    ],
+    [
+      "fragment",
+      "published",
+      "https://publisher.example/article/fragment#secret",
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+    ],
+    [
+      "oversized",
+      "published",
+      `https://publisher.example/article/${"x".repeat(2048)}`,
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+    ],
+    [
+      "malformed",
+      "published",
+      "not a valid URL",
+      "MEDIA_ORDER_URL_UNAVAILABLE",
+    ],
   ];
   for (const [suffix, status] of cases)
     createOrder(store, `fail-closed-${suffix}`, status);

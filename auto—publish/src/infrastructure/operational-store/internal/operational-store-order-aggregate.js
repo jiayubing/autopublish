@@ -11,6 +11,9 @@ const {
   supplierStatusCode,
   text,
 } = require("./operational-store-utils");
+const {
+  createOperationalStoreOrderLink,
+} = require("./operational-store-order-link");
 
 function createOrderAggregate(context, activeTarget) {
   const {
@@ -22,6 +25,7 @@ function createOrderAggregate(context, activeTarget) {
     iso,
     internalOrderProjectionObserver,
   } = context;
+  const orderLink = createOperationalStoreOrderLink(context);
 
   function attachRemoteOrderEvidence(input) {
     open();
@@ -43,15 +47,13 @@ function createOrderAggregate(context, activeTarget) {
           .get(attemptId)
       )
         throw fail("OPERATIONAL_ATTEMPT_NOT_FOUND");
-      // The publication outcome already records a media receipt in its
-      // transaction. A legacy alias may attach the same receipt again.
-      db.prepare("INSERT OR IGNORE INTO remote_orders VALUES(?,?,?,?,?)").run(
-        value.orderId,
+      orderLink.ensure({
+        orderId: value.orderId,
         attemptId,
-        value.remoteId,
-        text(value.evidence || {}),
-        iso(clock),
-      );
+        remoteId: value.remoteId,
+        evidence: value.evidence,
+        createdAt: iso(clock),
+      });
     });
   }
 
@@ -127,7 +129,8 @@ function createOrderAggregate(context, activeTarget) {
           ),
           quotedPrice: canonicalDisplayPrice(row.quoted_price),
           estimatedTotal: canonicalDisplayPrice(row.estimated_total),
-          systemSubmissionCode: safeDisplayText(row.system_submission_code, 128) || null,
+          systemSubmissionCode:
+            safeDisplayText(row.system_submission_code, 128) || null,
         });
       }),
     );
@@ -199,6 +202,18 @@ function createOrderAggregate(context, activeTarget) {
         db.prepare(
           "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
         ).run("published", stamp, row.publication_id);
+        db.prepare(
+          "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
+        ).run("resolved", text(evidence), stamp, row.attempt_id);
+      }
+      if (statusCode === "4" && row.status !== "published") {
+        publicationStatus = "failed";
+        db.prepare(
+          "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
+        ).run("failed", stamp, row.attempt_id);
+        db.prepare(
+          "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
+        ).run("failed", stamp, row.publication_id);
         db.prepare(
           "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
         ).run("resolved", text(evidence), stamp, row.attempt_id);

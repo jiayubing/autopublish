@@ -49,7 +49,8 @@ function createOperationalStore(options) {
     const recovery = createRecoveryAggregate(context, activeTarget);
     const order = createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
-    const reconciliation = createOperationalStoreReconciliationAggregate(context);
+    const reconciliation =
+      createOperationalStoreReconciliationAggregate(context);
     const facts = createOperationalStoreFactReader(context);
     const maintenance = createMaintenanceAggregate(context);
     return Object.freeze({
@@ -111,4 +112,9 @@ function createOperationalStore(options) {
     throw error;
   }
 }
-module.exports = { SCHEMA_VERSION, createOperationalStore, dryRunOperationalStoreMigration, verifyOperationalDatabase };
+module.exports = {
+  SCHEMA_VERSION,
+  createOperationalStore,
+  dryRunOperationalStoreMigration,
+  verifyOperationalDatabase,
+};

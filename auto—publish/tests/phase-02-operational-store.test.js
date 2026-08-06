@@ -200,7 +200,9 @@ test("upgrades a real schema v1 database to the operation schema without changin
   initial.close();
 
   const legacy = new DatabaseSync(database);
-  legacy.exec("DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots");
+  legacy.exec(
+    "DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots",
+  );
   legacy.prepare("DELETE FROM schema_migrations WHERE version > 1").run();
   const before = legacy
     .prepare("SELECT * FROM publication_records ORDER BY publication_id")
@@ -370,7 +372,7 @@ test("rolls back every schema v2 migration fault and retries idempotently", () =
     failed.close();
 
     const retried = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(retried.verify().schemaVersion, SCHEMA_VERSION);
+    assert.equal(retried.verify().schemaVersion, SCHEMA_VERSION);
     retried.close();
   }
 });

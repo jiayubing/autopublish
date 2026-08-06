@@ -65,7 +65,7 @@ test("hybrid execution partitions every discovered file exactly once", () => {
   const plan = createExecutionPlan(files);
   const assigned = [...plan.parallelFiles, ...plan.serialFiles];
 
-  assert.equal(files.length, 245);
+  assert.equal(files.length, 246);
   assert.equal(new Set(assigned).size, files.length);
   assert.deepEqual([...assigned].sort(), [...files].sort());
   assert.ok(

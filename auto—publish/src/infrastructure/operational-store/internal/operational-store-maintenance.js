@@ -32,7 +32,9 @@ function createMaintenanceAggregate(context) {
     verifyMigrationHistory(db, [1, 2, 3, 4], "OPERATIONAL_VERIFY_FAILED");
     verifyV1Structure(db, "OPERATIONAL_VERIFY_FAILED");
     verifyV2Structure(db, "OPERATIONAL_VERIFY_FAILED");
-    verifyV3Structure(db, "OPERATIONAL_VERIFY_FAILED", { allowV4Columns: true });
+    verifyV3Structure(db, "OPERATIONAL_VERIFY_FAILED", {
+      allowV4Columns: true,
+    });
     verifyV4Structure(db, "OPERATIONAL_VERIFY_FAILED");
     return {
       schemaVersion: version,

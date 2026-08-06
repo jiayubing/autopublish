@@ -523,7 +523,9 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
 });
 
 test("published article cannot reserve a second target", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-published-target-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-published-target-"),
+  );
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     const targetOne = {
@@ -1132,7 +1134,9 @@ test("reconcile restores the durable submission link and drains archive work", a
 });
 
 test("publication workflow rejects a second target before remote execution", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-active-target-workflow-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-active-target-workflow-"),
+  );
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     const targetOne = { kind: "media", mediaResourceId: "resource-one" };

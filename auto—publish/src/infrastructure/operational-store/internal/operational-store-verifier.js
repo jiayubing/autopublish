@@ -38,7 +38,9 @@ function verifyOperationalDatabase(filename) {
     verifyMigrationHistory(db, [1, 2, 3, 4], "OPERATIONAL_RESTORE_INVALID");
     verifyV1Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV2Structure(db, "OPERATIONAL_RESTORE_INVALID");
-    verifyV3Structure(db, "OPERATIONAL_RESTORE_INVALID", { allowV4Columns: true });
+    verifyV3Structure(db, "OPERATIONAL_RESTORE_INVALID", {
+      allowV4Columns: true,
+    });
     verifyV4Structure(db, "OPERATIONAL_RESTORE_INVALID");
     return {
       schemaVersion: version,

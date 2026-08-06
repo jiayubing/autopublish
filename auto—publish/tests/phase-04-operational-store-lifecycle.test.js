@@ -7,7 +7,9 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
-const { createArticleManagementSnapshot } = require("../desktop/services/article-management-snapshot");
+const {
+  createArticleManagementSnapshot,
+} = require("../desktop/services/article-management-snapshot");
 const {
   SCHEMA_VERSION,
   createOperationalStore,
@@ -49,9 +51,20 @@ function schemaSnapshot(databasePath) {
   const db = new DatabaseSync(databasePath, { readOnly: true });
   try {
     return {
-      history: db.prepare("SELECT version FROM schema_migrations ORDER BY version").all().map((row) => row.version),
-      tables: db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name),
-      orderColumns: db.prepare("PRAGMA table_info(order_display_snapshots)").all().map((row) => row.name),
+      history: db
+        .prepare("SELECT version FROM schema_migrations ORDER BY version")
+        .all()
+        .map((row) => row.version),
+      tables: db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        )
+        .all()
+        .map((row) => row.name),
+      orderColumns: db
+        .prepare("PRAGMA table_info(order_display_snapshots)")
+        .all()
+        .map((row) => row.name),
     };
   } finally {
     db.close();
@@ -59,7 +72,10 @@ function schemaSnapshot(databasePath) {
 }
 
 function fileHash(filename) {
-  return crypto.createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(filename))
+    .digest("hex");
 }
 
 function platformTarget(accountProfileId) {
@@ -67,7 +83,12 @@ function platformTarget(accountProfileId) {
 }
 
 test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiable", () => {
-  for (const point of ["before-v4", "after-v4-create", "after-v4-verify", "after-v4-record"]) {
+  for (const point of [
+    "before-v4",
+    "after-v4-create",
+    "after-v4-verify",
+    "after-v4-record",
+  ]) {
     const root = workspace();
     let store = createOperationalStore({ workspaceRoot: root });
     const databasePath = store.databasePath;
@@ -76,9 +97,13 @@ test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiabl
     const before = schemaSnapshot(databasePath);
     assert.deepEqual(before.history, [1, 2, 3]);
     assert.throws(
-      () => createOperationalStore({ workspaceRoot: root, internalMigrationFault(actual) {
-        if (actual === point) throw new Error(point);
-      } }),
+      () =>
+        createOperationalStore({
+          workspaceRoot: root,
+          internalMigrationFault(actual) {
+            if (actual === point) throw new Error(point);
+          },
+        }),
       { code: "OPERATIONAL_DATABASE_OPEN_FAILED" },
     );
     assert.deepEqual(schemaSnapshot(databasePath), before);
@@ -98,12 +123,19 @@ test("v4 order snapshot extension preserves rows from a real v3 database", () =>
   let store = createOperationalStore({ workspaceRoot: root });
   const batch = store.createSubmissionBatch({
     batchId: "v3-order-batch",
-    items: [{
-      articleId: "v3-order-article",
-      target: { kind: "media", mediaResourceId: "v3-resource" },
-      payload: { attemptId: "v3-order-attempt", titleSnapshot: "旧标题", filename: "old.md", resourceNameSnapshot: "旧媒体", quotedPrice: 12,
+    items: [
+      {
+        articleId: "v3-order-article",
+        target: { kind: "media", mediaResourceId: "v3-resource" },
+        payload: {
+          attemptId: "v3-order-attempt",
+          titleSnapshot: "旧标题",
+          filename: "old.md",
+          resourceNameSnapshot: "旧媒体",
+          quotedPrice: 12,
+        },
       },
-    }],
+    ],
   });
   store.reservePublicationTarget({
     articleId: "v3-order-article",
@@ -114,13 +146,48 @@ test("v4 order snapshot extension preserves rows from a real v3 database", () =>
   store.commitRemoteOutcome({
     attemptId: "v3-order-attempt",
     batchItemId: batch.items[0].itemId,
-    outcome: { status: "submitted", evidence: { articleId: "v3-order-article", attemptId: "v3-order-attempt", targetKey: "media-resource:v3-resource", remoteId: "v3-order" } },
+    outcome: {
+      status: "submitted",
+      evidence: {
+        articleId: "v3-order-article",
+        attemptId: "v3-order-attempt",
+        targetKey: "media-resource:v3-resource",
+        remoteId: "v3-order",
+      },
+    },
   });
   const databasePath = store.databasePath;
   store.close();
   removeV4Schema(databasePath);
   store = createOperationalStore({ workspaceRoot: root });
-  assert.deepEqual(store.listOrderDisplayViews().map(({ orderId, titleSnapshot, filename, resourceNameSnapshot, quotedPrice }) => ({ orderId, titleSnapshot, filename, resourceNameSnapshot, quotedPrice })), [{ orderId: "v3-order", titleSnapshot: "旧标题", filename: "old.md", resourceNameSnapshot: "旧媒体", quotedPrice: 12 }]);
+  assert.deepEqual(
+    store
+      .listOrderDisplayViews()
+      .map(
+        ({
+          orderId,
+          titleSnapshot,
+          filename,
+          resourceNameSnapshot,
+          quotedPrice,
+        }) => ({
+          orderId,
+          titleSnapshot,
+          filename,
+          resourceNameSnapshot,
+          quotedPrice,
+        }),
+      ),
+    [
+      {
+        orderId: "v3-order",
+        titleSnapshot: "旧标题",
+        filename: "old.md",
+        resourceNameSnapshot: "旧媒体",
+        quotedPrice: 12,
+      },
+    ],
+  );
   store.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -152,29 +219,48 @@ test("one article has one database-enforced active target and failure releases i
   const root = workspace();
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    const first = () => store.reservePublicationTarget({
-      articleId: "article-active",
-      publicationId: "publication-active-1",
-      attemptId: "attempt-active-1",
-      target: platformTarget(profile.accountProfileId),
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "fixture",
     });
-    const second = () => store.reservePublicationTarget({
-      articleId: "article-active",
-      publicationId: "publication-active-2",
-      attemptId: "attempt-active-2",
-      target: { kind: "media", mediaResourceId: "resource-active" },
-    });
+    const first = () =>
+      store.reservePublicationTarget({
+        articleId: "article-active",
+        publicationId: "publication-active-1",
+        attemptId: "attempt-active-1",
+        target: platformTarget(profile.accountProfileId),
+      });
+    const second = () =>
+      store.reservePublicationTarget({
+        articleId: "article-active",
+        publicationId: "publication-active-2",
+        attemptId: "attempt-active-2",
+        target: { kind: "media", mediaResourceId: "resource-active" },
+      });
     const results = await Promise.allSettled([
       Promise.resolve().then(first),
       Promise.resolve().then(second),
     ]);
-    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
-    assert.equal(results.filter((result) => result.status === "rejected")[0].reason.code, "PUBLICATION_DUPLICATE");
+    assert.equal(
+      results.filter((result) => result.status === "fulfilled").length,
+      1,
+    );
+    assert.equal(
+      results.filter((result) => result.status === "rejected")[0].reason.code,
+      "PUBLICATION_DUPLICATE",
+    );
 
     store.commitRemoteOutcome({
       attemptId: "attempt-active-1",
-      outcome: { status: "failed", error: { code: "REJECTED", category: "remote", retryability: "safe", userMessage: "Rejected" } },
+      outcome: {
+        status: "failed",
+        error: {
+          code: "REJECTED",
+          category: "remote",
+          retryability: "safe",
+          userMessage: "Rejected",
+        },
+      },
     });
     const replacement = store.reservePublicationTarget({
       articleId: "article-active",
@@ -185,14 +271,304 @@ test("one article has one database-enforced active target and failure releases i
     assert.equal(replacement.status, "queued");
     store.markRecoveryUncertain({
       attemptId: "attempt-active-3",
-      error: { code: "UNKNOWN", category: "transport", retryability: "manual-check", userMessage: "Check" },
+      error: {
+        code: "UNKNOWN",
+        category: "transport",
+        retryability: "manual-check",
+        userMessage: "Check",
+      },
     });
-    assert.throws(() => store.reservePublicationTarget({
-      articleId: "article-active",
-      publicationId: "publication-active-4",
-      attemptId: "attempt-active-4",
+    assert.throws(
+      () =>
+        store.reservePublicationTarget({
+          articleId: "article-active",
+          publicationId: "publication-active-4",
+          attemptId: "attempt-active-4",
+          target: platformTarget(profile.accountProfileId),
+        }),
+      { code: "PUBLICATION_UNCERTAIN" },
+    );
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("media order rejection resolves the publication and permits retargeting without downgrading published articles", () => {
+  const root = workspace();
+  const store = createOperationalStore({ workspaceRoot: root });
+  try {
+    store.reservePublicationTarget({
+      articleId: "rejected-media-article",
+      publicationId: "rejected-media-publication",
+      attemptId: "rejected-media-attempt",
+      target: { kind: "media", mediaResourceId: "rejected-media-resource" },
+    });
+    store.commitRemoteOutcome({
+      attemptId: "rejected-media-attempt",
+      outcome: {
+        status: "submitted",
+        evidence: {
+          articleId: "rejected-media-article",
+          attemptId: "rejected-media-attempt",
+          targetKey: "media-resource:rejected-media-resource",
+          remoteId: "rejected-media-order",
+        },
+      },
+    });
+    assert.equal(
+      store.recordRemoteOrderObservation({
+        orderId: "rejected-media-order",
+        observation: { statusCode: "4" },
+      }).publicationStatus,
+      "failed",
+    );
+    assert.deepEqual(
+      store
+        .listPublicationRecords({
+          publicationIds: ["rejected-media-publication"],
+        })
+        .map((record) => [record.status, record.attempts[0].status]),
+      [["failed", "failed"]],
+    );
+    assert.equal(store.listActionableRecovery().length, 0);
+    assert.deepEqual(
+      store
+        .listRemoteOrders()
+        .map((order) => [
+          order.orderId,
+          order.status,
+          order.supplierStatusCode,
+        ]),
+      [["rejected-media-order", "failed", "4"]],
+    );
+    assert.equal(
+      store.reservePublicationTarget({
+        articleId: "rejected-media-article",
+        publicationId: "rejected-media-retarget-publication",
+        attemptId: "rejected-media-retarget-attempt",
+        target: {
+          kind: "media",
+          mediaResourceId: "replacement-media-resource",
+        },
+      }).status,
+      "queued",
+    );
+
+    store.reservePublicationTarget({
+      articleId: "published-media-article",
+      publicationId: "published-media-publication",
+      attemptId: "published-media-attempt",
+      target: { kind: "media", mediaResourceId: "published-media-resource" },
+    });
+    store.commitRemoteOutcome({
+      attemptId: "published-media-attempt",
+      outcome: {
+        status: "submitted",
+        evidence: {
+          articleId: "published-media-article",
+          attemptId: "published-media-attempt",
+          targetKey: "media-resource:published-media-resource",
+          remoteId: "published-media-order",
+        },
+      },
+    });
+    store.recordRemoteOrderObservation({
+      orderId: "published-media-order",
+      observation: {
+        statusCode: "2",
+        remoteUrl: "https://example.test/published-media-order",
+      },
+    });
+    assert.equal(
+      store.recordRemoteOrderObservation({
+        orderId: "published-media-order",
+        observation: { statusCode: "4" },
+      }).publicationStatus,
+      "published",
+    );
+    assert.equal(
+      store.listPublicationRecords({
+        publicationIds: ["published-media-publication"],
+      })[0].status,
+      "published",
+    );
+    assert.throws(
+      () =>
+        store.reservePublicationTarget({
+          articleId: "published-media-article",
+          publicationId: "published-media-retarget-publication",
+          attemptId: "published-media-retarget-attempt",
+          target: { kind: "media", mediaResourceId: "other-media-resource" },
+        }),
+      { code: "PUBLICATION_DUPLICATE" },
+    );
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("media remote order ID conflicts roll back another attempt while same-attempt outcomes stay idempotent", () => {
+  const root = workspace();
+  const store = createOperationalStore({ workspaceRoot: root });
+  try {
+    const firstOutcome = {
+      status: "submitted",
+      evidence: {
+        articleId: "order-conflict-first-article",
+        attemptId: "order-conflict-first-attempt",
+        targetKey: "media-resource:order-conflict-first-resource",
+        remoteId: "shared-order-id",
+      },
+    };
+    store.reservePublicationTarget({
+      articleId: "order-conflict-first-article",
+      publicationId: "order-conflict-first-publication",
+      attemptId: "order-conflict-first-attempt",
+      target: {
+        kind: "media",
+        mediaResourceId: "order-conflict-first-resource",
+      },
+    });
+    assert.equal(
+      store.commitRemoteOutcome({
+        attemptId: "order-conflict-first-attempt",
+        outcome: firstOutcome,
+      }).status,
+      "submitted",
+    );
+    assert.doesNotThrow(() =>
+      store.attachRemoteOrderEvidence({
+        attemptId: "order-conflict-first-attempt",
+        orderId: "shared-order-id",
+        remoteId: "shared-order-id",
+        evidence: {},
+      }),
+    );
+    assert.equal(
+      store.commitRemoteOutcome({
+        attemptId: "order-conflict-first-attempt",
+        outcome: firstOutcome,
+      }).status,
+      "submitted",
+    );
+
+    store.reservePublicationTarget({
+      articleId: "order-conflict-second-article",
+      publicationId: "order-conflict-second-publication",
+      attemptId: "order-conflict-second-attempt",
+      target: {
+        kind: "media",
+        mediaResourceId: "order-conflict-second-resource",
+      },
+    });
+    assert.throws(
+      () =>
+        store.commitRemoteOutcome({
+          attemptId: "order-conflict-second-attempt",
+          outcome: {
+            status: "submitted",
+            evidence: {
+              articleId: "order-conflict-second-article",
+              attemptId: "order-conflict-second-attempt",
+              targetKey: "media-resource:order-conflict-second-resource",
+              remoteId: "shared-order-id",
+            },
+          },
+        }),
+      { code: "OPERATIONAL_ORDER_CONFLICT" },
+    );
+    assert.throws(
+      () =>
+        store.attachRemoteOrderEvidence({
+          attemptId: "order-conflict-second-attempt",
+          orderId: "shared-order-id",
+          remoteId: "shared-order-id",
+          evidence: {},
+        }),
+      { code: "OPERATIONAL_ORDER_CONFLICT" },
+    );
+    assert.deepEqual(
+      store
+        .listPublicationRecords({
+          publicationIds: ["order-conflict-second-publication"],
+        })
+        .map((record) => [
+          record.status,
+          record.attempts[0].status,
+          record.attempts[0].remoteId,
+        ]),
+      [["queued", "queued", null]],
+    );
+    assert.deepEqual(
+      store.listRemoteOrders().map((order) => [order.orderId, order.attemptId]),
+      [["shared-order-id", "order-conflict-first-attempt"]],
+    );
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("published outcomes stay idempotent and keep one archive job on exact replay", () => {
+  const root = workspace();
+  const store = createOperationalStore({ workspaceRoot: root });
+  try {
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "fixture",
+    });
+    store.reservePublicationTarget({
+      articleId: "published-replay-article",
+      publicationId: "published-replay-publication",
+      attemptId: "published-replay-attempt",
       target: platformTarget(profile.accountProfileId),
-    }), { code: "PUBLICATION_UNCERTAIN" });
+    });
+    const outcome = {
+      status: "published",
+      evidence: {
+        articleId: "published-replay-article",
+        attemptId: "published-replay-attempt",
+        targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
+        accountProfileId: profile.accountProfileId,
+        remoteId: "published-replay-remote",
+        remoteUrl: "https://example.test/published-replay-remote",
+      },
+    };
+    const expected = {
+      attemptId: "published-replay-attempt",
+      status: "published",
+    };
+    assert.deepEqual(
+      store.commitRemoteOutcome({
+        attemptId: "published-replay-attempt",
+        outcome,
+      }),
+      expected,
+    );
+    assert.deepEqual(
+      store.commitRemoteOutcome({
+        attemptId: "published-replay-attempt",
+        outcome,
+      }),
+      expected,
+    );
+    const database = new DatabaseSync(store.verify().databasePath, {
+      readOnly: true,
+    });
+    try {
+      assert.equal(
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM post_processing_jobs WHERE attempt_id=? AND kind='archive'",
+          )
+          .get("published-replay-attempt").count,
+        1,
+      );
+    } finally {
+      database.close();
+    }
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -203,38 +579,122 @@ test("queue groups, paid confirmation snapshots, and manual reconciliation facts
   const root = workspace();
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    const group = store.createSubmissionQueueGroup({ queueGroupId: "queue-group-1", platformId: "toutiao", accountProfileId: profile.accountProfileId });
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "fixture",
+    });
+    const group = store.createSubmissionQueueGroup({
+      queueGroupId: "queue-group-1",
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
+    });
     const batch = store.createSubmissionBatch({
       batchId: "queue-batch-1",
       items: [
-        { articleId: "queue-article-1", target: platformTarget(profile.accountProfileId), payload: { clientId: "client-1" } },
-        { articleId: "queue-article-2", target: platformTarget(profile.accountProfileId), payload: { clientId: "client-1" } },
+        {
+          articleId: "queue-article-1",
+          target: platformTarget(profile.accountProfileId),
+          payload: { clientId: "client-1" },
+        },
+        {
+          articleId: "queue-article-2",
+          target: platformTarget(profile.accountProfileId),
+          payload: { clientId: "client-1" },
+        },
       ],
     });
-    assert.equal(store.enqueueSubmissionQueueItem({ queueGroupId: group.queueGroupId, itemId: batch.items[0].itemId }).position, 1);
-    assert.equal(store.enqueueSubmissionQueueItem({ queueGroupId: group.queueGroupId, itemId: batch.items[1].itemId }).position, 2);
-    assert.deepEqual(store.listSubmissionQueueItems({ queueGroupId: group.queueGroupId }).map((item) => item.position), [1, 2]);
-    assert.equal(store.setSubmissionQueueGroupPause({ queueGroupId: group.queueGroupId, paused: false }).paused, false);
+    assert.equal(
+      store.enqueueSubmissionQueueItem({
+        queueGroupId: group.queueGroupId,
+        itemId: batch.items[0].itemId,
+      }).position,
+      1,
+    );
+    assert.equal(
+      store.enqueueSubmissionQueueItem({
+        queueGroupId: group.queueGroupId,
+        itemId: batch.items[1].itemId,
+      }).position,
+      2,
+    );
+    assert.deepEqual(
+      store
+        .listSubmissionQueueItems({ queueGroupId: group.queueGroupId })
+        .map((item) => item.position),
+      [1, 2],
+    );
+    assert.equal(
+      store.setSubmissionQueueGroupPause({
+        queueGroupId: group.queueGroupId,
+        paused: false,
+      }).paused,
+      false,
+    );
     const cancelled = store.createSubmissionBatch({
       batchId: "queue-cancelled-batch",
-      items: [{ articleId: "queue-cancelled-article", target: platformTarget(profile.accountProfileId), payload: {} }],
+      items: [
+        {
+          articleId: "queue-cancelled-article",
+          target: platformTarget(profile.accountProfileId),
+          payload: {},
+        },
+      ],
     });
-    store.cancelQueuedSubmissionItem({ batchId: cancelled.batchId, itemId: cancelled.items[0].itemId });
-    assert.throws(() => store.enqueueSubmissionQueueItem({ queueGroupId: group.queueGroupId, itemId: cancelled.items[0].itemId }), { code: "OPERATIONAL_QUEUE_ITEM_STATUS_INVALID" });
+    store.cancelQueuedSubmissionItem({
+      batchId: cancelled.batchId,
+      itemId: cancelled.items[0].itemId,
+    });
+    assert.throws(
+      () =>
+        store.enqueueSubmissionQueueItem({
+          queueGroupId: group.queueGroupId,
+          itemId: cancelled.items[0].itemId,
+        }),
+      { code: "OPERATIONAL_QUEUE_ITEM_STATUS_INVALID" },
+    );
     for (const status of ["completed", "failed"]) {
       const terminal = store.createSubmissionBatch({
         batchId: `queue-${status}-batch`,
-        items: [{ articleId: `queue-${status}-article`, target: platformTarget(profile.accountProfileId), payload: {} }],
+        items: [
+          {
+            articleId: `queue-${status}-article`,
+            target: platformTarget(profile.accountProfileId),
+            payload: {},
+          },
+        ],
       });
-      const claim = store.claimSubmissionItemById({ batchId: terminal.batchId, itemId: terminal.items[0].itemId, claimToken: `claim-${status}` });
-      store.updateSubmissionItem({ batchId: terminal.batchId, itemId: claim.itemId, revision: claim.revision, claimToken: claim.claimToken, status, payload: {} });
-      assert.throws(() => store.enqueueSubmissionQueueItem({ queueGroupId: group.queueGroupId, itemId: claim.itemId }), { code: "OPERATIONAL_QUEUE_ITEM_STATUS_INVALID" });
+      const claim = store.claimSubmissionItemById({
+        batchId: terminal.batchId,
+        itemId: terminal.items[0].itemId,
+        claimToken: `claim-${status}`,
+      });
+      store.updateSubmissionItem({
+        batchId: terminal.batchId,
+        itemId: claim.itemId,
+        revision: claim.revision,
+        claimToken: claim.claimToken,
+        status,
+        payload: {},
+      });
+      assert.throws(
+        () =>
+          store.enqueueSubmissionQueueItem({
+            queueGroupId: group.queueGroupId,
+            itemId: claim.itemId,
+          }),
+        { code: "OPERATIONAL_QUEUE_ITEM_STATUS_INVALID" },
+      );
     }
 
     const paidBatch = store.createSubmissionBatch({
       batchId: "paid-batch-1",
-      items: [{ articleId: "paid-article-1", target: { kind: "media", mediaResourceId: "media-1" }, payload: { titleSnapshot: "标题" } }],
+      items: [
+        {
+          articleId: "paid-article-1",
+          target: { kind: "media", mediaResourceId: "media-1" },
+          payload: { titleSnapshot: "标题" },
+        },
+      ],
     });
     const paid = store.createPaidSubmissionBatch({
       batchId: paidBatch.batchId,
@@ -246,15 +706,18 @@ test("queue groups, paid confirmation snapshots, and manual reconciliation facts
       confirmation: { articleCount: 1, resourceName: "媒体" },
     });
     assert.equal(paid.paused, true);
-    assert.equal(store.createPaidSubmissionBatch({
-      batchId: paidBatch.batchId,
-      mediaResourceId: "media-1",
-      confirmationFingerprint: "confirmation-fingerprint-1",
-      systemSubmissionCode: "system-code-1",
-      quotedPrice: 20,
-      estimatedTotal: 20,
-      confirmation: { articleCount: 1, resourceName: "媒体" },
-    }).idempotent, true);
+    assert.equal(
+      store.createPaidSubmissionBatch({
+        batchId: paidBatch.batchId,
+        mediaResourceId: "media-1",
+        confirmationFingerprint: "confirmation-fingerprint-1",
+        systemSubmissionCode: "system-code-1",
+        quotedPrice: 20,
+        estimatedTotal: 20,
+        confirmation: { articleCount: 1, resourceName: "媒体" },
+      }).idempotent,
+      true,
+    );
 
     store.reservePublicationTarget({
       articleId: "reconcile-article",
@@ -269,18 +732,32 @@ test("queue groups, paid confirmation snapshots, and manual reconciliation facts
       evidence: { operator: "fixture" },
     });
     assert.equal(reconciliation.idempotent, false);
-    assert.equal(store.recordManualReconciliation({
-      reconciliationId: "reconciliation-1",
+    const replayedWithoutId = store.recordManualReconciliation({
       attemptId: "reconcile-attempt",
       decision: "not_accepted",
       evidence: { operator: "fixture" },
-    }).idempotent, true);
-    assert.throws(() => store.recordManualReconciliation({
-      reconciliationId: "reconciliation-2",
-      attemptId: "reconcile-attempt",
-      decision: "accepted",
-      evidence: {},
-    }), { code: "OPERATIONAL_RECONCILIATION_CONFLICT" });
+    });
+    assert.equal(replayedWithoutId.idempotent, true);
+    assert.equal(replayedWithoutId.reconciliationId, "reconciliation-1");
+    assert.equal(
+      store.recordManualReconciliation({
+        reconciliationId: "reconciliation-1",
+        attemptId: "reconcile-attempt",
+        decision: "not_accepted",
+        evidence: { operator: "fixture" },
+      }).idempotent,
+      true,
+    );
+    assert.throws(
+      () =>
+        store.recordManualReconciliation({
+          reconciliationId: "reconciliation-2",
+          attemptId: "reconcile-attempt",
+          decision: "accepted",
+          evidence: {},
+        }),
+      { code: "OPERATIONAL_RECONCILIATION_CONFLICT" },
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -290,17 +767,43 @@ test("queue groups, paid confirmation snapshots, and manual reconciliation facts
 test("batch lifecycle facts use a fixed-query public port and article snapshot consumes it", async () => {
   const root = workspace();
   const metrics = [];
-  const store = createOperationalStore({ workspaceRoot: root, internalLifecycleProjectionObserver: (value) => metrics.push(value) });
+  const store = createOperationalStore({
+    workspaceRoot: root,
+    internalLifecycleProjectionObserver: (value) => metrics.push(value),
+  });
   try {
-    const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "fixture",
+    });
     const batch = store.createSubmissionBatch({
       batchId: "facts-batch",
-      items: [{ articleId: "facts-article", target: platformTarget(profile.accountProfileId), payload: { clientId: "client-facts" } }],
+      items: [
+        {
+          articleId: "facts-article",
+          target: platformTarget(profile.accountProfileId),
+          payload: { clientId: "client-facts" },
+        },
+      ],
     });
-    store.createSubmissionQueueGroup({ queueGroupId: "facts-group", platformId: "toutiao", accountProfileId: profile.accountProfileId });
-    store.enqueueSubmissionQueueItem({ queueGroupId: "facts-group", itemId: batch.items[0].itemId });
-    store.reservePublicationTarget({ articleId: "facts-article", publicationId: "facts-publication", attemptId: "facts-attempt", target: platformTarget(profile.accountProfileId) });
-    const facts = store.listArticleLifecycleFacts({ articleIds: ["facts-article"] });
+    store.createSubmissionQueueGroup({
+      queueGroupId: "facts-group",
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
+    });
+    store.enqueueSubmissionQueueItem({
+      queueGroupId: "facts-group",
+      itemId: batch.items[0].itemId,
+    });
+    store.reservePublicationTarget({
+      articleId: "facts-article",
+      publicationId: "facts-publication",
+      attemptId: "facts-attempt",
+      target: platformTarget(profile.accountProfileId),
+    });
+    const facts = store.listArticleLifecycleFacts({
+      articleIds: ["facts-article"],
+    });
     assert.equal(facts.publications.length, 1);
     assert.equal(facts.submissionItems.length, 1);
     assert.equal(facts.orders.length, 0);
@@ -309,12 +812,26 @@ test("batch lifecycle facts use a fixed-query public port and article snapshot c
     const snapshot = createArticleManagementSnapshot({
       workspaceRoot: root,
       aiContentService: {
-        listGeneratedArticles: () => [{ id: "facts-article", clientId: "client-facts", title: "标题", content: "正文" }],
+        listGeneratedArticles: () => [
+          {
+            id: "facts-article",
+            clientId: "client-facts",
+            title: "标题",
+            content: "正文",
+          },
+        ],
         listTrashedArticles: () => [],
       },
-      contentSubmissionService: { listBatches: () => [], listPlatforms: () => [] },
+      contentSubmissionService: {
+        listBatches: () => [],
+        listPlatforms: () => [],
+      },
       operationalStore: store,
-      listAttention: () => ({ revision: 1, items: [], counts: { total: 0, actionable: 0 } }),
+      listAttention: () => ({
+        revision: 1,
+        items: [],
+        counts: { total: 0, actionable: 0 },
+      }),
       getRevision: () => 1,
     });
     const result = await snapshot.get({ clientId: "client-facts" });

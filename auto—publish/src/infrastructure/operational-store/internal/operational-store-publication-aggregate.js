@@ -6,6 +6,9 @@ const {
   safeDisplayText,
   text,
 } = require("./operational-store-utils");
+const {
+  createOperationalStoreOutcomeWriter,
+} = require("./operational-store-outcome-writer");
 function publicationIntentPayload(context, detail) {
   if (!context) return detail === undefined ? null : detail;
   return {
@@ -29,6 +32,10 @@ function parsePublicationIntentPayload(value) {
 
 function createPublicationAggregate(context, activeTarget) {
   const { db, open, transaction, clock, randomUUID, fail, iso } = context;
+  const outcomeWriter = createOperationalStoreOutcomeWriter(
+    context,
+    activeTarget,
+  );
   function submissionContext(input) {
     const value = input || {};
     if (
@@ -221,7 +228,15 @@ function createPublicationAggregate(context, activeTarget) {
         stamp,
         stamp,
       );
-      activeTarget.recordReservation({ articleId, publicationId, attemptId, targetKey, target, state: "queued", stamp });
+      activeTarget.recordReservation({
+        articleId,
+        publicationId,
+        attemptId,
+        targetKey,
+        target,
+        state: "queued",
+        stamp,
+      });
       return { publicationId, attemptId, targetKey, status: "queued" };
     });
   }
@@ -305,7 +320,15 @@ function createPublicationAggregate(context, activeTarget) {
       db.prepare(
         "UPDATE publication_records SET status='queued',updated_at=? WHERE publication_id=?",
       ).run(stamp, publicationId);
-      activeTarget.recordReservation({ articleId, publicationId, attemptId, targetKey, target, state: "queued", stamp });
+      activeTarget.recordReservation({
+        articleId,
+        publicationId,
+        attemptId,
+        targetKey,
+        target,
+        state: "queued",
+        stamp,
+      });
       return { publicationId, attemptId, targetKey, status: "queued" };
     });
   }
@@ -388,30 +411,7 @@ function createPublicationAggregate(context, activeTarget) {
             }
           : persisted.context;
       rejectSensitive(postProcessingPayload);
-      db.prepare(
-        "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
-      ).run(outcome.status, stamp, attemptId);
-      db.prepare(
-        "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
-      ).run(outcome.status, stamp, attempt.publication_id);
-      activeTarget.settle({ articleId: attempt.article_id, publicationId: attempt.publication_id, attemptId, target, status: outcome.status, stamp });
-      if (outcome.evidence)
-        db.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
-          randomUUID(),
-          attemptId,
-          outcome.evidence.remoteId,
-          outcome.evidence.remoteUrl || null,
-          text(outcome.evidence),
-          stamp,
-        );
-      if (outcome.evidence && target && target.kind === "media")
-        db.prepare("INSERT OR IGNORE INTO remote_orders VALUES(?,?,?,?,?)").run(
-          outcome.evidence.remoteId,
-          attemptId,
-          outcome.evidence.remoteId,
-          text(outcome.evidence),
-          stamp,
-        );
+      outcomeWriter.apply({ attempt, attemptId, outcome, target, stamp });
       if (batchItemId !== undefined) {
         const item = db
           .prepare(
@@ -495,7 +495,7 @@ function createPublicationAggregate(context, activeTarget) {
       );
       if (outcome.status === "published")
         db.prepare(
-          "INSERT INTO post_processing_jobs VALUES(?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO post_processing_jobs VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(attempt_id,kind) DO NOTHING",
         ).run(
           randomUUID(),
           attemptId,

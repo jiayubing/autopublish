@@ -7,6 +7,7 @@ const {
   projectArticleLifecycle,
 } = require("../src/content/article-lifecycle-projection");
 const { projectManagementSnapshot } = require("../desktop/ipc/contracts/content-core-contracts");
+const { publicationSummary } = require("../src/content/article-lifecycle-facts");
 
 function article(overrides) {
   return {
@@ -30,6 +31,17 @@ function facts(overrides) {
     ...(overrides || {}),
   };
 }
+
+test("submitted facts are exposed as pending confirmation, never reviewing", () => {
+  const summary = publicationSummary(
+    [{ articleId: "article-1", status: "submitted", targetKey: "media-resource:r1" }],
+    [],
+    [],
+  );
+  assert.equal(summary.status, "uncertain");
+  assert.equal(summary.label, "待确认");
+  assert.equal(summary.uncertain, true);
+});
 
 test("article lifecycle exposes the six mutually exclusive stages", () => {
   assert.deepEqual(ARTICLE_LIFECYCLE_STAGES, [

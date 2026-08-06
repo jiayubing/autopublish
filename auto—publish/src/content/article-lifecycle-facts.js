@@ -30,7 +30,6 @@ const SUMMARY_LABELS = Object.freeze({
   queued: "已入队",
   paid_processing: "付费处理中",
   submitting: "投稿中",
-  reviewing: "审核中",
   partial: "部分发布",
   published: "已发布",
   uncertain: "待确认",
@@ -157,7 +156,7 @@ function publicationSummary(records, orders, submissionItems) {
   if (values.some((status) => status === "0" || status === "1")) return result("paid_processing");
   if (values.every((status) => status === "failed" || status === "cancelled" || status === "4" || status === "9")) return result("failed");
   if (values.includes("submitting") || values.includes("remote_started")) return result("submitting");
-  if (values.includes("submitted")) return result("reviewing");
+  if (values.includes("submitted")) return result("uncertain", true);
   if (values.includes("queued")) return result("queued");
   return result("failed");
 }

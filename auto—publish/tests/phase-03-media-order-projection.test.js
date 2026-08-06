@@ -22,7 +22,14 @@ test("media order service requires the canonical OperationalStore projection and
     code: "MEDIA_ORDER_STORE_REQUIRED",
   });
   assert.throws(
-    () => createMediaOrderService({ operationalStore: { listRemoteOrders() { return []; } } }),
+    () =>
+      createMediaOrderService({
+        operationalStore: {
+          listRemoteOrders() {
+            return [];
+          },
+        },
+      }),
     { code: "MEDIA_ORDER_PROJECTION_REQUIRED" },
   );
   for (const symbol of [
@@ -53,16 +60,21 @@ test("media order views consume the bounded OperationalStore projection and expo
           submittedAt: "2026-07-25T00:00:00.000Z",
         },
       ],
-      listSubmissionBatches: () => { throw new Error("unbounded history scan"); },
+      listSubmissionBatches: () => {
+        throw new Error("unbounded history scan");
+      },
     },
   });
   const view = service.listOrderViews()[0];
   assert.equal(readLegacy, false);
-  assert.deepEqual(
-    [view.orderNid, view.statusCode],
-    ["order-1", "0"],
-  );
-  for (const key of ["publicationId", "attemptId", "resourceId", "publicationStatus", "raw"])
+  assert.deepEqual([view.orderNid, view.statusCode], ["order-1", "0"]);
+  for (const key of [
+    "publicationId",
+    "attemptId",
+    "resourceId",
+    "publicationStatus",
+    "raw",
+  ])
     assert.equal(key in view, false, key);
 });
 
@@ -89,13 +101,7 @@ test("media order views join the immutable submission display snapshot without i
 
   const view = service.listOrderViews()[0];
   assert.deepEqual(
-    [
-      view.title,
-      view.filename,
-      view.resourceName,
-      view.price,
-      view.statusCode,
-    ],
+    [view.title, view.filename, view.resourceName, view.price, view.statusCode],
     ["已保存的投稿标题", "article-1.md", "媒体甲", "12.5", "0"],
   );
 });
@@ -126,7 +132,9 @@ test("order projection preserves timezone-bearing instants and leaves missing pu
 });
 
 test("a real SQLite projection stays single-query and parses only orders across 13k submission batches", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-order-large-history-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-03-order-large-history-"),
+  );
   let store = createOperationalStore({ workspaceRoot: root });
   let databasePath;
   const fakeSupplier = {
@@ -213,18 +221,30 @@ test("a real SQLite projection stays single-query and parses only orders across 
     const startedAt = performance.now();
     const views = service.listOrderViews();
     const elapsedMs = performance.now() - startedAt;
-    const heapDeltaBytes = Math.max(0, process.memoryUsage().heapUsed - beforeHeap);
+    const heapDeltaBytes = Math.max(
+      0,
+      process.memoryUsage().heapUsed - beforeHeap,
+    );
 
     assert.equal(orderQueryCount, 1);
-    assert.deepEqual(metrics, [{ sqlCount: 1, rowCount: 3, parsedPayloadCount: 3 }]);
+    assert.deepEqual(metrics, [
+      { sqlCount: 1, rowCount: 3, parsedPayloadCount: 3 },
+    ]);
     assert.equal(views.length, 3);
     assert.deepEqual(
       views.map((view) => [view.title, view.resourceName, view.price]),
-      [["订单标题 3", "媒体 3", "30"], ["订单标题 2", "媒体 2", "20"], ["订单标题 1", "媒体 1", "10"]],
+      [
+        ["订单标题 3", "媒体 3", "30"],
+        ["订单标题 2", "媒体 2", "20"],
+        ["订单标题 1", "媒体 1", "10"],
+      ],
     );
     assert.equal(paidSendCalls, 0);
     assert.ok(elapsedMs < 1000, `elapsedMs=${elapsedMs}`);
-    assert.ok(heapDeltaBytes < 16 * 1024 * 1024, `heapDeltaBytes=${heapDeltaBytes}`);
+    assert.ok(
+      heapDeltaBytes < 16 * 1024 * 1024,
+      `heapDeltaBytes=${heapDeltaBytes}`,
+    );
     t.diagnostic(
       `fixture=temporary SQLite; historyBatches=13000; orderQueries=${orderQueryCount}; sql=${metrics[0].sqlCount}; parsedPayloads=${metrics[0].parsedPayloadCount}; orders=${views.length}; heapDeltaBytes=${heapDeltaBytes}; elapsedMs=${elapsedMs.toFixed(3)}; paidSendCalls=${paidSendCalls}`,
     );
@@ -253,9 +273,7 @@ test("media order views expose the five supplier status categories independently
   });
 
   assert.deepEqual(
-    service
-      .listOrderViews()
-      .map((order) => order.statusCode),
+    service.listOrderViews().map((order) => order.statusCode),
     statuses.map(([statusCode]) => statusCode),
   );
 });
@@ -266,8 +284,13 @@ test("OperationalStore media order sync never writes the retired JSONL history",
   fs.writeFileSync(storePath, '{"legacy":true}\n');
   const service = createMediaOrderService({
     storePath,
-    operationalStore: { listOrderDisplayViews: () => [], recordRemoteOrderObservation: () => ({}) },
-    clientProvider: () => ({ orderInfo: async () => ({ data: [{ status: 1 }] }) }),
+    operationalStore: {
+      listOrderDisplayViews: () => [],
+      recordRemoteOrderObservation: () => ({}),
+    },
+    clientProvider: () => ({
+      orderInfo: async () => ({ data: [{ status: 1 }] }),
+    }),
   });
   await service.syncOrder("order-1");
   assert.equal(fs.readFileSync(storePath, "utf8"), '{"legacy":true}\n');
@@ -277,12 +300,19 @@ test("supplier reconciliation storage failures are safe command failures, never 
   const service = createMediaOrderService({
     operationalStore: {
       listOrderDisplayViews: () => [],
-      recordRemoteOrderObservation: () => { throw new Error("sqlite secret payload must not reach the UI"); },
+      recordRemoteOrderObservation: () => {
+        throw new Error("sqlite secret payload must not reach the UI");
+      },
     },
-    clientProvider: () => ({ orderInfo: async () => ({ data: [{ status: 1 }] }) }),
+    clientProvider: () => ({
+      orderInfo: async () => ({ data: [{ status: 1 }] }),
+    }),
   });
-  await assert.rejects(() => service.syncOrder("order-1"), (error) =>
-    error.code === "MEDIA_ORDER_SYNC_FAILED" && !/secret/i.test(error.message),
+  await assert.rejects(
+    () => service.syncOrder("order-1"),
+    (error) =>
+      error.code === "MEDIA_ORDER_SYNC_FAILED" &&
+      !/secret/i.test(error.message),
   );
 });
 
@@ -311,13 +341,17 @@ test("supplier observation parsing failures are stable and never expose the supp
 });
 
 test("real SQLite write and evidence conflicts roll back supplier observations with safe errors", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-order-sync-faults-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-03-order-sync-faults-"),
+  );
   let injectWriteFault = false;
   const store = createOperationalStore({
     workspaceRoot: root,
     internalBeforeCommit: () => {
       if (injectWriteFault)
-        throw new Error("SQLITE_IOERR C:\\private\\operations.sqlite secret-payload");
+        throw new Error(
+          "SQLITE_IOERR C:\\private\\operations.sqlite secret-payload",
+        );
     },
   });
   try {
@@ -347,9 +381,13 @@ test("real SQLite write and evidence conflicts roll back supplier observations w
       () =>
         createMediaOrderService({
           operationalStore: store,
-          clientProvider: () => ({ orderInfo: async () => ({ data: [{ status: 1 }] }) }),
+          clientProvider: () => ({
+            orderInfo: async () => ({ data: [{ status: 1 }] }),
+          }),
         }).syncOrder("order-sqlite"),
-      (error) => error.code === "MEDIA_ORDER_SYNC_FAILED" && !/sqlite|private|payload/i.test(error.message),
+      (error) =>
+        error.code === "MEDIA_ORDER_SYNC_FAILED" &&
+        !/sqlite|private|payload/i.test(error.message),
     );
     injectWriteFault = false;
 
@@ -359,16 +397,29 @@ test("real SQLite write and evidence conflicts roll back supplier observations w
           operationalStore: store,
           clientProvider: () => ({
             orderInfo: async () => ({
-              data: [{ status: 2, order_url: "https://user:secret@publisher.example/article?token=secret" }],
+              data: [
+                {
+                  status: 2,
+                  order_url:
+                    "https://user:secret@publisher.example/article?token=secret",
+                },
+              ],
             }),
           }),
         }).syncOrder("order-evidence"),
-      (error) => error.code === "MEDIA_ORDER_SYNC_FAILED" && !/secret|publisher|token/i.test(error.message),
+      (error) =>
+        error.code === "MEDIA_ORDER_SYNC_FAILED" &&
+        !/secret|publisher|token/i.test(error.message),
     );
 
-    const orders = new Map(store.listOrderDisplayViews().map((order) => [order.orderId, order]));
+    const orders = new Map(
+      store.listOrderDisplayViews().map((order) => [order.orderId, order]),
+    );
     assert.deepEqual(
-      [orders.get("order-sqlite").supplierStatusCode, orders.get("order-evidence").supplierStatusCode],
+      [
+        orders.get("order-sqlite").supplierStatusCode,
+        orders.get("order-evidence").supplierStatusCode,
+      ],
       ["", ""],
     );
   } finally {
@@ -377,31 +428,72 @@ test("real SQLite write and evidence conflicts roll back supplier observations w
 });
 
 test("supplier after-sales observation cannot revoke canonical published state and missing observation stays unknown", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-order-observation-"));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-03-order-observation-"),
+  );
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    store.reservePublicationTarget({ articleId: "article-1", publicationId: "publication-1", attemptId: "attempt-1", target: { kind: "media", mediaResourceId: "resource-1" } });
-    store.commitRemoteOutcome({ attemptId: "attempt-1", outcome: { status: "submitted", evidence: { articleId: "article-1", attemptId: "attempt-1", targetKey: "media-resource:resource-1", remoteId: "order-1" } } });
-    assert.equal(createMediaOrderService({ operationalStore: store }).listOrderViews()[0].statusCode, "");
+    store.reservePublicationTarget({
+      articleId: "article-1",
+      publicationId: "publication-1",
+      attemptId: "attempt-1",
+      target: { kind: "media", mediaResourceId: "resource-1" },
+    });
+    store.commitRemoteOutcome({
+      attemptId: "attempt-1",
+      outcome: {
+        status: "submitted",
+        evidence: {
+          articleId: "article-1",
+          attemptId: "attempt-1",
+          targetKey: "media-resource:resource-1",
+          remoteId: "order-1",
+        },
+      },
+    });
+    assert.equal(
+      createMediaOrderService({ operationalStore: store }).listOrderViews()[0]
+        .statusCode,
+      "",
+    );
     const service = createMediaOrderService({
       operationalStore: store,
-      clientProvider: () => ({ orderInfo: async () => ({ data: [{ status: 2, order_url: "https://publisher.example/article-1", published_at: "2026-07-28T12:00:00.000Z" }] }) }),
+      clientProvider: () => ({
+        orderInfo: async () => ({
+          data: [
+            {
+              status: 2,
+              order_url: "https://publisher.example/article-1",
+              published_at: "2026-07-28T12:00:00.000Z",
+            },
+          ],
+        }),
+      }),
     });
     await service.syncOrder("order-1");
     assert.equal(store.listRemoteOrders()[0].status, "published");
     await createMediaOrderService({
       operationalStore: store,
-      clientProvider: () => ({ orderInfo: async () => ({ data: [{ status: 9 }] }) }),
+      clientProvider: () => ({
+        orderInfo: async () => ({ data: [{ status: 9 }] }),
+      }),
     }).syncOrder("order-1");
-    const view = createMediaOrderService({ operationalStore: store }).listOrderViews()[0];
-    assert.deepEqual([store.listRemoteOrders()[0].status, view.statusCode, view.publishedAt], ["published", "9", "2026-07-28T12:00:00.000Z"]);
+    const view = createMediaOrderService({
+      operationalStore: store,
+    }).listOrderViews()[0];
+    assert.deepEqual(
+      [store.listRemoteOrders()[0].status, view.statusCode, view.publishedAt],
+      ["published", "9", "2026-07-28T12:00:00.000Z"],
+    );
   } finally {
     store.close();
   }
 });
 
-test("all supplier observations persist independently and status 2 without HTTPS evidence does not promote canonical state", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-order-all-observations-"));
+test("all supplier observations persist independently, rejection closes unpublished work, and status 2 without HTTPS evidence does not promote", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-03-order-all-observations-"),
+  );
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     for (const statusCode of ["0", "1", "2", "4", "9"]) {
@@ -438,7 +530,10 @@ test("all supplier observations persist independently and status 2 without HTTPS
     for (const statusCode of ["0", "1", "2", "4", "9"]) {
       const order = observations.get(`order-status-${statusCode}`);
       assert.equal(order.supplierStatusCode, statusCode);
-      assert.equal(order.publicationStatus, "submitted");
+      assert.equal(
+        order.publicationStatus,
+        statusCode === "4" ? "failed" : "submitted",
+      );
     }
     assert.equal(observations.get("order-status-2").remoteUrl, null);
   } finally {
@@ -482,10 +577,7 @@ test("supplier status survives sync and OperationalStore reopen without being re
     const view = createMediaOrderService({
       operationalStore: store,
     }).listOrderViews()[0];
-    assert.deepEqual(
-      [view.statusCode, view.publishedAt],
-      ["1", ""],
-    );
+    assert.deepEqual([view.statusCode, view.publishedAt], ["1", ""]);
     assert.equal(store.listRemoteOrders()[0].status, "submitted");
   } finally {
     store.close();

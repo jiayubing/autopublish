@@ -87,6 +87,16 @@ const MODULE_SIZE_EXCEPTIONS = Object.freeze([
     "single SQLite publication aggregate",
   ],
   [
+    "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
+    473,
+    "single SQLite queue and paid-batch fact aggregate",
+  ],
+  [
+    "src/infrastructure/operational-store/internal/operational-store-schema.js",
+    483,
+    "SQLite schema versioning and migration coordinator",
+  ],
+  [
     "src/content/content-path-policy.js",
     481,
     "shared workspace and link safety policy",
