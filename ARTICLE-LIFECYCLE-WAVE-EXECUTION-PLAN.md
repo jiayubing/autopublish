@@ -50,8 +50,13 @@
 | 波次 4 执行组 07 | `COMPLETE` | threadId `019fd7f0-b064-7892-be0a-e7a7d4ccb987`；hostId `local`；worktree `C:\Users\violet\.codex\worktrees\f8f0\官媒投稿-refactor`；branch `codex/article-lifecycle-07`；base `e96f4e3eef238649ae81a1c398c39ed18e14d5ac`；ticket commit `690a29fbf6489c51ffc15b2c37f60f738405a178`；merge commit `ae12f36c37518ac66d9bf1ef703d8fdbbf0fca99`；integration fix `1298214c543a944ce388856cef88ce3d97d8d83b` |
 | 波次 4 Ticket 07 审计与修复 | `COMPLETE` | 深度独立审计报告 2 P1、1 P2：取消审计事实被删除、Renderer 成功路径变量错误、外部 `batchId` 可跨客户混批；均已修复并由公开合同、事实投影与定向测试逐项复核，无遗留阻塞 finding |
 | 波次 4 Ticket 07 合并后定向复验 | `COMPLETE` | 业务/IPC/真实 Renderer 定向回归 47/47；production IPC matrix 34/34；Phase 8 gate 5/5；lint、main/bridge/renderer typecheck 通过；本票触达文件格式检查通过 |
-| 当前执行波次 | `4` / `PARTIAL` | Ticket 07 已完成审计、提交、合并和定向复验；下一串行执行组仅 Ticket 12，依赖 Ticket 06、11 均已进入当前集成历史 |
-| 下一执行基线 | 当前集成 `HEAD` | 实际创建 Ticket 12 时必须使用包含本状态记录的最新 Git `HEAD`，不得硬编码 Ticket 07 合并前快照 |
+| 波次 4 执行组 12 | `COMPLETE` | implementation threadId `019fd876-dde7-71d1-9524-4eceaf41ab05`；审计修复 threadId `019fd8f7-fc98-71e2-89b9-a69c5235487d`（Sol/medium）；hostId `local`；worktree `C:\Users\violet\.codex\worktrees\a97b\官媒投稿-refactor`；branch `codex/article-lifecycle-12`；base `2db15bf2bf62d6a6b712836328f59d0bf2af84fa`；ticket commit `a3ecdd563970d66df4adfd4ec0803ecb6b801966`；merge commit `ca54f4022b6ec731565d88638e52f6e190364950`；合并后类型/格式修复 `91ee7a763f182b552d6fd3a4ab6e6e9bb9bc8d7b` |
+| 波次 4 Ticket 12 审计与修复 | `COMPLETE` | 深度独立审计报告 1 P1、1 P2：paid-media IPC 未等待异步 service、强制故障与并发矩阵不足；修复线程补齐 async await/拒绝/副作用顺序、资源/价格/文章/系统标识漂移、内容校验、锁与事务失败、保存/确认和普通/付费 admission 竞态、重复确认竞态及安全错误合同，无遗留阻塞 finding |
+| 波次 4 Ticket 12 合并后定向复验 | `COMPLETE` | Ticket 07/12、IPC、Renderer、资源服务及共享 coordinator/OperationalStore 定向回归 86/86；production IPC matrix 34/34（114 capabilities）；Phase 8 gate 5/5；lint、main/bridge/renderer typecheck、Renderer/Preload build 通过 |
+| 波次 4 增量集成验收 | `COMPLETE` | 普通/付费活动目标双向竞态和零孤立事实矩阵通过；原全量测试 12 项回归由 `84b1c7b308484fe761a12e75b4e965f65f794165` 修复；原失败文件复验 68/68；`pack:production:smoke:dirty` 及 production package verifier 通过；lint、main/bridge/renderer typecheck、format、production IPC matrix 34/34、Phase 8 gate 5/5 通过 |
+| 波次 4 最终全量验收 | `COMPLETE` | 最终集成 `84b1c7b308484fe761a12e75b4e965f65f794165` 上完整 `npm test`：249 files，1751/1751，0 failed，wall clock 449085ms；证据 `auto—publish/build/evidence/root-test-timings.json` |
+| 当前执行波次 | `5` / `READY` | 波次 4 已完成全部 ticket 审计、修复、提交、合并、定向复验、增量矩阵和最终全量验收；波次 5 首执行组 Ticket 08 的依赖 Ticket 07 已进入集成历史 |
+| 下一执行基线 | 当前集成 `HEAD` | 实际创建 Ticket 08 时必须使用包含 `84b1c7b308484fe761a12e75b4e965f65f794165` 与本状态记录的最新 Git `HEAD` |
 
 状态词只使用：
 
@@ -71,8 +76,8 @@
 | 1 | 01/03/11/17 | 无 | `COMPLETE` |
 | 2 | 02/04/05 | 02←01；04←03；05←03 | `COMPLETE` |
 | 3 | 06 | 04、05 | `COMPLETE` |
-| 4 | 07 → 12 | 07←02、06；12←06、11 | `PARTIAL` |
-| 5 | 08 → 13 | 08←07；13←02、04、12 | `PENDING` |
+| 4 | 07 → 12 | 07←02、06；12←06、11 | `COMPLETE` |
+| 5 | 08 → 13 | 08←07；13←02、04、12 | `READY` |
 | 6 | 09 → 14 → 15 | 09←08；14←13；15←09、11、13 | `PENDING` |
 | 7 | 10 → 16 | 10←09；16←15 | `PENDING` |
 | 8 | 18 → 22 | 18←08、09、10、17；22←06、09、16 | `PENDING` |
