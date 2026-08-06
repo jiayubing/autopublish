@@ -561,7 +561,11 @@ export async function admitRegularQueueItems(
   input: RegularQueueAdmissionInput,
 ): Promise<RegularQueueAdmissionResult> {
   return callSubmission(
-    (api) => requireBridgeMethod(api.admitRegularQueueItems)({ ...input, confirmed: true }),
+    (api) =>
+      requireBridgeMethod(api.admitRegularQueueItems)({
+        ...input,
+        confirmed: true,
+      }),
     "regular queue admission failed",
   );
 }
@@ -569,7 +573,11 @@ export async function removePendingQueueItems(
   input: Omit<PendingQueueRemovalInput, "confirmed">,
 ): Promise<PendingQueueRemovalResult> {
   return callSubmission(
-    (api) => requireBridgeMethod(api.removePendingQueueItems)({ ...input, confirmed: true }),
+    (api) =>
+      requireBridgeMethod(api.removePendingQueueItems)({
+        ...input,
+        confirmed: true,
+      }),
     "pending queue removal failed",
   );
 }

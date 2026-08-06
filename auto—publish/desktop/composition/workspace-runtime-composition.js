@@ -148,11 +148,14 @@ async function createWorkspaceRuntimeComposition(deps) {
     const { loadPlatforms } = require("../../src/core/platforms");
     const loadedPlatforms = loadPlatforms();
     const operationalStoreTransitionPorts = {};
-    const operationalStore = require("../../src/infrastructure/operational-store/operational-store").createOperationalStore({
-      workspaceRoot,
-      clock: options.clock,
-      transitionPorts: operationalStoreTransitionPorts,
-    });
+    const operationalStore =
+      require("../../src/infrastructure/operational-store/operational-store").createOperationalStore(
+        {
+          workspaceRoot,
+          clock: options.clock,
+          transitionPorts: operationalStoreTransitionPorts,
+        },
+      );
     ownService({
       dispose: function () {
         operationalStore.close();
@@ -163,22 +166,31 @@ async function createWorkspaceRuntimeComposition(deps) {
         {
           workspaceRoot,
           paths: injectedPaths,
-          publicationTransitions: operationalStoreTransitionPorts.publicationTransitions,
-          lifecycleFacts: operationalStoreTransitionPorts.publicationTransitions,
-          regularQueueTransitions: operationalStoreTransitionPorts.regularQueueTransitions,
+          publicationTransitions:
+            operationalStoreTransitionPorts.publicationTransitions,
+          lifecycleFacts:
+            operationalStoreTransitionPorts.publicationTransitions,
+          regularQueueTransitions:
+            operationalStoreTransitionPorts.regularQueueTransitions,
           clock: options.clock,
         },
       ),
     );
     const contentStore = contentLifecycleComposition.contentStore;
-    const articleMutationCoordinator = contentLifecycleComposition.articleMutationCoordinator;
-    const regularQueueApplication = require("../services/regular-queue-application").createRegularQueueApplication({
-      contentStore,
-      articleMutationCoordinator,
-      regularQueueTransitions: operationalStoreTransitionPorts.regularQueueTransitions,
-      accountProfileResolver: operationalStore.assertExecutableAccountProfile,
-      platforms: loadedPlatforms,
-    });
+    const articleMutationCoordinator =
+      contentLifecycleComposition.articleMutationCoordinator;
+    const regularQueueApplication =
+      require("../services/regular-queue-application").createRegularQueueApplication(
+        {
+          contentStore,
+          articleMutationCoordinator,
+          regularQueueTransitions:
+            operationalStoreTransitionPorts.regularQueueTransitions,
+          accountProfileResolver:
+            operationalStore.assertExecutableAccountProfile,
+          platforms: loadedPlatforms,
+        },
+      );
     const createPlatformSettingsService =
       require("../services/platform-settings-service").createPlatformSettingsService;
     const {
@@ -385,8 +397,10 @@ async function createWorkspaceRuntimeComposition(deps) {
         contentStore,
         operationalStore: publicationComposition.operationalStore,
         articleMutationCoordinator,
-        articleRemovalTransactionStore: contentLifecycleComposition.articleRemovalTransactionStore,
-        articleRemovalTransitionPort: contentLifecycleComposition.articleRemovalTransitionPort,
+        articleRemovalTransactionStore:
+          contentLifecycleComposition.articleRemovalTransactionStore,
+        articleRemovalTransitionPort:
+          contentLifecycleComposition.articleRemovalTransitionPort,
         contentSubmissionService,
         onArticleRemovalTransaction: function (transaction) {
           const eventContract = productionIpcRegistry.byChannel(

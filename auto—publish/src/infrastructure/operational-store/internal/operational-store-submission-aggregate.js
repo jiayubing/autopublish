@@ -523,7 +523,10 @@ function createSubmissionAggregate(context) {
           revision: row.revision,
           status: row.status,
           queueGroupId: row.queue_group_id || undefined,
-          position: row.position === null || row.position === undefined ? undefined : row.position,
+          position:
+            row.position === null || row.position === undefined
+              ? undefined
+              : row.position,
           payload: fromText(row.payload_json),
         }),
       );

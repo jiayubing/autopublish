@@ -1,8 +1,12 @@
 const { createArticleStore } = require("../../src/content/article-store");
 const { createContentStore } = require("../../src/content/content-store");
 const { listClientIdentities } = require("../../src/content/client-knowledge");
-const { createArticleMutationCoordinator } = require("../../src/content/article-mutation-coordinator");
-const { createArticleRemovalTransactionStore } = require("../../src/content/article-removal-transaction-store");
+const {
+  createArticleMutationCoordinator,
+} = require("../../src/content/article-mutation-coordinator");
+const {
+  createArticleRemovalTransactionStore,
+} = require("../../src/content/article-removal-transaction-store");
 
 // The workspace is the sole owner of the file-backed content implementation.
 // Application services receive the logical ContentStore seam, never the
@@ -22,22 +26,33 @@ function createContentLifecycleComposition(options) {
       });
     },
   });
-  const articleRemovalTransactionStore = value.articleRemovalTransactionStore || createArticleRemovalTransactionStore({
-    workspaceRoot: value.workspaceRoot,
-    now: value.clock,
-  });
+  const articleRemovalTransactionStore =
+    value.articleRemovalTransactionStore ||
+    createArticleRemovalTransactionStore({
+      workspaceRoot: value.workspaceRoot,
+      now: value.clock,
+    });
   const articleRemovalTransitionPort = { execute: null };
   const articleMutationCoordinator = createArticleMutationCoordinator({
     articleStore,
     contentStore,
-    publicationTransitions: value.publicationTransitions || value.operationalStore,
-    lifecycleFacts: value.lifecycleFacts || value.publicationTransitions || value.operationalStore,
+    publicationTransitions:
+      value.publicationTransitions || value.operationalStore,
+    lifecycleFacts:
+      value.lifecycleFacts ||
+      value.publicationTransitions ||
+      value.operationalStore,
     regularQueueTransitions: value.regularQueueTransitions,
     removalTransactionStore: articleRemovalTransactionStore,
     articleRemovalTransitionPort,
     clock: value.clock,
   });
-  return { contentStore, articleMutationCoordinator, articleRemovalTransactionStore, articleRemovalTransitionPort };
+  return {
+    contentStore,
+    articleMutationCoordinator,
+    articleRemovalTransactionStore,
+    articleRemovalTransitionPort,
+  };
 }
 
 module.exports = { createContentLifecycleComposition };

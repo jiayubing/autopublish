@@ -32,7 +32,19 @@ const AUTH_INVOKE_EXEMPTIONS = [
 ];
 const AUTH_EVENT_EXEMPTIONS = ["auth-state-changed"];
 
-function requiredKeys(schema) {
+function requiredKeys(schema, value) {
+  if (schema.type === "oneOf") {
+    const matching = schema.fields.find((candidate) => {
+      if (!candidate || candidate.type !== "object" || !value) return false;
+      return Object.entries(candidate.fields).every(([, field]) =>
+        field && field.type === "literal"
+          ? Object.is(value.outcome, field.value) ||
+            Object.values(value).some((entry) => Object.is(entry, field.value))
+          : true,
+      );
+    });
+    return matching ? requiredKeys(matching, value) : [];
+  }
   return Object.entries(schema.fields)
     .filter(([, field]) => !field || field.type !== "optional")
     .map(([key]) => key);
@@ -273,7 +285,7 @@ test("shared registry rejects missing required fields where applicable", () => {
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);
     if (contract.kind === "event") {
-      const [key] = requiredKeys(contract.event);
+      const [key] = requiredKeys(contract.event, fixture.event);
       if (!key) continue;
       const encoded = productionIpcRegistry.event(contract, fixture.event);
       assert.throws(
@@ -284,7 +296,7 @@ test("shared registry rejects missing required fields where applicable", () => {
       );
       continue;
     }
-    const [requestKey] = requiredKeys(contract.request);
+    const [requestKey] = requiredKeys(contract.request, fixture.request);
     if (requestKey) {
       const encoded = productionIpcRegistry.encodeRequest(
         contract,
@@ -300,7 +312,7 @@ test("shared registry rejects missing required fields where applicable", () => {
         `${fixture.capability}:request-missing-${requestKey}`,
       );
     }
-    const [resultKey] = requiredKeys(contract.success);
+    const [resultKey] = requiredKeys(contract.success, fixture.result);
     if (resultKey) {
       const encoded = productionIpcRegistry.success(contract, fixture.result);
       assert.throws(

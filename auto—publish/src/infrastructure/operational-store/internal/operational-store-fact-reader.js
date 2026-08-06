@@ -53,17 +53,22 @@ function createOperationalStoreFactReader(context) {
       .all(...articleIds)
       .map((row) => {
         const target = fromText(row.target_json) || {};
-        const cancellation = cancellationResolutionFromIntent(row.intent_payload);
+        const cancellation = cancellationResolutionFromIntent(
+          row.intent_payload,
+        );
         return Object.freeze({
           publicationId: row.publication_id,
           articleId: row.article_id,
           targetKey: row.target_key,
           ...targetFields(target),
           status: cancellation ? "cancelled" : row.status,
-          ...(cancellation ? {
-            reasonCode: cancellation.reasonCode || "REGULAR_QUEUE_ITEM_CANCELLED",
-            cancelledAt: cancellation.cancelledAt || null,
-          } : {}),
+          ...(cancellation
+            ? {
+                reasonCode:
+                  cancellation.reasonCode || "REGULAR_QUEUE_ITEM_CANCELLED",
+                cancelledAt: cancellation.cancelledAt || null,
+              }
+            : {}),
           target,
           attemptId: row.attempt_id || null,
           remoteId: row.remote_id || null,

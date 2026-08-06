@@ -37,7 +37,9 @@ const {
   createMaintenanceAggregate,
   verifyOperationalDatabase,
 } = require("./internal/operational-store-maintenance");
-const { exposeOperationalStoreTransitionPorts } = require("./internal/operational-store-transition-ports");
+const {
+  exposeOperationalStoreTransitionPorts,
+} = require("./internal/operational-store-transition-ports");
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
   const context = createOperationalStoreContext(runtime, options);
@@ -49,10 +51,16 @@ function createOperationalStore(options) {
     const recovery = createRecoveryAggregate(context, activeTarget);
     const order = createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
-    const reconciliation = createOperationalStoreReconciliationAggregate(context);
+    const reconciliation =
+      createOperationalStoreReconciliationAggregate(context);
     const facts = createOperationalStoreFactReader(context);
     const maintenance = createMaintenanceAggregate(context);
-    exposeOperationalStoreTransitionPorts(options, { facts, publication, recovery, queue });
+    exposeOperationalStoreTransitionPorts(options, {
+      facts,
+      publication,
+      recovery,
+      queue,
+    });
     return Object.freeze({
       databasePath: runtime.filename,
       createAccountProfile: publication.createAccountProfile,

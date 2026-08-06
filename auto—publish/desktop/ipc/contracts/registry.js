@@ -1,4 +1,6 @@
-const { parseSafeOperationalError } = require("../../../src/domain/safe-operational-error");
+const {
+  parseSafeOperationalError,
+} = require("../../../src/domain/safe-operational-error");
 
 const SCHEMA_VERSION = 1;
 const SAFE_TOKEN = /^[A-Za-z0-9._:-]+$/;
@@ -13,7 +15,10 @@ function contractError(code, message) {
 }
 
 function safeDiagnosticId(value) {
-  return typeof value === "string" && SAFE_DIAGNOSTIC_ID.test(value) && value !== "." && value !== ".."
+  return typeof value === "string" &&
+    SAFE_DIAGNOSTIC_ID.test(value) &&
+    value !== "." &&
+    value !== ".."
     ? value
     : null;
 }
@@ -50,14 +55,19 @@ function plainObjectDescriptors(value, code) {
 
 function arrayValues(value, code) {
   try {
-    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+    if (
+      !Array.isArray(value) ||
+      Object.getPrototypeOf(value) !== Array.prototype
+    )
       throw contractError(code);
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const keys = Reflect.ownKeys(descriptors);
     if (
-      keys.some((key) =>
-        typeof key !== "string" ||
-        (key !== "length" && !/^(0|[1-9][0-9]*)$/.test(key)))
+      keys.some(
+        (key) =>
+          typeof key !== "string" ||
+          (key !== "length" && !/^(0|[1-9][0-9]*)$/.test(key)),
+      )
     )
       throw contractError(code);
     const result = [];
@@ -76,7 +86,8 @@ function arrayValues(value, code) {
 function copyPlainDataObject(value, code) {
   const descriptors = plainObjectDescriptors(value, code);
   const result = {};
-  for (const key of Object.keys(descriptors)) result[key] = descriptors[key].value;
+  for (const key of Object.keys(descriptors))
+    result[key] = descriptors[key].value;
   return result;
 }
 
@@ -102,15 +113,13 @@ function assertBounds(min, max, integer) {
 }
 
 function assertLiteral(value) {
-  if (
-    !(
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value)) ||
-      (typeof value === "string" &&
-        value.length <= 512 &&
-        !/[\x00-\x1f\x7f]/.test(value))
-    )
-  )
+  if (!(
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    (typeof value === "string" &&
+      value.length <= 512 &&
+      !/[\x00-\x1f\x7f]/.test(value))
+  ))
     throw contractError("IPC_CONTRACT_INVALID");
 }
 
@@ -173,9 +182,10 @@ function assertFieldSpec(spec, seen) {
     return;
   }
   if (values.type === "array" || values.arrayOf) {
-    const allowed = values.type === "array"
-      ? ["type", "field", "min", "max"]
-      : ["arrayOf", "min", "max"];
+    const allowed =
+      values.type === "array"
+        ? ["type", "field", "min", "max"]
+        : ["arrayOf", "min", "max"];
     if (Object.keys(values).some((key) => !allowed.includes(key)))
       throw contractError("IPC_CONTRACT_INVALID");
     assertBounds(
@@ -183,7 +193,10 @@ function assertFieldSpec(spec, seen) {
       values.max === undefined ? 1000 : values.max,
       true,
     );
-    assertFieldSpec(values.type === "array" ? values.field : values.arrayOf, visited);
+    assertFieldSpec(
+      values.type === "array" ? values.field : values.arrayOf,
+      visited,
+    );
     visited.delete(spec);
     return;
   }
@@ -225,7 +238,8 @@ function multilineStringField(options) {
     values: values.values
       ? Object.freeze(arrayValues(values.values, "IPC_CONTRACT_INVALID"))
       : null,
-    pattern: values.pattern || /^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/u,
+    pattern:
+      values.pattern || /^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/u,
     multiline: true,
   });
   assertFieldSpec(field);
@@ -327,15 +341,17 @@ function validateValue(spec, value, code) {
     return value;
   }
   if (spec && spec.type === "oneOf") {
-    let unknownField = false;
+    let unknownFieldCount = 0;
     for (const field of spec.fields) {
       try {
         return validateValue(field, value, code);
       } catch (error) {
-        if (error && error.code === "IPC_UNKNOWN_FIELD") unknownField = true;
+        if (error && error.code === "IPC_UNKNOWN_FIELD") unknownFieldCount += 1;
       }
     }
-    throw contractError(unknownField ? "IPC_UNKNOWN_FIELD" : code);
+    throw contractError(
+      unknownFieldCount === spec.fields.length ? "IPC_UNKNOWN_FIELD" : code,
+    );
   }
   if (spec === "boolean") {
     if (typeof value !== "boolean") throw contractError(code);
@@ -371,8 +387,7 @@ function validateValue(spec, value, code) {
     const min = spec.min === undefined ? 0 : spec.min;
     const max = spec.max === undefined ? 1000 : spec.max;
     const values = arrayValues(value, code);
-    if (values.length < min || values.length > max)
-      throw contractError(code);
+    if (values.length < min || values.length > max) throw contractError(code);
     return values.map((item) => validateValue(field, item, code));
   }
   throw contractError("IPC_CONTRACT_INVALID");
@@ -417,7 +432,8 @@ function defineContract(input) {
     success: input.success || null,
     event: input.event || null,
     eventFields: Object.freeze([...(input.eventFields || [])]),
-    validateEvent: typeof input.validateEvent === "function" ? input.validateEvent : null,
+    validateEvent:
+      typeof input.validateEvent === "function" ? input.validateEvent : null,
     errorCodes: Object.freeze([...(input.errorCodes || [])]),
     errors: Object.freeze({ ...(input.errors || {}) }),
     fromArgs: typeof input.fromArgs === "function" ? input.fromArgs : null,
@@ -430,7 +446,8 @@ function envelope(input, fields, code) {
   for (const key of Object.keys(descriptors))
     if (!fields.includes(key)) throw contractError("IPC_UNKNOWN_FIELD");
   const parsed = {};
-  for (const key of Object.keys(descriptors)) parsed[key] = descriptors[key].value;
+  for (const key of Object.keys(descriptors))
+    parsed[key] = descriptors[key].value;
   if (parsed.schemaVersion !== SCHEMA_VERSION)
     throw contractError("IPC_SCHEMA_UNSUPPORTED");
   return parsed;
@@ -440,7 +457,10 @@ function createContractRegistry(contracts) {
   const byCapabilityMap = new Map();
   const byChannelMap = new Map();
   for (const contract of contracts || []) {
-    if (byCapabilityMap.has(contract.capability) || byChannelMap.has(contract.channel))
+    if (
+      byCapabilityMap.has(contract.capability) ||
+      byChannelMap.has(contract.channel)
+    )
       throw contractError("IPC_CONTRACT_DUPLICATE");
     byCapabilityMap.set(contract.capability, contract);
     byChannelMap.set(contract.channel, contract);
@@ -458,7 +478,11 @@ function createContractRegistry(contracts) {
     encodeRequest(contract, payload) {
       return {
         schemaVersion: SCHEMA_VERSION,
-        payload: validateObject(contract.request, payload, "IPC_REQUEST_INVALID"),
+        payload: validateObject(
+          contract.request,
+          payload,
+          "IPC_REQUEST_INVALID",
+        ),
       };
     },
     parseRequest(contract, input) {
@@ -467,7 +491,11 @@ function createContractRegistry(contracts) {
         ["schemaVersion", "payload"],
         "IPC_REQUEST_INVALID",
       );
-      return validateObject(contract.request, parsed.payload, "IPC_REQUEST_INVALID");
+      return validateObject(
+        contract.request,
+        parsed.payload,
+        "IPC_REQUEST_INVALID",
+      );
     },
     success(contract, data) {
       return {
@@ -492,19 +520,26 @@ function createContractRegistry(contracts) {
       try {
         if (error && !(error instanceof Error)) {
           const plainError = copyPlainDataObject(error, "IPC_RESULT_INVALID");
-          errorCode = typeof plainError.code === "string" ? plainError.code : null;
+          errorCode =
+            typeof plainError.code === "string" ? plainError.code : null;
           diagnosticId = safeDiagnosticId(plainError.diagnosticId);
           const parsed = parseSafeOperationalError(plainError);
           if (contract.errorCodes.includes(parsed.code)) {
             safe = Object.freeze({
               code: parsed.code,
               ...contract.errors[parsed.code],
-              ...(parsed.diagnosticId ? { diagnosticId: parsed.diagnosticId } : {}),
+              ...(parsed.diagnosticId
+                ? { diagnosticId: parsed.diagnosticId }
+                : {}),
             });
           }
         } else if (error instanceof Error) {
           const descriptor = Object.getOwnPropertyDescriptor(error, "code");
-          if (descriptor && "value" in descriptor && typeof descriptor.value === "string")
+          if (
+            descriptor &&
+            "value" in descriptor &&
+            typeof descriptor.value === "string"
+          )
             errorCode = descriptor.value;
           diagnosticId = safeDiagnosticId(error.diagnosticId);
         }
@@ -581,7 +616,8 @@ function createContractRegistry(contracts) {
       }
     },
     event(contract, payload) {
-      if (!contract || contract.kind !== "event") throw contractError("IPC_EVENT_INVALID");
+      if (!contract || contract.kind !== "event")
+        throw contractError("IPC_EVENT_INVALID");
       const parsed = contract.validateEvent
         ? contract.validateEvent(payload)
         : validateObject(contract.event, payload, "IPC_EVENT_INVALID");

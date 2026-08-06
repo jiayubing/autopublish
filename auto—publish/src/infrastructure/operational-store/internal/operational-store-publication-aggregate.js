@@ -578,8 +578,7 @@ function createPublicationAggregate(context, activeTarget) {
               ...(cancellation
                 ? {
                     reasonCode:
-                      cancellation.reasonCode ||
-                      "REGULAR_QUEUE_ITEM_CANCELLED",
+                      cancellation.reasonCode || "REGULAR_QUEUE_ITEM_CANCELLED",
                   }
                 : {}),
             });
@@ -592,9 +591,10 @@ function createPublicationAggregate(context, activeTarget) {
           articleId: record.article_id,
           articleKey: record.article_id,
           targetKey: record.target_key,
-          status: latestAttempt && latestAttempt.status === "cancelled"
-            ? "cancelled"
-            : record.status,
+          status:
+            latestAttempt && latestAttempt.status === "cancelled"
+              ? "cancelled"
+              : record.status,
           ...(latestAttempt && latestAttempt.status === "cancelled"
             ? {
                 reasonCode:
