@@ -32,7 +32,7 @@
 
 ## 2. 当前进度快照
 
-快照时间：2026-08-06。每次执行前必须以当前 Git 状态重新验证，快照不能覆盖 Git 事实。
+快照时间：2026-08-07。每次执行前必须以当前 Git 状态重新验证，快照不能覆盖 Git 事实。
 
 | 项目 | 当前状态 | 证据/说明 |
 | --- | --- | --- |
@@ -43,8 +43,12 @@
 | 全量测试运行器优化 | `COMPLETE` | 集成历史包含 `651654c perf: optimize full test execution` |
 | 波次 2 | `COMPLETE` | 02、04、05 已进入集成分支；集成审计修复提交为 `3516fb5` |
 | 波次 2 验收 | `COMPLETE` | Phase 8、production-smoke、格式门禁与完整 `npm test`（1706/1706）通过 |
-| 当前执行波次 | `3` / `RUNNING` | Ticket 06 已在独立 worktree 实施；依赖 04、05 均已进入集成分支 |
-| 波次 3 执行组 06 | `RUNNING` | threadId `019fd707-7d7f-7981-bc13-240a8c0bd578`；source threadId `019fd703-97d7-73d2-878e-7e6eb0f99509`；hostId `local`；worktree `C:\Users\violet\.codex\worktrees\4550\官媒投稿-refactor`；branch `codex/article-lifecycle-06`；base `754e40c0a47a612dd6a2175de4f8f4a5126113b5` |
+| 波次 3 | `COMPLETE` | Ticket 06 已完成独立审计、findings 修复、提交、合并及合并后定向复验；用户已确认合并结果并要求推进波次 4 |
+| 波次 3 执行组 06 | `COMPLETE` | threadId `019fd707-7d7f-7981-bc13-240a8c0bd578`；source threadId `019fd703-97d7-73d2-878e-7e6eb0f99509`；hostId `local`；worktree `C:\Users\violet\.codex\worktrees\4550\官媒投稿-refactor`；branch `codex/article-lifecycle-06`；base `754e40c0a47a612dd6a2175de4f8f4a5126113b5`；ticket commit `7cf63681c4d782e35229c4e9410a2fac17753a37`；integration commit `775720b5480046998262da9992e93ccca34e9184` |
+| 波次 3 审计与修复 | `COMPLETE` | 独立审计 threadId `019fd791-0a55-73c2-8464-e8eba4c90544` 报告 3 P1、2 P2、1 P3；修复后由波次 4 启动前审计 threadId `019fd7be-e2f6-7a70-950c-28ad4d6bc239` 逐项核对已知 findings 的生产接线与回归证据，无遗留阻塞 finding |
+| 波次 3 合并后定向复验 | `COMPLETE` | `node --test tests/article-mutation-coordinator.test.js tests/phase-05-production-removal.test.js tests/phase-02-operational-store.test.js tests/phase-11-media-supplier-contract.test.js`：45/45，约 1.4s；`npm run lint`：通过，约 6.2s；`npm run typecheck:main`：通过，约 1.3s；`npm run typecheck:bridge`：通过，约 2.4s；`npm run typecheck:renderer`：通过，约 4.0s |
+| 当前执行波次 | `4` / `READY` | 首个执行组仅 Ticket 07；依赖 Ticket 02、06 均为当前集成 `HEAD` 的祖先；Ticket 12 必须等待 07 审计、提交、合并和定向复验后再调度 |
+| 下一执行基线 | 当前集成 `HEAD` | 波次 3 代码合并提交为 `775720b5480046998262da9992e93ccca34e9184`；实际创建 Ticket 07 时必须使用包含本状态记录的最新 Git `HEAD`，不得硬编码旧快照 |
 
 状态词只使用：
 
@@ -63,8 +67,8 @@
 | --- | --- | --- | --- |
 | 1 | 01/03/11/17 | 无 | `COMPLETE` |
 | 2 | 02/04/05 | 02←01；04←03；05←03 | `COMPLETE` |
-| 3 | 06 | 04、05 | `RUNNING` |
-| 4 | 07 → 12 | 07←02、06；12←06、11 | `PENDING` |
+| 3 | 06 | 04、05 | `COMPLETE` |
+| 4 | 07 → 12 | 07←02、06；12←06、11 | `READY` |
 | 5 | 08 → 13 | 08←07；13←02、04、12 | `PENDING` |
 | 6 | 09 → 14 → 15 | 09←08；14←13；15←09、11、13 | `PENDING` |
 | 7 | 10 → 16 | 10←09；16←15 | `PENDING` |
