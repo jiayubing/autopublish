@@ -118,6 +118,21 @@ export default function GeneratedArticlesView({ clientId, management, query, com
     return allowed === true && !(dirtyArticleId && article.id === dirtyArticleId);
   }
 
+  function pendingRegularQueueItemsForArticle(article: GeneratedContentArticle) {
+    return submissionBatches.flatMap((batch) => batch.items
+      .filter((item) => item.articleId === article.id && item.status === 'queued' && Boolean(item.itemId && item.queueGroupId))
+      .map((item) => ({
+        articleRef: { clientId, articleId: article.id },
+        itemId: item.itemId as string,
+        batchId: batch.id,
+        ...(item.targetKey ? { targetKey: item.targetKey } : {}),
+      })));
+  }
+
+  function canRemovePendingArticle(article: GeneratedContentArticle): boolean {
+    return pendingRegularQueueItemsForArticle(article).length > 0;
+  }
+
   function canTrashArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
     const allowed = workflow?.operations?.trash?.allowed ?? workflow?.locks.canTrash;
@@ -125,7 +140,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   }
 
   function isArticleSelectable(article: GeneratedContentArticle): boolean {
-    return selectableArticles([article], clientId).length > 0 && (canQueueArticle(article) || canTrashArticle(article));
+    return selectableArticles([article], clientId).length > 0 && (canQueueArticle(article) || canTrashArticle(article) || canRemovePendingArticle(article));
   }
 
   function isPublishedArticle(article: GeneratedContentArticle): boolean {
@@ -144,6 +159,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(() => selectableArticles(filtered, clientId).filter(isArticleSelectable), [filtered, clientId, workflowByArticle, dirtyArticleId]);
   const selectedArticles = filtered.filter((article) => selected.includes(selectionKey(article)) && isArticleSelectable(article)); const selectedDirtyArticle = selectedArticles.find((article) => Boolean(dirtyArticleId && article.id === dirtyArticleId)); const selectedQueueableArticles = selectedDirtyArticle ? [] : selectedArticles.filter(canQueueArticle);
+  const selectedPendingQueueItems = selectedArticles.flatMap(pendingRegularQueueItemsForArticle);
   const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
   // Batch order is an implementation detail.  Actions must cover every safe
   // item for this client so a newer completed batch cannot hide an older media
@@ -188,11 +204,29 @@ export default function GeneratedArticlesView({ clientId, management, query, com
 
   async function queueSelected() {
     const requestedClientId = clientId;
-    if (commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')) return;
+    if (commandBusy('previewRegularQueueAdmission', 'admitRegularQueueItems', 'previewContentSubmissionBatch', 'createContentSubmissionBatch')) return;
     const selectedQueueable = selectedQueueableArticles;
     if (!selectedQueueable.length || !targetPlatformIds.length) return;
     setError('');
     try {
+      if (targetPlatformIds.length === 1 && accountProfiles[targetPlatformIds[0]] &&
+        typeof commands.previewRegularQueueAdmission === 'function' &&
+        typeof commands.admitRegularQueueItems === 'function') {
+        const regularInput = {
+          articleRefs: selectedQueueable.map((article) => ({ clientId: requestedClientId, articleId: article.id })),
+          platformId: targetPlatformIds[0],
+          accountProfileId: accountProfiles[targetPlatformIds[0]],
+        };
+        const preview = await commands.previewRegularQueueAdmission(regularInput);
+        if (!isCurrentClient(requestedClientId)) return;
+        if (!preview.queueableCount && !preview.idempotentCount) throw new Error('没有符合普通平台队列规则的文章');
+        if (!(await confirm({ title: '确认加入普通平台队列', message: `新增 ${preview.queueableCount} 项，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。`, confirmLabel: '确认加入普通平台队列' }))) return;
+        const result = await commands.admitRegularQueueItems(regularInput);
+        if (isContentCommandStaleResult(result) || !isCurrentClient(requestedClientId)) return;
+        updateSelected([]);
+        setBatchFeedback({ kind: 'status', text: `已加入 ${result.admittedCount || 0} 项普通平台队列。` });
+        return;
+      }
       const input = { clientId, articleIds: selectedQueueable.map((article) => article.id), targetPlatformIds, accountProfiles };
       const preview = await commands.previewContentSubmissionBatch(input);
       if (!isCurrentClient(requestedClientId)) return;
@@ -205,6 +239,21 @@ export default function GeneratedArticlesView({ clientId, management, query, com
         updateSelected([]);
       } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
     } catch (value) { if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '批量入队失败'); }
+  }
+
+  async function removePendingSelected() {
+    const requestedClientId = clientId;
+    if (!selectedPendingQueueItems.length || typeof commands.removePendingQueueItems !== 'function' || commandBusy('removePendingQueueItems')) return;
+    if (!(await confirm({ title: '确认移除待执行队列项', message: `将从普通平台队列移除 ${selectedPendingQueueItems.length} 项尚未开始的投稿；文章随后恢复可编辑。`, confirmLabel: '确认移除', tone: 'warning' }))) return;
+    setError('');
+    try {
+      const result = await commands.removePendingQueueItems({ items: selectedPendingQueueItems });
+      if (isContentCommandStaleResult(result) || !isCurrentClient(requestedClientId)) return;
+      updateSelected([]);
+      setBatchFeedback({ kind: result.conflictCount ? 'error' : 'status', text: `已移除 ${result.removedCount || 0} 项普通平台队列；${result.conflictCount || 0} 项需要刷新核对。` });
+    } catch (value) {
+      if (isCurrentClient(requestedClientId)) setError(value instanceof Error ? value.message : '移除待执行队列项失败');
+    }
   }
 
   async function handoffSelectedToMedia() {
@@ -478,8 +527,9 @@ export default function GeneratedArticlesView({ clientId, management, query, com
       </div>
 
        <div className="flex min-w-0 flex-wrap items-center gap-2">
-         <button type="button" onClick={toggleAll} disabled={!operable.length} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
+          <button type="button" onClick={toggleAll} disabled={!operable.length} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">全选当前结果</button>
           <button type="button" onClick={() => void trashSelected()} disabled={!selectedTrashableArticles.length || commandBusy('previewContentArticleRemoval', 'trashContentArticles') || removalSubmitDisabled} className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">移入回收站 ({selectedTrashableArticles.length})</button>
+         {selectedPendingQueueItems.length > 0 && <button type="button" onClick={() => void removePendingSelected()} disabled={commandBusy('removePendingQueueItems')} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">移除待执行队列 ({selectedPendingQueueItems.length})</button>}
          {(cancelableCount > 0 || cancellationIsPending) && <button type="button" title={cancellationIsPending ? '正在撤销当前客户的未开始投稿内容' : `覆盖当前客户全部可撤销批次：${cancelableBatches.map(({ plan, batch, count }) => `${plan.items.find((item) => item.allowed)?.targetPlatformId || '未知目标'} ${formatBeijingTime(batch.createdAt)} (${count})`).join('；')}`} onClick={() => void cancelCancelableBatches()} disabled={cancellationIsPending || commandBusy('cancelContentSubmissionBatch')} className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">{cancellationIsPending ? `正在撤销… (${cancellationPending.count})` : `撤销未开始投稿 (${cancelableCount})`}</button>}
          {cleanableCount > 0 && <button type="button" onClick={() => void cleanupFailedBatches()} disabled={commandBusy('previewCleanupFailedContentSubmissionItems', 'cleanupFailedContentSubmissionItems')} className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40">清理失败队列项 ({cleanableCount})</button>}
          {submissionBatches.length > 0 && !cancelableCount && !cleanableCount && <span role="status" className="text-xs text-slate-500">当前客户全部批次均无可撤销或可清理项。</span>}
@@ -495,7 +545,7 @@ export default function GeneratedArticlesView({ clientId, management, query, com
            <span className="shrink-0 text-xs font-medium text-slate-500">投稿平台</span>
           {submissionPlatforms.map((platform) => <button key={platform.id} type="button" onClick={() => setTargetPlatformIds((current) => current.includes(platform.id) ? current.filter((id) => id !== platform.id) : [...current, platform.id])} className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>{platform.displayName || platform.id}</button>)}
          </div>
-          <button type="button" onClick={() => void queueSelected()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
+          <button type="button" onClick={() => void queueSelected()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || !targetPlatformIds.length || targetPlatformIds.some((platformId) => !accountProfiles[platformId]) || commandBusy('previewRegularQueueAdmission', 'admitRegularQueueItems', 'previewContentSubmissionBatch', 'createContentSubmissionBatch')} className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">加入投稿队列</button>
           <button type="button" onClick={() => void handoffSelectedToMedia()} title={selectedDirtyArticle ? '当前编辑文章有未保存修改，请先保存后投稿。' : undefined} disabled={!selectedQueueableArticles.length || commandBusy('previewExport', 'exportToSubmissionQueue')} className="shrink-0 rounded border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">加入付费媒体投稿</button>
         <AccountProfileSelector platforms={submissionPlatforms} targetPlatformIds={targetPlatformIds} value={accountProfiles} onChange={setAccountProfiles} />
       </div>

@@ -400,6 +400,15 @@ const api = {
     createSubmissionBatch: function(input) {
       return ipcRenderer.invoke("content:create-submission-batch", input);
     },
+    previewRegularQueueAdmission: function(input) {
+      return ipcRenderer.invoke("content:preview-regular-queue-admission", input);
+    },
+    admitRegularQueueItems: function(input) {
+      return ipcRenderer.invoke("content:admit-regular-queue-items", input);
+    },
+    removePendingQueueItems: function(input) {
+      return ipcRenderer.invoke("content:remove-pending-queue-items", input);
+    },
     cancelSubmissionBatch: function(input) {
       return ipcRenderer.invoke("content:cancel-submission-batch", input);
     },

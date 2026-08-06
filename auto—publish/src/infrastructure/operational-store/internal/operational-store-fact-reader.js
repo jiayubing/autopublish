@@ -2,6 +2,7 @@ const domain = require("../../../domain");
 
 const {
   fromText,
+  cancellationResolutionFromIntent,
   safeDisplayText,
   safeEvidenceUrl,
   safeOperationalPayload,
@@ -47,17 +48,22 @@ function createOperationalStoreFactReader(context) {
     const inList = placeholders(articleIds);
     const publications = db
       .prepare(
-        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,e.remote_id,e.remote_url FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.created_at DESC,latest.attempt_id DESC LIMIT 1) LEFT JOIN remote_evidence e ON e.evidence_id=(SELECT latest_evidence.evidence_id FROM remote_evidence latest_evidence WHERE latest_evidence.attempt_id=a.attempt_id ORDER BY latest_evidence.created_at DESC,latest_evidence.evidence_id DESC LIMIT 1) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
+        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.remote_id,e.remote_url FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.created_at DESC,latest.attempt_id DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.evidence_id=(SELECT latest_evidence.evidence_id FROM remote_evidence latest_evidence WHERE latest_evidence.attempt_id=a.attempt_id ORDER BY latest_evidence.created_at DESC,latest_evidence.evidence_id DESC LIMIT 1) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
       )
       .all(...articleIds)
       .map((row) => {
         const target = fromText(row.target_json) || {};
+        const cancellation = cancellationResolutionFromIntent(row.intent_payload);
         return Object.freeze({
           publicationId: row.publication_id,
           articleId: row.article_id,
           targetKey: row.target_key,
           ...targetFields(target),
-          status: row.status,
+          status: cancellation ? "cancelled" : row.status,
+          ...(cancellation ? {
+            reasonCode: cancellation.reasonCode || "REGULAR_QUEUE_ITEM_CANCELLED",
+            cancelledAt: cancellation.cancelledAt || null,
+          } : {}),
           target,
           attemptId: row.attempt_id || null,
           remoteId: row.remote_id || null,

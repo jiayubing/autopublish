@@ -20,6 +20,9 @@ const SUBMISSION_CHANNELS = [
   "content:preview-submission-batch",
   "content:list-submission-platforms",
   "content:create-submission-batch",
+  "content:preview-regular-queue-admission",
+  "content:admit-regular-queue-items",
+  "content:remove-pending-queue-items",
   "content:cancel-submission-batch",
   "content:preview-cleanup-failed-submission-items",
   "content:cleanup-failed-submission-items",
@@ -164,8 +167,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 26 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 26);
+test("content operations inventory has 29 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 29);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);
@@ -174,6 +177,23 @@ test("content operations inventory has 26 exact versioned contracts", () => {
   assert.equal(
     productionIpcRegistry.byChannel("content:doubao-queue-state").kind,
     "event",
+  );
+});
+
+test("regular queue admission does not accept a caller batch identity", () => {
+  const contract = productionIpcRegistry.byChannel(
+    "content:admit-regular-queue-items",
+  );
+  assert.throws(
+    () =>
+      productionIpcRegistry.encodeRequest(contract, {
+        articleRefs: [{ clientId: "client-1", articleId: "article-1" }],
+        platformId: "toutiao",
+        accountProfileId: "profile-1",
+        batchId: "caller-controlled-batch",
+        confirmed: true,
+      }),
+    { code: "IPC_UNKNOWN_FIELD" },
   );
 });
 

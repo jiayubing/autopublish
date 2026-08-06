@@ -35,6 +35,7 @@ export type GeneratedArticlesCommandName =
   | 'cancelContentSubmissionBatch'
   | 'cleanupFailedContentSubmissionItems'
   | 'createContentSubmissionBatch'
+  | 'admitRegularQueueItems'
   | 'exportToSubmissionQueue'
   | 'getContentArticleRemovalTransaction'
   | 'permanentlyDeleteContentArticle'
@@ -42,9 +43,11 @@ export type GeneratedArticlesCommandName =
   | 'previewCleanupFailedContentSubmissionItems'
   | 'previewContentArticleRemoval'
   | 'previewContentSubmissionBatch'
+  | 'previewRegularQueueAdmission'
   | 'previewExport'
   | 'reconcilePublication'
   | 'restoreContentArticle'
+  | 'removePendingQueueItems'
   | 'retryContentArticleRemovalTransaction'
   | 'trashContentArticles';
 

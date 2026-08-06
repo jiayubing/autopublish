@@ -30,7 +30,9 @@ function createContentLifecycleComposition(options) {
   const articleMutationCoordinator = createArticleMutationCoordinator({
     articleStore,
     contentStore,
-    operationalStore: value.operationalStore,
+    publicationTransitions: value.publicationTransitions || value.operationalStore,
+    lifecycleFacts: value.lifecycleFacts || value.publicationTransitions || value.operationalStore,
+    regularQueueTransitions: value.regularQueueTransitions,
     removalTransactionStore: articleRemovalTransactionStore,
     articleRemovalTransitionPort,
     clock: value.clock,

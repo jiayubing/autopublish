@@ -145,9 +145,13 @@ async function createWorkspaceRuntimeComposition(deps) {
     const paths = runtime.paths;
     const injectedPaths = paths && paths.installation ? paths : undefined;
     const workspaceRoot = runtime.workspaceRoot;
+    const { loadPlatforms } = require("../../src/core/platforms");
+    const loadedPlatforms = loadPlatforms();
+    const operationalStoreTransitionPorts = {};
     const operationalStore = require("../../src/infrastructure/operational-store/operational-store").createOperationalStore({
       workspaceRoot,
       clock: options.clock,
+      transitionPorts: operationalStoreTransitionPorts,
     });
     ownService({
       dispose: function () {
@@ -159,13 +163,22 @@ async function createWorkspaceRuntimeComposition(deps) {
         {
           workspaceRoot,
           paths: injectedPaths,
-          operationalStore,
+          publicationTransitions: operationalStoreTransitionPorts.publicationTransitions,
+          lifecycleFacts: operationalStoreTransitionPorts.publicationTransitions,
+          regularQueueTransitions: operationalStoreTransitionPorts.regularQueueTransitions,
           clock: options.clock,
         },
       ),
     );
     const contentStore = contentLifecycleComposition.contentStore;
     const articleMutationCoordinator = contentLifecycleComposition.articleMutationCoordinator;
+    const regularQueueApplication = require("../services/regular-queue-application").createRegularQueueApplication({
+      contentStore,
+      articleMutationCoordinator,
+      regularQueueTransitions: operationalStoreTransitionPorts.regularQueueTransitions,
+      accountProfileResolver: operationalStore.assertExecutableAccountProfile,
+      platforms: loadedPlatforms,
+    });
     const createPlatformSettingsService =
       require("../services/platform-settings-service").createPlatformSettingsService;
     const {
@@ -200,8 +213,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         platformSettingsService,
       }),
     );
-    const { loadPlatforms } = require("../../src/core/platforms");
-    const loadedPlatforms = loadPlatforms();
     let accountInspector = null;
     const workerPublisher =
       require("../services/worker-publisher").createWorkerPublisher({
@@ -351,6 +362,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           paths: injectedPaths,
           contentStore,
           operationalStore: publicationComposition.operationalStore,
+          platforms: loadedPlatforms,
           onDataInvalidated: invalidation.invalidate,
           getDataRevision: invalidation.getRevision,
           retryFailedPublication: function (task) {
@@ -399,6 +411,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     await publicationComposition.publicationWorkflow.recover();
     const attentionPorts = publicationComposition.createAttentionPorts({
       contentSubmissionService,
+      regularQueueApplication,
       articleRemovalService: aiContentService,
       getRevision: invalidation.getRevision,
       onDataInvalidated: invalidation.invalidate,
@@ -530,6 +543,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       aiProviderService,
       contentStore,
       contentSubmissionService,
+      regularQueueApplication,
       aiContentService,
       contentGenerationBatchService,
       generationSubmissionHandoffService: null,
@@ -557,6 +571,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       contentStore,
       aiContentService,
       contentSubmissionService,
+      regularQueueApplication,
       contentGenerationBatchService,
       generationSubmissionHandoffService: null,
       platformWorkbenchService,

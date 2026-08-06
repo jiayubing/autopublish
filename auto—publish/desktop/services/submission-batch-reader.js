@@ -11,6 +11,14 @@ function createSubmissionBatchReader(options) {
   }
 
   function toPublicBatch(batch) {
+    function publicPayload(payload) {
+      const output = payload && typeof payload === "object" && !Array.isArray(payload)
+        ? Object.assign({}, payload)
+        : {};
+      delete output.publicationSnapshot;
+      delete output.articleRef;
+      return output;
+    }
     const first = batch.items.find(
       (stored) => stored.payload && typeof stored.payload.clientId === "string",
     );
@@ -22,18 +30,19 @@ function createSubmissionBatchReader(options) {
       revision: batch.revision,
       createdAt: batch.createdAt,
       updatedAt: batch.updatedAt,
-      items: batch.items.map((stored) =>
-        Object.assign(
-          {
-            itemId: stored.itemId,
-            articleId: stored.articleId,
-            targetKey: stored.targetKey,
-            status: stored.status,
-            revision: stored.revision,
-          },
-          stored.payload || {},
-        ),
-      ),
+      items: batch.items.map((stored) => {
+        const item = {
+          itemId: stored.itemId,
+          articleId: stored.articleId,
+          targetKey: stored.targetKey,
+          status: stored.status,
+          revision: stored.revision,
+          ...publicPayload(stored.payload),
+        };
+        if (stored.queueGroupId !== undefined) item.queueGroupId = stored.queueGroupId;
+        if (stored.position !== undefined) item.position = stored.position;
+        return item;
+      }),
     };
   }
 
