@@ -176,7 +176,10 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.paidAdmissionTransitions,
           systemSubmissionCodeProvider: function () {
             try {
-              return platformSettingsService.getRuntimeConfig("media").thirdPartyId || "";
+              return (
+                platformSettingsService.getRuntimeConfig("media")
+                  .thirdPartyId || ""
+              );
             } catch (_) {
               return "";
             }
@@ -561,7 +564,10 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.paidAdmissionTransitions,
           systemSubmissionCodeProvider: function () {
             try {
-              return platformSettingsService.getRuntimeConfig("media").thirdPartyId || "";
+              return (
+                platformSettingsService.getRuntimeConfig("media")
+                  .thirdPartyId || ""
+              );
             } catch (_) {
               return "";
             }

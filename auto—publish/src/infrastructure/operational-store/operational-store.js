@@ -3,21 +3,43 @@ const {
   openOperationalStoreRuntime,
   dryRunOperationalStoreMigration,
 } = require("./internal/operational-store-runtime");
-const { createOperationalStoreContext } = require("./internal/operational-store-context");
-const { createPublicationAggregate } = require("./internal/operational-store-publication-aggregate");
-const { createSubmissionAggregate } = require("./internal/operational-store-submission-aggregate");
-const { createSubmissionPreparationAggregate } = require("./internal/operational-store-submission-preparation");
-const { createRecoveryAggregate } = require("./internal/operational-store-recovery-aggregate");
-const { createOrderAggregate } = require("./internal/operational-store-order-aggregate");
-const { createOperationalStoreQueueAggregate } = require("./internal/operational-store-queue-aggregate");
-const { createOperationalStoreActiveTargetAggregate } = require("./internal/operational-store-active-target-aggregate");
-const { createOperationalStoreReconciliationAggregate } = require("./internal/operational-store-reconciliation-aggregate");
-const { createOperationalStoreFactReader } = require("./internal/operational-store-fact-reader");
+const {
+  createOperationalStoreContext,
+} = require("./internal/operational-store-context");
+const {
+  createPublicationAggregate,
+} = require("./internal/operational-store-publication-aggregate");
+const {
+  createSubmissionAggregate,
+} = require("./internal/operational-store-submission-aggregate");
+const {
+  createSubmissionPreparationAggregate,
+} = require("./internal/operational-store-submission-preparation");
+const {
+  createRecoveryAggregate,
+} = require("./internal/operational-store-recovery-aggregate");
+const {
+  createOrderAggregate,
+} = require("./internal/operational-store-order-aggregate");
+const {
+  createOperationalStoreQueueAggregate,
+} = require("./internal/operational-store-queue-aggregate");
+const {
+  createOperationalStoreActiveTargetAggregate,
+} = require("./internal/operational-store-active-target-aggregate");
+const {
+  createOperationalStoreReconciliationAggregate,
+} = require("./internal/operational-store-reconciliation-aggregate");
+const {
+  createOperationalStoreFactReader,
+} = require("./internal/operational-store-fact-reader");
 const {
   createMaintenanceAggregate,
   verifyOperationalDatabase,
 } = require("./internal/operational-store-maintenance");
-const { exposeOperationalStoreTransitionPorts } = require("./internal/operational-store-transition-ports");
+const {
+  exposeOperationalStoreTransitionPorts,
+} = require("./internal/operational-store-transition-ports");
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
   const context = createOperationalStoreContext(runtime, options);
