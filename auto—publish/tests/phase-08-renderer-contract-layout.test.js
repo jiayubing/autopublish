@@ -96,6 +96,22 @@ const domainTypeSymbols = {
     "ContentSubmissionBatchPreview",
     "ContentSubmissionBatchRecord",
     "ContentSubmissionPlatform",
+    "RegularQueueItemStatus",
+    "RegularQueueTarget",
+    "RegularQueueItem",
+    "RegularQueueAdmissionInput",
+    "RegularQueueAdmissionPreview",
+    "RegularQueueAdmissionResult",
+    "PaidMediaPreflightInput",
+    "PaidMediaRiskWarning",
+    "PaidMediaPreflightArticle",
+    "PaidMediaPreflight",
+    "PaidMediaConfirmationInput",
+    "PaidMediaAdmissionItem",
+    "PaidMediaAdmissionResult",
+    "PendingQueueRemovalItemInput",
+    "PendingQueueRemovalInput",
+    "PendingQueueRemovalResult",
     "ContentSubmissionActionPlanItem",
     "ContentSubmissionCancellationPreview",
     "ContentSubmissionCleanupPreview",
@@ -161,6 +177,7 @@ const typeAliasSymbols = new Set([
   "PlatformProviderStatus",
   "PublicationHistorySummaryStatus",
   "PublicationRecordStatus",
+  "RegularQueueItemStatus",
   "RuntimeCapabilityState",
   "WorkspaceBootstrapStatus",
   "WorkspaceConfirmationResult",
@@ -210,7 +227,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 122);
+  assert.equal(expectedOwners.size, 138);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -242,7 +259,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 122);
+  assert.equal(actualDeclarations.size, 138);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),

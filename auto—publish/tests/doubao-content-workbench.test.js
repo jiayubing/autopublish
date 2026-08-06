@@ -34,7 +34,7 @@ describe("Doubao content workbench renderer contracts", function() {
       "media-workbench/src/components/content/GeneratedArticlesView.tsx",
       "media-workbench/src/components/content/CollectionTaskBar.tsx"
     ];
-    const forbidden = /fs|child_process|PLAYWRIGHT_CLI_JS|browser_data|ipcRenderer/;
+    const forbidden = /\b(?:fs|child_process|PLAYWRIGHT_CLI_JS|browser_data|ipcRenderer)\b/;
     files.forEach(function(file) { assert.doesNotMatch(read(file), forbidden, "privileged code in " + file); });
   });
 
@@ -259,7 +259,8 @@ describe("Doubao content workbench renderer contracts", function() {
     assert.equal(resolveAvailableTemplateId({ platform: "ctrip", templateId: "deleted", templateSnapshot: { platform: "ctrip", id: "deleted", name: "Old", scenario: "guide", body: "old" } }, [{ id: "current", platform: "ctrip", scenario: "guide" }]), "deleted");
     assert.match(generation, /resolveAvailableTemplateId/);
     assert.match(generation, /onArticleChange\(\{ \.\.\.currentArticle, templateId: resolvedTemplateId \}\)/);
-    assert.match(generation, /commands\.saveArticle\(\{ \.\.\.selectedArticle, templateId: resolvedTemplateId/);
+    assert.match(generation, /commands\.saveArticle\(\{ article: \{ \.\.\.editorArticle, templateId: resolvedTemplateId/);
+    assert.match(generation, /expectedFingerprint/);
     assert.match(generation, /templateId: resolvedTemplateId/);
   });
 });

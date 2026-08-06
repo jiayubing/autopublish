@@ -341,8 +341,21 @@ function validateValue(spec, value, code) {
     return value;
   }
   if (spec && spec.type === "oneOf") {
+    const objectFields =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? spec.fields.filter((field) => {
+            let candidate = field;
+            while (
+              candidate &&
+              (candidate.type === "optional" || candidate.type === "nullable")
+            )
+              candidate = candidate.field;
+            return candidate && candidate.type === "object";
+          })
+        : [];
+    const candidates = objectFields.length ? objectFields : spec.fields;
     let unknownFieldCount = 0;
-    for (const field of spec.fields) {
+    for (const field of candidates) {
       try {
         return validateValue(field, value, code);
       } catch (error) {
@@ -350,7 +363,7 @@ function validateValue(spec, value, code) {
       }
     }
     throw contractError(
-      unknownFieldCount === spec.fields.length ? "IPC_UNKNOWN_FIELD" : code,
+      unknownFieldCount === candidates.length ? "IPC_UNKNOWN_FIELD" : code,
     );
   }
   if (spec === "boolean") {

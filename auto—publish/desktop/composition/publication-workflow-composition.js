@@ -18,10 +18,12 @@ function createPublicationWorkflowComposition(options) {
     throw new Error(
       "Publication workflow composition dependencies are required",
     );
-  const operationalStore = value.operationalStore || createOperationalStore({
-    workspaceRoot: value.workspaceRoot,
-    clock: value.clock,
-  });
+  const operationalStore =
+    value.operationalStore ||
+    createOperationalStore({
+      workspaceRoot: value.workspaceRoot,
+      clock: value.clock,
+    });
   const ownsOperationalStore = !value.operationalStore;
   const postProcessor =
     typeof value.createPostProcessor === "function"

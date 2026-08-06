@@ -238,6 +238,12 @@ it("workspace startup recovers stranded publication intents before becoming avai
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-publication-recovery-"));
   const workspace = path.join(root, "workspace");
   fs.mkdirSync(workspace, { recursive: true });
+  const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
+  createContentLifecycleComposition({ workspaceRoot: workspace }).contentStore.saveArticle(
+    Object.assign(generatedArticle("article-recovery", "Recovery fixture"), {
+      clientId: "client-recovery",
+    }),
+  );
   const store = createOperationalStore({ workspaceRoot: workspace });
   const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "Fixture account" });
   store.reservePublicationTarget({
@@ -245,6 +251,9 @@ it("workspace startup recovers stranded publication intents before becoming avai
     publicationId: "publication-recovery",
     attemptId: "attempt-recovery",
     target: { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId },
+    postProcessingPayload: {
+      articleRef: { clientId: "client-recovery", articleId: "article-recovery" },
+    },
   });
   store.close();
 

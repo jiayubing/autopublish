@@ -37,10 +37,23 @@ function recoverySubmission(value) {
 }
 
 function recoveryArticleRef(submission) {
-  const ref = submission && submission.postProcessingPayload && submission.postProcessingPayload.articleRef;
+  const ref =
+    submission &&
+    submission.postProcessingPayload &&
+    submission.postProcessingPayload.articleRef;
   if (!ref || typeof ref !== "object" || Array.isArray(ref)) return null;
-  if (typeof ref.clientId !== "string" || !ref.clientId.trim() || typeof ref.articleId !== "string" || !ref.articleId.trim()) return null;
-  if (/[\u0000-\u001f\\/]/.test(ref.clientId) || /[\u0000-\u001f\\/]/.test(ref.articleId)) return null;
+  if (
+    typeof ref.clientId !== "string" ||
+    !ref.clientId.trim() ||
+    typeof ref.articleId !== "string" ||
+    !ref.articleId.trim()
+  )
+    return null;
+  if (
+    /[\u0000-\u001f\\/]/.test(ref.clientId) ||
+    /[\u0000-\u001f\\/]/.test(ref.articleId)
+  )
+    return null;
   return { clientId: ref.clientId.trim(), articleId: ref.articleId.trim() };
 }
 
@@ -115,7 +128,9 @@ function createRecoveryAggregate(context, activeTarget) {
         targetKey: row.target_key,
         status: row.status,
         detail: recoveryDetail(row.payload_json),
-        ...(recoveryArticleRef(submission) ? { articleRef: recoveryArticleRef(submission) } : {}),
+        ...(recoveryArticleRef(submission)
+          ? { articleRef: recoveryArticleRef(submission) }
+          : {}),
       };
     });
     Object.defineProperty(result, "hasMore", {

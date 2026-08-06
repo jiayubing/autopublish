@@ -18,7 +18,7 @@ describe('renderer content confirmation flow', () => {
       assert.match(source, /const \{ confirm \} = useConfirmation\(\)/);
       assert.doesNotMatch(source, /ActionConfirmationModal|pendingConfirmation|confirmationActionRef|window\.confirm/);
     });
-    assert.match(queue, /title: '确认加入投稿队列'/);
+    assert.match(queue, /title: '确认加入普通平台队列'/);
     assert.match(cancel, /title: '确认撤销未开始投稿'/);
     const host = read('media-workbench/src/components/ConfirmationHost.tsx');
     assert.match(host, /ConfirmationHost/);
@@ -28,7 +28,7 @@ describe('renderer content confirmation flow', () => {
   it('does not auto-accept native dialogs in content queue regression tests', () => {
     const clientSwitch = read('tests/renderer-content-client-switch.test.js');
     assert.doesNotMatch(clientSwitch, /page\.on\("dialog"/);
-    assert.match(clientSwitch, /getByRole\("dialog", \{ name: "确认加入投稿队列" \}\)/);
+    assert.match(clientSwitch, /getByRole\("dialog", \{ name: "确认加入普通平台队列" \}\)/);
     assert.match(clientSwitch, /getByRole\("dialog", \{ name: "确认撤销未开始投稿" \}\)/);
   });
 });

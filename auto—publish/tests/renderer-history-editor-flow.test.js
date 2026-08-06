@@ -165,10 +165,14 @@ function installDesktopFixture(page, fixture) {
       listTemplateCatalog: () => ok({ revision: "fixture", platforms: [{ id: template.platform, displayName: "测试模板平台", description: "", order: 1 }], templates: [template], diagnostics: [] }),
       retryMaterial: () => ok({}),
       generateArticle: () => ok(state.articles[0]),
-      saveArticle: (article) => {
+      getArticleEditor: ({ articleId }) => {
+        const article = state.articles.find((item) => item.id === articleId);
+        return ok({ article, editFingerprint: `fixture-edit-${articleId}` });
+      },
+      saveArticle: ({ article }) => {
         state.calls.saveArticle.push(article);
         state.articles = state.articles.map((item) => item.id === article.id ? article : item);
-        return ok({ article });
+        return ok({ outcome: "saved", article, editFingerprint: `fixture-edit-${article.id}-saved` });
       },
       copyArticleVersion: (request) => {
         state.calls.copyArticleVersion.push(request);

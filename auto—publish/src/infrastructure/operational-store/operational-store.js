@@ -3,9 +3,7 @@ const {
   openOperationalStoreRuntime,
   dryRunOperationalStoreMigration,
 } = require("./internal/operational-store-runtime");
-const {
-  createOperationalStoreContext,
-} = require("./internal/operational-store-context");
+const storeContext = require("./internal/operational-store-context");
 const {
   createPublicationAggregate,
 } = require("./internal/operational-store-publication-aggregate");
@@ -15,12 +13,8 @@ const {
 const {
   createSubmissionPreparationAggregate,
 } = require("./internal/operational-store-submission-preparation");
-const {
-  createRecoveryAggregate,
-} = require("./internal/operational-store-recovery-aggregate");
-const {
-  createOrderAggregate,
-} = require("./internal/operational-store-order-aggregate");
+const recovery = require("./internal/operational-store-recovery-aggregate");
+const orders = require("./internal/operational-store-order-aggregate");
 const {
   createOperationalStoreQueueAggregate,
 } = require("./internal/operational-store-queue-aggregate");
@@ -42,39 +36,36 @@ const {
 } = require("./internal/operational-store-transition-ports");
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
-  const context = createOperationalStoreContext(runtime, options);
+  const context = storeContext.createOperationalStoreContext(runtime, options);
   try {
     const activeTarget = createOperationalStoreActiveTargetAggregate(context);
-    const publication = createPublicationAggregate(context, activeTarget);
+    const pub = createPublicationAggregate(context, activeTarget);
     const submission = createSubmissionAggregate(context);
-    const submissionPreparation = createSubmissionPreparationAggregate(context);
-    const recovery = createRecoveryAggregate(context, activeTarget);
-    const order = createOrderAggregate(context, activeTarget);
+    const prep = createSubmissionPreparationAggregate(context);
+    const recover = recovery.createRecoveryAggregate(context, activeTarget);
+    const order = orders.createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
-    const reconciliation =
-      createOperationalStoreReconciliationAggregate(context);
+    const reconcile = createOperationalStoreReconciliationAggregate(context);
     const facts = createOperationalStoreFactReader(context);
-    const maintenance = createMaintenanceAggregate(context);
+    const maintain = createMaintenanceAggregate(context);
     exposeOperationalStoreTransitionPorts(options, {
       facts,
-      publication,
-      recovery,
+      publication: pub,
+      recovery: recover,
       queue,
     });
     return Object.freeze({
       databasePath: runtime.filename,
-      createAccountProfile: publication.createAccountProfile,
-      listAccountProfiles: publication.listAccountProfiles,
-      assertExecutableAccountProfile:
-        publication.assertExecutableAccountProfile,
-      reservePublicationTarget: publication.reservePublicationTarget,
-      commitRemoteOutcome: publication.commitRemoteOutcome,
-      listActionableRecovery: recovery.listActionableRecovery,
-      markRecoveryUncertain: recovery.markRecoveryUncertain,
-      createSubmissionBatch: submissionPreparation.createSubmissionBatch,
-      queueSubmissionBatch: submissionPreparation.queueSubmissionBatch,
-      discardPreparedSubmissionBatch:
-        submissionPreparation.discardPreparedSubmissionBatch,
+      createAccountProfile: pub.createAccountProfile,
+      listAccountProfiles: pub.listAccountProfiles,
+      assertExecutableAccountProfile: pub.assertExecutableAccountProfile,
+      reservePublicationTarget: pub.reservePublicationTarget,
+      commitRemoteOutcome: pub.commitRemoteOutcome,
+      listActionableRecovery: recover.listActionableRecovery,
+      markRecoveryUncertain: recover.markRecoveryUncertain,
+      createSubmissionBatch: prep.createSubmissionBatch,
+      queueSubmissionBatch: prep.queueSubmissionBatch,
+      discardPreparedSubmissionBatch: prep.discardPreparedSubmissionBatch,
       prepareSubmissionItemAction: submission.prepareSubmissionItemAction,
       getSubmissionItemAction: submission.getSubmissionItemAction,
       checkpointSubmissionItemAction: submission.checkpointSubmissionItemAction,
@@ -89,12 +80,12 @@ function createOperationalStore(options) {
       findSubmissionItem: submission.findSubmissionItem,
       getArchiveEligibility: submission.getArchiveEligibility,
       attachRemoteOrderEvidence: order.attachRemoteOrderEvidence,
-      claimPostProcessing: recovery.claimPostProcessing,
-      completePostProcessing: recovery.completePostProcessing,
-      retryPostProcessing: recovery.retryPostProcessing,
-      listPostProcessingAttention: recovery.listPostProcessingAttention,
-      listPublicationAttention: recovery.listPublicationAttention,
-      listPublicationRecords: publication.listPublicationRecords,
+      claimPostProcessing: recover.claimPostProcessing,
+      completePostProcessing: recover.completePostProcessing,
+      retryPostProcessing: recover.retryPostProcessing,
+      listPostProcessingAttention: recover.listPostProcessingAttention,
+      listPublicationAttention: recover.listPublicationAttention,
+      listPublicationRecords: pub.listPublicationRecords,
       listRemoteOrders: order.listRemoteOrders,
       listOrderDisplayViews: order.listOrderDisplayViews,
       recordRemoteOrderObservation: order.recordRemoteOrderObservation,
@@ -107,12 +98,12 @@ function createOperationalStore(options) {
       getPaidSubmissionBatch: queue.getPaidSubmissionBatch,
       listPaidSubmissionBatches: queue.listPaidSubmissionBatches,
       setPaidSubmissionBatchPause: queue.setPaidSubmissionBatchPause,
-      recordManualReconciliation: reconciliation.recordManualReconciliation,
-      listManualReconciliations: reconciliation.listManualReconciliations,
+      recordManualReconciliation: reconcile.recordManualReconciliation,
+      listManualReconciliations: reconcile.listManualReconciliations,
       listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
-      deriveAttentionInput: recovery.listActionableRecovery,
-      verify: maintenance.verify,
-      backup: maintenance.backup,
+      deriveAttentionInput: recover.listActionableRecovery,
+      verify: maintain.verify,
+      backup: maintain.backup,
       close: context.close,
     });
   } catch (error) {

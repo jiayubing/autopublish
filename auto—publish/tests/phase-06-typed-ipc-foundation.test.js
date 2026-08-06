@@ -234,6 +234,30 @@ test("bounded arrays validate each item through oneOf nested exact variants", ()
   }
 });
 
+test("oneOf classifies unknown object fields without masking missing discriminators", () => {
+  const command = defineContract({
+    capability: "media.setVariant",
+    channel: "media:set-variant",
+    feature: "media",
+    kind: "command",
+    request: exactObject({
+      variant: oneOf([
+        exactObject({ kind: literalField("text"), text: stringField({ min: 1, max: 24 }) }),
+        exactObject({ kind: literalField("count"), count: integerField({ min: 1, max: 9 }) }),
+      ]),
+    }),
+    success: exactObject({ accepted: "boolean" }),
+  });
+  const registry = createContractRegistry([command]);
+
+  assert.throws(() => registry.encodeRequest(command, {
+    variant: { text: "missing discriminator" },
+  }), { code: "IPC_REQUEST_INVALID" });
+  assert.throws(() => registry.encodeRequest(command, {
+    variant: { kind: "text", text: "valid", filePath: "C:\\secret" },
+  }), { code: "IPC_UNKNOWN_FIELD" });
+});
+
 test("schema validation fails closed for oversized and prototype-abnormal payloads", () => {
   const guarded = defineContract({
     capability: "media.guardPayload",
