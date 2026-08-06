@@ -522,137 +522,52 @@ test("blocked auto-trash remains attention-visible and durable across restart", 
   }
 });
 
-test("terminal multi-target archive blocking becomes attention instead of an infinite retry", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-terminal-archive-"),
-  );
-  const input = path.join(root, "input");
-  const published = path.join(root, "published");
-  fs.mkdirSync(path.join(input, "media"), { recursive: true });
-  fs.writeFileSync(path.join(input, "media", "fixture.md"), "# title\n\nbody");
+test("published article cannot reserve a second target", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-published-target-"));
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     const targetOne = {
       kind: "media",
-      mediaResourceId: "resource-terminal-one",
+      mediaResourceId: "resource-published-one",
     };
     const targetTwo = {
       kind: "media",
-      mediaResourceId: "resource-terminal-two",
+      mediaResourceId: "resource-published-two",
     };
-    const batch = store.createSubmissionBatch({
-      batchId: "batch-terminal-archive",
-      items: [
-        {
-          articleId: "article-terminal-archive",
-          target: targetOne,
-          payload: {
-            attemptId: "attempt-terminal-one",
-            batchId: "batch-terminal-archive",
-            sourcePlatformId: "media",
-            filename: "fixture.md",
-          },
-        },
-        {
-          articleId: "article-terminal-archive",
-          target: targetTwo,
-          payload: {
-            attemptId: "attempt-terminal-two",
-            batchId: "batch-terminal-archive",
-            sourcePlatformId: "media",
-            filename: "fixture.md",
-          },
-        },
-      ],
-    });
-    const first = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[0].itemId,
-      claimToken: "claim-terminal-one",
-    });
     store.reservePublicationTarget({
-      articleId: "article-terminal-archive",
-      publicationId: "publication-terminal-one",
-      attemptId: "attempt-terminal-one",
+      articleId: "article-published-target",
+      publicationId: "publication-published-one",
+      attemptId: "attempt-published-one",
       target: targetOne,
-      batchItemId: first.itemId,
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-      },
     });
     store.commitRemoteOutcome({
-      attemptId: "attempt-terminal-one",
-      batchItemId: first.itemId,
-      batchClaimToken: first.claimToken,
+      attemptId: "attempt-published-one",
       outcome: {
         status: "published",
         evidence: {
-          articleId: "article-terminal-archive",
-          attemptId: "attempt-terminal-one",
-          targetKey: "media-resource:resource-terminal-one",
-          remoteId: "remote-terminal-one",
-          remoteUrl: "https://example.test/remote-terminal-one",
+          articleId: "article-published-target",
+          attemptId: "attempt-published-one",
+          targetKey: "media-resource:resource-published-one",
+          remoteId: "remote-published-one",
+          remoteUrl: "https://example.test/remote-published-one",
         },
       },
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-      },
     });
-    const second = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[1].itemId,
-      claimToken: "claim-terminal-two",
-    });
-    store.reservePublicationTarget({
-      articleId: "article-terminal-archive",
-      publicationId: "publication-terminal-two",
-      attemptId: "attempt-terminal-two",
-      target: targetTwo,
-      batchItemId: second.itemId,
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-      },
-    });
-    store.commitRemoteOutcome({
-      attemptId: "attempt-terminal-two",
-      batchItemId: second.itemId,
-      batchClaimToken: second.claimToken,
-      outcome: {
-        status: "failed",
-        error: {
-          code: "REMOTE_FAILED",
-          category: "remote",
-          retryability: "never",
-          userMessage: "Remote failed",
-        },
-      },
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-      },
-    });
-    const processor = createPublicationPostProcessor({
-      workspaceRoot: root,
-      paths: { input, published },
-      platforms: [{ id: "media", scanDir: "media" }],
-      operationalStore: store,
-    });
-    const result = await createPostProcessingCoordinator({
-      operationalStore: store,
-      postProcessor: processor,
-    }).drain({ collectResults: true });
-    assert.equal(
-      result.results[0].errorCode,
-      "POST_PROCESSING_ARCHIVE_BLOCKED",
+    assert.throws(
+      () =>
+        store.reservePublicationTarget({
+          articleId: "article-published-target",
+          publicationId: "publication-published-two",
+          attemptId: "attempt-published-two",
+          target: targetTwo,
+        }),
+      { code: "PUBLICATION_DUPLICATE" },
     );
-    assert.equal(store.listPostProcessingAttention().length, 1);
+    assert.equal(
+      store.listPublicationRecords({ articleIds: ["article-published-target"] })
+        .length,
+      1,
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -1216,136 +1131,50 @@ test("reconcile restores the durable submission link and drains archive work", a
   }
 });
 
-test("multi-target archive eligibility is deferred without leaving failed attention", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-multi-target-archive-"),
-  );
-  const input = path.join(root, "input");
-  const published = path.join(root, "published");
-  fs.mkdirSync(path.join(input, "media"), { recursive: true });
-  fs.writeFileSync(path.join(input, "media", "fixture.md"), "# title\n\nbody");
+test("publication workflow rejects a second target before remote execution", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-08-active-target-workflow-"));
   const store = createOperationalStore({ workspaceRoot: root });
   try {
     const targetOne = { kind: "media", mediaResourceId: "resource-one" };
     const targetTwo = { kind: "media", mediaResourceId: "resource-two" };
-    const autoTrashSelections = [];
-    const batch = store.createSubmissionBatch({
-      batchId: "batch-multi-target",
-      items: [
-        {
-          articleId: "article-multi-target",
-          target: targetOne,
-          payload: {
-            attemptId: "attempt-resource-one",
-            batchId: "batch-multi-target",
-            autoTrash: true,
-            clientId: "client-multi-target",
-            articleId: "article-multi-target",
-            sourcePlatformId: "media",
-            filename: "fixture.md",
-          },
-        },
-        {
-          articleId: "article-multi-target",
-          target: targetTwo,
-          payload: {
-            attemptId: "attempt-resource-two",
-            batchId: "batch-multi-target",
-            autoTrash: true,
-            clientId: "client-multi-target",
-            articleId: "article-multi-target",
-            sourcePlatformId: "media",
-            filename: "fixture.md",
-          },
-        },
-      ],
-    });
-    const workflow = createPublicationWorkflow({
-      clock: () => new Date(),
-      operationalStore: store,
-      postProcessor: createPublicationPostProcessor({
-        workspaceRoot: root,
-        paths: { input, published },
-        platforms: [{ id: "media", scanDir: "media" }],
-        operationalStore: store,
-        autoTrashArticle: async (selection) => {
-          autoTrashSelections.push(selection);
-          return { status: "committed" };
-        },
-      }),
-      publisher: {
-        inspectAccount: async () => ({ verified: true }),
-        publish: async (inputValue) => ({
-          status: "published",
-          evidence: {
-            articleId: inputValue.articleId,
-            attemptId: inputValue.attemptId,
-            targetKey:
-              inputValue.target.mediaResourceId === "resource-one"
-                ? "media-resource:resource-one"
-                : "media-resource:resource-two",
-            remoteId: `remote-${inputValue.target.mediaResourceId}`,
-            remoteUrl: `https://example.test/${inputValue.target.mediaResourceId}`,
-          },
-        }),
-      },
-    });
-    const firstClaim = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[0].itemId,
-      claimToken: "claim-one",
-    });
-    await workflow.publish({
-      articleId: "article-multi-target",
+    store.reservePublicationTarget({
+      articleId: "article-active-target",
       publicationId: "publication-resource-one",
       attemptId: "attempt-resource-one",
       target: targetOne,
-      title: "title",
-      body: "body",
-      batchItemId: firstClaim.itemId,
-      batchClaimToken: firstClaim.claimToken,
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        autoTrash: true,
-        clientId: "client-multi-target",
-        articleId: "article-multi-target",
-        sourcePlatformId: "media",
-        filename: "fixture.md",
+    });
+    let remoteCalls = 0;
+    const workflow = createPublicationWorkflow({
+      clock: () => new Date(),
+      operationalStore: store,
+      postProcessor: {
+        process: async () => ({ status: "completed" }),
+      },
+      publisher: {
+        publish: async () => {
+          remoteCalls += 1;
+          return { status: "failed" };
+        },
       },
     });
-    assert.deepEqual(store.listPostProcessingAttention(), []);
-
-    const secondClaim = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[1].itemId,
-      claimToken: "claim-two",
-    });
-    await workflow.publish({
-      articleId: "article-multi-target",
-      publicationId: "publication-resource-two",
-      attemptId: "attempt-resource-two",
-      target: targetTwo,
-      title: "title",
-      body: "body",
-      batchItemId: secondClaim.itemId,
-      batchClaimToken: secondClaim.claimToken,
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        autoTrash: true,
-        clientId: "client-multi-target",
-        articleId: "article-multi-target",
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-      },
-    });
-    assert.deepEqual(store.listPostProcessingAttention(), []);
-    assert.equal(store.getSubmissionBatch(batch.batchId).status, "completed");
-    assert.deepEqual(autoTrashSelections, [
-      { clientId: "client-multi-target", articleId: "article-multi-target" },
-      { clientId: "client-multi-target", articleId: "article-multi-target" },
-    ]);
-    assert.equal(fs.existsSync(path.join(input, "media", "fixture.md")), false);
-    assert.equal(fs.existsSync(path.join(published, "fixture.md")), true);
+    await assert.rejects(
+      () =>
+        workflow.publish({
+          articleId: "article-active-target",
+          publicationId: "publication-resource-two",
+          attemptId: "attempt-resource-two",
+          target: targetTwo,
+          title: "title",
+          body: "body",
+        }),
+      { code: "PUBLICATION_DUPLICATE" },
+    );
+    assert.equal(remoteCalls, 0);
+    assert.equal(
+      store.listPublicationRecords({ articleIds: ["article-active-target"] })
+        .length,
+      1,
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });

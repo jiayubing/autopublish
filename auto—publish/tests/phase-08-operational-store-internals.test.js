@@ -58,6 +58,18 @@ const PUBLIC_SURFACE = [
   "listRemoteOrders",
   "listOrderDisplayViews",
   "recordRemoteOrderObservation",
+  "createSubmissionQueueGroup",
+  "setSubmissionQueueGroupPause",
+  "listSubmissionQueueGroups",
+  "enqueueSubmissionQueueItem",
+  "listSubmissionQueueItems",
+  "createPaidSubmissionBatch",
+  "getPaidSubmissionBatch",
+  "listPaidSubmissionBatches",
+  "setPaidSubmissionBatchPause",
+  "recordManualReconciliation",
+  "listManualReconciliations",
+  "listArticleLifecycleFacts",
   "deriveAttentionInput",
   "verify",
   "backup",
@@ -66,8 +78,13 @@ const PUBLIC_SURFACE = [
 
 const INTERNAL_MODULES = [
   "src/infrastructure/operational-store/internal/operational-store-context.js",
+  "src/infrastructure/operational-store/internal/operational-store-active-target-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-maintenance.js",
+  "src/infrastructure/operational-store/internal/operational-store-schema-v4.js",
   "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
   "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
   "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-recovery-guard.js",
@@ -133,7 +150,7 @@ test("OperationalStore facade preserves the frozen caller surface", () => {
   let store;
   try {
     store = createOperationalStore({ workspaceRoot });
-    assert.equal(SCHEMA_VERSION, 3);
+    assert.equal(SCHEMA_VERSION, 4);
     assert.deepEqual(Object.keys(store), PUBLIC_SURFACE);
     assert.equal(Object.isFrozen(store), true);
     assert.equal("db" in store, false);

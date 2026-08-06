@@ -69,15 +69,20 @@ const OPERATIONAL_FACADE =
 const MIGRATION_IMPORTER = "scripts/migrate-operational-store-v1.js";
 const RECOVERY_GUARD_IMPORT = `${INTERNAL_PREFIX}/operational-store-recovery-guard`;
 const INTERNAL_MODULES = Object.freeze([
+  "src/infrastructure/operational-store/internal/operational-store-active-target-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-context.js",
+  "src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
   "src/infrastructure/operational-store/internal/operational-store-maintenance.js",
   "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
   "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-recovery-guard.js",
   "src/infrastructure/operational-store/internal/operational-store-runtime.js",
   "src/infrastructure/operational-store/internal/operational-store-schema.js",
+  "src/infrastructure/operational-store/internal/operational-store-schema-v4.js",
   "src/infrastructure/operational-store/internal/operational-store-submission-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-submission-preparation.js",
   "src/infrastructure/operational-store/internal/operational-store-transaction.js",

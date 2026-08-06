@@ -3,7 +3,7 @@ const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 
 const { fail } = require("./operational-store-utils");
-const { migrateSchema } = require("./operational-store-schema");
+const { dryRunSchema, migrateSchema } = require("./operational-store-schema");
 const {
   assertStoreAvailable,
   acquireRuntimeOwner,
@@ -84,4 +84,15 @@ function openOperationalStoreRuntime(options) {
   });
 }
 
-module.exports = { databasePath, openOperationalStoreRuntime };
+function dryRunOperationalStoreMigration(options) {
+  const value = options || {};
+  if (typeof value.workspaceRoot !== "string")
+    throw fail("OPERATIONAL_WORKSPACE_REQUIRED");
+  return dryRunSchema(databasePath(value.workspaceRoot, value.filename, false));
+}
+
+module.exports = {
+  databasePath,
+  dryRunOperationalStoreMigration,
+  openOperationalStoreRuntime,
+};

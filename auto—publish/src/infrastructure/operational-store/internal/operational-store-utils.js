@@ -76,6 +76,30 @@ function fromText(value) {
   return value ? JSON.parse(value) : null;
 }
 
+function safeOperationalPayload(value) {
+  const parsed = fromText(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const allowed = [
+    "accountProfileId",
+    "attemptId",
+    "batchItemId",
+    "clientId",
+    "contentHash",
+    "filename",
+    "outcomeStatus",
+    "quotedPrice",
+    "resourceNameSnapshot",
+    "sourcePlatformId",
+    "systemSubmissionCode",
+    "titleSnapshot",
+  ];
+  return Object.fromEntries(
+    allowed
+      .filter((key) => Object.prototype.hasOwnProperty.call(parsed, key))
+      .map((key) => [key, parsed[key]]),
+  );
+}
+
 function rejectSensitive(value) {
   if (
     /(cookie|api[_-]?key|authorization|\"body\"|\"html\"|absolutePath)/i.test(
@@ -96,5 +120,6 @@ module.exports = {
   iso,
   text,
   fromText,
+  safeOperationalPayload,
   rejectSensitive,
 };
