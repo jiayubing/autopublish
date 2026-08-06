@@ -17,6 +17,8 @@
 
 `ARTICLE-LIFECYCLE-GOAL-ORCHESTRATION.md` 是当前文章生命周期重构的执行编排协议；只有任务明确进入该 Goal 时才应用。它不得覆盖 `CONTEXT.md` 和产品规格中的业务语义，也不是一般开发任务的默认流程。历史分支计划、handoff、归档材料和 pre-refactor 文档只能作为历史证据。
 
+`ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 是用户手动控制的波次执行计划。当用户说“执行波次 X”时，读取该计划，只为该波次可执行 ticket 创建独立的 Luna/max Codex worktree 线程并直接实施；ticket 线程不使用 `$implement`，不创建子代理，不审计、不 stage、不 commit、不合并、不推送。审计、修复确认、提交、合并、波次验收和进度推进均等待用户逐项指令。“执行波次 X”不等于启用 Goal 自动编排。
+
 源码与目标规格暂时不一致时，先判断它是否是当前重构已明确要消除的旧残影。若是，按规格收敛并补测试；若不是，报告冲突、影响和推荐方向，等待用户确认，不得自行维护双路线。
 
 ## 产品边界
