@@ -14,25 +14,31 @@
 ## 执行过程
 
 1. 定义队列组身份、组级运行状态、手工暂停意图、当前项和剩余 FIFO 顺序的只读模型。
-2. 建立组编排器：一个组同一时间最多一个在途项，不同组使用独立执行通道并可并行。
+2. 建立组编排器：一个组同一时间最多一个在途项，不同组使用独立执行通道并可并行。每次领取必须通过单个 transition-specific 事务原子复核组运行/暂停意图与 FIFO 头项，生成稳定 `regularPublicationAttemptId`，并一起保存组当前项、claim/lease 和 phase=`prepared` 的 in-flight intent；事务成功后才向平台执行器返回确定任务。未收口 intent 不得重新生成 attempt identity。
 3. 支持向运行组追加文章到队尾，继承组的平台、账号和已有组配置，绝不插队。
 4. 实现开始全部：只启动未开始且未被手工暂停的普通平台组；实现暂停全部：当前请求安全返回后停止领取下一项。
-5. 应用启动时所有普通平台组保持暂停，必须由用户明确开始；崩溃恢复只恢复本地事实，不自动调用远端。
-6. 一个组完成、暂停或失败不得取消、停止或改写其他组。
-7. 增加并发、FIFO、追加、暂停竞态、重启和多组隔离测试。
+5. 平台阶段一返回仅进程内 `PreparedSubmission` capability：它公开不可变、安全的 `preparedSubmissionEvidenceV1` 和唯一具名方法 `submitPreparedPublication()`，平台会话、DOM、上传 token 与其他私有状态隐藏在 adapter 内部闭包中。evidence 至少绑定 attempt、实际投稿标题/正文、content fingerprint、deliveryMode、图片安全 fingerprint/布局和最终降级决定；纯文本路径使用空图片清单。submit 必须提交与 evidence 相同的已准备内容，不得在 evidence 冻结后改标题、正文、图片布局或降级模式；若内部状态漂移，submission-start 后只能返回 uncertain。capability 不可枚举平台状态、不可序列化、不可记录、不可进入 IPC/持久化，也不得退化为任意 callback/metadata 容器。
+6. executor 取得 `PreparedSubmission` 后，在调用其提交方法的紧前一刻调用 `beginRegularRemoteSubmission(attemptId, preparedSubmissionEvidenceV1)`；该事务原子校验 attempt/正文 fingerprint 与 phase，冻结完整 evidence，将 intent 从 `prepared` 推进为 `remote_call_started` 并只写一次 `remoteCallStartedAt`。事务成功后才调用 `submitPreparedPublication()`。该标记表示“从此不得安全自动重放”，不声称供应商一定收到请求；标记前可在用户重新开始后重做准备，标记后 evidence 已持久保存且缺少终态 observation 一律交给 09 uncertain。
+7. 应用启动时所有普通平台组保持暂停，必须由用户明确开始；崩溃恢复只恢复本地事实，不自动调用远端。`prepared` intent 不得仅因 lease 过期自动运行，`remote_call_started` intent 不得重新变成 pending 或再次调用平台。
+8. 一个组完成、暂停或失败不得取消、停止或改写其他组。
+9. 增加并发、FIFO、追加、暂停竞态、证据冻结、远端边界前后、重启和多组隔离测试。
 
 ## 职责边界
 
 - 组编排器只负责领取顺序、并发隔离和暂停意图，不解释远端结果类别。
-- 平台执行器只执行一个确定任务并返回明确结果。
+- 平台 executor 只协调 `preparePlatformSubmission → freeze evidence + beginRegularRemoteSubmission → PreparedSubmission.submitPreparedPublication`，只能读取安全 evidence 并调用具名方法，不能取得 adapter 私有 token/会话；Ticket 08 先为纯文本建立稳定 seam，Ticket 18–21 只扩展 evidence 的图片字段和阶段一交付，不改变 submission-start 所有权。平台 adapter 不获得 OperationalStore capability。
 - 状态存储只保存组和任务事实，不启动 worker。
 - 全局控制器只向符合条件的组发命令，不拥有组状态机。
+- OperationalStore 的 `regularQueueGroupTransitions` 最小 capability 封装组快照读取、开始/暂停意图、“复核 FIFO 头项 + claim/lease + 组当前项 + 唯一 prepared intent”的领取事务，以及冻结 evidence 的幂等 `beginRegularRemoteSubmission`；它是普通平台 intent、实际提交 evidence 与 submission-start phase 的唯一 writer。组编排器不得用多个公开写操作拼接领取/证据/边界，也不得通过该 capability 写入 09 outcome/resolution。
 
 ## 架构硬门槛
 
 - 编排边界以队列组状态机和窄命令接口形成深模块；平台执行细节不能进入通用组编排器，也不得为缩短文件拆出透传层。
 - 组之间不共享可变运行状态；全局开始/暂停不能成为全局大状态机。
 - 使用明确的 claim/lease 或等价机制保证同组单消费者和崩溃恢复。
+- lease 只解决本地单消费者所有权，不能充当远端幂等或安全重试证明。只有 durable `remote_call_started` 才表示已进入不可安全重放区；它是保守的本地边界标记，不伪装成供应商接收证据。
+- Ticket 09 只能按 `regularPublicationAttemptId` 读取、标记或收口 08 创建的 intent，不得创建第二条 intent；正常 accepted、article_rejected、group_blocked 和人工 resolution 必须原子收口原 intent。
+- composition 只向组编排器注入 `regularQueueGroupTransitions` capability 和单项平台执行端口；不得注入完整 OperationalStore，也不得暴露通用 claim/release、任意 lease 写入、付费/迁移能力或 09 的 outcome 写能力。capability 由 owner 直接聚合或冻结选取，禁止创建纯透传 wrapper。
 - 禁止用定时轮询 Renderer 推断进度；只读快照和失效事件是界面入口。
 
 ## Acceptance criteria
@@ -42,7 +48,21 @@
 - [ ] 运行组追加文章进入队尾并继承组身份和配置。
 - [ ] 开始全部不会恢复手工暂停组，暂停全部不会强制中断当前远端请求。
 - [ ] 应用重启后所有组保持暂停且不会自动产生投稿。
+- [ ] 在 claim 后、submission-start 前、远端返回前和 observation 落库前分别注入崩溃：prepared 项不会被当作已投稿，可在用户重新开始并复核后重做准备；remote_call_started 项绝不再次调用平台，缺少明确结果时由 09 接管。
+- [ ] 在 `beginRegularRemoteSubmission` 提交前后分别注入崩溃：标记前没有远端调用且只能在用户重新开始、复核后重做准备；标记后即使 adapter 尚未来得及执行也保守进入 uncertain，绝不自动重放。`remoteCallStartedAt` 只写一次。
+- [ ] 纯文本默认路径生成图片清单为空、`deliveryMode=text_only` 的完整 `preparedSubmissionEvidenceV1`；begin 事务故障不保存半份 evidence也不调用提交，事务成功后的崩溃仍可从持久 evidence 完整人工收口。换图、带图和显式纯文本降级留给 Ticket 18 在不改变本 ticket submission-start owner 的前提下扩展并验收。
+- [ ] `PreparedSubmission` 公开面只有安全 evidence 与具名 submit 方法；序列化、日志、IPC、跨平台传递、读取私有 session/token 和注入通用 callback/metadata 的架构测试均失败关闭。
+- [ ] evidence 冻结后注入编辑器/会话内容漂移，submit 不会静默改写或重建 manifest；边界后只返回 uncertain，档案证据与任何明确 accepted 的实际准备内容一致。
+- [ ] 在组运行状态、FIFO 头项、claim/lease、组当前项和 in-flight intent 的每个持久化故障点注入失败，证明领取事务要么完整提交并返回唯一任务，要么不改变任何事实；不会留下“组已领取或已有当前项但缺少 in-flight intent”或重复领取状态。
+- [ ] composition/架构测试证明组编排器只能获得 `regularQueueGroupTransitions` 和单项执行端口，不能旁路 09、拼接通用 claim/release 或访问付费、迁移及其他无关写能力。
+- [ ] 合同测试证明同一未收口项只有一个稳定 `regularPublicationAttemptId`，08 是唯一 intent creator，并向 09 暴露只读/收口所需的稳定身份合同而不授予第二个 intent creator；09 对该合同的实际消费与不重复 intent 由 Ticket 09 及波次 6 集成复验完成。
 - [ ] 交接记录提供组状态机、并发模型、恢复策略、模块职责、依赖方向及显著规模变化说明。
+
+## 审计建议
+
+- 等级：深度独立审计。
+- 范围：组身份与 FIFO、同组单消费者、跨组并行、追加、开始/暂停意图、prepared/remote_call_started phase、重启暂停、lease 过期和远端未知结果失败关闭。
+- 重点核对 executor 两阶段调用与 09 结果策略的边界；注入 submission-start 标记前后、远端调用中和 observation 前的崩溃，证明不会把未开始误写成已提交，也不会自动重复投稿。不重复审计 07 admission 或 10 UI 细节，不运行完整 `npm test`。
 
 ## Non-goals
 

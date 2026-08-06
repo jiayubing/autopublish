@@ -26,6 +26,7 @@
 - 预检策略负责验证和费用快照，不执行远端调用。
 - OperationalStore 付费 admission 组合端口拥有批次与活动目标的一致性事务；调用方不得分别 claim/release 后拼接批次写入。
 - 06 coordinator 拥有跨文章锁和锁内事实复核；本 ticket 只在该 owner 内增加 `admitPaidBatch` 具名方法并注入付费 admission 端口，不取得锁、不接收通用 callback，也不把付费规则放入共享锁原语。
+- composition 只向 coordinator 注入 `paidAdmissionTransitions` 最小 capability，包含付费 admission 所需事实读取和单个组合事务；不得注入完整 OperationalStore、普通队列、订单 outcome 或迁移写能力。
 - 风险检测器只扫描本次确认文本并返回提示，不修改内容。
 - 应用级设置拥有系统投稿标识码和密钥保护；订单快照只保存使用值。
 - Renderer 只展示服务返回的确认模型，不自行重新算价格或风险。
@@ -36,6 +37,7 @@
 - 确认模型使用不可变快照与指纹，不把整个文章/资源可变对象跨层传递。
 - 普通平台命令不能依赖或调用本付费预检。
 - 不把手机号/网址检测做成持续后台扫描。
+- `paidAdmissionTransitions` 由 owner 直接提供或在 composition 冻结选取，不增加同名透传 wrapper，也不允许调用方拆分批次/活动目标写入。
 
 ## Acceptance criteria
 
@@ -48,6 +50,13 @@
 - [ ] 付费 admission 命令消费 06 的统一权限与协调端口；真实付费批次确认后文章保存和改投被拒绝，且该端到端冻结回归由本 ticket 验收。
 - [ ] 反序文章集合与并发保存/确认测试证明全部文章锁按规范顺序取得，锁获取或单事务 admission 失败时完整释放且不留下部分活动目标；测试不访问真实服务商。
 - [ ] 交接记录包含确认指纹、风险规则、设置边界、公开接口、依赖方向及显著规模变化说明。
+- [ ] composition/架构测试证明付费预检与 coordinator 看不到普通 outcome、取消、迁移等无关 OperationalStore 写能力。
+
+## 审计建议
+
+- 等级：深度独立审计。
+- 范围：资源/价格预检、确认 fingerprint、风险提示、全局投稿标识、06 coordinator 的 paid admission、全文章锁和单事务批次建立、文章冻结及失败清理。
+- 必须验证价格/正文/资源/标识变化失效、反序集合并发、锁获取和 admission 故障；不重复审计 13 的付费执行或 11 的供应商内部实现，不运行完整 `npm test`。
 
 ## Non-goals
 
