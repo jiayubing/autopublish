@@ -5,11 +5,6 @@
 // its recorded ceiling or if a new first-party module crosses 400 lines.
 const MODULE_SIZE_EXCEPTIONS = Object.freeze([
   [
-    "desktop/services/operational-content-submission-service.js",
-    1690,
-    "remaining claim/outcome/cleanup ordering owner pending ticket 2",
-  ],
-  [
     "desktop/ipc/contracts/content-core-contracts.js",
     1328,
     "domain wire declarations and validators",
