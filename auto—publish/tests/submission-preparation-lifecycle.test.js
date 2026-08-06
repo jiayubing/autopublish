@@ -32,6 +32,7 @@ const { registerAiContentIpc } = require("../desktop/ipc/ai-content-ipc");
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
 const { contentCoreContracts } = require("../desktop/ipc/contracts/content-core-contracts");
 const { createArticleStore } = require("../src/content/article-store");
+const { fingerprintArticle } = require("../src/content/content-store");
 
 function article(overrides) {
   return Object.assign({
@@ -171,20 +172,28 @@ test("manual content crosses typed save IPC and the real article store into subm
     registerAiContentIpc({
       ipcMain,
       aiContentService: {
-        saveArticle(articleValue) { return articleStore.saveArticle(articleValue); },
+        saveArticle(input) {
+          const saved = articleStore.saveArticle(input.article);
+          return { outcome: "saved", article: saved, editFingerprint: fingerprintArticle(saved) };
+        },
       },
     });
-    const manual = {
+    const initial = {
       id: "manual-chain-1",
       clientId: "client-1",
       title: "手工投稿文章",
-      content: "没有 AI 来源的手工正文。",
+      content: "初始手工正文。",
       status: "saved",
       createdAt: "2026-08-06T00:00:00.000Z",
     };
+    articleStore.createArticle(initial);
+    const manual = Object.assign({}, initial, { content: "没有 AI 来源的手工正文。" });
     const registry = createContractRegistry(contentCoreContracts);
     const contract = registry.byChannel("content:save-article");
-    const request = registry.encodeRequest(contract, contract.fromArgs([manual]));
+    const request = registry.encodeRequest(contract, {
+      article: manual,
+      expectedFingerprint: fingerprintArticle(initial),
+    });
     const response = await handlers.get("content:save-article")(null, request);
     const saved = registry.parseSuccess(contract, response).article;
     assert.deepEqual(saved, manual);

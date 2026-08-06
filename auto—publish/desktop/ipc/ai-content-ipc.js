@@ -39,7 +39,32 @@ function registerAiContentIpc(deps) {
     return wrap(async function() { return { material: projectMaterial(await service.retryMaterial(input && input.clientId, input && input.materialId)) }; });
   });
   ipcMain.handle("content:generate-article", function(event, input) { return wrap(async function() { return { article: projectArticle(await service.generateArticle(generationInput(input))) }; }); });
-  ipcMain.handle("content:save-article", function(event, article) { return wrap(function() { return { article: projectArticle(service.saveArticle(article)) }; }); });
+  ipcMain.handle("content:save-article", function(event, input) {
+    return wrap(function() {
+      const result = service.saveArticle(input);
+      if (result && result.outcome === "saved") {
+        return {
+          outcome: "saved",
+          article: projectArticle(result.article),
+          editFingerprint: result.editFingerprint,
+        };
+      }
+      if (result && result.outcome === "conflict") return result;
+      if (result && result.outcome === "result-uncertain") return result;
+      const error = new Error("Article save returned an invalid typed result");
+      error.code = "IPC_RESULT_INVALID";
+      throw error;
+    });
+  });
+  ipcMain.handle("content:get-article-editor", function(event, input) {
+    return wrap(function() {
+      const result = service.getArticleEditor(input && input.clientId, input && input.articleId);
+      return {
+        article: projectArticle(result.article),
+        editFingerprint: result.editFingerprint,
+      };
+    });
+  });
   ipcMain.handle("content:preview-article-removal-impact", function(event, input) {
     return wrap(function() { return projectImpactPreview(service.previewArticleRemovalImpact(input)); });
   });

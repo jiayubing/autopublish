@@ -100,10 +100,24 @@ function safeOperationalPayload(value) {
   );
 }
 
+function isPublicationSnapshot(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === 4 &&
+    keys[0] === "articleId" &&
+    keys[1] === "body" &&
+    keys[2] === "fingerprint" &&
+    keys[3] === "title";
+}
+
 function rejectSensitive(value) {
   if (
     /(cookie|api[_-]?key|authorization|\"body\"|\"html\"|absolutePath)/i.test(
-      text(value),
+      JSON.stringify(value, function (key, child) {
+        return isPublicationSnapshot(this) && ["articleId", "title", "body", "fingerprint"].includes(key)
+          ? undefined
+          : child;
+      }),
     )
   )
     throw fail("OPERATIONAL_SENSITIVE_FIELD");

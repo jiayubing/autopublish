@@ -9,7 +9,7 @@ import type {
   PublicationHistorySummary,
 } from '../../types/publication';
 import type { GeneratedContentArticle } from '../../types/generation';
-import type { ArticleWorkflowStage } from '../../article-workflow';
+import type { ArticleOperation, ArticleWorkflowStage } from '../../article-workflow';
 
 export type ArticleManagementReadModel = {
   articles: GeneratedContentArticle[];
@@ -21,6 +21,7 @@ export type ArticleManagementReadModel = {
     stage: ArticleWorkflowStage;
     label?: string;
     locks: { canEdit: boolean; canQueue: boolean; canCancel: boolean; canTrash: boolean };
+    operations?: { edit: ArticleOperation; queue: ArticleOperation; retarget: ArticleOperation; trash: ArticleOperation };
     primaryAction: string;
     allowedBulkActions: string[];
     publicationSummary: PublicationHistorySummary;

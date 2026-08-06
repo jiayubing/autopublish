@@ -15,6 +15,7 @@ const EMPTY_MANAGEMENT = Object.freeze({
 });
 
 const COMMAND_SCOPES = Object.freeze({
+  getArticleEditor: null,
   saveArticle: 'management',
   reconcilePublication: 'management',
   previewExport: null,
@@ -42,12 +43,13 @@ const REMOVAL_EVENT_COMMANDS = new Set([
 ]);
 
 const CLIENT_IDENTITY = Object.freeze({
-  saveArticle: (input) => [input?.clientId],
+  getArticleEditor: (input) => [input?.clientId],
+  saveArticle: (input) => [input?.clientId || input?.article?.clientId],
   reconcilePublication: (input) => [input?.clientId],
   exportToSubmissionQueue: (input) => [input?.clientId],
   createContentSubmissionBatch: (input) => [input?.clientId],
   previewContentArticleRemoval: (input) => (input?.selections || []).map((item) => item?.clientId),
-  trashContentArticles: (input) => (input?.articles || []).map((item) => item?.clientId),
+  trashContentArticles: (input) => (input?.selections || input?.articles || []).map((item) => item?.clientId),
   restoreContentArticle: (input) => [input?.clientId],
   preparePermanentDeleteContentArticle: (input) => [input?.clientId],
   permanentlyDeleteContentArticle: (input) => [input?.clientId],
@@ -358,6 +360,7 @@ export function createArticleManagementFeature(adapters = {}) {
   // Keep command names explicit at the feature boundary so composed callers
   // retain stable TypeChecker symbols for each management capability.
   const commands = Object.freeze({
+    getArticleEditor: (input) => runCommand('getArticleEditor', input),
     saveArticle: (input) => runCommand('saveArticle', input),
     reconcilePublication: (input) => runCommand('reconcilePublication', input),
     previewExport: (input) => runCommand('previewExport', input),

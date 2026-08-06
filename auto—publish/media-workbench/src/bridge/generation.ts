@@ -62,8 +62,22 @@ type GenerationContentApi = {
     templateCatalogRevision?: string;
   }) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle }>>;
   saveArticle: (
-    article: GeneratedContentArticle,
-  ) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle }>>;
+    input: {
+      article: GeneratedContentArticle;
+      expectedFingerprint: string;
+    },
+  ) => Promise<GenerationIpcResponse<
+    | { outcome: "saved"; article: GeneratedContentArticle; editFingerprint: string }
+    | { outcome: "conflict"; code: "ARTICLE_EDIT_CONFLICT"; articleId: string; refreshRequired: true }
+    | { outcome: "result-uncertain"; code: "ARTICLE_MUTATION_RESULT_UNCERTAIN"; articleId: string; refreshRequired: true }
+  >>;
+  getArticleEditor?: (input: {
+    clientId: string;
+    articleId: string;
+  }) => Promise<GenerationIpcResponse<{
+    article: GeneratedContentArticle;
+    editFingerprint: string;
+  }>>;
   previewGenerationBatch: (
     input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<GenerationBatchPreview>>;
@@ -109,6 +123,11 @@ type SubmissionContentApi = {
   listSubmissionPlatforms: () => Promise<
     GenerationIpcResponse<{ platforms: ContentSubmissionPlatform[] }>
   >;
+};
+
+export type SavedContentArticle = {
+  article: GeneratedContentArticle;
+  editFingerprint: string;
 };
 
 function generationIpcError(
@@ -163,12 +182,35 @@ export async function generateContentArticle(input: {
 
 export async function saveContentArticle(
   article: GeneratedContentArticle,
-): Promise<GeneratedContentArticle> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.saveArticle)(article),
-    "Unable to save article",
-    { map: (wire) => wire.article },
-  );
+  expectedFingerprint: string,
+): Promise<SavedContentArticle> {
+  if (!expectedFingerprint) {
+    const error = new Error("文章编辑凭证缺失，请重新打开文章后重试。") as Error & { code?: string };
+    error.code = "ARTICLE_EDIT_FINGERPRINT_REQUIRED";
+    throw error;
+  }
+  const api = requireContentApi<GenerationContentApi>();
+  const result = await requireBridgeMethod(api.saveArticle)({
+    article,
+    expectedFingerprint,
+  });
+  if (result.ok === false) throw generationIpcError(result.error, "Unable to save article");
+  const data = result.data;
+  if (!data) throw generationIpcError(undefined, "Unable to save article");
+  if (data.outcome === "conflict") {
+    const error = new Error("文章已被其他编辑会话修改，请刷新后重试。") as Error & { code?: string; refreshRequired?: boolean };
+    error.code = "ARTICLE_EDIT_CONFLICT";
+    error.refreshRequired = true;
+    throw error;
+  }
+  if (data.outcome === "result-uncertain") {
+    const error = new Error("文章操作结果需要人工核对，请勿自动重试。") as Error & { code?: string; refreshRequired?: boolean };
+    error.code = "ARTICLE_MUTATION_RESULT_UNCERTAIN";
+    error.refreshRequired = true;
+    throw error;
+  }
+  if (data.outcome !== "saved" || !data.article || !data.editFingerprint) throw generationIpcError(undefined, "Unable to save article");
+  return { article: data.article, editFingerprint: data.editFingerprint };
 }
 
 export async function previewGenerationBatch(

@@ -36,6 +36,14 @@ function recoverySubmission(value) {
   return null;
 }
 
+function recoveryArticleRef(submission) {
+  const ref = submission && submission.postProcessingPayload && submission.postProcessingPayload.articleRef;
+  if (!ref || typeof ref !== "object" || Array.isArray(ref)) return null;
+  if (typeof ref.clientId !== "string" || !ref.clientId.trim() || typeof ref.articleId !== "string" || !ref.articleId.trim()) return null;
+  if (/[\u0000-\u001f\\/]/.test(ref.clientId) || /[\u0000-\u001f\\/]/.test(ref.articleId)) return null;
+  return { clientId: ref.clientId.trim(), articleId: ref.articleId.trim() };
+}
+
 function safePostProcessingErrorCode(value) {
   return typeof value === "string" &&
     /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value)
@@ -97,15 +105,19 @@ function createRecoveryAggregate(context, activeTarget) {
           ") ORDER BY i.updated_at,i.attempt_id LIMIT ?",
       )
       .all(RECOVERY_PAGE_SIZE);
-    const result = rows.map((row) => ({
-      attemptId: row.attempt_id,
-      state: row.state,
-      publicationId: row.publication_id,
-      articleId: row.article_id,
-      targetKey: row.target_key,
-      status: row.status,
-      detail: recoveryDetail(row.payload_json),
-    }));
+    const result = rows.map((row) => {
+      const submission = recoverySubmission(row.payload_json);
+      return {
+        attemptId: row.attempt_id,
+        state: row.state,
+        publicationId: row.publication_id,
+        articleId: row.article_id,
+        targetKey: row.target_key,
+        status: row.status,
+        detail: recoveryDetail(row.payload_json),
+        ...(recoveryArticleRef(submission) ? { articleRef: recoveryArticleRef(submission) } : {}),
+      };
+    });
     Object.defineProperty(result, "hasMore", {
       value: rows.length === RECOVERY_PAGE_SIZE,
       enumerable: false,

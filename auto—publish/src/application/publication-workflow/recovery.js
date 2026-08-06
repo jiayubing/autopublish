@@ -14,10 +14,21 @@ function createPublicationRecovery(options) {
       recoveryPage = value.operationalStore.listActionableRecovery({ includeManualCheck: false });
       for (const item of recoveryPage) {
         if (item.state === "manual_check") continue;
-        value.operationalStore.markRecoveryUncertain({
+        const recovery = {
           attemptId: item.attemptId,
+          articleId: item.articleId,
           error: uncertainError(),
-        });
+          ...(item.articleRef
+            ? { articleRef: item.articleRef }
+            : item.detail && item.detail.articleRef
+              ? { articleRef: item.detail.articleRef }
+              : {}),
+        };
+        if (value.articleMutationCoordinator) {
+          value.articleMutationCoordinator.markRecoveryUncertain(recovery);
+        } else {
+          value.operationalStore.markRecoveryUncertain(recovery);
+        }
         recoveryCount += 1;
       }
     } while (recoveryPage.hasMore === true);

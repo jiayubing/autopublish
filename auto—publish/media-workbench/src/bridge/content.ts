@@ -23,6 +23,7 @@ import type {
   DoubaoLoginState,
   DoubaoQueueState,
 } from "../types/content";
+import type { GeneratedContentArticle } from "../types/generation";
 import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
 
 export interface ContentExportInput {
@@ -67,6 +68,10 @@ type SafeContentIpcError = {
 };
 type ContentIpcResponse<T> =
   { ok: true; data?: T } | { ok: false; error?: SafeContentIpcError };
+export type ArticleEditorSnapshot = {
+  article: GeneratedContentArticle;
+  editFingerprint: string;
+};
 type ArticleManagementSnapshotWire = Omit<
   ArticleManagementSnapshot,
   "workflowByArticle" | "publicationSummaries"
@@ -95,6 +100,10 @@ type CoreContentApi = {
   getArticleManagementSnapshot: (input: {
     clientId: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
+  getArticleEditor: (input: {
+    clientId: string;
+    articleId: string;
+  }) => Promise<ContentIpcResponse<ArticleEditorSnapshot>>;
 };
 
 async function callCoreContent<TWire, TResult = TWire>(
@@ -482,6 +491,16 @@ export async function getArticleManagementSnapshot(
         ),
       };
     },
+  );
+}
+
+export async function getArticleEditor(input: {
+  clientId: string;
+  articleId: string;
+}): Promise<ArticleEditorSnapshot> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.getArticleEditor)(input),
+    "Unable to load article editor",
   );
 }
 export async function previewExport(

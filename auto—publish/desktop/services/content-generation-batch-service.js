@@ -167,7 +167,8 @@ function createContentGenerationBatchService(options) {
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = opts.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
   const contentStore = opts.contentStore;
-  if (!contentStore || typeof contentStore.saveArticle !== "function" || typeof contentStore.findByGenerationTaskId !== "function") {
+  const articleMutationCoordinator = opts.articleMutationCoordinator || null;
+  if (!contentStore || (typeof contentStore.createArticle !== "function" && typeof contentStore.saveArticle !== "function") || typeof contentStore.findByGenerationTaskId !== "function") {
     throw generationError("GENERATION_CONTENT_STORE_REQUIRED", "Content store is required");
   }
   const batchStore = opts.batchStore || createGenerationBatchStore({ workspaceRoot: workspaceRoot, paths: paths });
@@ -429,7 +430,13 @@ function createContentGenerationBatchService(options) {
     article.status = "generated";
     article.generationBatchId = activeBatchId;
     article.generationTaskId = task.id;
-    contentStore.saveArticle(article);
+    if (articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function") {
+      articleMutationCoordinator.createArticle(article);
+    } else if (typeof contentStore.createArticle === "function") {
+      contentStore.createArticle(article);
+    } else {
+      contentStore.saveArticle(article);
+    }
     return { id: article.id, articleId: article.id };
   }
 

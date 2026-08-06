@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
 import type { ContentClient, ContentTemplateCatalog } from '../types/content';
 import type { GeneratedContentArticle } from '../types/generation';
+import type { ArticleEditorSnapshot } from '../bridge/content';
 import ArticleGenerationView from './content/ArticleGenerationView';
 import GeneratedArticleEditorPanel from './content/GeneratedArticleEditorPanel';
 import GeneratedArticlesView from './content/GeneratedArticlesView';
@@ -26,11 +27,19 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
   useConfirmationScope(content.snapshot.scope && clientId ? `${content.snapshot.scope.workspaceRuntimeId}:${clientId}` : null);
   const [historyEditingArticle, setHistoryEditingArticle] = useState<GeneratedContentArticle | null>(null);
   const [historyEditingPublished, setHistoryEditingPublished] = useState(false);
+  const [historyEditingEditable, setHistoryEditingEditable] = useState(true);
+  const [historyEditingFingerprint, setHistoryEditingFingerprint] = useState<string | null>(null);
   const [tab, setTab] = useState<'questions' | 'generate' | 'history'>('questions');
   const [articleStageFilter, setArticleStageFilter] = useState<ArticleWorkflowStage | 'all'>('all');
   const [error, setError] = useState('');
   const historyDirtyRef = useRef(false); const [historyDirtyArticleId, setHistoryDirtyArticleId] = useState<string | null>(null);
   const historySourceRef = useRef<HTMLElement | null>(null);
+
+  function isArticleEditorSnapshot(value: unknown): value is ArticleEditorSnapshot {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as { article?: unknown; editFingerprint?: unknown };
+    return Boolean(candidate.article && typeof candidate.article === 'object' && typeof candidate.editFingerprint === 'string');
+  }
 
   useEffect(() => {
     if (!attentionIntent) return;
@@ -61,12 +70,38 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     historySourceRef.current = null;
     historyDirtyRef.current = false; setHistoryDirtyArticleId(null);
     setHistoryEditingArticle(null);
+    setHistoryEditingFingerprint(null);
+    setHistoryEditingEditable(true);
+    historyEditorRequestRef.current += 1;
     source?.focus();
     requestAnimationFrame(() => source?.focus());
   }
 
+  const historyEditorRequestRef = useRef(0);
+
   function openHistoryEditor(nextArticle: GeneratedContentArticle, source?: HTMLElement | null, published = false) {
-    const open = () => { historySourceRef.current = source || null; historyDirtyRef.current = false; setHistoryDirtyArticleId(null); setHistoryEditingPublished(published); setHistoryEditingArticle(nextArticle); };
+    const workflow = management.workflowByArticle[nextArticle.id];
+    const editable = !published && workflow?.operations?.edit?.allowed !== false;
+    const open = () => {
+      const requestId = ++historyEditorRequestRef.current;
+      historySourceRef.current = source || null;
+      historyDirtyRef.current = false;
+      setHistoryDirtyArticleId(null);
+      setHistoryEditingPublished(published);
+      setHistoryEditingEditable(editable);
+      setHistoryEditingFingerprint(null);
+      setHistoryEditingArticle(nextArticle);
+      const loadEditor = content.commands.getArticleEditor;
+      if (typeof loadEditor !== 'function') return;
+      void loadEditor({ clientId, articleId: nextArticle.id }).then((result: unknown) => {
+        if (requestId !== historyEditorRequestRef.current || !isArticleEditorSnapshot(result)) return;
+        setHistoryEditingArticle(result.article);
+        setHistoryEditingFingerprint(result.editFingerprint);
+      }).catch(() => {
+        // The management snapshot remains a safe read-only fallback when the
+        // optional editor query is unavailable in an older renderer fixture.
+      });
+    };
     if (historyEditingArticle && historyEditingArticle.id !== nextArticle.id) requestHistoryLeave(open);
     else open();
   }
@@ -98,7 +133,7 @@ export default function ContentWorkbench({ attentionIntent, onAttentionIntentCon
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {tab === 'questions' && <QuestionCollectionView clients={clients} clientId={clientId} questions={questions} research={research} query={clientQuery} commands={content.commands} commandStates={content.snapshot.commands} queue={doubaoQueue} login={doubaoLogin} queueQuery={doubaoQueueQuery} loginQuery={doubaoLoginQuery} />}
       {tab === 'generate' && <ArticleGenerationView client={clients.find((item) => item.id === clientId)} clients={clients} clientId={clientId} research={research} researchByClient={researchByClient} templateCatalog={templateCatalog} selectedArticle={article} onArticleChange={content.setCurrentArticle} commands={content.commands} commandStates={content.snapshot.commands} refreshManagement={content.refreshManagement} />}
-      {tab === 'history' && <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} counts={management.lifecycleCounts} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} management={management} query={managementQuery} commands={content.commands} commandStates={content.snapshot.commands} removal={content.snapshot.removal} watchRemovalTransaction={content.watchRemovalTransaction} stageFilter={articleStageFilter} dirtyArticleId={historyDirtyArticleId} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} onOpenOrders={onOpenOrders} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} saving={content.snapshot.commands.saveArticle.busy} onSaveArticle={(draft) => content.commands.saveArticle({ ...draft, status: 'saved', updatedAt: new Date().toISOString() })} onSaved={(saved) => { setHistoryEditingArticle(saved); }} onClose={() => closeHistoryEditor(true)} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; setHistoryDirtyArticleId(dirty ? historyEditingArticle?.id || null : null); }} />}</div></div>}
+      {tab === 'history' && <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3"><ArticleStageTabs value={articleStageFilter} onChange={setArticleStageFilter} counts={management.lifecycleCounts} /><div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row"><div className="min-h-0 min-w-0 flex-1"><GeneratedArticlesView clientId={clientId} management={management} query={managementQuery} commands={content.commands} commandStates={content.snapshot.commands} removal={content.snapshot.removal} watchRemovalTransaction={content.watchRemovalTransaction} stageFilter={articleStageFilter} dirtyArticleId={historyDirtyArticleId} selectedAttentionId={attentionIntent?.attentionId} onArticleSelect={openHistoryEditor} onStageFilterChange={setArticleStageFilter} onOpenOrders={onOpenOrders} /></div>{historyEditingArticle && <GeneratedArticleEditorPanel article={historyEditingArticle} published={historyEditingPublished} editable={historyEditingEditable} editFingerprint={historyEditingFingerprint} onEditFingerprintChange={setHistoryEditingFingerprint} onConflict={async () => { const result = await content.commands.getArticleEditor({ clientId, articleId: historyEditingArticle.id }); return isArticleEditorSnapshot(result) ? result : null; }} saving={content.snapshot.commands.saveArticle.busy} onSaveArticle={(draft, expectedFingerprint) => content.commands.saveArticle({ article: { ...draft, status: 'saved', updatedAt: new Date().toISOString() }, expectedFingerprint })} onSaved={(saved) => { setHistoryEditingArticle(saved); }} onClose={() => closeHistoryEditor(true)} onDirtyChange={(dirty) => { historyDirtyRef.current = dirty; setHistoryDirtyArticleId(dirty ? historyEditingArticle?.id || null : null); }} />}</div></div>}
     </div>
   </div>;
 }

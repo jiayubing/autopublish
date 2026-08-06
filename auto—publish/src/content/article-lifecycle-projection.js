@@ -22,6 +22,7 @@ const {
   targetKeyOf,
   text,
 } = require("./article-lifecycle-facts");
+const { canonicalArticleRefKey } = require("./article-ref");
 
 const ARTICLE_LIFECYCLE_PROJECTION_VERSION = 1;
 const ARTICLE_LIFECYCLE_STAGES = Object.freeze([
@@ -55,7 +56,47 @@ const REASON_MESSAGES = Object.freeze({
   PUBLICATION_STATUS_UNKNOWN: "投稿事实状态未知，需要人工核对。",
   SUBMISSION_STATUS_UNKNOWN: "投稿队列事实状态未知，需要人工核对。",
   MULTIPLE_ACTIVE_TARGETS: "文章存在多个活动投稿目标，需要人工核对。",
+  ARTICLE_PUBLISHED_IMMUTABLE: "文章已有发布成功事实，已永久只读。",
+  ARTICLE_OPERATION_FROZEN: "文章当前存在未结束的投稿事实，暂不能修改。",
+  ARTICLE_IN_TRASH: "回收站文章不能直接执行当前操作。",
+  ARTICLE_RETARGET_NO_TARGET: "文章没有可结束后改投的目标。",
 });
+const TRASH_MUTATION_UNKNOWN_REASON_CODES = new Set([
+  "ORDER_STATUS_UNKNOWN",
+  "PUBLICATION_STATUS_UNKNOWN",
+  "SUBMISSION_STATUS_UNKNOWN",
+  "MEDIA_ORDER_MISSING",
+]);
+
+function articleRefKey(value) {
+  const clientId = text(value && value.clientId);
+  const articleId = articleIdOf(value);
+  if (!clientId || !articleId) return null;
+  try {
+    return canonicalArticleRefKey({ clientId, articleId });
+  } catch (_) {
+    return clientId + "\u0000" + articleId;
+  }
+}
+
+function removalTransactionMatchesArticle(transaction, article) {
+  const articleId = articleIdOf(article);
+  if (!articleId) return false;
+  const targetKey = articleRefKey(article);
+  const references = [transaction]
+    .concat(array(transaction && transaction.selections))
+    .concat(array(transaction && transaction.articles));
+  return references.some((reference) => {
+    if (articleIdOf(reference) !== articleId) return false;
+    const referenceKey = articleRefKey(reference);
+    if (targetKey && referenceKey) return targetKey === referenceKey;
+    return !text(reference && reference.clientId) || !text(article && article.clientId);
+  });
+}
+
+function removalTransactionsForArticle(transactions, article) {
+  return array(transactions).filter((transaction) => removalTransactionMatchesArticle(transaction, article));
+}
 
 function deriveArticleLifecycle(input) {
   const value = input || {};
@@ -65,7 +106,7 @@ function deriveArticleLifecycle(input) {
   const submissionItems = array(value.submissionItems).filter((item) => articleIdOf(item) === articleId);
   const orders = array(value.orders).filter((order) => articleIdOf(order) === articleId);
   const attentionItems = array(value.attentionItems).filter((item) => !item.articleId || item.articleId === articleId || item.archiveErrorCode);
-  const removalTransactions = array(value.removalTransactions).filter((transaction) => !transaction.articleId || transaction.articleId === articleId);
+  const removalTransactions = removalTransactionsForArticle(value.removalTransactions, article);
   const targetFacts = targetFactsFor(publications, submissionItems, orders);
   const publicationStatuses = publications.map(publicationLifecycleStatus);
   const submissionStatuses = submissionItems.map(submissionLifecycleStatus);
@@ -150,13 +191,70 @@ function deriveArticleLifecycle(input) {
     allowedBulkActions = ["restore"];
     locks = { canEdit: false, canQueue: false, canCancel: false, canTrash: false };
   }
+  const targetKeys = Object.keys(targetFacts).sort();
+  const safeMetadata = Object.freeze({
+    articleId,
+    stage,
+    targetKeys: Object.freeze(targetKeys),
+    hasPublished,
+    hasActiveTarget: hasActivePublication || hasActiveSubmission || hasPaidOrder,
+    hasUncertain,
+    isTrash,
+  });
+  const operationReasons = function (action, allowed) {
+    if (allowed) {
+      if (action === "queue" && !isCompleteArticle(article)) return ["ARTICLE_CONTENT_INCOMPLETE"];
+      return [];
+    }
+    if (hasPublished) return ["ARTICLE_PUBLISHED_IMMUTABLE"];
+    if (isTrash) return ["ARTICLE_IN_TRASH"];
+    if (action === "retarget" && !targetKeys.length) return ["ARTICLE_RETARGET_NO_TARGET"];
+    if (reasonCodes.length) return [...new Set(reasonCodes)];
+    return ["ARTICLE_OPERATION_FROZEN"];
+  };
+  const retargetAllowed = Boolean(
+    !hasPublished &&
+    !isTrash &&
+    !frozenAttention &&
+    isCompleteArticle(article) &&
+    targetKeys.length,
+  );
+  const operations = Object.freeze({
+    edit: Object.freeze({
+      allowed: locks.canEdit === true,
+      reasonCodes: Object.freeze(operationReasons("edit", locks.canEdit === true)),
+      safeMetadata,
+    }),
+    queue: Object.freeze({
+      allowed: locks.canQueue === true,
+      reasonCodes: Object.freeze(operationReasons("queue", locks.canQueue === true && isCompleteArticle(article))),
+      safeMetadata,
+    }),
+    retarget: Object.freeze({
+      allowed: retargetAllowed,
+      reasonCodes: Object.freeze(operationReasons("retarget", retargetAllowed)),
+      safeMetadata,
+    }),
+    trash: Object.freeze({
+      allowed: locks.canTrash === true,
+      reasonCodes: Object.freeze(operationReasons("trash", locks.canTrash === true)),
+      safeMetadata,
+    }),
+  });
+  locks = Object.freeze({
+    canEdit: operations.edit.allowed,
+    canQueue: operations.queue.allowed,
+    canCancel: locks.canCancel === true,
+    canTrash: operations.trash.allowed,
+  });
   return Object.freeze({
     version: ARTICLE_LIFECYCLE_PROJECTION_VERSION,
     stage,
     label: STAGE_LABELS[stage],
     primaryAction,
     allowedBulkActions: Object.freeze(allowedBulkActions),
-    locks: Object.freeze(locks),
+    locks,
+    operations,
     reasonCodes: Object.freeze([...new Set(reasonCodes)]),
     reasonMessage: REASON_MESSAGES[reasonCodes[0]] || null,
     publicationSummary: Object.freeze(publicationSummary(publications, orders, submissionItems)),
@@ -194,7 +292,9 @@ function projectArticleLifecycle(input) {
       const id = articleIdOf(reference);
       if (!id) return;
       const clientId = text(reference && reference.clientId);
-      const referenceKey = clientId + "\0" + id;
+      const referenceKey = clientId
+        ? canonicalArticleRefKey({ clientId, articleId: id })
+        : "\0" + id;
       if (seenReferences.has(referenceKey)) return;
       seenReferences.add(referenceKey);
       const mapKey = referenceKey;
@@ -219,7 +319,9 @@ function projectArticleLifecycle(input) {
       orders: ordersByArticle.get(id),
       attentionItems: attentionByArticle.get(id),
       removalTransactions: [...new Set([
-        ...(transactionsByArticle.get(text(article && article.clientId) + "\0" + id) || []),
+        ...(text(article && article.clientId)
+          ? transactionsByArticle.get(canonicalArticleRefKey({ clientId: text(article && article.clientId), articleId: id })) || []
+          : []),
         ...(transactionsByArticle.get("\0" + id) || []),
       ])],
     });
@@ -236,6 +338,27 @@ function projectArticleLifecycle(input) {
   });
 }
 
+function trashedArticleMutationBlockReason(workflow, removalTransactions) {
+  const metadata = workflow && workflow.operations && workflow.operations.edit && workflow.operations.edit.safeMetadata || {};
+  const unknownReason = array(workflow && workflow.reasonCodes).find(function (code) {
+    return TRASH_MUTATION_UNKNOWN_REASON_CODES.has(code);
+  });
+  const openRemoval = array(removalTransactions).some(function (transaction) {
+    return !["committed", "superseded"].includes(transaction.status) && transaction.phase !== "committed";
+  });
+  return metadata.hasPublished
+    ? "ARTICLE_PUBLISHED_IMMUTABLE"
+    : metadata.hasActiveTarget
+      ? "ARTICLE_OPERATION_FROZEN"
+      : metadata.hasUncertain
+        ? "PUBLICATION_UNCERTAIN"
+        : unknownReason
+          ? unknownReason
+          : openRemoval
+            ? "ARTICLE_OPERATION_FROZEN"
+            : null;
+}
+
 module.exports = {
   ARTICLE_LIFECYCLE_PROJECTION_VERSION,
   ARTICLE_LIFECYCLE_STAGES,
@@ -243,5 +366,8 @@ module.exports = {
   STAGE_LABELS,
   deriveArticleLifecycle,
   projectArticleLifecycle,
+  removalTransactionMatchesArticle,
+  removalTransactionsForArticle,
+  trashedArticleMutationBlockReason,
   targetKeyOf,
 };

@@ -18,16 +18,18 @@ function createPublicationWorkflowComposition(options) {
     throw new Error(
       "Publication workflow composition dependencies are required",
     );
-  const operationalStore = createOperationalStore({
+  const operationalStore = value.operationalStore || createOperationalStore({
     workspaceRoot: value.workspaceRoot,
     clock: value.clock,
   });
+  const ownsOperationalStore = !value.operationalStore;
   const postProcessor =
     typeof value.createPostProcessor === "function"
       ? value.createPostProcessor(operationalStore)
       : value.postProcessor;
   const publicationWorkflow = createPublicationWorkflow({
     operationalStore,
+    articleMutationCoordinator: value.articleMutationCoordinator,
     publisher: value.publisher,
     postProcessor,
     clock: value.clock || (() => new Date()),
@@ -62,7 +64,7 @@ function createPublicationWorkflowComposition(options) {
     dispose: async function () {
       if (disposed) return;
       disposed = true;
-      operationalStore.close();
+      if (ownsOperationalStore) operationalStore.close();
     },
   });
 }

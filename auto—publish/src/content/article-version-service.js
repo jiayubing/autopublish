@@ -137,14 +137,17 @@ function createArticleVersionService(options) {
   function copyArticleVersion(input) {
     const normalized = normalizeInput(input);
     const source = readSource(normalized);
-    if (typeof contentStore.saveArticle !== "function") {
+    if (typeof contentStore.createArticle !== "function" && typeof contentStore.saveArticle !== "function") {
       throw versionError("ARTICLE_VERSION_SERVICE_INVALID", "Content store cannot save articles");
     }
     const articleId = createUniqueId(normalized.clientId, normalized.sourceArticleId);
     const timestamp = resolveTimestamp(now);
     const version = sourceVersion(source) + 1;
     const copied = copyContentFields(source, normalized.clientId, articleId, sourceLineageId(source), version, timestamp);
-    const saved = contentStore.saveArticle(copied);
+    const save = typeof contentStore.createArticle === "function"
+      ? contentStore.createArticle
+      : contentStore.saveArticle;
+    const saved = save.call(contentStore, copied);
     return saved === undefined ? copied : saved;
   }
 

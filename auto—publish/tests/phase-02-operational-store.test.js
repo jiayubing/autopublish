@@ -100,6 +100,23 @@ test("single write owner, duplicate target and sensitive payload fail closed", (
     }).status,
     "queued",
   );
+  assert.equal(
+    store.reservePublicationTarget({
+      ...input(),
+      articleId: "article-3",
+      publicationId: "publication-4",
+      attemptId: "attempt-4",
+      postProcessingPayload: {
+        publicationSnapshot: {
+          articleId: "article-3",
+          title: "Authorization guide",
+          body: "article body with the word cookie",
+          fingerprint: "a".repeat(64),
+        },
+      },
+    }).status,
+    "queued",
+  );
   assert.throws(
     () =>
       store.reservePublicationTarget({

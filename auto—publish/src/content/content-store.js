@@ -49,7 +49,7 @@ function createContentStore(options) {
 
   function findByGenerationTaskId(id) { return createIdentityIndex().findByGenerationTaskId(id); }
   function findByArticleId(id) { return createIdentityIndex().findByArticleId(id); }
-  const delegated = ["getArticle", "saveArticle", "listArticles", "moveArticleToTrash", "restoreTrashedArticle", "listTrashedArticles", "getTrashedTombstone", "permanentlyDeleteTrashedArticle", "isArticleTrashed", "isArticleRemoved"];
+  const delegated = ["getArticle", "saveArticle", "createArticle", "listArticles", "moveArticleToTrash", "restoreTrashedArticle", "listTrashedArticles", "getTrashedTombstone", "permanentlyDeleteTrashedArticle", "isArticleTrashed", "isArticleRemoved"];
   const api = { snapshotArticle, fingerprintArticle, resolveIdentities, findByGenerationTaskId, findByArticleId, createGenerationTaskIndex: createIdentityIndex, supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true };
   delegated.forEach(function(name) {
     if (typeof articleStore[name] === "function") api[name] = articleStore[name].bind(articleStore);
