@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 — 统一文章编辑、改投与回收权限；11 — 网站媒体服务商契约深模块
 
-**Status:** ready-for-agent
+**Status:** complete；已进入集成历史，不因后续 ticket 重新调度
 
 ## 启动约定
 

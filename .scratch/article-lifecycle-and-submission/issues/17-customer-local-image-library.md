@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** complete；已进入集成历史，图片扩展后置不授权重新调度本 ticket
 
 ## 启动约定
 

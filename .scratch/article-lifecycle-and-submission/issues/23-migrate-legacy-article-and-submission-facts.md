@@ -4,7 +4,9 @@
 
 **Blocked by:** 04 — 扩展 SQLite 生命周期与队列事实；05 — 移除审核与生成来源投稿门槛；09 — 普通平台结果分类与人工收口；14 — 网站媒体订单创建结果人工核对；16 — 服务商订单取消与永久历史；22 — 已发布档案与安全删除规则
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前不可调度
+
+**Scheduling gate:** 作为独立波次 9，等待波次 8 Ticket 22 完成并使波次 8 `COMPLETE` 后调度；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
 
 ## 启动约定
 
@@ -16,7 +18,7 @@
 
 1. 建立旧事实分类矩阵：审核字段、generated/saved、多个目标、queued/submitting/submitted/published/failed/uncertain、媒体订单号、回收墓碑和删除事务。
 2. 忽略审核字段对资格的影响；保留生成来源作为可选追溯信息。
-3. 任一可信普通平台成功证据或网站媒体已发布订单通过单一受控 `importLifecycleFacts` capability 建立全局发布档案并永久冻结；迁移器不得直接调用在线 outcome、publication-success 或 order transition。若旧证据没有实际投稿标题/正文，导入 `publicationEvidenceV1` 时将 `contentAvailable=false`、记录规范 `missingReasons=["LEGACY_SUBMISSION_CONTENT_UNAVAILABLE"]`，不得读取当前文章正文冒充历史投稿内容；缺少真实提交或首次发布时间时对应字段为 `null`，分别记录 `LEGACY_SUBMITTED_AT_UNAVAILABLE` / `LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE`，不得使用迁移执行时间伪造。
+3. 任一可信普通平台成功证据或网站媒体已发布订单通过单一受控 `importLifecycleFacts` capability 建立全局发布档案并永久冻结；迁移器不得直接调用在线 outcome、publication-success 或 order transition。导入必须复用 09 的唯一 `publicationEvidenceV1` validator。若旧证据没有实际投稿标题/正文，设置 `contentAvailable=false` 并加入 `LEGACY_SUBMISSION_CONTENT_UNAVAILABLE`，不得读取当前文章正文冒充历史投稿内容；缺少真实提交或首次发布时间时对应字段为 `null`，分别加入 `LEGACY_SUBMITTED_AT_UNAVAILABLE` / `LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE`，不得使用迁移执行时间伪造。无法证明历史图片摘要时 `imageSummaryV1=null` 并加入 `LEGACY_IMAGE_SUMMARY_UNAVAILABLE`，不得用 `text_only` 空清单冒充已知无图。
 4. 多个活动旧目标、缺乏可解释证据的普通平台 submitted、缺订单号媒体记录、身份/内容冲突和已发布回收记录进入需处理，不自动挑选赢家。
 5. 已明确失败/取消且无成功或不确定事实的文章恢复待投稿；明确退稿按新订单历史保留并恢复编辑。
 6. workspace/schema gate 检测到需要迁移时创建持久 `MigrationJournalV1` 并进入独立 migration composition root。journal 通过同一 operational SQLite 的 migration metadata/bootstrap owner 保存，gate 可在正常 schema/composition 前读取；不得写入应用配置、内容 JSON 或独立易漂移文件。phase 固定为 `detected → backed_up → confirmed → import_committed → verified`，绑定 migrationRunId、稳定 workspace identity/source fingerprint、plan fingerprint、backup identity、confirmation fingerprint、import commit fingerprint 和 verification fingerprint。import 事实、schema/version 更新与 phase=`import_committed` 必须在同一 SQLite 事务提交；post-import verification 成功后另行持久化 `verified`。正常 composition 只认可与当前 workspace identity/source/version 完全匹配的 durable verified journal，不能用“schema 已是当前版本”替代。

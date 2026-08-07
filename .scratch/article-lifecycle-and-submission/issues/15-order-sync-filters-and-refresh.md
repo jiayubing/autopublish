@@ -4,7 +4,9 @@
 
 **Blocked by:** 09 — 普通平台结果分类与唯一发布成功 writer；11 — 网站媒体服务商契约深模块；13 — 网站媒体严格串行付费批次
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前不可调度
+
+**Scheduling gate:** 等待同波次 Ticket 14 完成审计、提交、合并和定向复验，并确认业务依赖 Ticket 09、11、13 均已进入集成历史后调度。
 
 ## 启动约定
 

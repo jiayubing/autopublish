@@ -4,7 +4,9 @@
 
 **Blocked by:** 07 — 普通平台单目标入队与待执行移除
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前可调度（波次 5 最左执行组，仍须通过波次/Git/线程预检）
+
+**Scheduling gate:** 仅当波次 5 为 `READY` 且基线包含已验收 Ticket 07 时可创建；完成审计、提交、合并和定向复验前不得调度同波次 Ticket 13。
 
 ## 启动约定
 
@@ -17,16 +19,27 @@
 2. 建立组编排器：一个组同一时间最多一个在途项，不同组使用独立执行通道并可并行。每次领取必须通过单个 transition-specific 事务原子复核组运行/暂停意图与 FIFO 头项，生成稳定 `regularPublicationAttemptId`，并一起保存组当前项、claim/lease 和 phase=`prepared` 的 in-flight intent；事务成功后才向平台执行器返回确定任务。未收口 intent 不得重新生成 attempt identity。
 3. 支持向运行组追加文章到队尾，继承组的平台、账号和已有组配置，绝不插队。
 4. 实现开始全部：只启动未开始且未被手工暂停的普通平台组；实现暂停全部：当前请求安全返回后停止领取下一项。
-5. 平台阶段一返回仅进程内 `PreparedSubmission` capability：它公开不可变、安全的 `preparedSubmissionEvidenceV1` 和唯一具名方法 `submitPreparedPublication()`，平台会话、DOM、上传 token 与其他私有状态隐藏在 adapter 内部闭包中。evidence 至少绑定 attempt、实际投稿标题/正文、content fingerprint、deliveryMode、图片安全 fingerprint/布局和最终降级决定；纯文本路径使用空图片清单。submit 必须提交与 evidence 相同的已准备内容，不得在 evidence 冻结后改标题、正文、图片布局或降级模式；若内部状态漂移，submission-start 后只能返回 uncertain。capability 不可枚举平台状态、不可序列化、不可记录、不可进入 IPC/持久化，也不得退化为任意 callback/metadata 容器。
+5. 平台阶段一返回仅进程内 `PreparedSubmission` capability：它公开不可变、安全的 `preparedSubmissionEvidenceV1` 和唯一具名方法 `submitPreparedPublication()`，平台会话、DOM、上传 token 与其他私有状态隐藏在 adapter 内部闭包中。Ticket 08 必须实现下述唯一 V1 owner/validator；纯文本阶段不得只保存“至少包含”字段或开放 metadata。submit 必须提交与 evidence 相同的已准备内容，不得在 evidence 冻结后改标题、正文、图片布局或降级模式；若内部状态漂移，submission-start 后只能返回 uncertain。capability 不可枚举平台状态、不可序列化、不可记录、不可进入 IPC/持久化，也不得退化为任意 callback/metadata 容器。
 6. executor 取得 `PreparedSubmission` 后，在调用其提交方法的紧前一刻调用 `beginRegularRemoteSubmission(attemptId, preparedSubmissionEvidenceV1)`；该事务原子校验 attempt/正文 fingerprint 与 phase，冻结完整 evidence，将 intent 从 `prepared` 推进为 `remote_call_started` 并只写一次 `remoteCallStartedAt`。事务成功后才调用 `submitPreparedPublication()`。该标记表示“从此不得安全自动重放”，不声称供应商一定收到请求；标记前可在用户重新开始后重做准备，标记后 evidence 已持久保存且缺少终态 observation 一律交给 09 uncertain。
 7. 应用启动时所有普通平台组保持暂停，必须由用户明确开始；崩溃恢复只恢复本地事实，不自动调用远端。`prepared` intent 不得仅因 lease 过期自动运行，`remote_call_started` intent 不得重新变成 pending 或再次调用平台。
 8. 一个组完成、暂停或失败不得取消、停止或改写其他组。
 9. 增加并发、FIFO、追加、暂停竞态、证据冻结、远端边界前后、重启和多组隔离测试。
 
+### `preparedSubmissionEvidenceV1` 封闭 schema
+
+V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentityV1, title, body, contentFingerprint, deliveryMode, images, decisionKind }`，不得出现其他字段：
+
+- `version` 固定为整数 `1`；`attemptId` 为 1–128 字符稳定身份；`articleIdentityV1` 与 `targetIdentityV1` 必须通过各自 owner 的 V1 封闭 validator。
+- `title` 为 1–256 个 JavaScript UTF-16 code units；`body` 为 1–200,000 个 JavaScript UTF-16 code units，与 07 已验收的 `publicationSnapshot` 持久化上界和控制字符规则一致；二者都是 adapter 最终准备并将实际提交的内容，不得回退 admission 原文。`contentFingerprint` 为 64 位小写十六进制 SHA-256，精确覆盖稳定 UTF-8 规范序列化后的 `{ title, body }` 对象，不得使用无边界字符串拼接或包含文章其他可变 metadata。
+- `deliveryMode` 只允许 `text_only|with_images`。核心纯文本阶段固定为 `text_only`；`images` 必须是空数组；`decisionKind` 固定为 `initial`。
+- `images` 最多 5 项，条目字段精确为 `{ assetFingerprint, layoutSlot }`；`assetFingerprint` 为 64 位小写十六进制 SHA-256，`layoutSlot` 为 `0..9999` 的整数，条目按最终正文顺序排列且 fingerprint 不重复。此结构现在即固定，Ticket 18 只能填充值，不能添加字段或另建 V1。
+- `decisionKind` 的完整 V1 enum 现在固定为 `initial|retry_preparation|replace_image|continue_text_only`；后 3 项只供 Ticket 18 后置图片扩展使用。`continue_text_only` 必须搭配 `deliveryMode=text_only` 和空 `images`。
+- validator 必须递归拒绝顶层和嵌套 extra fields、未知 enum、超界字符串/数组/slot、重复图片、不一致 mode/decision 组合，以及绝对路径、二进制、DOM、Cookie、token、原始请求/响应、任意 metadata 或其他敏感字段。持久化、日志和 IPC 只能接触通过该 validator 的 safe evidence；`PreparedSubmission` capability 本身永不进入 validator 或持久化。
+
 ## 职责边界
 
 - 组编排器只负责领取顺序、并发隔离和暂停意图，不解释远端结果类别。
-- 平台 executor 只协调 `preparePlatformSubmission → freeze evidence + beginRegularRemoteSubmission → PreparedSubmission.submitPreparedPublication`，只能读取安全 evidence 并调用具名方法，不能取得 adapter 私有 token/会话；Ticket 08 先为纯文本建立稳定 seam，Ticket 18–21 只扩展 evidence 的图片字段和阶段一交付，不改变 submission-start 所有权。平台 adapter 不获得 OperationalStore capability。
+- 平台 executor 只协调 `preparePlatformSubmission → freeze evidence + beginRegularRemoteSubmission → PreparedSubmission.submitPreparedPublication`，只能读取安全 evidence 并调用具名方法，不能取得 adapter 私有 token/会话；Ticket 08 先为纯文本建立完整稳定 seam，Ticket 18–21 在核心完成后只能填充已声明图片字段、选择已声明 enum 并扩展阶段一交付，不改变 schema、submission-start 所有权或结果合同。平台 adapter 不获得 OperationalStore capability。
 - 状态存储只保存组和任务事实，不启动 worker。
 - 全局控制器只向符合条件的组发命令，不拥有组状态机。
 - OperationalStore 的 `regularQueueGroupTransitions` 最小 capability 封装组快照读取、开始/暂停意图、“复核 FIFO 头项 + claim/lease + 组当前项 + 唯一 prepared intent”的领取事务，以及冻结 evidence 的幂等 `beginRegularRemoteSubmission`；它是普通平台 intent、实际提交 evidence 与 submission-start phase 的唯一 writer。组编排器不得用多个公开写操作拼接领取/证据/边界，也不得通过该 capability 写入 09 outcome/resolution。
@@ -51,6 +64,7 @@
 - [ ] 在 claim 后、submission-start 前、远端返回前和 observation 落库前分别注入崩溃：prepared 项不会被当作已投稿，可在用户重新开始并复核后重做准备；remote_call_started 项绝不再次调用平台，缺少明确结果时由 09 接管。
 - [ ] 在 `beginRegularRemoteSubmission` 提交前后分别注入崩溃：标记前没有远端调用且只能在用户重新开始、复核后重做准备；标记后即使 adapter 尚未来得及执行也保守进入 uncertain，绝不自动重放。`remoteCallStartedAt` 只写一次。
 - [ ] 纯文本默认路径生成图片清单为空、`deliveryMode=text_only` 的完整 `preparedSubmissionEvidenceV1`；begin 事务故障不保存半份 evidence也不调用提交，事务成功后的崩溃仍可从持久 evidence 完整人工收口。换图、带图和显式纯文本降级留给 Ticket 18 在不改变本 ticket submission-start owner 的前提下扩展并验收。
+- [ ] 唯一 V1 validator 按上述精确字段、enum 和上界递归拒绝 extra/sensitive fields；Ticket 18 合同测试只能填充已存在的 `images`、`deliveryMode`、`decisionKind`，不能修改 schema 或创建平行 validator。
 - [ ] `PreparedSubmission` 公开面只有安全 evidence 与具名 submit 方法；序列化、日志、IPC、跨平台传递、读取私有 session/token 和注入通用 callback/metadata 的架构测试均失败关闭。
 - [ ] evidence 冻结后注入编辑器/会话内容漂移，submit 不会静默改写或重建 manifest；边界后只返回 uncertain，档案证据与任何明确 accepted 的实际准备内容一致。
 - [ ] 在组运行状态、FIFO 头项、claim/lease、组当前项和 in-flight intent 的每个持久化故障点注入失败，证明领取事务要么完整提交并返回唯一任务，要么不改变任何事实；不会留下“组已领取或已有当前项但缺少 in-flight intent”或重复领取状态。

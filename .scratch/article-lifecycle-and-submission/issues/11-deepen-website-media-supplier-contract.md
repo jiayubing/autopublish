@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** complete；已进入集成历史，不因后续 ticket 重新调度
 
 ## 启动约定
 

@@ -1,6 +1,6 @@
 # 文章生命周期与投稿流程规格
 
-状态：业务规则已确认，可进入任务拆分；网站媒体图片传输保留一项待实测事实。
+状态：业务规则已确认，可进入任务拆分；当前核心里程碑以纯文本链路验收，普通平台图片扩展后置，网站媒体图片传输保留独立待实测事实。
 
 ## Problem Statement
 
@@ -17,6 +17,12 @@
 普通平台按照“平台 + 平台账号档案”形成独立队列组。不同组可以并行，同一组内严格按先进先出顺序执行。某个平台完成不会终止其他平台。普通平台只要明确接受投稿就算发布成功，不等待公开页面，不轮询后续审核结果。
 
 网站媒体是通过当前服务商 API 创建付费订单的独立渠道，不接入“第三方自媒体”。订单创建成功后，文章立即离开投稿队列并进入“付费处理中”；订单的详细状态、取消、申诉、退款和刷新统一在订单页处理。付费任务不会被普通平台的“开始全部”或“暂停全部”控制，任何实际下单都必须经过单独的费用确认。
+
+### 里程碑边界
+
+当前核心地基里程碑只完成并验收文章生命周期、纯文本普通平台投稿、网站媒体订单、迁移、删除与交付门禁。核心完成不代表图片生产链已经实现：普通平台图片准备与三个平台图片 adapter（Ticket 18–21）在核心验收后单独实施；核心阶段只固定封闭 evidence 扩展接缝，实际生产 evidence 必须使用 `deliveryMode=text_only`、空图片清单和初始决定。不可用的图片入口不得出现在生产 UI。
+
+网站媒体图片与 Ticket 18–21 无关，继续保持未实现、未承诺。只有用户明确授权真实低价媒体探索，并预先限定费用、格式、尺寸、数量、请求体、传输机制和停止条件后，才能收集事实；探索结果仅可为 `SUPPORTED`、`UNSUPPORTED` 或 `INCONCLUSIVE`。`SUPPORTED` 只允许另建实施 ticket，`UNSUPPORTED`/`INCONCLUSIVE` 均保持纯文本且不阻塞核心完成。真实验证前不得采用自建 OSS、外部图片托管或另一个系统的私有 UEditor 接口。
 
 ### 文章分类规则
 
@@ -175,7 +181,7 @@
 - 订单刷新、取消或申诉发生传输异常时保留原有远端事实，不猜测成功或失败。已知订单查询缺失进入状态异常并冻结，直到基于订单身份、最新 observation 与可核对证据完成人工收口；只允许恢复订单跟踪、确认已发布或确认明确非发布终态三类具名结果，证据不足继续冻结。
 - 待安排显示取消订单；已安排显示尝试取消并提示可能被拒绝；已发布、已退稿和售后中不提供取消。明确取消成功且订单转换 guard 确认不存在全局已发布事实后恢复文章编辑；若取消在途期间已发布，取消只追加证据，不恢复编辑，历史订单永久保留。
 - 已发布后的售后、退款、未收录、链接失效或结果不一致不撤销文章的全局已发布事实。用户需要再次铺设时必须创建全新文章。
-- 已发布档案使用版本化 `publicationEvidenceV1` 保存实际提交正文（或明确不可得标记）、标题、content fingerprint、图片安全 fingerprint/布局/降级摘要、客户安全快照、目标、`submittedAt/submittedAtSource`、`firstPublishedAt/firstPublishedAtSource`、发布结果、订单号和安全远端链接。普通平台内容只来自 submission-start 同事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文或重建已丢失的浏览器会话；网站媒体内容来自订单创建不可变快照。首次发布时间优先可信远端事件，其次首次正面 observation，人工确认使用明确标记的 `manual_positive_evidence_time`。历史缺失使用 `null + legacy_unavailable + missing reason`，不得伪造。界面称其为投稿内容，不抓取网页覆盖。
+- 已发布档案使用版本化 `publicationEvidenceV1` 保存实际提交正文（或明确不可得标记）、标题、content fingerprint、图片安全 fingerprint/布局/降级摘要或历史不可得标记、客户安全快照、目标、`submittedAt/submittedAtSource`、`firstPublishedAt/firstPublishedAtSource`、发布结果、订单号和安全远端链接。09 是该封闭 schema 与 validator 的唯一 owner，15、22、23 必须复用而不得平行解释。普通平台内容只来自 submission-start 同事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文或重建已丢失的浏览器会话；网站媒体内容来自订单创建不可变快照。首次发布时间优先可信远端事件，其次首次正面 observation，人工确认使用明确标记的 `manual_positive_evidence_time`。历史缺失使用 `null + legacy_unavailable + missing reason`，不得伪造，也不得以空图片清单冒充未知历史图片事实。界面称其为投稿内容，不抓取网页覆盖。
 - 回收站只接收未发布且没有活动队列、订单或不确定结果的文章。永久删除正文后仍保留订单、标题、客户、目标、金额、时间和结果等最小审计信息。
 - 订单保存媒体名称、资源 ID、确认单价、预计费用、系统投稿标识和文章标题快照；资源列表变更不改写历史。服务商若返回实际金额则单独记录。
 - 旧数据迁移时忽略审核状态。workspace/schema gate 在正常 composition 前独占迁移，并以同一 operational SQLite migration metadata 中的持久 `MigrationJournalV1` 管理 `detected → backed_up → confirmed → import_committed → verified`；import 事实、schema/version 与 import_committed 同事务，正常 composition 只认可匹配当前稳定 workspace identity/source/version 的 verified journal。import 后验证前崩溃只重跑验证，不重复 import或因 schema 当前而放行。migration root 不构造任何远端能力。`ImportPlanV1` envelope、公共 entry 和六种 variant payload 全部版本化封闭、递归拒绝 extra fields/未知 enum；六种 variant 为 `publishedEvidence`、`trackablePaidOrder`、`pendingReadmission`、`nonPublishedTerminal`、`needsAttentionConflict`、`deletionRecoveryConflict`，均不得产生 runnable 事实或自动远端动作。
@@ -203,7 +209,7 @@
 - 迁移测试覆盖 journal 每个 phase、import commit 后立即崩溃、备份复用/失效、验证重跑、六种封闭 payload、extra fields、未知 enum、重复文章/订单身份、正文/时间缺失和回收冲突。schema 当前但 journal 未 verified 必须阻断；`importLifecycleFacts` 拒绝任何 runnable 事实，migration root 不构造远端能力，失败不写部分事实。
 - 性能测试重点验证分类投影和导航计数在大量文章、队列和订单下仍使用批量读取，不发生逐文章磁盘或数据库查询。手机号和网址风险检测只扫描本次确认内容。
 - 图片库测试覆盖客户隔离、随机数量、不重复、损坏文件、数量不足和自动布局；普通平台图片合同还覆盖 prepare/decision、safe manifest、进程内 capability、submission-start/submit 顺序，以及换图/纯文本降级后崩溃的人工 accepted。网站媒体图片传输合同测试必须等真实低价媒体验证出传输方式和限制后再编写。
-- 手工验收至少覆盖普通平台两组同时运行、网站媒体真实订单状态刷新和一次图片专项验证。真实付费验证必须由用户明确确认并记录订单号、媒体资源、最终链接、图片格式、尺寸、数量和结果。
+- 核心里程碑的手工验收至少覆盖普通平台纯文本两组同时运行和网站媒体真实订单状态刷新；真实付费验证必须由用户明确确认并记录订单号、媒体资源、最终链接和结果。图片专项验证移至核心完成后的独立图片扩展/探索阶段，不是核心完成门槛。
 - 优先复用现有文章管理快照、投稿资格、发布工作流、网站媒体传输、订单投影、Renderer 文章管理和队列控制测试模式；新增接缝只允许出现在集中分类器或供应商图片适配边界。
 
 ## Out of Scope
@@ -224,6 +230,6 @@
 - 服务商网站媒体接口文档确认存在媒体资源列表、投稿、订单详情、申诉、媒体分类和取消订单；当前范围不读取或实现第三方自媒体接口。
 - 网站媒体投稿 API 接收 HTML 正文但没有公开图片上传字段。另一个对接系统会先把本地图片上传到自己的 UEditor 路径，再把公开地址插入正文；这只能证明网站媒体业务支持图片，不能证明服务商 API 接受本地路径或内嵌图片。
 - 当前桌面端付费媒体的文章预览与实际提交都从 DOCX 提取纯文字并重新生成 HTML，DOCX 图片不会随现有流程发送。因此现有界面不能作为网站媒体图片能力测试工具。
-- 网站媒体图片待实测项不影响文章生命周期、队列、订单和分类的实施。图片模块必须保留独立供应商适配边界，验证完成后只补充传输策略和合同测试。
+- 网站媒体图片待实测项和后置的普通平台图片扩展都不影响核心文章生命周期、纯文本队列、订单、迁移、删除和分类的完成。核心模块必须保留封闭 evidence 接缝与独立供应商适配边界；真实验证后仍需另建实施 ticket，不能把探索证据直接当成功能完成。
 - 旧规则“待审核/已审核”“同一文章多个发布目标”“投稿队列副本”“通用已提交”“已发布文章可回收”均被本规格明确废止，不应作为兼容业务继续出现在界面或新模块接口中。
 - 本规格是后续任务拆分和各实施分支的共同基线。实施分支应从包含本规格和权威词汇表的提交创建，避免每个分支复制或改写业务规则。

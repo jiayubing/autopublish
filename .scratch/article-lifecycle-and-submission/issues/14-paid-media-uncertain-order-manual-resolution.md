@@ -4,7 +4,9 @@
 
 **Blocked by:** 13 — 网站媒体严格串行付费批次
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前不可调度
+
+**Scheduling gate:** 等待波次 5 `COMPLETE`，并等待波次 6 的 Ticket 09 完成审计、提交、合并和定向复验后，从新的集成 `HEAD` 调度；该顺序不建立 14←09 的业务依赖。
 
 ## 启动约定
 

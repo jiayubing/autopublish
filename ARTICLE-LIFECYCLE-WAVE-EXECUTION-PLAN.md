@@ -54,9 +54,9 @@
 | 波次 4 Ticket 12 审计与修复 | `COMPLETE` | 深度独立审计报告 1 P1、1 P2：paid-media IPC 未等待异步 service、强制故障与并发矩阵不足；修复线程补齐 async await/拒绝/副作用顺序、资源/价格/文章/系统标识漂移、内容校验、锁与事务失败、保存/确认和普通/付费 admission 竞态、重复确认竞态及安全错误合同，无遗留阻塞 finding |
 | 波次 4 Ticket 12 合并后定向复验 | `COMPLETE` | Ticket 07/12、IPC、Renderer、资源服务及共享 coordinator/OperationalStore 定向回归 86/86；production IPC matrix 34/34（114 capabilities）；Phase 8 gate 5/5；lint、main/bridge/renderer typecheck、Renderer/Preload build 通过 |
 | 波次 4 增量集成验收 | `COMPLETE` | 普通/付费活动目标双向竞态和零孤立事实矩阵通过；原全量测试 12 项回归由 `84b1c7b308484fe761a12e75b4e965f65f794165` 修复；原失败文件复验 68/68；`pack:production:smoke:dirty` 及 production package verifier 通过；lint、main/bridge/renderer typecheck、format、production IPC matrix 34/34、Phase 8 gate 5/5 通过 |
-| 波次 4 最终全量验收 | `COMPLETE` | 最终集成 `84b1c7b308484fe761a12e75b4e965f65f794165` 上完整 `npm test`：249 files，1751/1751，0 failed，wall clock 449085ms；证据 `auto—publish/build/evidence/root-test-timings.json` |
+| 波次 4 最终全量验收 | `COMPLETE` | 当前集成 `8c0282a3e65c378e544fd26f0546ed6c38e5062b` 上完整 `npm test`：249 files，1756/1756，0 failed，0 skipped，0 cancelled，wall clock 440098ms；证据 `auto—publish/build/evidence/root-test-timings.json` |
 | 当前执行波次 | `5` / `READY` | 波次 4 已完成全部 ticket 审计、修复、提交、合并、定向复验、增量矩阵和最终全量验收；波次 5 首执行组 Ticket 08 的依赖 Ticket 07 已进入集成历史 |
-| 下一执行基线 | 当前集成 `HEAD` | 实际创建 Ticket 08 时必须使用包含 `84b1c7b308484fe761a12e75b4e965f65f794165` 与本状态记录的最新 Git `HEAD` |
+| 下一执行基线 | `8c0282a3e65c378e544fd26f0546ed6c38e5062b` 或包含它的更新集成 `HEAD` | `8c0282a` 已通过当前完整 `npm test`；实际创建 Ticket 08 时仍须记录当时精确 Git `HEAD`，并确认 `8c0282a` 是其祖先。任何后续源码/测试修复都会使旧 HEAD 的全量证据失效，必须在新最终 HEAD 重跑并生成绑定 commit/sourceState 的证据 |
 
 状态词只使用：
 
@@ -80,10 +80,14 @@
 | 5 | 08 → 13 | 08←07；13←02、04、12 | `READY` |
 | 6 | 09 → 14 → 15 | 09←08；14←13；15←09、11、13 | `PENDING` |
 | 7 | 10 → 16 | 10←09；16←15 | `PENDING` |
-| 8 | 18 → 22 | 18←08、09、10、17；22←06、09、16 | `PENDING` |
-| 9 | 23 → 19 → 20 → 21 | 19/20/21←18；23←04、05、09、14、16、22 | `PENDING` |
-| 10 | 24 | 02、10、14、16、19、20、21、23 | `PENDING` |
+| 8 | 22 | 06、09、16 | `PENDING` |
+| 9 | 23 | 04、05、09、14、16、22 | `PENDING` |
+| 10 | 24 | 02、10、14、16、23 | `PENDING` |
 | 11 | 25 | 24 | `PENDING` |
+| 12（核心完成后的图片扩展） | 18 | 08、09、10、17，且波次 11 `COMPLETE` | `PENDING` |
+| 13（普通平台图片 adapter） | 19 → 20 → 21 | 19/20/21←18；同组按共享接线风险串行 | `PENDING` |
+
+这里的 ticket `Status: document-ready` 只表示任务文档已具备实施信息，不表示当前可调度。当前可调度性只由本表波次状态、最左未完成执行组、ticket 业务依赖、下述 scheduling gate 和 Git/线程预检共同决定；不得把串行 scheduling gate 改写成 `Blocked by` 业务依赖，也不得仅凭 ticket 文档已就绪提前创建线程。Ticket 18–21 在波次 11 核心地基完成前一律不得调度。
 
 ### 3.1 波次 3 的独立完成边界
 
@@ -102,8 +106,8 @@ Ticket 06 交接必须额外列出：edit fingerprint 合同、锁 owner 与锁�
 此前把同一依赖层误当成可安全并行层。后续 ticket 虽然在业务依赖图上可能互不依赖，但仍会修改相同 owner 或集成文件，因此按以下边界调度：
 
 1. 07 与 12 都扩展 06 的同一个 article mutation coordinator owner、同一个运行时协调实例和 OperationalStore admission 门面，必须串行并从新的集成基线启动。07 完成后 coordinator 已持有 `regularQueueTransitions`；12 在同一实例上增加独立的 `paidAdmissionTransitions`，不得以“付费服务不应看到普通能力”为由复制 coordinator 或锁 owner。能力隔离发生在 transition-specific 方法及其对外冻结 facade，而不是要求共享 coordinator 实例只能持有一种渠道能力。
-2. 08 与 13、09/14/15、10 与 16、18 与 22 分别会在运行事实门面、生命周期投影、IPC/bridge 或 Renderer 集成面发生可预见重叠；在 ticket 尚未给出不重叠文件证据前按串行处理。
-3. 19、20、21 的业务 owner 分别限定在三个平台 adapter，但其 adapter 注册、composition、共享合同与测试接线无法在创建线程前证明完全不重叠；当前协议又要求 ticket 勘察后直接实施，没有可可靠阻止其他已启动线程的整组暂停点。因此按 `19 → 20 → 21` 串行并逐个从新的集成基线启动。它们仍不得修改通用图片准备器、队列状态机或共享结果策略；若某个 ticket 的实施前勘察发现必须修改这些共享 owner，停止该 ticket 并报告重新切分范围，不创建后续 adapter ticket。
+2. 08 与 13、09/14/15、10 与 16 分别会在运行事实门面、生命周期投影、IPC/bridge 或 Renderer 集成面发生可预见重叠；在 ticket 尚未给出不重叠文件证据前按串行处理。22 已移动到独立波次 8；18 已后置到核心完成后的独立波次 12，二者不再构成同波串行组。
+3. 19、20、21 只在波次 12 完成后进入图片扩展波次 13。其业务 owner 分别限定在三个平台 adapter，但 adapter 注册、composition、共享合同与测试接线无法在创建线程前证明完全不重叠，因此按 `19 → 20 → 21` 串行并逐个从新的集成基线启动。它们仍不得修改通用图片准备器、队列状态机或共享结果策略；若某个 ticket 的实施前勘察发现必须修改这些共享 owner，停止该 ticket 并报告重新切分范围，不创建后续 adapter ticket。
 4. 串行并不表示后一 ticket 依赖前一 ticket 的业务语义；它只保证共享 owner/文件基线稳定，禁止为了制造依赖而让普通平台和网站媒体互相调用。
 
 权威 ticket 位于：
@@ -193,8 +197,8 @@ ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md 和
 .scratch/article-lifecycle-and-submission/issues/25-full-workflow-acceptance-performance-and-release-gates.md 全文。
 验证当前 HEAD 精确等于 <完整 base integration commit>，然后创建并切换到
 codex/article-lifecycle-25；若分支已存在、被占用或 HEAD 不一致，立即停止并报告。
-允许按 Ticket 25 合同实施缺陷修复、运行验收用例、完整 npm test、构建、类型/架构/安全门禁
-以及 pack:production:smoke:dirty，并记录全部证据；正式 pack:production:smoke 留待修复提交合并后的
+允许按 Ticket 25 核心地基合同实施缺陷修复、运行验收用例、完整 npm test、构建、类型/架构/安全门禁
+以及 pack:production:smoke:dirty，并用独立输出路径记录不覆盖 clean smoke 的 JSON 证据；正式 pack:production:smoke 留待修复提交合并后的
 干净集成工作树由用户控制运行。不得使用 $implement，不创建子代理，不 stage、不 commit，
 不 merge/rebase/push/PR，不访问真实账号、真实平台、真实服务商或生产数据，不执行发布、付费、
 签名或 release 上传。不得自行进行代码/架构审计或给出审计通过结论；只报告可复现证据、未通过项、
@@ -272,9 +276,9 @@ Ticket 01–24 的执行线程只运行：
 3. 与改动范围对应的 lint、typecheck、phase gate、迁移、IPC、Renderer、容量或打包合同测试。
 4. ticket 明确要求的故障、并发、幂等、恢复和安全场景。
 
-Ticket 01–24 的执行线程不运行完整 `npm test`。全量测试由用户在完成各 ticket 的独立审计、提交、合并和波次修复后，在该波次合并后的最终集成 `HEAD` 上单独控制运行；它是该波次标记 `COMPLETE` 和放行下一波的硬门禁。若全量测试失败，波次保持 `RUNNING` 或 `BLOCKED`，完成修复并合并后必须在新的集成 `HEAD` 重跑。不得因为不跑全量而省略专项测试，也不得用各 ticket 定向测试或增量矩阵替代该全量门禁。
+Ticket 01–24 的执行线程不运行完整 `npm test`。全量测试由用户在完成各 ticket 的独立审计、提交、合并和波次修复后，在该波次合并后的最终集成 `HEAD` 上单独控制运行；它是该波次标记 `COMPLETE` 和放行下一波的硬门禁。每份全量证据必须绑定精确 Git commit、`sourceState`（至少区分 clean/dirty 并记录变更摘要）、Node 版本、命令、开始/结束时间和结果；可使用现有 `auto—publish/scripts/create-root-test-evidence.js`，或产出含同等字段的证据。旧 commit 的成功证据不得沿用到含源码、测试、schema、脚本或门禁变更的新 `HEAD`。若全量测试失败，波次保持 `RUNNING` 或 `BLOCKED`，完成修复并合并后必须在新的集成 `HEAD` 重跑。不得因为不跑全量而省略专项测试，也不得用各 ticket 定向测试或增量矩阵替代该全量门禁。
 
-Ticket 25 是唯一例外：用户执行 Ticket 25 即授权其按 ticket 合同运行完整 `npm test`、Renderer/Preload build、类型/架构/安全门禁和 `pack:production:smoke:dirty` 诊断打包。它仍不得访问真实账号、创建真实订单、发布内容或运行签名/release 上传；高成本命令及生成物必须逐项记录和按仓库生成物规则处理。正式 `pack:production:smoke` 的 clean-build 证据必须在 Ticket 25 修复经用户审计、提交并合并后的干净集成工作树中单独运行，属于波次 11 标记 `COMPLETE` 的前置证据，而不是 dirty ticket 线程可伪造或跳过的结果。
+Ticket 25 是唯一例外：用户执行 Ticket 25 即授权其按 ticket 合同运行完整 `npm test`、Renderer/Preload build、类型/架构/安全门禁和 `pack:production:smoke:dirty` 诊断打包。dirty smoke 必须显式使用独立输出路径生成专用 JSON，不得覆盖 clean smoke 证据。它仍不得访问真实账号、创建真实订单、发布内容或运行签名/release 上传；高成本命令及生成物必须逐项记录和按仓库生成物规则处理。正式 `pack:production:smoke` 的 clean-build 证据必须在 Ticket 25 修复经用户审计、提交并合并后的干净集成工作树中单独运行，属于波次 11 标记 `COMPLETE` 的前置证据，而不是 dirty ticket 线程可伪造或跳过的结果。
 
 自动化测试只使用合成数据、临时目录、假 transport 和假运行时，不得登录真实账号、创建真实订单或发布文章。
 
@@ -353,10 +357,12 @@ Recommended audit scope:
 | 5 | 08 普通组编排与 13 付费批次共享运行事实时互不启动、暂停或恢复对方；两类 attempt 的 prepared/submission-start 边界、明确拒绝事务及重启恢复均失败关闭 | 07/12 的完整 admission 审计 |
 | 6 | 纯文本 08→09 的 prepared evidence、submission-start、adapter outcome/orphan、人工 resolution 完整交接；09/15 唯一 publication-success primitive；13/14 attempt guard 优先级；09/14/15 事实一致性和订单缺失收口 | 三个平台 DOM、图片扩展和订单页纯展示细节 |
 | 7 | 10 typed UI 动作与 16 取消命令接线；订单同步/取消并发、发布成功优先级和 cancellation-uncertain 两种收口 | 10 的全部视觉细节及 15 的全部筛选测试 |
-| 8 | 18 在 08 已固定的 preparedSubmissionEvidenceV1 图片清单/deliveryMode 字段上填充真实图片值和 decisionKind，接入进程内 PreparedSubmission capability、换图/降级及边界后人工 accepted；不得重定义 08 的 submission-start owner 或 09 的 outcome/evidence 消费合同。22 复验档案查询/保留、恢复/永久删除与文章锁竞态 | 17 图片库内部算法和 09 四类 outcome 状态机本身 |
-| 9 | 23 journal 在 import-commit/verify 间崩溃可恢复、migration root 无远端能力、六种封闭 payload 不生成 runnable 事实；19/20/21 的 adapter 私有 capability 与 safe manifest 分离并保持平台隔离。迁移结果只经投影/查询验证，未来投稿只能由用户重新 admission | 迁移触发远端、adapter 消费迁移事实、把 pre-submit decision 塞入 09 outcome、三个平台通用布局算法和完整迁移容量套件 |
+| 8 | 22 档案查询/保留、恢复/永久删除与文章锁竞态；纯文本 `publicationEvidenceV1` 的图片摘要保持 `text_only`、空清单且 UI 不暴露不可用图片入口 | 17 图片库内部算法、18–21 图片扩展和 09 四类 outcome 状态机本身 |
+| 9 | 23 journal 在 import-commit/verify 间崩溃可恢复、migration root 无远端能力、六种封闭 payload 不生成 runnable 事实；迁移结果只经投影/查询验证，未来投稿只能由用户重新 admission | 迁移触发远端、adapter 消费迁移事实、图片扩展和完整迁移容量套件 |
 | 10 | 离线迁移边界仍可识别旧输入，正常运行时 legacy absence、公开 IPC/bridge/UI 旧能力消失 | 重跑前序所有业务场景 |
-| 11 | 85 条追踪矩阵、完整门禁、性能查询预算、Ticket 25 独立审计结果、合并后 clean smoke，以及用户明确授权并执行的真实普通平台两组并行、网站媒体真实订单状态刷新和一次图片专项验证证据 | 另建一轮内容相同的全库审计；Ticket 25 线程不得自行执行真实外部操作 |
+| 11 | 85 条追踪矩阵（图片故事标为 `DEFERRED_IMAGE_EXTENSION`）、核心纯文本完整门禁、版本化性能查询预算、Ticket 25 独立审计结果、合并后 clean smoke，以及用户明确授权并执行的真实普通平台纯文本两组并行和网站媒体真实订单状态刷新；纯文本 evidence 必须为空图片清单且 UI 不暴露未实现图片入口 | 图片实现/专项验证、另建一轮内容相同的全库审计；Ticket 25 线程不得自行执行真实外部操作 |
+| 12 | 18 只在 08 已固定的 `preparedSubmissionEvidenceV1` 图片字段内填充真实值和既有 `decisionKind`，接入进程内 `PreparedSubmission` capability、换图/降级及边界后人工 accepted；不得重定义 08 submission-start 或 09 outcome/evidence 合同 | 17 图片库内部算法、19–21 平台 DOM 和网站媒体图片传输 |
+| 13 | 19/20/21 adapter 私有 capability 与 safe manifest 分离、平台隔离、提交边界前恢复动作与边界后 uncertain；逐个从新集成 HEAD 串行复验 | 三个平台通用布局算法、网站媒体图片传输和 09 状态机本身 |
 
 ## 7. 进度记录规则
 
@@ -376,7 +382,15 @@ Recommended audit scope:
 - 当前集成 HEAD；
 - 下一可执行波次。
 
-只有上述执行组证据已记录，后续串行组才能从新的集成 `HEAD` 调度。只有用户确认一个波次的全部 ticket 已按各自最低审计等级完成复核、提交、合并，完成增量波次集成验收，并在波次修复全部合并后的最终集成 `HEAD` 上通过完整 `npm test`，才能把该波次标记为 `COMPLETE` 并把下一波改为 `READY`。完整测试失败后不得沿用旧 `HEAD` 的通过结果；修复合并后必须重跑。波次 11 还必须同时包含：合并后干净集成工作树上的正式 `pack:production:smoke`；用户明确授权并实际执行的真实普通平台两组并行、网站媒体真实订单状态刷新和一次图片专项验证证据。Ticket 25 只生成安全清单，不授权真实登录、发布、付费或订单操作；任一真实证据缺失时波次 11 保持 `BLOCKED` 并记录 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得以模拟结果或清单替代，也不得把图片专项验证误报为已实现网站媒体本地图片传输。
+只有上述执行组证据已记录，后续串行组才能从新的集成 `HEAD` 调度。只有用户确认一个波次的全部 ticket 已按各自最低审计等级完成复核、提交、合并，完成增量波次集成验收，并在波次修复全部合并后的最终集成 `HEAD` 上通过完整 `npm test`，才能把该波次标记为 `COMPLETE` 并把下一波改为 `READY`。完整测试证据必须绑定精确 commit/sourceState；旧 `HEAD` 结果不得沿用，修复合并后必须重跑。波次 11 还必须同时包含：合并后干净集成工作树上的正式 `pack:production:smoke`；用户明确授权并实际执行的真实普通平台纯文本两组并行和网站媒体真实订单状态刷新。Ticket 25 只生成安全清单，不授权真实登录、发布、付费或订单操作；任一这两项真实证据缺失时波次 11 保持 `BLOCKED` 并记录 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得以模拟结果或清单替代。图片实现与图片专项验证不是波次 11 的完成门槛，按波次 12–13 及下述探索门另行推进。
+
+### 7.1 核心完成后的图片扩展与网站媒体探索门
+
+- 波次 11 `COMPLETE` 只表示文章生命周期、纯文本普通平台、网站媒体订单、迁移、删除与交付门禁的核心地基完成，不表示任何图片生产链已经实现。
+- 普通平台图片只可在核心完成后按 `18 → 19 → 20 → 21` 实施；08/09 在核心阶段只提供封闭扩展接缝，生产 evidence 使用 `deliveryMode=text_only`、空图片清单和 `decisionKind=initial`。
+- 网站媒体图片传输不属于 Ticket 18–21。只有用户对真实低价媒体实验给予明确授权后，才可执行独立探索；授权必须规定费用上限、媒体资源、图片格式/尺寸/数量、请求体观察、传输机制、正文成功判据、敏感证据处理和停止条件。
+- 探索只允许输出 `SUPPORTED`、`UNSUPPORTED` 或 `INCONCLUSIVE`。`SUPPORTED` 仅授权另建正式实施 ticket，不等于功能已实现；`UNSUPPORTED` 保持纯文本；`INCONCLUSIVE` 同样保持功能关闭且不阻塞核心完成。
+- 在真实验证前不得创建网站媒体图片实现承诺，不使用自建 OSS、外部图片托管或另一个系统的私有 UEditor 接口。
 
 ## 8. 调度完成时主线程的输出
 

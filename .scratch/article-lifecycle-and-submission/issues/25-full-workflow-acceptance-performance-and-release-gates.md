@@ -1,26 +1,29 @@
-# 25 — 全流程验收、性能与交付门禁
+# 25 — 核心地基验收、性能与交付门禁
 
-**What to build:** 执行新文章生命周期、普通平台、网站媒体、图片、迁移和删除流程的端到端验收用例，建立并运行可持续的性能、架构、类型和打包门禁，产出供独立审计使用的完整证据与人工验收交接。
+**What to build:** 执行新文章生命周期、纯文本普通平台、网站媒体订单、迁移和删除核心流程的端到端验收用例，建立并运行可持续的性能、架构、类型和打包门禁，产出供独立审计使用的完整证据与人工验收交接；明确记录图片扩展尚未实施，不以“全流程”暗示图片已完成。
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前不可调度
+
+**Scheduling gate:** 作为波次 11 唯一 ticket，等待波次 10 Ticket 24 完成并使波次 10 `COMPLETE` 后调度；Ticket 18–21 不属于前置依赖。
 
 ## 启动约定
 
 - 本 ticket 是最终验收执行与证据收集，不自行承担代码/架构审计；它必须从公开行为重新生成证据，不以各 ticket 自报完成代替运行结果。完成后由用户另派独立审计 subagent 审查 diff、证据真实性和遗漏项。
-- 自动化不得使用真实服务商、真实付费订单或真实平台账号；真实验证只生成用户可执行清单，不自行触发外部费用或发布。
+- 自动化不得使用真实服务商、真实付费订单或真实平台账号；真实验证只生成用户可执行清单，不自行触发外部费用或发布。核心验收只要求纯文本外部链，不含图片专项验证。
 
 ## 执行过程
 
-1. 建立规格 85 条 user stories 到行为测试/人工验收的追踪矩阵，明确自动、模拟和用户控制三类证据。
+1. 建立规格 85 条 user stories 到行为测试/人工验收的受 Git 管理追踪矩阵，明确自动、模拟和用户控制三类证据。图片相关 stories 6、29、78–85 必须逐条标记 `DEFERRED_IMAGE_EXTENSION`（若某条同时含已完成的纯文本语义，可拆分映射，但图片部分仍保持 deferred），不得标为通过、模拟通过或被遗漏。
 2. 验证六类入口互斥、导航计数和操作权限；覆盖成功高于售后/退稿、uncertain 永远冻结等组合。
 3. 用假平台运行至少两个普通平台组并行，验证同组 FIFO、追加、开始/暂停、重启暂停、错误范围和人工 uncertain 收口。
 4. 用假供应商验证付费确认、价格变化、串行扣费、订单号门槛、暂停、未知结果、订单刷新、取消和永久历史。
-5. 验证三个普通平台 0–5 图片路径、客户隔离、布局、失败降级和纯文本；网站媒体图片明确保持未支持状态。
+5. 验证核心纯文本路径生成并冻结 `deliveryMode=text_only`、空图片清单、`decisionKind=initial` 的 evidence，发布档案保持同样摘要；验证生产 UI 未暴露 0–5 配图、换图、降级或网站媒体图片等不可用入口。Ticket 17 图片库可保持已完成但不接入生产投稿；不执行或伪造 Ticket 18–21 的图片链。
 6. 对合成旧库执行 dry-run、迁移、重开、备份恢复和冲突需处理验证。
-7. 运行大批量文章/队列/订单投影基准，以固定合成数据规模下的查询/扫描次数证明无 N+1，并把该次数预算作为确定性硬门禁。wall-clock p50/p95 只在同机器、同 Node 基线和预热协议下与 checked-in baseline 比较；若执行前不存在经批准的稳定耗时预算，则记录分布和回归证据但不临时发明通过阈值。随后运行模块职责与规模观察、依赖方向、legacy absence、安全、typed IPC、完整 `npm test`、Renderer/Preload build 和 `pack:production:smoke:dirty`。该 dirty smoke 是 ticket worktree 的诊断证据，不替代合并后干净集成工作树上的正式 `pack:production:smoke`。
-8. 输出可复现的命令、原始结果摘要、失败项、修复 diff、剩余风险、建议独立审计范围和人工验收清单，包括真实普通平台两组并行、网站媒体真实订单状态刷新，以及一次经用户明确授权的图片专项验证；不输出自我审计通过结论。Ticket 线程只生成清单，不执行这些真实操作；缺少用户后续执行证据时必须明确报告 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得把清单冒充验收结果。图片专项验证用于记录真实能力与限制，不得据此把尚未实现的网站媒体本地图片传输标记为已支持。
+7. 运行大批量文章/队列/订单投影基准，以固定合成数据规模下的查询/扫描次数证明无 N+1，并把查询/扫描次数预算作为受 Git 管理的确定性硬门禁。wall-clock p50/p95 只在同机器、同 Node 基线和预热协议下与 checked-in baseline 比较；若执行前不存在经批准的稳定耗时预算，则记录分布和回归证据但不临时发明通过阈值。随后运行模块职责与规模观察、依赖方向、legacy absence、安全、typed IPC、完整 `npm test`、Renderer/Preload build 和 `pack:production:smoke:dirty`。该 dirty smoke 必须显式传入独立输出路径并生成专用 JSON，不能覆盖 clean smoke；它是 ticket worktree 的诊断证据，不替代合并后干净集成工作树上的正式 `pack:production:smoke`。
+8. 输出可复现的命令、原始结果摘要、失败项、修复 diff、剩余风险、建议独立审计范围和核心人工验收清单，包括真实普通平台纯文本两组并行和网站媒体真实订单状态刷新；不输出自我审计通过结论。Ticket 线程只生成清单，不执行这些真实操作；缺少用户后续执行证据时必须明确报告 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得把清单冒充验收结果。图片专项验证移至核心完成后的独立阶段。
+9. 明确证据归属：85 条追踪矩阵、查询/扫描次数预算及其 schema/门禁属于 tracked source；`build/evidence/` 下的测试、benchmark、dirty/clean smoke 运行结果属于 ignored generated evidence。每份 generated evidence 必须记录精确 commit、sourceState、Node 版本、命令、时间和结果；旧 HEAD 证据不得沿用。不得把账号、Cookie、token、敏感路径或供应商原始响应写入任何证据。
 
 ## 职责边界
 
@@ -30,6 +33,7 @@
 - 本 ticket 发现缺陷时记录并在对应所有者模块修复，不建立新的“验收补丁”巨型模块。
 - Ticket 线程只负责验收执行、缺陷修复与证据收集，不评价自身 diff 的代码/架构质量，也不自行确认其修复已通过用户审计；正式 clean-build 打包由用户在修复提交合并后运行。
 - 证据清单必须逐个记录：owner、职责边界、公开接口/最小 capability、直接调用方、依赖方向、隐藏不变量、公开合同测试、故障证据和显著规模变化理由；清单是供独立审计使用的事实，不是 Ticket 25 的自我审计结论。
+- tracked 追踪矩阵和查询预算定义“验收什么”；ignored generated evidence 记录“某个精确 sourceState 上实际运行了什么”。两者不得互相替代，dirty/clean smoke 使用不同文件名和 provenance。
 
 ## 架构硬门槛
 
@@ -40,23 +44,24 @@
 
 ## Acceptance criteria
 
-- [ ] 85 条 user stories 全部映射到自动化、模拟或明确的用户控制证据。
+- [ ] 85 条 user stories 全部进入 tracked 追踪矩阵；图片相关部分明确标记 `DEFERRED_IMAGE_EXTENSION`，其余条目映射到自动化、模拟或明确的用户控制证据，不把 deferred 伪称已通过。
 - [ ] 六类文章入口、普通平台并行链和网站媒体订单链端到端通过。
-- [ ] 图片、迁移、删除恢复、unknown/uncertain 和故障注入场景通过。
+- [ ] 迁移、删除恢复、unknown/uncertain 和故障注入场景通过；核心纯文本 evidence 的图片清单为空且 UI 无不可用图片入口。Ticket 18–21 图片实现不属于本验收通过项。
 - [ ] 批量投影在固定合成规模下满足版本化查询/扫描次数预算且没有 N+1；耗时满足执行前已存在的同环境预算，若无该预算则只作为观察数据并明确记录，不能阻塞或伪称性能门禁通过。
-- [ ] 模块职责证据清单与规模观察已生成并记录，依赖方向、legacy absence、安全、typed IPC、完整测试与构建通过，ticket worktree 的 `pack:production:smoke:dirty` 诊断通过；执行线程不据此给出自我审计结论。
+- [ ] 模块职责证据清单与规模观察已生成并记录，依赖方向、legacy absence、安全、typed IPC、完整测试与构建通过，ticket worktree 的 `pack:production:smoke:dirty` 诊断通过；dirty smoke 产出独立 JSON 且不覆盖 clean smoke，执行线程不据此给出自我审计结论。
 - [ ] 证据清单包含每个受影响生产模块的 owner、职责、公开接口/最小 capability、调用方、依赖方向、隐藏不变量和公开合同测试，不能只列模块名称或行数。
 - [ ] Ticket 25 修复经用户审计、提交并合并后，在干净集成工作树运行正式 `pack:production:smoke` 并记录证据；该项未完成前波次 11 不得标记 `COMPLETE`。
-- [ ] 真实外部验证清单明确说明费用/发布风险、前置配置、记录字段和停止条件；用户后续明确授权并实际完成普通平台两组并行、网站媒体真实订单状态刷新和一次图片专项验证后，分别记录账号/目标安全身份、订单号、媒体资源、最终链接、图片格式/尺寸/数量、结果和停止条件。任一证据未完成时波次 11 保持 `BLOCKED`，原因记录为 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`，不得标记 `COMPLETE`。
-- [ ] 最终交接包含追踪矩阵、测试计数、性能数据、模块职责与显著规模变化说明、残余风险和未实现的网站媒体图片事实。
+- [ ] 真实外部验证清单明确说明费用/发布风险、前置配置、记录字段和停止条件；用户后续明确授权并实际完成普通平台纯文本两组并行和网站媒体真实订单状态刷新后，分别记录账号/目标安全身份、订单号、媒体资源、最终链接、结果和停止条件。任一证据未完成时波次 11 保持 `BLOCKED`，原因记录为 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`；图片证据缺失不阻塞核心完成。
+- [ ] 最终交接包含 tracked 追踪矩阵/查询预算、绑定 commit/sourceState 的 generated evidence、测试计数、性能数据、模块职责与显著规模变化说明、残余风险和 `DEFERRED_IMAGE_EXTENSION` 清单。
 
 ## 审计建议
 
 - 等级：执行完成后必须另派深度独立审计；Ticket 25 的执行线程只产出验收证据，该审计与证据共同构成波次 11 的主要集成验收，不再追加第三轮内容重复的全量审计。
-- 范围：85 条 user stories 追踪矩阵、六类入口互斥、普通/付费/图片/迁移/删除全链路、性能查询预算、legacy absence、安全、typed IPC、完整 `npm test`、build、dirty smoke 以及合并后 clean `pack:production:smoke` 证据。
+- 范围：85 条 user stories 追踪矩阵及 deferred 标记、六类入口互斥、普通平台纯文本/付费/迁移/删除核心链、性能查询预算、证据 Git provenance、legacy absence、安全、typed IPC、完整 `npm test`、build、独立 dirty smoke JSON 以及合并后 clean `pack:production:smoke` 证据。
 - 审计 subagent 检查 Ticket 25 完整 diff、证据真实性、追踪矩阵遗漏和门禁覆盖，只报告 findings；缺陷修复后由用户复验并在干净集成工作树运行正式 smoke，Ticket 线程不得自行把波次标记为 `COMPLETE`。
 
 ## Non-goals
 
 - 不自行创建真实付费订单、登录真实平台或发布真实文章。
-- 不把网站媒体图片传输标记为已实现。
+- 不实现或验收 Ticket 18–21 普通平台图片链，不把任何图片 story 标记为核心已通过。
+- 不执行网站媒体图片探索，也不把网站媒体图片传输标记为已实现。

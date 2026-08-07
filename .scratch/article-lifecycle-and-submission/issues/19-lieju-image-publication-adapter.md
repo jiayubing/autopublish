@@ -4,7 +4,9 @@
 
 **Blocked by:** 18 — 普通平台队列组图片准备
 
-**Status:** ready-for-agent
+**Status:** deferred-until-core-complete；当前不可调度
+
+**Scheduling gate:** 等待波次 12 Ticket 18 完成审计、提交、合并、定向复验及波次验收后，作为波次 13 最左执行组调度。
 
 ## 启动约定
 

@@ -4,7 +4,9 @@
 
 **Blocked by:** 09 — 普通平台结果分类与人工收口
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前不可调度
+
+**Scheduling gate:** 等待 Ticket 09 完成审计、提交、合并和定向复验，并在波次 6 `COMPLETE` 后作为波次 7 最左执行组调度。
 
 ## 启动约定
 

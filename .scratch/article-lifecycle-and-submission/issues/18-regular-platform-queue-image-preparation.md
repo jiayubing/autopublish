@@ -4,13 +4,15 @@
 
 **Blocked by:** 08 — 普通平台独立队列组执行；09 — 普通平台结果分类与人工收口；10 — 精简普通平台投稿队列界面；17 — 客户本地图片库深模块
 
-**Status:** ready-for-agent
+**Status:** deferred-until-core-complete；当前不可调度
+
+**Scheduling gate:** 仅在波次 11 核心地基验收 `COMPLETE` 后，作为波次 12 唯一 ticket 调度；此前生产 UI 必须保持图片入口关闭。本门槛不改变 08、09、10、17 的业务依赖。
 
 ## 启动约定
 
 - 本 ticket 负责队列配置和平台无关准备，不承诺所有平台使用同一种上传方式。
 - 图片始终可选，文字是必需内容；请求 0 张或客户无图时必须继续纯文本投稿。
-- 先读取 08 的 `PreparedSubmission`/submission-start 合同和 09 的 `publicationEvidenceV1`/outcome 合同；本 ticket 只扩展图片 evidence 与提交前 decision，不重定义这两个 owner。
+- 先读取 08 的 `PreparedSubmission`/submission-start/唯一 `preparedSubmissionEvidenceV1` validator 和 09 的唯一 `publicationEvidenceV1` validator/outcome 合同；本 ticket 只填充 V1 已声明的图片字段与提交前 decision，不重定义 owner、字段、enum、上界或创建平行 validator。
 
 ## 执行过程
 
@@ -19,7 +21,7 @@
 3. 建立平台无关图片准备端口，输出正文段落结构、选中资产、能力要求和诊断，不执行上传，也不返回 Ticket 09 的投稿 outcome。
 4. 计算均匀插入位置：不在标题前、不连续堆叠；段落不足和图片不足时安全收敛。
 5. 固定两阶段封闭合同。阶段一 `preparePlatformSubmission(command, imagePlan)` 只可返回 `readyToSubmit(PreparedSubmission)`、`preSubmitImageDecisionRequired`、`article_rejected` 或 `group_blocked`；decision 只包含稳定安全原因和固定动作 `retry_preparation`、`replace_image`、`continue_text_only`，不得伪装成 09 outcome。用户选择动作后只能重做阶段一。
-6. 图片版 `preparedSubmissionEvidenceV1` 必须是安全平台无关 manifest：`attemptId`、实际标题/正文、content fingerprint、`deliveryMode=with_images|text_only`、按最终顺序排列的 `{assetFingerprint, layoutSlot}`、`decisionKind=initial|retry_preparation|replace_image|continue_text_only`。禁止绝对路径、二进制、上传 token、DOM、Cookie、供应商响应和开放 metadata。每次重做阶段一只产生候选 manifest，只有最终 chosen manifest 随 08 submission-start 原子冻结。
+6. 图片版 evidence 必须通过 08 的同一个 `preparedSubmissionEvidenceV1` validator：保留 V1 全部既有字段，只把 `deliveryMode` 设为 `with_images|text_only`、按最终顺序填充最多 5 个既有 `{assetFingerprint, layoutSlot}` 条目，并从既有 `decisionKind=initial|retry_preparation|replace_image|continue_text_only` 中选择。禁止增加字段、版本或 metadata；禁止绝对路径、二进制、上传 token、DOM、Cookie 和供应商响应。每次重做阶段一只产生候选 manifest，只有最终 chosen manifest 随 08 submission-start 原子冻结。
 7. `PreparedSubmission` 是仅进程内 capability，不是 DTO/handle：公开只读 manifest 与唯一具名 `submitPreparedPublication()`，adapter 私有会话隐藏在实现内部。executor 先把 manifest 交给 08 `beginRegularRemoteSubmission`，成功后只调用该具名方法；submit 必须使用与冻结 manifest 对应的已准备内容，禁止再换图/降级/改正文。若编辑器或会话漂移，阶段二只能 uncertain。阶段二只返回 09 四种 outcome，不得再返回 decision 或再次提交。
 8. 图片准备器只输出安全资产与布局，不持有 `PreparedSubmission`、不判断提交边界；19–21 各自创建 capability 并隐藏上传/会话状态，executor 不包含平台分支。
 9. 增加配置继承、随机时机、不重复、manifest、能力隔离、两阶段结果、失败动作和纯文本回归测试。
@@ -55,6 +57,7 @@
 - [ ] 换图、纯文本降级、带图和 outcome 前崩溃测试证明冻结 manifest 精确对应实际准备内容，09 人工 accepted 可在 capability 消失后生成完整档案。
 - [ ] manifest 冻结后注入编辑器图片数量、正文或会话漂移，阶段二不会重建/改写 evidence 或继续确定提交；只返回 uncertain。
 - [ ] executor 只能按“prepare → beginRegularRemoteSubmission → submit”顺序工作；在三个接缝注入故障，证明标记前可安全重做准备、标记后只进入 uncertain。
+- [ ] schema 兼容测试证明 08 的纯文本 evidence 在本 ticket 后无需迁移；18 只填充既有字段并复用 08/09 唯一 validator，任何新字段、未知 decision 或平行 V1 都失败关闭。
 
 ## 审计建议
 

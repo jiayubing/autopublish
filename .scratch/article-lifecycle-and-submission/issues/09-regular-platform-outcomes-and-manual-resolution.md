@@ -4,7 +4,9 @@
 
 **Blocked by:** 08 — 普通平台独立队列组执行
 
-**Status:** ready-for-agent
+**Status:** document-ready；当前不可调度
+
+**Scheduling gate:** 等待 Ticket 08 完成审计、提交、合并和定向复验，且波次 5 `COMPLETE`、波次 6 变为 `READY`；这是执行顺序，不新增业务依赖。
 
 ## 启动约定
 
@@ -14,7 +16,7 @@
 ## 执行过程
 
 1. 定义投稿执行的规范 outcome：accepted、article_rejected、group_blocked、uncertain；每类包含安全原因和必要远端证据。accepted/uncertain 只能来自 submission-start 后的最终提交阶段；提交前阶段可在明确内容拒绝或平台/认证阻塞时返回 article_rejected/group_blocked。Ticket 18 的 `preSubmitImageDecisionRequired` 不是第五种投稿 outcome，也不进入本结果策略。
-2. 固化版本化 `publicationEvidenceV1` 合同：文章稳定身份、客户安全快照、实际投稿标题/正文及 content fingerprint、目标 kind/id 与账号或媒体安全快照、规范结果码、`submittedAt`、`submittedAtSource`、`firstPublishedAt`、`firstPublishedAtSource`、图片安全 fingerprint/布局/降级摘要、可选订单号/安全远端链接和最小安全证据，以及 `contentAvailable/missingReasons`。普通平台实际内容必须只读取 08 在 submission-start 事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文、重建图片布局或读取已丢失的 adapter 会话；网站媒体读取 13 的不可变提交快照。时间来源矩阵保持封闭：普通平台 submittedAt=`08.remoteCallStartedAt`，网站媒体 submittedAt=`13.remoteCallStartedAt`；首次发布时间依次使用可信 provider event、positive observation 或明确标记的 manual positive evidence time。历史迁移不可得时使用 `null + legacy_unavailable + missing reason`。正常成功必须 `contentAvailable=true` 且携带完整内容/时间；禁止伪造或保存敏感平台状态。
+2. 固化下述唯一、版本化、递归封闭的 `publicationEvidenceV1` owner/validator。普通平台实际内容必须只读取 08 在 submission-start 事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文、重建图片布局或读取已丢失的 adapter 会话；网站媒体读取 13 的不可变提交快照。15、22、23 只能复用此 validator 和嵌套 DTO，不得复制字段、放宽 missing/time 规则或建立平行 schema。
 3. 在 OperationalStore 内建立唯一的 `applyFirstPublicationSuccess` 内部 primitive，集中拥有证据校验、首次成功 first-wins、幂等、不可变 `publicationEvidenceV1`、全局永久冻结和既有成功不可覆盖规则。它不作为调用方可自由调用的通用写接口，只能由 transition-specific 事务端口在同一 SQLite 事务内委托；09 的普通平台 accepted outcome 首先消费该 primitive。
 4. 在适配器边界映射平台特有响应，平台明确接受后通过 regular accepted outcome 事务按 `regularPublicationAttemptId` 原子读取冻结的 prepared evidence、写入 observation、调用唯一 publication-success primitive、保存证据、收口 intent、终结队列项和活动目标，不再生成通用 `submitted/reviewing` 新事实。
 5. 文章级明确失败通过对应 outcome 事务按 attempt identity 原子写入 observation、收口原 intent、终结队列项并结束当前活动目标；事务成功后才恢复编辑并继续同组下一篇。
@@ -23,6 +25,20 @@
 8. 提供 `prepareRegularUncertainResolution`：绑定 attempt identity、最新 observation fingerprint、证据 fingerprint、当前发布事实和目标/队列事实，返回短期确认令牌和且仅有的“确认已接受”“确认未接受”动作；证据不足继续冻结。
 9. `confirmRegularAccepted` resolution 复核令牌与全部绑定事实，只从冻结的 prepared evidence 加上第 2 步时间来源生成完整发布证据，调用同一 publication-success primitive、收口 intent并终结队列/目标；`confirmRegularNotAccepted` 原子保存人工证据、收口 intent、终结队列/目标，并仅在没有发布成功或其他阻塞事实时恢复待投稿。重复同向命令幂等，相反决定、stale token 或状态漂移稳定冲突；可信 accepted observation 永远优先，迟到但可绑定原 attempt 的可信 accepted 仍建立永久发布事实，绝不恢复编辑或再次投稿。
 10. 删除任何公开页面轮询、审核等待或可见性判定的新调用路径。
+
+### `publicationEvidenceV1` 封闭 schema
+
+V1 顶层字段精确为 `{ version, articleIdentityV1, customerSnapshotV1, contentAvailable, title, body, contentFingerprint, targetSnapshotV1, resultCode, submittedAt, submittedAtSource, firstPublishedAt, firstPublishedAtSource, imageSummaryV1, orderNumber, remoteUrl, missingReasons, safeEvidenceRefs }`，不得出现其他字段：
+
+- `version` 固定为整数 `1`；身份/客户/目标快照必须通过各 owner 的 V1 封闭 validator。客户与目标快照只保留展示和核对需要的安全字段，不得含凭据、Cookie、绝对路径或供应商原始对象。
+- `contentAvailable=true` 时，`title` 为 1–256 个 JavaScript UTF-16 code units、`body` 为 1–200,000 个 JavaScript UTF-16 code units，并复用 08/13 已冻结实际提交内容的控制字符规则；`contentFingerprint` 为该实际 `{ title, body }` 稳定 UTF-8 规范序列化结果的 64 位小写十六进制 SHA-256，且不得包含 `LEGACY_SUBMISSION_CONTENT_UNAVAILABLE`。`contentAvailable=false` 仅允许 Ticket 23 迁移历史，三项内容字段都为 `null`，且 `missingReasons` 必须包含 `LEGACY_SUBMISSION_CONTENT_UNAVAILABLE`。所有在线成功路径必须 `missingReasons=[]`；Ticket 23 可在内容可得时仅记录其他历史缺失项。
+- `resultCode` 只允许 `REGULAR_ACCEPTED|PAID_PUBLISHED`。`submittedAt`/`firstPublishedAt` 为 ISO-8601 UTC 字符串或历史迁移专用 `null`；在线成功两者都必须非空。
+- `submittedAtSource` 只允许 `regular_remote_call_started|paid_order_remote_call_started|legacy_unavailable`；普通平台时间精确取 08 `remoteCallStartedAt`，网站媒体精确取 13 `remoteCallStartedAt`。`firstPublishedAtSource` 只允许 `provider_event_time|first_positive_observation_time|manual_positive_evidence_time|legacy_unavailable`；优先可信 provider event，其次首次正面 observation，人工确认只可使用明确标记的 `manual_positive_evidence_time`。一个时间不得替代另一个，也不得以迁移/查询执行时间冒充未知时间。
+- `imageSummaryV1` 在线路径字段精确为 `{ deliveryMode, images, decisionKind }`，约束与 08 对应字段一致且最多 5 项；核心纯文本路径固定为 `text_only`、空 `images`、`initial`。仅 Ticket 23 导入无法证明历史图片摘要时允许该字段为 `null`，并必须包含 `LEGACY_IMAGE_SUMMARY_UNAVAILABLE`；15/22/23 不得重建图片布局或以空清单冒充未知历史事实。
+- `orderNumber` 为 `null` 或 1–128 字符；普通平台必须为 `null`，网站媒体必须非空。`remoteUrl` 为 `null` 或最多 2048 字符的 `https` URL。
+- `missingReasons` 最多 4 项且不重复，完整 enum 为 `LEGACY_SUBMISSION_CONTENT_UNAVAILABLE|LEGACY_SUBMITTED_AT_UNAVAILABLE|LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE|LEGACY_IMAGE_SUMMARY_UNAVAILABLE`；仅 Ticket 23 的历史导入可使用。对应时间为 `null` 时 source 必须为 `legacy_unavailable` 且含对应 reason，反之禁止出现该 reason；`imageSummaryV1=null` 与图片缺失 reason 也必须双向一致。
+- `safeEvidenceRefs` 为 1–16 项且 `(kind,fingerprint)` 不重复，条目字段精确为 `{ kind, fingerprint }`；`kind` 只允许 `PREPARED_SUBMISSION|REGULAR_ACCEPTED_OBSERVATION|MANUAL_POSITIVE_EVIDENCE|PAID_ORDER_SNAPSHOT|PAID_PUBLISHED_OBSERVATION|LEGACY_EVIDENCE`，`fingerprint` 为 64 位小写十六进制 SHA-256。禁止原始响应、任意 metadata、token、请求头、页面正文或不受控 URL。
+- owner validator 必须递归拒绝所有 extra fields、未知 enum、字段组合/来源/missing reason 不一致、超界值和敏感字段；成功 primitive、15 observation、22 archive query 和 23 import 必须调用同一 validator。
 
 ## 职责边界
 
@@ -54,7 +70,8 @@
 - [ ] 成功、明确失败、uncertain 和两种人工收口在任一写入故障下都不会留下发布事实、队列项和活动目标互相矛盾的部分状态。
 - [ ] 唯一 publication-success primitive 从公开 outcome/resolution 行为验证 first-wins、重复/并发幂等、不可变快照和永久冻结；Ticket 15 后续可在其订单 observation 事务内复用，不需要建立第二个 writer。
 - [ ] 普通 accepted 与人工确认已接受都保存完整 `publicationEvidenceV1` 必需字段；缺少实际在线投稿正文、目标快照或关键证据时事务失败关闭，不写不完整成功事实。
-- [ ] 使用合成的最终 manifest 合同覆盖带图、换图和纯文本降级摘要，证明 `confirmRegularAccepted` 只按冻结 evidence 恢复相同标题/正文/content fingerprint/图片布局/降级摘要，不会用 admission 原文冒充实际提交内容；本 ticket 不声称图片选择、换图或降级生产链已实现，真实应用链由 Ticket 18 及波次 8 集成复验完成。
+- [ ] `publicationEvidenceV1` 只有一个 owner/validator；15、22、23 的直接合同测试证明它们复用同一精确 schema、时间来源和 missing reason 规则，递归 extra/sensitive fields 一律失败关闭。
+- [ ] 使用合成的最终 manifest 合同覆盖带图、换图和纯文本降级摘要，证明 `confirmRegularAccepted` 只按冻结 evidence 恢复相同标题/正文/content fingerprint/图片布局/降级摘要，不会用 admission 原文冒充实际提交内容；本 ticket 不声称图片选择、换图或降级生产链已实现，真实应用链由核心完成后的 Ticket 18 及波次 12 集成复验完成。
 - [ ] 在线成功同时保存有规范来源的 `submittedAt` 与 `firstPublishedAt`；历史不可得只允许由 23 写入 `null + missing reason`，任何路径都不得拿 observation/迁移执行时间冒充未知时间。
 - [ ] 直接 accepted 与 `confirmRegularAccepted` 分别覆盖 provider event、positive observation 和 manual positive evidence 三类来源；人工确认时间可作为明确标记的正面证据时间，但绝不伪装成供应商发布时间。
 - [ ] composition/架构测试证明结果服务只获得不含 intent 创建能力的 `regularOutcomeTransitions`，无法调用 08 creator、付费、取消、迁移或其他无关写能力。

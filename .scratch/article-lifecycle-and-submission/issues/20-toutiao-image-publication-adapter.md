@@ -4,7 +4,9 @@
 
 **Blocked by:** 18 — 普通平台队列组图片准备
 
-**Status:** ready-for-agent
+**Status:** deferred-until-core-complete；当前不可调度
+
+**Scheduling gate:** 等待波次 13 Ticket 19 完成定向复核、提交、合并和定向复验后，从新的集成 `HEAD` 调度；该串行门不建立 20←19 的业务依赖。
 
 ## 启动约定
 
