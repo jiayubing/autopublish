@@ -34,6 +34,10 @@ const MEDIA_CHANNELS = [
   "media:get-orders",
   "media:sync-order",
   "media:open-published-url",
+  "media:prepare-bind-paid-order-number",
+  "media:bind-paid-order-number",
+  "media:prepare-confirm-paid-order-absent",
+  "media:confirm-paid-order-absent",
 ];
 
 test("media projections and draft requests preserve all supported resource types", () => {
@@ -195,11 +199,11 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
   assert.equal(order.hasPublishedUrl, true);
 });
 
-test("all 15 consumed media invokes have versioned exact contracts", () => {
+test("all 19 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 15);
+  assert.equal(media.length, 19);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),

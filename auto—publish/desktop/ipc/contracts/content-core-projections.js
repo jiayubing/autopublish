@@ -36,6 +36,8 @@ const ATTENTION_ITEM_FIELDS = Object.freeze([
   "batchId",
   "publicationId",
   "attemptId",
+  "orderCreationAttemptId",
+  "resolutionActions",
   "transactionId",
   "status",
   "reasonCode",

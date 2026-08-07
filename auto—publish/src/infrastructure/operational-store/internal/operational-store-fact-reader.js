@@ -8,6 +8,9 @@ const {
   safeOperationalPayload,
   supplierObservation,
 } = require("./operational-store-utils");
+const {
+  projectPaidOrderResolutionAttention,
+} = require("./operational-store-paid-resolution-attention");
 
 function createOperationalStoreFactReader(context) {
   const { db, open, fail, internalLifecycleProjectionObserver } = context;
@@ -153,6 +156,8 @@ function createOperationalStoreFactReader(context) {
           payload.detail && typeof payload.detail === "object"
             ? payload.detail
             : {};
+        const resolutionAttention =
+          projectPaidOrderResolutionAttention(payload);
         return Object.freeze({
           attentionId: `publication:${row.attempt_id}`,
           kind: "publication_uncertain",
@@ -165,6 +170,7 @@ function createOperationalStoreFactReader(context) {
             typeof detail.code === "string"
               ? detail.code
               : "PUBLICATION_UNCERTAIN",
+          ...resolutionAttention,
           updatedAt: row.updated_at,
         });
       });

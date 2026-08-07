@@ -92,6 +92,14 @@ it("workspace invalidation owns reason-to-scope policy and emits safe monotonic 
   }]);
   assert.equal(sent[1][1].revision, 2);
   assert.deepEqual(invalidation.scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders"]);
+  assert.equal(invalidation.invalidate("PAID_ORDER_RESOLUTION_CHANGED"), 3);
+  assert.deepEqual(sent[2], ["workspace:data-invalidated", {
+    schemaVersion: 1,
+    workspaceRuntimeId: "runtime-fixture-1",
+    revision: 3,
+    scopes: ["articleManagement", "articleAttention", "orders"],
+    reasonCode: "PAID_ORDER_RESOLUTION_CHANGED"
+  }]);
 });
 
 it("maps every production workspace mutation reason explicitly without a broad fallback", function() {
@@ -116,6 +124,7 @@ it("maps every production workspace mutation reason explicitly without a broad f
   });
   assert.deepEqual(scopesForReason("CONTENT_EXPORT_QUEUED"), [...submissionScopes, "mediaWorkbench"]);
   assert.deepEqual(scopesForReason("MEDIA_SUBMIT_COMPLETED"), [...submissionScopes, "orders"]);
+  assert.deepEqual(scopesForReason("PAID_ORDER_RESOLUTION_CHANGED"), ["articleManagement", "articleAttention", "orders"]);
   [
     "CONTENT_SOURCE_CHANGED",
     "CONTENT_QUESTION_CREATED",

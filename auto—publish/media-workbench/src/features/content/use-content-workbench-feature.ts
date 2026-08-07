@@ -50,6 +50,12 @@ import {
   trashContentArticles,
 } from "../../bridge/content-removal";
 import { reconcilePublicationHistory } from "../../bridge/publication";
+import {
+  prepareBindPaidOrderNumber,
+  bindPaidOrderNumber,
+  prepareConfirmPaidOrderAbsent,
+  confirmPaidOrderAbsent,
+} from "../../bridge/media";
 import type { DoubaoBatchTask } from "../../types/content";
 import type { GeneratedContentArticle } from "../../types/generation";
 import {
@@ -98,6 +104,10 @@ export function useContentWorkbenchFeature() {
       listPaidMediaBatches,
       startPaidMediaBatch,
       pausePaidMediaBatch,
+      prepareBindPaidOrderNumber,
+      bindPaidOrderNumber,
+      prepareConfirmPaidOrderAbsent,
+      confirmPaidOrderAbsent,
       removePendingQueueItems,
       cancelContentSubmissionBatch: (input: {
         batchId: string;

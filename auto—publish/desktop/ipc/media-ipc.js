@@ -60,6 +60,18 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:open-published-url", (event, orderNid) =>
     invoke(() => application.openPublishedUrl(orderNid)),
   );
+  ipcMain.handle("media:prepare-bind-paid-order-number", (event, input) =>
+    invoke(() => application.prepareBindPaidOrderNumber(input)),
+  );
+  ipcMain.handle("media:bind-paid-order-number", (event, input) =>
+    invoke(() => application.bindPaidOrderNumber(input)),
+  );
+  ipcMain.handle("media:prepare-confirm-paid-order-absent", (event, input) =>
+    invoke(() => application.prepareConfirmPaidOrderAbsent(input)),
+  );
+  ipcMain.handle("media:confirm-paid-order-absent", (event, input) =>
+    invoke(() => application.confirmPaidOrderAbsent(input)),
+  );
 
   return { application };
 }

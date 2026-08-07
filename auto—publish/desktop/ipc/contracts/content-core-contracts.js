@@ -331,6 +331,8 @@ const articleAttentionItem = exactObject({
   batchId: optionalNullableText(200),
   publicationId: optionalNullableText(200),
   attemptId: optionalNullableText(200),
+  orderCreationAttemptId: optionalNullableText(200),
+  resolutionActions: optionalField(arrayField(stringField({ max: 80 }), { max: 8 })),
   transactionId: optionalNullableText(200),
   status: optionalNullableText(80),
   reasonCode: optionalNullableText(128),
