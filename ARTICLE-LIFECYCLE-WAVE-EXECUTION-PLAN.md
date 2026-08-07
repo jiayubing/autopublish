@@ -204,8 +204,8 @@ git -C "F:\官媒投稿-refactor" log --oneline --decorate -20
       },
     },
   },
-  "model": "gpt-5.6-luna",
-  "thinking": "max",
+  "model": "gpt-5.6-sol",
+  "thinking": "medium",
   "title": "Article lifecycle ticket NN",
   "prompt": "<下方完整 prompt>",
 }
@@ -260,10 +260,10 @@ codex/article-lifecycle-25；若分支已存在、被占用或 HEAD 不一致，
 
 模型与强度是硬约束：
 
-- 精确模型必须是 `gpt-5.6-luna`。
-- Luna 支持的最高推理强度使用 `max`。
-- 不允许改用 Sol、Terra 或其他模型。
-- 不允许改成 `high`、`xhigh` 或其他强度。
+- 精确模型必须是 `gpt-5.6-sol`。
+- 推理强度必须使用 `medium`。
+- 不允许改用 Luna、Terra 或其他模型。
+- 不允许改成 `low`、`high`、`xhigh` 或其他强度。
 - 任一组合不可用时，不创建任何降级执行线程，向用户报告 `BLOCKED_MODEL_UNAVAILABLE`。
 
 `create_thread` 是非阻塞操作。返回正式 `threadId`/`hostId` 时记录二者，并在输出中使用 `::created-thread{threadId="..."}`。只返回 `clientThreadId` 时表示 worktree setup 已受理但尚未完成：

@@ -15,7 +15,7 @@
 5. `auto—publish/README.md`：工程入口、目录边界和人工控制操作。
 6. 当前仍有效的其他文档与 Git 历史。
 
-`ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 是文章生命周期重构唯一的实时调度与进度真源。当用户说“执行波次 X”或“执行维护 Mxx”时，读取该计划及对应 ticket/maintenance 合同，只创建当前 gate 允许的独立 Luna/max Codex worktree 线程并直接实施；Ticket 01–24 与维护任务的线程不使用 `$implement`，不创建子代理，不审计、不 stage、不 commit、不合并、不推送。Ticket 25 按计划中的专用 prompt 执行最终验收用例、完整门禁和证据收集，但不自行进行代码/架构审计；完成后仍由用户另派审计 subagent。审计、修复确认、提交、合并、波次/维护验收和进度推进均等待用户逐项指令。历史分支计划、handoff、归档材料和 pre-refactor 文档只能作为历史证据。
+`ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 是文章生命周期重构唯一的实时调度与进度真源。当用户说“执行波次 X”或“执行维护 Mxx”时，读取该计划及对应 ticket/maintenance 合同，只创建当前 gate 允许的独立 Sol/medium Codex worktree 线程并直接实施；Ticket 01–24 与维护任务的线程不使用 `$implement`，不创建子代理，不审计、不 stage、不 commit、不合并、不推送。Ticket 25 按计划中的专用 prompt 执行最终验收用例、完整门禁和证据收集，但不自行进行代码/架构审计；完成后仍由用户另派审计 subagent。审计、修复确认、提交、合并、波次/维护验收和进度推进均等待用户逐项指令。历史分支计划、handoff、归档材料和 pre-refactor 文档只能作为历史证据。
 
 源码与目标规格暂时不一致时，先判断它是否是当前重构已明确要消除的旧残影。若是，按规格收敛并补测试；若不是，报告冲突、影响和推荐方向，等待用户确认，不得自行维护双路线。
 
