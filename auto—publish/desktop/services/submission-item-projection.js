@@ -99,7 +99,10 @@ function createSubmissionItemProjection(options) {
     let files = null;
     try {
       files = safeQueuePaths(Object.assign({}, payload, { targetPlatformId }));
-    } catch (_) {}
+    } catch (_) {
+      // Invalid/changed queue identity is intentionally projected without file paths.
+      files = null;
+    }
     const item = Object.assign({}, payload, {
       itemId: stored.itemId,
       batchId: batch.batchId,
