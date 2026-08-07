@@ -9,10 +9,28 @@ function createRegularQueueGroupComposition(options) {
   const orchestrator = createRegularQueueGroupOrchestrator({
     regularQueueGroupTransitions: value.regularQueueGroupTransitions,
     platformSubmissionExecutor: value.platformSubmissionExecutor,
+    regularPlatformOutcomeService: value.regularPlatformOutcomeService,
     randomUUID: value.randomUUID,
   });
   const startupSnapshot = orchestrator.initializePaused();
-  return Object.freeze({ orchestrator, startupSnapshot });
+  const orphanedOutcomes = Object.freeze(
+    value.regularPlatformOutcomeService
+      ? startupSnapshot.groups
+          .filter(
+            (group) =>
+              group.current && group.current.phase === "remote_call_started",
+          )
+          .map((group) =>
+            value.regularPlatformOutcomeService.markOrphanedRegularAttemptUncertain(
+              {
+                regularPublicationAttemptId:
+                  group.current.regularPublicationAttemptId,
+              },
+            ),
+          )
+      : [],
+  );
+  return Object.freeze({ orchestrator, orphanedOutcomes, startupSnapshot });
 }
 
 module.exports = { createRegularQueueGroupComposition };

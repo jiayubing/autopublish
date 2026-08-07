@@ -542,6 +542,15 @@ function createArticleMutationCoordinator(options) {
             publicationId: `publication-${crypto.randomUUID()}`,
             attemptId: `attempt-${crypto.randomUUID()}`,
             target,
+            customerSnapshotV1:
+              request.customerSnapshotsV1 && request.customerSnapshotsV1[ref.clientId]
+                ? request.customerSnapshotsV1[ref.clientId]
+                : domain.parseCustomerSnapshotV1({
+                    version: 1,
+                    clientId: ref.clientId,
+                    displayName: article.clientDisplayName || article.clientName || ref.clientId,
+                  }),
+            targetSnapshotV1: request.targetSnapshotV1,
             publicationSnapshot: Object.freeze({
               articleId: ref.articleId,
               title: article.title,

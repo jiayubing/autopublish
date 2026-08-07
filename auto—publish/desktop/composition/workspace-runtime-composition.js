@@ -220,6 +220,18 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueTransitions,
           accountProfileResolver:
             operationalStore.assertExecutableAccountProfile,
+          clientSnapshotResolver: function (clientId) {
+            const client =
+              require("../../src/content/client-knowledge").getClient(
+                workspaceRoot,
+                clientId,
+              );
+            return {
+              version: 1,
+              clientId,
+              displayName: client.name || clientId,
+            };
+          },
           platforms: loadedPlatforms,
         },
       );
@@ -606,12 +618,21 @@ async function createWorkspaceRuntimeComposition(deps) {
       require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(
         { adapters: regularPlatformAdapters, accountInspector },
       );
+    const regularPlatformOutcomeService =
+      require("../services/regular-platform-outcome-service").createRegularPlatformOutcomeService(
+        {
+          regularOutcomeTransitions:
+            operationalStoreTransitionPorts.regularOutcomeTransitions,
+          clock: options.clock,
+        },
+      );
     const regularQueueGroupComposition =
       require("./regular-queue-group-composition").createRegularQueueGroupComposition(
         {
           regularQueueGroupTransitions:
             operationalStoreTransitionPorts.regularQueueGroupTransitions,
           platformSubmissionExecutor,
+          regularPlatformOutcomeService,
         },
       );
     const paidMediaBatchComposition =
@@ -728,6 +749,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       contentSubmissionService,
       regularQueueApplication,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
+      regularPlatformOutcomeService,
       paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
       aiContentService,
       contentGenerationBatchService,

@@ -348,6 +348,8 @@ function createPublicationAggregate(context, activeTarget) {
       )
     )
       throw fail("OPERATIONAL_OUTCOME_INVALID");
+    if (outcome.status === "published")
+      throw fail("PUBLICATION_SUCCESS_WRITER_CLOSED");
     if (
       value.batchClaimToken !== undefined &&
       (typeof value.batchClaimToken !== "string" || !value.batchClaimToken)
@@ -573,7 +575,13 @@ function createPublicationAggregate(context, activeTarget) {
               finishedAt: attempt.finished_at,
               createdAt: attempt.created_at,
               updatedAt: attempt.finished_at || attempt.created_at,
-              remoteId: (evidence && evidence.remote_id) || null,
+              remoteId:
+                evidence &&
+                !String(evidence.remote_id || "").startsWith(
+                  "publication-success:",
+                )
+                  ? evidence.remote_id
+                  : null,
               remoteUrl: (evidence && evidence.remote_url) || null,
               ...(cancellation
                 ? {

@@ -13,6 +13,16 @@ const TRANSITION_METHODS = Object.freeze([
   "setRegularQueueGroupRunIntent",
   "startAllRegularQueueGroups",
 ]);
+const PREPARATION_GROUP_BLOCK_CODES = new Set([
+  "HEPAN_CONFIG_NOT_SET",
+  "LOGIN_REQUIRED",
+  "REGULAR_ACCOUNT_PROFILE_UNVERIFIED",
+  "REGULAR_PLATFORM_PREPARATION_UNAVAILABLE",
+]);
+const PREPARATION_ARTICLE_REJECTION_CODES = new Set([
+  "REGULAR_CONTENT_INVALID",
+  "REMOTE_REJECTED",
+]);
 
 function fail(code) {
   const error = new Error(code);
@@ -44,16 +54,35 @@ function validateExecutor(value) {
 function uncertainObservation(claim, evidence) {
   return Object.freeze({
     status: "uncertain",
-    code: "REGULAR_REMOTE_RESULT_UNCERTAIN",
+    errorCode: "REGULAR_REMOTE_RESULT_UNCERTAIN",
     regularPublicationAttemptId: claim.regularPublicationAttemptId,
     preparedSubmissionEvidenceV1: evidence,
   });
+}
+
+function explicitPreparationOutcome(error) {
+  const code = error && error.code;
+  if (PREPARATION_GROUP_BLOCK_CODES.has(code))
+    return Object.freeze({
+      status: "group_blocked",
+      errorCode: code,
+      articleRecoverable: true,
+    });
+  if (PREPARATION_ARTICLE_REJECTION_CODES.has(code))
+    return Object.freeze({ status: "article_rejected", errorCode: code });
+  return null;
 }
 
 function createRegularQueueGroupOrchestrator(options) {
   const value = options || {};
   const transitions = validateTransitions(value.regularQueueGroupTransitions);
   const executor = validateExecutor(value.platformSubmissionExecutor);
+  const outcomeService = value.regularPlatformOutcomeService || null;
+  if (
+    outcomeService !== null &&
+    typeof outcomeService.applyRegularOutcome !== "function"
+  )
+    throw fail("REGULAR_OUTCOME_SERVICE_INVALID");
   const randomUUID = value.randomUUID || crypto.randomUUID;
   const setTimer = value.setInterval || setInterval;
   const clearTimer = value.clearInterval || clearInterval;
@@ -80,9 +109,31 @@ function createRegularQueueGroupOrchestrator(options) {
     if (timer && typeof timer.unref === "function") timer.unref();
     let prepared;
     try {
-      prepared = domain.createPreparedSubmission(
-        await executor.preparePlatformSubmission(claim),
-      );
+      const preparation = await executor.preparePlatformSubmission(claim);
+      if (
+        preparation &&
+        ["article_rejected", "group_blocked"].includes(preparation.status)
+      ) {
+        if (!outcomeService) return preparation;
+        return Object.freeze({
+          ...preparation,
+          transition: outcomeService.applyRegularOutcome({
+            regularPublicationAttemptId: claim.regularPublicationAttemptId,
+            outcome: preparation,
+          }),
+        });
+      }
+      prepared = domain.createPreparedSubmission(preparation);
+    } catch (error) {
+      const preparationOutcome = explicitPreparationOutcome(error);
+      if (!preparationOutcome || !outcomeService) throw error;
+      return Object.freeze({
+        ...preparationOutcome,
+        transition: outcomeService.applyRegularOutcome({
+          regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          outcome: preparationOutcome,
+        }),
+      });
     } finally {
       clearTimer(timer);
     }
@@ -103,11 +154,32 @@ function createRegularQueueGroupOrchestrator(options) {
     });
     if (!boundary.submitAuthorized)
       return Object.freeze({ status: "submission_already_started" });
+    let observation;
     try {
-      return await prepared.submitPreparedPublication();
+      observation = await prepared.submitPreparedPublication();
     } catch (_) {
-      return uncertainObservation(claim, evidence);
+      observation = uncertainObservation(claim, evidence);
     }
+    if (!outcomeService) return observation;
+    let transition;
+    try {
+      transition = outcomeService.applyRegularOutcome({
+        regularPublicationAttemptId: claim.regularPublicationAttemptId,
+        outcome: observation,
+      });
+    } catch (error) {
+      if (!error || error.code !== "REGULAR_ADAPTER_OUTCOME_INVALID")
+        throw error;
+      observation = Object.freeze({
+        status: "uncertain",
+        errorCode: "REGULAR_ADAPTER_OUTCOME_INVALID",
+      });
+      transition = outcomeService.applyRegularOutcome({
+        regularPublicationAttemptId: claim.regularPublicationAttemptId,
+        outcome: observation,
+      });
+    }
+    return Object.freeze({ ...observation, transition });
   }
 
   function runGroup(queueGroupId) {
@@ -120,25 +192,50 @@ function createRegularQueueGroupOrchestrator(options) {
     const operation = Promise.resolve(previousPlatformOperation)
       .catch(() => undefined)
       .then(async function () {
-        const claim = transitions.claimRegularQueueGroupHead({
-          queueGroupId,
-          claimToken: `regular-claim-${randomUUID()}`,
-          leaseMs: 30000,
-        });
-        if (!claim) return Object.freeze({ queueGroupId, status: "idle" });
-        const observation = await executeClaim(claim);
-        if (observation.status === "submission_already_started")
-          return Object.freeze({
+        const completed = [];
+        while (true) {
+          const claim = transitions.claimRegularQueueGroupHead({
             queueGroupId,
-            status: "submission_already_started",
-            regularPublicationAttemptId: claim.regularPublicationAttemptId,
+            claimToken: `regular-claim-${randomUUID()}`,
+            leaseMs: 30000,
           });
-        return Object.freeze({
-          queueGroupId,
-          status: "observation_ready",
-          regularPublicationAttemptId: claim.regularPublicationAttemptId,
-          observation,
-        });
+          if (!claim)
+            return completed.length
+              ? Object.freeze({
+                  queueGroupId,
+                  status: "observation_ready",
+                  regularPublicationAttemptId:
+                    completed[completed.length - 1]
+                      .regularPublicationAttemptId,
+                  observation: completed[completed.length - 1].observation,
+                  processed: Object.freeze(completed),
+                })
+              : Object.freeze({ queueGroupId, status: "idle" });
+          const observation = await executeClaim(claim);
+          if (observation.status === "submission_already_started")
+            return Object.freeze({
+              queueGroupId,
+              status: "submission_already_started",
+              regularPublicationAttemptId: claim.regularPublicationAttemptId,
+            });
+          completed.push(
+            Object.freeze({
+              regularPublicationAttemptId: claim.regularPublicationAttemptId,
+              observation,
+            }),
+          );
+          if (
+            !outcomeService ||
+            ["group_blocked", "uncertain"].includes(observation.status)
+          )
+            return Object.freeze({
+              queueGroupId,
+              status: "observation_ready",
+              regularPublicationAttemptId: claim.regularPublicationAttemptId,
+              observation,
+              processed: Object.freeze(completed),
+            });
+        }
       })
       .finally(function () {
         activeGroups.delete(queueGroupId);

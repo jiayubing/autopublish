@@ -31,6 +31,11 @@ function createRegularQueueApplication(options) {
   const coordinator = value.articleMutationCoordinator;
   const transitions = value.regularQueueTransitions;
   const accountProfileResolver = value.accountProfileResolver;
+  const clientSnapshotResolver = typeof value.clientSnapshotResolver === "function"
+    ? value.clientSnapshotResolver
+    : function (clientId) {
+        return { version: 1, clientId, displayName: clientId };
+      };
   const configuredPlatforms = Array.isArray(value.platforms) ? value.platforms : null;
 
   function platformList() {
@@ -190,9 +195,32 @@ function createRegularQueueApplication(options) {
     const target = targetFrom(input);
     const refs = refsFrom(input);
     const queueConfig = queueConfigFrom(input);
+    const platform = platformList().find(function (candidate) { return candidate.id === target.platformId; });
+    const account = accountProfileResolver({
+      accountProfileId: target.accountProfileId,
+      platformId: target.platformId,
+    });
+    const targetSnapshotV1 = domain.parseTargetSnapshotV1({
+      version: 1,
+      kind: "platform",
+      platformId: target.platformId,
+      platformName: (platform && platform.displayName) || target.platformId,
+      accountProfileId: target.accountProfileId,
+      accountLabel: account.displayName,
+    });
+    const customerSnapshotsV1 = Object.freeze(Object.fromEntries(
+      refs.map(function (ref) {
+        return [
+          ref.clientId,
+          domain.parseCustomerSnapshotV1(clientSnapshotResolver(ref.clientId)),
+        ];
+      }),
+    ));
     const result = coordinator.admitRegularQueueItems({
       articleRefs: refs,
       target,
+      targetSnapshotV1,
+      customerSnapshotsV1,
       queueConfig,
     });
     return Object.freeze(Object.assign({}, result, {
