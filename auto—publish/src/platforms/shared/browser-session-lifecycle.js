@@ -4,7 +4,7 @@ const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 function createBrowserSessionLifecycle(options) {
   const opts = options || {};
   const session = opts.session;
-  const run = opts.pwRun;
+  const run = opts.run;
   const sleep = opts.sleep || function () {};
   const ensureDir = opts.ensureDir || function () {};
   const io = opts.fs || fs;
@@ -24,7 +24,7 @@ function createBrowserSessionLifecycle(options) {
   function isAlive() {
     try {
       return (
-        run("list", { timeout: 8000, session: session }).indexOf(
+        run(["list"], { timeout: 8000, session: session }).indexOf(
           session.session,
         ) !== -1
       );
@@ -63,7 +63,7 @@ function createBrowserSessionLifecycle(options) {
 
   function loadSavedState() {
     if (!io.existsSync(session.stateFile)) return false;
-    run("state-load " + opts.quoteArg(session.stateFile), {
+    run(["state-load", session.stateFile], {
       timeout: 20000,
       session: session,
     });
@@ -73,7 +73,7 @@ function createBrowserSessionLifecycle(options) {
 
   function saveState() {
     ensureDir(opts.stateDir);
-    run("state-save " + opts.quoteArg(session.stateFile), {
+    run(["state-save", session.stateFile], {
       timeout: 20000,
       session: session,
     });
@@ -87,7 +87,7 @@ function createBrowserSessionLifecycle(options) {
       diagnose("BROWSER_SESSION_STATE_SAVE_FAILED", "storage", "state-save");
     }
     try {
-      run("close", { timeout: 15000, session: session });
+      run(["close"], { timeout: 15000, session: session });
       diagnose("BROWSER_SESSION_CLOSED", "transport", "close");
     } catch (error) {
       diagnose("BROWSER_SESSION_CLOSE_FAILED", "transport", "close");
