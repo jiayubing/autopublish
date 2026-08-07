@@ -33,6 +33,10 @@ function createOperationalStoreContext(runtime, options) {
       typeof value.internalRegularQueueTransitionFault === "function"
         ? value.internalRegularQueueTransitionFault
         : null,
+    internalPaidExecutionTransitionFault:
+      typeof value.internalPaidExecutionTransitionFault === "function"
+        ? value.internalPaidExecutionTransitionFault
+        : null,
     open,
     transaction: transaction.run,
     fail,
