@@ -2,7 +2,7 @@
 
 **Purpose:** 在不改变普通平台发布业务语义的前提下，移除生产可达 Playwright 路径中的 shell command-string 执行，统一为可审计的 executable + argv + env 调用边界。
 
-**Status:** `PENDING`；实时可调度性只由波次执行计划与 Git 预检决定
+**Status:** `COMPLETE`；维护 5.5 第一项已完成并通过最终集成门禁
 
 **Scheduling gate:** 仅当波次 5 `COMPLETE` 后调度；维护 5.5 的第一项。完成、审计、合并和定向复验前不得调度 M02 或波次 6。
 

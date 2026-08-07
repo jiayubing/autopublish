@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("node:fs");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function articleMarkdown(article) {
   return "# " + String(article.title || "") + "\n\n" + String(article.content || "").trim() + "\n";
@@ -18,12 +19,44 @@ function writePairAtomic(filePath, markdown, sidecarPath, sidecar) {
     fs.renameSync(markdownTemp, filePath); markdownMoved = true;
     fs.renameSync(sidecarTemp, sidecarPath); sidecarMoved = true;
   } catch (error) {
-    try { if (sidecarMoved) fs.unlinkSync(sidecarPath); } catch (_) {}
-    try { if (markdownMoved) fs.unlinkSync(filePath); } catch (_) {}
+    if (sidecarMoved) {
+      try {
+        fs.unlinkSync(sidecarPath);
+      } catch (_) {
+        reportDiagnostic({
+          code: "SUBMISSION_PAIR_ROLLBACK_FAILED",
+          module: "submission-file-persistence",
+          category: "storage",
+          metadata: { operation: "write_pair_atomic", phase: "rollback", action: "unlink", failureKind: "sidecar" },
+        });
+      }
+    }
+    if (markdownMoved) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (_) {
+        reportDiagnostic({
+          code: "SUBMISSION_PAIR_ROLLBACK_FAILED",
+          module: "submission-file-persistence",
+          category: "storage",
+          metadata: { operation: "write_pair_atomic", phase: "rollback", action: "unlink", failureKind: "markdown" },
+        });
+      }
+    }
     throw error;
   } finally {
-    try { if (fs.existsSync(markdownTemp)) fs.unlinkSync(markdownTemp); } catch (_) {}
-    try { if (fs.existsSync(sidecarTemp)) fs.unlinkSync(sidecarTemp); } catch (_) {}
+    for (const [temporary, failureKind] of [[markdownTemp, "markdown"], [sidecarTemp, "sidecar"]]) {
+      try {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      } catch (_) {
+        reportDiagnostic({
+          code: "SUBMISSION_PAIR_TEMP_CLEANUP_FAILED",
+          module: "submission-file-persistence",
+          category: "storage",
+          metadata: { operation: "write_pair_atomic", phase: "cleanup", action: "unlink", failureKind },
+        });
+      }
+    }
   }
 }
 

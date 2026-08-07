@@ -2,7 +2,7 @@
 
 **Purpose:** 治理关键运行路径中会吞掉真实失败的空 `catch` / 无诊断 fallback，使故障保留既有安全语义与可追踪证据；不在本阶段机械清空全库所有 catch。
 
-**Status:** `PENDING`；实时可调度性只由波次执行计划与 Git 预检决定
+**Status:** `COMPLETE`；本次 closure 已完成 submission pair persistence 收口与最终门禁
 
 **Scheduling gate:** M01 完成、独立审计/修复/合并并在新集成 `HEAD` 定向复验后调度；维护 5.5 的第二项。M02 完成并通过维护 5.5 最终门禁后才放行波次 6。
 
@@ -35,9 +35,14 @@
 
 ## Acceptance criteria
 
-- [ ] 上述关键 owner 中不存在无语义的空 catch；保留的 best-effort cleanup 有明确意图和安全行为测试/注释。
-- [ ] auth/session persistence 失败不会被报告为成功或悄悄丢失状态。
-- [ ] platform/worker/workspace/submission 的 process、文件、状态写入失败会进入既有稳定错误/diagnostic/uncertain 语义。
-- [ ] 故障注入测试覆盖至少 persistence write/rename、child/process failure、workspace read/write 和关键 cleanup 不覆盖主错误。
-- [ ] 不新增敏感日志泄露，错误 metadata 仍满足仓库安全合同。
-- [ ] 形成残余 silent-catch inventory，明确哪些延后 M06、为何不属于关键路径。
+- [x] 上述关键 owner 中不存在无语义的空 catch；保留的 best-effort cleanup 有明确意图和安全行为测试/注释。
+- [x] auth/session persistence 失败不会被报告为成功或悄悄丢失状态。
+- [x] platform/worker/workspace/submission 的 process、文件、状态写入失败会进入既有稳定错误/diagnostic/uncertain 语义。
+- [x] 故障注入测试覆盖至少 persistence write/rename、child/process failure、workspace read/write 和关键 cleanup 不覆盖主错误。
+- [x] 不新增敏感日志泄露，错误 metadata 仍满足仓库安全合同。
+- [x] 形成残余 silent-catch inventory，明确哪些延后 M06、为何不属于关键路径。
+
+## Residual silent-failure inventory (deferred to M06)
+
+- `desktop/services/submission-operation-staging.js`：仅删除空 staging directory 的 best-effort cleanup；文件/状态事实已在此前步骤确认，目录删除失败不会把操作投影为完成或改变业务事实，延后 M06 统一分类。
+- 其他非本次 M02 关键 owner 的空 catch：不在本次 closure 扩大范围，避免机械清理和改变既有业务语义；由 M06 按最终边界逐项处理。
