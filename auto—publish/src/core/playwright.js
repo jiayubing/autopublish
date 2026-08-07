@@ -189,7 +189,15 @@ function runCode(jsCode, opts) {
   } finally {
     try {
       fs.unlinkSync(filePath);
-    } catch (e) {}
+    } catch (e) {
+      reportDiagnostic({
+        code: "PLAYWRIGHT_TEMP_FILE_CLEANUP_FAILED",
+        module: "core-playwright",
+        category: "storage",
+        operationId: "run-code-cleanup",
+        metadata: { action: "cleanup" },
+      });
+    }
   }
 }
 
@@ -300,7 +308,15 @@ function windowsNpmCliEntrypoint(cli) {
           })
           .filter(Boolean),
       );
-    } catch (_) {}
+    } catch (_) {
+      reportDiagnostic({
+        code: "PLAYWRIGHT_CLI_LOOKUP_FAILED",
+        module: "core-playwright",
+        category: "transport",
+        operationId: "cli-lookup",
+        metadata: { action: "optional-probe" },
+      });
+    }
   }
   for (var i = 0; i < candidates.length; i += 1) {
     var candidate = candidates[i];
@@ -401,7 +417,15 @@ function createPlaywrightRuntime(options) {
     } finally {
       try {
         fs.unlinkSync(filePath);
-      } catch (_) {}
+      } catch (_) {
+        reportDiagnostic({
+          code: "PLAYWRIGHT_TEMP_FILE_CLEANUP_FAILED",
+          module: "core-playwright",
+          category: "storage",
+          operationId: "evaluate-cleanup",
+          metadata: { action: "cleanup" },
+        });
+      }
     }
   }
 

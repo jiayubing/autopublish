@@ -8,6 +8,19 @@ const {
 const {
   projectPlatformSnapshot,
 } = require("../ipc/contracts/platform-contracts");
+const {
+  reportDiagnostic,
+} = require("../../src/diagnostics/diagnostic-producer");
+
+function reportCompositionDiagnostic(code, operation) {
+  reportDiagnostic({
+    code,
+    module: "workspace-runtime-composition",
+    category: "lifecycle",
+    operationId: operation || "composition",
+    metadata: { action: operation || "composition" },
+  });
+}
 function subscribePlatformState(taskService, sendToRenderer) {
   if (!taskService || typeof taskService.subscribe !== "function")
     return function () {};
@@ -108,13 +121,20 @@ async function createWorkspaceRuntimeComposition(deps) {
     for (const release of pending) {
       try {
         await release();
-      } catch (_) {}
+      } catch (_) {
+        reportCompositionDiagnostic("WORKSPACE_DISPOSER_FAILED", "disposer");
+      }
     }
     const services = ownedServices.splice(0).reverse();
     for (const service of services) {
       try {
         await service.dispose();
-      } catch (_) {}
+      } catch (_) {
+        reportCompositionDiagnostic(
+          "WORKSPACE_SERVICE_DISPOSE_FAILED",
+          "service-dispose",
+        );
+      }
     }
     modules = null;
     articleLifecycleOwner = null;
@@ -344,7 +364,12 @@ async function createWorkspaceRuntimeComposition(deps) {
       try {
         systemSubmissionCode =
           platformSettingsService.getRuntimeConfig("media").thirdPartyId || "";
-      } catch (_) {}
+      } catch (_) {
+        reportCompositionDiagnostic(
+          "WORKSPACE_MEDIA_CODE_READ_FAILED",
+          "media-code-read",
+        );
+      }
       if (
         !systemSubmissionCode ||
         systemSubmissionCode !== claim.systemSubmissionCode
@@ -542,7 +567,12 @@ async function createWorkspaceRuntimeComposition(deps) {
                 runtime.diagnosticsService &&
                   runtime.diagnosticsService.report &&
                   runtime.diagnosticsService.report(diagnostic);
-              } catch (_) {}
+              } catch (_) {
+                reportCompositionDiagnostic(
+                  "WORKSPACE_RECOVERY_DIAGNOSTIC_FAILED",
+                  "recovery-diagnostic",
+                );
+              }
             },
           },
         ),

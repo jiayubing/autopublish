@@ -6,10 +6,21 @@ const {
 const {
   createWorkspaceRuntimeComposition,
 } = require("./composition/workspace-runtime-composition");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 function required(value, name) {
   if (!value) throw new Error("Workspace runtime requires " + name);
   return value;
+}
+
+function reportWorkspaceDiagnostic(code, operation) {
+  reportDiagnostic({
+    code,
+    module: "workspace-runtime",
+    category: "lifecycle",
+    operationId: operation || "workspace-runtime",
+    metadata: { action: operation || "lifecycle" },
+  });
 }
 
 // The runtime is the single workspace lifecycle owner. Construction and
@@ -58,7 +69,9 @@ function createWorkspaceRuntime(deps) {
   async function start(bootstrapState) {
     if (state === "running") return getState();
     if (disposePromise)
-      return disposePromise.then(function() { return start(bootstrapState); });
+      return disposePromise.then(function () {
+        return start(bootstrapState);
+      });
     if (startPromise) return startPromise;
     const generation = ++lifecycleGeneration;
     startPromise = (async function () {
@@ -74,10 +87,18 @@ function createWorkspaceRuntime(deps) {
           ? await options.createWorkspaceRuntimeComposition(compositionInput)
           : await createWorkspaceRuntimeComposition(compositionInput);
         if (generation !== lifecycleGeneration) {
-          if (nextComposition && typeof nextComposition.dispose === "function") {
+          if (
+            nextComposition &&
+            typeof nextComposition.dispose === "function"
+          ) {
             try {
               await nextComposition.dispose();
-            } catch (_) {}
+            } catch (_) {
+              reportWorkspaceDiagnostic(
+                "WORKSPACE_COMPOSITION_DISPOSE_FAILED",
+                "stale-start-dispose",
+              );
+            }
           }
           return getState();
         }
@@ -105,13 +126,23 @@ function createWorkspaceRuntime(deps) {
     if (ipc && typeof ipc.dispose === "function") {
       try {
         await ipc.dispose();
-      } catch (_) {}
+      } catch (_) {
+        reportWorkspaceDiagnostic(
+          "WORKSPACE_IPC_DISPOSE_FAILED",
+          "ipc-dispose",
+        );
+      }
     }
     ipc = null;
     if (composition && typeof composition.dispose === "function") {
       try {
         await composition.dispose();
-      } catch (_) {}
+      } catch (_) {
+        reportWorkspaceDiagnostic(
+          "WORKSPACE_COMPOSITION_DISPOSE_FAILED",
+          "composition-dispose",
+        );
+      }
     }
     composition = null;
     modules = null;
@@ -131,7 +162,12 @@ function createWorkspaceRuntime(deps) {
       if (pendingStart) {
         try {
           await pendingStart;
-        } catch (_) {}
+        } catch (_) {
+          reportWorkspaceDiagnostic(
+            "WORKSPACE_START_FAILED_DURING_DISPOSE",
+            "pending-start",
+          );
+        }
       }
       await releaseResources();
       disposePromise = null;
