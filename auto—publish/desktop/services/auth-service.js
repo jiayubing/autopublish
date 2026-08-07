@@ -3,6 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { AUTH_ERRORS, authError } = require("../../src/contracts/auth-contract");
+const {
+  reportDiagnostic,
+} = require("../../src/diagnostics/diagnostic-producer");
 
 const AUTH_BASE_URL = "https://auth.jiayubing.xyz";
 const TERMINAL_SESSION_ERRORS = new Set([
@@ -15,28 +18,57 @@ const TERMINAL_SESSION_ERRORS = new Set([
 ]);
 const RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
 
+function reportAuthDiagnostic(code, operation) {
+  reportDiagnostic({
+    code,
+    module: "auth-service",
+    category: "storage",
+    operationId: operation || "auth-session",
+    metadata: { action: operation || "session" },
+  });
+}
+
 function defaultRequest(input) {
   return new Promise((resolve, reject) => {
     const url = new URL(input.url);
     const body = input.body ? JSON.stringify(input.body) : "";
-    const request = https.request({
-      protocol: url.protocol,
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: `${url.pathname}${url.search}`,
-      method: input.method || "GET",
-      headers: Object.assign({ accept: "application/json", "content-type": "application/json", "content-length": Buffer.byteLength(body) }, input.headers || {}),
-      timeout: 10000,
-    }, (response) => {
-      let text = "";
-      response.setEncoding("utf8");
-      response.on("data", (chunk) => { text += chunk; });
-      response.on("end", () => {
-        let parsed = {};
-        try { parsed = text ? JSON.parse(text) : {}; } catch (_) {}
-        resolve({ statusCode: response.statusCode || 0, body: parsed });
-      });
-    });
+    const request = https.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: `${url.pathname}${url.search}`,
+        method: input.method || "GET",
+        headers: Object.assign(
+          {
+            accept: "application/json",
+            "content-type": "application/json",
+            "content-length": Buffer.byteLength(body),
+          },
+          input.headers || {},
+        ),
+        timeout: 10000,
+      },
+      (response) => {
+        let text = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          text += chunk;
+        });
+        response.on("end", () => {
+          let parsed = {};
+          try {
+            parsed = text ? JSON.parse(text) : {};
+          } catch (_) {
+            reportAuthDiagnostic(
+              "AUTH_RESPONSE_PARSE_FAILED",
+              "response-parse",
+            );
+          }
+          resolve({ statusCode: response.statusCode || 0, body: parsed });
+        });
+      },
+    );
     request.on("timeout", () => request.destroy(new Error("timeout")));
     request.on("error", reject);
     if (body) request.write(body);
@@ -49,14 +81,28 @@ function createAuthService(options) {
   const request = opts.request || defaultRequest;
   const safeStorage = opts.safeStorage || null;
   const userDataPath = opts.userDataPath || null;
-  const sessionFile = userDataPath ? path.join(userDataPath, "auth-session.json") : null;
+  const sessionFile = userDataPath
+    ? path.join(userDataPath, "auth-session.json")
+    : null;
   const deviceIdentity = opts.deviceIdentity || null;
-  const deviceId = opts.deviceId || (deviceIdentity && typeof deviceIdentity.getDeviceId === "function" ? deviceIdentity.getDeviceId() : crypto.randomUUID());
-  const deviceName = typeof opts.deviceName === "string" && opts.deviceName.trim() ? opts.deviceName.trim().slice(0, 80) : `${process.platform} device`;
-  const appVersion = typeof opts.appVersion === "string" ? opts.appVersion.slice(0, 64) : "unknown";
+  const deviceId =
+    opts.deviceId ||
+    (deviceIdentity && typeof deviceIdentity.getDeviceId === "function"
+      ? deviceIdentity.getDeviceId()
+      : crypto.randomUUID());
+  const deviceName =
+    typeof opts.deviceName === "string" && opts.deviceName.trim()
+      ? opts.deviceName.trim().slice(0, 80)
+      : `${process.platform} device`;
+  const appVersion =
+    typeof opts.appVersion === "string"
+      ? opts.appVersion.slice(0, 64)
+      : "unknown";
   const now = typeof opts.now === "function" ? opts.now : Date.now;
-  const setTimeoutFn = typeof opts.setTimeout === "function" ? opts.setTimeout : setTimeout;
-  const clearTimeoutFn = typeof opts.clearTimeout === "function" ? opts.clearTimeout : clearTimeout;
+  const setTimeoutFn =
+    typeof opts.setTimeout === "function" ? opts.setTimeout : setTimeout;
+  const clearTimeoutFn =
+    typeof opts.clearTimeout === "function" ? opts.clearTimeout : clearTimeout;
   let accessToken = null;
   let refreshToken = null;
   let accessExpiresAt = 0;
@@ -66,14 +112,35 @@ function createAuthService(options) {
   let retryAttempt = 0;
   let sessionGeneration = 0;
   let disposed = false;
-  let state = { authenticated: false, user: null, entitlements: [], device: null, errorCode: null, passwordChangeRequired: false, pendingLoginName: null, sessionStatus: "signed_out" };
+  let state = {
+    authenticated: false,
+    user: null,
+    entitlements: [],
+    device: null,
+    errorCode: null,
+    passwordChangeRequired: false,
+    pendingLoginName: null,
+    sessionStatus: "signed_out",
+  };
   const listeners = new Set();
 
-  function getState() { return JSON.parse(JSON.stringify(state)); }
+  function diagnose(code, operation) {
+    reportAuthDiagnostic(code, operation);
+  }
+
+  function getState() {
+    return JSON.parse(JSON.stringify(state));
+  }
 
   function notify() {
     const safe = getState();
-    listeners.forEach((listener) => { try { listener(safe); } catch (_) {} });
+    listeners.forEach((listener) => {
+      try {
+        listener(safe);
+      } catch (_) {
+        diagnose("AUTH_STATE_LISTENER_FAILED", "state-listener");
+      }
+    });
   }
 
   function unrefTimer(timer) {
@@ -98,28 +165,65 @@ function createAuthService(options) {
   }
 
   function loadRefreshToken() {
-    if (!sessionFile || !safeStorage || typeof safeStorage.decryptString !== "function") return null;
+    if (
+      !sessionFile ||
+      !safeStorage ||
+      typeof safeStorage.decryptString !== "function"
+    )
+      return null;
     try {
       const record = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
-      if (!record || typeof record.encryptedRefreshToken !== "string") return null;
-      return safeStorage.decryptString(Buffer.from(record.encryptedRefreshToken, "base64"));
-    } catch (_) { return null; }
+      if (!record || typeof record.encryptedRefreshToken !== "string")
+        return null;
+      return safeStorage.decryptString(
+        Buffer.from(record.encryptedRefreshToken, "base64"),
+      );
+    } catch (_) {
+      diagnose("AUTH_SESSION_LOAD_FAILED", "session-load");
+      return null;
+    }
   }
 
   function saveRefreshToken(token) {
-    if (!sessionFile || !safeStorage || typeof safeStorage.encryptString !== "function" || (typeof safeStorage.isEncryptionAvailable === "function" && !safeStorage.isEncryptionAvailable())) return;
+    if (
+      !sessionFile ||
+      !safeStorage ||
+      typeof safeStorage.encryptString !== "function" ||
+      (typeof safeStorage.isEncryptionAvailable === "function" &&
+        !safeStorage.isEncryptionAvailable())
+    )
+      return;
+    let temporary = null;
     try {
       fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
       const encrypted = safeStorage.encryptString(token).toString("base64");
-      const temporary = `${sessionFile}.tmp-${process.pid}`;
-      fs.writeFileSync(temporary, JSON.stringify({ version: 1, encryptedRefreshToken: encrypted }) + "\n", { mode: 0o600 });
+      temporary = `${sessionFile}.tmp-${process.pid}`;
+      fs.writeFileSync(
+        temporary,
+        JSON.stringify({ version: 1, encryptedRefreshToken: encrypted }) + "\n",
+        { mode: 0o600 },
+      );
       fs.renameSync(temporary, sessionFile);
-    } catch (_) {}
+    } catch (_) {
+      if (temporary) {
+        try {
+          fs.rmSync(temporary, { force: true });
+        } catch (_) {
+          diagnose("AUTH_SESSION_TEMP_CLEAR_FAILED", "session-temp-clear");
+        }
+      }
+      diagnose("AUTH_SESSION_SAVE_FAILED", "session-save");
+      throw authError("AUTH_SERVER_ERROR");
+    }
   }
 
   function clearStoredRefreshToken() {
     if (!sessionFile) return;
-    try { fs.rmSync(sessionFile, { force: true }); } catch (_) {}
+    try {
+      fs.rmSync(sessionFile, { force: true });
+    } catch (_) {
+      diagnose("AUTH_SESSION_CLEAR_FAILED", "session-clear");
+    }
   }
 
   function isTerminalError(error) {
@@ -131,7 +235,8 @@ function createAuthService(options) {
     state = Object.assign({}, state, {
       authenticated: Boolean(state.authenticated || refreshToken),
       errorCode: code,
-      sessionStatus: state.authenticated || refreshToken ? "recovering" : "signed_out",
+      sessionStatus:
+        state.authenticated || refreshToken ? "recovering" : "signed_out",
     });
     notify();
     return getState();
@@ -144,7 +249,9 @@ function createAuthService(options) {
       entitlements: [],
       device: null,
       errorCode: error && error.code ? error.code : "AUTH_SERVER_ERROR",
-      passwordChangeRequired: Boolean(error && error.code === "AUTH_PASSWORD_CHANGE_REQUIRED"),
+      passwordChangeRequired: Boolean(
+        error && error.code === "AUTH_PASSWORD_CHANGE_REQUIRED",
+      ),
       pendingLoginName: pendingLoginName || null,
       sessionStatus: "signed_out",
     });
@@ -156,32 +263,67 @@ function createAuthService(options) {
     clearRefreshTimer();
     if (disposed || !refreshToken || !accessExpiresAt) return;
     const delay = Math.max(0, accessExpiresAt - now() - 60 * 1000);
-    refreshTimer = unrefTimer(setTimeoutFn(() => {
-      refreshTimer = null;
-      void refresh().catch(() => {});
-    }, delay));
+    refreshTimer = unrefTimer(
+      setTimeoutFn(() => {
+        refreshTimer = null;
+        void refresh().catch((error) => {
+          diagnose("AUTH_SCHEDULED_REFRESH_FAILED", "scheduled-refresh");
+          return error;
+        });
+      }, delay),
+    );
   }
 
   function scheduleRetry() {
     if (disposed || !refreshToken || retryTimer) return;
-    const delay = RETRY_DELAYS_MS[Math.min(retryAttempt, RETRY_DELAYS_MS.length - 1)];
+    const delay =
+      RETRY_DELAYS_MS[Math.min(retryAttempt, RETRY_DELAYS_MS.length - 1)];
     retryAttempt += 1;
-    retryTimer = unrefTimer(setTimeoutFn(() => {
-      retryTimer = null;
-      void refresh().catch(() => {});
-    }, delay));
+    retryTimer = unrefTimer(
+      setTimeoutFn(() => {
+        retryTimer = null;
+        void refresh().catch((error) => {
+          diagnose("AUTH_SCHEDULED_REFRESH_FAILED", "scheduled-retry");
+          return error;
+        });
+      }, delay),
+    );
   }
 
   function setAuthenticated(data, snapshot) {
-    if (snapshot && (disposed || sessionGeneration !== snapshot.generation || (snapshot.refreshToken !== undefined && refreshToken !== snapshot.refreshToken))) return getState();
+    if (
+      snapshot &&
+      (disposed ||
+        sessionGeneration !== snapshot.generation ||
+        (snapshot.refreshToken !== undefined &&
+          refreshToken !== snapshot.refreshToken))
+    )
+      return getState();
+    const nextRefreshToken = data.refreshToken || refreshToken;
+    if (nextRefreshToken) saveRefreshToken(nextRefreshToken);
     sessionGeneration += 1;
     accessToken = data.accessToken || null;
-    refreshToken = data.refreshToken || refreshToken;
-    const parsedExpiry = data.accessExpiresAt ? Date.parse(data.accessExpiresAt) : 0;
+    refreshToken = nextRefreshToken;
+    const parsedExpiry = data.accessExpiresAt
+      ? Date.parse(data.accessExpiresAt)
+      : 0;
     const expiresIn = Number(data.expiresIn);
-    accessExpiresAt = parsedExpiry > 0 ? parsedExpiry : Number.isFinite(expiresIn) && expiresIn > 0 ? now() + expiresIn * 1000 : now() + 10 * 60 * 1000;
-    state = { authenticated: true, user: data.user || null, entitlements: Array.isArray(data.entitlements) ? data.entitlements : [], device: data.device || null, errorCode: null, passwordChangeRequired: false, pendingLoginName: null, sessionStatus: "authenticated" };
-    if (refreshToken) saveRefreshToken(refreshToken);
+    accessExpiresAt =
+      parsedExpiry > 0
+        ? parsedExpiry
+        : Number.isFinite(expiresIn) && expiresIn > 0
+          ? now() + expiresIn * 1000
+          : now() + 10 * 60 * 1000;
+    state = {
+      authenticated: true,
+      user: data.user || null,
+      entitlements: Array.isArray(data.entitlements) ? data.entitlements : [],
+      device: data.device || null,
+      errorCode: null,
+      passwordChangeRequired: false,
+      pendingLoginName: null,
+      sessionStatus: "authenticated",
+    };
     clearRetryTimer();
     retryAttempt = 0;
     notify();
@@ -195,27 +337,69 @@ function createAuthService(options) {
     accessToken = null;
     refreshToken = null;
     accessExpiresAt = 0;
-    state = { authenticated: false, user: null, entitlements: [], device: null, errorCode: errorCode || null, passwordChangeRequired: errorCode === "AUTH_PASSWORD_CHANGE_REQUIRED", pendingLoginName: pendingLoginName || null, sessionStatus: "signed_out" };
+    state = {
+      authenticated: false,
+      user: null,
+      entitlements: [],
+      device: null,
+      errorCode: errorCode || null,
+      passwordChangeRequired: errorCode === "AUTH_PASSWORD_CHANGE_REQUIRED",
+      pendingLoginName: pendingLoginName || null,
+      sessionStatus: "signed_out",
+    };
     clearStoredRefreshToken();
     notify();
     return getState();
   }
 
   function mapResponse(response, route) {
-    const body = response && response.body && response.body.data ? response.body.data : response && response.body;
-    if (response && response.statusCode >= 200 && response.statusCode < 300 && body && body.accessToken) return body;
-    const serverCode = response && response.body && response.body.error && response.body.error.code;
-    const fallbackCode = response && response.statusCode === 401
-      ? (route === "/v1/auth/refresh" || route === "/v1/auth/session" || route === "/v1/auth/entitlements" ? "AUTH_SESSION_EXPIRED" : "AUTH_INVALID_CREDENTIALS")
-      : response && response.statusCode === 403 ? "AUTH_NOT_ENTITLED"
-        : response && response.statusCode === 400 ? "AUTH_INPUT_INVALID" : "AUTH_SERVER_ERROR";
-    const code = typeof serverCode === "string" && AUTH_ERRORS[serverCode] ? serverCode : fallbackCode;
+    const body =
+      response && response.body && response.body.data
+        ? response.body.data
+        : response && response.body;
+    if (
+      response &&
+      response.statusCode >= 200 &&
+      response.statusCode < 300 &&
+      body &&
+      body.accessToken
+    )
+      return body;
+    const serverCode =
+      response &&
+      response.body &&
+      response.body.error &&
+      response.body.error.code;
+    const fallbackCode =
+      response && response.statusCode === 401
+        ? route === "/v1/auth/refresh" ||
+          route === "/v1/auth/session" ||
+          route === "/v1/auth/entitlements"
+          ? "AUTH_SESSION_EXPIRED"
+          : "AUTH_INVALID_CREDENTIALS"
+        : response && response.statusCode === 403
+          ? "AUTH_NOT_ENTITLED"
+          : response && response.statusCode === 400
+            ? "AUTH_INPUT_INVALID"
+            : "AUTH_SERVER_ERROR";
+    const code =
+      typeof serverCode === "string" && AUTH_ERRORS[serverCode]
+        ? serverCode
+        : fallbackCode;
     throw authError(code);
   }
 
   async function call(method, route, body, headers) {
     try {
-      return mapResponse(await request({ url: `${AUTH_BASE_URL}${route}`, method, body, headers: headers || {} }), route);
+      return mapResponse(
+        await request({
+          url: `${AUTH_BASE_URL}${route}`,
+          method,
+          body,
+          headers: headers || {},
+        }),
+        route,
+      );
     } catch (error) {
       if (error && error.code && AUTH_ERRORS[error.code]) throw error;
       throw authError("AUTH_SERVICE_UNAVAILABLE");
@@ -223,32 +407,86 @@ function createAuthService(options) {
   }
 
   async function login(loginName, password) {
-    if (typeof loginName !== "string" || !loginName.trim() || typeof password !== "string" || !password) throw authError("AUTH_INPUT_INVALID");
-    const operation = { generation: sessionGeneration + 1, refreshToken: refreshToken };
+    if (
+      typeof loginName !== "string" ||
+      !loginName.trim() ||
+      typeof password !== "string" ||
+      !password
+    )
+      throw authError("AUTH_INPUT_INVALID");
+    const operation = {
+      generation: sessionGeneration + 1,
+      refreshToken: refreshToken,
+    };
     sessionGeneration = operation.generation;
     clearRefreshSchedules();
     const hadSession = Boolean(refreshToken || state.authenticated);
     try {
-      return setAuthenticated(await call("POST", "/v1/auth/login", { loginName: loginName.trim(), password, deviceId, deviceName, appVersion }), operation);
+      return setAuthenticated(
+        await call("POST", "/v1/auth/login", {
+          loginName: loginName.trim(),
+          password,
+          deviceId,
+          deviceName,
+          appVersion,
+        }),
+        operation,
+      );
     } catch (error) {
-      if (disposed || sessionGeneration !== operation.generation || refreshToken !== operation.refreshToken) throw error;
+      if (
+        disposed ||
+        sessionGeneration !== operation.generation ||
+        refreshToken !== operation.refreshToken
+      )
+        throw error;
       if (isTerminalError(error) && hadSession) clearSession(error.code);
       else if (hadSession) setRecovering(error);
-      else setUnauthenticatedError(error, error.code === "AUTH_PASSWORD_CHANGE_REQUIRED" ? loginName.trim() : null);
+      else
+        setUnauthenticatedError(
+          error,
+          error.code === "AUTH_PASSWORD_CHANGE_REQUIRED"
+            ? loginName.trim()
+            : null,
+        );
       throw error;
     }
   }
 
   async function changePassword(loginName, currentPassword, newPassword) {
-    if (typeof loginName !== "string" || !loginName.trim() || typeof currentPassword !== "string" || !currentPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+    if (
+      typeof loginName !== "string" ||
+      !loginName.trim() ||
+      typeof currentPassword !== "string" ||
+      !currentPassword ||
+      typeof newPassword !== "string" ||
+      newPassword.length < 6
+    ) {
       throw authError("AUTH_INPUT_INVALID");
     }
-    const operation = { generation: sessionGeneration + 1, refreshToken: refreshToken };
+    const operation = {
+      generation: sessionGeneration + 1,
+      refreshToken: refreshToken,
+    };
     sessionGeneration = operation.generation;
     try {
-      return setAuthenticated(await call("POST", "/v1/auth/change-password", { loginName: loginName.trim(), currentPassword, newPassword, deviceId, deviceName, appVersion }), operation);
+      return setAuthenticated(
+        await call("POST", "/v1/auth/change-password", {
+          loginName: loginName.trim(),
+          currentPassword,
+          newPassword,
+          deviceId,
+          deviceName,
+          appVersion,
+        }),
+        operation,
+      );
     } catch (error) {
-      if (disposed || sessionGeneration !== operation.generation || refreshToken !== operation.refreshToken) throw error;
+      if (
+        disposed ||
+        sessionGeneration !== operation.generation ||
+        refreshToken !== operation.refreshToken
+      )
+        throw error;
       if (isTerminalError(error)) clearSession(error.code);
       else setUnauthenticatedError(error, loginName.trim());
       throw error;
@@ -263,12 +501,19 @@ function createAuthService(options) {
     if (!refreshToken) refreshToken = token;
     const snapshot = { refreshToken: token, generation: sessionGeneration };
     let promise;
-    promise = (async function() {
+    promise = (async function () {
       try {
-        const result = await call("POST", "/v1/auth/refresh", { refreshToken: token, deviceId, appVersion });
+        const result = await call("POST", "/v1/auth/refresh", {
+          refreshToken: token,
+          deviceId,
+          appVersion,
+        });
         return setAuthenticated(result, snapshot);
       } catch (error) {
-        const current = !disposed && sessionGeneration === snapshot.generation && refreshToken === snapshot.refreshToken;
+        const current =
+          !disposed &&
+          sessionGeneration === snapshot.generation &&
+          refreshToken === snapshot.refreshToken;
         if (current) {
           if (isTerminalError(error)) clearSession(error.code);
           else {
@@ -280,19 +525,28 @@ function createAuthService(options) {
       }
     })();
     refreshPromise = promise;
-    promise.then(() => {
-      if (refreshPromise === promise) refreshPromise = null;
-    }, () => {
-      if (refreshPromise === promise) refreshPromise = null;
-    });
+    promise.then(
+      () => {
+        if (refreshPromise === promise) refreshPromise = null;
+      },
+      () => {
+        if (refreshPromise === promise) refreshPromise = null;
+      },
+    );
     return promise;
   }
 
   async function initialize() {
     if (disposed) return getState();
-    if (state.authenticated && accessToken && accessExpiresAt > now()) return getState();
+    if (state.authenticated && accessToken && accessExpiresAt > now())
+      return getState();
     if (!refreshToken && !loadRefreshToken()) return getState();
-    try { return await refresh(); } catch (_) { return getState(); }
+    try {
+      return await refresh();
+    } catch (_) {
+      diagnose("AUTH_INITIALIZE_FAILED", "initialize");
+      return getState();
+    }
   }
 
   async function logout() {
@@ -301,15 +555,27 @@ function createAuthService(options) {
     sessionGeneration += 1;
     clearRefreshSchedules();
     try {
-      if (currentAccessToken || token) await request({ url: `${AUTH_BASE_URL}/v1/auth/logout`, method: "POST", body: { refreshToken: token }, headers: currentAccessToken ? { authorization: `Bearer ${currentAccessToken}` } : {} });
-    } catch (_) {}
+      if (currentAccessToken || token)
+        await request({
+          url: `${AUTH_BASE_URL}/v1/auth/logout`,
+          method: "POST",
+          body: { refreshToken: token },
+          headers: currentAccessToken
+            ? { authorization: `Bearer ${currentAccessToken}` }
+            : {},
+        });
+    } catch (_) {
+      diagnose("AUTH_LOGOUT_REMOTE_FAILED", "logout-remote");
+    }
     return clearSession(null);
   }
 
   async function requireAuthenticated() {
-    if (state.authenticated && accessToken && accessExpiresAt > now()) return accessToken;
+    if (state.authenticated && accessToken && accessExpiresAt > now())
+      return accessToken;
     await refresh();
-    if (state.authenticated && accessToken && accessExpiresAt > now()) return accessToken;
+    if (state.authenticated && accessToken && accessExpiresAt > now())
+      return accessToken;
     throw authError("AUTH_REQUIRED");
   }
 
@@ -329,7 +595,10 @@ function createAuthService(options) {
     logout,
     requireAuthenticated,
     dispose,
-    onStateChanged(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    onStateChanged(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
 }
 

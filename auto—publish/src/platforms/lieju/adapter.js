@@ -165,7 +165,13 @@ function doLogin(options) {
       timeout: 15000,
       session: SESSION,
     });
-  } catch (e) {}
+  } catch (e) {
+    diagnose(
+      "PLATFORM_LOGIN_NAVIGATION_FAILED",
+      "transport",
+      "login-navigation",
+    );
+  }
 
   if (!interactive) {
     diagnose("PLATFORM_LOGIN_WAITING", "authentication", "login-wait");

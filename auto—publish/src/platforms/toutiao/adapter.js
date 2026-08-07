@@ -178,7 +178,13 @@ function doLogin(options) {
       timeout: 15000,
       session: SESSION,
     });
-  } catch (e) {}
+  } catch (e) {
+    diagnose(
+      "PLATFORM_LOGIN_NAVIGATION_FAILED",
+      "transport",
+      "login-navigation",
+    );
+  }
 
   if (!interactive) {
     diagnose("PLATFORM_LOGIN_WAITING", "authentication", "login-wait");
@@ -232,14 +238,16 @@ function dismissAssistantDrawer() {
         "  if (await mask.count()) {\n" +
         "    var vis = await mask.evaluate(function(el) { return el.offsetParent !== null && el.getBoundingClientRect().width > 0; });\n" +
         "    if (vis) {\n" +
-        "      await mask.click({ timeout: 3000 }).catch(function() {});\n" +
+        "      await mask.click({ timeout: 3000 }).catch(function() { return false; });\n" +
         "      await page.waitForTimeout(500);\n" +
         "    }\n" +
         "  }\n" +
         "  return 'ok';\n",
       { timeout: 10000, session: SESSION },
     );
-  } catch (e) {}
+  } catch (e) {
+    diagnose("PLATFORM_DRAWER_DISMISS_FAILED", "remote", "drawer-dismiss");
+  }
 }
 
 function fillTitle(title) {
@@ -321,7 +329,13 @@ function confirmAdDialog() {
         "  }\n",
       { timeout: 15000, session: SESSION },
     );
-  } catch (e) {}
+  } catch (e) {
+    diagnose(
+      "PLATFORM_AD_DIALOG_CONFIRM_FAILED",
+      "remote",
+      "ad-dialog-confirm",
+    );
+  }
 }
 
 function clickConfirmPublish() {

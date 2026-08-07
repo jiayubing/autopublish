@@ -41,7 +41,15 @@ function send(type, payload) {
         try {
           if (typeof process.disconnect === "function" && process.connected)
             process.disconnect();
-        } catch (_) {}
+        } catch (_) {
+          // IPC disconnect is best-effort cleanup after the result is queued.
+          reportWorkerDiagnostic(
+            "PLATFORM_WORKER_DISCONNECT_FAILED",
+            "cleanup",
+            "result-disconnect",
+            { action: "disconnect" },
+          );
+        }
       });
     }
     return;
@@ -62,6 +70,12 @@ function installWorkerDiagnosticReporter(paths) {
     });
     initializeDiagnosticSink(sink);
   } catch (_) {
+    reportWorkerDiagnostic(
+      "PLATFORM_WORKER_DIAGNOSTIC_SINK_SETUP_FAILED",
+      "storage",
+      "diagnostic-sink",
+      { action: "setup" },
+    );
     return function () {};
   }
   return setDiagnosticReporter(function (record) {
@@ -75,6 +89,9 @@ function installWorkerDiagnosticReporter(paths) {
       sink.append(correlated);
       return true;
     } catch (_) {
+      // A diagnostic sink cannot report its own append failure without recursion.
+      // Returning false keeps the worker result path intact while the failure is
+      // classified as best-effort diagnostic delivery.
       return false;
     }
   });
@@ -155,15 +172,36 @@ process.on("message", function (message) {
         if (typeof p.closeSession === "function") {
           try {
             p.closeSession();
-          } catch (_) {}
+          } catch (_) {
+            reportWorkerDiagnostic(
+              "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
+              "storage",
+              "pause-close-session",
+              { action: "close-session" },
+            );
+          }
         }
       });
-    } catch (_) {}
+    } catch (_) {
+      reportWorkerDiagnostic(
+        "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
+        "storage",
+        "pause-close-session",
+        { action: "close-session" },
+      );
+    }
     // Also set stop signal for throwIfStopped checkpoints
     try {
       const { requestStopSignal } = require("../../src/core/stop-signal");
       requestStopSignal("operator_pause");
-    } catch (_) {}
+    } catch (_) {
+      reportWorkerDiagnostic(
+        "PLATFORM_WORKER_STOP_SIGNAL_FAILED",
+        "conflict",
+        "pause-stop-signal",
+        { action: "stop-signal" },
+      );
+    }
     return;
   }
 });
@@ -293,10 +331,24 @@ process.on("message", function (message) {
             if (typeof platform.closeSession === "function") {
               try {
                 platform.closeSession();
-              } catch (_) {}
+              } catch (_) {
+                reportWorkerDiagnostic(
+                  "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
+                  "storage",
+                  "final-close-session",
+                  { action: "close-session" },
+                );
+              }
             }
           });
-        } catch (_) {}
+        } catch (_) {
+          reportWorkerDiagnostic(
+            "PLATFORM_WORKER_PLATFORM_CLEANUP_FAILED",
+            "storage",
+            "platform-cleanup",
+            { action: "cleanup" },
+          );
+        }
       }
       return;
     }

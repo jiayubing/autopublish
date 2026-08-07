@@ -9,14 +9,19 @@ const { createPlatformRun } = require("../desktop/services/platform-run");
 
 function deferred() {
   let resolve;
-  const promise = new Promise((done) => { resolve = done; });
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
 function child() {
   const value = new EventEmitter();
   value.killCalls = 0;
-  value.kill = () => { value.killCalls += 1; value.emit("exit", 0); };
+  value.kill = () => {
+    value.killCalls += 1;
+    value.emit("exit", 0);
+  };
   value.send = () => {};
   return value;
 }
@@ -31,15 +36,28 @@ test("PlatformRun rejects a replacement until a remote-started child has termina
     launch: ({ runId, onMessage }) => {
       const selected = runId === "run-a" ? first : second;
       selected.on("message", onMessage);
-      return { child: selected, promise: runId === "run-a" ? firstDone.promise : Promise.resolve({ ok: true, data: { results: [] } }) };
+      return {
+        child: selected,
+        promise:
+          runId === "run-a"
+            ? firstDone.promise
+            : Promise.resolve({ ok: true, data: { results: [] } }),
+      };
     },
     onSnapshot: (snapshot) => snapshots.push(snapshot),
   });
 
   const pending = run.start({ runId: "run-a" });
-  first.emit("message", { schemaVersion: 1, runId: "run-a", type: "state", payload: { phase: "remote-started" } });
+  first.emit("message", {
+    schemaVersion: 1,
+    runId: "run-a",
+    type: "state",
+    payload: { phase: "remote-started" },
+  });
   assert.equal(run.stop("run-a").alreadyRequested, false);
-  assert.throws(() => run.start({ runId: "run-b" }), { code: "PLATFORM_RUN_ACTIVE" });
+  assert.throws(() => run.start({ runId: "run-b" }), {
+    code: "PLATFORM_RUN_ACTIVE",
+  });
 
   firstDone.resolve({ ok: true, data: { results: [] } });
   first.emit("exit", 0);
@@ -48,7 +66,12 @@ test("PlatformRun rejects a replacement until a remote-started child has termina
   second.emit("exit", 0);
   await secondPending;
   const before = snapshots.length;
-  first.emit("message", { schemaVersion: 1, runId: "run-a", type: "state", payload: { phase: "remote-finished" } });
+  first.emit("message", {
+    schemaVersion: 1,
+    runId: "run-a",
+    type: "state",
+    payload: { phase: "remote-finished" },
+  });
   assert.equal(snapshots.length, before);
 });
 
@@ -60,11 +83,34 @@ test("PlatformRun runs cleanup exactly once across stop and terminal completion"
     watchdogMs: 1000,
     launch: () => ({ child: value, promise: done.promise }),
   });
-  const pending = run.start({ runId: "cleanup" , cleanup: () => { cleanupCalls += 1; } });
+  const pending = run.start({
+    runId: "cleanup",
+    cleanup: () => {
+      cleanupCalls += 1;
+    },
+  });
   run.stop("cleanup");
   done.resolve({ ok: true, data: { results: [] } });
   await pending;
   assert.equal(cleanupCalls, 1);
+});
+
+test("PlatformRun keeps the terminal result when cleanup fails", async () => {
+  const done = deferred();
+  const value = child();
+  const run = createPlatformRun({
+    watchdogMs: 1000,
+    launch: () => ({ child: value, promise: done.promise }),
+  });
+  const pending = run.start({
+    runId: "cleanup-failure",
+    cleanup: () => {
+      throw new Error("cleanup failed");
+    },
+  });
+  done.resolve({ ok: true, data: { results: [] } });
+  value.emit("exit", 0);
+  assert.deepEqual(await pending, { ok: true, data: { results: [] } });
 });
 
 test("PlatformRun gives its launch an immutable identity and abort signal", async () => {
@@ -74,11 +120,24 @@ test("PlatformRun gives its launch an immutable identity and abort signal", asyn
     watchdogMs: 1000,
     launch: (input) => {
       launch = input;
-      return { child: value, promise: Promise.resolve({ ok: true, data: { results: [] } }) };
+      return {
+        child: value,
+        promise: Promise.resolve({ ok: true, data: { results: [] } }),
+      };
     },
   });
-  const pending = run.start({ runId: "identity", publisher: "fixture", accountProfileId: "account-1", target: "toutiao" });
-  assert.deepEqual(launch.command, { publisher: "fixture", accountProfileId: "account-1", target: "toutiao", tasks: [] });
+  const pending = run.start({
+    runId: "identity",
+    publisher: "fixture",
+    accountProfileId: "account-1",
+    target: "toutiao",
+  });
+  assert.deepEqual(launch.command, {
+    publisher: "fixture",
+    accountProfileId: "account-1",
+    target: "toutiao",
+    tasks: [],
+  });
   assert.equal(Object.isFrozen(launch.command), true);
   assert.equal(launch.signal.aborted, false);
   run.stop("identity");
@@ -94,7 +153,10 @@ test("PlatformRun keeps the watchdog gate closed until its child exits", async (
   const replacement = child();
   const run = createPlatformRun({
     watchdogMs: 1,
-    setTimeout: (callback) => { watchdog = callback; return 1; },
+    setTimeout: (callback) => {
+      watchdog = callback;
+      return 1;
+    },
     clearTimeout: () => {},
     launch: ({ runId }) => ({
       child: runId === "watchdog-a" ? stuck : replacement,
@@ -105,7 +167,9 @@ test("PlatformRun keeps the watchdog gate closed until its child exits", async (
   const pending = run.start({ runId: "watchdog-a" });
   watchdog();
   assert.equal((await pending).errorCode, "PLATFORM_WORKER_WATCHDOG_TIMEOUT");
-  assert.throws(() => run.start({ runId: "watchdog-b" }), { code: "PLATFORM_RUN_ACTIVE" });
+  assert.throws(() => run.start({ runId: "watchdog-b" }), {
+    code: "PLATFORM_RUN_ACTIVE",
+  });
   stuck.emit("exit", 1);
   const next = run.start({ runId: "watchdog-b" });
   replacement.emit("exit", 0);
@@ -146,18 +210,31 @@ test("PlatformRun terminates a short real local child without releasing the gate
   const run = createPlatformRun({
     watchdogMs: 5000,
     launch: () => {
-      childProcess = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
+      childProcess = spawn(
+        process.execPath,
+        ["-e", "setInterval(() => {}, 1000)"],
+        { stdio: "ignore", windowsHide: true },
+      );
       return {
         child: childProcess,
-        promise: new Promise((resolve) => childProcess.once("exit", () => resolve({ ok: false, errorCode: "STOP_REQUESTED" }))),
+        promise: new Promise((resolve) =>
+          childProcess.once("exit", () =>
+            resolve({ ok: false, errorCode: "STOP_REQUESTED" }),
+          ),
+        ),
       };
     },
   });
   const pending = run.start({ runId: "real-child" });
   assert.equal(run.stop("real-child").alreadyRequested, false);
-  assert.throws(() => run.start({ runId: "replacement" }), { code: "PLATFORM_RUN_ACTIVE" });
+  assert.throws(() => run.start({ runId: "replacement" }), {
+    code: "PLATFORM_RUN_ACTIVE",
+  });
   assert.equal((await pending).errorCode, "STOP_REQUESTED");
-  assert.equal(childProcess.exitCode !== null || childProcess.signalCode !== null, true);
+  assert.equal(
+    childProcess.exitCode !== null || childProcess.signalCode !== null,
+    true,
+  );
 });
 
 test("PlatformRun survives 100 stop-start interleavings without accepting an old run", async () => {
@@ -167,7 +244,10 @@ test("PlatformRun survives 100 stop-start interleavings without accepting an old
     launch: ({ runId, onMessage }) => {
       const value = child();
       value.on("message", onMessage);
-      return { child: value, promise: Promise.resolve({ ok: true, data: { results: [] } }) };
+      return {
+        child: value,
+        promise: Promise.resolve({ ok: true, data: { results: [] } }),
+      };
     },
   });
   for (let index = 0; index < 100; index += 1) {
