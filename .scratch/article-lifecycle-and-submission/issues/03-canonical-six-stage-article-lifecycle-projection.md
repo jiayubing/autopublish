@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** `COMPLETE`（以 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 的实时 provenance 为准）；不得重复调度
 
 ## 启动约定
 

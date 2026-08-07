@@ -4,9 +4,9 @@
 
 **Blocked by:** 02 — 投稿清理、删除协调与恢复深模块；04 — 扩展 SQLite 生命周期与队列事实；12 — 网站媒体付费预检与费用确认
 
-**Status:** document-ready；当前不可调度
+**Status:** `COMPLETE`（以 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 中保留的实时 Ticket 13、Wave 5 audit/commit/handoff provenance 为准）；不得重复调度
 
-**Scheduling gate:** 业务依赖已满足仍不代表可调度；必须等待同波次 Ticket 08 完成审计、提交、合并和定向复验，再从新的集成 `HEAD` 创建。该顺序用于稳定共享运行事实/接线，不建立 13←08 的业务依赖。
+**Scheduling gate:** 已关闭。历史实施、审计、修复与合并证据只从当前 Git 和波次计划读取；后续不得以本 ticket 文档为由重复创建 13 线程。
 
 ## 启动约定
 

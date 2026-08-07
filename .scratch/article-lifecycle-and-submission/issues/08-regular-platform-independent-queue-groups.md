@@ -4,9 +4,9 @@
 
 **Blocked by:** 07 — 普通平台单目标入队与待执行移除
 
-**Status:** document-ready；当前可调度（波次 5 最左执行组，仍须通过波次/Git/线程预检）
+**Status:** `COMPLETE`（以 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 的实时 provenance 为准）；不得重复调度
 
-**Scheduling gate:** 仅当波次 5 为 `READY` 且基线包含已验收 Ticket 07 时可创建；完成审计、提交、合并和定向复验前不得调度同波次 Ticket 13。
+**Scheduling gate:** 已关闭。历史实施必须从波次计划和 Git 证据读取；后续不得以本 ticket 文档为由重复创建 08 线程。
 
 ## 启动约定
 

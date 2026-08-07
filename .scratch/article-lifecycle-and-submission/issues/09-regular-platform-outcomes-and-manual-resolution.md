@@ -6,7 +6,7 @@
 
 **Status:** document-ready；当前不可调度
 
-**Scheduling gate:** 等待 Ticket 08 完成审计、提交、合并和定向复验，且波次 5 `COMPLETE`、波次 6 变为 `READY`；这是执行顺序，不新增业务依赖。
+**Scheduling gate:** 等待 Ticket 08 完成审计、提交、合并和定向复验，且波次 5 与维护 5.5（M01 → M02）均 `COMPLETE`、波次 6 变为 `READY`；这是执行顺序，不新增业务依赖。
 
 ## 启动约定
 

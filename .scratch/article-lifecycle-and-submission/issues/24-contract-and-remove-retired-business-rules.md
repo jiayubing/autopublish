@@ -55,6 +55,11 @@
 - 范围：全库 legacy absence、审核/多目标/submitted/reviewing/复制版本/已发布回收/队列副本的生产代码、类型、IPC、bridge、Renderer、fixture、文案和静态门禁。
 - 必须检查迁移边界仍可读取旧事实、运行时无双路线、公开接口差异和负向扫描证据；不以一次文案搜索替代行为与静态门禁审计，不运行完整 `npm test`。
 
+## 与维护计划的关系
+
+- 本 ticket 必须先删除 legacy IPC/bridge/compatibility surface，再进入维护 M04；M04 只能在清理后的最终业务合同上做职责收缩/拆分，禁止为了重构保留本 ticket 应删除的旧能力。
+- 本 ticket 可保留必要 legacy-absence 静态门禁；M05 之后会审查其是否属于允许的“能力不存在/架构静态边界”类别，不得把这些必要门禁误删。
+
 ## Non-goals
 
 - 不删除 Git 历史中的旧实现证据。

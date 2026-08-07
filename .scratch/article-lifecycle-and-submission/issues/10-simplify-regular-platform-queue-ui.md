@@ -52,6 +52,11 @@
 - 范围：typed bridge/feature 命令、动作投影消费、单/多账号选择、加载/错误/禁用态、窄屏和键盘 smoke；确认组件不复制生命周期判断、不出现付费入口。
 - 不重复审计 09 的结果策略、16 的取消状态机或全库 Renderer 架构，不运行完整 `npm test`。
 
+## 与维护计划的关系
+
+- 本 ticket 是 Renderer 超长文章管理/普通平台组件的业务性拆分 owner；维护 M03 不得在本 ticket 前提前拆 `GeneratedArticlesView.tsx` 来规避这里的 feature/组件职责设计。
+- 本 ticket 完成后，M03 只在确有独立 owner/不变量时继续处理尚存的大型核心模块，不回滚这里形成的 typed bridge → feature → component 边界。
+
 ## Non-goals
 
 - 不加入图片数量控件；由 18 完成。

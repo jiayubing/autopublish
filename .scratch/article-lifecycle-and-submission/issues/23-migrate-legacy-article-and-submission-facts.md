@@ -6,7 +6,7 @@
 
 **Status:** document-ready；当前不可调度
 
-**Scheduling gate:** 作为独立波次 9，等待波次 8 Ticket 22 完成并使波次 8 `COMPLETE` 后调度；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
+**Scheduling gate:** 作为独立波次 9，等待波次 8 Ticket 22 完成并使波次 8 `COMPLETE`，随后维护插槽 8.5 的 M03 也 `COMPLETE` 后调度；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
 
 ## 启动约定
 

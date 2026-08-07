@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — 投稿准备与批次生命周期深模块
 
-**Status:** ready-for-agent
+**Status:** `COMPLETE`（以 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 的实时 provenance 为准）；不得重复调度
 
 ## 启动约定
 

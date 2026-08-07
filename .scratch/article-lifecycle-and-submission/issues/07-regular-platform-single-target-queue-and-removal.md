@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — 投稿清理、删除协调与恢复深模块；06 — 统一文章编辑、改投与回收权限
 
-**Status:** ready-for-agent
+**Status:** `COMPLETE`（以 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 的实时 provenance 为准）；不得重复调度
 
 ## 启动约定
 

@@ -15,9 +15,7 @@
 5. `auto—publish/README.md`：工程入口、目录边界和人工控制操作。
 6. 当前仍有效的其他文档与 Git 历史。
 
-`ARTICLE-LIFECYCLE-GOAL-ORCHESTRATION.md` 是当前文章生命周期重构的执行编排协议；只有任务明确进入该 Goal 时才应用。它不得覆盖 `CONTEXT.md` 和产品规格中的业务语义，也不是一般开发任务的默认流程。历史分支计划、handoff、归档材料和 pre-refactor 文档只能作为历史证据。
-
-`ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 是用户手动控制的波次执行计划。当用户说“执行波次 X”时，读取该计划，只为该波次可执行 ticket 创建独立的 Luna/max Codex worktree 线程并直接实施；Ticket 01–24 的线程不使用 `$implement`，不创建子代理，不审计、不 stage、不 commit、不合并、不推送。Ticket 25 按计划中的专用 prompt 执行最终验收用例、完整门禁和证据收集，但不自行进行代码/架构审计；完成后仍由用户另派审计 subagent。审计、修复确认、提交、合并、波次验收和进度推进均等待用户逐项指令。“执行波次 X”不等于启用 Goal 自动编排。
+`ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 是文章生命周期重构唯一的实时调度与进度真源。当用户说“执行波次 X”或“执行维护 Mxx”时，读取该计划及对应 ticket/maintenance 合同，只创建当前 gate 允许的独立 Luna/max Codex worktree 线程并直接实施；Ticket 01–24 与维护任务的线程不使用 `$implement`，不创建子代理，不审计、不 stage、不 commit、不合并、不推送。Ticket 25 按计划中的专用 prompt 执行最终验收用例、完整门禁和证据收集，但不自行进行代码/架构审计；完成后仍由用户另派审计 subagent。审计、修复确认、提交、合并、波次/维护验收和进度推进均等待用户逐项指令。历史分支计划、handoff、归档材料和 pre-refactor 文档只能作为历史证据。
 
 源码与目标规格暂时不一致时，先判断它是否是当前重构已明确要消除的旧残影。若是，按规格收敛并补测试；若不是，报告冲突、影响和推荐方向，等待用户确认，不得自行维护双路线。
 
@@ -52,6 +50,7 @@ AutoPublish 是本地 Electron 内容运营应用，负责客户调研、内容�
 - `auto—publish/desktop/workspace-schema-gate.js`、workspace/runtime config 与 `src/infrastructure/workspace/`：内容库、应用配置和运行路径隔离边界。不要回退到历史固定根路径或把密钥写进内容库。
 - `auto—publish/auth-server/src/domain/` 与 `auth-domain.js`：鉴权、设备、会话、权益和密码策略 owner；`auth-server/migrations/` 是 SQLite schema/migration owner；HTTP handler、CLI 和 Docker 只做 adapter。
 - `.github/workflows/ci.yml` 与各 `package.json` scripts：自动化门禁和可执行命令真源。
+- `.scratch/article-lifecycle-and-submission/maintenance/`：工程债维护任务合同；只允许在 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 指定的维护插槽调度，不得改变产品业务语义或提前实现后续 ticket。
 
 当前没有独立的 UI token、设计稿或设计系统文档 owner。修改 UI 时以 `media-workbench/src/index.css`、现有组件和当前真实渲染为证据；涉及新的视觉体系时先向用户说明这一缺口，不要自行另起设计语言。
 
@@ -65,7 +64,7 @@ AutoPublish 是本地 Electron 内容运营应用，负责客户调研、内容�
 - 检查是否存在同职责模块、合同、状态机、store、migration 或 fixture；不要从 UI、IPC、prompt、脚本或临时 JSON 倒推核心业务。
 - 给出一个推荐主线。只有会改变可见范围、成本、停机、迁移、数据、权限、供应商锁定或不可逆后果时才要求用户决策。
 
-执行 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 中的新波次时，主线程只做调度预检：验证集成分支、干净基线、依赖提交的祖先关系、当前波次状态以及重复分支/worktree/任务。不得因此重跑上一波完整测试、重读上一波全部 diff 或重新给已 `COMPLETE` 波次出审计结论。Ticket 线程仍须对当前 ticket 做实施前勘察，读取直接依赖的最终公开合同、调用方和定向测试；只有发现依赖提交缺失、依赖合同后来变化、当前测试回归或规格冲突时，才停止并报告需要重新核查的具体范围。
+执行 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 中的新业务波次或维护任务时，主线程只做调度预检：验证集成分支、干净基线、依赖提交的祖先关系、当前业务波次/维护插槽状态以及重复分支/worktree/任务。不得因此重跑上一波完整测试、重读上一波全部 diff 或重新给已 `COMPLETE` 波次出审计结论。执行线程仍须对当前 ticket/maintenance 做实施前勘察，读取直接依赖的最终公开合同、调用方和定向测试；只有发现依赖提交缺失、依赖合同后来变化、当前测试回归或规格冲突时，才停止并报告需要重新核查的具体范围。
 
 用户说“先看”“诊断”“不动代码”时保持只读。诊断任务只报告原因与证据，除非用户同时要求修复。
 
@@ -131,6 +130,7 @@ npm run build:preload
 按风险增加验证：
 
 - 单模块/合同：优先 `node --test tests/<相关测试>.test.js`，测试外部可观察行为，不锁死私有函数和文件布局。
+- 业务验收测试不得通过读取生产源码、匹配私有函数名、文件布局、实现行数或源码字符串来证明业务行为。源码/正则静态检查只用于依赖方向、公开能力/legacy absence、生成物/CI/打包合同和安全静态边界；若同一规则可由稳定公开行为证明，优先行为/合同测试。
 - 生命周期、IPC、媒体 transport、诊断、容量、迁移和 phase gate：使用 `package.json` 中对应的 `test:*` / `verify:*` script，并核对 `.github/workflows/ci.yml`。
 - 鉴权服务：在 `auto—publish/auth-server/` 运行 `npm test`；健康、限流、迁移、备份恢复按对应脚本验证。
 - UI：除 typecheck/build 外，必须使用真实 renderer 或受控浏览器检查受影响流程；涉及 Electron-only 行为时使用相应 Electron 测试或手工验收。
@@ -149,7 +149,7 @@ npm run build:preload
 - dirty worktree 中保留用户改动；修改前查看相关 diff，禁止回滚、覆盖、格式化或顺带吸收无关文件。
 - 禁止 `git add .`、force-add ignored 文件、破坏性 reset/checkout 和未经请求的 commit、push、PR、release。
 - stage 时逐个列出本任务文件；提交或交接前复核仓库根、当前分支、状态、暂存文件和嵌套仓库。
-- 只有用户明确要求并行 agent 工作，或当前任务明确启用了 `ARTICLE-LIFECYCLE-GOAL-ORCHESTRATION.md`，才拆分多 agent。每个 agent 必须有不重叠的 owner/文件范围、输入、禁止事项、验证和交接；主 agent 对最终集成负责。
+- 只有用户明确要求并行 agent 工作，或 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 当前执行组明确允许独立 ticket 并行时，才拆分多 agent。每个 agent 必须有不重叠的 owner/文件范围、输入、禁止事项、验证和交接；主 agent 对最终集成负责。
 
 ## 必须停止并询问
 
