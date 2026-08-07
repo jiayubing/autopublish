@@ -1132,7 +1132,10 @@ test("browser adapters finish form preparation before exposing the final-submit 
     "submitPreparedPublication: async function",
     preparationStart,
   );
-  const capabilityEnd = toutiaoSource.indexOf("async function publishArticle", capabilityStart);
+  const capabilityEnd = toutiaoSource.indexOf(
+    "async function publishArticle",
+    capabilityStart,
+  );
   const preparation = toutiaoSource.slice(preparationStart, capabilityStart);
   const capability = toutiaoSource.slice(capabilityStart, capabilityEnd);
   assert.match(preparation, /clickPreviewAndPublish\(\)/);

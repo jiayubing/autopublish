@@ -23,7 +23,9 @@ function normalizePlatformIds(platformIds) {
 
 function validateAdapter(adapter, id) {
   if (!adapter || adapter.id !== id) {
-    return "平台 adapter id 不匹配: 配置=" + id + " 模块=" + (adapter && adapter.id);
+    return (
+      "平台 adapter id 不匹配: 配置=" + id + " 模块=" + (adapter && adapter.id)
+    );
   }
 
   if (!adapter.scanDir) {
@@ -34,7 +36,7 @@ function validateAdapter(adapter, id) {
     "ensureSession",
     "ensureLoggedIn",
     "publishArticle",
-    "closeSession"
+    "closeSession",
   ];
 
   for (var i = 0; i < requiredFunctions.length; i++) {
@@ -56,7 +58,11 @@ function validateAdapter(adapter, id) {
   var hasOwnScan = typeof adapter.scanArticles === "function";
   var hasOwnParse = typeof adapter.parseArticleFiles === "function";
   if (hasOwnScan !== hasOwnParse) {
-    return "[" + id + "] adapter scanArticles and parseArticleFiles must be provided together";
+    return (
+      "[" +
+      id +
+      "] adapter scanArticles and parseArticleFiles must be provided together"
+    );
   }
 
   return null;
