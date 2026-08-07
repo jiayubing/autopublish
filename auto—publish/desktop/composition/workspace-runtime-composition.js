@@ -267,6 +267,91 @@ async function createWorkspaceRuntimeComposition(deps) {
           );
         },
       });
+    const mediaClientProvider = function () {
+      const mediaRuntime =
+        platformSettingsService.getAdapterForRuntime("media");
+      return mediaRuntime.adapter.createClient(mediaRuntime.config);
+    };
+    const paidOrderCreationSupplier =
+      require("../../src/platforms/media/media-supplier-adapter").createMediaSupplierAdapter(
+        {
+          clientProvider: mediaClientProvider,
+        },
+      );
+    const paidOrderCreationPort = Object.freeze({
+      createOrder: paidOrderCreationSupplier.createOrder,
+    });
+    const {
+      MediaResourceStore,
+    } = require("../../src/platforms/media/media-resource-store");
+    const {
+      MediaPoolStore,
+    } = require("../../src/platforms/media/media-pool-store");
+    const {
+      MediaDraftStore,
+    } = require("../../src/platforms/media/media-draft-store");
+    const {
+      createMediaResourceService,
+    } = require("../services/media-resource-service");
+    const mediaResourceStore = new MediaResourceStore({ paths });
+    const mediaPoolStore = new MediaPoolStore({ paths });
+    const mediaDraftStore = new MediaDraftStore({ paths });
+    const mediaSupplierProvider = function () {
+      return paidOrderCreationSupplier;
+    };
+    const mediaResourceService = createMediaResourceService({
+      resourceStore: mediaResourceStore,
+      poolStore: mediaPoolStore,
+      clientProvider: mediaClientProvider,
+      supplierProvider: mediaSupplierProvider,
+    });
+    const paidMediaRecheck = async function (claim) {
+      const target = claim && claim.targetIdentityV1;
+      let resource;
+      try {
+        resource = await mediaResourceService.queryCurrentResource(
+          target && target.mediaResourceId,
+        );
+      } catch (_) {
+        return { reasonCode: "PAID_ORDER_PRECHECK_FAILED" };
+      }
+      if (
+        !resource ||
+        resource.resourceId !== (target && target.mediaResourceId) ||
+        resource.available !== true ||
+        resource.price !== claim.quotedPrice ||
+        (claim.resourceFingerprint &&
+          resource.fingerprint !== claim.resourceFingerprint)
+      )
+        return { reasonCode: "PAID_MEDIA_CONFIRMATION_STALE" };
+      let article;
+      try {
+        article = contentStore.getArticle(
+          claim.articleIdentityV1.clientId,
+          claim.articleIdentityV1.articleId,
+        );
+      } catch (_) {
+        article = null;
+      }
+      const { fingerprintArticle } = require("../../src/content/content-store");
+      if (
+        !article ||
+        !claim.publicationSnapshot ||
+        fingerprintArticle(article) !== claim.publicationSnapshot.fingerprint
+      )
+        return { reasonCode: "PAID_MEDIA_CONFIRMATION_STALE" };
+      let systemSubmissionCode = "";
+      try {
+        systemSubmissionCode =
+          platformSettingsService.getRuntimeConfig("media").thirdPartyId || "";
+      } catch (_) {}
+      if (
+        !systemSubmissionCode ||
+        systemSubmissionCode !== claim.systemSubmissionCode
+      )
+        return { reasonCode: "PAID_MEDIA_SYSTEM_SUBMISSION_CODE_CHANGED" };
+      return null;
+    };
     const publisher =
       require("../services/desktop-publisher-router").createDesktopPublisherRouter(
         { workerPublisher, mediaPublisher },
@@ -499,6 +584,15 @@ async function createWorkspaceRuntimeComposition(deps) {
           platformSubmissionExecutor,
         },
       );
+    const paidMediaBatchComposition =
+      require("./paid-media-batch-composition").createPaidMediaBatchComposition(
+        {
+          paidExecutionTransitions:
+            operationalStoreTransitionPorts.paidExecutionTransitions,
+          orderCreationPort: paidOrderCreationPort,
+          recheckPaidOrder: paidMediaRecheck,
+        },
+      );
     const platformWorkbenchService = ownService(
       require("../services/platform-workbench-service").createPlatformWorkbenchService(
         {
@@ -574,6 +668,11 @@ async function createWorkspaceRuntimeComposition(deps) {
           paths,
           rootDir: workspaceRoot,
           platformSettingsService,
+          resourceStore: mediaResourceStore,
+          poolStore: mediaPoolStore,
+          draftStore: mediaDraftStore,
+          mediaResourceService,
+          mediaSupplierProvider,
           operationalStore: publicationComposition.operationalStore,
           contentStore,
           paidAdmissionFacade: Object.freeze({
@@ -581,6 +680,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           }),
           paidLifecycleFacts:
             operationalStoreTransitionPorts.paidAdmissionTransitions,
+          paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
           systemSubmissionCodeProvider: function () {
             try {
               return (
@@ -606,6 +706,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       contentSubmissionService,
       regularQueueApplication,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
+      paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
       aiContentService,
       contentGenerationBatchService,
       generationSubmissionHandoffService: null,

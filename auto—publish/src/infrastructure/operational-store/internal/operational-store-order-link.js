@@ -3,21 +3,53 @@ const { text } = require("./operational-store-utils");
 function createOperationalStoreOrderLink(context) {
   const { db, fail } = context;
 
-  function ensure(input) {
+  // This is the single internal order-creation guard.  It checks both
+  // identities before any order fact is written so Ticket 14 can reuse the
+  // same attempt/order priority without depending on the public facade.
+  function orderCreationAttemptGuard(input) {
     const value = input || {};
-    const existing = db
+    const attemptOrder = db
       .prepare(
-        "SELECT attempt_id,remote_id FROM remote_orders WHERE order_id=?",
+        "SELECT order_id,attempt_id,remote_id,payload_json,created_at FROM remote_orders WHERE attempt_id=? ORDER BY created_at,order_id LIMIT 1",
+      )
+      .get(value.attemptId);
+    const order = db
+      .prepare(
+        "SELECT order_id,attempt_id,remote_id,payload_json,created_at FROM remote_orders WHERE order_id=?",
       )
       .get(value.orderId);
-    if (existing) {
+    if (attemptOrder) {
+      return Object.freeze({
+        kind:
+          attemptOrder.order_id === value.orderId &&
+          attemptOrder.remote_id === value.remoteId
+            ? "attempt_bound"
+            : "attempt_conflict",
+        existing: Object.freeze(attemptOrder),
+        order: order && Object.freeze(order),
+      });
+    }
+    if (order)
+      return Object.freeze({
+        kind: "order_conflict",
+        existing: Object.freeze(order),
+      });
+    return Object.freeze({ kind: "available" });
+  }
+
+  function ensure(input) {
+    const value = input || {};
+    const guarded = orderCreationAttemptGuard(value);
+    if (guarded.kind === "attempt_bound") {
       if (
-        existing.attempt_id !== value.attemptId ||
-        existing.remote_id !== value.remoteId
+        guarded.existing.attempt_id !== value.attemptId ||
+        guarded.existing.remote_id !== value.remoteId
       )
         throw fail("OPERATIONAL_ORDER_CONFLICT");
       return { idempotent: true };
     }
+    if (guarded.kind !== "available")
+      throw fail("OPERATIONAL_ORDER_CONFLICT");
     try {
       db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
         value.orderId,
@@ -34,7 +66,10 @@ function createOperationalStoreOrderLink(context) {
     return { idempotent: false };
   }
 
-  return Object.freeze({ ensure });
+  return Object.freeze({
+    ensure,
+    orderCreationAttemptGuard,
+  });
 }
 
 module.exports = { createOperationalStoreOrderLink };

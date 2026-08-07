@@ -4,6 +4,7 @@ const publisher = require("./publisher-contract");
 const error = require("./safe-operational-error");
 const dto = require("./dto");
 const regularPublication = require("./regular-publication-contract");
+const paidMediaOrder = require("./paid-media-order-contract");
 module.exports = Object.freeze({
   ...identities,
   ...target,
@@ -11,4 +12,5 @@ module.exports = Object.freeze({
   parseSafeOperationalError: error.parseSafeOperationalError,
   ...dto,
   ...regularPublication,
+  ...paidMediaOrder,
 });

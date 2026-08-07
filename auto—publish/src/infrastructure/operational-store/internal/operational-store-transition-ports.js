@@ -6,6 +6,8 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   const publication = value.publication;
   const recovery = value.recovery;
   const queue = value.queue;
+  const order = value.order;
+  const paidExecution = value.paidExecution;
   holder.publicationTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     reservePublicationTarget: publication.reservePublicationTarget,
@@ -30,6 +32,26 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   holder.paidAdmissionTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     admitPaidBatch: queue.admitPaidBatch,
+  });
+  holder.paidExecutionTransitions = Object.freeze({
+    beginOrderCreationRemoteCall: paidExecution.beginOrderCreationRemoteCall,
+    claimPaidSubmissionBatchItem: paidExecution.claimPaidSubmissionBatchItem,
+    listPaidSubmissionBatchSnapshots:
+      paidExecution.listPaidSubmissionBatchSnapshots,
+    pauseAllPaidSubmissionBatches: paidExecution.pauseAllPaidSubmissionBatches,
+    pausePaidSubmissionBatchesOnStartup:
+      paidExecution.pausePaidSubmissionBatchesOnStartup,
+    recordPaidOrderCreationArticleRejection:
+      order.recordPaidOrderCreationArticleRejection,
+    recordPaidOrderCreationSuccess: order.recordPaidOrderCreationSuccess,
+    recordPaidOrderCreationSystemRejection:
+      order.recordPaidOrderCreationSystemRejection,
+    recordPaidOrderCreationUncertain: order.recordPaidOrderCreationUncertain,
+    releasePaidOrderCreationClaim: paidExecution.releasePaidOrderCreationClaim,
+    renewPaidOrderCreationClaim: paidExecution.renewPaidOrderCreationClaim,
+    setPaidSubmissionBatchRunIntent:
+      paidExecution.setPaidSubmissionBatchRunIntent,
+    startAllPaidSubmissionBatches: paidExecution.startAllPaidSubmissionBatches,
   });
 }
 

@@ -25,6 +25,9 @@ const {
   createOperationalStoreReconciliationAggregate,
 } = require("./internal/operational-store-reconciliation-aggregate");
 const {
+  createPaidExecutionAggregate,
+} = require("./internal/operational-store-paid-execution-aggregate");
+const {
   createOperationalStoreFactReader,
 } = require("./internal/operational-store-fact-reader");
 const {
@@ -45,6 +48,7 @@ function createOperationalStore(options) {
     const recover = recovery.createRecoveryAggregate(context, activeTarget);
     const order = orders.createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
+    const paidExecution = createPaidExecutionAggregate(context);
     const reconcile = createOperationalStoreReconciliationAggregate(context);
     const facts = createOperationalStoreFactReader(context);
     const maintain = createMaintenanceAggregate(context);
@@ -53,6 +57,8 @@ function createOperationalStore(options) {
       publication: pub,
       recovery: recover,
       queue,
+      order,
+      paidExecution,
     });
     return Object.freeze({
       databasePath: runtime.filename,
@@ -98,6 +104,27 @@ function createOperationalStore(options) {
       getPaidSubmissionBatch: queue.getPaidSubmissionBatch,
       listPaidSubmissionBatches: queue.listPaidSubmissionBatches,
       setPaidSubmissionBatchPause: queue.setPaidSubmissionBatchPause,
+      beginOrderCreationRemoteCall: paidExecution.beginOrderCreationRemoteCall,
+      claimPaidSubmissionBatchItem: paidExecution.claimPaidSubmissionBatchItem,
+      listPaidSubmissionBatchSnapshots:
+        paidExecution.listPaidSubmissionBatchSnapshots,
+      pauseAllPaidSubmissionBatches:
+        paidExecution.pauseAllPaidSubmissionBatches,
+      pausePaidSubmissionBatchesOnStartup:
+        paidExecution.pausePaidSubmissionBatchesOnStartup,
+      releasePaidOrderCreationClaim:
+        paidExecution.releasePaidOrderCreationClaim,
+      renewPaidOrderCreationClaim: paidExecution.renewPaidOrderCreationClaim,
+      setPaidSubmissionBatchRunIntent:
+        paidExecution.setPaidSubmissionBatchRunIntent,
+      startAllPaidSubmissionBatches:
+        paidExecution.startAllPaidSubmissionBatches,
+      recordPaidOrderCreationArticleRejection:
+        order.recordPaidOrderCreationArticleRejection,
+      recordPaidOrderCreationSystemRejection:
+        order.recordPaidOrderCreationSystemRejection,
+      recordPaidOrderCreationSuccess: order.recordPaidOrderCreationSuccess,
+      recordPaidOrderCreationUncertain: order.recordPaidOrderCreationUncertain,
       recordManualReconciliation: reconcile.recordManualReconciliation,
       listManualReconciliations: reconcile.listManualReconciliations,
       listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
