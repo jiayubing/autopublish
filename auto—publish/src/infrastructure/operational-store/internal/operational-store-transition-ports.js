@@ -67,6 +67,11 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
       paidExecution.setPaidSubmissionBatchRunIntent,
     startAllPaidSubmissionBatches: paidExecution.startAllPaidSubmissionBatches,
   });
+  holder.orderCreationResolutionTransitions = Object.freeze({
+    prepareOrderCreationResolution: order.prepareOrderCreationResolution,
+    bindVerifiedOrder: order.bindVerifiedOrder,
+    confirmNoOrder: order.confirmNoOrder,
+  });
 }
 
 module.exports = { exposeOperationalStoreTransitionPorts };

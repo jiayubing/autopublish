@@ -331,6 +331,11 @@ async function createWorkspaceRuntimeComposition(deps) {
     const mediaSupplierProvider = function () {
       return paidOrderCreationSupplier;
     };
+    const paidOrderDetailsQueryPort = Object.freeze({
+      getOrderDetails: function (orderIds) {
+        return mediaSupplierProvider().getOrderDetails(orderIds);
+      },
+    });
     const mediaResourceService = createMediaResourceService({
       resourceStore: mediaResourceStore,
       poolStore: mediaPoolStore,
@@ -640,6 +645,9 @@ async function createWorkspaceRuntimeComposition(deps) {
         {
           paidExecutionTransitions:
             operationalStoreTransitionPorts.paidExecutionTransitions,
+          orderCreationResolutionTransitions:
+            operationalStoreTransitionPorts.orderCreationResolutionTransitions,
+          orderDetailsQueryPort: paidOrderDetailsQueryPort,
           orderCreationPort: paidOrderCreationPort,
           recheckPaidOrder: paidMediaRecheck,
         },
@@ -725,6 +733,8 @@ async function createWorkspaceRuntimeComposition(deps) {
           paidLifecycleFacts:
             operationalStoreTransitionPorts.paidAdmissionTransitions,
           paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
+          paidOrderCreationResolutionService:
+            paidMediaBatchComposition.orderCreationResolutionService,
           systemSubmissionCodeProvider: function () {
             try {
               return (
@@ -751,6 +761,8 @@ async function createWorkspaceRuntimeComposition(deps) {
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       regularPlatformOutcomeService,
       paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
+      paidOrderCreationResolutionService:
+        paidMediaBatchComposition.orderCreationResolutionService,
       aiContentService,
       contentGenerationBatchService,
       generationSubmissionHandoffService: null,

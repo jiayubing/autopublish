@@ -477,6 +477,8 @@ export interface ArticleAttentionItem {
   batchId?: string | null;
   publicationId?: string | null;
   attemptId?: string | null;
+  orderCreationAttemptId?: string | null;
+  resolutionActions?: string[];
   transactionId?: string | null;
   status?: string | null;
   reasonCode?: string | null;

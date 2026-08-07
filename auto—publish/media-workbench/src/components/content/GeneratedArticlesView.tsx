@@ -116,6 +116,7 @@ export default function GeneratedArticlesView({
     useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] =
     useState<ArticleAttentionItem | null>(null);
+  const [paidResolutionError, setPaidResolutionError] = useState("");
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowStage | "all">(
@@ -1138,6 +1139,68 @@ export default function GeneratedArticlesView({
       />
     );
 
+  async function bindPaidOrderNumber(
+    item: ArticleAttentionItem,
+    orderId: string,
+  ) {
+    if (!item.orderCreationAttemptId) return;
+    setPaidResolutionError("");
+    try {
+      const prepared = await commands.prepareBindPaidOrderNumber({
+        orderCreationAttemptId: item.orderCreationAttemptId,
+        orderId,
+      });
+      if (
+        !(await confirm({
+          title: "确认补录订单号",
+          message: `已核对订单 ${orderId} 的媒体资源、标题和系统投稿标识。确认后将恢复正常订单跟踪。`,
+          confirmLabel: "确认补录",
+          tone: "warning",
+        }))
+      )
+        return;
+      await commands.bindPaidOrderNumber({
+        orderCreationAttemptId: item.orderCreationAttemptId,
+        orderId,
+        confirmationToken: prepared.confirmationToken,
+      });
+      setAttentionDetail(null);
+    } catch (value) {
+      setPaidResolutionError(
+        value instanceof Error ? value.message : "补录订单号失败。",
+      );
+    }
+  }
+
+  async function confirmPaidOrderAbsent(item: ArticleAttentionItem) {
+    if (!item.orderCreationAttemptId) return;
+    setPaidResolutionError("");
+    try {
+      const prepared = await commands.prepareConfirmPaidOrderAbsent({
+        orderCreationAttemptId: item.orderCreationAttemptId,
+      });
+      if (
+        !(await confirm({
+          title: "确认服务商没有订单",
+          message:
+            "仅在已人工核对服务商且确认没有生成订单时继续。确认后文章才能解除冻结；迟到的可信订单事实仍会重新冻结并优先保留。",
+          confirmLabel: "确认没有订单",
+          tone: "danger",
+        }))
+      )
+        return;
+      await commands.confirmPaidOrderAbsent({
+        orderCreationAttemptId: item.orderCreationAttemptId,
+        confirmationToken: prepared.confirmationToken,
+      });
+      setAttentionDetail(null);
+    } catch (value) {
+      setPaidResolutionError(
+        value instanceof Error ? value.message : "确认没有订单失败。",
+      );
+    }
+  }
+
   return (
     <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">
       <div className="mb-4 grid min-w-0 gap-3">
@@ -1482,6 +1545,13 @@ export default function GeneratedArticlesView({
             onExecutePreview={attentionFeature.executePreview}
             selectedAttentionId={selectedAttentionId}
             onOpenPublication={(item) => {
+              // Paid-order resolution is a dedicated attention workflow. Open
+              // its detail drawer so the typed media commands remain reachable
+              // without routing them through the generic attention resolver.
+              if (item.resolutionActions?.length) {
+                setAttentionDetail(item);
+                return;
+              }
               const article = articles.find(
                 (candidate) => candidate.id === item.articleId,
               );
@@ -1664,6 +1734,15 @@ export default function GeneratedArticlesView({
       <ArticleAttentionDetailDrawer
         item={attentionDetail}
         onClose={() => setAttentionDetail(null)}
+        onBindPaidOrderNumber={bindPaidOrderNumber}
+        onConfirmPaidOrderAbsent={confirmPaidOrderAbsent}
+        resolutionBusy={
+          commandStates.prepareBindPaidOrderNumber?.busy === true ||
+          commandStates.bindPaidOrderNumber?.busy === true ||
+          commandStates.prepareConfirmPaidOrderAbsent?.busy === true ||
+          commandStates.confirmPaidOrderAbsent?.busy === true
+        }
+        resolutionError={paidResolutionError}
       />
       {paidMediaPreflight && (
         <PaidMediaPreflightDialog

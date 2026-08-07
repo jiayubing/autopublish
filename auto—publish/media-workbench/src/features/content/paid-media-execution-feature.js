@@ -4,15 +4,25 @@ import {
 } from "../../infrastructure/query-identity/query-identity.js";
 
 function safeError(value) {
+  const safe = Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof value.code === "string" &&
+      typeof value.category === "string" &&
+      typeof value.retryability === "string" &&
+      typeof value.userMessage === "string",
+  );
   return Object.freeze({
     code:
       value && typeof value.code === "string"
         ? value.code
         : "PAID_MEDIA_EXECUTION_FAILED",
-    category: "internal",
-    retryability: "manual-check",
+    category: safe ? value.category : "internal",
+    retryability: safe ? value.retryability : "manual-check",
     userMessage:
-      value instanceof Error && value.message
+      safe
+        ? value.userMessage
+        : value instanceof Error && value.message
         ? value.message
         : "付费批次操作未能安全完成。",
   });
@@ -42,6 +52,22 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     pausePaidMediaBatch: createCommandOwner({
       feature: "content",
       command: "pausePaidMediaBatch",
+    }),
+    prepareBindPaidOrderNumber: createCommandOwner({
+      feature: "content",
+      command: "prepareBindPaidOrderNumber",
+    }),
+    bindPaidOrderNumber: createCommandOwner({
+      feature: "content",
+      command: "bindPaidOrderNumber",
+    }),
+    prepareConfirmPaidOrderAbsent: createCommandOwner({
+      feature: "content",
+      command: "prepareConfirmPaidOrderAbsent",
+    }),
+    confirmPaidOrderAbsent: createCommandOwner({
+      feature: "content",
+      command: "confirmPaidOrderAbsent",
     }),
   });
   const listeners = new Set();
@@ -139,6 +165,13 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     commands: Object.freeze({
       startPaidMediaBatch: (input) => runCommand("startPaidMediaBatch", input),
       pausePaidMediaBatch: (input) => runCommand("pausePaidMediaBatch", input),
+      prepareBindPaidOrderNumber: (input) =>
+        runCommand("prepareBindPaidOrderNumber", input),
+      bindPaidOrderNumber: (input) => runCommand("bindPaidOrderNumber", input),
+      prepareConfirmPaidOrderAbsent: (input) =>
+        runCommand("prepareConfirmPaidOrderAbsent", input),
+      confirmPaidOrderAbsent: (input) =>
+        runCommand("confirmPaidOrderAbsent", input),
     }),
     dispose() {
       if (disposed) return;

@@ -17,6 +17,7 @@ const SCOPES_BY_REASON = Object.freeze({
   CONTENT_EXPORT_QUEUED: ["articleManagement", "articleAttention", "platformQueue", "mediaWorkbench"],
   PUBLICATION_RECONCILED: ["articleManagement", "articleAttention", "platformQueue"],
   MEDIA_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue", "orders"],
+  PAID_ORDER_RESOLUTION_CHANGED: ["articleManagement", "articleAttention", "orders"],
   PLATFORM_AUTO_TRASH_APPLIED: ["articleManagement", "articleAttention", "platformQueue"],
   ARTICLE_REMOVAL_TRANSACTION_CHANGED: ["articleManagement", "articleAttention", "platformQueue"],
   GENERATION_SUBMISSION_HANDOFF_COMMITTED: ["articleManagement", "articleAttention", "platformQueue"],

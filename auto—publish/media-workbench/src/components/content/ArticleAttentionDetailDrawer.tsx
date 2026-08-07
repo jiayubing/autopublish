@@ -1,10 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { ArticleAttentionItem } from '../../types/publication';
 
 interface ArticleAttentionDetailDrawerProps {
   item: ArticleAttentionItem | null;
   onClose: () => void;
+  onBindPaidOrderNumber?: (item: ArticleAttentionItem, orderId: string) => Promise<unknown>;
+  onConfirmPaidOrderAbsent?: (item: ArticleAttentionItem) => Promise<unknown>;
+  resolutionBusy?: boolean;
+  resolutionError?: string | null;
 }
 
 function actionLabel(action: string): string {
@@ -15,13 +19,17 @@ function actionLabel(action: string): string {
     'open-article': '打开文章',
     inspect: '查看差异',
     finalize: '安全完成',
+    'bind-paid-order-number': '补录订单号',
+    'confirm-paid-order-absent': '确认没有订单',
   };
   return labels[action] || action;
 }
 
-export default function ArticleAttentionDetailDrawer({ item, onClose }: ArticleAttentionDetailDrawerProps) {
+export default function ArticleAttentionDetailDrawer({ item, onClose, onBindPaidOrderNumber, onConfirmPaidOrderAbsent, resolutionBusy = false, resolutionError = null }: ArticleAttentionDetailDrawerProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const [orderId, setOrderId] = useState('');
   useEffect(() => { if (item) headingRef.current?.focus(); }, [item]);
+  useEffect(() => { setOrderId(''); }, [item?.attentionId]);
   if (!item) return null;
   return <div className="fixed inset-0 z-[100] flex justify-end" role="dialog" aria-modal="true" aria-label="需处理详情">
     <button type="button" aria-label="关闭需处理详情" onClick={onClose} className="absolute inset-0 cursor-default bg-slate-900/20" />
@@ -40,6 +48,13 @@ export default function ArticleAttentionDetailDrawer({ item, onClose }: ArticleA
           {item.updatedAt && <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2"><dt className="text-slate-400">最近更新</dt><dd className="break-words">{item.updatedAt}</dd></div>}
         </dl>
         <div className="rounded border border-slate-200 bg-slate-50 p-3 leading-5 text-slate-600">此详情不显示工作区绝对路径、正文、Cookie、完整哈希或远端完整响应。</div>
+        {item.orderCreationAttemptId && item.resolutionActions?.includes('bind-paid-order-number') && <div className="grid gap-2 rounded border border-blue-200 bg-blue-50 p-3">
+          <label className="font-semibold text-blue-900" htmlFor="paid-order-resolution-id">补录服务商订单号</label>
+          <input id="paid-order-resolution-id" value={orderId} onChange={(event) => setOrderId(event.target.value)} disabled={resolutionBusy} placeholder="输入已在服务商处核对的订单号" className="min-w-0 rounded border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 disabled:opacity-50" />
+          <button type="button" disabled={resolutionBusy || !orderId.trim() || !onBindPaidOrderNumber} onClick={() => void onBindPaidOrderNumber?.(item, orderId.trim())} className="w-full rounded bg-blue-600 px-3 py-2 font-semibold text-white disabled:opacity-50 sm:w-auto">{resolutionBusy ? '正在核对…' : '核对并补录'}</button>
+        </div>}
+        {item.orderCreationAttemptId && item.resolutionActions?.includes('confirm-paid-order-absent') && <button type="button" disabled={resolutionBusy || !onConfirmPaidOrderAbsent} onClick={() => void onConfirmPaidOrderAbsent?.(item)} className="w-full rounded border border-amber-300 bg-amber-50 px-3 py-2 font-semibold text-amber-900 disabled:opacity-50 sm:w-auto">确认服务商没有该订单</button>}
+        {resolutionError && <div role="alert" className="rounded border border-rose-200 bg-rose-50 p-3 text-rose-700">{resolutionError}</div>}
         {item.allowedActions.length > 0 && <div><div className="font-semibold text-slate-700">当前允许动作</div><div className="mt-2 flex flex-wrap gap-1.5">{item.allowedActions.map((action) => <span key={action} className="rounded bg-white px-2 py-1 text-[11px] text-slate-600 ring-1 ring-slate-200">{actionLabel(action)}</span>)}</div></div>}
       </div>
     </aside>

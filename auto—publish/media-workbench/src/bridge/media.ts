@@ -89,6 +89,38 @@ type OrdersApi = {
   openPublishedUrl: (
     orderNid: string,
   ) => Promise<IpcResponse<{ completed: boolean }>>;
+  prepareBindPaidOrderNumber: (input: {
+    orderCreationAttemptId: string;
+    orderId: string;
+  }) => Promise<IpcResponse<PaidOrderResolutionPreparation>>;
+  bindPaidOrderNumber: (input: {
+    orderCreationAttemptId: string;
+    orderId: string;
+    confirmationToken: string;
+  }) => Promise<IpcResponse<PaidOrderResolutionResult>>;
+  prepareConfirmPaidOrderAbsent: (input: {
+    orderCreationAttemptId: string;
+  }) => Promise<IpcResponse<PaidOrderResolutionPreparation>>;
+  confirmPaidOrderAbsent: (input: {
+    orderCreationAttemptId: string;
+    confirmationToken: string;
+  }) => Promise<IpcResponse<PaidOrderResolutionResult>>;
+};
+
+type PaidOrderResolutionPreparation = {
+  orderCreationAttemptId: string;
+  action: "bind_verified_order" | "confirm_no_order";
+  confirmationToken: string;
+  expiresAt: string;
+  orderId?: string;
+  observationFingerprint?: string;
+};
+
+type PaidOrderResolutionResult = {
+  orderCreationAttemptId: string;
+  orderId?: string;
+  status: "order_bound" | "no_order";
+  idempotent: boolean;
 };
 
 function mediaApi(): MediaApi {
@@ -375,5 +407,49 @@ export async function openPublishedUrl(orderNid: string): Promise<void> {
   await unwrap(
     requireBridgeMethod(api.openPublishedUrl)(orderNid),
     "openPublishedUrl failed",
+  );
+}
+
+export async function prepareBindPaidOrderNumber(input: {
+  orderCreationAttemptId: string;
+  orderId: string;
+}): Promise<PaidOrderResolutionPreparation> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.prepareBindPaidOrderNumber)(input),
+    "prepareBindPaidOrderNumber failed",
+  );
+}
+
+export async function bindPaidOrderNumber(input: {
+  orderCreationAttemptId: string;
+  orderId: string;
+  confirmationToken: string;
+}): Promise<PaidOrderResolutionResult> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.bindPaidOrderNumber)(input),
+    "bindPaidOrderNumber failed",
+  );
+}
+
+export async function prepareConfirmPaidOrderAbsent(input: {
+  orderCreationAttemptId: string;
+}): Promise<PaidOrderResolutionPreparation> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.prepareConfirmPaidOrderAbsent)(input),
+    "prepareConfirmPaidOrderAbsent failed",
+  );
+}
+
+export async function confirmPaidOrderAbsent(input: {
+  orderCreationAttemptId: string;
+  confirmationToken: string;
+}): Promise<PaidOrderResolutionResult> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.confirmPaidOrderAbsent)(input),
+    "confirmPaidOrderAbsent failed",
   );
 }

@@ -91,6 +91,10 @@ test("article attention list crosses the authenticated IPC seam as an exact path
               kind: "failed-submission",
               articleId: "article-1",
               titleSnapshot: "公开标题",
+              resolutionActions: [
+                "bind-paid-order-number",
+                "confirm-paid-order-absent",
+              ],
               allowedActions: ["inspect"],
               message: "请检查投稿状态",
               filePath: "F:\\private\\article.md",
@@ -122,6 +126,10 @@ test("article attention list crosses the authenticated IPC seam as an exact path
           kind: "failed-submission",
           articleId: "article-1",
           titleSnapshot: "公开标题",
+          resolutionActions: [
+            "bind-paid-order-number",
+            "confirm-paid-order-absent",
+          ],
           allowedActions: ["inspect"],
           message: "请检查投稿状态",
         },

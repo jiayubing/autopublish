@@ -115,6 +115,26 @@ function createMediaWorkbenchApplication(options) {
         })
       : null);
   const paidMediaBatchOrchestrator = values.paidMediaBatchOrchestrator || null;
+  const paidOrderCreationResolutionService =
+    values.paidOrderCreationResolutionService || null;
+  const invalidateData =
+    typeof values.invalidateData === "function" ? values.invalidateData : null;
+
+  function resolutionService() {
+    if (!paidOrderCreationResolutionService) {
+      const error = new Error("Paid order resolution is unavailable");
+      error.code = "PAID_ORDER_RESOLUTION_UNAVAILABLE";
+      throw error;
+    }
+    return paidOrderCreationResolutionService;
+  }
+
+  function resolved(command) {
+    return Promise.resolve(command()).then((result) => {
+      if (invalidateData) invalidateData("PAID_ORDER_RESOLUTION_CHANGED");
+      return result;
+    });
+  }
 
   return Object.freeze({
     refreshResources: (input) =>
@@ -228,6 +248,14 @@ function createMediaWorkbenchApplication(options) {
         batch: paidMediaBatchOrchestrator.pauseBatch(input || {}),
       };
     },
+    prepareBindPaidOrderNumber: (input) =>
+      resolutionService().prepareBindOrderNumber(input || {}),
+    bindPaidOrderNumber: (input) =>
+      resolved(() => resolutionService().bindOrderNumber(input || {})),
+    prepareConfirmPaidOrderAbsent: (input) =>
+      resolutionService().prepareConfirmNoOrder(input || {}),
+    confirmPaidOrderAbsent: (input) =>
+      resolved(() => resolutionService().confirmNoOrder(input || {})),
     getOrders: () => ({
       items: orderService.listOrderViews().map(projectMediaOrder),
     }),

@@ -16,7 +16,7 @@ function queryState(loading = false, error = null, reason = null) {
 function fingerprintOf(data) {
   return JSON.stringify([
     data.revision,
-    data.items.map((item) => [item.attentionId, item.allowedActions]),
+    data.items.map((item) => [item.attentionId, item.allowedActions, item.resolutionActions]),
   ]);
 }
 

@@ -620,6 +620,18 @@ const api = {
     openPublishedUrl: function (orderNid) {
       return ipcRenderer.invoke("media:open-published-url", orderNid);
     },
+    prepareBindPaidOrderNumber: function (input) {
+      return ipcRenderer.invoke("media:prepare-bind-paid-order-number", input);
+    },
+    bindPaidOrderNumber: function (input) {
+      return ipcRenderer.invoke("media:bind-paid-order-number", input);
+    },
+    prepareConfirmPaidOrderAbsent: function (input) {
+      return ipcRenderer.invoke("media:prepare-confirm-paid-order-absent", input);
+    },
+    confirmPaidOrderAbsent: function (input) {
+      return ipcRenderer.invoke("media:confirm-paid-order-absent", input);
+    },
   },
 };
 

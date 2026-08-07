@@ -3,6 +3,9 @@
 const {
   createPaidMediaBatchOrchestrator,
 } = require("../services/paid-media-batch-orchestrator");
+const {
+  createPaidOrderCreationResolutionService,
+} = require("../services/paid-order-creation-resolution-service");
 
 function createPaidMediaBatchComposition(options) {
   const value = options || {};
@@ -13,7 +16,17 @@ function createPaidMediaBatchComposition(options) {
     randomUUID: value.randomUUID,
   });
   const startupSnapshot = orchestrator.initializePaused();
-  return Object.freeze({ orchestrator, startupSnapshot });
+  const orderCreationResolutionService =
+    createPaidOrderCreationResolutionService({
+      orderCreationResolutionTransitions:
+        value.orderCreationResolutionTransitions,
+      orderDetailsQueryPort: value.orderDetailsQueryPort,
+    });
+  return Object.freeze({
+    orchestrator,
+    orderCreationResolutionService,
+    startupSnapshot,
+  });
 }
 
 module.exports = { createPaidMediaBatchComposition };

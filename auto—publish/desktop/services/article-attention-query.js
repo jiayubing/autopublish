@@ -176,6 +176,7 @@ function createArticleAttentionQuery(options) {
       batchId: safeText(value.batchId, 160),
       publicationId: safeText(value.publicationId, 160),
       attemptId: safeText(value.attemptId, 160),
+      orderCreationAttemptId: safeText(value.orderCreationAttemptId, 160),
       targetKey: safeText(value.targetKey, 512),
       jobId: safeText(value.jobId, 160),
       transactionId: safeText(value.transactionId || value.id, 160),
@@ -187,7 +188,16 @@ function createArticleAttentionQuery(options) {
       updatedAt: safeText(value.updatedAt, 64),
       message: policy.message || MESSAGES[kind] || "需处理项需要进一步核对",
       recommendedAction: policy.recommendedAction,
-      allowedActions: policy.allowedActions.slice()
+      // Ticket 14 resolution commands are a dedicated media capability. Keep
+      // them out of the generic attention action list, whose commands are
+      // previewed/resolved by article-attention-resolver. The renderer uses
+      // this separate projection to reach the dedicated resolution UI.
+      resolutionActions: Array.isArray(value.resolutionActions)
+        ? value.resolutionActions
+            .filter((action) => typeof action === "string")
+            .slice(0, 8)
+        : [],
+      allowedActions: policy.allowedActions.slice(),
     };
     return { item: copy, policy: policy, facts: normalizedFacts };
   }
@@ -312,7 +322,9 @@ function createArticleAttentionQuery(options) {
       items: filtered.map(function(entry) { return entry.item; }),
       counts: {
         total: filtered.length,
-        actionable: filtered.filter(function(entry) { return entry.item.allowedActions.some(function(action) { return action !== "inspect" && action !== "open-publication" && action !== "open-article"; }); }).length
+        actionable: filtered.filter(function(entry) {
+          return entry.item.resolutionActions.length > 0 || entry.item.allowedActions.some(function(action) { return action !== "inspect" && action !== "open-publication" && action !== "open-article"; });
+        }).length
       }
     };
   }
