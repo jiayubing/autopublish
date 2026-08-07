@@ -44,6 +44,15 @@ function validateAdapter(adapter, id) {
     }
   }
 
+  if (
+    adapter.contentQueueImport === true &&
+    adapter.publicationTarget &&
+    adapter.publicationTarget.kind === "platform" &&
+    typeof adapter.preparePlatformSubmission !== "function"
+  ) {
+    return "[" + id + "] adapter missing function: preparePlatformSubmission";
+  }
+
   var hasOwnScan = typeof adapter.scanArticles === "function";
   var hasOwnParse = typeof adapter.parseArticleFiles === "function";
   if (hasOwnScan !== hasOwnParse) {

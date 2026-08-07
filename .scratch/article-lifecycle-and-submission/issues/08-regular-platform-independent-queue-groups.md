@@ -1,6 +1,6 @@
 # 08 — 普通平台独立队列组执行
 
-**What to build:** 按“普通平台 + 平台账号档案”建立独立 FIFO 队列组，使不同组可以并行，同组严格串行，并正确保存开始、暂停和重启意图。
+**What to build:** 按“普通平台 + 平台账号档案”建立独立 FIFO 队列组，使不同平台的组可以并行，同组严格串行，并正确保存开始、暂停和重启意图。当前核心阶段同一平台的多个账号档案组共享平台级执行锁并串行；账号专属浏览器会话与同平台多账号并行后置扩展。
 
 **Blocked by:** 07 — 普通平台单目标入队与待执行移除
 
@@ -16,10 +16,10 @@
 ## 执行过程
 
 1. 定义队列组身份、组级运行状态、手工暂停意图、当前项和剩余 FIFO 顺序的只读模型。
-2. 建立组编排器：一个组同一时间最多一个在途项，不同组使用独立执行通道并可并行。每次领取必须通过单个 transition-specific 事务原子复核组运行/暂停意图与 FIFO 头项，生成稳定 `regularPublicationAttemptId`，并一起保存组当前项、claim/lease 和 phase=`prepared` 的 in-flight intent；事务成功后才向平台执行器返回确定任务。未收口 intent 不得重新生成 attempt identity。
+2. 建立组编排器：一个组同一时间最多一个在途项，不同平台使用独立执行通道并可并行；同一平台的账号档案组在账号专属会话实现前共享平台级执行锁并串行。每次领取必须通过单个 transition-specific 事务原子复核组运行/暂停意图与 FIFO 头项，生成稳定 `regularPublicationAttemptId`，并一起保存组当前项、claim/lease 和 phase=`prepared` 的 in-flight intent；事务成功后才向平台执行器返回确定任务。未收口 intent 不得重新生成 attempt identity。
 3. 支持向运行组追加文章到队尾，继承组的平台、账号和已有组配置，绝不插队。
 4. 实现开始全部：只启动未开始且未被手工暂停的普通平台组；实现暂停全部：当前请求安全返回后停止领取下一项。
-5. 平台阶段一返回仅进程内 `PreparedSubmission` capability：它公开不可变、安全的 `preparedSubmissionEvidenceV1` 和唯一具名方法 `submitPreparedPublication()`，平台会话、DOM、上传 token 与其他私有状态隐藏在 adapter 内部闭包中。Ticket 08 必须实现下述唯一 V1 owner/validator；纯文本阶段不得只保存“至少包含”字段或开放 metadata。submit 必须提交与 evidence 相同的已准备内容，不得在 evidence 冻结后改标题、正文、图片布局或降级模式；若内部状态漂移，submission-start 后只能返回 uncertain。capability 不可枚举平台状态、不可序列化、不可记录、不可进入 IPC/持久化，也不得退化为任意 callback/metadata 容器。
+5. 平台阶段一返回仅进程内 `PreparedSubmission` capability：它公开不可变、安全的 `preparedSubmissionEvidenceV1` 和唯一具名方法 `submitPreparedPublication()`，平台会话、DOM、上传 token 与其他私有状态隐藏在 adapter 内部闭包中。Ticket 08 必须实现下述唯一 V1 owner/validator；纯文本阶段不得只保存“至少包含”字段或开放 metadata。submit 必须提交与 evidence 相同的已准备内容，不得在 evidence 冻结后改标题、正文、图片布局或降级模式；若内部状态漂移，submission-start 后只能返回 uncertain。capability 不可枚举平台状态、不可序列化、不可记录、不可进入 IPC/持久化，也不得退化为任意 callback/metadata 容器。今日头条已确认“预览并发布”只进入预览确认界面，广告弹窗处理也属于 preparation，只有“确认发布”是 capability 在 submission-start 后执行的不可逆动作；最终点击紧前必须再次核验账号身份。禾畔最终 payload 在 preparation 创建，投稿执行所需的临时 Cookie 只能在 submission-start 成功并真正调用 submit capability 时物化，正常返回和异常路径都立即清理。账号核验可在 submission-start 前使用独立、短生命周期的临时 Cookie，但必须在核验结束后立即清理，且不得借此发起投稿；用户于 2026-08-07 明确接受 begin 随后失败时该核验 Cookie 曾短暂物化的剩余风险。
 6. executor 取得 `PreparedSubmission` 后，在调用其提交方法的紧前一刻调用 `beginRegularRemoteSubmission(attemptId, preparedSubmissionEvidenceV1)`；该事务原子校验 attempt/正文 fingerprint 与 phase，冻结完整 evidence，将 intent 从 `prepared` 推进为 `remote_call_started` 并只写一次 `remoteCallStartedAt`。事务成功后才调用 `submitPreparedPublication()`。该标记表示“从此不得安全自动重放”，不声称供应商一定收到请求；标记前可在用户重新开始后重做准备，标记后 evidence 已持久保存且缺少终态 observation 一律交给 09 uncertain。
 7. 应用启动时所有普通平台组保持暂停，必须由用户明确开始；崩溃恢复只恢复本地事实，不自动调用远端。`prepared` intent 不得仅因 lease 过期自动运行，`remote_call_started` intent 不得重新变成 pending 或再次调用平台。
 8. 一个组完成、暂停或失败不得取消、停止或改写其他组。
@@ -55,7 +55,7 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 ## 架构硬门槛
 
 - 编排边界以队列组状态机和窄命令接口形成深模块；平台执行细节不能进入通用组编排器，也不得为缩短文件拆出透传层。
-- 组之间不共享可变运行状态；全局开始/暂停不能成为全局大状态机。
+- 不同平台之间不共享可变运行状态；当前核心阶段同一平台只共享一个最小执行锁，不共享队列顺序、暂停意图、当前项或 attempt 事实。全局开始/暂停不能成为全局大状态机。
 - 使用明确的 claim/lease 或等价机制保证同组单消费者和崩溃恢复。
 - lease 只解决本地单消费者所有权，不能充当远端幂等或安全重试证明。只有 durable `remote_call_started` 才表示已进入不可安全重放区；它是保守的本地边界标记，不伪装成供应商接收证据。
 - Ticket 09 只能按 `regularPublicationAttemptId` 读取、标记或收口 08 创建的 intent，不得创建第二条 intent；正常 accepted、article_rejected、group_blocked 和人工 resolution 必须原子收口原 intent。
@@ -65,7 +65,7 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 ## Acceptance criteria
 
 - [ ] 同一平台账号组严格 FIFO 且最多一个在途项。
-- [ ] 至少两个不同平台/账号组可并行，任一组结束或暂停不影响其他组。
+- [ ] 至少两个不同平台的账号组可并行，任一组结束或暂停不影响其他平台；同一平台的多个账号档案组当前严格串行，并在 preparation 前核验当前登录账号与目标档案一致。
 - [ ] 运行组追加文章进入队尾并继承组身份和配置。
 - [ ] 开始全部不会恢复手工暂停组，暂停全部不会强制中断当前远端请求。
 - [ ] 应用重启后所有组保持暂停且不会自动产生投稿。
@@ -76,6 +76,7 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 - [ ] `src/domain/` 唯一导出的 `articleIdentityV1` / `targetIdentityV1` validator 覆盖全部正反 variant；prepared evidence 只接受普通平台 target，当前宽松 articleRef/IPC 对象不能绕过版本和 extra-field 拒绝。交接必须列出导出位置和 09/13/23 的复用方式。
 - [ ] `PreparedSubmission` 公开面只有安全 evidence 与具名 submit 方法；序列化、日志、IPC、跨平台传递、读取私有 session/token 和注入通用 callback/metadata 的架构测试均失败关闭。
 - [ ] evidence 冻结后注入编辑器/会话内容漂移，submit 不会静默改写或重建 manifest；边界后只返回 uncertain，档案证据与任何明确 accepted 的实际准备内容一致。
+- [ ] `claim_until <= now` 一律视为 lease 已过期；账号 fingerprint 在 preparation 与最终点击紧前必须相同；begin 失败或幂等未授权 submit 不创建禾畔投稿 Cookie。账号核验使用并立即清理的独立临时 Cookie 是用户明确接受的例外。
 - [ ] 在组运行状态、FIFO 头项、claim/lease、组当前项和 in-flight intent 的每个持久化故障点注入失败，证明领取事务要么完整提交并返回唯一任务，要么不改变任何事实；不会留下“组已领取或已有当前项但缺少 in-flight intent”或重复领取状态。
 - [ ] composition/架构测试证明组编排器只能获得 `regularQueueGroupTransitions` 和单项执行端口，不能旁路 09、拼接通用 claim/release 或访问付费、迁移及其他无关写能力。
 - [ ] 合同测试证明同一未收口项只有一个稳定 `regularPublicationAttemptId`，08 是唯一 intent creator，并向 09 暴露只读/收口所需的稳定身份合同而不授予第二个 intent creator；09 对该合同的实际消费与不重复 intent 由 Ticket 09 及波次 6 集成复验完成。
@@ -84,7 +85,7 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 ## 审计建议
 
 - 等级：深度独立审计。
-- 范围：组身份与 FIFO、同组单消费者、跨组并行、追加、开始/暂停意图、prepared/remote_call_started phase、重启暂停、lease 过期和远端未知结果失败关闭。
+- 范围：组身份与 FIFO、同组单消费者、不同平台跨组并行、同平台账号组串行及账号核验、追加、开始/暂停意图、prepared/remote_call_started phase、重启暂停、lease 过期和远端未知结果失败关闭。
 - 重点核对 executor 两阶段调用与 09 结果策略的边界；注入 submission-start 标记前后、远端调用中和 observation 前的崩溃，证明不会把未开始误写成已提交，也不会自动重复投稿。不重复审计 07 admission 或 10 UI 细节，不运行完整 `npm test`。
 
 ## Non-goals

@@ -5,6 +5,7 @@ const { execSync } = require("child_process");
 
 const { DIRS, PW, LIEJU } = require("../../../scripts/config");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
+const domain = require("../../domain");
 const { ensureDir, sleep, quoteArg } = require("../../core/files");
 const {
   pwSessionConfig,
@@ -273,65 +274,109 @@ function buildFillScript(article) {
   return code;
 }
 
-async function publishArticle(article, options) {
-  var opts = options || {};
-  var autoSubmit = opts.autoSubmit !== false;
-  var interactive = resolveInteractive(opts);
-  var remoteCallStarted = false;
-
+function preparedContentMatches(article) {
   try {
+    return (
+      runCode(
+        "  var title = await page.locator('#atc_title').inputValue();\n" +
+          "  var body = await page.locator('#atc_content').inputValue();\n" +
+          "  return title === " +
+          JSON.stringify(article.title) +
+          " && body === " +
+          JSON.stringify(article.body) +
+          ";\n",
+        SESSION_OPTS,
+      ) === true
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+async function prepareArticleSubmission(article, options) {
+  var opts = options || {};
+  var interactive = resolveInteractive(opts);
+  throwIfStopped();
+  pwRun("goto " + LIEJU.publishUrl, { timeout: 20000, session: SESSION });
+  waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
+  throwIfStopped();
+
+  if (!checkLoginInCurrentPage()) {
+    diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
+    var relogged = await doLogin({
+      interactive: interactive,
+      timeoutMs: opts.timeoutMs,
+    });
+    if (!relogged || !checkLogin()) {
+      var loginError = new Error("Login failed");
+      loginError.code = "LOGIN_FAILED";
+      throw loginError;
+    }
     throwIfStopped();
+    saveCurrentState();
     pwRun("goto " + LIEJU.publishUrl, { timeout: 20000, session: SESSION });
     waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
     throwIfStopped();
+  }
 
-    if (!checkLoginInCurrentPage()) {
-      diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
-      var relogged = await doLogin({
-        interactive: interactive,
-        timeoutMs: opts.timeoutMs,
-      });
-      if (!relogged || !checkLogin()) {
-        return { status: "failed", errorCode: "LOGIN_FAILED" };
+  switchCity(article.city);
+  throwIfStopped();
+  runCode(buildFillScript(article), SESSION_OPTS);
+  diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
+
+  return Object.freeze({
+    submitPreparedPublication: async function () {
+      diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
+      try {
+        throwIfStopped();
+        if (!preparedContentMatches(article))
+          return { status: "uncertain", errorCode: "PREPARED_CONTENT_DRIFT" };
+        pwRun("click " + LIEJU.selectors.submitBtn, {
+          timeout: 20000,
+          session: SESSION,
+        });
+        // The current page URL and generic post-submit page structure cannot
+        // prove that this article was created. Do not manufacture published.
+        return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+      } catch (_) {
+        return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
       }
-      throwIfStopped();
-      saveCurrentState();
-      pwRun("goto " + LIEJU.publishUrl, { timeout: 20000, session: SESSION });
-      waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
-      throwIfStopped();
-    }
+    },
+  });
+}
 
-    switchCity(article.city);
-    throwIfStopped();
-    runCode(buildFillScript(article), SESSION_OPTS);
-    diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
-
-    if (!autoSubmit) {
+async function publishArticle(article, options) {
+  var opts = options || {};
+  try {
+    var prepared = await prepareArticleSubmission(article, opts);
+    if (opts.autoSubmit === false) {
       diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
       return { status: "submitted" };
     }
-
-    throwIfStopped();
-    diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
-    remoteCallStarted = true;
-    try {
-      pwRun("click " + LIEJU.selectors.submitBtn, {
-        timeout: 20000,
-        session: SESSION,
-      });
-      // The current page URL and generic post-submit page structure cannot
-      // prove that this article was created. Do not manufacture published.
-      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
-    } catch (remoteError) {
-      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
-    }
+    return prepared.submitPreparedPublication();
   } catch (error) {
-    if (remoteCallStarted)
-      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
     if (isStopError(error))
       return { status: "failed", errorCode: "STOP_REQUESTED" };
-    return { status: "failed", errorCode: "ADAPTER_FAILED" };
+    return {
+      status: "failed",
+      errorCode: error && error.code ? error.code : "ADAPTER_FAILED",
+    };
   }
+}
+
+async function preparePlatformSubmission(claim) {
+  const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+  const preparedArticle = Object.freeze({
+    title: evidence.title,
+    body: evidence.body,
+  });
+  const prepared = await prepareArticleSubmission(preparedArticle, {
+    autoSubmit: true,
+  });
+  return domain.createPreparedSubmission({
+    preparedSubmissionEvidenceV1: evidence,
+    submitPreparedPublication: prepared.submitPreparedPublication,
+  });
 }
 
 function isStopError(error) {
@@ -381,6 +426,7 @@ module.exports = {
   checkLogin: checkLogin,
   inspectAccount: inspectAccount,
   publishArticle: publishArticle,
+  preparePlatformSubmission: preparePlatformSubmission,
   saveSession: saveCurrentState,
   closeSession: closeBrowserSession,
 };

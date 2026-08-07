@@ -13,7 +13,21 @@ const PAUSE_INTENTS = new Set(["none", "manual", "system"]);
 const FINGERPRINT = /^[a-f0-9]{64}$/;
 
 function createOperationalStoreQueueAggregate(context) {
-  const { db, open, transaction, clock, randomUUID, fail, iso } = context;
+  const {
+    db,
+    open,
+    transaction,
+    clock,
+    randomUUID,
+    fail,
+    iso,
+    internalRegularQueueTransitionFault,
+  } = context;
+
+  function regularQueueFault(point, detail) {
+    if (internalRegularQueueTransitionFault)
+      internalRegularQueueTransitionFault(point, detail || {});
+  }
 
   function requiredText(value, max, code) {
     if (
@@ -49,6 +63,78 @@ function createOperationalStoreQueueAggregate(context) {
     });
   }
 
+  function regularQueueGroupRows(input) {
+    const value = input || {};
+    const params = [];
+    let where = "";
+    if (value.queueGroupId !== undefined) {
+      where = "WHERE g.queue_group_id=?";
+      params.push(
+        requiredText(
+          value.queueGroupId,
+          128,
+          "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+        ),
+      );
+    }
+    return db
+      .prepare(
+        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','submitting') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
+          where +
+          " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id,q.position",
+      )
+      .all(...params)
+      .filter(
+        (row, index, rows) =>
+          index === 0 || row.queue_group_id !== rows[index - 1].queue_group_id,
+      );
+  }
+
+  function regularQueueGroupSnapshot(row) {
+    if (!row) return null;
+    const current = row.current_item_id
+      ? Object.freeze({
+          itemId: row.current_item_id,
+          batchId: row.current_batch_id,
+          articleId: row.current_article_id,
+          regularPublicationAttemptId: row.current_attempt_id,
+          phase: row.current_phase,
+          claimUntil: row.current_claim_until,
+        })
+      : null;
+    const remaining = db
+      .prepare(
+        "SELECT q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE q.queue_group_id=? AND s.status='queued' ORDER BY q.position LIMIT 20000",
+      )
+      .all(row.queue_group_id)
+      .map((item) =>
+        Object.freeze({
+          itemId: item.item_id,
+          batchId: item.batch_id,
+          articleId: item.article_id,
+          regularPublicationAttemptId: item.attempt_id,
+          position: item.position,
+        }),
+      );
+    return Object.freeze({
+      queueGroupId: row.queue_group_id,
+      platformId: row.platform_id,
+      accountProfileId: row.account_profile_id,
+      runState: current
+        ? "in_flight"
+        : row.pause_intent === "none"
+          ? "running"
+          : "paused",
+      pauseIntent: row.pause_intent,
+      manuallyPaused: row.pause_intent === "manual",
+      current,
+      remaining: Object.freeze(remaining),
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+  }
+
   function createSubmissionQueueGroup(input) {
     open();
     const value = input || {};
@@ -71,7 +157,7 @@ function createOperationalStoreQueueAggregate(context) {
           );
     const intent = pauseIntent(
       value.pauseIntent,
-      value.paused === false ? "none" : "manual",
+      value.paused === false ? "none" : "system",
     );
     const stamp = iso(clock);
     return transaction(() => {
@@ -150,6 +236,76 @@ function createOperationalStoreQueueAggregate(context) {
         .all()
         .map(queueGroupRow),
     );
+  }
+
+  function listRegularQueueGroupSnapshots(input) {
+    open();
+    return Object.freeze(
+      regularQueueGroupRows(input).map(regularQueueGroupSnapshot),
+    );
+  }
+
+  function setRegularQueueGroupRunIntent(input) {
+    open();
+    const value = input || {};
+    const queueGroupId = requiredText(
+      value.queueGroupId,
+      128,
+      "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+    );
+    const intent = value.running === true ? "none" : "manual";
+    const stamp = iso(clock);
+    return transaction(() => {
+      const changed = db
+        .prepare(
+          "UPDATE submission_queue_groups SET pause_intent=?,revision=revision+1,updated_at=? WHERE queue_group_id=?",
+        )
+        .run(intent, stamp, queueGroupId).changes;
+      if (changed !== 1) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
+      regularQueueFault("after-group-run-intent", { queueGroupId, intent });
+      return regularQueueGroupSnapshot(
+        regularQueueGroupRows({ queueGroupId })[0],
+      );
+    });
+  }
+
+  function updateRegularQueueGroupsForGlobalIntent(mode) {
+    open();
+    const stamp = iso(clock);
+    return transaction(() => {
+      const changed =
+        mode === "start"
+          ? db
+              .prepare(
+                "UPDATE submission_queue_groups SET pause_intent='none',revision=revision+1,updated_at=? WHERE pause_intent='system'",
+              )
+              .run(stamp).changes
+          : db
+              .prepare(
+                "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE pause_intent='none'",
+              )
+              .run(stamp).changes;
+      regularQueueFault("after-global-run-intent", { mode, changed });
+      return Object.freeze({
+        mode,
+        changedCount: changed,
+        groups: Object.freeze(
+          regularQueueGroupRows({}).map(regularQueueGroupSnapshot),
+        ),
+      });
+    });
+  }
+
+  function startAllRegularQueueGroups() {
+    return updateRegularQueueGroupsForGlobalIntent("start");
+  }
+
+  function pauseAllRegularQueueGroups() {
+    return updateRegularQueueGroupsForGlobalIntent("pause");
+  }
+
+  function pauseRegularQueueGroupsOnStartup() {
+    return updateRegularQueueGroupsForGlobalIntent("startup");
   }
 
   function enqueueSubmissionQueueItem(input) {
@@ -280,6 +436,301 @@ function createOperationalStoreQueueAggregate(context) {
     );
   }
 
+  function claimRegularQueueGroupHead(input) {
+    open();
+    const value = input || {};
+    const queueGroupId = requiredText(
+      value.queueGroupId,
+      128,
+      "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+    );
+    const claimToken = requiredText(
+      value.claimToken,
+      128,
+      "OPERATIONAL_CLAIM_INVALID",
+    );
+    const leaseMs =
+      Number.isSafeInteger(value.leaseMs) && value.leaseMs > 0
+        ? value.leaseMs
+        : 30000;
+    if (leaseMs > 300000) throw fail("OPERATIONAL_CLAIM_INVALID");
+    const stamp = iso(clock);
+    const claimUntil = new Date(Date.parse(stamp) + leaseMs).toISOString();
+    return transaction(() => {
+      const group = db
+        .prepare("SELECT * FROM submission_queue_groups WHERE queue_group_id=?")
+        .get(queueGroupId);
+      if (!group) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
+      if (group.pause_intent !== "none") return null;
+      const head = db
+        .prepare(
+          "SELECT q.position,s.*,i.state intent_state,i.payload_json intent_payload,p.publication_id,p.target_json FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id JOIN publication_attempts a ON a.attempt_id=json_extract(s.payload_json,'$.attemptId') JOIN publication_records p ON p.publication_id=a.publication_id JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE q.queue_group_id=? ORDER BY q.position LIMIT 1",
+        )
+        .get(queueGroupId);
+      if (!head) return null;
+      const intent = fromText(head.intent_payload) || {};
+      const phase = intent.detail && intent.detail.phase;
+      if (phase === "remote_call_started" || head.intent_state !== "resolved")
+        return null;
+      const reclaimable =
+        head.status === "queued" ||
+        (head.status === "claimed" &&
+          typeof head.claim_until === "string" &&
+          head.claim_until <= stamp &&
+          phase === "prepared");
+      if (!reclaimable) return null;
+      const payload = fromText(head.payload_json) || {};
+      const snapshot = payload.publicationSnapshot;
+      if (
+        !snapshot ||
+        typeof payload.attemptId !== "string" ||
+        typeof payload.clientId !== "string"
+      )
+        throw fail("REGULAR_QUEUE_FACT_CONFLICT");
+      const changed = db
+        .prepare(
+          "UPDATE submission_items SET status='claimed',claim_token=?,claim_until=?,revision=revision+1 WHERE item_id=? AND revision=?",
+        )
+        .run(claimToken, claimUntil, head.item_id, head.revision).changes;
+      if (changed !== 1) throw fail("REGULAR_QUEUE_CLAIM_CONFLICT");
+      regularQueueFault("after-head-claim", {
+        queueGroupId,
+        itemId: head.item_id,
+      });
+      const nextIntent = Object.assign({}, intent, {
+        detail: Object.assign({}, intent.detail || {}, { phase: "prepared" }),
+        regularSubmission: {
+          queueGroupId,
+          itemId: head.item_id,
+          claimToken,
+          claimUntil,
+          regularPublicationAttemptId: payload.attemptId,
+        },
+      });
+      const intentChanged = db
+        .prepare(
+          "UPDATE recovery_intents SET payload_json=?,updated_at=? WHERE attempt_id=? AND state='resolved'",
+        )
+        .run(text(nextIntent), stamp, payload.attemptId).changes;
+      if (intentChanged !== 1) throw fail("REGULAR_QUEUE_FACT_CONFLICT");
+      regularQueueFault("after-prepared-intent", {
+        queueGroupId,
+        itemId: head.item_id,
+        attemptId: payload.attemptId,
+      });
+      const groupChanged = db
+        .prepare(
+          "UPDATE submission_queue_groups SET revision=revision+1,updated_at=? WHERE queue_group_id=? AND pause_intent='none'",
+        )
+        .run(stamp, queueGroupId).changes;
+      if (groupChanged !== 1) throw fail("REGULAR_QUEUE_CLAIM_CONFLICT");
+      regularQueueFault("after-group-current-item", {
+        queueGroupId,
+        itemId: head.item_id,
+      });
+      return Object.freeze({
+        queueGroupId,
+        platformId: group.platform_id,
+        accountProfileId: group.account_profile_id,
+        itemId: head.item_id,
+        batchId: head.batch_id,
+        articleIdentityV1: domain.parseArticleIdentityV1({
+          version: 1,
+          clientId: payload.clientId,
+          articleId: head.article_id,
+        }),
+        targetIdentityV1: domain.parseTargetIdentityV1({
+          version: 1,
+          ...fromText(head.target_json),
+        }),
+        publicationSnapshot: Object.freeze({ ...snapshot }),
+        regularPublicationAttemptId: payload.attemptId,
+        claimToken,
+        claimUntil,
+        position: head.position,
+      });
+    });
+  }
+
+  function beginRegularRemoteSubmission(input) {
+    open();
+    const value = input || {};
+    const attemptId = domain.AttemptId.serialize(
+      domain.AttemptId.parse(
+        value.regularPublicationAttemptId || value.attemptId,
+      ),
+    );
+    const claimToken = requiredText(
+      value.claimToken,
+      128,
+      "OPERATIONAL_CLAIM_INVALID",
+    );
+    const evidence = domain.parsePreparedSubmissionEvidenceV1(
+      value.preparedSubmissionEvidenceV1,
+    );
+    if (evidence.attemptId !== attemptId)
+      throw fail("REGULAR_SUBMISSION_EVIDENCE_MISMATCH");
+    const stamp = iso(clock);
+    return transaction(() => {
+      const row = db
+        .prepare(
+          "SELECT i.state,i.payload_json,s.item_id,s.status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.article_id,p.target_json,a.status attempt_status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id JOIN submission_items s ON json_extract(s.payload_json,'$.attemptId')=i.attempt_id WHERE i.attempt_id=?",
+        )
+        .get(attemptId);
+      if (!row) throw fail("REGULAR_SUBMISSION_ATTEMPT_NOT_FOUND");
+      if (row.claim_token !== claimToken)
+        throw fail("REGULAR_SUBMISSION_CLAIM_STALE");
+      const intent = fromText(row.payload_json) || {};
+      const existingEvidence = intent.preparedSubmissionEvidenceV1;
+      if (
+        row.state === "remote_started" &&
+        intent.detail &&
+        intent.detail.phase === "remote_call_started"
+      ) {
+        if (JSON.stringify(existingEvidence) !== JSON.stringify(evidence))
+          throw fail("REGULAR_SUBMISSION_EVIDENCE_CONFLICT");
+        return Object.freeze({
+          regularPublicationAttemptId: attemptId,
+          phase: "remote_call_started",
+          remoteCallStartedAt: intent.detail.remoteCallStartedAt,
+          idempotent: true,
+          submitAuthorized: false,
+          preparedSubmissionEvidenceV1: evidence,
+        });
+      }
+      if (
+        row.state !== "resolved" ||
+        !intent.detail ||
+        intent.detail.phase !== "prepared" ||
+        row.status !== "claimed" ||
+        typeof row.claim_until !== "string" ||
+        row.claim_until <= stamp ||
+        row.attempt_status !== "queued"
+      )
+        throw fail("REGULAR_SUBMISSION_PHASE_INVALID");
+      const itemPayload = fromText(row.item_payload) || {};
+      const target = fromText(row.target_json);
+      if (
+        itemPayload.clientId !== evidence.articleIdentityV1.clientId ||
+        row.article_id !== evidence.articleIdentityV1.articleId ||
+        JSON.stringify({ version: 1, ...target }) !==
+          JSON.stringify(evidence.targetIdentityV1)
+      )
+        throw fail("REGULAR_SUBMISSION_EVIDENCE_MISMATCH");
+      const nextIntent = Object.assign({}, intent, {
+        detail: Object.assign({}, intent.detail, {
+          phase: "remote_call_started",
+          remoteCallStartedAt: stamp,
+        }),
+        preparedSubmissionEvidenceV1: evidence,
+      });
+      const intentChanged = db
+        .prepare(
+          "UPDATE recovery_intents SET state='remote_started',payload_json=?,updated_at=? WHERE attempt_id=? AND state='resolved'",
+        )
+        .run(text(nextIntent), stamp, attemptId).changes;
+      if (intentChanged !== 1) throw fail("REGULAR_SUBMISSION_PHASE_INVALID");
+      regularQueueFault("after-evidence-freeze", { attemptId });
+      const attemptChanged = db
+        .prepare(
+          "UPDATE publication_attempts SET status='remote_started' WHERE attempt_id=? AND status='queued'",
+        )
+        .run(attemptId).changes;
+      if (attemptChanged !== 1) throw fail("REGULAR_SUBMISSION_PHASE_INVALID");
+      regularQueueFault("after-attempt-remote-started", { attemptId });
+      const publicationChanged = db
+        .prepare(
+          "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=? AND status='queued'",
+        )
+        .run(stamp, row.publication_id).changes;
+      if (publicationChanged !== 1)
+        throw fail("REGULAR_SUBMISSION_PHASE_INVALID");
+      regularQueueFault("after-publication-remote-started", { attemptId });
+      const targetChanged = db
+        .prepare(
+          "UPDATE article_active_targets SET state='remote_started',updated_at=? WHERE attempt_id=? AND state='queued'",
+        )
+        .run(stamp, attemptId).changes;
+      if (targetChanged !== 1) throw fail("REGULAR_SUBMISSION_PHASE_INVALID");
+      regularQueueFault("after-active-target-remote-started", { attemptId });
+      const itemChanged = db
+        .prepare(
+          "UPDATE submission_items SET status='submitting',claim_until=NULL,revision=revision+1 WHERE item_id=? AND status='claimed' AND claim_token=?",
+        )
+        .run(row.item_id, row.claim_token).changes;
+      if (itemChanged !== 1) throw fail("REGULAR_SUBMISSION_PHASE_INVALID");
+      regularQueueFault("after-submission-start", {
+        attemptId,
+        itemId: row.item_id,
+      });
+      return Object.freeze({
+        regularPublicationAttemptId: attemptId,
+        phase: "remote_call_started",
+        remoteCallStartedAt: stamp,
+        idempotent: false,
+        submitAuthorized: true,
+        preparedSubmissionEvidenceV1: evidence,
+      });
+    });
+  }
+
+  function renewRegularQueueGroupClaim(input) {
+    open();
+    const value = input || {};
+    const attemptId = domain.AttemptId.serialize(
+      domain.AttemptId.parse(value.regularPublicationAttemptId),
+    );
+    const claimToken = requiredText(
+      value.claimToken,
+      128,
+      "OPERATIONAL_CLAIM_INVALID",
+    );
+    const leaseMs =
+      Number.isSafeInteger(value.leaseMs) && value.leaseMs > 0
+        ? value.leaseMs
+        : 30000;
+    if (leaseMs > 300000) throw fail("OPERATIONAL_CLAIM_INVALID");
+    const stamp = iso(clock);
+    const claimUntil = new Date(Date.parse(stamp) + leaseMs).toISOString();
+    return transaction(() => {
+      const row = db
+        .prepare(
+          "SELECT s.item_id,s.claim_until,i.payload_json FROM submission_items s JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') WHERE json_extract(s.payload_json,'$.attemptId')=? AND s.status='claimed' AND s.claim_token=?",
+        )
+        .get(attemptId, claimToken);
+      if (
+        !row ||
+        typeof row.claim_until !== "string" ||
+        row.claim_until <= stamp
+      )
+        throw fail("REGULAR_SUBMISSION_CLAIM_STALE");
+      const itemChanged = db
+        .prepare(
+          "UPDATE submission_items SET claim_until=?,revision=revision+1 WHERE item_id=? AND status='claimed' AND claim_token=? AND claim_until>?",
+        )
+        .run(claimUntil, row.item_id, claimToken, stamp).changes;
+      if (itemChanged !== 1) throw fail("REGULAR_SUBMISSION_CLAIM_STALE");
+      const intent = fromText(row.payload_json) || {};
+      const nextIntent = Object.assign({}, intent, {
+        regularSubmission: Object.assign({}, intent.regularSubmission || {}, {
+          claimToken,
+          claimUntil,
+        }),
+      });
+      const intentChanged = db
+        .prepare(
+          "UPDATE recovery_intents SET payload_json=?,updated_at=? WHERE attempt_id=? AND state='resolved'",
+        )
+        .run(text(nextIntent), stamp, attemptId).changes;
+      if (intentChanged !== 1) throw fail("REGULAR_SUBMISSION_CLAIM_STALE");
+      return Object.freeze({
+        regularPublicationAttemptId: attemptId,
+        claimToken,
+        claimUntil,
+      });
+    });
+  }
+
   function regularTarget(input) {
     let target;
     try {
@@ -379,7 +830,7 @@ function createOperationalStoreQueueAggregate(context) {
         queueGroupId,
         target.platformId,
         accountProfileId,
-        "manual",
+        "system",
         1,
         stamp,
         stamp,
@@ -1376,6 +1827,14 @@ function createOperationalStoreQueueAggregate(context) {
     listSubmissionQueueGroups,
     enqueueSubmissionQueueItem,
     listSubmissionQueueItems,
+    listRegularQueueGroupSnapshots,
+    setRegularQueueGroupRunIntent,
+    startAllRegularQueueGroups,
+    pauseAllRegularQueueGroups,
+    pauseRegularQueueGroupsOnStartup,
+    claimRegularQueueGroupHead,
+    renewRegularQueueGroupClaim,
+    beginRegularRemoteSubmission,
     admitRegularQueueItem,
     removePendingQueueItem,
     admitPaidBatch,

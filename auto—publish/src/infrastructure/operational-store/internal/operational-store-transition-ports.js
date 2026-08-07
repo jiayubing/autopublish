@@ -17,6 +17,16 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     admitRegularQueueItem: queue.admitRegularQueueItem,
     removePendingQueueItem: queue.removePendingQueueItem,
   });
+  holder.regularQueueGroupTransitions = Object.freeze({
+    listRegularQueueGroupSnapshots: queue.listRegularQueueGroupSnapshots,
+    setRegularQueueGroupRunIntent: queue.setRegularQueueGroupRunIntent,
+    startAllRegularQueueGroups: queue.startAllRegularQueueGroups,
+    pauseAllRegularQueueGroups: queue.pauseAllRegularQueueGroups,
+    pauseRegularQueueGroupsOnStartup: queue.pauseRegularQueueGroupsOnStartup,
+    claimRegularQueueGroupHead: queue.claimRegularQueueGroupHead,
+    renewRegularQueueGroupClaim: queue.renewRegularQueueGroupClaim,
+    beginRegularRemoteSubmission: queue.beginRegularRemoteSubmission,
+  });
   holder.paidAdmissionTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     admitPaidBatch: queue.admitPaidBatch,

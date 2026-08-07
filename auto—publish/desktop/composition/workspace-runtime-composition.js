@@ -480,6 +480,25 @@ async function createWorkspaceRuntimeComposition(deps) {
     loadedPlatforms.forEach(function (platform) {
       adapters[platform.id] = platform;
     });
+    const regularPlatformAdapters = loadedPlatforms.map(function (platform) {
+      return platform.id === "hepan"
+        ? require("../services/hepan-regular-preparation-adapter").createHepanRegularPreparationAdapter(
+            { platformSettingsService, paths: injectedPaths },
+          )
+        : platform;
+    });
+    const platformSubmissionExecutor =
+      require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(
+        { adapters: regularPlatformAdapters, accountInspector },
+      );
+    const regularQueueGroupComposition =
+      require("./regular-queue-group-composition").createRegularQueueGroupComposition(
+        {
+          regularQueueGroupTransitions:
+            operationalStoreTransitionPorts.regularQueueGroupTransitions,
+          platformSubmissionExecutor,
+        },
+      );
     const platformWorkbenchService = ownService(
       require("../services/platform-workbench-service").createPlatformWorkbenchService(
         {
@@ -586,6 +605,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       contentStore,
       contentSubmissionService,
       regularQueueApplication,
+      regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       aiContentService,
       contentGenerationBatchService,
       generationSubmissionHandoffService: null,
