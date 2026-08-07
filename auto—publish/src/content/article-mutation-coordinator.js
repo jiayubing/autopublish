@@ -719,6 +719,7 @@ function createArticleMutationCoordinator(options) {
         const fact = facts.submissionItems.find(function (candidate) {
           return candidate.articleId === ref.articleId &&
             (selection.itemId ? candidate.itemId === selection.itemId : candidate.status === "queued") &&
+            candidate.batchId === selection.batchId &&
             (!selection.targetKey || candidate.targetKey === selection.targetKey);
         });
         if (!fact || !fact.itemId || !fact.batchId)

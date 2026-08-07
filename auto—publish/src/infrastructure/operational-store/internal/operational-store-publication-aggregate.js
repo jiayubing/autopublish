@@ -268,7 +268,7 @@ function createPublicationAggregate(context, activeTarget) {
         throw fail("PUBLICATION_RETRY_NOT_ELIGIBLE");
       const latest = db
         .prepare(
-          "SELECT attempt_id,status FROM publication_attempts WHERE publication_id=? ORDER BY created_at DESC,attempt_id DESC LIMIT 1",
+          "SELECT attempt_id,status FROM publication_attempts WHERE publication_id=? ORDER BY rowid DESC LIMIT 1",
         )
         .get(publicationId);
       if (!latest || latest.status !== "failed")
@@ -554,7 +554,7 @@ function createPublicationAggregate(context, activeTarget) {
       records.map((record) => {
         const attempts = db
           .prepare(
-            "SELECT a.attempt_id,a.status,a.created_at,a.finished_at,i.payload_json AS intent_payload FROM publication_attempts a LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE a.publication_id=? ORDER BY a.created_at",
+            "SELECT a.attempt_id,a.status,a.created_at,a.finished_at,i.payload_json AS intent_payload FROM publication_attempts a LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE a.publication_id=? ORDER BY a.rowid",
           )
           .all(record.publication_id)
           .map((attempt) => {

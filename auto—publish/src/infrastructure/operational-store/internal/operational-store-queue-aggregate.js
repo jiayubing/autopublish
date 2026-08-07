@@ -1,6 +1,7 @@
 const domain = require("../../../domain");
 
 const {
+  cancellationResolutionFromIntent,
   fromText,
   rejectSensitive,
   safeOperationalPayload,
@@ -930,43 +931,57 @@ function createOperationalStoreQueueAggregate(context) {
           throw fail("REGULAR_QUEUE_BATCH_CONFLICT");
       }
       const group = regularGroup(item, item.target, stamp);
+      const oldPublication = db
+        .prepare(
+          "SELECT p.publication_id,p.status,a.attempt_id,a.finished_at,i.payload_json AS intent_payload FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE p.article_id=? AND p.target_key=?",
+        )
+        .get(item.articleId, targetKey);
+      const cancelledPublication =
+        oldPublication &&
+        oldPublication.status === "queued" &&
+        oldPublication.attempt_id &&
+        oldPublication.finished_at &&
+        cancellationResolutionFromIntent(oldPublication.intent_payload);
+      if (oldPublication && !cancelledPublication)
+        throw fail(
+          oldPublication.status === "uncertain"
+            ? "PUBLICATION_UNCERTAIN"
+            : "PUBLICATION_DUPLICATE",
+        );
+      const publicationId = oldPublication
+        ? oldPublication.publication_id
+        : item.publicationId;
       const payload = Object.assign({}, item.payload || {}, {
         clientId: item.clientId,
         sourcePlatformId: item.target.platformId,
         targetPlatformId: item.target.platformId,
         accountProfileId: item.target.accountProfileId,
         publicationSnapshot: item.snapshot,
-        publicationId: item.publicationId,
+        publicationId,
         attemptId: item.attemptId,
       });
       rejectSensitive(payload);
-      const oldPublication = db
-        .prepare(
-          "SELECT status FROM publication_records WHERE article_id=? AND target_key=?",
-        )
-        .get(item.articleId, targetKey);
-      if (oldPublication)
-        throw fail(
-          oldPublication.status === "uncertain"
-            ? "PUBLICATION_UNCERTAIN"
-            : "PUBLICATION_DUPLICATE",
-        );
       const batchItem = db
         .prepare("SELECT item_id FROM submission_items WHERE item_id=?")
         .get(item.itemId);
       if (batchItem) throw fail("REGULAR_QUEUE_ITEM_CONFLICT");
-      db.prepare("INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)").run(
-        item.publicationId,
-        item.articleId,
-        targetKey,
-        text(item.target),
-        "queued",
-        stamp,
-        stamp,
-      );
+      if (!oldPublication)
+        db.prepare("INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)").run(
+          publicationId,
+          item.articleId,
+          targetKey,
+          text(item.target),
+          "queued",
+          stamp,
+          stamp,
+        );
+      else
+        db.prepare(
+          "UPDATE publication_records SET status='queued',target_json=?,updated_at=? WHERE publication_id=?",
+        ).run(text(item.target), stamp, publicationId);
       db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
         item.attemptId,
-        item.publicationId,
+        publicationId,
         "queued",
         stamp,
         null,
@@ -1010,7 +1025,7 @@ function createOperationalStoreQueueAggregate(context) {
         )
         .run(
           item.articleId,
-          item.publicationId,
+          publicationId,
           item.attemptId,
           targetKey,
           text(item.target),
@@ -1023,7 +1038,7 @@ function createOperationalStoreQueueAggregate(context) {
         itemId: item.itemId,
         batchId: item.batchId,
         articleId: item.articleId,
-        publicationId: item.publicationId,
+        publicationId,
         attemptId: item.attemptId,
         targetKey,
         queueGroupId: group.queue_group_id,
@@ -1061,7 +1076,7 @@ function createOperationalStoreQueueAggregate(context) {
     return transaction(() => {
       const row = db
         .prepare(
-          "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.status,s.claim_token,s.payload_json,q.queue_group_id,q.position,p.publication_id,p.status publication_status,a.attempt_id,a.status attempt_status FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id LEFT JOIN publication_records p ON p.article_id=s.article_id AND p.target_key=s.target_key LEFT JOIN publication_attempts a ON a.publication_id=p.publication_id WHERE s.item_id=? AND s.batch_id=?",
+          "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.status,s.claim_token,s.payload_json,q.queue_group_id,q.position,p.publication_id,p.status publication_status,a.attempt_id,a.status attempt_status FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id LEFT JOIN publication_attempts a ON a.attempt_id=json_extract(s.payload_json,'$.attemptId') LEFT JOIN publication_records p ON p.publication_id=a.publication_id AND p.article_id=s.article_id AND p.target_key=s.target_key WHERE s.item_id=? AND s.batch_id=?",
         )
         .get(itemId, batchId);
       if (!row) throw fail("REGULAR_QUEUE_ITEM_NOT_FOUND");

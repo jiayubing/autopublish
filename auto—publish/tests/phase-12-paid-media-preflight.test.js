@@ -297,6 +297,35 @@ test("invalid resource prices remain visible as a blocked preflight through the 
   }
 });
 
+test("preflight blocks an estimated total above the paid admission amount limit", async () => {
+  const fixture = makeFixture({
+    queryResource: (resource) =>
+      Object.assign({}, resource, { price: 60000000 }),
+  });
+  try {
+    fixture.add(article("article-a"));
+    fixture.add(article("article-b"));
+    const preview = await fixture.service.preflight({
+      articleRefs: refs("article-a", "article-b"),
+      mediaResourceId: "media-12",
+    });
+    assert.equal(preview.quotedPrice, 60000000);
+    assert.equal(preview.estimatedTotal, 120000000);
+    assert.equal(preview.status, "blocked");
+    assert.equal(preview.canConfirm, false);
+    assert.ok(preview.blockers.includes("PAID_ADMISSION_PRICE_INVALID"));
+    await assert.rejects(
+      fixture.service.confirm({
+        confirmationToken: preview.confirmationToken,
+      }),
+      { code: "PAID_MEDIA_CONFIRMATION_BLOCKED" },
+    );
+    assertNoSubmissionFacts(fixture, ["article-a", "article-b"]);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("paid admission locks articles in canonical order and exposes only its transition capability", async () => {
   const lockEvents = [];
   const fixture = makeFixture({

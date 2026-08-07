@@ -84,6 +84,47 @@ test("operational store owns an atomic publication outcome and derived recovery"
   );
   store.close();
 });
+test("failed publication retry selects the latest attempt by insertion order at the same clock instant", () => {
+  const dir = root();
+  const store = createOperationalStore({
+    workspaceRoot: dir,
+    clock: () => new Date("2026-08-07T00:00:00.000Z"),
+  });
+  const target = input().target;
+  store.reservePublicationTarget({
+    ...input(),
+    attemptId: "attempt-z-old",
+  });
+  store.commitRemoteOutcome({
+    attemptId: "attempt-z-old",
+    outcome: { status: "failed" },
+  });
+  store.reservePublicationTarget({
+    ...input(),
+    attemptId: "attempt-a-latest",
+    target,
+    retryFailed: true,
+  });
+  store.commitRemoteOutcome({
+    attemptId: "attempt-a-latest",
+    outcome: { status: "failed" },
+  });
+
+  const retried = store.reservePublicationTarget({
+    ...input(),
+    attemptId: "attempt-next",
+    target,
+    retryFailed: true,
+  });
+  assert.equal(retried.attemptId, "attempt-next");
+  assert.deepEqual(
+    store
+      .listPublicationRecords({ articleIds: ["article-1"] })[0]
+      .attempts.map((attempt) => attempt.attemptId),
+    ["attempt-z-old", "attempt-a-latest", "attempt-next"],
+  );
+  store.close();
+});
 test("single write owner, duplicate target and sensitive payload fail closed", () => {
   const dir = root(),
     store = createOperationalStore({ workspaceRoot: dir });

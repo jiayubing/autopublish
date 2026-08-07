@@ -8,7 +8,7 @@ const { createRegularQueueApplication } = require("../desktop/services/regular-q
 const { createSubmissionBatchReader } = require("../desktop/services/submission-batch-reader");
 const { createArticleMutationCoordinator } = require("../src/content/article-mutation-coordinator");
 const { createArticleStore } = require("../src/content/article-store");
-const { createContentStore } = require("../src/content/content-store");
+const { createContentStore, fingerprintArticle } = require("../src/content/content-store");
 const { createOperationalStore } = require("../src/infrastructure/operational-store/operational-store");
 
 function article(articleId, clientId = "client-a", overrides) {
@@ -261,6 +261,113 @@ test("pending removal restores editing, removes all linked facts, and repeated r
     assert.equal(repeated.removedCount, 0);
     assert.equal(repeated.idempotentCount, 1);
     assert.equal(repeated.items[0].status, "cancelled");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("cancelled regular admission can re-enter the same target with a new attempt and preserved audit history", () => {
+  const fixture = makeFixture();
+  try {
+    const original = article("article-a");
+    fixture.add(original);
+    const first = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    const removed = fixture.application.removePendingQueueItems(removalInput(first, ref("article-a")));
+    assert.equal(removed.removedCount, 1);
+
+    const preview = fixture.application.previewRegularQueueAdmission(admissionInput(fixture, [ref("article-a")]));
+    assert.equal(preview.items[0].status, "queueable");
+
+    const second = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    assert.equal(second.admittedCount, 1);
+    assert.equal(second.items[0].status, "queued");
+    assert.equal(second.items[0].publicationId, first.items[0].publicationId);
+    assert.notEqual(second.items[0].attemptId, first.items[0].attemptId);
+    assert.notEqual(second.items[0].itemId, first.items[0].itemId);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 1);
+    const repeatedAdmission = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    assert.equal(repeatedAdmission.idempotentCount, 1);
+    assert.equal(repeatedAdmission.items[0].attemptId, second.items[0].attemptId);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 1);
+
+    const facts = fixture.store.listArticleLifecycleFacts({ articleIds: ["article-a"] });
+    assert.equal(facts.publications.length, 1);
+    assert.equal(facts.publications[0].status, "queued");
+    assert.equal(facts.publications[0].attemptId, second.items[0].attemptId);
+    assert.deepEqual(facts.submissionItems.map((item) => item.status).sort(), ["cancelled", "queued"]);
+    const history = fixture.store.listPublicationRecords({ articleIds: ["article-a"] });
+    assert.equal(history.length, 1);
+    assert.deepEqual(history[0].attempts.map((attempt) => attempt.status), ["cancelled", "queued"]);
+    assert.throws(
+      () => fixture.coordinator.saveExistingArticle({
+        article: Object.assign({}, original, { title: "still frozen" }),
+        expectedFingerprint: fingerprintArticle(original),
+      }),
+      { code: "ARTICLE_OPERATION_FROZEN" },
+    );
+
+    const removedAgain = fixture.application.removePendingQueueItems(removalInput(second, ref("article-a")));
+    assert.equal(removedAgain.removedCount, 1);
+    const finalHistory = fixture.store.listPublicationRecords({ articleIds: ["article-a"] });
+    assert.deepEqual(finalHistory[0].attempts.map((attempt) => attempt.status), ["cancelled", "cancelled"]);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 0);
+    assert.equal(fixture.coordinator.readArticleForEdit(ref("article-a")).article.id, "article-a");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("attention selects only the latest failed attempt after same-clock cancellation and re-entry", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a"));
+    const first = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    fixture.application.removePendingQueueItems(removalInput(first, ref("article-a")));
+    const second = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    const durableItem = fixture.store.getSubmissionBatch(second.batchId).items[0];
+    const claim = fixture.store.claimSubmissionItemById({
+      itemId: second.items[0].itemId,
+      batchId: second.batchId,
+      revision: durableItem.revision,
+      claimToken: "same-clock-failure",
+    });
+    fixture.store.commitRemoteOutcome({
+      attemptId: second.items[0].attemptId,
+      batchItemId: second.items[0].itemId,
+      batchClaimToken: claim.claimToken,
+      outcome: { status: "failed" },
+    });
+
+    const attention = fixture.store.listPublicationAttention();
+    assert.equal(attention.length, 1);
+    assert.equal(attention[0].attemptId, second.items[0].attemptId);
+    const history = fixture.store.listPublicationRecords({ articleIds: ["article-a"] });
+    assert.deepEqual(history[0].attempts.map((attempt) => attempt.status), ["cancelled", "failed"]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("pending removal binds the caller batch id and leaves the real queue item untouched on mismatch", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a"));
+    const admitted = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    const wrong = removalInput(admitted, ref("article-a"));
+    wrong.items[0].batchId = "regular-batch-stale-caller-value";
+
+    const rejected = fixture.application.removePendingQueueItems(wrong);
+    assert.equal(rejected.removedCount, 0);
+    assert.equal(rejected.conflictCount, 1);
+    assert.equal(rejected.items[0].reasonCode, "REGULAR_QUEUE_ITEM_NOT_FOUND");
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 1);
+    assert.equal(
+      fixture.store.listArticleLifecycleFacts({ articleIds: ["article-a"] }).submissionItems[0].status,
+      "queued",
+    );
+
+    const removed = fixture.application.removePendingQueueItems(removalInput(admitted, ref("article-a")));
+    assert.equal(removed.removedCount, 1);
   } finally {
     fixture.close();
   }

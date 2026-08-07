@@ -333,6 +333,14 @@ function createPaidMediaPreflightService(options) {
       blockers.push("PAID_MEDIA_RESOURCE_UNAVAILABLE");
     if (safeResource.price === null)
       blockers.push("PAID_MEDIA_RESOURCE_PRICE_INVALID");
+    if (
+      safeResource.price !== null &&
+      (typeof estimatedTotal !== "number" ||
+        !Number.isFinite(estimatedTotal) ||
+        estimatedTotal < 0 ||
+        estimatedTotal > MAX_PRICE)
+    )
+      blockers.push("PAID_ADMISSION_PRICE_INVALID");
     if (!systemSubmissionCode)
       blockers.push("PAID_MEDIA_SYSTEM_SUBMISSION_CODE_REQUIRED");
     articleSummaries.forEach((item) => blockers.push(...item.reasonCodes));
