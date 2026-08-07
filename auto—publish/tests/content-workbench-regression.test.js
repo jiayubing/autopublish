@@ -30,8 +30,8 @@ describe("content workbench regression", function() {
     const sidebar = read("media-workbench/src/components/Sidebar.tsx");
     const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
     assert.equal(app.includes("ContentWorkbench"), true);
-    assert.equal(app.includes("currentView === 'content'"), true);
-    assert.equal(sidebar.includes("id: 'content' as ViewMode"), true);
+    assert.match(app, /currentView === ["']content["']/);
+    assert.match(sidebar, /id: ["']content["'] as ViewMode/);
     assert.equal(workbench.includes("QuestionCollectionView"), true);
     assert.equal(workbench.includes("ArticleGenerationView"), true);
     assert.equal(workbench.includes("GeneratedArticlesView"), true);
@@ -53,7 +53,10 @@ describe("content workbench regression", function() {
 
   it("keeps the content view height chain constrained for batch wizard actions", function() {
     const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-    assert.match(workbench, /<div className="flex min-h-0 flex-1 flex-col overflow-hidden">\s*\{tab === 'questions'/);
+    assert.match(
+      workbench,
+      /<div className="flex min-h-0 flex-1 flex-col overflow-hidden">\s*\{tab === ["']questions["']/,
+    );
   });
 
   it("lets the batch generation branch fill the remaining article-generation height", function() {
@@ -103,8 +106,14 @@ describe("content workbench regression", function() {
   it("exposes the Task 1 batch preview and prepared-start renderer API", function() {
     const preload = read("desktop/preload.js");
     const api = read("media-workbench/src/bridge/content.ts");
-    assert.match(preload, /previewDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:preview-doubao-batch", input\); \}/);
-    assert.match(preload, /startPreparedDoubaoBatch: function\(input\) \{ return ipcRenderer\.invoke\("content:start-prepared-doubao-batch", input\); \}/);
+    assert.match(
+      preload,
+      /previewDoubaoBatch: function\s*\(input\)\s*\{\s*return ipcRenderer\.invoke\("content:preview-doubao-batch", input\);\s*\}/,
+    );
+    assert.match(
+      preload,
+      /startPreparedDoubaoBatch: function\s*\(input\)\s*\{\s*return ipcRenderer\.invoke\("content:start-prepared-doubao-batch", input\);\s*\}/,
+    );
     assert.match(api, /export async function previewDoubaoBatch[\s\S]*callDoubao\(\s*\(api\) => requireBridgeMethod\(api\.previewDoubaoBatch\)\(input\)/);
     assert.match(api, /export async function startPreparedDoubaoBatch[\s\S]*callDoubao\(\s*\(api\) => requireBridgeMethod\(api\.startPreparedDoubaoBatch\)\(\{ tasks \}\)/);
     assert.doesNotMatch(api, /callContent\(\s*"(?:previewDoubaoBatch|startPreparedDoubaoBatch)"/);

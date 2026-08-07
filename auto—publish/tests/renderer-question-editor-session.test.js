@@ -30,7 +30,7 @@ describe("renderer question editor session", function() {
     assert.match(panel, /Escape/);
     assert.match(workbench, /useContentWorkbenchFeature/);
     assert.doesNotMatch(source, /onRefresh\(\)/);
-    assert.match(contentFeature, /useWorkspaceScope\('contentSources'/);
+    assert.match(contentFeature, /useWorkspaceScope\(["']contentSources["']/);
     assert.match(contentFeature, /feature\.refreshContentSources\(event\.kind\)/);
   });
 

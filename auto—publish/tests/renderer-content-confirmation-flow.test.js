@@ -18,8 +18,8 @@ describe('renderer content confirmation flow', () => {
       assert.match(source, /const \{ confirm \} = useConfirmation\(\)/);
       assert.doesNotMatch(source, /ActionConfirmationModal|pendingConfirmation|confirmationActionRef|window\.confirm/);
     });
-    assert.match(queue, /title: '确认加入普通平台队列'/);
-    assert.match(cancel, /title: '确认撤销未开始投稿'/);
+    assert.match(queue, /title: ["']确认加入普通平台队列["']/);
+    assert.match(cancel, /title: ["']确认撤销未开始投稿["']/);
     const host = read('media-workbench/src/components/ConfirmationHost.tsx');
     assert.match(host, /ConfirmationHost/);
     assert.match(host, /queueRef\.current\.push/);

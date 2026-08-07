@@ -32,7 +32,7 @@ describe("renderer workbench controller seams", () => {
     assert.doesNotMatch(view, /createArticleManagementController/);
     assert.doesNotMatch(view, /getArticleManagementSnapshot|refreshToken/);
     assert.match(feature, /createArticleManagementFeature/);
-    assert.match(managementFeature, /query: 'articleManagement'/);
+    assert.match(managementFeature, /query: ["']articleManagement["']/);
   });
 
   it("account profile selection consumes the root platform feature", () => {

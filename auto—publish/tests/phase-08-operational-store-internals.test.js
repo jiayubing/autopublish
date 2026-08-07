@@ -67,6 +67,19 @@ const PUBLIC_SURFACE = [
   "getPaidSubmissionBatch",
   "listPaidSubmissionBatches",
   "setPaidSubmissionBatchPause",
+  "beginOrderCreationRemoteCall",
+  "claimPaidSubmissionBatchItem",
+  "listPaidSubmissionBatchSnapshots",
+  "pauseAllPaidSubmissionBatches",
+  "pausePaidSubmissionBatchesOnStartup",
+  "releasePaidOrderCreationClaim",
+  "renewPaidOrderCreationClaim",
+  "setPaidSubmissionBatchRunIntent",
+  "startAllPaidSubmissionBatches",
+  "recordPaidOrderCreationArticleRejection",
+  "recordPaidOrderCreationSystemRejection",
+  "recordPaidOrderCreationSuccess",
+  "recordPaidOrderCreationUncertain",
   "recordManualReconciliation",
   "listManualReconciliations",
   "listArticleLifecycleFacts",
@@ -84,6 +97,7 @@ const INTERNAL_MODULES = [
   "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-order-link.js",
   "src/infrastructure/operational-store/internal/operational-store-outcome-writer.js",
+  "src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
@@ -167,7 +181,7 @@ test("OperationalStore facade preserves the frozen caller surface", () => {
 
 test("OperationalStore facade hides SQL, table names, and transaction choreography", () => {
   const source = fs.readFileSync(facadePath, "utf8");
-  assert.ok(source.trimEnd().split(/\r?\n/).length <= 120);
+  assert.ok(source.trimEnd().split(/\r?\n/).length <= 160);
   assert.doesNotMatch(
     source,
     /DatabaseSync|\.prepare\(|CREATE TABLE|BEGIN IMMEDIATE/,

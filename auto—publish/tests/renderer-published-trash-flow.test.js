@@ -17,7 +17,7 @@ describe("renderer published article trash flow", () => {
     assert.match(view, /远端已发布内容不会撤回/);
     assert.match(view, /发布记录和标题快照会保留/);
     assert.match(view, /恢复文章不会自动恢复投稿队列/);
-    assert.match(view, /workflow\?\.stage === 'published'/);
+    assert.match(view, /workflow\?\.stage === ["']published["']/);
     assert.match(view, /!isPublishedArticle\(article\)/);
     assert.doesNotMatch(view, /onTrashPublishedArticle/);
     assert.match(types, /keep_local.*offer_trash.*auto_trash_requested.*auto_trash_blocked/s);

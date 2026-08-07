@@ -11,14 +11,26 @@ describe("renderer content submission batch actions", () => {
     const view = source();
     assert.match(view, /management: ArticleManagementReadModel/);
     assert.doesNotMatch(view, /previewCancelContentSubmissionBatch\(batch\.id\)/);
-    assert.match(view, /const \{ articles, trash, submissionBatches, cancellationPlans,/);
-    assert.match(view, /const cancelableBatches = useMemo\(\(\) => cancellationPlans\.map/);
-    assert.match(view, /const cleanableBatches = useMemo\(\(\) => submissionBatches\.map/);
+    assert.match(
+      view,
+      /const \{\s*articles,\s*trash,\s*submissionBatches,\s*cancellationPlans,/,
+    );
+    assert.match(
+      view,
+      /const cancelableBatches = useMemo\(\s*\(\) =>\s*cancellationPlans\s*\.map/,
+    );
+    assert.match(
+      view,
+      /const cleanableBatches = useMemo\(\s*\(\) =>\s*submissionBatches\s*\.map/,
+    );
     assert.doesNotMatch(view, /submissionBatches\[0\]/);
     assert.doesNotMatch(view, /item\.canCancel === true/);
     assert.doesNotMatch(view, /cancelableCount\?: number/);
     assert.doesNotMatch(view, /uncancelableCount\?: number/);
-    assert.match(view, /commands\.cancelContentSubmissionBatch\(\{ batchId: preview\.batchId, planId: preview\.planId \}\)/);
+    assert.match(
+      view,
+      /commands\.cancelContentSubmissionBatch\(\{\s*batchId: preview\.batchId,\s*planId: preview\.planId,?\s*\}\)/,
+    );
   });
 
   it("tracks cancellation pending state and refreshes authoritative management after stale plans", () => {
@@ -29,7 +41,10 @@ describe("renderer content submission batch actions", () => {
     assert.match(cancel, /SUBMISSION_ACTION_STALE/);
     assert.match(cancel, /队列已变化，请重新检查/);
     assert.doesNotMatch(cancel, /refreshBatchAffectedArticles\(\)/);
-    assert.match(management, /await refreshAfterCommand\(name, 'command-error'\)/);
+    assert.match(
+      management,
+      /await refreshAfterCommand\(name, ["']command-error["']\)/,
+    );
     assert.match(cancel, /cancellationRequestIdRef\.current === requestId/);
   });
 

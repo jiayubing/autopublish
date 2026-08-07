@@ -14,7 +14,7 @@ describe("renderer content refresh lifecycle", function () {
     const sources = read("media-workbench/src/features/content/content-sources-feature.js");
     const management = read("media-workbench/src/features/content/article-management-feature.js");
     assert.match(source, /useContentWorkbenchFeature/);
-    assert.match(source, /content\.refresh\('manual'\)/);
+    assert.match(source, /content\.refresh\(["']manual["']\)/);
     assert.match(hook, /feature\.refreshContentSources\(event\.kind\)/);
     assert.match(hook, /event\.reasonCode/);
     assert.match(hook, /ARTICLE_REMOVAL_TRANSACTION_CHANGED/);
@@ -23,7 +23,7 @@ describe("renderer content refresh lifecycle", function () {
     assert.match(sources, /createQueryIdentity/);
     assert.match(management, /createQueryIdentity/);
     assert.doesNotMatch(source, /refreshRequestIdRef|refreshTimerRef|setTimeout\(/);
-    assert.match(source, /role="status" aria-live="polite"/);
+    assert.match(source, /role="status"\s*aria-live="polite"/);
     assert.match(source, /role="alert"/);
   });
 
@@ -65,7 +65,7 @@ describe("renderer content refresh lifecycle", function () {
     );
     const invalidation = read("desktop/workspace-data-invalidation.js");
     const hook = read("media-workbench/src/features/content/use-content-workbench-feature.ts");
-    assert.match(hook, /useWorkspaceScope\('contentSources'/);
+    assert.match(hook, /useWorkspaceScope\(["']contentSources["']/);
     assert.doesNotMatch(workbench, /onWorkspaceDataInvalidated/);
     assert.match(invalidation, /contentSources/);
     assert.match(questions, /queueQuery|queue=\{queue\}/);

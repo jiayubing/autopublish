@@ -25,6 +25,9 @@ function adapters(overrides = {}) {
       workflowByArticle: {},
       submissionPlatforms: [{ id: "platform-a", displayName: "Platform A", contentQueueImport: true }],
     }),
+    listPaidMediaBatches: async () => [],
+    startPaidMediaBatch: async () => ({}),
+    pausePaidMediaBatch: async () => ({}),
     ...overrides,
   };
 }

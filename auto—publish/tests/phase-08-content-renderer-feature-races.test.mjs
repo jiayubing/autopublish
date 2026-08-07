@@ -48,6 +48,9 @@ function adapters(overrides = {}) {
       workflowByArticle: {},
       submissionPlatforms: [],
     }),
+    listPaidMediaBatches: async () => [],
+    startPaidMediaBatch: async () => ({}),
+    pausePaidMediaBatch: async () => ({}),
     ...overrides,
   };
 }

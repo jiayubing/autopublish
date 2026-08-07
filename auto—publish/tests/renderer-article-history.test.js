@@ -81,7 +81,10 @@ describe("article history grouping", async function() {
     assert.match(view, /useConfirmation/);
     assert.match(view, /const \{ confirm \} = useConfirmation\(\)/);
     assert.match(view, /isArticleSelectable/);
-    assert.match(view, /function openArticle\(article: GeneratedContentArticle/);
+    assert.match(
+      view,
+      /function openArticle\(\s*article: GeneratedContentArticle/,
+    );
     assert.match(view, /if \(!workflow\) return/);
     assert.doesNotMatch(view, /onArticleSelect\(article, null, false\)/);
     assert.match(view, /全选当前结果/);
@@ -95,7 +98,10 @@ describe("article history grouping", async function() {
     assert.doesNotMatch(view, /getArticleManagementSnapshot/);
     assert.match(view, /commands\.restoreContentArticle/);
     assert.match(view, /commands\.preparePermanentDeleteContentArticle/);
-    assert.match(view, /await confirm\(\{ title: '确认永久删除文章'/);
+    assert.match(
+      view,
+      /await confirm\(\{\s*title: ["']确认永久删除文章["']/,
+    );
     assert.match(view, /commands\.permanentlyDeleteContentArticle/);
     assert.match(view, /移入回收站/);
     assert.match(view, /永久删除/);
@@ -103,13 +109,22 @@ describe("article history grouping", async function() {
 
   it("keeps saved articles selectable for submission queueing", function() {
     const view = readHistoryView();
-    assert.match(view, /selectedQueueableArticles = selectedDirtyArticle \? \[\] : selectedArticles\.filter\(canQueueArticle\)/);
-    assert.match(view, /disabled=\{!selectedQueueableArticles\.length/);
+    assert.match(
+      view,
+      /selectedQueueableArticles = selectedDirtyArticle\s*\? \[\]\s*: selectedArticles\.filter\(canQueueArticle\)/,
+    );
+    assert.match(
+      view,
+      /disabled=\{\s*!selectedQueueableArticles\.length/,
+    );
     assert.match(view, /阶段：/);
     assert.match(view, /撤销未开始投稿/);
     assert.match(view, /management: ArticleManagementReadModel/);
     assert.match(view, /const \[selected, setSelected\]/);
-    assert.match(view, /function openArticle\(article: GeneratedContentArticle/);
+    assert.match(
+      view,
+      /function openArticle\(\s*article: GeneratedContentArticle/,
+    );
     assert.match(view, /queueableTaskCount/);
     assert.match(view, /idempotentCount/);
     assert.match(view, /conflictCount/);

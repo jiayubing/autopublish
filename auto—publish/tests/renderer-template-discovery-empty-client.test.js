@@ -44,7 +44,7 @@ describe("empty-client template discovery", function() {
   it("provides an explicit refresh action for clients and templates", function() {
     const source = read("media-workbench/src/components/ContentWorkbench.tsx");
     assert.match(source, /刷新客户与模板/);
-    assert.match(source, /content\.refresh\('manual'\)/);
+    assert.match(source, /content\.refresh\(["']manual["']\)/);
     assert.doesNotMatch(source, /listContentClients\(\)|refreshToken/);
   });
 });

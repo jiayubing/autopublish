@@ -92,8 +92,11 @@ describe("publication history renderer boundary", async function() {
     assert.doesNotMatch(view, /getArticleManagementSnapshot|bridge\/publication|bridge\/content/);
     assert.doesNotMatch(view, /commands\.copyArticleVersion|onCopyVersion/);
     assert.match(view, /commands\.reconcilePublication/);
-    assert.match(view, /await confirm\(\{ title: label/);
-    assert.match(view, /summary=\{drawerArticle \? workflowByArticle\.get\(drawerArticle\.id\)\?\.publicationSummary/);
+    assert.match(view, /await confirm\(\{\s*title: label/);
+    assert.match(
+      view,
+      /summary=\{\s*drawerArticle\s*\? workflowByArticle\.get\(drawerArticle\.id\)\?\.publicationSummary/,
+    );
     assert.doesNotMatch(view, /publicationSummaries/);
     assert.doesNotMatch(view, /\|\| 'pending_submission'/);
     assert.doesNotMatch(drawer, /summarizePublicationRecords/);

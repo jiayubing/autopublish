@@ -17,7 +17,7 @@ describe('renderer article management workflow seam', () => {
     assert.match(content, /articleStageFilter/);
     assert.match(`${list}\n${listItems}`, /snapshotWorkflowByArticle/);
     assert.match(`${list}\n${listItems}`, /management:\s*ArticleManagementReadModel/);
-    assert.match(content, /management[^\n]+content\.snapshot/);
+    assert.match(content, /management[\s\S]+content\.snapshot/);
     assert.match(content, /GeneratedArticlesView[^>]+management=\{management\}/);
     assert.doesNotMatch(list, /getArticleManagementSnapshot/);
     assert.match(`${list}\n${listItems}`, /打开需处理/);
