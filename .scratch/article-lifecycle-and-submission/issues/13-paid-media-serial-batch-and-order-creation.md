@@ -11,6 +11,7 @@
 ## 启动约定
 
 - 核对 12 已创建不可变付费批次确认，04 已能保存 intent、订单和暂停事实。
+- 启动时必须导入并复用 Ticket 08 唯一 domain owner 导出的 `articleIdentityV1` / `targetIdentityV1` validator；付费链路只允许 `targetIdentityV1.kind=media`，不得在订单聚合、OperationalStore 或供应商 adapter 复制身份字段或建立宽松 mapper。
 - 付费批次与普通平台队列是不同应用服务；普通平台开始全部/暂停全部不得调用本服务。
 
 ## 执行过程
@@ -23,6 +24,16 @@
 6. 暂停命令等待当前请求明确返回后阻止下一笔，不强制中断在途请求。
 7. 应用重启后保持暂停，不自动恢复扣费；由用户重新确认继续资格。
 8. 增加串行、价格竞态、错误范围、暂停竞态、重启和部分成功测试。
+
+### 下游迁移必须复用的订单 V1 owner
+
+Ticket 13 必须在 `src/domain/` 的订单聚合公开合同中建立以下唯一、版本化、递归封闭 validator。所有 object 都必须精确匹配字段集并拒绝 extra fields；所有嵌套身份都直接调用 08 的 owner validator，不复制字段。
+
+- `orderIdentityV1 = { version, orderId }`：`version=1`；`orderId` 为供应商明确返回或 14 验证补录的 1–128 位 `[A-Za-z0-9._:-]` 身份，不得为 `null`、空白、控制字符或规范化后的另一形式。当前单供应商合同下 `orderId` 全局唯一；未来如需多供应商命名空间必须演进 V2，不得向 V1 追加可选字段。
+- `orderSnapshotV1 = { version, orderIdentityV1, articleIdentityV1, targetIdentityV1, orderCreationAttemptId, mediaName, quotedPrice, estimatedTotal, actualAmount, systemSubmissionCode, submittedTitle, submittedBody, contentFingerprint, remoteCallStartedAt }`：`version=1`，`targetIdentityV1.kind=media`；`orderCreationAttemptId` 为 1–128 位安全身份；`systemSubmissionCode` 必须精确复用 12 已验收确认快照中的规范值和 1–128 上界，不得改名为供应商字段 `systemSubmissionId`；`mediaName` 为 1–256 个 UTF-16 code units；`submittedTitle` 为 1–30 个 Unicode code points，`submittedBody` 为 1–200,000 个 UTF-16 code units，并复用 12 已验收的 trim、非空和控制字符规则。`quotedPrice`、`estimatedTotal` 必须精确复用 12 的有限非负 number 合同和既有 `0..100000000` 上界，不得另行换算成整数分或现场引入 currency；`actualAmount` 为 `null` 或同一数值合同下的服务商实际金额，缺少供应商证据时必须为 `null`。`contentFingerprint` 为精确覆盖 `{ submittedTitle, submittedBody }` 稳定 UTF-8 规范序列化的 64 位小写 SHA-256；`remoteCallStartedAt` 为带时区的 ISO-8601 时刻且不可为 `null`。快照只记录订单建立时已知的不可变事实；后续发现的实际金额、状态和链接通过 15/16 的追加 observation/history 合同保存，不得回写 V1 快照或用预计费用冒充实际金额。
+- `paidTargetV1 = { version, articleIdentityV1, targetIdentityV1, orderCreationAttemptId, orderIdentityV1, state, terminalAt }`：`version=1`，`targetIdentityV1.kind=media`，attempt/order 必须与同聚合快照一致；`state` 只允许 `ACTIVE_TRACKING|TERMINAL_PUBLISHED|TERMINAL_REJECTED|TERMINAL_CANCELLED`。`ACTIVE_TRACKING` 必须 `terminalAt=null`；三种 `TERMINAL_*` 必须提供带时区 ISO-8601 `terminalAt`；不确定创建不得伪造 `orderIdentityV1`/`paidTargetV1`，取消不确定仍保持 `ACTIVE_TRACKING`并由 16 的追加观测事实表达。
+- 公开合同测试必须覆盖三个 DTO 的缺字段、extra field、错误版本/kind/enum、null 组合、字符串/金额上界、fingerprint/时间格式、身份不一致和递归嵌套 extra field。
+- 14、15、16、22、23 只能导入该 owner 的 `orderIdentityV1` / `orderSnapshotV1` / `paidTargetV1` validator；不得从数据库行、供应商对象、Renderer 类型或 migration payload 复制订单/目标字段。若后续业务需要新增字段，必须新版本演进，不能放宽 V1。
 
 ## 职责边界
 
@@ -57,6 +68,7 @@
 - [ ] 对文章/资源拒绝与账号/余额/服务拒绝的每个事务写点注入故障，证明只有完整提交后才继续下一项或暂停批次；失败不会提前解冻、领取下一项、遗留部分 observation 或丢失未收口 intent。
 - [ ] composition/架构测试证明付费编排器只获得 `paidExecutionTransitions` 和 11 的创建订单端口，无法旁路调用其他 OperationalStore 写能力。
 - [ ] 重启后不会自动继续付费，交接记录包含 intent/outcome、错误范围、模块职责、依赖方向及显著规模变化说明。
+- [ ] `orderIdentityV1` / `orderSnapshotV1` / `paidTargetV1` 的精确公开导出、递归封闭字段/null/上界规则和正反合同测试已记录，且直接调用方只复用 owner validator；这三个合同成为 14/15/16/22/23 的硬前置，不允许下游补定义。
 
 ## 审计建议
 

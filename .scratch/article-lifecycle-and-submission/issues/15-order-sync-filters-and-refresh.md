@@ -25,6 +25,11 @@
 8. Renderer 默认选中待安排，显示各筛选数量并按创建时间倒序；页面首次打开自动刷新一次，避免重复挂载循环。订单状态异常只展示 prepare 返回的证据状态和允许的具名动作，不自行推断。
 9. 提供顶部刷新全部和详情刷新单个按钮，展示逐项失败而不清空旧列表；长期待安排/已安排只显示延迟提醒，不自动判定失败。
 
+### 下游迁移必须复用的 observation/history V1 owner
+
+- Ticket 15 必须在同一 OperationalStore 订单聚合 owner 中建立唯一、版本化、递归封闭的 `orderObservationV1`、`terminalObservationV1` 与 `orderHistoryV1` validator，固定订单身份、规范状态 0/1/2/4/9 或明确非发布终态、观察/远端事件时间及来源、安全链接/证据 fingerprint、创建快照引用和追加事实顺序；服务商后续返回实际金额时，只能在 observation/history 中使用 Ticket 13 `actualAmount` 的同一有限非负 number/null 合同追加保存，不得回写订单创建快照或用预计费用代替。精确字段、null 组合、上界、状态优先级和 extra-field 拒绝必须由公开合同测试固定。
+- Ticket 16 只通过该 owner 的版本化追加事实端口保存取消/人工证据，不得修改或复制 V1 快照解释；Ticket 22/23 只读复用最终导出。需要扩展时新建后续版本，不在调用方给 V1 加可选 metadata。
+
 ## 职责边界
 
 - 订单同步服务负责查询与保存 observation，不决定页面筛选。
@@ -60,6 +65,7 @@
 - [ ] cancellation intent 与 anomaly 并存、15/16 共同调用 guard 以及取消在途时 status 2 永久优先的公开行为，明确留给 Ticket 16 及波次 7 集成复验；Ticket 15 不增加 test-only cancellation writer 验证未来行为。
 - [ ] 长期未完成只提示延迟，不自动终结。
 - [ ] 交接记录包含状态映射、同步事务、UI 组件边界、依赖方向及显著规模变化说明。
+- [ ] `orderObservationV1` / `terminalObservationV1` / `orderHistoryV1` 的精确导出和正反合同测试已记录；Ticket 16 的追加边界及 Ticket 23 的只读消费方式明确，不允许 migration 建立平行订单 schema。
 
 ## 审计建议
 

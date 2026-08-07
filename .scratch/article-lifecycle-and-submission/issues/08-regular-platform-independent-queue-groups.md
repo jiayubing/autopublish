@@ -25,6 +25,14 @@
 8. 一个组完成、暂停或失败不得取消、停止或改写其他组。
 9. 增加并发、FIFO、追加、暂停竞态、证据冻结、远端边界前后、重启和多组隔离测试。
 
+### 身份 V1 前置合同与唯一 owner
+
+Ticket 08 必须先在 `src/domain/` 的稳定身份/DTO owner 中建立并导出以下两个递归封闭 validator；当前 `src/content/article-ref.js` 的运行时引用规范化只能作为调用方适配，不能充当 V1 owner，因为它不拥有版本合同且不得决定 evidence schema。
+
+- `articleIdentityV1` 精确字段为 `{ version, clientId, articleId }`。`version=1`；`clientId`、`articleId` 必须分别复用现有 `ClientId`、`ArticleId` 规范化和上界。缺字段、extra field、错误 kind 的 identity、路径/控制字符或规范化后空值全部拒绝。
+- `targetIdentityV1` 是精确封闭 union：普通平台 `{ version, kind, platformId, accountProfileId }`，网站媒体 `{ version, kind, mediaResourceId }`，迁移专用未知账号 `{ version, kind, platformId, autoExecutable }`。`version=1`；`kind` 分别固定为 `platform|media|legacy-unknown-account`；`platformId` 复用 `parsePublicationTarget` 的规范，账号/资源 ID 复用现有 domain identity；迁移专用 variant 必须 `autoExecutable=false`。在线普通平台 prepared evidence 只允许 `platform`，在线网站媒体只允许 `media`，第三个 variant 仅供 Ticket 23 读取历史冲突事实。
+- 这两个 DTO 的字段、规范化、序列化与 validator 只能由该 domain owner 定义。08、09、13、22、23 和 IPC/持久化层只能导入复用，不得复制字段列表、放宽 extra-field 检查或创建同名 mapper 作为第二 owner。
+
 ### `preparedSubmissionEvidenceV1` 封闭 schema
 
 V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentityV1, title, body, contentFingerprint, deliveryMode, images, decisionKind }`，不得出现其他字段：
@@ -65,6 +73,7 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 - [ ] 在 `beginRegularRemoteSubmission` 提交前后分别注入崩溃：标记前没有远端调用且只能在用户重新开始、复核后重做准备；标记后即使 adapter 尚未来得及执行也保守进入 uncertain，绝不自动重放。`remoteCallStartedAt` 只写一次。
 - [ ] 纯文本默认路径生成图片清单为空、`deliveryMode=text_only` 的完整 `preparedSubmissionEvidenceV1`；begin 事务故障不保存半份 evidence也不调用提交，事务成功后的崩溃仍可从持久 evidence 完整人工收口。换图、带图和显式纯文本降级留给 Ticket 18 在不改变本 ticket submission-start owner 的前提下扩展并验收。
 - [ ] 唯一 V1 validator 按上述精确字段、enum 和上界递归拒绝 extra/sensitive fields；Ticket 18 合同测试只能填充已存在的 `images`、`deliveryMode`、`decisionKind`，不能修改 schema 或创建平行 validator。
+- [ ] `src/domain/` 唯一导出的 `articleIdentityV1` / `targetIdentityV1` validator 覆盖全部正反 variant；prepared evidence 只接受普通平台 target，当前宽松 articleRef/IPC 对象不能绕过版本和 extra-field 拒绝。交接必须列出导出位置和 09/13/23 的复用方式。
 - [ ] `PreparedSubmission` 公开面只有安全 evidence 与具名 submit 方法；序列化、日志、IPC、跨平台传递、读取私有 session/token 和注入通用 callback/metadata 的架构测试均失败关闭。
 - [ ] evidence 冻结后注入编辑器/会话内容漂移，submit 不会静默改写或重建 manifest；边界后只返回 uncertain，档案证据与任何明确 accepted 的实际准备内容一致。
 - [ ] 在组运行状态、FIFO 头项、claim/lease、组当前项和 in-flight intent 的每个持久化故障点注入失败，证明领取事务要么完整提交并返回唯一任务，要么不改变任何事实；不会留下“组已领取或已有当前项但缺少 in-flight intent”或重复领取状态。

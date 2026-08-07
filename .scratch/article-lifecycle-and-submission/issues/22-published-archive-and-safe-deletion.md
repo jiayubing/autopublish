@@ -23,6 +23,11 @@
 6. 订单历史和发布档案没有删除命令；删除事务失败进入需处理，不伪造成功。
 7. 增加普通/付费发布、售后、退稿、取消、永久删除和恢复组合测试。
 
+### 下游迁移必须复用的目标/删除 V1 owner
+
+- Ticket 22 必须在活动目标与 durable deletion/recovery 的既有 owner 中导出唯一、版本化、递归封闭的 `terminalTargetV1`、`closedTargetV1`、`tombstoneIdentityV1` 与 `deletionTransactionIdentityV1` validator。精确字段必须只包含稳定身份、规范终态/原因、必要时间和安全 fingerprint；不得包含内部表名、绝对路径、正文、任意 metadata 或删除 callback。
+- Ticket 23 只能引用这些最终公开合同；migration 不得根据 internal schema 或墓碑文件布局重建字段。若任一导出/合同测试缺失，Ticket 23 调度前必须阻断，而不是由迁移器临时补一个 DTO。
+
 ## 职责边界
 
 - OperationalStore 内由 09 建立的 publication-success primitive 拥有不可变投稿快照和首次成功事实；发布档案投影拥有只读查询、展示 DTO 与保留完整性，不拥有写入规则。09/15 只调用各自具名事务端口并在内部委托同一 primitive。
@@ -52,6 +57,7 @@
 - [ ] 普通平台和网站媒体档案正确展示提交时间与首次发布时间；对合成的 `legacy_unavailable` publication evidence，档案投影显示规范缺失原因且不以当前时间或另一个时间字段替代。本 ticket 不声称真实 migration import → archive query 链已通过，该生产链由 Ticket 23 及波次 9 集成复验完成。
 - [ ] 当前生产纯文本档案展示 `text_only`、空图片清单和 `initial`，历史图片摘要不可得时展示规范缺失原因；使用 09 validator 的合成前向兼容 fixture 证明后置带图/换图/降级摘要可只读展示且不暴露路径或二进制，但本 ticket 不声称 Ticket 18–21 生产链已实现。
 - [ ] 交接记录包含保留矩阵、隐私边界、删除故障测试、公开接口、依赖方向及显著规模变化说明。
+- [ ] 上述四个 V1 身份/目标合同具有精确公开导出、上界与 extra/sensitive-field 反例测试，并在交接中列出 Ticket 23 的只读复用入口。
 
 ## 审计建议
 

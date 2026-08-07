@@ -59,6 +59,7 @@
 - [ ] 保存 cancellation intent 后并发同步 status 2，再收到取消成功、拒绝或 unknown 时，首次发布事实始终优先且永久保留；取消链只追加证据，不恢复编辑或重新开放目标。
 - [ ] composition/架构测试证明取消服务只能通过 `orderCancellationTransitions` 和 11 的取消端口工作，不能旁路订单 observation、迁移或其他写能力；`orderTransitionGuard` 仍是唯一优先级 owner。
 - [ ] 订单、价格、标识码和取消证据没有删除入口。
+- [ ] 取消与人工收口只通过 15 所属订单聚合的版本化追加事实合同进入 `orderHistoryV1` 查询，不修改 `orderSnapshotV1` / `orderObservationV1` 的 V1 字段，也不建立 Ticket 23 需要重新解释的平行历史 DTO。
 - [ ] 交接记录包含允许矩阵、异常语义、历史模型、公开接口、依赖方向及显著规模变化说明。
 
 ## 审计建议

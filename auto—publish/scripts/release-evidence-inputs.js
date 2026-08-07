@@ -263,6 +263,7 @@ function currentCommit(root) {
     return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root,
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch (_) {
     return null;
@@ -274,17 +275,21 @@ function currentSourceState(root) {
     const porcelain = execFileSync(
       "git",
       ["status", "--porcelain=v1", "--untracked-files=all"],
-      { cwd: root, encoding: "utf8" },
+      {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
     );
     const diff = execFileSync(
       "git",
       ["diff", "--binary", "--no-ext-diff", "HEAD"],
-      { cwd: root },
+      { cwd: root, stdio: ["ignore", "pipe", "ignore"] },
     );
     const untracked = execFileSync(
       "git",
       ["ls-files", "--others", "--exclude-standard", "-z"],
-      { cwd: root },
+      { cwd: root, stdio: ["ignore", "pipe", "ignore"] },
     );
     const digest = crypto.createHash("sha256");
     digest.update("status\0");
@@ -317,9 +322,21 @@ function currentSourceState(root) {
         digest.update(error.code || "UNKNOWN");
       }
     }
+    const entries = porcelain.split(/\r?\n/).filter(Boolean);
     return {
       status: porcelain.trim() === "" ? "CLEAN" : "DIRTY",
       diffSha256: digest.digest("hex"),
+      summary: {
+        changedEntries: entries.length,
+        stagedEntries: entries.filter(
+          (entry) => entry.slice(0, 2) !== "??" && entry[0] !== " ",
+        ).length,
+        unstagedEntries: entries.filter(
+          (entry) => entry.slice(0, 2) !== "??" && entry[1] !== " ",
+        ).length,
+        untrackedEntries: entries.filter((entry) => entry.slice(0, 2) === "??")
+          .length,
+      },
     };
   } catch (_) {
     return {
@@ -328,8 +345,70 @@ function currentSourceState(root) {
         .createHash("sha256")
         .update("git-status-unavailable")
         .digest("hex"),
+      summary: {
+        changedEntries: 0,
+        stagedEntries: 0,
+        unstagedEntries: 0,
+        untrackedEntries: 0,
+      },
     };
   }
+}
+
+function executionTime(value, code) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime()))
+    throw evidenceError(code, "Evidence execution time is invalid");
+  return date;
+}
+
+function createExecutionProvenance(options) {
+  const value = options || {};
+  const root = path.resolve(value.root || ".");
+  const command = String(value.command || "").trim();
+  if (
+    !command ||
+    command.length > 1024 ||
+    /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(command)
+  )
+    throw evidenceError(
+      "EXECUTION_EVIDENCE_COMMAND_INVALID",
+      "Evidence command is invalid",
+    );
+  const started = executionTime(
+    value.startedAt,
+    "EXECUTION_EVIDENCE_STARTED_AT_INVALID",
+  );
+  const finished = executionTime(
+    value.finishedAt === undefined ? Date.now() : value.finishedAt,
+    "EXECUTION_EVIDENCE_FINISHED_AT_INVALID",
+  );
+  if (finished.getTime() < started.getTime())
+    throw evidenceError(
+      "EXECUTION_EVIDENCE_TIME_ORDER_INVALID",
+      "Evidence finish time precedes its start time",
+    );
+  const commit = currentCommit(root);
+  if (!/^[a-f0-9]{40,64}$/i.test(commit || ""))
+    throw evidenceError(
+      "EXECUTION_EVIDENCE_COMMIT_UNAVAILABLE",
+      "Evidence commit is unavailable",
+    );
+  const sourceState = currentSourceState(root);
+  if (sourceState.status === "UNKNOWN")
+    throw evidenceError(
+      "EXECUTION_EVIDENCE_SOURCE_STATE_UNAVAILABLE",
+      "Evidence source state is unavailable",
+    );
+  return {
+    commit: commit.toLowerCase(),
+    sourceState,
+    nodeVersion: process.version,
+    command,
+    startedAt: started.toISOString(),
+    finishedAt: finished.toISOString(),
+    durationMs: finished.getTime() - started.getTime(),
+  };
 }
 
 function normalizeSourceState(value) {
@@ -360,6 +439,7 @@ module.exports = {
   summarizeArtifactManifest,
   currentCommit,
   currentSourceState,
+  createExecutionProvenance,
   normalizeSourceState,
   safeSchemaVersion,
 };

@@ -13,6 +13,7 @@
 - 遵守 SQLite ADR：先备份、dry-run、验证，再迁移；旧来源成为只读迁移证据。
 - 迁移绝不自动调用远端、自动选择活动目标、自动重试或推断没有订单。
 - 迁移只能由 workspace/schema gate 在正常运行时 composition 之前独占执行；迁移期间不得构造 publisher、普通队列 worker、付费订单执行器或供应商 adapter。
+- 调度/实施前必须逐项验证上游最终公开 V1 导出及合同测试：08 的 `articleIdentityV1` / `targetIdentityV1`，09 的 `customerSnapshotV1` / `targetSnapshotV1` / `publicationEvidenceV1`，13 的 `orderIdentityV1` / `orderSnapshotV1` / `paidTargetV1`，15/16 的 `orderObservationV1` / `terminalObservationV1` / `orderHistoryV1`，22 的 `terminalTargetV1` / `closedTargetV1` / `tombstoneIdentityV1` / `deletionTransactionIdentityV1`。任一缺失或字段后来变化时立即返回 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING` 并报告 owner，不得由 Ticket 23 猜测、复制或补定义。
 
 ## 执行过程
 
@@ -47,34 +48,34 @@
 
 ### MigrationJournalV1 恢复矩阵
 
-| Durable phase | 重启动作 | 禁止动作 |
-| --- | --- | --- |
-| `detected` | 重新生成 dry-run；source fingerprint 变化则创建新 run | import、构造正常 composition |
-| `backed_up` | 仅在 workspace/source/plan fingerprint 与 backup integrity 全部匹配时复用备份，否则使其失效并重新备份 | 静默复用旧备份、import |
-| `confirmed` | 复核确认与 plan fingerprint 后幂等执行 import | 重新请求远端、跳过备份/确认 |
-| `import_committed` | 禁止再次 import，只重跑 post-import verification；失败时保持 gate 阻断并提供显式恢复流程 | 因 schema 当前而放行、重复写入 |
-| `verified` | 仅当 journal fingerprint 与当前 workspace/source/schema 全匹配时允许正常 composition，执行组仍暂停 | 将其他 run 的 verified 证据复用到当前 workspace |
+| Durable phase      | 重启动作                                                                                              | 禁止动作                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `detected`         | 重新生成 dry-run；source fingerprint 变化则创建新 run                                                 | import、构造正常 composition                    |
+| `backed_up`        | 仅在 workspace/source/plan fingerprint 与 backup integrity 全部匹配时复用备份，否则使其失效并重新备份 | 静默复用旧备份、import                          |
+| `confirmed`        | 复核确认与 plan fingerprint 后幂等执行 import                                                         | 重新请求远端、跳过备份/确认                     |
+| `import_committed` | 禁止再次 import，只重跑 post-import verification；失败时保持 gate 阻断并提供显式恢复流程              | 因 schema 当前而放行、重复写入                  |
+| `verified`         | 仅当 journal fingerprint 与当前 workspace/source/schema 全匹配时允许正常 composition，执行组仍暂停    | 将其他 run 的 verified 证据复用到当前 workspace |
 
 ### ImportPlanV1 封闭 schema
 
-Envelope 精确为 `{ version: 1, migrationRunId, workspaceFingerprint, sourceFingerprint, planFingerprint, entries }`。每个 entry 的公共字段精确为 `{ entryId, variant, articleIdentityV1, legacySourceFingerprint, legacyEvidenceRefs }`，其中 `legacyEvidenceRefs` 是非空 `LegacyEvidenceRefV1[]`，是该 entry 唯一的来源证据引用集合，variant payload 不得另建第二份引用。所有嵌套 DTO 均引用身份、目标、订单、发布或删除 owner 的明确版本合同；migration 不复制其字段定义。任何层级 extra field、未知 enum、重复 article identity 或跨 entry 订单号重复都拒绝。
+Envelope 精确为 `{ version: 1, migrationRunId, workspaceFingerprint, sourceFingerprint, planFingerprint, entries }`。每个 entry 的公共字段精确为 `{ entryId, variant, articleIdentityV1, legacySourceFingerprint, legacyEvidenceRefs }`，其中 `legacyEvidenceRefs` 是非空 `LegacyEvidenceRefV1[]`，是该 entry 唯一的来源证据引用集合，variant payload 不得另建第二份引用。所有嵌套 DTO 必须直接调用启动约定中列出的上游最终公开 validator；migration 不复制字段定义，也不得在上游导出缺失时提供 fallback schema。任何层级 extra field、未知 enum、重复 article identity 或跨 entry 订单号重复都拒绝。
 
 迁移本地辅助 DTO 也必须封闭：
 
 - `LegacyEvidenceRefV1 = { sourceKind, sourceRecordIdHash, sourceVersion, evidenceFingerprint }`，`sourceKind` 只能为 `ARTICLE_RECORD|QUEUE_RECORD|SUBMISSION_RECORD|ORDER_RECORD|DELETION_RECORD`；禁止原始数据库行和绝对路径。
 - `LegacyQueueEvidenceV1 = { targetIdentityV1, queueState, remoteBoundaryCrossed }`，其中 `queueState="QUEUED"`、`remoteBoundaryCrossed=false`。
-- `MigrationConflictEvidenceV1 = { legacyStateCodes, targetIdentityV1s, orderIdentityV1s, contentFingerprints }`；数组字段必须存在但可为空，state code 只能来自 Ticket 23 第 1 步分类矩阵，禁止自由字符串。
+- `MigrationConflictEvidenceV1 = { legacyStateCodes, targetIdentityV1s, orderIdentityV1s, contentFingerprints }`；数组字段必须存在但可为空，`targetIdentityV1s` 每项直接调用 08 owner，`orderIdentityV1s` 每项直接调用 13 owner，不允许字符串订单号或本地 fallback object；state code 只能来自 Ticket 23 第 1 步分类矩阵，禁止自由字符串。
 - `MigrationDeletionEvidenceV1 = { tombstoneIdentityV1, deletionTransactionIdentityV1, conflictingFactKinds }`；两个 identity 字段允许明确 `null`，fact kind 只能为 `PUBLICATION|ORDER|ACTIVE_TARGET|TOMBSTONE|RECOVERY_TRANSACTION`。
 - `RestoreEligibilityV1 = { hasPublicationSuccess, hasActiveTarget, hasTrackableOrder, hasOpenUncertainty }`，四个布尔字段必须全部存在；任一为 true 时不得恢复编辑。
 
 | Variant | 精确 payload 字段 | 固定 enum / 约束 | 唯一允许写入 |
 | --- | --- | --- | --- |
 | `publishedEvidence` | `{ publicationEvidenceV1, terminalTargetV1, orderHistoryV1 }` | `orderHistoryV1` 为明确对象或 `null`；证据必须可信成功 | 发布档案、终态目标、可选不可变订单历史、永久冻结 |
-| `trackablePaidOrder` | `{ orderSnapshotV1, orderObservationV1, paidTargetV1 }` | observation status 只能为 `0|1|9`；订单号全局唯一 | 订单快照/observation、一个冻结付费目标 |
+| `trackablePaidOrder` | `{ orderSnapshotV1, orderObservationV1, paidTargetV1 }` | `orderSnapshotV1.orderIdentityV1` 与 `paidTargetV1.orderIdentityV1` 必须相等，article/target/attempt 身份也必须一致；observation status 只能为 `0`、`1`、`9`；订单身份跨 entry 全局唯一 | 订单快照/observation、一个冻结付费目标 |
 | `pendingReadmission` | `{ legacyQueueEvidenceV1, closedTargetV1, readmissionReason }` | reason 只能为 `PROVEN_PRE_REMOTE_QUEUE`；无订单/成功/unknown | 迁移说明、结束旧目标、恢复待投稿 |
-| `nonPublishedTerminal` | `{ terminalObservationV1, closedTargetV1, orderHistoryV1, restoreEligibilityV1 }` | terminal kind 只能为 `FAILED|REJECTED|CANCELLED|PAID_STATUS_4`；order history 为对象或 `null` | 终态 observation、可选订单历史、结束目标、按 eligibility 恢复 |
-| `needsAttentionConflict` | `{ conflictKind, migrationConflictEvidenceV1, freezeReasonCode }` | kind 只能为 `SUBMITTING_OR_UNPROVEN_SUBMITTED|MISSING_ORDER_ID|MULTIPLE_ACTIVE_TARGETS|IDENTITY_CONFLICT|CONTENT_CONFLICT|UNKNOWN_FACT_COMBINATION`；freeze reason 固定 `MIGRATION_CONFLICT` | 封闭冲突证据与需处理冻结 |
-| `deletionRecoveryConflict` | `{ deletionConflictKind, migrationDeletionEvidenceV1, freezeReasonCode }` | kind 只能为 `PUBLISHED_IN_TRASH|ORDERED_IN_TRASH|ACTIVE_TARGET_IN_TRASH|TOMBSTONE_CONFLICT|RECOVERY_TRANSACTION_CONFLICT`；freeze reason 固定 `MIGRATION_DELETION_CONFLICT` | 封闭 deletion/recovery 证据、需处理冻结、owner DTO 引用的发布/订单历史 |
+| `nonPublishedTerminal` | `{ terminalObservationV1, closedTargetV1, orderHistoryV1, restoreEligibilityV1 }` | terminal kind 只能为 `FAILED`、`REJECTED`、`CANCELLED`、`PAID_STATUS_4`；order history 为对象或 `null` | 终态 observation、可选订单历史、结束目标、按 eligibility 恢复 |
+| `needsAttentionConflict` | `{ conflictKind, migrationConflictEvidenceV1, freezeReasonCode }` | kind 只能为 `SUBMITTING_OR_UNPROVEN_SUBMITTED`、`MISSING_ORDER_ID`、`MULTIPLE_ACTIVE_TARGETS`、`IDENTITY_CONFLICT`、`CONTENT_CONFLICT`、`UNKNOWN_FACT_COMBINATION`；freeze reason 固定 `MIGRATION_CONFLICT` | 封闭冲突证据与需处理冻结 |
+| `deletionRecoveryConflict` | `{ deletionConflictKind, migrationDeletionEvidenceV1, freezeReasonCode }` | kind 只能为 `PUBLISHED_IN_TRASH`、`ORDERED_IN_TRASH`、`ACTIVE_TARGET_IN_TRASH`、`TOMBSTONE_CONFLICT`、`RECOVERY_TRANSACTION_CONFLICT`；freeze reason 固定 `MIGRATION_DELETION_CONFLICT` | 封闭 deletion/recovery 证据、需处理冻结、owner DTO 引用的发布/订单历史 |
 
 六种 payload 均禁止 runnable queue、open remote intent、可执行批次、供应商命令、任意 metadata/原始数据库行和未列出的事实；planner 与 store owner 共同使用同一版本化 schema，但 store owner 是最终拒绝边界。
 
@@ -94,6 +95,7 @@ Envelope 精确为 `{ version: 1, migrationRunId, workspaceFingerprint, sourceFi
 - [ ] 损坏/恶意 plan、未知版本、互斥目标、重复订单号、成功与非发布终态冲突及证据不完整测试证明 import owner 自身失败关闭且事务不产生部分事实；planner 不是跨事实不变量的唯一防线。
 - [ ] 六种 V1 variant 全部有正反合同测试；未声明 variant 以及试图写入 runnable queue、open remote intent 或 executable paid batch 的计划均被 owner 原子拒绝。
 - [ ] 六种 payload 的缺字段、extra field、未知 enum、嵌套 DTO 版本错误、重复 article/订单身份和跨 variant 冲突全部原子拒绝；planner 与 store 不形成两套字段解释。
+- [ ] 上游 V1 inventory gate 对每个 owner 的导出缺失、版本漂移和 validator 身份不一致均失败关闭并返回 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING`；迁移源码中不存在复制的订单、目标、发布或删除字段列表。
 - [ ] 交接记录包含映射矩阵、数量报告、冲突样例、恢复证据、模块职责、依赖方向及显著规模变化说明。
 
 ## 审计建议

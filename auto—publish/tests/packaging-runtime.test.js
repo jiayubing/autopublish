@@ -21,6 +21,7 @@ const {
 } = require("../scripts/create-production-artifact-manifest");
 const { runOfflineSelfTest } = require("../scripts/offline-self-test");
 const {
+  evidenceCommand,
   summarizeChecks,
   writeEvidenceReport,
 } = require("../scripts/verify-production-package");
@@ -365,26 +366,48 @@ test("production smoke evidence summarizes offline checks and rejects empty resu
   const fixture = temporaryRoot("autopublish-production-evidence-");
   try {
     const output = path.join(fixture.root, "production-smoke.json");
-    const passed = writeEvidenceReport(output, {
-      ok: true,
-      packageVersion: "1.0.1",
-      workspaceSchemaVersion: 1,
-      artifactCount: 13,
-      offline: {
-        main: { status: 0 },
-        storage: { cleanup: { status: "passed" } },
+    const passed = writeEvidenceReport(
+      output,
+      {
+        ok: true,
+        packageVersion: "1.0.1",
+        workspaceSchemaVersion: 1,
+        artifactCount: 13,
+        offline: {
+          main: { status: 0 },
+          storage: { cleanup: { status: "passed" } },
+        },
       },
-    });
+      {
+        root: path.resolve(__dirname, ".."),
+        command: "node tests/packaging-runtime.test.js",
+        startedAt: Date.now() - 1,
+      },
+    );
     assert.equal(passed.status, "PASSED");
     assert.equal(passed.checkCount, 2);
     assert.equal(passed.passed, 2);
-    const failed = writeEvidenceReport(output, {
-      ok: true,
-      packageVersion: "1.0.1",
-      workspaceSchemaVersion: 1,
-      artifactCount: 13,
-      offline: { main: { status: "FAILED" } },
-    });
+    assert.match(passed.commit, /^[a-f0-9]{40,64}$/);
+    assert.match(passed.nodeVersion, /^v\d+\.\d+\.\d+$/);
+    assert.equal(passed.command, "node tests/packaging-runtime.test.js");
+    assert.match(passed.startedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(passed.finishedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(typeof passed.sourceState.summary.changedEntries, "number");
+    const failed = writeEvidenceReport(
+      output,
+      {
+        ok: true,
+        packageVersion: "1.0.1",
+        workspaceSchemaVersion: 1,
+        artifactCount: 13,
+        offline: { main: { status: "FAILED" } },
+      },
+      {
+        root: path.resolve(__dirname, ".."),
+        command: "node tests/packaging-runtime.test.js",
+        startedAt: Date.now() - 1,
+      },
+    );
     assert.equal(failed.status, "FAILED");
     assert.equal(failed.failed, 1);
     assert.throws(
@@ -394,4 +417,19 @@ test("production smoke evidence summarizes offline checks and rejects empty resu
   } finally {
     fixture.cleanup();
   }
+});
+
+test("production smoke evidence command keeps workspace paths relative and masks external paths", () => {
+  assert.equal(
+    evidenceCommand([
+      path.resolve(__dirname, "..", "release-production-smoke", "resources"),
+      "--output",
+      path.resolve(__dirname, "..", "build", "evidence", "smoke.json"),
+    ]),
+    "node scripts/verify-production-package.js release-production-smoke/resources --output build/evidence/smoke.json",
+  );
+  assert.equal(
+    evidenceCommand([path.resolve(os.tmpdir(), "external-resources")]),
+    "node scripts/verify-production-package.js <absolute-path>",
+  );
 });

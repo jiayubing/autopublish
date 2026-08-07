@@ -40,6 +40,12 @@ V1 顶层字段精确为 `{ version, articleIdentityV1, customerSnapshotV1, cont
 - `safeEvidenceRefs` 为 1–16 项且 `(kind,fingerprint)` 不重复，条目字段精确为 `{ kind, fingerprint }`；`kind` 只允许 `PREPARED_SUBMISSION|REGULAR_ACCEPTED_OBSERVATION|MANUAL_POSITIVE_EVIDENCE|PAID_ORDER_SNAPSHOT|PAID_PUBLISHED_OBSERVATION|LEGACY_EVIDENCE`，`fingerprint` 为 64 位小写十六进制 SHA-256。禁止原始响应、任意 metadata、token、请求头、页面正文或不受控 URL。
 - owner validator 必须递归拒绝所有 extra fields、未知 enum、字段组合/来源/missing reason 不一致、超界值和敏感字段；成功 primitive、15 observation、22 archive query 和 23 import 必须调用同一 validator。
 
+嵌套展示快照同样由 `src/domain/` 稳定 DTO owner 唯一定义，Ticket 09 在实现顶层 validator 前必须建立以下精确合同：
+
+- `customerSnapshotV1 = { version, clientId, displayName }`；`version=1`，`clientId` 复用 `articleIdentityV1` 的 domain identity，`displayName` 为 1–256 个 UTF-16 code units 的安全展示文本。不得包含客户资料正文、联系方式、内容库路径或任意 metadata。
+- `targetSnapshotV1` 是封闭 union：普通平台 `{ version, kind, platformId, platformName, accountProfileId, accountLabel }`；网站媒体 `{ version, kind, mediaResourceId, mediaName }`；迁移专用未知账号 `{ version, kind, platformId, platformName }`。`version=1`，`kind` 固定为 `platform|media|legacy-unknown-account`，身份字段复用 08 的 `targetIdentityV1` 规则；四个展示名称/标签均为 1–256 个 UTF-16 code units 的安全文本。在线成功只允许前两个 variant，第三个只允许 Ticket 23 的历史导入。
+- 两个快照 validator 必须递归拒绝 extra fields、控制字符、凭据、Cookie、路径、供应商原始对象和超界展示文本。15、22、23 只能复用导出，不得通过页面投影或 migration mapper 重新解释字段。
+
 ## 职责边界
 
 - 平台适配器阶段一可返回 ready、pre-submit decision 或明确 article_rejected/group_blocked；阶段二识别供应商/网页提交响应并只返回四种规范 outcome。两阶段都不决定队列下一步，09 只忽略 decision、消费规范 outcome。
@@ -71,6 +77,7 @@ V1 顶层字段精确为 `{ version, articleIdentityV1, customerSnapshotV1, cont
 - [ ] 唯一 publication-success primitive 从公开 outcome/resolution 行为验证 first-wins、重复/并发幂等、不可变快照和永久冻结；Ticket 15 后续可在其订单 observation 事务内复用，不需要建立第二个 writer。
 - [ ] 普通 accepted 与人工确认已接受都保存完整 `publicationEvidenceV1` 必需字段；缺少实际在线投稿正文、目标快照或关键证据时事务失败关闭，不写不完整成功事实。
 - [ ] `publicationEvidenceV1` 只有一个 owner/validator；15、22、23 的直接合同测试证明它们复用同一精确 schema、时间来源和 missing reason 规则，递归 extra/sensitive fields 一律失败关闭。
+- [ ] `customerSnapshotV1` / `targetSnapshotV1` 的三个 target variant、在线/迁移允许矩阵、展示文本上界和敏感字段拒绝由 domain owner 的公开合同测试固定；15、22、23 不复制嵌套 schema。
 - [ ] 使用合成的最终 manifest 合同覆盖带图、换图和纯文本降级摘要，证明 `confirmRegularAccepted` 只按冻结 evidence 恢复相同标题/正文/content fingerprint/图片布局/降级摘要，不会用 admission 原文冒充实际提交内容；本 ticket 不声称图片选择、换图或降级生产链已实现，真实应用链由核心完成后的 Ticket 18 及波次 12 集成复验完成。
 - [ ] 在线成功同时保存有规范来源的 `submittedAt` 与 `firstPublishedAt`；历史不可得只允许由 23 写入 `null + missing reason`，任何路径都不得拿 observation/迁移执行时间冒充未知时间。
 - [ ] 直接 accepted 与 `confirmRegularAccepted` 分别覆盖 provider event、positive observation 和 manual positive evidence 三类来源；人工确认时间可作为明确标记的正面证据时间，但绝不伪装成供应商发布时间。

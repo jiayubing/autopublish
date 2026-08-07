@@ -16,6 +16,34 @@ const {
   writeEvidenceReport,
 } = require("./production-smoke-evidence");
 
+const ROOT = path.resolve(__dirname, "..");
+
+function evidenceCommand(args) {
+  const values = Array.from(args || []).map((arg) => {
+    const value = String(arg);
+    const absolute = path.isAbsolute(value) || path.win32.isAbsolute(value);
+    if (absolute) {
+      const relative = path.relative(ROOT, path.resolve(value));
+      if (
+        relative &&
+        !relative.startsWith("..") &&
+        !path.isAbsolute(relative) &&
+        !path.win32.isAbsolute(relative)
+      )
+        return relative.replaceAll("\\", "/");
+      return "<absolute-path>";
+    }
+    if (
+      /^[A-Za-z0-9_./=-]+$/.test(value) &&
+      value.length <= 512 &&
+      !value.split(/[\\/]/).includes("..")
+    )
+      return value.replaceAll("\\", "/");
+    return JSON.stringify(value.replace(/[\x00-\x1f\x7f]/g, ""));
+  });
+  return ["node", "scripts/verify-production-package.js", ...values].join(" ");
+}
+
 function findPackagedApplication(resourcesPath) {
   const packageRoot = path.dirname(path.resolve(resourcesPath));
   let names;
@@ -114,6 +142,8 @@ function runPackagedPreloadSandbox(resourcesPath) {
 
 function verifyProductionPackage(resourcesPath, options) {
   const opts = Object.assign({}, options || {});
+  const evidenceProvenance = opts.evidenceProvenance;
+  delete opts.evidenceProvenance;
   const verification = verifyArtifactPackage(resourcesPath, opts);
   let contractAbsence;
   try {
@@ -123,16 +153,20 @@ function verifyProductionPackage(resourcesPath, options) {
     });
   } catch (error) {
     if (opts.output && error.report)
-      writeEvidenceReport(opts.output, {
-        ok: false,
-        packageVersion: verification.packageVersion,
-        workspaceSchemaVersion: verification.workspaceSchemaVersion,
-        artifactCount: verification.artifacts.length,
-        offline: {
-          rendererContractAbsence: error.report,
-          runtime: "not_run",
+      writeEvidenceReport(
+        opts.output,
+        {
+          ok: false,
+          packageVersion: verification.packageVersion,
+          workspaceSchemaVersion: verification.workspaceSchemaVersion,
+          artifactCount: verification.artifacts.length,
+          offline: {
+            rendererContractAbsence: error.report,
+            runtime: "not_run",
+          },
         },
-      });
+        evidenceProvenance,
+      );
     throw error;
   }
   if (opts.staticOnly)
@@ -169,15 +203,26 @@ function verifyProductionPackage(resourcesPath, options) {
 }
 
 if (require.main === module) {
+  const startedAt = Date.now();
+  const rawArguments = process.argv.slice(2);
   try {
-    const parsed = parseArguments(process.argv.slice(2));
+    const parsed = parseArguments(rawArguments);
+    parsed.options.evidenceProvenance = {
+      root: ROOT,
+      command: evidenceCommand(rawArguments),
+      startedAt,
+    };
     const result = verifyProductionPackage(
       parsed.resourcesPath,
       parsed.options,
     );
     if (
       parsed.options.output &&
-      writeEvidenceReport(parsed.options.output, result).status !== "PASSED"
+      writeEvidenceReport(
+        parsed.options.output,
+        result,
+        parsed.options.evidenceProvenance,
+      ).status !== "PASSED"
     )
       throw packageEvidenceError(
         "PRODUCTION_PACKAGE_SMOKE_FAILED",
@@ -195,6 +240,7 @@ if (require.main === module) {
 
 module.exports = {
   findPackagedApplication,
+  evidenceCommand,
   parseArguments,
   runPackagedPreloadSandbox,
   summarizeChecks,

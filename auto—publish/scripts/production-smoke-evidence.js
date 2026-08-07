@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 function packageEvidenceError(code, message) {
   const error = new Error(message);
@@ -64,11 +65,13 @@ function summarizeChecks(checks) {
   };
 }
 
-function writeEvidenceReport(output, result) {
+function writeEvidenceReport(output, result, provenanceOptions) {
   const checks = summarizeChecks(result && result.offline);
+  const provenance = createExecutionProvenance(provenanceOptions);
   const report = {
     status: result.ok === true && checks.failed === 0 ? "PASSED" : "FAILED",
     operation: "production-directory-smoke",
+    ...provenance,
     packageVersion: result.packageVersion,
     workspaceSchemaVersion: result.workspaceSchemaVersion,
     artifactCount: result.artifactCount,

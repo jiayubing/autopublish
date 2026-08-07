@@ -29,7 +29,10 @@ const {
   buildReleaseEvidenceManifest,
   checklistEntries,
 } = require("../scripts/release-evidence-writer");
-const { currentSourceState } = require("../scripts/release-evidence-inputs");
+const {
+  createExecutionProvenance,
+  currentSourceState,
+} = require("../scripts/release-evidence-inputs");
 const applicationVersion = require("../package.json").version;
 
 const repositoryRoot = path.resolve(__dirname, "..", "..");
@@ -206,6 +209,83 @@ test("source-state evidence changes when tracked or untracked content changes", 
     assert.notEqual(
       untrackedChange.diffSha256,
       untrackedChangeAgain.diffSha256,
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("execution provenance binds commit, source state, runtime, command, and times", () => {
+  const finishedAt = Date.now();
+  const provenance = createExecutionProvenance({
+    root: repositoryRoot,
+    command: "node scripts/run-tests.js",
+    startedAt: finishedAt - 25,
+    finishedAt,
+  });
+  assert.match(provenance.commit, /^[a-f0-9]{40,64}$/);
+  assert.ok(["CLEAN", "DIRTY"].includes(provenance.sourceState.status));
+  assert.match(provenance.sourceState.diffSha256, /^[a-f0-9]{64}$/);
+  assert.equal(typeof provenance.sourceState.summary.changedEntries, "number");
+  assert.match(provenance.nodeVersion, /^v\d+\.\d+\.\d+$/);
+  assert.equal(provenance.command, "node scripts/run-tests.js");
+  assert.match(provenance.startedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(provenance.finishedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.ok(provenance.durationMs >= 25);
+});
+
+test("execution provenance fails closed when Git source state is unavailable", () => {
+  const fixture = tempRoot();
+  try {
+    execFileSync("git", ["init"], { cwd: fixture.root, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(fixture.root, "tracked.txt"),
+      "fixture\n",
+      "utf8",
+    );
+    execFileSync("git", ["add", "tracked.txt"], {
+      cwd: fixture.root,
+      stdio: "ignore",
+    });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-m",
+        "fixture",
+      ],
+      { cwd: fixture.root, stdio: "ignore" },
+    );
+    assert.match(
+      execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: fixture.root,
+        encoding: "utf8",
+      }).trim(),
+      /^[a-f0-9]{40,64}$/,
+    );
+    fs.writeFileSync(
+      path.join(fixture.root, ".git", "index"),
+      "invalid",
+      "utf8",
+    );
+    assert.equal(currentSourceState(fixture.root).status, "UNKNOWN");
+
+    assert.throws(
+      () =>
+        createExecutionProvenance({
+          root: fixture.root,
+          command: "node scripts/run-tests.js",
+          startedAt: Date.now() - 1,
+        }),
+      (error) => {
+        assert.equal(error.code, "EXECUTION_EVIDENCE_SOURCE_STATE_UNAVAILABLE");
+        assert.equal(error.message.includes(fixture.root), false);
+        return true;
+      },
     );
   } finally {
     fixture.cleanup();

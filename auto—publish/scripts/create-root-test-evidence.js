@@ -5,10 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { collectTestFiles } = require("./run-tests");
-const {
-  currentCommit,
-  currentSourceState,
-} = require("./release-evidence-inputs");
+const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -36,18 +33,21 @@ function createRootTestEvidence(options) {
     windowsHide: true,
   });
   const output = String(result.stdout || "") + String(result.stderr || "");
+  const provenance = createExecutionProvenance({
+    root: ROOT,
+    command: "node scripts/run-tests.js",
+    startedAt,
+  });
   const report = {
     status: result.status === 0 ? "PASSED" : "FAILED",
     operation: "desktop-root-tests",
     suite: "node scripts/run-tests.js",
-    commit: currentCommit(ROOT),
-    sourceState: currentSourceState(ROOT),
+    ...provenance,
     testFiles: files.length,
     count: lastCount(output, "tests"),
     passed: lastCount(output, "pass"),
     failed: lastCount(output, "fail"),
     skipped: lastCount(output, "skipped"),
-    durationMs: Date.now() - startedAt,
     sha256: crypto.createHash("sha256").update(files.join("\n")).digest("hex"),
   };
   fs.mkdirSync(path.dirname(opts.output), { recursive: true });
