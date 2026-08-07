@@ -5,6 +5,7 @@ const { execSync } = require("child_process");
 
 const { DIRS, PW } = require("../../../scripts/config");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
+const domain = require("../../domain");
 const { ensureDir, sleep, quoteArg } = require("../../core/files");
 const {
   pwSessionConfig,
@@ -321,90 +322,157 @@ function confirmAdDialog() {
 }
 
 function clickConfirmPublish() {
-  runCode(
-    "  var button = page.getByRole('button', { name: '确认发布' });\n" +
-      "  try {\n" +
-      "    await button.first().waitFor({ state: 'visible', timeout: 10000 });\n" +
-      "  } catch (e) {\n" +
-      "    return;\n" +
-      "  }\n" +
-      "  await button.first().click({ timeout: 15000 });\n" +
-      "  await page.waitForTimeout(1000);\n",
-    { timeout: 25000, session: SESSION },
+  return (
+    runCode(
+      "  var button = page.getByRole('button', { name: '确认发布' }).first();\n" +
+        "  await button.waitFor({ state: 'visible', timeout: 10000 });\n" +
+        "  await button.click({ timeout: 15000 });\n" +
+        "  await page.waitForTimeout(1000);\n" +
+        "  return true;\n",
+      { timeout: 25000, session: SESSION },
+    ) === true
   );
 }
 
-async function publishArticle(article, options) {
+function confirmPublishReady() {
+  return (
+    runCode(
+      "  var button = page.getByRole('button', { name: '确认发布' }).first();\n" +
+        "  await button.waitFor({ state: 'visible', timeout: 10000 });\n" +
+        "  return true;\n",
+      { timeout: 15000, session: SESSION },
+    ) === true
+  );
+}
+
+function preparedContentMatches(article) {
+  try {
+    return (
+      runCode(
+        "  var title = await page.locator('textarea[placeholder*=\"文章标题\"]').first().inputValue();\n" +
+          "  var body = await page.locator('div.ProseMirror').first().innerText();\n" +
+          "  return title === " +
+          JSON.stringify(article.title) +
+          " && body === " +
+          JSON.stringify(article.body) +
+          ";\n",
+        { timeout: 20000, session: SESSION },
+      ) === true
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+async function prepareArticleSubmission(article, options) {
   var opts = options || {};
-  var autoSubmit = opts.autoSubmit !== false;
   var interactive = resolveInteractive(opts);
   var sidecar = article.sidecar || {};
   var coverMode = sidecar.coverMode || "none";
   var adEnabled = !!sidecar.adEnabled;
-  var remoteCallStarted = false;
+  throwIfStopped();
+  pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
+  waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
+  throwIfStopped();
 
-  try {
+  if (!checkLoginInCurrentPage()) {
+    diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
+    var relogged = await doLogin({
+      interactive: interactive,
+      timeoutMs: opts.timeoutMs,
+    });
+    if (!relogged || !checkLogin()) {
+      var loginError = new Error("Login failed");
+      loginError.code = "LOGIN_FAILED";
+      throw loginError;
+    }
     throwIfStopped();
+    saveCurrentState();
     pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
     waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
     throwIfStopped();
+  }
 
-    if (!checkLoginInCurrentPage()) {
-      diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
-      var relogged = await doLogin({
-        interactive: interactive,
-        timeoutMs: opts.timeoutMs,
-      });
-      if (!relogged || !checkLogin()) {
-        return { status: "failed", errorCode: "LOGIN_FAILED" };
+  dismissAssistantDrawer();
+  throwIfStopped();
+  fillTitle(article.title);
+  throwIfStopped();
+  fillBody(article.body);
+  throwIfStopped();
+  selectCoverMode(coverMode);
+  throwIfStopped();
+  selectAdEnabled(adEnabled);
+  diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
+  if (!preparedContentMatches(article)) {
+    var driftError = new Error("Prepared content drifted before preview");
+    driftError.code = "PREPARED_CONTENT_DRIFT";
+    throw driftError;
+  }
+  clickPreviewAndPublish();
+  throwIfStopped();
+  confirmAdDialog();
+  throwIfStopped();
+  if (!confirmPublishReady()) {
+    var confirmationError = new Error("Publish confirmation is unavailable");
+    confirmationError.code = "PREPARED_CONFIRMATION_UNAVAILABLE";
+    throw confirmationError;
+  }
+
+  return Object.freeze({
+    submitPreparedPublication: async function () {
+      diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
+      try {
+        throwIfStopped();
+        if (!clickConfirmPublish())
+          return {
+            status: "uncertain",
+            errorCode: "PREPARED_SESSION_DRIFT",
+          };
+        throwIfStopped();
+
+        // Navigation to a generic list cannot bind a remote record to this
+        // article/attempt. Browser submission has no response evidence yet.
+        return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+      } catch (_) {
+        return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
       }
-      throwIfStopped();
-      saveCurrentState();
-      pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
-      waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
-      throwIfStopped();
-    }
+    },
+  });
+}
 
-    dismissAssistantDrawer();
-    throwIfStopped();
-    fillTitle(article.title);
-    throwIfStopped();
-    fillBody(article.body);
-    throwIfStopped();
-    selectCoverMode(coverMode);
-    throwIfStopped();
-    selectAdEnabled(adEnabled);
-    diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
-
-    if (!autoSubmit) {
+async function publishArticle(article, options) {
+  var opts = options || {};
+  try {
+    var prepared = await prepareArticleSubmission(article, opts);
+    if (opts.autoSubmit === false) {
       diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
       return { status: "submitted" };
     }
-
-    throwIfStopped();
-    diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
-    remoteCallStarted = true;
-    try {
-      clickPreviewAndPublish();
-      throwIfStopped();
-      confirmAdDialog();
-      throwIfStopped();
-      clickConfirmPublish();
-      throwIfStopped();
-
-      // Navigation to a generic list cannot bind a remote record to this
-      // article/attempt. Browser submission has no response evidence yet.
-      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
-    } catch (remoteError) {
-      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
-    }
+    return prepared.submitPreparedPublication();
   } catch (error) {
-    if (remoteCallStarted)
-      return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
     if (isStopError(error))
       return { status: "failed", errorCode: "STOP_REQUESTED" };
-    return { status: "failed", errorCode: "ADAPTER_FAILED" };
+    return {
+      status: "failed",
+      errorCode: error && error.code ? error.code : "ADAPTER_FAILED",
+    };
   }
+}
+
+async function preparePlatformSubmission(claim) {
+  const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+  const preparedArticle = Object.freeze({
+    title: evidence.title,
+    body: evidence.body,
+    sidecar: Object.freeze({ coverMode: "none", adEnabled: false }),
+  });
+  const prepared = await prepareArticleSubmission(preparedArticle, {
+    autoSubmit: true,
+  });
+  return domain.createPreparedSubmission({
+    preparedSubmissionEvidenceV1: evidence,
+    submitPreparedPublication: prepared.submitPreparedPublication,
+  });
 }
 
 function isStopError(error) {
@@ -495,6 +563,7 @@ module.exports = {
   checkLogin: checkLogin,
   inspectAccount: inspectAccount,
   publishArticle: publishArticle,
+  preparePlatformSubmission: preparePlatformSubmission,
   saveSession: saveCurrentState,
   closeSession: closeBrowserSession,
   scanArticles: scanArticles,

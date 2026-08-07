@@ -93,6 +93,7 @@ test("two platform fixtures and the fake publisher validate the common contract 
     assert.equal(legacyAdapter.publicationTarget.kind, "platform");
     assert.equal(legacyAdapter.publicationTarget.granularity, "platform");
     assert.equal(typeof legacyAdapter.publishArticle, "function");
+    assert.equal(typeof legacyAdapter.preparePlatformSubmission, "function");
   }
   assert.equal(
     parsePublishOutcome(

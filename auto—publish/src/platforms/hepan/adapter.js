@@ -5,6 +5,7 @@ const { spawn } = require("node:child_process");
 
 const { DIRS } = require("../../../scripts/config");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
+const domain = require("../../domain");
 const { parseArticle, scanArticles: scanArticleSources } = require("./article-source");
 const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("./runtime-paths");
 
@@ -399,6 +400,94 @@ function createHepanAdapter(options) {
     }
   }
 
+  async function preparePlatformSubmission(claim) {
+    const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+    const config = runtime();
+    if (
+      !config.pythonPath
+    ) {
+      const error = new Error("Hepan publishing is not configured");
+      error.code = "HEPAN_CONFIG_NOT_SET";
+      throw error;
+    }
+    const preparedArticle = {
+      title: evidence.title,
+      contentHtml: evidence.body,
+      sourceStem: evidence.articleIdentityV1.articleId,
+    };
+    const temporaryPayload = createTemporaryPayload(preparedArticle);
+    let consumed = false;
+    try {
+      return domain.createPreparedSubmission({
+        preparedSubmissionEvidenceV1: evidence,
+        submitPreparedPublication: async function() {
+          if (consumed)
+            return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+          consumed = true;
+          try {
+            const submissionConfig = runtime();
+            if (
+              !submissionConfig.cookiePath ||
+              !io.existsSync(submissionConfig.cookiePath)
+            ) {
+              const error = new Error("Hepan publishing is not configured");
+              error.code = "HEPAN_CONFIG_NOT_SET";
+              throw error;
+            }
+            const args = [
+              "--image-dir", imagesDirectory,
+              "--cookie-path", submissionConfig.cookiePath,
+              "--category-id", String(config.categoryId),
+              ...(config.vendorDir ? ["--vendor-dir", config.vendorDir] : []),
+              "--payload-path", temporaryPayload.filename,
+            ];
+            const payload = await runHepan(args);
+            if (payload.errorCode && /^HEPAN_/.test(payload.errorCode)) {
+              return {
+                status: "uncertain",
+                errorCode: payload.errorCode,
+              };
+            }
+            if (payload.needsLogin)
+              return { status: "group_blocked", errorCode: "LOGIN_REQUIRED" };
+            if (!payload.ok)
+              return { status: "article_rejected", errorCode: "REMOTE_REJECTED" };
+            const remoteUrl = typeof payload.url === "string" ? payload.url : "";
+            const remoteIdMatch =
+              remoteUrl.match(/[?&]aid=([A-Za-z0-9_-]+)/i) ||
+              remoteUrl.match(
+                /\/(?:article|aid)\/([A-Za-z0-9_-]+)(?:$|[?#])/i,
+              );
+            const remoteId = remoteIdMatch && remoteIdMatch[1];
+            if (!remoteId)
+              return {
+                status: "uncertain",
+                errorCode: "HEPAN_REMOTE_ID_MISSING",
+              };
+            return {
+              status: "accepted",
+              remoteId,
+              remoteUrl: remoteUrl || undefined,
+            };
+          } catch (error) {
+            return {
+              status: "uncertain",
+              errorCode:
+                error && /^HEPAN_/.test(error.code || "")
+                  ? error.code
+                  : "REMOTE_RESULT_UNKNOWN",
+            };
+          } finally {
+            temporaryPayload.cleanup();
+          }
+        },
+      });
+    } catch (error) {
+      temporaryPayload.cleanup();
+      throw error;
+    }
+  }
+
   return {
     id: "hepan",
     publicationTarget: { kind: "platform", granularity: "platform" },
@@ -409,6 +498,7 @@ function createHepanAdapter(options) {
     inspectAccount,
     validatePayload,
     publishArticle,
+    preparePlatformSubmission,
     closeSession: function() {},
     scanArticles: function() { return scanArticleSources(inputDirectory, { fs: io, path: pathApi }); },
     parseArticleFiles,
