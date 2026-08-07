@@ -621,7 +621,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "media.prepareBindPaidOrderNumber": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "GeneratedArticlesView",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/media.ts",
     bridgeSymbol: "prepareBindPaidOrderNumber",
@@ -635,7 +636,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "media.bindPaidOrderNumber": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "GeneratedArticlesView",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/media.ts",
     bridgeSymbol: "bindPaidOrderNumber",
@@ -649,7 +651,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "media.prepareConfirmPaidOrderAbsent": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "GeneratedArticlesView",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/media.ts",
     bridgeSymbol: "prepareConfirmPaidOrderAbsent",
@@ -663,7 +666,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "media.confirmPaidOrderAbsent": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "GeneratedArticlesView",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/media.ts",
     bridgeSymbol: "confirmPaidOrderAbsent",
@@ -2718,7 +2722,14 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
       [
         "media-workbench/src/features/content/paid-media-execution-feature.js",
         "createPaidMediaExecutionFeature",
-        ["content.startPaidMediaBatch", "content.pausePaidMediaBatch"],
+        [
+          "content.startPaidMediaBatch",
+          "content.pausePaidMediaBatch",
+          "media.prepareBindPaidOrderNumber",
+          "media.bindPaidOrderNumber",
+          "media.prepareConfirmPaidOrderAbsent",
+          "media.confirmPaidOrderAbsent",
+        ],
       ],
     ].flatMap(([source, factory, capabilities]) =>
       capabilities.map((capability) => [
@@ -2855,6 +2866,10 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.confirmPaidMediaBatch",
           "content.startPaidMediaBatch",
           "content.pausePaidMediaBatch",
+          "media.prepareBindPaidOrderNumber",
+          "media.bindPaidOrderNumber",
+          "media.prepareConfirmPaidOrderAbsent",
+          "media.confirmPaidOrderAbsent",
           "content.removePendingQueueItems",
           "content.cancelSubmissionBatch",
           "content.previewCleanupFailedSubmissionItems",
@@ -3846,7 +3861,8 @@ const rawProductionIpcContractFixtures = [
     capability: "media.prepareConfirmPaidOrderAbsent",
     channel: "media:prepare-confirm-paid-order-absent",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:prepare-confirm-paid-order-absent",
+    productionCaller:
+      "desktop/preload.js:media:prepare-confirm-paid-order-absent",
     request: { orderCreationAttemptId: "paid-attempt-1" },
     result: {
       orderCreationAttemptId: "paid-attempt-1",
