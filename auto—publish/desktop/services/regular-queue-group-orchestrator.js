@@ -116,41 +116,37 @@ function createRegularQueueGroupOrchestrator(options) {
       (candidate) => candidate.queueGroupId === queueGroupId,
     );
     if (!group) return Promise.reject(fail("REGULAR_QUEUE_GROUP_NOT_FOUND"));
-    if (activePlatforms.has(group.platformId))
-      return Promise.resolve(
-        Object.freeze({
+    const previousPlatformOperation = activePlatforms.get(group.platformId);
+    const operation = Promise.resolve(previousPlatformOperation)
+      .catch(() => undefined)
+      .then(async function () {
+        const claim = transitions.claimRegularQueueGroupHead({
           queueGroupId,
-          platformId: group.platformId,
-          status: "platform_busy",
-        }),
-      );
-    activePlatforms.set(group.platformId, queueGroupId);
-    const operation = (async function () {
-      const claim = transitions.claimRegularQueueGroupHead({
-        queueGroupId,
-        claimToken: `regular-claim-${randomUUID()}`,
-        leaseMs: 30000,
-      });
-      if (!claim) return Object.freeze({ queueGroupId, status: "idle" });
-      const observation = await executeClaim(claim);
-      if (observation.status === "submission_already_started")
+          claimToken: `regular-claim-${randomUUID()}`,
+          leaseMs: 30000,
+        });
+        if (!claim) return Object.freeze({ queueGroupId, status: "idle" });
+        const observation = await executeClaim(claim);
+        if (observation.status === "submission_already_started")
+          return Object.freeze({
+            queueGroupId,
+            status: "submission_already_started",
+            regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          });
         return Object.freeze({
           queueGroupId,
-          status: "submission_already_started",
+          status: "observation_ready",
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          observation,
         });
-      return Object.freeze({
-        queueGroupId,
-        status: "observation_ready",
-        regularPublicationAttemptId: claim.regularPublicationAttemptId,
-        observation,
+      })
+      .finally(function () {
+        activeGroups.delete(queueGroupId);
+        if (activePlatforms.get(group.platformId) === operation)
+          activePlatforms.delete(group.platformId);
       });
-    })().finally(function () {
-      activeGroups.delete(queueGroupId);
-      if (activePlatforms.get(group.platformId) === queueGroupId)
-        activePlatforms.delete(group.platformId);
-    });
     activeGroups.set(queueGroupId, operation);
+    activePlatforms.set(group.platformId, operation);
     return operation;
   }
 

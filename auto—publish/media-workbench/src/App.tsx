@@ -3,7 +3,6 @@ import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ArticleList from "./components/ArticleList";
 import ArticleEditor from "./components/ArticleEditor";
-import PreflightModal from "./components/PreflightModal";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
@@ -12,7 +11,6 @@ import {
   HelpCircle,
   RefreshCw,
   Layout,
-  Send,
   ChevronRight,
   FileText,
   AlertCircle,
@@ -76,13 +74,6 @@ function AppContent() {
     ].every((query) => !query.loading);
   const isScanning = mediaSnapshot.commands.scanArticles.busy;
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
-  const isSubmitting =
-    mediaSnapshot.commands.prepareSubmission.busy ||
-    mediaSnapshot.commands.submitPrepared.busy;
-  const submissionError =
-    mediaSnapshot.commands.prepareSubmission.error?.userMessage ||
-    mediaSnapshot.commands.submitPrepared.error?.userMessage ||
-    null;
   const mediaRefreshResult = mediaSnapshot.commands.refreshResources.result as {
     truncated?: boolean;
     resourceCount?: number;
@@ -92,7 +83,6 @@ function AppContent() {
       ? `资源刷新达到安全上限，已加载 ${mediaRefreshResult.resourceCount || 0} 项，结果已截断。`
       : `资源库已刷新，共 ${mediaRefreshResult.resourceCount || 0} 项。`
     : null;
-  const readyForSubmit = mediaSnapshot.readyForSubmission;
 
   const openArticleAttention = (
     intent: { attentionId?: string; clientId?: string } = {},
@@ -135,30 +125,9 @@ function AppContent() {
                 </div>
               )}
             </div>
-            {currentView === 'workbench' && (
+            {currentView === "workbench" && (
               <div className="flex min-w-0 items-center gap-3">
                 <MediaThirdPartyIdControl />
-                {articles.some(
-                  (a) => a.selectedResources && a.selectedResources.length > 0,
-                ) && (
-                  <button
-                    onClick={() => {
-                      void mediaFeature
-                        .prepareSubmission()
-                        .catch(() => undefined);
-                    }}
-                    disabled={!readyForSubmit || isSubmitting}
-                    title={
-                      readyForSubmit
-                        ? "仅执行投稿预检；付费提交必须在确认弹窗中再次确认"
-                        : "请先为至少一篇稿件选择媒体资源"
-                    }
-                    className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all active:scale-95"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>{isSubmitting ? "预检中" : "投稿预检"}</span>
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -278,7 +247,6 @@ function AppContent() {
                             }
                       }
                       errorMessage={
-                        submissionError ||
                         mediaSnapshot.commands.openArticle.error?.userMessage ||
                         mediaSnapshot.commands.refreshResources.error
                           ?.userMessage ||
@@ -291,17 +259,6 @@ function AppContent() {
                       statusMessage={mediaRefreshMessage}
                     />
                   </div>
-                  <PreflightModal isOpen={Boolean(mediaSnapshot.preflight.data)}
-                    onClose={() => mediaFeature.dismissPreflight()}
-                    articles={articles}
-                    balance={balance}
-                    summary={mediaSnapshot.preflight.data || {}}
-                    isSubmitting={isSubmitting}
-                    submissionError={submissionError}
-                    onSubmit={async () => {
-                      await mediaFeature.submitPrepared().catch(() => undefined);
-                    }}
-                  />
                 </motion.div>
               )}
 
@@ -355,7 +312,7 @@ function AppContent() {
               )}
 
               {/* View 2.5: Platforms View */}
-              {currentView === 'content' && (
+              {currentView === "content" && (
                 <motion.div
                   key="content-view"
                   initial={{ opacity: 0, y: 5 }}

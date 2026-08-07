@@ -41,6 +41,29 @@ function contentCatalogFixture() {
     diagnostics: [],
   };
 }
+function paidExecutionBatchFixture() {
+  return {
+    batchId: "fixture-1",
+    mediaResourceId: "fixture-1",
+    status: "queued",
+    pauseIntent: "manual",
+    paused: true,
+    runState: "paused",
+    articleCount: 1,
+    quotedPrice: 1,
+    estimatedTotal: 1,
+    createdAt: "fixture-1",
+    updatedAt: "fixture-1",
+    items: [
+      {
+        itemId: "fixture-1",
+        articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+        status: "queued",
+        phase: "paid-admitted",
+      },
+    ],
+  };
+}
 function contentArticleFixture() {
   return {
     id: "article-1",
@@ -552,34 +575,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/media-ipc.js",
     application: "application.previewArticle",
     featureBinding: "previewArticle",
-  }),
-  "media.buildConfirmation": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "buildConfirmation",
-    preloadMethod: "buildConfirmation",
-    command: "media.buildConfirmation",
-    channel: "media:build-confirmation",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.buildConfirmation",
-    featureBinding: "buildConfirmation",
-  }),
-  "media.submitSelected": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "submitSelected",
-    preloadMethod: "submitSelected",
-    command: "media.submitSelected",
-    channel: "media:submit-selected",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.submitSelected",
-    featureBinding: "submitSelected",
   }),
   "media.getOrders": Object.freeze({
     view: "media-workbench/src/App.tsx",
@@ -1241,21 +1236,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.commit",
     featureBinding: "commitSubmissionHandoff",
   }),
-  "content.previewExport": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "previewExport",
-    preloadMethod: "previewExport",
-    command: "content.previewExport",
-    channel: "content:preview-export",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.preparation.previewExport",
-    featureBinding: "previewExport",
-  }),
   "content.previewSubmissionBatch": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
@@ -1285,21 +1265,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/content-submission-ipc.js",
     application: "workflow.preparation.listPlatforms",
     featureBinding: "listSubmissionPlatforms",
-  }),
-  "content.exportArticle": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "exportToSubmissionQueue",
-    preloadMethod: "exportArticle",
-    command: "content.exportArticle",
-    channel: "content:export-article",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.preparation.exportArticle",
-    featureBinding: "exportToSubmissionQueue",
   }),
   "content.createSubmissionBatch": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
@@ -1375,6 +1340,51 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/content-submission-ipc.js",
     application: "paidMedia.confirm",
     featureBinding: "confirmPaidMediaBatch",
+  }),
+  "content.listPaidMediaBatches": Object.freeze({
+    view: "media-workbench/src/components/ContentWorkbench.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "listPaidMediaBatches",
+    preloadMethod: "listPaidMediaBatches",
+    command: "content.listPaidMediaBatches",
+    channel: "content:list-paid-media-batches",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "paidExecution.list",
+    featureBinding: "listPaidMediaBatches",
+  }),
+  "content.startPaidMediaBatch": Object.freeze({
+    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "startPaidMediaBatch",
+    preloadMethod: "startPaidMediaBatch",
+    command: "content.startPaidMediaBatch",
+    channel: "content:start-paid-media-batch",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "paidExecution.start",
+    featureBinding: "startPaidMediaBatch",
+  }),
+  "content.pausePaidMediaBatch": Object.freeze({
+    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "pausePaidMediaBatch",
+    preloadMethod: "pausePaidMediaBatch",
+    command: "content.pausePaidMediaBatch",
+    channel: "content:pause-paid-media-batch",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "paidExecution.pause",
+    featureBinding: "pausePaidMediaBatch",
   }),
   "content.removePendingQueueItems": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -1935,16 +1945,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/App.tsx",
     "openArticle",
   ],
-  "media.buildConfirmation": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "prepareSubmission",
-  ],
-  "media.submitSelected": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "submitPrepared",
-  ],
   "media.getOrders": [
     "lifecycle",
     "media-workbench/src/features/media/use-media-feature.ts",
@@ -2161,11 +2161,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx",
     "commitSubmissionHandoff",
   ],
-  "content.previewExport": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "previewExport",
-  ],
   "content.previewSubmissionBatch": [
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -2175,11 +2170,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "direct",
     "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx",
     "listSubmissionPlatforms",
-  ],
-  "content.exportArticle": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "exportToSubmissionQueue",
   ],
   "content.createSubmissionBatch": [
     "direct",
@@ -2205,6 +2195,21 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     "confirmPaidMediaBatch",
+  ],
+  "content.listPaidMediaBatches": [
+    "lifecycle",
+    "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    "refreshPaidMediaBatches",
+  ],
+  "content.startPaidMediaBatch": [
+    "direct",
+    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "startPaidMediaBatch",
+  ],
+  "content.pausePaidMediaBatch": [
+    "direct",
+    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "pausePaidMediaBatch",
   ],
   "content.removePendingQueueItems": [
     "direct",
@@ -2416,6 +2421,11 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "content.snapshot",
     "management",
   ],
+  "content.listPaidMediaBatches": [
+    "media-workbench/src/components/ContentWorkbench.tsx",
+    "content.snapshot",
+    "paidMediaExecution",
+  ],
   "attention.listArticleAttention": [
     "media-workbench/src/components/content/ArticleAttentionPanel.tsx",
     "snapshot",
@@ -2542,21 +2552,32 @@ const PRODUCTION_NESTED_FEATURES = Object.freeze({
     stateField: "doubaoQueue",
   }),
   "content.getArticleManagementSnapshot": Object.freeze({
-    source: "media-workbench/src/features/content/article-management-feature.js",
+    source:
+      "media-workbench/src/features/content/article-management-feature.js",
     factory: "createArticleManagementFeature",
     method: "refreshManagement",
     binding: "loadManagement",
     stateField: "management",
   }),
+  "content.listPaidMediaBatches": Object.freeze({
+    source:
+      "media-workbench/src/features/content/paid-media-execution-feature.js",
+    factory: "createPaidMediaExecutionFeature",
+    method: "refresh",
+    binding: "listPaidMediaBatches",
+    stateField: "items",
+  }),
   "content.articleRemovalTransactionChanged": Object.freeze({
-    source: "media-workbench/src/features/content/article-management-feature.js",
+    source:
+      "media-workbench/src/features/content/article-management-feature.js",
     factory: "createArticleManagementFeature",
     method: "watchRemovalTransaction",
     binding: "subscribeRemovalTransaction",
     cleanupMethod: "dispose",
   }),
   "content.getArticleRemovalTransaction": Object.freeze({
-    source: "media-workbench/src/features/content/article-management-feature.js",
+    source:
+      "media-workbench/src/features/content/article-management-feature.js",
     factory: "createArticleManagementFeature",
     method: "watchRemovalTransaction",
     binding: "getRemovalTransaction",
@@ -2605,9 +2626,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.preparePermanentDeleteArticle",
           "content.permanentlyDeleteArticle",
           "content.retryArticleRemovalTransaction",
-          "content.previewExport",
           "content.previewSubmissionBatch",
-          "content.exportArticle",
           "content.createSubmissionBatch",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
@@ -2619,6 +2638,11 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.cleanupFailedSubmissionItems",
           "publication.reconcile",
         ],
+      ],
+      [
+        "media-workbench/src/features/content/paid-media-execution-feature.js",
+        "createPaidMediaExecutionFeature",
+        ["content.startPaidMediaBatch", "content.pausePaidMediaBatch"],
       ],
     ].flatMap(([source, factory, capabilities]) =>
       capabilities.map((capability) => [
@@ -2636,6 +2660,10 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
 );
 
 const PRODUCTION_PROP_WIRINGS = Object.freeze({
+  "content.listPaidMediaBatches": [
+    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "refreshPaidMediaBatches",
+  ],
   "attention.previewArticleAttention": [
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     "onPreviewAction",
@@ -2692,6 +2720,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.listResearch",
           "content.listTemplateCatalog",
           "content.getArticleManagementSnapshot",
+          "content.listPaidMediaBatches",
           "attention.listArticleAttention",
           "generation.getRuntimeSnapshot",
           "content.listQuestions",
@@ -2714,8 +2743,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "media.setDraft",
           "media.scanArticles",
           "media.previewArticle",
-          "media.buildConfirmation",
-          "media.submitSelected",
           "media.syncOrder",
           "media.openPublishedUrl",
         ],
@@ -2744,14 +2771,14 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.preparePermanentDeleteArticle",
           "content.permanentlyDeleteArticle",
           "content.retryArticleRemovalTransaction",
-          "content.previewExport",
           "content.previewSubmissionBatch",
-          "content.exportArticle",
           "content.createSubmissionBatch",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
           "content.previewPaidMediaPreflight",
           "content.confirmPaidMediaBatch",
+          "content.startPaidMediaBatch",
+          "content.pausePaidMediaBatch",
           "content.removePendingQueueItems",
           "content.cancelSubmissionBatch",
           "content.previewCleanupFailedSubmissionItems",
@@ -3662,52 +3689,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "media.buildConfirmation",
-    channel: "media:build-confirmation",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:build-confirmation",
-    request: {
-      submissions: [
-        {
-          filename: "fixture-1",
-          resourceIds: ["fixture-1"],
-        },
-      ],
-    },
-    result: {
-      articleCount: 0,
-      resourceCount: 0,
-      submitableResourceCount: 0,
-      blockedResourceCount: 0,
-      estimatedTotalPrice: 0,
-      actualPrice: 0,
-      blockers: [],
-      blockedResources: [],
-      submitableResources: [],
-    },
-  },
-  {
-    capability: "media.submitSelected",
-    channel: "media:submit-selected",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:submit-selected",
-    request: {
-      submissions: [
-        {
-          filename: "fixture-1",
-          resourceIds: ["fixture-1"],
-        },
-      ],
-    },
-    result: {
-      batchId: "fixture-1",
-      publishedCount: 0,
-      failedCount: 0,
-      uncertainCount: 0,
-      skippedCount: 0,
-    },
-  },
-  {
     capability: "media.getOrders",
     channel: "media:get-orders",
     owner: "media",
@@ -4472,25 +4453,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "content.previewExport",
-    channel: "content:preview-export",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:preview-export",
-    request: {
-      clientId: "fixture-1",
-      generatedArticleId: "fixture-1",
-      targetPlatform: "fixture-1",
-      confirmed: true,
-    },
-    result: {
-      filename: "fixture-1",
-      targetPlatform: "fixture-1",
-      contentHash: "fixture-1",
-      markdown: "fixture-1",
-      status: "queueable",
-    },
-  },
-  {
     capability: "content.previewSubmissionBatch",
     channel: "content:preview-submission-batch",
     owner: "content",
@@ -4528,26 +4490,6 @@ const rawProductionIpcContractFixtures = [
     request: {},
     result: {
       platforms: [],
-    },
-  },
-  {
-    capability: "content.exportArticle",
-    channel: "content:export-article",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:export-article",
-    request: {
-      clientId: "fixture-1",
-      generatedArticleId: "fixture-1",
-      targetPlatform: "fixture-1",
-      confirmed: true,
-    },
-    result: {
-      filename: "fixture-1",
-      targetPlatform: "fixture-1",
-      contentHash: "fixture-1",
-      markdown: "fixture-1",
-      status: "queueable",
-      idempotent: false,
     },
   },
   {
@@ -4607,8 +4549,7 @@ const rawProductionIpcContractFixtures = [
     capability: "content.admitRegularQueueItems",
     channel: "content:admit-regular-queue-items",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:admit-regular-queue-items",
+    productionCaller: "desktop/preload.js:content:admit-regular-queue-items",
     request: {
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       platformId: "fixture-1",
@@ -4630,8 +4571,7 @@ const rawProductionIpcContractFixtures = [
     capability: "content.previewPaidMediaPreflight",
     channel: "content:preview-paid-media-preflight",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:preview-paid-media-preflight",
+    productionCaller: "desktop/preload.js:content:preview-paid-media-preflight",
     request: {
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       mediaResourceId: "fixture-1",
@@ -4644,15 +4584,17 @@ const rawProductionIpcContractFixtures = [
       confirmationFingerprint: "fixture-1",
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       articleCount: 1,
-      articles: [{
-        articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
-        articleId: "fixture-1",
-        title: "fixture-1",
-        contentFingerprint: "fixture-1",
-        status: "ready",
-        reasonCodes: [],
-        riskCodes: [],
-      }],
+      articles: [
+        {
+          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+          articleId: "fixture-1",
+          title: "fixture-1",
+          contentFingerprint: "fixture-1",
+          status: "ready",
+          reasonCodes: [],
+          riskCodes: [],
+        },
+      ],
       mediaResourceId: "fixture-1",
       mediaName: "fixture-1",
       mediaRemarks: "fixture-1",
@@ -4671,8 +4613,7 @@ const rawProductionIpcContractFixtures = [
     capability: "content.confirmPaidMediaBatch",
     channel: "content:confirm-paid-media-batch",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:confirm-paid-media-batch",
+    productionCaller: "desktop/preload.js:content:confirm-paid-media-batch",
     request: { confirmationToken: "fixture-1", confirmed: true },
     result: {
       batchId: "fixture-1",
@@ -4681,17 +4622,19 @@ const rawProductionIpcContractFixtures = [
       status: "queued",
       articleCount: 1,
       idempotent: false,
-      items: [{
-        articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
-        articleId: "fixture-1",
-        itemId: "fixture-1",
-        batchId: "fixture-1",
-        publicationId: "fixture-1",
-        attemptId: "fixture-1",
-        targetKey: "fixture-1",
-        status: "queued",
-        idempotent: false,
-      }],
+      items: [
+        {
+          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+          articleId: "fixture-1",
+          itemId: "fixture-1",
+          batchId: "fixture-1",
+          publicationId: "fixture-1",
+          attemptId: "fixture-1",
+          targetKey: "fixture-1",
+          status: "queued",
+          idempotent: false,
+        },
+      ],
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       confirmationFingerprint: "fixture-1",
       quotedPrice: 1,
@@ -4699,17 +4642,45 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
+    capability: "content.listPaidMediaBatches",
+    channel: "content:list-paid-media-batches",
+    owner: "content",
+    productionCaller: "desktop/preload.js:content:list-paid-media-batches",
+    request: {},
+    result: { items: [paidExecutionBatchFixture()] },
+  },
+  {
+    capability: "content.startPaidMediaBatch",
+    channel: "content:start-paid-media-batch",
+    owner: "content",
+    productionCaller: "desktop/preload.js:content:start-paid-media-batch",
+    request: { batchId: "fixture-1" },
+    result: {
+      executionStatus: "submitted",
+      batch: paidExecutionBatchFixture(),
+    },
+  },
+  {
+    capability: "content.pausePaidMediaBatch",
+    channel: "content:pause-paid-media-batch",
+    owner: "content",
+    productionCaller: "desktop/preload.js:content:pause-paid-media-batch",
+    request: { batchId: "fixture-1" },
+    result: { batch: paidExecutionBatchFixture() },
+  },
+  {
     capability: "content.removePendingQueueItems",
     channel: "content:remove-pending-queue-items",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:remove-pending-queue-items",
+    productionCaller: "desktop/preload.js:content:remove-pending-queue-items",
     request: {
-      items: [{
-        articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
-        itemId: "fixture-1",
-        batchId: "fixture-1",
-      }],
+      items: [
+        {
+          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+          itemId: "fixture-1",
+          batchId: "fixture-1",
+        },
+      ],
       confirmed: true,
     },
     result: {

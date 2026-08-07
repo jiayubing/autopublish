@@ -15,8 +15,6 @@ const {
 } = require("../desktop/ipc/doubao-collection-ipc");
 
 const SUBMISSION_CHANNELS = [
-  "content:preview-export",
-  "content:export-article",
   "content:preview-submission-batch",
   "content:list-submission-platforms",
   "content:create-submission-batch",
@@ -25,6 +23,9 @@ const SUBMISSION_CHANNELS = [
   "content:remove-pending-queue-items",
   "content:preview-paid-media-preflight",
   "content:confirm-paid-media-batch",
+  "content:list-paid-media-batches",
+  "content:start-paid-media-batch",
+  "content:pause-paid-media-batch",
   "content:cancel-submission-batch",
   "content:preview-cleanup-failed-submission-items",
   "content:cleanup-failed-submission-items",
@@ -58,18 +59,6 @@ test("submission operations accept the production Unicode client identity", () =
     accountProfiles: { toutiao: "account-1" },
   };
   for (const [channel, input] of [
-    ["content:preview-export", {
-      clientId: "东方视光",
-      generatedArticleId: "article-1",
-      targetPlatform: "media",
-      confirmed: true,
-    }],
-    ["content:export-article", {
-      clientId: "东方视光",
-      generatedArticleId: "article-1",
-      targetPlatform: "media",
-      confirmed: true,
-    }],
     ["content:preview-submission-batch", base],
     ["content:create-submission-batch", { ...base, confirmed: true }],
   ]) {
@@ -169,8 +158,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 31 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 31);
+test("content operations inventory has 32 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 32);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);
@@ -268,7 +257,7 @@ test("Doubao production callers are fixed named methods owned by content", () =>
     "saveManualResearch",
     "onDoubaoQueueState",
   ]) {
-    assert.match(preload, new RegExp(`${method}: function\\(`), method);
+    assert.match(preload, new RegExp(`${method}: function\\s*\\(`), method);
     assert.match(
       bridge,
       new RegExp(`(?:api\\.${method}|onDoubaoQueueState)`),

@@ -33,8 +33,6 @@ type MediaApi = {
     filename: string,
     draft: Omit<Draft, "filename">,
   ) => Promise<IpcResponse<{ completed: boolean }>>;
-  buildConfirmation: (submissions: unknown[]) => Promise<IpcResponse<unknown>>;
-  submitSelected: (submissions: unknown[]) => Promise<IpcResponse<unknown>>;
   refreshResources: (
     input: Record<string, never>,
   ) => Promise<IpcResponse<MediaRefreshResult>>;
@@ -252,34 +250,6 @@ export async function setDraft(filename: string, draft: Draft): Promise<void> {
       })) as MediaResource[],
     }),
     "setDraft failed",
-  );
-}
-export async function buildConfirmation(articles: Article[]): Promise<unknown> {
-  const api = mediaApi();
-  return unwrap(
-    requireBridgeMethod(api.buildConfirmation)(
-      articles.map((article) => ({
-        filename: article.filename,
-        resourceIds: article.selectedResources.map(
-          (resource) => resource.resourceId,
-        ),
-      })),
-    ),
-    "buildConfirmation failed",
-  );
-}
-export async function submitSelected(articles: Article[]): Promise<unknown> {
-  const api = mediaApi();
-  return unwrap(
-    requireBridgeMethod(api.submitSelected)(
-      articles.map((article) => ({
-        filename: article.filename,
-        resourceIds: article.selectedResources.map(
-          (resource) => resource.resourceId,
-        ),
-      })),
-    ),
-    "submitSelected failed",
   );
 }
 export async function refreshResources(): Promise<

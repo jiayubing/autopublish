@@ -76,55 +76,6 @@ test("failed publication retry is eligible only for its intact durable batch ite
   }
 });
 
-test("production content service stages a generated article for the paid-media workbench", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-04-media-handoff-"));
-  const store = createOperationalStore({ workspaceRoot: root });
-  const invalidations = [];
-  try {
-    const input = path.join(root, ".autopublish", "input");
-    const service = createContentSubmissionService({
-      workspaceRoot: root,
-      paths: { input },
-      operationalStore: store,
-      contentStore: { getArticle: () => article() },
-      platforms: [
-        {
-          id: "media",
-          displayName: "付费媒体",
-          scanDir: "media",
-          contentQueueImport: true,
-          publicationTarget: { kind: "resource" },
-        },
-      ],
-      onDataInvalidated: (reasonCode) => invalidations.push(reasonCode),
-    });
-    const request = {
-      clientId: "client-1",
-      generatedArticleId: "article-1",
-      targetPlatform: "media",
-      confirmed: true,
-    };
-    const preview = service.previewExport(request);
-    assert.equal(preview.status, "queueable");
-    assert.equal(preview.targetPlatform, "media");
-    assert.equal(preview.markdown, "# Fixture\n\nBody\n");
-
-    const exported = service.exportArticle(request);
-    const filePath = path.join(input, "media", exported.filename);
-    const sidecar = JSON.parse(
-      fs.readFileSync(`${filePath}.submission.json`, "utf8"),
-    );
-    assert.equal(fs.readFileSync(filePath, "utf8"), preview.markdown);
-    assert.equal(sidecar.generatedArticleId, "article-1");
-    assert.equal(sidecar.clientId, "client-1");
-    assert.equal(sidecar.targetPlatform, "media");
-    assert.deepEqual(invalidations, ["CONTENT_EXPORT_QUEUED"]);
-  } finally {
-    store.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test("production content batch persists explicit account binding in OperationalStore and queue sidecar", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-operational-content-"));
   const store = createOperationalStore({ workspaceRoot: root });

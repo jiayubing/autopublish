@@ -11,6 +11,8 @@ import type {
   ContentSubmissionPlatform,
   PaidMediaAdmissionResult,
   PaidMediaConfirmationInput,
+  PaidMediaExecutionBatch,
+  PaidMediaExecutionResult,
   PaidMediaPreflight,
   PaidMediaPreflightInput,
   PendingQueueRemovalInput,
@@ -34,32 +36,6 @@ import type {
 } from "../types/content";
 import type { GeneratedContentArticle } from "../types/generation";
 import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
-
-export interface ContentExportInput {
-  clientId: string;
-  generatedArticleId: string;
-  targetPlatform: string;
-  mediaResourceId?: string;
-  confirmed: true;
-}
-export interface ContentExportPreview {
-  filename: string;
-  targetPlatform: string;
-  contentHash: string;
-  markdown: string;
-  status:
-    | "queued"
-    | "queueable"
-    | "idempotent"
-    | "blockedPublished"
-    | "blockedUncertain"
-    | "conflict";
-  publicationId?: string | null;
-  attemptId?: string | null;
-  articleKey?: string;
-  targetKey?: string;
-  publicationStatus?: string | null;
-}
 
 type SafeContentIpcError = {
   code: string;
@@ -190,12 +166,6 @@ type DoubaoContentApi = {
   ) => () => void;
 };
 type SubmissionContentApi = {
-  previewExport: (
-    input: ContentExportInput,
-  ) => Promise<ContentIpcResponse<ContentExportPreview>>;
-  exportArticle: (
-    input: ContentExportInput,
-  ) => Promise<ContentIpcResponse<ContentExportPreview>>;
   previewSubmissionBatch: (
     input: ContentSubmissionBatchInput,
   ) => Promise<ContentIpcResponse<ContentSubmissionBatchPreview>>;
@@ -217,6 +187,15 @@ type SubmissionContentApi = {
   confirmPaidMediaBatch: (
     input: PaidMediaConfirmationInput & { confirmed: true },
   ) => Promise<ContentIpcResponse<PaidMediaAdmissionResult>>;
+  listPaidMediaBatches: () => Promise<
+    ContentIpcResponse<{ items: PaidMediaExecutionBatch[] }>
+  >;
+  startPaidMediaBatch: (input: {
+    batchId: string;
+  }) => Promise<ContentIpcResponse<PaidMediaExecutionResult>>;
+  pausePaidMediaBatch: (input: {
+    batchId: string;
+  }) => Promise<ContentIpcResponse<PaidMediaExecutionResult>>;
   removePendingQueueItems: (
     input: PendingQueueRemovalInput,
   ) => Promise<ContentIpcResponse<PendingQueueRemovalResult>>;
@@ -527,22 +506,6 @@ export async function getArticleEditor(input: {
     "Unable to load article editor",
   );
 }
-export async function previewExport(
-  input: ContentExportInput,
-): Promise<ContentExportPreview> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.previewExport)(input),
-    "preview export failed",
-  );
-}
-export async function exportToSubmissionQueue(
-  input: ContentExportInput,
-): Promise<ContentExportPreview> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.exportArticle)(input),
-    "export failed",
-  );
-}
 export async function previewContentSubmissionBatch(
   input: ContentSubmissionBatchInput,
 ): Promise<ContentSubmissionBatchPreview> {
@@ -597,6 +560,34 @@ export async function confirmPaidMediaBatch(
         confirmed: true,
       }),
     "paid media confirmation failed",
+  );
+}
+
+export async function listPaidMediaBatches(): Promise<
+  PaidMediaExecutionBatch[]
+> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.listPaidMediaBatches)(),
+    "paid media batch query failed",
+    { map: (wire) => wire.items },
+  );
+}
+
+export async function startPaidMediaBatch(input: {
+  batchId: string;
+}): Promise<PaidMediaExecutionResult> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.startPaidMediaBatch)(input),
+    "paid media batch start failed",
+  );
+}
+
+export async function pausePaidMediaBatch(input: {
+  batchId: string;
+}): Promise<PaidMediaExecutionResult> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.pausePaidMediaBatch)(input),
+    "paid media batch pause failed",
   );
 }
 export async function removePendingQueueItems(

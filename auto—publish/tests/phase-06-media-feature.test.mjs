@@ -83,13 +83,6 @@ describe("Phase 06 media feature", () => {
       },
       scanArticles: async () => [article],
       previewArticle: async () => ({ ...article, content: "preview" }),
-      buildConfirmation: async () => ({
-        articleCount: 1,
-        blockers: [],
-        submitableResources: [{ resourceId: "resource-1" }],
-        actualPrice: 10,
-      }),
-      submitSelected: async () => ({ accepted: true }),
       getOrders: async () => [],
       syncOrder: async () => ({}),
       openPublishedUrl: async (orderNid) => {
@@ -133,16 +126,6 @@ describe("Phase 06 media feature", () => {
       "resource-1",
     );
 
-    await feature.prepareSubmission();
-    assert.equal(feature.getSnapshot().preflight.data.articleCount, 1);
-    assert.equal(feature.getSnapshot().commands.prepareSubmission.busy, false);
-    await feature.submitPrepared();
-    assert.equal(feature.getSnapshot().commands.submitPrepared.busy, false);
-    assert.equal(feature.getSnapshot().preflight.data, null);
-    assert.equal(
-      feature.getSnapshot().articles.activeArticle.content,
-      "preview",
-    );
     await feature.openPublishedUrl("order-1");
     assert.deepEqual(calls.at(-1), ["openPublishedUrl", "order-1"]);
   });
@@ -161,10 +144,7 @@ describe("Phase 06 media feature", () => {
     assert.match(app, /mediaSnapshot\.articles/);
     assert.match(app, /mediaSnapshot\.pool/);
     assert.match(app, /mediaSnapshot\.balance/);
-    assert.match(
-      app,
-      /mediaFeature\.(?:openArticle|saveDraft|prepareSubmission|submitPrepared)/,
-    );
+    assert.match(app, /mediaFeature\.(?:openArticle|saveDraft)/);
   });
 
   it("lets the workspace coordinator own the single production initial refresh", () => {
@@ -210,8 +190,6 @@ describe("Phase 06 media feature", () => {
       setDraft: async () => ({}),
       scanArticles: async () => [],
       previewArticle: async () => ({}),
-      buildConfirmation: async () => ({}),
-      submitSelected: async () => ({}),
       getOrders: async () => [],
       syncOrder: async () => ({}),
       openPublishedUrl: async () => ({}),
@@ -249,9 +227,17 @@ describe("Phase 06 media feature", () => {
         page: 1,
         pageSize: 50,
       }),
-      refreshResources: async () => { throw Object.assign(new Error("刷新失败"), { code: "MEDIA_REFRESH_FAILED" }); },
+      refreshResources: async () => {
+        throw Object.assign(new Error("刷新失败"), {
+          code: "MEDIA_REFRESH_FAILED",
+        });
+      },
       getPoolPage: emptyPoolPage,
-      addToPool: async () => { throw Object.assign(new Error("收藏失败"), { code: "MEDIA_POOL_FAILED" }); },
+      addToPool: async () => {
+        throw Object.assign(new Error("收藏失败"), {
+          code: "MEDIA_POOL_FAILED",
+        });
+      },
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
       getDrafts: async () => [],
@@ -259,8 +245,6 @@ describe("Phase 06 media feature", () => {
       setDraft: async () => ({}),
       scanArticles: async () => [],
       previewArticle: async () => ({}),
-      buildConfirmation: async () => ({}),
-      submitSelected: async () => ({}),
       getOrders: async () => [{ orderNid: "order-1" }],
       syncOrder: async () => {
         throw Object.assign(new Error("同步暂时失败"), {
@@ -297,8 +281,16 @@ describe("Phase 06 media feature", () => {
       "ORDER_SYNC_FAILED",
     );
     await assert.doesNotReject(feature.refreshResources());
-    await assert.doesNotReject(feature.togglePool({ resourceId: "resource-1" }));
-    assert.equal(feature.getSnapshot().commands.refreshResources.error.code, "MEDIA_REFRESH_FAILED");
-    assert.equal(feature.getSnapshot().commands.togglePool.error.code, "MEDIA_POOL_FAILED");
+    await assert.doesNotReject(
+      feature.togglePool({ resourceId: "resource-1" }),
+    );
+    assert.equal(
+      feature.getSnapshot().commands.refreshResources.error.code,
+      "MEDIA_REFRESH_FAILED",
+    );
+    assert.equal(
+      feature.getSnapshot().commands.togglePool.error.code,
+      "MEDIA_POOL_FAILED",
+    );
   });
 });

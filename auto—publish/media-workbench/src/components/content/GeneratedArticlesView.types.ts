@@ -7,9 +7,13 @@ import type {
   ContentSubmissionPlatform,
   PublicationHistoryRecord,
   PublicationHistorySummary,
-} from '../../types/publication';
-import type { GeneratedContentArticle } from '../../types/generation';
-import type { ArticleOperation, ArticleWorkflowStage } from '../../article-workflow';
+  PaidMediaExecutionBatch,
+} from "../../types/publication";
+import type { GeneratedContentArticle } from "../../types/generation";
+import type {
+  ArticleOperation,
+  ArticleWorkflowStage,
+} from "../../article-workflow";
 
 export type ArticleManagementReadModel = {
   articles: GeneratedContentArticle[];
@@ -17,41 +21,54 @@ export type ArticleManagementReadModel = {
   submissionBatches: ContentSubmissionBatchRecord[];
   cancellationPlans: ContentSubmissionCancellationPreview[];
   publicationRecords: PublicationHistoryRecord[];
-  workflowByArticle: Record<string, {
-    stage: ArticleWorkflowStage;
-    label?: string;
-    locks: { canEdit: boolean; canQueue: boolean; canCancel: boolean; canTrash: boolean };
-    operations?: { edit: ArticleOperation; queue: ArticleOperation; retarget: ArticleOperation; trash: ArticleOperation };
-    primaryAction: string;
-    allowedBulkActions: string[];
-    publicationSummary: PublicationHistorySummary;
-    reasonCodes?: string[];
-    reasonMessage?: string | null;
-  }>;
+  workflowByArticle: Record<
+    string,
+    {
+      stage: ArticleWorkflowStage;
+      label?: string;
+      locks: {
+        canEdit: boolean;
+        canQueue: boolean;
+        canCancel: boolean;
+        canTrash: boolean;
+      };
+      operations?: {
+        edit: ArticleOperation;
+        queue: ArticleOperation;
+        retarget: ArticleOperation;
+        trash: ArticleOperation;
+      };
+      primaryAction: string;
+      allowedBulkActions: string[];
+      publicationSummary: PublicationHistorySummary;
+      reasonCodes?: string[];
+      reasonMessage?: string | null;
+    }
+  >;
   submissionPlatforms: ContentSubmissionPlatform[];
 };
 
 export type GeneratedArticlesCommandName =
-  | 'cancelContentSubmissionBatch'
-  | 'cleanupFailedContentSubmissionItems'
-  | 'createContentSubmissionBatch'
-  | 'admitRegularQueueItems'
-  | 'confirmPaidMediaBatch'
-  | 'exportToSubmissionQueue'
-  | 'getContentArticleRemovalTransaction'
-  | 'permanentlyDeleteContentArticle'
-  | 'preparePermanentDeleteContentArticle'
-  | 'previewCleanupFailedContentSubmissionItems'
-  | 'previewContentArticleRemoval'
-  | 'previewContentSubmissionBatch'
-  | 'previewRegularQueueAdmission'
-  | 'previewPaidMediaPreflight'
-  | 'previewExport'
-  | 'reconcilePublication'
-  | 'restoreContentArticle'
-  | 'removePendingQueueItems'
-  | 'retryContentArticleRemovalTransaction'
-  | 'trashContentArticles';
+  | "cancelContentSubmissionBatch"
+  | "cleanupFailedContentSubmissionItems"
+  | "createContentSubmissionBatch"
+  | "admitRegularQueueItems"
+  | "confirmPaidMediaBatch"
+  | "startPaidMediaBatch"
+  | "pausePaidMediaBatch"
+  | "getContentArticleRemovalTransaction"
+  | "permanentlyDeleteContentArticle"
+  | "preparePermanentDeleteContentArticle"
+  | "previewCleanupFailedContentSubmissionItems"
+  | "previewContentArticleRemoval"
+  | "previewContentSubmissionBatch"
+  | "previewRegularQueueAdmission"
+  | "previewPaidMediaPreflight"
+  | "reconcilePublication"
+  | "restoreContentArticle"
+  | "removePendingQueueItems"
+  | "retryContentArticleRemovalTransaction"
+  | "trashContentArticles";
 
 export type GeneratedArticlesCommands = Record<
   GeneratedArticlesCommandName,
@@ -63,17 +80,29 @@ export interface GeneratedArticlesViewProps {
   management: ArticleManagementReadModel;
   query: { loading: boolean; error?: { userMessage?: string } | null };
   commands: GeneratedArticlesCommands;
-  commandStates: Record<string, { busy: boolean; error?: { userMessage?: string } | null }>;
+  commandStates: Record<
+    string,
+    { busy: boolean; error?: { userMessage?: string } | null }
+  >;
   removal: {
     transactionId: string | null;
     transaction: ArticleRemovalTransaction | null;
     query: { loading: boolean; error?: { userMessage?: string } | null };
   };
+  paidMediaExecution: {
+    items: PaidMediaExecutionBatch[];
+    query: { loading: boolean; error?: { userMessage?: string } | null };
+  };
+  refreshPaidMediaBatches: () => Promise<unknown>;
   watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
-  stageFilter?: ArticleWorkflowStage | 'all';
+  stageFilter?: ArticleWorkflowStage | "all";
   dirtyArticleId?: string | null;
   selectedAttentionId?: string;
-  onArticleSelect: (article: GeneratedContentArticle, source?: HTMLElement | null, published?: boolean) => void;
-  onStageFilterChange?: (stage: ArticleWorkflowStage | 'all') => void;
+  onArticleSelect: (
+    article: GeneratedContentArticle,
+    source?: HTMLElement | null,
+    published?: boolean,
+  ) => void;
+  onStageFilterChange?: (stage: ArticleWorkflowStage | "all") => void;
   onOpenOrders?: () => void;
 }

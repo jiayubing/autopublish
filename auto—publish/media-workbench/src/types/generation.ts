@@ -106,8 +106,6 @@ export interface GenerationSubmissionHandoffResult {
   changedScopes?: string[];
 }
 
-// Backward-compatible alias for PreflightModal and mockData
-
 export interface GenerationBatchTemplateSelection {
   platform: string;
   templateId: string;

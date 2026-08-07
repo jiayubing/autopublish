@@ -629,13 +629,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           orchestrator: publicationSubmissionOrchestrator,
         },
       );
-    const mediaPublicationSubmissionService =
-      require("../services/media-publication-submission-service").createMediaPublicationSubmissionService(
-        {
-          workbench: platformWorkbenchService,
-          orchestrator: publicationSubmissionOrchestrator,
-        },
-      );
     const platformSessionService =
       require("../services/platform-session-service").createPlatformSessionService(
         {
@@ -692,7 +685,6 @@ async function createWorkspaceRuntimeComposition(deps) {
             }
           },
           platformWorkbenchService,
-          mediaPublicationSubmissionService,
           openExternal: options.openExternal,
           invalidateData: invalidation.invalidate,
         },
@@ -714,7 +706,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       publicationComposition,
       attentionPorts,
       publicationSubmissionService,
-      mediaPublicationSubmissionService,
       platformApplication,
       mediaApplication,
     };
@@ -744,10 +735,14 @@ async function createWorkspaceRuntimeComposition(deps) {
         preflight: mediaApplication.preflightPaidMedia,
         confirm: mediaApplication.confirmPaidMedia,
       }),
+      paidMediaExecutionService: Object.freeze({
+        list: mediaApplication.getPaidMediaBatches,
+        start: mediaApplication.startPaidMediaBatch,
+        pause: mediaApplication.pausePaidMediaBatch,
+      }),
       loadedPlatforms,
       platformSessionService,
       publicationSubmissionService,
-      mediaPublicationSubmissionService,
       operationalStore: publicationComposition.operationalStore,
       articleMutationCoordinator,
       publicationWorkflow: publicationComposition.publicationWorkflow,

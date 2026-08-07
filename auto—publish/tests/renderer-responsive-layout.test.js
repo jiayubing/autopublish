@@ -225,29 +225,16 @@ function installDesktopFixture(page) {
       selectedResources: [],
     };
     const mediaSubmissionState = {
-      submitted: false,
-      keepSubmittedArticle: false,
       scanCalls: 0,
       refreshShouldFail: false,
-      preflightShouldFail: false,
-      preflightCalls: 0,
-      submitCalls: 0,
-      preflightSubmissionCount: 0,
       thirdPartyId: "长期标识-A",
       thirdPartyIdSaves: 0,
-      openedOrderNid: null,
     };
     window.__mediaSubmissionState = mediaSubmissionState;
     const media = {
       scanArticles: () => {
         mediaSubmissionState.scanCalls += 1;
-        if (!mediaSubmissionState.submitted)
-          return result({ items: [mediaArticle, unselectedMediaArticle] });
-        if (!mediaSubmissionState.keepSubmittedArticle)
-          return result({ items: [] });
-        const summary = { ...mediaArticle };
-        delete summary.content;
-        return result({ items: [summary, unselectedMediaArticle] });
+        return result({ items: [mediaArticle, unselectedMediaArticle] });
       },
       previewArticle: () => result({ article: mediaArticle }),
       getDrafts: () => result({ items: [] }),
@@ -315,75 +302,9 @@ function installDesktopFixture(page) {
         }),
       removeFromPool: () => result({ completed: true }),
       getBalance: () => result({ balance: "100" }),
-      buildConfirmation: (submissions) => {
-        mediaSubmissionState.preflightCalls += 1;
-        mediaSubmissionState.preflightSubmissionCount = submissions.length;
-        return mediaSubmissionState.preflightShouldFail
-          ? Promise.resolve({
-              ok: false,
-              error: {
-                code: "SUBMISSION_INPUT_INVALID",
-                category: "validation",
-                retryability: "never",
-                userMessage: "付费媒体投稿预检请求无效。",
-              },
-            })
-          : result({
-              articleCount: 1,
-              resourceCount: 1,
-              submitableResourceCount: 1,
-              blockedResourceCount: 0,
-              estimatedTotalPrice: 1,
-              actualPrice: 1,
-              blockers: [],
-              blockedResources: [],
-              submitableResources: [
-                {
-                  filename: mediaArticle.filename,
-                  title: mediaArticle.title,
-                  resourceId: "preflight-resource",
-                  resourceName: "预检资源",
-                  price: 1,
-                  status: "available",
-                },
-              ],
-            });
-      },
-      submitSelected: () => {
-        mediaSubmissionState.submitCalls += 1;
-        mediaSubmissionState.submitted = true;
-        return result({
-          batchId: "preflight-batch",
-          publishedCount: 1,
-          failedCount: 0,
-          uncertainCount: 0,
-          skippedCount: 0,
-        });
-      },
-      stopSubmit: () => result({ stopped: true }),
     };
     const orders = {
-      getOrders: () =>
-        result({
-          items: mediaSubmissionState.submitted
-            ? [
-                {
-                  title: mediaArticle.title,
-                  filename: mediaArticle.filename,
-                  orderNid: "preflight-order",
-                  statusCode: "2",
-                  statusLabel: "已发布",
-                  submittedAt: "2026-07-27T00:00:00.000Z",
-                  publishedAt: "2026-07-28T00:00:00.000Z",
-                  resourceName: "预检资源",
-                  price: "1",
-                  hasPublishedUrl: true,
-                  publicationId: "publication-internal",
-                  publicationStatus: "published",
-                },
-              ]
-            : [],
-        }),
+      getOrders: () => result({ items: [] }),
       syncOrder: () =>
         result({
           order: {
@@ -401,10 +322,7 @@ function installDesktopFixture(page) {
             publicationStatus: "published",
           },
         }),
-      openPublishedUrl: (orderNid) => {
-        mediaSubmissionState.openedOrderNid = orderNid;
-        return result({ completed: true });
-      },
+      openPublishedUrl: () => result({ completed: true }),
     };
     const aiProvider = {
       getStatus: () =>
@@ -621,159 +539,6 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
   });
   after(closeRenderer);
 
-  it("keeps the preflight confirmation button clickable beside the normal authorization status bar", async () => {
-    for (const [width, height] of [
-      [1280, 720],
-      [1180, 760],
-      [900, 640],
-    ]) {
-      const page = await browser.newPage({ viewport: { width, height } });
-      try {
-        page.setDefaultTimeout(5000);
-        await installDesktopFixture(page);
-        await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-        await page.getByRole("button", { name: "投稿预检" }).click();
-        const confirm = page.locator("[data-preflight-confirm='true']");
-        await confirm.waitFor();
-        const preflightState = await page.evaluate(
-          () => window.__mediaSubmissionState,
-        );
-        assert.equal(preflightState.preflightSubmissionCount, 1);
-        assert.equal(preflightState.submitCalls, 0);
-        const hit = await page.evaluate(() => {
-          const button = document.querySelector(
-            "[data-preflight-confirm='true']",
-          );
-          const status = document.querySelector("[aria-label='授权状态']");
-          const modal = document.querySelector("[data-modal-host='true']");
-          if (!button || !status || !modal) return null;
-          const box = button.getBoundingClientRect();
-          const target = document.elementFromPoint(
-            box.x + box.width / 2,
-            box.y + box.height / 2,
-          );
-          return {
-            targetIsButton:
-              target === button ||
-              Boolean(target?.closest("[data-preflight-confirm='true']")),
-            statusContainsButton: status.contains(button),
-            modalIsBodyChild: modal.parentElement === document.body,
-            box: box.toJSON(),
-          };
-        });
-        assert.ok(hit, "expected preflight modal DOM");
-        assert.equal(hit.targetIsButton, true, JSON.stringify(hit));
-        assert.equal(hit.statusContainsButton, false, JSON.stringify(hit));
-        assert.equal(hit.modalIsBodyChild, true, JSON.stringify(hit));
-        assertInsideViewport(hit.box, { width, height });
-      } finally {
-        await page.close();
-      }
-    }
-  });
-
-  it("rescans media articles and refreshes orders after a successful paid submission", async () => {
-    const page = await browser.newPage({
-      viewport: { width: 1280, height: 720 },
-    });
-    try {
-      page.setDefaultTimeout(5000);
-      await installDesktopFixture(page);
-      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.getByRole("button", { name: "打开" }).first().click();
-      await page.getByText("当前编辑", { exact: true }).waitFor();
-      const initialScanCalls = await page.evaluate(
-        () => window.__mediaSubmissionState.scanCalls,
-      );
-      await page.getByRole("button", { name: "投稿预检" }).click();
-      await page.locator("[data-preflight-confirm='true']").click();
-      await page.waitForFunction(
-        () =>
-          window.__mediaSubmissionState.scanCalls > 1 &&
-          !document.body.innerText.includes("预检交互稿件"),
-      );
-      const refreshed = await page.evaluate(() => ({
-        scanCalls: window.__mediaSubmissionState.scanCalls,
-        body: document.body.innerText,
-      }));
-      assert.ok(
-        refreshed.scanCalls > initialScanCalls,
-        JSON.stringify(refreshed),
-      );
-      assert.match(refreshed.body, /暂无打开的稿件/);
-    } finally {
-      await page.close();
-    }
-  });
-
-  it("classifies OperationalStore media orders by supplier status with their title and quoted price", async () => {
-    const page = await browser.newPage({
-      viewport: { width: 1280, height: 720 },
-    });
-    try {
-      page.setDefaultTimeout(5000);
-      await installDesktopFixture(page);
-      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.getByRole("button", { name: "投稿预检" }).click();
-      await page.locator("[data-preflight-confirm='true']").click();
-      await page.waitForFunction(
-        () => window.__mediaSubmissionState.submitted === true,
-      );
-      await page.locator("#nav-item-orders").click();
-      await page.getByRole("heading", { name: "分发队列与订单追踪" }).waitFor();
-      await page.getByRole("button", { name: "已发布", exact: true }).click();
-      await page.getByText("预检交互稿件", { exact: true }).waitFor();
-      await page.getByText("¥1", { exact: true }).waitFor();
-      assert.equal(
-        await page.getByText("预检交互稿件", { exact: true }).isVisible(),
-        true,
-      );
-      assert.equal(await page.getByText("源文件", { exact: true }).count(), 0);
-      assert.equal(await page.getByText(/发布记录:/).count(), 0);
-      await page.getByRole("button", { name: "订单详情" }).click();
-      await page.getByRole("button", { name: "打开发布链接" }).click();
-      await page.waitForFunction(
-        () =>
-          window.__mediaSubmissionState.openedOrderNid === "preflight-order",
-      );
-    } finally {
-      await page.close();
-    }
-  });
-
-  it("keeps the loaded article body when post-submit rescan returns only a summary", async () => {
-    const page = await browser.newPage({
-      viewport: { width: 1280, height: 720 },
-    });
-    try {
-      page.setDefaultTimeout(5000);
-      await installDesktopFixture(page);
-      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.evaluate(() => {
-        window.__mediaSubmissionState.keepSubmittedArticle = true;
-      });
-      await page.getByRole("button", { name: "打开" }).first().click();
-      await page.getByText("全文预览", { exact: false }).click();
-      await page.getByText("正文预览内容", { exact: true }).waitFor();
-      const initialScanCalls = await page.evaluate(
-        () => window.__mediaSubmissionState.scanCalls,
-      );
-      await page.getByRole("button", { name: "投稿预检" }).click();
-      await page.locator("[data-preflight-confirm='true']").click();
-      await page.waitForFunction(
-        (before) => window.__mediaSubmissionState.scanCalls > before,
-        initialScanCalls,
-      );
-      await page.getByText("正文预览内容", { exact: true }).waitFor();
-      assert.equal(
-        await page.getByText("正文预览内容", { exact: true }).isVisible(),
-        true,
-      );
-    } finally {
-      await page.close();
-    }
-  });
-
   it("loads and replaces the reusable paid-media third-party identity without submitting", async () => {
     const page = await browser.newPage({
       viewport: { width: 1280, height: 720 },
@@ -792,7 +557,12 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       );
       const state = await page.evaluate(() => window.__mediaSubmissionState);
       assert.equal(state.thirdPartyId, "长期标识-B");
-      assert.equal(state.submitCalls, 0);
+      assert.equal(
+        await page.evaluate(
+          () => typeof window.desktopConsole.media.submitSelected,
+        ),
+        "undefined",
+      );
       for (const width of [900, 1180, 1280]) {
         await page.setViewportSize({ width, height: 720 });
         const layout = await page
@@ -819,30 +589,6 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
           `page overflows at ${width}px viewport`,
         );
       }
-    } finally {
-      await page.close();
-    }
-  });
-
-  it("shows a safe preflight failure without invoking paid submission", async () => {
-    const page = await browser.newPage({
-      viewport: { width: 1280, height: 720 },
-    });
-    try {
-      page.setDefaultTimeout(5000);
-      await installDesktopFixture(page);
-      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.evaluate(() => {
-        window.__mediaSubmissionState.preflightShouldFail = true;
-      });
-      await page.getByRole("button", { name: "投稿预检" }).click();
-      await page
-        .getByRole("alert")
-        .filter({ hasText: "付费媒体投稿预检请求无效" })
-        .waitFor();
-      const state = await page.evaluate(() => window.__mediaSubmissionState);
-      assert.equal(state.preflightCalls, 1);
-      assert.equal(state.submitCalls, 0);
     } finally {
       await page.close();
     }

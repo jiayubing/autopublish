@@ -31,8 +31,6 @@ const MEDIA_CHANNELS = [
   "media:set-draft",
   "media:scan-articles",
   "media:preview-article",
-  "media:build-confirmation",
-  "media:submit-selected",
   "media:get-orders",
   "media:sync-order",
   "media:open-published-url",
@@ -64,45 +62,41 @@ test("media projections and draft requests preserve all supported resource types
   assert.equal(request.payload.draft.selectedResources[0].type, "audio");
 });
 
-test("media submission rehydrates audio and document types from authoritative resources", async () => {
-  let submittedArticles = [];
+test("paid-media confirmation establishes a paused batch without starting order creation", async () => {
+  let starts = 0;
   const application = createMediaWorkbenchApplication({
     mediaClientProvider: () => ({}),
     mediaResourceService: {},
     mediaOrderService: { listOrderViews: () => [] },
-    resourceStore: {
-      getAll: () => ({
-        resources: [
-          { resourceId: "audio-1", name: "Audio", price: 1, type: "audio" },
-          { resourceId: "document-1", name: "Document", price: 2, type: "document" },
-        ],
-      }),
-    },
+    resourceStore: { getAll: () => ({ resources: [] }) },
     poolStore: { getAll: () => [] },
     draftStore: { get: () => null },
     mediaWorkbenchService: {
       scanArticles: async () => [],
       resolveSubmissionFile: (filename) => filename,
     },
-    mediaPublicationSubmissionService: {
-      submit: async (articles) => {
-        submittedArticles = articles;
-        return { batchId: "batch-typed", results: [] };
+    paidMediaPreflightService: {
+      confirm: async () => ({
+        batchId: "paid-batch-paused",
+        status: "queued",
+      }),
+    },
+    paidMediaBatchOrchestrator: {
+      startBatch: async () => {
+        starts += 1;
+        return { status: "submitted" };
       },
     },
   });
 
-  await application.submitSelected([
-    {
-      filename: "article.md",
-      resourceIds: ["audio-1", "document-1"],
-    },
-  ]);
+  const result = await application.confirmPaidMedia({
+    confirmationToken: "confirmation-1",
+    confirmed: true,
+  });
 
-  assert.deepEqual(
-    submittedArticles[0].selectedResources.map((resource) => resource.type),
-    ["audio", "document"],
-  );
+  assert.equal(result.batchId, "paid-batch-paused");
+  assert.equal(result.execution, undefined);
+  assert.equal(starts, 0);
 });
 
 test("public media pool command projects a full Renderer resource to its exact selection DTO", async () => {
@@ -201,11 +195,11 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
   assert.equal(order.hasPublishedUrl, true);
 });
 
-test("all 17 consumed media invokes have versioned exact contracts", () => {
+test("all 15 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 17);
+  assert.equal(media.length, 15);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),
@@ -337,7 +331,7 @@ test("media refresh and projections reject full resources, paths, and raw provid
   );
 });
 
-test("media registrar projects resources and articles before typed success validation", async (t) => {
+test("media registrar projects resources and articles without exposing legacy paid-submit commands", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-06-media-ipc-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const data = path.join(root, "data");
@@ -383,9 +377,6 @@ test("media registrar projects resources and articles before typed success valid
     }),
     getBalance: async () => ({ balance: "100" }),
   };
-  let paidSubmitCalls = 0;
-  let submittedArticles = [];
-  let publicationRecords = [];
   const openedUrls = [];
   registerMediaIpc({
     ipcMain,
@@ -393,10 +384,6 @@ test("media registrar projects resources and articles before typed success valid
     rootDir: root,
     mediaClientProvider: () => client,
     operationalStore: {
-      listPublicationRecords: ({ articleIds }) =>
-        publicationRecords.filter((record) =>
-          articleIds.includes(record.articleId),
-        ),
       listRemoteOrders: () => [
         {
           orderId: "order-published",
@@ -414,26 +401,6 @@ test("media registrar projects resources and articles before typed success valid
       ],
     },
     openExternal: async (url) => openedUrls.push(url),
-    platformWorkbenchService: {
-      prepareMediaPublicationCommands: async (items) =>
-        items.flatMap((item) =>
-          item.selectedResources.map((resource) => ({
-            articleId: "media-article-1",
-            target: { kind: "media", mediaResourceId: resource.resourceId },
-            postProcessingPayload: { filename: item.filename },
-          })),
-        ),
-    },
-    mediaPublicationSubmissionService: {
-      submit: async (articles) => {
-        paidSubmitCalls += 1;
-        submittedArticles = articles;
-        return {
-          batchId: "batch-fixture",
-          results: [{ status: "submitted" }],
-        };
-      },
-    },
   });
 
   const pageContract = productionIpcRegistry.byChannel(
@@ -474,60 +441,11 @@ test("media registrar projects resources and articles before typed success valid
   assert.equal(preview.ok, true, JSON.stringify(preview));
   assert.equal(preview.data.article.content, "# Fixture article\nBody");
 
-  const preflightContract = productionIpcRegistry.byChannel(
-    "media:build-confirmation",
+  assert.equal(
+    productionIpcRegistry.byChannel("media:build-confirmation"),
+    null,
   );
-  const preflight = await handlers.get(preflightContract.channel)(
-    {},
-    productionIpcRegistry.encodeRequest(preflightContract, {
-      submissions: [{ filename: "article.md", resourceIds: ["resource-1"] }],
-    }),
-  );
-  assert.equal(preflight.ok, true, JSON.stringify(preflight));
-  assert.equal(preflight.data.articleCount, 1);
-  assert.equal(preflight.data.resourceCount, 1);
-  assert.equal(preflight.data.submitableResourceCount, 1);
-  assert.equal(preflight.data.blockedResourceCount, 0);
-  assert.equal(preflight.data.submitableResources.length, 1);
-  assert.equal(preflight.data.submitableResources[0].resourceId, "resource-1");
-  assert.equal(preflight.data.actualPrice, 12.5);
-  assert.equal(paidSubmitCalls, 0);
-
-  const submitContract = productionIpcRegistry.byChannel(
-    "media:submit-selected",
-  );
-  const submitted = await handlers.get(submitContract.channel)(
-    {},
-    productionIpcRegistry.encodeRequest(submitContract, {
-      submissions: [{ filename: "article.md", resourceIds: ["resource-1"] }],
-    }),
-  );
-  assert.equal(submitted.ok, true, JSON.stringify(submitted));
-  assert.equal(paidSubmitCalls, 1);
-  assert.equal(submittedArticles[0].selectedResources[0].price, 12.5);
-
-  publicationRecords = [
-    {
-      publicationId: "publication-1",
-      articleId: "media-article-1",
-      targetKey: "media-resource:resource-1",
-      status: "published",
-      attempts: [],
-    },
-  ];
-  const submitCallsBeforeBlockedPreflight = paidSubmitCalls;
-  const blockedPreflight = await handlers.get(preflightContract.channel)(
-    {},
-    productionIpcRegistry.encodeRequest(preflightContract, {
-      submissions: [{ filename: "article.md", resourceIds: ["resource-1"] }],
-    }),
-  );
-  assert.equal(blockedPreflight.ok, true, JSON.stringify(blockedPreflight));
-  assert.equal(blockedPreflight.data.submitableResourceCount, 0);
-  assert.equal(blockedPreflight.data.blockedResourceCount, 1);
-  assert.equal(blockedPreflight.data.blockedResources[0].status, "published");
-  assert.equal(blockedPreflight.data.actualPrice, 0);
-  assert.equal(paidSubmitCalls, submitCallsBeforeBlockedPreflight);
+  assert.equal(productionIpcRegistry.byChannel("media:submit-selected"), null);
 
   const openContract = productionIpcRegistry.byChannel(
     "media:open-published-url",

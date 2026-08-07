@@ -16,8 +16,6 @@ function createSubmissionInterface(service, regularQueueService) {
   const regular = regularQueueService || service;
   return Object.freeze({
     preparation: {
-      previewExport: bind(service, "previewExport"),
-      exportArticle: bind(service, "exportArticle"),
       previewBatch: bind(service, "previewBatch"),
       createBatch: bind(service, "createBatch"),
       listPlatforms: bind(service, "listPlatforms"),
@@ -90,6 +88,24 @@ function paidMediaConfirmationInput(input) {
   return input;
 }
 
+function paidMediaBatchInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) {
+      return key !== "batchId";
+    }) ||
+    typeof input.batchId !== "string" ||
+    !input.batchId.trim()
+  ) {
+    const error = new Error("Invalid paid-media batch input");
+    error.code = "PAID_EXECUTION_BATCH_INVALID";
+    throw error;
+  }
+  return input;
+}
+
 function regularAdmissionInput(input, confirmed) {
   if (
     !input ||
@@ -150,44 +166,7 @@ function registerContentSubmissionIpc(deps) {
     deps.submissionWorkflow ||
     createSubmissionInterface(service, deps.regularQueueApplication);
   const paidMedia = deps.paidMediaPreflightService || deps.paidMediaPreflight;
-  function checked(input) {
-    if (
-      !input ||
-      input.confirmed !== true ||
-      Object.keys(input).some(function (key) {
-        return (
-          [
-            "clientId",
-            "generatedArticleId",
-            "targetPlatform",
-            "mediaResourceId",
-            "confirmed",
-          ].indexOf(key) === -1
-        );
-      })
-    ) {
-      const e = new Error("Manual confirmation is required");
-      e.code = "CONTENT_EXPORT_CONFIRMATION_REQUIRED";
-      throw e;
-    }
-    return input;
-  }
-  deps.ipcMain.handle("content:preview-export", function (event, input) {
-    return wrap(function () {
-      return projectSubmissionResult(
-        "content:preview-export",
-        workflow.preparation.previewExport(checked(input)),
-      );
-    });
-  });
-  deps.ipcMain.handle("content:export-article", function (event, input) {
-    return wrap(function () {
-      return projectSubmissionResult(
-        "content:export-article",
-        workflow.preparation.exportArticle(checked(input)),
-      );
-    });
-  });
+  const paidExecution = deps.paidMediaExecutionService;
   function batchInput(input, confirmed) {
     if (
       !input ||
@@ -393,6 +372,56 @@ function registerContentSubmissionIpc(deps) {
           );
           return projectSubmissionResult(
             "content:confirm-paid-media-batch",
+            result,
+          );
+        });
+      },
+    );
+  }
+  if (paidExecution) {
+    deps.ipcMain.handle("content:list-paid-media-batches", function () {
+      return wrap(async function () {
+        if (typeof paidExecution.list !== "function") {
+          const error = new Error("Paid-media execution query is unavailable");
+          error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+          throw error;
+        }
+        const result = await paidExecution.list();
+        return projectSubmissionResult(
+          "content:list-paid-media-batches",
+          result,
+        );
+      });
+    });
+    deps.ipcMain.handle(
+      "content:start-paid-media-batch",
+      function (event, input) {
+        return wrap(async function () {
+          if (typeof paidExecution.start !== "function") {
+            const error = new Error("Paid-media execution is unavailable");
+            error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+            throw error;
+          }
+          const result = await paidExecution.start(paidMediaBatchInput(input));
+          return projectSubmissionResult(
+            "content:start-paid-media-batch",
+            result,
+          );
+        });
+      },
+    );
+    deps.ipcMain.handle(
+      "content:pause-paid-media-batch",
+      function (event, input) {
+        return wrap(async function () {
+          if (typeof paidExecution.pause !== "function") {
+            const error = new Error("Paid-media execution is unavailable");
+            error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+            throw error;
+          }
+          const result = await paidExecution.pause(paidMediaBatchInput(input));
+          return projectSubmissionResult(
+            "content:pause-paid-media-batch",
             result,
           );
         });

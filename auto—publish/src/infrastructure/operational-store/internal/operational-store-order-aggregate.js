@@ -212,15 +212,10 @@ function createOrderAggregate(context, activeTarget) {
       conflictKind: kind,
       orderCreationAttemptId: snapshot.orderCreationAttemptId,
       existingOrderEvidence: persistedOrderSummary(guard.existing),
-      conflictingOrderEvidence: conflictOrderSummary(
-        snapshot,
-        row.attempt_id,
-      ),
+      conflictingOrderEvidence: conflictOrderSummary(snapshot, row.attempt_id),
     });
     rejectSensitive(detail);
-    db.prepare(
-      "INSERT OR IGNORE INTO remote_evidence VALUES(?,?,?,?,?,?)",
-    ).run(
+    db.prepare("INSERT OR IGNORE INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
       randomUUID(),
       row.attempt_id,
       snapshot.orderIdentityV1.orderId,

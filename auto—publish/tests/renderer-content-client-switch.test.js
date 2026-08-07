@@ -81,7 +81,7 @@ describe("renderer content client switching", function () {
         cancellationCalls: [],
         resolveCancellation: null,
         cancelPreviewCalls: [],
-        mediaExportCalls: [],
+        paidPreflightCalls: [],
       };
       const generationBatch = {
         id: "generation-batch-a",
@@ -386,12 +386,43 @@ describe("renderer content client switching", function () {
               resolve({ ok: true, data: state.batches[input.clientId][0] });
           });
         },
-        previewExport: (input) =>
-          ok({ filename: `${input.generatedArticleId}.md` }),
-        exportArticle: (input) => {
-          state.mediaExportCalls.push(input);
-          return ok({ filename: `${input.generatedArticleId}.md` });
+        listPaidMediaBatches: () => ok({ items: [] }),
+        startPaidMediaBatch: () => ok({}),
+        pausePaidMediaBatch: () => ok({}),
+        previewPaidMediaPreflight: (input) => {
+          state.paidPreflightCalls.push(input);
+          return ok({
+            version: 1,
+            status: "ready",
+            canConfirm: true,
+            confirmationToken: "paid-token-1",
+            confirmationFingerprint: "paid-fingerprint-1",
+            articleRefs: input.articleRefs,
+            articleCount: input.articleRefs.length,
+            articles: input.articleRefs.map((articleRef) => ({
+              articleRef,
+              articleId: articleRef.articleId,
+              title: "客户 A 文章",
+              contentFingerprint: "content-fingerprint-1",
+              status: "ready",
+              reasonCodes: [],
+              riskCodes: [],
+            })),
+            mediaResourceId: input.mediaResourceId,
+            mediaName: "测试媒体",
+            mediaRemarks: "",
+            resourceFingerprint: "resource-fingerprint-1",
+            resourceAvailable: true,
+            quotedPrice: 1,
+            estimatedTotal: input.articleRefs.length,
+            systemSubmissionCode: "system-1",
+            blockers: [],
+            risks: [],
+            createdAt: "2026-08-07T00:00:00.000Z",
+            expiresAt: "2026-08-07T00:05:00.000Z",
+          });
         },
+        confirmPaidMediaBatch: () => ok({}),
         previewCancelSubmissionBatch: ({ batchId }) => {
           state.cancelPreviewCalls.push(batchId);
           const batch = Object.values(state.batches)
@@ -631,28 +662,20 @@ describe("renderer content client switching", function () {
       await page
         .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
         .check();
-      await page.getByRole("button", { name: "加入付费媒体投稿" }).click();
+      await page.getByRole("textbox", { name: "付费媒体资源 ID" }).fill("media-1");
+      await page.getByRole("button", { name: "付费媒体预检" }).click();
       await page
-        .getByRole("dialog", { name: "确认加入付费媒体投稿" })
+        .getByRole("dialog", { name: "付费媒体费用确认" })
         .waitFor();
-      await page.getByRole("button", { name: "确认加入付费媒体投稿" }).click();
-      await page.waitForFunction(
-        () => window.__clientSwitchFlow.mediaExportCalls.length === 1,
-      );
+      await page.waitForFunction(() => window.__clientSwitchFlow.paidPreflightCalls.length === 1);
       assert.deepEqual(
-        await page.evaluate(
-          () => window.__clientSwitchFlow.mediaExportCalls[0],
-        ),
+        await page.evaluate(() => window.__clientSwitchFlow.paidPreflightCalls[0]),
         {
-          clientId: "client-a",
-          generatedArticleId: "article-a",
-          targetPlatform: "media",
-          confirmed: true,
+          articleRefs: [{ clientId: "client-a", articleId: "article-a" }],
+          mediaResourceId: "media-1",
         },
       );
-      await page
-        .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
-        .check();
+      await page.getByRole("button", { name: "取消" }).click();
       await page.getByRole("button", { name: "测试投稿平台" }).click();
       await page.getByRole("button", { name: "加入投稿队列" }).click();
       await page

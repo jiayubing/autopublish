@@ -1,7 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   addToPool,
-  buildConfirmation,
   getBalance,
   getDraft,
   getDrafts,
@@ -15,7 +14,6 @@ import {
   scanArticles,
   searchResourcePage,
   setDraft,
-  submitSelected,
   syncOrder,
 } from "../../bridge/media";
 import { useWorkspaceScope } from "../workspace/workspace-coordinator-context";
@@ -37,8 +35,6 @@ export function useMediaFeature() {
       setDraft,
       scanArticles,
       previewArticle,
-      buildConfirmation,
-      submitSelected,
       getOrders,
       syncOrder,
       openPublishedUrl,

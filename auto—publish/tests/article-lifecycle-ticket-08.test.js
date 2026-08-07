@@ -386,6 +386,10 @@ test("same-platform account groups are serialized until account-specific session
   const current = fixture();
   const gates = [];
   const prepared = [];
+  let markSecondPrepared;
+  const secondPrepared = new Promise((resolve) => {
+    markSecondPrepared = resolve;
+  });
   try {
     const firstProfile = addProfile(current, "toutiao");
     const secondProfile = addProfile(current, "toutiao");
@@ -403,6 +407,7 @@ test("same-platform account groups are serialized until account-specific session
         const gate = deferred();
         gates.push(gate);
         prepared.push(claim.queueGroupId);
+        if (prepared.length === 2) markSecondPrepared();
         return domain.createPreparedSubmission({
           preparedSubmissionEvidenceV1: evidence(claim),
           submitPreparedPublication: async () => {
@@ -415,15 +420,18 @@ test("same-platform account groups are serialized until account-specific session
     const running = orchestrator.startAll();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(prepared.length, 1);
-    gates.forEach((gate) => gate.resolve());
+    gates[0].resolve();
+    await secondPrepared;
+    assert.equal(prepared.length, 2);
+    gates[1].resolve();
     const result = await running;
-    assert.deepEqual(result.results.map((item) => item.status).sort(), [
-      "observation_ready",
-      "platform_busy",
-    ]);
     assert.deepEqual(
-      new Set([first.queueGroupId, second.queueGroupId]).has(prepared[0]),
-      true,
+      result.results.map((item) => item.status),
+      ["observation_ready", "observation_ready"],
+    );
+    assert.deepEqual(
+      new Set(prepared),
+      new Set([first.queueGroupId, second.queueGroupId]),
     );
   } finally {
     current.close();
@@ -1142,6 +1150,11 @@ test("browser adapters finish form preparation before exposing the final-submit 
   assert.match(preparation, /confirmAdDialog\(\)/);
   assert.doesNotMatch(capability, /clickPreviewAndPublish\(\)/);
   assert.doesNotMatch(capability, /confirmAdDialog\(\)/);
+  assert.match(capability, /preparedContentMatches\(article\)/);
+  assert.ok(
+    capability.indexOf("preparedContentMatches(article)") <
+      capability.indexOf("clickConfirmPublish()"),
+  );
   assert.match(capability, /clickConfirmPublish\(\)/);
 });
 

@@ -231,7 +231,7 @@ function createPaidExecutionAggregate(context) {
         mode === "start"
           ? db
               .prepare(
-                "UPDATE paid_submission_batches SET pause_intent='none',updated_at=? WHERE pause_intent='system'",
+                "UPDATE paid_submission_batches AS batch SET pause_intent='none',updated_at=? WHERE pause_intent='system' AND NOT EXISTS (SELECT 1 FROM submission_items AS item WHERE item.batch_id=batch.batch_id AND item.status IN ('uncertain','blocked'))",
               )
               .run(stamp).changes
           : db

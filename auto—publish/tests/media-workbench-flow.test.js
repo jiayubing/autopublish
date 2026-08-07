@@ -7,8 +7,8 @@ function read(file) {
   return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
 }
 
-describe("media workbench flow", function() {
-  it("keeps article editing and the shared media pool in the React app", function() {
+describe("media workbench flow", function () {
+  it("keeps article editing and the shared media pool in the React app", function () {
     const app = read("media-workbench/src/App.tsx");
     const editor = read("media-workbench/src/components/ArticleEditor.tsx");
     const library = read("media-workbench/src/components/ResourceLibrary.tsx");
@@ -20,17 +20,19 @@ describe("media workbench flow", function() {
     assert.match(library, /mode === 'picker'/);
   });
 
-  it("keeps supplier price canonicalization out of downstream owners", function() {
+  it("keeps supplier price canonicalization out of downstream owners", function () {
     for (const file of [
       "desktop/services/media-workbench-service.js",
-      "desktop/services/media-publication-submission-service.js",
       "desktop/ipc/media-ipc.js",
       "src/platforms/media/media-resource-store.js",
       "media-workbench/src/components/ArticleEditor.tsx",
-      "media-workbench/src/components/PreflightModal.tsx",
     ]) {
       const source = read(file);
-      assert.doesNotMatch(source, /normalizePrice|Number\([^\n]*(?:price|quotedPrice)/i, file);
+      assert.doesNotMatch(
+        source,
+        /normalizePrice|Number\([^\n]*(?:price|quotedPrice)/i,
+        file,
+      );
     }
   });
 });

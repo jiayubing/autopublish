@@ -359,7 +359,8 @@ test("success rejects forged frozen order evidence before writing an order fact"
             batchId: admitted.batchId,
             batchItemId: first.execution.claim.batchItemId,
             claimToken: first.execution.claim.claimToken,
-            orderCreationAttemptId: first.execution.claim.orderCreationAttemptId,
+            orderCreationAttemptId:
+              first.execution.claim.orderCreationAttemptId,
             orderSnapshotV1: forgedSnapshot,
             paidTargetV1: forgedTarget,
           }),
@@ -844,6 +845,19 @@ test("article/resource rejection continues the batch while account/service rejec
     assert.equal(snapshot.paused, true);
     assert.equal(snapshot.items[0].status, "blocked");
     assert.equal(snapshot.items[1].status, "queued");
+
+    const restartedAll = await orchestrator.startAll();
+    assert.deepEqual(restartedAll.results, []);
+    assert.equal(calls, 1);
+    const afterRestartAll =
+      blocked.transitions.listPaidSubmissionBatchSnapshots({
+        batchId: admitted.batchId,
+      })[0];
+    assert.equal(afterRestartAll.paused, true);
+    assert.deepEqual(
+      afterRestartAll.items.map((item) => item.status),
+      ["blocked", "queued"],
+    );
   } finally {
     blocked.close();
   }

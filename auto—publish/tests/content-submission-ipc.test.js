@@ -13,28 +13,6 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
-it("requires confirmed true and never accepts renderer paths", async function () {
-  const handlers = new Map();
-  registerContentSubmissionIpc({
-    ipcMain: { handle: (c, h) => handlers.set(c, h) },
-    contentSubmissionService: { previewExport: () => ({}) },
-  });
-  const result = await handlers.get("content:preview-export")(null, {
-    clientId: "c",
-    generatedArticleId: "a",
-    targetPlatform: "media",
-    confirmed: false,
-    filePath: "C:\\x",
-  });
-  assert.deepStrictEqual(result, {
-    ok: false,
-    error: {
-      code: "CONTENT_EXPORT_CONFIRMATION_REQUIRED",
-      message: "Manual confirmation is required",
-    },
-  });
-});
-
 it("forwards only the preview action plan token for batch cancellation", async function () {
   const handlers = new Map();
   let received;
@@ -87,29 +65,6 @@ it("rejects a content submission batch without explicit account profile bindings
   });
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "ACCOUNT_PROFILE_REQUIRED");
-});
-
-it("passes an optional media resource id but continues rejecting renderer paths", async function () {
-  const handlers = new Map();
-  let received;
-  registerContentSubmissionIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {
-      previewExport: (input) => {
-        received = input;
-        return { status: "queueable" };
-      },
-    },
-  });
-  const result = await handlers.get("content:preview-export")(null, {
-    clientId: "client-1",
-    generatedArticleId: "article-1",
-    targetPlatform: "media",
-    mediaResourceId: "1001",
-    confirmed: true,
-  });
-  assert.deepEqual(result, { ok: true, data: { status: "queueable" } });
-  assert.equal(received.mediaResourceId, "1001");
 });
 
 it("exposes reconciliation cleanup previews and keeps queue paths out of the renderer response", async function () {
@@ -540,4 +495,76 @@ it("waits for paid-media rejection and maps it without an orphaned background ef
   assert.equal(completed, 1);
   await Promise.resolve();
   assert.equal(completed, 1);
+});
+
+it("exposes paid-media batch snapshot, start, and pause as independent commands", async function () {
+  const handlers = new Map();
+  let finishStart;
+  let pauseCalls = 0;
+  const batch = {
+    batchId: "paid-batch-1",
+    mediaResourceId: "media-1",
+    status: "queued",
+    pauseIntent: "manual",
+    paused: true,
+    runState: "paused",
+    articleCount: 1,
+    quotedPrice: 12.5,
+    estimatedTotal: 12.5,
+    createdAt: "2026-08-07T00:00:00.000Z",
+    updatedAt: "2026-08-07T00:00:00.000Z",
+    secret: "must-not-cross-ipc",
+    items: [
+      {
+        itemId: "paid-item-1",
+        articleIdentityV1: {
+          version: 1,
+          clientId: "client-1",
+          articleId: "article-1",
+        },
+        status: "queued",
+        phase: "paid-admitted",
+        claimToken: "secret-claim",
+      },
+    ],
+  };
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    contentSubmissionService: {},
+    paidMediaExecutionService: {
+      list: async () => ({ items: [batch] }),
+      start: async () =>
+        new Promise((resolve) => {
+          finishStart = () => resolve({ executionStatus: "submitted", batch });
+        }),
+      pause: async () => {
+        pauseCalls += 1;
+        return { batch };
+      },
+    },
+  });
+
+  const listed = await handlers.get("content:list-paid-media-batches")({});
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  assert.equal(listed.data.items[0].secret, undefined);
+  assert.equal(listed.data.items[0].items[0].claimToken, undefined);
+
+  const starting = handlers.get("content:start-paid-media-batch")(
+    {},
+    {
+      batchId: batch.batchId,
+    },
+  );
+  const paused = await handlers.get("content:pause-paid-media-batch")(
+    {},
+    {
+      batchId: batch.batchId,
+    },
+  );
+  assert.equal(paused.ok, true, JSON.stringify(paused));
+  assert.equal(pauseCalls, 1);
+  finishStart();
+  const started = await starting;
+  assert.equal(started.ok, true, JSON.stringify(started));
+  assert.equal(started.data.executionStatus, "submitted");
 });

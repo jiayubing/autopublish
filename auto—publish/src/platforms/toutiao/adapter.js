@@ -423,6 +423,8 @@ async function prepareArticleSubmission(article, options) {
       diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
       try {
         throwIfStopped();
+        if (!preparedContentMatches(article))
+          return { status: "uncertain", errorCode: "PREPARED_CONTENT_DRIFT" };
         if (!clickConfirmPublish())
           return {
             status: "uncertain",

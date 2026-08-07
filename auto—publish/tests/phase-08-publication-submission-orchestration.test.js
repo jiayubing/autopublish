@@ -17,9 +17,6 @@ const {
   createPostProcessingCoordinator,
 } = require("../src/application/publication-workflow/post-processing");
 const {
-  createMediaPublicationSubmissionService,
-} = require("../desktop/services/media-publication-submission-service");
-const {
   createPublicationSubmissionOrchestrator,
 } = require("../desktop/services/publication-submission-orchestrator");
 const {
@@ -31,66 +28,6 @@ const {
 const {
   createPublicationPostProcessor,
 } = require("../desktop/services/publication-post-processor");
-
-function fixtureDependencies(events) {
-  let createdPayload;
-  return {
-    workbench: {
-      prepareMediaPublicationCommands: async () => [
-        {
-          articleId: "article-media",
-          target: { kind: "media", mediaResourceId: "resource-media" },
-          title: "title",
-          body: "body",
-          postProcessingPayload: { filename: "fixture.md" },
-        },
-      ],
-    },
-    operationalStore: {
-      createSubmissionBatch(input) {
-        events.push("create-batch");
-        createdPayload = input.items[0].payload;
-        return {
-          batchId: input.batchId,
-          items: [{ itemId: "item-media", revision: 1 }],
-        };
-      },
-      claimSubmissionItemById(input) {
-        events.push("claim-item");
-        return {
-          itemId: input.itemId,
-          batchId: input.batchId,
-          revision: 2,
-          claimToken: input.claimToken,
-          payload: createdPayload,
-        };
-      },
-    },
-    workflow: {
-      publish: async (command) => {
-        events.push("workflow-publish");
-        assert.equal(command.batchItemId, "item-media");
-        assert.equal(command.target.mediaResourceId, "resource-media");
-        assert.equal(command.postProcessingPayload.batchId.length > 0, true);
-        return { status: "submitted", attemptId: command.attemptId };
-      },
-    },
-  };
-}
-
-test("media submission uses the shared claim-to-workflow seam", async () => {
-  const events = [];
-  const dependencies = fixtureDependencies(events);
-  const service = createMediaPublicationSubmissionService(dependencies);
-  const result = await service.submit([
-    {
-      filename: "fixture.md",
-      selectedResources: [{ resourceId: "resource-media" }],
-    },
-  ]);
-  assert.equal(result.results[0].status, "submitted");
-  assert.deepEqual(events, ["create-batch", "claim-item", "workflow-publish"]);
-});
 
 test("failed submission retry reclaims the existing item and calls PublicationWorkflow.retry", async () => {
   let claimed = null;
@@ -203,17 +140,7 @@ test("auto-trash intent is retained in both the durable item and workflow payloa
 test("shared submission validation runs before batch creation or item claim", async () => {
   let creates = 0;
   let claims = 0;
-  const service = createMediaPublicationSubmissionService({
-    workbench: {
-      prepareMediaPublicationCommands: async () => [
-        {
-          articleId: "article-media",
-          target: { kind: "media", mediaResourceId: "resource-media" },
-          title: "bad\u0000title",
-          body: "body",
-        },
-      ],
-    },
+  const orchestrator = createPublicationSubmissionOrchestrator({
     workflow: { publish: async () => ({ status: "submitted" }) },
     operationalStore: {
       createSubmissionBatch: () => {
@@ -226,9 +153,21 @@ test("shared submission validation runs before batch creation or item claim", as
       },
     },
   });
-  await assert.rejects(() => service.submit([{ filename: "fixture.md" }]), {
-    code: "PUBLISH_INPUT_INVALID",
-  });
+  await assert.rejects(
+    () =>
+      orchestrator.submit(
+        [
+          {
+            articleId: "article-media",
+            target: { kind: "media", mediaResourceId: "resource-media" },
+            title: "bad\u0000title",
+            body: "body",
+          },
+        ],
+        { createBatch: true },
+      ),
+    { code: "PUBLISH_INPUT_INVALID" },
+  );
   assert.equal(creates, 0);
   assert.equal(claims, 0);
 });

@@ -21,8 +21,6 @@ const COMMAND_NAMES = [
   "refreshResources",
   "togglePool",
   "checkBalance",
-  "prepareSubmission",
-  "submitPrepared",
   "syncOrder",
   "openPublishedUrl",
 ];
@@ -57,9 +55,8 @@ function boundedItems(value) {
   const seen = new Set();
   return value
     .filter((item) => {
-      const resourceId = item && typeof item.resourceId === "string"
-        ? item.resourceId
-        : null;
+      const resourceId =
+        item && typeof item.resourceId === "string" ? item.resourceId : null;
       if (!resourceId) return true;
       if (seen.has(resourceId)) return false;
       seen.add(resourceId);
@@ -70,8 +67,9 @@ function boundedItems(value) {
 
 function boundedResourceIds(value) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((resourceId) => typeof resourceId === "string"))]
-    .slice(0, 100);
+  return [
+    ...new Set(value.filter((resourceId) => typeof resourceId === "string")),
+  ].slice(0, 100);
 }
 
 function emptyQuery() {
@@ -111,8 +109,6 @@ export function createMediaFeature(adapters = {}) {
     "setDraft",
     "scanArticles",
     "previewArticle",
-    "buildConfirmation",
-    "submitSelected",
     "getOrders",
     "syncOrder",
     "openPublishedUrl",
@@ -143,19 +139,12 @@ export function createMediaFeature(adapters = {}) {
   let pool = { ...emptyPage(), memberResourceIds: [] };
   let balance = { value: 0, query: emptyQuery() };
   let orders = { items: [], query: emptyQuery() };
-  let preflight = { data: null };
-  let preparedArticles = [];
   let selectionRevision = 0;
   let syncingOrderNid = null;
   let syncingOrderRevision = 0;
   let snapshot;
 
   const publish = () => {
-    const submissionCandidates = articles.items.filter(
-      (article) =>
-        Array.isArray(article.selectedResources) &&
-        article.selectedResources.length > 0,
-    );
     snapshot = Object.freeze({
       scope,
       articles: Object.freeze({
@@ -181,9 +170,7 @@ export function createMediaFeature(adapters = {}) {
         items: Object.freeze([...orders.items]),
         syncingOrderNid,
       }),
-      preflight: Object.freeze({ ...preflight }),
       selectionRevision,
-      readyForSubmission: submissionCandidates.length > 0,
       commands: Object.freeze(
         Object.fromEntries(
           Object.entries(owners).map(([name, owner]) => [
@@ -223,10 +210,6 @@ export function createMediaFeature(adapters = {}) {
           : null,
         query: Object.freeze({ loading: false, error: null, reason }),
       };
-      if (preflight.data) {
-        preflight = { data: null };
-        preparedArticles = [];
-      }
       publish();
     } catch (value) {
       if (!queries.articles.isCurrent(token)) return;
@@ -473,8 +456,6 @@ export function createMediaFeature(adapters = {}) {
       items: articles.items.map(apply),
       activeArticle: apply(articles.activeArticle),
     };
-    preflight = { data: null };
-    preparedArticles = [];
     selectionRevision += 1;
     const token = owners.selection.begin(scope);
     owners.selection.finalize(token, { result: { selectionRevision } });
@@ -507,8 +488,6 @@ export function createMediaFeature(adapters = {}) {
       pool = { ...emptyPage(), memberResourceIds: [] };
       balance = { value: 0, query: emptyQuery() };
       orders = { items: [], query: emptyQuery() };
-      preflight = { data: null };
-      preparedArticles = [];
       selectionRevision = 0;
       syncingOrderNid = null;
       syncingOrderRevision += 1;
@@ -690,63 +669,6 @@ export function createMediaFeature(adapters = {}) {
         },
       );
     },
-    prepareSubmission() {
-      const candidates = articles.items
-        .filter(
-          (article) =>
-            Array.isArray(article.selectedResources) &&
-            article.selectedResources.length > 0,
-        )
-        .map((article) => ({
-          ...article,
-          selectedResources: [...article.selectedResources],
-        }));
-      return runCommand(
-        "prepareSubmission",
-        () => adapters.buildConfirmation(candidates),
-        "MEDIA_SUBMISSION_PREFLIGHT_FAILED",
-        "媒体投稿预检失败。",
-        (data) => {
-          preparedArticles = candidates;
-          preflight = { data };
-          publish();
-        },
-      );
-    },
-    dismissPreflight() {
-      preflight = { data: null };
-      preparedArticles = [];
-      publish();
-    },
-    submitPrepared() {
-      const submissions = preparedArticles;
-      return runCommand(
-        "submitPrepared",
-        async () => {
-          if (!submissions.length) {
-            throw Object.freeze({
-              code: "SUBMISSION_INPUT_INVALID",
-              category: "validation",
-              retryability: "never",
-              userMessage: "投稿预检已失效，请重新预检。",
-            });
-          }
-          return adapters.submitSelected(submissions);
-        },
-        "MEDIA_SUBMISSION_FAILED",
-        "媒体投稿失败。",
-        async () => {
-          await Promise.all([
-            loadArticles("command-result"),
-            refreshOrders("command-result"),
-            refreshBalance("command-result"),
-          ]);
-          preflight = { data: null };
-          preparedArticles = [];
-          publish();
-        },
-      );
-    },
     syncOrder(orderNid) {
       if (!orderNid) return undefined;
       const requestRevision = ++syncingOrderRevision;
@@ -763,7 +685,10 @@ export function createMediaFeature(adapters = {}) {
           publish();
         },
       ).then((value) => {
-        if (requestRevision === syncingOrderRevision && syncingOrderNid === orderNid) {
+        if (
+          requestRevision === syncingOrderRevision &&
+          syncingOrderNid === orderNid
+        ) {
           syncingOrderNid = null;
           publish();
         }

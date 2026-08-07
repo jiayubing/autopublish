@@ -388,6 +388,33 @@ export interface PaidMediaAdmissionResult {
   estimatedTotal: number;
 }
 
+export interface PaidMediaExecutionItem {
+  itemId: string;
+  articleRef: ArticleSelection;
+  status: string;
+  phase: string;
+}
+
+export interface PaidMediaExecutionBatch {
+  batchId: string;
+  mediaResourceId: string;
+  status: "queued" | "needs_attention" | "completed";
+  pauseIntent: "none" | "manual" | "system";
+  paused: boolean;
+  runState: "paused" | "running" | "in_flight";
+  articleCount: number;
+  quotedPrice: number;
+  estimatedTotal: number;
+  createdAt: string;
+  updatedAt: string;
+  items: PaidMediaExecutionItem[];
+}
+
+export interface PaidMediaExecutionResult {
+  executionStatus?: string;
+  batch: PaidMediaExecutionBatch;
+}
+
 export interface PendingQueueRemovalItemInput {
   articleRef: ArticleSelection;
   itemId: string;

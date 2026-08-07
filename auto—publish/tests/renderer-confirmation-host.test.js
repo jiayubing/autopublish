@@ -19,12 +19,18 @@ describe("renderer confirmation host", () => {
     assert.match(source, /queueRef\.current/);
     assert.match(source, /cancelRequester/);
     assert.match(source, /pendingRef\.current/);
-    assert.doesNotMatch(source, /window\.confirm|window\.focus|window\.restore/);
+    assert.doesNotMatch(
+      source,
+      /window\.confirm|window\.focus|window\.restore/,
+    );
   });
 
   it("keeps the public confirmation API small and portal based", () => {
     const source = read("media-workbench/src/confirmation.tsx");
-    assert.match(source, /confirm:\s*\(options: ConfirmationOptions\)\s*=> Promise<boolean>/);
+    assert.match(
+      source,
+      /confirm:\s*\(options: ConfirmationOptions\)\s*=> Promise<boolean>/,
+    );
     assert.match(source, /createPortal/);
     assert.match(source, /useConfirmation/);
     assert.doesNotMatch(source, /dangerouslySetInnerHTML/);
@@ -34,14 +40,19 @@ describe("renderer confirmation host", () => {
     const main = read("media-workbench/src/main.tsx");
     const app = read("media-workbench/src/App.tsx");
     const content = read("media-workbench/src/components/ContentWorkbench.tsx");
-    const gate = read("media-workbench/src/components/WorkspaceBootstrapGate.tsx");
+    const gate = read(
+      "media-workbench/src/components/WorkspaceBootstrapGate.tsx",
+    );
     assert.equal((app.match(/<ConfirmationHost/g) || []).length, 1);
     assert.match(
       main,
       /<AuthGate>\s*<WorkspaceCoordinatorProvider>\s*<WorkspaceScopedConfirmationHost>\s*<WorkspaceFeatureProvider>/s,
     );
     assert.match(app, /useWorkspaceRuntimeIdentity/);
-    assert.match(app, /scopeKey=\{workspaceRuntimeId \|\| "workspace-bootstrap"\}/);
+    assert.match(
+      app,
+      /scopeKey=\{workspaceRuntimeId \|\| "workspace-bootstrap"\}/,
+    );
     assert.match(content, /useConfirmationScope/);
     assert.doesNotMatch(gate, /ConfirmationHost/);
     for (const file of [
@@ -56,14 +67,20 @@ describe("renderer confirmation host", () => {
     }
   });
 
-  it("renders media preflight from the media feature snapshot", () => {
+  it("removes the legacy media submit modal and renders paid execution controls", () => {
     const app = read("media-workbench/src/App.tsx");
     const feature = read("media-workbench/src/features/media/media-feature.js");
-    assert.match(app, /currentView === 'workbench'/);
-    assert.match(app, /<PreflightModal isOpen=\{Boolean\(mediaSnapshot\.preflight\.data\)\}/);
-    assert.match(app, /mediaFeature\.submitPrepared/);
-    assert.match(feature, /prepareSubmission/);
-    assert.match(feature, /submitPrepared/);
-    assert.doesNotMatch(app, /setConfirmation|setIsSubmitting|setSubmissionError/);
+    const generatedArticles = read(
+      "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    );
+    assert.doesNotMatch(app, /PreflightModal|mediaFeature\.submitPrepared/);
+    assert.doesNotMatch(feature, /prepareSubmission|submitPrepared/);
+    assert.match(generatedArticles, /付费媒体批次控制/);
+    assert.match(generatedArticles, /startPaidMediaBatch/);
+    assert.match(generatedArticles, /pausePaidMediaBatch/);
+    assert.doesNotMatch(
+      app,
+      /setConfirmation|setIsSubmitting|setSubmissionError/,
+    );
   });
 });

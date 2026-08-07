@@ -634,8 +634,6 @@ test("the application facade exposes only stable submission operations", () => {
     listPlatforms: () => [],
   };
   for (const name of [
-    "previewExport",
-    "exportArticle",
     "createBatch",
     "listBatches",
     "getBatch",

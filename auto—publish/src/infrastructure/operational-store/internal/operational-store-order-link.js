@@ -48,8 +48,7 @@ function createOperationalStoreOrderLink(context) {
         throw fail("OPERATIONAL_ORDER_CONFLICT");
       return { idempotent: true };
     }
-    if (guarded.kind !== "available")
-      throw fail("OPERATIONAL_ORDER_CONFLICT");
+    if (guarded.kind !== "available") throw fail("OPERATIONAL_ORDER_CONFLICT");
     try {
       db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
         value.orderId,

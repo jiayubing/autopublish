@@ -79,6 +79,7 @@ const INTERNAL_MODULES = Object.freeze([
   "src/infrastructure/operational-store/internal/operational-store-order-link.js",
   "src/infrastructure/operational-store/internal/operational-store-outcome-writer.js",
   "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
+  "src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",

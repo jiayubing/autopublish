@@ -186,35 +186,6 @@ const articlePreview = exactObject({
   selectedResources: arrayField(resource, { max: 100 }),
 });
 
-const submission = exactObject({
-  filename,
-  resourceIds: arrayField(identifier, { min: 1, max: 100 }),
-  draftRevision: optionalField(safeText(64)),
-});
-
-const preflightItem = exactObject({
-  filename,
-  title: safeText(1000),
-  resourceId: identifier,
-  resourceName: safeText(500),
-  price: numberField({ min: 0, max: 100000000 }),
-  status: safeText(64),
-  reasonCode: optionalField(safeText(128)),
-  publicationId: optionalField(safeText(256)),
-});
-
-const preflight = exactObject({
-  articleCount: integerField({ min: 0, max: 1000 }),
-  resourceCount: integerField({ min: 0, max: 20000 }),
-  submitableResourceCount: integerField({ min: 0, max: 20000 }),
-  blockedResourceCount: integerField({ min: 0, max: 20000 }),
-  estimatedTotalPrice: numberField({ min: 0, max: 1000000000 }),
-  actualPrice: numberField({ min: 0, max: 1000000000 }),
-  blockers: arrayField(safeText(1000), { max: 1000 }),
-  blockedResources: arrayField(preflightItem, { max: 20000 }),
-  submitableResources: arrayField(preflightItem, { max: 20000 }),
-});
-
 const order = exactObject({
   title: safeText(1000),
   orderNid: identifier,
@@ -434,40 +405,6 @@ const mediaContracts = [
     },
     ["SUBMISSION_INPUT_INVALID"],
   ),
-  contract(
-    {
-      capability: "media.buildConfirmation",
-      channel: "media:build-confirmation",
-      kind: "query",
-      request: exactObject({
-        submissions: arrayField(submission, { min: 1, max: 1000 }),
-      }),
-      success: preflight,
-      fromArgs: (args) => ({ submissions: args[0] }),
-      toArgs: (payload) => [payload.submissions],
-    },
-    ["SUBMISSION_INPUT_INVALID"],
-  ),
-  contract(
-    {
-      capability: "media.submitSelected",
-      channel: "media:submit-selected",
-      kind: "command",
-      request: exactObject({
-        submissions: arrayField(submission, { min: 1, max: 1000 }),
-      }),
-      success: exactObject({
-        batchId: safeText(256),
-        publishedCount: integerField({ min: 0, max: 20000 }),
-        failedCount: integerField({ min: 0, max: 20000 }),
-        uncertainCount: integerField({ min: 0, max: 20000 }),
-        skippedCount: integerField({ min: 0, max: 20000 }),
-      }),
-      fromArgs: (args) => ({ submissions: args[0] }),
-      toArgs: (payload) => [payload.submissions],
-    },
-    ["SUBMISSION_INPUT_INVALID", "PUBLICATION_WORKFLOW_UNAVAILABLE"],
-  ),
   contract({
     capability: "media.getOrders",
     channel: "media:get-orders",
@@ -537,9 +474,16 @@ function projectMediaResource(value) {
     ? resource.type
     : "image";
   const result = {
-    resourceId: String(resource.resourceId || resource.id || resource.resource_id || ""),
-    name: String(resource.name || resource.title || resource.resourceName || ""),
-    price: finiteMediaPrice(resource.price) === undefined ? null : finiteMediaPrice(resource.price),
+    resourceId: String(
+      resource.resourceId || resource.id || resource.resource_id || "",
+    ),
+    name: String(
+      resource.name || resource.title || resource.resourceName || "",
+    ),
+    price:
+      finiteMediaPrice(resource.price) === undefined
+        ? null
+        : finiteMediaPrice(resource.price),
     type,
     createdAt: String(resource.createdAt || resource.updatedAt || ""),
   };
@@ -571,9 +515,10 @@ function projectMediaArticleSummary(value) {
     autoTitle: String(article.autoTitle || article.title || ""),
     remark: String(article.remark || ""),
     hasImages: article.hasImages === true,
-    imageCount: Number.isSafeInteger(article.imageCount) && article.imageCount >= 0
-      ? article.imageCount
-      : 0,
+    imageCount:
+      Number.isSafeInteger(article.imageCount) && article.imageCount >= 0
+        ? article.imageCount
+        : 0,
     ignoreImages: article.ignoreImages === true,
     selectedResources: Array.isArray(article.selectedResources)
       ? article.selectedResources.map(projectMediaResource)
@@ -596,11 +541,19 @@ function projectMediaArticlePreview(value) {
 function projectMediaResourcePage(value) {
   const page = value || {};
   return {
-    items: Array.isArray(page.items) ? page.items.map(projectMediaResource) : [],
+    items: Array.isArray(page.items)
+      ? page.items.map(projectMediaResource)
+      : [],
     total: Number.isSafeInteger(page.total) && page.total >= 0 ? page.total : 0,
     page: Number.isSafeInteger(page.page) && page.page > 0 ? page.page : 1,
-    pageSize: Number.isSafeInteger(page.pageSize) && page.pageSize > 0 ? page.pageSize : 50,
-    totalPages: Number.isSafeInteger(page.totalPages) && page.totalPages >= 0 ? page.totalPages : 0,
+    pageSize:
+      Number.isSafeInteger(page.pageSize) && page.pageSize > 0
+        ? page.pageSize
+        : 50,
+    totalPages:
+      Number.isSafeInteger(page.totalPages) && page.totalPages >= 0
+        ? page.totalPages
+        : 0,
     hasPrev: page.hasPrev === true,
     hasNext: page.hasNext === true,
   };
@@ -609,7 +562,9 @@ function projectMediaResourcePage(value) {
 function projectMediaPoolPage(value) {
   const page = projectMediaResourcePage(value);
   page.memberResourceIds = Array.isArray(value && value.memberResourceIds)
-    ? value.memberResourceIds.filter((resourceId) => typeof resourceId === "string").slice(0, 100)
+    ? value.memberResourceIds
+        .filter((resourceId) => typeof resourceId === "string")
+        .slice(0, 100)
     : [];
   return page;
 }
@@ -620,50 +575,31 @@ function projectMediaRefreshResult(value) {
     status: result.truncated === true ? "truncated" : "complete",
     complete: result.complete === true,
     truncated: result.truncated === true,
-    truncationReason: typeof result.truncationReason === "string" ? result.truncationReason : null,
-    pageCount: Number.isSafeInteger(result.pageCount) && result.pageCount >= 0 ? result.pageCount : 0,
-    resourceCount: Number.isSafeInteger(result.resourceCount) && result.resourceCount >= 0 ? result.resourceCount : 0,
-    diagnostics: (Array.isArray(result.diagnostics) ? result.diagnostics : []).map((value) => {
-      const diagnostic = { code: String((value && value.code) || "MEDIA_RESOURCE_DIAGNOSTIC") };
+    truncationReason:
+      typeof result.truncationReason === "string"
+        ? result.truncationReason
+        : null,
+    pageCount:
+      Number.isSafeInteger(result.pageCount) && result.pageCount >= 0
+        ? result.pageCount
+        : 0,
+    resourceCount:
+      Number.isSafeInteger(result.resourceCount) && result.resourceCount >= 0
+        ? result.resourceCount
+        : 0,
+    diagnostics: (Array.isArray(result.diagnostics)
+      ? result.diagnostics
+      : []
+    ).map((value) => {
+      const diagnostic = {
+        code: String((value && value.code) || "MEDIA_RESOURCE_DIAGNOSTIC"),
+      };
       for (const key of ["page", "count", "loadedCount"])
-        if (Number.isSafeInteger(value && value[key]) && value[key] >= 0) diagnostic[key] = value[key];
+        if (Number.isSafeInteger(value && value[key]) && value[key] >= 0)
+          diagnostic[key] = value[key];
       return diagnostic;
     }),
     refreshedAt: String(result.refreshedAt || new Date().toISOString()),
-  };
-}
-
-function projectMediaPreflightItem(value) {
-  const item = value || {};
-  const result = {
-    filename: String(item.filename || ""),
-    title: String(item.title || ""),
-    resourceId: String(item.resourceId || ""),
-    resourceName: String(item.resourceName || ""),
-    price: finiteMediaPrice(item.price),
-    status: String(item.status || "available"),
-  };
-  if (typeof item.reasonCode === "string") result.reasonCode = item.reasonCode;
-  if (typeof item.publicationId === "string") result.publicationId = item.publicationId;
-  return result;
-}
-
-function projectMediaPreflight(value) {
-  const result = value || {};
-  const submitable = Array.isArray(result.submitableResources)
-    ? result.submitableResources
-    : Array.isArray(result.queueableResources) ? result.queueableResources : [];
-  const blocked = Array.isArray(result.blockedResources) ? result.blockedResources : [];
-  return {
-    articleCount: Number.isSafeInteger(result.articleCount) ? result.articleCount : 0,
-    resourceCount: Number.isSafeInteger(result.resourceCount) ? result.resourceCount : submitable.length + blocked.length,
-    submitableResourceCount: Number.isSafeInteger(result.submitableResourceCount) ? result.submitableResourceCount : submitable.length,
-    blockedResourceCount: Number.isSafeInteger(result.blockedResourceCount) ? result.blockedResourceCount : blocked.length,
-    estimatedTotalPrice: finiteMediaPrice(result.estimatedTotalPrice),
-    actualPrice: finiteMediaPrice(result.actualPrice === undefined ? result.estimatedTotalPrice : result.actualPrice),
-    blockers: (Array.isArray(result.blockers) ? result.blockers : []).map(String),
-    blockedResources: blocked.map(projectMediaPreflightItem),
-    submitableResources: submitable.map(projectMediaPreflightItem),
   };
 }
 
@@ -692,6 +628,5 @@ module.exports = {
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,
-  projectMediaPreflight,
   projectMediaOrder,
 };

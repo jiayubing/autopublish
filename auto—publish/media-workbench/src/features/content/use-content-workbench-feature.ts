@@ -1,16 +1,14 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   getArticleManagementSnapshot,
   getArticleEditor,
   createContentQuestion,
   deleteContentQuestion,
-  exportToSubmissionQueue,
   collectDoubaoQuestion,
   listContentClients,
   listContentQuestions,
   listContentResearch,
   listContentTemplateCatalog,
-  previewExport,
   retryContentMaterial,
   retryFailedDoubao,
   saveManualResearch,
@@ -27,6 +25,9 @@ import {
   admitRegularQueueItems,
   previewPaidMediaPreflight,
   confirmPaidMediaBatch,
+  listPaidMediaBatches,
+  startPaidMediaBatch,
+  pausePaidMediaBatch,
   removePendingQueueItems,
   getCachedDoubaoLoginState,
   getDoubaoLoginStatus,
@@ -36,8 +37,8 @@ import {
   rememberDoubaoLoginState,
   subscribeDoubaoQueue,
   updateContentQuestion,
-} from '../../bridge/content';
-import { saveContentArticle } from '../../bridge/generation';
+} from "../../bridge/content";
+import { saveContentArticle } from "../../bridge/generation";
 import {
   getContentArticleRemovalTransaction,
   onContentArticleRemovalTransaction,
@@ -47,16 +48,21 @@ import {
   retryContentArticleRemovalTransaction,
   restoreContentArticle,
   trashContentArticles,
-} from '../../bridge/content-removal';
-import { reconcilePublicationHistory } from '../../bridge/publication';
-import type { DoubaoBatchTask } from '../../types/content';
-import type { GeneratedContentArticle } from '../../types/generation';
-import { useWorkspaceRuntimeIdentity, useWorkspaceScope } from '../workspace/workspace-coordinator-context';
-import { createContentWorkbenchFeature } from './content-workbench-feature.js';
+} from "../../bridge/content-removal";
+import { reconcilePublicationHistory } from "../../bridge/publication";
+import type { DoubaoBatchTask } from "../../types/content";
+import type { GeneratedContentArticle } from "../../types/generation";
+import {
+  useWorkspaceRuntimeIdentity,
+  useWorkspaceScope,
+} from "../workspace/workspace-coordinator-context";
+import { createContentWorkbenchFeature } from "./content-workbench-feature.js";
 
 export function useContentWorkbenchFeature() {
   const workspace = useWorkspaceRuntimeIdentity();
-  const featureRef = useRef<ReturnType<typeof createContentWorkbenchFeature> | null>(null);
+  const featureRef = useRef<ReturnType<
+    typeof createContentWorkbenchFeature
+  > | null>(null);
   if (!featureRef.current) {
     featureRef.current = createContentWorkbenchFeature({
       listClients: listContentClients,
@@ -69,13 +75,16 @@ export function useContentWorkbenchFeature() {
       deleteQuestion: deleteContentQuestion,
       saveManualResearch,
       retryMaterial: retryContentMaterial,
-      getArticleEditor: (input: { clientId: string; articleId: string }) => getArticleEditor(input),
-      saveArticle: (input: { article: GeneratedContentArticle; expectedFingerprint: string }) => saveContentArticle(input.article, input.expectedFingerprint),
+      getArticleEditor: (input: { clientId: string; articleId: string }) =>
+        getArticleEditor(input),
+      saveArticle: (input: {
+        article: GeneratedContentArticle;
+        expectedFingerprint: string;
+      }) => saveContentArticle(input.article, input.expectedFingerprint),
       reconcilePublication: reconcilePublicationHistory,
-      previewExport,
-      exportToSubmissionQueue,
       collectDoubaoQuestion,
-      startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) => startPreparedDoubaoBatch(input.tasks),
+      startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) =>
+        startPreparedDoubaoBatch(input.tasks),
       pauseDoubaoBatch,
       resumeDoubaoBatch,
       stopDoubaoBatch,
@@ -86,18 +95,33 @@ export function useContentWorkbenchFeature() {
       admitRegularQueueItems,
       previewPaidMediaPreflight,
       confirmPaidMediaBatch,
+      listPaidMediaBatches,
+      startPaidMediaBatch,
+      pausePaidMediaBatch,
       removePendingQueueItems,
-      cancelContentSubmissionBatch: (input: { batchId: string; planId: string }) => cancelContentSubmissionBatch(input.batchId, input.planId),
-      previewCleanupFailedContentSubmissionItems: (input: { batchId: string }) => previewCleanupFailedContentSubmissionItems(input.batchId),
-      cleanupFailedContentSubmissionItems: (input: { batchId: string }) => cleanupFailedContentSubmissionItems(input.batchId),
-      previewContentArticleRemoval: (input: { selections: Array<{ clientId: string; articleId: string }> }) => previewContentArticleRemoval(input.selections),
+      cancelContentSubmissionBatch: (input: {
+        batchId: string;
+        planId: string;
+      }) => cancelContentSubmissionBatch(input.batchId, input.planId),
+      previewCleanupFailedContentSubmissionItems: (input: {
+        batchId: string;
+      }) => previewCleanupFailedContentSubmissionItems(input.batchId),
+      cleanupFailedContentSubmissionItems: (input: { batchId: string }) =>
+        cleanupFailedContentSubmissionItems(input.batchId),
+      previewContentArticleRemoval: (input: {
+        selections: Array<{ clientId: string; articleId: string }>;
+      }) => previewContentArticleRemoval(input.selections),
       trashContentArticles,
-      getContentArticleRemovalTransaction: (input: { transactionId: string }) => getContentArticleRemovalTransaction(input.transactionId),
-      retryContentArticleRemovalTransaction: (input: { transactionId: string }) => retryContentArticleRemovalTransaction(input.transactionId),
+      getContentArticleRemovalTransaction: (input: { transactionId: string }) =>
+        getContentArticleRemovalTransaction(input.transactionId),
+      retryContentArticleRemovalTransaction: (input: {
+        transactionId: string;
+      }) => retryContentArticleRemovalTransaction(input.transactionId),
       restoreContentArticle,
       preparePermanentDeleteContentArticle,
       permanentlyDeleteContentArticle,
-      getRemovalTransaction: (input: { transactionId: string }) => getContentArticleRemovalTransaction(input.transactionId),
+      getRemovalTransaction: (input: { transactionId: string }) =>
+        getContentArticleRemovalTransaction(input.transactionId),
       subscribeRemovalTransaction: onContentArticleRemovalTransaction,
       getDoubaoQueueState,
       getDoubaoLoginStatus,
@@ -112,37 +136,46 @@ export function useContentWorkbenchFeature() {
   useEffect(() => {
     if (!workspace.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId });
-    void feature.refresh('initial');
-    void feature.refreshDoubaoQueue('initial');
+    void feature.refresh("initial");
+    void feature.refreshDoubaoQueue("initial");
   }, [feature, workspace.workspaceRuntimeId]);
-  useWorkspaceScope('contentSources', (event) => {
+  useWorkspaceScope("contentSources", (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (!['initial', 'identity', 'runtime-switch'].includes(event.kind)) {
+    if (!["initial", "identity", "runtime-switch"].includes(event.kind)) {
       void feature.refreshContentSources(event.kind);
       void feature.refreshDoubaoQueue(event.kind);
     }
   });
-  useWorkspaceScope('articleManagement', (event) => {
+  useWorkspaceScope("articleManagement", (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
     // The removal transaction event is the authoritative management refresh
     // owner.  The paired workspace invalidation still refreshes attention and
     // platform consumers, but must not issue a second management query.
-    if (!['initial', 'identity', 'runtime-switch'].includes(event.kind)
-      && event.reasonCode !== 'ARTICLE_REMOVAL_TRANSACTION_CHANGED')
+    if (
+      !["initial", "identity", "runtime-switch"].includes(event.kind) &&
+      event.reasonCode !== "ARTICLE_REMOVAL_TRANSACTION_CHANGED"
+    )
       void feature.refreshManagement(event.kind);
   });
   useEffect(() => () => feature.dispose(), [feature]);
-  const snapshot = useSyncExternalStore(feature.subscribe, feature.getSnapshot, feature.getSnapshot);
+  const snapshot = useSyncExternalStore(
+    feature.subscribe,
+    feature.getSnapshot,
+    feature.getSnapshot,
+  );
   return {
     snapshot,
-    refresh: (reason = 'manual') => feature.refresh(reason),
-    refreshClientData: (reason = 'manual') => feature.refreshClientData(reason),
+    refresh: (reason = "manual") => feature.refresh(reason),
+    refreshClientData: (reason = "manual") => feature.refreshClientData(reason),
     refreshManagement: feature.refreshManagement,
+    refreshPaidMediaBatches: (reason = "manual") =>
+      feature.refreshPaidMediaBatches(reason),
     refreshDoubaoQueue: feature.refreshDoubaoQueue,
     selectClient: feature.selectClient,
-    setCurrentArticle: (article: GeneratedContentArticle | null) => feature.setCurrentArticle(article),
+    setCurrentArticle: (article: GeneratedContentArticle | null) =>
+      feature.setCurrentArticle(article),
     commands: feature.commands,
     watchRemovalTransaction: feature.watchRemovalTransaction,
     clearRemovalTransaction: feature.clearRemovalTransaction,

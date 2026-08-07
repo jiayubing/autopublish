@@ -1,8 +1,6 @@
 "use strict";
 
 const APPLICATION_OPERATIONS = Object.freeze([
-  "previewExport",
-  "exportArticle",
   "listPlatforms",
   "previewBatch",
   "createBatch",

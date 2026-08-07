@@ -32,7 +32,6 @@ const {
   createArticleSubmissionRemovalCoordinator,
 } = require("./article-submission-removal-coordinator");
 const { createSubmissionRetry } = require("./submission-retry");
-const { createSubmissionMediaExport } = require("./submission-media-export");
 const {
   articleMarkdown,
   writePairAtomic,
@@ -139,18 +138,7 @@ function createOperationalContentSubmissionService(options) {
     retryFailedPublication: value.retryFailedPublication,
     onDataInvalidated: value.onDataInvalidated,
   });
-  const mediaExport = createSubmissionMediaExport({
-    inputRoot,
-    contentStore: value.contentStore,
-    targetCatalog,
-    preflight,
-    batchPlanner,
-    onDataInvalidated: value.onDataInvalidated,
-  });
-
   return Object.freeze({
-    previewExport: mediaExport.previewExport,
-    exportArticle: mediaExport.exportArticle,
     listPlatforms,
     previewBatch,
     createBatch,
