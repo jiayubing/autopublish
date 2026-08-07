@@ -140,7 +140,7 @@ process.on("message", function (message) {
   }
 
   if (message.type === "pause") {
-    // Immediately close all browser sessions to break the current blocking pwRun call
+    // Immediately close all browser sessions to break the current blocking Playwright invocation
     reportWorkerDiagnostic(
       "PLATFORM_WORKER_PAUSE_REQUESTED",
       "conflict",

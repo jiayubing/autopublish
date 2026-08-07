@@ -9,21 +9,22 @@ describe("shared browser session lifecycle", function () {
   it("loads, starts, saves, and closes a platform session through one seam", function () {
     const calls = [];
     let alive = false;
+    const stateFile =
+      "fixture state & value|next<end>^group(1)%bang!hash#.json";
     const lifecycle = createBrowserSessionLifecycle({
-      session: { session: "fixture", stateFile: "fixture-state.json" },
+      session: { session: "fixture", stateFile: stateFile },
       stateDir: "fixture-state",
-      pwRun(command) {
-        calls.push(command);
-        if (command === "list") return alive ? "fixture" : "";
-        if (command.startsWith("state-load")) return "";
-        if (command.startsWith("state-save")) return "";
-        if (command === "close") {
+      run(args) {
+        calls.push(args);
+        if (args[0] === "list") return alive ? "fixture" : "";
+        if (args[0] === "state-load") return "";
+        if (args[0] === "state-save") return "";
+        if (args[0] === "close") {
           alive = false;
           return "";
         }
         throw new Error("unexpected command");
       },
-      quoteArg: (value) => value,
       fs: { existsSync: () => true },
       ensureDir: () => calls.push("mkdir"),
       sleep: () => {
@@ -37,15 +38,15 @@ describe("shared browser session lifecycle", function () {
     lifecycle.saveState();
     lifecycle.close();
     assert.deepEqual(calls, [
-      "list",
+      ["list"],
       "start",
-      "list",
-      "state-load fixture-state.json",
+      ["list"],
+      ["state-load", stateFile],
       "mkdir",
-      "state-save fixture-state.json",
+      ["state-save", stateFile],
       "mkdir",
-      "state-save fixture-state.json",
-      "close",
+      ["state-save", stateFile],
+      ["close"],
     ]);
   });
 });

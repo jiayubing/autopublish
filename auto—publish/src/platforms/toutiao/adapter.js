@@ -1,17 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
-const { execSync } = require("child_process");
-
 const { DIRS, PW } = require("../../../scripts/config");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 const domain = require("../../domain");
-const { ensureDir, sleep, quoteArg } = require("../../core/files");
+const { ensureDir, sleep } = require("../../core/files");
 const {
   pwSessionConfig,
-  pwEnv,
-  pwCmd,
-  pwRun,
+  pwInvokeSync,
   runCode,
 } = require("../../core/playwright");
 const { extractDocxArticle } = require("../../core/docx-text-extractor");
@@ -53,22 +49,20 @@ var TOUTIAO = {
 var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
   session: SESSION,
   stateDir: DIRS.stateDir,
-  pwRun: pwRun,
-  quoteArg: quoteArg,
+  run: pwInvokeSync,
   ensureDir: ensureDir,
   sleep: sleep,
   start: function () {
-    execSync(
-      pwCmd(
-        "open " +
-          TOUTIAO.base +
-          " --browser=" +
-          PW.browserChannel +
-          " --headed --persistent --profile=" +
-          quoteArg(SESSION.profileDir),
-        SESSION,
-      ),
-      { encoding: "utf-8", timeout: 20000, env: pwEnv(SESSION) },
+    pwInvokeSync(
+      [
+        "open",
+        TOUTIAO.base,
+        "--browser=" + PW.browserChannel,
+        "--headed",
+        "--persistent",
+        "--profile=" + SESSION.profileDir,
+      ],
+      { timeout: 20000, session: SESSION },
     );
   },
 });
@@ -105,7 +99,10 @@ function getCurrentPageText() {
 
 function checkLogin() {
   try {
-    pwRun("goto " + TOUTIAO.base, { timeout: 25000, session: SESSION });
+    pwInvokeSync(["goto", TOUTIAO.base], {
+      timeout: 25000,
+      session: SESSION,
+    });
     return waitForLoginState(LOGIN_STATE_SETTLE_MS);
   } catch (e) {
     return false;
@@ -119,7 +116,10 @@ function openLogin() {
   } catch (e) {
     diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
-  pwRun("goto " + TOUTIAO.loginUrl, { timeout: 15000, session: SESSION });
+  pwInvokeSync(["goto", TOUTIAO.loginUrl], {
+    timeout: 15000,
+    session: SESSION,
+  });
 }
 
 function checkLoginInCurrentPage() {
@@ -174,7 +174,10 @@ function doLogin(options) {
   var interactive = resolveInteractive(opts);
   diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "login-required");
   try {
-    pwRun("goto " + TOUTIAO.loginUrl, { timeout: 15000, session: SESSION });
+    pwInvokeSync(["goto", TOUTIAO.loginUrl], {
+      timeout: 15000,
+      session: SESSION,
+    });
   } catch (e) {}
 
   if (!interactive) {
@@ -371,7 +374,10 @@ async function prepareArticleSubmission(article, options) {
   var coverMode = sidecar.coverMode || "none";
   var adEnabled = !!sidecar.adEnabled;
   throwIfStopped();
-  pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
+  pwInvokeSync(["goto", TOUTIAO.publishUrl], {
+    timeout: 25000,
+    session: SESSION,
+  });
   waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
   throwIfStopped();
 
@@ -388,7 +394,10 @@ async function prepareArticleSubmission(article, options) {
     }
     throwIfStopped();
     saveCurrentState();
-    pwRun("goto " + TOUTIAO.publishUrl, { timeout: 25000, session: SESSION });
+    pwInvokeSync(["goto", TOUTIAO.publishUrl], {
+      timeout: 25000,
+      session: SESSION,
+    });
     waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
     throwIfStopped();
   }
