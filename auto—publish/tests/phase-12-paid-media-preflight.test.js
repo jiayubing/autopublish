@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { DatabaseSync } = require("node:sqlite");
 
 const {
   createArticleMutationCoordinator,
@@ -92,6 +93,11 @@ function makeFixture(options) {
         return Object.assign({}, resource);
       },
       systemSubmissionCodeProvider: () => code.value,
+      clientSnapshotResolver: (clientId) => ({
+        version: 1,
+        clientId,
+        displayName: "客户甲",
+      }),
       clock: () => new Date("2026-08-07T00:00:00.000Z"),
     });
     const profile = store.createAccountProfile({
@@ -154,6 +160,11 @@ function paidStoreItem(articleId, suffix) {
     publicationId: "paid-publication-duplicate",
     attemptId: `paid-attempt-${suffix}`,
     target: { kind: "media", mediaResourceId: "media-12" },
+    customerSnapshotV1: {
+      version: 1,
+      clientId: "client-a",
+      displayName: "客户甲",
+    },
     publicationSnapshot: {
       articleId,
       title: `标题 ${articleId}`,
@@ -224,6 +235,19 @@ test("confirm rechecks resource, code and content before one atomic paid admissi
       2,
     );
     assert.equal(fixture.store.listSubmissionQueueItems().length, 0);
+    const db = new DatabaseSync(fixture.store.databasePath);
+    const storedItems = db
+      .prepare("SELECT payload_json FROM submission_items ORDER BY article_id")
+      .all()
+      .map((row) => JSON.parse(row.payload_json));
+    db.close();
+    assert.deepEqual(
+      storedItems.map((item) => item.customerSnapshotV1),
+      [
+        { version: 1, clientId: "client-a", displayName: "客户甲" },
+        { version: 1, clientId: "client-a", displayName: "客户甲" },
+      ],
+    );
     assert.throws(
       () =>
         fixture.coordinator.saveExistingArticle({
@@ -479,6 +503,11 @@ test("preflight blocks a missing authoritative body before paid admission", asyn
       available: true,
     }),
     systemSubmissionCodeProvider: () => "system-submission-12",
+    clientSnapshotResolver: (clientId) => ({
+      version: 1,
+      clientId,
+      displayName: "客户甲",
+    }),
     clock: () => new Date("2026-08-07T00:00:00.000Z"),
   });
   const preview = await service.preflight({

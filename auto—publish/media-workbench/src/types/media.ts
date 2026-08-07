@@ -61,9 +61,15 @@ export interface RealOrder {
   title: string;
   orderNid: string;
   statusCode: string;
+  createdAt: string;
   submittedAt: string;
   publishedAt: string;
   resourceName: string;
   price: string;
+  actualAmount: string;
   hasPublishedUrl: boolean;
+  anomaly: {
+    reason: "order-missing" | "unknown-status" | "unsettled-aftercare";
+    openedAt: string;
+  } | null;
 }

@@ -617,6 +617,24 @@ const api = {
     syncOrder: function (orderNid) {
       return ipcRenderer.invoke("media:sync-order", orderNid);
     },
+    syncAllOrders: function () {
+      return ipcRenderer.invoke("media:sync-all-orders");
+    },
+    prepareOrderStatusAnomalyResolution: function (input) {
+      return ipcRenderer.invoke(
+        "media:prepare-order-status-anomaly-resolution",
+        input,
+      );
+    },
+    resumeOrderTracking: function (input) {
+      return ipcRenderer.invoke("media:resume-order-tracking", input);
+    },
+    confirmOrderPublished: function (input) {
+      return ipcRenderer.invoke("media:confirm-order-published", input);
+    },
+    confirmOrderNotPublished: function (input) {
+      return ipcRenderer.invoke("media:confirm-order-not-published", input);
+    },
     openPublishedUrl: function (orderNid) {
       return ipcRenderer.invoke("media:open-published-url", orderNid);
     },
@@ -627,7 +645,10 @@ const api = {
       return ipcRenderer.invoke("media:bind-paid-order-number", input);
     },
     prepareConfirmPaidOrderAbsent: function (input) {
-      return ipcRenderer.invoke("media:prepare-confirm-paid-order-absent", input);
+      return ipcRenderer.invoke(
+        "media:prepare-confirm-paid-order-absent",
+        input,
+      );
     },
     confirmPaidOrderAbsent: function (input) {
       return ipcRenderer.invoke("media:confirm-paid-order-absent", input);

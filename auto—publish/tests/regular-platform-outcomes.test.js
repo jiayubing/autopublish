@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { DatabaseSync } = require("node:sqlite");
 
 const domain = require("../src/domain");
 const {
@@ -83,6 +84,7 @@ function fixture(options) {
     root,
     store,
     transitions: transitionPorts.regularOutcomeTransitions,
+    orderTransitions: transitionPorts.orderObservationTransitions,
     queueTransitions: transitionPorts.regularQueueTransitions,
     groupTransitions: transitionPorts.regularQueueGroupTransitions,
     prepare,
@@ -92,6 +94,100 @@ function fixture(options) {
     },
   };
 }
+
+test("regular accepted and paid status 2 share one first-wins publication snapshot", () => {
+  const f = fixture();
+  try {
+    const prepared = f.prepare("article-shared-success");
+    const snapshot = domain.parseOrderSnapshotV1({
+      version: 1,
+      orderIdentityV1: { version: 1, orderId: "order-shared-success" },
+      articleIdentityV1: {
+        version: 1,
+        clientId: "client-1",
+        articleId: "article-shared-success",
+      },
+      targetIdentityV1: {
+        version: 1,
+        kind: "media",
+        mediaResourceId: "resource-shared",
+      },
+      orderCreationAttemptId: "paid-shared-success",
+      mediaName: "共享成功媒体",
+      quotedPrice: 10,
+      estimatedTotal: 10,
+      actualAmount: null,
+      systemSubmissionCode: "shared-success",
+      submittedTitle: "付费标题",
+      submittedBody: "付费正文",
+      contentFingerprint: domain.contentFingerprint("付费标题", "付费正文"),
+      remoteCallStartedAt: "2026-08-07T00:59:00.000Z",
+    });
+    const db = new DatabaseSync(f.store.databasePath);
+    db.prepare("INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)").run(
+      "publication-paid-shared",
+      "article-shared-success",
+      "media-resource:resource-shared",
+      JSON.stringify({ kind: "media", mediaResourceId: "resource-shared" }),
+      "submitted",
+      "2026-08-07T00:59:00.000Z",
+      "2026-08-07T00:59:00.000Z",
+    );
+    db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
+      "attempt-paid-shared",
+      "publication-paid-shared",
+      "submitted",
+      "2026-08-07T00:59:00.000Z",
+      null,
+    );
+    db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
+      "order-shared-success",
+      "attempt-paid-shared",
+      "order-shared-success",
+      JSON.stringify(snapshot),
+      "2026-08-07T00:59:01.000Z",
+    );
+    db.close();
+
+    const regular = f.transitions.recordRegularAccepted(
+      accepted(prepared.claim.regularPublicationAttemptId),
+    );
+    const context = f.orderTransitions.getOrderObservationContext(
+      "order-shared-success",
+    );
+    const paid = f.orderTransitions.recordOrderObservation({
+      orderObservationV1: domain.parseOrderObservationV1({
+        version: 1,
+        orderIdentityV1: { version: 1, orderId: "order-shared-success" },
+        statusCode: "2",
+        observedAt: "2026-08-07T01:00:03.000Z",
+        eventAt: null,
+        eventAtSource: "not_available",
+        remoteUrl: null,
+        actualAmount: null,
+        evidenceFingerprint: "9".repeat(64),
+        orderSnapshotFingerprint: context.orderSnapshotFingerprint,
+      }),
+    });
+    assert.equal(regular.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
+    assert.equal(
+      paid.publication.publicationEvidenceV1.resultCode,
+      "REGULAR_ACCEPTED",
+    );
+    const check = new DatabaseSync(f.store.databasePath);
+    assert.equal(
+      check
+        .prepare(
+          "SELECT COUNT(*) count FROM remote_evidence WHERE remote_id LIKE 'publication-success:%'",
+        )
+        .get().count,
+      1,
+    );
+    check.close();
+  } finally {
+    f.close();
+  }
+});
 
 function accepted(attemptId) {
   return {

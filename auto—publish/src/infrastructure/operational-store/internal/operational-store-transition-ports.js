@@ -9,6 +9,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   const order = value.order;
   const paidExecution = value.paidExecution;
   const regularOutcome = value.regularOutcome;
+  const orderObservation = value.orderObservation;
   holder.publicationTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     reservePublicationTarget: publication.reservePublicationTarget,
@@ -71,6 +72,18 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     prepareOrderCreationResolution: order.prepareOrderCreationResolution,
     bindVerifiedOrder: order.bindVerifiedOrder,
     confirmNoOrder: order.confirmNoOrder,
+  });
+  holder.orderObservationTransitions = Object.freeze({
+    listOrderObservationViews: orderObservation.listOrderObservationViews,
+    getOrderObservationContext: orderObservation.getOrderObservationContext,
+    recordOrderObservation: orderObservation.recordOrderObservation,
+    recordOrderStatusAnomaly: orderObservation.recordOrderStatusAnomaly,
+    prepareOrderStatusAnomalyResolution:
+      orderObservation.prepareOrderStatusAnomalyResolution,
+    resumeOrderTracking: orderObservation.resumeOrderTracking,
+    confirmOrderPublished: orderObservation.confirmOrderPublished,
+    confirmOrderNotPublished: orderObservation.confirmOrderNotPublished,
+    readOrderTransitionFacts: orderObservation.readOrderTransitionFacts,
   });
 }
 

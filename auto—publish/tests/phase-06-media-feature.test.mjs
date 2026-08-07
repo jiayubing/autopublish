@@ -85,6 +85,11 @@ describe("Phase 06 media feature", () => {
       previewArticle: async () => ({ ...article, content: "preview" }),
       getOrders: async () => [],
       syncOrder: async () => ({}),
+      syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
+      prepareOrderStatusAnomalyResolution: async () => ({}),
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => ({}),
+      confirmOrderNotPublished: async () => ({}),
       openPublishedUrl: async (orderNid) => {
         calls.push(["openPublishedUrl", orderNid]);
       },
@@ -192,6 +197,11 @@ describe("Phase 06 media feature", () => {
       previewArticle: async () => ({}),
       getOrders: async () => [],
       syncOrder: async () => ({}),
+      syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
+      prepareOrderStatusAnomalyResolution: async () => ({}),
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => ({}),
+      confirmOrderNotPublished: async () => ({}),
       openPublishedUrl: async () => ({}),
     });
     feature.setScope({ workspaceRuntimeId: "workspace-media" });
@@ -251,6 +261,17 @@ describe("Phase 06 media feature", () => {
           code: "ORDER_SYNC_FAILED",
         });
       },
+      syncAllOrders: async () => ({
+        items: [
+          { orderNid: "order-1", ok: false, errorCode: "ORDER_SYNC_FAILED" },
+        ],
+        succeeded: 0,
+        failed: 1,
+      }),
+      prepareOrderStatusAnomalyResolution: async () => ({}),
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => ({}),
+      confirmOrderNotPublished: async () => ({}),
       openPublishedUrl: async () => ({}),
     });
     feature.setScope({ workspaceRuntimeId: "workspace-media" });
@@ -291,6 +312,234 @@ describe("Phase 06 media feature", () => {
     assert.equal(
       feature.getSnapshot().commands.togglePool.error.code,
       "MEDIA_POOL_FAILED",
+    );
+  });
+
+  it("refreshes all orders only once on the first open and preserves per-item failures", async () => {
+    let syncCalls = 0;
+    let queryCalls = 0;
+    const feature = createMediaFeature({
+      getResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      searchResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      refreshResources: async () => ({}),
+      getPoolPage: emptyPoolPage,
+      addToPool: async () => ({}),
+      removeFromPool: async () => ({}),
+      getBalance: async () => 0,
+      getDrafts: async () => [],
+      getDraft: async () => null,
+      setDraft: async () => ({}),
+      scanArticles: async () => [],
+      previewArticle: async () => ({}),
+      getOrders: async () => {
+        queryCalls += 1;
+        return [{ orderNid: "order-1", statusCode: "0" }];
+      },
+      syncOrder: async () => ({}),
+      syncAllOrders: async () => {
+        syncCalls += 1;
+        return {
+          items: [
+            {
+              orderNid: "order-1",
+              ok: false,
+              errorCode: "MEDIA_ORDER_SYNC_FAILED",
+            },
+          ],
+          succeeded: 0,
+          failed: 1,
+        };
+      },
+      prepareOrderStatusAnomalyResolution: async () => ({}),
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => ({}),
+      confirmOrderNotPublished: async () => ({}),
+      openPublishedUrl: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "workspace-orders" });
+    await feature.openOrders();
+    await feature.openOrders();
+    assert.deepEqual([syncCalls, queryCalls], [1, 1]);
+    assert.equal(feature.getSnapshot().orders.syncFailures.length, 1);
+  });
+
+  it("acquires one order mutation command before exposing busy identity and blocks conflicting actions", async () => {
+    const singleSync = deferred();
+    let prepareCalls = 0;
+    let resolutionCalls = 0;
+    let syncAllCalls = 0;
+    let anomalyOpen = true;
+    const feature = createMediaFeature({
+      getResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      searchResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      refreshResources: async () => ({}),
+      getPoolPage: emptyPoolPage,
+      addToPool: async () => ({}),
+      removeFromPool: async () => ({}),
+      getBalance: async () => 0,
+      getDrafts: async () => [],
+      getDraft: async () => null,
+      setDraft: async () => ({}),
+      scanArticles: async () => [],
+      previewArticle: async () => ({}),
+      getOrders: async () => [
+        {
+          orderNid: "order-1",
+          statusCode: "0",
+          anomaly: anomalyOpen ? {} : null,
+        },
+      ],
+      syncOrder: () =>
+        singleSync.promise.then((result) => {
+          anomalyOpen = false;
+          return result;
+        }),
+      syncAllOrders: async () => {
+        syncAllCalls += 1;
+        return { items: [], succeeded: 0, failed: 0 };
+      },
+      prepareOrderStatusAnomalyResolution: async () => {
+        prepareCalls += 1;
+        return {
+          orderId: "order-1",
+          confirmationToken: "token-1",
+          classification: "verified_published",
+          allowedActions: ["confirmOrderPublished"],
+        };
+      },
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => {
+        resolutionCalls += 1;
+        return {};
+      },
+      confirmOrderNotPublished: async () => ({}),
+      openPublishedUrl: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "workspace-order-owner" });
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+    assert.equal(prepareCalls, 1);
+
+    const syncing = feature.syncOrder("order-1");
+    assert.equal(feature.getSnapshot().orders.syncingOrderNid, "order-1");
+    await feature.syncAllOrders();
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+    await feature.confirmOrderPublished("order-1");
+    assert.deepEqual(
+      [syncAllCalls, prepareCalls, resolutionCalls],
+      [0, 1, 0],
+    );
+
+    singleSync.resolve({});
+    await syncing;
+    assert.equal(feature.getSnapshot().orders.syncingOrderNid, null);
+    assert.equal(
+      feature.getSnapshot().orders.anomalyPreparations["order-1"],
+      undefined,
+    );
+  });
+
+  it("owns safe refresh, prepare, and resolution errors in the public snapshot", async () => {
+    const failures = {
+      syncAll: false,
+      prepare: false,
+      resolution: false,
+    };
+    const feature = createMediaFeature({
+      getResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      searchResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      refreshResources: async () => ({}),
+      getPoolPage: emptyPoolPage,
+      addToPool: async () => ({}),
+      removeFromPool: async () => ({}),
+      getBalance: async () => 0,
+      getDrafts: async () => [],
+      getDraft: async () => null,
+      setDraft: async () => ({}),
+      scanArticles: async () => [],
+      previewArticle: async () => ({}),
+      getOrders: async () => [
+        { orderNid: "order-1", statusCode: "0", anomaly: {} },
+      ],
+      syncOrder: async () => ({}),
+      syncAllOrders: async () => {
+        if (failures.syncAll) throw new Error("supplier-secret-sync");
+        return { items: [], succeeded: 0, failed: 0 };
+      },
+      prepareOrderStatusAnomalyResolution: async () => {
+        if (failures.prepare) throw new Error("supplier-secret-prepare");
+        return {
+          orderId: "order-1",
+          confirmationToken: "token-1",
+          classification: "verified_published",
+          allowedActions: ["confirmOrderPublished"],
+        };
+      },
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => {
+        if (failures.resolution) throw new Error("supplier-secret-resolution");
+        return {};
+      },
+      confirmOrderNotPublished: async () => ({}),
+      openPublishedUrl: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "workspace-order-errors" });
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+
+    failures.syncAll = true;
+    await feature.syncAllOrders();
+    assert.deepEqual(
+      feature.getSnapshot().commands.syncAllOrders.error,
+      {
+        code: "MEDIA_ORDER_SYNC_FAILED",
+        category: "internal",
+        retryability: "manual-check",
+        userMessage: "刷新订单失败。",
+      },
+    );
+    failures.syncAll = false;
+    failures.prepare = true;
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+    assert.equal(
+      feature.getSnapshot().commands.prepareOrderStatusAnomalyResolution.error
+        .userMessage,
+      "无法准备订单状态核对。",
+    );
+    failures.prepare = false;
+    failures.resolution = true;
+    await feature.confirmOrderPublished("order-1");
+    assert.equal(
+      feature.getSnapshot().commands.confirmOrderPublished.error.userMessage,
+      "订单状态核对未能安全完成。",
     );
   });
 });

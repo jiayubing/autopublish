@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const domain = require("../../src/domain");
 const { canonicalArticleRefs } = require("../../src/content/article-ref");
 const { fingerprintArticle } = require("../../src/content/content-store");
 const {
@@ -207,6 +208,9 @@ function createPaidMediaPreflightService(options) {
   const lifecycleFacts =
     value.lifecycleFacts || value.articleLifecycleFacts || null;
   const contentStore = value.contentStore;
+  if (typeof value.clientSnapshotResolver !== "function")
+    throw preflightError("PAID_MEDIA_CUSTOMER_SNAPSHOT_RESOLVER_REQUIRED");
+  const clientSnapshotResolver = value.clientSnapshotResolver;
   const systemSubmissionCodeProvider =
     typeof value.systemSubmissionCodeProvider === "function"
       ? value.systemSubmissionCodeProvider
@@ -538,6 +542,25 @@ function createPaidMediaPreflightService(options) {
       riskCodes: model.risks.map((warning) => warning.code),
       confirmedAt: nowIso(clock),
     });
+    let customerSnapshotsV1;
+    try {
+      customerSnapshotsV1 = Object.freeze(
+        Object.fromEntries(
+          entry.refs.map((ref) => {
+            const snapshot = domain.parseCustomerSnapshotV1(
+              clientSnapshotResolver(ref.clientId),
+            );
+            if (snapshot.clientId !== ref.clientId)
+              throw preflightError("PAID_MEDIA_CUSTOMER_SNAPSHOT_INVALID");
+            return [ref.clientId, snapshot];
+          }),
+        ),
+      );
+    } catch (error) {
+      if (error && error.code === "PAID_MEDIA_CUSTOMER_SNAPSHOT_INVALID")
+        throw error;
+      throw preflightError("PAID_MEDIA_CUSTOMER_SNAPSHOT_INVALID");
+    }
     let result;
     try {
       result = paidAdmission.admitPaidBatch({
@@ -558,6 +581,7 @@ function createPaidMediaPreflightService(options) {
         quotedPrice: model.quotedPrice,
         estimatedTotal: model.estimatedTotal,
         articleFingerprints: currentFingerprints,
+        customerSnapshotsV1,
       });
     } catch (error) {
       if (

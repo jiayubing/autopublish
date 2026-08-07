@@ -725,11 +725,24 @@ async function createWorkspaceRuntimeComposition(deps) {
           draftStore: mediaDraftStore,
           mediaResourceService,
           mediaSupplierProvider,
-          operationalStore: publicationComposition.operationalStore,
+          orderObservationTransitions:
+            operationalStoreTransitionPorts.orderObservationTransitions,
           contentStore,
           paidAdmissionFacade: Object.freeze({
             admitPaidBatch: articleMutationCoordinator.admitPaidBatch,
           }),
+          clientSnapshotResolver: function (clientId) {
+            const client =
+              require("../../src/content/client-knowledge").getClient(
+                workspaceRoot,
+                clientId,
+              );
+            return {
+              version: 1,
+              clientId: client.id,
+              displayName: client.name,
+            };
+          },
           paidLifecycleFacts:
             operationalStoreTransitionPorts.paidAdmissionTransitions,
           paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,

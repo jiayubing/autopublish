@@ -114,6 +114,66 @@ const COMMON_ERRORS = {
     retryability: "manual-check",
     userMessage: "订单同步未能安全完成，请稍后重试。",
   },
+  MEDIA_ORDER_STATUS_ANOMALY: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单状态无法安全确认，已保留原事实并进入人工核对。",
+  },
+  ORDER_STATUS_ANOMALY_OPEN: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单状态异常尚未收口，请先完成人工核对。",
+  },
+  ORDER_STATUS_ANOMALY_NOT_OPEN: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单状态异常已变化，请刷新后重新核对。",
+  },
+  ORDER_STATUS_ANOMALY_TOKEN_STALE: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "核对凭据已过期，请重新准备。",
+  },
+  ORDER_STATUS_ANOMALY_STATE_STALE: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单事实已变化，请刷新后重新核对。",
+  },
+  ORDER_STATUS_ANOMALY_QUERY_STALE: {
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "核对查询期间订单事实已变化，请刷新后重新准备。",
+  },
+  ORDER_OBSERVATION_QUERY_STALE: {
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "同步查询期间订单事实已变化，请刷新后重试。",
+  },
+  ORDER_TRANSITION_TERMINAL: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "订单已有明确终态，旧状态不会覆盖当前事实。",
+  },
+  ORDER_OBSERVATION_STATUS_REGRESSION: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "订单旧状态不会覆盖更新的跟踪事实。",
+  },
+  ORDER_CUSTOMER_SNAPSHOT_UNAVAILABLE: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单缺少下单时客户快照，文章继续冻结等待人工核对。",
+  },
+  ORDER_STATUS_ANOMALY_RESOLUTION_OPPOSITE: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "该订单已按相反结论完成核对。",
+  },
+  ORDER_CANCELLATION_INTENT_OPEN: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单取消仍在处理中，请先完成取消核对。",
+  },
   PAID_ORDER_RESOLUTION_QUERY_FAILED: {
     category: "transport",
     retryability: "manual-check",
@@ -266,15 +326,53 @@ const articlePreview = exactObject({
   selectedResources: arrayField(resource, { max: 100 }),
 });
 
+const orderAnomaly = exactObject({
+  reason: enumField(["order-missing", "unknown-status", "unsettled-aftercare"]),
+  openedAt: safeText(64),
+});
+
 const order = exactObject({
   title: safeText(1000),
   orderNid: identifier,
   statusCode: safeText(64),
+  createdAt: safeText(64),
   submittedAt: safeText(64),
   publishedAt: safeText(64),
   resourceName: safeText(500),
   price: safeText(128),
+  actualAmount: safeText(128),
   hasPublishedUrl: "boolean",
+  anomaly: nullableField(orderAnomaly),
+});
+
+const orderSyncItem = exactObject({
+  orderNid: identifier,
+  ok: "boolean",
+  errorCode: nullableField(safeText(128)),
+});
+
+const anomalyClassification = enumField([
+  "verified_trackable",
+  "verified_published",
+  "verified_non_published_terminal",
+  "inconclusive",
+]);
+const anomalyAction = enumField([
+  "resumeOrderTracking",
+  "confirmOrderPublished",
+  "confirmOrderNotPublished",
+]);
+const anomalyPreparation = exactObject({
+  orderId: identifier,
+  classification: anomalyClassification,
+  confirmationToken: safeText(256),
+  expiresAt: safeText(64),
+  allowedActions: arrayField(anomalyAction, { max: 1 }),
+});
+const anomalyResolution = exactObject({
+  orderId: identifier,
+  status: enumField(["tracking_resumed", "published", "not_published"]),
+  idempotent: "boolean",
 });
 
 const resourcePage = exactObject({
@@ -504,7 +602,75 @@ const mediaContracts = [
       fromArgs: (args) => ({ orderNid: args[0] }),
       toArgs: (payload) => [payload.orderNid],
     },
-    ["MEDIA_CONFIG_NOT_SET", "MEDIA_ORDER_SYNC_FAILED"],
+    [
+      "MEDIA_CONFIG_NOT_SET",
+      "MEDIA_ORDER_SYNC_FAILED",
+      "MEDIA_ORDER_STATUS_ANOMALY",
+      "ORDER_STATUS_ANOMALY_OPEN",
+      "ORDER_CANCELLATION_INTENT_OPEN",
+      "ORDER_OBSERVATION_QUERY_STALE",
+      "ORDER_OBSERVATION_STATUS_REGRESSION",
+      "ORDER_TRANSITION_TERMINAL",
+      "ORDER_CUSTOMER_SNAPSHOT_UNAVAILABLE",
+    ],
+  ),
+  contract({
+    capability: "media.syncAllOrders",
+    channel: "media:sync-all-orders",
+    kind: "command",
+    request: emptyRequest,
+    success: exactObject({
+      items: arrayField(orderSyncItem, { max: 20000 }),
+      succeeded: integerField({ min: 0, max: 20000 }),
+      failed: integerField({ min: 0, max: 20000 }),
+    }),
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+  }),
+  contract(
+    {
+      capability: "media.prepareOrderStatusAnomalyResolution",
+      channel: "media:prepare-order-status-anomaly-resolution",
+      kind: "command",
+      request: exactObject({ orderId: identifier }),
+      success: anomalyPreparation,
+      fromArgs: (args) => args[0],
+      toArgs: (payload) => [payload],
+    },
+    [
+      "MEDIA_CONFIG_NOT_SET",
+      "MEDIA_ORDER_SYNC_FAILED",
+      "ORDER_STATUS_ANOMALY_NOT_OPEN",
+      "ORDER_STATUS_ANOMALY_QUERY_STALE",
+    ],
+  ),
+  ...[
+    ["resumeOrderTracking", "resume-order-tracking"],
+    ["confirmOrderPublished", "confirm-order-published"],
+    ["confirmOrderNotPublished", "confirm-order-not-published"],
+  ].map(([capabilityName, channelName]) =>
+    contract(
+      {
+        capability: `media.${capabilityName}`,
+        channel: `media:${channelName}`,
+        kind: "command",
+        request: exactObject({
+          orderId: identifier,
+          confirmationToken: safeText(256, 1),
+        }),
+        success: anomalyResolution,
+        fromArgs: (args) => args[0],
+        toArgs: (payload) => [payload],
+      },
+      [
+        "ORDER_STATUS_ANOMALY_NOT_OPEN",
+        "ORDER_STATUS_ANOMALY_TOKEN_STALE",
+        "ORDER_STATUS_ANOMALY_STATE_STALE",
+        "ORDER_STATUS_ANOMALY_RESOLUTION_OPPOSITE",
+        "ORDER_CANCELLATION_INTENT_OPEN",
+        "ORDER_CUSTOMER_SNAPSHOT_UNAVAILABLE",
+      ],
+    ),
   ),
   contract(
     {
@@ -805,11 +971,23 @@ function projectMediaOrder(value) {
     title: String(order.title || ""),
     orderNid: String(order.orderNid || ""),
     statusCode: String(order.statusCode || ""),
+    createdAt: String(order.createdAt || ""),
     submittedAt: String(order.submittedAt || ""),
     publishedAt: String(order.publishedAt || ""),
     resourceName: String(order.resourceName || ""),
     price: String(order.price || ""),
+    actualAmount:
+      order.actualAmount === null || order.actualAmount === undefined
+        ? ""
+        : String(order.actualAmount),
     hasPublishedUrl: order.hasPublishedUrl === true,
+    anomaly:
+      order.anomaly && typeof order.anomaly === "object"
+        ? {
+            reason: String(order.anomaly.reason || "order-missing"),
+            openedAt: String(order.anomaly.openedAt || ""),
+          }
+        : null,
   };
 }
 

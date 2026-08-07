@@ -92,6 +92,11 @@ function fixture(options) {
         resource.resourceId,
     }),
     systemSubmissionCodeProvider: () => code,
+    clientSnapshotResolver: (clientId) => ({
+      version: 1,
+      clientId,
+      displayName: "客户甲",
+    }),
     clock: () => new Date(NOW),
   });
   contentStore.createArticle(article("article-a"));

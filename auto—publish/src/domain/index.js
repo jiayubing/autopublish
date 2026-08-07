@@ -6,6 +6,7 @@ const dto = require("./dto");
 const regularPublication = require("./regular-publication-contract");
 const publicationEvidence = require("./publication-evidence-contract");
 const paidMediaOrder = require("./paid-media-order-contract");
+const orderObservation = require("./order-observation-contract");
 module.exports = Object.freeze({
   ...identities,
   ...target,
@@ -15,4 +16,5 @@ module.exports = Object.freeze({
   ...regularPublication,
   ...publicationEvidence,
   ...paidMediaOrder,
+  ...orderObservation,
 });

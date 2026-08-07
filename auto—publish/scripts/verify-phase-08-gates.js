@@ -76,12 +76,15 @@ const INTERNAL_MODULES = Object.freeze([
   "src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
   "src/infrastructure/operational-store/internal/operational-store-maintenance.js",
   "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-order-observation-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-order-link.js",
   "src/infrastructure/operational-store/internal/operational-store-outcome-writer.js",
   "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
   "src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-publication-success.js",
   "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-regular-outcome-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-recovery-guard.js",
@@ -93,6 +96,7 @@ const INTERNAL_MODULES = Object.freeze([
   "src/infrastructure/operational-store/internal/operational-store-transaction.js",
   "src/infrastructure/operational-store/internal/operational-store-utils.js",
   "src/infrastructure/operational-store/internal/operational-store-verifier.js",
+  "src/infrastructure/operational-store/internal/order-transition-guard.js",
 ]);
 const ALLOWED_INTERNAL_IMPORTERS = new Set([
   OPERATIONAL_FACADE,

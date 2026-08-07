@@ -1,105 +1,321 @@
+"use strict";
+
+const crypto = require("node:crypto");
+const net = require("node:net");
+
+const domain = require("../../src/domain");
+
+const STATUS_BY_KIND = Object.freeze({
+  pending: "0",
+  scheduled: "1",
+  published: "2",
+  rejected: "4",
+  aftercare: "9",
+});
+
 function createMediaOrderService(opts) {
-  var options = opts || {};
-  var operationalStore = options.operationalStore;
-  if (!operationalStore) throw orderError("MEDIA_ORDER_STORE_REQUIRED");
-  if (typeof operationalStore.listOrderDisplayViews !== "function")
-    throw orderError("MEDIA_ORDER_PROJECTION_REQUIRED");
+  const options = opts || {};
+  const transitions = options.orderObservationTransitions;
+  if (!transitions) throw orderError("MEDIA_ORDER_STORE_REQUIRED");
+  for (const method of [
+    "listOrderObservationViews",
+    "getOrderObservationContext",
+    "recordOrderObservation",
+    "recordOrderStatusAnomaly",
+    "prepareOrderStatusAnomalyResolution",
+    "resumeOrderTracking",
+    "confirmOrderPublished",
+    "confirmOrderNotPublished",
+  ])
+    if (typeof transitions[method] !== "function")
+      throw orderError("MEDIA_ORDER_TRANSITIONS_REQUIRED");
 
-  var clientProvider =
-    typeof options.clientProvider === "function" ? options.clientProvider : null;
-  var supplierProvider =
-    typeof options.supplierProvider === "function" ? options.supplierProvider : null;
-  var openExternal =
+  const supplierProvider =
+    typeof options.supplierProvider === "function"
+      ? options.supplierProvider
+      : null;
+  const openExternal =
     typeof options.openExternal === "function" ? options.openExternal : null;
-
-  function trustedPublishedHosts() {
-    var hosts = new Set(
-      Array.isArray(options.allowedPublishedUrlHosts)
-        ? options.allowedPublishedUrlHosts
-            .filter(function (host) {
-              return typeof host === "string" && host.trim();
-            })
-            .map(function (host) {
-              return host.trim().toLowerCase();
-            })
-        : [],
-    );
-    try {
-      var client = clientProvider ? clientProvider() : null;
-      var policyHostname =
-        client && client.endpointPolicy && client.endpointPolicy.hostname;
-      if (policyHostname) hosts.add(String(policyHostname).toLowerCase());
-      else if (client && client.baseUrl)
-        hosts.add(new URL(client.baseUrl).hostname.toLowerCase());
-    } catch (_) {}
-    return hosts;
-  }
+  const clock =
+    typeof options.clock === "function" ? options.clock : () => new Date();
 
   function listOrderViews() {
-    var allowedHosts = trustedPublishedHosts();
-    return operationalStore
-      .listOrderDisplayViews()
-      .map(function (order) {
-        return toOperationalOrderView(order, allowedHosts);
-      });
+    return transitions
+      .listOrderObservationViews()
+      .map((order) => toOperationalOrderView(order));
   }
 
-  async function syncOrder(orderNid) {
-    var client = supplierProvider ? null : clientProvider ? clientProvider() : null;
-    if (!client && !supplierProvider) throw orderError("MEDIA_CONFIG_NOT_SET", "付费媒体配置未设置");
+  function provider() {
+    const value = supplierProvider && supplierProvider();
+    if (!value || typeof value.getOrderDetails !== "function")
+      throw orderError("MEDIA_CONFIG_NOT_SET", "付费媒体配置未设置");
+    return value;
+  }
+
+  function stamp() {
+    const value = clock();
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(parsed.getTime()))
+      throw orderError("MEDIA_ORDER_SYNC_FAILED");
+    return parsed.toISOString();
+  }
+
+  function evidenceFingerprint(value) {
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify(value), "utf8")
+      .digest("hex");
+  }
+
+  function canonicalItem(result, orderId) {
+    if (!result || result.kind !== "order_details")
+      throw orderError("MEDIA_ORDER_SYNC_FAILED");
+    return (result.orders || []).find(
+      (item) => item && String(item.orderId || "") === String(orderId),
+    );
+  }
+
+  function statusCode(item) {
+    return item ? STATUS_BY_KIND[String(item.status || "")] || "" : "";
+  }
+
+  function safeEventAt(item) {
+    if (!item || typeof item.publishedAt !== "string") return null;
+    const value = Date.parse(item.publishedAt);
+    return Number.isFinite(value) ? new Date(value).toISOString() : null;
+  }
+
+  function safeActualAmount(value) {
+    return typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 100000000
+      ? value
+      : null;
+  }
+
+  function buildObservation(orderId, item, observedAt, context) {
+    const code = statusCode(item);
+    if (!code) return null;
+    const eventAt = code === "2" ? safeEventAt(item) : null;
+    const rawUrl =
+      code === "2" ? domain.normalizePublishedArticleUrl(item.remoteUrl) : null;
+    const canonical = {
+      orderId: String(orderId),
+      statusCode: code,
+      observedAt,
+      eventAt,
+      remoteUrl: rawUrl,
+      actualAmount: safeActualAmount(item.actualAmount),
+    };
+    return domain.parseOrderObservationV1({
+      version: 1,
+      orderIdentityV1: { version: 1, orderId: String(orderId) },
+      statusCode: code,
+      observedAt,
+      eventAt,
+      eventAtSource: eventAt ? "provider_event_time" : "not_available",
+      remoteUrl: rawUrl,
+      actualAmount: canonical.actualAmount,
+      evidenceFingerprint: evidenceFingerprint(canonical),
+      orderSnapshotFingerprint: context.orderSnapshotFingerprint,
+    });
+  }
+
+  async function query(orderId) {
+    let result;
     try {
-      var response;
-      var item;
-      var statusCode;
-      if (supplierProvider) {
-        var supplierResult = await supplierProvider().getOrderDetails([String(orderNid)]);
-        response = supplierResult;
-        if (!supplierResult || supplierResult.kind !== "order_details") throw orderError("MEDIA_ORDER_SYNC_FAILED");
-        item = (supplierResult.orders || []).find(function (order) {
-          return order && String(order.orderId || "") === String(orderNid);
-        });
-        statusCode = canonicalStatusCode(item && item.status);
-        if (!item || !statusCode) throw orderError("MEDIA_ORDER_SYNC_FAILED");
-      } else {
-        var response = await client.orderInfo(orderNid);
-        item = firstOrderItem(response);
-        statusCode = supplierOrderStatusCode(response);
-      }
-      if (
-        !statusCode ||
-        typeof operationalStore.recordRemoteOrderObservation !== "function"
-      )
-        throw orderError("MEDIA_ORDER_SYNC_FAILED");
-      operationalStore.recordRemoteOrderObservation({
-        orderId: String(orderNid),
-        observation: {
-          statusCode: statusCode,
-          ...(statusCode === "2"
-            ? { remoteUrl: item.remoteUrl || item.order_url || item.orderUrl }
-            : {}),
-          ...(supplierProvider
-            ? (item.publishedAt ? { publishedAt: item.publishedAt } : {})
-            : (supplierPublishedAt(response)
-              ? { publishedAt: supplierPublishedAt(response) }
-              : {})
-          ),
-        },
-      });
+      result = await provider().getOrderDetails([String(orderId)]);
     } catch (_) {
       throw orderError("MEDIA_ORDER_SYNC_FAILED");
     }
-    return response;
+    if (!result || result.kind !== "order_details")
+      throw orderError("MEDIA_ORDER_SYNC_FAILED");
+    return { result, item: canonicalItem(result, orderId) };
   }
 
-  async function openPublishedUrl(orderNid) {
-    if (typeof operationalStore.listRemoteOrders !== "function")
-      throw orderError("MEDIA_ORDER_STORE_REQUIRED");
-    var order = operationalStore.listRemoteOrders().find(function (item) {
-      return String(item && (item.orderNid || item.orderId || "")) === String(orderNid || "");
+  async function syncOrder(orderId) {
+    const id = String(orderId || "");
+    const context = transitions.getOrderObservationContext(id);
+    const observedAt = stamp();
+    const { item } = await query(id);
+    if (!item) {
+      const missingFingerprint = evidenceFingerprint({
+        orderId: id,
+        observedAt,
+        result: "missing",
+      });
+      const mutation = transitions.recordOrderStatusAnomaly({
+        orderId: id,
+        reason: "order-missing",
+        evidenceFingerprint: missingFingerprint,
+        queryBinding: context.queryBinding,
+      });
+      if (mutation && mutation.publishedWins)
+        return Object.freeze({
+          orderId: id,
+          statusCode: "2",
+          idempotent: true,
+          publishedWins: true,
+        });
+      throw orderError(
+        "MEDIA_ORDER_STATUS_ANOMALY",
+        undefined,
+        mutation && mutation.publishedWins
+          ? null
+          : {
+              changed: true,
+              kind: "order_status_anomaly_recorded",
+              orderId: id,
+            },
+      );
+    }
+    const observation = buildObservation(id, item, observedAt, context);
+    if (!observation) {
+      const mutation = transitions.recordOrderStatusAnomaly({
+        orderId: id,
+        reason: "unknown-status",
+        evidenceFingerprint: evidenceFingerprint({
+          orderId: id,
+          observedAt,
+          result: "unknown-status",
+        }),
+        queryBinding: context.queryBinding,
+      });
+      if (mutation && mutation.publishedWins)
+        return Object.freeze({
+          orderId: id,
+          statusCode: "2",
+          idempotent: true,
+          publishedWins: true,
+        });
+      throw orderError(
+        "MEDIA_ORDER_STATUS_ANOMALY",
+        undefined,
+        mutation && mutation.publishedWins
+          ? null
+          : {
+              changed: true,
+              kind: "order_status_anomaly_recorded",
+              orderId: id,
+            },
+      );
+    }
+    return transitions.recordOrderObservation({
+      orderObservationV1: observation,
+      queryBinding: context.queryBinding,
     });
-    if (!order || String(order.status || "") !== "published")
+  }
+
+  async function syncAllOrders() {
+    const current = listOrderViews();
+    const items = [];
+    let mutationCount = 0;
+    for (const order of current) {
+      try {
+        const result = await syncOrder(order.orderNid);
+        if (!result || result.idempotent !== true) mutationCount += 1;
+        items.push(
+          Object.freeze({
+            orderNid: order.orderNid,
+            ok: true,
+            errorCode: null,
+          }),
+        );
+      } catch (error) {
+        if (error && error.mutation && error.mutation.changed === true)
+          mutationCount += 1;
+        items.push(
+          Object.freeze({
+            orderNid: order.orderNid,
+            ok: false,
+            errorCode:
+              error && typeof error.code === "string"
+                ? error.code
+                : "MEDIA_ORDER_SYNC_FAILED",
+          }),
+        );
+      }
+    }
+    return Object.freeze({
+      items: Object.freeze(items),
+      succeeded: items.filter((item) => item.ok).length,
+      failed: items.filter((item) => !item.ok).length,
+      mutationCount,
+    });
+  }
+
+  async function prepareOrderStatusAnomalyResolution(input) {
+    const value = input || {};
+    const orderId = String(value.orderId || "");
+    const context = transitions.getOrderObservationContext(orderId);
+    const observedAt = stamp();
+    let item = null;
+    let queryFailed = false;
+    try {
+      ({ item } = await query(orderId));
+    } catch (_) {
+      queryFailed = true;
+    }
+    const observation = item
+      ? buildObservation(orderId, item, observedAt, context)
+      : null;
+    const code = observation && observation.statusCode;
+    let classification = "inconclusive";
+    if (!queryFailed && observation) {
+      if (["0", "1"].includes(code)) classification = "verified_trackable";
+      else if (code === "2") classification = "verified_published";
+      else if (code === "4") classification = "verified_non_published_terminal";
+    }
+    const verificationFingerprint = evidenceFingerprint({
+      orderId,
+      classification,
+      observationFingerprint: observation
+        ? observation.evidenceFingerprint
+        : null,
+    });
+    const terminalObservationV1 =
+      classification === "verified_non_published_terminal"
+        ? domain.parseTerminalObservationV1({
+            version: 1,
+            orderIdentityV1: observation.orderIdentityV1,
+            terminalKind: "REJECTED",
+            observedAt: observation.observedAt,
+            eventAt: observation.eventAt,
+            eventAtSource: observation.eventAtSource,
+            actualAmount: observation.actualAmount,
+            evidenceFingerprint: observation.evidenceFingerprint,
+            orderSnapshotFingerprint: observation.orderSnapshotFingerprint,
+          })
+        : null;
+    return transitions.prepareOrderStatusAnomalyResolution({
+      orderId,
+      queryBinding: context.queryBinding,
+      verification: {
+        classification,
+        evidenceFingerprint: verificationFingerprint,
+        orderObservationV1:
+          classification === "verified_trackable" ||
+          classification === "verified_published"
+            ? observation
+            : null,
+        terminalObservationV1,
+      },
+    });
+  }
+
+  async function openPublishedUrl(orderId) {
+    const order = listOrderViews().find(
+      (item) => item.orderNid === String(orderId),
+    );
+    if (
+      !order ||
+      (order.statusCode !== "2" &&
+        !(order.statusCode === "9" && order.publishedAt))
+    )
       throw orderError("MEDIA_ORDER_NOT_PUBLISHED");
-    var url = publishedUrlForOrder(order, trustedPublishedHosts());
+    const context = transitions.getOrderObservationContext(String(orderId));
+    const url = publishedUrlForExternalOpen(context.remoteUrl);
     if (!url) throw orderError("MEDIA_ORDER_URL_UNAVAILABLE");
     if (!openExternal) throw orderError("MEDIA_ORDER_OPEN_FAILED");
     try {
@@ -110,125 +326,84 @@ function createMediaOrderService(opts) {
     return { completed: true };
   }
 
-  return {
-    listOrderViews: listOrderViews,
-    syncOrder: syncOrder,
-    openPublishedUrl: openPublishedUrl,
-  };
+  return Object.freeze({
+    listOrderViews,
+    syncOrder,
+    syncAllOrders,
+    prepareOrderStatusAnomalyResolution,
+    resumeOrderTracking: transitions.resumeOrderTracking,
+    confirmOrderPublished: transitions.confirmOrderPublished,
+    confirmOrderNotPublished: transitions.confirmOrderNotPublished,
+    openPublishedUrl,
+  });
 }
 
-function canonicalStatusCode(value) {
-  return {
-    pending: "0",
-    scheduled: "1",
-    published: "2",
-    rejected: "4",
-    aftercare: "9",
-  }[String(value || "")] || "";
-}
-
-function orderError(code, message) {
-  var error = new Error(message || code);
+function orderError(code, message, mutation) {
+  const error = new Error(message || code);
   error.code = code;
+  if (mutation && mutation.changed === true)
+    Object.defineProperty(error, "mutation", {
+      value: Object.freeze({ ...mutation }),
+      enumerable: false,
+    });
   return error;
 }
 
-function safePublishedUrl(value, allowedHosts) {
-  if (typeof value !== "string" || !value || value.length > 2048) return null;
+function publishedUrlForExternalOpen(value) {
+  const normalized = domain.normalizePublishedArticleUrl(value);
+  if (!normalized) return null;
   try {
-    var url = new URL(value);
+    const hostname = new URL(normalized).hostname.toLowerCase();
+    const ipCandidate =
+      hostname.startsWith("[") && hostname.endsWith("]")
+        ? hostname.slice(1, -1)
+        : hostname;
     if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      !(allowedHosts instanceof Set) ||
-      !allowedHosts.has(url.hostname.toLowerCase())
+      !hostname ||
+      net.isIP(ipCandidate) !== 0 ||
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal")
     )
       return null;
-    return url.href;
+    return normalized;
   } catch (_) {
     return null;
   }
 }
 
-function publishedUrlForOrder(order, allowedHosts) {
-  var value = order || {};
-  var canonicalStatus = value.status || value.publicationStatus;
-  return canonicalStatus === "published"
-    ? safePublishedUrl(value.remoteUrl, allowedHosts)
-    : null;
-}
-
-function toOperationalOrderView(order, allowedHosts) {
-  var value = order || {};
-  var quotedPrice =
+function toOperationalOrderView(order) {
+  const value = order || {};
+  const quotedPrice =
     typeof value.quotedPrice === "number" &&
     Number.isFinite(value.quotedPrice) &&
     value.quotedPrice >= 0
       ? String(value.quotedPrice)
       : "";
-  var statusCode = supplierStatusCode(value.supplierStatusCode);
-  return {
-    title: typeof value.titleSnapshot === "string" ? value.titleSnapshot : "",
+  return Object.freeze({
+    title: typeof value.title === "string" ? value.title : "",
     filename: typeof value.filename === "string" ? value.filename : "",
-    orderNid: String(value.orderNid || value.orderId || ""),
-    statusCode: statusCode || "",
-    submittedAt: isoInstantOrEmpty(value.submittedAt || value.createdAt),
+    orderNid: String(value.orderId || ""),
+    statusCode: ["0", "1", "2", "4", "9"].includes(value.statusCode)
+      ? value.statusCode
+      : "0",
+    createdAt: isoInstantOrEmpty(value.createdAt),
+    submittedAt: isoInstantOrEmpty(value.submittedAt),
     publishedAt: isoInstantOrEmpty(value.publishedAt),
     resourceName:
-      typeof value.resourceNameSnapshot === "string"
-        ? value.resourceNameSnapshot
-        : "",
+      typeof value.resourceName === "string" ? value.resourceName : "",
     price: quotedPrice,
-    hasPublishedUrl: Boolean(publishedUrlForOrder(value, allowedHosts)),
-  };
-}
-
-function supplierStatusCode(value) {
-  var code = String(value == null ? "" : value);
-  return ["0", "1", "2", "4", "9"].includes(code) ? code : "";
+    actualAmount:
+      typeof value.actualAmount === "number" ? String(value.actualAmount) : "",
+    hasPublishedUrl: Boolean(publishedUrlForExternalOpen(value.remoteUrl)),
+    anomaly: value.anomaly || null,
+  });
 }
 
 function isoInstantOrEmpty(value) {
-  if (
-    typeof value !== "string" ||
-    value.length > 64 ||
-    !/(?:Z|[+-]\d{2}:\d{2})$/.test(value)
-  )
-    return "";
-  var timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : "";
-}
-
-function firstOrderItem(response) {
-  if (!response) return {};
-  if (response.data && Array.isArray(response.data)) return response.data[0] || {};
-  if (response.data && Array.isArray(response.data.data))
-    return response.data.data[0] || {};
-  if (response.data && response.data.data && typeof response.data.data === "object")
-    return response.data.data;
-  return response.data && typeof response.data === "object" ? response.data : {};
-}
-
-function supplierOrderStatusCode(response) {
-  var item = firstOrderItem(response);
-  var status =
-    item.status !== undefined
-      ? item.status
-      : item.status_code !== undefined
-        ? item.status_code
-        : response && response.status;
-  return supplierStatusCode(status);
-}
-
-function supplierPublishedAt(response) {
-  var item = firstOrderItem(response);
-  var value =
-    item.publishedAt || item.published_at || item.publication_published_at;
   if (typeof value !== "string" || value.length > 64) return "";
-  var timestamp = Date.parse(value);
+  const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : "";
 }
 

@@ -15,6 +15,11 @@ import {
   searchResourcePage,
   setDraft,
   syncOrder,
+  syncAllOrders,
+  prepareOrderStatusAnomalyResolution,
+  resumeOrderTracking,
+  confirmOrderPublished,
+  confirmOrderNotPublished,
 } from "../../bridge/media";
 import { useWorkspaceScope } from "../workspace/workspace-coordinator-context";
 import { createMediaFeature } from "./media-feature.js";
@@ -37,6 +42,11 @@ export function useMediaFeature() {
       previewArticle,
       getOrders,
       syncOrder,
+      syncAllOrders,
+      prepareOrderStatusAnomalyResolution,
+      resumeOrderTracking,
+      confirmOrderPublished,
+      confirmOrderNotPublished,
       openPublishedUrl,
     });
   }

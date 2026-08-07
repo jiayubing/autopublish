@@ -647,6 +647,17 @@ function createArticleMutationCoordinator(options) {
           throw mutationError("PAID_MEDIA_TITLE_TOO_LONG");
         if (!title.trim() || !body.trim())
           throw mutationError("PAID_MEDIA_ARTICLE_CONTENT_REQUIRED");
+        let customerSnapshotV1;
+        try {
+          customerSnapshotV1 = domain.parseCustomerSnapshotV1(
+            request.customerSnapshotsV1 &&
+              request.customerSnapshotsV1[ref.clientId],
+          );
+        } catch (_) {
+          throw mutationError("PAID_MEDIA_CUSTOMER_SNAPSHOT_INVALID");
+        }
+        if (customerSnapshotV1.clientId !== ref.clientId)
+          throw mutationError("PAID_MEDIA_CUSTOMER_SNAPSHOT_INVALID");
         return Object.freeze({
           clientId: ref.clientId,
           articleRef: ref,
@@ -655,6 +666,7 @@ function createArticleMutationCoordinator(options) {
           publicationId: `paid-publication-${crypto.randomUUID()}`,
           attemptId: `paid-attempt-${crypto.randomUUID()}`,
           target,
+          customerSnapshotV1,
           publicationSnapshot: Object.freeze({
             articleId: ref.articleId,
             title: title.trim(),

@@ -4,17 +4,17 @@ const domain = require("../../../domain");
 const {
   canonicalDisplayPrice,
   fromText,
-  observationTimestamp,
   rejectSensitive,
   safeDisplayText,
-  safeEvidenceUrl,
-  supplierObservation,
-  supplierStatusCode,
   text,
 } = require("./operational-store-utils");
 const {
   createOperationalStoreOrderLink,
 } = require("./operational-store-order-link");
+const {
+  createOrderObservationAggregate,
+  projectOrderHistoryV1,
+} = require("./operational-store-order-observation-aggregate");
 
 function createOrderAggregate(context, activeTarget) {
   const {
@@ -1344,18 +1344,32 @@ function createOrderAggregate(context, activeTarget) {
     });
   }
 
+  function projectOrderHistory(row) {
+    const history = row.history_json
+      ? fromText(row.history_json)
+      : {
+          version: 1,
+          orderIdentityV1: { version: 1, orderId: row.order_id },
+          entries: [],
+        };
+    try {
+      return projectOrderHistoryV1(history);
+    } catch (error) {
+      throw fail(error.code || "ORDER_HISTORY_V1_INVALID");
+    }
+  }
+
   function listRemoteOrders() {
     open();
     return Object.freeze(
       db
         .prepare(
-          "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id ORDER BY o.created_at DESC",
+          "SELECT o.order_id,o.remote_id,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json,h.evidence_json AS history_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) ORDER BY o.created_at DESC",
         )
         .all()
         .map((row) => {
           const target = fromText(row.target_json) || {};
-          const evidence = fromText(row.payload_json) || {};
-          const observation = supplierObservation(evidence);
+          const projection = projectOrderHistory(row);
           return Object.freeze({
             orderId: row.order_id,
             orderNid: row.order_id,
@@ -1365,23 +1379,23 @@ function createOrderAggregate(context, activeTarget) {
             articleId: row.article_id,
             mediaResourceId: target.mediaResourceId || null,
             status: row.status,
-            supplierStatusCode: observation ? observation.statusCode : null,
-            supplierObservedAt: observation ? observation.observedAt : null,
-            publishedAt: observation ? observation.publishedAt : null,
-            remoteUrl: evidence.remoteUrl || null,
+            supplierStatusCode: projection.statusCode || null,
+            supplierObservedAt: projection.observedAt,
+            publishedAt: projection.publishedAt,
+            remoteUrl: projection.remoteUrl,
             createdAt: row.created_at,
           });
         }),
     );
   }
 
-  // This is the only order-list read model. It performs one bounded join for
-  // current orders and parses only each matched display snapshot.
+  // Legacy public order reads remain for older direct callers, but their
+  // status/evidence projection is delegated to the Ticket 15 history owner.
   function listOrderDisplayViews() {
     open();
     const rows = db
       .prepare(
-        "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id ORDER BY o.created_at DESC LIMIT 20000",
+        "SELECT o.order_id,o.remote_id,o.created_at,a.attempt_id,a.status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code,h.evidence_json AS history_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) ORDER BY o.created_at DESC LIMIT 20000",
       )
       .all();
     if (internalOrderProjectionObserver)
@@ -1392,8 +1406,7 @@ function createOrderAggregate(context, activeTarget) {
       });
     return Object.freeze(
       rows.map((row) => {
-        const evidence = fromText(row.payload_json) || {};
-        const observation = supplierObservation(evidence);
+        const projection = projectOrderHistory(row);
         const target = fromText(row.target_json) || {};
         return Object.freeze({
           orderId: row.order_id,
@@ -1404,10 +1417,10 @@ function createOrderAggregate(context, activeTarget) {
           articleId: row.article_id,
           mediaResourceId: target.mediaResourceId || null,
           submittedAt: row.created_at,
-          supplierStatusCode: observation ? observation.statusCode : "",
-          supplierObservedAt: observation ? observation.observedAt : null,
-          publishedAt: observation ? observation.publishedAt : null,
-          remoteUrl: evidence.remoteUrl || null,
+          supplierStatusCode: projection.statusCode,
+          supplierObservedAt: projection.observedAt,
+          publishedAt: projection.publishedAt,
+          remoteUrl: projection.remoteUrl,
           titleSnapshot: safeDisplayText(row.title_snapshot, 1000),
           filename: safeDisplayText(row.filename, 255),
           resourceNameSnapshot: safeDisplayText(
@@ -1423,93 +1436,10 @@ function createOrderAggregate(context, activeTarget) {
     );
   }
 
-  function recordRemoteOrderObservation(input) {
-    open();
-    const value = input || {};
-    if (
-      typeof value.orderId !== "string" ||
-      !value.orderId ||
-      !value.observation ||
-      !supplierStatusCode(value.observation.statusCode)
-    )
-      throw fail("OPERATIONAL_ORDER_OBSERVATION_INVALID");
-    if (String(value.observation.statusCode) === "2")
-      throw fail("PAID_PUBLICATION_SUCCESS_PATH_CLOSED");
-    const stamp = iso(clock);
-    const publishedAt = observationTimestamp(value.observation.publishedAt);
-    if (value.observation.publishedAt !== undefined && !publishedAt)
-      throw fail("OPERATIONAL_ORDER_OBSERVATION_INVALID");
-    return transaction(() => {
-      const row = db
-        .prepare(
-          "SELECT o.attempt_id,o.remote_id,o.payload_json,p.publication_id,p.article_id,p.target_json,p.status FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE o.order_id=?",
-        )
-        .get(value.orderId);
-      if (!row || (fromText(row.target_json) || {}).kind !== "media")
-        throw fail("OPERATIONAL_ORDER_NOT_FOUND");
-      const statusCode = supplierStatusCode(value.observation.statusCode);
-      let remoteUrl = null;
-      if (value.observation.remoteUrl !== undefined) {
-        remoteUrl = safeEvidenceUrl(value.observation.remoteUrl);
-        if (!remoteUrl) throw fail("OPERATIONAL_ORDER_EVIDENCE_REQUIRED");
-      }
-      const currentEvidence = fromText(row.payload_json) || {};
-      const previousObservation = supplierObservation(currentEvidence);
-      const observation = Object.freeze({
-        statusCode,
-        observedAt: stamp,
-        ...(publishedAt ||
-        (previousObservation && previousObservation.publishedAt)
-          ? { publishedAt: publishedAt || previousObservation.publishedAt }
-          : {}),
-      });
-      const evidence = Object.assign({}, currentEvidence, {
-        supplierObservation: observation,
-        ...(remoteUrl ? { remoteUrl } : {}),
-      });
-      db.prepare(
-        "UPDATE remote_orders SET payload_json=? WHERE order_id=?",
-      ).run(text(evidence), value.orderId);
-      if (remoteUrl)
-        db.prepare(
-          "UPDATE remote_evidence SET remote_url=?,evidence_json=? WHERE attempt_id=? AND remote_id=?",
-        ).run(remoteUrl, text(evidence), row.attempt_id, row.remote_id);
-      // Supplier observations do not transition publication success in Ticket
-      // 09; the paid publication success port is owned by Ticket 15.
-      let publicationStatus = row.status;
-      if (statusCode === "4" && row.status !== "published") {
-        publicationStatus = "failed";
-        db.prepare(
-          "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
-        ).run("failed", stamp, row.attempt_id);
-        db.prepare(
-          "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
-        ).run("failed", stamp, row.publication_id);
-        db.prepare(
-          "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
-        ).run("resolved", text(evidence), stamp, row.attempt_id);
-      }
-      if (statusCode === "4" || (statusCode === "2" && remoteUrl))
-        activeTarget.release({
-          articleId: row.article_id,
-          publicationId: row.publication_id,
-          attemptId: row.attempt_id,
-        });
-      return Object.freeze({
-        orderId: value.orderId,
-        attemptId: row.attempt_id,
-        publicationId: row.publication_id,
-        publicationStatus,
-        supplierStatusCode: statusCode,
-      });
-    });
-  }
-
   return Object.freeze({
     attachRemoteOrderEvidence,
     listRemoteOrders,
     listOrderDisplayViews,
-    recordRemoteOrderObservation,
     recordPaidOrderCreationArticleRejection,
     recordPaidOrderCreationSystemRejection,
     recordPaidOrderCreationSuccess,
@@ -1520,4 +1450,4 @@ function createOrderAggregate(context, activeTarget) {
   });
 }
 
-module.exports = { createOrderAggregate };
+module.exports = { createOrderAggregate, createOrderObservationAggregate };

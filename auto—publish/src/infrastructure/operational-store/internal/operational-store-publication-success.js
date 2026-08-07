@@ -83,6 +83,31 @@ function createPublicationSuccessPrimitive(context) {
     }
   }
 
+  function readFirstPublicationSuccess(articleId) {
+    const existing = db
+      .prepare(
+        "SELECT p.publication_id,a.attempt_id,e.evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.status='published' LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id=? AND p.status='published' ORDER BY p.updated_at,p.publication_id LIMIT 1",
+      )
+      .get(articleId);
+    if (!existing) return null;
+    let publicationEvidenceV1;
+    try {
+      publicationEvidenceV1 = domain.parsePublicationEvidenceV1(
+        fromText(existing.evidence_json),
+      );
+    } catch (_) {
+      throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
+    }
+    return Object.freeze({
+      attemptId: existing.attempt_id,
+      publicationId: existing.publication_id,
+      status: "published",
+      idempotent: true,
+      firstWins: true,
+      publicationEvidenceV1,
+    });
+  }
+
   function applyFirstPublicationSuccess(input) {
     const value = input || {};
     const attemptId = domain.AttemptId.serialize(
@@ -100,36 +125,8 @@ function createPublicationSuccessPrimitive(context) {
     if (row.article_id !== evidence.articleIdentityV1.articleId)
       throw fail("PUBLICATION_EVIDENCE_ARTICLE_MISMATCH");
 
-    const existingSuccess = db
-      .prepare(
-        "SELECT p.publication_id,a.attempt_id,e.evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.status='published' LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id=? AND p.status='published' ORDER BY p.updated_at,p.publication_id LIMIT 1",
-      )
-      .get(row.article_id);
-    if (existingSuccess) {
-      const existingEvidence = domain.parsePublicationEvidenceV1(
-        fromText(existingSuccess.evidence_json),
-      );
-      if (
-        existingSuccess.attempt_id === attemptId &&
-        JSON.stringify(existingEvidence) === JSON.stringify(evidence)
-      )
-        return Object.freeze({
-          attemptId,
-          publicationId: existingSuccess.publication_id,
-          status: "published",
-          idempotent: true,
-          firstWins: true,
-          publicationEvidenceV1: evidence,
-        });
-      return Object.freeze({
-        attemptId: existingSuccess.attempt_id,
-        publicationId: existingSuccess.publication_id,
-        status: "published",
-        idempotent: true,
-        firstWins: true,
-        publicationEvidenceV1: existingEvidence,
-      });
-    }
+    const existingSuccess = readFirstPublicationSuccess(row.article_id);
+    if (existingSuccess) return existingSuccess;
 
     const existingEvidence = db
       .prepare(
@@ -156,13 +153,13 @@ function createPublicationSuccessPrimitive(context) {
     }
     const attemptChanged = db
       .prepare(
-        "UPDATE publication_attempts SET status='published',finished_at=? WHERE attempt_id=? AND status IN('remote_started','uncertain','failed')",
+        "UPDATE publication_attempts SET status='published',finished_at=? WHERE attempt_id=? AND status IN('remote_started','submitted','uncertain','failed')",
       )
       .run(value.stamp, attemptId).changes;
     if (attemptChanged !== 1) throw fail("PUBLICATION_SUCCESS_STATE_CONFLICT");
     const publicationChanged = db
       .prepare(
-        "UPDATE publication_records SET status='published',updated_at=? WHERE publication_id=? AND status IN('remote_started','uncertain','failed')",
+        "UPDATE publication_records SET status='published',updated_at=? WHERE publication_id=? AND status IN('remote_started','submitted','uncertain','failed')",
       )
       .run(value.stamp, row.publication_id).changes;
     if (publicationChanged !== 1)
@@ -181,7 +178,10 @@ function createPublicationSuccessPrimitive(context) {
     });
   }
 
-  return Object.freeze({ applyFirstPublicationSuccess });
+  return Object.freeze({
+    applyFirstPublicationSuccess,
+    readFirstPublicationSuccess,
+  });
 }
 
 module.exports = { createPublicationSuccessPrimitive };

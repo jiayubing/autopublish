@@ -665,6 +665,21 @@ const COMMON_ERRORS = Object.freeze({
     retryability: "safe",
     userMessage: "付费确认已过期，请重新预检。",
   },
+  PAID_MEDIA_CUSTOMER_SNAPSHOT_INVALID: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "客户身份快照不可用，未创建付费批次。",
+  },
+  PAID_MEDIA_CUSTOMER_SNAPSHOT_RESOLVER_REQUIRED: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "客户身份读取能力不可用，未创建付费批次。",
+  },
+  PAID_ADMISSION_CUSTOMER_SNAPSHOT_INVALID: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "客户身份快照无效，未创建付费批次。",
+  },
   PAID_ADMISSION_TRANSITION_UNAVAILABLE: {
     category: "internal",
     retryability: "manual-check",

@@ -79,6 +79,11 @@ function fixture(options) {
     lifecycleFacts: transitionPorts.paidAdmissionTransitions,
     queryResource: async () => Object.assign({}, resource),
     systemSubmissionCodeProvider: () => code,
+    clientSnapshotResolver: (clientId) => ({
+      version: 1,
+      clientId,
+      displayName: "客户甲",
+    }),
     clock: () => new Date(NOW),
   });
   contentStore.createArticle(article("article-a"));

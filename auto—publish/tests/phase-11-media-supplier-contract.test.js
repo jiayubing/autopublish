@@ -215,7 +215,12 @@ test("getOrderDetails maps all supported status codes and keeps unknown status c
         return successful([
           { order_nid: "order-0", status: 0, resource_id: "resource-1" },
           { order_nid: "order-1", status: 1, resource_id: "resource-1" },
-          { order_nid: "order-2", status: 2, resource_id: "resource-1" },
+          {
+            order_nid: "order-2",
+            status: 2,
+            resource_id: "resource-1",
+            actual_amount: 12.5,
+          },
           { order_nid: "order-4", status: 4, resource_id: "resource-1" },
           { order_nid: "order-9", status: 9, resource_id: "resource-1" },
           { order_nid: "order-x", status: 99, resource_id: "resource-1" },
@@ -238,7 +243,12 @@ test("getOrderDetails maps all supported status codes and keeps unknown status c
     orders: [
       { orderId: "order-0", status: "pending", resourceId: "resource-1" },
       { orderId: "order-1", status: "scheduled", resourceId: "resource-1" },
-      { orderId: "order-2", status: "published", resourceId: "resource-1" },
+      {
+        orderId: "order-2",
+        status: "published",
+        resourceId: "resource-1",
+        actualAmount: 12.5,
+      },
       { orderId: "order-4", status: "rejected", resourceId: "resource-1" },
       { orderId: "order-9", status: "aftercare", resourceId: "resource-1" },
       { orderId: "order-x", status: "unknown", resourceId: "resource-1" },
@@ -431,12 +441,18 @@ test("the application publisher keeps supplier identity-provider failures defini
 test("the application order service consumes canonical order details from the supplier port", async () => {
   const observations = [];
   const service = createMediaOrderService({
-    clientProvider: () => {
-      throw new Error("legacy client must not be constructed");
-    },
-    operationalStore: {
-      listOrderDisplayViews: () => [],
-      recordRemoteOrderObservation: (input) => observations.push(input),
+    orderObservationTransitions: {
+      listOrderObservationViews: () => [],
+      getOrderObservationContext: () => ({
+        orderSnapshotFingerprint: "a".repeat(64),
+        remoteUrl: null,
+      }),
+      recordOrderObservation: (input) => observations.push(input),
+      recordOrderStatusAnomaly: () => ({}),
+      prepareOrderStatusAnomalyResolution: () => ({}),
+      resumeOrderTracking: () => ({}),
+      confirmOrderPublished: () => ({}),
+      confirmOrderNotPublished: () => ({}),
     },
     supplierProvider: () => ({
       getOrderDetails: async (orderIds) => {
@@ -455,20 +471,28 @@ test("the application order service consumes canonical order details from the su
         };
       },
     }),
+    clock: () => new Date("2026-08-05T12:05:00.000Z"),
   });
 
   await service.syncOrder("order-2");
 
-  assert.deepEqual(observations, [
-    {
-      orderId: "order-2",
-      observation: {
-        statusCode: "2",
-        remoteUrl: "https://publisher.example/article-2",
-        publishedAt: "2026-08-05T12:00:00.000Z",
-      },
-    },
-  ]);
+  const observation = observations[0].orderObservationV1;
+  assert.deepEqual(
+    [
+      observation.orderIdentityV1.orderId,
+      observation.statusCode,
+      observation.remoteUrl,
+      observation.eventAt,
+      observation.eventAtSource,
+    ],
+    [
+      "order-2",
+      "2",
+      "https://publisher.example/article-2",
+      "2026-08-05T12:00:00.000Z",
+      "provider_event_time",
+    ],
+  );
 });
 
 test("the application resource service refreshes through the canonical supplier port", async () => {
