@@ -57,6 +57,23 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:sync-order", (event, orderNid) =>
     invoke(() => application.syncOrder(orderNid)),
   );
+  ipcMain.handle("media:sync-all-orders", () =>
+    invoke(() => application.syncAllOrders()),
+  );
+  ipcMain.handle(
+    "media:prepare-order-status-anomaly-resolution",
+    (event, input) =>
+      invoke(() => application.prepareOrderStatusAnomalyResolution(input)),
+  );
+  ipcMain.handle("media:resume-order-tracking", (event, input) =>
+    invoke(() => application.resumeOrderTracking(input)),
+  );
+  ipcMain.handle("media:confirm-order-published", (event, input) =>
+    invoke(() => application.confirmOrderPublished(input)),
+  );
+  ipcMain.handle("media:confirm-order-not-published", (event, input) =>
+    invoke(() => application.confirmOrderNotPublished(input)),
+  );
   ipcMain.handle("media:open-published-url", (event, orderNid) =>
     invoke(() => application.openPublishedUrl(orderNid)),
   );

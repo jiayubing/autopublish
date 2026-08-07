@@ -4,13 +4,14 @@ const {
   fromText,
   cancellationResolutionFromIntent,
   safeDisplayText,
-  safeEvidenceUrl,
   safeOperationalPayload,
-  supplierObservation,
 } = require("./operational-store-utils");
 const {
   projectPaidOrderResolutionAttention,
 } = require("./operational-store-paid-resolution-attention");
+const {
+  projectOrderHistoryV1,
+} = require("./operational-store-order-observation-aggregate");
 
 function createOperationalStoreFactReader(context) {
   const { db, open, fail, internalLifecycleProjectionObserver } = context;
@@ -51,7 +52,7 @@ function createOperationalStoreFactReader(context) {
     const inList = placeholders(articleIds);
     const publications = db
       .prepare(
-        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.remote_id,e.remote_url FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.evidence_id=(SELECT latest_evidence.evidence_id FROM remote_evidence latest_evidence WHERE latest_evidence.attempt_id=a.attempt_id ORDER BY latest_evidence.created_at DESC,latest_evidence.evidence_id DESC LIMIT 1) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
+        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS success_evidence,e.remote_url AS success_remote_url FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
       )
       .all(...articleIds)
       .map((row) => {
@@ -59,6 +60,16 @@ function createOperationalStoreFactReader(context) {
         const cancellation = cancellationResolutionFromIntent(
           row.intent_payload,
         );
+        let successEvidence = null;
+        if (row.success_evidence) {
+          try {
+            successEvidence = domain.parsePublicationEvidenceV1(
+              fromText(row.success_evidence),
+            );
+          } catch (_) {
+            throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
+          }
+        }
         return Object.freeze({
           publicationId: row.publication_id,
           articleId: row.article_id,
@@ -74,8 +85,16 @@ function createOperationalStoreFactReader(context) {
             : {}),
           target,
           attemptId: row.attempt_id || null,
-          remoteId: row.remote_id || null,
-          remoteUrl: safeEvidenceUrl(row.remote_url) || null,
+          remoteId:
+            successEvidence && successEvidence.orderNumber
+              ? successEvidence.orderNumber
+              : null,
+          remoteUrl:
+            domain.normalizePublishedArticleUrl(
+              successEvidence
+                ? successEvidence.remoteUrl
+                : row.success_remote_url,
+            ) || null,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
           finishedAt: row.finished_at || null,
@@ -86,8 +105,9 @@ function createOperationalStoreFactReader(context) {
         `SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g.pause_intent FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id LEFT JOIN submission_queue_groups g ON g.queue_group_id=q.queue_group_id WHERE s.article_id IN(${inList}) ORDER BY s.article_id,s.item_id`,
       )
       .all(...articleIds)
-      .map((row) =>
-        Object.freeze({
+      .map((row) => {
+        const payload = safeOperationalPayload(row.payload_json);
+        return Object.freeze({
           itemId: row.item_id,
           batchId: row.batch_id,
           articleId: row.article_id,
@@ -95,23 +115,40 @@ function createOperationalStoreFactReader(context) {
           revision: row.revision,
           status: row.status,
           canCancel: row.status === "queued",
-          payload: safeOperationalPayload(row.payload_json),
+          payload,
+          outcomeStatus:
+            payload && typeof payload.outcomeStatus === "string"
+              ? payload.outcomeStatus
+              : null,
           queueGroupId: row.queue_group_id || null,
           position: row.position || null,
           platformId: row.platform_id || null,
           accountProfileId: row.account_profile_id || null,
           pauseIntent: row.pause_intent || null,
           createdAt: row.queued_at || null,
-        }),
-      );
+        });
+      });
     const orders = db
       .prepare(
-        `SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id WHERE p.article_id IN(${inList}) ORDER BY o.created_at DESC,o.order_id DESC`,
+        `SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code,h.evidence_json AS history_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) WHERE p.article_id IN(${inList}) ORDER BY o.created_at DESC,o.order_id DESC`,
       )
       .all(...articleIds)
       .map((row) => {
-        const evidence = fromText(row.payload_json) || {};
-        const observation = supplierObservation(evidence);
+        let snapshot;
+        let history;
+        try {
+          snapshot = domain.parseOrderSnapshotV1(fromText(row.payload_json));
+          history = row.history_json
+            ? domain.parseOrderHistoryV1(fromText(row.history_json))
+            : domain.parseOrderHistoryV1({
+                version: 1,
+                orderIdentityV1: snapshot.orderIdentityV1,
+                entries: [],
+              });
+        } catch (error) {
+          throw fail(error.code || "ORDER_HISTORY_V1_INVALID");
+        }
+        const historyProjection = projectOrderHistoryV1(history);
         const target = fromText(row.target_json) || {};
         return Object.freeze({
           orderId: row.order_id,
@@ -127,10 +164,12 @@ function createOperationalStoreFactReader(context) {
               ? `media-resource:${target.mediaResourceId}`
               : null,
           publicationStatus: row.publication_status,
-          supplierStatusCode: observation ? observation.statusCode : "",
-          supplierObservedAt: observation ? observation.observedAt : null,
-          publishedAt: observation ? observation.publishedAt : null,
-          remoteUrl: safeEvidenceUrl(evidence.remoteUrl) || null,
+          supplierStatusCode: historyProjection.statusCode,
+          supplierObservedAt: historyProjection.observedAt,
+          publishedAt: historyProjection.publishedAt,
+          remoteUrl:
+            domain.normalizePublishedArticleUrl(historyProjection.remoteUrl) ||
+            null,
           titleSnapshot: safeDisplayText(row.title_snapshot, 1000),
           filename: safeDisplayText(row.filename, 255),
           resourceNameSnapshot: safeDisplayText(
@@ -142,7 +181,7 @@ function createOperationalStoreFactReader(context) {
             row.estimated_total === null ? null : row.estimated_total,
           systemSubmissionCode:
             safeDisplayText(row.system_submission_code, 128) || null,
-          submittedAt: row.created_at,
+          submittedAt: snapshot.remoteCallStartedAt,
         });
       });
     const attentionItems = db

@@ -22,7 +22,20 @@ const COMMAND_NAMES = [
   "togglePool",
   "checkBalance",
   "syncOrder",
+  "syncAllOrders",
+  "prepareOrderStatusAnomalyResolution",
+  "resumeOrderTracking",
+  "confirmOrderPublished",
+  "confirmOrderNotPublished",
   "openPublishedUrl",
+];
+const ORDER_MUTATION_COMMANDS = [
+  "syncOrder",
+  "syncAllOrders",
+  "prepareOrderStatusAnomalyResolution",
+  "resumeOrderTracking",
+  "confirmOrderPublished",
+  "confirmOrderNotPublished",
 ];
 
 function safeError(value, fallbackCode, fallbackMessage) {
@@ -111,6 +124,11 @@ export function createMediaFeature(adapters = {}) {
     "previewArticle",
     "getOrders",
     "syncOrder",
+    "syncAllOrders",
+    "prepareOrderStatusAnomalyResolution",
+    "resumeOrderTracking",
+    "confirmOrderPublished",
+    "confirmOrderNotPublished",
     "openPublishedUrl",
   ];
   for (const name of required) {
@@ -138,7 +156,13 @@ export function createMediaFeature(adapters = {}) {
   let resources = { ...emptyPage(), search: "" };
   let pool = { ...emptyPage(), memberResourceIds: [] };
   let balance = { value: 0, query: emptyQuery() };
-  let orders = { items: [], query: emptyQuery() };
+  let orders = {
+    items: [],
+    query: emptyQuery(),
+    syncFailures: [],
+    anomalyPreparations: {},
+  };
+  let autoRefreshedOrderScope = null;
   let selectionRevision = 0;
   let syncingOrderNid = null;
   let syncingOrderRevision = 0;
@@ -168,7 +192,14 @@ export function createMediaFeature(adapters = {}) {
       orders: Object.freeze({
         ...orders,
         items: Object.freeze([...orders.items]),
+        syncFailures: Object.freeze([...(orders.syncFailures || [])]),
+        anomalyPreparations: Object.freeze({
+          ...(orders.anomalyPreparations || {}),
+        }),
         syncingOrderNid,
+        mutationBusy: ORDER_MUTATION_COMMANDS.some(
+          (name) => owners[name].getSnapshot().busy,
+        ),
       }),
       selectionRevision,
       commands: Object.freeze(
@@ -389,8 +420,20 @@ export function createMediaFeature(adapters = {}) {
     try {
       const items = await adapters.getOrders();
       if (!queries.orders.isCurrent(token)) return;
+      const nextItems = Array.isArray(items) ? items : [];
+      const openAnomalyOrderIds = new Set(
+        nextItems
+          .filter((item) => item && item.anomaly)
+          .map((item) => item.orderNid),
+      );
       orders = {
-        items: Array.isArray(items) ? items : [],
+        ...orders,
+        items: nextItems,
+        anomalyPreparations: Object.fromEntries(
+          Object.entries(orders.anomalyPreparations || {}).filter(([orderId]) =>
+            openAnomalyOrderIds.has(orderId),
+          ),
+        ),
         query: Object.freeze({ loading: false, error: null, reason }),
       };
       publish();
@@ -418,9 +461,21 @@ export function createMediaFeature(adapters = {}) {
     fallbackCode,
     fallbackMessage,
     afterSuccess,
+    commandOptions,
   ) {
-    if (disposed || !scope || owners[name].getSnapshot().busy) return undefined;
+    const options = commandOptions || {};
+    if (
+      disposed ||
+      !scope ||
+      owners[name].getSnapshot().busy ||
+      (options.exclusiveOrderMutation === true &&
+        ORDER_MUTATION_COMMANDS.some(
+          (commandName) => owners[commandName].getSnapshot().busy,
+        ))
+    )
+      return undefined;
     const token = owners[name].begin(scope);
+    if (typeof options.onAcquired === "function") options.onAcquired(token);
     publish();
     try {
       const result = await action();
@@ -462,6 +517,29 @@ export function createMediaFeature(adapters = {}) {
     publish();
   }
 
+  function resolvePreparedOrderStatusAnomaly(orderId, action, adapter) {
+    const preparation = orders.anomalyPreparations[orderId];
+    if (!preparation || !preparation.allowedActions.includes(action))
+      return undefined;
+    return runCommand(
+      action,
+      () =>
+        adapter({
+          orderId,
+          confirmationToken: preparation.confirmationToken,
+        }),
+      "ORDER_STATUS_ANOMALY_RESOLUTION_FAILED",
+      "订单状态核对未能安全完成。",
+      async () => {
+        const next = { ...orders.anomalyPreparations };
+        delete next[orderId];
+        orders = { ...orders, anomalyPreparations: next };
+        await refreshOrders("command-result");
+      },
+      { exclusiveOrderMutation: true },
+    );
+  }
+
   const feature = {
     getSnapshot: () => snapshot,
     subscribe(listener) {
@@ -487,7 +565,13 @@ export function createMediaFeature(adapters = {}) {
       resources = { ...emptyPage(), search: "" };
       pool = { ...emptyPage(), memberResourceIds: [] };
       balance = { value: 0, query: emptyQuery() };
-      orders = { items: [], query: emptyQuery() };
+      orders = {
+        items: [],
+        query: emptyQuery(),
+        syncFailures: [],
+        anomalyPreparations: {},
+      };
+      autoRefreshedOrderScope = null;
       selectionRevision = 0;
       syncingOrderNid = null;
       syncingOrderRevision += 1;
@@ -516,6 +600,12 @@ export function createMediaFeature(adapters = {}) {
     loadPoolPage,
     refreshBalance,
     refreshOrders,
+    openOrders() {
+      if (!scope || autoRefreshedOrderScope === scope.workspaceRuntimeId)
+        return undefined;
+      autoRefreshedOrderScope = scope.workspaceRuntimeId;
+      return feature.syncAllOrders();
+    },
     async searchResources(search) {
       resources = {
         ...resources,
@@ -671,9 +761,7 @@ export function createMediaFeature(adapters = {}) {
     },
     syncOrder(orderNid) {
       if (!orderNid) return undefined;
-      const requestRevision = ++syncingOrderRevision;
-      syncingOrderNid = orderNid;
-      publish();
+      let requestRevision = null;
       return runCommand(
         "syncOrder",
         () => adapters.syncOrder(orderNid),
@@ -683,6 +771,13 @@ export function createMediaFeature(adapters = {}) {
           await refreshOrders("command-result");
           syncingOrderNid = null;
           publish();
+        },
+        {
+          exclusiveOrderMutation: true,
+          onAcquired() {
+            requestRevision = ++syncingOrderRevision;
+            syncingOrderNid = orderNid;
+          },
         },
       ).then((value) => {
         if (
@@ -694,6 +789,65 @@ export function createMediaFeature(adapters = {}) {
         }
         return value;
       });
+    },
+    syncAllOrders() {
+      return runCommand(
+        "syncAllOrders",
+        () => adapters.syncAllOrders(),
+        "MEDIA_ORDER_SYNC_FAILED",
+        "刷新订单失败。",
+        async (result) => {
+          orders = {
+            ...orders,
+            syncFailures: Array.isArray(result?.items)
+              ? result.items.filter((item) => !item.ok)
+              : [],
+          };
+          await refreshOrders("command-result");
+        },
+        { exclusiveOrderMutation: true },
+      );
+    },
+    prepareOrderStatusAnomalyResolution(orderId) {
+      if (!orderId) return undefined;
+      return runCommand(
+        "prepareOrderStatusAnomalyResolution",
+        () => adapters.prepareOrderStatusAnomalyResolution(orderId),
+        "ORDER_STATUS_ANOMALY_PREPARE_FAILED",
+        "无法准备订单状态核对。",
+        (preparation) => {
+          orders = {
+            ...orders,
+            anomalyPreparations: {
+              ...orders.anomalyPreparations,
+              [orderId]: preparation,
+            },
+          };
+          publish();
+        },
+        { exclusiveOrderMutation: true },
+      );
+    },
+    resumeOrderTracking(orderId) {
+      return resolvePreparedOrderStatusAnomaly(
+        orderId,
+        "resumeOrderTracking",
+        adapters.resumeOrderTracking,
+      );
+    },
+    confirmOrderPublished(orderId) {
+      return resolvePreparedOrderStatusAnomaly(
+        orderId,
+        "confirmOrderPublished",
+        adapters.confirmOrderPublished,
+      );
+    },
+    confirmOrderNotPublished(orderId) {
+      return resolvePreparedOrderStatusAnomaly(
+        orderId,
+        "confirmOrderNotPublished",
+        adapters.confirmOrderNotPublished,
+      );
     },
     openPublishedUrl(orderNid) {
       if (!orderNid) return undefined;

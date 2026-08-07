@@ -86,6 +86,19 @@ type OrdersApi = {
   syncOrder: (
     orderNid: string,
   ) => Promise<IpcResponse<{ order: Record<string, unknown> }>>;
+  syncAllOrders: () => Promise<IpcResponse<OrderSyncAllResult>>;
+  prepareOrderStatusAnomalyResolution: (input: {
+    orderId: string;
+  }) => Promise<IpcResponse<OrderAnomalyPreparation>>;
+  resumeOrderTracking: (
+    input: OrderAnomalyResolutionInput,
+  ) => Promise<IpcResponse<OrderAnomalyResolutionResult>>;
+  confirmOrderPublished: (
+    input: OrderAnomalyResolutionInput,
+  ) => Promise<IpcResponse<OrderAnomalyResolutionResult>>;
+  confirmOrderNotPublished: (
+    input: OrderAnomalyResolutionInput,
+  ) => Promise<IpcResponse<OrderAnomalyResolutionResult>>;
   openPublishedUrl: (
     orderNid: string,
   ) => Promise<IpcResponse<{ completed: boolean }>>;
@@ -105,6 +118,37 @@ type OrdersApi = {
     orderCreationAttemptId: string;
     confirmationToken: string;
   }) => Promise<IpcResponse<PaidOrderResolutionResult>>;
+};
+
+export type OrderSyncAllResult = {
+  items: Array<{ orderNid: string; ok: boolean; errorCode: string | null }>;
+  succeeded: number;
+  failed: number;
+};
+
+export type OrderAnomalyPreparation = {
+  orderId: string;
+  classification:
+    | "verified_trackable"
+    | "verified_published"
+    | "verified_non_published_terminal"
+    | "inconclusive";
+  confirmationToken: string;
+  expiresAt: string;
+  allowedActions: Array<
+    "resumeOrderTracking" | "confirmOrderPublished" | "confirmOrderNotPublished"
+  >;
+};
+
+export type OrderAnomalyResolutionInput = {
+  orderId: string;
+  confirmationToken: string;
+};
+
+export type OrderAnomalyResolutionResult = {
+  orderId: string;
+  status: "tracking_resumed" | "published" | "not_published";
+  idempotent: boolean;
 };
 
 type PaidOrderResolutionPreparation = {
@@ -223,11 +267,17 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
     title: String(raw.title || ""),
     orderNid: String(raw.orderNid || ""),
     statusCode: String(raw.statusCode || ""),
+    createdAt: String(raw.createdAt || ""),
     submittedAt: String(raw.submittedAt || ""),
     publishedAt: String(raw.publishedAt || ""),
     resourceName: String(raw.resourceName || ""),
     price: typeof raw.price === "string" ? raw.price : "",
+    actualAmount: typeof raw.actualAmount === "string" ? raw.actualAmount : "",
     hasPublishedUrl: raw.hasPublishedUrl === true,
+    anomaly:
+      raw.anomaly && typeof raw.anomaly === "object"
+        ? (raw.anomaly as RealOrder["anomaly"])
+        : null,
   };
 }
 
@@ -400,6 +450,49 @@ export async function syncOrder(orderNid: string): Promise<unknown> {
   return unwrap(
     requireBridgeMethod(api.syncOrder)(orderNid),
     "syncOrder failed",
+  );
+}
+export async function syncAllOrders(): Promise<OrderSyncAllResult> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.syncAllOrders)(),
+    "syncAllOrders failed",
+  );
+}
+export async function prepareOrderStatusAnomalyResolution(
+  orderId: string,
+): Promise<OrderAnomalyPreparation> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.prepareOrderStatusAnomalyResolution)({ orderId }),
+    "prepareOrderStatusAnomalyResolution failed",
+  );
+}
+export async function resumeOrderTracking(
+  input: OrderAnomalyResolutionInput,
+): Promise<OrderAnomalyResolutionResult> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.resumeOrderTracking)(input),
+    "resumeOrderTracking failed",
+  );
+}
+export async function confirmOrderPublished(
+  input: OrderAnomalyResolutionInput,
+): Promise<OrderAnomalyResolutionResult> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.confirmOrderPublished)(input),
+    "confirmOrderPublished failed",
+  );
+}
+export async function confirmOrderNotPublished(
+  input: OrderAnomalyResolutionInput,
+): Promise<OrderAnomalyResolutionResult> {
+  const api = ordersApi();
+  return unwrap(
+    requireBridgeMethod(api.confirmOrderNotPublished)(input),
+    "confirmOrderNotPublished failed",
   );
 }
 export async function openPublishedUrl(orderNid: string): Promise<void> {

@@ -1,48 +1,7 @@
-const { URL } = require("node:url");
-
 function fail(code) {
   const error = new Error(code);
   error.code = code;
   return error;
-}
-
-function supplierStatusCode(value) {
-  const code = typeof value === "number" ? String(value) : value;
-  return ["0", "1", "2", "4", "9"].includes(code) ? code : null;
-}
-
-function supplierObservation(evidence) {
-  const value = evidence && evidence.supplierObservation;
-  const statusCode = value && supplierStatusCode(value.statusCode);
-  if (statusCode)
-    return {
-      statusCode,
-      observedAt: observationTimestamp(value.observedAt),
-      publishedAt: observationTimestamp(value.publishedAt),
-    };
-  return null;
-}
-
-function observationTimestamp(value) {
-  if (typeof value !== "string" || value.length > 64) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
-}
-
-function safeEvidenceUrl(value) {
-  if (typeof value !== "string" || value.length > 2048) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      !url.search &&
-      !url.hash
-      ? url.href
-      : null;
-  } catch (_) {
-    return null;
-  }
 }
 
 function safeDisplayText(value, max) {
@@ -142,10 +101,6 @@ function rejectSensitive(value) {
 
 module.exports = {
   fail,
-  supplierStatusCode,
-  supplierObservation,
-  observationTimestamp,
-  safeEvidenceUrl,
   safeDisplayText,
   canonicalDisplayPrice,
   iso,

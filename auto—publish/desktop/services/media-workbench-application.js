@@ -88,11 +88,10 @@ function createMediaWorkbenchApplication(options) {
   const orderService =
     values.mediaOrderService ||
     createMediaOrderService({
-      paths: values.paths,
-      clientProvider,
       supplierProvider,
-      operationalStore: values.operationalStore,
+      orderObservationTransitions: values.orderObservationTransitions,
       openExternal: values.openExternal,
+      clock: values.clock,
     });
   const workbenchService =
     values.mediaWorkbenchService ||
@@ -110,6 +109,7 @@ function createMediaWorkbenchApplication(options) {
           paidAdmission: values.paidAdmissionFacade,
           lifecycleFacts: values.paidLifecycleFacts,
           resourceService,
+          clientSnapshotResolver: values.clientSnapshotResolver,
           systemSubmissionCodeProvider: values.systemSubmissionCodeProvider,
           clock: values.clock,
         })
@@ -134,6 +134,33 @@ function createMediaWorkbenchApplication(options) {
       if (invalidateData) invalidateData("PAID_ORDER_RESOLUTION_CHANGED");
       return result;
     });
+  }
+
+  function orderMutation(command, reasonCode, changed) {
+    return Promise.resolve()
+      .then(command)
+      .then(
+        (result) => {
+          if (
+            invalidateData &&
+            (typeof changed === "function"
+              ? changed(result)
+              : !result || result.idempotent !== true)
+          )
+            invalidateData(reasonCode);
+          return result;
+        },
+        (error) => {
+          if (
+            invalidateData &&
+            error &&
+            error.mutation &&
+            error.mutation.changed === true
+          )
+            invalidateData(reasonCode);
+          throw error;
+        },
+      );
   }
 
   return Object.freeze({
@@ -260,7 +287,10 @@ function createMediaWorkbenchApplication(options) {
       items: orderService.listOrderViews().map(projectMediaOrder),
     }),
     syncOrder: async (orderNid) => {
-      await orderService.syncOrder(orderNid);
+      await orderMutation(
+        () => orderService.syncOrder(orderNid),
+        "PAID_ORDER_OBSERVATION_CHANGED",
+      );
       const order = orderService
         .listOrderViews()
         .filter((item) => String(item.orderNid) === String(orderNid))[0];
@@ -271,6 +301,33 @@ function createMediaWorkbenchApplication(options) {
       }
       return { order: projectMediaOrder(order) };
     },
+    syncAllOrders: () =>
+      orderMutation(
+        () => orderService.syncAllOrders(),
+        "PAID_ORDER_OBSERVATION_CHANGED",
+        (result) => Number(result && result.mutationCount) > 0,
+      ).then((result) => ({
+        items: Array.isArray(result && result.items) ? result.items : [],
+        succeeded: Number(result && result.succeeded) || 0,
+        failed: Number(result && result.failed) || 0,
+      })),
+    prepareOrderStatusAnomalyResolution: (input) =>
+      orderService.prepareOrderStatusAnomalyResolution(input || {}),
+    resumeOrderTracking: (input) =>
+      orderMutation(
+        () => orderService.resumeOrderTracking(input || {}),
+        "PAID_ORDER_STATUS_ANOMALY_RESOLVED",
+      ),
+    confirmOrderPublished: (input) =>
+      orderMutation(
+        () => orderService.confirmOrderPublished(input || {}),
+        "PAID_ORDER_STATUS_ANOMALY_RESOLVED",
+      ),
+    confirmOrderNotPublished: (input) =>
+      orderMutation(
+        () => orderService.confirmOrderNotPublished(input || {}),
+        "PAID_ORDER_STATUS_ANOMALY_RESOLVED",
+      ),
     openPublishedUrl: (orderNid) => orderService.openPublishedUrl(orderNid),
   });
 }

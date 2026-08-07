@@ -974,6 +974,16 @@ function createOperationalStoreQueueAggregate(context) {
     const clientId = domain.ClientId.serialize(
       domain.ClientId.parse(value.clientId),
     );
+    let customerSnapshotV1;
+    try {
+      customerSnapshotV1 = domain.parseCustomerSnapshotV1(
+        value.customerSnapshotV1,
+      );
+    } catch (_) {
+      throw fail("PAID_ADMISSION_CUSTOMER_SNAPSHOT_INVALID");
+    }
+    if (customerSnapshotV1.clientId !== clientId)
+      throw fail("PAID_ADMISSION_CUSTOMER_SNAPSHOT_INVALID");
     const publicationId = domain.PublicationId.serialize(
       domain.PublicationId.parse(value.publicationId),
     );
@@ -1009,6 +1019,7 @@ function createOperationalStoreQueueAggregate(context) {
       estimatedTotal,
       systemSubmissionCode,
       publicationSnapshot: snapshot,
+      customerSnapshotV1,
     });
     rejectSensitive(storedPayload);
     return Object.freeze({

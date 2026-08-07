@@ -4,9 +4,7 @@ const {
   dryRunOperationalStoreMigration,
 } = require("./internal/operational-store-runtime");
 const storeContext = require("./internal/operational-store-context");
-const {
-  createPublicationAggregate,
-} = require("./internal/operational-store-publication-aggregate");
+const publications = require("./internal/operational-store-publication-aggregate");
 const {
   createSubmissionAggregate,
 } = require("./internal/operational-store-submission-aggregate");
@@ -37,26 +35,28 @@ const {
 const {
   exposeOperationalStoreTransitionPorts,
 } = require("./internal/operational-store-transition-ports");
-const {
-  createPublicationSuccessPrimitive,
-} = require("./internal/operational-store-publication-success");
-const {
-  createRegularOutcomeAggregate,
-} = require("./internal/operational-store-regular-outcome-aggregate");
+const successes = require("./internal/operational-store-publication-success");
+const regularOutcomes = require("./internal/operational-store-regular-outcome-aggregate");
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
   const context = storeContext.createOperationalStoreContext(runtime, options);
   try {
     const activeTarget = createOperationalStoreActiveTargetAggregate(context);
-    const pub = createPublicationAggregate(context, activeTarget);
+    const pub = publications.createPublicationAggregate(context, activeTarget);
     const submission = createSubmissionAggregate(context);
     const prep = createSubmissionPreparationAggregate(context);
     const recover = recovery.createRecoveryAggregate(context, activeTarget);
     const order = orders.createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
     const paidExecution = createPaidExecutionAggregate(context);
-    const publicationSuccess = createPublicationSuccessPrimitive(context);
-    const regularOutcome = createRegularOutcomeAggregate(
+    const publicationSuccess =
+      successes.createPublicationSuccessPrimitive(context);
+    const orderObservation = orders.createOrderObservationAggregate(
+      context,
+      activeTarget,
+      publicationSuccess,
+    );
+    const regularOutcome = regularOutcomes.createRegularOutcomeAggregate(
       context,
       publicationSuccess,
     );
@@ -71,6 +71,7 @@ function createOperationalStore(options) {
       order,
       paidExecution,
       regularOutcome,
+      orderObservation,
     });
     return Object.freeze({
       databasePath: runtime.filename,
@@ -106,7 +107,6 @@ function createOperationalStore(options) {
       listPublicationRecords: pub.listPublicationRecords,
       listRemoteOrders: order.listRemoteOrders,
       listOrderDisplayViews: order.listOrderDisplayViews,
-      recordRemoteOrderObservation: order.recordRemoteOrderObservation,
       createSubmissionQueueGroup: queue.createSubmissionQueueGroup,
       setSubmissionQueueGroupPause: queue.setSubmissionQueueGroupPause,
       listSubmissionQueueGroups: queue.listSubmissionQueueGroups,

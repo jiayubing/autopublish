@@ -62,6 +62,11 @@ describe("Phase 06 media Renderer capacity", function () {
         submitSelected: async () => ({}),
         getOrders: async () => [],
         syncOrder: async () => ({ ok: true }),
+        syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
+        prepareOrderStatusAnomalyResolution: async () => ({}),
+        resumeOrderTracking: async () => ({}),
+        confirmOrderPublished: async () => ({}),
+        confirmOrderNotPublished: async () => ({}),
         openPublishedUrl: async () => ({ completed: true }),
       });
       feature.setScope({ workspaceRuntimeId: `synthetic-${total}` });

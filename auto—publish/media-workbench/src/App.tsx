@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ArticleList from "./components/ArticleList";
@@ -62,6 +62,9 @@ function AppContent() {
   const poolResources = mediaSnapshot.pool.items;
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
+  useEffect(() => {
+    if (currentView === "orders") void mediaFeature.openOrders();
+  }, [currentView, mediaFeature, mediaSnapshot.scope]);
   const dataLoaded =
     Boolean(mediaSnapshot.scope) &&
     [
@@ -359,14 +362,41 @@ function AppContent() {
                   <OrdersView
                     orders={orders}
                     onSyncOrder={(orderNid) => mediaFeature.syncOrder(orderNid)}
+                    onSyncAllOrders={() => mediaFeature.syncAllOrders()}
+                    onPrepareAnomaly={(orderNid) =>
+                      mediaFeature.prepareOrderStatusAnomalyResolution(orderNid)
+                    }
+                    onResolveAnomaly={(orderNid, action) =>
+                      action === "resumeOrderTracking"
+                        ? mediaFeature.resumeOrderTracking(orderNid)
+                        : action === "confirmOrderPublished"
+                          ? mediaFeature.confirmOrderPublished(orderNid)
+                          : mediaFeature.confirmOrderNotPublished(orderNid)
+                    }
                     onOpenPublishedUrl={(orderNid) =>
                       mediaFeature.openPublishedUrl(orderNid)
                     }
                     syncingOrderNid={mediaSnapshot.orders.syncingOrderNid}
+                    syncingAll={mediaSnapshot.commands.syncAllOrders.busy}
+                    orderActionsBusy={mediaSnapshot.orders.mutationBusy}
+                    syncFailures={mediaSnapshot.orders.syncFailures}
+                    anomalyPreparations={
+                      mediaSnapshot.orders.anomalyPreparations
+                    }
                     errorMessage={
                       mediaSnapshot.commands.openPublishedUrl.error
                         ?.userMessage ||
                       mediaSnapshot.commands.syncOrder.error?.userMessage ||
+                      mediaSnapshot.commands.syncAllOrders.error?.userMessage ||
+                      mediaSnapshot.commands
+                        .prepareOrderStatusAnomalyResolution.error
+                        ?.userMessage ||
+                      mediaSnapshot.commands.resumeOrderTracking.error
+                        ?.userMessage ||
+                      mediaSnapshot.commands.confirmOrderPublished.error
+                        ?.userMessage ||
+                      mediaSnapshot.commands.confirmOrderNotPublished.error
+                        ?.userMessage ||
                       mediaSnapshot.orders.query.error?.userMessage
                     }
                   />

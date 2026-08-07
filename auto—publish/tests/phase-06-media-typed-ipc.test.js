@@ -12,6 +12,7 @@ const {
 } = require("../desktop/ipc/contracts/production-registry");
 const {
   projectMediaDraft,
+  projectMediaOrder,
   projectMediaResource,
 } = require("../desktop/ipc/contracts/media-contracts");
 const {
@@ -33,6 +34,11 @@ const MEDIA_CHANNELS = [
   "media:preview-article",
   "media:get-orders",
   "media:sync-order",
+  "media:sync-all-orders",
+  "media:prepare-order-status-anomaly-resolution",
+  "media:resume-order-tracking",
+  "media:confirm-order-published",
+  "media:confirm-order-not-published",
   "media:open-published-url",
   "media:prepare-bind-paid-order-number",
   "media:bind-paid-order-number",
@@ -64,6 +70,16 @@ test("media projections and draft requests preserve all supported resource types
     },
   });
   assert.equal(request.payload.draft.selectedResources[0].type, "audio");
+});
+
+test("media order IPC projection preserves a zero actual amount", () => {
+  assert.equal(
+    projectMediaOrder({
+      orderNid: "order-zero",
+      actualAmount: 0,
+    }).actualAmount,
+    "0",
+  );
 });
 
 test("paid-media confirmation establishes a paused batch without starting order creation", async () => {
@@ -177,11 +193,14 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
         title: "Fixture",
         orderNid: "order-1",
         statusCode: "2",
+        createdAt: "2026-07-28T00:00:00.000Z",
         submittedAt: "2026-07-28T00:00:00.000Z",
         publishedAt: "2026-07-28T00:01:00.000Z",
         resourceName: "媒体",
         price: "1",
+        actualAmount: "1",
         hasPublishedUrl: true,
+        anomaly: null,
       },
     ],
   });
@@ -199,11 +218,11 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
   assert.equal(order.hasPublishedUrl, true);
 });
 
-test("all 19 consumed media invokes have versioned exact contracts", () => {
+test("all 24 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 19);
+  assert.equal(media.length, 24);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),
@@ -217,6 +236,28 @@ test("all 19 consumed media invokes have versioned exact contracts", () => {
     assert.ok(contract.errorCodes.includes("IPC_REQUEST_INVALID"), channel);
     assert.ok(contract.errorCodes.includes("IPC_RESULT_INVALID"), channel);
   }
+});
+
+test("open order-status anomaly errors round-trip through the production registry with a safe descriptor", () => {
+  const contract = productionIpcRegistry.byChannel("media:sync-order");
+  const response = productionIpcRegistry.failure(
+    contract,
+    Object.assign(new Error("raw provider details must not cross IPC"), {
+      code: "ORDER_STATUS_ANOMALY_OPEN",
+    }),
+  );
+  assert.deepEqual(response.error, {
+    code: "ORDER_STATUS_ANOMALY_OPEN",
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单状态异常尚未收口，请先完成人工核对。",
+  });
+  assert.deepEqual(productionIpcRegistry.parseResult(contract, response), {
+    code: "ORDER_STATUS_ANOMALY_OPEN",
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单状态异常尚未收口，请先完成人工核对。",
+  });
 });
 
 test("media page contracts fail closed above 100 and on unknown fields", () => {
@@ -366,7 +407,7 @@ test("media registrar projects resources and articles without exposing legacy pa
     async () => {},
   );
   const client = {
-    endpointPolicy: { hostname: "publisher.example" },
+    endpointPolicy: { hostname: "api.supplier.example" },
     mediaList: async () => ({
       data: [
         {
@@ -387,22 +428,24 @@ test("media registrar projects resources and articles without exposing legacy pa
     paths: { data, mediaInput },
     rootDir: root,
     mediaClientProvider: () => client,
-    operationalStore: {
-      listRemoteOrders: () => [
+    orderObservationTransitions: {
+      listOrderObservationViews: () => [
         {
           orderId: "order-published",
-          status: "published",
-          supplierStatusCode: "2",
+          statusCode: "2",
           remoteUrl: "https://publisher.example/article/1",
         },
       ],
-      listOrderDisplayViews: () => [
-        {
-          orderId: "order-published",
-          supplierStatusCode: "2",
-          remoteUrl: "https://publisher.example/article/1",
-        },
-      ],
+      getOrderObservationContext: () => ({
+        orderSnapshotFingerprint: "a".repeat(64),
+        remoteUrl: "https://publisher.example/article/1",
+      }),
+      recordOrderObservation: () => ({}),
+      recordOrderStatusAnomaly: () => ({}),
+      prepareOrderStatusAnomalyResolution: () => ({}),
+      resumeOrderTracking: () => ({}),
+      confirmOrderPublished: () => ({}),
+      confirmOrderNotPublished: () => ({}),
     },
     openExternal: async (url) => openedUrls.push(url),
   });
