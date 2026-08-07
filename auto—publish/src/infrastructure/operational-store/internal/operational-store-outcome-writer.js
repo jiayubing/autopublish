@@ -9,6 +9,8 @@ function createOperationalStoreOutcomeWriter(context, activeTarget) {
 
   function apply(input) {
     const value = input || {};
+    if (value.outcome && value.outcome.status === "published")
+      throw context.fail("PUBLICATION_SUCCESS_WRITER_CLOSED");
     const evidence = value.outcome && value.outcome.evidence;
     const isMediaOrderOutcome =
       evidence && value.target && value.target.kind === "media";

@@ -63,10 +63,10 @@ test("canonical outcomes never backfill a supplier observation", () => {
     workspaceRoot: temporaryWorkspace("canonical-no-supplier"),
   });
   try {
-    for (const status of ["submitted", "published", "failed", "uncertain"])
+    for (const status of ["submitted", "failed", "uncertain"])
       createOrder(store, `canonical-${status}`, status);
     const views = orderMap(store);
-    for (const status of ["submitted", "published", "failed", "uncertain"]) {
+    for (const status of ["submitted", "failed", "uncertain"]) {
       const order = views.get(`order-canonical-${status}`);
       assert.equal(order.publicationStatus, status);
       assert.equal(order.supplierStatusCode, "");
@@ -88,12 +88,16 @@ test("supplier responses preserve 0/1/2/4/9 independently, rejection closes unpu
   try {
     for (const code of ["0", "1", "2", "4", "9"]) {
       const orderId = createOrder(store, `supplier-${code}`, "submitted");
-      await observe(store, orderId, { status: Number(code) });
+      if (code === "2")
+        await assert.rejects(() => observe(store, orderId, { status: 2 }), {
+          code: "MEDIA_ORDER_SYNC_FAILED",
+        });
+      else await observe(store, orderId, { status: Number(code) });
     }
     const views = orderMap(store);
     for (const code of ["0", "1", "2", "4", "9"]) {
       const order = views.get(`order-supplier-${code}`);
-      assert.equal(order.supplierStatusCode, code);
+      assert.equal(order.supplierStatusCode, code === "2" ? "" : code);
       assert.equal(
         order.publicationStatus,
         code === "4" ? "failed" : "submitted",
@@ -104,52 +108,52 @@ test("supplier responses preserve 0/1/2/4/9 independently, rejection closes unpu
   }
 });
 
-test("only supplier 2 plus safe HTTPS evidence promotes an in-flight canonical outcome", async () => {
+test("supplier 2 cannot promote any in-flight canonical outcome before Ticket 15", async () => {
   const store = createOperationalStore({
     workspaceRoot: temporaryWorkspace("supplier-promotion"),
   });
   try {
-    for (const status of ["submitted", "uncertain", "failed", "published"])
+    for (const status of ["submitted", "uncertain", "failed"])
       createOrder(store, `evidence-${status}`, status);
-    for (const status of ["submitted", "uncertain", "failed", "published"])
-      await observe(store, `order-evidence-${status}`, {
-        status: 2,
-        order_url: `https://publisher.example/${status}`,
-      });
+    for (const status of ["submitted", "uncertain", "failed"])
+      await assert.rejects(
+        () =>
+          observe(store, `order-evidence-${status}`, {
+            status: 2,
+            order_url: `https://publisher.example/${status}`,
+          }),
+        { code: "MEDIA_ORDER_SYNC_FAILED" },
+      );
     const views = orderMap(store);
     assert.equal(
       views.get("order-evidence-submitted").publicationStatus,
-      "published",
+      "submitted",
     );
     assert.equal(
       views.get("order-evidence-uncertain").publicationStatus,
-      "published",
+      "uncertain",
     );
     assert.equal(
       views.get("order-evidence-failed").publicationStatus,
       "failed",
     );
-    assert.equal(
-      views.get("order-evidence-published").publicationStatus,
-      "published",
-    );
     for (const order of views.values())
-      assert.equal(order.supplierStatusCode, "2");
+      assert.equal(order.supplierStatusCode, "");
   } finally {
     store.close();
   }
 });
 
-test("supplier 9 and other observations cannot revoke canonical published", async () => {
+test("non-success supplier observations cannot promote submitted work", async () => {
   const store = createOperationalStore({
     workspaceRoot: temporaryWorkspace("published-monotonic"),
   });
   try {
-    const orderId = createOrder(store, "published-monotonic", "published");
-    for (const code of [9, 0, 1, 4]) {
+    const orderId = createOrder(store, "published-monotonic", "submitted");
+    for (const code of [9, 0, 1]) {
       await observe(store, orderId, { status: code });
       const order = orderMap(store).get(orderId);
-      assert.equal(order.publicationStatus, "published");
+      assert.equal(order.publicationStatus, "submitted");
       assert.equal(order.supplierStatusCode, String(code));
     }
   } finally {
@@ -157,42 +161,44 @@ test("supplier 9 and other observations cannot revoke canonical published", asyn
   }
 });
 
-test("canonical published order remains openable after supplier status changes from 2 to 9", async () => {
+test("closed supplier success leaves no URL after a later status 9", async () => {
   const store = createOperationalStore({
     workspaceRoot: temporaryWorkspace("published-url-2-to-9"),
   });
   const opened = [];
   try {
     const orderId = createOrder(store, "published-url-2-to-9", "submitted");
-    await observe(store, orderId, {
-      status: 2,
-      order_url: "https://publisher.example/article/persistent-evidence",
-    });
+    await assert.rejects(
+      () =>
+        observe(store, orderId, {
+          status: 2,
+          order_url: "https://publisher.example/article/persistent-evidence",
+        }),
+      { code: "MEDIA_ORDER_SYNC_FAILED" },
+    );
     await observe(store, orderId, { status: 9 });
 
     const view = createMediaOrderService({
       operationalStore: store,
       allowedPublishedUrlHosts: ["publisher.example"],
     }).listOrderViews()[0];
-    assert.deepEqual([view.statusCode, view.hasPublishedUrl], ["9", true]);
+    assert.deepEqual([view.statusCode, view.hasPublishedUrl], ["9", false]);
 
     const service = createMediaOrderService({
       operationalStore: store,
       allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (url) => opened.push(url),
     });
-    assert.deepEqual(await service.openPublishedUrl(orderId), {
-      completed: true,
+    await assert.rejects(() => service.openPublishedUrl(orderId), {
+      code: "MEDIA_ORDER_NOT_PUBLISHED",
     });
-    assert.deepEqual(opened, [
-      "https://publisher.example/article/persistent-evidence",
-    ]);
+    assert.deepEqual(opened, []);
   } finally {
     store.close();
   }
 });
 
-test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 observations", async () => {
+test("closed supplier 2 evidence stays absent after 0/1/4/9 observations", async () => {
   const store = createOperationalStore({
     workspaceRoot: temporaryWorkspace("published-url-observation-matrix"),
   });
@@ -200,7 +206,10 @@ test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 obser
     for (const code of [0, 1, 4, 9]) {
       const orderId = createOrder(store, `published-url-${code}`, "submitted");
       const url = `https://publisher.example/article/persistent-${code}`;
-      await observe(store, orderId, { status: 2, order_url: url });
+      await assert.rejects(
+        () => observe(store, orderId, { status: 2, order_url: url }),
+        { code: "MEDIA_ORDER_SYNC_FAILED" },
+      );
       await observe(store, orderId, { status: code });
 
       const view = createMediaOrderService({
@@ -216,7 +225,7 @@ test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 obser
           view.statusCode,
           view.hasPublishedUrl,
         ],
-        ["published", String(code), true],
+        [code === 4 ? "failed" : "submitted", String(code), false],
       );
 
       const opened = [];
@@ -225,10 +234,10 @@ test("supplier 2 HTTPS evidence stays visible and opens once after 0/1/4/9 obser
         allowedPublishedUrlHosts: ["publisher.example"],
         openExternal: async (target) => opened.push(target),
       });
-      assert.deepEqual(await service.openPublishedUrl(orderId), {
-        completed: true,
+      await assert.rejects(() => service.openPublishedUrl(orderId), {
+        code: "MEDIA_ORDER_NOT_PUBLISHED",
       });
-      assert.deepEqual(opened, [url]);
+      assert.deepEqual(opened, []);
     }
   } finally {
     store.close();
@@ -277,12 +286,15 @@ test("supplier observation survives restart, backup, and restored temporary SQLi
   }
 });
 
-test("published HTTPS evidence remains visible and openable after restart, backup, and restore", async () => {
+test("closed supplier success remains absent after restart, backup, and restore", async () => {
   const workspaceRoot = temporaryWorkspace("published-url-persistence");
   let store = createOperationalStore({ workspaceRoot });
   const orderId = createOrder(store, "published-url-persistence", "submitted");
   const url = "https://publisher.example/article/persistent-after-restore";
-  await observe(store, orderId, { status: 2, order_url: url });
+  await assert.rejects(
+    () => observe(store, orderId, { status: 2, order_url: url }),
+    { code: "MEDIA_ORDER_SYNC_FAILED" },
+  );
   await observe(store, orderId, { status: 9 });
   const backupPath = path.join(workspaceRoot, "published-url.backup.sqlite");
   store.backup(backupPath);
@@ -296,11 +308,11 @@ test("published HTTPS evidence remains visible and openable after restart, backu
       allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (target) => opened.push(target),
     });
-    assert.equal(service.listOrderViews()[0].hasPublishedUrl, true);
-    assert.deepEqual(await service.openPublishedUrl(orderId), {
-      completed: true,
+    assert.equal(service.listOrderViews()[0].hasPublishedUrl, false);
+    await assert.rejects(() => service.openPublishedUrl(orderId), {
+      code: "MEDIA_ORDER_NOT_PUBLISHED",
     });
-    assert.deepEqual(opened, [url]);
+    assert.deepEqual(opened, []);
   } finally {
     store.close();
   }
@@ -321,11 +333,11 @@ test("published HTTPS evidence remains visible and openable after restart, backu
       allowedPublishedUrlHosts: ["publisher.example"],
       openExternal: async (target) => opened.push(target),
     });
-    assert.equal(service.listOrderViews()[0].hasPublishedUrl, true);
-    assert.deepEqual(await service.openPublishedUrl(orderId), {
-      completed: true,
+    assert.equal(service.listOrderViews()[0].hasPublishedUrl, false);
+    await assert.rejects(() => service.openPublishedUrl(orderId), {
+      code: "MEDIA_ORDER_NOT_PUBLISHED",
     });
-    assert.deepEqual(opened, [url]);
+    assert.deepEqual(opened, []);
   } finally {
     restored.close();
   }
@@ -379,8 +391,8 @@ test("real SQLite order projection hides and main rejects every unsafe published
       "MEDIA_ORDER_URL_UNAVAILABLE",
     ],
   ];
-  for (const [suffix, status] of cases)
-    createOrder(store, `fail-closed-${suffix}`, status);
+  for (const [suffix] of cases)
+    createOrder(store, `fail-closed-${suffix}`, "submitted");
   const databasePath = store.verify().databasePath;
   store.close();
 
@@ -392,6 +404,14 @@ test("real SQLite order projection hides and main rejects every unsafe published
     for (const [suffix, , remoteUrl] of cases) {
       if (remoteUrl !== null)
         update.run(remoteUrl, `attempt-fail-closed-${suffix}`);
+    }
+    for (const [suffix, status] of cases) {
+      database
+        .prepare("UPDATE publication_attempts SET status=? WHERE attempt_id=?")
+        .run(status, `attempt-fail-closed-${suffix}`);
+      database
+        .prepare("UPDATE publication_records SET status=? WHERE publication_id=?")
+        .run(status, `publication-fail-closed-${suffix}`);
     }
   } finally {
     database.close();

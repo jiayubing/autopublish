@@ -57,31 +57,32 @@ function snapshotTables(database) {
     db.close();
   }
 }
-test("operational store owns an atomic publication outcome and derived recovery", () => {
+test("legacy generic publication success is closed without partial recovery facts", () => {
   const dir = root(),
     store = createOperationalStore({ workspaceRoot: dir });
   const reserved = store.reservePublicationTarget(input());
   assert.equal(reserved.status, "queued");
   assert.equal(store.listActionableRecovery().length, 1);
-  store.commitRemoteOutcome({
-    attemptId: "attempt-1",
-    outcome: {
-      status: "published",
-      evidence: {
-        articleId: "article-1",
+  assert.throws(
+    () =>
+      store.commitRemoteOutcome({
         attemptId: "attempt-1",
-        targetKey: "platform:toutiao:account:account-1",
-        accountProfileId: "account-1",
-        remoteId: "remote-1",
-        remoteUrl: "https://example.test/article",
-      },
-    },
-  });
-  assert.equal(store.listActionableRecovery().length, 0);
-  assert.equal(
-    store.claimPostProcessing({ claimToken: "owner-1" }).kind,
-    "archive",
+        outcome: {
+          status: "published",
+          evidence: {
+            articleId: "article-1",
+            attemptId: "attempt-1",
+            targetKey: "platform:toutiao:account:account-1",
+            accountProfileId: "account-1",
+            remoteId: "remote-1",
+            remoteUrl: "https://example.test/article",
+          },
+        },
+      }),
+    { code: "PUBLICATION_SUCCESS_WRITER_CLOSED" },
   );
+  assert.equal(store.listActionableRecovery().length, 1);
+  assert.equal(store.claimPostProcessing({ claimToken: "owner-1" }), null);
   store.close();
 });
 test("failed publication retry selects the latest attempt by insertion order at the same clock instant", () => {

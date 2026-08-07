@@ -777,6 +777,8 @@ function createOrderAggregate(context, activeTarget) {
       !supplierStatusCode(value.observation.statusCode)
     )
       throw fail("OPERATIONAL_ORDER_OBSERVATION_INVALID");
+    if (String(value.observation.statusCode) === "2")
+      throw fail("PAID_PUBLICATION_SUCCESS_PATH_CLOSED");
     const stamp = iso(clock);
     const publishedAt = observationTimestamp(value.observation.publishedAt);
     if (value.observation.publishedAt !== undefined && !publishedAt)
@@ -816,27 +818,9 @@ function createOrderAggregate(context, activeTarget) {
         db.prepare(
           "UPDATE remote_evidence SET remote_url=?,evidence_json=? WHERE attempt_id=? AND remote_id=?",
         ).run(remoteUrl, text(evidence), row.attempt_id, row.remote_id);
-      // A supplier observation is not a canonical workflow transition. The
-      // only exception is status 2 with safe published evidence.
+      // Supplier observations do not transition publication success in Ticket
+      // 09; the paid publication success port is owned by Ticket 15.
       let publicationStatus = row.status;
-      if (
-        statusCode === "2" &&
-        remoteUrl &&
-        ["queued", "remote_started", "submitted", "uncertain"].includes(
-          row.status,
-        )
-      ) {
-        publicationStatus = "published";
-        db.prepare(
-          "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
-        ).run("published", stamp, row.attempt_id);
-        db.prepare(
-          "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
-        ).run("published", stamp, row.publication_id);
-        db.prepare(
-          "UPDATE recovery_intents SET state=?,payload_json=?,updated_at=? WHERE attempt_id=?",
-        ).run("resolved", text(evidence), stamp, row.attempt_id);
-      }
       if (statusCode === "4" && row.status !== "published") {
         publicationStatus = "failed";
         db.prepare(

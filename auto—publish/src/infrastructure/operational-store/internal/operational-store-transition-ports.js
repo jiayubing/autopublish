@@ -8,6 +8,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   const queue = value.queue;
   const order = value.order;
   const paidExecution = value.paidExecution;
+  const regularOutcome = value.regularOutcome;
   holder.publicationTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     reservePublicationTarget: publication.reservePublicationTarget,
@@ -28,6 +29,19 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     claimRegularQueueGroupHead: queue.claimRegularQueueGroupHead,
     renewRegularQueueGroupClaim: queue.renewRegularQueueGroupClaim,
     beginRegularRemoteSubmission: queue.beginRegularRemoteSubmission,
+  });
+  holder.regularOutcomeTransitions = Object.freeze({
+    confirmRegularAccepted: regularOutcome.confirmRegularAccepted,
+    confirmRegularNotAccepted: regularOutcome.confirmRegularNotAccepted,
+    getRegularOutcomeSnapshot: regularOutcome.getRegularOutcomeSnapshot,
+    markOrphanedRegularAttemptUncertain:
+      regularOutcome.markOrphanedRegularAttemptUncertain,
+    prepareRegularUncertainResolution:
+      regularOutcome.prepareRegularUncertainResolution,
+    recordRegularAccepted: regularOutcome.recordRegularAccepted,
+    recordRegularArticleRejected: regularOutcome.recordRegularArticleRejected,
+    recordRegularGroupBlocked: regularOutcome.recordRegularGroupBlocked,
+    recordRegularUncertain: regularOutcome.recordRegularUncertain,
   });
   holder.paidAdmissionTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,

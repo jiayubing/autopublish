@@ -294,7 +294,7 @@ test("one article has one database-enforced active target and failure releases i
   }
 });
 
-test("media order rejection resolves the publication and permits retargeting without downgrading published articles", () => {
+test("media order rejection permits retargeting while paid success remains closed", () => {
   const root = workspace();
   const store = createOperationalStore({ workspaceRoot: root });
   try {
@@ -373,25 +373,22 @@ test("media order rejection resolves the publication and permits retargeting wit
         },
       },
     });
-    store.recordRemoteOrderObservation({
-      orderId: "published-media-order",
-      observation: {
-        statusCode: "2",
-        remoteUrl: "https://example.test/published-media-order",
-      },
-    });
-    assert.equal(
-      store.recordRemoteOrderObservation({
-        orderId: "published-media-order",
-        observation: { statusCode: "4" },
-      }).publicationStatus,
-      "published",
+    assert.throws(
+      () =>
+        store.recordRemoteOrderObservation({
+          orderId: "published-media-order",
+          observation: {
+            statusCode: "2",
+            remoteUrl: "https://example.test/published-media-order",
+          },
+        }),
+      { code: "PAID_PUBLICATION_SUCCESS_PATH_CLOSED" },
     );
     assert.equal(
       store.listPublicationRecords({
         publicationIds: ["published-media-publication"],
       })[0].status,
-      "published",
+      "submitted",
     );
     assert.throws(
       () =>
@@ -511,7 +508,7 @@ test("media remote order ID conflicts roll back another attempt while same-attem
   }
 });
 
-test("published outcomes stay idempotent and keep one archive job on exact replay", () => {
+test("legacy published outcome replay stays closed and creates no archive job", () => {
   const root = workspace();
   const store = createOperationalStore({ workspaceRoot: root });
   try {
@@ -536,24 +533,15 @@ test("published outcomes stay idempotent and keep one archive job on exact repla
         remoteUrl: "https://example.test/published-replay-remote",
       },
     };
-    const expected = {
-      attemptId: "published-replay-attempt",
-      status: "published",
-    };
-    assert.deepEqual(
-      store.commitRemoteOutcome({
-        attemptId: "published-replay-attempt",
-        outcome,
-      }),
-      expected,
-    );
-    assert.deepEqual(
-      store.commitRemoteOutcome({
-        attemptId: "published-replay-attempt",
-        outcome,
-      }),
-      expected,
-    );
+    for (let replay = 0; replay < 2; replay += 1)
+      assert.throws(
+        () =>
+          store.commitRemoteOutcome({
+            attemptId: "published-replay-attempt",
+            outcome,
+          }),
+        { code: "PUBLICATION_SUCCESS_WRITER_CLOSED" },
+      );
     const database = new DatabaseSync(store.verify().databasePath, {
       readOnly: true,
     });
@@ -564,7 +552,7 @@ test("published outcomes stay idempotent and keep one archive job on exact repla
             "SELECT COUNT(*) AS count FROM post_processing_jobs WHERE attempt_id=? AND kind='archive'",
           )
           .get("published-replay-attempt").count,
-        1,
+        0,
       );
     } finally {
       database.close();

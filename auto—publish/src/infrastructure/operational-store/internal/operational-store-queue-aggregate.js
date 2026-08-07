@@ -892,6 +892,14 @@ function createOperationalStoreQueueAggregate(context) {
       itemId,
       snapshot,
       clientId: value.clientId.trim(),
+      customerSnapshotV1:
+        value.customerSnapshotV1 === undefined
+          ? null
+          : domain.parseCustomerSnapshotV1(value.customerSnapshotV1),
+      targetSnapshotV1:
+        value.targetSnapshotV1 === undefined
+          ? null
+          : domain.parseTargetSnapshotV1(value.targetSnapshotV1),
       articleRef: value.articleRef || {
         clientId: value.clientId.trim(),
         articleId,
@@ -1402,6 +1410,11 @@ function createOperationalStoreQueueAggregate(context) {
       const publicationId = oldPublication
         ? oldPublication.publication_id
         : item.publicationId;
+      const profile = db
+        .prepare(
+          "SELECT display_name FROM account_profiles WHERE account_profile_id=?",
+        )
+        .get(item.target.accountProfileId);
       const payload = Object.assign({}, item.payload || {}, {
         clientId: item.clientId,
         sourcePlatformId: item.target.platformId,
@@ -1410,6 +1423,24 @@ function createOperationalStoreQueueAggregate(context) {
         publicationSnapshot: item.snapshot,
         publicationId,
         attemptId: item.attemptId,
+        customerSnapshotV1:
+          item.customerSnapshotV1 ||
+          domain.parseCustomerSnapshotV1({
+            version: 1,
+            clientId: item.clientId,
+            displayName: item.clientId,
+          }),
+        targetSnapshotV1:
+          item.targetSnapshotV1 ||
+          domain.parseTargetSnapshotV1({
+            version: 1,
+            kind: "platform",
+            platformId: item.target.platformId,
+            platformName: item.target.platformId,
+            accountProfileId: item.target.accountProfileId,
+            accountLabel:
+              (profile && profile.display_name) || item.target.accountProfileId,
+          }),
       });
       rejectSensitive(payload);
       const batchItem = db

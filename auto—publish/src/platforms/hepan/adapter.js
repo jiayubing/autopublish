@@ -693,7 +693,11 @@ function createHepanAdapter(options) {
               };
             }
             if (payload.needsLogin)
-              return { status: "group_blocked", errorCode: "LOGIN_REQUIRED" };
+              return {
+                status: "group_blocked",
+                errorCode: "LOGIN_REQUIRED",
+                articleRecoverable: true,
+              };
             if (!payload.ok)
               return {
                 status: "article_rejected",
