@@ -164,6 +164,109 @@ test("23-B gives trusted success priority over late terminal observations", () =
   assert.equal(plan.entries[0].variant, "publishedEvidence");
 });
 
+test("23-B preserves submitted-content conflicts even when one record proves success", () => {
+  const source = {
+    workspaceFingerprint: FINGERPRINT,
+    articles: [article("published-content-conflict")],
+    publications: [
+      fact(
+        "published-content-conflict",
+        platform("published-content-conflict"),
+        "published",
+        {
+          accepted: true,
+          submittedTitle: "历史标题 A",
+          submittedBody: "历史正文 A",
+        },
+      ),
+      fact(
+        "published-content-conflict",
+        platform("published-content-conflict"),
+        "failed",
+        {
+          submittedTitle: "历史标题 B",
+          submittedBody: "历史正文 B",
+        },
+      ),
+    ],
+  };
+
+  const plan = createLegacyMigrationPlanner({ legacySource: source }).plan();
+  assert.equal(plan.entries.length, 1);
+  assert.equal(plan.entries[0].variant, "needsAttentionConflict");
+  assert.equal(plan.entries[0].payload.conflictKind, "CONTENT_CONFLICT");
+});
+
+test("23-B does not let success hide an uncertain different target", () => {
+  const source = {
+    workspaceFingerprint: FINGERPRINT,
+    articles: [article("published-target-conflict")],
+    publications: [
+      fact(
+        "published-target-conflict",
+        platform("published-target"),
+        "published",
+        {
+          accepted: true,
+          submittedTitle: "历史标题",
+          submittedBody: "历史正文",
+        },
+      ),
+      fact(
+        "published-target-conflict",
+        platform("uncertain-target"),
+        "submitted",
+      ),
+    ],
+  };
+
+  const plan = createLegacyMigrationPlanner({ legacySource: source }).plan();
+  assert.equal(plan.entries.length, 1);
+  assert.equal(plan.entries[0].variant, "needsAttentionConflict");
+  assert.equal(plan.entries[0].payload.conflictKind, "MULTIPLE_ACTIVE_TARGETS");
+});
+
+test("23-B rejects disagreement between nested V1 and flat legacy identities", () => {
+  const source = {
+    workspaceFingerprint: FINGERPRINT,
+    articles: [
+      article("flat-article"),
+      article("target-conflict"),
+      article("order-conflict"),
+    ],
+    publications: [
+      fact("flat-article", platform("article"), "submitted", {
+        articleIdentityV1: {
+          version: 1,
+          clientId: "client-23-b",
+          articleId: "nested-article",
+        },
+      }),
+      Object.assign(
+        fact("target-conflict", platform("nested-target"), "submitted"),
+        {
+          platformId: "toutiao",
+          accountProfileId: "account-flat-target",
+        },
+      ),
+    ],
+    orders: [
+      fact("order-conflict", media("order-conflict"), "1", {
+        orderIdentityV1: { version: 1, orderId: "nested-order" },
+        orderId: "flat-order",
+      }),
+    ],
+  };
+
+  const plan = createLegacyMigrationPlanner({ legacySource: source }).plan();
+  const conflicts = plan.entries.filter(
+    (entry) =>
+      entry.variant === "needsAttentionConflict" &&
+      entry.payload.conflictKind === "IDENTITY_CONFLICT",
+  );
+  assert.equal(conflicts.length, 3);
+});
+
 test("23-B routes multiple targets, missing order ids and content disagreement to attention", () => {
   const source = {
     workspaceFingerprint: FINGERPRINT,

@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-`RUNNING`。23-B 的 reader/planner implementation 与定向验证已完成；Primary Audit、finding remediation、bounded re-audit、commit 和 23-C 尚未开始。不得把本 handoff 解释为 23-B `COMPLETE` 或提前调度 23-C。
+`COMPLETE`。23-B 的 reader/planner implementation、Primary Audit、blocking finding remediation 与 bounded re-audit 已闭合；23-C 尚未开始。
 
 ## Scope 与 owner
 
@@ -35,18 +35,28 @@ Planner 的 migration contract 边界只有 `domain.parseImportPlanV1`；nested 
 - report 只输出版本、fingerprint、输入/variant 数量、稳定 code、safe article identity、hash evidence refs 和 hash source/order 标识。
 - plan 先以 `domain.parseImportPlanV1` 校验单 entry，再做跨 entry order identity 去重保护，最后再次验证完整 envelope；reader/planner 没有任何远端副作用。
 
+## Primary Audit 与 remediation
+
+审计范围固定为 `d5ae087...cb050ce` 的 23-B reader/planner implementation、23-A `parseImportPlanV1` 边界、直接 V1 owner 与公开行为测试。发现并关闭三个阻塞 P2，来源均为 `INTRODUCED_BY_CHANGE`：
+
+1. 可信成功分支先于历史投稿正文冲突返回，可能把同文章的不同 submitted content 静默归为 `publishedEvidence`。Owner：Legacy Migration Planner classification。修复：正文指纹冲突在成功优先级前进入 `CONTENT_CONFLICT`；成功仍只覆盖同目标迟到 terminal observation。
+2. 成功目标与另一个处于 uncertain/submitted 的不同活动目标没有取并集比较，可能丢失需处理的远端不确定事实。Owner：Legacy Migration Planner classification。修复：成功目标与活动目标联合唯一性校验，不同目标进入 `MULTIPLE_ACTIVE_TARGETS`。
+3. 同一旧记录的嵌套 V1 identity 与扁平 article/target/order identity 未交叉核对，可能静默选择嵌套值。Owner：Legacy Migration Planner grouping。修复：在分组前比较两种证据，不一致进入 `IDENTITY_CONFLICT`。
+
+Bounded re-audit 只检查上述 findings、修复 diff、成功优先级、冲突保真、23-A 最终 validator 与直接回归；三个 finding 均关闭，未修改公开合同、schema、writer、事务或远端副作用边界，未触发 escalation。结论：`PASS`，无 deferred blocking finding。
+
 ## 实际验证
 
 在 `F:/官媒投稿-refactor/auto—publish` 执行：
 
-- `node --test tests/article-lifecycle-ticket-23-b.test.js tests/article-lifecycle-ticket-23-a.test.js tests/article-lifecycle-ticket-08.test.js tests/regular-publication-evidence-contract.test.js tests/article-lifecycle-ticket-13.test.js tests/order-observation-contract.test.js tests/article-lifecycle-ticket-22.test.js`：70/70 PASS。
+- `node --test tests/article-lifecycle-ticket-23-b.test.js tests/article-lifecycle-ticket-23-a.test.js tests/article-lifecycle-ticket-08.test.js tests/regular-publication-evidence-contract.test.js tests/article-lifecycle-ticket-13.test.js tests/order-observation-contract.test.js tests/article-lifecycle-ticket-22.test.js`：73/73 PASS。
 - `npx eslint src/content/legacy-migration-reader.js src/content/legacy-migration-planner.js tests/article-lifecycle-ticket-23-b.test.js`：PASS。
 - `npx prettier --check --end-of-line auto src/content/legacy-migration-reader.js src/content/legacy-migration-planner.js tests/article-lifecycle-ticket-23-b.test.js`：PASS。
-- `npm run test:discover`：PASS，收集 265 个测试并包含 `article-lifecycle-ticket-23-b.test.js`。
+- `npm run test:discover`：PASS，收集 265 个测试文件并包含 `article-lifecycle-ticket-23-b.test.js`。
 - `git diff --check`：PASS。
 
-未运行完整 `npm test`、Ticket 23-E final migration gate、Primary Audit、commit/merge；当前用户请求只启动 23-B，Execution Protocol 的 Manual Dispatch 不自动推进这些动作。
+未运行完整 `npm test` 与 Ticket 23-E final migration gate：按 Ticket 合同均留给 23-E/final reconciliation；本 closure 没有远端操作。
 
 ## 下一动作
 
-在新的明确调度下对本 23-B implementation 执行协议要求的 Primary Audit；blocking finding 只修其最小闭合范围并 bounded re-audit。Audit/closure 通过且进入新的 clean integration HEAD 后，才允许启动 23-C 唯一 import transaction。
+23-B closure commit 为包含本 handoff 的提交；base implementation commit=`cb050ce`。下一串行工作包仅为 23-C 唯一 import transaction，必须从包含本 closure 的 clean integration HEAD 在新的明确调度下启动；23-D/E 不得提前实施。

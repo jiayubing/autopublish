@@ -331,8 +331,6 @@ function targetInfoFromRecord(record) {
     )
   )
     return { target: parsedCandidates[0], invalid: true };
-  if (parsedCandidates.length)
-    return { target: parsedCandidates[0], invalid: false };
   const mediaResourceId = text(
     firstValue(
       record && record.mediaResourceId,
@@ -340,11 +338,6 @@ function targetInfoFromRecord(record) {
       record && record.resource_id,
     ),
   );
-  if (mediaResourceId && validId(mediaResourceId))
-    return {
-      target: parseTarget({ version: 1, kind: "media", mediaResourceId }),
-      invalid: candidates.length > 0,
-    };
   const platformId = text(
     firstValue(
       record && record.platformId,
@@ -352,10 +345,54 @@ function targetInfoFromRecord(record) {
       record && record.targetPlatform,
     ),
   );
-  if (!platformId) return { target: null, invalid: candidates.length > 0 };
   const accountProfileId = text(
-    firstValue(record.accountProfileId, record.accountId),
+    firstValue(record && record.accountProfileId, record && record.accountId),
   );
+  let explicitTarget = null;
+  if (mediaResourceId && validId(mediaResourceId))
+    explicitTarget = parseTarget({
+      version: 1,
+      kind: "media",
+      mediaResourceId,
+    });
+  else if (platformId) {
+    explicitTarget = accountProfileId
+      ? parseTarget({
+          version: 1,
+          kind: "platform",
+          platformId,
+          accountProfileId,
+        })
+      : parseTarget({
+          version: 1,
+          kind: "legacy-unknown-account",
+          platformId,
+          autoExecutable: false,
+        });
+  }
+  if (parsedCandidates.length)
+    return {
+      target: parsedCandidates[0],
+      invalid: Boolean(
+        (explicitTarget &&
+          targetKey(explicitTarget) !== targetKey(parsedCandidates[0])) ||
+        (mediaResourceId &&
+          (parsedCandidates[0].kind !== "media" ||
+            mediaResourceId !== parsedCandidates[0].mediaResourceId)) ||
+        (platformId &&
+          (parsedCandidates[0].kind === "media" ||
+            platformId !== parsedCandidates[0].platformId)) ||
+        (accountProfileId &&
+          (parsedCandidates[0].kind !== "platform" ||
+            accountProfileId !== parsedCandidates[0].accountProfileId)),
+      ),
+    };
+  if (mediaResourceId && validId(mediaResourceId))
+    return {
+      target: parseTarget({ version: 1, kind: "media", mediaResourceId }),
+      invalid: candidates.length > 0,
+    };
+  if (!platformId) return { target: null, invalid: candidates.length > 0 };
   if (accountProfileId && validId(accountProfileId))
     return {
       target: parseTarget({
@@ -380,9 +417,29 @@ function targetInfoFromRecord(record) {
 function articleFromRecord(record, articleById) {
   const candidates = directArticleCandidates(record);
   const parsed = candidates.map(parseArticle).filter(Boolean);
+  const explicitId = text(
+    firstValue(record && record.articleId, record && record.generatedArticleId),
+  );
+  const explicitClientId = text(record && record.clientId);
+  const explicitIdentity =
+    explicitId && explicitClientId
+      ? parseArticle({
+          version: 1,
+          clientId: explicitClientId,
+          articleId: explicitId,
+        })
+      : null;
   if (parsed.length && parsed.some((item) => !sameJson(item, parsed[0])))
     return { identity: parsed[0], invalid: true };
-  if (parsed.length) return { identity: parsed[0], invalid: false };
+  if (parsed.length)
+    return {
+      identity: parsed[0],
+      invalid: Boolean(
+        (explicitId && explicitId !== parsed[0].articleId) ||
+        (explicitClientId && explicitClientId !== parsed[0].clientId) ||
+        (explicitId && explicitClientId && !explicitIdentity),
+      ),
+    };
   const id = text(
     firstValue(
       record && record.articleId,
@@ -415,12 +472,27 @@ function orderFromRecord(record) {
       nested(record, "paidTargetV1").orderIdentityV1,
   ].filter(Boolean);
   const parsedOrders = nestedOrder.map(parseOrder).filter(Boolean);
+  const explicitOrderId = text(
+    firstValue(
+      record && record.orderId,
+      record && record.orderNid,
+      record && record.orderNumber,
+      nested(record, "publicationEvidenceV1") &&
+        nested(record, "publicationEvidenceV1").orderNumber,
+    ),
+  );
   if (
     parsedOrders.length > 1 &&
     parsedOrders.some((item) => item.orderId !== parsedOrders[0].orderId)
   )
     return { identity: parsedOrders[0], invalid: true };
-  if (parsedOrders.length) return { identity: parsedOrders[0], invalid: false };
+  if (parsedOrders.length)
+    return {
+      identity: parsedOrders[0],
+      invalid: Boolean(
+        explicitOrderId && explicitOrderId !== parsedOrders[0].orderId,
+      ),
+    };
   const orderId = text(
     firstValue(
       record && record.orderId,
@@ -1466,9 +1538,16 @@ function classifyGroup(group) {
       return { kind: "deletion", code: "PUBLISHED_IN_TRASH" };
     return { kind: "deletion", code: deletionKindFor(group) };
   }
+  if (group.submittedContentFingerprints.size > 1)
+    return { kind: "attention", code: "CONTENT_CONFLICT" };
   if (group.successFacts.length) {
+    const observedTargetKeys = new Set([
+      ...successTargets,
+      ...group.activeTargetKeys,
+    ]);
+    if (observedTargetKeys.size > 1)
+      return { kind: "attention", code: "MULTIPLE_ACTIVE_TARGETS" };
     if (
-      group.activeTargetKeys.size > 1 ||
       successTargets.size !== 1 ||
       group.invalidIdentity ||
       group.invalidTarget
@@ -1482,8 +1561,6 @@ function classifyGroup(group) {
     return { kind: "attention", code: "MISSING_ORDER_ID" };
   if (group.activeTargetKeys.size > 1)
     return { kind: "attention", code: "MULTIPLE_ACTIVE_TARGETS" };
-  if (group.submittedContentFingerprints.size > 1)
-    return { kind: "attention", code: "CONTENT_CONFLICT" };
   if (group.uncertainFacts.length)
     return { kind: "attention", code: "SUBMITTING_OR_UNPROVEN_SUBMITTED" };
   if (group.trackableFacts.length)
