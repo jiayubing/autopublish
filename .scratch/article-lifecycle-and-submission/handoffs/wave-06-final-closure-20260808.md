@@ -95,6 +95,17 @@ Gate Recovery 按 18 个独立失败逐项分类后，未先修改生产代码�
 
 结论：Gate Recovery 允许范围内 findings 已关闭并 bounded re-review PASS；4 个真实 migration public-contract failures 是 scheduling blocker。Wave 6 不得标记 COMPLETE，Wave 7 保持 PENDING。
 
+## Blocker scheduling preflight
+
+用户授权在合规前提下处理下一步后，对“提前拆出窄 migration publication import capability”进行了只读预检，结论为拒绝实施：
+
+- 旧 `publication-ledger-store` 的真实 V1 record 包含 `clientId`、target display、attempt timestamps 等字段，但当前 `phase-02-migration` synthetic publication fixture 省略了这些生产必需字段；不能从该 fixture 诚实构造当前封闭 `publicationEvidenceV1`。
+- 旧付费 `submission-orders.jsonl` 本身不稳定携带完整 article/customer identity；正确导入需要按 publication/attempt/content facts 做跨源关联、分类和冲突处理。这属于 Ticket 23 planner/import contract，不是给唯一 success primitive 增加一个窄调用口即可安全解决。
+- 用 `clientId`、迁移时间、当前正文或空图片清单补齐缺失字段会伪造历史 evidence；新增临时 legacy DTO/writer 又会形成 Ticket 23 之后必须删除的 compatibility path。两者都违反 Ticket 09/23 与 Gate Recovery 禁止项。
+- Ticket 23 完整 `ImportPlanV1` 仍依赖 Ticket 16、Ticket 22 和 M03 的最终 V1 owner；当前无法把完整 Ticket 23 合规前移。与此同时 Wave 7 又以 Wave 6 `COMPLETE` 为 gate，形成必须由新的调度合同解决的依赖环。
+
+本预检未修改生产代码、测试、fixture 或 gate；未实施 Ticket 23/M03，未恢复 `commitRemoteOutcome(published)`。Wave 6 保持 `BLOCKED`，Wave 7 保持 `PENDING`。
+
 ## 改动文件
 
 - `auto—publish/src/infrastructure/operational-store/internal/order-transition-guard.js`

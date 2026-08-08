@@ -16,11 +16,11 @@
 | Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
 | Wave 7 | `PENDING` | Wave 6 final clean HEAD gate PASS 后才变 `READY` |
 
-**当前下一动作：对 legacy migration published-fact import capability 作调度决策；不得在本 Gate Recovery 提前实施 Ticket 23/M03。**
+**当前下一动作：解决 Wave 6 final gate 与 Ticket 23 上游 gate 之间的调度依赖环。证据化预检已否决提前拆出窄 migration publication writer；不得降低完整测试 gate、恢复 legacy writer、伪造历史 evidence，或在上游 V1 合同缺失时提前实施 Ticket 23/M03。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
-当前 HEAD `9637819` 的历史记录曾将 Wave 6 记为完成，但该记录同时明确未在最终 HEAD 重新运行符合要求的完整 `npm test`；在新的合规 evidence 产生前，本实时计划按 final gate 规则保持 Wave 6=`RUNNING`、Wave 7=`PENDING`。
+当前 HEAD `9637819` 的历史记录曾将 Wave 6 记为完成，但该记录同时明确未在最终 HEAD 重新运行符合要求的完整 `npm test`；在新的合规 evidence 产生前，本实时计划按 final gate 规则保持 Wave 6=`BLOCKED`、Wave 7=`PENDING`。
 
 ## 2. Wave 6 Final Closure Gate
 
