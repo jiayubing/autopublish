@@ -183,6 +183,13 @@ test("V1 identity and prepared evidence owners recursively reject open or unsafe
     },
   };
   const valid = evidence(sampleClaim);
+  assert.equal(
+    domain.preparedContentFingerprint({
+      title: "标题",
+      body: "正文\nsecond line",
+    }),
+    "b4be445cb5891d838a7bc1751ece7fd08b4b84fafe6d68ce1581ba707511a809",
+  );
   assert.deepEqual(domain.parsePreparedSubmissionEvidenceV1(valid), valid);
   assert.throws(
     () =>

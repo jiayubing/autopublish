@@ -174,6 +174,41 @@ const COMMON_ERRORS = {
     retryability: "manual-check",
     userMessage: "订单取消仍在处理中，请先完成取消核对。",
   },
+  ORDER_CANCELLATION_NOT_ALLOWED: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "当前订单状态不允许取消。",
+  },
+  ORDER_CANCELLATION_CONFIRMATION_STALE: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "取消确认已过期，请刷新后重新准备。",
+  },
+  ORDER_CANCELLATION_OBSERVATION_STALE: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "订单事实已变化，请刷新后重新核对取消状态。",
+  },
+  ORDER_CANCELLATION_ATTEMPT_NOT_FOUND: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "未找到对应的取消记录。",
+  },
+  ORDER_CANCELLATION_ALREADY_RESOLVED: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "该取消记录已经完成人工核对。",
+  },
+  ORDER_CANCELLATION_RESOLUTION_STALE: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "取消核对确认已过期，请重新准备。",
+  },
+  ORDER_CANCELLATION_RESOLUTION_CONFLICT: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "该取消记录已按相反结论完成核对。",
+  },
   PAID_ORDER_RESOLUTION_QUERY_FAILED: {
     category: "transport",
     retryability: "manual-check",

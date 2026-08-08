@@ -12,7 +12,14 @@ const {
   oneOf,
   customField,
 } = require("./registry");
-const domain = require("../../../src/domain");
+const {
+  parsePublicationEvidenceV1,
+} = require("../../../src/domain/publication-evidence-contract");
+const {
+  parseDeletionTransactionIdentityV1,
+  parseTerminalTargetV1,
+  parseTombstoneIdentityV1,
+} = require("../../../src/domain/article-lifecycle-terminal-contract");
 const {
   projectArticleAttentionItem,
   projectArticleAttentionList,
@@ -281,7 +288,7 @@ const saveArticleResult = oneOf([
 const selection = exactObject({ clientId: id, articleId: id });
 const trashReference = exactObject({ type: text(80), id });
 const tombstoneIdentityField = customField(function (value) {
-  return domain.parseTombstoneIdentityV1(value);
+  return parseTombstoneIdentityV1(value);
 });
 const trashRecord = exactObject({
   version: literalField(1),
@@ -374,7 +381,7 @@ const articleRemovalTransaction = exactObject({
   ),
   deletionTransactionIdentityV1: optionalField(
     customField(function (value) {
-      return domain.parseDeletionTransactionIdentityV1(value);
+      return parseDeletionTransactionIdentityV1(value);
     }),
   ),
 });
@@ -822,10 +829,10 @@ const publicationRecord = exactObject({
   reasonCode: optionalField(nullableField(text(128))),
 });
 const publicationEvidenceField = customField(function (value) {
-  return domain.parsePublicationEvidenceV1(value, { allowLegacy: true });
+  return parsePublicationEvidenceV1(value, { allowLegacy: true });
 });
 const terminalTargetField = customField(function (value) {
-  return domain.parseTerminalTargetV1(value);
+  return parseTerminalTargetV1(value);
 });
 const publishedArchive = exactObject({
   publicationId: id,

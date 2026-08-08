@@ -21,6 +21,7 @@ function installDesktopFixture(page) {
     const state = {
       workspaceRuntimeId,
       queueCalls: 0,
+      groupCalls: 0,
       queueRevision: 0,
       phase: 'idle',
       invalidationListeners: [],
@@ -86,6 +87,14 @@ function installDesktopFixture(page) {
       previewTrashedArticleQueueResidue: () => response({ items: [], cleanableItems: [], reportedItems: [], cleanableCount: 0, reportedCount: 0 }),
       listContentClients: () => response([]),
       listContentArticles: () => response([]),
+      listRegularQueueGroups: () => {
+        state.groupCalls += 1;
+        return response([]);
+      },
+      startRegularQueueGroup: () => response([]),
+      pauseRegularQueueGroup: () => response([]),
+      startAllRegularQueueGroups: () => response([]),
+      pauseAllRegularQueueGroups: () => response([]),
       listSubmissionPlatforms: () => response([]),
       listSubmissionBatches: () => response([]),
       listArticleTrash: () => response([]),
@@ -131,6 +140,9 @@ function installDesktopFixture(page) {
       },
       getQueueCalls() {
         return state.queueCalls;
+      },
+      getGroupCalls() {
+        return state.groupCalls;
       },
     };
     window.desktopConsole = {
@@ -186,71 +198,25 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     if (buildDir) fs.rmSync(buildDir, { recursive: true, force: true });
   });
 
-  it('loads once, stays idle, refreshes manually, and deduplicates terminal revisions', async () => {
+  it('loads queue groups once and refreshes them only on explicit user intent', async () => {
     const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
     page.setDefaultTimeout(10000);
     await installDesktopFixture(page);
     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByText('数据已就绪').waitFor();
-    const initialCalls = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
-    assert.equal(initialCalls, 1, 'PlatformFeatureProvider owns the initial queue load');
+    const initialCalls = await page.evaluate(() => window.__platformQueueLifecycle.getGroupCalls());
+    assert.equal(initialCalls, 1, 'PlatformFeatureProvider owns the initial queue-group load');
 
     await page.waitForTimeout(500);
-    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), initialCalls, 'initial idle does not trigger terminal refresh');
+    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getGroupCalls()), initialCalls, 'initial idle does not trigger another group query');
 
     await page.locator('#nav-item-platforms').click();
-    await page.getByRole('heading', { name: '其他平台投稿' }).waitFor();
+    await page.getByRole('heading', { name: '普通平台队列' }).waitFor();
     await page.waitForTimeout(500);
-    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), initialCalls, 'mounting the page does not refresh again');
+    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getGroupCalls()), initialCalls, 'mounting the page does not refresh again');
 
-    await page.getByRole('button', { name: '刷新队列' }).click();
-    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() === expected + 1, initialCalls);
-
-    const afterManualRefresh = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
-    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({ phase: 'running' }));
-    await page.evaluate(() => {
-      window.__platformQueueLifecycle.emitWorkspaceInvalidated(41);
-      window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 41 });
-      window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 41 });
-    });
-    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() >= expected + 1, afterManualRefresh);
-    await page.waitForTimeout(300);
-    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), afterManualRefresh + 1, 'one explicit terminal revision refreshes once');
-
-    const afterFirstTerminal = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
-    await page.evaluate(() => {
-      window.__platformQueueLifecycle.emitPlatformState({ phase: 'running' });
-      window.__platformQueueLifecycle.emitWorkspaceInvalidated(42);
-      window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 42 });
-      window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 42 });
-    });
-    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() >= expected + 1, afterFirstTerminal);
-    await page.waitForTimeout(300);
-    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), afterFirstTerminal + 1, 'a new explicit terminal revision refreshes once');
-
-    await page.locator('#nav-item-workbench').click();
-    await page.waitForTimeout(300);
-    const afterUnmount = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
-    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({ phase: 'completed', queueRevision: 43 }));
-    await page.waitForTimeout(300);
-    assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), afterUnmount, 'unmounted page no longer reacts to terminal state');
-
-    await page.locator('#nav-item-platforms').click();
-    await page.getByRole('heading', { name: '其他平台投稿' }).waitFor();
-    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({
-      runId: 'cross-page-run-2', phase: 'running', total: 20, processed: 7, succeeded: 6, failed: 1, skipped: 0, uncertain: 0,
-      currentTask: { sourcePlatformId: 'hepan', filename: 'article-08.md', targetPlatformId: 'hepan' },
-      updatedAt: new Date(Date.now() + 1000).toISOString(),
-    }));
-    await page.getByText('7 / 20').first().waitFor();
-    await page.locator('#nav-item-workbench').click();
-    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({
-      runId: 'cross-page-run-2', phase: 'running', total: 20, processed: 8, succeeded: 7, failed: 1, skipped: 0, uncertain: 0,
-      currentTask: { sourcePlatformId: 'hepan', filename: 'article-09.md', targetPlatformId: 'hepan' },
-      updatedAt: new Date(Date.now() + 2000).toISOString(),
-    }));
-    await page.locator('#nav-item-platforms').click();
-    await page.getByText('8 / 20').first().waitFor();
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await page.waitForFunction((expected) => window.__platformQueueLifecycle.getGroupCalls() === expected + 1, initialCalls);
     await page.close();
   });
 
@@ -261,18 +227,11 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByText('数据已就绪').waitFor();
     await page.locator('#nav-item-platforms').click();
-    await page.getByRole('heading', { name: '其他平台投稿' }).waitFor();
+    await page.getByRole('heading', { name: '普通平台队列' }).waitFor();
 
     const beforeSwitch = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
     await page.evaluate(() => window.__platformQueueLifecycle.switchWorkspace('fixture-runtime-2', 60));
     await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() > expected, beforeSwitch);
-    await page.evaluate(() => window.__platformQueueLifecycle.emitPlatformState({
-      workspaceRuntimeId: 'fixture-runtime-2', runId: 'run-b', phase: 'running', total: 20, processed: 7,
-      succeeded: 6, failed: 1, skipped: 0, uncertain: 0,
-      updatedAt: new Date(Date.now() + 1000).toISOString(),
-    }));
-    await page.getByText('7 / 20').first().waitFor();
-
     const beforeDelayedA = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
     await page.evaluate(() => {
       window.__platformQueueLifecycle.emitPlatformState({
@@ -288,7 +247,6 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     });
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), beforeDelayedA, 'A terminal event must not refresh B queue');
-    await page.getByText('7 / 20').first().waitFor();
     await page.close();
   });
 });

@@ -395,9 +395,9 @@ async function openPlatformPage(scenario) {
   await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
   await page.locator("#nav-item-platforms").waitFor();
   await page.locator("#nav-item-platforms").click();
-  await page.getByRole("heading", { name: "其他平台投稿" }).waitFor();
+  await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
   await page
-    .getByRole("button", { name: /检查并清理已删除文章残留/ })
+    .getByRole("button", { name: "检查残留" })
     .waitFor();
   return page;
 }
@@ -413,13 +413,10 @@ describe("renderer residue cleanup flow", { concurrency: false }, () => {
       const page = await openPlatformPage(scenario);
       try {
         const action = page.getByRole("button", {
-          name: /检查并清理已删除文章残留/,
+          name: "检查残留",
         });
         await action.click();
-        await page
-          .getByRole("dialog", { name: "清理已删除文章队列残留" })
-          .waitFor();
-        await page.getByRole("button", { name: "确认清理" }).click();
+        await page.getByRole("button", { name: "确认清理本地残留" }).click();
         await page.waitForFunction(
           () => !document.body.innerText.includes("清理中…"),
         );
@@ -434,8 +431,11 @@ describe("renderer residue cleanup flow", { concurrency: false }, () => {
             false,
             `RESIDUE_BUSY_RED ${scenario}`,
           );
-          await alerts.waitFor();
-          const text = await alerts.first().innerText();
+          const cleanupAlert = alerts.filter({
+            hasText: /PUBLICATION_ATTEMPT_MISMATCH|清理服务拒绝|失败|未清理/,
+          });
+          await cleanupAlert.waitFor();
+          const text = await cleanupAlert.first().innerText();
           assert.match(
             text,
             /PUBLICATION_ATTEMPT_MISMATCH|cleanup rejected|失败|未清理/,

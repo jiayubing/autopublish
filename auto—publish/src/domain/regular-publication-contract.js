@@ -1,7 +1,6 @@
 "use strict";
 
-const crypto = require("node:crypto");
-const util = require("node:util");
+const { sha256 } = require("@noble/hashes/sha2.js");
 
 const { ArticleId, AttemptId, ClientId } = require("./identities");
 const { parsePublicationTarget } = require("./publication-target");
@@ -81,10 +80,14 @@ function preparedContentFingerprint(input) {
   const value = input || {};
   if (typeof value.title !== "string" || typeof value.body !== "string")
     invalid("PREPARED_SUBMISSION_EVIDENCE_V1_INVALID");
-  return crypto
-    .createHash("sha256")
-    .update(JSON.stringify({ title: value.title, body: value.body }), "utf8")
-    .digest("hex");
+  return Array.from(
+    sha256(
+      new TextEncoder().encode(
+        JSON.stringify({ title: value.title, body: value.body }),
+      ),
+    ),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function validTitle(value) {
@@ -226,7 +229,7 @@ function createPreparedSubmission(input) {
         throw dtoError("PREPARED_SUBMISSION_NOT_SERIALIZABLE");
       },
     },
-    [util.inspect.custom]: {
+    [Symbol.for("nodejs.util.inspect.custom")]: {
       enumerable: false,
       value: function () {
         return "[PreparedSubmission]";

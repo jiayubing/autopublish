@@ -4902,6 +4902,29 @@ function callExpressionTargetsSymbol(program, checker, expression, target) {
           ts.isVariableDeclaration(candidate) || ts.isBindingElement(candidate),
       )
     : null;
+  if (
+    declaration &&
+    ts.isVariableDeclaration(declaration) &&
+    declaration.initializer &&
+    ts.isBinaryExpression(declaration.initializer) &&
+    [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(
+      declaration.initializer.operatorToken.kind,
+    )
+  )
+    return (
+      callExpressionTargetsSymbol(
+        program,
+        checker,
+        declaration.initializer.left,
+        target,
+      ) ||
+      callExpressionTargetsSymbol(
+        program,
+        checker,
+        declaration.initializer.right,
+        target,
+      )
+    );
   let exportName = null;
   let requireCall = null;
   if (ts.isPropertyAccessExpression(expression)) {
