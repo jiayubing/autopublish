@@ -5,7 +5,7 @@
 - Ticket: `24-D`
 - Base integration HEAD: `4ad663888c61dfb0c592873e0c7ab653048d8746`
 - Branch: `codex/article-lifecycle-submission`
-- Final commit: `2c79391` before the handoff-only amend; the final amended OID is recorded by the closure response and clean-HEAD verification.
+- Final implementation commit: `53e0aa99ca55fd7df033fa1a8fbd646841811a39`.
 - Scope owner: Removal and Queue Capability Owner.
 - Explicitly out of scope: Ticket 24-E, M04, the 24-B target contract, the 24-C typed-outcome owner, migration ownership, merge, push, and real external operations.
 

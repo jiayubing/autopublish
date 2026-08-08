@@ -23,7 +23,7 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：24-C generic runtime outcome vocabulary removal 已在 clean integration HEAD `90254f959c6aaa7de765069bde06be99c527ec14` 完成；handoff `handoffs/24-C-remove-generic-outcome-vocabulary.md` 记录 typed regular/paid outcomes、legacy/schema 隔离、97/97 定向回归、Primary Audit PASS 与 bounded re-audit PASS。production IPC fixture matrix timeout、既有未改动 format 问题和 packaged verifier 参数缺失均已如实记录；24-C 未进入 24-D，Wave 10 保持 `PARTIAL`，下一可调度项为 24-D。**
+**当前动作：24-D published-recycle 与 queue-copy user capability removal 已在 clean integration HEAD `53e0aa99ca55fd7df033fa1a8fbd646841811a39` 完成；handoff `handoffs/24-D-remove-published-recycle-and-queue-copy.md` 记录已发布永久只读、未开始队列撤销保留、residue repair/evidence 保留、137/137 定向回归、production matrix 35/35（force-exit）、Primary Audit PASS 与 bounded re-audit PASS。正常 matrix 的进程 timeout、既有未改动 format 问题和其他 evidence gap 均已如实记录；24-D 未进入 24-E，Wave 10 保持 `PARTIAL`，下一可调度项为 24-E。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -60,7 +60,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8    | 22                                                       | 06、09、16                                               | `COMPLETE`                                                                            |
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
-| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `PARTIAL`；24-C COMPLETE，下一项 24-D                                                  |
+| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `PARTIAL`；24-D COMPLETE，下一项 24-E                                                  |
 | 10.5 | M04 → M05 → M06                                          | Wave 10 COMPLETE                                         | `PENDING`                                                                             |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
