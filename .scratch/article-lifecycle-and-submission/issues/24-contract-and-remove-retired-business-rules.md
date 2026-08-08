@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — 投稿清理、删除协调与恢复深模块；10 — 精简普通平台投稿队列界面；14 — 网站媒体订单创建结果人工核对；16 — 服务商订单取消与永久历史；23 — 旧文章与投稿事实安全迁移
 
-**Status:** `READY`。Wave 9 与 Ticket 23 已 `COMPLETE`；下一可调度工作包为 24-0。本状态仍须在执行前以当前 Git、Wave Plan 与依赖 handoff 重新验证。
+**Status:** `RUNNING`。24-0 已完成 inventory/deletion-map handoff、Primary Audit 与 bounded re-audit；下一可调度工作包为 24-A。本状态仍须在执行前以当前 Git、Wave Plan 与 handoff 重新验证。
 
 **Scheduling gate:** 作为独立 Wave 10，按 `24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F` 严格串行调度；不等待后置 Ticket 18–21。前一工作包未 Closure、未进入新的 clean integration HEAD 时，不得启动后一工作包。
 

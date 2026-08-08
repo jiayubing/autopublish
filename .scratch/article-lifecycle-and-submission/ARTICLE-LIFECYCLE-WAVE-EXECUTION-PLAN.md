@@ -23,7 +23,7 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：final clean-HEAD reconciliation 已完成。Clean implementation HEAD `265517a8d25934b7917e10a0c2240ce25a20182e` 上完整 `npm test` 为 1,927/1,927 PASS，migration、Phase 08、lint/typecheck/format/discovery 与 clean production-smoke 全部 PASS；Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9 已按原顺序回填 `COMPLETE`。Evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`。下一可调度项为 Ticket 24-0；Ticket 24 必须按拆分工作包串行推进。**
+**当前动作：24-0 runtime legacy inventory 已在 clean integration HEAD `d4ab9af331d9bc5283d312e4a8127b6ac9383c86` 完成；handoff `handoffs/24-0-runtime-legacy-inventory.md` 记录五类分类、公开 capability before-map、直接调用图、Primary Audit PASS 与 bounded re-audit PASS。24-0 仅修改 handoff，未修改 production/test/gate；Wave 10 进入 `PARTIAL`，下一可调度项为 24-A。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -60,7 +60,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8    | 22                                                       | 06、09、16                                               | `COMPLETE`                                                                            |
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
-| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `READY`；下一项 24-0                                                                  |
+| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `PARTIAL`；24-0 COMPLETE，下一项 24-A                                                  |
 | 10.5 | M04 → M05 → M06                                          | Wave 10 COMPLETE                                         | `PENDING`                                                                             |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
