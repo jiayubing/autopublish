@@ -70,39 +70,6 @@ const OPERATIONAL_FACADE =
   "src/infrastructure/operational-store/operational-store.js";
 const MIGRATION_IMPORTER = "scripts/migrate-operational-store-v1.js";
 const RECOVERY_GUARD_IMPORT = `${INTERNAL_PREFIX}/operational-store-recovery-guard`;
-const INTERNAL_MODULES = Object.freeze([
-  "src/infrastructure/operational-store/internal/operational-store-active-target-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-context.js",
-  "src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
-  "src/infrastructure/operational-store/internal/operational-store-maintenance.js",
-  "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-order-observation-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-order-link.js",
-  "src/infrastructure/operational-store/internal/operational-store-outcome-writer.js",
-  "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
-  "src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-publication-success.js",
-  "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-regular-outcome-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-recovery-guard.js",
-  "src/infrastructure/operational-store/internal/operational-store-runtime.js",
-  "src/infrastructure/operational-store/internal/operational-store-schema.js",
-  "src/infrastructure/operational-store/internal/operational-store-schema-v4.js",
-  "src/infrastructure/operational-store/internal/operational-store-submission-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-submission-preparation.js",
-  "src/infrastructure/operational-store/internal/operational-store-transaction.js",
-  "src/infrastructure/operational-store/internal/operational-store-utils.js",
-  "src/infrastructure/operational-store/internal/operational-store-verifier.js",
-  "src/infrastructure/operational-store/internal/order-transition-guard.js",
-]);
-const ALLOWED_INTERNAL_IMPORTERS = new Set([
-  OPERATIONAL_FACADE,
-  ...INTERNAL_MODULES,
-  MIGRATION_IMPORTER,
-]);
 const PUBLISHER_OWNER_FILES = Object.freeze([
   "desktop/services/desktop-publisher-router.js",
   "desktop/services/worker-publisher.js",
@@ -271,7 +238,10 @@ function isInternalImport(resolved) {
 function isAllowedInternalImport(importer, resolved) {
   if (importer === MIGRATION_IMPORTER)
     return resolved === RECOVERY_GUARD_IMPORT;
-  return ALLOWED_INTERNAL_IMPORTERS.has(importer);
+  return (
+    importer === OPERATIONAL_FACADE ||
+    importer.startsWith(`${INTERNAL_PREFIX}/`)
+  );
 }
 
 function operationalStoreBoundaryReport() {

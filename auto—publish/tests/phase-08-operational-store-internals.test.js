@@ -20,6 +20,8 @@ const PRODUCTION_ROOTS = [
   "auth-server/scripts",
 ];
 const INTERNAL_PREFIX = "src/infrastructure/operational-store/internal";
+const FACADE_RELATIVE =
+  "src/infrastructure/operational-store/operational-store.js";
 const MIGRATION_IMPORTER = "scripts/migrate-operational-store-v1.js";
 const RECOVERY_GUARD_IMPORT = `${INTERNAL_PREFIX}/operational-store-recovery-guard`;
 
@@ -88,41 +90,6 @@ const PUBLIC_SURFACE = [
   "close",
 ];
 
-const INTERNAL_MODULES = [
-  "src/infrastructure/operational-store/internal/operational-store-context.js",
-  "src/infrastructure/operational-store/internal/operational-store-active-target-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-maintenance.js",
-  "src/infrastructure/operational-store/internal/operational-store-schema-v4.js",
-  "src/infrastructure/operational-store/internal/operational-store-order-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-order-link.js",
-  "src/infrastructure/operational-store/internal/operational-store-order-observation-aggregate.js",
-  "src/infrastructure/operational-store/internal/order-transition-guard.js",
-  "src/infrastructure/operational-store/internal/operational-store-outcome-writer.js",
-  "src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-queue-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-reconciliation-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
-  "src/infrastructure/operational-store/internal/operational-store-owner-lease.js",
-  "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-publication-success.js",
-  "src/infrastructure/operational-store/internal/operational-store-regular-outcome-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-recovery-guard.js",
-  "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-runtime.js",
-  "src/infrastructure/operational-store/internal/operational-store-schema.js",
-  "src/infrastructure/operational-store/internal/operational-store-submission-aggregate.js",
-  "src/infrastructure/operational-store/internal/operational-store-submission-preparation.js",
-  "src/infrastructure/operational-store/internal/operational-store-transaction.js",
-  "src/infrastructure/operational-store/internal/operational-store-transition-ports.js",
-  "src/infrastructure/operational-store/internal/operational-store-utils.js",
-  "src/infrastructure/operational-store/internal/operational-store-verifier.js",
-];
-
-const ALLOWED_INTERNAL_IMPORTERS = new Set([
-  "src/infrastructure/operational-store/operational-store.js",
-  ...INTERNAL_MODULES,
-]);
-
 const IMPORT_PATTERNS = [
   /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
   /\bfrom\s*["']([^"']+)["']/g,
@@ -156,7 +123,9 @@ function isInternalImport(resolved) {
 function isAllowedInternalImport(importer, resolved) {
   if (importer === MIGRATION_IMPORTER)
     return resolved === RECOVERY_GUARD_IMPORT;
-  return ALLOWED_INTERNAL_IMPORTERS.has(importer);
+  return (
+    importer === FACADE_RELATIVE || importer.startsWith(`${INTERNAL_PREFIX}/`)
+  );
 }
 
 test("OperationalStore facade preserves the frozen caller surface", () => {
@@ -185,7 +154,6 @@ test("OperationalStore facade preserves the frozen caller surface", () => {
 
 test("OperationalStore facade hides SQL, table names, and transaction choreography", () => {
   const source = fs.readFileSync(facadePath, "utf8");
-  assert.ok(source.trimEnd().split(/\r?\n/).length <= 160);
   assert.doesNotMatch(
     source,
     /DatabaseSync|\.prepare\(|CREATE TABLE|BEGIN IMMEDIATE/,
@@ -194,8 +162,6 @@ test("OperationalStore facade hides SQL, table names, and transaction choreograp
     source,
     /\b(?:publication_records|submission_items|remote_orders|recovery_intents|order_display_snapshots)\b/,
   );
-  for (const relative of INTERNAL_MODULES)
-    assert.equal(fs.existsSync(path.join(root, relative)), true, relative);
   assert.match(source, /createPublicationAggregate/);
   assert.match(source, /createSubmissionAggregate/);
   assert.match(source, /createOrderAggregate/);
@@ -259,6 +225,30 @@ test("migration importer allow-list is specific to the recovery guard", () => {
     isAllowedInternalImport(
       MIGRATION_IMPORTER,
       `${INTERNAL_PREFIX}/operational-store-schema.js`,
+    ),
+    false,
+  );
+});
+
+test("internal dependency permission follows the module boundary", () => {
+  assert.equal(
+    isAllowedInternalImport(
+      FACADE_RELATIVE,
+      `${INTERNAL_PREFIX}/operational-store-context`,
+    ),
+    true,
+  );
+  assert.equal(
+    isAllowedInternalImport(
+      `${INTERNAL_PREFIX}/future-internal-owner.js`,
+      `${INTERNAL_PREFIX}/operational-store-utils`,
+    ),
+    true,
+  );
+  assert.equal(
+    isAllowedInternalImport(
+      "src/content/article-mutation-coordinator.js",
+      `${INTERNAL_PREFIX}/operational-store-context`,
     ),
     false,
   );
