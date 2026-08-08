@@ -4,7 +4,7 @@
 
 **Blocked by:** 15 — 服务商订单同步、筛选与刷新
 
-**Status:** document-ready；当前不可调度
+**Status:** COMPLETE；implementation/audit evidence 见 `handoffs/16-order-cancellation-and-immutable-history.md`
 
 **Scheduling gate:** 等待波次 6 `COMPLETE`，并等待波次 7 的 Ticket 10 完成轻量定向复核、提交、合并和定向复验后，从新的集成 `HEAD` 调度；该顺序不建立 16←10 的业务依赖。
 
