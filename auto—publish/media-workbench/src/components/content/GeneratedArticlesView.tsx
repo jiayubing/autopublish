@@ -17,6 +17,7 @@ import type {
   ArticleTrashPreview,
   ArticleTrashRecord,
   PaidMediaPreflight,
+  PublicationArchiveEntry,
   PublicationHistoryRecord,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
@@ -94,6 +95,7 @@ export default function GeneratedArticlesView({
     submissionBatches,
     cancellationPlans,
     publicationRecords,
+    publishedArchives = [],
     workflowByArticle: snapshotWorkflowByArticle,
     submissionPlatforms: allSubmissionPlatforms,
   } = management;
@@ -211,6 +213,17 @@ export default function GeneratedArticlesView({
     });
     return grouped;
   }, [publicationRecords]);
+  const publicationArchivesByArticle = useMemo(() => {
+    const grouped = new Map<string, PublicationArchiveEntry[]>();
+    publishedArchives.forEach((archive) => {
+      const articleId = archive.publicationEvidenceV1.articleIdentityV1.articleId;
+      grouped.set(articleId, [
+        ...(grouped.get(articleId) || []),
+        archive,
+      ]);
+    });
+    return grouped;
+  }, [publishedArchives]);
   const workflowByArticle = useMemo(
     () =>
       new Map(
@@ -1704,6 +1717,11 @@ export default function GeneratedArticlesView({
         records={
           drawerArticle
             ? publicationRecordsByArticle.get(drawerArticle.id) || []
+            : []
+        }
+        archives={
+          drawerArticle
+            ? publicationArchivesByArticle.get(drawerArticle.id) || []
             : []
         }
         summary={

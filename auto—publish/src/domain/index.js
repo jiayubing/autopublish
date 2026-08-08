@@ -7,6 +7,7 @@ const regularPublication = require("./regular-publication-contract");
 const publicationEvidence = require("./publication-evidence-contract");
 const paidMediaOrder = require("./paid-media-order-contract");
 const orderObservation = require("./order-observation-contract");
+const articleLifecycleTerminal = require("./article-lifecycle-terminal-contract");
 module.exports = Object.freeze({
   ...identities,
   ...target,
@@ -17,4 +18,5 @@ module.exports = Object.freeze({
   ...publicationEvidence,
   ...paidMediaOrder,
   ...orderObservation,
+  ...articleLifecycleTerminal,
 });

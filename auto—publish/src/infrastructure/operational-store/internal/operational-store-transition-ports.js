@@ -11,6 +11,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   const regularOutcome = value.regularOutcome;
   const orderObservation = value.orderObservation;
   const orderCancellation = value.orderCancellation;
+  const publishedArchiveQueries = value.publishedArchiveQueries;
   holder.publicationTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     reservePublicationTarget: publication.reservePublicationTarget,
@@ -100,6 +101,9 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
       orderCancellation.confirmCancellationSucceeded,
     confirmCancellationNotApplied:
       orderCancellation.confirmCancellationNotApplied,
+  });
+  holder.publishedArchiveQueries = Object.freeze({
+    listPublishedArchives: publishedArchiveQueries.listPublishedArchives,
   });
 }
 

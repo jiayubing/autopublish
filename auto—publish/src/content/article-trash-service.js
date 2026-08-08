@@ -1,11 +1,7 @@
 const crypto = require("crypto");
+const domain = require("../domain");
 const { createArticleRemovalService } = require("./article-removal-service");
 const { createArticleTrashConfirmation } = require("./article-trash-confirmation");
-const {
-  deriveArticleLifecycle,
-  removalTransactionMatchesArticle,
-  trashedArticleMutationBlockReason,
-} = require("./article-lifecycle-projection");
 
 function trashError(code, message) {
   const error = new Error(message);
@@ -33,8 +29,6 @@ function createArticleTrashService(options) {
   if (!opts.contentStore) throw trashError("ARTICLE_TRASH_SERVICE_INVALID", "Content store is required");
   const contentStore = opts.contentStore;
   const mutationCoordinator = opts.mutationCoordinator || null;
-  const operationalStore = opts.operationalStore || null;
-  const transactionStore = opts.transactionStore || null;
   const now = opts.now || function() { return new Date().toISOString(); };
   const confirmations = createArticleTrashConfirmation({
     now: now,
@@ -58,93 +52,18 @@ function createArticleTrashService(options) {
       onTransactionStatus: opts.onTransactionStatus
     }) : null);
 
-  function removalTransactionsForArticleRef(item) {
-    if (!transactionStore || typeof transactionStore.list !== "function") return [];
-    try {
-      return transactionStore.list().filter(function (transaction) {
-        return removalTransactionMatchesArticle(transaction, item);
-      });
-    } catch (_) {
-      throw trashError("ARTICLE_LIFECYCLE_FACTS_UNAVAILABLE", "文章删除事实不可用，操作已停止");
-    }
-  }
-
-  function lifecycleForArticleRef(item) {
-    if (!operationalStore || typeof operationalStore.listArticleLifecycleFacts !== "function") return null;
-    let facts;
-    try {
-      facts = operationalStore.listArticleLifecycleFacts({ articleIds: [item.articleId] });
-    } catch (_) {
-      throw trashError("ARTICLE_LIFECYCLE_FACTS_UNAVAILABLE", "文章生命周期事实不可用，操作已停止");
-    }
-    if (!facts || !Array.isArray(facts.publications) || !Array.isArray(facts.submissionItems) || !Array.isArray(facts.orders) || !Array.isArray(facts.attentionItems)) {
-      throw trashError("ARTICLE_LIFECYCLE_FACTS_UNAVAILABLE", "文章生命周期事实不可用，操作已停止");
-    }
-    const removalTransactions = removalTransactionsForArticleRef(item);
-    return deriveArticleLifecycle({
-      article: {
-        id: item.articleId,
-        clientId: item.clientId,
-        title: "trashed article",
-        content: "trashed article",
-        status: "trashed",
-      },
-      publications: facts.publications,
-      submissionItems: facts.submissionItems,
-      orders: facts.orders,
-      attentionItems: facts.attentionItems,
-      removalTransactions,
-    });
+  function nowIso() {
+    const value = typeof now === "function" ? now() : now;
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime()))
+      throw trashError("ARTICLE_PERMANENT_DELETE_CLOCK_INVALID", "Permanent deletion clock is invalid");
+    return date.toISOString();
   }
 
   function assertLifecycleSafe(item, operation) {
-    if (mutationCoordinator && typeof mutationCoordinator.assertTrashedArticleMutationAllowed === "function") {
-      mutationCoordinator.assertTrashedArticleMutationAllowed({ articleRef: item, operation });
-      return;
-    }
-    const lifecycle = lifecycleForArticleRef(item);
-    if (!lifecycle) return;
-    const transactions = removalTransactionsForArticleRef(item);
-    const code = trashedArticleMutationBlockReason(lifecycle, transactions);
-    if (code) {
-      const error = trashError(code, operation === "restore"
-        ? "文章存在未结束的发布事实，不能恢复"
-        : "文章存在未结束的发布事实，不能永久删除");
-      Object.defineProperty(error, "safeMetadata", {
-        value: Object.freeze({ operation, articleId: item.articleId }),
-        enumerable: false,
-      });
-      throw error;
-    }
-  }
-
-  function uncertainAfterLifecycleChange(operation, cause) {
-    const error = trashError("ARTICLE_MUTATION_RESULT_UNCERTAIN", operation + "结果需要人工核对");
-    Object.defineProperty(error, "safeMetadata", {
-      value: Object.freeze({ operation, causeCode: cause && cause.code || "ARTICLE_LIFECYCLE_CHANGED" }),
-      enumerable: false,
-    });
-    return error;
-  }
-
-  function buildTombstone(article) {
-    const references = [];
-    if (typeof article.generationBatchId === "string" && article.generationBatchId.trim()) {
-      references.push({ type: "generation-batch", id: article.generationBatchId });
-    }
-    if (typeof article.generationTaskId === "string" && article.generationTaskId.trim()) {
-      references.push({ type: "generation-task", id: article.generationTaskId });
-    }
-    return {
-      version: 1,
-      deletedAt: now(),
-      clientId: article.clientId,
-      articleId: article.id,
-      status: article.status,
-      references: references,
-      titleSnapshot: typeof article.title === "string" && article.title.trim() ? article.title.trim().slice(0, 200) : null,
-      contentFingerprint: typeof contentStore.fingerprintArticle === "function" ? contentStore.fingerprintArticle(article) : undefined
-    };
+    if (!mutationCoordinator || typeof mutationCoordinator.assertTrashedArticleMutationAllowed !== "function")
+      throw trashError("ARTICLE_MUTATION_COORDINATOR_REQUIRED", "文章恢复或永久删除必须通过文章变更协调器");
+    mutationCoordinator.assertTrashedArticleMutationAllowed({ articleRef: item, operation });
   }
 
   function tombstoneFingerprint(tombstone) {
@@ -155,9 +74,37 @@ function createArticleTrashService(options) {
     })).digest("hex");
   }
 
+  function tombstoneIdentityV1(tombstone, fallbackPurgedAt) {
+    return domain.parseTombstoneIdentityV1({
+      version: 1,
+      articleIdentityV1: {
+        version: 1,
+        clientId: tombstone.clientId,
+        articleId: tombstone.articleId,
+      },
+      state: tombstone.permanentlyDeleted === true
+        ? "PERMANENTLY_DELETED"
+        : "TRASHED",
+      deletedAt: tombstone.deletedAt,
+      purgedAt: tombstone.permanentlyDeleted === true
+        ? tombstone.purgedAt || fallbackPurgedAt || nowIso()
+        : null,
+      reasonCode: tombstone.permanentlyDeleted === true
+        ? "ARTICLE_PERMANENTLY_DELETED"
+        : "ARTICLE_TRASHED",
+      contentFingerprint: tombstone.contentFingerprint || null,
+    });
+  }
+
+  function publicTombstone(tombstone) {
+    return Object.assign({}, tombstone, {
+      tombstoneIdentityV1: tombstoneIdentityV1(tombstone),
+    });
+  }
+
   function listTrashedArticles(clientId) {
     assertId(clientId, "Client id");
-    return contentStore.listTrashedArticles(clientId);
+    return contentStore.listTrashedArticles(clientId).map(publicTombstone);
   }
 
   function trashArticles(input) {
@@ -173,28 +120,7 @@ function createArticleTrashService(options) {
         confirmed: input.confirmed
       });
     }
-    if (input.confirmed !== true) throw trashError("ARTICLE_TRASH_CONFIRMATION_REQUIRED", "Article trash confirmation is required");
-    const moved = [];
-    const skipped = [];
-    const rejected = [];
-    input.articles.forEach(function(rawSelection) {
-      const item = selection(rawSelection);
-      try {
-        const article = contentStore.getArticle(item.clientId, item.articleId);
-        const tombstone = contentStore.moveArticleToTrash(item.clientId, item.articleId, buildTombstone(article));
-        moved.push(tombstone);
-      } catch (error) {
-        if (error && error.code === "ARTICLE_NOT_FOUND") {
-          const existing = contentStore.listTrashedArticles(item.clientId).find(function(value) { return value.articleId === item.articleId; });
-          if (existing) {
-            skipped.push(existing);
-            return;
-          }
-        }
-        rejected.push({ clientId: item.clientId, articleId: item.articleId, code: error.code || "ARTICLE_TRASH_FAILED" });
-      }
-    });
-    return { moved: moved, skipped: skipped, rejected: rejected };
+    throw trashError("ARTICLE_REMOVAL_UNAVAILABLE", "Article removal coordinator is unavailable");
   }
 
   function previewTrashArticles(input) {
@@ -206,12 +132,12 @@ function createArticleTrashService(options) {
     const item = selection(input);
     assertLifecycleSafe(item, "restore");
     let restored;
-    if (mutationCoordinator && typeof mutationCoordinator.restoreTrashedArticle === "function") {
+    if (mutationCoordinator && typeof mutationCoordinator.restoreArticles === "function") {
+      restored = mutationCoordinator.restoreArticles({ articleRefs: [item] }).items[0].article;
+    } else if (mutationCoordinator && typeof mutationCoordinator.restoreTrashedArticle === "function") {
       restored = mutationCoordinator.restoreTrashedArticle({ articleRef: item }).article;
     } else {
-      restored = contentStore.restoreTrashedArticle(item.clientId, item.articleId);
-      try { assertLifecycleSafe(item, "restore"); }
-      catch (error) { throw uncertainAfterLifecycleChange("restore", error); }
+      throw trashError("ARTICLE_MUTATION_COORDINATOR_REQUIRED", "文章恢复必须通过文章变更协调器");
     }
     confirmations.invalidateBinding(item);
     return removalService ? { article: restored, restored: true, queueRestored: false, message: "文章已恢复，投稿队列不会自动恢复" } : restored;
@@ -249,16 +175,39 @@ function createArticleTrashService(options) {
       throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_STALE", "Permanent deletion confirmation is stale");
     }
     assertLifecycleSafe(item, "permanent-delete");
+    const requestedPurgedAt = nowIso();
     let tombstone;
-    if (mutationCoordinator && typeof mutationCoordinator.permanentlyDeleteTrashedArticle === "function") {
-      tombstone = mutationCoordinator.permanentlyDeleteTrashedArticle({ articleRef: item, purgedAt: now() }).tombstone;
-    } else {
-      tombstone = contentStore.permanentlyDeleteTrashedArticle(item.clientId, item.articleId, now());
-      try { assertLifecycleSafe(item, "permanent-delete"); }
-      catch (error) { throw uncertainAfterLifecycleChange("permanent-delete", error); }
+    try {
+      if (mutationCoordinator && typeof mutationCoordinator.permanentlyDeleteArticles === "function") {
+        tombstone = mutationCoordinator.permanentlyDeleteArticles({
+          articleRefs: [item],
+          purgedAt: requestedPurgedAt,
+          expectedTombstone: current,
+        }).items[0].tombstone;
+      } else if (mutationCoordinator && typeof mutationCoordinator.permanentlyDeleteTrashedArticle === "function") {
+        tombstone = mutationCoordinator.permanentlyDeleteTrashedArticle({
+          articleRef: item,
+          purgedAt: requestedPurgedAt,
+          expectedTombstone: current,
+        }).tombstone;
+      } else {
+        throw trashError("ARTICLE_MUTATION_COORDINATOR_REQUIRED", "文章永久删除必须通过文章变更协调器");
+      }
+    } catch (error) {
+      if (error && error.code === "ARTICLE_TOMBSTONE_CHANGED") {
+        confirmations.remove(input.token);
+        throw trashError("ARTICLE_PERMANENT_DELETE_CONFIRMATION_STALE", "Permanent deletion confirmation is stale");
+      }
+      throw error;
     }
     confirmations.invalidateBinding(item);
-    return { clientId: item.clientId, articleId: item.articleId, deleted: true, deletedAt: tombstone.deletedAt };
+    return {
+      clientId: item.clientId,
+      articleId: item.articleId,
+      deleted: true,
+      deletedAt: tombstone.deletedAt,
+      tombstoneIdentityV1: tombstoneIdentityV1(tombstone, requestedPurgedAt),
+    };
   }
 
   return {

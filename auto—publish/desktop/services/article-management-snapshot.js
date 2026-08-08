@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const domain = require("../../src/domain");
 const {
   ARTICLE_LIFECYCLE_PROJECTION_VERSION,
   deriveArticleLifecycle,
@@ -127,6 +128,57 @@ function safeOrder(order) {
   };
 }
 
+function safePublishedArchive(entry, scopedClientId) {
+  const value = entry && typeof entry === "object" ? entry : {};
+  const fields = [
+    "publicationId",
+    "attemptId",
+    "publicationEvidenceV1",
+    "terminalTargetV1",
+  ];
+  if (
+    Object.keys(value).some((field) => !fields.includes(field)) ||
+    fields.some((field) => !Object.prototype.hasOwnProperty.call(value, field))
+  )
+    throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+  let publicationId;
+  let attemptId;
+  try {
+    publicationId = domain.PublicationId.serialize(
+      domain.PublicationId.parse(value.publicationId),
+    );
+    attemptId = domain.AttemptId.serialize(domain.AttemptId.parse(value.attemptId));
+  } catch (_) {
+    throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+  }
+  let evidence;
+  let terminal;
+  try {
+    evidence = domain.parsePublicationEvidenceV1(value.publicationEvidenceV1, {
+      allowLegacy: true,
+    });
+    terminal = domain.parseTerminalTargetV1(value.terminalTargetV1);
+  } catch (_) {
+    throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+  }
+  if (
+    evidence.articleIdentityV1.clientId !== scopedClientId ||
+    terminal.articleIdentityV1.clientId !== scopedClientId ||
+    terminal.articleIdentityV1.articleId !== evidence.articleIdentityV1.articleId ||
+    terminal.attemptId !== attemptId
+  )
+    throw snapshotError(
+      "ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_CLIENT_MISMATCH",
+      "Publication archive does not belong to the requested client",
+    );
+  return {
+    publicationId,
+    attemptId,
+    publicationEvidenceV1: evidence,
+    terminalTargetV1: terminal,
+  };
+}
+
 // Kept as a compatibility adapter for older callers.  The classification
 // itself belongs to the shared projection module above.
 function deriveWorkflow(
@@ -209,6 +261,7 @@ function createArticleManagementSnapshot(options) {
   const ai = opts.aiContentService || {};
   const submission = opts.contentSubmissionService || {};
   const operationalStore = opts.operationalStore || null;
+  const publishedArchiveQueries = opts.publishedArchiveQueries || null;
   const attention = opts.articleAttentionQuery || null;
 
   function key(clientId, revision) {
@@ -272,6 +325,29 @@ function createArticleManagementSnapshot(options) {
         return article && (article.id || article.articleId);
       })
       .filter(Boolean);
+    let publishedArchives = [];
+    if (
+      publishedArchiveQueries &&
+      typeof publishedArchiveQueries.listPublishedArchives === "function"
+    ) {
+      const archiveResult =
+        await publishedArchiveQueries.listPublishedArchives({ articleIds });
+      if (!Array.isArray(archiveResult))
+        throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+      publishedArchives = archiveResult
+        .filter(function (entry) {
+          return (
+            entry &&
+            entry.publicationEvidenceV1 &&
+            articleIds.includes(
+              entry.publicationEvidenceV1.articleIdentityV1.articleId,
+            )
+          );
+        })
+        .map(function (entry) {
+          return safePublishedArchive(entry, clientId);
+        });
+    }
     const lifecycleFactsRaw = await read(
       "listLifecycleFacts",
       function () {
@@ -382,6 +458,7 @@ function createArticleManagementSnapshot(options) {
       submissionBatches: batches,
       cancellationPlans: plans,
       publicationRecords,
+      publishedArchives,
       orders,
       attention: {
         revision: Number(attentionList && attentionList.revision) || revision,

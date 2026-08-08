@@ -7,6 +7,7 @@ import type {
   ContentSubmissionPlatform,
   PublicationHistoryRecord,
   PublicationHistorySummary,
+  PublicationArchiveEntry,
   PaidMediaExecutionBatch,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
@@ -21,6 +22,7 @@ export type ArticleManagementReadModel = {
   submissionBatches: ContentSubmissionBatchRecord[];
   cancellationPlans: ContentSubmissionCancellationPreview[];
   publicationRecords: PublicationHistoryRecord[];
+  publishedArchives?: PublicationArchiveEntry[];
   workflowByArticle: Record<
     string,
     {

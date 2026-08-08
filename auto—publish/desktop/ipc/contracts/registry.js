@@ -130,6 +130,15 @@ function assertFieldSpec(spec, seen) {
     throw contractError("IPC_CONTRACT_INVALID");
   visited.add(spec);
   const values = copyPlainDataObject(spec, "IPC_CONTRACT_INVALID");
+  if (values.type === "custom") {
+    if (
+      Object.keys(values).some((key) => !["type", "validate"].includes(key)) ||
+      typeof values.validate !== "function"
+    )
+      throw contractError("IPC_CONTRACT_INVALID");
+    visited.delete(spec);
+    return;
+  }
   if (values.type === "string") {
     assertBounds(values.min, values.max, true);
     if (
@@ -316,6 +325,14 @@ function oneOf(fields) {
   return spec;
 }
 
+function customField(validate) {
+  if (typeof validate !== "function")
+    throw contractError("IPC_CONTRACT_INVALID");
+  const spec = Object.freeze({ type: "custom", validate });
+  assertFieldSpec(spec);
+  return spec;
+}
+
 function exactObject(fields) {
   const values = copyPlainDataObject(fields, "IPC_CONTRACT_INVALID");
   const spec = Object.freeze({
@@ -365,6 +382,13 @@ function validateValue(spec, value, code) {
     throw contractError(
       unknownFieldCount === candidates.length ? "IPC_UNKNOWN_FIELD" : code,
     );
+  }
+  if (spec && spec.type === "custom") {
+    try {
+      return spec.validate(value);
+    } catch (_) {
+      throw contractError(code);
+    }
   }
   if (spec === "boolean") {
     if (typeof value !== "boolean") throw contractError(code);
@@ -654,4 +678,5 @@ module.exports = {
   numberField,
   arrayField,
   oneOf,
+  customField,
 };

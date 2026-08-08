@@ -59,6 +59,106 @@ export interface PublicationHistorySummary {
   published: number;
   uncertain: boolean;
 }
+export interface PublicationEvidenceV1 {
+  version: 1;
+  articleIdentityV1: { version: 1; clientId: string; articleId: string };
+  customerSnapshotV1: { version: 1; clientId: string; displayName: string };
+  contentAvailable: boolean;
+  title: string | null;
+  body: string | null;
+  contentFingerprint: string | null;
+  targetSnapshotV1:
+    | {
+        version: 1;
+        kind: "platform";
+        platformId: string;
+        platformName: string;
+        accountProfileId: string;
+        accountLabel: string;
+      }
+    | {
+        version: 1;
+        kind: "media";
+        mediaResourceId: string;
+        mediaName: string;
+      }
+    | {
+        version: 1;
+        kind: "legacy-unknown-account";
+        platformId: string;
+        platformName: string;
+      };
+  resultCode: "REGULAR_ACCEPTED" | "PAID_PUBLISHED";
+  submittedAt: string | null;
+  submittedAtSource: string;
+  firstPublishedAt: string | null;
+  firstPublishedAtSource: string;
+  imageSummaryV1: {
+    deliveryMode: "text_only" | "with_images";
+    images: Array<{ assetFingerprint: string; layoutSlot: number }>;
+    decisionKind: string;
+  } | null;
+  orderNumber: string | null;
+  remoteUrl: string | null;
+  missingReasons: string[];
+  safeEvidenceRefs: Array<{ kind: string; fingerprint: string }>;
+}
+export interface TerminalTargetV1 {
+  version: 1;
+  articleIdentityV1: { version: 1; clientId: string; articleId: string };
+  targetIdentityV1: Record<string, unknown>;
+  attemptId: string | null;
+  terminalKind: "PUBLISHED";
+  reasonCode: string;
+  terminalAt: string | null;
+  terminalAtSource: string;
+  evidenceFingerprint: string;
+}
+export interface ClosedTargetV1 {
+  version: 1;
+  articleIdentityV1: { version: 1; clientId: string; articleId: string };
+  targetIdentityV1: Record<string, unknown>;
+  attemptId: string | null;
+  closedKind:
+    | "PRE_REMOTE_QUEUE_CLOSED"
+    | "FAILED"
+    | "REJECTED"
+    | "CANCELLED"
+    | "PAID_STATUS_4";
+  reasonCode: string;
+  closedAt: string | null;
+  closedAtSource: string;
+  evidenceFingerprint: string;
+}
+export interface TombstoneIdentityV1 {
+  version: 1;
+  articleIdentityV1: { version: 1; clientId: string; articleId: string };
+  state: "TRASHED" | "PERMANENTLY_DELETED";
+  deletedAt: string;
+  purgedAt: string | null;
+  reasonCode: string;
+  contentFingerprint: string | null;
+}
+export interface DeletionTransactionIdentityV1 {
+  version: 1;
+  transactionId: string;
+  articleIdentitiesV1: Array<{
+    version: 1;
+    clientId: string;
+    articleId: string;
+  }>;
+  state: "PENDING" | "COMMITTED" | "NEEDS_REPAIR" | "SUPERSEDED";
+  reasonCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+  selectionFingerprint: string;
+}
+export interface PublicationArchiveEntry {
+  publicationId: string;
+  attemptId: string;
+  publicationEvidenceV1: PublicationEvidenceV1;
+  terminalTargetV1: TerminalTargetV1;
+}
 
 export interface ArticleSelection {
   clientId: string;
@@ -83,6 +183,7 @@ export interface ArticleRemovalTransaction {
   articleCount?: number;
   queueCursor?: number;
   articleCursor?: number;
+  deletionTransactionIdentityV1?: DeletionTransactionIdentityV1;
 }
 
 export interface ArticleTrashImpactItem {
@@ -519,6 +620,7 @@ export interface ArticleTrashRecord {
   publicationSummary?:
     PublicationHistorySummary | Record<string, unknown> | null;
   publicationRecords?: PublicationHistoryRecord[];
+  tombstoneIdentityV1?: TombstoneIdentityV1;
 }
 
 export interface ArticleManagementSnapshot {
@@ -529,6 +631,7 @@ export interface ArticleManagementSnapshot {
   submissionBatches: ContentSubmissionBatchRecord[];
   cancellationPlans: ContentSubmissionCancellationPreview[];
   publicationRecords: PublicationHistoryRecord[];
+  publishedArchives?: PublicationArchiveEntry[];
   attention: ArticleAttentionList;
   submissionPlatforms: ContentSubmissionPlatform[];
   workflowByArticle: Record<

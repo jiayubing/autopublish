@@ -125,6 +125,7 @@ describe("publication history renderer boundary", async function () {
     );
     assert.match(drawer, /远端 URL/);
     assert.match(drawer, /订单号\/远端 ID/);
+    assert.match(drawer, /evidence\?\.orderNumber/);
     assert.match(drawer, /安全错误码/);
     assert.match(drawer, /待确认/);
     assert.match(drawer, /不提供直接重试/);

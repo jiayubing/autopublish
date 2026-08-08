@@ -12,6 +12,7 @@ const ARTICLE_REMOVAL_FIELDS = Object.freeze([
   "articleCursor",
   "revision",
   "changedScopes",
+  "deletionTransactionIdentityV1",
 ]);
 
 function projectArticleRemovalTransaction(input) {

@@ -880,9 +880,9 @@ function createArticleMutationCoordinator(options) {
     });
   }
 
-  function assertTrashedMutationAllowed(ref, session, operation, tombstone) {
+  function assertTrashedMutationAllowed(ref, session, operation, tombstone, knownFacts) {
     const currentTombstone = tombstone || session.getTrashedTombstone(ref);
-    const facts = factsFor([ref]);
+    const facts = knownFacts || factsFor([ref]);
     const workflow = workflowFor({
       id: ref.articleId,
       clientId: ref.clientId,
@@ -902,6 +902,122 @@ function createArticleMutationCoordinator(options) {
     return currentTombstone;
   }
 
+  function tombstoneComparisonKey(tombstone) {
+    const value = tombstone || {};
+    return JSON.stringify({
+      version: value.version,
+      deletedAt: value.deletedAt,
+      clientId: value.clientId,
+      articleId: value.articleId,
+      status: value.status,
+      references: Array.isArray(value.references) ? value.references : [],
+      titleSnapshot: value.titleSnapshot === undefined ? null : value.titleSnapshot,
+      contentFingerprint: value.contentFingerprint || null,
+      permanentlyDeleted: value.permanentlyDeleted === true,
+      purgedAt: value.purgedAt || null,
+    });
+  }
+
+  function transitionRefs(input) {
+    const request = input || {};
+    const values = Array.isArray(request.articleRefs)
+      ? request.articleRefs
+      : Array.isArray(request.selections)
+        ? request.selections
+        : request.articleRef || request;
+    return canonicalArticleRefs(Array.isArray(values) ? values : [values]);
+  }
+
+  function restoreArticles(input) {
+    const request = input || {};
+    const refs = transitionRefs(request);
+    return withArticleSet(refs, function (session, markSideEffect) {
+      const facts = factsFor(refs);
+      const prepared = refs.map(function (ref) {
+        const tombstone = assertTrashedMutationAllowed(
+          ref,
+          session,
+          "restore",
+          undefined,
+          facts,
+        );
+        return { ref, tombstone };
+      });
+      const items = prepared.map(function (item) {
+        markSideEffect();
+        const article = session.restoreTrashedArticle(item.ref);
+        assertTrashedMutationAllowed(
+          item.ref,
+          session,
+          "restore",
+          item.tombstone,
+          facts,
+        );
+        return Object.freeze({
+          articleRef: item.ref,
+          article: snapshotArticle(article),
+          tombstone: snapshotArticle(item.tombstone),
+          restored: true,
+        });
+      });
+      return Object.freeze({
+        items: Object.freeze(items),
+        restoredCount: items.length,
+      });
+    });
+  }
+
+  function permanentlyDeleteArticles(input) {
+    const request = input || {};
+    const refs = transitionRefs(request);
+    return withArticleSet(refs, function (session, markSideEffect) {
+      const facts = factsFor(refs);
+      const prepared = refs.map(function (ref) {
+        const currentTombstone = session.getTrashedTombstone(ref);
+        const expectedTombstone = request.expectedTombstone || (
+          Array.isArray(request.expectedTombstones)
+            ? request.expectedTombstones.find(function (value) {
+              return value && value.clientId === ref.clientId && value.articleId === ref.articleId;
+            })
+            : null
+        );
+        if (expectedTombstone && tombstoneComparisonKey(expectedTombstone) !== tombstoneComparisonKey(currentTombstone))
+          throw mutationError("ARTICLE_TOMBSTONE_CHANGED", "Article tombstone changed before permanent deletion");
+        const tombstone = assertTrashedMutationAllowed(
+          ref,
+          session,
+          "permanent-delete",
+          currentTombstone,
+          facts,
+        );
+        return { ref, tombstone };
+      });
+      const items = prepared.map(function (item) {
+        markSideEffect();
+        const tombstone = session.permanentlyDeleteTrashedArticle(
+          item.ref,
+          request.purgedAt,
+        );
+        assertTrashedMutationAllowed(
+          item.ref,
+          session,
+          "permanent-delete",
+          tombstone,
+          facts,
+        );
+        return Object.freeze({
+          articleRef: item.ref,
+          tombstone: snapshotArticle(tombstone),
+          deleted: true,
+        });
+      });
+      return Object.freeze({
+        items: Object.freeze(items),
+        deletedCount: items.length,
+      });
+    });
+  }
+
   function assertTrashedArticleMutationAllowed(input) {
     const request = input || {};
     const ref = normalizeArticleRef(request.articleRef || request);
@@ -912,33 +1028,26 @@ function createArticleMutationCoordinator(options) {
   }
 
   function restoreTrashedArticle(input) {
-    const ref = normalizeArticleRef(input && input.articleRef ? input.articleRef : input);
-    return withArticleSet([ref], function (session, markSideEffect) {
-      const tombstone = assertTrashedMutationAllowed(ref, session, "restore");
-      markSideEffect();
-      const article = session.restoreTrashedArticle(ref);
-      assertTrashedMutationAllowed(ref, session, "restore", tombstone);
-      return Object.freeze({
-        article: snapshotArticle(article),
-        tombstone: snapshotArticle(tombstone),
-        articleRef: ref,
-      });
+    const result = restoreArticles({
+      articleRefs: [normalizeArticleRef(input && input.articleRef ? input.articleRef : input)],
     });
+    return Object.freeze(Object.assign({}, result.items[0], {
+      items: result.items,
+      restoredCount: result.restoredCount,
+    }));
   }
 
   function permanentlyDeleteTrashedArticle(input) {
     const request = input || {};
-    const ref = normalizeArticleRef(request.articleRef || request);
-    return withArticleSet([ref], function (session, markSideEffect) {
-      const tombstone = assertTrashedMutationAllowed(ref, session, "permanent-delete");
-      markSideEffect();
-      const terminal = session.permanentlyDeleteTrashedArticle(ref, request.purgedAt);
-      assertTrashedMutationAllowed(ref, session, "permanent-delete", terminal);
-      return Object.freeze({
-        tombstone: snapshotArticle(terminal),
-        articleRef: ref,
-      });
+    const result = permanentlyDeleteArticles({
+      articleRefs: [normalizeArticleRef(request.articleRef || request)],
+      purgedAt: request.purgedAt,
+      expectedTombstone: request.expectedTombstone,
     });
+    return Object.freeze(Object.assign({}, result.items[0], {
+      items: result.items,
+      deletedCount: result.deletedCount,
+    }));
   }
 
   return Object.freeze({
@@ -957,6 +1066,8 @@ function createArticleMutationCoordinator(options) {
     removePendingQueueItems,
     executeArticleRemovalTransaction,
     assertTrashedArticleMutationAllowed,
+    restoreArticles,
+    permanentlyDeleteArticles,
     restoreTrashedArticle,
     permanentlyDeleteTrashedArticle,
     supportsArticleRemovalTransaction: function () {

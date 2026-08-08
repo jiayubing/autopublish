@@ -2,6 +2,8 @@ import React from "react";
 import { AlertTriangle, Check, ExternalLink, X, XCircle } from "lucide-react";
 import { formatBeijingTime } from "../../time-format";
 import type {
+  PublicationArchiveEntry,
+  PublicationEvidenceV1,
   PublicationHistoryRecord,
   PublicationHistorySummary,
 } from "../../types/publication";
@@ -16,6 +18,7 @@ import {
 interface PublicationHistoryDrawerProps {
   article: GeneratedContentArticle | null;
   records: PublicationHistoryRecord[];
+  archives?: PublicationArchiveEntry[];
   summary?: PublicationHistorySummary;
   onClose: () => void;
   onReconcile?: (
@@ -37,9 +40,38 @@ function safeRemoteUrl(value: string | null | undefined): string | null {
   }
 }
 
+function missingReasonLabel(reason: string | undefined): string {
+  const labels: Record<string, string> = {
+    LEGACY_SUBMISSION_CONTENT_UNAVAILABLE: "历史实际投稿正文不可得",
+    LEGACY_SUBMITTED_AT_UNAVAILABLE: "历史提交时间不可得",
+    LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE: "历史首次发布时间不可得",
+    LEGACY_IMAGE_SUMMARY_UNAVAILABLE: "历史图片摘要不可得",
+  };
+  return (reason && labels[reason]) || "历史证据不可得";
+}
+
+function evidenceTime(
+  evidence: PublicationEvidenceV1,
+  value: string | null,
+  missingReason: string,
+): string {
+  if (value) return formatBeijingTime(value);
+  const reason = evidence.missingReasons.find((item) => item === missingReason);
+  return missingReasonLabel(reason || missingReason);
+}
+
+function targetLabel(evidence: PublicationEvidenceV1): string {
+  const target = evidence.targetSnapshotV1;
+  if (target.kind === "platform")
+    return `${target.platformName} · ${target.accountLabel}`;
+  if (target.kind === "media") return target.mediaName;
+  return `${target.platformName} · 历史账号不可得`;
+}
+
 export default function PublicationHistoryDrawer({
   article,
   records,
+  archives = [],
   summary: snapshotSummary,
   onClose,
   onReconcile,
@@ -104,7 +136,14 @@ export default function PublicationHistoryDrawer({
           )}
           {records.map((record) => {
             const attempt = latestPublicationAttempt(record);
-            const remoteUrl = safeRemoteUrl(attempt.remoteUrl);
+            const archive = archives.find(
+              (entry) => entry.publicationId === record.publicationId,
+            );
+            const evidence = archive?.publicationEvidenceV1;
+            const remoteUrl = safeRemoteUrl(
+              evidence?.remoteUrl || attempt.remoteUrl,
+            );
+            const remoteIdentity = evidence?.orderNumber || attempt.remoteId;
             const uncertain = record.status === "uncertain";
             const regularUncertain =
               uncertain && record.targetKey.startsWith("platform:");
@@ -153,11 +192,11 @@ export default function PublicationHistoryDrawer({
                       </dd>
                     </div>
                   )}
-                  {attempt.remoteId && (
+                  {remoteIdentity && (
                     <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
                       <dt className="text-slate-400">订单号/远端 ID</dt>
                       <dd className="min-w-0 break-all font-mono text-slate-700">
-                        {attempt.remoteId}
+                        {remoteIdentity}
                       </dd>
                     </div>
                   )}
@@ -178,6 +217,85 @@ export default function PublicationHistoryDrawer({
                     </div>
                   )}
                 </dl>
+                {evidence && (
+                  <div className="mt-3 grid min-w-0 gap-2 rounded border border-blue-100 bg-blue-50/40 p-3 text-xs">
+                    <div className="font-semibold text-slate-800">
+                      实际投稿档案（只读）
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">客户</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {evidence.customerSnapshotV1.displayName}
+                      </span>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">目标</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {targetLabel(evidence)}
+                      </span>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">结果</span>
+                      <span className="min-w-0 break-words font-mono text-slate-700">
+                        {evidence.resultCode}
+                      </span>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">提交时间</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {evidenceTime(
+                          evidence,
+                          evidence.submittedAt,
+                          "LEGACY_SUBMITTED_AT_UNAVAILABLE",
+                        )}
+                      </span>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">首次发布时间</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {evidenceTime(
+                          evidence,
+                          evidence.firstPublishedAt,
+                          "LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE",
+                        )}
+                      </span>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">投稿标题</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {evidence.contentAvailable
+                          ? evidence.title
+                          : missingReasonLabel(
+                              "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
+                            )}
+                      </span>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">投稿正文</span>
+                      {evidence.contentAvailable ? (
+                        <pre className="max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-words font-sans text-slate-700">
+                          {evidence.body}
+                        </pre>
+                      ) : (
+                        <span className="min-w-0 break-words text-amber-700">
+                          {missingReasonLabel(
+                            "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <span className="text-slate-400">图片摘要</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {evidence.imageSummaryV1
+                          ? `${evidence.imageSummaryV1.deliveryMode} · ${evidence.imageSummaryV1.images.length} 张 · ${evidence.imageSummaryV1.decisionKind}`
+                          : missingReasonLabel(
+                              "LEGACY_IMAGE_SUMMARY_UNAVAILABLE",
+                            )}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {uncertain && (
                   <div className="mt-3 min-w-0 rounded border border-rose-200 bg-white/70 p-2.5">
                     <div className="text-xs font-semibold leading-5 text-rose-700">

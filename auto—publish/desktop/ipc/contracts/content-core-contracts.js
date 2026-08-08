@@ -10,7 +10,9 @@ const {
   multilineStringField,
   enumField,
   oneOf,
+  customField,
 } = require("./registry");
+const domain = require("../../../src/domain");
 const {
   projectArticleAttentionItem,
   projectArticleAttentionList,
@@ -278,6 +280,9 @@ const saveArticleResult = oneOf([
 ]);
 const selection = exactObject({ clientId: id, articleId: id });
 const trashReference = exactObject({ type: text(80), id });
+const tombstoneIdentityField = customField(function (value) {
+  return domain.parseTombstoneIdentityV1(value);
+});
 const trashRecord = exactObject({
   version: literalField(1),
   deletedAt: timestamp,
@@ -286,6 +291,7 @@ const trashRecord = exactObject({
   status: text(80),
   references: arrayField(trashReference, { max: 1000 }),
   titleSnapshot: optionalField(nullableField(multiline(1000))),
+  tombstoneIdentityV1: optionalField(tombstoneIdentityField),
 });
 const impactItem = exactObject({
   clientId: optionalField(id),
@@ -366,6 +372,11 @@ const articleRemovalTransaction = exactObject({
   changedScopes: optionalField(
     arrayField(stringField({ max: 80 }), { max: 32 }),
   ),
+  deletionTransactionIdentityV1: optionalField(
+    customField(function (value) {
+      return domain.parseDeletionTransactionIdentityV1(value);
+    }),
+  ),
 });
 const trashCommitResult = exactObject({
   moved: optionalField(arrayField(trashRecord, { max: 10000 })),
@@ -401,6 +412,7 @@ const permanentDeleteResult = exactObject({
   articleId: id,
   deleted: literalField(true),
   deletedAt: timestamp,
+  tombstoneIdentityV1: optionalField(tombstoneIdentityField),
 });
 
 function own(value, key) {
@@ -612,9 +624,10 @@ function projectTrashRecord(value) {
     "version",
     "deletedAt",
     "clientId",
-    "articleId",
-    "status",
-    "titleSnapshot",
+  "articleId",
+  "status",
+  "titleSnapshot",
+    "tombstoneIdentityV1",
   ]);
   output.references = Array.isArray(value && value.references)
     ? value.references.map((item) => projectFields(item, ["type", "id"]))
@@ -727,6 +740,7 @@ function projectPermanentDeleteResult(value) {
     "articleId",
     "deleted",
     "deletedAt",
+    "tombstoneIdentityV1",
   ]);
 }
 const submissionItem = exactObject({
@@ -807,6 +821,18 @@ const publicationRecord = exactObject({
   errorCode: optionalField(nullableField(text(128))),
   reasonCode: optionalField(nullableField(text(128))),
 });
+const publicationEvidenceField = customField(function (value) {
+  return domain.parsePublicationEvidenceV1(value, { allowLegacy: true });
+});
+const terminalTargetField = customField(function (value) {
+  return domain.parseTerminalTargetV1(value);
+});
+const publishedArchive = exactObject({
+  publicationId: id,
+  attemptId: id,
+  publicationEvidenceV1: publicationEvidenceField,
+  terminalTargetV1: terminalTargetField,
+});
 const submissionPlatform = exactObject({
   id,
   displayName: text(1000),
@@ -878,6 +904,7 @@ const managementSnapshot = exactObject({
   submissionBatches: arrayField(submissionBatch, { max: 10000 }),
   cancellationPlans: arrayField(cancellationPlan, { max: 10000 }),
   publicationRecords: arrayField(publicationRecord, { max: 10000 }),
+  publishedArchives: optionalField(arrayField(publishedArchive, { max: 10000 })),
   attention: articleAttentionList,
   submissionPlatforms: arrayField(submissionPlatform, { max: 1000 }),
   workflowItems: arrayField(exactObject({ articleId: id, workflow }), {
@@ -997,6 +1024,14 @@ function projectPublicationRecord(value) {
     : [];
   return output;
 }
+function projectPublishedArchive(value) {
+  return projectFields(value, [
+    "publicationId",
+    "attemptId",
+    "publicationEvidenceV1",
+    "terminalTargetV1",
+  ]);
+}
 function projectWorkflow(value) {
   const output = projectFields(value, [
     "version",
@@ -1080,6 +1115,9 @@ function projectManagementSnapshot(value) {
     publicationRecords: Array.isArray(snapshot.publicationRecords)
       ? snapshot.publicationRecords.map(projectPublicationRecord)
       : [],
+    ...(Array.isArray(snapshot.publishedArchives)
+      ? { publishedArchives: snapshot.publishedArchives.map(projectPublishedArchive) }
+      : {}),
     attention: projectArticleAttentionList(
       snapshot.attention || {
         revision: snapshot.revision || 0,

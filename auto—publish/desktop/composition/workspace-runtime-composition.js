@@ -788,6 +788,8 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformSessionService,
       regularPlatformOutcomeService,
       operationalStore: publicationComposition.operationalStore,
+      publishedArchiveQueries:
+        operationalStoreTransitionPorts.publishedArchiveQueries,
       articleMutationCoordinator,
       publicationWorkflow: publicationComposition.publicationWorkflow,
       articleAttentionQuery: attentionPorts.attentionQuery,

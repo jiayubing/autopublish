@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const domain = require("../domain");
 const { createArticleRemovalTransactionStore } = require("./article-removal-transaction-store");
 const { createArticleRemovalCursor } = require("./article-removal-cursor");
 const { createArticleRemovalStateMachine } = require("./article-removal-state");
@@ -197,6 +198,35 @@ function createArticleRemovalService(options) {
 
   function transactionDto(transaction) {
     if (!transaction) return null;
+    const selectionRefs = Array.isArray(transaction.selections)
+      ? transaction.selections
+      : [];
+    const state =
+      transaction.phase === "needs_repair" || transaction.status === "needs_repair"
+        ? "NEEDS_REPAIR"
+        : transaction.status === "committed"
+          ? "COMMITTED"
+          : transaction.status === "superseded" || transaction.phase === "superseded"
+            ? "SUPERSEDED"
+            : "PENDING";
+    const deletionTransactionIdentityV1 = domain.parseDeletionTransactionIdentityV1({
+      version: 1,
+      transactionId: transaction.id,
+      articleIdentitiesV1: selectionRefs.map(function (item) {
+        return {
+          version: 1,
+          clientId: item.clientId,
+          articleId: item.articleId,
+        };
+      }),
+      state,
+      reasonCode: transaction.reasonCode || transaction.errorCode || null,
+      createdAt: transaction.createdAt,
+      updatedAt: transaction.updatedAt || transaction.createdAt,
+      selectionFingerprint:
+        transaction.fingerprint ||
+        transactionFingerprint(selectionRefs, transaction.queueActions || []),
+    });
     return {
       id: transaction.id,
       transactionId: transaction.id,
@@ -209,7 +239,8 @@ function createArticleRemovalService(options) {
       updatedAt: transaction.updatedAt || null,
       articleCount: Array.isArray(transaction.articles) ? transaction.articles.length : Array.isArray(transaction.selections) ? transaction.selections.length : 0,
       queueCursor: Number(transaction.queueCursor || 0),
-      articleCursor: Number(transaction.articleCursor || 0)
+      articleCursor: Number(transaction.articleCursor || 0),
+      deletionTransactionIdentityV1,
     };
   }
 

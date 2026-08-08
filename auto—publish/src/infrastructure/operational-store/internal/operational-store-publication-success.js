@@ -6,6 +6,14 @@ const { fromText, text } = require("./operational-store-utils");
 function createPublicationSuccessPrimitive(context) {
   const { db, fail, randomUUID } = context;
 
+  function parseEvidence(value, allowLegacy) {
+    try {
+      return domain.parsePublicationEvidenceV1(value, { allowLegacy: allowLegacy === true });
+    } catch (_) {
+      throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
+    }
+  }
+
   function refreshBatch(batchId, stamp) {
     const statuses = db
       .prepare("SELECT status FROM submission_items WHERE batch_id=?")
@@ -90,14 +98,7 @@ function createPublicationSuccessPrimitive(context) {
       )
       .get(articleId);
     if (!existing) return null;
-    let publicationEvidenceV1;
-    try {
-      publicationEvidenceV1 = domain.parsePublicationEvidenceV1(
-        fromText(existing.evidence_json),
-      );
-    } catch (_) {
-      throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
-    }
+    const publicationEvidenceV1 = parseEvidence(fromText(existing.evidence_json));
     return Object.freeze({
       attemptId: existing.attempt_id,
       publicationId: existing.publication_id,
@@ -178,8 +179,41 @@ function createPublicationSuccessPrimitive(context) {
     });
   }
 
+  function listFirstPublicationSuccesses(articleIds, options) {
+    if (!Array.isArray(articleIds) || articleIds.length > 5000)
+      throw fail("PUBLICATION_ARCHIVE_ARTICLES_INVALID");
+    if (!articleIds.length) return Object.freeze([]);
+    const placeholders = articleIds.map(() => "?").join(",");
+    const rows = db
+      .prepare(
+        `SELECT p.publication_id,a.attempt_id,p.article_id,e.evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.status='published' LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${placeholders}) AND p.status='published' ORDER BY p.article_id,p.updated_at,p.publication_id`,
+      )
+      .all(...articleIds);
+    const seen = new Set();
+    const result = [];
+    for (const row of rows) {
+      if (seen.has(row.article_id)) continue;
+      seen.add(row.article_id);
+      result.push(
+        Object.freeze({
+          publicationId: row.publication_id,
+          attemptId: row.attempt_id,
+          articleId: row.article_id,
+          status: "published",
+          firstWins: true,
+          publicationEvidenceV1: parseEvidence(
+            fromText(row.evidence_json),
+            options && options.allowLegacy === true,
+          ),
+        }),
+      );
+    }
+    return Object.freeze(result);
+  }
+
   return Object.freeze({
     applyFirstPublicationSuccess,
+    listFirstPublicationSuccesses,
     readFirstPublicationSuccess,
   });
 }

@@ -160,7 +160,10 @@ function registerIpc(deps) {
       articleAttentionQuery: values.articleAttentionQuery,
       articleAttentionResolver: values.articleAttentionResolver
     }));
-    modules.articleManagement = require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, { articleAttentionQuery: modules.attention.query }));
+    modules.articleManagement = require("./article-management-ipc").registerArticleManagementIpc(Object.assign({}, guarded, {
+      articleAttentionQuery: modules.attention.query,
+      publishedArchiveQueries: values.publishedArchiveQueries,
+    }));
     modules.publication = require("./publication-ipc").registerPublicationIpc(guarded);
     modules.doubao = require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);
     modules.diagnostics = require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(guarded);

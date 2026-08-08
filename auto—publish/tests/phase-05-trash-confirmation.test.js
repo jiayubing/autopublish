@@ -10,7 +10,20 @@ function fixture(clock) {
     permanentlyDeleteTrashedArticle() { deleted = true; return Object.assign({}, tombstone, { permanentlyDeleted: true }); },
     listTrashedArticles() { return [tombstone]; }
   };
-  return { service: createArticleTrashService({ contentStore: store, now: () => clock.value, permanentDeleteTokenTtlMs: 1000 }), deleted: () => deleted };
+  const mutationCoordinator = {
+    assertTrashedArticleMutationAllowed() {},
+    permanentlyDeleteTrashedArticle(input) {
+      return {
+        articleRef: input.articleRef,
+        tombstone: store.permanentlyDeleteTrashedArticle(
+          input.articleRef.clientId,
+          input.articleRef.articleId,
+          input.purgedAt,
+        ),
+      };
+    },
+  };
+  return { service: createArticleTrashService({ contentStore: store, mutationCoordinator, now: () => clock.value, permanentDeleteTokenTtlMs: 1000 }), deleted: () => deleted };
 }
 
 it("expires at the exact TTL boundary and fails closed for an invalid execution clock", function() {
