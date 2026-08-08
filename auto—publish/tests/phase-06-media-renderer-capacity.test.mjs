@@ -59,7 +59,6 @@ describe("Phase 06 media Renderer capacity", function () {
         scanArticles: async () => [],
         previewArticle: async () => ({}),
         buildConfirmation: async () => ({}),
-        submitSelected: async () => ({}),
         getOrders: async () => [],
         syncOrder: async () => ({ ok: true }),
         syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),

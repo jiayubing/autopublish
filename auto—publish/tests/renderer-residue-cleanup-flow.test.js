@@ -223,14 +223,6 @@ function installDesktopFixture(page, scenario) {
             blockedResources: [],
             submitableResources: [],
           }),
-        submitSelected: () =>
-          ok({
-            batchId: "fixture",
-            publishedCount: 0,
-            failedCount: 0,
-            uncertainCount: 0,
-            skippedCount: 0,
-          }),
         stopSubmit: () => ok({ stopped: true }),
         refreshResources: () =>
           ok({

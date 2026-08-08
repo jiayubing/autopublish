@@ -10,10 +10,6 @@ const {
 const {
   createWorkerPublisher,
 } = require("../desktop/services/worker-publisher");
-const {
-  createPublicationSubmissionService,
-} = require("../desktop/services/publication-submission-service");
-const { parsePublishInput } = require("../src/domain/publisher-contract");
 
 test("platform worker does not construct the legacy stateful workbench", () => {
   const source = fs.readFileSync(
@@ -90,6 +86,21 @@ test("worker publisher executor turns an adapter exception into uncertain", asyn
     status: "uncertain",
     errorCode: "PUBLISHER_EXCEPTION",
   });
+});
+
+test("dead main submission service seam is absent", () => {
+  assert.equal(
+    fs.existsSync(
+      path.join(
+        __dirname,
+        "..",
+        "desktop",
+        "services",
+        "publication-submission-service.js",
+      ),
+    ),
+    false,
+  );
 });
 
 test("worker publisher executor never invokes the media adapter without main-process settings", async () => {
@@ -246,169 +257,4 @@ test("main worker publisher inspects the sole registered task account before pub
   });
   publisher.unregisterAttempt("attempt-1");
   assert.deepEqual(await publisher.inspectAccount(), { verified: false });
-});
-
-test("main submission service commits the durable queue batch item rather than creating a second batch", async () => {
-  const registered = [];
-  const service = createPublicationSubmissionService({
-    workbench: {
-      preparePublicationCommand: async () => ({
-        articleId: "article-1",
-        title: "title",
-        body: "body",
-        target: {
-          kind: "platform",
-          platformId: "toutiao",
-          accountProfileId: "account-1",
-        },
-        postProcessingPayload: {
-          sourcePlatformId: "toutiao",
-          filename: "article.md",
-          batchId: "batch-queue-1",
-        },
-        workerTask: { filename: "article.md" },
-      }),
-    },
-    workerPublisher: {
-      registerAttempt: (id, task) => registered.push([id, task.filename]),
-      unregisterAttempt: () => registered.push(["removed"]),
-    },
-    workflow: {
-      publish: async (command) => ({
-        attemptId: command.attemptId,
-        status: "uncertain",
-      }),
-    },
-    operationalStore: {
-      findSubmissionItem: () => ({
-        itemId: "item-1",
-        batchId: "batch-queue-1",
-        status: "queued",
-      }),
-      claimSubmissionItemById: (input) => ({
-        itemId: input.itemId,
-        batchId: input.batchId,
-      }),
-      createSubmissionBatch: () => {
-        throw new Error("must not create a second batch");
-      },
-    },
-  });
-  const result = await service.submit({ tasks: [{ filename: "article.md" }] });
-  assert.equal(result.results[0].status, "uncertain");
-  assert.equal(result.batchId, "batch-queue-1");
-  assert.equal(registered[0][1], "article.md");
-  assert.deepEqual(registered[1], ["removed"]);
-});
-
-test("main submission service validates the operational DTO before claiming its queue item", async () => {
-  let claims = 0;
-  let workflowCalls = 0;
-  const service = createPublicationSubmissionService({
-    workbench: {
-      preparePublicationCommand: async () => ({
-        articleId: "article-1",
-        title: "invalid\u0000title",
-        body: "body",
-        target: {
-          kind: "platform",
-          platformId: "hepan",
-          accountProfileId: "account-1",
-        },
-        postProcessingPayload: {
-          sourcePlatformId: "hepan",
-          filename: "article.md",
-          batchId: "batch-queue-1",
-        },
-        workerTask: { filename: "article.md" },
-      }),
-    },
-    workerPublisher: { registerAttempt: () => {}, unregisterAttempt: () => {} },
-    workflow: {
-      publish: async (command) => {
-        workflowCalls += 1;
-        return parsePublishInput({
-          version: 1,
-          articleId: command.articleId,
-          attemptId: command.attemptId,
-          target: command.target,
-          title: command.title,
-          body: command.body,
-        });
-      },
-    },
-    operationalStore: {
-      findSubmissionItem: () => ({
-        itemId: "item-1",
-        batchId: "batch-queue-1",
-        status: "queued",
-      }),
-      claimSubmissionItemById: (input) => {
-        claims += 1;
-        return { itemId: input.itemId, batchId: input.batchId };
-      },
-    },
-  });
-
-  await assert.rejects(
-    () => service.submit({ tasks: [{ filename: "article.md" }] }),
-    {
-      code: "PUBLISH_INPUT_INVALID",
-    },
-  );
-  assert.equal(claims, 0);
-  assert.equal(workflowCalls, 0);
-});
-
-test("main releases an item claim when account verification rejects before remote publication", async () => {
-  const released = [];
-  const service = createPublicationSubmissionService({
-    workbench: {
-      preparePublicationCommand: async () => ({
-        articleId: "article-1",
-        title: "title",
-        body: "body",
-        target: {
-          kind: "platform",
-          platformId: "toutiao",
-          accountProfileId: "account-1",
-        },
-        postProcessingPayload: {
-          sourcePlatformId: "toutiao",
-          filename: "article.md",
-          batchId: "batch-queue-1",
-        },
-        workerTask: { filename: "article.md" },
-      }),
-    },
-    workerPublisher: { registerAttempt: () => {}, unregisterAttempt: () => {} },
-    workflow: {
-      publish: async () => {
-        const error = new Error("account mismatch");
-        error.code = "ACCOUNT_PROFILE_INSPECTION_UNVERIFIED";
-        throw error;
-      },
-    },
-    operationalStore: {
-      findSubmissionItem: () => ({
-        itemId: "item-1",
-        batchId: "batch-queue-1",
-        status: "queued",
-      }),
-      claimSubmissionItemById: (input) => ({
-        itemId: input.itemId,
-        batchId: input.batchId,
-        revision: 2,
-        payload: { clientId: "client-1" },
-      }),
-      updateSubmissionItem: (input) => released.push(input),
-    },
-  });
-  await assert.rejects(
-    () => service.submit({ tasks: [{ filename: "article.md" }] }),
-    { code: "ACCOUNT_PROFILE_INSPECTION_UNVERIFIED" },
-  );
-  assert.equal(released.length, 1);
-  assert.equal(released[0].status, "queued");
-  assert.equal(released[0].revision, 2);
 });

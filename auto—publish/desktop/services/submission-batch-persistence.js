@@ -71,7 +71,6 @@ function createSubmissionBatchPersistence(options) {
       submissionBatchId: batchId,
       generatedArticleId: candidate.articleId,
       clientId: preview.clientId,
-      targetPlatform: candidate.targetPlatformId,
       targetPlatformId: candidate.targetPlatformId,
       accountProfileId: candidate.accountProfileId,
       filename: candidate.filename,

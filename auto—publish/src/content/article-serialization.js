@@ -1,11 +1,22 @@
 const { assertContentSegment, clone } = require("./content-identity");
 
 const LEGACY_ARTICLE = Symbol("legacyArticle");
+const RETIRED_ARTICLE_FIELDS = ["reviewedAt", "sourceArticleId", "version"];
 
 function storeError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+function rejectRetiredArticleFields(article) {
+  if (RETIRED_ARTICLE_FIELDS.some((field) =>
+    Object.prototype.hasOwnProperty.call(article, field),
+  ))
+    throw storeError(
+      "ARTICLE_LEGACY_FIELD_UNSUPPORTED",
+      "Retired article fields are not supported",
+    );
 }
 
 function assertArticleSegment(value, label) {
@@ -236,6 +247,7 @@ function normalizeArticle(article) {
   if (!article || typeof article !== "object" || Array.isArray(article)) {
     throw storeError("ARTICLE_INVALID", "Article is invalid");
   }
+  rejectRetiredArticleFields(article);
   assertArticleSegment(article.id, "id");
   assertArticleSegment(article.clientId, "client id");
   const researchIds = normalizeResearchQueryIds(article);
@@ -302,11 +314,6 @@ function normalizeArticle(article) {
     normalized.generationBatchId = generationBatchId;
   if (generationTaskId !== undefined)
     normalized.generationTaskId = generationTaskId;
-  // Historical article metadata is accepted only at the file boundary and
-  // never enters the current article model or persistence payload.
-  ["reviewedAt", "sourceArticleId", "version"].forEach(function (field) {
-    delete normalized[field];
-  });
   if (researchIds.legacy) {
     assertNonEmptyString(article.researchQueryId, "researchQueryId");
     Object.defineProperty(normalized, LEGACY_ARTICLE, {
@@ -323,10 +330,10 @@ function normalizeArticle(article) {
 }
 
 function articleForPersistence(article) {
+  if (!article || typeof article !== "object" || Array.isArray(article))
+    throw storeError("ARTICLE_INVALID", "Article is invalid");
+  rejectRetiredArticleFields(article);
   const persisted = clone(article);
-  ["reviewedAt", "sourceArticleId", "version"].forEach(function (field) {
-    delete persisted[field];
-  });
   if (article && article[LEGACY_ARTICLE]) {
     delete persisted.researchQueryIds;
     delete persisted.researchSnapshots;

@@ -220,19 +220,6 @@ test("a deletion fact with an active queue cannot be presented as a safe trash i
   assert.equal(workflow.locks.canTrash, false);
 });
 
-test("compatibility workflow derivation does not mutate the supplied fact arrays", () => {
-  const records = [];
-  const items = [];
-  const { deriveWorkflow } = require("../desktop/services/article-management-snapshot");
-  deriveWorkflow(article(), records, [], [], [], {
-    submissionItems: items,
-    targetFacts: [{ targetKey: "platform:p1", status: "published" }],
-  });
-
-  assert.deepEqual(records, []);
-  assert.deepEqual(items, []);
-});
-
 test("batch projection classifies every article once and returns shared counts", () => {
   const articles = [
     article({ id: "pending" }),

@@ -32,7 +32,7 @@ function selection(value) {
 function selections(input) {
   const values = Array.isArray(input)
     ? input
-    : input && (input.selections || input.articles);
+    : input && input.selections;
   if (!Array.isArray(values) || !values.length)
     throw removalError(
       "CONTENT_INPUT_INVALID",

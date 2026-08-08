@@ -80,15 +80,13 @@ function readSubmissionMetadata(filePath) {
       reason: "SUBMISSION_SIDECAR_INVALID",
     };
 
-  // Sidecars without a version are still accepted for the supported queue
-  // migration boundary. Versioned sidecars must prove their file identity and
-  // content before they can participate in a publish command.
-  if (data.version === undefined)
-    return { path: sidecarPath, data, valid: true, legacy: true };
   if (
     data.version !== 2 ||
     typeof data.contentHash !== "string" ||
-    !/^[a-f0-9]{64}$/.test(data.contentHash)
+    !/^[a-f0-9]{64}$/.test(data.contentHash) ||
+    Object.prototype.hasOwnProperty.call(data, "articleId") ||
+    Object.prototype.hasOwnProperty.call(data, "targetPlatform") ||
+    Object.prototype.hasOwnProperty.call(data, "platformId")
   )
     return {
       path: sidecarPath,
@@ -112,9 +110,7 @@ function readSubmissionMetadata(filePath) {
     };
   if (
     !isSafeToken(data.clientId) ||
-    (!isSafeToken(data.generatedArticleId) &&
-      !isSafeToken(data.articleId) &&
-      !isSafeToken(data.articleKey))
+    !isSafeToken(data.generatedArticleId)
   )
     return {
       path: sidecarPath,
@@ -226,7 +222,7 @@ function createPlatformQueueReader(options) {
   function sourceArticleState(metadata) {
     const data = metadata && metadata.data;
     const clientId = data && data.clientId;
-    const articleId = data && (data.generatedArticleId || data.articleId);
+    const articleId = data && data.generatedArticleId;
     if (
       !clientId ||
       !articleId ||

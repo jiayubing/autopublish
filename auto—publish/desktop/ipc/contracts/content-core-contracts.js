@@ -322,7 +322,6 @@ const impactPreview = exactObject({
   canCommit: boolean,
   selections: optionalField(arrayField(selection, { max: 10000 })),
   expiresAt: optionalField(timestamp),
-  legacy: optionalField(boolean),
   transactionId: optionalNullableText(200),
   openTransactionId: optionalNullableText(200),
 });
@@ -657,7 +656,6 @@ function projectImpactPreview(value) {
     "articleCount",
     "canCommit",
     "expiresAt",
-    "legacy",
     "transactionId",
     "openTransactionId",
   ]);
@@ -1159,13 +1157,10 @@ const articleEditorRequest = exactObject({ clientId: id, articleId: id });
 const articleSelectionList = arrayField(selection, { min: 1, max: 10000 });
 const removalPreviewRequest = exactObject({
   selections: optionalField(articleSelectionList),
-  articles: optionalField(articleSelectionList),
 });
 const removalCommitRequest = exactObject({
   selections: optionalField(articleSelectionList),
-  articles: optionalField(articleSelectionList),
   token: optionalField(opaqueToken),
-  legacy: optionalField(boolean),
   confirmed: literalField(true),
 });
 

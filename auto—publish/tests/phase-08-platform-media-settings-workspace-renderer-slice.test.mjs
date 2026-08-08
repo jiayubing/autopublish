@@ -53,7 +53,6 @@ function mediaAdapters(overrides = {}) {
     scanArticles: async () => [],
     previewArticle: async () => ({}),
     buildConfirmation: async () => ({}),
-    submitSelected: async () => ({}),
     getOrders: async () => [],
     syncOrder: async () => ({}),
     syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),

@@ -567,7 +567,7 @@ describe("article store", function () {
     );
   });
 
-  it("persists and validates explicit material and template provenance", function () {
+  it("rejects retired article lineage fields while preserving current provenance", function () {
     const article = valid("provenance", {
       materialSnapshots: [
         {
@@ -593,14 +593,9 @@ describe("article store", function () {
       sourceArticleId: "article-root",
       version: 4,
     });
-    const saved = store.saveArticle(article);
-    const loaded = store.getArticle("client-1", "provenance");
-    const persisted = JSON.parse(fs.readFileSync(path.join(root, "generated", "client-1", "provenance.json"), "utf8"));
-    for (const field of ["reviewedAt", "sourceArticleId", "version"]) {
-      assert.equal(Object.prototype.hasOwnProperty.call(saved, field), false, field);
-      assert.equal(Object.prototype.hasOwnProperty.call(loaded, field), false, field);
-      assert.equal(Object.prototype.hasOwnProperty.call(persisted, field), false, field);
-    }
+    assert.throws(() => store.saveArticle(article), {
+      code: "ARTICLE_LEGACY_FIELD_UNSUPPORTED",
+    });
     for (const invalid of [
       { materialSnapshots: [{ id: "brand.md" }] },
       { templateSnapshot: { platform: "ctrip", id: "template-1", body: "" } },

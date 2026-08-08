@@ -109,13 +109,12 @@ function createArticleTrashService(options) {
 
   function trashArticles(input) {
     if (!input || typeof input !== "object" || Array.isArray(input) ||
-        (!removalService && (!Array.isArray(input.articles) || input.articles.length < 1)) ||
-        (removalService && (!Array.isArray(input.selections || input.articles) || !(input.selections || input.articles).length))) {
+        !Array.isArray(input.selections) || !input.selections.length) {
       throw trashError("CONTENT_INPUT_INVALID", "At least one article is required");
     }
     if (removalService) {
       return removalService.applyArticleRemovalImpact({
-        selections: input.selections || input.articles,
+        selections: input.selections,
         token: input.token,
         confirmed: input.confirmed
       });

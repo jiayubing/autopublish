@@ -79,7 +79,6 @@ function installDesktopFixture(page) {
           state.platformStateListeners = state.platformStateListeners.filter((item) => item !== listener);
         };
       },
-      submitSelected: () => response({ ok: 0, fail: 0, skipped: 0, results: [] }),
       pauseSubmit: () => response(undefined),
       stopSubmit: () => response(undefined),
     };

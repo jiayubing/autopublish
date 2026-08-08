@@ -2,7 +2,6 @@ const crypto = require("node:crypto");
 const domain = require("../../src/domain");
 const {
   ARTICLE_LIFECYCLE_PROJECTION_VERSION,
-  deriveArticleLifecycle,
   projectArticleLifecycle,
 } = require("../../src/content/article-lifecycle-projection");
 
@@ -177,71 +176,6 @@ function safePublishedArchive(entry, scopedClientId) {
     publicationEvidenceV1: evidence,
     terminalTargetV1: terminal,
   };
-}
-
-// Kept as a compatibility adapter for older callers.  The classification
-// itself belongs to the shared projection module above.
-function deriveWorkflow(
-  article,
-  records,
-  batches,
-  transactions,
-  attentionItems,
-  indexedFacts,
-) {
-  const facts = indexedFacts || {};
-  const submissionItems = Array.isArray(facts.submissionItems)
-    ? facts.submissionItems.slice()
-    : Array.isArray(batches)
-      ? batches.flatMap(function (batch) {
-          return (batch.items || [])
-            .filter(function (item) {
-              return item.articleId === article.id;
-            })
-            .map(function (item) {
-              return Object.assign({ batchId: batch.id }, item);
-            });
-        })
-      : [];
-  const publicationRecords = Array.isArray(records) ? records.slice() : [];
-  const syntheticFacts = Array.isArray(facts.targetFacts)
-    ? facts.targetFacts
-    : facts.targetFacts && typeof facts.targetFacts === "object"
-      ? Object.values(facts.targetFacts)
-      : [];
-  syntheticFacts.forEach(function (fact) {
-    if (fact.status === "published")
-      publicationRecords.push({
-        articleId: article.id,
-        status: "published",
-        targetKey: fact.targetKey,
-      });
-    else if (
-      [
-        "queued",
-        "claimed",
-        "reserving",
-        "remote_started",
-        "uncertain",
-        "failed",
-        "cancelled",
-      ].includes(fact.status)
-    )
-      submissionItems.push({
-        articleId: article.id,
-        status: fact.status,
-        targetKey: fact.targetKey,
-        canCancel: fact.canCancel,
-      });
-  });
-  return deriveArticleLifecycle({
-    article,
-    publications: publicationRecords,
-    submissionItems,
-    orders: facts.orders || [],
-    attentionItems: facts.attentionItems || attentionItems || [],
-    removalTransactions: transactions || [],
-  });
 }
 
 function createArticleManagementSnapshot(options) {
@@ -494,4 +428,4 @@ function createArticleManagementSnapshot(options) {
   return { get, invalidate, cacheSize };
 }
 
-module.exports = { createArticleManagementSnapshot, deriveWorkflow };
+module.exports = { createArticleManagementSnapshot };

@@ -396,7 +396,7 @@ const COMMON_ERRORS = Object.freeze({
   CONTENT_EXPORT_CONFLICT: {
     category: "conflict",
     retryability: "manual-check",
-    userMessage: "投稿队列中存在冲突副本。",
+    userMessage: "投稿队列中存在冲突。",
   },
   CONTENT_SUBMISSION_BATCH_INPUT_INVALID: {
     category: "validation",

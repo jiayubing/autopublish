@@ -129,8 +129,7 @@ function createSubmissionRetry(options) {
       sidecar.submissionBatchId !== batch.batchId ||
       sidecar.generatedArticleId !== item.articleId ||
       sidecar.accountProfileId !== payload.accountProfileId ||
-      (sidecar.targetPlatformId || sidecar.targetPlatform) !==
-        payload.targetPlatformId
+      sidecar.targetPlatformId !== payload.targetPlatformId
     )
       return {
         publicationId,

@@ -32,6 +32,7 @@
     "verify:phase-08": "node scripts/verify-phase-08-gates.js",
     "test:media-transport": "node --test tests/phase-04-media-transport.test.js",
     "test:legacy-absence": "node scripts/verify-legacy-absence.js",
+    "test:ticket-24-e": "node scripts/verify-ticket-24-e-absence.js",
     "test:discover:evidence": "node scripts/create-test-discovery-evidence.js",
     "test:release-evidence": "node --test tests/release-evidence.test.js",
     "pack:production": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && npm run create:production-manifest && electron-builder --win portable --config electron-builder.production.yml",

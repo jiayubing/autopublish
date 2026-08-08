@@ -143,7 +143,7 @@ function createSubmissionActionPolicy(options) {
   }
 
   function normalizeSelections(input) {
-    const selections = input && (input.selections || input.articles);
+    const selections = input && input.selections;
     if (!Array.isArray(selections) || !selections.length)
       throw fail("CONTENT_INPUT_INVALID", "At least one article is required");
     const seen = new Set();

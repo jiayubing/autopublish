@@ -26,6 +26,7 @@ describe("platform-workbench-service", function () {
     fs.writeFileSync(
       path.join(root, "input", "lieju", "a.txt.submission.json"),
       JSON.stringify({
+        version: 2,
         submissionBatchId: "batch-fixture",
         clientId: "client-1",
         generatedArticleId: "article-1",
@@ -77,6 +78,7 @@ describe("platform-workbench-service", function () {
     fs.writeFileSync(
       path.join(portableInput, "lieju", "portable.txt.submission.json"),
       JSON.stringify({
+        version: 2,
         submissionBatchId: "batch-fixture",
         clientId: "client-1",
         generatedArticleId: "article-1",
@@ -103,52 +105,43 @@ describe("platform-workbench-service", function () {
       }),
       ["portable.txt"],
     );
-    const plan = portableService.buildSelectedPlan({
-      selectedArticles: [
-        {
-          sourcePlatformId: "lieju",
-          filename: "portable.txt",
-          accountProfileId: "account-lieju",
-        },
-      ],
-      platformId: "lieju",
-      accountProfileId: "account-lieju",
-    });
-    assert.equal(
-      plan.tasks[0].filePath,
-      path.join(portableInput, "lieju", "portable.txt"),
-    );
     assert.equal(
       portableService.resolveSubmissionFile("lieju", "portable.txt"),
       path.join(portableInput, "lieju", "portable.txt"),
     );
   });
 
-  it("builds selected article target plan", function () {
-    const plan = service.buildSelectedPlan({
-      selectedArticles: [
-        {
-          sourcePlatformId: "lieju",
-          filename: "a.txt",
-          accountProfileId: "account-lieju",
-        },
-      ],
-      platformId: "lieju",
-      accountProfileId: "account-lieju",
-    });
-    assert.deepStrictEqual(
-      plan.tasks.map(function (task) {
-        return task.targetPlatformId;
-      }),
-      ["lieju"],
+  it("does not admit unversioned or aliased queue sidecars", function () {
+    fs.writeFileSync(
+      path.join(root, "input", "lieju", "legacy.txt"),
+      "Legacy\nBody",
+      "utf-8",
     );
-    assert.throws(
-      () => service.buildSelectedPlan({
-        selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt" }],
-        targetPlatformIds: ["lieju"],
-        accountProfiles: { lieju: "account-lieju" },
+    fs.writeFileSync(
+      path.join(root, "input", "lieju", "legacy.txt.submission.json"),
+      JSON.stringify({
+        submissionBatchId: "batch-fixture",
+        clientId: "client-1",
+        generatedArticleId: "article-legacy",
+        targetPlatform: "lieju",
+        accountProfileId: "account-lieju",
+        contentHash: require("crypto")
+          .createHash("sha256")
+          .update("Legacy\nBody")
+          .digest("hex"),
+        status: "queued",
       }),
-      { code: "SUBMISSION_INPUT_INVALID" },
+      "utf8",
+    );
+    assert.deepEqual(
+      service.scanQueue()[0].articles.map(function (article) {
+        return article.filename;
+      }),
+      ["a.txt"],
+    );
+    assert.equal(
+      service.readSubmissionMetadata("lieju", "legacy.txt").reason,
+      "SUBMISSION_SIDECAR_VERSION_INVALID",
     );
   });
 
@@ -208,6 +201,18 @@ describe("platform-workbench-service", function () {
       "Title only",
       "utf-8",
     );
+    const sidecarPath = path.join(
+      root,
+      "input",
+      "lieju",
+      "a.txt.submission.json",
+    );
+    const sidecar = JSON.parse(fs.readFileSync(sidecarPath, "utf-8"));
+    sidecar.contentHash = require("crypto")
+      .createHash("sha256")
+      .update("Title only")
+      .digest("hex");
+    fs.writeFileSync(sidecarPath, JSON.stringify(sidecar), "utf-8");
     const commandService = createPlatformWorkbenchService({
       rootDir: root,
       platforms: [{ id: "lieju", scanDir: "lieju" }],

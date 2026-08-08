@@ -3,7 +3,6 @@ const { describe, it } = require("node:test");
 
 const {
   createArticleManagementSnapshot,
-  deriveWorkflow,
 } = require("../desktop/services/article-management-snapshot");
 const {
   registerArticleManagementIpc,
@@ -195,52 +194,6 @@ describe("article management snapshot", function () {
     const snapshot = await service.get({ clientId: "client-a" });
     assert.equal(legacyReads, 0);
     assert.deepEqual(snapshot.orders, []);
-  });
-
-  it("does not offer cancellation for a published target when an old queued item remains", function () {
-    const workflow = deriveWorkflow(
-      { id: "article-a", status: "saved" },
-      [],
-      [],
-      [],
-      [],
-      {
-        targetFacts: {
-          "platform:toutiao": {
-            targetKey: "platform:toutiao",
-            status: "published",
-            canCancel: false,
-          },
-        },
-      },
-    );
-    assert.equal(workflow.stage, "published");
-    assert.equal(workflow.locks.canCancel, false);
-  });
-
-  it("keeps a published article published while another declared target remains available", function () {
-    const workflow = deriveWorkflow(
-      { id: "article-a", status: "saved" },
-      [],
-      [],
-      [],
-      [],
-      {
-        targetFacts: {
-          "platform:toutiao": {
-            targetKey: "platform:toutiao",
-            status: "published",
-            canCancel: false,
-          },
-          "platform:hepan": {
-            targetKey: "platform:hepan",
-            status: "not_submitted",
-            canCancel: false,
-          },
-        },
-      },
-    );
-    assert.equal(workflow.stage, "published");
   });
 
   it("loads publication facts for trash records before projecting lifecycle conflicts", async function () {

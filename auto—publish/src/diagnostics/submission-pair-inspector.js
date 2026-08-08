@@ -67,10 +67,8 @@ function inspectSubmissionPair(item, batch, suppliedSidecar, options) {
           typeof sidecar === "object" &&
           (!hasBatch || sidecar.submissionBatchId === batch.id) &&
           (!batch || !batch.clientId || sidecar.clientId === batch.clientId) &&
-          (sidecar.generatedArticleId === value.articleId ||
-            sidecar.articleId === value.articleId) &&
-          (sidecar.targetPlatformId === value.targetPlatformId ||
-            sidecar.targetPlatform === value.targetPlatformId) &&
+          sidecar.generatedArticleId === value.articleId &&
+          sidecar.targetPlatformId === value.targetPlatformId &&
           (value.contentHash === undefined ||
             sidecar.contentHash === value.contentHash)
         );

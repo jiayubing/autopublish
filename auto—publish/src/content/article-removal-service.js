@@ -770,7 +770,7 @@ function createArticleRemovalService(options) {
     const value = input || {};
     if (value.confirmed !== true) throw removalError("ARTICLE_TRASH_CONFIRMATION_REQUIRED", "Article trash confirmation is required");
     const token = tokenValue(value);
-    if (value.selections || value.articles) {
+    if (value.selections) {
       const requested = selections(value);
       if (fingerprint(requested) !== fingerprint(token.binding.selections)) {
         throw removalError("ARTICLE_TRASH_PREVIEW_STALE", "Article trash preview is stale");

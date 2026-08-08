@@ -37,109 +37,10 @@ function mediaBodyHtml(value) {
 
 function createPlatformCommandPreparer(options) {
   const value = options || {};
-  const platforms = Array.isArray(value.platforms) ? value.platforms : [];
   const adapters = value.adapters || {};
   const reader = value.reader;
   const contentStore = value.contentStore || null;
   if (!reader) throw new Error("Platform queue reader is required");
-
-  function validatePlatformId(platformId) {
-    if (typeof platformId !== "string" || !platformId.trim())
-      throw submissionInputError();
-    if (
-      (!platforms.some(
-        (platform) => platform.id === platformId && platform.id !== "media",
-      ) &&
-        !adapters[platformId])
-    )
-      throw submissionInputError();
-    return platformId;
-  }
-
-  function buildSelectedArticleTasks(selectedArticle, platformId, accountProfileId) {
-    const selected = reader.safeTask({
-      sourcePlatformId: selectedArticle.sourcePlatformId,
-      filename: selectedArticle.filename,
-      targetPlatformId: platformId,
-    });
-    const filePath = reader.resolveSelectedFilePath(selectedArticle);
-    const sourceMetadata = reader.readSubmissionMetadata(
-      selectedArticle.sourcePlatformId,
-      selectedArticle.filename,
-    );
-    const durableAccountProfileId =
-      sourceMetadata &&
-      sourceMetadata.data &&
-      sourceMetadata.data.accountProfileId;
-    if (typeof durableAccountProfileId !== "string" || !durableAccountProfileId)
-      throw submissionInputError(
-        "LEGACY_UNKNOWN_ACCOUNT",
-        "The queued publication must be manually bound to an account profile",
-      );
-    const state = reader.sourceArticleState(sourceMetadata);
-    if (state.sourceArticleState === "trashed")
-      throw submissionInputError(
-        state.reasonCode,
-        "Source article is in the trash",
-      );
-    const durableTargetPlatformId =
-      sourceMetadata &&
-      sourceMetadata.data &&
-      (sourceMetadata.data.targetPlatformId ||
-        sourceMetadata.data.targetPlatform);
-    if (
-      typeof durableTargetPlatformId === "string" &&
-      durableTargetPlatformId &&
-      durableTargetPlatformId !== platformId
-    )
-      throw submissionInputError(
-        "PUBLICATION_TARGET_MISMATCH",
-        "The selected target does not match the queued publication",
-      );
-    if (accountProfileId !== durableAccountProfileId)
-      throw submissionInputError(
-        "ACCOUNT_PROFILE_MISMATCH",
-        "The selected account does not match the queued publication",
-      );
-    return [{
-      sourcePlatformId: selected.sourcePlatformId,
-      filename: selected.filename,
-      filePath,
-      sourceArticle: Object.assign({}, selectedArticle, {
-        file: filePath,
-        filePath,
-        sourceFile: filePath,
-        fileBaseName: path.basename(
-          selected.filename,
-          path.extname(selected.filename),
-        ),
-      }),
-      targetPlatformId: platformId,
-      accountProfileId: durableAccountProfileId,
-    }];
-  }
-
-  function buildSelectedPlan(input) {
-    if (
-      !input ||
-      typeof input !== "object" ||
-      Array.isArray(input) ||
-      Object.keys(input).some(
-        (key) => !["selectedArticles", "platformId", "accountProfileId"].includes(key),
-      ) ||
-      !Array.isArray(input.selectedArticles)
-    ) throw submissionInputError();
-    const selectedArticles = input.selectedArticles;
-    const platformId = validatePlatformId(input.platformId);
-    if (typeof input.accountProfileId !== "string" || !input.accountProfileId.trim())
-      throw submissionInputError("ACCOUNT_PROFILE_REQUIRED", "A platform account profile is required");
-    const tasks = [];
-    for (const selectedArticle of selectedArticles)
-      tasks.push(
-        ...buildSelectedArticleTasks(selectedArticle, platformId, input.accountProfileId),
-      );
-    return { taskCount: tasks.length, tasks };
-  }
 
   async function fallbackParseArticle(sourceArticle, filePath) {
     const article = {
@@ -186,23 +87,18 @@ function createPlatformCommandPreparer(options) {
     return article;
   }
 
-  function articleIdentity(article, metadata, filePath) {
+  function articleIdentity(metadata) {
     const sidecar = metadata.data || {};
-    const clientId =
-      sidecar.clientId || article.clientId || "legacy-platform-queue";
-    const generatedArticleId =
-      sidecar.generatedArticleId || sidecar.articleId || article.articleId;
-    if (generatedArticleId)
-      return resolveArticleIdentity({
-        clientId,
-        articleId: generatedArticleId,
-      });
-    let content = typeof article.body === "string" ? article.body : "";
-    if (!content) content = fs.readFileSync(filePath, "utf8");
+    const clientId = sidecar.clientId;
+    const generatedArticleId = sidecar.generatedArticleId;
+    if (!isSafeToken(clientId) || !isSafeToken(generatedArticleId))
+      throw submissionInputError(
+        "SUBMISSION_SIDECAR_IDENTITY_INVALID",
+        "The queued publication has no safe article identity",
+      );
     return resolveArticleIdentity({
       clientId,
-      title: article.title || path.basename(filePath, path.extname(filePath)),
-      content,
+      articleId: generatedArticleId,
     });
   }
 
@@ -239,7 +135,7 @@ function createPlatformCommandPreparer(options) {
     const durableTargetPlatformId =
       metadata &&
       metadata.data &&
-      (metadata.data.targetPlatformId || metadata.data.targetPlatform);
+      metadata.data.targetPlatformId;
     if (
       typeof durableTargetPlatformId === "string" &&
       durableTargetPlatformId &&
@@ -265,7 +161,7 @@ function createPlatformCommandPreparer(options) {
         "Article parse returned no publishable article",
       );
     const article = parsed[0];
-    const identity = articleIdentity(article, metadata, filePath);
+    const identity = articleIdentity(metadata);
     const submissionBatchId =
       metadata && metadata.data && metadata.data.submissionBatchId;
     if (typeof submissionBatchId !== "string" || !submissionBatchId)
@@ -315,7 +211,7 @@ function createPlatformCommandPreparer(options) {
       }
     }
     return Object.freeze({
-      articleId: identity.articleId || identity.articleKey,
+      articleId: identity.articleId,
       ...(articleRef ? { articleRef } : {}),
       target: {
         kind: "platform",
@@ -386,7 +282,6 @@ function createPlatformCommandPreparer(options) {
   }
 
   return Object.freeze({
-    buildSelectedPlan,
     preparePublicationCommand,
     prepareMediaPublicationCommands,
   });
