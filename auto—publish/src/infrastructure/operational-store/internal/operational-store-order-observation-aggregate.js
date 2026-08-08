@@ -338,42 +338,45 @@ function createOrderObservationAggregate(
     const existingSuccess = publicationSuccess.readFirstPublicationSuccess(
       row.article_id,
     );
-    if (existingSuccess) return existingSuccess;
-    const success = publicationSuccess.applyFirstPublicationSuccess({
-      attemptId: row.attempt_id,
-      publicationEvidenceV1: publicationEvidence(
-        row,
-        observation,
-        manual,
+    const success =
+      existingSuccess ||
+      publicationSuccess.applyFirstPublicationSuccess({
+        attemptId: row.attempt_id,
+        publicationEvidenceV1: publicationEvidence(
+          row,
+          observation,
+          manual,
+          stamp,
+        ),
         stamp,
-      ),
-      stamp,
-    });
+      });
     fault("after-paid-publication-success", { orderId: row.order_id });
-    if (success.attemptId === row.attempt_id) {
-      updateItemTarget(row, "TERMINAL_PUBLISHED", stamp, "published");
-      resolveRecovery(row, "order_published", stamp);
-      const anomaly = evidenceRow(
+
+    // The primitive owns the article-global first-publication fact.  Even when
+    // another target won first, this order's trusted status-2 observation must
+    // still close its own recovery/anomaly facts and paid target projection.
+    updateItemTarget(row, "TERMINAL_PUBLISHED", stamp, "published");
+    resolveRecovery(row, "order_published", stamp);
+    const anomaly = evidenceRow(
+      row.attempt_id,
+      `order-status-anomaly:${row.order_id}`,
+    );
+    const anomalyFact = anomaly && fromText(anomaly.evidence_json);
+    if (anomalyFact && anomalyFact.state === "open")
+      writeEvidence(
         row.attempt_id,
         `order-status-anomaly:${row.order_id}`,
-      );
-      const anomalyFact = anomaly && fromText(anomaly.evidence_json);
-      if (anomalyFact && anomalyFact.state === "open")
-        writeEvidence(
-          row.attempt_id,
-          `order-status-anomaly:${row.order_id}`,
-          Object.freeze({
-            ...anomalyFact,
-            state: "resolved",
-            resolution: Object.freeze({
-              action: manual ? "confirmOrderPublished" : "publishedObservation",
-              status: "published",
-              decidedAt: stamp,
-            }),
+        Object.freeze({
+          ...anomalyFact,
+          state: "resolved",
+          resolution: Object.freeze({
+            action: manual ? "confirmOrderPublished" : "publishedObservation",
+            status: "published",
+            decidedAt: stamp,
           }),
-          stamp,
-        );
-    }
+        }),
+        stamp,
+      );
     return success;
   }
 
@@ -453,17 +456,7 @@ function createOrderObservationAggregate(
         observation.statusCode === "2",
       );
       const facts = guard.readFacts(row.order_id);
-      const decision = guard.assertObservationAllowed(
-        facts,
-        observation.statusCode,
-      );
-      if (decision === "published_wins")
-        return Object.freeze({
-          orderId: row.order_id,
-          statusCode: facts.latestStatusCode || "2",
-          idempotent: true,
-          publishedWins: true,
-        });
+      guard.assertObservationAllowed(facts, observation.statusCode);
       appendHistory(row, "observation", observation, stamp);
       fault("after-order-observation", { orderId: row.order_id });
       let publication = null;

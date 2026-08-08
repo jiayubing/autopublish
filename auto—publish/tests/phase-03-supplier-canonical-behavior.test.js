@@ -303,7 +303,7 @@ test("published success and URL evidence win over every later supplier status", 
           view.statusCode,
           view.hasPublishedUrl,
         ],
-        ["published", code === 9 ? "9" : "2", true],
+        ["published", String(code), true],
       );
 
       const opened = [];

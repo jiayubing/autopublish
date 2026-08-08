@@ -308,11 +308,9 @@ function createMediaOrderService(opts) {
     const order = listOrderViews().find(
       (item) => item.orderNid === String(orderId),
     );
-    if (
-      !order ||
-      (order.statusCode !== "2" &&
-        !(order.statusCode === "9" && order.publishedAt))
-    )
+    // A later per-order status is still authoritative history, but it must not
+    // hide the durable publication URL established by an earlier status 2.
+    if (!order || !order.publishedAt)
       throw orderError("MEDIA_ORDER_NOT_PUBLISHED");
     const context = transitions.getOrderObservationContext(String(orderId));
     const url = publishedUrlForExternalOpen(context.remoteUrl);

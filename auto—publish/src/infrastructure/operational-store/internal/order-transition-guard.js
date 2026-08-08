@@ -107,8 +107,10 @@ function createOrderTransitionGuard(context) {
 
   function assertObservationAllowed(facts, statusCode) {
     if (statusCode === "2") return "apply_published";
-    if (facts.published)
-      return statusCode === "9" ? "keep_aftercare" : "published_wins";
+    // Article-global publication success only suppresses lifecycle side effects.
+    // The order's own remote observation remains an append-only fact and must
+    // still be recorded in orderHistoryV1 after the article is published.
+    if (facts.published) return "record_after_publication";
     if (facts.latestOrderFactKind === "terminal")
       throw fail("ORDER_TRANSITION_TERMINAL");
     const previousPriority = TRACKING_STATUS_PRIORITY[facts.latestStatusCode];

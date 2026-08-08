@@ -189,6 +189,109 @@ test("regular accepted and paid status 2 share one first-wins publication snapsh
   }
 });
 
+test("a paid anomaly closes on its own status 2 after regular global publication", () => {
+  const f = fixture();
+  try {
+    const prepared = f.prepare("article-anomaly-after-regular");
+    const snapshot = domain.parseOrderSnapshotV1({
+      version: 1,
+      orderIdentityV1: { version: 1, orderId: "order-anomaly-after-regular" },
+      articleIdentityV1: {
+        version: 1,
+        clientId: "client-1",
+        articleId: "article-anomaly-after-regular",
+      },
+      targetIdentityV1: {
+        version: 1,
+        kind: "media",
+        mediaResourceId: "resource-anomaly-after-regular",
+      },
+      orderCreationAttemptId: "paid-anomaly-after-regular",
+      mediaName: "异常媒体",
+      quotedPrice: 10,
+      estimatedTotal: 10,
+      actualAmount: null,
+      systemSubmissionCode: "anomaly-after-regular",
+      submittedTitle: "付费标题",
+      submittedBody: "付费正文",
+      contentFingerprint: domain.contentFingerprint("付费标题", "付费正文"),
+      remoteCallStartedAt: "2026-08-07T00:59:00.000Z",
+    });
+    const db = new DatabaseSync(f.store.databasePath);
+    db.prepare("INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)").run(
+      "publication-paid-anomaly-after-regular",
+      "article-anomaly-after-regular",
+      "media-resource:resource-anomaly-after-regular",
+      JSON.stringify({ kind: "media", mediaResourceId: "resource-anomaly-after-regular" }),
+      "submitted",
+      "2026-08-07T00:59:00.000Z",
+      "2026-08-07T00:59:00.000Z",
+    );
+    db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
+      "attempt-paid-anomaly-after-regular",
+      "publication-paid-anomaly-after-regular",
+      "submitted",
+      "2026-08-07T00:59:00.000Z",
+      null,
+    );
+    db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
+      "order-anomaly-after-regular",
+      "attempt-paid-anomaly-after-regular",
+      "order-anomaly-after-regular",
+      JSON.stringify(snapshot),
+      "2026-08-07T00:59:01.000Z",
+    );
+    db.close();
+
+    f.orderTransitions.recordOrderStatusAnomaly({
+      orderId: "order-anomaly-after-regular",
+      evidenceFingerprint: "e".repeat(64),
+    });
+    const regular = f.transitions.recordRegularAccepted(
+      accepted(prepared.claim.regularPublicationAttemptId),
+    );
+    const context = f.orderTransitions.getOrderObservationContext(
+      "order-anomaly-after-regular",
+    );
+    const paid = f.orderTransitions.recordOrderObservation({
+      orderObservationV1: domain.parseOrderObservationV1({
+        version: 1,
+        orderIdentityV1: { version: 1, orderId: "order-anomaly-after-regular" },
+        statusCode: "2",
+        observedAt: "2026-08-07T01:00:03.000Z",
+        eventAt: null,
+        eventAtSource: "not_available",
+        remoteUrl: null,
+        actualAmount: null,
+        evidenceFingerprint: "f".repeat(64),
+        orderSnapshotFingerprint: context.orderSnapshotFingerprint,
+      }),
+    });
+
+    assert.equal(regular.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
+    assert.equal(paid.publication.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
+    const view = f.orderTransitions.listOrderObservationViews()[0];
+    assert.equal(view.statusCode, "2");
+    assert.equal(view.anomaly, null);
+    const lifecycle = f.store.listArticleLifecycleFacts({
+      articleIds: ["article-anomaly-after-regular"],
+    });
+    assert.equal(lifecycle.publications.some((fact) => fact.status === "published"), true);
+    const check = new DatabaseSync(f.store.databasePath);
+    const anomaly = check.prepare(
+      "SELECT evidence_json FROM remote_evidence WHERE remote_id=?",
+    ).get("order-status-anomaly:order-anomaly-after-regular");
+    const history = check.prepare(
+      "SELECT evidence_json FROM remote_evidence WHERE remote_id=?",
+    ).get("order-history:order-anomaly-after-regular");
+    check.close();
+    assert.equal(JSON.parse(anomaly.evidence_json).state, "resolved");
+    assert.equal(JSON.parse(history.evidence_json).entries.at(-1).orderObservationV1.statusCode, "2");
+  } finally {
+    f.close();
+  }
+});
+
 function accepted(attemptId) {
   return {
     regularPublicationAttemptId: attemptId,
