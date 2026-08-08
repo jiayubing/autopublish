@@ -606,8 +606,20 @@ const api = {
     },
   },
   publication: {
-    reconcile: function (input) {
-      return ipcRenderer.invoke("publication:reconcile", input);
+    prepareRegularUncertainResolution: function (input) {
+      return ipcRenderer.invoke(
+        "publication:prepare-regular-uncertain-resolution",
+        input,
+      );
+    },
+    confirmRegularAccepted: function (input) {
+      return ipcRenderer.invoke("publication:confirm-regular-accepted", input);
+    },
+    confirmRegularNotAccepted: function (input) {
+      return ipcRenderer.invoke(
+        "publication:confirm-regular-not-accepted",
+        input,
+      );
     },
   },
   orders: {

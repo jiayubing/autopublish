@@ -59,6 +59,34 @@ test("platform queue projects only its durable account profile id", async () => 
   });
 });
 
+test("production platform submit closes before Playwright or command preparation", async () => {
+  let playwrightChecks = 0;
+  const value = register(
+    {},
+    {
+      publicationSubmissionService: null,
+      assertPlaywrightAvailable: () => {
+        playwrightChecks += 1;
+      },
+    },
+  );
+  const result = await value.handlers.get("platforms:submit-selected")(null, {
+    submissions: [
+      {
+        sourcePlatformId: "toutiao",
+        filename: "fixture.md",
+        targetPlatformIds: ["toutiao"],
+        accountProfiles: { toutiao: "account-toutiao" },
+      },
+    ],
+    autoTrash: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "PUBLICATION_WORKFLOW_UNAVAILABLE");
+  assert.equal(playwrightChecks, 0);
+  assert.equal(value.received(), null);
+});
+
 test("browser platform login commands open and persist a verified session", async () => {
   const calls = [];
   const adapter = {

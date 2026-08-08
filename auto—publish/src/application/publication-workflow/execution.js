@@ -42,11 +42,15 @@ function createPublicationExecution(options) {
     }
     if (mutation) {
       if (!inputValue.articleRef) {
-        const error = new Error("Publication article identity could not be resolved");
+        const error = new Error(
+          "Publication article identity could not be resolved",
+        );
         error.code = "ARTICLE_IDENTITY_UNRESOLVED";
         throw error;
       }
-      publicationAdmission = mutation.readArticleForPublication({ articleRef: inputValue.articleRef });
+      publicationAdmission = mutation.readArticleForPublication({
+        articleRef: inputValue.articleRef,
+      });
     } else {
       input = domain.parsePublishInput({
         version: 1,
@@ -58,7 +62,9 @@ function createPublicationExecution(options) {
       });
     }
     const reservation = {
-      articleId: mutation ? publicationAdmission.articleRef.articleId : input.articleId,
+      articleId: mutation
+        ? publicationAdmission.articleRef.articleId
+        : input.articleId,
       publicationId,
       attemptId,
       target,
@@ -71,17 +77,21 @@ function createPublicationExecution(options) {
       reservation.postProcessingPayload = inputValue.postProcessingPayload;
     if (retry) {
       reservation.retryFailed = true;
-      reservation.expectedCurrentTargetKey = domain.publicationTargetKey(target);
+      reservation.expectedCurrentTargetKey =
+        domain.publicationTargetKey(target);
     }
     const reserve = value.operationalStore.reservePublicationTarget;
     if (typeof reserve !== "function")
       throw new Error("Publication reservation is unavailable");
     const reserved = mutation
-      ? mutation.reservePublicationTarget(Object.assign({}, reservation, {
-        articleRef: publicationAdmission.articleRef,
-        expectedFingerprint: publicationAdmission.publicationSnapshot.fingerprint,
-        operation: retry ? "retarget" : "queue",
-      }))
+      ? mutation.reservePublicationTarget(
+          Object.assign({}, reservation, {
+            articleRef: publicationAdmission.articleRef,
+            expectedFingerprint:
+              publicationAdmission.publicationSnapshot.fingerprint,
+            operation: retry ? "retarget" : "queue",
+          }),
+        )
       : reserve(reservation);
     if (mutation) {
       input = domain.parsePublishInput({
@@ -111,17 +121,21 @@ function createPublicationExecution(options) {
     if (inputValue.batchClaimToken !== undefined)
       committed.batchClaimToken = inputValue.batchClaimToken;
     if (mutation) {
-      committed.postProcessingPayload = reserved.postProcessingPayload || Object.assign({}, inputValue.postProcessingPayload || {}, {
-        articleRef: reserved.articleRef,
-        publicationSnapshot: reserved.publicationSnapshot,
-      });
+      committed.postProcessingPayload =
+        reserved.postProcessingPayload ||
+        Object.assign({}, inputValue.postProcessingPayload || {}, {
+          articleRef: reserved.articleRef,
+          publicationSnapshot: reserved.publicationSnapshot,
+        });
     } else if (inputValue.postProcessingPayload !== undefined) {
       committed.postProcessingPayload = inputValue.postProcessingPayload;
     }
     if (mutation) {
-      mutation.commitPublicationOutcome(Object.assign({}, committed, {
-        articleRef: reserved.articleRef,
-      }));
+      mutation.commitPublicationOutcome(
+        Object.assign({}, committed, {
+          articleRef: reserved.articleRef,
+        }),
+      );
     } else {
       value.operationalStore.commitRemoteOutcome(committed);
     }
@@ -148,50 +162,7 @@ function createPublicationExecution(options) {
     return execute(command, true);
   }
 
-  async function reconcile(command) {
-    const input = command || {};
-    if (typeof input.attemptId !== "string")
-      throw new Error("Reconcile attempt is required");
-    if (
-      !input.outcome ||
-      !["published", "submitted", "failed", "uncertain"].includes(
-        input.outcome.status,
-      )
-    )
-      throw new Error("Reconcile outcome is required");
-    const reconciliation = {
-      attemptId: input.attemptId,
-      outcome: input.outcome,
-      ...(input.reasonCode
-        ? {
-            reconciliation: {
-              kind: "manual-reconciliation",
-              reasonCode: input.reasonCode,
-              evidence: input.outcome.evidence || null,
-            },
-          }
-        : {}),
-    };
-    if (value.articleMutationCoordinator) {
-      value.articleMutationCoordinator.commitPublicationOutcome(Object.assign({}, reconciliation, {
-        ...(input.articleRef ? { articleRef: input.articleRef } : { articleId: input.articleId }),
-      }));
-    } else {
-      value.operationalStore.commitRemoteOutcome(reconciliation);
-    }
-    const postProcessing = await value.postProcessing.drain({
-      collectResults: true,
-    });
-    return Object.freeze({
-      attemptId: input.attemptId,
-      status: input.outcome.status,
-      ...(postProcessing.results && postProcessing.results.length
-        ? { postProcessing: postProcessing.results }
-        : {}),
-    });
-  }
-
-  return Object.freeze({ publish, retry, reconcile });
+  return Object.freeze({ publish, retry });
 }
 
 module.exports = { createPublicationExecution };

@@ -39,7 +39,7 @@ test("Phase 8 cleanup gates pass against the current production tree", () => {
       "uniqueOwnersAndWriters",
     ].sort(),
   );
-  assert.equal(report.checks.capabilityReachability.reachableCount, 122);
+  assert.equal(report.checks.capabilityReachability.reachableCount, 124);
   assert.equal(report.checks.moduleSize.violations.length, 0);
 });
 

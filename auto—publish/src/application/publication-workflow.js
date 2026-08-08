@@ -33,7 +33,6 @@ function createPublicationWorkflow(dependencies) {
     publish: execution.publish,
     retry: execution.retry,
     recover: recovery.recover,
-    reconcile: execution.reconcile,
   });
 }
 

@@ -273,7 +273,9 @@ export default function OrdersView({
                         <p className="mt-1">
                           当前事实已冻结，页面不会根据供应商原始响应自行推断。
                         </p>
-                        {!anomalyPreparations[order.orderNid] ? (
+                        {!anomalyPreparations[order.orderNid] ||
+                        anomalyPreparations[order.orderNid].allowedActions
+                          .length === 0 ? (
                           <button
                             type="button"
                             disabled={orderActionsBusy}
@@ -282,7 +284,9 @@ export default function OrdersView({
                               void onPrepareAnomaly(order.orderNid)
                             }
                           >
-                            核对可用证据
+                            {anomalyPreparations[order.orderNid]
+                              ? "重新核对可用证据"
+                              : "核对可用证据"}
                           </button>
                         ) : (
                           <div className="mt-2 space-y-2">

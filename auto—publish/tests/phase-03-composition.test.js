@@ -28,7 +28,7 @@ test("Phase 3 composition owns one OperationalStore writer and releases it on di
     workspaceRoot,
     publisher,
   });
-  assert.equal(typeof composition.publicationWorkflow.publish, "function");
+  assert.deepEqual(Object.keys(composition.publicationWorkflow), ["recover"]);
   assert.equal(composition.operationalStore.verify().schemaVersion, 4);
   await composition.dispose();
   const next = createPublicationWorkflowComposition({
@@ -39,44 +39,176 @@ test("Phase 3 composition owns one OperationalStore writer and releases it on di
 });
 
 test("restarted composition rebuilds uncertain attention from OperationalStore with stable account identity", async () => {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-attention-restart-"));
-  const publisher = { inspectAccount: async () => ({}), publish: async () => { throw new Error("unused"); } };
-  const first = createPublicationWorkflowComposition({ workspaceRoot, publisher });
+  const workspaceRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-03-attention-restart-"),
+  );
+  const publisher = {
+    inspectAccount: async () => ({}),
+    publish: async () => {
+      throw new Error("unused");
+    },
+  };
+  const first = createPublicationWorkflowComposition({
+    workspaceRoot,
+    publisher,
+  });
   try {
-    const profile = first.operationalStore.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    first.operationalStore.reservePublicationTarget({ articleId: "article-1", publicationId: "publication-1", attemptId: "attempt-1", target: { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId } });
-    first.operationalStore.markRecoveryUncertain({ attemptId: "attempt-1", error: { code: "FIXTURE", category: "transport", retryability: "manual-check", userMessage: "fixture" } });
-  } finally { await first.dispose(); }
-  const second = createPublicationWorkflowComposition({ workspaceRoot, publisher });
+    const profile = first.operationalStore.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "fixture",
+    });
+    first.operationalStore.reservePublicationTarget({
+      articleId: "article-1",
+      publicationId: "publication-1",
+      attemptId: "attempt-1",
+      target: {
+        kind: "platform",
+        platformId: "toutiao",
+        accountProfileId: profile.accountProfileId,
+      },
+    });
+    first.operationalStore.markRecoveryUncertain({
+      attemptId: "attempt-1",
+      error: {
+        code: "FIXTURE",
+        category: "transport",
+        retryability: "manual-check",
+        userMessage: "fixture",
+      },
+    });
+  } finally {
+    await first.dispose();
+  }
+  const second = createPublicationWorkflowComposition({
+    workspaceRoot,
+    publisher,
+  });
   try {
     const ports = second.createAttentionPorts({});
     const item = ports.attentionQuery.list().items[0];
     assert.equal(item.attemptId, "attempt-1");
-    assert.equal(item.accountProfileId, second.operationalStore.listPublicationAttention()[0].accountProfileId);
-    assert.ok(item.allowedActions.includes("reconcile-failed"));
-    const before = second.operationalStore.listPublicationRecords({ articleIds: ["article-1"] });
-    await assert.rejects(() => ports.attentionResolver.resolve({ attentionId: item.attentionId, action: "retry-archive", expectedRevision: ports.attentionQuery.getRevision(), confirmed: true }), { code: "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED" });
-    await assert.rejects(() => ports.attentionResolver.resolve({ attentionId: item.attentionId, action: "reconcile-failed", expectedRevision: ports.attentionQuery.getRevision() + 1, confirmed: true }), { code: "ARTICLE_ATTENTION_STALE" });
-    assert.deepEqual(second.operationalStore.listPublicationRecords({ articleIds: ["article-1"] }), before);
-    await ports.attentionResolver.resolve({ attentionId: item.attentionId, action: "reconcile-failed", expectedRevision: ports.attentionQuery.getRevision(), confirmed: true });
-  } finally { await second.dispose(); }
-  const third = createPublicationWorkflowComposition({ workspaceRoot, publisher });
+    assert.equal(
+      item.accountProfileId,
+      second.operationalStore.listPublicationAttention()[0].accountProfileId,
+    );
+    assert.deepEqual(item.allowedActions, ["open-publication"]);
+    const before = second.operationalStore.listPublicationRecords({
+      articleIds: ["article-1"],
+    });
+    await assert.rejects(
+      () =>
+        ports.attentionResolver.resolve({
+          attentionId: item.attentionId,
+          action: "retry-archive",
+          expectedRevision: ports.attentionQuery.getRevision(),
+          confirmed: true,
+        }),
+      { code: "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED" },
+    );
+    await assert.rejects(
+      () =>
+        ports.attentionResolver.resolve({
+          attentionId: item.attentionId,
+          action: "reconcile-failed",
+          expectedRevision: ports.attentionQuery.getRevision(),
+          confirmed: true,
+        }),
+      { code: "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED" },
+    );
+    assert.deepEqual(
+      second.operationalStore.listPublicationRecords({
+        articleIds: ["article-1"],
+      }),
+      before,
+    );
+  } finally {
+    await second.dispose();
+  }
+  const third = createPublicationWorkflowComposition({
+    workspaceRoot,
+    publisher,
+  });
   try {
-    assert.equal(third.createAttentionPorts({}).attentionQuery.list().items.length, 0);
-  } finally { await third.dispose(); fs.rmSync(workspaceRoot, { recursive: true, force: true }); }
+    assert.equal(typeof third.publicationWorkflow.reconcile, "undefined");
+    assert.equal(
+      third.createAttentionPorts({}).attentionQuery.list().items.length,
+      1,
+    );
+  } finally {
+    await third.dispose();
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
-test("legacy composition cannot bypass the canonical publication success path", async () => {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-attention-retry-"));
-  let profile; let publishes = 0;
-  const publisher = { inspectAccount: async () => ({ verified: true, accountProfileId: profile.accountProfileId }), publish: async (input) => { publishes += 1; return { status: "published", evidence: { articleId: input.articleId, attemptId: input.attemptId, targetKey: `platform:toutiao:account:${profile.accountProfileId}`, accountProfileId: profile.accountProfileId, remoteId: "remote-1", remoteUrl: "https://example.test/remote-1" } }; } };
-  const first = createPublicationWorkflowComposition({ workspaceRoot, publisher });
+test("production composition closes legacy publish before any remote side effect", async () => {
+  const workspaceRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-03-attention-retry-"),
+  );
+  let profile;
+  let publishes = 0;
+  const publisher = {
+    inspectAccount: async () => ({
+      verified: true,
+      accountProfileId: profile.accountProfileId,
+    }),
+    publish: async (input) => {
+      publishes += 1;
+      return {
+        status: "published",
+        evidence: {
+          articleId: input.articleId,
+          attemptId: input.attemptId,
+          targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
+          accountProfileId: profile.accountProfileId,
+          remoteId: "remote-1",
+          remoteUrl: "https://example.test/remote-1",
+        },
+      };
+    },
+  };
+  const first = createPublicationWorkflowComposition({
+    workspaceRoot,
+    publisher,
+  });
   try {
-    profile = first.operationalStore.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    await assert.rejects(() => first.publicationWorkflow.publish({ articleId: "article-1", target: { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId }, title: "title", body: "body", postProcessingPayload: { sourcePlatformId: "toutiao", filename: "fixture.md", batchId: "batch-1" } }), { code: "PUBLICATION_SUCCESS_WRITER_CLOSED" });
-    assert.equal(publishes, 1);
-    assert.equal(first.operationalStore.listPublicationRecords({ articleIds: ["article-1"] })[0].attempts.length, 1);
-    assert.equal(first.operationalStore.claimPostProcessing({ claimToken: "fixture-claim" }), null);
-  } finally { await first.dispose(); }
+    profile = first.operationalStore.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "fixture",
+    });
+    assert.equal(typeof first.publicationWorkflow.publish, "undefined");
+    assert.equal(typeof first.publicationWorkflow.retry, "undefined");
+    assert.equal(typeof first.publicationWorkflow.reconcile, "undefined");
+    assert.equal(publishes, 0);
+    assert.deepEqual(
+      first.operationalStore.listPublicationRecords({
+        articleIds: ["article-1"],
+      }),
+      [],
+    );
+    assert.equal(
+      first.operationalStore.claimPostProcessing({
+        claimToken: "fixture-claim",
+      }),
+      null,
+    );
+  } finally {
+    await first.dispose();
+  }
   fs.rmSync(workspaceRoot, { recursive: true, force: true });
+});
+
+test("workspace runtime cannot wire the retired submission orchestrator", () => {
+  const runtime = fs.readFileSync(
+    path.resolve(
+      __dirname,
+      "../desktop/composition/workspace-runtime-composition.js",
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(runtime, /publication-submission-orchestrator/);
+  assert.doesNotMatch(runtime, /publicationSubmissionService/);
+  assert.doesNotMatch(runtime, /retryFailedPublicationExecutor/);
+  assert.doesNotMatch(runtime, /retryFailedPublication\s*:/);
+  assert.match(runtime, /regularQueueGroupComposition\.orchestrator/);
+  assert.match(runtime, /regularPlatformOutcomeService/);
 });

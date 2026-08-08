@@ -1,261 +1,261 @@
 const { wrap } = require("../services/ipc-response");
 
-const MAX_ARTICLE_IDS = 2000;
-
 function inputError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
 }
 
-function validateListInput(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+function regularAttemptId(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]+$/.test(value.trim()))
     throw inputError(
-      "PUBLICATION_HISTORY_INPUT_INVALID",
-      "Publication history input is invalid",
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular publication attempt is invalid",
     );
-  }
+  return value.trim();
+}
+
+function validateRegularPrepareInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw inputError(
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular outcome input is invalid",
+    );
   const keys = Object.keys(input);
-  if (keys.some((key) => key !== "clientId" && key !== "articleIds")) {
+  if (keys.some((key) => key !== "regularPublicationAttemptId"))
     throw inputError(
-      "PUBLICATION_HISTORY_INPUT_INVALID",
-      "Publication history input is invalid",
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular outcome input is invalid",
     );
-  }
-  if (typeof input.clientId !== "string" || !input.clientId.trim()) {
-    throw inputError("PUBLICATION_ARTICLE_ID_INVALID", "Client id is invalid");
-  }
-  if (
-    !Array.isArray(input.articleIds) ||
-    input.articleIds.length > MAX_ARTICLE_IDS
-  ) {
-    throw inputError(
-      "PUBLICATION_ARTICLE_IDS_INVALID",
-      "Article ids are invalid",
-    );
-  }
-  if (
-    input.articleIds.some(
-      (articleId) =>
-        typeof articleId !== "string" ||
-        !/^[A-Za-z0-9_.-]+$/.test(articleId.trim()),
-    )
-  ) {
-    throw inputError(
-      "PUBLICATION_ARTICLE_ID_INVALID",
-      "Article ids are invalid",
-    );
-  }
   return {
-    clientId: input.clientId.trim(),
-    articleIds: input.articleIds.map((articleId) => articleId.trim()),
+    regularPublicationAttemptId: regularAttemptId(
+      input.regularPublicationAttemptId,
+    ),
   };
 }
 
-function validateReconcileInput(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+function validateRegularAcceptedInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
     throw inputError(
-      "PUBLICATION_RECONCILE_INVALID",
-      "Publication reconciliation input is invalid",
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular outcome input is invalid",
     );
-  }
   const keys = Object.keys(input);
   if (
     keys.some(
       (key) =>
-        ["confirmed", "publicationId", "reasonCode", "remoteId", "remoteUrl", "status"].indexOf(key) ===
-        -1,
+        ![
+          "regularPublicationAttemptId",
+          "confirmationToken",
+          "manualPositiveEvidence",
+          "confirmed",
+        ].includes(key),
     )
-  ) {
-    throw inputError(
-      "PUBLICATION_RECONCILE_INVALID",
-      "Publication reconciliation input is invalid",
-    );
-  }
-  if (input.confirmed !== true) {
-    throw inputError(
-      "PUBLICATION_RECONCILE_CONFIRMATION_REQUIRED",
-      "Publication reconciliation requires confirmation",
-    );
-  }
-  if (
-    typeof input.publicationId !== "string" ||
-    !/^[A-Za-z0-9_.-]+$/.test(input.publicationId.trim())
-  ) {
-    throw inputError("PUBLICATION_ID_INVALID", "Publication id is invalid");
-  }
-  if (
-    ["failed", "published"].indexOf(input.status) === -1 ||
-    typeof input.reasonCode !== "string" ||
-    !/^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(input.reasonCode.trim())
-  ) {
-    throw inputError(
-      "PUBLICATION_RECONCILE_INVALID",
-      "Publication reconciliation decision is invalid",
-    );
-  }
-  if (
-    input.status === "published" &&
-    (typeof input.remoteId !== "string" ||
-      !/^[A-Za-z0-9_.:-]{1,512}$/.test(input.remoteId.trim()) ||
-      typeof input.remoteUrl !== "string" ||
-      !/^https:\/\//.test(input.remoteUrl))
   )
     throw inputError(
-      "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED",
-      "Published reconciliation requires remote evidence",
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular outcome input is invalid",
+    );
+  if (input.confirmed !== true)
+    throw inputError(
+      "REGULAR_OUTCOME_CONFIRMATION_REQUIRED",
+      "Regular outcome confirmation is required",
+    );
+  const evidence = input.manualPositiveEvidence;
+  if (
+    !evidence ||
+    typeof evidence !== "object" ||
+    Array.isArray(evidence) ||
+    Object.keys(evidence).some(
+      (key) => !["observedAt", "remoteUrl"].includes(key),
+    ) ||
+    typeof evidence.observedAt !== "string" ||
+    !evidence.observedAt.trim() ||
+    (evidence.remoteUrl !== undefined &&
+      (typeof evidence.remoteUrl !== "string" ||
+        !/^https?:\/\/[^\s\\]+$/.test(evidence.remoteUrl)))
+  )
+    throw inputError(
+      "REGULAR_MANUAL_POSITIVE_EVIDENCE_REQUIRED",
+      "Positive evidence is required",
+    );
+  if (
+    typeof input.confirmationToken !== "string" ||
+    !/^[A-Za-z0-9_.:-]+$/.test(input.confirmationToken.trim())
+  )
+    throw inputError(
+      "REGULAR_UNCERTAIN_RESOLUTION_TOKEN_STALE",
+      "Regular outcome token is invalid",
     );
   return {
-    publicationId: input.publicationId.trim(),
-    status: input.status,
-    reasonCode: input.reasonCode.trim(),
-    ...(input.status === "published"
-      ? { remoteId: input.remoteId.trim(), remoteUrl: input.remoteUrl }
-      : {}),
+    regularPublicationAttemptId: regularAttemptId(
+      input.regularPublicationAttemptId,
+    ),
+    confirmationToken: input.confirmationToken.trim(),
+    manualPositiveEvidence: {
+      observedAt: evidence.observedAt.trim(),
+      ...(evidence.remoteUrl ? { remoteUrl: evidence.remoteUrl } : {}),
+    },
+    confirmed: true,
   };
 }
 
-function safeRemoteUrl(value) {
-  if (typeof value !== "string" || !value) return null;
-  try {
-    const parsed = new URL(value);
-    if (
-      !["http:", "https:"].includes(parsed.protocol) ||
-      parsed.username ||
-      parsed.password
+function validateRegularNotAcceptedInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw inputError(
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular outcome input is invalid",
+    );
+  const keys = Object.keys(input);
+  if (
+    keys.some(
+      (key) =>
+        ![
+          "regularPublicationAttemptId",
+          "confirmationToken",
+          "manualNegativeEvidence",
+          "confirmed",
+        ].includes(key),
     )
-      return null;
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
-  } catch (_) {
-    return null;
-  }
-}
-
-function safeAttempt(attempt) {
-  if (!attempt || typeof attempt !== "object") return null;
+  )
+    throw inputError(
+      "REGULAR_OUTCOME_INPUT_INVALID",
+      "Regular outcome input is invalid",
+    );
+  if (input.confirmed !== true)
+    throw inputError(
+      "REGULAR_OUTCOME_CONFIRMATION_REQUIRED",
+      "Regular outcome confirmation is required",
+    );
+  const evidence = input.manualNegativeEvidence;
+  if (
+    !evidence ||
+    typeof evidence !== "object" ||
+    Array.isArray(evidence) ||
+    Object.keys(evidence).some(
+      (key) => !["reasonCode", "observedAt"].includes(key),
+    ) ||
+    typeof evidence.reasonCode !== "string" ||
+    !/^[A-Z][A-Z0-9_]{0,127}$/.test(evidence.reasonCode) ||
+    typeof evidence.observedAt !== "string" ||
+    !evidence.observedAt.trim()
+  )
+    throw inputError(
+      "REGULAR_MANUAL_NEGATIVE_EVIDENCE_REQUIRED",
+      "Negative evidence is required",
+    );
+  if (
+    typeof input.confirmationToken !== "string" ||
+    !/^[A-Za-z0-9_.:-]+$/.test(input.confirmationToken.trim())
+  )
+    throw inputError(
+      "REGULAR_UNCERTAIN_RESOLUTION_TOKEN_STALE",
+      "Regular outcome token is invalid",
+    );
   return {
-    attemptId: typeof attempt.attemptId === "string" ? attempt.attemptId : null,
-    status: typeof attempt.status === "string" ? attempt.status : null,
-    createdAt: attempt.createdAt || null,
-    updatedAt: attempt.updatedAt || null,
-    startedAt: attempt.startedAt || null,
-    finishedAt: attempt.finishedAt || null,
-    remoteId: typeof attempt.remoteId === "string" ? attempt.remoteId : null,
-    remoteUrl: safeRemoteUrl(attempt.remoteUrl),
-    errorCode: typeof attempt.errorCode === "string" ? attempt.errorCode : null,
-    reasonCode:
-      typeof attempt.reasonCode === "string" ? attempt.reasonCode : null,
+    regularPublicationAttemptId: regularAttemptId(
+      input.regularPublicationAttemptId,
+    ),
+    confirmationToken: input.confirmationToken.trim(),
+    manualNegativeEvidence: {
+      reasonCode: evidence.reasonCode,
+      observedAt: evidence.observedAt.trim(),
+    },
+    confirmed: true,
   };
 }
 
-function safeRecord(record) {
-  const attempts = Array.isArray(record && record.attempts)
-    ? record.attempts.map(safeAttempt).filter(Boolean)
-    : [];
-  const latestAttempt = attempts.length ? attempts[attempts.length - 1] : null;
+function projectRegularResolution(result, expectedStatus) {
+  const value = result && typeof result === "object" ? result : {};
+  if (
+    typeof value.attemptId !== "string" ||
+    !value.attemptId ||
+    value.status !== expectedStatus
+  )
+    throw inputError(
+      "REGULAR_OUTCOME_RESULT_INVALID",
+      "Regular outcome result is invalid",
+    );
   return {
-    version: record.version,
-    publicationId: record.publicationId,
-    clientId: record.clientId === undefined ? null : record.clientId,
-    articleId: record.articleId === undefined ? null : record.articleId,
-    articleKey: record.articleKey,
-    targetKey: record.targetKey,
-    platformId: record.platformId || null,
-    mediaResourceId: record.mediaResourceId || null,
-    displayName: record.displayName || null,
-    status: record.status,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    attempts: attempts,
-    attemptId: latestAttempt && latestAttempt.attemptId,
-    remoteId: latestAttempt && latestAttempt.remoteId,
-    remoteUrl: latestAttempt && latestAttempt.remoteUrl,
-    errorCode: latestAttempt && latestAttempt.errorCode,
-    reasonCode: latestAttempt && latestAttempt.reasonCode,
+    attemptId: value.attemptId,
+    status: value.status,
+    ...(typeof value.idempotent === "boolean"
+      ? { idempotent: value.idempotent }
+      : {}),
+    ...(typeof value.firstWins === "boolean"
+      ? { firstWins: value.firstWins }
+      : {}),
   };
 }
 
 function registerPublicationIpc(deps) {
   const values = deps || {};
-  values.ipcMain.handle("publication:reconcile", function (event, input) {
-    return wrap(async function () {
-      const request = validateReconcileInput(input);
-      if (
-        !deps.publicationWorkflow ||
-        typeof deps.publicationWorkflow.reconcile !== "function" ||
-        !deps.operationalStore ||
-        typeof deps.operationalStore.listPublicationRecords !== "function"
-      )
-        throw inputError(
-          "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED",
-          "Manual reconciliation requires evidence from PublicationWorkflow",
+  const outcomeService = values.regularPlatformOutcomeService;
+  values.ipcMain.handle(
+    "publication:prepare-regular-uncertain-resolution",
+    function (event, input) {
+      return wrap(async function () {
+        if (
+          !outcomeService ||
+          typeof outcomeService.prepareRegularUncertainResolution !== "function"
+        )
+          throw inputError(
+            "REGULAR_OUTCOME_SERVICE_UNAVAILABLE",
+            "Regular outcome service is unavailable",
+          );
+        return outcomeService.prepareRegularUncertainResolution(
+          validateRegularPrepareInput(input),
         );
-      const records = deps.operationalStore.listPublicationRecords({
-        publicationIds: [request.publicationId],
       });
-      const record = records[0];
-      if (!record)
-        throw inputError(
-          "PUBLICATION_RECONCILE_NOT_FOUND",
-          "Publication record was not found",
+    },
+  );
+  values.ipcMain.handle(
+    "publication:confirm-regular-accepted",
+    function (event, input) {
+      return wrap(async function () {
+        if (
+          !outcomeService ||
+          typeof outcomeService.confirmRegularAccepted !== "function"
+        )
+          throw inputError(
+            "REGULAR_OUTCOME_SERVICE_UNAVAILABLE",
+            "Regular outcome service is unavailable",
+          );
+        return projectRegularResolution(
+          outcomeService.confirmRegularAccepted(
+            validateRegularAcceptedInput(input),
+          ),
+          "published",
         );
-      const attempt =
-        Array.isArray(record.attempts) && record.attempts.length
-          ? record.attempts[record.attempts.length - 1]
-          : null;
-      if (record.status !== "uncertain" || !attempt || attempt.status !== "uncertain")
-        throw inputError(
-          "PUBLICATION_RECONCILE_NOT_ACTIONABLE",
-          "Publication record is not awaiting reconciliation",
-        );
-      const accountMatch = /^platform:[^:]+:account:(.+)$/.exec(record.targetKey);
-      await deps.publicationWorkflow.reconcile({
-        attemptId: attempt.attemptId,
-        outcome: {
-          status: request.status,
-          ...(request.status === "published"
-            ? {
-                evidence: {
-                  articleId: record.articleId,
-                  attemptId: attempt.attemptId,
-                  targetKey: record.targetKey,
-                  ...(accountMatch ? { accountProfileId: accountMatch[1] } : {}),
-                  remoteId: request.remoteId,
-                  remoteUrl: request.remoteUrl,
-                },
-              }
-            : {
-                error: {
-                  code: request.reasonCode,
-                  category: "remote",
-                  retryability: "never",
-                  userMessage: "Manual reconciliation",
-                },
-              }),
-        },
-        reasonCode: request.reasonCode,
       });
-      const updated = deps.operationalStore.listPublicationRecords({
-        publicationIds: [request.publicationId],
-      })[0];
-      if (!updated)
-        throw inputError(
-          "PUBLICATION_RECONCILE_NOT_FOUND",
-          "Publication record was not found after reconciliation",
+    },
+  );
+  values.ipcMain.handle(
+    "publication:confirm-regular-not-accepted",
+    function (event, input) {
+      return wrap(async function () {
+        if (
+          !outcomeService ||
+          typeof outcomeService.confirmRegularNotAccepted !== "function"
+        )
+          throw inputError(
+            "REGULAR_OUTCOME_SERVICE_UNAVAILABLE",
+            "Regular outcome service is unavailable",
+          );
+        return projectRegularResolution(
+          outcomeService.confirmRegularNotAccepted(
+            validateRegularNotAcceptedInput(input),
+          ),
+          "not_accepted",
         );
-      if (typeof deps.invalidateData === "function")
-        deps.invalidateData("PUBLICATION_RECONCILED");
-      return { record: safeRecord(updated) };
-    });
-  });
+      });
+    },
+  );
 }
 
 module.exports = {
   registerPublicationIpc,
-  validateListInput,
-  validateReconcileInput,
-  safeRecord,
-  safeRemoteUrl,
+  validateRegularPrepareInput,
+  validateRegularAcceptedInput,
+  validateRegularNotAcceptedInput,
 };

@@ -3,7 +3,6 @@ import type {
   ArticleAttentionList,
   ArticleAttentionPreview,
   ArticleAttentionResolution,
-  PublicationHistoryRecord,
 } from "../types/publication";
 import type {
   PublicationTargetDto,
@@ -23,16 +22,42 @@ type PublicationIpcResponse<T> = {
   data?: T;
   error?: SafeOperationalErrorDto;
 };
-type PublicationReconcileInput = {
-  publicationId: string;
-  status: "published" | "failed";
-  reasonCode: string;
+type PublicationApi = {
+  prepareRegularUncertainResolution?: (input: {
+    regularPublicationAttemptId: string;
+  }) => Promise<PublicationIpcResponse<RegularUncertainPreparation>>;
+  confirmRegularAccepted?: (
+    input: RegularAcceptedInput,
+  ) => Promise<PublicationIpcResponse<RegularResolutionResult>>;
+  confirmRegularNotAccepted?: (
+    input: RegularNotAcceptedInput,
+  ) => Promise<PublicationIpcResponse<RegularResolutionResult>>;
+};
+export type RegularUncertainPreparation = {
+  regularPublicationAttemptId: string;
+  confirmationToken: string;
+  expiresAt: string;
+  actions: Array<"confirm_accepted" | "confirm_not_accepted">;
+  observationFingerprint: string;
+  preparedEvidenceFingerprint: string;
+};
+type RegularAcceptedInput = {
+  regularPublicationAttemptId: string;
+  confirmationToken: string;
+  manualPositiveEvidence: { observedAt: string; remoteUrl?: string };
   confirmed: true;
 };
-type PublicationApi = {
-  reconcile?: (
-    input: PublicationReconcileInput,
-  ) => Promise<PublicationIpcResponse<{ record: PublicationHistoryRecord }>>;
+type RegularNotAcceptedInput = {
+  regularPublicationAttemptId: string;
+  confirmationToken: string;
+  manualNegativeEvidence: { reasonCode: string; observedAt: string };
+  confirmed: true;
+};
+export type RegularResolutionResult = {
+  attemptId: string;
+  status: "published" | "not_accepted";
+  idempotent?: boolean;
+  firstWins?: boolean;
 };
 type AttentionContentApi = {
   listArticleAttention?: (input?: {
@@ -65,24 +90,47 @@ function publicationError(
   return ipcError(error, fallback);
 }
 
-export async function reconcilePublicationHistory(input: {
-  publicationId: string;
-  status: "published" | "failed";
-  reasonCode: string;
-}): Promise<PublicationHistoryRecord> {
-  const api = publicationApi();
-  const result = await requireBridgeMethod(api.reconcile)({
-    ...input,
-    confirmed: true,
-  });
-  if (result.ok === false)
+export async function prepareRegularUncertainResolution(input: {
+  regularPublicationAttemptId: string;
+}): Promise<RegularUncertainPreparation> {
+  const result = await requireBridgeMethod(
+    publicationApi().prepareRegularUncertainResolution,
+  )(input);
+  if (!result.ok || !result.data)
     throw publicationError(
       result.error,
-      "Unable to reconcile publication result",
+      "Unable to prepare regular outcome resolution",
     );
-  if (!result.data?.record)
-    throw publicationError(undefined, "Unable to reconcile publication result");
-  return result.data.record;
+  return result.data;
+}
+
+export async function confirmRegularAccepted(input: {
+  regularPublicationAttemptId: string;
+  confirmationToken: string;
+  manualPositiveEvidence: { observedAt: string; remoteUrl?: string };
+}): Promise<RegularResolutionResult> {
+  const result = await requireBridgeMethod(
+    publicationApi().confirmRegularAccepted,
+  )({ ...input, confirmed: true });
+  if (!result.ok || !result.data)
+    throw publicationError(
+      result.error,
+      "Unable to confirm regular acceptance",
+    );
+  return result.data;
+}
+
+export async function confirmRegularNotAccepted(input: {
+  regularPublicationAttemptId: string;
+  confirmationToken: string;
+  manualNegativeEvidence: { reasonCode: string; observedAt: string };
+}): Promise<RegularResolutionResult> {
+  const result = await requireBridgeMethod(
+    publicationApi().confirmRegularNotAccepted,
+  )({ ...input, confirmed: true });
+  if (!result.ok || !result.data)
+    throw publicationError(result.error, "Unable to confirm regular rejection");
+  return result.data;
 }
 export async function listArticleAttentionSnapshot(
   clientId?: string,

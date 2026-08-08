@@ -166,16 +166,16 @@ function createPlatformWorkbenchApplication(options) {
   }
 
   async function submitSelected(input) {
+    if (!values.publicationSubmissionService || typeof values.publicationSubmissionService.submit !== "function") {
+      const error = new Error("Legacy platform submission is closed; use the regular queue workflow");
+      error.code = "PUBLICATION_WORKFLOW_UNAVAILABLE";
+      throw error;
+    }
     const raw = Array.isArray(input) ? input : input && Array.isArray(input.submissions) ? input.submissions : [input];
     if (!raw.length) throw inputError();
     ensurePlaywright();
     const plan = workbenchService.buildSelectedSubmissionsPlan(raw.map(validatePlatformSubmission));
     const autoTrash = Boolean(input && input.autoTrash === true);
-    if (!values.publicationSubmissionService || typeof values.publicationSubmissionService.submit !== "function") {
-      const error = new Error("Publication workflow is unavailable");
-      error.code = "PUBLICATION_WORKFLOW_UNAVAILABLE";
-      throw error;
-    }
     const execution = await values.publicationSubmissionService.submit(plan, { autoTrash });
     const results = (execution.results || []).map((result, index) => Object.assign({ task: plan.tasks[index] }, result));
     const trash = autoTrash ? projectAutoTrash(plan, results) : { disposition: "keep_local", summary: emptyTrashSummary() };

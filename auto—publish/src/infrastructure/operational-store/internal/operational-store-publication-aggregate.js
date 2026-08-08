@@ -356,7 +356,6 @@ function createPublicationAggregate(context, activeTarget) {
     )
       throw fail("OPERATIONAL_CLAIM_INVALID");
     rejectSensitive(outcome);
-    rejectSensitive(value.reconciliation || {});
     rejectSensitive(value.postProcessingPayload || {});
     const stamp = iso(clock);
     return transaction(() => {
@@ -492,7 +491,7 @@ function createPublicationAggregate(context, activeTarget) {
         text(
           publicationIntentPayload(
             submission,
-            value.reconciliation || outcome.error || outcome.evidence || null,
+            outcome.error || outcome.evidence || null,
           ),
         ),
         stamp,

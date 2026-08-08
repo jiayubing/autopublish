@@ -8,37 +8,77 @@ function attentionError(code, message) {
 
 function createArticleAttentionResolver(options) {
   const opts = options || {};
-  if (!opts.query || typeof opts.query.get !== "function") throw attentionError("ARTICLE_ATTENTION_INVALID", "Attention query is required");
+  if (!opts.query || typeof opts.query.get !== "function")
+    throw attentionError(
+      "ARTICLE_ATTENTION_INVALID",
+      "Attention query is required",
+    );
   const query = opts.query;
-  const invalidate = typeof opts.onDataInvalidated === "function" ? opts.onDataInvalidated : function() {};
-  const readPolicy = typeof query.getPolicy === "function" ? query.getPolicy.bind(query) : function(input) { return deriveAttentionPolicy(query.get(input || {}), {}); };
+  const invalidate =
+    typeof opts.onDataInvalidated === "function"
+      ? opts.onDataInvalidated
+      : function () {};
+  const readPolicy =
+    typeof query.getPolicy === "function"
+      ? query.getPolicy.bind(query)
+      : function (input) {
+          return deriveAttentionPolicy(query.get(input || {}), {});
+        };
 
   function assertFresh(input) {
     const expected = Number(input && input.expectedRevision);
-    if (!Number.isSafeInteger(expected) || expected !== query.getRevision()) throw attentionError("ARTICLE_ATTENTION_STALE", "需处理项已发生变化，请重新检查");
+    if (!Number.isSafeInteger(expected) || expected !== query.getRevision())
+      throw attentionError(
+        "ARTICLE_ATTENTION_STALE",
+        "需处理项已发生变化，请重新检查",
+      );
   }
 
   function find(input) {
     const item = query.get(input || {});
-    if (!item) throw attentionError("ARTICLE_ATTENTION_NOT_FOUND", "需处理项不存在或已处理");
+    if (!item)
+      throw attentionError(
+        "ARTICLE_ATTENTION_NOT_FOUND",
+        "需处理项不存在或已处理",
+      );
     const policy = readPolicy(input || {});
-    if (!policy || policy.included !== true) throw attentionError("ARTICLE_ATTENTION_NOT_FOUND", "需处理项不存在或已处理");
+    if (!policy || policy.included !== true)
+      throw attentionError(
+        "ARTICLE_ATTENTION_NOT_FOUND",
+        "需处理项不存在或已处理",
+      );
     return { item, policy };
   }
 
   function assertAllowed(entry, action) {
-    if (typeof action !== "string" || !entry.policy.allowedActions.includes(action)) {
-      throw attentionError("ARTICLE_ATTENTION_ACTION_NOT_ALLOWED", "当前状态不允许此操作");
+    if (
+      typeof action !== "string" ||
+      !entry.policy.allowedActions.includes(action)
+    ) {
+      throw attentionError(
+        "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED",
+        "当前状态不允许此操作",
+      );
     }
   }
 
   function retryPreview(item) {
     const service = opts.contentSubmissionService;
-    if (!service || typeof service.previewRetryFailedPublication !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "失败投稿重试服务不可用");
-    try { return service.previewRetryFailedPublication({ publicationId: item.publicationId }); }
-    catch (error) {
+    if (!service || typeof service.previewRetryFailedPublication !== "function")
+      throw attentionError(
+        "ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE",
+        "失败投稿重试服务不可用",
+      );
+    try {
+      return service.previewRetryFailedPublication({
+        publicationId: item.publicationId,
+      });
+    } catch (error) {
       if (error && error.code) throw error;
-      throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "失败投稿重试预检失败");
+      throw attentionError(
+        "ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE",
+        "失败投稿重试预检失败",
+      );
     }
   }
 
@@ -46,15 +86,23 @@ function createArticleAttentionResolver(options) {
     const entry = find(input);
     const action = input && input.action;
     assertAllowed(entry, action);
-    const retry = action === "retry-publication" ? retryPreview(entry.item) : null;
+    const retry =
+      action === "retry-publication" ? retryPreview(entry.item) : null;
     return {
       attentionId: entry.item.attentionId,
       revision: query.getRevision(),
       action,
-      requiresConfirmation: retry && retry.requiresConfirmation !== undefined ? retry.requiresConfirmation === true : !["inspect", "open-publication", "open-article"].includes(action),
-      message: retry && retry.message || entry.item.message,
-      details: retry && retry.details || undefined,
-      changedScopes: ["inspect", "open-publication", "open-article"].includes(action) ? [] : ["articleManagement", "articleAttention", "platformQueue"]
+      requiresConfirmation:
+        retry && retry.requiresConfirmation !== undefined
+          ? retry.requiresConfirmation === true
+          : !["inspect", "open-publication", "open-article"].includes(action),
+      message: (retry && retry.message) || entry.item.message,
+      details: (retry && retry.details) || undefined,
+      changedScopes: ["inspect", "open-publication", "open-article"].includes(
+        action,
+      )
+        ? []
+        : ["articleManagement", "articleAttention", "platformQueue"],
     };
   }
 
@@ -64,70 +112,124 @@ function createArticleAttentionResolver(options) {
     const action = value.action;
     assertAllowed(entry, action);
     assertFresh(value);
-    if (!["inspect", "open-publication", "open-article"].includes(action) && value.confirmed !== true) {
-      throw attentionError("ARTICLE_ATTENTION_CONFIRMATION_REQUIRED", "需处理动作需要确认");
+    if (
+      !["inspect", "open-publication", "open-article"].includes(action) &&
+      value.confirmed !== true
+    ) {
+      throw attentionError(
+        "ARTICLE_ATTENTION_CONFIRMATION_REQUIRED",
+        "需处理动作需要确认",
+      );
     }
 
-    if (action === "inspect" || action === "open-publication" || action === "open-article") {
+    if (
+      action === "inspect" ||
+      action === "open-publication" ||
+      action === "open-article"
+    ) {
       return {
         outcome: action === "inspect" ? "inspection_required" : action,
         attentionId: entry.item.attentionId,
         item: entry.item,
-        changedScopes: []
+        changedScopes: [],
       };
     }
 
     let result;
     if (action === "finalize" || action === "cleanup") {
       const service = opts.contentSubmissionService;
-      if (!service || typeof service.cleanupArticleSubmissionItem !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "投稿队列处理服务不可用");
-      result = service.cleanupArticleSubmissionItem(Object.assign({}, entry.item, {
-        action: "cleanup",
-        evaluationFingerprint: entry.item.evaluationFingerprint
-      }));
+      if (
+        !service ||
+        typeof service.cleanupArticleSubmissionItem !== "function"
+      )
+        throw attentionError(
+          "ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE",
+          "投稿队列处理服务不可用",
+        );
+      result = service.cleanupArticleSubmissionItem(
+        Object.assign({}, entry.item, {
+          action: "cleanup",
+          evaluationFingerprint: entry.item.evaluationFingerprint,
+        }),
+      );
     } else if (action === "retry-removal") {
-      if (!opts.articleRemovalService || typeof opts.articleRemovalService.retryArticleRemovalTransaction !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "删除事务修复服务不可用");
-      result = opts.articleRemovalService.retryArticleRemovalTransaction({ transactionId: entry.item.transactionId, confirmed: true });
+      if (
+        !opts.articleRemovalService ||
+        typeof opts.articleRemovalService.retryArticleRemovalTransaction !==
+          "function"
+      )
+        throw attentionError(
+          "ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE",
+          "删除事务修复服务不可用",
+        );
+      result = opts.articleRemovalService.retryArticleRemovalTransaction({
+        transactionId: entry.item.transactionId,
+        confirmed: true,
+      });
     } else if (action === "retry-publication") {
       const service = opts.contentSubmissionService;
-      if (!service || typeof service.retryFailedPublication !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "失败投稿重试服务不可用");
-      result = await service.retryFailedPublication({ publicationId: entry.item.publicationId, expectedRevision: value.expectedRevision, confirmed: true });
-    } else if (action === "reconcile-published" || action === "reconcile-failed") {
-      if (!opts.publicationWorkflow || typeof opts.publicationWorkflow.reconcile !== "function") throw attentionError("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE", "发布核对服务不可用");
-      const published = action === "reconcile-published";
-      result = await opts.publicationWorkflow.reconcile({
-        attemptId: entry.item.attemptId,
-        outcome: published
-          ? {
-              status: "published",
-              evidence: {
-                articleId: entry.item.articleId,
-                attemptId: entry.item.attemptId,
-                targetKey: entry.item.targetKey,
-                ...(entry.item.accountProfileId ? { accountProfileId: entry.item.accountProfileId } : {}),
-                remoteId: entry.item.remoteId,
-                remoteUrl: entry.item.remoteUrl,
-              },
-            }
-          : { status: "failed", error: { code: "CONFIRMED_NOT_PUBLISHED", category: "remote", retryability: "never", userMessage: "Manual reconciliation" } },
-        reasonCode: published ? "CONFIRMED_PUBLISHED" : "CONFIRMED_NOT_PUBLISHED",
+      if (!service || typeof service.retryFailedPublication !== "function")
+        throw attentionError(
+          "ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE",
+          "失败投稿重试服务不可用",
+        );
+      result = await service.retryFailedPublication({
+        publicationId: entry.item.publicationId,
+        expectedRevision: value.expectedRevision,
+        confirmed: true,
       });
     } else if (action === "retry-archive") {
-      if (entry.item.jobId && opts.postProcessingPort && typeof opts.postProcessingPort.retry === "function") {
-        result = await opts.postProcessingPort.retry({ jobId: entry.item.jobId });
+      if (
+        entry.item.jobId &&
+        opts.postProcessingPort &&
+        typeof opts.postProcessingPort.retry === "function"
+      ) {
+        result = await opts.postProcessingPort.retry({
+          jobId: entry.item.jobId,
+        });
       } else {
         const archiveActionPort = opts.archiveActionPort || opts.archiveService;
-        if (!archiveActionPort || typeof archiveActionPort.retryArchive !== "function") throw attentionError("ARTICLE_ARCHIVE_RETRY_UNAVAILABLE", "本地归档重试服务不可用");
+        if (
+          !archiveActionPort ||
+          typeof archiveActionPort.retryArchive !== "function"
+        )
+          throw attentionError(
+            "ARTICLE_ARCHIVE_RETRY_UNAVAILABLE",
+            "本地归档重试服务不可用",
+          );
         result = archiveActionPort.retryArchive(entry.item);
       }
     } else {
-      throw attentionError("ARTICLE_ATTENTION_ACTION_INVALID", "需处理动作无效");
+      throw attentionError(
+        "ARTICLE_ATTENTION_ACTION_INVALID",
+        "需处理动作无效",
+      );
     }
 
-    const changedScopes = ["articleManagement", "articleAttention", "platformQueue"];
-    if (!result || result.domainHandled !== true && (!Array.isArray(result.changedScopes) || result.changedScopes.length === 0)) invalidate("ARTICLE_ATTENTION_RESOLVED");
-    if (typeof opts.getRevision !== "function" && query && typeof query.invalidate === "function") query.invalidate();
-    return { outcome: "resolved", attentionId: entry.item.attentionId, result: result || null, changedScopes };
+    const changedScopes = [
+      "articleManagement",
+      "articleAttention",
+      "platformQueue",
+    ];
+    if (
+      !result ||
+      (result.domainHandled !== true &&
+        (!Array.isArray(result.changedScopes) ||
+          result.changedScopes.length === 0))
+    )
+      invalidate("ARTICLE_ATTENTION_RESOLVED");
+    if (
+      typeof opts.getRevision !== "function" &&
+      query &&
+      typeof query.invalidate === "function"
+    )
+      query.invalidate();
+    return {
+      outcome: "resolved",
+      attentionId: entry.item.attentionId,
+      result: result || null,
+      changedScopes,
+    };
   }
 
   return { preview, resolve };

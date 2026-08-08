@@ -60,7 +60,12 @@ function createPublicationWorkflowComposition(options) {
   }
   return Object.freeze({
     operationalStore,
-    publicationWorkflow,
+    // Generic publish/retry/reconciliation is intentionally not part of the
+    // production capability surface. Regular-platform execution goes through
+    // Ticket 08's queue-group orchestrator and Ticket 09's named outcomes.
+    publicationWorkflow: Object.freeze({
+      recover: publicationWorkflow.recover,
+    }),
     postProcessor,
     createAttentionPorts,
     dispose: async function () {

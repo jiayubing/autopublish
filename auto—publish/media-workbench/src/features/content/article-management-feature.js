@@ -24,7 +24,9 @@ const EMPTY_MANAGEMENT = Object.freeze({
 const COMMAND_SCOPES = Object.freeze({
   getArticleEditor: null,
   saveArticle: "management",
-  reconcilePublication: "management",
+  prepareRegularUncertainResolution: "management",
+  confirmRegularAccepted: "management",
+  confirmRegularNotAccepted: "management",
   previewContentSubmissionBatch: null,
   createContentSubmissionBatch: "management",
   previewRegularQueueAdmission: null,
@@ -55,7 +57,6 @@ const REMOVAL_EVENT_COMMANDS = new Set([
 const CLIENT_IDENTITY = Object.freeze({
   getArticleEditor: (input) => [input?.clientId],
   saveArticle: (input) => [input?.clientId || input?.article?.clientId],
-  reconcilePublication: (input) => [input?.clientId],
   createContentSubmissionBatch: (input) => [input?.clientId],
   previewRegularQueueAdmission: (input) =>
     (input?.articleRefs || input?.selections || []).map(
@@ -495,7 +496,12 @@ export function createArticleManagementFeature(adapters = {}) {
   const commands = Object.freeze({
     getArticleEditor: (input) => runCommand("getArticleEditor", input),
     saveArticle: (input) => runCommand("saveArticle", input),
-    reconcilePublication: (input) => runCommand("reconcilePublication", input),
+    prepareRegularUncertainResolution: (input) =>
+      runCommand("prepareRegularUncertainResolution", input),
+    confirmRegularAccepted: (input) =>
+      runCommand("confirmRegularAccepted", input),
+    confirmRegularNotAccepted: (input) =>
+      runCommand("confirmRegularNotAccepted", input),
     previewContentSubmissionBatch: (input) =>
       runCommand("previewContentSubmissionBatch", input),
     createContentSubmissionBatch: (input) =>

@@ -49,7 +49,11 @@ import {
   restoreContentArticle,
   trashContentArticles,
 } from "../../bridge/content-removal";
-import { reconcilePublicationHistory } from "../../bridge/publication";
+import {
+  prepareRegularUncertainResolution,
+  confirmRegularAccepted,
+  confirmRegularNotAccepted,
+} from "../../bridge/publication";
 import {
   prepareBindPaidOrderNumber,
   bindPaidOrderNumber,
@@ -87,7 +91,9 @@ export function useContentWorkbenchFeature() {
         article: GeneratedContentArticle;
         expectedFingerprint: string;
       }) => saveContentArticle(input.article, input.expectedFingerprint),
-      reconcilePublication: reconcilePublicationHistory,
+      prepareRegularUncertainResolution,
+      confirmRegularAccepted,
+      confirmRegularNotAccepted,
       collectDoubaoQuestion,
       startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) =>
         startPreparedDoubaoBatch(input.tasks),

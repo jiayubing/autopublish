@@ -6,35 +6,53 @@ const { execFileSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
-const tsxLoader = pathToFileURL(path.join(root, "media-workbench", "node_modules", "tsx", "dist", "loader.mjs")).href;
+const tsxLoader = pathToFileURL(
+  path.join(
+    root,
+    "media-workbench",
+    "node_modules",
+    "tsx",
+    "dist",
+    "loader.mjs",
+  ),
+).href;
 
 function runStatusModule(source) {
-  return JSON.parse(execFileSync(process.execPath, ["--import", tsxLoader, "--input-type=module", "-e", source], { cwd: root, encoding: "utf8" }));
+  return JSON.parse(
+    execFileSync(
+      process.execPath,
+      ["--import", tsxLoader, "--input-type=module", "-e", source],
+      { cwd: root, encoding: "utf8" },
+    ),
+  );
 }
 
 function record(status, overrides) {
-  return Object.assign({
-    publicationId: `publication-${status}`,
-    clientId: "c1",
-    articleId: "a1",
-    articleKey: "generated:c1:a1",
-    targetKey: `platform:${status}`,
-    platformId: status,
-    mediaResourceId: null,
-    displayName: status,
-    status,
-    createdAt: "2026-07-18T00:00:00.000Z",
-    updatedAt: "2026-07-18T00:00:00.000Z",
-    attempts: [],
-    attemptId: null,
-    remoteId: null,
-    remoteUrl: null,
-    errorCode: null,
-    reasonCode: null,
-  }, overrides || {});
+  return Object.assign(
+    {
+      publicationId: `publication-${status}`,
+      clientId: "c1",
+      articleId: "a1",
+      articleKey: "generated:c1:a1",
+      targetKey: `platform:${status}`,
+      platformId: status,
+      mediaResourceId: null,
+      displayName: status,
+      status,
+      createdAt: "2026-07-18T00:00:00.000Z",
+      updatedAt: "2026-07-18T00:00:00.000Z",
+      attempts: [],
+      attemptId: null,
+      remoteId: null,
+      remoteUrl: null,
+      errorCode: null,
+      reasonCode: null,
+    },
+    overrides || {},
+  );
 }
 
-describe("publication history renderer boundary", async function() {
+describe("publication history renderer boundary", async function () {
   const status = runStatusModule(`
     import { summarizePublicationRecords, publicationRecordStatusLabel, publicationSummaryMatchesFilter } from './media-workbench/src/publication-status.ts';
     const record = (status, overrides = {}) => ({ status, targetKey: 'platform:fixture', mediaResourceId: null, platformId: 'fixture', attempts: [], createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z', ...overrides });
@@ -53,13 +71,13 @@ describe("publication history renderer boundary", async function() {
     }));
   `);
 
-  it("keeps no publication separate from the publication lifecycle summary", function() {
+  it("keeps no publication separate from the publication lifecycle summary", function () {
     assert.equal(status.empty.status, "not_submitted");
     assert.equal(status.empty.label, "未投稿");
     assert.equal(status.queued.label, "已入队");
   });
 
-  it("summarizes independent targets without hiding partial or uncertain results", function() {
+  it("summarizes independent targets without hiding partial or uncertain results", function () {
     assert.equal(status.partial.status, "partial");
     assert.equal(status.uncertain.status, "uncertain");
     assert.equal(status.failed.status, "failed");
@@ -72,11 +90,39 @@ describe("publication history renderer boundary", async function() {
     assert.equal(status.matches, true);
   });
 
-  it("keeps the history detail target-oriented and visibly blocks uncertain direct retry", function() {
-    const drawer = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/PublicationHistoryDrawer.tsx"), "utf8");
-    const view = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8");
-    const editor = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx"), "utf8");
-    const workbench = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/ContentWorkbench.tsx"), "utf8");
+  it("keeps the history detail target-oriented and visibly blocks uncertain direct retry", function () {
+    const drawer = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "..",
+        "media-workbench/src/components/content/PublicationHistoryDrawer.tsx",
+      ),
+      "utf8",
+    );
+    const view = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "..",
+        "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+      ),
+      "utf8",
+    );
+    const editor = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "..",
+        "media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx",
+      ),
+      "utf8",
+    );
+    const workbench = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "..",
+        "media-workbench/src/components/ContentWorkbench.tsx",
+      ),
+      "utf8",
+    );
     assert.match(drawer, /远端 URL/);
     assert.match(drawer, /订单号\/远端 ID/);
     assert.match(drawer, /安全错误码/);
@@ -84,14 +130,23 @@ describe("publication history renderer boundary", async function() {
     assert.match(drawer, /不提供直接重试/);
     assert.doesNotMatch(drawer, /复制为新版本|onCopyVersion/);
     assert.doesNotMatch(editor, /复制为新版本|onCopyVersion/);
-    assert.doesNotMatch(workbench, /复制文章新版本|copyArticleVersion|onCopyVersion/);
+    assert.doesNotMatch(
+      workbench,
+      /复制文章新版本|copyArticleVersion|onCopyVersion/,
+    );
     assert.match(drawer, /确认已发布/);
     assert.match(drawer, /确认未发布/);
     assert.match(view, /PublicationHistoryDrawer/);
     assert.match(view, /management: ArticleManagementReadModel/);
-    assert.doesNotMatch(view, /getArticleManagementSnapshot|bridge\/publication|bridge\/content/);
+    assert.doesNotMatch(
+      view,
+      /getArticleManagementSnapshot|bridge\/publication|bridge\/content/,
+    );
     assert.doesNotMatch(view, /commands\.copyArticleVersion|onCopyVersion/);
-    assert.match(view, /commands\.reconcilePublication/);
+    assert.match(view, /commands\.prepareRegularUncertainResolution/);
+    assert.match(view, /commands\.confirmRegularAccepted/);
+    assert.match(view, /commands\.confirmRegularNotAccepted/);
+    assert.doesNotMatch(view, /commands\.reconcilePublication/);
     assert.match(view, /await confirm\(\{\s*title: label/);
     assert.match(
       view,

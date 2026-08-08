@@ -444,10 +444,7 @@ describe("Phase 06 media feature", () => {
     await feature.syncAllOrders();
     await feature.prepareOrderStatusAnomalyResolution("order-1");
     await feature.confirmOrderPublished("order-1");
-    assert.deepEqual(
-      [syncAllCalls, prepareCalls, resolutionCalls],
-      [0, 1, 0],
-    );
+    assert.deepEqual([syncAllCalls, prepareCalls, resolutionCalls], [0, 1, 0]);
 
     singleSync.resolve({});
     await syncing;
@@ -517,15 +514,12 @@ describe("Phase 06 media feature", () => {
 
     failures.syncAll = true;
     await feature.syncAllOrders();
-    assert.deepEqual(
-      feature.getSnapshot().commands.syncAllOrders.error,
-      {
-        code: "MEDIA_ORDER_SYNC_FAILED",
-        category: "internal",
-        retryability: "manual-check",
-        userMessage: "刷新订单失败。",
-      },
-    );
+    assert.deepEqual(feature.getSnapshot().commands.syncAllOrders.error, {
+      code: "MEDIA_ORDER_SYNC_FAILED",
+      category: "internal",
+      retryability: "manual-check",
+      userMessage: "刷新订单失败。",
+    });
     failures.syncAll = false;
     failures.prepare = true;
     await feature.prepareOrderStatusAnomalyResolution("order-1");
@@ -540,6 +534,88 @@ describe("Phase 06 media feature", () => {
     assert.equal(
       feature.getSnapshot().commands.confirmOrderPublished.error.userMessage,
       "订单状态核对未能安全完成。",
+    );
+  });
+
+  it("clears stale anomaly preparation so the renderer can explicitly re-prepare evidence", async () => {
+    let prepareCount = 0;
+    const feature = createMediaFeature({
+      getResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      searchResourcePage: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+      }),
+      refreshResources: async () => ({}),
+      getPoolPage: emptyPoolPage,
+      addToPool: async () => ({}),
+      removeFromPool: async () => ({}),
+      getBalance: async () => 0,
+      getDrafts: async () => [],
+      getDraft: async () => null,
+      setDraft: async () => ({}),
+      scanArticles: async () => [],
+      previewArticle: async () => ({}),
+      getOrders: async () => [
+        { orderNid: "order-1", statusCode: "0", anomaly: {} },
+      ],
+      syncOrder: async () => ({}),
+      syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
+      prepareOrderStatusAnomalyResolution: async () => {
+        prepareCount += 1;
+        if (prepareCount === 3) throw new Error("stale preparation");
+        return {
+          orderId: "order-1",
+          confirmationToken: `token-${prepareCount}`,
+          classification:
+            prepareCount === 1 ? "verified_published" : "inconclusive",
+          allowedActions: prepareCount === 1 ? ["confirmOrderPublished"] : [],
+        };
+      },
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => {
+        throw Object.assign(new Error("stale token"), {
+          code: "ORDER_STATUS_ANOMALY_TOKEN_STALE",
+        });
+      },
+      confirmOrderNotPublished: async () => ({}),
+      openPublishedUrl: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "workspace-anomaly-reprepare" });
+    await feature.refreshOrders("initial");
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+    assert.ok(feature.getSnapshot().orders.anomalyPreparations["order-1"]);
+    await feature.confirmOrderPublished("order-1");
+    assert.equal(
+      feature.getSnapshot().orders.anomalyPreparations["order-1"],
+      undefined,
+    );
+    assert.equal(
+      feature.getSnapshot().commands.confirmOrderPublished.error.code,
+      "ORDER_STATUS_ANOMALY_TOKEN_STALE",
+    );
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+    assert.deepEqual(
+      feature.getSnapshot().orders.anomalyPreparations["order-1"]
+        .allowedActions,
+      [],
+    );
+    const ordersView = fs.readFileSync(
+      path.resolve("media-workbench/src/components/OrdersView.tsx"),
+      "utf8",
+    );
+    assert.match(ordersView, /重新核对可用证据/);
+    assert.match(ordersView, /allowedActions\s*\.length === 0/);
+    await feature.prepareOrderStatusAnomalyResolution("order-1");
+    assert.equal(
+      feature.getSnapshot().orders.anomalyPreparations["order-1"],
+      undefined,
     );
   });
 });

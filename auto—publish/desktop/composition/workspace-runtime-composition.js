@@ -505,7 +505,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       }),
     );
-    let retryFailedPublicationExecutor = null;
     const contentSubmissionService = ownService(
       require("../services/content-submission-service").createContentSubmissionService(
         {
@@ -516,16 +515,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           platforms: loadedPlatforms,
           onDataInvalidated: invalidation.invalidate,
           getDataRevision: invalidation.getRevision,
-          retryFailedPublication: function (task) {
-            if (!retryFailedPublicationExecutor) {
-              const error = new Error(
-                "Publication retry workflow is unavailable",
-              );
-              error.code = "PUBLICATION_RETRY_REQUIRES_WORKFLOW";
-              throw error;
-            }
-            return retryFailedPublicationExecutor(task);
-          },
         },
       ),
     );
@@ -665,29 +654,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       ),
     );
-    const publicationSubmissionOrchestrator =
-      require("../services/publication-submission-orchestrator").createPublicationSubmissionOrchestrator(
-        {
-          workflow: publicationComposition.publicationWorkflow,
-          operationalStore: publicationComposition.operationalStore,
-          workerPublisher,
-        },
-      );
-    retryFailedPublicationExecutor = async function (task) {
-      const command =
-        await platformWorkbenchService.preparePublicationCommand(task);
-      return publicationSubmissionOrchestrator.submit(
-        [Object.assign({}, command, { publicationId: task.publicationId })],
-        { retryFailed: true },
-      );
-    };
-    const publicationSubmissionService =
-      require("../services/publication-submission-service").createPublicationSubmissionService(
-        {
-          workbench: platformWorkbenchService,
-          orchestrator: publicationSubmissionOrchestrator,
-        },
-      );
     const platformSessionService =
       require("../services/platform-session-service").createPlatformSessionService(
         {
@@ -706,7 +672,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           platformSessionService,
           platformWorkbenchService,
           taskService,
-          publicationSubmissionService,
           assertPlaywrightAvailable: function () {
             return require("../services/playwright-capability").assertPlaywrightAvailable(
               runtime.diagnosticsService,
@@ -782,7 +747,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformWorkbenchService,
       publicationComposition,
       attentionPorts,
-      publicationSubmissionService,
       platformApplication,
       mediaApplication,
     };
@@ -819,7 +783,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       }),
       loadedPlatforms,
       platformSessionService,
-      publicationSubmissionService,
+      regularPlatformOutcomeService,
       operationalStore: publicationComposition.operationalStore,
       articleMutationCoordinator,
       publicationWorkflow: publicationComposition.publicationWorkflow,

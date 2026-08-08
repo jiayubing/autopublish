@@ -2,96 +2,57 @@ const { it } = require("node:test");
 const assert = require("node:assert/strict");
 const { registerPublicationIpc } = require("../desktop/ipc/publication-ipc");
 
-it("requires confirmation and refuses the retired reconciliation command", async function () {
+it("production registration closes generic reconcile and exposes only named regular outcome commands", async function () {
   const handlers = new Map();
+  const calls = [];
   registerPublicationIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    regularPlatformOutcomeService: {
+      prepareRegularUncertainResolution: (input) => {
+        calls.push(["prepare", input]);
+        return {
+          regularPublicationAttemptId: input.regularPublicationAttemptId,
+          confirmationToken: "token-1",
+          expiresAt: "2026-08-07T00:05:00.000Z",
+          actions: ["confirm_accepted", "confirm_not_accepted"],
+          observationFingerprint: "observation-1",
+          preparedEvidenceFingerprint: "evidence-1",
+        };
+      },
+      confirmRegularAccepted: (input) => {
+        calls.push(["accepted", input]);
+        return {
+          attemptId: input.regularPublicationAttemptId,
+          status: "published",
+        };
+      },
+      confirmRegularNotAccepted: (input) => ({
+        attemptId: input.regularPublicationAttemptId,
+        status: "not_accepted",
+      }),
+    },
   });
-  const rejected = await handlers.get("publication:reconcile")(null, {
-    publicationId: "publication-1",
-    status: "failed",
-    reasonCode: "CONFIRMED_NOT_PUBLISHED",
-  });
-  assert.equal(rejected.ok, false);
+  assert.equal(handlers.has("publication:reconcile"), false);
   assert.equal(
-    rejected.error.code,
-    "PUBLICATION_RECONCILE_CONFIRMATION_REQUIRED",
+    handlers.has("publication:prepare-regular-uncertain-resolution"),
+    true,
   );
-  const result = await handlers.get("publication:reconcile")(null, {
-    publicationId: "publication-1",
-    status: "failed",
-    reasonCode: "CONFIRMED_NOT_PUBLISHED",
-    confirmed: true,
+  const prepared = await handlers.get(
+    "publication:prepare-regular-uncertain-resolution",
+  )(null, {
+    regularPublicationAttemptId: "attempt-1",
   });
-  assert.equal(result.ok, false);
-  assert.equal(result.error.code, "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED");
-});
-
-it("requires evidence for a published reconciliation and binds it to the current attempt", async function () {
-  const handlers = new Map();
-  let reconcileCommand = null;
-  let reads = 0;
-  const uncertain = {
-    version: 1,
-    publicationId: "publication-1",
-    articleId: "article-1",
-    articleKey: "article-1",
-    targetKey: "media-resource:resource-1",
-    status: "uncertain",
-    createdAt: "2026-08-03T00:00:00.000Z",
-    updatedAt: "2026-08-03T00:00:01.000Z",
-    attempts: [
-      {
-        attemptId: "attempt-1",
-        status: "uncertain",
-        createdAt: "2026-08-03T00:00:00.000Z",
-        updatedAt: "2026-08-03T00:00:01.000Z",
-      },
-    ],
-  };
-  const published = {
-    ...uncertain,
-    status: "published",
-    attempts: [{ ...uncertain.attempts[0], status: "published" }],
-  };
-  registerPublicationIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    operationalStore: {
-      listPublicationRecords: () => (++reads === 1 ? [uncertain] : [published]),
+  assert.equal(prepared.ok, true);
+  const accepted = await handlers.get("publication:confirm-regular-accepted")(
+    null,
+    {
+      regularPublicationAttemptId: "attempt-1",
+      confirmationToken: "token-1",
+      manualPositiveEvidence: { observedAt: "2026-08-06T00:00:00.000Z" },
+      confirmed: true,
     },
-    publicationWorkflow: {
-      reconcile: async (command) => {
-        reconcileCommand = command;
-      },
-    },
-  });
-  const missingEvidence = await handlers.get("publication:reconcile")(null, {
-    publicationId: "publication-1",
-    status: "published",
-    reasonCode: "CONFIRMED_PUBLISHED",
-    confirmed: true,
-  });
-  assert.equal(missingEvidence.ok, false);
-  assert.equal(missingEvidence.error.code, "PUBLICATION_RECONCILE_EVIDENCE_REQUIRED");
-  assert.equal(reconcileCommand, null);
-  const result = await handlers.get("publication:reconcile")(null, {
-    publicationId: "publication-1",
-    status: "published",
-    reasonCode: "CONFIRMED_PUBLISHED",
-    remoteId: "remote-1",
-    remoteUrl: "https://example.test/articles/remote-1",
-    confirmed: true,
-  });
-  assert.equal(result.ok, true);
-  assert.equal(result.data.record.status, "published");
-  assert.equal(reconcileCommand.attemptId, "attempt-1");
-  assert.equal(reconcileCommand.outcome.status, "published");
-  assert.deepEqual(reconcileCommand.outcome.evidence, {
-    articleId: "article-1",
-    attemptId: "attempt-1",
-    targetKey: "media-resource:resource-1",
-    remoteId: "remote-1",
-    remoteUrl: "https://example.test/articles/remote-1",
-  });
-  assert.equal(reconcileCommand.reasonCode, "CONFIRMED_PUBLISHED");
+  );
+  assert.equal(accepted.ok, true);
+  assert.equal(calls[1][1].regularPublicationAttemptId, "attempt-1");
+  assert.equal(calls[1][1].confirmed, true);
 });

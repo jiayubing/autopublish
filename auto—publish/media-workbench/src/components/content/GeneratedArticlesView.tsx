@@ -634,12 +634,22 @@ export default function GeneratedArticlesView({
     onArticleSelect(article, source, workflow.stage === "published");
   }
 
-  async function reconcilePublication(
+  async function resolveRegularUncertain(
     record: PublicationHistoryRecord,
     status: "published" | "failed",
   ) {
     const requestedClientId = clientId;
     if (record.status !== "uncertain") return;
+    if (!record.attemptId) {
+      if (isCurrentClient(requestedClientId))
+        setError("普通平台投稿尝试缺失，无法核对。");
+      return;
+    }
+    if (!record.targetKey.startsWith("platform:")) {
+      if (isCurrentClient(requestedClientId))
+        setError("付费订单结果请在订单页使用具名核对动作。");
+      return;
+    }
     const label = status === "published" ? "确认远端已发布" : "确认远端未发布";
     if (
       !(await confirm({
@@ -651,14 +661,30 @@ export default function GeneratedArticlesView({
       return;
     setError("");
     try {
-      const result = await commands.reconcilePublication({
-        publicationId: record.publicationId,
-        status,
-        reasonCode:
-          status === "published"
-            ? "CONFIRMED_PUBLISHED"
-            : "CONFIRMED_NOT_PUBLISHED",
+      const preparation = await commands.prepareRegularUncertainResolution({
+        regularPublicationAttemptId: record.attemptId,
       });
+      const observedAt = new Date().toISOString();
+      const result =
+        status === "published"
+          ? await commands.confirmRegularAccepted({
+              regularPublicationAttemptId:
+                preparation.regularPublicationAttemptId,
+              confirmationToken: preparation.confirmationToken,
+              manualPositiveEvidence: {
+                observedAt,
+                ...(record.remoteUrl ? { remoteUrl: record.remoteUrl } : {}),
+              },
+            })
+          : await commands.confirmRegularNotAccepted({
+              regularPublicationAttemptId:
+                preparation.regularPublicationAttemptId,
+              confirmationToken: preparation.confirmationToken,
+              manualNegativeEvidence: {
+                reasonCode: "REGULAR_MANUAL_NOT_ACCEPTED",
+                observedAt,
+              },
+            });
       if (
         isContentCommandStaleResult(result) ||
         !isCurrentClient(requestedClientId)
@@ -1727,9 +1753,13 @@ export default function GeneratedArticlesView({
         }
         onClose={() => setDrawerArticle(null)}
         onReconcile={(record, status) =>
-          void reconcilePublication(record, status)
+          void resolveRegularUncertain(record, status)
         }
-        busy={commandStates.reconcilePublication.busy}
+        busy={
+          commandStates.prepareRegularUncertainResolution?.busy === true ||
+          commandStates.confirmRegularAccepted?.busy === true ||
+          commandStates.confirmRegularNotAccepted?.busy === true
+        }
       />
       <ArticleAttentionDetailDrawer
         item={attentionDetail}

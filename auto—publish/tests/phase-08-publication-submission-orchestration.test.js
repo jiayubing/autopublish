@@ -7,15 +7,13 @@ const os = require("node:os");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const test = require("node:test");
+const domain = require("../src/domain");
 const {
   createOperationalStore,
 } = require("../src/infrastructure/operational-store/operational-store");
 const {
   createPublicationWorkflow,
 } = require("../src/application/publication-workflow");
-const {
-  createPostProcessingCoordinator,
-} = require("../src/application/publication-workflow/post-processing");
 const {
   createPublicationSubmissionOrchestrator,
 } = require("../desktop/services/publication-submission-orchestrator");
@@ -25,9 +23,64 @@ const {
 const {
   createWorkerPublisher,
 } = require("../desktop/services/worker-publisher");
-const {
-  createPublicationPostProcessor,
-} = require("../desktop/services/publication-post-processor");
+
+function prepareRegularAttempt(transitionPorts, articleId, profile) {
+  const title = `title ${articleId}`;
+  const body = `body ${articleId}`;
+  const target = {
+    kind: "platform",
+    platformId: profile.platformId,
+    accountProfileId: profile.accountProfileId,
+  };
+  const admitted =
+    transitionPorts.regularQueueTransitions.admitRegularQueueItem({
+      clientId: "client-1",
+      articleId,
+      batchId: `regular-batch-${articleId}`,
+      itemId: `regular-item-${articleId}`,
+      publicationId: `regular-publication-${articleId}`,
+      attemptId: `regular-attempt-${articleId}`,
+      target,
+      publicationSnapshot: {
+        articleId,
+        title,
+        body,
+        fingerprint: domain.contentFingerprint(title, body),
+      },
+      payload: { clientId: "client-1" },
+    });
+  transitionPorts.regularQueueGroupTransitions.setRegularQueueGroupRunIntent({
+    queueGroupId: admitted.queueGroupId,
+    running: true,
+  });
+  const claim =
+    transitionPorts.regularQueueGroupTransitions.claimRegularQueueGroupHead({
+      queueGroupId: admitted.queueGroupId,
+      claimToken: `regular-claim-${articleId}`,
+      leaseMs: 30000,
+    });
+  const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+  transitionPorts.regularQueueGroupTransitions.beginRegularRemoteSubmission({
+    regularPublicationAttemptId: claim.regularPublicationAttemptId,
+    claimToken: claim.claimToken,
+    preparedSubmissionEvidenceV1: evidence,
+  });
+  return { admitted, claim, evidence, target };
+}
+
+function acceptRegularAttempt(transitionPorts, prepared) {
+  return transitionPorts.regularOutcomeTransitions.recordRegularAccepted({
+    regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+    observation: {
+      status: "accepted",
+      code: "REGULAR_ACCEPTED",
+      observedAt: "2026-08-07T01:00:02.000Z",
+      providerEventAt: "2026-08-07T01:00:01.000Z",
+      remoteId: `remote-${prepared.claim.regularPublicationAttemptId}`,
+      remoteUrl: "https://example.test/published",
+    },
+  });
+}
 
 test("failed submission retry reclaims the existing item and calls PublicationWorkflow.retry", async () => {
   let claimed = null;
@@ -236,19 +289,18 @@ test("renewed submission claims cannot be taken over during a long remote call",
       batchItemId: first.itemId,
       batchClaimToken: first.claimToken,
       outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-claim-lease",
-          attemptId: "attempt-claim-lease",
-          targetKey: "media-resource:resource-claim-lease",
-          remoteId: "remote-claim-lease",
-          remoteUrl: "https://example.test/remote-claim-lease",
+        status: "failed",
+        error: {
+          code: "REMOTE_REJECTED",
+          category: "remote",
+          retryability: "never",
+          userMessage: "Remote rejected the submission",
         },
       },
     });
     assert.equal(
       store.getSubmissionBatch(batch.batchId).items[0].status,
-      "completed",
+      "failed",
     );
   } finally {
     store.close();
@@ -310,26 +362,8 @@ test("startup recovery closes a stranded submission claim with its publication i
       store.getSubmissionBatch(batch.batchId).items[0].status,
       "failed",
     );
-    const reconciled = await workflow.reconcile({
-      attemptId: "attempt-recovery-claim",
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-recovery-claim",
-          attemptId: "attempt-recovery-claim",
-          targetKey: "media-resource:resource-recovery-claim",
-          remoteId: "remote-recovery-claim",
-          remoteUrl: "https://example.test/remote-recovery-claim",
-        },
-      },
-    });
-    assert.equal(reconciled.status, "published");
-    assert.equal(store.getSubmissionBatch(batch.batchId).status, "completed");
-    assert.equal(
-      store.getSubmissionBatch(batch.batchId).items[0].status,
-      "completed",
-    );
-    assert.deepEqual(archived, [{ batchId: batch.batchId }]);
+    assert.equal(typeof workflow.reconcile, "undefined");
+    assert.deepEqual(archived, []);
     const database = new DatabaseSync(store.databasePath, { readOnly: true });
     try {
       const lease = database
@@ -348,113 +382,43 @@ test("startup recovery closes a stranded submission claim with its publication i
   }
 });
 
-test("blocked auto-trash remains attention-visible and durable across restart", async () => {
+test("named regular success creates immutable publication without legacy auto-trash work", () => {
   const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-auto-trash-recovery-"),
+    path.join(os.tmpdir(), "phase-08-regular-success-"),
   );
-  const input = path.join(root, "input");
-  const published = path.join(root, "published");
-  fs.mkdirSync(path.join(input, "media"), { recursive: true });
-  fs.writeFileSync(path.join(input, "media", "fixture.md"), "# title\n\nbody");
-  let store = createOperationalStore({ workspaceRoot: root });
+  const transitionPorts = {};
+  let store = createOperationalStore({ workspaceRoot: root, transitionPorts });
   try {
-    const batch = store.createSubmissionBatch({
-      batchId: "batch-auto-trash-recovery",
-      items: [
-        {
-          articleId: "article-auto-trash-recovery",
-          target: {
-            kind: "media",
-            mediaResourceId: "resource-auto-trash-recovery",
-          },
-          payload: {
-            attemptId: "attempt-auto-trash-recovery",
-            batchId: "batch-auto-trash-recovery",
-            sourcePlatformId: "media",
-            filename: "fixture.md",
-            autoTrash: true,
-            clientId: "client-auto-trash-recovery",
-            articleId: "article-auto-trash-recovery",
-          },
-        },
-      ],
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "Fixture account",
     });
-    const claim = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[0].itemId,
-      claimToken: "claim-auto-trash-recovery",
-    });
-    store.reservePublicationTarget({
-      articleId: "article-auto-trash-recovery",
-      publicationId: "publication-auto-trash-recovery",
-      attemptId: "attempt-auto-trash-recovery",
-      target: {
-        kind: "media",
-        mediaResourceId: "resource-auto-trash-recovery",
-      },
-      batchItemId: claim.itemId,
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-        autoTrash: true,
-        clientId: "client-auto-trash-recovery",
-        articleId: "article-auto-trash-recovery",
-      },
-    });
-    store.commitRemoteOutcome({
-      attemptId: "attempt-auto-trash-recovery",
-      batchItemId: claim.itemId,
-      batchClaimToken: claim.claimToken,
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-auto-trash-recovery",
-          attemptId: "attempt-auto-trash-recovery",
-          targetKey: "media-resource:resource-auto-trash-recovery",
-          remoteId: "remote-auto-trash-recovery",
-          remoteUrl: "https://example.test/remote-auto-trash-recovery",
-        },
-      },
-      postProcessingPayload: {
-        batchId: batch.batchId,
-        sourcePlatformId: "media",
-        filename: "fixture.md",
-        autoTrash: true,
-        clientId: "client-auto-trash-recovery",
-        articleId: "article-auto-trash-recovery",
-      },
-    });
-    const processor = createPublicationPostProcessor({
-      workspaceRoot: root,
-      paths: { input, published },
-      platforms: [{ id: "media", scanDir: "media" }],
-      operationalStore: store,
-      autoTrashArticle: async () => ({
-        status: "blocked",
-        reasonCode: "REMOVAL_BLOCKED",
-      }),
-    });
-    const coordinator = createPostProcessingCoordinator({
-      operationalStore: store,
-      postProcessor: processor,
-    });
-    const result = await coordinator.drain({ collectResults: true });
-    assert.equal(result.results[0].status, "failed");
-    assert.equal(result.results[0].output.autoTrash.status, "blocked");
-    assert.equal(store.listPostProcessingAttention().length, 1);
+    const prepared = prepareRegularAttempt(
+      transitionPorts,
+      "article-regular-success",
+      profile,
+    );
+    acceptRegularAttempt(transitionPorts, prepared);
+    assert.equal(store.listPostProcessingAttention().length, 0);
     assert.equal(
-      store.listPostProcessingAttention()[0].reasonCode,
-      "REMOVAL_BLOCKED",
+      store.claimPostProcessing({ claimToken: "legacy-post" }),
+      null,
     );
     store.close();
-    store = createOperationalStore({ workspaceRoot: root });
-    const attention = store.listPostProcessingAttention();
-    assert.equal(attention.length, 1);
-    assert.equal(
-      attention[0].payload.postProcessingOutput.autoTrash.status,
-      "blocked",
-    );
+    const reopenedPorts = {};
+    store = createOperationalStore({
+      workspaceRoot: root,
+      transitionPorts: reopenedPorts,
+    });
+    const record = store.listPublicationRecords({
+      articleIds: ["article-regular-success"],
+    })[0];
+    assert.equal(record.status, "published");
+    const snapshot =
+      reopenedPorts.regularOutcomeTransitions.getRegularOutcomeSnapshot({
+        regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      });
+    assert.equal(snapshot.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -465,35 +429,26 @@ test("published article cannot reserve a second target", () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "phase-08-published-target-"),
   );
-  const store = createOperationalStore({ workspaceRoot: root });
+  const transitionPorts = {};
+  const store = createOperationalStore({
+    workspaceRoot: root,
+    transitionPorts,
+  });
   try {
-    const targetOne = {
-      kind: "media",
-      mediaResourceId: "resource-published-one",
-    };
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "Fixture account",
+    });
     const targetTwo = {
       kind: "media",
       mediaResourceId: "resource-published-two",
     };
-    store.reservePublicationTarget({
-      articleId: "article-published-target",
-      publicationId: "publication-published-one",
-      attemptId: "attempt-published-one",
-      target: targetOne,
-    });
-    store.commitRemoteOutcome({
-      attemptId: "attempt-published-one",
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-published-target",
-          attemptId: "attempt-published-one",
-          targetKey: "media-resource:resource-published-one",
-          remoteId: "remote-published-one",
-          remoteUrl: "https://example.test/remote-published-one",
-        },
-      },
-    });
+    const prepared = prepareRegularAttempt(
+      transitionPorts,
+      "article-published-target",
+      profile,
+    );
+    acceptRegularAttempt(transitionPorts, prepared);
     assert.throws(
       () =>
         store.reservePublicationTarget({
@@ -670,401 +625,179 @@ test("real platform stop and pause do not claim the next submission item", async
   }
 });
 
-test("ordinary archive error code survives post-processing restart", async () => {
+test("generic success writer fails closed without creating archive work", () => {
   const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-archive-error-recovery-"),
-  );
-  const input = path.join(root, "input");
-  const published = path.join(root, "published");
-  fs.mkdirSync(path.join(input, "toutiao"), { recursive: true });
-  fs.mkdirSync(published, { recursive: true });
-  fs.writeFileSync(path.join(input, "toutiao", "fixture.md"), "fixture");
-  fs.writeFileSync(path.join(published, "fixture.md"), "existing");
-  let store = createOperationalStore({ workspaceRoot: root });
-  try {
-    const profile = store.createAccountProfile({
-      platformId: "toutiao",
-      displayName: "fixture",
-    });
-    const target = {
-      kind: "platform",
-      platformId: "toutiao",
-      accountProfileId: profile.accountProfileId,
-    };
-    const batch = store.createSubmissionBatch({
-      batchId: "batch-archive-error-recovery",
-      items: [
-        {
-          articleId: "article-archive-error-recovery",
-          target,
-          payload: {
-            sourcePlatformId: "toutiao",
-            filename: "fixture.md",
-          },
-        },
-      ],
-    });
-    const claim = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[0].itemId,
-      claimToken: "claim-archive-error-recovery",
-    });
-    const postProcessingPayload = {
-      batchId: batch.batchId,
-      sourcePlatformId: "toutiao",
-      filename: "fixture.md",
-    };
-    store.reservePublicationTarget({
-      articleId: "article-archive-error-recovery",
-      publicationId: "publication-archive-error-recovery",
-      attemptId: "attempt-archive-error-recovery",
-      target,
-      batchItemId: claim.itemId,
-      postProcessingPayload,
-    });
-    store.commitRemoteOutcome({
-      attemptId: "attempt-archive-error-recovery",
-      batchItemId: claim.itemId,
-      batchClaimToken: claim.claimToken,
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-archive-error-recovery",
-          attemptId: "attempt-archive-error-recovery",
-          targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
-          accountProfileId: profile.accountProfileId,
-          remoteId: "remote-archive-error-recovery",
-          remoteUrl: "https://example.test/archive-error-recovery",
-        },
-      },
-      postProcessingPayload,
-    });
-    const processor = createPublicationPostProcessor({
-      workspaceRoot: root,
-      paths: { input, published },
-      platforms: [{ id: "toutiao", scanDir: "toutiao" }],
-      operationalStore: store,
-    });
-    const coordinator = createPostProcessingCoordinator({
-      operationalStore: store,
-      postProcessor: processor,
-    });
-    const result = await coordinator.drain({ collectResults: true });
-    assert.equal(result.results[0].errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(
-      store.listPostProcessingAttention()[0].errorCode,
-      "PUBLISHED_ARCHIVE_CONFLICT",
-    );
-    assert.equal(
-      store.listPostProcessingAttention()[0].reasonCode,
-      "PUBLISHED_ARCHIVE_CONFLICT",
-    );
-    assert.equal(
-      store.listPostProcessingAttention()[0].payload.postProcessingErrorCode,
-      "PUBLISHED_ARCHIVE_CONFLICT",
-    );
-
-    store.close();
-    store = createOperationalStore({ workspaceRoot: root });
-    const attention = store.listPostProcessingAttention();
-    assert.equal(attention.length, 1);
-    assert.equal(attention[0].errorCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(attention[0].reasonCode, "PUBLISHED_ARCHIVE_CONFLICT");
-    assert.equal(
-      attention[0].payload.postProcessingErrorCode,
-      "PUBLISHED_ARCHIVE_CONFLICT",
-    );
-  } finally {
-    store.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("latest retry error code overrides stale auto-trash output after restart", () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-retry-error-recovery-"),
-  );
-  let store = createOperationalStore({ workspaceRoot: root });
-  try {
-    const profile = store.createAccountProfile({
-      platformId: "toutiao",
-      displayName: "fixture",
-    });
-    const target = {
-      kind: "platform",
-      platformId: "toutiao",
-      accountProfileId: profile.accountProfileId,
-    };
-    const batch = store.createSubmissionBatch({
-      batchId: "batch-retry-error-recovery",
-      items: [
-        {
-          articleId: "article-retry-error-recovery",
-          target,
-          payload: {},
-        },
-      ],
-    });
-    const claim = store.claimSubmissionItemById({
-      batchId: batch.batchId,
-      itemId: batch.items[0].itemId,
-      claimToken: "claim-retry-error-recovery",
-    });
-    const postProcessingPayload = {
-      batchId: batch.batchId,
-      sourcePlatformId: "toutiao",
-      filename: "fixture.md",
-    };
-    store.reservePublicationTarget({
-      articleId: "article-retry-error-recovery",
-      publicationId: "publication-retry-error-recovery",
-      attemptId: "attempt-retry-error-recovery",
-      target,
-      batchItemId: claim.itemId,
-      postProcessingPayload,
-    });
-    store.commitRemoteOutcome({
-      attemptId: "attempt-retry-error-recovery",
-      batchItemId: claim.itemId,
-      batchClaimToken: claim.claimToken,
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-retry-error-recovery",
-          attemptId: "attempt-retry-error-recovery",
-          targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
-          accountProfileId: profile.accountProfileId,
-          remoteId: "remote-retry-error-recovery",
-          remoteUrl: "https://example.test/remote-retry-error-recovery",
-        },
-      },
-      postProcessingPayload,
-    });
-
-    const firstToken = "post-retry-error-first";
-    const job = store.claimPostProcessing({ claimToken: firstToken });
-    store.completePostProcessing({
-      jobId: job.jobId,
-      claimToken: firstToken,
-      success: false,
-      output: {
-        autoTrash: { status: "blocked", reasonCode: "REMOVAL_BLOCKED" },
-      },
-    });
-    assert.equal(
-      store.listPostProcessingAttention()[0].reasonCode,
-      "REMOVAL_BLOCKED",
-    );
-
-    store.retryPostProcessing({ jobId: job.jobId });
-    const retryToken = "post-retry-error-second";
-    const retry = store.claimPostProcessing({ claimToken: retryToken });
-    store.completePostProcessing({
-      jobId: retry.jobId,
-      claimToken: retryToken,
-      success: false,
-      errorCode: "PUBLISHED_ARCHIVE_CONFLICT",
-    });
-    assert.equal(
-      store.listPostProcessingAttention()[0].reasonCode,
-      "PUBLISHED_ARCHIVE_CONFLICT",
-    );
-
-    store.retryPostProcessing({ jobId: job.jobId });
-    const autoTrashRetryToken = "post-retry-error-third";
-    const autoTrashRetry = store.claimPostProcessing({
-      claimToken: autoTrashRetryToken,
-    });
-    store.completePostProcessing({
-      jobId: autoTrashRetry.jobId,
-      claimToken: autoTrashRetryToken,
-      success: false,
-      output: {
-        autoTrash: { status: "failed", reasonCode: "REMOVAL_RETRY_FAILED" },
-      },
-    });
-    assert.equal(
-      store.listPostProcessingAttention()[0].reasonCode,
-      "REMOVAL_RETRY_FAILED",
-    );
-
-    store.close();
-    store = createOperationalStore({ workspaceRoot: root });
-    const attention = store.listPostProcessingAttention();
-    assert.equal(attention.length, 1);
-    assert.equal(attention[0].errorCode, "REMOVAL_RETRY_FAILED");
-    assert.equal(attention[0].reasonCode, "REMOVAL_RETRY_FAILED");
-  } finally {
-    store.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("duplicate media publication is rejected before creating a zombie batch", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-duplicate-media-"),
+    path.join(os.tmpdir(), "phase-08-generic-success-closed-"),
   );
   const store = createOperationalStore({ workspaceRoot: root });
-  try {
-    const target = {
-      kind: "media",
-      mediaResourceId: "resource-duplicate-media",
-    };
-    store.reservePublicationTarget({
-      articleId: "article-duplicate-media",
-      publicationId: "publication-duplicate-media",
-      attemptId: "attempt-duplicate-media",
-      target,
-    });
-    store.commitRemoteOutcome({
-      attemptId: "attempt-duplicate-media",
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-duplicate-media",
-          attemptId: "attempt-duplicate-media",
-          targetKey: "media-resource:resource-duplicate-media",
-          remoteId: "remote-duplicate-media",
-          remoteUrl: "https://example.test/remote-duplicate-media",
-        },
-      },
-    });
-    const orchestrator = createPublicationSubmissionOrchestrator({
-      operationalStore: store,
-      workflow: { publish: async () => ({ status: "published" }) },
-    });
-    await assert.rejects(
-      () =>
-        orchestrator.submit(
-          [
-            {
-              articleId: "article-duplicate-media",
-              target,
-              title: "title",
-              body: "body",
-              postProcessingPayload: {},
-            },
-          ],
-          { createBatch: true },
-        ),
-      { code: "PUBLICATION_DUPLICATE" },
-    );
-    assert.deepEqual(store.listSubmissionBatches(), []);
-  } finally {
-    store.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("reconcile restores the durable submission link and drains archive work", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-08-reconcile-link-"),
-  );
-  let store = createOperationalStore({ workspaceRoot: root });
   try {
     const profile = store.createAccountProfile({
       platformId: "toutiao",
       displayName: "Fixture account",
     });
-    const target = {
-      kind: "platform",
-      platformId: "toutiao",
-      accountProfileId: profile.accountProfileId,
-    };
-    const batch = store.createSubmissionBatch({
-      batchId: "batch-reconcile",
-      items: [
-        {
-          articleId: "article-reconcile",
-          target,
-          payload: { sourcePlatformId: "toutiao", filename: "fixture.md" },
-        },
-      ],
+    store.reservePublicationTarget({
+      articleId: "article-generic-success-closed",
+      publicationId: "publication-generic-success-closed",
+      attemptId: "attempt-generic-success-closed",
+      target: {
+        kind: "platform",
+        platformId: "toutiao",
+        accountProfileId: profile.accountProfileId,
+      },
     });
-    const firstWorkflow = createPublicationWorkflow({
-      clock: () => new Date(),
-      operationalStore: store,
-      publisher: {
-        inspectAccount: async () => ({
-          verified: true,
-          accountProfileId: profile.accountProfileId,
+    assert.throws(
+      () =>
+        store.commitRemoteOutcome({
+          attemptId: "attempt-generic-success-closed",
+          outcome: { status: "published" },
         }),
-        publish: async () => {
-          throw new Error("remote timeout");
-        },
-      },
-    });
-    const first = await firstWorkflow.publish({
-      articleId: "article-reconcile",
-      publicationId: "publication-reconcile",
-      attemptId: "attempt-reconcile",
-      target,
-      title: "title",
-      body: "body",
-      batchItemId: batch.items[0].itemId,
-      postProcessingPayload: {
-        sourcePlatformId: "toutiao",
-        filename: "fixture.md",
-        batchId: batch.batchId,
-      },
-    });
-    assert.equal(first.status, "uncertain");
+      { code: "PUBLICATION_SUCCESS_WRITER_CLOSED" },
+    );
     assert.equal(
-      store.getSubmissionBatch(batch.batchId).items[0].status,
+      store.claimPostProcessing({ claimToken: "post-closed" }),
+      null,
+    );
+    assert.equal(
+      store.listPublicationRecords({
+        articleIds: ["article-generic-success-closed"],
+      })[0].status,
+      "queued",
+    );
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("named regular rejection closes the attempt without legacy retry work", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-regular-rejected-"),
+  );
+  const transitionPorts = {};
+  const store = createOperationalStore({
+    workspaceRoot: root,
+    transitionPorts,
+  });
+  try {
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "Fixture account",
+    });
+    const prepared = prepareRegularAttempt(
+      transitionPorts,
+      "article-regular-rejected",
+      profile,
+    );
+    const result =
+      transitionPorts.regularOutcomeTransitions.recordRegularArticleRejected({
+        regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+        observation: {
+          status: "article_rejected",
+          code: "REMOTE_REJECTED",
+          observedAt: "2026-08-07T01:00:02.000Z",
+        },
+      });
+    assert.equal(result.status, "article_rejected");
+    assert.equal(
+      store.listPublicationRecords({
+        articleIds: ["article-regular-rejected"],
+      })[0].status,
       "failed",
     );
+    assert.equal(
+      store.claimPostProcessing({ claimToken: "legacy-retry" }),
+      null,
+    );
+  } finally {
     store.close();
-    store = createOperationalStore({ workspaceRoot: root });
-    const archived = [];
-    const recoveredWorkflow = createPublicationWorkflow({
-      clock: () => new Date(),
-      operationalStore: store,
-      postProcessor: {
-        process: async (job) => archived.push(job.payload),
-      },
-      publisher: {
-        inspectAccount: async () => ({ verified: false }),
-        publish: async () => ({ status: "failed" }),
-      },
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("named publication success rejects a duplicate without creating a second batch", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-duplicate-media-"),
+  );
+  const transitionPorts = {};
+  const store = createOperationalStore({
+    workspaceRoot: root,
+    transitionPorts,
+  });
+  try {
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "Fixture account",
     });
-    const result = await recoveredWorkflow.reconcile({
-      attemptId: "attempt-reconcile",
-      outcome: {
-        status: "published",
-        evidence: {
-          articleId: "article-reconcile",
-          attemptId: "attempt-reconcile",
-          targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
-          accountProfileId: profile.accountProfileId,
-          remoteId: "remote-reconcile",
-          remoteUrl: "https://example.test/reconcile",
-        },
-      },
+    const prepared = prepareRegularAttempt(
+      transitionPorts,
+      "article-duplicate-media",
+      profile,
+    );
+    acceptRegularAttempt(transitionPorts, prepared);
+    assert.throws(
+      () =>
+        transitionPorts.regularQueueTransitions.admitRegularQueueItem({
+          clientId: "client-1",
+          articleId: "article-duplicate-media",
+          batchId: "regular-batch-duplicate-second",
+          itemId: "regular-item-duplicate-second",
+          publicationId: "regular-publication-duplicate-second",
+          attemptId: "regular-attempt-duplicate-second",
+          target: prepared.target,
+          publicationSnapshot: {
+            articleId: "article-duplicate-media",
+            title: "title",
+            body: "body",
+            fingerprint: domain.contentFingerprint("title", "body"),
+          },
+          payload: { clientId: "client-1" },
+        }),
+      { code: "PUBLICATION_DUPLICATE" },
+    );
+    assert.equal(store.listSubmissionBatches().length, 1);
+  } finally {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("named regular accepted transition closes the original attempt after restart", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "phase-08-named-accepted-restart-"),
+  );
+  const firstPorts = {};
+  let store = createOperationalStore({
+    workspaceRoot: root,
+    transitionPorts: firstPorts,
+  });
+  try {
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "Fixture account",
     });
+    const prepared = prepareRegularAttempt(
+      firstPorts,
+      "article-named-accepted-restart",
+      profile,
+    );
+    store.close();
+
+    const reopenedPorts = {};
+    store = createOperationalStore({
+      workspaceRoot: root,
+      transitionPorts: reopenedPorts,
+    });
+    const result = acceptRegularAttempt(reopenedPorts, prepared);
     assert.equal(result.status, "published");
-    const item = store.getSubmissionBatch(batch.batchId).items[0];
-    assert.equal(item.status, "completed");
-    assert.equal(item.payload.outcomeStatus, "published");
-    assert.equal(store.getSubmissionBatch(batch.batchId).status, "completed");
-    const database = new DatabaseSync(store.databasePath, { readOnly: true });
-    try {
-      const lease = database
-        .prepare(
-          "SELECT claim_token,claim_until FROM submission_items WHERE item_id=?",
-        )
-        .get(item.itemId);
-      assert.equal(lease.claim_token, null);
-      assert.equal(lease.claim_until, null);
-    } finally {
-      database.close();
-    }
-    assert.deepEqual(archived, [
-      {
-        sourcePlatformId: "toutiao",
-        filename: "fixture.md",
-        batchId: batch.batchId,
-      },
-    ]);
+    const batch = store.getSubmissionBatch(prepared.admitted.batchId);
+    assert.equal(batch.items[0].status, "completed");
+    assert.equal(batch.status, "completed");
+    assert.equal(
+      reopenedPorts.regularOutcomeTransitions.getRegularOutcomeSnapshot({
+        regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      }).publicationEvidenceV1.contentFingerprint,
+      prepared.evidence.contentFingerprint,
+    );
     assert.equal(store.claimPostProcessing({ claimToken: "post-done" }), null);
   } finally {
     store.close();

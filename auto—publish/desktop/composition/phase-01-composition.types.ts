@@ -10,5 +10,4 @@ export interface PublisherPort {
 export interface PublicationWorkflowPort {
   publish(command: unknown): Promise<unknown>;
   recover(): Promise<unknown>;
-  reconcile(command: unknown): Promise<unknown>;
 }

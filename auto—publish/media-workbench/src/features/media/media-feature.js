@@ -487,6 +487,7 @@ export function createMediaFeature(adapters = {}) {
       return result;
     } catch (value) {
       if (owners[name].isCurrent(token)) {
+        if (typeof options.onError === "function") options.onError(value);
         owners[name].finalize(token, {
           error: safeError(value, fallbackCode, fallbackMessage),
         });
@@ -519,8 +520,21 @@ export function createMediaFeature(adapters = {}) {
 
   function resolvePreparedOrderStatusAnomaly(orderId, action, adapter) {
     const preparation = orders.anomalyPreparations[orderId];
-    if (!preparation || !preparation.allowedActions.includes(action))
-      return undefined;
+    if (!preparation) {
+      return runCommand(
+        action,
+        () => {
+          const error = new Error("订单状态核对需要先重新准备证据");
+          error.code = "ORDER_STATUS_ANOMALY_PREPARATION_REQUIRED";
+          throw error;
+        },
+        "ORDER_STATUS_ANOMALY_RESOLUTION_FAILED",
+        "订单状态核对未能安全完成。",
+        null,
+        { exclusiveOrderMutation: true },
+      );
+    }
+    if (!preparation.allowedActions.includes(action)) return undefined;
     return runCommand(
       action,
       () =>
@@ -536,7 +550,24 @@ export function createMediaFeature(adapters = {}) {
         orders = { ...orders, anomalyPreparations: next };
         await refreshOrders("command-result");
       },
-      { exclusiveOrderMutation: true },
+      {
+        exclusiveOrderMutation: true,
+        onError(value) {
+          if (
+            value &&
+            [
+              "ORDER_STATUS_ANOMALY_TOKEN_STALE",
+              "ORDER_STATUS_ANOMALY_STATE_STALE",
+              "ORDER_STATUS_ANOMALY_QUERY_STALE",
+            ].includes(value.code)
+          ) {
+            const next = { ...orders.anomalyPreparations };
+            delete next[orderId];
+            orders = { ...orders, anomalyPreparations: next };
+            publish();
+          }
+        },
+      },
     );
   }
 
@@ -810,6 +841,12 @@ export function createMediaFeature(adapters = {}) {
     },
     prepareOrderStatusAnomalyResolution(orderId) {
       if (!orderId) return undefined;
+      if (orders.anomalyPreparations[orderId]) {
+        const next = { ...orders.anomalyPreparations };
+        delete next[orderId];
+        orders = { ...orders, anomalyPreparations: next };
+        publish();
+      }
       return runCommand(
         "prepareOrderStatusAnomalyResolution",
         () => adapters.prepareOrderStatusAnomalyResolution(orderId),

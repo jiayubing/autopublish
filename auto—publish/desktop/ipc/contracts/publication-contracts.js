@@ -3,23 +3,11 @@ const {
   defineContract,
   enumField,
   exactObject,
-  integerField,
   literalField,
-  nullableField,
   optionalField,
   stringField,
 } = require("./registry");
 
-const id = stringField({
-  min: 1,
-  max: 200,
-  pattern: /^[A-Za-z0-9_.:-]+$/u,
-});
-const articleId = stringField({
-  min: 1,
-  max: 200,
-  pattern: /^[A-Za-z0-9_.-]+$/u,
-});
 const code = stringField({
   min: 1,
   max: 128,
@@ -27,54 +15,22 @@ const code = stringField({
 });
 const safeText = (max, min = 0) =>
   stringField({ min, max, pattern: /^[^\x00-\x1f\x7f\\]*$/u });
-const timestamp = safeText(64, 1);
 const remoteUrl = stringField({
   min: 1,
   max: 2048,
   pattern: /^https?:\/\/[^\s\\]+$/u,
 });
-const status = enumField([
-  "queued",
-  "submitting",
-  "submitted",
-  "published",
-  "uncertain",
-  "failed",
-  "cancelled",
-]);
-
-const attempt = exactObject({
-  attemptId: nullableField(id),
-  status: nullableField(status),
-  createdAt: nullableField(timestamp),
-  updatedAt: nullableField(timestamp),
-  startedAt: nullableField(timestamp),
-  finishedAt: nullableField(timestamp),
-  remoteId: nullableField(safeText(512, 1)),
-  remoteUrl: nullableField(remoteUrl),
-  errorCode: nullableField(code),
-  reasonCode: nullableField(code),
+const regularAttemptId = stringField({
+  min: 1,
+  max: 200,
+  pattern: /^[A-Za-z0-9_.:-]+$/u,
 });
-const record = exactObject({
-  version: optionalField(integerField({ min: 1, max: 100 })),
-  publicationId: id,
-  clientId: nullableField(articleId),
-  articleId: nullableField(articleId),
-  articleKey: id,
-  targetKey: id,
-  platformId: nullableField(id),
-  mediaResourceId: nullableField(id),
-  displayName: nullableField(safeText(256, 1)),
-  status,
-  createdAt: timestamp,
-  updatedAt: timestamp,
-  attempts: arrayField(attempt, { max: 1000 }),
-  attemptId: nullableField(id),
-  remoteId: nullableField(safeText(512, 1)),
-  remoteUrl: nullableField(remoteUrl),
-  errorCode: nullableField(code),
-  reasonCode: nullableField(code),
+const confirmationToken = stringField({
+  min: 1,
+  max: 256,
+  pattern: /^[A-Za-z0-9_.:-]+$/u,
 });
+const regularTimestamp = safeText(64, 1);
 
 const COMMON_ERRORS = {
   AUTH_REQUIRED: {
@@ -99,15 +55,22 @@ const COMMON_ERRORS = {
   },
 };
 const OWNED_ERRORS = {
-  PUBLICATION_HISTORY_INPUT_INVALID: "发布记录查询输入无效。",
-  PUBLICATION_ARTICLE_ID_INVALID: "客户或文章标识无效。",
-  PUBLICATION_ARTICLE_IDS_INVALID: "文章标识列表无效。",
-  PUBLICATION_RECONCILE_INVALID: "发布核对输入无效。",
-  PUBLICATION_RECONCILE_CONFIRMATION_REQUIRED: "发布核对需要明确确认。",
-  PUBLICATION_ID_INVALID: "发布记录标识无效。",
-  PUBLICATION_RECONCILE_EVIDENCE_REQUIRED: "发布核对缺少可靠远端证据。",
-  PUBLICATION_RECONCILE_NOT_FOUND: "发布记录不存在。",
-  PUBLICATION_RECONCILE_NOT_ACTIONABLE: "发布记录当前不可核对。",
+  REGULAR_OUTCOME_SERVICE_UNAVAILABLE: "普通平台结果核对服务不可用。",
+  REGULAR_OUTCOME_INPUT_INVALID: "普通平台结果核对输入无效。",
+  REGULAR_OUTCOME_RESULT_INVALID: "普通平台结果核对输出无效。",
+  REGULAR_OUTCOME_CONFIRMATION_REQUIRED: "普通平台结果核对需要明确确认。",
+  REGULAR_SUBMISSION_ATTEMPT_NOT_FOUND: "普通平台投稿尝试不存在。",
+  REGULAR_UNCERTAIN_RESOLUTION_NOT_AVAILABLE: "普通平台结果当前不可核对。",
+  REGULAR_UNCERTAIN_EVIDENCE_INSUFFICIENT: "普通平台结果缺少可绑定证据。",
+  REGULAR_UNCERTAIN_RESOLUTION_TOKEN_STALE:
+    "普通平台核对令牌已失效，请重新准备。",
+  REGULAR_UNCERTAIN_RESOLUTION_STATE_STALE: "普通平台事实已变化，请重新准备。",
+  REGULAR_UNCERTAIN_RESOLUTION_OPPOSITE: "普通平台结果已按相反决定收口。",
+  REGULAR_MANUAL_POSITIVE_EVIDENCE_REQUIRED: "确认已接受需要安全人工证据。",
+  REGULAR_MANUAL_NEGATIVE_EVIDENCE_REQUIRED: "确认未接受需要安全人工证据。",
+  REGULAR_OUTCOME_TIME_INVALID: "普通平台结果时间无效。",
+  REGULAR_OUTCOME_CONFLICT: "普通平台结果存在事实冲突。",
+  REGULAR_OUTCOME_EVIDENCE_INVALID: "普通平台结果证据无效。",
 };
 const errors = Object.freeze({
   ...COMMON_ERRORS,
@@ -124,19 +87,74 @@ const directInput = (payload) => [payload];
 
 const publicationContracts = Object.freeze([
   defineContract({
-    capability: "publication.reconcile",
-    channel: "publication:reconcile",
+    capability: "publication.prepareRegularUncertainResolution",
+    channel: "publication:prepare-regular-uncertain-resolution",
     feature: "content",
     kind: "command",
     request: exactObject({
-      publicationId: id,
-      status: enumField(["published", "failed"]),
-      reasonCode: code,
-      remoteId: optionalField(safeText(512, 1)),
-      remoteUrl: optionalField(remoteUrl),
+      regularPublicationAttemptId: regularAttemptId,
+    }),
+    success: exactObject({
+      regularPublicationAttemptId: regularAttemptId,
+      confirmationToken,
+      expiresAt: regularTimestamp,
+      actions: arrayField(
+        enumField(["confirm_accepted", "confirm_not_accepted"]),
+        { min: 1, max: 2 },
+      ),
+      observationFingerprint: stringField({ min: 1, max: 128 }),
+      preparedEvidenceFingerprint: stringField({ min: 1, max: 128 }),
+    }),
+    fromArgs: directArgs,
+    toArgs: directInput,
+    errors,
+    errorCodes,
+  }),
+  defineContract({
+    capability: "publication.confirmRegularAccepted",
+    channel: "publication:confirm-regular-accepted",
+    feature: "content",
+    kind: "command",
+    request: exactObject({
+      regularPublicationAttemptId: regularAttemptId,
+      confirmationToken,
+      manualPositiveEvidence: exactObject({
+        observedAt: regularTimestamp,
+        remoteUrl: optionalField(remoteUrl),
+      }),
       confirmed: literalField(true),
     }),
-    success: exactObject({ record }),
+    success: exactObject({
+      attemptId: regularAttemptId,
+      status: enumField(["published"]),
+      idempotent: optionalField("boolean"),
+      firstWins: optionalField("boolean"),
+    }),
+    fromArgs: directArgs,
+    toArgs: directInput,
+    errors,
+    errorCodes,
+  }),
+  defineContract({
+    capability: "publication.confirmRegularNotAccepted",
+    channel: "publication:confirm-regular-not-accepted",
+    feature: "content",
+    kind: "command",
+    request: exactObject({
+      regularPublicationAttemptId: regularAttemptId,
+      confirmationToken,
+      manualNegativeEvidence: exactObject({
+        reasonCode: code,
+        observedAt: regularTimestamp,
+      }),
+      confirmed: literalField(true),
+    }),
+    success: exactObject({
+      attemptId: regularAttemptId,
+      status: enumField(["not_accepted"]),
+      idempotent: optionalField("boolean"),
+      firstWins: optionalField("boolean"),
+    }),
     fromArgs: directArgs,
     toArgs: directInput,
     errors,
