@@ -18,9 +18,9 @@
 | Ticket 22 | `COMPLETE` | implementation、Primary Audit、remediation、bounded re-audit、最终 gates、implementation/docs commit 已完成；handoff 见 `handoffs/22-published-archive-and-safe-deletion.md` |
 | Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
 | Wave 7 | `RUNNING` | Lane 内 Ticket 10、16 已完成；依授权规则不提前回填 `COMPLETE` |
-| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22、M03-C Closure、23-0、23-A、23-B 与 23-C 已闭合；下一串行工作包仅为 23-D |
+| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22、M03-C Closure、23-0、23-A、23-B、23-C 与 23-D 已闭合；下一串行工作包仅为 23-E |
 
-**当前动作：23-C OperationalStore journal metadata and atomic import 已 `COMPLETE`：正式 schema v5、最小 public migration facade、六 variant 单事务 import、store owner 二次校验、跨 import order identity 唯一性、transaction fault rollback、commit 后 crash/restart 与 verified 幂等已闭合；implementation commit=`b7f1d9e`。没有实现 workspace gate、backup/verifier、migration composition 或任何远端能力。Evidence 见 `handoffs/23-C-operational-store-journal-and-atomic-import.md`。下一串行工作包仅为 23-D；23-E 保持 `PENDING`。M03/Wave 8 依 lane 规则不提前回填 `COMPLETE`；该 lane 不豁免 acceptance、串行 clean HEAD、23-E combined audit 或最终完整 gate。**
+**当前动作：23-D Workspace gate and isolated migration composition 已 `COMPLETE`：唯一 gate owner、DB+WAL pre-open backup、confirmation fingerprint、每 phase restart/repair、post-import verifier、旧 journal mismatch 阻断及 no-remote startup composition 已闭合；implementation commit=`d26588f`。Evidence 见 `handoffs/23-D-workspace-gate-and-isolated-migration-composition.md`。下一串行工作包仅为 23-E combined Primary Audit / remediation / bounded re-audit / Ticket closure；M03/Wave 6–9 不提前回填 `COMPLETE`，不得进入 Ticket 24。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -56,7 +56,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 7 | 10 → 16 | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免 | `RUNNING`（10/16 COMPLETE；状态回填等待最终 reconciliation） |
 | 8 | 22 | 06、09、16 | `RUNNING`（Ticket 22 `COMPLETE`；依 lane 规则不提前回填 Wave 8 `COMPLETE`） |
 | 8.5 | M03-0 → M03-A → M03-B → M03-C | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate | `PARTIAL`（M03-C Closure PASS；最终 `COMPLETE` 回填等待 Ticket 23 后 reconciliation） |
-| 9 | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `RUNNING`（23-0/23-A/23-B/23-C `COMPLETE`；23-D–E `PENDING`） |
+| 9 | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `RUNNING`（23-0/23-A/23-B/23-C/23-D `COMPLETE`；23-E 为唯一下一工作包） |
 | 10 | 24 | 02、10、14、16、23 | `PENDING` |
 | 10.5 | M04 → M05 → M06 | Wave 10 COMPLETE | `PENDING` |
 | 11 | 25 | 24；M10.5 COMPLETE | `PENDING` |
