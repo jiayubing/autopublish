@@ -61,8 +61,7 @@ function createWorkerPublisher(options) {
       const raw = item && item.outcome;
       if (raw && raw.errorCode === "STOP_REQUESTED") stopRequested = true;
       if (!raw) return { status: "uncertain", error: safeError("WORKER_RESULT_MISSING", "transport", "manual-check", "无法确认远端投稿结果") };
-      if (raw.status === "failed") return { status: "failed", error: safeError(raw.errorCode || "PUBLISHER_REJECTED", "remote", "safe", "远端拒绝投稿") };
-      if ((raw.status === "published" || raw.status === "submitted") && typeof raw.remoteId === "string" && raw.remoteId) {
+      if (raw.status === "accepted" && typeof raw.remoteId === "string" && raw.remoteId) {
         const target = { kind: "platform", platformId: task.targetPlatformId, accountProfileId: task.accountProfileId };
         const evidence = {
           articleId: input.articleId,
@@ -70,10 +69,12 @@ function createWorkerPublisher(options) {
           targetKey: publicationTargetKey(target),
           accountProfileId: task.accountProfileId,
           remoteId: raw.remoteId,
-          ...(raw.status === "published" && typeof raw.remoteUrl === "string" ? { remoteUrl: raw.remoteUrl } : {}),
+          ...(typeof raw.remoteUrl === "string" ? { remoteUrl: raw.remoteUrl } : {}),
         };
-        try { return parsePublishOutcome({ status: raw.status, evidence }, Object.assign({}, input, { version: 1, target })); } catch (_) {}
+        try { return parsePublishOutcome({ status: "accepted", evidence }, Object.assign({}, input, { version: 1, target })); } catch (_) {}
       }
+      if (raw.status === "article_rejected" || raw.status === "group_blocked")
+        return { status: raw.status, error: safeError(raw.errorCode || "PUBLISHER_REJECTED", "remote", "safe", "远端未接受投稿") };
       return { status: "uncertain", error: safeError(raw.errorCode || "PUBLISHER_EVIDENCE_REQUIRED", "remote", "manual-check", "无法确认远端投稿结果") };
     },
   });

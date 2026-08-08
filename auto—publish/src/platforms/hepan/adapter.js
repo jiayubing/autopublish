@@ -541,7 +541,7 @@ function createHepanAdapter(options) {
     const config = runtime();
     diagnose("HEPAN_SUBMIT_STARTED", "remote", "submit");
     if (!config.pythonPath || !config.cookiePath)
-      return { status: "failed", errorCode: "HEPAN_CONFIG_NOT_SET" };
+      return { status: "group_blocked", errorCode: "HEPAN_CONFIG_NOT_SET" };
 
     const sourceFile =
       article && (article.sourceFile || article.file || article.filePath);
@@ -593,7 +593,7 @@ function createHepanAdapter(options) {
         ) {
           return { status: "uncertain", errorCode: payload.errorCode };
         }
-        return { status: "failed", errorCode: payload.errorCode };
+        return { status: "group_blocked", errorCode: payload.errorCode };
       }
       if (payload.needsLogin) {
         diagnose(
@@ -601,10 +601,10 @@ function createHepanAdapter(options) {
           "authentication",
           "cookie-refresh",
         );
-        return { status: "submitted", errorCode: "LOGIN_REQUIRED" };
+        return { status: "group_blocked", errorCode: "LOGIN_REQUIRED" };
       }
       if (!payload.ok)
-        return { status: "failed", errorCode: "REMOTE_REJECTED" };
+        return { status: "article_rejected", errorCode: "REMOTE_REJECTED" };
       article.title = payload.title || article.title;
       article.publishUrl = payload.url;
       const remoteUrl = typeof payload.url === "string" ? payload.url : "";
@@ -616,7 +616,7 @@ function createHepanAdapter(options) {
         return { status: "uncertain", errorCode: "HEPAN_REMOTE_ID_MISSING" };
       diagnose("HEPAN_SUBMIT_COMPLETED", "remote", "submit");
       return {
-        status: "published",
+        status: "accepted",
         remoteId: remoteId,
         remoteUrl: remoteUrl || undefined,
       };
@@ -633,10 +633,10 @@ function createHepanAdapter(options) {
         return { status: "uncertain", errorCode: error.code };
       }
       if (error && /^HEPAN_/.test(error.code || ""))
-        return { status: "failed", errorCode: error.code };
+        return { status: "group_blocked", errorCode: error.code };
       if (remoteCallStarted)
         return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
-      return { status: "failed", errorCode: "ADAPTER_FAILED" };
+      return { status: "group_blocked", errorCode: "ADAPTER_FAILED" };
     } finally {
       if (temporaryPayload) temporaryPayload.cleanup();
     }

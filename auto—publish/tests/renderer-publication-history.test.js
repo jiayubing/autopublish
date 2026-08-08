@@ -81,12 +81,12 @@ describe("publication history renderer boundary", async function () {
     assert.equal(status.partial.status, "partial");
     assert.equal(status.uncertain.status, "uncertain");
     assert.equal(status.failed.status, "failed");
-    assert.equal(status.ordinarySubmitted.status, "published");
-    assert.equal(status.ordinarySubmitted.label, "已发布");
-    assert.equal(status.mediaSubmitted.status, "paid_processing");
-    assert.equal(status.mediaSubmitted.label, "付费处理中");
-    assert.equal(status.ordinarySubmittedLabel, "已发布");
-    assert.equal(status.mediaSubmittedLabel, "付费处理中");
+    assert.equal(status.ordinarySubmitted.status, "manual_check");
+    assert.equal(status.ordinarySubmitted.label, "人工核对");
+    assert.equal(status.mediaSubmitted.status, "manual_check");
+    assert.equal(status.mediaSubmitted.label, "人工核对");
+    assert.equal(status.ordinarySubmittedLabel, "人工核对");
+    assert.equal(status.mediaSubmittedLabel, "人工核对");
     assert.equal(status.matches, true);
   });
 

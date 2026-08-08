@@ -151,7 +151,7 @@ function createPaidExecutionAggregate(context) {
         row.pause_intent !== "none"
           ? "paused"
           : items.some((item) =>
-                ["claimed", "submitting"].includes(item.status),
+                ["claimed", "remote_started"].includes(item.status),
               )
             ? "in_flight"
             : "running",
@@ -638,7 +638,7 @@ function createPaidExecutionAggregate(context) {
       if (db.prepare("SELECT changes() AS count").get().count !== 1)
         throw fail("PAID_ORDER_PHASE_INVALID");
       db.prepare(
-        "UPDATE submission_items SET status='submitting',claim_until=NULL,revision=revision+1 WHERE item_id=? AND status='claimed' AND claim_token=?",
+        "UPDATE submission_items SET status='remote_started',claim_until=NULL,revision=revision+1 WHERE item_id=? AND status='claimed' AND claim_token=?",
       ).run(row.item_id, claimToken);
       if (db.prepare("SELECT changes() AS count").get().count !== 1)
         throw fail("PAID_ORDER_PHASE_INVALID");

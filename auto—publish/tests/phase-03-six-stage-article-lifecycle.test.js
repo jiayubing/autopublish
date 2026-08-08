@@ -32,7 +32,7 @@ function facts(overrides) {
   };
 }
 
-test("submitted facts are exposed as pending confirmation, never reviewing", () => {
+test("legacy submitted facts are isolated as pending confirmation, never reviewing", () => {
   const summary = publicationSummary(
     [{ articleId: "article-1", status: "submitted", targetKey: "media-resource:r1" }],
     [],
@@ -62,7 +62,7 @@ test("article lifecycle exposes the six mutually exclusive stages", () => {
   );
   assert.equal(
     deriveArticleLifecycle(facts({
-      publications: [{ articleId: "article-1", status: "submitted", targetKey: "media-resource:r1" }],
+      publications: [{ articleId: "article-1", status: "remote_started", targetKey: "media-resource:r1" }],
       orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "0" }],
     })).stage,
     "paid_processing",
@@ -99,7 +99,7 @@ test("published evidence wins over supplier rejection and after-sales facts", ()
 
 test("ordinary platform acceptance is a global published fact", () => {
   const workflow = deriveArticleLifecycle(facts({
-    publications: [{ articleId: "article-1", status: "submitted", targetKey: "platform:p1" }],
+    publications: [{ articleId: "article-1", status: "published", targetKey: "platform:p1" }],
   }));
 
   assert.equal(workflow.stage, "published");
@@ -246,7 +246,7 @@ test("batch projection classifies every article once and returns shared counts",
     trash: [{ articleId: "trash", clientId: "client-1", status: "trashed" }],
     submissionItems: [{ articleId: "queued", status: "queued", targetKey: "platform:p1" }],
     publications: [
-      { articleId: "paid", status: "submitted", targetKey: "media-resource:r1" },
+      { articleId: "paid", status: "remote_started", targetKey: "media-resource:r1" },
       { articleId: "attention", status: "uncertain", targetKey: "platform:p1" },
       { articleId: "published", status: "published", targetKey: "platform:p1" },
     ],

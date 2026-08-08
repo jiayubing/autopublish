@@ -134,7 +134,7 @@ function deriveArticleLifecycle(input) {
   const hasMultipleActiveTargets = activeTargetKeys.size > 1;
   const hasRejectedOrder = orderStatuses.includes("4");
   const hasAfterSalesOrder = orderStatuses.includes("9");
-  const hasMissingMediaOrder = mediaFacts.some((fact) => ["submitted", "published"].includes(rawStatusOf(fact))
+  const hasMissingMediaOrder = mediaFacts.some((fact) => ["queued", "remote_started", "paid_processing", "published"].includes(rawStatusOf(fact))
     && !orders.some((order) => matchesOrderTarget(fact, order, mediaFacts, orders)));
   const hasRepair = removalTransactions.some((transaction) => transaction.status === "needs_repair" || transaction.phase === "needs_repair");
   const explicitFailure = text(article.status) === "failed" || publicationStatuses.includes("failed") || submissionStatuses.some((status) => FAILURE_STATUSES.has(status));
@@ -164,7 +164,7 @@ function deriveArticleLifecycle(input) {
   else if (hasPublished) stage = "published";
   else if (isTrash && !trashActivityConflict) stage = "trash";
   else if (hasAttention || trashActivityConflict || (!isCompleteArticle(article) && !hasPaidOrder && !hasActivePublication && !hasActiveSubmission)) stage = "failed";
-  else if (hasPaidOrder || (mediaFacts.some((fact) => ["submitted", "submitting"].includes(rawStatusOf(fact))) && orders.length > 0)) stage = "paid_processing";
+  else if (hasPaidOrder) stage = "paid_processing";
   else if (hasActivePublication || hasActiveSubmission) stage = "queued";
 
   let primaryAction = "queue";

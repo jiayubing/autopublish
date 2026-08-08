@@ -86,9 +86,9 @@ test("publisher outcomes require bound evidence and never accept sensitive field
     title: "Safe title",
     body: "Body supplied only to the publisher",
   });
-  const published = domain.parsePublishOutcome(
+  const accepted = domain.parsePublishOutcome(
     {
-      status: "published",
+      status: "accepted",
       evidence: {
         articleId: "article-1",
         attemptId: "attempt-1",
@@ -100,11 +100,11 @@ test("publisher outcomes require bound evidence and never accept sensitive field
     },
     input,
   );
-  assert.equal(published.status, "published");
+  assert.equal(accepted.status, "accepted");
   assert.throws(
     () =>
       domain.parsePublishOutcome(
-        { status: "published", evidence: { articleId: "article-1" } },
+        { status: "accepted", evidence: { articleId: "article-1" } },
         input,
       ),
     { code: "PUBLISH_OUTCOME_INVALID" },
@@ -128,19 +128,20 @@ test("publisher outcomes require bound evidence and never accept sensitive field
   );
   const fake = domain.createFakePublisher({
     outcome: {
-      status: "submitted",
+      status: "accepted",
       evidence: {
         articleId: "article-1",
         attemptId: "attempt-1",
         targetKey: "platform:toutiao:account:account-1",
         accountProfileId: "account-1",
         remoteId: "receipt-1",
+        remoteUrl: "https://example.invalid/articles/receipt-1",
       },
     },
   });
   assert.equal(
     (await fake.publish(input, new AbortController().signal)).status,
-    "submitted",
+    "accepted",
   );
 });
 

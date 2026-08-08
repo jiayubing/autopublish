@@ -146,7 +146,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       .all(batchId)
       .map((row) => row.status);
     const status = statuses.some((value) =>
-      ["queued", "claimed", "submitting"].includes(value),
+      ["queued", "claimed", "remote_started"].includes(value),
     )
       ? "queued"
       : statuses.some((value) => ["failed", "uncertain"].includes(value))

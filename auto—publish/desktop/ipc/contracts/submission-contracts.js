@@ -1635,7 +1635,7 @@ const submissionContractFixtures = Object.freeze([
     owner: "content",
     productionCaller: "desktopConsole.content.startPaidMediaBatch",
     request: { batchId: "paid-batch-1" },
-    result: { executionStatus: "submitted", batch: paidExecutionBatchFixture },
+    result: { executionStatus: "paid_processing", batch: paidExecutionBatchFixture },
   },
   {
     channel: "content:pause-paid-media-batch",

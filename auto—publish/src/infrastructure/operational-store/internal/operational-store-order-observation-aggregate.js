@@ -737,17 +737,17 @@ function createOrderObservationAggregate(
       if (action === "resumeOrderTracking") {
         appendHistory(row, "observation", verified.orderObservationV1, stamp);
         db.prepare(
-          "UPDATE publication_attempts SET status='submitted',finished_at=NULL WHERE attempt_id=? AND status='uncertain'",
+          "UPDATE publication_attempts SET status='remote_started',finished_at=NULL WHERE attempt_id=? AND status='uncertain'",
         ).run(row.attempt_id);
         db.prepare(
-          "UPDATE publication_records SET status='submitted',updated_at=? WHERE publication_id=? AND status='uncertain'",
+          "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=? AND status='uncertain'",
         ).run(stamp, row.publication_id);
         activeTarget.settle({
           articleId: row.article_id,
           publicationId: row.publication_id,
           attemptId: row.attempt_id,
           target: row.orderSnapshotV1.targetIdentityV1,
-          status: "submitted",
+          status: "remote_started",
           stamp,
         });
         resolveRecovery(row, "order_tracking_resumed", stamp);

@@ -1,7 +1,6 @@
 const PUBLICATION_STATUSES = Object.freeze([
   "queued",
-  "submitting",
-  "submitted",
+  "remote_started",
   "published",
   "uncertain",
   "failed",
@@ -9,9 +8,8 @@ const PUBLICATION_STATUSES = Object.freeze([
 ]);
 
 const TRANSITIONS = Object.freeze({
-  queued: Object.freeze(["submitting", "cancelled"]),
-  submitting: Object.freeze(["submitted", "published", "uncertain", "failed"]),
-  submitted: Object.freeze(["published", "uncertain", "failed"]),
+  queued: Object.freeze(["remote_started", "cancelled"]),
+  remote_started: Object.freeze(["published", "uncertain", "failed"]),
   published: Object.freeze([]),
   uncertain: Object.freeze(["published", "failed"]),
   failed: Object.freeze(["queued"]),
@@ -47,14 +45,14 @@ function assertTransition(from, to) {
 }
 
 function assertOutcomeStatus(status) {
-  if (["submitted", "published", "uncertain", "failed"].indexOf(status) === -1) {
+  if (["accepted", "article_rejected", "group_blocked", "failed", "uncertain"].indexOf(status) === -1) {
     throw stateError("PUBLICATION_OUTCOME_INVALID", "Publication outcome is invalid");
   }
   return status;
 }
 
 function blocksReservation(status) {
-  return ["queued", "submitting", "submitted", "published", "uncertain"].indexOf(status) !== -1;
+  return ["queued", "remote_started", "published", "uncertain"].indexOf(status) !== -1;
 }
 
 function canReserveAgain(status) {

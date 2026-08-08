@@ -89,7 +89,7 @@ function createMediaAdapter(opts) {
       var data = response && response.data ? response.data : {};
       return {
         platform: 'media',
-        status: 'submitted',
+        status: 'order_created',
         title: title,
         resourceId: resourceId,
         thirdId: thirdId || null,
@@ -183,7 +183,7 @@ module.exports = {
   publishArticle: async function() {
     // Media submission is main-process only: its configured client is built
     // from platform settings and must never be reconstructed in a worker.
-    return { status: "failed", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" };
+    return { status: "group_blocked", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" };
   },
 
   createMediaAdapter: createMediaAdapter,

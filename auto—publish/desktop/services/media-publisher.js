@@ -7,7 +7,7 @@ function safeError(code, category, retryability, userMessage) {
 }
 function missingSystemSubmissionId() {
   return {
-    status: "failed",
+    kind: "order_rejected",
     error: safeError(
       "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED",
       "validation",
@@ -18,7 +18,7 @@ function missingSystemSubmissionId() {
 }
 function invalidMediaConfiguration(code) {
   return {
-    status: "failed",
+    kind: "configuration_error",
     error: safeError(
       code || "MEDIA_CONFIG_INVALID",
       "validation",
@@ -29,7 +29,7 @@ function invalidMediaConfiguration(code) {
 }
 function invalidMediaInput(code) {
   return {
-    status: "failed",
+    kind: "invalid_input",
     error: safeError(
       code || "MEDIA_SUPPLIER_INPUT_INVALID",
       "validation",
@@ -82,7 +82,7 @@ function createMediaPublisher(options) {
       const target = domain.parsePublicationTarget(input.target);
       if (target.kind !== "media")
         return {
-          status: "failed",
+          kind: "invalid_input",
           error: safeError(
             "MEDIA_TARGET_REQUIRED",
             "validation",
@@ -114,7 +114,7 @@ function createMediaPublisher(options) {
           });
       } catch (_) {
         return {
-          status: "uncertain",
+          kind: "uncertain",
           error: safeError(
             "MEDIA_REMOTE_UNCERTAIN",
             "transport",
@@ -125,7 +125,7 @@ function createMediaPublisher(options) {
       }
       if (explicitlyRejected(response))
         return {
-          status: "failed",
+          kind: "order_rejected",
           error: safeError(
             "MEDIA_REMOTE_REJECTED",
             "remote",
@@ -136,7 +136,7 @@ function createMediaPublisher(options) {
       const id = remoteId(response);
       if (!id)
         return {
-          status: "uncertain",
+          kind: "uncertain",
           error: safeError(
             "MEDIA_ORDER_EVIDENCE_REQUIRED",
             "remote",
@@ -145,13 +145,8 @@ function createMediaPublisher(options) {
           ),
         };
       return {
-        status: "submitted",
-        evidence: {
-          articleId: input.articleId,
-          attemptId: input.attemptId,
-          targetKey: domain.publicationTargetKey(target),
-          remoteId: id,
-        },
+        kind: "order_created",
+        orderId: id,
       };
     },
   });
@@ -195,7 +190,7 @@ async function publishThroughSupplier(options, input, target) {
     });
   } catch (_) {
     return {
-      status: "uncertain",
+      kind: "uncertain",
       error: safeError(
         "MEDIA_REMOTE_UNCERTAIN",
         "transport",
@@ -207,18 +202,13 @@ async function publishThroughSupplier(options, input, target) {
 
   if (result && result.kind === "order_created" && result.orderId) {
     return {
-      status: "submitted",
-      evidence: {
-        articleId: input.articleId,
-        attemptId: input.attemptId,
-        targetKey: domain.publicationTargetKey(target),
-        remoteId: result.orderId,
-      },
+      kind: "order_created",
+      orderId: String(result.orderId),
     };
   }
   if (result && result.kind === "order_rejected") {
     return {
-      status: "failed",
+      kind: "order_rejected",
       error: safeError(
         "MEDIA_REMOTE_REJECTED",
         "remote",
@@ -234,7 +224,7 @@ async function publishThroughSupplier(options, input, target) {
     return invalidMediaInput(result.error && result.error.code);
   }
   return {
-    status: "uncertain",
+    kind: "uncertain",
     error: safeError(
       "MEDIA_REMOTE_UNCERTAIN",
       "transport",

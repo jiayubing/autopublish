@@ -48,17 +48,17 @@ function parsePublishInput(input) {
     body: input.body,
   });
 }
-function parseEvidence(input, command, submitted) {
-  const fields = submitted
-    ? ["articleId", "attemptId", "targetKey", "accountProfileId", "remoteId"]
-    : [
+function parseEvidence(input, command, requiresRemoteUrl) {
+  const fields = requiresRemoteUrl
+    ? [
         "articleId",
         "attemptId",
         "targetKey",
         "accountProfileId",
         "remoteId",
         "remoteUrl",
-      ];
+      ]
+    : ["articleId", "attemptId", "targetKey", "accountProfileId", "remoteId"];
   exact(input, fields);
   const target = command.target;
   const expectedAccount =
@@ -76,7 +76,7 @@ function parseEvidence(input, command, submitted) {
         ) !== expectedAccount) ||
       (expectedAccount === undefined && input.accountProfileId !== undefined) ||
       !RemoteId.validate(input.remoteId).ok ||
-      (!submitted &&
+      (requiresRemoteUrl &&
         (!safeString(input.remoteUrl, 2048) ||
           !/^https:\/\//.test(input.remoteUrl)))
     )
@@ -90,18 +90,18 @@ function parsePublishOutcome(input, command) {
   const parsedCommand = parsePublishInput(command);
   if (!input || typeof input !== "object")
     throw dtoError("PUBLISH_OUTCOME_INVALID");
-  if (input.status === "published") {
+  if (input.status === "accepted") {
     exact(input, ["status", "evidence"]);
     return Object.freeze({
-      status: "published",
-      evidence: parseEvidence(input.evidence, parsedCommand, false),
+      status: "accepted",
+      evidence: parseEvidence(input.evidence, parsedCommand, true),
     });
   }
-  if (input.status === "submitted") {
-    exact(input, ["status", "evidence"]);
+  if (input.status === "article_rejected" || input.status === "group_blocked") {
+    exact(input, ["status", "error"]);
     return Object.freeze({
-      status: "submitted",
-      evidence: parseEvidence(input.evidence, parsedCommand, true),
+      status: input.status,
+      error: parseSafeOperationalError(input.error),
     });
   }
   if (input.status === "failed") {
@@ -118,7 +118,7 @@ function parsePublishOutcome(input, command) {
       error: parseSafeOperationalError(input.error),
     };
     if (input.evidence !== undefined)
-      result.evidence = parseEvidence(input.evidence, parsedCommand, true);
+      result.evidence = parseEvidence(input.evidence, parsedCommand, false);
     return Object.freeze(result);
   }
   throw dtoError("PUBLISH_OUTCOME_INVALID");

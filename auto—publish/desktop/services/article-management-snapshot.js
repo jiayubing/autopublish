@@ -222,8 +222,6 @@ function deriveWorkflow(
         "claimed",
         "reserving",
         "remote_started",
-        "submitting",
-        "submitted",
         "uncertain",
         "failed",
         "cancelled",

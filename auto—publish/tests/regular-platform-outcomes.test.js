@@ -129,14 +129,14 @@ test("regular accepted and paid status 2 share one first-wins publication snapsh
       "article-shared-success",
       "media-resource:resource-shared",
       JSON.stringify({ kind: "media", mediaResourceId: "resource-shared" }),
-      "submitted",
+      "remote_started",
       "2026-08-07T00:59:00.000Z",
       "2026-08-07T00:59:00.000Z",
     );
     db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
       "attempt-paid-shared",
       "publication-paid-shared",
-      "submitted",
+      "remote_started",
       "2026-08-07T00:59:00.000Z",
       null,
     );
@@ -223,14 +223,14 @@ test("a paid anomaly closes on its own status 2 after regular global publication
       "article-anomaly-after-regular",
       "media-resource:resource-anomaly-after-regular",
       JSON.stringify({ kind: "media", mediaResourceId: "resource-anomaly-after-regular" }),
-      "submitted",
+      "remote_started",
       "2026-08-07T00:59:00.000Z",
       "2026-08-07T00:59:00.000Z",
     );
     db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
       "attempt-paid-anomaly-after-regular",
       "publication-paid-anomaly-after-regular",
-      "submitted",
+      "remote_started",
       "2026-08-07T00:59:00.000Z",
       null,
     );
@@ -758,7 +758,7 @@ test("fault after the unique success primitive rolls the whole outcome back", ()
       regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
     });
     assert.equal(snapshot.publicationStatus, "remote_started");
-    assert.equal(snapshot.itemStatus, "submitting");
+    assert.equal(snapshot.itemStatus, "remote_started");
     assert.equal(snapshot.publicationEvidenceV1, null);
   } finally {
     f.close();
@@ -798,7 +798,7 @@ for (const outcome of ["article_rejected", "group_blocked", "uncertain"]) {
         regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
       });
       assert.equal(snapshot.publicationStatus, "remote_started");
-      assert.equal(snapshot.itemStatus, "submitting");
+      assert.equal(snapshot.itemStatus, "remote_started");
       assert.equal(snapshot.observation, null);
     } finally {
       f.close();

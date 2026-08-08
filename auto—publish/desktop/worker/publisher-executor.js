@@ -26,7 +26,7 @@ function safeTask(value) {
 
 function safeOutcome(value) {
   const raw = value || {};
-  if (["published", "submitted", "failed", "uncertain"].includes(raw.status)) {
+  if (["accepted", "article_rejected", "group_blocked", "uncertain"].includes(raw.status)) {
     return Object.freeze({
       status: raw.status,
       ...(typeof raw.errorCode === "string" ? { errorCode: raw.errorCode } : {}),
@@ -58,13 +58,13 @@ function createWorkerPublisherExecutor(options) {
       try {
         task = safeTask(rawTask);
         if (task.targetPlatformId === "media") {
-          results.push(Object.freeze({ task, outcome: { status: "failed", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" } }));
+          results.push(Object.freeze({ task, outcome: { status: "group_blocked", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" } }));
           continue;
         }
         const adapter = adapters[task.targetPlatformId];
         if (!adapter || typeof adapter.publishArticle !== "function") throw workerError("SUBMISSION_ADAPTER_MISSING");
         if (value.shouldStop && value.shouldStop()) {
-          results.push({ task, outcome: { status: "failed", errorCode: "STOP_REQUESTED" } });
+          results.push({ task, outcome: { status: "group_blocked", errorCode: "STOP_REQUESTED" } });
           continue;
         }
         const filename = resolveFile(task, adapter);
@@ -81,7 +81,7 @@ function createWorkerPublisherExecutor(options) {
         if (value.onState) value.onState({ phase: "remote-finished", task, status: outcome.status, errorCode: outcome.errorCode });
         results.push(Object.freeze({ task, outcome }));
       } catch (error) {
-        results.push(Object.freeze({ task: rawTask || {}, outcome: { status: "failed", errorCode: error.code || "PUBLISHER_PREPARE_FAILED" } }));
+        results.push(Object.freeze({ task: rawTask || {}, outcome: { status: "group_blocked", errorCode: error.code || "PUBLISHER_PREPARE_FAILED" } }));
       }
     }
     return Object.freeze({ results });

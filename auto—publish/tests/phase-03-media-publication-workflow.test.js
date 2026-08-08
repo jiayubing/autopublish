@@ -10,7 +10,7 @@ const {
   createPlatformWorkbenchService,
 } = require("../desktop/services/platform-workbench-service");
 
-test("media publisher emits receipt-bound outcome without an order JSON writer", async () => {
+test("media publisher emits the existing order-created outcome without an order JSON writer", async () => {
   const publisher = createMediaPublisher({
     thirdIdProvider: () => "system-submission-1",
     clientProvider: () => ({
@@ -32,15 +32,7 @@ test("media publisher emits receipt-bound outcome without an order JSON writer",
     title: "投稿标题",
     body: "<p>投稿正文</p>",
   });
-  assert.deepEqual(outcome, {
-    status: "submitted",
-    evidence: {
-      articleId: "media-article",
-      attemptId: "attempt-1",
-      targetKey: "media-resource:resource-1",
-      remoteId: "order-1",
-    },
-  });
+  assert.deepEqual(outcome, { kind: "order_created", orderId: "order-1" });
 });
 
 test("media publisher sends the reusable operator identity without replacing the internal attempt", async () => {
@@ -62,8 +54,7 @@ test("media publisher sends the reusable operator identity without replacing the
     body: "<p>投稿正文</p>",
   });
 
-  assert.equal(outcome.evidence.attemptId, "attempt-internal-1");
-  assert.equal(outcome.evidence.remoteId, "order-custom");
+  assert.deepEqual(outcome, { kind: "order_created", orderId: "order-custom" });
 });
 
 test("media command preparation is read-only and derives a media target from selected resources", async () => {

@@ -3,9 +3,10 @@ import type { ArticleOperation } from "../article-workflow";
 
 export type PublicationRecordStatus =
   | "queued"
-  | "submitting"
-  | "submitted"
+  | "remote_started"
   | "published"
+  | "paid_processing"
+  | "manual_check"
   | "uncertain"
   | "failed"
   | "cancelled"
@@ -14,10 +15,10 @@ export type PublicationHistorySummaryStatus =
   | "not_submitted"
   | "queued"
   | "paid_processing"
-  | "submitting"
   | "partial"
   | "published"
   | "uncertain"
+  | "manual_check"
   | "failed";
 export interface PublicationHistoryAttempt {
   attemptId: string | null;
@@ -326,8 +327,8 @@ export type ContentSubmissionItemStatus =
   | "conflict"
   | "reserving"
   | "queued"
-  | "submitting"
-  | "submitted"
+  | "remote_started"
+  | "paid_processing"
   | "published"
   | "uncertain"
   | "failed"

@@ -75,7 +75,7 @@ function createRegularQueueRuntime(context) {
     }
     return db
       .prepare(
-        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','submitting') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
+        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
           where +
           " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id,q.position",
       )
@@ -657,7 +657,7 @@ function createRegularQueueRuntime(context) {
       regularQueueFault("after-active-target-remote-started", { attemptId });
       const itemChanged = db
         .prepare(
-          "UPDATE submission_items SET status='submitting',claim_until=NULL,revision=revision+1 WHERE item_id=? AND status='claimed' AND claim_token=?",
+          "UPDATE submission_items SET status='remote_started',claim_until=NULL,revision=revision+1 WHERE item_id=? AND status='claimed' AND claim_token=?",
         )
         .run(row.item_id, row.claim_token).changes;
       if (itemChanged !== 1) throw fail("REGULAR_SUBMISSION_PHASE_INVALID");

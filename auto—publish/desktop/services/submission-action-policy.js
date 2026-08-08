@@ -107,7 +107,7 @@ function createSubmissionActionPolicy(options) {
         item,
         action,
         false,
-        ["queued", "claimed", "submitting", "submitted", "uncertain"].includes(
+        ["queued", "claimed", "remote_started", "uncertain"].includes(
           item.status,
         )
           ? "ARTICLE_SUBMISSION_ACTIVE"

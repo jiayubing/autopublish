@@ -658,7 +658,7 @@ function createQueueAdmissionTransaction(context) {
     }
     const legacy = dbHandle
       .prepare(
-        "SELECT item_id,status FROM submission_items WHERE article_id=? AND target_key=? AND status IN('queued','claimed','submitting','submitted','reserving','uncertain') LIMIT 1",
+        "SELECT item_id,status FROM submission_items WHERE article_id=? AND target_key=? AND status IN('queued','claimed','remote_started','reserving','uncertain') LIMIT 1",
       )
       .get(articleId, targetKey);
     if (legacy) throw fail("REGULAR_QUEUE_FACT_CONFLICT");

@@ -27,7 +27,7 @@ function createArticleSubmissionRemovalCoordinator(options) {
     const items = views.map((item) => {
       const safe = projection.publicItem(item);
       if (
-        ["submitting", "submitted", "uncertain", "claimed"].includes(
+        ["remote_started", "uncertain", "claimed"].includes(
           item.status,
         )
       )

@@ -7,10 +7,7 @@ function createOperationalStoreActiveTargetAggregate(context) {
 
   function stateFor(status, target) {
     if (status === "uncertain") return "uncertain";
-    if (status === "submitted" && target && target.kind === "media")
-      return "submitted";
-    if (["queued", "remote_started", "submitting"].includes(status))
-      return status;
+    if (["queued", "remote_started"].includes(status)) return status;
     return null;
   }
 
@@ -26,7 +23,7 @@ function createOperationalStoreActiveTargetAggregate(context) {
       );
     const legacy = db
       .prepare(
-        "SELECT status FROM publication_records WHERE article_id=? AND status IN('queued','remote_started','submitted','published','uncertain') ORDER BY updated_at DESC LIMIT 1",
+        "SELECT status FROM publication_records WHERE article_id=? AND status IN('queued','remote_started','published','uncertain') ORDER BY updated_at DESC LIMIT 1",
       )
       .get(articleId);
     if (legacy)

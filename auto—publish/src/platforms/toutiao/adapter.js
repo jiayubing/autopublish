@@ -471,14 +471,14 @@ async function publishArticle(article, options) {
     var prepared = await prepareArticleSubmission(article, opts);
     if (opts.autoSubmit === false) {
       diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
-      return { status: "submitted" };
+      return { status: "group_blocked", errorCode: "MANUAL_SUBMIT_REQUIRED" };
     }
     return prepared.submitPreparedPublication();
   } catch (error) {
     if (isStopError(error))
-      return { status: "failed", errorCode: "STOP_REQUESTED" };
+      return { status: "group_blocked", errorCode: "STOP_REQUESTED" };
     return {
-      status: "failed",
+      status: "group_blocked",
       errorCode: error && error.code ? error.code : "ADAPTER_FAILED",
     };
   }

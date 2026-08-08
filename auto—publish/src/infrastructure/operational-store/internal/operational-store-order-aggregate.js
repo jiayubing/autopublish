@@ -190,7 +190,7 @@ function createOrderAggregate(context, activeTarget) {
       const intent = fromText(row.intent_payload) || {};
       if (
         row.state !== "remote_started" ||
-        row.item_status !== "submitting" ||
+        row.item_status !== "remote_started" ||
         row.attempt_status !== "remote_started" ||
         !intent.detail ||
         intent.detail.phase !== "remote_call_started"
@@ -355,7 +355,7 @@ function createOrderAggregate(context, activeTarget) {
     if (
       db
         .prepare(
-          "UPDATE publication_attempts SET status='uncertain',finished_at=? WHERE attempt_id=? AND status IN('remote_started','submitted','uncertain','failed')",
+          "UPDATE publication_attempts SET status='uncertain',finished_at=? WHERE attempt_id=? AND status IN('remote_started','uncertain','failed')",
         )
         .run(stamp, row.attempt_id).changes !== 1
     )
@@ -375,7 +375,7 @@ function createOrderAggregate(context, activeTarget) {
     if (
       db
         .prepare(
-          "UPDATE submission_items SET status='uncertain',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status IN('submitting','completed','uncertain','failed')",
+          "UPDATE submission_items SET status='uncertain',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status IN('remote_started','completed','uncertain','failed')",
         )
         .run(text(itemPayload), row.item_id).changes !== 1
     )
@@ -469,7 +469,7 @@ function createOrderAggregate(context, activeTarget) {
           attemptId: row.attempt_id,
           batchId: row.batch_id,
           batchItemId: row.item_id,
-          status: "submitted",
+          status: "order_created",
           idempotent: true,
         });
       }
@@ -543,7 +543,7 @@ function createOrderAggregate(context, activeTarget) {
         orderSnapshotV1: snapshot,
         paidTargetV1: target,
         orderId: snapshot.orderIdentityV1.orderId,
-        outcomeStatus: "submitted",
+        outcomeStatus: "paid_processing",
       });
       rejectSensitive(itemPayload);
       db.prepare(
@@ -563,13 +563,13 @@ function createOrderAggregate(context, activeTarget) {
       if (
         db
           .prepare(
-            "UPDATE publication_attempts SET status='submitted',finished_at=NULL WHERE attempt_id=? AND status IN('remote_started','failed','uncertain')",
+            "UPDATE publication_attempts SET status='remote_started',finished_at=NULL WHERE attempt_id=? AND status IN('remote_started','failed','uncertain')",
           )
           .run(row.attempt_id).changes !== 1
       )
         throw fail("PAID_ORDER_PHASE_INVALID");
       db.prepare(
-        "UPDATE publication_records SET status='submitted',updated_at=? WHERE publication_id=? AND status IN('remote_started','failed','uncertain')",
+        "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=? AND status IN('remote_started','failed','uncertain')",
       ).run(stamp, row.publication_id);
       paidFault("after-publication-order-created", {
         attemptId: row.attempt_id,
@@ -579,11 +579,11 @@ function createOrderAggregate(context, activeTarget) {
         publicationId: row.publication_id,
         attemptId: row.attempt_id,
         target: fromText(row.target_json),
-        status: "submitted",
+        status: "remote_started",
         stamp,
       });
       db.prepare(
-        "UPDATE submission_items SET status='completed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status IN('submitting','failed','uncertain')",
+        "UPDATE submission_items SET status='completed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status IN('remote_started','failed','uncertain')",
       ).run(text(itemPayload), row.item_id);
       paidFault("after-paid-item-completed", { itemId: row.item_id });
       db.prepare(
@@ -625,7 +625,7 @@ function createOrderAggregate(context, activeTarget) {
         attemptId: row.attempt_id,
         batchId: row.batch_id,
         batchItemId: row.item_id,
-        status: "submitted",
+        status: "order_created",
         idempotent: Boolean(linked && linked.idempotent),
       });
     });
@@ -701,7 +701,7 @@ function createOrderAggregate(context, activeTarget) {
         ).run(stamp, row.batch_id);
       }
       db.prepare(
-        "UPDATE submission_items SET status=?,claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='submitting'",
+        "UPDATE submission_items SET status=?,claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='remote_started'",
       ).run(
         itemStatus,
         text(
@@ -779,7 +779,7 @@ function createOrderAggregate(context, activeTarget) {
         stamp,
       });
       db.prepare(
-        "UPDATE submission_items SET status='uncertain',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='submitting'",
+        "UPDATE submission_items SET status='uncertain',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='remote_started'",
       ).run(
         text(
           Object.assign({}, fromText(row.item_payload) || {}, {
@@ -963,8 +963,8 @@ function createOrderAggregate(context, activeTarget) {
       throw fail("PAID_ORDER_RESOLUTION_STATE_STALE");
     if (action === "bind_verified_order") {
       if (
-        row.publication_status !== "submitted" ||
-        row.attempt_status !== "submitted" ||
+        row.publication_status !== "remote_started" ||
+        row.attempt_status !== "remote_started" ||
         row.item_status !== "completed"
       )
         throw fail("PAID_ORDER_RESOLUTION_STATE_STALE");
@@ -982,8 +982,8 @@ function createOrderAggregate(context, activeTarget) {
         !active ||
         active.publication_id !== row.publication_id ||
         active.attempt_id !== row.attempt_id ||
-        active.state !== "submitted" ||
-        itemPayload.outcomeStatus !== "submitted" ||
+        active.state !== "remote_started" ||
+        itemPayload.outcomeStatus !== "paid_processing" ||
         itemPayload.orderId !== orderId ||
         !itemPayload.orderSnapshotV1 ||
         itemPayload.orderSnapshotV1.orderCreationAttemptId !==
@@ -1153,17 +1153,17 @@ function createOrderAggregate(context, activeTarget) {
         snapshot.systemSubmissionCode,
       );
       db.prepare(
-        "UPDATE publication_attempts SET status='submitted',finished_at=NULL WHERE attempt_id=? AND status='uncertain'",
+        "UPDATE publication_attempts SET status='remote_started',finished_at=NULL WHERE attempt_id=? AND status='uncertain'",
       ).run(row.attempt_id);
       db.prepare(
-        "UPDATE publication_records SET status='submitted',updated_at=? WHERE publication_id=? AND status='uncertain'",
+        "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=? AND status='uncertain'",
       ).run(stamp, row.publication_id);
       activeTarget.settle({
         articleId: row.article_id,
         publicationId: row.publication_id,
         attemptId: row.attempt_id,
         target: snapshot.targetIdentityV1,
-        status: "submitted",
+        status: "remote_started",
         stamp,
       });
       db.prepare(
@@ -1171,7 +1171,7 @@ function createOrderAggregate(context, activeTarget) {
       ).run(
         text(
           Object.assign({}, fromText(row.item_payload) || {}, {
-            outcomeStatus: "submitted",
+            outcomeStatus: "paid_processing",
             orderId: observation.orderId,
             orderSnapshotV1: snapshot,
             paidTargetV1: target,
@@ -1413,7 +1413,14 @@ function createOrderAggregate(context, activeTarget) {
           orderNid: row.order_id,
           attemptId: row.attempt_id,
           publicationId: row.publication_id,
-          publicationStatus: row.status,
+          publicationStatus:
+            row.status === "published"
+              ? "published"
+              : row.status === "failed" || row.status === "uncertain"
+                ? "manual_check"
+                : row.status === "cancelled"
+                  ? "cancelled"
+                  : "paid_processing",
           articleId: row.article_id,
           mediaResourceId: target.mediaResourceId || null,
           submittedAt: row.created_at,

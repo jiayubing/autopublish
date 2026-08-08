@@ -343,12 +343,17 @@ function createPublicationAggregate(context, activeTarget) {
     const outcome = value.outcome;
     if (
       !outcome ||
-      !["published", "submitted", "failed", "uncertain"].includes(
-        outcome.status,
-      )
+      ![
+        "accepted",
+        "article_rejected",
+        "group_blocked",
+        "published",
+        "failed",
+        "uncertain",
+      ].includes(outcome.status)
     )
       throw fail("OPERATIONAL_OUTCOME_INVALID");
-    if (outcome.status === "published")
+    if (["accepted", "published"].includes(outcome.status))
       throw fail("PUBLICATION_SUCCESS_WRITER_CLOSED");
     if (
       value.batchClaimToken !== undefined &&
@@ -368,10 +373,7 @@ function createPublicationAggregate(context, activeTarget) {
       if (cancellationResolutionFromIntent(attempt.intent_payload))
         throw fail("PUBLICATION_CANCELLED");
       const target = fromText(attempt.target_json);
-      if (
-        ["published", "submitted"].includes(outcome.status) &&
-        !outcome.evidence
-      )
+      if (outcome.status === "accepted" && !outcome.evidence)
         throw fail("OPERATIONAL_OUTCOME_EVIDENCE_REQUIRED");
       if (outcome.evidence) {
         const evidence = outcome.evidence;
@@ -386,7 +388,7 @@ function createPublicationAggregate(context, activeTarget) {
           evidence.accountProfileId !== expectedAccount ||
           typeof evidence.remoteId !== "string" ||
           !evidence.remoteId ||
-          (outcome.status === "published" &&
+          (outcome.status === "accepted" &&
             (typeof evidence.remoteUrl !== "string" ||
               !/^https:\/\//.test(evidence.remoteUrl)))
         )
@@ -415,7 +417,18 @@ function createPublicationAggregate(context, activeTarget) {
             }
           : persisted.context;
       rejectSensitive(postProcessingPayload);
-      outcomeWriter.apply({ attempt, attemptId, outcome, target, stamp });
+      const persistedOutcome = ["article_rejected", "group_blocked"].includes(
+        outcome.status,
+      )
+        ? Object.assign({}, outcome, { status: "failed" })
+        : outcome;
+      outcomeWriter.apply({
+        attempt,
+        attemptId,
+        outcome: persistedOutcome,
+        target,
+        stamp,
+      });
       if (batchItemId !== undefined) {
         const item = db
           .prepare(
@@ -441,7 +454,7 @@ function createPublicationAggregate(context, activeTarget) {
           throw fail("OPERATIONAL_BATCH_ITEM_MISMATCH");
         const payload = Object.assign({}, itemPayload, postProcessingPayload, {
           attemptId,
-          outcomeStatus: outcome.status,
+          outcomeStatus: persistedOutcome.status,
           ...(outcome.evidence ? { remoteId: outcome.evidence.remoteId } : {}),
         });
         if (
@@ -461,9 +474,8 @@ function createPublicationAggregate(context, activeTarget) {
             canonicalDisplayPrice(payload.estimatedTotal),
             safeDisplayText(payload.systemSubmissionCode, 128) || null,
           );
-        const itemStatus = ["published", "submitted"].includes(outcome.status)
-          ? "completed"
-          : "failed";
+        const itemStatus =
+          outcome.status === "accepted" ? "completed" : "failed";
         const updateItem =
           value.batchClaimToken === undefined
             ? db.prepare(
@@ -497,7 +509,7 @@ function createPublicationAggregate(context, activeTarget) {
         stamp,
         attemptId,
       );
-      if (outcome.status === "published")
+      if (outcome.status === "accepted")
         db.prepare(
           "INSERT INTO post_processing_jobs VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(attempt_id,kind) DO NOTHING",
         ).run(

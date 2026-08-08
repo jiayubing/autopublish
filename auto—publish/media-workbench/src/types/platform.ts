@@ -16,7 +16,13 @@ export interface PlatformArticle {
   sourceArticleState?: "active" | "trashed" | "missing" | string | null;
   reasonCode?: string | null;
   archiveErrorCode?: string | null;
-  remoteStatus?: "published" | "failed" | "uncertain" | string | null;
+  remoteStatus?:
+    | "accepted"
+    | "article_rejected"
+    | "group_blocked"
+    | "uncertain"
+    | string
+    | null;
 }
 
 export interface PlatformQueueData {
@@ -153,12 +159,12 @@ export interface PlatformSubmitResult {
 export interface PlatformTaskResult {
   task: PlatformSubmitTask;
   status:
-    | "success"
-    | "published"
-    | "submitted"
+    | "accepted"
+    | "article_rejected"
+    | "group_blocked"
     | "failed"
     | "uncertain"
-    | "pending"
+    | "skipped"
     | string;
   publicationStatus?: PublicationRecordStatus | null;
   errorCode?: string | null;

@@ -38,7 +38,7 @@ test("worker publisher executor returns an adapter outcome without a state write
         parseArticleFiles: async () => [{ title: "title", body: "body" }],
         publishArticle: async () => {
           published += 1;
-          return { status: "submitted", remoteId: "remote-1" };
+          return { status: "accepted", remoteId: "remote-1", remoteUrl: "https://example.test/article/1" };
         },
       },
     },
@@ -54,8 +54,9 @@ test("worker publisher executor returns an adapter outcome without a state write
   });
   assert.equal(published, 1);
   assert.deepEqual(result.results[0].outcome, {
-    status: "submitted",
+    status: "accepted",
     remoteId: "remote-1",
+    remoteUrl: "https://example.test/article/1",
   });
 });
 
@@ -146,7 +147,7 @@ test("main worker publisher never upgrades an evidence-free worker success", asy
     taskService: {
       startPlatformSubmit: async () => ({
         ok: true,
-        data: { results: [{ outcome: { status: "published" } }] },
+        data: { results: [{ outcome: { status: "accepted" } }] },
       }),
     },
   });
@@ -155,7 +156,7 @@ test("main worker publisher never upgrades an evidence-free worker success", asy
   assert.equal(result.error.code, "PUBLISHER_EVIDENCE_REQUIRED");
 });
 
-test("main worker publisher preserves a published outcome only when the remote evidence binds this input", async () => {
+test("main worker publisher preserves an accepted outcome only when the remote evidence binds this input", async () => {
   const publisher = createWorkerPublisher({
     inspectAccount: async () => ({
       verified: true,
@@ -174,7 +175,7 @@ test("main worker publisher preserves a published outcome only when the remote e
           results: [
             {
               outcome: {
-                status: "published",
+                status: "accepted",
                 remoteId: "remote-1",
                 remoteUrl: "https://example.test/article/1",
               },
@@ -197,7 +198,7 @@ test("main worker publisher preserves a published outcome only when the remote e
     body: "body",
   });
   assert.deepEqual(result, {
-    status: "published",
+    status: "accepted",
     evidence: {
       articleId: "article-1",
       attemptId: "attempt-1",
@@ -221,7 +222,7 @@ test("main worker publisher inspects the sole registered task account before pub
         ok: true,
         data: {
           results: [
-            { outcome: { status: "failed", errorCode: "REMOTE_REJECTED" } },
+            { outcome: { status: "article_rejected", errorCode: "REMOTE_REJECTED" } },
           ],
         },
       }),

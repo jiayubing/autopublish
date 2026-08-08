@@ -122,7 +122,7 @@ function createPlatformTaskStateStore(options) {
     const publicationStatus = result && result.publicationStatus;
     const status = result && result.status;
     if (publicationStatus === "uncertain" || status === "uncertain") return "uncertain";
-    if (publicationStatus === "published" || publicationStatus === "submitted" || status === "success" || status === "submitted") return "succeeded";
+    if (publicationStatus === "accepted" || status === "accepted" || status === "success") return "succeeded";
     if (publicationStatus === "cancelled" || status === "skipped" || status === "pending") return "skipped";
     return "failed";
   }

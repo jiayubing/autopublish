@@ -22,18 +22,23 @@ function createOperationalStoreOutcomeWriter(context, activeTarget) {
         evidence,
         createdAt: value.stamp,
       });
+    const persistedStatus = ["article_rejected", "group_blocked"].includes(
+      value.outcome.status,
+    )
+      ? "failed"
+      : value.outcome.status;
     db.prepare(
       "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=?",
-    ).run(value.outcome.status, value.stamp, value.attemptId);
+    ).run(persistedStatus, value.stamp, value.attemptId);
     db.prepare(
       "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
-    ).run(value.outcome.status, value.stamp, value.attempt.publication_id);
+    ).run(persistedStatus, value.stamp, value.attempt.publication_id);
     activeTarget.settle({
       articleId: value.attempt.article_id,
       publicationId: value.attempt.publication_id,
       attemptId: value.attemptId,
       target: value.target,
-      status: value.outcome.status,
+      status: persistedStatus,
       stamp: value.stamp,
     });
     if (evidence)

@@ -23,6 +23,21 @@ const filename = stringField({
   pattern: /^[^\\/\x00-\x1f\x7f]+$/u,
 });
 const emptyRequest = exactObject({});
+const TYPED_PLATFORM_OUTCOMES = Object.freeze([
+  "accepted",
+  "article_rejected",
+  "group_blocked",
+  "uncertain",
+]);
+const PLATFORM_RESULT_STATUSES = Object.freeze([
+  ...TYPED_PLATFORM_OUTCOMES,
+  "failed",
+  "skipped",
+]);
+const typedPlatformOutcome = (value) =>
+  typeof value === "string" && TYPED_PLATFORM_OUTCOMES.includes(value)
+    ? value
+    : null;
 
 const COMMON_ERRORS = {
   AUTH_REQUIRED: {
@@ -136,8 +151,8 @@ const task = exactObject({
 
 const terminalResultItem = exactObject({
   task,
-  status: safeText(64, 1),
-  publicationStatus: nullableField(safeText(64)),
+  status: enumField(PLATFORM_RESULT_STATUSES),
+  publicationStatus: nullableField(enumField(TYPED_PLATFORM_OUTCOMES)),
   errorCode: nullableField(safeText(128)),
 });
 
@@ -293,9 +308,7 @@ function projectPlatformQueue(value) {
         ? safeErrorCode(article.archiveError, "ARCHIVE_FAILED")
         : null,
       remoteStatus:
-        article && typeof article.remoteStatus === "string"
-          ? article.remoteStatus
-          : null,
+        typedPlatformOutcome(article && article.remoteStatus),
     })),
   };
   if (Number.isSafeInteger(input.revision) && input.revision >= 0)
@@ -325,7 +338,7 @@ const platformContracts = [
           reasonCode: nullableField(safeText(128)),
           accountProfileId: safeText(256),
           archiveErrorCode: nullableField(safeText(128)),
-          remoteStatus: nullableField(safeText(64)),
+          remoteStatus: nullableField(enumField(TYPED_PLATFORM_OUTCOMES)),
         }),
         { max: 100000 },
       ),

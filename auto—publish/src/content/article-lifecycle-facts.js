@@ -1,13 +1,12 @@
 const UNKNOWN_FACT_STATUS = "unknown";
-const ACTIVE_PUBLICATION_STATUSES = new Set(["queued", "remote_started", "submitting", "submitted"]);
-const ACTIVE_SUBMISSION_STATUSES = new Set(["queued", "claimed", "submitting", "submitted", "reserving"]);
+const ACTIVE_PUBLICATION_STATUSES = new Set(["queued", "remote_started"]);
+const ACTIVE_SUBMISSION_STATUSES = new Set(["queued", "claimed", "remote_started", "reserving"]);
 const FAILURE_STATUSES = new Set(["failed", "uncertain", "conflict"]);
 const KNOWN_PUBLICATION_STATUSES = new Set([
   "queued",
   "remote_started",
-  "submitting",
-  "submitted",
   "published",
+  "paid_processing",
   "uncertain",
   "failed",
   "cancelled",
@@ -16,10 +15,9 @@ const KNOWN_SUBMISSION_STATUSES = new Set([
   "queued",
   "claimed",
   "reserving",
-  "submitting",
-  "submitted",
   "published",
   "remote_started",
+  "paid_processing",
   "uncertain",
   "failed",
   "cancelled",
@@ -29,7 +27,6 @@ const SUMMARY_LABELS = Object.freeze({
   not_submitted: "未投稿",
   queued: "已入队",
   paid_processing: "付费处理中",
-  submitting: "投稿中",
   partial: "部分发布",
   published: "已发布",
   uncertain: "待确认",
@@ -100,7 +97,7 @@ function isCompleteArticle(article) {
 
 function publicationLifecycleStatus(value) {
   const status = rawStatusOf(value) || UNKNOWN_FACT_STATUS;
-  return status === "submitted" && !isMediaTarget(value) ? "published" : status;
+  return KNOWN_PUBLICATION_STATUSES.has(status) ? status : UNKNOWN_FACT_STATUS;
 }
 
 function submissionLifecycleStatus(value) {
@@ -111,20 +108,20 @@ function submissionLifecycleStatus(value) {
   if (rawStatus === "completed") {
     const outcome = text(value && (value.publicationStatus || value.outcomeStatus)).trim();
     if (!outcome) return UNKNOWN_FACT_STATUS;
-    return outcome === "submitted" && !isMediaTarget(value) ? "published" : outcome;
+    return KNOWN_SUBMISSION_STATUSES.has(outcome) ? outcome : UNKNOWN_FACT_STATUS;
   }
   const status = rawStatus || UNKNOWN_FACT_STATUS;
-  return status === "submitted" && !isMediaTarget(value) ? "published" : status;
+  return KNOWN_SUBMISSION_STATUSES.has(status) ? status : UNKNOWN_FACT_STATUS;
 }
 
 function activePublicationFact(value) {
   const status = rawStatusOf(value);
-  return ACTIVE_PUBLICATION_STATUSES.has(status) && !(status === "submitted" && !isMediaTarget(value));
+  return ACTIVE_PUBLICATION_STATUSES.has(status);
 }
 
 function activeSubmissionFact(value) {
   const status = rawStatusOf(value);
-  return ACTIVE_SUBMISSION_STATUSES.has(status) && !(status === "submitted" && !isMediaTarget(value));
+  return ACTIVE_SUBMISSION_STATUSES.has(status);
 }
 
 function activeMediaOrderFact(value) {
@@ -143,8 +140,8 @@ function publicationSummary(records, orders, submissionItems) {
   const values = Object.values(targetFacts).map((fact) => fact.status).concat(
     factValues.filter((fact) => !keyedTargets.has(targetKeyOf(fact.value))).map((fact) => fact.status),
   );
-  const mediaFacts = array(records).filter(isMediaTarget).concat(array(submissionItems).filter(isMediaTarget)).filter((fact) => ["submitted", "published"].includes(rawStatusOf(fact)));
-  const missingMediaOrder = mediaFacts.some((fact) => ["submitted", "published"].includes(rawStatusOf(fact))
+  const mediaFacts = array(records).filter(isMediaTarget).concat(array(submissionItems).filter(isMediaTarget)).filter((fact) => ["queued", "remote_started", "paid_processing", "published"].includes(rawStatusOf(fact)));
+  const missingMediaOrder = mediaFacts.some((fact) => ["queued", "remote_started", "paid_processing", "published"].includes(rawStatusOf(fact))
     && !array(orders).some((order) => matchesOrderTarget(fact, order, mediaFacts, array(orders))));
   const published = values.filter((status) => status === "published" || status === "2").length;
   const uncertain = values.includes("uncertain") || values.includes(UNKNOWN_FACT_STATUS) || missingMediaOrder;
@@ -155,8 +152,7 @@ function publicationSummary(records, orders, submissionItems) {
   if (published > 0) return result("published");
   if (values.some((status) => status === "0" || status === "1")) return result("paid_processing");
   if (values.every((status) => status === "failed" || status === "cancelled" || status === "4" || status === "9")) return result("failed");
-  if (values.includes("submitting") || values.includes("remote_started")) return result("submitting");
-  if (values.includes("submitted")) return result("uncertain", true);
+  if (values.includes("remote_started")) return result("queued");
   if (values.includes("queued")) return result("queued");
   return result("failed");
 }
