@@ -1,8 +1,14 @@
 const { SCHEMA_VERSION } = require("./internal/operational-store-schema");
 const {
+  databasePath,
   openOperationalStoreRuntime,
   dryRunOperationalStoreMigration,
 } = require("./internal/operational-store-runtime");
+const { fail } = require("./internal/operational-store-utils");
+const {
+  acquireMigrationOwner,
+  releaseMigrationOwner,
+} = require("./internal/operational-store-owner-lease");
 const {
   inspectOperationalStoreMigrationJournals,
 } = require("./internal/operational-store-migration-journal-inspector");
@@ -69,6 +75,23 @@ function createOperationalStoreMigrationFacade(options) {
     context.close();
     throw error;
   }
+}
+
+function acquireOperationalStoreMigrationLease(options) {
+  const value = options || {};
+  const filename = databasePath(value.workspaceRoot, null, false);
+  const owner = acquireMigrationOwner(
+    filename,
+    fail,
+    verifyOperationalDatabase,
+  );
+  return Object.freeze({ filename, owner });
+}
+
+function releaseOperationalStoreMigrationLease(lease) {
+  if (!lease || typeof lease.filename !== "string" || !lease.owner)
+    throw fail("OPERATIONAL_MIGRATION_LEASE_INVALID");
+  releaseMigrationOwner(lease.filename, lease.owner);
 }
 
 function createOperationalStore(options) {
@@ -196,10 +219,12 @@ function createOperationalStore(options) {
   }
 }
 module.exports = {
+  acquireOperationalStoreMigrationLease,
   SCHEMA_VERSION,
   createOperationalStore,
   createOperationalStoreMigrationFacade,
   inspectOperationalStoreMigrationJournals,
+  releaseOperationalStoreMigrationLease,
   dryRunOperationalStoreMigration,
   verifyOperationalDatabase,
 };

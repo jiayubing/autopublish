@@ -268,13 +268,16 @@ function deletionEntry() {
 }
 
 function plan(entries) {
-  return {
+  const value = {
     version: 1,
     migrationRunId: "migration-run-23-a",
     workspaceFingerprint: fp("7"),
     sourceFingerprint: fp("8"),
-    planFingerprint: fp("9"),
     entries,
+  };
+  return {
+    ...value,
+    planFingerprint: domain.importPlanFingerprintV1(value),
   };
 }
 
@@ -306,6 +309,15 @@ test("23-A accepts and recursively freezes all six closed migration variants", (
   assert.equal(Object.isFrozen(parsed.entries), true);
   assert.equal(Object.isFrozen(parsed.entries[0].payload), true);
   assert.equal(Object.isFrozen(parsed.entries[0].legacyEvidenceRefs[0]), true);
+});
+
+test("23-A binds the claimed plan fingerprint to every normalized fact", () => {
+  const original = plan(allEntries());
+  const changed = JSON.parse(JSON.stringify(original));
+  changed.entries[0].legacySourceFingerprint = fp("0");
+  assert.throws(() => domain.parseImportPlanV1(changed), {
+    code: "IMPORT_PLAN_V1_INVALID",
+  });
 });
 
 test("23-A rejects future versions, unknown variants, extras, sparse arrays, and runnable facts", () => {

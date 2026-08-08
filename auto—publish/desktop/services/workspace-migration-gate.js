@@ -163,6 +163,14 @@ function createWorkspaceMigrationGate(options) {
       throw migrationError("MIGRATION_BACKUP_INTEGRITY_FAILED");
   }
 
+  function assertConfirmation(current, plan) {
+    if (
+      current.confirmationFingerprint !==
+      confirmationFingerprint(plan, current.backupIdentity)
+    )
+      throw migrationError("MIGRATION_CONFIRMATION_FINGERPRINT_MISMATCH");
+  }
+
   function run(input) {
     const request = input || {};
     const plan = request.plan;
@@ -253,13 +261,23 @@ function createWorkspaceMigrationGate(options) {
       }
 
       if (current.phase === "confirmed") {
-        assertBackup(current, plan);
-        const expectedConfirmation = confirmationFingerprint(
-          plan,
-          current.backupIdentity,
-        );
-        if (current.confirmationFingerprint !== expectedConfirmation)
-          throw migrationError("MIGRATION_CONFIRMATION_FINGERPRINT_MISMATCH");
+        try {
+          assertBackup(current, plan);
+        } catch (error) {
+          if (!error || error.code !== "MIGRATION_BACKUP_INTEGRITY_FAILED")
+            throw error;
+          current = backUp(plan, current);
+          assertBackup(current, plan);
+          return blocked("MIGRATION_CONFIRMATION_REQUIRED", current.phase, {
+            kind: "confirm_migration",
+            confirmationFingerprint: confirmationFingerprint(
+              plan,
+              current.backupIdentity,
+            ),
+            backupIdentity: current.backupIdentity,
+          });
+        }
+        assertConfirmation(current, plan);
         fault("before-import", { migrationRunId: plan.migrationRunId });
         importLifecycleFacts({ plan });
         fault("after-import", { migrationRunId: plan.migrationRunId });
@@ -269,6 +287,7 @@ function createWorkspaceMigrationGate(options) {
 
       if (current.phase === "import_committed") {
         assertBackup(current, plan);
+        assertConfirmation(current, plan);
         fault("before-verification", { migrationRunId: plan.migrationRunId });
         const verified = verifyImport({ plan, journal: current });
         fault("after-verification", { migrationRunId: plan.migrationRunId });
@@ -302,6 +321,7 @@ function createWorkspaceMigrationGate(options) {
 
       if (current.phase === "verified") {
         assertBackup(current, plan);
+        assertConfirmation(current, plan);
         const verified = verifyImport({ plan, journal: current });
         if (
           !verified ||
@@ -335,9 +355,15 @@ function createWorkspaceMigrationGate(options) {
         latest && latest.phase ? latest.phase : current.phase,
         {
           kind:
-            latest && ["import_committed", "verified"].includes(latest.phase)
-              ? "retry_verification"
-              : "retry_migration",
+            error &&
+            error.code === "MIGRATION_BACKUP_INTEGRITY_FAILED" &&
+            latest &&
+            ["import_committed", "verified"].includes(latest.phase)
+              ? "restore_pre_import_backup"
+              : latest &&
+                  ["import_committed", "verified"].includes(latest.phase)
+                ? "retry_verification"
+                : "retry_migration",
         },
       );
     }

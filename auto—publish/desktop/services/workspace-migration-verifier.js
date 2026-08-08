@@ -64,6 +64,8 @@ function createWorkspaceMigrationVerifier(options) {
         version: 1,
         migrationRunId: plan.migrationRunId,
         planFingerprint: plan.planFingerprint,
+        backupIdentity: journal.backupIdentity,
+        confirmationFingerprint: journal.confirmationFingerprint,
         importCommitFingerprint: journal.importCommitFingerprint,
         schemaVersion: store.schemaVersion,
         entries: actual,

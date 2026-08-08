@@ -15,14 +15,34 @@ async function createWorkspaceStartupComposition(deps) {
   const runMigrationGate =
     options.runWorkspaceMigrationGate ||
     require("./workspace-migration-composition").runWorkspaceMigrationGate;
-  const gateResult = await runMigrationGate({
+  const gateOptions = {
     workspaceRoot,
     workspaceIdentity: bootstrapState.workspaceIdentity,
-    confirmationFingerprint: bootstrapState.migrationConfirmationFingerprint,
+    confirmationFingerprint: null,
     clock: options.clock,
     fault: options.workspaceMigrationFault,
     internalMigrationImportFault: options.internalMigrationImportFault,
-  });
+  };
+  let gateResult = await runMigrationGate(gateOptions);
+  if (
+    gateResult &&
+    gateResult.allowed !== true &&
+    gateResult.repair &&
+    gateResult.repair.kind === "confirm_migration" &&
+    typeof options.confirmWorkspaceMigration === "function"
+  ) {
+    const confirmationFingerprint =
+      await options.confirmWorkspaceMigration(gateResult);
+    if (
+      typeof confirmationFingerprint === "string" &&
+      confirmationFingerprint === gateResult.repair.confirmationFingerprint
+    ) {
+      gateResult = await runMigrationGate({
+        ...gateOptions,
+        confirmationFingerprint,
+      });
+    }
+  }
   if (!gateResult || gateResult.allowed !== true)
     throw blockedError(gateResult || {});
 

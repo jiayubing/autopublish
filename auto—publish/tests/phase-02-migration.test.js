@@ -166,22 +166,20 @@ test("dry-run fully reads production-shaped publication, batch, sidecar and JSON
   }
 });
 
-test("synthetic legacy workspace executes, verifies, backs up, restore-verifies, and preserves all mapped relationships", () => {
+test("synthetic legacy facts require the isolated workspace migration gate", () => {
   const root = fixture();
   try {
-    const before = sourceHashes(root),
-      result = createMigration({ workspaceRoot: root }).execute();
-    assert.equal(result.report.counts.mapped, 3);
-    assert.equal(verifyOperationalDatabase(result.databasePath).rows, 3);
-    const store = createOperationalStore({ workspaceRoot: root });
-    const backup = path.join(root, "backup.db");
-    assert.equal(store.backup(backup).rows, 3);
-    store.close();
-    assert.equal(verifyOperationalDatabase(backup).rows, 3);
-    assert.deepEqual(sourceHashes(root), before);
+    const before = sourceHashes(root);
     assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
-      code: "MIGRATION_TARGET_EXISTS",
+      code: "MIGRATION_WORKSPACE_GATE_REQUIRED",
     });
+    assert.equal(
+      fs.existsSync(
+        path.join(root, ".autopublish", "operations", "operations.db"),
+      ),
+      false,
+    );
+    assert.deepEqual(sourceHashes(root), before);
   } finally {
     cleanup(root);
   }
@@ -234,15 +232,8 @@ test("corrupt, duplicate, unknown-account and missing-remote legacy facts are ex
   }
 });
 
-test("every migration lifecycle fault leaves source and existing target safe, removes temporary database and releases lease", () => {
-  const points = [
-    "before_start",
-    "scan_publication",
-    "import",
-    "before_sqlite_commit",
-    "verify",
-    "before_rename",
-  ];
+test("retired importer scan faults and gate refusal leave legacy sources untouched", () => {
+  const points = ["before_start", "scan_publication"];
   for (const point of points) {
     const root = fixture();
     try {
@@ -277,9 +268,9 @@ test("every migration lifecycle fault leaves source and existing target safe, re
           : false,
         false,
       );
-      assert.doesNotThrow(() =>
-        createMigration({ workspaceRoot: root }).execute(),
-      );
+      assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
+        code: "MIGRATION_WORKSPACE_GATE_REQUIRED",
+      });
     } finally {
       cleanup(root);
     }
@@ -287,7 +278,7 @@ test("every migration lifecycle fault leaves source and existing target safe, re
 });
 
 test("migration payload write failure removes its own incomplete lease", () => {
-  const root = fixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "operational-migration-"));
   const originalWriteFileSync = fs.writeFileSync;
   let failLeaseWrite = true;
   try {
@@ -317,7 +308,7 @@ test("migration payload write failure removes its own incomplete lease", () => {
 });
 
 test("migration payload write failure never removes a replacement lease", () => {
-  const root = fixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "operational-migration-"));
   const lock = path.join(root, ".autopublish", "operations", "migration.lock");
   const originalWriteFileSync = fs.writeFileSync;
   let injected = false;
@@ -422,7 +413,9 @@ test("rename failure cannot overwrite an existing valid target, and post-rename 
   } finally {
     cleanup(root);
   }
-  const second = fixture();
+  const second = fs.mkdtempSync(
+    path.join(os.tmpdir(), "operational-migration-"),
+  );
   try {
     assert.throws(
       () =>
@@ -461,7 +454,7 @@ test("rename failure cannot overwrite an existing valid target, and post-rename 
       "operations",
       "operations.db",
     );
-    assert.equal(verifyOperationalDatabase(target).rows, 3);
+    assert.equal(verifyOperationalDatabase(target).rows, 0);
     assert.throws(() => createMigration({ workspaceRoot: second }).execute(), {
       code: "MIGRATION_TARGET_EXISTS",
     });

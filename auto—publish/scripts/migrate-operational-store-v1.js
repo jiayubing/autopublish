@@ -514,6 +514,8 @@ function createMigration(options) {
         throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
       if (fs.existsSync(target))
         throw fail("MIGRATION_TARGET_EXISTS", p.report);
+      if (p.candidates.length > 0 || p.batches.length > 0)
+        throw fail("MIGRATION_WORKSPACE_GATE_REQUIRED", p.report);
       try {
         withRecoveryGuard(target, () => {
           if (fs.existsSync(runtimeLock))
@@ -586,58 +588,6 @@ function createMigration(options) {
         internalBeforeCommit: () => fault("before_sqlite_commit", p.report),
       });
       try {
-        for (const record of p.candidates) {
-          fault("import", p.report);
-          const reserved = store.reservePublicationTarget(record);
-          if (record.status !== "queued") {
-            const outcome = ["published", "submitted"].includes(record.status)
-              ? {
-                  status: record.status,
-                  evidence: {
-                    articleId: record.articleId,
-                    attemptId: reserved.attemptId,
-                    targetKey: reserved.targetKey,
-                    remoteId: record.remoteId,
-                    remoteUrl: record.remoteUrl || null,
-                  },
-                }
-              : {
-                  status: record.status,
-                  error: {
-                    code: "LEGACY_IMPORT",
-                    category: "storage",
-                    retryability: "manual-check",
-                    userMessage: "Imported legacy status",
-                  },
-                };
-            store.commitRemoteOutcome({
-              attemptId: reserved.attemptId,
-              outcome,
-            });
-          }
-          if (record.order)
-            store.attachRemoteOrderEvidence({
-              attemptId: reserved.attemptId,
-              orderId: record.order.orderId,
-              remoteId: record.order.remoteId,
-              evidence: { source: "legacy-jsonl" },
-            });
-        }
-        for (const batch of p.batches) {
-          store.createSubmissionBatch({
-            batchId: batch.batchId,
-            items: batch.items
-              .map((item) => ({
-                articleId: item.articleId,
-                target: item.target,
-                payload: {
-                  legacyBatchId: batch.batchId,
-                  legacyStatus: String(item.status || "queued"),
-                },
-              }))
-              .filter((item) => item.target),
-          });
-        }
         store.verify();
         store.close();
         verifyOperationalDatabase(temp);

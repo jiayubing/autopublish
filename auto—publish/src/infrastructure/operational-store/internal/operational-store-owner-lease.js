@@ -42,9 +42,19 @@ function assertStoreAvailable(filename, fail) {
   if (activeStores.has(filename)) throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
 }
 
-function assertMigrationLeaseAvailable(filename, fail) {
+function ownsMigrationLease(lock, migrationOwner) {
+  return Boolean(
+    migrationOwner &&
+    migrationOwner.lock === lock &&
+    typeof migrationOwner.token === "string" &&
+    readLock(lock)?.token === migrationOwner.token,
+  );
+}
+
+function assertMigrationLeaseAvailable(filename, fail, migrationOwner) {
   const lock = migrationLockPath(filename);
   if (!fs.existsSync(lock)) return;
+  if (ownsMigrationLease(lock, migrationOwner)) return;
   const value = readLock(lock);
   if (!value || ownerProcessAlive(value.pid))
     throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
@@ -70,11 +80,12 @@ function acquireRuntimeOwner(
   fail,
   verifyExistingDatabase,
   afterAcquire,
+  migrationOwner,
 ) {
   const lock = ownerLockPath(filename);
   try {
     return withRecoveryGuard(filename, () => {
-      assertMigrationLeaseAvailable(filename, fail);
+      assertMigrationLeaseAvailable(filename, fail, migrationOwner);
       for (;;) {
         const token = crypto.randomUUID();
         try {
@@ -102,7 +113,7 @@ function acquireRuntimeOwner(
         const runtimeOwner = { lock, token };
         try {
           if (typeof afterAcquire === "function") afterAcquire(runtimeOwner);
-          assertMigrationLeaseAvailable(filename, fail);
+          assertMigrationLeaseAvailable(filename, fail, migrationOwner);
           return runtimeOwner;
         } catch (error) {
           releaseRuntimeOwnerUnderGuard(runtimeOwner);
@@ -120,6 +131,78 @@ function acquireRuntimeOwner(
       throw fail("OPERATIONAL_WRITE_OWNER_UNAVAILABLE");
     throw error;
   }
+}
+
+function acquireMigrationOwner(filename, fail, verifyExistingDatabase) {
+  const lock = migrationLockPath(filename);
+  fs.mkdirSync(path.dirname(filename), { recursive: true });
+  try {
+    return withRecoveryGuard(filename, () => {
+      assertStoreAvailable(filename, fail);
+      const runtimeLock = ownerLockPath(filename);
+      for (;;) {
+        const runtimeOwner = readLock(runtimeLock);
+        if (!runtimeOwner) break;
+        if (ownerProcessAlive(runtimeOwner.pid))
+          throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
+        if (fs.existsSync(filename)) verifyExistingDatabase(filename);
+        const current = readLock(runtimeLock);
+        if (!current || current.token !== runtimeOwner.token) continue;
+        try {
+          fs.unlinkSync(runtimeLock);
+        } catch (_) {
+          throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
+        }
+      }
+      for (;;) {
+        const token = crypto.randomUUID();
+        try {
+          fs.writeFileSync(
+            lock,
+            JSON.stringify({ version: 1, pid: process.pid, token }),
+            { encoding: "utf8", flag: "wx" },
+          );
+          return Object.freeze({ lock, token });
+        } catch (error) {
+          if (!error || error.code !== "EEXIST")
+            throw fail("OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE");
+          const owner = readLock(lock);
+          if (!owner || ownerProcessAlive(owner.pid))
+            throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
+          const current = readLock(lock);
+          if (!current || current.token !== owner.token) continue;
+          try {
+            fs.unlinkSync(lock);
+          } catch (_) {
+            throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
+          }
+        }
+      }
+    });
+  } catch (error) {
+    if (isRecoveryGuardBusy(error))
+      throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
+    if (error && error.code === "OPERATIONAL_RECOVERY_GUARD_UNAVAILABLE")
+      throw fail("OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE");
+    throw error;
+  }
+}
+
+function releaseMigrationOwner(filename, migrationOwner) {
+  if (!migrationOwner) return;
+  try {
+    withRecoveryGuard(
+      filename,
+      () => {
+        const owner = readLock(migrationOwner.lock);
+        if (owner && owner.token === migrationOwner.token)
+          try {
+            fs.unlinkSync(migrationOwner.lock);
+          } catch (_) {}
+      },
+      5000,
+    );
+  } catch (_) {}
 }
 
 function registerStore(filename) {
@@ -142,7 +225,9 @@ module.exports = {
   ownerLockPath,
   migrationLockPath,
   assertStoreAvailable,
+  acquireMigrationOwner,
   acquireRuntimeOwner,
   registerStore,
   releaseRuntimeOwner,
+  releaseMigrationOwner,
 };

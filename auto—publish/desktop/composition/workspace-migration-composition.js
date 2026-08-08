@@ -31,7 +31,16 @@ function createWorkspaceMigrationComposition(options) {
     values.inspectMigrationJournals ||
     require("../../src/infrastructure/operational-store/operational-store")
       .inspectOperationalStoreMigrationJournals;
+  const acquireMigrationLease =
+    values.acquireMigrationLease ||
+    require("../../src/infrastructure/operational-store/operational-store")
+      .acquireOperationalStoreMigrationLease;
+  const releaseMigrationLease =
+    values.releaseMigrationLease ||
+    require("../../src/infrastructure/operational-store/operational-store")
+      .releaseOperationalStoreMigrationLease;
   let facade = null;
+  let migrationLease = null;
   let closed = false;
 
   function needsMigration(planned) {
@@ -52,6 +61,7 @@ function createWorkspaceMigrationComposition(options) {
       values.migrationFacade ||
       createFacade({
         workspaceRoot: values.workspaceRoot,
+        migrationOwner: migrationLease && migrationLease.owner,
         clock: values.clock,
         internalMigrationImportFault: values.internalMigrationImportFault,
       });
@@ -93,6 +103,25 @@ function createWorkspaceMigrationComposition(options) {
   function run(input) {
     if (closed)
       throw migrationCompositionError("WORKSPACE_MIGRATION_ROOT_CLOSED");
+    if (!migrationLease) {
+      try {
+        migrationLease = acquireMigrationLease({
+          workspaceRoot: values.workspaceRoot,
+        });
+      } catch (error) {
+        return Object.freeze({
+          allowed: false,
+          status: "blocked",
+          code:
+            error && typeof error.code === "string"
+              ? error.code
+              : "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE",
+          phase: null,
+          executionGroupsPaused: true,
+          repair: Object.freeze({ kind: "retry_migration" }),
+        });
+      }
+    }
     const planned = planner.planResult();
     const migrationRequired = needsMigration(planned);
     const journals = inspectJournals({ workspaceRoot: values.workspaceRoot });
@@ -150,7 +179,12 @@ function createWorkspaceMigrationComposition(options) {
   function close() {
     if (closed) return;
     closed = true;
-    if (facade) facade.close();
+    try {
+      if (facade) facade.close();
+    } finally {
+      if (migrationLease) releaseMigrationLease(migrationLease);
+      migrationLease = null;
+    }
   }
 
   return Object.freeze({ run, close });

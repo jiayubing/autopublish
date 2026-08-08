@@ -50,7 +50,13 @@ function openOperationalStoreRuntime(options) {
   const runtimeOwner =
     value.migrationTemporary === true
       ? null
-      : acquireRuntimeOwner(filename, fail, verifyOperationalDatabase);
+      : acquireRuntimeOwner(
+          filename,
+          fail,
+          verifyOperationalDatabase,
+          null,
+          value.migrationOwner,
+        );
   let db;
   try {
     db = new DatabaseSync(filename);

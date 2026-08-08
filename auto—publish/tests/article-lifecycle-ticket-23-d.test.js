@@ -22,6 +22,12 @@ const {
 const {
   createLegacyMigrationPlanner,
 } = require("../src/content/legacy-migration-planner");
+const {
+  acquireOperationalStoreMigrationLease,
+  createOperationalStore,
+  createOperationalStoreMigrationFacade,
+  releaseOperationalStoreMigrationLease,
+} = require("../src/infrastructure/operational-store/operational-store");
 
 const A = "a".repeat(64);
 const B = "b".repeat(64);
@@ -43,7 +49,8 @@ function harness(options) {
   let journal = null;
   let imports = 0;
   let verifications = 0;
-  const backupIdentity = "backup-23-d";
+  let backupIdentity = "backup-23-d";
+  let backupValid = true;
   const ports = {
     journal: {
       bootstrapMigrationJournal(input) {
@@ -77,10 +84,17 @@ function harness(options) {
     },
     backup: {
       ensure() {
+        if (!backupValid) {
+          backupIdentity = "backup-23-d-repair";
+          backupValid = true;
+        }
         return { backupIdentity, reused: false };
       },
-      verify() {
-        return { valid: values.backupValid !== false };
+      verify(input) {
+        return {
+          valid:
+            backupValid === true && input.backupIdentity === backupIdentity,
+        };
       },
     },
     importer: {
@@ -111,6 +125,9 @@ function harness(options) {
     state: () => journal,
     imports: () => imports,
     verifications: () => verifications,
+    invalidateBackup: () => {
+      backupValid = false;
+    },
   };
 }
 
@@ -170,6 +187,60 @@ it("import_committed restart only verifies and never repeats import", () => {
   assert.equal(restarted.allowed, true);
   assert.equal(restarted.phase, "verified");
   assert.equal(fixture.imports(), 1);
+});
+
+it("repairs a confirmed backup before import and requires fresh confirmation", () => {
+  const fixture = harness();
+  const gate = createWorkspaceMigrationGate({
+    ...fixture.ports,
+    fault(point) {
+      if (point === "before-import") {
+        const error = new Error("stop before import");
+        error.code = "SYNTHETIC_BEFORE_IMPORT";
+        throw error;
+      }
+    },
+  });
+  const first = gate.run({ plan: plan(), report: { counts: {} } });
+  const stopped = gate.run({
+    plan: plan(),
+    report: { counts: {} },
+    confirmationFingerprint: first.repair.confirmationFingerprint,
+  });
+  assert.equal(stopped.phase, "confirmed");
+  fixture.invalidateBackup();
+  const repaired = createWorkspaceMigrationGate(fixture.ports).run({
+    plan: plan(),
+    report: { counts: {} },
+  });
+  assert.equal(repaired.code, "MIGRATION_CONFIRMATION_REQUIRED");
+  assert.equal(repaired.phase, "backed_up");
+  assert.equal(repaired.repair.backupIdentity, "backup-23-d-repair");
+  assert.equal(fixture.imports(), 0);
+});
+
+it("blocks tampered confirmed bindings and post-import backup loss", () => {
+  const fixture = harness();
+  const gate = createWorkspaceMigrationGate(fixture.ports);
+  const first = gate.run({ plan: plan(), report: { counts: {} } });
+  gate.run({
+    plan: plan(),
+    report: { counts: {} },
+    confirmationFingerprint: first.repair.confirmationFingerprint,
+  });
+  fixture.state().confirmationFingerprint = "f".repeat(64);
+  const tampered = gate.run({ plan: plan(), report: { counts: {} } });
+  assert.equal(tampered.allowed, false);
+  assert.equal(tampered.code, "MIGRATION_CONFIRMATION_FINGERPRINT_MISMATCH");
+  fixture.state().confirmationFingerprint = confirmationFingerprint(
+    plan(),
+    fixture.state().backupIdentity,
+  );
+  fixture.invalidateBackup();
+  const missingBackup = gate.run({ plan: plan(), report: { counts: {} } });
+  assert.equal(missingBackup.allowed, false);
+  assert.equal(missingBackup.code, "MIGRATION_BACKUP_INTEGRITY_FAILED");
+  assert.equal(missingBackup.repair.kind, "restore_pre_import_backup");
 });
 
 it("recovers at every gate crash boundary without duplicating import", () => {
@@ -294,6 +365,30 @@ it("creates and verifies a pre-open operational database backup", () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+it("holds a cross-process migration lease before opening the facade", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "migration-23-d-lease-"));
+  const lease = acquireOperationalStoreMigrationLease({ workspaceRoot: root });
+  try {
+    assert.throws(
+      () => acquireOperationalStoreMigrationLease({ workspaceRoot: root }),
+      { code: "OPERATIONAL_MIGRATION_LEASE_ACTIVE" },
+    );
+    assert.throws(() => createOperationalStore({ workspaceRoot: root }), {
+      code: "OPERATIONAL_MIGRATION_LEASE_ACTIVE",
+    });
+    const facade = createOperationalStoreMigrationFacade({
+      workspaceRoot: root,
+      migrationOwner: lease.owner,
+    });
+    facade.close();
+  } finally {
+    releaseOperationalStoreMigrationLease(lease);
+  }
+  const store = createOperationalStore({ workspaceRoot: root });
+  store.close();
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 it("runs the real planner, journal, atomic importer and verifier end to end", () => {
@@ -474,4 +569,47 @@ it("does not construct normal or remote composition while migration is blocked",
     { code: "MIGRATION_CONFIRMATION_REQUIRED" },
   );
   assert.equal(normalConstructions, 0);
+});
+
+it("requests explicit production confirmation and retries the isolated gate before normal composition", async () => {
+  const expected = "a".repeat(64);
+  const calls = [];
+  let normalConstructions = 0;
+  const composition = await createWorkspaceStartupComposition({
+    bootstrapState: { workspacePath: "C:\\synthetic-workspace" },
+    options: {
+      async runWorkspaceMigrationGate(input) {
+        calls.push(input.confirmationFingerprint);
+        if (input.confirmationFingerprint !== expected) {
+          return {
+            allowed: false,
+            code: "MIGRATION_CONFIRMATION_REQUIRED",
+            phase: "backed_up",
+            executionGroupsPaused: true,
+            repair: {
+              kind: "confirm_migration",
+              confirmationFingerprint: expected,
+              backupIdentity: "backup-safe-id",
+            },
+          };
+        }
+        return {
+          allowed: true,
+          status: "verified",
+          executionGroupsPaused: true,
+        };
+      },
+      async confirmWorkspaceMigration(result) {
+        assert.equal(result.repair.backupIdentity, "backup-safe-id");
+        return result.repair.confirmationFingerprint;
+      },
+      createNormalWorkspaceRuntimeComposition() {
+        normalConstructions += 1;
+        return { dispose() {} };
+      },
+    },
+  });
+  assert.deepEqual(calls, [null, expected]);
+  assert.equal(normalConstructions, 1);
+  assert.equal(typeof composition.dispose, "function");
 });

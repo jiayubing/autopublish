@@ -235,6 +235,9 @@ function createOperationalStoreMigrationImport(context) {
         .prepare(
           "SELECT 1 FROM migration_import_entries WHERE article_id=? LIMIT 1",
         )
+        .get(articleId) ||
+      db
+        .prepare("SELECT 1 FROM submission_items WHERE article_id=? LIMIT 1")
         .get(articleId)
     )
       throw fail("MIGRATION_IMPORT_ARTICLE_CONFLICT");
@@ -477,7 +480,7 @@ function createOperationalStoreMigrationImport(context) {
           migrationRunId: plan.migrationRunId,
           planFingerprint: plan.planFingerprint,
           schemaVersion: SCHEMA_VERSION,
-          entries: plan.entries.map((entry) => entry.entryId),
+          entries: plan.entries,
         }),
       )
       .digest("hex");

@@ -230,6 +230,19 @@ test("migration importer allow-list is specific to the recovery guard", () => {
   );
 });
 
+test("retired operational migration script cannot write lifecycle facts", () => {
+  const source = read(MIGRATION_IMPORTER);
+  for (const capability of [
+    "reservePublicationTarget",
+    "commitRemoteOutcome",
+    "attachRemoteOrderEvidence",
+    "createSubmissionBatch",
+    "importLifecycleFacts",
+  ]) {
+    assert.equal(source.includes(capability), false, capability);
+  }
+});
+
 test("internal dependency permission follows the module boundary", () => {
   assert.equal(
     isAllowedInternalImport(

@@ -429,11 +429,20 @@ function articleFromRecord(record, articleById) {
           articleId: explicitId,
         })
       : null;
+  const identitiesForExplicitId = explicitId
+    ? articleById.get(explicitId) || []
+    : [];
+  const flatIdentity =
+    explicitIdentity ||
+    (identitiesForExplicitId.length === 1 ? identitiesForExplicitId[0] : null);
   if (parsed.length && parsed.some((item) => !sameJson(item, parsed[0])))
-    return { identity: parsed[0], invalid: true };
+    return { identity: flatIdentity, invalid: true };
   if (parsed.length)
     return {
-      identity: parsed[0],
+      identity:
+        flatIdentity && !sameJson(flatIdentity, parsed[0])
+          ? flatIdentity
+          : parsed[0],
       invalid: Boolean(
         (explicitId && explicitId !== parsed[0].articleId) ||
         (explicitClientId && explicitClientId !== parsed[0].clientId) ||
@@ -1690,7 +1699,7 @@ function makeEnvelope(options, evidence, entries) {
     sourceFingerprint: evidence.sourceFingerprint,
     entries,
   };
-  const planFingerprint = digest(withoutFingerprint);
+  const planFingerprint = domain.importPlanFingerprintV1(withoutFingerprint);
   return {
     ...withoutFingerprint,
     planFingerprint,

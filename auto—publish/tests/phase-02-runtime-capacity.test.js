@@ -101,7 +101,7 @@ test("real child processes enforce runtime writer and migration lease ownership,
     }).execute();
     assert.equal(
       verifyOperationalDatabase(afterMigration.databasePath).schemaVersion,
-      4,
+      5,
     );
     cleanup(migrationRoot);
 

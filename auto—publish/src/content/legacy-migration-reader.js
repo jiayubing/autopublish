@@ -611,7 +611,11 @@ function readSidecars(root, diagnostics) {
             sourceRef,
             status: value.status || "queued",
             queueState: "QUEUED",
-            remoteBoundaryCrossed: false,
+            remoteBoundaryCrossed:
+              value.remoteBoundaryCrossed === true ||
+              ["submitting", "submitted", "published", "uncertain"].includes(
+                String(value.status || "").toLowerCase(),
+              ),
           }),
           "QUEUE_RECORD",
           0,

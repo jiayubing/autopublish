@@ -185,6 +185,51 @@ function createOperationalStoreFactReader(context) {
           submittedAt: snapshot.remoteCallStartedAt,
         });
       });
+    const migratedHistoricalOrders = db
+      .prepare(
+        `SELECT h.evidence_json AS history_json,h.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json FROM remote_evidence h JOIN publication_attempts a ON a.attempt_id=h.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE p.article_id IN(${inList}) AND h.remote_id LIKE 'migration-order-history:%' ORDER BY h.created_at DESC,h.evidence_id DESC`,
+      )
+      .all(...articleIds)
+      .map((row) => {
+        let history;
+        try {
+          history = domain.parseOrderHistoryV1(fromText(row.history_json));
+        } catch (error) {
+          throw fail(error.code || "ORDER_HISTORY_V1_INVALID");
+        }
+        const historyProjection = projectOrderHistoryV1(history);
+        const target = fromText(row.target_json) || {};
+        const orderId = history.orderIdentityV1.orderId;
+        return Object.freeze({
+          orderId,
+          orderNid: orderId,
+          remoteId: orderId,
+          attemptId: row.attempt_id,
+          publicationId: row.publication_id,
+          articleId: row.article_id,
+          mediaResourceId:
+            target.kind === "media" ? target.mediaResourceId || null : null,
+          targetKey:
+            target.kind === "media"
+              ? `media-resource:${target.mediaResourceId}`
+              : null,
+          publicationStatus: row.publication_status,
+          supplierStatusCode: historyProjection.statusCode,
+          supplierObservedAt: historyProjection.observedAt,
+          publishedAt: historyProjection.publishedAt,
+          remoteUrl:
+            domain.normalizePublishedArticleUrl(historyProjection.remoteUrl) ||
+            null,
+          titleSnapshot: null,
+          filename: null,
+          resourceNameSnapshot: null,
+          quotedPrice: null,
+          estimatedTotal: null,
+          systemSubmissionCode: null,
+          submittedAt: null,
+        });
+      });
+    orders.push(...migratedHistoricalOrders);
     const attentionItems = db
       .prepare(
         `SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status,p.updated_at FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE p.article_id IN(${inList}) AND i.state='manual_check' ORDER BY i.updated_at,i.attempt_id`,

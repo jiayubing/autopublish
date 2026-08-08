@@ -1,5 +1,7 @@
 "use strict";
 
+const crypto = require("node:crypto");
+
 const {
   parseArticleIdentityV1,
   parseTargetIdentityV1,
@@ -539,15 +541,8 @@ function parseEntry(input) {
   };
 }
 
-function parseImportPlanV1(input) {
-  required(input, [
-    "version",
-    "migrationRunId",
-    "workspaceFingerprint",
-    "sourceFingerprint",
-    "planFingerprint",
-    "entries",
-  ]);
+function parsePlanCore(input, fields) {
+  required(input, fields);
   if (input.version !== 1) invalid();
   const parsedEntries = denseArray(input.entries, 0, 100000).map(parseEntry);
   const articleKeys = new Set();
@@ -566,14 +561,51 @@ function parseImportPlanV1(input) {
       orderIds.add(orderId);
     }
   }
-  return Object.freeze({
+  return {
     version: 1,
     migrationRunId: safeId(input.migrationRunId),
     workspaceFingerprint: fingerprint(input.workspaceFingerprint),
     sourceFingerprint: fingerprint(input.sourceFingerprint),
-    planFingerprint: fingerprint(input.planFingerprint),
     entries: Object.freeze(parsedEntries.map((entry) => entry.value)),
+  };
+}
+
+function importPlanFingerprintV1(input) {
+  const plan = parsePlanCore(input, [
+    "version",
+    "migrationRunId",
+    "workspaceFingerprint",
+    "sourceFingerprint",
+    "entries",
+  ]);
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(plan), "utf8")
+    .digest("hex");
+}
+
+function parseImportPlanV1(input) {
+  const plan = parsePlanCore(input, [
+    "version",
+    "migrationRunId",
+    "workspaceFingerprint",
+    "sourceFingerprint",
+    "planFingerprint",
+    "entries",
+  ]);
+  const claimed = fingerprint(input.planFingerprint);
+  const actual = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(plan), "utf8")
+    .digest("hex");
+  if (claimed !== actual) invalid();
+  return Object.freeze({
+    ...plan,
+    planFingerprint: actual,
   });
 }
 
-module.exports = Object.freeze({ parseImportPlanV1 });
+module.exports = Object.freeze({
+  importPlanFingerprintV1,
+  parseImportPlanV1,
+});

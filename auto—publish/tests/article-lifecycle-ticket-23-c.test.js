@@ -73,7 +73,6 @@ function source() {
         submittedTitle: "历史投稿标题",
         submittedBody: "历史投稿正文",
       }),
-      fact("failed", platform("failed"), "failed"),
       fact("uncertain", platform("uncertain"), "submitted"),
       fact("deleted", platform("deleted"), "published", {
         accepted: true,
@@ -99,6 +98,18 @@ function source() {
         submittedBody: "付费投稿正文",
         remoteCallStartedAt: "2026-08-08T00:00:00.000Z",
         observedAt: "2026-08-08T00:01:00.000Z",
+      }),
+      fact("failed", media("failed"), "4", {
+        orderId: "order-23-c-failed",
+        orderCreationAttemptId: "attempt-23-c-failed",
+        mediaName: "历史退稿媒体",
+        quotedPrice: 12,
+        estimatedTotal: 12,
+        systemSubmissionCode: "submission-code-23-c-failed",
+        submittedTitle: "历史退稿标题",
+        submittedBody: "历史退稿正文",
+        remoteCallStartedAt: "2026-08-08T00:00:00.000Z",
+        observedAt: "2026-08-08T00:03:00.000Z",
       }),
     ],
     deletions: [
@@ -182,7 +193,15 @@ test("23-C atomically imports all six variants through the narrow migration faca
       ),
     });
     assert.equal(facts.publications.length, 4);
-    assert.equal(facts.orders.length, 1);
+    assert.equal(facts.orders.length, 2);
+    assert.ok(
+      facts.orders.some(
+        (order) =>
+          order.orderId === "order-23-c-failed" &&
+          order.supplierStatusCode === "4" &&
+          order.titleSnapshot === null,
+      ),
+    );
     assert.equal(
       facts.attentionItems.filter((item) => item.kind.startsWith("migration_"))
         .length,
@@ -218,6 +237,15 @@ test("23-C rejects malicious plans at the store boundary without partial facts",
         .phase,
       "confirmed",
     );
+    const substituted = JSON.parse(JSON.stringify(plan));
+    const published = substituted.entries.find(
+      (entry) => entry.variant === "publishedEvidence",
+    );
+    published.payload.terminalTargetV1.targetIdentityV1.accountProfileId =
+      "account-substituted-after-confirmation";
+    assert.throws(() => facade.importLifecycleFacts({ plan: substituted }), {
+      code: "MIGRATION_IMPORT_PLAN_INVALID",
+    });
   } finally {
     facade.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -337,6 +365,43 @@ test("23-C rejects a plan that conflicts with existing lifecycle facts", () => {
       platformId: "toutiao",
       accountProfileId: "existing-account",
     },
+  });
+  store.close();
+
+  const facade = createOperationalStoreMigrationFacade({ workspaceRoot: root });
+  try {
+    confirm(facade, plan);
+    assert.throws(() => facade.importLifecycleFacts({ plan }), {
+      code: "MIGRATION_IMPORT_ARTICLE_CONFLICT",
+    });
+    assert.equal(
+      facade.listImportedLifecycleFacts({ migrationRunId: plan.migrationRunId })
+        .length,
+      0,
+    );
+  } finally {
+    facade.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("23-C rejects an article with existing runnable submission facts", () => {
+  const root = tempRoot();
+  const plan = createPlan();
+  const store = createOperationalStore({ workspaceRoot: root });
+  store.createSubmissionBatch({
+    batchId: "existing-runnable-batch",
+    items: [
+      {
+        articleId: "published",
+        target: {
+          kind: "platform",
+          platformId: "toutiao",
+          accountProfileId: "existing-runnable-account",
+        },
+        payload: { source: "pre-migration-fixture" },
+      },
+    ],
   });
   store.close();
 

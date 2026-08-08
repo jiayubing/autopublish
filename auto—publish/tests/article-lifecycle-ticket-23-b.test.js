@@ -265,6 +265,17 @@ test("23-B rejects disagreement between nested V1 and flat legacy identities", (
       entry.payload.conflictKind === "IDENTITY_CONFLICT",
   );
   assert.equal(conflicts.length, 3);
+  assert.ok(
+    conflicts.some(
+      (entry) => entry.articleIdentityV1.articleId === "flat-article",
+    ),
+  );
+  assert.equal(
+    conflicts.some(
+      (entry) => entry.articleIdentityV1.articleId === "nested-article",
+    ),
+    false,
+  );
 });
 
 test("23-B routes multiple targets, missing order ids and content disagreement to attention", () => {
@@ -410,6 +421,53 @@ test("23-B reads production-shaped legacy files without writing the source works
     assert.equal(
       fs.existsSync(path.join(root, ".autopublish", "operations")),
       false,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("23-B preserves a sidecar remote boundary and never restores it to readmission", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ticket-23-b-sidecar-"));
+  try {
+    const articleFile = path.join(
+      root,
+      "generated",
+      "client-23-b",
+      "sidecar-crossed.json",
+    );
+    const sidecarFile = path.join(
+      root,
+      ".autopublish",
+      "input",
+      "toutiao",
+      "sidecar-crossed.md.submission.json",
+    );
+    fs.mkdirSync(path.dirname(articleFile), { recursive: true });
+    fs.mkdirSync(path.dirname(sidecarFile), { recursive: true });
+    fs.writeFileSync(
+      articleFile,
+      JSON.stringify(article("sidecar-crossed")),
+      "utf8",
+    );
+    fs.writeFileSync(
+      sidecarFile,
+      JSON.stringify({
+        version: 2,
+        clientId: "client-23-b",
+        generatedArticleId: "sidecar-crossed",
+        targetPlatformId: "toutiao",
+        status: "queued",
+        remoteBoundaryCrossed: true,
+      }),
+      "utf8",
+    );
+    const result = createLegacyMigrationPlanner({ workspaceRoot: root }).plan();
+    assert.equal(result.entries.length, 1);
+    assert.equal(result.entries[0].variant, "needsAttentionConflict");
+    assert.equal(
+      result.entries[0].payload.conflictKind,
+      "SUBMITTING_OR_UNPROVEN_SUBMITTED",
     );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
