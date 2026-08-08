@@ -692,6 +692,8 @@ async function createWorkspaceRuntimeComposition(deps) {
           mediaSupplierProvider,
           orderObservationTransitions:
             operationalStoreTransitionPorts.orderObservationTransitions,
+          orderCancellationTransitions:
+            operationalStoreTransitionPorts.orderCancellationTransitions,
           contentStore,
           paidAdmissionFacade: Object.freeze({
             admitPaidBatch: articleMutationCoordinator.admitPaidBatch,

@@ -23,6 +23,11 @@ const COMMAND_NAMES = [
   "checkBalance",
   "syncOrder",
   "syncAllOrders",
+  "prepareOrderCancellation",
+  "cancelOrder",
+  "prepareCancellationResolution",
+  "confirmCancellationSucceeded",
+  "confirmCancellationNotApplied",
   "prepareOrderStatusAnomalyResolution",
   "resumeOrderTracking",
   "confirmOrderPublished",
@@ -32,6 +37,11 @@ const COMMAND_NAMES = [
 const ORDER_MUTATION_COMMANDS = [
   "syncOrder",
   "syncAllOrders",
+  "prepareOrderCancellation",
+  "cancelOrder",
+  "prepareCancellationResolution",
+  "confirmCancellationSucceeded",
+  "confirmCancellationNotApplied",
   "prepareOrderStatusAnomalyResolution",
   "resumeOrderTracking",
   "confirmOrderPublished",
@@ -125,6 +135,11 @@ export function createMediaFeature(adapters = {}) {
     "getOrders",
     "syncOrder",
     "syncAllOrders",
+    "prepareOrderCancellation",
+    "cancelOrder",
+    "prepareCancellationResolution",
+    "confirmCancellationSucceeded",
+    "confirmCancellationNotApplied",
     "prepareOrderStatusAnomalyResolution",
     "resumeOrderTracking",
     "confirmOrderPublished",
@@ -836,6 +851,57 @@ export function createMediaFeature(adapters = {}) {
           };
           await refreshOrders("command-result");
         },
+        { exclusiveOrderMutation: true },
+      );
+    },
+    prepareOrderCancellation(orderId) {
+      if (!orderId) return undefined;
+      return runCommand(
+        "prepareOrderCancellation",
+        () => adapters.prepareOrderCancellation(orderId),
+        "ORDER_CANCELLATION_PREPARE_FAILED",
+        "无法准备取消订单。",
+        undefined,
+        { exclusiveOrderMutation: true },
+      );
+    },
+    cancelOrder(input) {
+      return runCommand(
+        "cancelOrder",
+        () => adapters.cancelOrder(input),
+        "ORDER_CANCELLATION_FAILED",
+        "取消结果不确定，请人工核对。",
+        () => refreshOrders("command-result"),
+        { exclusiveOrderMutation: true },
+      );
+    },
+    prepareCancellationResolution(cancellationAttemptId) {
+      return runCommand(
+        "prepareCancellationResolution",
+        () => adapters.prepareCancellationResolution(cancellationAttemptId),
+        "ORDER_CANCELLATION_RESOLUTION_PREPARE_FAILED",
+        "无法核对取消结果。",
+        undefined,
+        { exclusiveOrderMutation: true },
+      );
+    },
+    confirmCancellationSucceeded(input) {
+      return runCommand(
+        "confirmCancellationSucceeded",
+        () => adapters.confirmCancellationSucceeded(input),
+        "ORDER_CANCELLATION_RESOLUTION_FAILED",
+        "无法确认订单已取消。",
+        () => refreshOrders("command-result"),
+        { exclusiveOrderMutation: true },
+      );
+    },
+    confirmCancellationNotApplied(input) {
+      return runCommand(
+        "confirmCancellationNotApplied",
+        () => adapters.confirmCancellationNotApplied(input),
+        "ORDER_CANCELLATION_RESOLUTION_FAILED",
+        "无法确认取消未生效。",
+        () => refreshOrders("command-result"),
         { exclusiveOrderMutation: true },
       );
     },

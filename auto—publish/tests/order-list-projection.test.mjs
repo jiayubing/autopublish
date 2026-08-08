@@ -58,10 +58,18 @@ test("order projection defaults to pending and owns counts plus creation-time or
     view.items.map((order) => order.orderNid),
     ["newer-pending", "older-pending"],
   );
-  assert.deepEqual(view.counts, { 0: 2, 1: 1, 2: 1, 4: 1, 9: 1, all: 6 });
+  assert.deepEqual(view.counts, {
+    0: 2,
+    1: 1,
+    2: 1,
+    4: 1,
+    9: 1,
+    cancelled: 0,
+    all: 6,
+  });
   assert.deepEqual(
     ORDER_FILTERS.map((filter) => filter.id),
-    ["0", "1", "2", "4", "9", "all"],
+    ["0", "1", "2", "4", "9", "cancelled", "all"],
   );
   assert.equal(
     view.items.every((order) => order.delayNotice),

@@ -36,6 +36,8 @@ function projectOrderHistoryV1(input) {
       ? observation.statusCode
       : terminal && terminal.terminalKind === "REJECTED"
         ? "4"
+        : terminal && terminal.terminalKind === "CANCELLED"
+          ? "cancelled"
         : "",
     observedAt: observation
       ? observation.observedAt
@@ -865,6 +867,80 @@ function createOrderObservationAggregate(
     });
   }
 
+  // Internal capability for the cancellation aggregate.  Order history and
+  // paid-target projection stay owned here; this is deliberately not exposed
+  // through orderObservationTransitions.
+  function cancellationSnapshot(orderId) {
+    const row = orderRow(orderId);
+    return Object.freeze({
+      row,
+      history: historyFor(row),
+      orderSnapshotFingerprint: domain.orderSnapshotFingerprint(
+        row.orderSnapshotV1,
+      ),
+    });
+  }
+
+  function recordCancellationTerminal(input) {
+    const value = input || {};
+    const snapshot = cancellationSnapshot(value.orderId);
+    const terminal = domain.parseTerminalObservationV1(
+      value.terminalObservationV1,
+    );
+    if (
+      terminal.terminalKind !== "CANCELLED" ||
+      terminal.orderIdentityV1.orderId !== snapshot.row.order_id ||
+      terminal.orderSnapshotFingerprint !== snapshot.orderSnapshotFingerprint
+    )
+      throw fail("ORDER_CANCELLATION_OUTCOME_INVALID");
+    const last = snapshot.history.entries.at(-1);
+    if (
+      last &&
+      last.kind === "terminal" &&
+      last.terminalObservationV1.evidenceFingerprint ===
+        terminal.evidenceFingerprint
+    )
+      return Object.freeze({
+        orderHistoryV1: snapshot.history,
+        publishedWins: guard.readFacts(snapshot.row.order_id).published,
+        idempotent: true,
+      });
+    if (last && last.kind === "terminal")
+      throw fail("ORDER_CANCELLATION_OUTCOME_CONFLICT");
+    const history = appendHistory(
+      snapshot.row,
+      "terminal",
+      terminal,
+      value.stamp,
+    );
+    const publishedWins = guard.readFacts(snapshot.row.order_id).published;
+    if (!publishedWins) {
+      db.prepare(
+        "UPDATE publication_attempts SET status='failed',finished_at=? WHERE attempt_id=? AND status<>'published'",
+      ).run(value.stamp, snapshot.row.attempt_id);
+      db.prepare(
+        "UPDATE publication_records SET status='failed',updated_at=? WHERE publication_id=? AND status<>'published'",
+      ).run(value.stamp, snapshot.row.publication_id);
+      updateItemTarget(
+        snapshot.row,
+        "TERMINAL_CANCELLED",
+        value.stamp,
+        "cancelled",
+      );
+      resolveRecovery(snapshot.row, "order_cancelled", value.stamp);
+      activeTarget.release({
+        articleId: snapshot.row.article_id,
+        publicationId: snapshot.row.publication_id,
+        attemptId: snapshot.row.attempt_id,
+      });
+    }
+    return Object.freeze({
+      orderHistoryV1: history,
+      publishedWins,
+      idempotent: false,
+    });
+  }
+
   return Object.freeze({
     recordOrderObservation,
     recordOrderStatusAnomaly,
@@ -878,6 +954,8 @@ function createOrderObservationAggregate(
     listOrderObservationViews,
     getOrderObservationContext,
     readOrderTransitionFacts: guard.readFacts,
+    cancellationSnapshot,
+    recordCancellationTerminal,
   });
 }
 

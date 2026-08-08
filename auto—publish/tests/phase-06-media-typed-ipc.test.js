@@ -35,6 +35,11 @@ const MEDIA_CHANNELS = [
   "media:get-orders",
   "media:sync-order",
   "media:sync-all-orders",
+  "media:prepare-order-cancellation",
+  "media:cancel-order",
+  "media:prepare-cancellation-resolution",
+  "media:confirm-cancellation-succeeded",
+  "media:confirm-cancellation-not-applied",
   "media:prepare-order-status-anomaly-resolution",
   "media:resume-order-tracking",
   "media:confirm-order-published",
@@ -201,6 +206,7 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
         actualAmount: "1",
         hasPublishedUrl: true,
         anomaly: null,
+        cancellation: null,
       },
     ],
   });
@@ -218,11 +224,11 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
   assert.equal(order.hasPublishedUrl, true);
 });
 
-test("all 24 consumed media invokes have versioned exact contracts", () => {
+test("all 29 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 24);
+  assert.equal(media.length, 29);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),

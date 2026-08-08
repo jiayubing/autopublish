@@ -385,7 +385,7 @@ function toOperationalOrderView(order) {
     title: typeof value.title === "string" ? value.title : "",
     filename: typeof value.filename === "string" ? value.filename : "",
     orderNid: String(value.orderId || ""),
-    statusCode: ["0", "1", "2", "4", "9"].includes(value.statusCode)
+    statusCode: ["0", "1", "2", "4", "9", "cancelled"].includes(value.statusCode)
       ? value.statusCode
       : "0",
     createdAt: isoInstantOrEmpty(value.createdAt),

@@ -638,6 +638,21 @@ const api = {
     syncAllOrders: function () {
       return ipcRenderer.invoke("media:sync-all-orders");
     },
+    prepareOrderCancellation: function (input) {
+      return ipcRenderer.invoke("media:prepare-order-cancellation", input);
+    },
+    cancelOrder: function (input) {
+      return ipcRenderer.invoke("media:cancel-order", input);
+    },
+    prepareCancellationResolution: function (input) {
+      return ipcRenderer.invoke("media:prepare-cancellation-resolution", input);
+    },
+    confirmCancellationSucceeded: function (input) {
+      return ipcRenderer.invoke("media:confirm-cancellation-succeeded", input);
+    },
+    confirmCancellationNotApplied: function (input) {
+      return ipcRenderer.invoke("media:confirm-cancellation-not-applied", input);
+    },
     prepareOrderStatusAnomalyResolution: function (input) {
       return ipcRenderer.invoke(
         "media:prepare-order-status-anomaly-resolution",

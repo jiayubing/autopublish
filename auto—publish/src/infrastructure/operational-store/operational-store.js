@@ -37,6 +37,9 @@ const {
 } = require("./internal/operational-store-transition-ports");
 const successes = require("./internal/operational-store-publication-success");
 const regularOutcomes = require("./internal/operational-store-regular-outcome-aggregate");
+const {
+  createOrderCancellationAggregate,
+} = require("./internal/operational-store-order-cancellation-aggregate");
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
   const context = storeContext.createOperationalStoreContext(runtime, options);
@@ -56,6 +59,10 @@ function createOperationalStore(options) {
       activeTarget,
       publicationSuccess,
     );
+    const orderCancellation = createOrderCancellationAggregate(
+      context,
+      orderObservation,
+    );
     const regularOutcome = regularOutcomes.createRegularOutcomeAggregate(
       context,
       publicationSuccess,
@@ -72,6 +79,7 @@ function createOperationalStore(options) {
       paidExecution,
       regularOutcome,
       orderObservation,
+      orderCancellation,
     });
     return Object.freeze({
       databasePath: runtime.filename,

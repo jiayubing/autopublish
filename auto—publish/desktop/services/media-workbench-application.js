@@ -12,6 +12,9 @@ const {
   createMediaSupplierAdapter,
 } = require("../../src/platforms/media/media-supplier-adapter");
 const { createMediaOrderService } = require("./media-order-service");
+const {
+  createOrderCancellationService,
+} = require("./order-cancellation-service");
 const { createMediaWorkbenchService } = require("./media-workbench-service");
 const { createMediaResourceService } = require("./media-resource-service");
 const {
@@ -93,6 +96,14 @@ function createMediaWorkbenchApplication(options) {
       openExternal: values.openExternal,
       clock: values.clock,
     });
+  const orderCancellationService =
+    values.orderCancellationService ||
+    (values.orderCancellationTransitions
+      ? createOrderCancellationService({
+          supplierProvider,
+          orderCancellationTransitions: values.orderCancellationTransitions,
+        })
+      : null);
   const workbenchService =
     values.mediaWorkbenchService ||
     createMediaWorkbenchService({
@@ -127,6 +138,26 @@ function createMediaWorkbenchApplication(options) {
       throw error;
     }
     return paidOrderCreationResolutionService;
+  }
+
+  function cancellationService() {
+    if (!orderCancellationService) {
+      const error = new Error("Order cancellation is unavailable");
+      error.code = "ORDER_CANCELLATION_UNAVAILABLE";
+      throw error;
+    }
+    return orderCancellationService;
+  }
+
+  function projectOrderWithCancellation(order) {
+    return projectMediaOrder({
+      ...order,
+      cancellation: orderCancellationService
+        ? orderCancellationService.getOrderCancellationView({
+            orderId: order.orderNid,
+          })
+        : null,
+    });
   }
 
   function resolved(command) {
@@ -284,8 +315,27 @@ function createMediaWorkbenchApplication(options) {
     confirmPaidOrderAbsent: (input) =>
       resolved(() => resolutionService().confirmNoOrder(input || {})),
     getOrders: () => ({
-      items: orderService.listOrderViews().map(projectMediaOrder),
+      items: orderService.listOrderViews().map(projectOrderWithCancellation),
     }),
+    prepareOrderCancellation: (input) =>
+      cancellationService().prepareOrderCancellation(input || {}),
+    cancelOrder: (input) =>
+      orderMutation(
+        () => cancellationService().cancelOrder(input || {}),
+        "PAID_ORDER_CANCELLATION_CHANGED",
+      ),
+    prepareCancellationResolution: (input) =>
+      cancellationService().prepareCancellationResolution(input || {}),
+    confirmCancellationSucceeded: (input) =>
+      orderMutation(
+        () => cancellationService().confirmCancellationSucceeded(input || {}),
+        "PAID_ORDER_CANCELLATION_CHANGED",
+      ),
+    confirmCancellationNotApplied: (input) =>
+      orderMutation(
+        () => cancellationService().confirmCancellationNotApplied(input || {}),
+        "PAID_ORDER_CANCELLATION_CHANGED",
+      ),
     syncOrder: async (orderNid) => {
       await orderMutation(
         () => orderService.syncOrder(orderNid),
@@ -299,7 +349,7 @@ function createMediaWorkbenchApplication(options) {
         error.code = "IPC_INTERNAL";
         throw error;
       }
-      return { order: projectMediaOrder(order) };
+      return { order: projectOrderWithCancellation(order) };
     },
     syncAllOrders: () =>
       orderMutation(

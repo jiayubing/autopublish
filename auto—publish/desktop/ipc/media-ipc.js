@@ -60,6 +60,21 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:sync-all-orders", () =>
     invoke(() => application.syncAllOrders()),
   );
+  ipcMain.handle("media:prepare-order-cancellation", (event, input) =>
+    invoke(() => application.prepareOrderCancellation(input)),
+  );
+  ipcMain.handle("media:cancel-order", (event, input) =>
+    invoke(() => application.cancelOrder(input)),
+  );
+  ipcMain.handle("media:prepare-cancellation-resolution", (event, input) =>
+    invoke(() => application.prepareCancellationResolution(input)),
+  );
+  ipcMain.handle("media:confirm-cancellation-succeeded", (event, input) =>
+    invoke(() => application.confirmCancellationSucceeded(input)),
+  );
+  ipcMain.handle("media:confirm-cancellation-not-applied", (event, input) =>
+    invoke(() => application.confirmCancellationNotApplied(input)),
+  );
   ipcMain.handle(
     "media:prepare-order-status-anomaly-resolution",
     (event, input) =>

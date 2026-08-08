@@ -72,4 +72,13 @@ export interface RealOrder {
     reason: "order-missing" | "unknown-status" | "unsettled-aftercare";
     openedAt: string;
   } | null;
+  cancellation: {
+    orderId: string;
+    state: "none" | "open" | "resolved";
+    cancellationAttemptId: string | null;
+    outcome: "cancelled" | "rejected" | null;
+    actionLabel: "取消订单" | "尝试取消" | null;
+    riskCode: "CANCELLATION_MAY_BE_REJECTED" | null;
+    manualResolutionRequired: boolean;
+  } | null;
 }

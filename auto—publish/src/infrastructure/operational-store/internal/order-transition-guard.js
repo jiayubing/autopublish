@@ -33,11 +33,15 @@ function createOrderTransitionGuard(context) {
     const anomalyFact = anomaly ? fromText(anomaly.evidence_json) : null;
     const intent = fromText(row.intent_payload) || {};
     const phase = intent.detail && intent.detail.phase;
-    const cancellationEvidence = db
+    const cancellationEvidenceRows = db
       .prepare(
-        "SELECT 1 FROM remote_evidence WHERE attempt_id=? AND remote_id LIKE 'order-cancellation-intent:%' LIMIT 1",
+        "SELECT evidence_json FROM remote_evidence WHERE attempt_id=? AND remote_id LIKE 'order-cancellation-intent:%'",
       )
-      .get(row.attempt_id);
+      .all(row.attempt_id);
+    const cancellationEvidence = cancellationEvidenceRows.some((entry) => {
+      const value = fromText(entry.evidence_json);
+      return value && value.state === "open";
+    });
     const historyRow = db
       .prepare(
         "SELECT evidence_json FROM remote_evidence WHERE attempt_id=? AND remote_id=?",
@@ -90,7 +94,11 @@ function createOrderTransitionGuard(context) {
   function decide(facts, transition) {
     if (facts.published) return "published_wins";
     if (transition === "published") return "apply_published";
-    if (facts.openCancellationIntent) return "cancellation_conflict";
+    if (
+      facts.openCancellationIntent &&
+      transition !== "cancellation_resolution"
+    )
+      return "cancellation_conflict";
     if (facts.openAnomaly && transition !== "anomaly_resolution")
       return "anomaly_frozen";
     if (transition === "non_published_terminal") return "apply_terminal";

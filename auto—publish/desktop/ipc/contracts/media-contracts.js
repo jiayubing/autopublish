@@ -331,6 +331,16 @@ const orderAnomaly = exactObject({
   openedAt: safeText(64),
 });
 
+const orderCancellation = exactObject({
+  orderId: identifier,
+  state: enumField(["none", "open", "resolved"]),
+  cancellationAttemptId: nullableField(identifier),
+  outcome: nullableField(enumField(["cancelled", "rejected"])),
+  actionLabel: nullableField(enumField(["取消订单", "尝试取消"])),
+  riskCode: nullableField(enumField(["CANCELLATION_MAY_BE_REJECTED"])),
+  manualResolutionRequired: "boolean",
+});
+
 const order = exactObject({
   title: safeText(1000),
   orderNid: identifier,
@@ -343,6 +353,49 @@ const order = exactObject({
   actualAmount: safeText(128),
   hasPublishedUrl: "boolean",
   anomaly: nullableField(orderAnomaly),
+  cancellation: nullableField(orderCancellation),
+});
+
+const cancellationPreparation = exactObject({
+  orderId: identifier,
+  cancellationAttemptId: identifier,
+  expectedObservationFingerprint: safeText(64, 64),
+  actionLabel: enumField(["取消订单", "尝试取消"]),
+  riskCode: nullableField(enumField(["CANCELLATION_MAY_BE_REJECTED"])),
+  confirmationToken: safeText(256, 1),
+  expiresAt: safeText(64, 1),
+});
+const cancellationResult = exactObject({
+  status: enumField(["cancelled", "rejected", "uncertain"]),
+  cancellationAttemptId: identifier,
+  manualCheckRequired: "boolean",
+  idempotent: "boolean",
+  publishedWins: "boolean",
+});
+const cancellationResolutionPreparation = exactObject({
+  version: integerField({ min: 1, max: 1 }),
+  cancellationAttemptId: identifier,
+  orderId: identifier,
+  expectedObservationFingerprint: safeText(64, 64),
+  classification: enumField([
+    "verified_cancelled",
+    "verified_active",
+    "inconclusive",
+  ]),
+  evidenceFingerprint: safeText(64, 64),
+  evidenceSummary: exactObject({
+    source: enumField(["supplier_query"]),
+    status: nullableField(safeText(64)),
+    observed: "boolean",
+  }),
+  confirmationToken: safeText(256, 1),
+  preparedAt: safeText(64, 1),
+  expiresAt: safeText(64, 1),
+});
+const cancellationManualResult = exactObject({
+  status: enumField(["cancelled", "rejected"]),
+  idempotent: "boolean",
+  publishedWins: optionalField("boolean"),
 });
 
 const orderSyncItem = exactObject({
@@ -627,6 +680,74 @@ const mediaContracts = [
     fromArgs: noArgs,
     toArgs: noLegacyInput,
   }),
+  contract(
+    {
+      capability: "media.prepareOrderCancellation",
+      channel: "media:prepare-order-cancellation",
+      kind: "command",
+      request: exactObject({ orderId: identifier }),
+      success: cancellationPreparation,
+      fromArgs: (args) => args[0],
+      toArgs: (payload) => [payload],
+    },
+    ["ORDER_CANCELLATION_NOT_ALLOWED", "ORDER_CANCELLATION_INTENT_OPEN"],
+  ),
+  contract(
+    {
+      capability: "media.cancelOrder",
+      channel: "media:cancel-order",
+      kind: "command",
+      request: exactObject({
+        orderId: identifier,
+        confirmationToken: safeText(256, 1),
+      }),
+      success: cancellationResult,
+      fromArgs: (args) => args[0],
+      toArgs: (payload) => [payload],
+    },
+    [
+      "ORDER_CANCELLATION_CONFIRMATION_STALE",
+      "ORDER_CANCELLATION_OBSERVATION_STALE",
+      "ORDER_CANCELLATION_INTENT_OPEN",
+    ],
+  ),
+  contract(
+    {
+      capability: "media.prepareCancellationResolution",
+      channel: "media:prepare-cancellation-resolution",
+      kind: "command",
+      request: exactObject({ cancellationAttemptId: identifier }),
+      success: cancellationResolutionPreparation,
+      fromArgs: (args) => args[0],
+      toArgs: (payload) => [payload],
+    },
+    ["ORDER_CANCELLATION_ATTEMPT_NOT_FOUND", "ORDER_CANCELLATION_ALREADY_RESOLVED"],
+  ),
+  ...[
+    ["confirmCancellationSucceeded", "confirm-cancellation-succeeded"],
+    ["confirmCancellationNotApplied", "confirm-cancellation-not-applied"],
+  ].map(([capabilityName, channelName]) =>
+    contract(
+      {
+        capability: `media.${capabilityName}`,
+        channel: `media:${channelName}`,
+        kind: "command",
+        request: exactObject({
+          cancellationAttemptId: identifier,
+          confirmationToken: safeText(256, 1),
+          evidenceFingerprint: safeText(64, 64),
+        }),
+        success: cancellationManualResult,
+        fromArgs: (args) => args[0],
+        toArgs: (payload) => [payload],
+      },
+      [
+        "ORDER_CANCELLATION_RESOLUTION_STALE",
+        "ORDER_CANCELLATION_RESOLUTION_CONFLICT",
+        "ORDER_CANCELLATION_OBSERVATION_STALE",
+      ],
+    ),
+  ),
   contract(
     {
       capability: "media.prepareOrderStatusAnomalyResolution",
@@ -986,6 +1107,20 @@ function projectMediaOrder(value) {
         ? {
             reason: String(order.anomaly.reason || "order-missing"),
             openedAt: String(order.anomaly.openedAt || ""),
+          }
+        : null,
+    cancellation:
+      order.cancellation && typeof order.cancellation === "object"
+        ? {
+            orderId: String(order.cancellation.orderId || order.orderNid || ""),
+            state: String(order.cancellation.state || "none"),
+            cancellationAttemptId:
+              order.cancellation.cancellationAttemptId || null,
+            outcome: order.cancellation.outcome || null,
+            actionLabel: order.cancellation.actionLabel || null,
+            riskCode: order.cancellation.riskCode || null,
+            manualResolutionRequired:
+              order.cancellation.manualResolutionRequired === true,
           }
         : null,
   };

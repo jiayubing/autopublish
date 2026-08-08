@@ -87,6 +87,11 @@ type OrdersApi = {
     orderNid: string,
   ) => Promise<IpcResponse<{ order: Record<string, unknown> }>>;
   syncAllOrders: () => Promise<IpcResponse<OrderSyncAllResult>>;
+  prepareOrderCancellation: (input: { orderId: string }) => Promise<IpcResponse<OrderCancellationPreparation>>;
+  cancelOrder: (input: { orderId: string; confirmationToken: string }) => Promise<IpcResponse<OrderCancellationResult>>;
+  prepareCancellationResolution: (input: { cancellationAttemptId: string }) => Promise<IpcResponse<CancellationResolutionPreparation>>;
+  confirmCancellationSucceeded: (input: CancellationResolutionInput) => Promise<IpcResponse<CancellationResolutionResult>>;
+  confirmCancellationNotApplied: (input: CancellationResolutionInput) => Promise<IpcResponse<CancellationResolutionResult>>;
   prepareOrderStatusAnomalyResolution: (input: {
     orderId: string;
   }) => Promise<IpcResponse<OrderAnomalyPreparation>>;
@@ -124,6 +129,37 @@ export type OrderSyncAllResult = {
   items: Array<{ orderNid: string; ok: boolean; errorCode: string | null }>;
   succeeded: number;
   failed: number;
+};
+
+export type OrderCancellationPreparation = {
+  orderId: string;
+  cancellationAttemptId: string;
+  actionLabel: "取消订单" | "尝试取消";
+  riskCode: "CANCELLATION_MAY_BE_REJECTED" | null;
+  confirmationToken: string;
+  expiresAt: string;
+};
+export type OrderCancellationResult = {
+  status: "cancelled" | "rejected" | "uncertain";
+  cancellationAttemptId: string;
+  manualCheckRequired: boolean;
+  idempotent: boolean;
+  publishedWins: boolean;
+};
+export type CancellationResolutionPreparation = {
+  cancellationAttemptId: string;
+  classification: "verified_cancelled" | "verified_active" | "inconclusive";
+  evidenceFingerprint: string;
+  confirmationToken: string;
+};
+export type CancellationResolutionInput = {
+  cancellationAttemptId: string;
+  evidenceFingerprint: string;
+  confirmationToken: string;
+};
+export type CancellationResolutionResult = {
+  status: "cancelled" | "rejected";
+  idempotent: boolean;
 };
 
 export type OrderAnomalyPreparation = {
@@ -277,6 +313,10 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
     anomaly:
       raw.anomaly && typeof raw.anomaly === "object"
         ? (raw.anomaly as RealOrder["anomaly"])
+        : null,
+    cancellation:
+      raw.cancellation && typeof raw.cancellation === "object"
+        ? (raw.cancellation as RealOrder["cancellation"])
         : null,
   };
 }
@@ -458,6 +498,26 @@ export async function syncAllOrders(): Promise<OrderSyncAllResult> {
     requireBridgeMethod(api.syncAllOrders)(),
     "syncAllOrders failed",
   );
+}
+export async function prepareOrderCancellation(orderId: string): Promise<OrderCancellationPreparation> {
+  const api = ordersApi();
+  return unwrap(requireBridgeMethod(api.prepareOrderCancellation)({ orderId }), "prepareOrderCancellation failed");
+}
+export async function cancelOrder(input: { orderId: string; confirmationToken: string }): Promise<OrderCancellationResult> {
+  const api = ordersApi();
+  return unwrap(requireBridgeMethod(api.cancelOrder)(input), "cancelOrder failed");
+}
+export async function prepareCancellationResolution(cancellationAttemptId: string): Promise<CancellationResolutionPreparation> {
+  const api = ordersApi();
+  return unwrap(requireBridgeMethod(api.prepareCancellationResolution)({ cancellationAttemptId }), "prepareCancellationResolution failed");
+}
+export async function confirmCancellationSucceeded(input: CancellationResolutionInput): Promise<CancellationResolutionResult> {
+  const api = ordersApi();
+  return unwrap(requireBridgeMethod(api.confirmCancellationSucceeded)(input), "confirmCancellationSucceeded failed");
+}
+export async function confirmCancellationNotApplied(input: CancellationResolutionInput): Promise<CancellationResolutionResult> {
+  const api = ordersApi();
+  return unwrap(requireBridgeMethod(api.confirmCancellationNotApplied)(input), "confirmCancellationNotApplied failed");
 }
 export async function prepareOrderStatusAnomalyResolution(
   orderId: string,

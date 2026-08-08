@@ -4,6 +4,7 @@ export const ORDER_FILTERS = Object.freeze([
   Object.freeze({ id: "2", label: "已发布" }),
   Object.freeze({ id: "4", label: "已退稿" }),
   Object.freeze({ id: "9", label: "售后中" }),
+  Object.freeze({ id: "cancelled", label: "已取消" }),
   Object.freeze({ id: "all", label: "全部记录" }),
 ]);
 
@@ -24,7 +25,7 @@ export function projectOrderList(orders, input = {}) {
   const search =
     typeof input.search === "string" ? input.search.trim().toLowerCase() : "";
   const counts = Object.fromEntries(
-    ["0", "1", "2", "4", "9"].map((code) => [
+    ["0", "1", "2", "4", "9", "cancelled"].map((code) => [
       code,
       source.filter((order) => order && order.statusCode === code).length,
     ]),

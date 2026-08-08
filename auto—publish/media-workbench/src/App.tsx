@@ -363,6 +363,10 @@ function AppContent() {
                     orders={orders}
                     onSyncOrder={(orderNid) => mediaFeature.syncOrder(orderNid)}
                     onSyncAllOrders={() => mediaFeature.syncAllOrders()}
+                    onPrepareCancellation={(orderNid) => mediaFeature.prepareOrderCancellation(orderNid)}
+                    onCancelOrder={(input) => mediaFeature.cancelOrder(input)}
+                    onPrepareCancellationResolution={(attemptId) => mediaFeature.prepareCancellationResolution(attemptId)}
+                    onResolveCancellation={(action, input) => action === "succeeded" ? mediaFeature.confirmCancellationSucceeded(input) : mediaFeature.confirmCancellationNotApplied(input)}
                     onPrepareAnomaly={(orderNid) =>
                       mediaFeature.prepareOrderStatusAnomalyResolution(orderNid)
                     }

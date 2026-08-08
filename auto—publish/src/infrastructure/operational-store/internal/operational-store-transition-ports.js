@@ -10,6 +10,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   const paidExecution = value.paidExecution;
   const regularOutcome = value.regularOutcome;
   const orderObservation = value.orderObservation;
+  const orderCancellation = value.orderCancellation;
   holder.publicationTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     reservePublicationTarget: publication.reservePublicationTarget,
@@ -84,6 +85,21 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     confirmOrderPublished: orderObservation.confirmOrderPublished,
     confirmOrderNotPublished: orderObservation.confirmOrderNotPublished,
     readOrderTransitionFacts: orderObservation.readOrderTransitionFacts,
+  });
+  holder.orderCancellationTransitions = Object.freeze({
+    prepareOrderCancellation: orderCancellation.prepareOrderCancellation,
+    beginOrderCancellation: orderCancellation.beginOrderCancellation,
+    recordOrderCancellationOutcome:
+      orderCancellation.recordOrderCancellationOutcome,
+    getOrderCancellationContext:
+      orderCancellation.getOrderCancellationContext,
+    getOrderCancellationView: orderCancellation.getOrderCancellationView,
+    prepareCancellationResolution:
+      orderCancellation.prepareCancellationResolution,
+    confirmCancellationSucceeded:
+      orderCancellation.confirmCancellationSucceeded,
+    confirmCancellationNotApplied:
+      orderCancellation.confirmCancellationNotApplied,
   });
 }
 
