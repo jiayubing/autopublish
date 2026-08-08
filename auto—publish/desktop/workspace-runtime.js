@@ -4,8 +4,8 @@ const {
   createWorkspaceDataInvalidation,
 } = require("./workspace-data-invalidation");
 const {
-  createWorkspaceRuntimeComposition,
-} = require("./composition/workspace-runtime-composition");
+  createWorkspaceStartupComposition,
+} = require("./composition/workspace-startup-composition");
 const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 function required(value, name) {
@@ -85,7 +85,7 @@ function createWorkspaceRuntime(deps) {
         };
         const nextComposition = options.createWorkspaceRuntimeComposition
           ? await options.createWorkspaceRuntimeComposition(compositionInput)
-          : await createWorkspaceRuntimeComposition(compositionInput);
+          : await createWorkspaceStartupComposition(compositionInput);
         if (generation !== lifecycleGeneration) {
           if (
             nextComposition &&

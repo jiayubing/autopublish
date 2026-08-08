@@ -306,6 +306,7 @@ it("workspace runtime gives the Hepan task service its configured platform setti
     }
   };
   try {
+    fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
     const runtime = createWorkspaceRuntime({
       ipcMain: {},
       sendToRenderer: function() {},
@@ -343,6 +344,7 @@ it("disposes services already created when a middle workspace factory fails", as
     { request: "../desktop/services/content-generation-batch-service", exports: { createContentGenerationBatchService: function() { throw new Error("generation factory failed"); } } }
   ]);
   try {
+    fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
     const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /generation factory failed/);
     assert.deepEqual(events, ["content", "submission", "provider", "doubao", "task"]);
@@ -369,6 +371,7 @@ it("unsubscribes and disposes all started workspace resources when post-subscrip
     { request: "../desktop/services/generation-submission-handoff-service", exports: { createGenerationSubmissionHandoffService: function() { throw new Error("handoff setup failed"); } } }
   ]);
   try {
+    fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
     const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /handoff setup failed/);
     assert.deepEqual(events, ["collection-unsubscribe", "workbench", "generation", "content", "submission", "provider", "doubao", "task"]);

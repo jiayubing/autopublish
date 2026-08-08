@@ -3,6 +3,9 @@ const {
   openOperationalStoreRuntime,
   dryRunOperationalStoreMigration,
 } = require("./internal/operational-store-runtime");
+const {
+  inspectOperationalStoreMigrationJournals,
+} = require("./internal/operational-store-migration-journal-inspector");
 const storeContext = require("./internal/operational-store-context");
 const publications = require("./internal/operational-store-publication-aggregate");
 const {
@@ -67,6 +70,7 @@ function createOperationalStoreMigrationFacade(options) {
     throw error;
   }
 }
+
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
   const context = storeContext.createOperationalStoreContext(runtime, options);
@@ -195,6 +199,7 @@ module.exports = {
   SCHEMA_VERSION,
   createOperationalStore,
   createOperationalStoreMigrationFacade,
+  inspectOperationalStoreMigrationJournals,
   dryRunOperationalStoreMigration,
   verifyOperationalDatabase,
 };
