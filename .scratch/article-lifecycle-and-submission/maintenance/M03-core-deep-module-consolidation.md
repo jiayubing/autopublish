@@ -47,6 +47,8 @@ M03-0 只有发现上述模块与当前 owner 存在无法分离的直接不变�
 
 M03-0 只允许更新职责图、测试计划和本 Maintenance 的必要合同澄清；不得在职责图确认前移动 production owner。
 
+本工作包的实时职责图、public interface before、调用方约束、测试基线与 migration seam 预检记录在 `handoffs/M03-0-realtime-ownership-and-contract-map.md`。该记录以 `59feb04` 为 source state；在它进入 integration HEAD 前，Wave Plan 的下一动作不得据此提前推进到 M03-A。
+
 ## M03-A — OperationalStore queue cluster
 
 按不变量拆分，不按函数数量拆分：
