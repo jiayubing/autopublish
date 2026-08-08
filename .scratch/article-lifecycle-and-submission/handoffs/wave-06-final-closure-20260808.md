@@ -41,7 +41,16 @@ node --test tests/regular-platform-outcomes.test.js tests/phase-03-supplier-cano
 
 ## Final gate 状态
 
-在修改后的当前工作树运行 `npm test`，结果为 1,872 tests：1,854 PASS、18 FAIL。失败为已有的迁移 legacy writer、过期 packaged owner hash、能力 inventory 等非本 closure 边界问题；因此本 evidence 不能宣称 final clean integration HEAD gate PASS，Wave Plan 暂保持 Wave 6=`RUNNING`、Wave 7=`PENDING`，等待这些基线问题由其 owner 收敛后重建最终 clean HEAD evidence。
+Gate Recovery 前运行 `npm test`，结果为 1,872 tests：1,854 PASS、18 FAIL。允许范围修复进入 clean HEAD `c6f346c31ad48654cd127d480cb9cb74b2fd25f9` 后重新运行完整 `npm test`：1,868 PASS、4 FAIL；剩余全部为下述 legacy migration blocker。因此 final gate 仍非 PASS，Wave 6=`BLOCKED`、Wave 7=`PENDING`。
+
+最终完整门禁 evidence：
+
+- command：`npm test`
+- start：`2026-08-08T04:11:16.2469721Z`
+- end：`2026-08-08T04:19:14.7868422Z`
+- environment：Windows；Node `v24.16.0`；npm `11.13.0`
+- collected：261 files；1,872 tests；1,868 PASS；4 FAIL；0 skipped/cancelled/todo
+- failing file：`tests/phase-02-migration.test.js`（4 tests）
 
 ## Gate Recovery failure map
 
