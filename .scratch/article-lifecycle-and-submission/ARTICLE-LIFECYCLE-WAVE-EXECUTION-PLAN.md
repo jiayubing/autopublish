@@ -15,8 +15,9 @@
 | Ticket 15 | `COMPLETE` | Wave 6 单 Ticket 工作已完成 |
 | Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
 | Wave 7 | `PENDING` | Wave 6 final clean HEAD gate PASS 后才变 `READY` |
+| Dependency-Resolution Lane | `READY` | 用户已授权；仅豁免造成依赖环的前序 Wave `COMPLETE` 调度 gate，固定串行 10→16→22→M03→23 |
 
-**当前下一动作：解决 Wave 6 final gate 与 Ticket 23 上游 gate 之间的调度依赖环。证据化预检已否决提前拆出窄 migration publication writer；不得降低完整测试 gate、恢复 legacy writer、伪造历史 evidence，或在上游 V1 合同缺失时提前实施 Ticket 23/M03。**
+**当前下一动作：执行已授权 Dependency-Resolution Lane：Ticket 10 → Ticket 16 → Ticket 22 → M03 → Ticket 23。该 lane 只豁免“前序 Wave 必须 `COMPLETE`”这一调度 gate；不得豁免 Ticket `Blocked by`、既有串行顺序、acceptance criteria、Primary Audit 或最终完整 gate。Ticket 23 写 production implementation 前必须通过 upstream V1 inventory；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -34,7 +35,7 @@ Wave 6 在以下全部完成前不得标记 `COMPLETE`：
 6. 在新的最终 clean integration HEAD 上重新运行完整 `npm test` 并记录合规 evidence。
 7. 修复本文与 handoff 的状态一致性：Wave 6=`COMPLETE`，Wave 7=`READY`。
 
-不得借 closure 进入 Ticket 10/16、M03、全库 empty-catch 清理或广域架构重构。
+Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-catch 清理或广域架构重构；后续 10→16→22→M03→23 只能依据第 3.1 节已授权 Dependency-Resolution Lane 独立推进，不视为 Wave 6 closure 范围。
 
 ## 3. 阶段顺序
 
@@ -61,10 +62,24 @@ Wave 6 在以下全部完成前不得标记 `COMPLETE`：
 
 Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本表、对应 `Blocked by`/`Scheduling gate` 和真实 Git 状态共同决定。
 
+### 3.1 Dependency-Resolution Lane（AUTHORIZED）
+
+本 lane 仅用于解除 Wave 6 final gate 与 Ticket 23 上游 gate 的确认依赖环。授权规则如下：
+
+1. **固定顺序**：`10 → 16 → 22 → M03 → 23`。不得因为进入 lane 而跳过 10、缩减 16/22/M03，或自行重排。
+2. **只豁免 Wave COMPLETE 调度 gate**：各 Ticket 的真实 `Blocked by`、串行 HEAD、acceptance criteria、专项测试、Primary Audit、finding remediation、bounded re-audit、commit/handoff 均保持有效。
+3. **不得做缩水 migration 前置**：禁止恢复 `commitRemoteOutcome(published)`、新增 23A/temporary compatibility writer、第二个 publication-success primitive、migration-only M03 半成品，或让 migration 依赖 OperationalStore internal schema。
+4. **继承失败规则**：Ticket 10/16/22/M03 推进期间，当前 `phase-02-migration.test.js` 的 4 个已确认 legacy migration failures 只要数量、根因和行为合同不变，可作为 inherited blocker 记录；任何新增 failure 必须单独分类并修复。
+5. **状态不提前完成**：Wave 6 继续 `BLOCKED`；Wave 7/8、M03、Wave 9 不因 lane 提前实施而自动 `COMPLETE`。最终状态必须在 Ticket 23 清除 migration blocker 后，于最终 clean integration HEAD 上重新跑完整 gate 再按原顺序回填。
+6. **Ticket 23 Upstream V1 Inventory Gate**：写 production implementation 前必须读取真实 exports + contract tests，逐项验证 08/09/13/15/16/22 要求的公开 V1。任一缺失返回 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING`，不得由 Ticket 23 猜测或复制 schema。
+7. **已知合同风险必须先判定**：当前 `terminalObservationV1` 的 `terminalKind` 只接受 `REJECTED | CANCELLED | OTHER_NON_PUBLISHED`，且强制包含 `orderIdentityV1`；Ticket 23 的 `nonPublishedTerminal` 文档却列出 `FAILED | REJECTED | CANCELLED | PAID_STATUS_4`。不得为无订单 legacy terminal 伪造 `orderIdentityV1`，也不得偷偷修改既有 V1。若现有权威合同不能唯一决定合法映射/表达方式，停止 Ticket 23 production implementation，标记 `BLOCKED_CONTRACT_DECISION_REQUIRED` 并报告最小合同决策点。
+8. **Ticket 23 必须完整实施**：只有上述 gate 合法通过后，才按 Ticket 23 正文建立 deterministic planner、封闭 `ImportPlanV1`、唯一 `importLifecycleFacts` capability、journal/crash recovery、no-remote composition 和完整 migration acceptance；不能只为现有 4 个测试打补丁。
+9. **最终 reconciliation**：Ticket 23 关闭 migration blocker 后，先跑 migration/专项矩阵，再在最终 clean HEAD 运行完整 `npm test` 与各 Wave/Maintenance 原定 gate；全部 PASS 后才依次回填 Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9。
+
 ## 4. 未来关键边界
 
 - **Wave 7**：Ticket 10 拆 Renderer 业务巨型组件；Ticket 16 实现取消状态机。不得为了“等 M03”把完整 cancellation 状态机继续塞进已有巨型 aggregate；Ticket 16 可以建立职责清楚的独立 cancellation owner，但不得执行系统性 M03。
-- **Wave 8.5 / M03**：在 09/14/15/16/22 业务语义稳定后治理核心深模块；不得提前拆 Ticket 10 已拥有的 Renderer 业务组件；必须保持公开门面/transaction/capability 与 Ticket 23 migration API 边界。
+- **Wave 8.5 / M03**：在 09/10/14/15/16/22 业务语义与最终 owner 稳定后治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration API 边界。
 - **Wave 10 / 10.5**：Ticket 24 先删除 legacy surface；之后 M04 收缩 contract owner，M05 治理测试质量，M06 收口剩余 silent catch。
 - **Wave 11**：Ticket 25 负责最终核心验收 evidence；真实平台操作仍需逐次用户授权。
 - **Wave 12–13**：核心完成后的图片扩展。旧组默认保持 `imageCount=0`；平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。

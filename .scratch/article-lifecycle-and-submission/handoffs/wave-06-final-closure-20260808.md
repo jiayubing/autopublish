@@ -106,6 +106,18 @@ Gate Recovery 按 18 个独立失败逐项分类后，未先修改生产代码�
 
 本预检未修改生产代码、测试、fixture 或 gate；未实施 Ticket 23/M03，未恢复 `commitRemoteOutcome(published)`。Wave 6 保持 `BLOCKED`，Wave 7 保持 `PENDING`。
 
+## Dependency-Resolution Lane authorization
+
+2026-08-08 用户已明确授权新的 Dependency-Resolution Lane，用于解除上述调度依赖环。授权不是降低 gate，而是只豁免“前序 Wave 必须 `COMPLETE` 才能开始下游执行项”这一条调度条件。
+
+- 固定串行：`Ticket 10 → Ticket 16 → Ticket 22 → M03 → Ticket 23`；保留原 Ticket `Blocked by`、串行 HEAD、acceptance、审计、提交和 handoff 规则。
+- Wave 6 继续 `BLOCKED`；下游 Wave/Maintenance 不因提前实施自动 `COMPLETE`。Ticket 23 关闭 migration blocker 后，在最终 clean integration HEAD 统一补完整 gate 并按原顺序回填状态。
+- 禁止恢复 legacy publication-success writer、建立 23A/temporary compatibility writer、伪造历史 identity/evidence、降低测试 gate，或让 migration 依赖 OperationalStore internal schema。
+- Ticket 23 production implementation 前增加 Upstream V1 Inventory Gate。当前已知风险：`terminalObservationV1` 仅允许 `REJECTED | CANCELLED | OTHER_NON_PUBLISHED` 且要求 `orderIdentityV1`，而 Ticket 23 `nonPublishedTerminal` 文档列出 `FAILED | REJECTED | CANCELLED | PAID_STATUS_4`。若不能由现有权威合同唯一、无伪造地对齐，必须停止并标记 `BLOCKED_CONTRACT_DECISION_REQUIRED`，不得自行改写 V1 或伪造无订单 legacy terminal 的订单身份。
+- Ticket 10/16/22/M03 阶段允许把当前 4 个 `phase-02-migration` failures 作为 inherited blocker 记录，前提是数量与根因不变且没有新增 regression；Ticket 23 必须完整解决 migration contract，而不是只改四个测试。
+
+实时执行细则以更新后的 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md` 第 3.1 节为准。
+
 ## 改动文件
 
 - `auto—publish/src/infrastructure/operational-store/internal/order-transition-guard.js`
