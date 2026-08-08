@@ -11,7 +11,7 @@ describe('renderer content confirmation flow', () => {
     const view = read('media-workbench/src/components/content/GeneratedArticlesView.tsx');
     const workbench = read('media-workbench/src/components/ContentWorkbench.tsx');
     const editor = read('media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx');
-    const queue = view.slice(view.indexOf('async function queueSelected'), view.indexOf('\n  async function copyArticleVersion'));
+    const queue = view.slice(view.indexOf('async function queueSelected'), view.indexOf('\n  async function removePendingSelected'));
     const cancel = view.slice(view.indexOf('async function cancelCancelableBatches'), view.indexOf('\n  async function cleanupFailedBatches'));
     [view, workbench, editor].forEach((source) => {
       assert.match(source, /useConfirmation/);

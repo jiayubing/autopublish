@@ -32,8 +32,6 @@ function makeArticle(id, title, index, overrides) {
     source: { client_material: true, doubao_answer: true, references: false, template: true },
     createdAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
     updatedAt: `2026-07-18T00:${String(index).padStart(2, "0")}:00.000Z`,
-    version: 1,
-    sourceArticleId: null,
     templateSnapshot: {
       platform: platformId,
       id: templateId,
@@ -89,9 +87,9 @@ function createFixture({ missingWorkflowArticleId = null } = {}) {
   );
   const publishedArticle = makeArticle(
     publishedArticleId,
-    `${longPrefix} 已发布版本：复制新版本不得修改原文章和发布记录`,
+    `${longPrefix} 已发布文章：发布事实不得修改原文章和发布记录`,
     20,
-    { status: "saved", version: 3 }
+    { status: "saved" }
   );
   const articles = [publishedArticle, ...Array.from({ length: 12 }, (_, index) => index === 9 ? selectedArticle : makeArticle(
     `selected-article-${String(index).padStart(2, "0")}`,
@@ -116,7 +114,7 @@ function installDesktopFixture(page, fixture) {
       removalTransaction: null,
       removalPolls: 0,
       removalListeners: [],
-      calls: { copyArticleVersion: [], saveArticle: [], submission: [], removalRetries: 0 }
+      calls: { saveArticle: [], submission: [], removalRetries: 0 }
     };
     const ok = (data) => Promise.resolve({ ok: true, data });
     const client = { id: "history-editor-fixture", name: "历史文章编辑测试客户", knowledgeFiles: [] };
@@ -136,7 +134,7 @@ function installDesktopFixture(page, fixture) {
         version: 1,
         stage: published ? "published" : "pending_submission",
         label: published ? "已发布" : "待投稿",
-        primaryAction: published ? "copy" : "queue",
+        primaryAction: published ? "view_publication" : "queue",
         allowedBulkActions: published ? [] : ["queue", "trash"],
         locks: {
           canEdit: !published,
@@ -173,13 +171,6 @@ function installDesktopFixture(page, fixture) {
         state.calls.saveArticle.push(article);
         state.articles = state.articles.map((item) => item.id === article.id ? article : item);
         return ok({ outcome: "saved", article, editFingerprint: `fixture-edit-${article.id}-saved` });
-      },
-      copyArticleVersion: (request) => {
-        state.calls.copyArticleVersion.push(request);
-        const source = state.articles.find((article) => article.id === request.sourceArticleId);
-        const copied = { ...source, id: "copied-published-article", sourceArticleId: source.id, version: (source.version || 1) + 1, status: "generated" };
-        state.articles = [...state.articles, copied];
-        return ok({ article: copied });
       },
       listPaidMediaBatches: () => ok({ items: [] }),
       startPaidMediaBatch: () => ok({}),
@@ -321,7 +312,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
-  it("guards unsaved edits and hides retired copy actions for published articles", async () => {
+  it("guards unsaved edits and keeps published articles read-only", async () => {
     const { page, fixture } = await openHistory();
     try {
       const filter = page.getByRole("textbox", { name: "筛选历史文章" });
@@ -341,7 +332,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
       await page.getByText(fixture.publishedArticle.title, { exact: true }).locator("..").locator("..").getByRole("button", { name: "发布详情" }).click();
       assert.equal(await page.getByRole("button", { name: "复制为新版本" }).count(), 0);
-      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.copyArticleVersion.length), 0);
     } finally {
       await page.close();
     }

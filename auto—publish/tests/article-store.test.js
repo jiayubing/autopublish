@@ -590,10 +590,17 @@ describe("article store", function () {
       generationBatchId: "batch-1",
       generationTaskId: "task-1",
       reviewedAt: "2026-07-15T00:00:00.000Z",
+      sourceArticleId: "article-root",
+      version: 4,
     });
     const saved = store.saveArticle(article);
-    assert.equal(Object.prototype.hasOwnProperty.call(saved, "reviewedAt"), false);
-    assert.equal(Object.prototype.hasOwnProperty.call(store.getArticle("client-1", "provenance"), "reviewedAt"), false);
+    const loaded = store.getArticle("client-1", "provenance");
+    const persisted = JSON.parse(fs.readFileSync(path.join(root, "generated", "client-1", "provenance.json"), "utf8"));
+    for (const field of ["reviewedAt", "sourceArticleId", "version"]) {
+      assert.equal(Object.prototype.hasOwnProperty.call(saved, field), false, field);
+      assert.equal(Object.prototype.hasOwnProperty.call(loaded, field), false, field);
+      assert.equal(Object.prototype.hasOwnProperty.call(persisted, field), false, field);
+    }
     for (const invalid of [
       { materialSnapshots: [{ id: "brand.md" }] },
       { templateSnapshot: { platform: "ctrip", id: "template-1", body: "" } },

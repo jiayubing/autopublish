@@ -85,15 +85,6 @@ test("article lifecycle exposes the six mutually exclusive stages", () => {
   );
 });
 
-test("a legacy review timestamp does not change the lifecycle projection", () => {
-  const withoutLegacyField = deriveArticleLifecycle(facts());
-  const withLegacyField = deriveArticleLifecycle(facts({
-    article: article({ reviewedAt: "2026-07-15T00:00:00.000Z" }),
-  }));
-
-  assert.deepEqual(withLegacyField, withoutLegacyField);
-});
-
 test("published evidence wins over supplier rejection and after-sales facts", () => {
   const workflow = deriveArticleLifecycle(facts({
     publications: [{ articleId: "article-1", status: "published", targetKey: "media-resource:r1" }],

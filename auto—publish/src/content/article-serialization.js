@@ -302,10 +302,11 @@ function normalizeArticle(article) {
     normalized.generationBatchId = generationBatchId;
   if (generationTaskId !== undefined)
     normalized.generationTaskId = generationTaskId;
-  // Legacy article files may still contain the retired review timestamp. It
-  // is deliberately ignored at this read boundary and never enters the new
-  // article model or persistence payload.
-  delete normalized.reviewedAt;
+  // Historical article metadata is accepted only at the file boundary and
+  // never enters the current article model or persistence payload.
+  ["reviewedAt", "sourceArticleId", "version"].forEach(function (field) {
+    delete normalized[field];
+  });
   if (researchIds.legacy) {
     assertNonEmptyString(article.researchQueryId, "researchQueryId");
     Object.defineProperty(normalized, LEGACY_ARTICLE, {
@@ -323,7 +324,9 @@ function normalizeArticle(article) {
 
 function articleForPersistence(article) {
   const persisted = clone(article);
-  delete persisted.reviewedAt;
+  ["reviewedAt", "sourceArticleId", "version"].forEach(function (field) {
+    delete persisted[field];
+  });
   if (article && article[LEGACY_ARTICLE]) {
     delete persisted.researchQueryIds;
     delete persisted.researchSnapshots;

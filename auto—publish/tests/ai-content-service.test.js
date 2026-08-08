@@ -100,7 +100,6 @@ describe("ai content service", function() {
     const setup = createService();
     const generated = await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
     assert.equal(generated.id, "article-1");
-    assert.equal(Object.prototype.hasOwnProperty.call(generated, "reviewedAt"), false);
     assert.equal(setup.calls.includes("aiClientFactory"), true);
     assert.equal(setup.calls.filter(function(value) { return value === "saveArticle"; }).length, 1);
   });

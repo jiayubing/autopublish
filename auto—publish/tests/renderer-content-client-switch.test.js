@@ -55,8 +55,6 @@ describe("renderer content client switching", function () {
         },
         createdAt: "2026-07-20T00:00:00.000Z",
         updatedAt: "2026-07-20T00:00:00.000Z",
-        version: 1,
-        sourceArticleId: null,
         templateSnapshot: {
           platform: "fixture-platform",
           id: "fixture-template",

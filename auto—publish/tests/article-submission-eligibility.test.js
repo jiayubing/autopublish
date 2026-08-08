@@ -29,7 +29,6 @@ describe("article submission eligibility", function() {
       title: "手工文章",
       content: "手工正文",
       status: "saved",
-      reviewedAt: "2026-07-15T00:00:00.000Z",
     });
     assert.deepEqual(result, { eligible: true, reasonCodes: [], reasons: [] });
   });

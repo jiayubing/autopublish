@@ -205,6 +205,4 @@ export interface GeneratedContentArticle {
   };
   generationBatchId?: string | null;
   generationTaskId?: string | null;
-  sourceArticleId?: string | null;
-  version?: number;
 }

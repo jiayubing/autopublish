@@ -130,7 +130,6 @@ test("complete manual content without AI provenance is queueable and reports con
     status: "saved",
     title: "手工文章",
     content: "手工正文",
-    reviewedAt: "2026-07-15T00:00:00.000Z",
   };
   const manualPlanner = planner(manual);
   const preview = manualPlanner.value.previewBatch({
@@ -140,7 +139,6 @@ test("complete manual content without AI provenance is queueable and reports con
     accountProfiles: { toutiao: "account-1" },
   });
   assert.equal(preview.queueableTaskCount, 1);
-  assert.equal("reviewedAt" in preview.items[0], false);
 
   for (const [field, code, reason] of [
     ["title", "ARTICLE_TITLE_EMPTY", "标题为空"],

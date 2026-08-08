@@ -19,6 +19,7 @@ const SAFE_KEYS = new Set([
   "reviewStatus",
   "reviewState",
   "reviewedAt",
+  "sourceArticleId",
   "title",
   "content",
   "body",

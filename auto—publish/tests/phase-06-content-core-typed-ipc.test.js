@@ -67,6 +67,14 @@ test("content core declares exactly 19 versioned path-free capabilities", functi
     "content:recover-article-removals",
   ])
     assert.equal(registry.byChannel(removed), null);
+  assert.equal(
+    contentCoreContracts.some((contract) =>
+      /(?:^|[.:_-])review(?:$|[.:_-])|copyArticleVersion|(?:^|[.:_-])article-version(?:$|[.:_-])/i.test(
+        `${contract.capability} ${contract.channel}`,
+      ),
+    ),
+    false,
+  );
 });
 
 test("article attention list crosses the authenticated IPC seam as an exact path-free DTO", async function () {
@@ -817,12 +825,22 @@ test("generated articles omit structured research snippets at the production IPC
     },
     createdAt: "2026-07-27T00:00:00.000Z",
     reviewedAt: "2026-07-15T00:00:00.000Z",
+    sourceArticleId: "legacy-source",
+    version: 4,
   });
 
   const response = registry.success(contract, { article: projected });
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.equal(
     Object.prototype.hasOwnProperty.call(response.data.article, "reviewedAt"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(response.data.article, "sourceArticleId"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(response.data.article, "version"),
     false,
   );
   assert.deepEqual(response.data.article.researchSnapshots[0].references[0], {

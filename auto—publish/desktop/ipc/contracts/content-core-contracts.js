@@ -256,8 +256,6 @@ const generatedArticle = exactObject({
   templateSnapshot: optionalField(templateSnapshot),
   generationBatchId: optionalField(nullableField(id)),
   generationTaskId: optionalField(nullableField(id)),
-  sourceArticleId: optionalField(nullableField(id)),
-  version: optionalField(integerField({ min: 1, max: 1000000 })),
 });
 const articleEditor = exactObject({
   article: generatedArticle,
@@ -578,8 +576,6 @@ function projectArticle(value) {
     "updatedAt",
     "generationBatchId",
     "generationTaskId",
-    "sourceArticleId",
-    "version",
   ]);
   if (own(value, "researchSnapshots"))
     output.researchSnapshots = Array.isArray(value.researchSnapshots)

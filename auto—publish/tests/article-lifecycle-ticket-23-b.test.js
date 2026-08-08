@@ -58,7 +58,11 @@ function completeSource() {
   return {
     workspaceFingerprint: FINGERPRINT,
     articles: [
-      article("review-only", { reviewStatus: "pending" }),
+      article("review-only", {
+        reviewStatus: "pending",
+        reviewedAt: "2026-08-08T00:00:00.000Z",
+        sourceArticleId: "legacy-root",
+      }),
       article("published"),
       article("paid"),
       article("queued"),
@@ -113,9 +117,11 @@ function completeSource() {
 }
 
 test("23-B builds all six closed variants and ignores review/generated/saved gates", () => {
-  const result = createLegacyMigrationPlanner({
+  const planner = createLegacyMigrationPlanner({
     legacySource: completeSource(),
-  }).planResult();
+  });
+  const evidence = planner.read();
+  const result = planner.planResult();
 
   assert.deepEqual(
     result.plan.entries.map((entry) => entry.variant).sort(),
@@ -137,6 +143,12 @@ test("23-B builds all six closed variants and ignores review/generated/saved gat
   assert.equal(result.report.counts.ignored, 1);
   assert.equal(result.report.counts.unplanned, 0);
   assert.equal(LEGACY_CLASSIFICATION_MATRIX.REVIEW_PENDING.result, "ignored");
+  const reviewEvidence = evidence.articles.find(
+    (item) => item.articleId === "review-only",
+  );
+  assert.equal(reviewEvidence.reviewedAt, "2026-08-08T00:00:00.000Z");
+  assert.equal(reviewEvidence.sourceArticleId, "legacy-root");
+  assert.doesNotMatch(JSON.stringify(result.plan), /reviewedAt|sourceArticleId/);
 
   const published = result.plan.entries.find(
     (entry) => entry.variant === "publishedEvidence",

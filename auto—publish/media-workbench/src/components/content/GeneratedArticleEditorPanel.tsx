@@ -110,7 +110,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
       <label className="grid min-h-64 gap-1 text-xs font-medium text-slate-600">文章正文
         <textarea aria-label="文章正文" value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} disabled={!canEdit || saving} className="min-h-64 w-full resize-none rounded-md border border-slate-300 p-3 text-sm leading-6 disabled:bg-slate-50" />
       </label>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>版本：{draft.version || 1}</span><span>来源：{sourceLabel}</span></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>来源：{sourceLabel}</span></div>
       {footer}
       {error && <p role="alert" aria-live="assertive" className="rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
       {canEdit && <button type="button" onClick={() => void save()} disabled={saving || !dirty} className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Save className="h-3.5 w-3.5" />{saving ? '保存中…' : '保存文章'}</button>}

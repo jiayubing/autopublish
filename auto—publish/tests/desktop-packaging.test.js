@@ -332,7 +332,6 @@ describe("source assembly and packaging contract", function() {
       "desktop/device-identity-store.js",
       "desktop/ipc/content-generation-batch-ipc.js",
       "desktop/ipc/publication-ipc.js",
-      "src/content/article-version-service.js",
       "media-workbench/dist/index.html"
     ]) {
       assert.match(verifier, new RegExp('"' + escapeRegExp(requiredSurface) + '"'), requiredSurface + " must be verified");
