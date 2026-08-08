@@ -3,7 +3,11 @@
 const crypto = require("node:crypto");
 const domain = require("../../../domain");
 const { createOrderTransitionGuard } = require("./order-transition-guard");
-const { fromText, rejectSensitive, text } = require("./operational-store-utils");
+const {
+  fromText,
+  rejectSensitive,
+  text,
+} = require("./operational-store-utils");
 
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 
@@ -198,8 +202,7 @@ function createOrderCancellationAggregate(context, orderHistoryOwner) {
         orderAttemptId: prepared.orderAttemptId,
         cancellationAttemptId: prepared.cancellationAttemptId,
         expectedOrderRevision: prepared.expectedOrderRevision,
-        expectedObservationFingerprint:
-          prepared.expectedObservationFingerprint,
+        expectedObservationFingerprint: prepared.expectedObservationFingerprint,
         expectedStatusCode: prepared.expectedStatusCode,
         openedAt: stamp,
         resolvedAt: null,
@@ -226,17 +229,17 @@ function createOrderCancellationAggregate(context, orderHistoryOwner) {
   }
 
   function locateIntent(cancellationAttemptId) {
-    requiredText(
-      cancellationAttemptId,
-      "ORDER_CANCELLATION_ATTEMPT_REQUIRED",
-    );
+    requiredText(cancellationAttemptId, "ORDER_CANCELLATION_ATTEMPT_REQUIRED");
     const row = db
       .prepare(
         "SELECT attempt_id,evidence_json FROM remote_evidence WHERE remote_id=?",
       )
       .get(`order-cancellation-intent:${cancellationAttemptId}`);
     if (!row) throw fail("ORDER_CANCELLATION_ATTEMPT_NOT_FOUND");
-    return { orderAttemptId: row.attempt_id, intent: fromText(row.evidence_json) };
+    return {
+      orderAttemptId: row.attempt_id,
+      intent: fromText(row.evidence_json),
+    };
   }
 
   function recordOrderCancellationOutcome(input) {

@@ -87,11 +87,22 @@ type OrdersApi = {
     orderNid: string,
   ) => Promise<IpcResponse<{ order: Record<string, unknown> }>>;
   syncAllOrders: () => Promise<IpcResponse<OrderSyncAllResult>>;
-  prepareOrderCancellation: (input: { orderId: string }) => Promise<IpcResponse<OrderCancellationPreparation>>;
-  cancelOrder: (input: { orderId: string; confirmationToken: string }) => Promise<IpcResponse<OrderCancellationResult>>;
-  prepareCancellationResolution: (input: { cancellationAttemptId: string }) => Promise<IpcResponse<CancellationResolutionPreparation>>;
-  confirmCancellationSucceeded: (input: CancellationResolutionInput) => Promise<IpcResponse<CancellationResolutionResult>>;
-  confirmCancellationNotApplied: (input: CancellationResolutionInput) => Promise<IpcResponse<CancellationResolutionResult>>;
+  prepareOrderCancellation: (input: {
+    orderId: string;
+  }) => Promise<IpcResponse<OrderCancellationPreparation>>;
+  cancelOrder: (input: {
+    orderId: string;
+    confirmationToken: string;
+  }) => Promise<IpcResponse<OrderCancellationResult>>;
+  prepareCancellationResolution: (input: {
+    cancellationAttemptId: string;
+  }) => Promise<IpcResponse<CancellationResolutionPreparation>>;
+  confirmCancellationSucceeded: (
+    input: CancellationResolutionInput,
+  ) => Promise<IpcResponse<CancellationResolutionResult>>;
+  confirmCancellationNotApplied: (
+    input: CancellationResolutionInput,
+  ) => Promise<IpcResponse<CancellationResolutionResult>>;
   prepareOrderStatusAnomalyResolution: (input: {
     orderId: string;
   }) => Promise<IpcResponse<OrderAnomalyPreparation>>;
@@ -499,25 +510,53 @@ export async function syncAllOrders(): Promise<OrderSyncAllResult> {
     "syncAllOrders failed",
   );
 }
-export async function prepareOrderCancellation(orderId: string): Promise<OrderCancellationPreparation> {
+export async function prepareOrderCancellation(
+  orderId: string,
+): Promise<OrderCancellationPreparation> {
   const api = ordersApi();
-  return unwrap(requireBridgeMethod(api.prepareOrderCancellation)({ orderId }), "prepareOrderCancellation failed");
+  return unwrap(
+    requireBridgeMethod(api.prepareOrderCancellation)({ orderId }),
+    "prepareOrderCancellation failed",
+  );
 }
-export async function cancelOrder(input: { orderId: string; confirmationToken: string }): Promise<OrderCancellationResult> {
+export async function cancelOrder(input: {
+  orderId: string;
+  confirmationToken: string;
+}): Promise<OrderCancellationResult> {
   const api = ordersApi();
-  return unwrap(requireBridgeMethod(api.cancelOrder)(input), "cancelOrder failed");
+  return unwrap(
+    requireBridgeMethod(api.cancelOrder)(input),
+    "cancelOrder failed",
+  );
 }
-export async function prepareCancellationResolution(cancellationAttemptId: string): Promise<CancellationResolutionPreparation> {
+export async function prepareCancellationResolution(
+  cancellationAttemptId: string,
+): Promise<CancellationResolutionPreparation> {
   const api = ordersApi();
-  return unwrap(requireBridgeMethod(api.prepareCancellationResolution)({ cancellationAttemptId }), "prepareCancellationResolution failed");
+  return unwrap(
+    requireBridgeMethod(api.prepareCancellationResolution)({
+      cancellationAttemptId,
+    }),
+    "prepareCancellationResolution failed",
+  );
 }
-export async function confirmCancellationSucceeded(input: CancellationResolutionInput): Promise<CancellationResolutionResult> {
+export async function confirmCancellationSucceeded(
+  input: CancellationResolutionInput,
+): Promise<CancellationResolutionResult> {
   const api = ordersApi();
-  return unwrap(requireBridgeMethod(api.confirmCancellationSucceeded)(input), "confirmCancellationSucceeded failed");
+  return unwrap(
+    requireBridgeMethod(api.confirmCancellationSucceeded)(input),
+    "confirmCancellationSucceeded failed",
+  );
 }
-export async function confirmCancellationNotApplied(input: CancellationResolutionInput): Promise<CancellationResolutionResult> {
+export async function confirmCancellationNotApplied(
+  input: CancellationResolutionInput,
+): Promise<CancellationResolutionResult> {
   const api = ordersApi();
-  return unwrap(requireBridgeMethod(api.confirmCancellationNotApplied)(input), "confirmCancellationNotApplied failed");
+  return unwrap(
+    requireBridgeMethod(api.confirmCancellationNotApplied)(input),
+    "confirmCancellationNotApplied failed",
+  );
 }
 export async function prepareOrderStatusAnomalyResolution(
   orderId: string,

@@ -8,7 +8,9 @@ function createPublicationSuccessPrimitive(context) {
 
   function parseEvidence(value, allowLegacy) {
     try {
-      return domain.parsePublicationEvidenceV1(value, { allowLegacy: allowLegacy === true });
+      return domain.parsePublicationEvidenceV1(value, {
+        allowLegacy: allowLegacy === true,
+      });
     } catch (_) {
       throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
     }
@@ -98,7 +100,9 @@ function createPublicationSuccessPrimitive(context) {
       )
       .get(articleId);
     if (!existing) return null;
-    const publicationEvidenceV1 = parseEvidence(fromText(existing.evidence_json));
+    const publicationEvidenceV1 = parseEvidence(
+      fromText(existing.evidence_json),
+    );
     return Object.freeze({
       attemptId: existing.attempt_id,
       publicationId: existing.publication_id,

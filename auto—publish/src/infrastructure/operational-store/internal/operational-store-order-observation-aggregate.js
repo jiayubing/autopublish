@@ -38,7 +38,7 @@ function projectOrderHistoryV1(input) {
         ? "4"
         : terminal && terminal.terminalKind === "CANCELLED"
           ? "cancelled"
-        : "",
+          : "",
     observedAt: observation
       ? observation.observedAt
       : terminal

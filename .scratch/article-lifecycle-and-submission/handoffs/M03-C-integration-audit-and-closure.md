@@ -2,16 +2,18 @@
 
 日期：2026-08-08
 
-Source state：`442835f`（`refactor: split article mutation coordination`）
+Primary Audit source state：`442835f`（`refactor: split article mutation coordination`）
 
-执行模式：Manual Dispatch；用户后续明确授权提交。本文记录 M03-A/B 最终组合 diff 的 Primary Audit、finding remediation、bounded re-audit 与最终 gate；M03-C remediation 与本文由本文所在 commit 一并提交，未进入 Ticket 23，也未修改 M03 candidate scope 之外的 production owner。
+Format gate bounded remediation source state：`bcd63e9`（`test: close M03 integration audit`）
+
+执行模式：Manual Dispatch。本文记录 M03-A/B 最终组合 diff 的 Primary Audit、finding remediation、bounded re-audit，以及后续明确授权的 16-file format gate bounded remediation。未进入 Ticket 23，也未修改业务语义、公开合同、schema、事实 owner、transaction 或远端副作用边界。
 
 ## 1. 结论
 
 - Primary Audit：M03-A/B production 组合没有发现 P0/P1 或需要修复的 production correctness finding；公开 facade、named transition ports、coordinator surface、transaction/capability、锁序和 migration seam 均保持原合同。
 - Finding remediation：关闭 3 项 M03-C 直接测试/gate evidence finding，未修改 production 业务 owner。
 - Bounded re-audit：`PASS`。只复核已知 findings、修复 diff、依赖方向、公开 surface 与直接组合回归，没有触发 escalation。
-- Closure：`BLOCKED`。仓库级 `npm run format:check` 仍因 16 个 M03 组合 diff 之外的既有文件失败；按本次“不要做超出职责的内容”的边界未格式化这些 owner。M03 不得在该 required gate 失败时标记完成或进入 Ticket 23。
+- Closure：`PASS`。后续 bounded remediation 只对原 repository format gate 报告的固定 16-file 清单执行 Prettier；`npm run format:check` 与 M03-C final gate 均通过。依 Wave Plan 的 reconciliation 规则，M03 状态仍不提前回填 `COMPLETE`；本次未进入 Ticket 23。
 
 ## 2. Primary Audit scope 与不变量
 
@@ -33,7 +35,7 @@ Source state：`442835f`（`refactor: split article mutation coordination`）
 1. `P2 / EXPOSED_PREEXISTING / blocking`：`phase-08-operational-store-internals.test.js` 用 `operational-store.js <= 160 lines` 证明 facade 深度，违反 M03 acceptance。已删除行数阈值，保留 frozen surface、SQL/table/transaction absence 与关键 aggregate 装配断言。
 2. `P2 / PROCESS_EVIDENCE_GAP / blocking`：同一测试及 `scripts/verify-phase-08-gates.js` 用手工 internal 文件 allow-list 判定合法 internal import，遗漏既有 cancellation owner 和 M03-A 新模块。已改为 boundary-based 判定：仅 facade 与 `internal/` 内模块可访问 internal；migration importer 只保留 recovery guard 单点例外；新增行为断言证明 facade/internal/外部三类结果。
 3. `P2 / PROCESS_EVIDENCE_GAP / blocking`：`phase-08-cleanup-gates.test.js` 把 reachable capability 数量锁死为旧值 `124`，而当前封闭 fixture 为 `131` 且全部可达。已改为断言 `reachableCount === capabilityCount`，继续验证公开能力完整可达而不绑定历史数量。
-4. `P2 / EXPOSED_PREEXISTING + PROCESS_EVIDENCE_GAP / blocking closure`：仓库级 format gate 报告 16 个未被 `3ebda26..442835f` 或本次 remediation 修改的既有文件。Owner 分布在 domain contract、OperationalStore 既有 order/publication/fact/port owners、renderer bridge/types 和既有架构测试；本次未越界修改。下一步必须由覆盖这些 owner 的明确维护范围机械格式化并复跑 gate。
+4. `P2 / EXPOSED_PREEXISTING + PROCESS_EVIDENCE_GAP / blocking closure`：仓库级 format gate 报告 16 个未被 `3ebda26..bcd63e9` 修改的既有文件。后续明确授权的 bounded remediation 仅机械格式化该固定清单并关闭 finding；清单与 M03 组合/closure diff 的交集为 0。16 个输入中 8 个产生规范化内容 diff，其余 8 个经 Prettier 处理后无有效内容 diff。
 
 已知 1–3 的修复未改变公开合同、schema、事实 owner、transaction 或远端副作用边界，因此 bounded re-audit 没有扩大为 fresh review。
 
@@ -78,6 +80,38 @@ Source state：`442835f`（`refactor: split article mutation coordination`）
 
 ## 6. 下一动作与 Git 状态
 
-M03-C 的 audit/remediation/bounded re-audit 已闭合，但 required repository format gate 未通过，Closure 保持 `BLOCKED`。不得进入 Ticket 23，也不得回填 M03/Wave 8 `COMPLETE`。下一动作是由明确覆盖上述 16 个既有 owner 的维护范围修复 format gate，然后只复跑 M03-C final gate 与受影响检查。
+M03-C 的 Primary Audit、finding remediation、bounded re-audit、format gate bounded remediation 与 final gate 均已闭合，Closure=`PASS`。依 Wave Plan 第 3.1 节，M03/Wave 8 仍等待 Ticket 23 后最终 clean integration HEAD reconciliation，不提前回填 `COMPLETE`。本次按用户边界停止，未执行 Ticket 23 upstream inventory 或 production implementation。
 
-M03-C remediation、Wave Plan 实时状态和本文由本文所在 commit 一并提交；没有 merge 或 push。
+## 7. Format gate bounded remediation evidence
+
+固定输入仅为原 `npm run format:check` 报告的 16 个文件：
+
+- `src/domain/article-lifecycle-terminal-contract.js`
+- `src/domain/index.js`
+- `src/infrastructure/operational-store/internal/operational-store-fact-reader.js`
+- `src/infrastructure/operational-store/internal/operational-store-order-cancellation-aggregate.js`
+- `src/infrastructure/operational-store/internal/operational-store-order-observation-aggregate.js`
+- `src/infrastructure/operational-store/internal/operational-store-publication-archive-query.js`
+- `src/infrastructure/operational-store/internal/operational-store-publication-success.js`
+- `src/infrastructure/operational-store/internal/operational-store-transition-ports.js`
+- `src/infrastructure/operational-store/internal/order-transition-guard.js`
+- `src/infrastructure/operational-store/operational-store.js`
+- `media-workbench/src/bridge/content.ts`
+- `media-workbench/src/bridge/media.ts`
+- `media-workbench/src/types/media.ts`
+- `media-workbench/src/types/publication.ts`
+- `tests/architecture-seams.test.js`
+- `tests/phase-08-feature-development-admission.test.mjs`
+
+环境：Windows；Node `v24.16.0`；npm `11.13.0`。
+
+- 精确 14-file M03 组合矩阵：175/175 PASS。
+- `node --test tests/phase-08-operational-store-internals.test.js`：6/6 PASS。
+- `npm run test:phase-08:gates`：5/5 PASS。
+- `node --test tests/architecture-seams.test.js tests/phase-08-feature-development-admission.test.mjs`：7/7 PASS。
+- `npm run lint`、`npm run typecheck:main`、`npm run typecheck:bridge`、`npm run typecheck:renderer`：PASS。
+- `npm run format:check`：PASS；全部匹配文件符合 Prettier。
+- `node --test tests/phase-02-migration.test.js`：8 tests；4 PASS、4 FAIL；四项 inherited failure 均保持 `PUBLICATION_SUCCESS_WRITER_CLOSED`，数量、位置与根因未变。
+- `git diff --check`：PASS。
+
+未运行完整 `npm test`：仍按 Wave Plan 保留到 Ticket 23 清除 inherited migration blocker 后的最终 clean integration HEAD reconciliation。用户随后明确授权提交本 bounded remediation；本文与格式修复由同一提交纳入，实际 commit/sourceState 以 Git 为准。未授权 merge 或 push。

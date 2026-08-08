@@ -47,9 +47,7 @@ function invalid(code) {
 function required(input, fields, code) {
   exact(input, fields);
   if (
-    fields.some(
-      (field) => !Object.prototype.hasOwnProperty.call(input, field),
-    )
+    fields.some((field) => !Object.prototype.hasOwnProperty.call(input, field))
   )
     invalid(code);
 }
@@ -172,8 +170,7 @@ function parseClosedTargetV1(input) {
     ],
     code,
   );
-  if (input.version !== 1 || !CLOSED_KINDS.has(input.closedKind))
-    invalid(code);
+  if (input.version !== 1 || !CLOSED_KINDS.has(input.closedKind)) invalid(code);
   const time = validateTimePair(
     input,
     "closedAt",
@@ -209,8 +206,7 @@ function parseTombstoneIdentityV1(input) {
     ],
     code,
   );
-  if (input.version !== 1 || !TOMBSTONE_STATES.has(input.state))
-    invalid(code);
+  if (input.version !== 1 || !TOMBSTONE_STATES.has(input.state)) invalid(code);
   const deletedAt = instant(input.deletedAt, code, false);
   const purgedAt = instant(input.purgedAt, code, true);
   if (

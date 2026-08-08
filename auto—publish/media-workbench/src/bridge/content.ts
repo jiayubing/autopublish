@@ -195,12 +195,12 @@ type SubmissionContentApi = {
   listRegularQueueGroups: () => Promise<
     ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
   >;
-  startRegularQueueGroup: (input: { queueGroupId: string }) => Promise<
-    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
-  >;
-  pauseRegularQueueGroup: (input: { queueGroupId: string }) => Promise<
-    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
-  >;
+  startRegularQueueGroup: (input: {
+    queueGroupId: string;
+  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
+  pauseRegularQueueGroup: (input: {
+    queueGroupId: string;
+  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
   startAllRegularQueueGroups: () => Promise<
     ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
   >;
@@ -534,7 +534,9 @@ export async function admitRegularQueueItems(
     "regular queue admission failed",
   );
 }
-export async function listRegularQueueGroups(): Promise<RegularQueueGroupSnapshot[]> {
+export async function listRegularQueueGroups(): Promise<
+  RegularQueueGroupSnapshot[]
+> {
   return callSubmission(
     (api) => requireBridgeMethod(api.listRegularQueueGroups)(),
     "regular queue group query failed",
@@ -559,14 +561,18 @@ export async function pauseRegularQueueGroup(input: {
     { map: (wire) => wire.items },
   );
 }
-export async function startAllRegularQueueGroups(): Promise<RegularQueueGroupSnapshot[]> {
+export async function startAllRegularQueueGroups(): Promise<
+  RegularQueueGroupSnapshot[]
+> {
   return callSubmission(
     (api) => requireBridgeMethod(api.startAllRegularQueueGroups)(),
     "regular queue groups start failed",
     { map: (wire) => wire.items },
   );
 }
-export async function pauseAllRegularQueueGroups(): Promise<RegularQueueGroupSnapshot[]> {
+export async function pauseAllRegularQueueGroups(): Promise<
+  RegularQueueGroupSnapshot[]
+> {
   return callSubmission(
     (api) => requireBridgeMethod(api.pauseAllRegularQueueGroups)(),
     "regular queue groups pause failed",

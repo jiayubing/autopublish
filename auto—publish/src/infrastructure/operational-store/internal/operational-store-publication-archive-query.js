@@ -7,7 +7,10 @@ function createOperationalStorePublicationArchiveQuery(
   publicationSuccess,
 ) {
   const { open, fail } = context;
-  if (!publicationSuccess || typeof publicationSuccess.listFirstPublicationSuccesses !== "function")
+  if (
+    !publicationSuccess ||
+    typeof publicationSuccess.listFirstPublicationSuccesses !== "function"
+  )
     throw fail("PUBLICATION_ARCHIVE_QUERY_INVALID");
 
   function articleIdsOf(input) {
@@ -15,7 +18,9 @@ function createOperationalStorePublicationArchiveQuery(
     if (!Array.isArray(value.articleIds) || value.articleIds.length > 5000)
       throw fail("PUBLICATION_ARCHIVE_ARTICLES_INVALID");
     try {
-      return value.articleIds.map((id) => domain.ArticleId.serialize(domain.ArticleId.parse(id)));
+      return value.articleIds.map((id) =>
+        domain.ArticleId.serialize(domain.ArticleId.parse(id)),
+      );
     } catch (_) {
       throw fail("PUBLICATION_ARCHIVE_ARTICLES_INVALID");
     }
@@ -91,7 +96,9 @@ function createOperationalStorePublicationArchiveQuery(
     open();
     return Object.freeze(
       publicationSuccess
-        .listFirstPublicationSuccesses(articleIdsOf(input), { allowLegacy: true })
+        .listFirstPublicationSuccesses(articleIdsOf(input), {
+          allowLegacy: true,
+        })
         .map(archiveFor),
     );
   }

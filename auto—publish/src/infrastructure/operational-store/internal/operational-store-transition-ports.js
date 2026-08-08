@@ -92,8 +92,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     beginOrderCancellation: orderCancellation.beginOrderCancellation,
     recordOrderCancellationOutcome:
       orderCancellation.recordOrderCancellationOutcome,
-    getOrderCancellationContext:
-      orderCancellation.getOrderCancellationContext,
+    getOrderCancellationContext: orderCancellation.getOrderCancellationContext,
     getOrderCancellationView: orderCancellation.getOrderCancellationView,
     prepareCancellationResolution:
       orderCancellation.prepareCancellationResolution,

@@ -18,9 +18,9 @@
 | Ticket 22 | `COMPLETE` | implementation、Primary Audit、remediation、bounded re-audit、最终 gates、implementation/docs commit 已完成；handoff 见 `handoffs/22-published-archive-and-safe-deletion.md` |
 | Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
 | Wave 7 | `RUNNING` | Lane 内 Ticket 10、16 已完成；依授权规则不提前回填 `COMPLETE` |
-| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22 `COMPLETE`；M03 是后续项，按 M03-0 → M03-A → M03-B → M03-C 串行执行 |
+| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22 与 M03-C Closure 已闭合；M03 最终状态等待 Ticket 23 后 reconciliation |
 
-**当前下一动作：M03-0/A/B 已依固定顺序进入当前 integration history；M03-C Primary Audit、finding remediation 与 bounded re-audit 已 PASS，但 Closure 被 16 个不在 M03 组合 diff 内的既有文件的 repository format gate 阻塞。先由覆盖这些 owner 的明确维护范围关闭 format gate，再只复跑 M03-C final gate；在此之前不得进入 Ticket 23。该 lane 只豁免“前序 Wave 必须 `COMPLETE`”这一调度 gate；不得豁免既有串行顺序、acceptance criteria、Primary Audit 或最终完整 gate。Ticket 23 写 production implementation 前必须通过 upstream V1 inventory；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止。**
+**当前下一动作：M03-C format gate bounded remediation 与 final gate 已 PASS，Closure 已闭合；本次未进入 Ticket 23，M03/Wave 8 依 lane 规则不提前回填 `COMPLETE`。后续仅可在新的明确调度中进入 Ticket 23，并先执行 upstream V1 inventory；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止。该 lane 只豁免“前序 Wave 必须 `COMPLETE`”这一调度 gate；不得豁免既有串行顺序、acceptance criteria、Primary Audit 或最终完整 gate。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -55,7 +55,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 6 | 09 → 14 → 15 → Final Closure | 09←08；14←13；15←09、11、13；M5.5 COMPLETE | `BLOCKED` |
 | 7 | 10 → 16 | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免 | `RUNNING`（10/16 COMPLETE；状态回填等待最终 reconciliation） |
 | 8 | 22 | 06、09、16 | `RUNNING`（Ticket 22 `COMPLETE`；依 lane 规则不提前回填 Wave 8 `COMPLETE`） |
-| 8.5 | M03-0 → M03-A → M03-B → M03-C | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate | `BLOCKED`（M03-C audit/re-audit PASS；repository format gate 等待有范围的修复） |
+| 8.5 | M03-0 → M03-A → M03-B → M03-C | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate | `PARTIAL`（M03-C Closure PASS；最终 `COMPLETE` 回填等待 Ticket 23 后 reconciliation） |
 | 9 | 23 | 04、05、09、14、16、22；M8.5 COMPLETE | `PENDING` |
 | 10 | 24 | 02、10、14、16、23 | `PENDING` |
 | 10.5 | M04 → M05 → M06 | Wave 10 COMPLETE | `PENDING` |
