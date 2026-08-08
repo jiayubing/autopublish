@@ -514,45 +514,6 @@ const platformContracts = [
   ),
   contract(
     {
-      capability: "platform.submitSelected",
-      channel: "platforms:submit-selected",
-      kind: "command",
-      request: exactObject({
-        submissions: arrayField(submission, { min: 1, max: 1000 }),
-        autoTrash: "boolean",
-      }),
-      success: exactObject({
-        ok: integerField({ min: 0, max: 100000 }),
-        fail: integerField({ min: 0, max: 100000 }),
-        uncertain: integerField({ min: 0, max: 100000 }),
-        skipped: integerField({ min: 0, max: 100000 }),
-        results: arrayField(submitResultItem, { max: 100000 }),
-        archiveSummary: exactObject({
-          attempted: integerField({ min: 0, max: 100000 }),
-          succeeded: integerField({ min: 0, max: 100000 }),
-          failed: integerField({ min: 0, max: 100000 }),
-        }),
-        trashDisposition: enumField([
-          "keep_local",
-          "offer_trash",
-          "auto_trash_requested",
-          "auto_trash_blocked",
-        ]),
-        trashSummary,
-      }),
-      fromArgs: submissionsFromArgs,
-      toArgs: submissionsToArgs,
-    },
-    [
-      "SUBMISSION_INPUT_INVALID",
-      "ACCOUNT_PROFILE_REQUIRED",
-      "PUBLICATION_WORKFLOW_UNAVAILABLE",
-      "PLATFORM_RUN_ACTIVE",
-      "HEPAN_CONFIG_NOT_SET",
-    ],
-  ),
-  contract(
-    {
       capability: "platform.pauseSubmit",
       channel: "platforms:pause-submit",
       kind: "command",

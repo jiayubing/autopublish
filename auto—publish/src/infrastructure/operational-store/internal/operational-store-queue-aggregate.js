@@ -116,6 +116,7 @@ function createOperationalStoreQueueAggregate(context) {
           position: item.position,
         }),
       );
+    const hasWork = Boolean(current) || remaining.length > 0;
     return Object.freeze({
       queueGroupId: row.queue_group_id,
       platformId: row.platform_id,
@@ -129,6 +130,11 @@ function createOperationalStoreQueueAggregate(context) {
       manuallyPaused: row.pause_intent === "manual",
       current,
       remaining: Object.freeze(remaining),
+      actions: Object.freeze({
+        canStart: hasWork && row.pause_intent !== "none",
+        canPause: hasWork && row.pause_intent === "none",
+        reasonCode: hasWork ? null : "REGULAR_QUEUE_GROUP_EMPTY",
+      }),
       revision: row.revision,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

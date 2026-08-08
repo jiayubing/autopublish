@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useSyncExternalStore } fr
 import type { ReactNode } from 'react';
 import {
   checkPlatformLogin,
+  getPlatformDisplayName,
   getPlatformQueue,
   getPlatformState,
   onPlatformState,
@@ -9,7 +10,6 @@ import {
   openPlatformLogin,
   pausePlatformSubmit,
   stopPlatformSubmit,
-  submitPlatformSelection,
 } from '../../bridge/platform';
 import {
   cleanupTrashedArticleQueueResidue,
@@ -18,6 +18,13 @@ import {
 import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 import { confirmAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
+import {
+  listRegularQueueGroups,
+  pauseAllRegularQueueGroups,
+  pauseRegularQueueGroup,
+  startAllRegularQueueGroups,
+  startRegularQueueGroup,
+} from '../../bridge/content';
 import { createPlatformFeature } from './platform-feature.js';
 import { routePlatformTransportEvent } from './platform-event-router.js';
 
@@ -27,11 +34,11 @@ const PlatformFeatureContext = createContext<PlatformFeature | null>(null);
 
 function createProductionPlatformFeature(): PlatformFeature {
   return createPlatformFeature({
+    platformDisplayName: getPlatformDisplayName,
     loadQueue: (_reason: string) => getPlatformQueue(),
     getRunState: getPlatformState,
     onRunState: (listener) => onPlatformState((state) =>
       routePlatformTransportEvent(state, listener, reportRuntimeDiagnostic)),
-    submit: submitPlatformSelection,
     pause: pausePlatformSubmit,
     stop: stopPlatformSubmit,
     previewResidue: previewTrashedArticleQueueResidue,
@@ -40,6 +47,11 @@ function createProductionPlatformFeature(): PlatformFeature {
     checkLogin: checkPlatformLogin,
     listAccountProfiles,
     confirmAccountProfile,
+    listRegularQueueGroups,
+    startRegularQueueGroup,
+    pauseRegularQueueGroup,
+    startAllRegularQueueGroups,
+    pauseAllRegularQueueGroups,
   });
 }
 
@@ -53,6 +65,7 @@ export function PlatformFeatureProvider({ children }: { children: ReactNode }) {
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
     void feature.refreshQueue(event.kind).catch(() => undefined);
     void feature.refreshAccountProfiles(event.kind).catch(() => undefined);
+    void feature.refreshRegularQueueGroups(event.kind).catch(() => undefined);
   });
 
   useEffect(() => {

@@ -117,9 +117,9 @@ test("electron transport facade is gone and domains own their bridge seams", () 
       /electron-api/,
     );
   }
-  assert.match(
+  assert.doesNotMatch(
     read("media-workbench/src/bridge/platform.ts"),
-    /submitPlatformSelection/,
+    /submitPlatformSelection|submitSelected/,
   );
   assert.match(
     read("media-workbench/src/bridge/workspace.ts"),

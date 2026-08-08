@@ -17,91 +17,63 @@ function createPlatformSubmissionController(bridge, refresh) {
   return feature;
 }
 
-it("platform controller publishes a single snapshot for selection pruning", () => {
-  const controller = createPlatformSubmissionController({}, async () => {});
-  const snapshots = [];
-  const unsubscribe = controller.subscribe(() => snapshots.push(controller.getState()));
-
-  controller.toggleArticle("a");
-  controller.togglePlatform("hepan");
-  controller.pruneArticles(new Set());
-
-  assert.deepEqual([...controller.getState().selectedArticles], []);
-  assert.deepEqual([...controller.getState().selectedPlatformIds], ["hepan"]);
-  assert.equal(snapshots.length, 3);
-  unsubscribe();
-});
-
-it("platform controller ignores duplicate submit, pause, and stop mutations", async () => {
-  let resolveSubmit;
+it("platform controller ignores duplicate pause and stop mutations", async () => {
   let resolvePause;
   let resolveStop;
-  const calls = { submit: 0, pause: 0, stop: 0 };
+  const calls = { pause: 0, stop: 0 };
   const controller = createPlatformSubmissionController({
-    submit() { calls.submit += 1; return new Promise((resolve) => { resolveSubmit = resolve; }); },
     pause() { calls.pause += 1; return new Promise((resolve) => { resolvePause = resolve; }); },
     stop() { calls.stop += 1; return new Promise((resolve) => { resolveStop = resolve; }); },
   }, async () => {});
 
-  const submit = controller.submit({ id: 1 });
-  assert.deepEqual(await controller.submit({ id: 2 }), { ignored: true });
   const pause = controller.pause("run-1");
   assert.deepEqual(await controller.pause("run-1"), { ignored: true });
   const stop = controller.stop("run-1");
   assert.deepEqual(await controller.stop("run-1"), { ignored: true });
-  assert.deepEqual(calls, { submit: 1, pause: 1, stop: 1 });
+  assert.deepEqual(calls, { pause: 1, stop: 1 });
 
-  resolveSubmit({ ok: 1 }); resolvePause(); resolveStop();
-  await Promise.all([submit, pause, stop]);
+  resolvePause(); resolveStop();
+  await Promise.all([pause, stop]);
   assert.equal(controller.getState().commands.pause.busy, false);
   assert.equal(controller.getState().commands.stop.busy, false);
 });
 
-it("submit pause and stop finalize only their own command state", async () => {
-  let resolveSubmit;
+it("pause and stop finalize only their own command state", async () => {
   let resolvePause;
   let resolveStop;
   const controller = createPlatformSubmissionController({
-    submit() { return new Promise((resolve) => { resolveSubmit = resolve; }); },
     pause() { return new Promise((resolve) => { resolvePause = resolve; }); },
     stop() { return new Promise((resolve) => { resolveStop = resolve; }); },
   }, async () => {});
 
-  const submit = controller.submit({ id: 1 });
   const pause = controller.pause("run-1");
   const stop = controller.stop("run-1");
   resolveStop({ stopped: true }); await stop;
   assert.equal(controller.getState().commands.stop.busy, false);
   assert.equal(controller.getState().commands.pause.busy, true);
-  assert.equal(controller.getState().commands.submit.busy, true);
   resolvePause({ paused: true }); await pause;
-  resolveSubmit({ ok: 1 }); await submit;
 
-  assert.deepEqual(controller.getState().result, { ok: 1 });
-  assert.equal(controller.getState().commands.submit.busy, false);
   assert.equal(controller.getState().commands.pause.busy, false);
   assert.equal(controller.getState().commands.stop.busy, false);
 });
 
-it("100 interleaved submit pause and stop rounds always converge independently", async () => {
+it("100 interleaved pause and stop rounds always converge independently", async () => {
   for (let round = 0; round < 100; round += 1) {
     const pending = {};
     const controller = createPlatformSubmissionController({
-      submit: () => new Promise((resolve) => { pending.submit = resolve; }),
       pause: () => new Promise((resolve) => { pending.pause = resolve; }),
       stop: () => new Promise((resolve) => { pending.stop = resolve; }),
     }, async () => {});
     const operations = [
-      controller.submit({ round }),
       controller.pause(`run-${round}`),
       controller.stop(`run-${round}`),
     ];
-    const order = round % 2 ? ["stop", "submit", "pause"] : ["pause", "stop", "submit"];
+    const order = round % 2 ? ["stop", "pause"] : ["pause", "stop"];
     order.forEach((name) => pending[name]({ round, name }));
     await Promise.all(operations);
     assert.deepEqual(
-      Object.fromEntries(["submit", "pause", "stop"].map((name) => [name, controller.getState().commands[name].busy])),
-      { submit: false, pause: false, stop: false },
+      Object.fromEntries(["pause", "stop"].map((name) => [name, controller.getState().commands[name].busy])),
+      { pause: false, stop: false },
     );
     controller.dispose();
   }
@@ -133,15 +105,14 @@ it("residue inspection, confirmation, cleanup, and refresh share one lifecycle",
 });
 
 it("dispose prevents late responses from changing the snapshot", async () => {
-  let resolveSubmit;
+  let resolvePause;
   const controller = createPlatformSubmissionController({
-    submit() { return new Promise((resolve) => { resolveSubmit = resolve; }); },
+    pause() { return new Promise((resolve) => { resolvePause = resolve; }); },
   }, async () => {});
-  const pending = controller.submit({ id: 1 });
+  const pending = controller.pause("run-1");
   controller.dispose();
-  resolveSubmit({ ok: 1 }); await pending;
-  assert.equal(controller.getState().result, null);
-  assert.equal(controller.getState().commands.submit.busy, false);
+  resolvePause({ paused: true }); await pending;
+  assert.equal(controller.getState().commands.pause.busy, false);
 });
 
 it("platform feature queue identity lets invalidation supersede initial", async () => {

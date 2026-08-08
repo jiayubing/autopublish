@@ -15,11 +15,14 @@ const {
 } = require("../desktop/ipc/doubao-collection-ipc");
 
 const SUBMISSION_CHANNELS = [
-  "content:preview-submission-batch",
   "content:list-submission-platforms",
-  "content:create-submission-batch",
   "content:preview-regular-queue-admission",
   "content:admit-regular-queue-items",
+  "content:list-regular-queue-groups",
+  "content:start-regular-queue-group",
+  "content:pause-regular-queue-group",
+  "content:start-all-regular-queue-groups",
+  "content:pause-all-regular-queue-groups",
   "content:remove-pending-queue-items",
   "content:preview-paid-media-preflight",
   "content:confirm-paid-media-batch",
@@ -51,21 +54,21 @@ const DOUBAO_CHANNELS = [
   "content:doubao-queue-state",
 ];
 
-test("submission operations accept the production Unicode client identity", () => {
+test("regular queue admission accepts the production Unicode client identity", () => {
   const base = {
-    clientId: "东方视光",
-    articleIds: ["article-1"],
-    targetPlatformIds: ["toutiao"],
-    accountProfiles: { toutiao: "account-1" },
+    articleRefs: [{ clientId: "东方视光", articleId: "article-1" }],
+    platformId: "toutiao",
+    accountProfileId: "account-1",
   };
   for (const [channel, input] of [
-    ["content:preview-submission-batch", base],
-    ["content:create-submission-batch", { ...base, confirmed: true }],
+    ["content:preview-regular-queue-admission", base],
+    ["content:admit-regular-queue-items", { ...base, confirmed: true }],
   ]) {
     const contract = productionIpcRegistry.byChannel(channel);
     const payload = contract.fromArgs([input]);
     assert.equal(
-      productionIpcRegistry.encodeRequest(contract, payload).payload.clientId,
+      productionIpcRegistry.encodeRequest(contract, payload).payload
+        .articleRefs[0].clientId,
       "东方视光",
       channel,
     );
@@ -158,8 +161,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 32 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 32);
+test("content operations inventory has 35 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 35);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);
@@ -185,6 +188,21 @@ test("regular queue admission does not accept a caller batch identity", () => {
         confirmed: true,
       }),
     { code: "IPC_UNKNOWN_FIELD" },
+  );
+});
+
+test("regular queue admission requires an explicit account profile identity", () => {
+  const contract = productionIpcRegistry.byChannel(
+    "content:admit-regular-queue-items",
+  );
+  assert.throws(
+    () =>
+      productionIpcRegistry.encodeRequest(contract, {
+        articleRefs: [{ clientId: "client-1", articleId: "article-1" }],
+        platformId: "toutiao",
+        confirmed: true,
+      }),
+    { code: "IPC_REQUEST_INVALID" },
   );
 });
 

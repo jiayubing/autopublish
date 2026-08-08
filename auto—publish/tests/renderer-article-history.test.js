@@ -125,7 +125,8 @@ describe("article history grouping", async function() {
       view,
       /function openArticle\(\s*article: GeneratedContentArticle/,
     );
-    assert.match(view, /queueableTaskCount/);
+    assert.match(view, /previewRegularQueueAdmission/);
+    assert.match(view, /queueableCount/);
     assert.match(view, /idempotentCount/);
     assert.match(view, /conflictCount/);
     assert.match(view, /新增/);

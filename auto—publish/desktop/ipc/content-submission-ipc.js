@@ -12,7 +12,7 @@ function bind(service, name) {
   return service[name].bind(service);
 }
 
-function createSubmissionInterface(service, regularQueueService) {
+function createSubmissionInterface(service, regularQueueService, regularQueueGroups) {
   const regular = regularQueueService || service;
   return Object.freeze({
     preparation: {
@@ -42,6 +42,13 @@ function createSubmissionInterface(service, regularQueueService) {
       previewAdmission: bind(regular, "previewRegularQueueAdmission"),
       admit: bind(regular, "admitRegularQueueItems"),
       removePending: bind(regular, "removePendingQueueItems"),
+    },
+    regularQueueGroups: {
+      list: bind(regularQueueGroups, "snapshot"),
+      start: bind(regularQueueGroups, "startGroup"),
+      pause: bind(regularQueueGroups, "pauseGroup"),
+      startAll: bind(regularQueueGroups, "startAll"),
+      pauseAll: bind(regularQueueGroups, "pauseAll"),
     },
   });
 }
@@ -164,7 +171,11 @@ function registerContentSubmissionIpc(deps) {
   }
   const workflow =
     deps.submissionWorkflow ||
-    createSubmissionInterface(service, deps.regularQueueApplication);
+    createSubmissionInterface(
+      service,
+      deps.regularQueueApplication,
+      deps.regularQueueGroupOrchestrator,
+    );
   const paidMedia = deps.paidMediaPreflightService || deps.paidMediaPreflight;
   const paidExecution = deps.paidMediaExecutionService;
   function batchInput(input, confirmed) {
@@ -218,17 +229,6 @@ function registerContentSubmissionIpc(deps) {
     }
     return input;
   }
-  deps.ipcMain.handle(
-    "content:preview-submission-batch",
-    function (event, input) {
-      return wrap(function () {
-        return projectSubmissionResult(
-          "content:preview-submission-batch",
-          workflow.preparation.previewBatch(batchInput(input, false)),
-        );
-      });
-    },
-  );
   deps.ipcMain.handle("content:list-submission-platforms", function () {
     return wrap(function () {
       return projectSubmissionResult(
@@ -237,17 +237,6 @@ function registerContentSubmissionIpc(deps) {
       );
     });
   });
-  deps.ipcMain.handle(
-    "content:create-submission-batch",
-    function (event, input) {
-      return wrap(function () {
-        return projectSubmissionResult(
-          "content:create-submission-batch",
-          workflow.preparation.createBatch(batchInput(input, true)),
-        );
-      });
-    },
-  );
   deps.ipcMain.handle(
     "content:cancel-submission-batch",
     function (event, input) {
@@ -338,6 +327,47 @@ function registerContentSubmissionIpc(deps) {
       });
     },
   );
+  deps.ipcMain.handle("content:list-regular-queue-groups", function () {
+    return wrap(function () {
+      return projectSubmissionResult(
+        "content:list-regular-queue-groups",
+        { items: workflow.regularQueueGroups.list() },
+      );
+    });
+  });
+  deps.ipcMain.handle("content:start-regular-queue-group", function (event, input) {
+    return wrap(async function () {
+      await workflow.regularQueueGroups.start(input);
+      return projectSubmissionResult("content:start-regular-queue-group", {
+        items: workflow.regularQueueGroups.list(),
+      });
+    });
+  });
+  deps.ipcMain.handle("content:pause-regular-queue-group", function (event, input) {
+    return wrap(function () {
+      workflow.regularQueueGroups.pause(input);
+      return projectSubmissionResult(
+        "content:pause-regular-queue-group",
+        { items: workflow.regularQueueGroups.list() },
+      );
+    });
+  });
+  deps.ipcMain.handle("content:start-all-regular-queue-groups", function () {
+    return wrap(async function () {
+      await workflow.regularQueueGroups.startAll();
+      return projectSubmissionResult("content:start-all-regular-queue-groups", {
+        items: workflow.regularQueueGroups.list(),
+      });
+    });
+  });
+  deps.ipcMain.handle("content:pause-all-regular-queue-groups", function () {
+    return wrap(function () {
+      return projectSubmissionResult(
+        "content:pause-all-regular-queue-groups",
+        { items: workflow.regularQueueGroups.pauseAll().groups },
+      );
+    });
+  });
   if (paidMedia) {
     deps.ipcMain.handle(
       "content:preview-paid-media-preflight",

@@ -767,6 +767,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       aiContentService,
       contentSubmissionService,
       regularQueueApplication,
+      regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       contentGenerationBatchService,
       generationSubmissionHandoffService: null,
       platformWorkbenchService,

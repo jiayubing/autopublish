@@ -30,7 +30,6 @@ const INVOKE_CHANNELS = [
   "platforms:confirm-account-profile",
   "platforms:open-login",
   "platforms:check-login",
-  "platforms:submit-selected",
   "platforms:pause-submit",
   "platforms:stop-submit",
   "platforms:get-state",
@@ -91,8 +90,8 @@ test("public preload platform login methods encode one exact platform identity",
   }
 });
 
-test("platform domain defines nine invokes and one versioned state event", () => {
-  assert.equal(platformContracts.length, 10);
+test("platform domain defines eight invokes and one versioned state event", () => {
+  assert.equal(platformContracts.length, 9);
   assert.deepEqual(
     platformContracts
       .filter((contract) => contract.kind !== "event")
@@ -124,42 +123,6 @@ test("platform queue contract rejects scanDir and submission results reject path
     { code: "IPC_UNKNOWN_FIELD" },
   );
 
-  const submit = registry.byChannel("platforms:submit-selected");
-  assert.throws(
-    () =>
-      registry.success(submit, {
-        ok: 1,
-        fail: 0,
-        uncertain: 0,
-        skipped: 0,
-        results: [
-          {
-            task: {
-              sourcePlatformId: "toutiao",
-              filename: "fixture.md",
-              targetPlatformId: "toutiao",
-              filePath: "C:\\private\\fixture.md",
-            },
-            status: "published",
-            publicationStatus: "published",
-            errorCode: null,
-            archiveErrorCode: null,
-          },
-        ],
-        archiveSummary: { attempted: 0, succeeded: 0, failed: 0 },
-        trashDisposition: "keep_local",
-        trashSummary: {
-          offeredCount: 0,
-          requestedCount: 0,
-          movedCount: 0,
-          recoveryCount: 0,
-          blockedCount: 0,
-          failedCount: 0,
-          reasonCodes: [],
-        },
-      }),
-    { code: "IPC_UNKNOWN_FIELD" },
-  );
 });
 
 test("platform-state accepts a safe snapshot and rejects raw errors", () => {

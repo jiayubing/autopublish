@@ -14,14 +14,13 @@ const registry = createContractRegistry(submissionContracts);
 
 test("submission query contracts have independent legal fixtures and ownership records", () => {
   const queryChannels = new Set([
-    "content:preview-submission-batch",
     "content:list-submission-platforms",
     "content:list-paid-media-batches",
   ]);
   const fixtures = submissionContractFixtures.filter((entry) =>
     queryChannels.has(entry.channel),
   );
-  assert.equal(fixtures.length, 3);
+  assert.equal(fixtures.length, 2);
   for (const fixture of fixtures) {
     const contract = registry.byChannel(fixture.channel);
     assert.ok(contract, fixture.channel);
@@ -48,14 +47,13 @@ test("submission query contracts have independent legal fixtures and ownership r
 
 test("ordinary submission mutations have independent legal fixtures", () => {
   const channels = new Set([
-    "content:create-submission-batch",
     "content:start-paid-media-batch",
     "content:pause-paid-media-batch",
   ]);
   const fixtures = submissionContractFixtures.filter((entry) =>
     channels.has(entry.channel),
   );
-  assert.equal(fixtures.length, 3);
+  assert.equal(fixtures.length, 2);
   for (const fixture of fixtures) {
     const contract = registry.byChannel(fixture.channel);
     assert.ok(contract, fixture.channel);
@@ -77,32 +75,6 @@ test("ordinary submission mutations have independent legal fixtures", () => {
       fixture.result,
     );
   }
-});
-
-test("submission account bindings are bounded wire data and reconstruct the main-process map", () => {
-  const contract = registry.byChannel("content:create-submission-batch");
-  const payload = contract.fromArgs([
-    {
-      clientId: "client-1",
-      articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "profile-1" },
-      confirmed: true,
-    },
-  ]);
-  assert.deepEqual(payload.accountBindings, [
-    { platformId: "toutiao", accountProfileId: "profile-1" },
-  ]);
-  assert.equal(Object.hasOwn(payload, "accountProfiles"), false);
-  assert.deepEqual(contract.toArgs(payload), [
-    {
-      clientId: "client-1",
-      articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "profile-1" },
-      confirmed: true,
-    },
-  ]);
 });
 
 test("destructive submission prepare-execute capabilities have independent fixtures", () => {

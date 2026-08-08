@@ -29,21 +29,19 @@ describe("desktop workbench flow", function () {
     assert.match(app, /OrdersView/);
     assert.match(app, /PlatformWorkbench/);
     assert.match(app, /ContentWorkbench/);
-    assert.match(platform, /selectedArticles/);
+    assert.match(platform, /regularQueueGroupViews/);
     assert.match(content, /GeneratedArticlesView/);
   });
 
-  it("keeps platform batch selection until explicit confirmation", function () {
+  it("keeps the platform page queue-group centered", function () {
     const platform = read(
       "media-workbench/src/components/PlatformWorkbench.tsx",
     );
-    assert.match(platform, /selectedArticles/);
-    assert.match(platform, /selectedPlatformIds/);
     assert.match(platform, /usePlatformFeature/);
-    assert.match(platform, /submissionController\.submit/);
+    assert.match(platform, /RegularQueueGroupsPanel/);
+    assert.match(platform, /startAllGroups/);
+    assert.match(platform, /pauseAllGroups/);
     assert.doesNotMatch(platform, /submitPlatformSelection/);
-    assert.match(platform, /isConfirming/);
-    assert.match(platform, /accountProfiles: Object\.fromEntries/);
-    assert.match(platform, /article\.accountProfileId/);
+    assert.doesNotMatch(platform, /selectedPlatformIds|selectedArticles/);
   });
 });

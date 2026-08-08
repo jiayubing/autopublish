@@ -11,7 +11,7 @@ describe("renderer platform queue refresh seam", () => {
   it("uses the shared snapshot and refreshes after terminal submission states", () => {
     const platform = [
       read("components/PlatformWorkbench.tsx"),
-      read("components/PlatformSubmissionOverlays.tsx"),
+      read("components/RegularQueueGroupsPanel.tsx"),
     ].join("\n");
     const controller = read("features/platform/platform-feature.js");
     const app = read("App.tsx");
@@ -38,6 +38,7 @@ describe("renderer platform queue refresh seam", () => {
     );
     assert.match(sidebar, /deriveNavigationSummary/);
     assert.match(sidebar, /item\.badge > 0/);
-    assert.match(platform, /远端已发布，本地归档待处理/);
+    assert.match(platform, /regularQueueGroupViews/);
+    assert.match(platform, /group\.actions\.canStart/);
   });
 });

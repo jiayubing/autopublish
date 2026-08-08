@@ -37,6 +37,7 @@ describe("react workbench regression", function () {
 
   it("keeps renderer APIs free of mock article persistence", function () {
     const api = readApp("bridge/platform.ts");
+    const contentApi = readApp("bridge/content.ts");
     const media = readApp("bridge/media.ts");
     const sharedApi = readApp("bridge/transport.ts");
     const app = readApp("App.tsx");
@@ -45,9 +46,11 @@ describe("react workbench regression", function () {
     assert.equal(app.includes("handleAddNewMockArticle"), false);
     assert.equal(app.includes("persistArticles"), false);
     assert.equal(app.includes("INITIAL_ARTICLES"), false);
+    assert.ok(api.includes("getPlatformQueue"));
+    assert.equal(api.includes("submitPlatformSelection"), false);
     assert.ok(
-      api.includes("getPlatformQueue") &&
-        api.includes("submitPlatformSelection"),
+      contentApi.includes("listRegularQueueGroups") &&
+        contentApi.includes("startRegularQueueGroup"),
     );
     assert.ok(media.includes("Number(") && media.includes("balance"));
   });
@@ -66,10 +69,7 @@ describe("react workbench regression", function () {
 
   it("exposes browser login controls for platform accounts", function () {
     const api = readApp("bridge/platform.ts");
-    const workbench = [
-      readComponent("PlatformWorkbench.tsx"),
-      readComponent("PlatformSubmitPanel.tsx"),
-    ].join("\n");
+    const workbench = readComponent("content/AccountProfileSelector.tsx");
     assert.ok(
       api.includes("openPlatformLogin") && api.includes("checkPlatformLogin"),
     );

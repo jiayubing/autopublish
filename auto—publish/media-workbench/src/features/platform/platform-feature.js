@@ -1,13 +1,16 @@
 import { createCommandOwner, createQueryIdentity } from '../../infrastructure/query-identity/query-identity.js';
 
 const COMMAND_NAMES = Object.freeze([
-  'submit',
   'pause',
   'stop',
   'cleanupResidue',
   'openLogin',
   'checkLogin',
   'confirmAccountProfile',
+  'startGroup',
+  'pauseGroup',
+  'startAllGroups',
+  'pauseAllGroups',
 ]);
 
 const IDLE_RUN = Object.freeze({
@@ -59,6 +62,36 @@ function isAttentionItem(article) {
   return Boolean(article?.archiveErrorCode) || article?.sourceArticleState === 'missing' || article?.sourceArticleState === 'trashed';
 }
 
+function regularQueueGroupViews(items, profiles, platformDisplayName) {
+  const profileList = Array.isArray(profiles) ? profiles : [];
+  const countByPlatform = new Map();
+  profileList.forEach((profile) => {
+    if (!profile?.platformId) return;
+    countByPlatform.set(profile.platformId, (countByPlatform.get(profile.platformId) || 0) + 1);
+  });
+  return Object.freeze((Array.isArray(items) ? items : []).map((group) => {
+    const profile = profileList.find((item) => item?.accountProfileId === group.accountProfileId);
+    const stateLabel = group.actions?.reasonCode === 'REGULAR_QUEUE_GROUP_EMPTY'
+      ? '队列为空'
+      : group.runState === 'in_flight'
+        ? '正在投稿'
+        : group.pauseIntent === 'manual'
+          ? '已手动暂停'
+          : group.pauseIntent === 'system'
+            ? '系统暂停'
+            : '运行中';
+    return Object.freeze({
+      ...group,
+      platformLabel: typeof platformDisplayName === 'function'
+        ? platformDisplayName(group.platformId)
+        : group.platformId,
+      accountLabel: profile?.displayName || group.accountProfileId,
+      showAccount: (countByPlatform.get(group.platformId) || 0) > 1,
+      stateLabel,
+    });
+  }));
+}
+
 function queueSnapshot(data, previousRevision) {
   const queue = Array.isArray(data?.queue) ? data.queue : [];
   const platforms = Array.isArray(data?.platforms) ? data.platforms : [];
@@ -100,6 +133,7 @@ export function createPlatformFeature(bridge = {}) {
   const runQuery = createQueryIdentity({ feature: 'platform', query: 'run' });
   const residueQuery = createQueryIdentity({ feature: 'platform', query: 'queueResidue' });
   const accountProfileQuery = createQueryIdentity({ feature: 'platform', query: 'accountProfiles' });
+  const regularGroupQuery = createQueryIdentity({ feature: 'platform', query: 'regularQueueGroups' });
   const listeners = new Set();
   let disposed = false;
   let started = false;
@@ -114,11 +148,11 @@ export function createPlatformFeature(bridge = {}) {
     items: Object.freeze([]),
     query: Object.freeze({ loading: false, error: null }),
   });
-  let selectedArticles = new Set();
-  let selectedPlatformIds = new Set();
+  let regularQueueGroups = Object.freeze({
+    items: Object.freeze([]),
+    query: Object.freeze({ loading: false, error: null }),
+  });
   let error = null;
-  let result = null;
-  let showResult = false;
   let terminalRevision = null;
   let residue = { phase: 'idle', cleanableCount: 0, reportedCount: 0, feedback: null };
   let snapshot;
@@ -131,11 +165,13 @@ export function createPlatformFeature(bridge = {}) {
       runQuery: runQueryState,
       loginByPlatformId,
       accountProfiles,
-      selectedArticles,
-      selectedPlatformIds,
+      regularQueueGroups,
+      regularQueueGroupViews: regularQueueGroupViews(
+        regularQueueGroups.items,
+        accountProfiles.items,
+        bridge.platformDisplayName,
+      ),
       error,
-      result,
-      showResult,
       terminalRevision,
       commands: Object.freeze(
         Object.fromEntries(COMMAND_NAMES.map((name) => [name, owners[name].getSnapshot()])),
@@ -220,6 +256,7 @@ export function createPlatformFeature(bridge = {}) {
       runQuery.setScope(scope);
       residueQuery.setScope(scope);
       accountProfileQuery.setScope(scope);
+      regularGroupQuery.setScope(scope);
       COMMAND_NAMES.forEach((name) => owners[name].invalidate());
       queue = EMPTY_QUEUE;
       run = IDLE_RUN;
@@ -229,10 +266,10 @@ export function createPlatformFeature(bridge = {}) {
         items: Object.freeze([]),
         query: Object.freeze({ loading: false, error: null }),
       });
-      selectedArticles = new Set();
-      selectedPlatformIds = new Set();
-      result = null;
-      showResult = false;
+      regularQueueGroups = Object.freeze({
+        items: Object.freeze([]),
+        query: Object.freeze({ loading: false, error: null }),
+      });
       terminalRevision = null;
       error = null;
       residue = { phase: "idle", cleanableCount: 0, reportedCount: 0, feedback: null };
@@ -347,15 +384,107 @@ export function createPlatformFeature(bridge = {}) {
         throw value;
       }
     },
-    submit(input) {
-      error = null;
-      result = null;
+    async refreshRegularQueueGroups(reason = 'manual') {
+      requireScope();
+      const token = regularGroupQuery.begin(undefined, reason);
+      regularQueueGroups = Object.freeze({
+        ...regularQueueGroups,
+        query: Object.freeze({ loading: true, error: null }),
+      });
+      publish();
+      try {
+        const items = await bridge.listRegularQueueGroups();
+        if (!regularGroupQuery.isCurrent(token)) return regularQueueGroups;
+        regularQueueGroups = Object.freeze({
+          items: Object.freeze(Array.isArray(items) ? [...items] : []),
+          query: Object.freeze({ loading: false, error: null }),
+        });
+        publish();
+        return regularQueueGroups;
+      } catch (value) {
+        if (!regularGroupQuery.isCurrent(token)) return regularQueueGroups;
+        regularQueueGroups = Object.freeze({
+          ...regularQueueGroups,
+          query: Object.freeze({
+            loading: false,
+            error: Object.freeze({
+              code: errorCode(value, 'REGULAR_QUEUE_GROUP_QUERY_FAILED'),
+              userMessage: message(value, '读取普通平台队列组失败'),
+            }),
+          }),
+        });
+        publish();
+        throw value;
+      }
+    },
+    startGroup(queueGroupId) {
+      if (owners.startGroup.getSnapshot().busy) return Promise.resolve({ ignored: true });
+      regularGroupQuery.invalidate();
+      const pending = ownedCommand(
+        owners.startGroup,
+        { ...requireScope(), queueGroupId },
+        () => bridge.startRegularQueueGroup({ queueGroupId }),
+        '启动普通平台队列组失败',
+        (items) => {
+          regularGroupQuery.invalidate();
+          regularQueueGroups = Object.freeze({
+            items: Object.freeze(Array.isArray(items) ? [...items] : []),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+      void feature.refreshRegularQueueGroups('start-requested').catch(() => undefined);
+      return pending;
+    },
+    pauseGroup(queueGroupId) {
+      regularGroupQuery.invalidate();
       return ownedCommand(
-        owners.submit,
+        owners.pauseGroup,
+        { ...requireScope(), queueGroupId },
+        () => bridge.pauseRegularQueueGroup({ queueGroupId }),
+        '暂停普通平台队列组失败',
+        (items) => {
+          regularGroupQuery.invalidate();
+          regularQueueGroups = Object.freeze({
+            items: Object.freeze(Array.isArray(items) ? [...items] : []),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+    },
+    startAllGroups() {
+      if (owners.startAllGroups.getSnapshot().busy) return Promise.resolve({ ignored: true });
+      regularGroupQuery.invalidate();
+      const pending = ownedCommand(
+        owners.startAllGroups,
         requireScope(),
-        () => bridge.submit(input),
-        'Submission failed',
-        (next) => { result = next; showResult = true; error = null; },
+        () => bridge.startAllRegularQueueGroups(),
+        '启动全部普通平台队列组失败',
+        (items) => {
+          regularGroupQuery.invalidate();
+          regularQueueGroups = Object.freeze({
+            items: Object.freeze(Array.isArray(items) ? [...items] : []),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+      void feature.refreshRegularQueueGroups('start-all-requested').catch(() => undefined);
+      return pending;
+    },
+    pauseAllGroups() {
+      regularGroupQuery.invalidate();
+      return ownedCommand(
+        owners.pauseAllGroups,
+        requireScope(),
+        () => bridge.pauseAllRegularQueueGroups(),
+        '暂停全部普通平台队列组失败',
+        (items) => {
+          regularGroupQuery.invalidate();
+          regularQueueGroups = Object.freeze({
+            items: Object.freeze(Array.isArray(items) ? [...items] : []),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
       );
     },
     pause(runId) {
@@ -506,30 +635,6 @@ export function createPlatformFeature(bridge = {}) {
       );
     },
     setError(next) { error = next; publish(); },
-    dismissResult() { showResult = false; result = null; publish(); },
-    toggleArticle(key) {
-      const next = new Set(selectedArticles);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      selectedArticles = next;
-      publish();
-    },
-    togglePlatform(id) {
-      const next = new Set(selectedPlatformIds);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      selectedPlatformIds = next;
-      publish();
-    },
-    replaceArticles(keys) { selectedArticles = new Set(keys); publish(); },
-    selectGroup(keys, allSelected) {
-      const next = new Set(selectedArticles);
-      keys.forEach((key) => { if (allSelected) next.delete(key); else next.add(key); });
-      selectedArticles = next;
-      publish();
-    },
-    pruneArticles(validKeys) {
-      selectedArticles = new Set([...selectedArticles].filter((key) => validKeys.has(key)));
-      publish();
-    },
     dispose() {
       if (disposed) return;
       feature.stopTransport();
@@ -539,8 +644,6 @@ export function createPlatformFeature(bridge = {}) {
       runQuery.dispose();
       residueQuery.dispose();
       accountProfileQuery.dispose();
-      result = null;
-      showResult = false;
       publish();
       listeners.clear();
     },

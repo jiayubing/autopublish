@@ -13,6 +13,36 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+
+it("returns the complete queue-group snapshot after pausing one group", async function () {
+  const handlers = new Map();
+  const calls = [];
+  const groups = [
+    { queueGroupId: "group-a" },
+    { queueGroupId: "group-b" },
+  ];
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    contentSubmissionService: {},
+    submissionWorkflow: {
+      regularQueueGroups: {
+        list: () => groups,
+        start: async () => undefined,
+        pause: (input) => calls.push(input),
+        startAll: async () => undefined,
+        pauseAll: () => ({ groups }),
+      },
+    },
+  });
+
+  const result = await handlers.get("content:pause-regular-queue-group")(
+    null,
+    { queueGroupId: "group-a" },
+  );
+
+  assert.deepEqual(calls, [{ queueGroupId: "group-a" }]);
+  assert.deepEqual(result, { ok: true, data: { items: groups } });
+});
 it("forwards only the preview action plan token for batch cancellation", async function () {
   const handlers = new Map();
   let received;
@@ -49,22 +79,6 @@ it("forwards only the preview action plan token for batch cancellation", async f
       blockedItems: [],
     },
   });
-});
-
-it("rejects a content submission batch without explicit account profile bindings", async function () {
-  const handlers = new Map();
-  registerContentSubmissionIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: { createBatch: () => ({}) },
-  });
-  const result = await handlers.get("content:create-submission-batch")(null, {
-    clientId: "client-1",
-    articleIds: ["article-1"],
-    targetPlatformIds: ["toutiao"],
-    confirmed: true,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.error.code, "ACCOUNT_PROFILE_REQUIRED");
 });
 
 it("exposes reconciliation cleanup previews and keeps queue paths out of the renderer response", async function () {

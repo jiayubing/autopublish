@@ -1,9 +1,7 @@
 import type {
   ArticleManagementSnapshot,
   ContentSubmissionActionPlanItem,
-  ContentSubmissionBatchInput,
   ContentSubmissionBatchItem,
-  ContentSubmissionBatchPreview,
   ContentSubmissionBatchRecord,
   ContentSubmissionCancellationPreview,
   ContentSubmissionCleanupPreview,
@@ -20,6 +18,7 @@ import type {
   RegularQueueAdmissionInput,
   RegularQueueAdmissionPreview,
   RegularQueueAdmissionResult,
+  RegularQueueGroupSnapshot,
 } from "../types/publication";
 import type {
   ContentClient,
@@ -166,15 +165,9 @@ type DoubaoContentApi = {
   ) => () => void;
 };
 type SubmissionContentApi = {
-  previewSubmissionBatch: (
-    input: ContentSubmissionBatchInput,
-  ) => Promise<ContentIpcResponse<ContentSubmissionBatchPreview>>;
   listSubmissionPlatforms: () => Promise<
     ContentIpcResponse<{ platforms: ContentSubmissionPlatform[] }>
   >;
-  createSubmissionBatch: (
-    input: ContentSubmissionBatchInput & { confirmed: true },
-  ) => Promise<ContentIpcResponse<ContentSubmissionBatchPreview>>;
   previewRegularQueueAdmission: (
     input: RegularQueueAdmissionInput,
   ) => Promise<ContentIpcResponse<RegularQueueAdmissionPreview>>;
@@ -199,6 +192,21 @@ type SubmissionContentApi = {
   removePendingQueueItems: (
     input: PendingQueueRemovalInput,
   ) => Promise<ContentIpcResponse<PendingQueueRemovalResult>>;
+  listRegularQueueGroups: () => Promise<
+    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+  >;
+  startRegularQueueGroup: (input: { queueGroupId: string }) => Promise<
+    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+  >;
+  pauseRegularQueueGroup: (input: { queueGroupId: string }) => Promise<
+    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+  >;
+  startAllRegularQueueGroups: () => Promise<
+    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+  >;
+  pauseAllRegularQueueGroups: () => Promise<
+    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+  >;
   cancelSubmissionBatch: (input: {
     batchId: string;
     planId: string;
@@ -506,22 +514,6 @@ export async function getArticleEditor(input: {
     "Unable to load article editor",
   );
 }
-export async function previewContentSubmissionBatch(
-  input: ContentSubmissionBatchInput,
-): Promise<ContentSubmissionBatchPreview> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.previewSubmissionBatch)(input),
-    "submission batch preview failed",
-  );
-}
-export async function createContentSubmissionBatch(
-  input: ContentSubmissionBatchInput & { confirmed: true },
-): Promise<ContentSubmissionBatchPreview> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.createSubmissionBatch)(input),
-    "submission batch creation failed",
-  );
-}
 export async function previewRegularQueueAdmission(
   input: RegularQueueAdmissionInput,
 ): Promise<RegularQueueAdmissionPreview> {
@@ -540,6 +532,45 @@ export async function admitRegularQueueItems(
         confirmed: true,
       }),
     "regular queue admission failed",
+  );
+}
+export async function listRegularQueueGroups(): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.listRegularQueueGroups)(),
+    "regular queue group query failed",
+    { map: (wire) => wire.items },
+  );
+}
+export async function startRegularQueueGroup(input: {
+  queueGroupId: string;
+}): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.startRegularQueueGroup)(input),
+    "regular queue group start failed",
+    { map: (wire) => wire.items },
+  );
+}
+export async function pauseRegularQueueGroup(input: {
+  queueGroupId: string;
+}): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.pauseRegularQueueGroup)(input),
+    "regular queue group pause failed",
+    { map: (wire) => wire.items },
+  );
+}
+export async function startAllRegularQueueGroups(): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.startAllRegularQueueGroups)(),
+    "regular queue groups start failed",
+    { map: (wire) => wire.items },
+  );
+}
+export async function pauseAllRegularQueueGroups(): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.pauseAllRegularQueueGroups)(),
+    "regular queue groups pause failed",
+    { map: (wire) => wire.items },
   );
 }
 export async function previewPaidMediaPreflight(

@@ -403,17 +403,14 @@ export default function GeneratedArticlesView({
       commandBusy(
         "previewRegularQueueAdmission",
         "admitRegularQueueItems",
-        "previewContentSubmissionBatch",
-        "createContentSubmissionBatch",
       )
     )
       return;
     const selectedQueueable = selectedQueueableArticles;
-    if (!selectedQueueable.length || !targetPlatformIds.length) return;
+    if (!selectedQueueable.length || targetPlatformIds.length !== 1) return;
     setError("");
     try {
       if (
-        targetPlatformIds.length === 1 &&
         accountProfiles[targetPlatformIds[0]] &&
         typeof commands.previewRegularQueueAdmission === "function" &&
         typeof commands.admitRegularQueueItems === "function"
@@ -452,40 +449,7 @@ export default function GeneratedArticlesView({
         });
         return;
       }
-      const input = {
-        clientId,
-        articleIds: selectedQueueable.map((article) => article.id),
-        targetPlatformIds,
-        accountProfiles,
-      };
-      const preview = await commands.previewContentSubmissionBatch(input);
-      if (!isCurrentClient(requestedClientId)) return;
-      if (!preview.queueableTaskCount && !preview.idempotentCount)
-        throw new Error("没有符合投稿就绪规则的文章");
-      if (
-        !(await confirm({
-          title: "确认加入投稿队列",
-          message: `新增 ${preview.queueableTaskCount} 项，已存在跳过 ${preview.idempotentCount} 项，阻断 ${preview.blockedContentCount || 0} 项，冲突 ${preview.conflictCount} 项。`,
-          confirmLabel: "确认加入投稿队列",
-        }))
-      )
-        return;
-      setError("");
-      try {
-        const result = await commands.createContentSubmissionBatch({
-          ...input,
-          confirmed: true,
-        });
-        if (
-          isContentCommandStaleResult(result) ||
-          !isCurrentClient(requestedClientId)
-        )
-          return;
-        updateSelected([]);
-      } catch (value) {
-        if (isCurrentClient(requestedClientId))
-          setError(value instanceof Error ? value.message : "批量入队失败");
-      }
+      throw new Error("请选择一个已配置账号的普通平台");
     } catch (value) {
       if (isCurrentClient(requestedClientId))
         setError(value instanceof Error ? value.message : "批量入队失败");
@@ -1481,9 +1445,7 @@ export default function GeneratedArticlesView({
                 type="button"
                 onClick={() =>
                   setTargetPlatformIds((current) =>
-                    current.includes(platform.id)
-                      ? current.filter((id) => id !== platform.id)
-                      : [...current, platform.id],
+                    current[0] === platform.id ? [] : [platform.id],
                   )
                 }
                 className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-300 text-slate-600"}`}
@@ -1509,8 +1471,6 @@ export default function GeneratedArticlesView({
               commandBusy(
                 "previewRegularQueueAdmission",
                 "admitRegularQueueItems",
-                "previewContentSubmissionBatch",
-                "createContentSubmissionBatch",
               )
             }
             className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"

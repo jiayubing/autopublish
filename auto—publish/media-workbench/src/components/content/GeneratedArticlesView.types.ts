@@ -51,7 +51,6 @@ export type ArticleManagementReadModel = {
 export type GeneratedArticlesCommandName =
   | "cancelContentSubmissionBatch"
   | "cleanupFailedContentSubmissionItems"
-  | "createContentSubmissionBatch"
   | "admitRegularQueueItems"
   | "confirmPaidMediaBatch"
   | "startPaidMediaBatch"
@@ -65,7 +64,6 @@ export type GeneratedArticlesCommandName =
   | "preparePermanentDeleteContentArticle"
   | "previewCleanupFailedContentSubmissionItems"
   | "previewContentArticleRemoval"
-  | "previewContentSubmissionBatch"
   | "previewRegularQueueAdmission"
   | "previewPaidMediaPreflight"
   | "prepareRegularUncertainResolution"

@@ -34,7 +34,6 @@ const platform = exactObject({
   displayName: safeText(200, 1),
   contentQueueImport: "boolean",
 });
-const accountBinding = exactObject({ platformId: id, accountProfileId: id });
 const batchItem = exactObject({
   itemId: optionalField(id),
   articleId: id,
@@ -82,36 +81,6 @@ const batch = exactObject({
   createdAt: optionalField(safeText(64, 1)),
   updatedAt: optionalField(safeText(64, 1)),
   items: arrayField(batchItem, { max: 10000 }),
-});
-const batchPreview = exactObject({
-  clientId: clientIdentity,
-  articleIds: arrayField(id, { min: 1, max: 1000 }),
-  targetPlatformIds: arrayField(id, { min: 1, max: 32 }),
-  totalTaskCount: count,
-  queueableTaskCount: count,
-  idempotentCount: count,
-  alreadyQueuedCount: optionalField(count),
-  blockedPublishedCount: optionalField(count),
-  blockedUncertainCount: optionalField(count),
-  blockedContentCount: count,
-  conflictCount: count,
-  ineligibleArticleIds: optionalField(arrayField(id, { max: 1000 })),
-  missingArticleIds: arrayField(id, { max: 1000 }),
-  unsupportedPlatformIds: arrayField(id, { max: 32 }),
-  items: arrayField(batchItem, { max: 32000 }),
-});
-const batchCreation = exactObject({
-  batchId: id,
-  clientId: clientIdentity,
-  createdCount: count,
-  idempotentCount: count,
-  queueableTaskCount: count,
-  alreadyQueuedCount: count,
-  blockedContentCount: count,
-  conflictCount: count,
-  missingArticleIds: arrayField(id, { max: 1000 }),
-  unsupportedPlatformIds: arrayField(id, { max: 32 }),
-  items: arrayField(batchItem, { max: 32000 }),
 });
 const changedScopes = arrayField(safeText(64, 1), { max: 32 });
 const cancelPreview = exactObject({
@@ -278,6 +247,42 @@ const regularRemovalResult = exactObject({
   removedCount: count,
   idempotentCount: count,
   conflictCount: count,
+});
+const regularQueueCurrentItem = exactObject({
+  itemId: id,
+  batchId: id,
+  articleId: id,
+  regularPublicationAttemptId: id,
+  phase: nullableField(safeText(64, 1)),
+  claimUntil: nullableField(safeText(64, 1)),
+});
+const regularQueueRemainingItem = exactObject({
+  itemId: id,
+  batchId: id,
+  articleId: id,
+  regularPublicationAttemptId: id,
+  position: integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }),
+});
+const regularQueueGroupSnapshot = exactObject({
+  queueGroupId: id,
+  platformId: id,
+  accountProfileId: id,
+  runState: enumField(["paused", "running", "in_flight"]),
+  pauseIntent: enumField(["none", "manual", "system"]),
+  manuallyPaused: "boolean",
+  current: nullableField(regularQueueCurrentItem),
+  remaining: arrayField(regularQueueRemainingItem, { max: 20000 }),
+  actions: exactObject({
+    canStart: "boolean",
+    canPause: "boolean",
+    reasonCode: nullableField(code),
+  }),
+  revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+  createdAt: safeText(64, 1),
+  updatedAt: safeText(64, 1),
+});
+const regularQueueGroupList = exactObject({
+  items: arrayField(regularQueueGroupSnapshot, { max: 10000 }),
 });
 const paidArticleSummary = exactObject({
   articleRef,
@@ -816,52 +821,11 @@ function contract(input) {
   });
 }
 
-function bindingsFromMap(value) {
-  const map = value && value.accountProfiles;
-  if (!map || typeof map !== "object" || Array.isArray(map)) return [];
-  return Object.keys(map).map((platformId) => ({
-    platformId,
-    accountProfileId: map[platformId],
-  }));
-}
-function batchRequestFromArgs(args) {
-  const value = args[0] || {};
-  const output = { ...value, accountBindings: bindingsFromMap(value) };
-  delete output.accountProfiles;
-  return output;
-}
-function batchRequestToArgs(payload) {
-  const output = { ...payload, accountProfiles: {} };
-  for (const binding of payload.accountBindings || [])
-    output.accountProfiles[binding.platformId] = binding.accountProfileId;
-  delete output.accountBindings;
-  return [output];
-}
-const batchSelectionFields = {
-  clientId: clientIdentity,
-  articleIds: arrayField(id, { min: 1, max: 1000 }),
-  targetPlatformIds: arrayField(id, { min: 1, max: 32 }),
-  accountBindings: arrayField(accountBinding, { min: 1, max: 32 }),
-};
-const batchSelectionRequest = exactObject(batchSelectionFields);
-const createBatchRequest = exactObject({
-  ...batchSelectionFields,
-  confirmed: literalField(true),
-});
 const listBatchesRequest = exactObject({
   clientId: optionalField(clientIdentity),
 });
 
 const submissionContracts = Object.freeze([
-  contract({
-    capability: "content.previewSubmissionBatch",
-    channel: "content:preview-submission-batch",
-    kind: "query",
-    request: batchSelectionRequest,
-    success: batchPreview,
-    fromArgs: batchRequestFromArgs,
-    toArgs: batchRequestToArgs,
-  }),
   contract({
     capability: "content.listSubmissionPlatforms",
     channel: "content:list-submission-platforms",
@@ -870,15 +834,6 @@ const submissionContracts = Object.freeze([
     success: exactObject({ platforms: arrayField(platform, { max: 32 }) }),
     fromArgs: noArgs,
     toArgs: noLegacyInput,
-  }),
-  contract({
-    capability: "content.createSubmissionBatch",
-    channel: "content:create-submission-batch",
-    kind: "command",
-    request: createBatchRequest,
-    success: batchCreation,
-    fromArgs: batchRequestFromArgs,
-    toArgs: batchRequestToArgs,
   }),
   contract({
     capability: "content.cancelSubmissionBatch",
@@ -959,6 +914,51 @@ const submissionContracts = Object.freeze([
     success: regularRemovalResult,
     fromArgs: directArgs,
     toArgs: directInput,
+  }),
+  contract({
+    capability: "content.listRegularQueueGroups",
+    channel: "content:list-regular-queue-groups",
+    kind: "query",
+    request: emptyRequest,
+    success: regularQueueGroupList,
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+  }),
+  contract({
+    capability: "content.startRegularQueueGroup",
+    channel: "content:start-regular-queue-group",
+    kind: "command",
+    request: exactObject({ queueGroupId: id }),
+    success: regularQueueGroupList,
+    fromArgs: directArgs,
+    toArgs: directInput,
+  }),
+  contract({
+    capability: "content.pauseRegularQueueGroup",
+    channel: "content:pause-regular-queue-group",
+    kind: "command",
+    request: exactObject({ queueGroupId: id }),
+    success: regularQueueGroupList,
+    fromArgs: directArgs,
+    toArgs: directInput,
+  }),
+  contract({
+    capability: "content.startAllRegularQueueGroups",
+    channel: "content:start-all-regular-queue-groups",
+    kind: "command",
+    request: emptyRequest,
+    success: regularQueueGroupList,
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
+  }),
+  contract({
+    capability: "content.pauseAllRegularQueueGroups",
+    channel: "content:pause-all-regular-queue-groups",
+    kind: "command",
+    request: emptyRequest,
+    success: regularQueueGroupList,
+    fromArgs: noArgs,
+    toArgs: noLegacyInput,
   }),
   contract({
     capability: "content.previewPaidMediaPreflight",
@@ -1083,30 +1083,6 @@ function projectPaidExecutionBatch(value) {
       phase: item.phase,
     })),
   };
-}
-function projectBatchPreview(value) {
-  const input = value || {};
-  const output = {
-    clientId: input.clientId,
-    articleIds: input.articleIds,
-    targetPlatformIds: input.targetPlatformIds,
-    totalTaskCount: input.totalTaskCount,
-    queueableTaskCount: input.queueableTaskCount,
-    idempotentCount: input.idempotentCount,
-    blockedContentCount: input.blockedContentCount,
-    conflictCount: input.conflictCount,
-    missingArticleIds: input.missingArticleIds || [],
-    unsupportedPlatformIds: input.unsupportedPlatformIds || [],
-    items: Array.isArray(input.items) ? input.items.map(projectBatchItem) : [],
-  };
-  for (const key of [
-    "alreadyQueuedCount",
-    "blockedPublishedCount",
-    "blockedUncertainCount",
-    "ineligibleArticleIds",
-  ])
-    include(output, input, key);
-  return output;
 }
 function projectArticleRef(value) {
   const input = value || {};
@@ -1248,8 +1224,6 @@ function projectResidueItem(value) {
   return output;
 }
 function projectSubmissionResult(channel, value) {
-  if (channel === "content:preview-submission-batch")
-    return projectBatchPreview(value);
   if (channel === "content:list-submission-platforms")
     return {
       platforms: (Array.isArray(value) ? value : []).map((item) => ({
@@ -1257,22 +1231,6 @@ function projectSubmissionResult(channel, value) {
         displayName: item.displayName,
         contentQueueImport: item.contentQueueImport === true,
       })),
-    };
-  if (channel === "content:create-submission-batch")
-    return {
-      batchId: value.batchId,
-      clientId: value.clientId,
-      createdCount: value.createdCount,
-      idempotentCount: value.idempotentCount,
-      queueableTaskCount: value.queueableTaskCount,
-      alreadyQueuedCount: value.alreadyQueuedCount,
-      blockedContentCount: value.blockedContentCount,
-      conflictCount: value.conflictCount,
-      missingArticleIds: value.missingArticleIds || [],
-      unsupportedPlatformIds: value.unsupportedPlatformIds || [],
-      items: Array.isArray(value.items)
-        ? value.items.map(projectBatchItem)
-        : [],
     };
   if (channel === "content:cancel-submission-batch") {
     const result = {
@@ -1385,38 +1343,6 @@ const paidExecutionBatchFixture = {
 };
 const submissionContractFixtures = Object.freeze([
   {
-    channel: "content:preview-submission-batch",
-    owner: "content",
-    productionCaller: "desktopConsole.content.previewSubmissionBatch",
-    request: {
-      clientId: "client-1",
-      articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountBindings: [
-        { platformId: "toutiao", accountProfileId: "profile-1" },
-      ],
-    },
-    result: {
-      clientId: "client-1",
-      articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      totalTaskCount: 1,
-      queueableTaskCount: 1,
-      idempotentCount: 0,
-      blockedContentCount: 0,
-      conflictCount: 0,
-      missingArticleIds: [],
-      unsupportedPlatformIds: [],
-      items: [
-        {
-          articleId: "article-1",
-          targetPlatformId: "toutiao",
-          status: "queueable",
-        },
-      ],
-    },
-  },
-  {
     channel: "content:list-submission-platforms",
     owner: "content",
     productionCaller: "desktopConsole.content.listSubmissionPlatforms",
@@ -1424,39 +1350,6 @@ const submissionContractFixtures = Object.freeze([
     result: {
       platforms: [
         { id: "toutiao", displayName: "头条", contentQueueImport: true },
-      ],
-    },
-  },
-  {
-    channel: "content:create-submission-batch",
-    owner: "content",
-    productionCaller: "desktopConsole.content.createSubmissionBatch",
-    request: {
-      clientId: "client-1",
-      articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountBindings: [
-        { platformId: "toutiao", accountProfileId: "profile-1" },
-      ],
-      confirmed: true,
-    },
-    result: {
-      batchId: "batch-1",
-      clientId: "client-1",
-      createdCount: 1,
-      idempotentCount: 0,
-      queueableTaskCount: 1,
-      alreadyQueuedCount: 0,
-      blockedContentCount: 0,
-      conflictCount: 0,
-      missingArticleIds: [],
-      unsupportedPlatformIds: [],
-      items: [
-        {
-          articleId: "article-1",
-          targetPlatformId: "toutiao",
-          status: "queued",
-        },
       ],
     },
   },

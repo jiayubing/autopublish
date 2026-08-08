@@ -187,6 +187,157 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     feature.dispose();
   });
 
+  it("coordinates queue-group commands through the renderer feature without overriding manual pause", async () => {
+    const group = {
+      queueGroupId: "group-a",
+      platformId: "toutiao",
+      accountProfileId: "profile-a",
+      runState: "paused",
+      pauseIntent: "manual",
+      manuallyPaused: true,
+      current: null,
+      remaining: [{ itemId: "item-a", batchId: "batch-a", articleId: "article-a", regularPublicationAttemptId: "attempt-a", position: 1 }],
+      actions: { canStart: true, canPause: false, reasonCode: null },
+      revision: 1,
+      createdAt: "2026-08-08T00:00:00.000Z",
+      updatedAt: "2026-08-08T00:00:00.000Z",
+    };
+    let listedGroups = [group];
+    let startAllCalls = 0;
+    const feature = createPlatformFeature({
+      platformDisplayName: (platformId) => platformId === "toutiao" ? "头条" : platformId,
+      listRegularQueueGroups: async () => listedGroups,
+      listAccountProfiles: async () => [
+        { accountProfileId: "profile-a", platformId: "toutiao", displayName: "机构主账号" },
+      ],
+      confirmAccountProfile: async () => ({
+        accountProfileId: "profile-b",
+        platformId: "toutiao",
+        displayName: "机构备用账号",
+      }),
+      startAllRegularQueueGroups: async () => {
+        startAllCalls += 1;
+        return [group];
+      },
+      pauseAllRegularQueueGroups: async () => [group],
+      startRegularQueueGroup: async () => [group],
+      pauseRegularQueueGroup: async () => [group],
+    });
+    feature.setScope({ workspaceRuntimeId: "platform-queue-groups" });
+    await feature.refreshAccountProfiles();
+    await feature.refreshRegularQueueGroups();
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].showAccount, false);
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].platformLabel, "头条");
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].accountLabel, "机构主账号");
+    await feature.confirmAccountProfile({ platformId: "toutiao", displayName: "机构备用账号" });
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].showAccount, true);
+    const first = feature.startAllGroups();
+    const second = feature.startAllGroups();
+    await Promise.all([first, second]);
+    assert.equal(startAllCalls, 1);
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].pauseIntent, "manual");
+    listedGroups = [{
+      ...group,
+      runState: "running",
+      pauseIntent: "none",
+      manuallyPaused: false,
+      remaining: [],
+      actions: { canStart: false, canPause: false, reasonCode: "REGULAR_QUEUE_GROUP_EMPTY" },
+    }];
+    await feature.refreshRegularQueueGroups();
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].stateLabel, "队列为空");
+    feature.dispose();
+  });
+
+  it("refreshes owner actions while a group start is pending so pause stays available", async () => {
+    const startGate = deferred();
+    let pauseCalls = 0;
+    let current = {
+      queueGroupId: "group-running",
+      platformId: "toutiao",
+      accountProfileId: "profile-running",
+      runState: "paused",
+      pauseIntent: "manual",
+      manuallyPaused: true,
+      current: null,
+      remaining: [{ itemId: "item-running", batchId: "batch-running", articleId: "article-running", regularPublicationAttemptId: "attempt-running", position: 1 }],
+      actions: { canStart: true, canPause: false, reasonCode: null },
+      revision: 1,
+      createdAt: "2026-08-08T00:00:00.000Z",
+      updatedAt: "2026-08-08T00:00:00.000Z",
+    };
+    const feature = createPlatformFeature({
+      listRegularQueueGroups: async () => [current],
+      startRegularQueueGroup: () => {
+        current = {
+          ...current,
+          runState: "running",
+          pauseIntent: "none",
+          manuallyPaused: false,
+          actions: { canStart: false, canPause: true, reasonCode: null },
+          revision: 2,
+        };
+        return startGate.promise;
+      },
+      pauseRegularQueueGroup: async () => {
+        pauseCalls += 1;
+        current = {
+          ...current,
+          runState: "paused",
+          pauseIntent: "manual",
+          manuallyPaused: true,
+          actions: { canStart: true, canPause: false, reasonCode: null },
+        };
+        return [current];
+      },
+    });
+    feature.setScope({ workspaceRuntimeId: "platform-start-pending" });
+    await feature.refreshRegularQueueGroups();
+
+    const starting = feature.startGroup("group-running");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(feature.getSnapshot().commands.startGroup.busy, true);
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].actions.canPause, true);
+    await feature.pauseGroup("group-running");
+    assert.equal(pauseCalls, 1);
+
+    startGate.resolve([current]);
+    await starting;
+    feature.dispose();
+  });
+
+  it("does not let an older queue-group query overwrite a completed pause", async () => {
+    const queryGate = deferred();
+    const paused = {
+      queueGroupId: "group-stale-query",
+      platformId: "toutiao",
+      accountProfileId: "profile-stale-query",
+      runState: "paused",
+      pauseIntent: "manual",
+      manuallyPaused: true,
+      current: null,
+      remaining: [{ itemId: "item-stale-query", batchId: "batch-stale-query", articleId: "article-stale-query", regularPublicationAttemptId: "attempt-stale-query", position: 1 }],
+      actions: { canStart: true, canPause: false, reasonCode: null },
+      revision: 2,
+      createdAt: "2026-08-08T00:00:00.000Z",
+      updatedAt: "2026-08-08T00:00:01.000Z",
+    };
+    const feature = createPlatformFeature({
+      listRegularQueueGroups: () => queryGate.promise,
+      pauseRegularQueueGroup: async () => [paused],
+    });
+    feature.setScope({ workspaceRuntimeId: "platform-stale-group-query" });
+
+    const staleQuery = feature.refreshRegularQueueGroups("initial");
+    await feature.pauseGroup(paused.queueGroupId);
+    queryGate.resolve([{ ...paused, runState: "running", pauseIntent: "none", manuallyPaused: false, actions: { canStart: false, canPause: true, reasonCode: null }, revision: 1 }]);
+    await staleQuery;
+
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].pauseIntent, "manual");
+    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].revision, 2);
+    feature.dispose();
+  });
+
   it("keeps the domain import boundary explicit for remaining renderer callers", () => {
     const sourceRoot = path.resolve(
       import.meta.dirname,
@@ -219,18 +370,14 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       "utf8",
     );
     assert.ok(platformWorkbench.split(/\r?\n/).length < 500);
-    for (const component of [
-      "PlatformQueuePanel.tsx",
-      "PlatformSubmitPanel.tsx",
-      "PlatformSubmissionOverlays.tsx",
-    ]) {
+    for (const component of ["RegularQueueGroupsPanel.tsx"]) {
       assert.equal(
         fs.existsSync(path.join(sourceRoot, "components", component)),
         true,
         component,
       );
     }
-    assert.match(platformWorkbench, /PlatformQueuePanel/);
-    assert.match(platformWorkbench, /PlatformSubmissionOverlays/);
+    assert.match(platformWorkbench, /RegularQueueGroupsPanel/);
+    assert.doesNotMatch(platformWorkbench, /PlatformSubmitPanel|PlatformSubmissionOverlays/);
   });
 });

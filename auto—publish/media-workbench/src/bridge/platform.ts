@@ -1,7 +1,6 @@
 import type {
   PlatformArticle,
   PlatformQueueData,
-  PlatformSubmitResult,
   PlatformSubmitState,
   PlatformTaskSnapshot,
 } from "../types/platform";
@@ -21,15 +20,6 @@ type PlatformApi = {
   checkLogin: (
     platformId: string,
   ) => Promise<IpcResponse<{ authenticated: boolean }>>;
-  submitSelected: (input: {
-    submissions: Array<{
-      sourcePlatformId: string;
-      filename: string;
-      targetPlatformIds: string[];
-      accountProfiles: Record<string, string>;
-    }>;
-    autoTrash?: boolean;
-  }) => Promise<IpcResponse<PlatformSubmitResult>>;
   getState: () => Promise<IpcResponse<PlatformTaskSnapshot>>;
   pauseSubmit: (
     runId?: string | null,
@@ -86,22 +76,6 @@ export async function checkPlatformLogin(platformId: string): Promise<boolean> {
   if (!result.ok) throw ipcError(result.error, "checkPlatformLogin failed");
   if (!result.data) throw ipcError(undefined, "checkPlatformLogin failed");
   return result.data.authenticated;
-}
-
-export async function submitPlatformSelection(input: {
-  submissions: Array<{
-    sourcePlatformId: string;
-    filename: string;
-    targetPlatformIds: string[];
-    accountProfiles: Record<string, string>;
-  }>;
-  autoTrash?: boolean;
-}): Promise<PlatformSubmitResult> {
-  const result = await requireBridgeMethod(platformApi().submitSelected)(input);
-  if (!result.ok)
-    throw ipcError(result.error, "submitPlatformSelection failed");
-  if (!result.data) throw ipcError(undefined, "submitPlatformSelection failed");
-  return result.data;
 }
 
 export async function getPlatformState(): Promise<PlatformTaskSnapshot> {

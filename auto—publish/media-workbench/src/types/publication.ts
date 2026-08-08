@@ -178,13 +178,42 @@ export interface ArticlePermanentDeleteResult {
   deletedAt: string;
 }
 
-export interface ContentSubmissionBatchInput {
-  clientId: string;
-  articleIds: string[];
-  targetPlatformIds: string[];
-  accountProfiles: Record<string, string>;
-  confirmed?: true;
+export interface RegularQueueGroupCurrentItem {
+  itemId: string;
+  batchId: string;
+  articleId: string;
+  regularPublicationAttemptId: string;
+  phase: string | null;
+  claimUntil: string | null;
 }
+
+export interface RegularQueueGroupRemainingItem {
+  itemId: string;
+  batchId: string;
+  articleId: string;
+  regularPublicationAttemptId: string;
+  position: number;
+}
+
+export interface RegularQueueGroupSnapshot {
+  queueGroupId: string;
+  platformId: string;
+  accountProfileId: string;
+  runState: "paused" | "running" | "in_flight";
+  pauseIntent: "none" | "manual" | "system";
+  manuallyPaused: boolean;
+  current: RegularQueueGroupCurrentItem | null;
+  remaining: RegularQueueGroupRemainingItem[];
+  actions: {
+    canStart: boolean;
+    canPause: boolean;
+    reasonCode: string | null;
+  };
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ContentSubmissionItemStatus =
   | "excluded"
   | "blocked"
@@ -229,22 +258,6 @@ export interface ContentSubmissionBatchItem {
   canCancel?: boolean;
   canCleanup?: boolean;
   submissionBatchId?: string;
-}
-export interface ContentSubmissionBatchPreview {
-  batchId?: string;
-  clientId: string;
-  totalTaskCount: number;
-  queueableTaskCount: number;
-  idempotentCount: number;
-  alreadyQueuedCount?: number;
-  blockedPublishedCount?: number;
-  blockedUncertainCount?: number;
-  blockedContentCount?: number;
-  conflictCount: number;
-  ineligibleArticleIds?: string[];
-  missingArticleIds: string[];
-  unsupportedPlatformIds: string[];
-  items: ContentSubmissionBatchItem[];
 }
 export interface ContentSubmissionBatchRecord {
   id: string;

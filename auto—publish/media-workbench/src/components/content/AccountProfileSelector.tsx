@@ -65,6 +65,7 @@ export default function AccountProfileSelector({ platforms, targetPlatformIds, v
     <p className="text-xs text-slate-500">为每个平台选择已确认的登录账号；换号时请新建档案，旧队列不会自动改投。</p>
     {targets.map((platform) => {
       const candidates = profiles.filter((profile) => profile.platformId === platform.id);
+      const login = snapshot.loginByPlatformId[platform.id];
       return <div key={platform.id} className="grid min-w-0 gap-2 rounded border border-slate-200 bg-white p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <label className="grid gap-1 text-xs text-slate-600">{platform.displayName || platform.id}账号档案
           <select aria-label={`${platform.displayName || platform.id}账号档案`} value={value[platform.id] || ''} onChange={(event) => onChange({ ...value, [platform.id]: event.target.value })} className="h-9 min-w-0 rounded border border-slate-300 px-2">
@@ -75,7 +76,12 @@ export default function AccountProfileSelector({ platforms, targetPlatformIds, v
         <label className="grid gap-1 text-xs text-slate-600">确认新的当前登录账号
           <input aria-label={`${platform.displayName || platform.id}新账号名称`} value={drafts[platform.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [platform.id]: event.target.value }))} placeholder="例如：机构主账号" maxLength={128} className="h-9 min-w-0 rounded border border-slate-300 px-2" />
         </label>
-        <button type="button" disabled={busy || !(drafts[platform.id] || '').trim()} onClick={() => void confirm(platform.id)} className="h-9 rounded border border-blue-300 px-3 text-xs text-blue-700 disabled:opacity-40">{busy ? '确认中…' : '确认账号'}</button>
+        <div className="flex flex-wrap gap-1">
+          <button type="button" disabled={snapshot.commands.openLogin.busy || login?.busy} onClick={() => void feature.openLogin(platform.id)} className="h-9 rounded border border-slate-300 px-2 text-xs disabled:opacity-40">打开登录页</button>
+          <button type="button" disabled={snapshot.commands.checkLogin.busy || login?.busy} onClick={() => void feature.checkLogin(platform.id)} className="h-9 rounded border border-slate-300 px-2 text-xs disabled:opacity-40">检查登录</button>
+          <button type="button" disabled={busy || !(drafts[platform.id] || '').trim()} onClick={() => void confirm(platform.id)} className="h-9 rounded border border-blue-300 px-3 text-xs text-blue-700 disabled:opacity-40">{busy ? '确认中…' : '确认账号'}</button>
+        </div>
+        {login?.message && <p className="text-xs text-slate-500 sm:col-span-3">{login.message}</p>}
       </div>;
     })}
     {error && <div role="alert" className="rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}

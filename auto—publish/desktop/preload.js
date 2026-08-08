@@ -299,9 +299,6 @@ const api = {
     checkLogin: function (platformId) {
       return ipcRenderer.invoke("platforms:check-login", platformId);
     },
-    submitSelected: function (input) {
-      return ipcRenderer.invoke("platforms:submit-selected", input);
-    },
     pauseSubmit: function (runId) {
       return ipcRenderer.invoke(
         "platforms:pause-submit",
@@ -379,14 +376,8 @@ const api = {
     permanentlyDeleteArticle: function (input) {
       return ipcRenderer.invoke("content:permanently-delete-article", input);
     },
-    previewSubmissionBatch: function (input) {
-      return ipcRenderer.invoke("content:preview-submission-batch", input);
-    },
     listSubmissionPlatforms: function () {
       return ipcRenderer.invoke("content:list-submission-platforms");
-    },
-    createSubmissionBatch: function (input) {
-      return ipcRenderer.invoke("content:create-submission-batch", input);
     },
     previewRegularQueueAdmission: function (input) {
       return ipcRenderer.invoke(
@@ -399,6 +390,21 @@ const api = {
     },
     removePendingQueueItems: function (input) {
       return ipcRenderer.invoke("content:remove-pending-queue-items", input);
+    },
+    listRegularQueueGroups: function () {
+      return ipcRenderer.invoke("content:list-regular-queue-groups");
+    },
+    startRegularQueueGroup: function (input) {
+      return ipcRenderer.invoke("content:start-regular-queue-group", input);
+    },
+    pauseRegularQueueGroup: function (input) {
+      return ipcRenderer.invoke("content:pause-regular-queue-group", input);
+    },
+    startAllRegularQueueGroups: function () {
+      return ipcRenderer.invoke("content:start-all-regular-queue-groups");
+    },
+    pauseAllRegularQueueGroups: function () {
+      return ipcRenderer.invoke("content:pause-all-regular-queue-groups");
     },
     previewPaidMediaPreflight: function (input) {
       return ipcRenderer.invoke("content:preview-paid-media-preflight", input);
