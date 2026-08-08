@@ -309,7 +309,7 @@ test("generation service exceptions become SafeOperationalError without raw deta
   assert.doesNotMatch(JSON.stringify(response), /private|generation\.db|raw service/i);
 });
 
-test("handoff wire converts bounded account profiles and omits private preview input", async () => {
+test("handoff wire carries one target binding and omits private preview input", async () => {
   const ipc = typedIpc();
   let received;
   registerGenerationSubmissionHandoffIpc({
@@ -323,7 +323,8 @@ test("handoff wire converts bounded account profiles and omits private preview i
           previewToken: "handoff:00000000-0000-4000-8000-000000000001",
           articleCount: 1,
           clientCount: 1,
-          targetPlatformIds: input.targetPlatformIds,
+          platformId: input.platformId,
+          accountProfileId: input.accountProfileId,
           estimatedTaskCount: 1,
           queueableTaskCount: 1,
           idempotentCount: 0,
@@ -350,7 +351,6 @@ test("handoff wire converts bounded account profiles and omits private preview i
               filePath: "C:\\private\\article.md",
             }],
           }],
-          accountProfiles: input.accountProfiles,
           entries: [{ apiKey: "must-not-cross-ipc" }],
         };
       },
@@ -361,11 +361,12 @@ test("handoff wire converts bounded account profiles and omits private preview i
     "content:preview-generation-submission-handoff",
     [{
       generationBatchId: "batch-1",
-      targetPlatformIds: ["media"],
-      accountProfiles: { media: "account-1" },
+      platformId: "media",
+      accountProfileId: "account-1",
     }],
   );
-  assert.deepEqual(received.accountProfiles, { media: "account-1" });
+  assert.equal(received.platformId, "media");
+  assert.equal(received.accountProfileId, "account-1");
   assert.equal(response.schemaVersion, 1);
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.equal("accountProfiles" in response.data, false);

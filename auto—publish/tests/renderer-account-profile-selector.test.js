@@ -17,7 +17,6 @@ test('account profile selector handles rejected commands without an unhandled re
       feature: { confirmAccountProfile: async () => { throw new Error('fixture rejected'); } },
       platformId: 'toutiao',
       displayName: '失败账号',
-      value: {},
       onChange: () => { changed += 1; },
     });
     await new Promise((resolve) => setImmediate(resolve));

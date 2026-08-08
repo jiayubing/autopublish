@@ -43,29 +43,24 @@ function createPlatformCommandPreparer(options) {
   const contentStore = value.contentStore || null;
   if (!reader) throw new Error("Platform queue reader is required");
 
-  function validateTargetPlatformIds(targetPlatformIds) {
-    if (!Array.isArray(targetPlatformIds) || targetPlatformIds.length === 0)
+  function validatePlatformId(platformId) {
+    if (typeof platformId !== "string" || !platformId.trim())
       throw submissionInputError();
-    for (const targetPlatformId of targetPlatformIds) {
-      if (
-        typeof targetPlatformId !== "string" ||
-        !targetPlatformId ||
-        (!platforms.some(
-          (platform) =>
-            platform.id === targetPlatformId && platform.id !== "media",
-        ) &&
-          !adapters[targetPlatformId])
-      )
-        throw submissionInputError();
-    }
-    return targetPlatformIds.slice();
+    if (
+      (!platforms.some(
+        (platform) => platform.id === platformId && platform.id !== "media",
+      ) &&
+        !adapters[platformId])
+    )
+      throw submissionInputError();
+    return platformId;
   }
 
-  function buildSelectedArticleTasks(selectedArticle, targetPlatformIds) {
+  function buildSelectedArticleTasks(selectedArticle, platformId, accountProfileId) {
     const selected = reader.safeTask({
       sourcePlatformId: selectedArticle.sourcePlatformId,
       filename: selectedArticle.filename,
-      targetPlatformId: targetPlatformIds[0],
+      targetPlatformId: platformId,
     });
     const filePath = reader.resolveSelectedFilePath(selectedArticle);
     const sourceMetadata = reader.readSubmissionMetadata(
@@ -87,80 +82,62 @@ function createPlatformCommandPreparer(options) {
         state.reasonCode,
         "Source article is in the trash",
       );
-    const tasks = [];
-    for (const targetPlatformId of targetPlatformIds) {
-      const rendererAccountProfileId =
-        selectedArticle.accountProfiles &&
-        selectedArticle.accountProfiles[targetPlatformId];
-      const durableTargetPlatformId =
-        sourceMetadata &&
-        sourceMetadata.data &&
-        (sourceMetadata.data.targetPlatformId ||
-          sourceMetadata.data.targetPlatform);
-      if (
-        typeof durableTargetPlatformId === "string" &&
-        durableTargetPlatformId &&
-        durableTargetPlatformId !== targetPlatformId
-      )
-        throw submissionInputError(
-          "PUBLICATION_TARGET_MISMATCH",
-          "The selected target does not match the queued publication",
-        );
-      if (rendererAccountProfileId !== durableAccountProfileId)
-        throw submissionInputError(
-          "ACCOUNT_PROFILE_MISMATCH",
-          "The selected account does not match the queued publication",
-        );
-      tasks.push({
-        sourcePlatformId: selected.sourcePlatformId,
-        filename: selected.filename,
+    const durableTargetPlatformId =
+      sourceMetadata &&
+      sourceMetadata.data &&
+      (sourceMetadata.data.targetPlatformId ||
+        sourceMetadata.data.targetPlatform);
+    if (
+      typeof durableTargetPlatformId === "string" &&
+      durableTargetPlatformId &&
+      durableTargetPlatformId !== platformId
+    )
+      throw submissionInputError(
+        "PUBLICATION_TARGET_MISMATCH",
+        "The selected target does not match the queued publication",
+      );
+    if (accountProfileId !== durableAccountProfileId)
+      throw submissionInputError(
+        "ACCOUNT_PROFILE_MISMATCH",
+        "The selected account does not match the queued publication",
+      );
+    return [{
+      sourcePlatformId: selected.sourcePlatformId,
+      filename: selected.filename,
+      filePath,
+      sourceArticle: Object.assign({}, selectedArticle, {
+        file: filePath,
         filePath,
-        sourceArticle: Object.assign({}, selectedArticle, {
-          file: filePath,
-          filePath,
-          sourceFile: filePath,
-          fileBaseName: path.basename(
-            selected.filename,
-            path.extname(selected.filename),
-          ),
-        }),
-        targetPlatformId,
-        accountProfileId: durableAccountProfileId,
-      });
-    }
-    return tasks;
+        sourceFile: filePath,
+        fileBaseName: path.basename(
+          selected.filename,
+          path.extname(selected.filename),
+        ),
+      }),
+      targetPlatformId: platformId,
+      accountProfileId: durableAccountProfileId,
+    }];
   }
 
   function buildSelectedPlan(input) {
-    const selectedArticles = input.selectedArticles || [];
-    if (!Array.isArray(selectedArticles)) throw submissionInputError();
-    const targetPlatformIds = validateTargetPlatformIds(
-      input.targetPlatformIds || [],
-    );
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (key) => !["selectedArticles", "platformId", "accountProfileId"].includes(key),
+      ) ||
+      !Array.isArray(input.selectedArticles)
+    ) throw submissionInputError();
+    const selectedArticles = input.selectedArticles;
+    const platformId = validatePlatformId(input.platformId);
+    if (typeof input.accountProfileId !== "string" || !input.accountProfileId.trim())
+      throw submissionInputError("ACCOUNT_PROFILE_REQUIRED", "A platform account profile is required");
     const tasks = [];
     for (const selectedArticle of selectedArticles)
       tasks.push(
-        ...buildSelectedArticleTasks(selectedArticle, targetPlatformIds),
+        ...buildSelectedArticleTasks(selectedArticle, platformId, input.accountProfileId),
       );
-    return { taskCount: tasks.length, tasks };
-  }
-
-  function buildSelectedSubmissionsPlan(submissions) {
-    if (!Array.isArray(submissions) || !submissions.length)
-      throw submissionInputError();
-    const tasks = [];
-    for (const submission of submissions) {
-      if (
-        !submission ||
-        typeof submission !== "object" ||
-        Array.isArray(submission)
-      )
-        throw submissionInputError();
-      const targetPlatformIds = validateTargetPlatformIds(
-        submission.targetPlatformIds || [],
-      );
-      tasks.push(...buildSelectedArticleTasks(submission, targetPlatformIds));
-    }
     return { taskCount: tasks.length, tasks };
   }
 
@@ -410,7 +387,6 @@ function createPlatformCommandPreparer(options) {
 
   return Object.freeze({
     buildSelectedPlan,
-    buildSelectedSubmissionsPlan,
     preparePublicationCommand,
     prepareMediaPublicationCommands,
   });

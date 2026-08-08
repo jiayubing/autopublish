@@ -187,8 +187,6 @@ function registerContentSubmissionIpc(deps) {
           [
             "clientId",
             "articleIds",
-            "targetPlatformIds",
-            "accountProfiles",
             "confirmed",
             "batchId",
             "planId",
@@ -204,28 +202,6 @@ function registerContentSubmissionIpc(deps) {
       const e = new Error("Batch confirmation is required");
       e.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED";
       throw e;
-    }
-    if (
-      Array.isArray(input.targetPlatformIds) &&
-      input.targetPlatformIds.length
-    ) {
-      if (
-        !input.accountProfiles ||
-        typeof input.accountProfiles !== "object" ||
-        Array.isArray(input.accountProfiles) ||
-        Object.keys(input.accountProfiles).length !==
-          input.targetPlatformIds.length ||
-        input.targetPlatformIds.some(function (platformId) {
-          return (
-            typeof input.accountProfiles[platformId] !== "string" ||
-            !input.accountProfiles[platformId].trim()
-          );
-        })
-      ) {
-        const e = new Error("A platform account profile is required");
-        e.code = "ACCOUNT_PROFILE_REQUIRED";
-        throw e;
-      }
     }
     return input;
   }

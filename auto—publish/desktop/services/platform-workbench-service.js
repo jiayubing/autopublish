@@ -37,7 +37,6 @@ function createPlatformWorkbenchService(options) {
   return Object.freeze({
     scanQueue: reader.scanQueue,
     buildSelectedPlan: preparer.buildSelectedPlan,
-    buildSelectedSubmissionsPlan: preparer.buildSelectedSubmissionsPlan,
     preparePublicationCommand: preparer.preparePublicationCommand,
     prepareMediaPublicationCommands: preparer.prepareMediaPublicationCommands,
     taskKey: reader.taskKey,

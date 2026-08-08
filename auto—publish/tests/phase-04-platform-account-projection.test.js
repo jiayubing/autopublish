@@ -6,7 +6,6 @@ const { registerPlatformIpc } = require("../desktop/ipc/platform-ipc");
 
 function register(overrides, dependencyOverrides) {
   const handlers = new Map();
-  let received = null;
   const service = Object.assign(
     {
       scanQueue: function () {
@@ -23,10 +22,6 @@ function register(overrides, dependencyOverrides) {
           },
         ];
       },
-      buildSelectedSubmissionsPlan: function (submissions) {
-        received = submissions;
-        return { tasks: [] };
-      },
       taskKey: function () {
         return "";
       },
@@ -39,7 +34,7 @@ function register(overrides, dependencyOverrides) {
     taskService: {},
     publicationSubmissionService: { submit: async () => ({ results: [] }) },
   }, dependencyOverrides));
-  return { handlers, received: () => received };
+  return { handlers };
 }
 
 test("platform queue projects only its durable account profile id", async () => {
@@ -62,7 +57,6 @@ test("platform queue projects only its durable account profile id", async () => 
 test("production platform IPC omits the retired direct-submit command", () => {
   const value = register();
   assert.equal(value.handlers.has("platforms:submit-selected"), false);
-  assert.equal(value.received(), null);
 });
 
 test("browser platform login commands open and persist a verified session", async () => {

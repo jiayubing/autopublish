@@ -56,8 +56,8 @@ function fixture() {
   const batch = service.createBatch({
     clientId: "client-cleanup",
     articleIds: ["article-cleanup"],
-    targetPlatformIds: ["toutiao"],
-    accountProfiles: { toutiao: profile.accountProfileId },
+    platformId: "toutiao",
+    accountProfileId: profile.accountProfileId,
     confirmed: true,
   });
   return { root, store, service, batch, profile };

@@ -33,7 +33,7 @@ describe("renderer generation submission handoff", { concurrency: false }, funct
         listSubmissionPlatforms: () => ok({ platforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }] }),
         listTemplateCatalog: () => ok({ revision: "fixture", platforms: [{ id: "fixture-platform", displayName: "测试模板平台", description: "", order: 1 }], templates: [{ id: "fixture-template", platform: "fixture-platform", scenario: "交接回归", name: "测试模板", body: "fixture", bodyHash: "fixture", source: "custom" }], diagnostics: [] }),
         listGenerationBatches: () => ok([batch]), getGenerationBatch: () => ok(batch), getGenerationBatchState: () => ok({ status: "idle", state: "idle", batchId: null }), getGenerationRuntimeSnapshot: () => ok({ runtimeId: "fixture-runtime", sequence: 0, runtime: { status: "idle", state: "idle", batchId: null }, batch, capabilities: {} }), onGenerationBatchState: () => () => {},
-        previewGenerationSubmissionHandoff: (input) => { state.previewInputs.push(input); return ok({ generationBatchId: batch.id, previewToken: "preview", articleCount: 1, clientCount: 1, targetPlatformIds: ["fixture-platform"], estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }); },
+        previewGenerationSubmissionHandoff: (input) => { state.previewInputs.push(input); return ok({ generationBatchId: batch.id, previewToken: "preview", articleCount: 1, clientCount: 1, platformId: "fixture-platform", accountProfileId: input.accountProfileId, estimatedTaskCount: 1, queueableTaskCount: 1, idempotentCount: 0, blockedPublishedCount: 0, blockedUncertainCount: 0, blockedContentCount: 0, conflictCount: 0, unavailableArticleCount: 0, invalidArticles: [], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }], items: [] }); },
         commitGenerationSubmissionHandoff: () => ok({ generationBatchId: batch.id, createdCount: 1, idempotentCount: 0, blockedCount: 0, conflictCount: 0, failedClientGroups: [], completedClientGroups: ["client-a"], clientGroups: [{ clientId: "client-a", articleCount: 1, queueableTaskCount: 1, idempotentCount: 0 }] }),
       };
       window.desktopConsole = {
@@ -53,14 +53,15 @@ describe("renderer generation submission handoff", { concurrency: false }, funct
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByRole("tab", { name: "批量生成" }).click();
       await page.getByRole("button", { name: "将成功文章加入投稿队列" }).click();
-      await page.getByRole("checkbox", { name: "测试投稿平台" }).check();
+      await page.getByRole("combobox", { name: "生成批次投稿目标" }).selectOption("fixture-platform");
       assert.equal(await page.getByRole("button", { name: "检查并确认" }).isDisabled(), true);
       await page.getByRole("textbox", { name: "测试投稿平台新账号名称" }).fill("测试登录账号");
       await page.getByRole("button", { name: "确认账号" }).click();
       await page.waitForFunction(() => !document.querySelector('button')?.disabled || window.__handoffFlow.profiles.length === 1);
       await page.getByRole("button", { name: "检查并确认" }).waitFor({ state: "visible" });
       await page.getByRole("button", { name: "检查并确认" }).click();
-      assert.deepEqual(await page.evaluate(() => window.__handoffFlow.previewInputs[0].accountProfiles), { "fixture-platform": "account-confirmed" });
+      assert.equal(await page.evaluate(() => window.__handoffFlow.previewInputs[0].platformId), "fixture-platform");
+      assert.equal(await page.evaluate(() => window.__handoffFlow.previewInputs[0].accountProfileId), "account-confirmed");
       await page.getByRole("button", { name: "一次确认并加入投稿队列" }).click();
       await page.getByTestId("generation-handoff-summary").waitFor();
       assert.equal(await page.getByRole("dialog", { name: "生成批次投稿交接" }).count(), 0);

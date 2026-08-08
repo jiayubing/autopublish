@@ -3,7 +3,8 @@ const { wrap } = require("../services/ipc-response");
 
 const SAFE_MESSAGES = Object.freeze({
   HANDOFF_INPUT_INVALID: "批次投稿交接输入无效",
-  HANDOFF_TARGET_REQUIRED: "请至少选择一个投稿目标",
+  HANDOFF_TARGET_REQUIRED: "请先选择一个投稿目标",
+  ACCOUNT_PROFILE_REQUIRED: "请先选择平台账号档案",
   HANDOFF_BATCH_NOT_TERMINAL: "生成批次尚未结束，暂不能交接投稿",
   HANDOFF_TARGET_UNSUPPORTED: "所选投稿目标不支持队列导入",
   HANDOFF_PREVIEW_STALE: "投稿交接预检已过期，请重新检查",
@@ -14,13 +15,10 @@ const SAFE_MESSAGES = Object.freeze({
 
 function input(value, commit) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Object.assign(new Error(SAFE_MESSAGES.HANDOFF_INPUT_INVALID), { code: "HANDOFF_INPUT_INVALID" });
-  const allowed = commit ? ["generationBatchId", "targetPlatformIds", "accountProfiles", "previewToken", "confirmed"] : ["generationBatchId", "targetPlatformIds", "accountProfiles"];
+  const allowed = commit ? ["generationBatchId", "platformId", "accountProfileId", "previewToken", "confirmed"] : ["generationBatchId", "platformId", "accountProfileId"];
   if (Object.keys(value).some((key) => !allowed.includes(key))) throw Object.assign(new Error(SAFE_MESSAGES.HANDOFF_INPUT_INVALID), { code: "HANDOFF_INPUT_INVALID" });
   const safeId = (candidate) => typeof candidate === "string" && /^[A-Za-z0-9_.:-]{1,200}$/.test(candidate);
-  if (!safeId(value.generationBatchId) || !Array.isArray(value.targetPlatformIds) || value.targetPlatformIds.some((target) => !safeId(target)) ||
-      !value.accountProfiles || typeof value.accountProfiles !== "object" || Array.isArray(value.accountProfiles) ||
-      Object.keys(value.accountProfiles).length !== value.targetPlatformIds.length ||
-      value.targetPlatformIds.some((target) => !safeId(value.accountProfiles[target]))) {
+  if (!safeId(value.generationBatchId) || !safeId(value.platformId) || !safeId(value.accountProfileId)) {
     throw Object.assign(new Error(SAFE_MESSAGES.HANDOFF_INPUT_INVALID), { code: "HANDOFF_INPUT_INVALID" });
   }
   if (commit && (!safeId(value.previewToken) || value.confirmed !== true)) {
@@ -45,7 +43,8 @@ function safePreview(value) {
     previewToken: input.previewToken,
     articleCount: input.articleCount,
     clientCount: input.clientCount,
-    targetPlatformIds: Array.isArray(input.targetPlatformIds) ? input.targetPlatformIds.slice() : [],
+    platformId: input.platformId,
+    accountProfileId: input.accountProfileId,
     estimatedTaskCount: input.estimatedTaskCount,
     queueableTaskCount: input.queueableTaskCount,
     idempotentCount: input.idempotentCount,

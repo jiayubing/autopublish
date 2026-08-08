@@ -108,10 +108,11 @@ describe("platform-workbench-service", function () {
         {
           sourcePlatformId: "lieju",
           filename: "portable.txt",
-          accountProfiles: { lieju: "account-lieju" },
+          accountProfileId: "account-lieju",
         },
       ],
-      targetPlatformIds: ["lieju"],
+      platformId: "lieju",
+      accountProfileId: "account-lieju",
     });
     assert.equal(
       plan.tasks[0].filePath,
@@ -129,16 +130,25 @@ describe("platform-workbench-service", function () {
         {
           sourcePlatformId: "lieju",
           filename: "a.txt",
-          accountProfiles: { lieju: "account-lieju" },
+          accountProfileId: "account-lieju",
         },
       ],
-      targetPlatformIds: ["lieju"],
+      platformId: "lieju",
+      accountProfileId: "account-lieju",
     });
     assert.deepStrictEqual(
       plan.tasks.map(function (task) {
         return task.targetPlatformId;
       }),
       ["lieju"],
+    );
+    assert.throws(
+      () => service.buildSelectedPlan({
+        selectedArticles: [{ sourcePlatformId: "lieju", filename: "a.txt" }],
+        targetPlatformIds: ["lieju"],
+        accountProfiles: { lieju: "account-lieju" },
+      }),
+      { code: "SUBMISSION_INPUT_INVALID" },
     );
   });
 

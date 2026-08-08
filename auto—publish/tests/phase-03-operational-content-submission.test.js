@@ -51,7 +51,7 @@ test("failed publication retry is eligible only for its intact durable batch ite
       platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }],
       retryFailedPublication: async (task) => { retried = task; return { status: "published" }; },
     });
-    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], platformId: "toutiao", accountProfileId: profile.accountProfileId, confirmed: true });
     const item = store.getSubmissionBatch(batch.batchId).items[0];
     const claim = store.claimSubmissionItemById({ batchId: batch.batchId, itemId: item.itemId, claimToken: "claim-1" });
     const target = { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId };
@@ -82,7 +82,7 @@ test("production content batch persists explicit account binding in OperationalS
   try {
     const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
     const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, contentStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
-    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], platformId: "toutiao", accountProfileId: profile.accountProfileId, confirmed: true });
     const files = queueFiles(root, batch.items[0]);
     const durable = store.getSubmissionBatch(batch.batchId);
     const sidecar = JSON.parse(fs.readFileSync(files.sidecarPath, "utf8"));
@@ -104,7 +104,7 @@ test("cancelling an unclaimed operational content batch removes only its queue c
   try {
     const profile = store.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
     const service = createContentSubmissionService({ workspaceRoot: root, operationalStore: store, contentStore: { getArticle: () => article() }, platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }] });
-    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const batch = service.createBatch({ clientId: "client-1", articleIds: ["article-1"], platformId: "toutiao", accountProfileId: profile.accountProfileId, confirmed: true });
     const files = queueFiles(root, batch.items[0]);
     const preview = service.previewCancelBatch({ batchId: batch.batchId });
     assert.equal(preview.allowedCount, 1);

@@ -1,113 +1,12 @@
 const fs = require("node:fs");
 const mammoth = require("mammoth");
 const { loadPlatforms } = require("../../src/core/platforms");
-const {
-  validatePlatformSubmission,
-  inputError,
-} = require("./submission-boundary");
 const { assertPlaywrightAvailable } = require("./playwright-capability");
 const { createPlatformSessionService } = require("./platform-session-service");
 const {
   projectPlatformQueue,
   projectPlatformSnapshot,
-  projectPlatformSubmitResult,
 } = require("../ipc/contracts/platform-contracts");
-
-function emptyTrashSummary() {
-  return {
-    offeredCount: 0,
-    requestedCount: 0,
-    movedCount: 0,
-    recoveryCount: 0,
-    blockedCount: 0,
-    failedCount: 0,
-    reasonCodes: [],
-  };
-}
-
-function addTrashReason(summary, code) {
-  if (!summary.reasonCodes.includes(code)) summary.reasonCodes.push(code);
-}
-
-function taskGroupKey(task) {
-  return `${task && task.sourcePlatformId}\u0000${task && task.filename}`;
-}
-
-function projectAutoTrash(plan, results) {
-  const summary = emptyTrashSummary();
-  const groups = new Map();
-  for (const task of (plan && plan.tasks) || []) {
-    const key = taskGroupKey(task);
-    if (!groups.has(key)) groups.set(key, { tasks: [], results: [], jobs: new Map() });
-    groups.get(key).tasks.push(task);
-  }
-  (results || []).forEach((result, index) => {
-    const task = result.task || ((plan && plan.tasks) || [])[index] || {};
-    const group = groups.get(taskGroupKey(task));
-    if (!group) return;
-    group.results.push(result);
-    for (const job of result.postProcessing || []) {
-      if (taskGroupKey(job) !== taskGroupKey(task)) continue;
-      group.jobs.set(`${job.batchId || ""}\u0000${job.jobId || ""}`, job);
-    }
-  });
-
-  let allSucceeded = groups.size > 0;
-  groups.forEach((group) => {
-    const expectedBatchId = group.tasks[0] && group.tasks[0].postProcessingPayload && group.tasks[0].postProcessingPayload.batchId;
-    const jobs = Array.from(group.jobs.values()).filter(
-      (job) => !expectedBatchId || !job.batchId || job.batchId === expectedBatchId,
-    );
-    const published = group.results.length === group.tasks.length &&
-      group.results.every((result) => result.status === "published");
-    const autoResults = jobs.map((job) => job.output && job.output.autoTrash).filter(Boolean);
-    const archived = jobs.length >= group.tasks.length && jobs.every((job) => job.status === "completed");
-    if (!published) {
-      allSucceeded = false;
-      summary.blockedCount += 1;
-      addTrashReason(summary, "REMOVAL_BLOCKED");
-      return;
-    }
-    if (!archived) {
-      if (autoResults.some((value) => ["failed", "needs_repair"].includes(value.status))) {
-        allSucceeded = false;
-        summary.failedCount += 1;
-        addTrashReason(summary, "REMOVAL_NEEDS_REPAIR");
-      } else if (autoResults.some((value) => value.status === "blocked")) {
-        allSucceeded = false;
-        summary.blockedCount += 1;
-        addTrashReason(summary, autoResults.find((value) => value.status === "blocked").reasonCode === "IDENTITY_MISSING" ? "IDENTITY_MISSING" : "REMOVAL_BLOCKED");
-      } else {
-        allSucceeded = false;
-        summary.blockedCount += 1;
-        addTrashReason(summary, "REMOVAL_BLOCKED");
-      }
-      return;
-    }
-    summary.offeredCount += 1;
-    summary.requestedCount += 1;
-    if (autoResults.some((value) => ["failed", "needs_repair"].includes(value.status))) {
-      allSucceeded = false;
-      summary.failedCount += 1;
-      addTrashReason(summary, "REMOVAL_NEEDS_REPAIR");
-    } else if (autoResults.some((value) => value.status === "blocked")) {
-      allSucceeded = false;
-      summary.blockedCount += 1;
-      addTrashReason(summary, autoResults.find((value) => value.status === "blocked").reasonCode === "IDENTITY_MISSING" ? "IDENTITY_MISSING" : "REMOVAL_BLOCKED");
-    } else if (autoResults.some((value) => value.status === "committed")) {
-      summary.movedCount += 1;
-    } else if (autoResults.some((value) => ["pending_auto_recovery", "pending_recovery"].includes(value.status))) {
-      summary.recoveryCount += 1;
-    } else {
-      allSucceeded = false;
-      summary.blockedCount += 1;
-      addTrashReason(summary, autoResults[0] && autoResults[0].reasonCode === "IDENTITY_MISSING" ? "IDENTITY_MISSING" : "REMOVAL_BLOCKED");
-    }
-  });
-  if (allSucceeded && summary.movedCount + summary.recoveryCount === summary.requestedCount)
-    return { disposition: "auto_trash_requested", summary };
-  return { disposition: "auto_trash_blocked", summary };
-}
 
 function createPlatformWorkbenchApplication(options) {
   const values = options || {};
@@ -165,37 +64,10 @@ function createPlatformWorkbenchApplication(options) {
     });
   }
 
-  async function submitSelected(input) {
-    if (!values.publicationSubmissionService || typeof values.publicationSubmissionService.submit !== "function") {
-      const error = new Error("Legacy platform submission is closed; use the regular queue workflow");
-      error.code = "PUBLICATION_WORKFLOW_UNAVAILABLE";
-      throw error;
-    }
-    const raw = Array.isArray(input) ? input : input && Array.isArray(input.submissions) ? input.submissions : [input];
-    if (!raw.length) throw inputError();
-    ensurePlaywright();
-    const plan = workbenchService.buildSelectedSubmissionsPlan(raw.map(validatePlatformSubmission));
-    const autoTrash = Boolean(input && input.autoTrash === true);
-    const execution = await values.publicationSubmissionService.submit(plan, { autoTrash });
-    const results = (execution.results || []).map((result, index) => Object.assign({ task: plan.tasks[index] }, result));
-    const trash = autoTrash ? projectAutoTrash(plan, results) : { disposition: "keep_local", summary: emptyTrashSummary() };
-    return projectPlatformSubmitResult({
-      ok: results.filter((result) => ["published", "submitted"].includes(result.status)).length,
-      fail: results.filter((result) => result.status === "failed").length,
-      uncertain: results.filter((result) => result.status === "uncertain").length,
-      skipped: 0,
-      results,
-      archiveSummary: { attempted: 0, succeeded: 0, failed: 0 },
-      trashDisposition: trash.disposition,
-      trashSummary: trash.summary,
-    });
-  }
-
   return Object.freeze({
     getQueue,
     openLogin: (input) => platformSessionService.openLogin(input.platformId),
     checkLogin: (input) => platformSessionService.checkLogin(input.platformId),
-    submitSelected,
     pauseSubmit: (input) => {
       const result = (values.taskService || {}).pausePlatformSubmit(input && input.runId) || {};
       return { accepted: result.ok === true, alreadyStopped: result.alreadyStopped === true };

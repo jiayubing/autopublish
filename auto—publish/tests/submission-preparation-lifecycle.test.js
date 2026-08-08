@@ -108,15 +108,24 @@ test("preflight and planning are side-effect-free application ports", () => {
   const preview = value.previewBatch({
     clientId: "client-1",
     articleIds: ["article-1"],
-    targetPlatformIds: ["toutiao"],
-    accountProfiles: { toutiao: "account-1" },
+    platformId: "toutiao",
+    accountProfileId: "account-1",
   });
   assert.equal(reads(), 1);
   assert.equal(preview.queueableTaskCount, 1);
+  assert.equal(preview.totalTaskCount, 1);
+  assert.equal(preview.platformId, "toutiao");
+  assert.equal(preview.accountProfileId, "account-1");
   assert.equal(preview.items[0].articleId, "article-1");
   assert.equal(preview.items[0].targetPlatformId, "toutiao");
   assert.equal("filePath" in preview.items[0], false);
   assert.equal("sidecarPath" in preview.items[0], false);
+  assert.throws(() => value.previewBatch({
+    clientId: "client-1",
+    articleIds: ["article-1"],
+    targetPlatformIds: ["toutiao"],
+    accountProfiles: { toutiao: "account-1" },
+  }), { code: "CONTENT_SUBMISSION_BATCH_INPUT_INVALID" });
   assert.deepEqual(
     targetCatalog.list().map((item) => item.id),
     ["toutiao"],
@@ -135,10 +144,13 @@ test("complete manual content without AI provenance is queueable and reports con
   const preview = manualPlanner.value.previewBatch({
     clientId: "client-1",
     articleIds: ["manual-1"],
-    targetPlatformIds: ["toutiao"],
-    accountProfiles: { toutiao: "account-1" },
+    platformId: "toutiao",
+    accountProfileId: "account-1",
   });
   assert.equal(preview.queueableTaskCount, 1);
+  assert.equal(preview.totalTaskCount, 1);
+  assert.equal(preview.platformId, "toutiao");
+  assert.equal(preview.accountProfileId, "account-1");
 
   for (const [field, code, reason] of [
     ["title", "ARTICLE_TITLE_EMPTY", "标题为空"],
@@ -148,8 +160,8 @@ test("complete manual content without AI provenance is queueable and reports con
     const incomplete = incompletePlanner.value.previewBatch({
       clientId: "client-1",
       articleIds: ["manual-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     assert.equal(incomplete.queueableTaskCount, 0);
     assert.equal(incomplete.items[0].status, "blocked");
@@ -209,8 +221,8 @@ test("manual content crosses typed save IPC and the real article store into subm
     const preview = plannerValue.previewBatch({
       clientId: "client-1",
       articleIds: ["manual-chain-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     assert.equal(preview.queueableTaskCount, 1);
     assert.deepEqual(preview.items[0].reasonCodes, undefined);
@@ -226,8 +238,8 @@ test("persistence and query ports keep account-bound batch facts durable", () =>
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     let durable;
     const operationalStore = {
@@ -310,8 +322,8 @@ test("persistence keeps the queue pair invisible until the prepared batch is dur
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     const filePath = path.join(root, "toutiao", preview.items[0].filename);
     const sidecarPath = filePath + ".submission.json";
@@ -368,8 +380,8 @@ test("persistence does not create queued database items when queue file creation
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     let createCalls = 0;
     const operationalStore = {
@@ -407,8 +419,8 @@ test("persistence removes prepared queue files when the database commit fails", 
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     const persistence = createSubmissionBatchPersistence({
       inputRoot: root,
@@ -445,8 +457,8 @@ test("persistence preserves an existing queue pair when a new batch collides", (
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     const directory = path.join(root, "toutiao");
     fs.mkdirSync(directory, { recursive: true });
@@ -489,8 +501,8 @@ test("prepared batch recovery promotes staging evidence before queueing", () => 
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     const candidate = preview.items[0];
     const batchId = "batch-recovery-promote";
@@ -581,8 +593,8 @@ test("prepared batch recovery discards a batch with no file evidence", () => {
     const preview = value.previewBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: "account-1" },
+      platformId: "toutiao",
+      accountProfileId: "account-1",
     });
     const batch = {
       batchId: "batch-recovery-discard",

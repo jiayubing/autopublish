@@ -22,8 +22,8 @@ it("runs 500 and 5000 tasks through the production file adapter with one identit
     const service = createGenerationSubmissionHandoffService({ generationBatchService: { get: () => ({ id: "batch", revision: 1, status: "completed", tasks: Array.from({ length: taskCount }, (_, index) => ({ id: "task-" + index, clientId: "client-1", status: "succeeded" })) }) }, contentStore, contentSubmissionService: submission, targetPlatforms: [{ id: "target", contentQueueImport: true }] });
     for (const count of [500, 5000]) {
       taskCount = count;
-      const preview = service.preview({ generationBatchId: "batch", targetPlatformIds: ["target"], accountProfiles: { target: "account" } });
-      const token = preview.previewToken; const result = service.commit({ generationBatchId: "batch", targetPlatformIds: ["target"], accountProfiles: { target: "account" }, previewToken: token, confirmed: true });
+      const preview = service.preview({ generationBatchId: "batch", platformId: "target", accountProfileId: "account" });
+      const token = preview.previewToken; const result = service.commit({ generationBatchId: "batch", platformId: "target", accountProfileId: "account", previewToken: token, confirmed: true });
       assert.equal(result.createdCount, count); assert.equal(preview.articleCount, count); assert.equal(created.at(-1).count, count);
     }
     assert.equal(scans, 4); assert.equal(created.length, 2);

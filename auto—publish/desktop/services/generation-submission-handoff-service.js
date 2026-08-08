@@ -7,13 +7,23 @@ function handoffError(code, message) {
   return error;
 }
 
-function clone(value) { return value === undefined ? value : JSON.parse(JSON.stringify(value)); }
 function assertId(value, label) {
   if (typeof value !== "string" || !value.trim() || !/^[A-Za-z0-9_.:-]+$/.test(value)) throw handoffError("HANDOFF_INPUT_INVALID", `${label} is invalid`);
   return value;
 }
 function hash(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 function latestRevision(batch) { return batch && (batch.revision || batch.updatedAt || batch.version || batch.id); }
+
+function assertInputShape(input, commit) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw handoffError("HANDOFF_INPUT_INVALID", "Handoff input is invalid");
+  const allowed = commit
+    ? ["generationBatchId", "platformId", "accountProfileId", "previewToken", "confirmed"]
+    : ["generationBatchId", "platformId", "accountProfileId"];
+  if (Object.keys(input).some((key) => !allowed.includes(key)))
+    throw handoffError("HANDOFF_INPUT_INVALID", "Handoff input is invalid");
+  return input;
+}
 
 function createGenerationSubmissionHandoffService(options) {
   const opts = options || {};
@@ -33,13 +43,13 @@ function createGenerationSubmissionHandoffService(options) {
     return [];
   }
 
-  function normalizeTargets(value) {
-    if (!Array.isArray(value) || !value.length) throw handoffError("HANDOFF_TARGET_REQUIRED", "At least one submission target is required");
-    const targets = [...new Set(value.map((item) => assertId(item, "target platform id")))];
+  function normalizeTarget(value) {
+    if (typeof value !== "string" || !value.trim()) throw handoffError("HANDOFF_TARGET_REQUIRED", "A submission target is required");
+    const platformId = assertId(value.trim(), "platform id");
     const available = new Map(targetPlatforms().map((item) => [item.id, item]));
-    const platforms = targets.map((id) => available.get(id) || { id, contentQueueImport: false });
-    if (platforms.some((platform) => platform.contentQueueImport !== true)) throw handoffError("HANDOFF_TARGET_UNSUPPORTED", "Submission target does not support queue import");
-    return { ids: targets, platforms };
+    const platform = available.get(platformId) || { id: platformId, contentQueueImport: false };
+    if (platform.contentQueueImport !== true) throw handoffError("HANDOFF_TARGET_UNSUPPORTED", "Submission target does not support queue import");
+    return { platformId, platform };
   }
 
   function getBatch(generationBatchId) {
@@ -94,15 +104,15 @@ function createGenerationSubmissionHandoffService(options) {
     return entries;
   }
 
-  function normalizeAccountProfiles(targets, value) {
-    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== targets.ids.length || targets.ids.some((id) => typeof value[id] !== "string" || !value[id].trim())) {
+  function normalizeAccountProfile(value) {
+    if (typeof value !== "string" || !value.trim()) {
       throw handoffError("ACCOUNT_PROFILE_REQUIRED", "A platform account profile is required");
     }
-    return Object.fromEntries(targets.ids.map((id) => [id, value[id].trim()]));
+    return assertId(value.trim(), "account profile id");
   }
 
-  function baseFingerprint(batch, targets, accountProfiles, entries) {
-    return hash({ batchId: batch.id, revision: latestRevision(batch), targetPlatformIds: targets.ids.slice().sort(), accountProfiles, articles: entries.map((entry) => ({ taskId: entry.task.id, clientId: entry.task.clientId, articleId: entry.article && entry.article.id || entry.task.articleId || null, fingerprint: entry.fingerprint, reasonCode: entry.reasonCode })) });
+  function baseFingerprint(batch, platformId, accountProfileId, entries) {
+    return hash({ batchId: batch.id, revision: latestRevision(batch), platformId, accountProfileId, articles: entries.map((entry) => ({ taskId: entry.task.id, clientId: entry.task.clientId, articleId: entry.article && entry.article.id || entry.task.articleId || null, fingerprint: entry.fingerprint, reasonCode: entry.reasonCode })) });
   }
 
   function safeItem(item) {
@@ -110,8 +120,8 @@ function createGenerationSubmissionHandoffService(options) {
   }
 
   function buildPreview(input) {
-    const targets = normalizeTargets(input.targetPlatformIds);
-    const accountProfiles = normalizeAccountProfiles(targets, input.accountProfiles);
+    const target = normalizeTarget(input.platformId);
+    const accountProfileId = normalizeAccountProfile(input.accountProfileId);
     const batch = getBatch(input.generationBatchId);
     const entries = resolveArticles(batch);
     const valid = entries.filter((entry) => entry.article && entry.eligibility?.eligible && !entry.reasonCode);
@@ -131,7 +141,7 @@ function createGenerationSubmissionHandoffService(options) {
     let conflictCount = invalidArticles.filter((item) => item.reasonCode === "HANDOFF_ARTICLE_IDENTITY_CONFLICT").length;
     let blockedContentCount = invalidArticles.length - conflictCount;
     byClient.forEach((group) => {
-      const submissionPreview = submissionService.previewBatch({ clientId: group.clientId, articleIds: group.articleIds, targetPlatformIds: targets.ids, accountProfiles });
+      const submissionPreview = submissionService.previewBatch({ clientId: group.clientId, articleIds: group.articleIds, platformId: target.platformId, accountProfileId });
       queueableTaskCount += submissionPreview.queueableTaskCount || 0;
       idempotentCount += submissionPreview.idempotentCount || 0;
       blockedPublishedCount += submissionPreview.blockedPublishedCount || 0;
@@ -150,18 +160,18 @@ function createGenerationSubmissionHandoffService(options) {
         items: (submissionPreview.items || []).filter((item) => item.status !== "queueable" && item.status !== "idempotent").map(safeItem)
       });
     });
-    const fingerprint = baseFingerprint(batch, targets, accountProfiles, entries);
+    const fingerprint = baseFingerprint(batch, target.platformId, accountProfileId, entries);
     const previewToken = `handoff:${crypto.randomUUID()}`;
-    tokens.set(previewToken, { fingerprint, generationBatchId: batch.id, targetPlatformIds: targets.ids.slice(), accountProfiles, batchRevision: latestRevision(batch), entries: valid.map((entry) => ({ clientId: entry.task.clientId, articleId: entry.article.id })) });
+    tokens.set(previewToken, { fingerprint, generationBatchId: batch.id, platformId: target.platformId, accountProfileId, batchRevision: latestRevision(batch), entries: valid.map((entry) => ({ clientId: entry.task.clientId, articleId: entry.article.id })) });
     const result = {
       generationBatchId: batch.id,
       batchRevision: latestRevision(batch),
       previewToken,
       articleCount: valid.length,
       clientCount: byClient.size,
-      targetPlatformIds: targets.ids.slice(),
-      accountProfiles: Object.assign({}, accountProfiles),
-      estimatedTaskCount: valid.length * targets.ids.length,
+      platformId: target.platformId,
+      accountProfileId,
+      estimatedTaskCount: valid.length,
       queueableTaskCount,
       idempotentCount,
       blockedPublishedCount,
@@ -179,20 +189,21 @@ function createGenerationSubmissionHandoffService(options) {
   }
 
   function preview(input) {
-    if (!input || typeof input !== "object" || Array.isArray(input)) throw handoffError("HANDOFF_INPUT_INVALID", "Handoff input is invalid");
-    return buildPreview(input);
+    return buildPreview(assertInputShape(input, false));
   }
 
   function commit(input) {
+    assertInputShape(input, true);
     if (!input || input.confirmed !== true || typeof input.previewToken !== "string") throw handoffError("HANDOFF_CONFIRMATION_REQUIRED", "Generation submission handoff confirmation is required");
     const stored = tokens.get(input.previewToken);
     if (!stored) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview has expired");
-    const committedProfiles = normalizeAccountProfiles({ ids: stored.targetPlatformIds }, input.accountProfiles);
-    if (JSON.stringify(committedProfiles) !== JSON.stringify(stored.accountProfiles)) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview is stale; run preflight again");
-    const current = buildPreview({ generationBatchId: stored.generationBatchId, targetPlatformIds: stored.targetPlatformIds, accountProfiles: stored.accountProfiles });
+    const platformId = normalizeTarget(input.platformId).platformId;
+    const accountProfileId = normalizeAccountProfile(input.accountProfileId);
+    if (platformId !== stored.platformId || accountProfileId !== stored.accountProfileId) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview is stale; run preflight again");
+    const current = buildPreview({ generationBatchId: stored.generationBatchId, platformId: stored.platformId, accountProfileId: stored.accountProfileId });
     const batch = getBatch(stored.generationBatchId);
     const currentEntries = current.__entries || [];
-    if (baseFingerprint(batch, { ids: stored.targetPlatformIds }, stored.accountProfiles, currentEntries) !== stored.fingerprint) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview is stale; run preflight again");
+    if (baseFingerprint(batch, stored.platformId, stored.accountProfileId, currentEntries) !== stored.fingerprint) throw handoffError("HANDOFF_PREVIEW_STALE", "Generation submission preview is stale; run preflight again");
     const completed = completedClients.get(input.previewToken) || new Set();
     let createdCount = 0;
     let idempotentCount = 0;
@@ -203,7 +214,7 @@ function createGenerationSubmissionHandoffService(options) {
         return;
       }
       try {
-        const result = submissionService.createBatch({ clientId: group.clientId, articleIds: stored.entries.filter((entry) => entry.clientId === group.clientId && entry.articleId).map((entry) => entry.articleId), targetPlatformIds: stored.targetPlatformIds.slice(), accountProfiles: Object.assign({}, stored.accountProfiles), confirmed: true });
+        const result = submissionService.createBatch({ clientId: group.clientId, articleIds: stored.entries.filter((entry) => entry.clientId === group.clientId && entry.articleId).map((entry) => entry.articleId), platformId: stored.platformId, accountProfileId: stored.accountProfileId, confirmed: true });
         createdCount += result.createdCount || 0;
         idempotentCount += result.idempotentCount || 0;
         completed.add(group.clientId);
@@ -225,7 +236,7 @@ function createGenerationSubmissionHandoffService(options) {
     };
   }
 
-  return { preview, previewGenerationSubmissionHandoff: preview, commit, commitGenerationSubmissionHandoff: commit };
+  return { preview, commit };
 }
 
 module.exports = { createGenerationSubmissionHandoffService };

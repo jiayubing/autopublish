@@ -241,7 +241,8 @@ describe("renderer content client switching", function () {
             previewToken: "handoff-preview",
             articleCount: 1,
             clientCount: 1,
-            targetPlatformIds: ["fixture-platform"],
+            platformId: "fixture-platform",
+            accountProfileId: "account-fixture",
             estimatedTaskCount: 1,
             queueableTaskCount: 1,
             idempotentCount: 0,
@@ -351,10 +352,10 @@ describe("renderer content client switching", function () {
         previewSubmissionBatch: (input) =>
           ok({
             clientId: input.clientId,
-            totalTaskCount:
-              input.articleIds.length * input.targetPlatformIds.length,
-            queueableTaskCount:
-              input.articleIds.length * input.targetPlatformIds.length,
+            platformId: input.platformId,
+            accountProfileId: input.accountProfileId,
+            totalTaskCount: input.articleIds.length,
+            queueableTaskCount: input.articleIds.length,
             idempotentCount: 0,
             conflictCount: 0,
             blockedContentCount: 0,
@@ -373,7 +374,7 @@ describe("renderer content client switching", function () {
               updatedAt: "2026-07-20T00:00:01.000Z",
               items: input.articleIds.map((articleId) => ({
                 articleId,
-                targetPlatformId: input.targetPlatformIds[0],
+                targetPlatformId: input.platformId,
                 status: "queued",
                 canCancel: true,
               })),
@@ -674,7 +675,7 @@ describe("renderer content client switching", function () {
         },
       );
       await page.getByRole("button", { name: "取消" }).click();
-      await page.getByRole("button", { name: "测试投稿平台" }).click();
+      await page.getByRole("combobox", { name: "普通平台投稿目标" }).selectOption("fixture-platform");
       await page.getByRole("button", { name: "加入投稿队列" }).click();
       await page
         .getByRole("dialog", { name: "确认加入普通平台队列" })
@@ -800,7 +801,7 @@ describe("renderer content client switching", function () {
       await page
         .getByRole("button", { name: "将成功文章加入投稿队列" })
         .click();
-      await page.getByRole("checkbox", { name: "测试投稿平台" }).check();
+      await page.getByRole("combobox", { name: "生成批次投稿目标" }).selectOption("fixture-platform");
       await page.getByRole("button", { name: "检查并确认" }).click();
       await page
         .getByRole("button", { name: "一次确认并加入投稿队列" })

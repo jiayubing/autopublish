@@ -140,8 +140,8 @@ function productionFixture() {
   const batch = submission.createBatch({
     clientId: "client-1",
     articleIds: ["article-1"],
-    targetPlatformIds: ["toutiao"],
-    accountProfiles: { toutiao: profile.accountProfileId },
+    platformId: "toutiao",
+    accountProfileId: profile.accountProfileId,
     confirmed: true,
   });
   const removal = createArticleRemovalService({

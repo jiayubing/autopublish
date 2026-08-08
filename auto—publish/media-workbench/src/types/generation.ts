@@ -56,7 +56,8 @@ export interface GenerationSubmissionHandoffPreview {
   previewToken: string;
   articleCount: number;
   clientCount: number;
-  targetPlatformIds: string[];
+  platformId: string;
+  accountProfileId: string;
   estimatedTaskCount: number;
   queueableTaskCount: number;
   idempotentCount: number;

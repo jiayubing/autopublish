@@ -29,21 +29,6 @@ function validateMediaSubmission(value) {
   return output;
 }
 
-function validatePlatformSubmission(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || !hasOnlyKeys(value, ["sourcePlatformId", "filename", "targetPlatformIds", "accountProfiles"])) throw inputError();
-  if (typeof value.sourcePlatformId !== "string" || !value.sourcePlatformId || value.sourcePlatformId.trim() !== value.sourcePlatformId) throw inputError();
-  var targetPlatformIds = validateIdList(value.targetPlatformIds);
-  if (!value.accountProfiles || typeof value.accountProfiles !== "object" || Array.isArray(value.accountProfiles) ||
-      Object.keys(value.accountProfiles).length !== targetPlatformIds.length ||
-      targetPlatformIds.some(function(platformId) { return typeof value.accountProfiles[platformId] !== "string" || !value.accountProfiles[platformId].trim(); })) throw inputError("ACCOUNT_PROFILE_REQUIRED", "A platform account profile is required");
-  return {
-    sourcePlatformId: value.sourcePlatformId,
-    filename: validateFilename(value.filename),
-    targetPlatformIds: targetPlatformIds,
-    accountProfiles: Object.fromEntries(targetPlatformIds.map(function(platformId) { return [platformId, value.accountProfiles[platformId]]; }))
-  };
-}
-
 function validateDraft(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || !hasOnlyKeys(value, ["title", "remark", "ignoreImages", "selectedResources"])) throw inputError("DRAFT_INVALID", "Invalid draft");
   var draft = {};
@@ -77,4 +62,4 @@ function validateDraft(value) {
   return draft;
 }
 
-module.exports = { inputError, validateMediaSubmission, validatePlatformSubmission, validateDraft };
+module.exports = { inputError, validateMediaSubmission, validateDraft };

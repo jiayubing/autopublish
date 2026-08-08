@@ -35,7 +35,7 @@ test("production removal uses OperationalStore queue facts and cancels before tr
       workspaceRoot: root, paths: { input }, operationalStore, contentStore,
       platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }]
     });
-    const batch = submission.createBatch({ clientId: "client-1", articleIds: ["article-1"], targetPlatformIds: ["toutiao"], accountProfiles: { toutiao: profile.accountProfileId }, confirmed: true });
+    const batch = submission.createBatch({ clientId: "client-1", articleIds: ["article-1"], platformId: "toutiao", accountProfileId: profile.accountProfileId, confirmed: true });
     const filePath = path.join(input, "toutiao", batch.items[0].filename);
     const sidecarPath = filePath + ".submission.json";
     const removal = createArticleRemovalService({

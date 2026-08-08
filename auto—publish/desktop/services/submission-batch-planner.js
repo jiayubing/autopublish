@@ -35,12 +35,23 @@ function createSubmissionBatchPlanner(options) {
     if (
       !input ||
       typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (key) =>
+          ![
+            "clientId",
+            "articleIds",
+            "platformId",
+            "accountProfileId",
+            "confirmed",
+          ].includes(key),
+      ) ||
       typeof input.clientId !== "string" ||
       !input.clientId.trim() ||
       !Array.isArray(input.articleIds) ||
       !input.articleIds.length ||
-      !Array.isArray(input.targetPlatformIds) ||
-      !input.targetPlatformIds.length
+      typeof input.platformId !== "string" ||
+      !input.platformId.trim()
     )
       throw fail(
         "CONTENT_SUBMISSION_BATCH_INPUT_INVALID",
@@ -52,14 +63,8 @@ function createSubmissionBatchPlanner(options) {
         "Batch confirmation is required",
       );
     if (
-      !input.accountProfiles ||
-      typeof input.accountProfiles !== "object" ||
-      Array.isArray(input.accountProfiles) ||
-      input.targetPlatformIds.some(
-        (platformId) =>
-          typeof input.accountProfiles[platformId] !== "string" ||
-          !input.accountProfiles[platformId].trim(),
-      )
+      typeof input.accountProfileId !== "string" ||
+      !input.accountProfileId.trim()
     )
       throw fail(
         "ACCOUNT_PROFILE_REQUIRED",
@@ -96,6 +101,7 @@ function createSubmissionBatchPlanner(options) {
     const items = [];
     const missingArticleIds = [];
     const unsupportedPlatformIds = [];
+    const platform = byId.get(request.platformId);
 
     for (const articleId of request.articleIds) {
       let article;
@@ -105,46 +111,48 @@ function createSubmissionBatchPlanner(options) {
         missingArticleIds.push(articleId);
         continue;
       }
-      for (const platformId of request.targetPlatformIds) {
-        const platform = byId.get(platformId);
-        const accountProfileId = request.accountProfiles[platformId];
-        if (!platform || platform.contentQueueImport !== true) {
-          if (!unsupportedPlatformIds.includes(platformId))
-            unsupportedPlatformIds.push(platformId);
-          items.push({
-            articleId,
-            targetPlatformId: platformId,
-            accountProfileId,
-            status: "excluded",
-          });
-          continue;
-        }
-        const eligibility = value.preflight.check(article, {
-          id: platformId,
-          contentQueueImport: true,
+      if (!platform || platform.contentQueueImport !== true) {
+        if (!unsupportedPlatformIds.includes(request.platformId))
+          unsupportedPlatformIds.push(request.platformId);
+        items.push({
+          articleId,
+          targetPlatformId: request.platformId,
+          accountProfileId: request.accountProfileId.trim(),
+          status: "excluded",
         });
-        if (!eligibility.eligible) {
-          items.push({
-            articleId,
-            targetPlatformId: platformId,
-            accountProfileId,
-            status: "blocked",
-            reasonCodes: eligibility.reasonCodes,
-            reasons: eligibility.reasons,
-          });
-          continue;
-        }
-        items.push(item(article, platform, platformId, accountProfileId));
+        continue;
       }
+      const eligibility = value.preflight.check(article, {
+        id: request.platformId,
+        contentQueueImport: true,
+      });
+      if (!eligibility.eligible) {
+        items.push({
+          articleId,
+          targetPlatformId: request.platformId,
+          accountProfileId: request.accountProfileId.trim(),
+          status: "blocked",
+          reasonCodes: eligibility.reasonCodes,
+          reasons: eligibility.reasons,
+        });
+        continue;
+      }
+      items.push(
+        item(
+          article,
+          platform,
+          request.platformId,
+          request.accountProfileId.trim(),
+        ),
+      );
     }
 
     return {
       clientId: request.clientId,
       articleIds: request.articleIds.slice(),
-      targetPlatformIds: request.targetPlatformIds.slice(),
-      accountProfiles: Object.assign({}, request.accountProfiles),
-      totalTaskCount:
-        request.articleIds.length * request.targetPlatformIds.length,
+      platformId: request.platformId,
+      accountProfileId: request.accountProfileId.trim(),
+      totalTaskCount: request.articleIds.length,
       queueableTaskCount: items.filter(
         (candidate) => candidate.status === "queueable",
       ).length,

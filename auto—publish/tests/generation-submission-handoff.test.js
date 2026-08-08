@@ -49,14 +49,18 @@ describe("generation submission handoff", function() {
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
 
-    const preview = service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } });
+    const preview = service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" });
     assert.equal(preview.articleCount, 50);
     assert.equal(preview.clientCount, 2);
     assert.equal(preview.queueableTaskCount, 50);
-    const committed = service.commit({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" }, previewToken: preview.previewToken, confirmed: true });
+    const committed = service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true });
     assert.equal(committed.createdCount, 50);
     assert.equal(batches.length, 2);
     assert.deepEqual(batches.map((item) => item.clientId).sort(), ["client-a", "client-b"]);
+    assert.equal(batches.every((item) => item.platformId === "target-a" && item.accountProfileId === "account-a"), true);
+    const repeated = service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true });
+    assert.equal(repeated.createdCount, 0);
+    assert.equal(batches.length, 2);
   });
 
   it("rejects a commit after the batch revision changes", function() {
@@ -67,9 +71,9 @@ describe("generation submission handoff", function() {
       contentSubmissionService: { previewBatch() { return { queueableTaskCount: 1, idempotentCount: 0, conflictCount: 0, items: [] }; }, createBatch() { throw new Error("must not commit stale preview"); } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
-    const preview = service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } });
+    const preview = service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" });
     revision = 2;
-    assert.throws(() => service.commit({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" }, previewToken: preview.previewToken, confirmed: true }), (error) => error.code === "HANDOFF_PREVIEW_STALE");
+    assert.throws(() => service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true }), (error) => error.code === "HANDOFF_PREVIEW_STALE");
   });
 
   it("blocks duplicate article identities before delegating to the submission service", function() {
@@ -82,7 +86,7 @@ describe("generation submission handoff", function() {
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
 
-    const preview = service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } });
+    const preview = service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" });
     assert.equal(preview.articleCount, 0);
     assert.equal(preview.unavailableArticleCount, 2);
     assert.equal(preview.conflictCount, 2);
@@ -99,7 +103,7 @@ describe("generation submission handoff", function() {
       contentSubmissionService: { previewBatch() { return { queueableTaskCount: 1, idempotentCount: 0, conflictCount: 0, items: [{ articleId: "article-1", targetPlatformId: "target-a", status: "queueable", filePath: secretPath, content: secretBody } ] }; }, createBatch() { return { createdCount: 1, idempotentCount: 0 }; } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
-    const serialized = JSON.stringify(service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } }));
+    const serialized = JSON.stringify(service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" }));
     assert.equal(serialized.includes(secretPath), false);
     assert.equal(serialized.includes(secretBody), false);
   });
@@ -111,6 +115,17 @@ describe("generation submission handoff", function() {
       contentSubmissionService: { previewBatch() { throw new Error("must not preview an unsupported target"); }, createBatch() { throw new Error("must not create an unsupported target"); } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: false }]
     });
-    assert.throws(() => service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } }), (error) => error.code === "HANDOFF_TARGET_UNSUPPORTED");
+    assert.throws(() => service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" }), (error) => error.code === "HANDOFF_TARGET_UNSUPPORTED");
+  });
+
+  it("rejects the retired multi-target request shape and missing account profile", function() {
+    const service = createGenerationSubmissionHandoffService({
+      generationBatchService: { get() { return { id: "generation-1", revision: 1, status: "completed", tasks: [] }; } },
+      articleStore: {},
+      contentSubmissionService: { previewBatch() { throw new Error("must not preview invalid input"); }, createBatch() { throw new Error("must not create invalid input"); } },
+      targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
+    });
+    assert.throws(() => service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } }), (error) => error.code === "HANDOFF_INPUT_INVALID");
+    assert.throws(() => service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "" }), (error) => error.code === "ACCOUNT_PROFILE_REQUIRED");
   });
 });

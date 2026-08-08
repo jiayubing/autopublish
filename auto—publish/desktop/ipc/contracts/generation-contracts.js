@@ -322,11 +322,10 @@ function validateGenerationRuntimeEvent(value) {
   return output;
 }
 
-const profile = exactObject({ targetPlatformId: id, accountProfileId: id });
 const handoffBase = {
   generationBatchId: id,
-  targetPlatformIds: arrayField(id, { min: 1, max: 32 }),
-  accountProfiles: arrayField(profile, { min: 1, max: 32 }),
+  platformId: id,
+  accountProfileId: id,
 };
 const handoffPreviewRequest = exactObject(handoffBase);
 const handoffCommitRequest = exactObject({
@@ -334,37 +333,6 @@ const handoffCommitRequest = exactObject({
   previewToken: opaqueToken,
   confirmed: literalField(true),
 });
-function handoffArgs(args) {
-  const input = args[0] || {};
-  const profiles = input.accountProfiles && typeof input.accountProfiles === "object"
-    ? Object.entries(input.accountProfiles).map(([targetPlatformId, accountProfileId]) => ({
-        targetPlatformId,
-        accountProfileId,
-      }))
-    : [];
-  const result = {
-    generationBatchId: input.generationBatchId,
-    targetPlatformIds: input.targetPlatformIds,
-    accountProfiles: profiles,
-  };
-  if (input.previewToken !== undefined) result.previewToken = input.previewToken;
-  if (input.confirmed !== undefined) result.confirmed = input.confirmed;
-  return result;
-}
-function handoffInput(payload) {
-  const accountProfiles = {};
-  payload.accountProfiles.forEach((item) => {
-    accountProfiles[item.targetPlatformId] = item.accountProfileId;
-  });
-  const result = {
-    generationBatchId: payload.generationBatchId,
-    targetPlatformIds: payload.targetPlatformIds,
-    accountProfiles,
-  };
-  if (payload.previewToken !== undefined) result.previewToken = payload.previewToken;
-  if (payload.confirmed !== undefined) result.confirmed = payload.confirmed;
-  return [result];
-}
 const invalidArticle = exactObject({
   clientId: id,
   articleId: optionalField(nullableField(id)),
@@ -395,7 +363,8 @@ const handoffPreview = exactObject({
   previewToken: opaqueToken,
   articleCount: integerField({ min: 0 }),
   clientCount: integerField({ min: 0 }),
-  targetPlatformIds: arrayField(id, { max: 32 }),
+  platformId: id,
+  accountProfileId: id,
   estimatedTaskCount: integerField({ min: 0 }),
   queueableTaskCount: integerField({ min: 0 }),
   idempotentCount: integerField({ min: 0 }),
@@ -449,6 +418,7 @@ const HANDOFF_CODES = [
   "HANDOFF_INPUT_INVALID", "HANDOFF_TARGET_REQUIRED", "HANDOFF_BATCH_NOT_TERMINAL",
   "HANDOFF_TARGET_UNSUPPORTED", "HANDOFF_PREVIEW_STALE", "HANDOFF_CONFIRMATION_REQUIRED",
   "HANDOFF_ARTICLE_IDENTITY_CONFLICT", "HANDOFF_SERVICE_INVALID", "HANDOFF_CLIENT_GROUP_FAILED",
+  "ACCOUNT_PROFILE_REQUIRED",
 ];
 function errors(codes, userMessage) {
   return Object.freeze({
@@ -482,8 +452,8 @@ const generationContracts = Object.freeze([
   contract({ capability: "generation.previewCancelPending", channel: "content:preview-cancel-pending-generation-batch", kind: "query", request: batchIdRequest, success: cancelPreview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.cancelPending", channel: "content:cancel-pending-generation-batch", kind: "command", request: cancelRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.getRuntimeSnapshot", channel: "content:get-generation-runtime-snapshot", kind: "query", request: emptyRequest, success: runtimeSnapshot, fromArgs: noArgs, toArgs: noLegacyInput }, generationErrors),
-  contract({ capability: "generation.previewSubmissionHandoff", channel: "content:preview-generation-submission-handoff", kind: "query", request: handoffPreviewRequest, success: handoffPreview, fromArgs: handoffArgs, toArgs: handoffInput }, handoffErrors),
-  contract({ capability: "generation.commitSubmissionHandoff", channel: "content:commit-generation-submission-handoff", kind: "command", request: handoffCommitRequest, success: handoffResult, fromArgs: handoffArgs, toArgs: handoffInput }, handoffErrors),
+  contract({ capability: "generation.previewSubmissionHandoff", channel: "content:preview-generation-submission-handoff", kind: "query", request: handoffPreviewRequest, success: handoffPreview, fromArgs: directArgs, toArgs: directInput }, handoffErrors),
+  contract({ capability: "generation.commitSubmissionHandoff", channel: "content:commit-generation-submission-handoff", kind: "command", request: handoffCommitRequest, success: handoffResult, fromArgs: directArgs, toArgs: directInput }, handoffErrors),
 ]);
 
 const generationEventContracts = Object.freeze([

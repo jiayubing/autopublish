@@ -44,8 +44,8 @@ type GenerationRuntimeSnapshot = {
 };
 type GenerationHandoffPreviewInput = {
   generationBatchId: string;
-  targetPlatformIds: string[];
-  accountProfiles: Record<string, string>;
+  platformId: string;
+  accountProfileId: string;
 };
 type GenerationHandoffCommitInput = GenerationHandoffPreviewInput & {
   previewToken: string;

@@ -192,7 +192,6 @@ test("authenticated platform and account registrars return path-free typed proje
           ],
         },
       ],
-      buildSelectedSubmissionsPlan: () => ({ tasks: [] }),
       taskKey: () => "",
     },
     taskService: {

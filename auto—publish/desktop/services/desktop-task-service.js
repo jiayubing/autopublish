@@ -254,11 +254,11 @@ function closeBrowserSessions() {
           }
         }
       });
-      var targetPlatformIds = Array.from(new Set(workerPlan.tasks.map(function(task) { return task.targetPlatformId; }).filter(Boolean)));
+      var distinctTargetIds = Array.from(new Set(workerPlan.tasks.map(function(task) { return task.targetPlatformId; }).filter(Boolean)));
       var accountProfileIds = Array.from(new Set(workerPlan.tasks.map(function(task) { return task.accountProfileId; }).filter(Boolean)));
       result = await platformRun.start({
         publisher: "platform-submit",
-        target: targetPlatformIds.length === 1 ? targetPlatformIds[0] : "mixed",
+        target: distinctTargetIds.length === 1 ? distinctTargetIds[0] : "mixed",
         accountProfileId: accountProfileIds.length === 1 ? accountProfileIds[0] : "",
         tasks: workerPlan.tasks,
         cleanup: hepanCleanup,

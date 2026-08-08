@@ -4796,20 +4796,16 @@ const rawProductionIpcContractFixtures = [
       "desktop/preload.js:content:preview-generation-submission-handoff",
     request: {
       generationBatchId: "fixture-1",
-      targetPlatformIds: ["fixture-1"],
-      accountProfiles: [
-        {
-          targetPlatformId: "fixture-1",
-          accountProfileId: "fixture-1",
-        },
-      ],
+      platformId: "fixture-1",
+      accountProfileId: "fixture-1",
     },
     result: {
       generationBatchId: "fixture-1",
       previewToken: "fixture-1",
       articleCount: 0,
       clientCount: 0,
-      targetPlatformIds: [],
+      platformId: "fixture-1",
+      accountProfileId: "fixture-1",
       estimatedTaskCount: 0,
       queueableTaskCount: 0,
       idempotentCount: 0,
@@ -4830,13 +4826,8 @@ const rawProductionIpcContractFixtures = [
       "desktop/preload.js:content:commit-generation-submission-handoff",
     request: {
       generationBatchId: "fixture-1",
-      targetPlatformIds: ["fixture-1"],
-      accountProfiles: [
-        {
-          targetPlatformId: "fixture-1",
-          accountProfileId: "fixture-1",
-        },
-      ],
+      platformId: "fixture-1",
+      accountProfileId: "fixture-1",
       previewToken: "fixture-1",
       confirmed: true,
     },

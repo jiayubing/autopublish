@@ -188,75 +188,6 @@ const accountProfile = exactObject({
   createdAt: optionalField(safeText(64)),
 });
 
-const submissionBinding = exactObject({
-  platformId: identifier,
-  accountProfileId: identifier,
-});
-
-const submission = exactObject({
-  sourcePlatformId: identifier,
-  filename,
-  targetPlatformIds: arrayField(identifier, { min: 1, max: 32 }),
-  accountProfiles: arrayField(submissionBinding, { min: 1, max: 32 }),
-});
-
-const submitResultItem = exactObject({
-  task,
-  status: safeText(64, 1),
-  publicationStatus: nullableField(safeText(64)),
-  errorCode: nullableField(safeText(128)),
-  archiveErrorCode: nullableField(safeText(128)),
-});
-
-const trashSummary = exactObject({
-  offeredCount: integerField({ min: 0, max: 100000 }),
-  requestedCount: integerField({ min: 0, max: 100000 }),
-  movedCount: integerField({ min: 0, max: 100000 }),
-  recoveryCount: integerField({ min: 0, max: 100000 }),
-  blockedCount: integerField({ min: 0, max: 100000 }),
-  failedCount: integerField({ min: 0, max: 100000 }),
-  reasonCodes: arrayField(safeText(128, 1), { max: 1000 }),
-});
-
-function submissionsFromArgs(args) {
-  const input = args[0] || {};
-  return {
-    submissions: (Array.isArray(input) ? input : input.submissions || []).map(
-      (value) => ({
-        sourcePlatformId: value.sourcePlatformId,
-        filename: value.filename,
-        targetPlatformIds: value.targetPlatformIds,
-        accountProfiles: Object.keys(value.accountProfiles || {}).map(
-          (platformId) => ({
-            platformId,
-            accountProfileId: value.accountProfiles[platformId],
-          }),
-        ),
-      }),
-    ),
-    autoTrash: input.autoTrash === true,
-  };
-}
-
-function submissionsToArgs(payload) {
-  return [
-    {
-      submissions: payload.submissions.map((value) => ({
-        sourcePlatformId: value.sourcePlatformId,
-        filename: value.filename,
-        targetPlatformIds: value.targetPlatformIds,
-        accountProfiles: Object.fromEntries(
-          value.accountProfiles.map((binding) => [
-            binding.platformId,
-            binding.accountProfileId,
-          ]),
-        ),
-      })),
-      autoTrash: payload.autoTrash,
-    },
-  ];
-}
-
 function safeErrorCode(value, fallback) {
   const candidate =
     typeof value === "string"
@@ -370,56 +301,6 @@ function projectPlatformQueue(value) {
   if (Number.isSafeInteger(input.revision) && input.revision >= 0)
     result.revision = input.revision;
   return result;
-}
-
-function projectPlatformSubmitResult(value) {
-  const input = value || {};
-  const integer = (candidate) =>
-    Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : 0;
-  const summary = input.trashSummary || {};
-  return {
-    ok: integer(input.ok),
-    fail: integer(input.fail),
-    uncertain: integer(input.uncertain),
-    skipped: integer(input.skipped),
-    results: (Array.isArray(input.results) ? input.results : []).map((item) => ({
-      task: projectTask(item && item.task),
-      status: String((item && item.status) || "failed"),
-      publicationStatus:
-        item && typeof item.publicationStatus === "string"
-          ? item.publicationStatus
-          : null,
-      errorCode: item && item.error ? safeErrorCode(item.error, "PLATFORM_TASK_FAILED") : null,
-      archiveErrorCode:
-        item && item.archiveError
-          ? safeErrorCode(item.archiveError, "ARCHIVE_FAILED")
-          : null,
-    })),
-    archiveSummary: {
-      attempted: integer(input.archiveSummary && input.archiveSummary.attempted),
-      succeeded: integer(input.archiveSummary && input.archiveSummary.succeeded),
-      failed: integer(input.archiveSummary && input.archiveSummary.failed),
-    },
-    trashDisposition: [
-      "keep_local",
-      "offer_trash",
-      "auto_trash_requested",
-      "auto_trash_blocked",
-    ].includes(input.trashDisposition)
-      ? input.trashDisposition
-      : "keep_local",
-    trashSummary: {
-      offeredCount: integer(summary.offeredCount),
-      requestedCount: integer(summary.requestedCount),
-      movedCount: integer(summary.movedCount),
-      recoveryCount: integer(summary.recoveryCount),
-      blockedCount: integer(summary.blockedCount),
-      failedCount: integer(summary.failedCount),
-      reasonCodes: (Array.isArray(summary.reasonCodes) ? summary.reasonCodes : [])
-        .map((code) => safeErrorCode(code, null))
-        .filter(Boolean),
-    },
-  };
 }
 
 const platformContracts = [
@@ -559,5 +440,4 @@ module.exports = {
   platformContracts,
   projectPlatformQueue,
   projectPlatformSnapshot,
-  projectPlatformSubmitResult,
 };

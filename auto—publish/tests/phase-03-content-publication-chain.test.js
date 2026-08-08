@@ -87,8 +87,8 @@ test("content queue execution claims and completes its original OperationalStore
     const queued = content.createBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: profile.accountProfileId },
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
       confirmed: true,
     });
     const workbench = createPlatformWorkbenchService({
@@ -132,14 +132,14 @@ test("content queue execution claims and completes its original OperationalStore
         unregisterAttempt: () => {},
       },
     });
-    const plan = workbench.buildSelectedSubmissionsPlan([
-      {
+    const plan = workbench.buildSelectedPlan({
+      selectedArticles: [{
         sourcePlatformId: "toutiao",
         filename: queued.items[0].filename,
-        targetPlatformIds: ["toutiao"],
-        accountProfiles: { toutiao: profile.accountProfileId },
-      },
-    ]);
+      }],
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
+    });
     const result = await service.submit(plan);
     assert.equal(result.batchId, queued.batchId);
     assert.equal(result.results[0].status, "submitted");
@@ -184,8 +184,8 @@ test("multiline platform content passes the operational DTO boundary and complet
     const queued = content.createBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["hepan"],
-      accountProfiles: { hepan: profile.accountProfileId },
+      platformId: "hepan",
+      accountProfileId: profile.accountProfileId,
       confirmed: true,
     });
     const workbench = createPlatformWorkbenchService({
@@ -229,14 +229,14 @@ test("multiline platform content passes the operational DTO boundary and complet
         unregisterAttempt: () => {},
       },
     });
-    const plan = workbench.buildSelectedSubmissionsPlan([
-      {
+    const plan = workbench.buildSelectedPlan({
+      selectedArticles: [{
         sourcePlatformId: "hepan",
         filename: queued.items[0].filename,
-        targetPlatformIds: ["hepan"],
-        accountProfiles: { hepan: profile.accountProfileId },
-      },
-    ]);
+      }],
+      platformId: "hepan",
+      accountProfileId: profile.accountProfileId,
+    });
 
     const result = await service.submit(plan);
     assert.equal(result.results[0].status, "submitted");
@@ -251,40 +251,34 @@ test("multiline platform content passes the operational DTO boundary and complet
   }
 });
 
-test("an account verification failure does not claim later selected platform items", async () => {
+test("an account verification failure does not claim later selected single-target items", async () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "phase-04-content-claim-"),
   );
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const toutiaoProfile = store.createAccountProfile({
+    const profile = store.createAccountProfile({
       platformId: "toutiao",
       displayName: "toutiao-fixture",
     });
-    const liejuProfile = store.createAccountProfile({
-      platformId: "lieju",
-      displayName: "lieju-fixture",
-    });
     const input = path.join(root, ".autopublish", "input");
-    const platforms = [
-      { id: "toutiao", scanDir: "toutiao", contentQueueImport: true },
-      { id: "lieju", scanDir: "lieju", contentQueueImport: true },
-    ];
+    const platforms = [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }];
+    const articles = new Map([
+      ["article-1", article()],
+      ["article-2", Object.assign({}, article(), { id: "article-2" })],
+    ]);
     const content = createContentSubmissionService({
       workspaceRoot: root,
       paths: { input },
       operationalStore: store,
-      contentStore: { getArticle: () => article() },
+      contentStore: { getArticle: (_clientId, articleId) => articles.get(articleId) },
       platforms,
     });
     const queued = content.createBatch({
       clientId: "client-1",
-      articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao", "lieju"],
-      accountProfiles: {
-        toutiao: toutiaoProfile.accountProfileId,
-        lieju: liejuProfile.accountProfileId,
-      },
+      articleIds: ["article-1", "article-2"],
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
       confirmed: true,
     });
     const workbench = createPlatformWorkbenchService({
@@ -293,7 +287,6 @@ test("an account verification failure does not claim later selected platform ite
       platforms,
       adapters: {
         toutiao: { parseArticleFiles: async () => [{ title: "Fixture" }] },
-        lieju: { parseArticleFiles: async () => [{ title: "Fixture" }] },
       },
     });
     const workflow = createPublicationWorkflow({
@@ -315,23 +308,14 @@ test("an account verification failure does not claim later selected platform ite
         unregisterAttempt: () => {},
       },
     });
-    const byPlatform = new Map(
-      queued.items.map((item) => [item.targetPlatformId, item]),
-    );
-    const plan = workbench.buildSelectedSubmissionsPlan([
-      {
+    const plan = workbench.buildSelectedPlan({
+      selectedArticles: queued.items.map((item) => ({
         sourcePlatformId: "toutiao",
-        filename: byPlatform.get("toutiao").filename,
-        targetPlatformIds: ["toutiao"],
-        accountProfiles: { toutiao: toutiaoProfile.accountProfileId },
-      },
-      {
-        sourcePlatformId: "lieju",
-        filename: byPlatform.get("lieju").filename,
-        targetPlatformIds: ["lieju"],
-        accountProfiles: { lieju: liejuProfile.accountProfileId },
-      },
-    ]);
+        filename: item.filename,
+      })),
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
+    });
 
     await assert.rejects(() => service.submit(plan), {
       code: "ACCOUNT_PROFILE_INSPECTION_UNVERIFIED",
@@ -374,8 +358,8 @@ test("an expired local claim can be reclaimed instead of reporting that the queu
     const queued = content.createBatch({
       clientId: "client-1",
       articleIds: ["article-1"],
-      targetPlatformIds: ["toutiao"],
-      accountProfiles: { toutiao: profile.accountProfileId },
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
       confirmed: true,
     });
     const durable = store.getSubmissionBatch(queued.batchId).items[0];
@@ -424,14 +408,14 @@ test("an expired local claim can be reclaimed instead of reporting that the queu
         unregisterAttempt: () => {},
       },
     });
-    const plan = workbench.buildSelectedSubmissionsPlan([
-      {
+    const plan = workbench.buildSelectedPlan({
+      selectedArticles: [{
         sourcePlatformId: "toutiao",
         filename: queued.items[0].filename,
-        targetPlatformIds: ["toutiao"],
-        accountProfiles: { toutiao: profile.accountProfileId },
-      },
-    ]);
+      }],
+      platformId: "toutiao",
+      accountProfileId: profile.accountProfileId,
+    });
 
     const result = await service.submit(plan);
     assert.equal(result.results[0].status, "submitted");

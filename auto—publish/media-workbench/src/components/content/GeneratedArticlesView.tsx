@@ -109,10 +109,8 @@ export default function GeneratedArticlesView({
       allSubmissionPlatforms.filter((platform) => platform.contentQueueImport),
     [allSubmissionPlatforms],
   );
-  const [targetPlatformIds, setTargetPlatformIds] = useState<string[]>([]);
-  const [accountProfiles, setAccountProfiles] = useState<
-    Record<string, string>
-  >({});
+  const [platformId, setPlatformId] = useState("");
+  const [accountProfileId, setAccountProfileId] = useState("");
   const cancellationRequestIdRef = useRef(0);
   const [drawerArticle, setDrawerArticle] =
     useState<GeneratedContentArticle | null>(null);
@@ -420,11 +418,10 @@ export default function GeneratedArticlesView({
     )
       return;
     const selectedQueueable = selectedQueueableArticles;
-    if (!selectedQueueable.length || targetPlatformIds.length !== 1) return;
+    if (!selectedQueueable.length || !platformId || !accountProfileId) return;
     setError("");
     try {
       if (
-        accountProfiles[targetPlatformIds[0]] &&
         typeof commands.previewRegularQueueAdmission === "function" &&
         typeof commands.admitRegularQueueItems === "function"
       ) {
@@ -433,8 +430,8 @@ export default function GeneratedArticlesView({
             clientId: requestedClientId,
             articleId: article.id,
           })),
-          platformId: targetPlatformIds[0],
-          accountProfileId: accountProfiles[targetPlatformIds[0]],
+          platformId,
+          accountProfileId,
         };
         const preview =
           await commands.previewRegularQueueAdmission(regularInput);
@@ -1452,20 +1449,22 @@ export default function GeneratedArticlesView({
             <span className="shrink-0 text-xs font-medium text-slate-500">
               投稿平台
             </span>
-            {submissionPlatforms.map((platform) => (
-              <button
-                key={platform.id}
-                type="button"
-                onClick={() =>
-                  setTargetPlatformIds((current) =>
-                    current[0] === platform.id ? [] : [platform.id],
-                  )
-                }
-                className={`rounded border px-2 py-1 text-xs ${targetPlatformIds.includes(platform.id) ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-300 text-slate-600"}`}
-              >
-                {platform.displayName || platform.id}
-              </button>
-            ))}
+            <select
+              aria-label="普通平台投稿目标"
+              value={platformId}
+              onChange={(event) => {
+                setPlatformId(event.target.value);
+                setAccountProfileId("");
+              }}
+              className="h-8 min-w-40 rounded border border-slate-300 px-2 text-xs"
+            >
+              <option value="">请选择一个平台</option>
+              {submissionPlatforms.map((platform) => (
+                <option key={platform.id} value={platform.id}>
+                  {platform.displayName || platform.id}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
@@ -1477,10 +1476,8 @@ export default function GeneratedArticlesView({
             }
             disabled={
               !selectedQueueableArticles.length ||
-              !targetPlatformIds.length ||
-              targetPlatformIds.some(
-                (platformId) => !accountProfiles[platformId],
-              ) ||
+              !platformId ||
+              !accountProfileId ||
               commandBusy(
                 "previewRegularQueueAdmission",
                 "admitRegularQueueItems",
@@ -1521,9 +1518,9 @@ export default function GeneratedArticlesView({
           </div>
           <AccountProfileSelector
             platforms={submissionPlatforms}
-            targetPlatformIds={targetPlatformIds}
-            value={accountProfiles}
-            onChange={setAccountProfiles}
+            platformId={platformId}
+            value={accountProfileId}
+            onChange={setAccountProfileId}
           />
         </div>
       </div>
