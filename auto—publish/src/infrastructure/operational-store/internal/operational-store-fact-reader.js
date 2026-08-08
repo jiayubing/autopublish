@@ -130,7 +130,7 @@ function createOperationalStoreFactReader(context) {
       });
     const orders = db
       .prepare(
-        `SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code,h.evidence_json AS history_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) WHERE p.article_id IN(${inList}) ORDER BY o.created_at DESC,o.order_id DESC`,
+        `SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code,h.evidence_json AS history_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) WHERE p.article_id IN(${inList}) AND json_extract(p.target_json,'$.kind')='media' ORDER BY o.created_at DESC,o.order_id DESC`,
       )
       .all(...articleIds)
       .map((row) => {

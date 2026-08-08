@@ -129,14 +129,13 @@ test("admission: a fake platform is isolated to a Publisher adapter and registry
         publish: async (input) => {
           calls.push(input.target.platformId);
           return {
-            status: "published",
+            status: "submitted",
             evidence: {
               articleId: input.articleId,
               attemptId: input.attemptId,
               targetKey: `platform:admission-fake-platform:account:${profile.accountProfileId}`,
               accountProfileId: profile.accountProfileId,
               remoteId: "admission-remote-1",
-              remoteUrl: "https://fixture.invalid/admission-remote-1",
             },
           };
         },
@@ -167,7 +166,7 @@ test("admission: a fake platform is isolated to a Publisher adapter and registry
       body: "Fixture only",
     });
 
-    assert.equal(result.status, "published");
+    assert.equal(result.status, "submitted");
     assert.deepEqual(calls, ["admission-fake-platform"]);
     assert.equal(
       store.listPublicationRecords({ articleIds: ["article-admission-1"] })

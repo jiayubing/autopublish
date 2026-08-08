@@ -310,7 +310,9 @@ function createMediaOrderService(opts) {
     );
     // A later per-order status is still authoritative history, but it must not
     // hide the durable publication URL established by an earlier status 2.
-    if (!order || !order.publishedAt)
+    // A direct status-2 projection is also a valid published-link fact when
+    // the provider did not supply a separate event timestamp.
+    if (!order || (order.statusCode !== "2" && !order.publishedAt))
       throw orderError("MEDIA_ORDER_NOT_PUBLISHED");
     const context = transitions.getOrderObservationContext(String(orderId));
     const url = publishedUrlForExternalOpen(context.remoteUrl);

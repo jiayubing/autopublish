@@ -111,14 +111,13 @@ test("content queue execution claims and completes its original OperationalStore
         publish: async (publishInput) => {
           publishedBody = publishInput.body;
           return {
-            status: "published",
+            status: "submitted",
             evidence: {
               articleId: publishInput.articleId,
               attemptId: publishInput.attemptId,
               targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
               accountProfileId: profile.accountProfileId,
               remoteId: "remote-1",
-              remoteUrl: "https://example.test/remote-1",
             },
           };
         },
@@ -143,7 +142,7 @@ test("content queue execution claims and completes its original OperationalStore
     ]);
     const result = await service.submit(plan);
     assert.equal(result.batchId, queued.batchId);
-    assert.equal(result.results[0].status, "published");
+    assert.equal(result.results[0].status, "submitted");
     assert.equal(publishedBody, "Body");
     assert.equal(
       store.getSubmissionBatch(queued.batchId).items[0].status,
@@ -151,7 +150,7 @@ test("content queue execution claims and completes its original OperationalStore
     );
     assert.equal(
       store.listPublicationRecords({ articleIds: ["article-1"] })[0].status,
-      "published",
+      "submitted",
     );
   } finally {
     store.close();
@@ -209,14 +208,13 @@ test("multiline platform content passes the operational DTO boundary and complet
         publish: async (publishInput) => {
           published += 1;
           return {
-            status: "published",
+            status: "submitted",
             evidence: {
               articleId: publishInput.articleId,
               attemptId: publishInput.attemptId,
               targetKey: `platform:hepan:account:${profile.accountProfileId}`,
               accountProfileId: profile.accountProfileId,
               remoteId: "remote-multiline",
-              remoteUrl: "https://example.test/remote-multiline",
             },
           };
         },
@@ -241,7 +239,7 @@ test("multiline platform content passes the operational DTO boundary and complet
     ]);
 
     const result = await service.submit(plan);
-    assert.equal(result.results[0].status, "published");
+    assert.equal(result.results[0].status, "submitted");
     assert.equal(published, 1);
     assert.equal(
       store.getSubmissionBatch(queued.batchId).items[0].status,
@@ -406,14 +404,13 @@ test("an expired local claim can be reclaimed instead of reporting that the queu
           accountProfileId: profile.accountProfileId,
         }),
         publish: async (publishInput) => ({
-          status: "published",
+          status: "submitted",
           evidence: {
             articleId: publishInput.articleId,
             attemptId: publishInput.attemptId,
             targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
             accountProfileId: profile.accountProfileId,
             remoteId: "remote-reclaimed",
-            remoteUrl: "https://example.test/remote-reclaimed",
           },
         }),
       },
@@ -437,7 +434,7 @@ test("an expired local claim can be reclaimed instead of reporting that the queu
     ]);
 
     const result = await service.submit(plan);
-    assert.equal(result.results[0].status, "published");
+    assert.equal(result.results[0].status, "submitted");
     assert.equal(
       store.getSubmissionBatch(queued.batchId).items[0].status,
       "completed",

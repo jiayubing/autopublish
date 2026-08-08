@@ -13,10 +13,10 @@
 | Ticket 09 | `COMPLETE` | Wave 6 单 Ticket 工作已完成 |
 | Ticket 14 | `COMPLETE` | Wave 6 单 Ticket 工作已完成 |
 | Ticket 15 | `COMPLETE` | Wave 6 单 Ticket 工作已完成 |
-| Wave 6 | `RUNNING` | 当前只允许 **Wave 6 Final Closure** |
-| Wave 7 | `PENDING` | Wave 6 final closure + final clean HEAD gate PASS 后才变 `READY` |
+| Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
+| Wave 7 | `PENDING` | Wave 6 final clean HEAD gate PASS 后才变 `READY` |
 
-**当前下一动作：Wave 6 Final Closure。**
+**当前下一动作：对 legacy migration published-fact import capability 作调度决策；不得在本 Gate Recovery 提前实施 Ticket 23/M03。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -48,7 +48,7 @@ Wave 6 在以下全部完成前不得标记 `COMPLETE`：
 | 4 | 07 → 12 | 07←02、06；12←06、11 | `COMPLETE` |
 | 5 | 08 → 13 | 08←07；13←02、04、12 | `COMPLETE` |
 | 5.5 | M01 → M02 | Wave 5 COMPLETE | `COMPLETE` |
-| 6 | 09 → 14 → 15 → Final Closure | 09←08；14←13；15←09、11、13；M5.5 COMPLETE | `RUNNING` |
+| 6 | 09 → 14 → 15 → Final Closure | 09←08；14←13；15←09、11、13；M5.5 COMPLETE | `BLOCKED` |
 | 7 | 10 → 16 | 10←09；16←15；Wave 6 COMPLETE | `PENDING` |
 | 8 | 22 | 06、09、16 | `PENDING` |
 | 8.5 | M03 | Wave 8 COMPLETE | `PENDING` |
