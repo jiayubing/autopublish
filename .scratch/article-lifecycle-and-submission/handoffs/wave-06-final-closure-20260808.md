@@ -2,7 +2,9 @@
 
 日期：2026-08-08
 
-Implementation/integration HEAD：`afd49d04adb9f2278acaa1b861a994564e500743`
+Closure implementation HEAD：`418267fba2bc8f592ac37c528f543672f9f63eeb`
+
+Gate Recovery implementation HEAD：`ec50d986da1cb1adaf7e44675458c8f280d3a410`
 
 ## Scope
 
