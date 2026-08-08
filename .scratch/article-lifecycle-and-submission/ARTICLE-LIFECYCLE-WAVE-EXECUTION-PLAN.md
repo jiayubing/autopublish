@@ -23,7 +23,7 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：24-A review/lineage removal 已在 clean integration HEAD `965ea04fc9de94d0d5497a1945beaf893ce01d7b` 完成；handoff `handoffs/24-A-remove-review-and-lineage.md` 记录 Article Content owner 收敛、定向行为/contract/IPC/Renderer/migration isolation/typecheck、Primary Audit PASS 与 bounded re-audit PASS。24-A 未进入 24-B；Wave 10 保持 `PARTIAL`，下一可调度项为 24-B。**
+**当前动作：24-B single-target submission contract 已在 clean integration HEAD `fa861f657a4279e3dfbba6c8e113886e8fb622ec` 完成；handoff `handoffs/24-B-single-target-submission-contract.md` 记录 generation/queue/workbench/IPC/Renderer 单目标收敛、定向矩阵、Primary Audit remediation 与 15/15 bounded re-audit PASS。全量 IPC fixture matrix timeout 已按未运行记录；24-B 未进入 24-C，Wave 10 保持 `PARTIAL`，下一可调度项为 24-C。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -60,7 +60,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8    | 22                                                       | 06、09、16                                               | `COMPLETE`                                                                            |
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
-| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `PARTIAL`；24-A COMPLETE，下一项 24-B                                                  |
+| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `PARTIAL`；24-B COMPLETE，下一项 24-C                                                  |
 | 10.5 | M04 → M05 → M06                                          | Wave 10 COMPLETE                                         | `PENDING`                                                                             |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
