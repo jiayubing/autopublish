@@ -23,7 +23,7 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：final clean-HEAD reconciliation 已完成。Clean implementation HEAD `265517a8d25934b7917e10a0c2240ce25a20182e` 上完整 `npm test` 为 1,927/1,927 PASS，migration、Phase 08、lint/typecheck/format/discovery 与 clean production-smoke 全部 PASS；Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9 已按原顺序回填 `COMPLETE`。Evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`。下一可调度项为 Ticket 24；本次未进入 Ticket 24。**
+**当前动作：final clean-HEAD reconciliation 已完成。Clean implementation HEAD `265517a8d25934b7917e10a0c2240ce25a20182e` 上完整 `npm test` 为 1,927/1,927 PASS，migration、Phase 08、lint/typecheck/format/discovery 与 clean production-smoke 全部 PASS；Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9 已按原顺序回填 `COMPLETE`。Evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`。下一可调度项为 Ticket 24-0；Ticket 24 必须按拆分工作包串行推进。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -60,7 +60,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8    | 22                                                       | 06、09、16                                               | `COMPLETE`                                                                            |
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
-| 10   | 24                                                       | 02、10、14、16、23                                       | `READY`                                                                               |
+| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `READY`；下一项 24-0                                                                  |
 | 10.5 | M04 → M05 → M06                                          | Wave 10 COMPLETE                                         | `PENDING`                                                                             |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
@@ -86,7 +86,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 
 - **Wave 7**：Ticket 10 拆 Renderer 业务巨型组件；Ticket 16 实现取消状态机。不得为了“等 M03”把完整 cancellation 状态机继续塞进已有巨型 aggregate；Ticket 16 可以建立职责清楚的独立 cancellation owner，但不得执行系统性 M03。
 - **Wave 8.5 / M03**：按 M03-0 职责图、M03-A queue cluster、M03-B ArticleMutationCoordinator cluster、M03-C 统一审计收口串行治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration seam，且不得提前实现 migration-only writer。
-- **Wave 10 / 10.5**：Ticket 24 先删除 legacy surface；之后 M04 收缩 contract owner，M05 治理测试质量，M06 收口剩余 silent catch。
+- **Wave 10 / 10.5**：Ticket 24 按 `24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F` 从新的 integration HEAD 严格串行删除 legacy surface；每个工作包使用独立执行任务，主任务只在前一包 Closure 后创建下一任务，不得预创建并行修改共享 owner。之后 M04 收缩 contract owner，M05 治理测试质量，M06 收口剩余 silent catch。
 - **Wave 11**：Ticket 25 负责最终核心验收 evidence；真实平台操作仍需逐次用户授权。
 - **Wave 12–13**：核心完成后的图片扩展。旧组默认保持 `imageCount=0`；平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。
 

@@ -32,6 +32,18 @@
 - 仅在用户当前 Goal 明确授权 commit/merge 时自动执行这些 Git 变更；否则到相应 gate 停止。
 - Goal 只到用户指定阶段；例如“完成 Wave 7”不得自动进入 Wave 8。
 
+### 1.3 Goal 驱动的 task-per-work-package 串行调度
+
+适用：一个 umbrella Ticket/Maintenance 已在 Wave Plan 和自身合同中拆成 `X-0 → X-A → ... → X-N`，且用户明确要求由主任务持续推进到该阶段 `COMPLETE`。
+
+- 主任务持有唯一阶段 Goal、Wave Plan 状态和 integration HEAD；子执行任务不各自创建覆盖整个阶段的 Goal，也不得自行调度兄弟任务。
+- 一个工作包对应一个新执行任务。主任务只把当前最左、gate 已满足的工作包交给它，并提供当前 integration HEAD、工作包合同、允许的 Git 操作和明确停止条件。
+- 主任务必须等待当前执行任务返回实现、测试、audit/remediation、commit/handoff evidence，并验证其已进入新的 clean integration HEAD；验证通过后才更新 Wave Plan，并创建下一工作包任务。
+- 不预创建后续执行任务，不并行修改共享 owner，不让后续任务基于旧 HEAD 开始“先分析/先实现”。只读调度预检也必须以创建任务时的真实 HEAD 重做。
+- 执行任务遇到普通测试失败或 in-scope finding 时在自身范围内继续闭环；只有第 8 节允许停止条件成立时才返回主任务请求决策。
+- 最后一个实现工作包完成后，由合同指定的 closure 工作包执行一次 combined/Wave audit、blocking remediation、bounded re-audit 和 final clean-HEAD gate；通过后主任务将阶段标记 `COMPLETE` 并停止 Goal，不自动进入下一 Wave/Maintenance。
+- 用户只授权 Manual Dispatch 时，本节不自动生效；不得仅因合同已拆分就擅自创建后续任务、commit 或 merge。
+
 ## 2. 调度预检
 
 每个新执行项开始前只做与当前任务成比例的预检：
