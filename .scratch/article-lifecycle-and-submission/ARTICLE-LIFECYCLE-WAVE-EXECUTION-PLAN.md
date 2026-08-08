@@ -16,15 +16,18 @@
 | Ticket 10                  | `COMPLETE` | Dependency-Resolution Lane 首项已完成；evidence 见对应 handoff/Git                                                                                                           |
 | Ticket 16                  | `COMPLETE` | implementation、Primary Audit、remediation、bounded re-audit、commit/handoff 已完成                                                                                          |
 | Ticket 22                  | `COMPLETE` | implementation、Primary Audit、remediation、bounded re-audit、最终 gates、implementation/docs commit 已完成；handoff 见 `handoffs/22-published-archive-and-safe-deletion.md` |
-| Wave 6                     | `BLOCKED`  | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策                                                 |
-| Wave 7                     | `RUNNING`  | Lane 内 Ticket 10、16 已完成；依授权规则不提前回填 `COMPLETE`                                                                                                                |
-| Dependency-Resolution Lane | `RUNNING`  | Ticket 23 / 23-E Closure 已完成；下一动作仅为最终 clean-HEAD reconciliation，不进入 Ticket 24                                                                                |
+| Wave 6                     | `COMPLETE` | Final Closure、Gate Recovery 与最终 clean-HEAD gate 已闭合；原 4 个 migration blocker 已由 Ticket 23 清零                                                                    |
+| Wave 7                     | `COMPLETE` | Ticket 10、16 Closure 与最终 clean-HEAD reconciliation 已闭合                                                                                                               |
+| Wave 8                     | `COMPLETE` | Ticket 22 Closure 与最终 clean-HEAD reconciliation 已闭合                                                                                                                   |
+| Maintenance M03           | `COMPLETE` | M03-0/A/B/C Closure 与最终 clean-HEAD reconciliation 已闭合                                                                                                                 |
+| Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
+| Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：Ticket 23 / 23-E Closure 已完成：combined Primary Audit、9 个 blocking finding remediation、三组 bounded re-audit 与最终专项 gates 已 PASS，`npm run test:migration` 已由 61/65 收口为 65/65。Evidence 见 `handoffs/23-E-integration-audit-and-closure.md`。下一动作仅为在新的 clean integration HEAD 执行最终 reconciliation：重新运行完整 `npm test` 与各 Wave/Maintenance 原定 gate，全部 PASS 后按 Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9 回填状态；不得进入 Ticket 24。**
+**当前动作：final clean-HEAD reconciliation 已完成。Clean implementation HEAD `265517a8d25934b7917e10a0c2240ce25a20182e` 上完整 `npm test` 为 1,927/1,927 PASS，migration、Phase 08、lint/typecheck/format/discovery 与 clean production-smoke 全部 PASS；Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9 已按原顺序回填 `COMPLETE`。Evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`。下一可调度项为 Ticket 24；本次未进入 Ticket 24。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
-当前 HEAD `9637819` 的历史记录曾将 Wave 6 记为完成，但该记录同时明确未在最终 HEAD 重新运行符合要求的完整 `npm test`；在新的合规 evidence 产生前，本实时计划按 final gate 规则保持 Wave 6=`BLOCKED`、Wave 7=`PENDING`。
+旧 HEAD `9637819` 缺少 final-HEAD 完整测试的问题已由本次 reconciliation evidence 取代；不得再用该旧 evidence 覆盖当前状态。
 
 ## 2. Wave 6 Final Closure Gate
 
@@ -52,12 +55,12 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 4    | 07 → 12                                                  | 07←02、06；12←06、11                                     | `COMPLETE`                                                                            |
 | 5    | 08 → 13                                                  | 08←07；13←02、04、12                                     | `COMPLETE`                                                                            |
 | 5.5  | M01 → M02                                                | Wave 5 COMPLETE                                          | `COMPLETE`                                                                            |
-| 6    | 09 → 14 → 15 → Final Closure                             | 09←08；14←13；15←09、11、13；M5.5 COMPLETE               | `BLOCKED`                                                                             |
-| 7    | 10 → 16                                                  | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免         | `RUNNING`（10/16 COMPLETE；状态回填等待最终 reconciliation）                          |
-| 8    | 22                                                       | 06、09、16                                               | `RUNNING`（Ticket 22 `COMPLETE`；依 lane 规则不提前回填 Wave 8 `COMPLETE`）           |
-| 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `PARTIAL`（M03-C Closure PASS；最终 `COMPLETE` 回填等待 Ticket 23 后 reconciliation） |
-| 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `RUNNING`（Ticket 23 Closure 完成；Wave 9 最终 reconciliation 尚未完成）              |
-| 10   | 24                                                       | 02、10、14、16、23                                       | `PENDING`                                                                             |
+| 6    | 09 → 14 → 15 → Final Closure                             | 09←08；14←13；15←09、11、13；M5.5 COMPLETE               | `COMPLETE`                                                                            |
+| 7    | 10 → 16                                                  | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免         | `COMPLETE`                                                                            |
+| 8    | 22                                                       | 06、09、16                                               | `COMPLETE`                                                                            |
+| 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
+| 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
+| 10   | 24                                                       | 02、10、14、16、23                                       | `READY`                                                                               |
 | 10.5 | M04 → M05 → M06                                          | Wave 10 COMPLETE                                         | `PENDING`                                                                             |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
@@ -65,7 +68,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 
 Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本表、对应 `Blocked by`/`Scheduling gate` 和真实 Git 状态共同决定。
 
-### 3.1 Dependency-Resolution Lane（AUTHORIZED）
+### 3.1 Dependency-Resolution Lane（COMPLETE）
 
 本 lane 仅用于解除 Wave 6 final gate 与 Ticket 23 上游 gate 的确认依赖环。授权规则如下：
 
@@ -73,11 +76,11 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 2. **只豁免 Wave COMPLETE 调度 gate**：各 Ticket 的真实 `Blocked by`、串行 HEAD、acceptance criteria、专项测试、Primary Audit、finding remediation、bounded re-audit、commit/handoff 均保持有效。
 3. **不得做缩水 migration 前置**：禁止恢复 `commitRemoteOutcome(published)`、新增 23A/temporary compatibility writer、第二个 publication-success primitive、migration-only M03 半成品，或让 migration 依赖 OperationalStore internal schema。
 4. **继承失败规则**：Ticket 10/16/22/M03 推进期间，当前 `phase-02-migration.test.js` 的 4 个已确认 legacy migration failures 只要数量、根因和行为合同不变，可作为 inherited blocker 记录；任何新增 failure 必须单独分类并修复。
-5. **状态不提前完成**：Wave 6 继续 `BLOCKED`；Wave 7/8、M03、Wave 9 不因 lane 提前实施而自动 `COMPLETE`。最终状态必须在 Ticket 23 清除 migration blocker 后，于最终 clean integration HEAD 上重新跑完整 gate 再按原顺序回填。
+5. **状态不提前完成（已闭合）**：lane 实施期间 Wave 6 保持 `BLOCKED`，Wave 7/8、M03、Wave 9 均未提前完成；Ticket 23 清除 migration blocker 后，已在最终 clean integration HEAD 重跑完整 gate 并按原顺序回填。
 6. **23-0 Upstream V1 Inventory Gate**：写 production implementation 前必须读取真实 exports + contract tests，逐项验证 08/09/13/15/16/22 要求的公开 V1。任一缺失返回 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING`，不得由 Ticket 23 猜测或复制 schema；23-0 不写 production implementation。
 7. **23-0 合同决策（CLOSED）**：`terminalObservationV1` 保持订单专属且不修改；`nonPublishedTerminal` 由 `closedTargetV1` 唯一承载 `FAILED | REJECTED | CANCELLED | PAID_STATUS_4`，只有存在真实订单身份时才允许 `orderHistoryV1` 为对象，否则必须为 `null`。payload 不得强制独立 `terminalObservationV1`，不得伪造订单身份或在 planner 中复制/改写上游 enum。
 8. **Ticket 23 必须完整实施**：只有 23-0 合法 PASS 后，才按 umbrella 合同串行完成 23-A closed contracts、23-B deterministic planner、23-C 唯一 import transaction、23-D journal/crash recovery/no-remote composition 与 23-E integration/audit/closure；不能并行共享 owner，也不能只为现有 4 个测试打补丁。
-9. **最终 reconciliation**：23-E 关闭 migration blocker 后，先跑 migration/专项矩阵，再在最终 clean HEAD 运行完整 `npm test` 与各 Wave/Maintenance 原定 gate；全部 PASS 后才依次回填 Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9。
+9. **最终 reconciliation（已闭合）**：23-E 关闭 migration blocker 后，migration/专项矩阵、最终 clean HEAD 完整 `npm test` 与各 Wave/Maintenance 原定 gate 均已 PASS，并已依次回填 Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9。
 
 ## 4. 未来关键边界
 
