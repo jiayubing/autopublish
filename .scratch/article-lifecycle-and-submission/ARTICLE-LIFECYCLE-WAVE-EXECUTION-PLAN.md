@@ -18,9 +18,9 @@
 | Ticket 22 | `COMPLETE` | implementation、Primary Audit、remediation、bounded re-audit、最终 gates、implementation/docs commit 已完成；handoff 见 `handoffs/22-published-archive-and-safe-deletion.md` |
 | Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
 | Wave 7 | `RUNNING` | Lane 内 Ticket 10、16 已完成；依授权规则不提前回填 `COMPLETE` |
-| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22 `COMPLETE`；M03 是后续项，须在新的调度请求中执行 |
+| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22 `COMPLETE`；M03 是后续项，按 M03-0 → M03-A → M03-B → M03-C 串行执行 |
 
-**当前下一动作：Ticket 22 已完成并在本线程停止；后续仍固定为 Ticket 22 → M03 → Ticket 23，M03 不在本线程进入。该 lane 只豁免“前序 Wave 必须 `COMPLETE`”这一调度 gate；不得豁免 Ticket `Blocked by`、既有串行顺序、acceptance criteria、Primary Audit 或最终完整 gate。Ticket 23 写 production implementation 前必须通过 upstream V1 inventory；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止。**
+**当前下一动作：从 Ticket 22 最终 clean HEAD 在新的调度请求中执行 M03-0；M03 内部固定为 M03-0 → M03-A → M03-B → M03-C，之后才允许 Ticket 23。该 lane 只豁免“前序 Wave 必须 `COMPLETE`”这一调度 gate；不得豁免既有串行顺序、acceptance criteria、Primary Audit 或最终完整 gate。Ticket 23 写 production implementation 前必须通过 upstream V1 inventory；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -55,7 +55,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 6 | 09 → 14 → 15 → Final Closure | 09←08；14←13；15←09、11、13；M5.5 COMPLETE | `BLOCKED` |
 | 7 | 10 → 16 | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免 | `RUNNING`（10/16 COMPLETE；状态回填等待最终 reconciliation） |
 | 8 | 22 | 06、09、16 | `RUNNING`（Ticket 22 `COMPLETE`；依 lane 规则不提前回填 Wave 8 `COMPLETE`） |
-| 8.5 | M03 | Wave 8 COMPLETE | `PENDING` |
+| 8.5 | M03-0 → M03-A → M03-B → M03-C | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate | `PENDING` |
 | 9 | 23 | 04、05、09、14、16、22；M8.5 COMPLETE | `PENDING` |
 | 10 | 24 | 02、10、14、16、23 | `PENDING` |
 | 10.5 | M04 → M05 → M06 | Wave 10 COMPLETE | `PENDING` |
@@ -69,7 +69,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 
 本 lane 仅用于解除 Wave 6 final gate 与 Ticket 23 上游 gate 的确认依赖环。授权规则如下：
 
-1. **固定顺序**：`10 → 16 → 22 → M03 → 23`。不得因为进入 lane 而跳过 10、缩减 16/22/M03，或自行重排。
+1. **固定顺序**：`10 → 16 → 22 → M03-0 → M03-A → M03-B → M03-C → 23`。M03 工作包不得并行修改共享 owner；不得因为进入 lane 而跳过、缩减或自行重排。
 2. **只豁免 Wave COMPLETE 调度 gate**：各 Ticket 的真实 `Blocked by`、串行 HEAD、acceptance criteria、专项测试、Primary Audit、finding remediation、bounded re-audit、commit/handoff 均保持有效。
 3. **不得做缩水 migration 前置**：禁止恢复 `commitRemoteOutcome(published)`、新增 23A/temporary compatibility writer、第二个 publication-success primitive、migration-only M03 半成品，或让 migration 依赖 OperationalStore internal schema。
 4. **继承失败规则**：Ticket 10/16/22/M03 推进期间，当前 `phase-02-migration.test.js` 的 4 个已确认 legacy migration failures 只要数量、根因和行为合同不变，可作为 inherited blocker 记录；任何新增 failure 必须单独分类并修复。
@@ -82,7 +82,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 ## 4. 未来关键边界
 
 - **Wave 7**：Ticket 10 拆 Renderer 业务巨型组件；Ticket 16 实现取消状态机。不得为了“等 M03”把完整 cancellation 状态机继续塞进已有巨型 aggregate；Ticket 16 可以建立职责清楚的独立 cancellation owner，但不得执行系统性 M03。
-- **Wave 8.5 / M03**：在 09/10/14/15/16/22 业务语义与最终 owner 稳定后治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration API 边界。
+- **Wave 8.5 / M03**：按 M03-0 职责图、M03-A queue cluster、M03-B ArticleMutationCoordinator cluster、M03-C 统一审计收口串行治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration seam，且不得提前实现 migration-only writer。
 - **Wave 10 / 10.5**：Ticket 24 先删除 legacy surface；之后 M04 收缩 contract owner，M05 治理测试质量，M06 收口剩余 silent catch。
 - **Wave 11**：Ticket 25 负责最终核心验收 evidence；真实平台操作仍需逐次用户授权。
 - **Wave 12–13**：核心完成后的图片扩展。旧组默认保持 `imageCount=0`；平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。
