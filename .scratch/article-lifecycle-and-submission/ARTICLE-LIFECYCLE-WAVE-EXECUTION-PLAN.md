@@ -20,7 +20,7 @@
 | Wave 7 | `RUNNING` | Lane 内 Ticket 10、16 已完成；依授权规则不提前回填 `COMPLETE` |
 | Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22、M03-C Closure、23-0 与 23-A 已闭合；下一串行工作包仅为 23-B |
 
-**当前下一动作：23-A closed migration contracts 已 `COMPLETE`：唯一 Migration Contract Owner 公开 `parseImportPlanV1`，封闭 envelope、公共 entry、六种 variant 与 migration-local DTO/enum，并复用 23-0 确认的上游 parser；跨 entry 文章/订单唯一性、身份绑定、成功优先级、证据完整性与 runnable-fact absence 的合同矩阵已通过。Evidence 见 `handoffs/23-A-closed-migration-contracts.md`。新的明确调度只允许从包含 23-A 的 clean integration HEAD 启动 23-B；23-C–E 保持 `PENDING`。M03/Wave 8 依 lane 规则不提前回填 `COMPLETE`；该 lane 不豁免 acceptance、串行 clean HEAD、审计或最终完整 gate。**
+**当前动作：23-A closed migration contracts 已 `COMPLETE`：唯一 Migration Contract Owner 公开 `parseImportPlanV1`，封闭 envelope、公共 entry、六种 variant 与 migration-local DTO/enum，并复用 23-0 确认的上游 parser；跨 entry 文章/订单唯一性、身份绑定、成功优先级、证据完整性与 runnable-fact absence 的合同矩阵已通过。Evidence 见 `handoffs/23-A-closed-migration-contracts.md`。23-B 已启动并完成只读 reader/planner implementation 与定向验证：只消费 `parseImportPlanV1`，生成确定性 plan、脱敏 dry-run/count report 和六种分类/冲突样例；没有写 OperationalStore、journal、composition 或远端能力。当前 23-B 仍等待按协议执行 Primary Audit/后续 closure；23-C–E 保持 `PENDING`。Evidence 见 `handoffs/23-B-read-only-evidence-and-deterministic-planning.md`。M03/Wave 8 依 lane 规则不提前回填 `COMPLETE`；该 lane 不豁免 acceptance、串行 clean HEAD、审计或最终完整 gate。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -56,7 +56,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 7 | 10 → 16 | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免 | `RUNNING`（10/16 COMPLETE；状态回填等待最终 reconciliation） |
 | 8 | 22 | 06、09、16 | `RUNNING`（Ticket 22 `COMPLETE`；依 lane 规则不提前回填 Wave 8 `COMPLETE`） |
 | 8.5 | M03-0 → M03-A → M03-B → M03-C | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate | `PARTIAL`（M03-C Closure PASS；最终 `COMPLETE` 回填等待 Ticket 23 后 reconciliation） |
-| 9 | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `RUNNING`（23-0/23-A `COMPLETE`；23-B `READY`；23-C–E `PENDING`） |
+| 9 | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `RUNNING`（23-0/23-A `COMPLETE`；23-B `RUNNING`，implementation evidence 已留；23-C–E `PENDING`） |
 | 10 | 24 | 02、10、14、16、23 | `PENDING` |
 | 10.5 | M04 → M05 → M06 | Wave 10 COMPLETE | `PENDING` |
 | 11 | 25 | 24；M10.5 COMPLETE | `PENDING` |
