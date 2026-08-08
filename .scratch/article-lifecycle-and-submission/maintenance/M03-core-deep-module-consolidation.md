@@ -87,7 +87,7 @@ Ticket 23 的真实 `ImportPlanV1` validator、单事务导入和单方法 `impo
 - M03 重组不阻塞未来在同一 OperationalStore transaction owner 中实现 journal/import commit；
 - 不恢复 `commitRemoteOutcome(published)`，不新增第二 publication-success primitive，不增加 migration-only compatibility writer。
 
-M03 不解决 `terminalObservationV1` 与 Ticket 23 `nonPublishedTerminal` 的产品合同冲突；该问题仍由 Wave Plan 的 Ticket 23 Upstream V1 Inventory Gate 判定。
+M03 不解决 `terminalObservationV1` 与 Ticket 23 `nonPublishedTerminal` 的产品合同冲突；该问题仍由 Wave Plan 的 23-0 Upstream V1 Inventory Gate 判定。
 
 ## Acceptance criteria
 

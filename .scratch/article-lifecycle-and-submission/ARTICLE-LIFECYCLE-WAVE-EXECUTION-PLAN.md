@@ -18,9 +18,9 @@
 | Ticket 22 | `COMPLETE` | implementation、Primary Audit、remediation、bounded re-audit、最终 gates、implementation/docs commit 已完成；handoff 见 `handoffs/22-published-archive-and-safe-deletion.md` |
 | Wave 6 | `BLOCKED` | Final Closure 与 Gate Recovery 已完成；4 个 legacy migration public-contract tests 等待未来受控 import capability 的调度决策 |
 | Wave 7 | `RUNNING` | Lane 内 Ticket 10、16 已完成；依授权规则不提前回填 `COMPLETE` |
-| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22 与 M03-C Closure 已闭合；M03 最终状态等待 Ticket 23 后 reconciliation |
+| Dependency-Resolution Lane | `RUNNING` | Ticket 10、16、22 与 M03-C Closure 已闭合；下一串行工作包仅为 Ticket 23-0 |
 
-**当前下一动作：M03-C format gate bounded remediation 与 final gate 已 PASS，Closure 已闭合；本次未进入 Ticket 23，M03/Wave 8 依 lane 规则不提前回填 `COMPLETE`。后续仅可在新的明确调度中进入 Ticket 23，并先执行 upstream V1 inventory；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止。该 lane 只豁免“前序 Wave 必须 `COMPLETE`”这一调度 gate；不得豁免既有串行顺序、acceptance criteria、Primary Audit 或最终完整 gate。**
+**当前下一动作：Ticket 23 已拆为 `23-0 → 23-A → 23-B → 23-C → 23-D → 23-E`；本次只更新计划，尚未执行任何工作包。新的明确调度只能先执行 23-0 upstream V1 inventory/contract decision；若 `terminalObservationV1` 与 `nonPublishedTerminal` 无法在不伪造历史 identity/evidence 的前提下对齐，则以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止，23-A–E 保持 `PENDING`。M03/Wave 8 依 lane 规则不提前回填 `COMPLETE`；该 lane 不豁免 acceptance、串行 clean HEAD、审计或最终完整 gate。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -56,7 +56,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 7 | 10 → 16 | 10←09；16←15；Wave 6 COMPLETE 仅由授权 lane 豁免 | `RUNNING`（10/16 COMPLETE；状态回填等待最终 reconciliation） |
 | 8 | 22 | 06、09、16 | `RUNNING`（Ticket 22 `COMPLETE`；依 lane 规则不提前回填 Wave 8 `COMPLETE`） |
 | 8.5 | M03-0 → M03-A → M03-B → M03-C | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate | `PARTIAL`（M03-C Closure PASS；最终 `COMPLETE` 回填等待 Ticket 23 后 reconciliation） |
-| 9 | 23 | 04、05、09、14、16、22；M8.5 COMPLETE | `PENDING` |
+| 9 | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `READY`（只允许调度 23-0；23-A–E PENDING） |
 | 10 | 24 | 02、10、14、16、23 | `PENDING` |
 | 10.5 | M04 → M05 → M06 | Wave 10 COMPLETE | `PENDING` |
 | 11 | 25 | 24；M10.5 COMPLETE | `PENDING` |
@@ -69,15 +69,15 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 
 本 lane 仅用于解除 Wave 6 final gate 与 Ticket 23 上游 gate 的确认依赖环。授权规则如下：
 
-1. **固定顺序**：`10 → 16 → 22 → M03-0 → M03-A → M03-B → M03-C → 23`。M03 工作包不得并行修改共享 owner；不得因为进入 lane 而跳过、缩减或自行重排。
+1. **固定顺序**：`10 → 16 → 22 → M03-0 → M03-A → M03-B → M03-C → 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E`。M03/Ticket 23 工作包不得并行修改共享 owner；不得因为进入 lane 而跳过、缩减或自行重排。
 2. **只豁免 Wave COMPLETE 调度 gate**：各 Ticket 的真实 `Blocked by`、串行 HEAD、acceptance criteria、专项测试、Primary Audit、finding remediation、bounded re-audit、commit/handoff 均保持有效。
 3. **不得做缩水 migration 前置**：禁止恢复 `commitRemoteOutcome(published)`、新增 23A/temporary compatibility writer、第二个 publication-success primitive、migration-only M03 半成品，或让 migration 依赖 OperationalStore internal schema。
 4. **继承失败规则**：Ticket 10/16/22/M03 推进期间，当前 `phase-02-migration.test.js` 的 4 个已确认 legacy migration failures 只要数量、根因和行为合同不变，可作为 inherited blocker 记录；任何新增 failure 必须单独分类并修复。
 5. **状态不提前完成**：Wave 6 继续 `BLOCKED`；Wave 7/8、M03、Wave 9 不因 lane 提前实施而自动 `COMPLETE`。最终状态必须在 Ticket 23 清除 migration blocker 后，于最终 clean integration HEAD 上重新跑完整 gate 再按原顺序回填。
-6. **Ticket 23 Upstream V1 Inventory Gate**：写 production implementation 前必须读取真实 exports + contract tests，逐项验证 08/09/13/15/16/22 要求的公开 V1。任一缺失返回 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING`，不得由 Ticket 23 猜测或复制 schema。
-7. **已知合同风险必须先判定**：当前 `terminalObservationV1` 的 `terminalKind` 只接受 `REJECTED | CANCELLED | OTHER_NON_PUBLISHED`，且强制包含 `orderIdentityV1`；Ticket 23 的 `nonPublishedTerminal` 文档却列出 `FAILED | REJECTED | CANCELLED | PAID_STATUS_4`。不得为无订单 legacy terminal 伪造 `orderIdentityV1`，也不得偷偷修改既有 V1。若现有权威合同不能唯一决定合法映射/表达方式，停止 Ticket 23 production implementation，标记 `BLOCKED_CONTRACT_DECISION_REQUIRED` 并报告最小合同决策点。
-8. **Ticket 23 必须完整实施**：只有上述 gate 合法通过后，才按 Ticket 23 正文建立 deterministic planner、封闭 `ImportPlanV1`、唯一 `importLifecycleFacts` capability、journal/crash recovery、no-remote composition 和完整 migration acceptance；不能只为现有 4 个测试打补丁。
-9. **最终 reconciliation**：Ticket 23 关闭 migration blocker 后，先跑 migration/专项矩阵，再在最终 clean HEAD 运行完整 `npm test` 与各 Wave/Maintenance 原定 gate；全部 PASS 后才依次回填 Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9。
+6. **23-0 Upstream V1 Inventory Gate**：写 production implementation 前必须读取真实 exports + contract tests，逐项验证 08/09/13/15/16/22 要求的公开 V1。任一缺失返回 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING`，不得由 Ticket 23 猜测或复制 schema；23-0 不写 production implementation。
+7. **已知合同风险必须在 23-0 判定**：当前 `terminalObservationV1` 的 `terminalKind` 只接受 `REJECTED | CANCELLED | OTHER_NON_PUBLISHED`，且强制包含 `orderIdentityV1`；Ticket 23 的 `nonPublishedTerminal` 文档却列出 `FAILED | REJECTED | CANCELLED | PAID_STATUS_4`。不得为无订单 legacy terminal 伪造 `orderIdentityV1`，也不得偷偷修改既有 V1。若现有权威合同不能唯一决定合法映射/表达方式，以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止，23-A–E 不得启动。
+8. **Ticket 23 必须完整实施**：只有 23-0 合法 PASS 后，才按 umbrella 合同串行完成 23-A closed contracts、23-B deterministic planner、23-C 唯一 import transaction、23-D journal/crash recovery/no-remote composition 与 23-E integration/audit/closure；不能并行共享 owner，也不能只为现有 4 个测试打补丁。
+9. **最终 reconciliation**：23-E 关闭 migration blocker 后，先跑 migration/专项矩阵，再在最终 clean HEAD 运行完整 `npm test` 与各 Wave/Maintenance 原定 gate；全部 PASS 后才依次回填 Wave 6 → Wave 7 → Wave 8 → M03 → Wave 9。
 
 ## 4. 未来关键边界
 

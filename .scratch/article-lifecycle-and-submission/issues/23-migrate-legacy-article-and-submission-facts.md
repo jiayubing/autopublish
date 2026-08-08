@@ -4,9 +4,67 @@
 
 **Blocked by:** 04 — 扩展 SQLite 生命周期与队列事实；05 — 移除审核与生成来源投稿门槛；09 — 普通平台结果分类与人工收口；14 — 网站媒体订单创建结果人工核对；16 — 服务商订单取消与永久历史；22 — 已发布档案与安全删除规则
 
-**Status:** document-ready；当前不可调度
+**Status:** split-ready；仅 23-0 可由新的明确调度启动，23-A–E 依串行 gate 保持 `PENDING`
 
-**Scheduling gate:** 作为独立波次 9，等待波次 8 Ticket 22 完成并使波次 8 `COMPLETE`，随后维护插槽 8.5 的 M03 也 `COMPLETE` 后调度；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
+**Scheduling gate:** 正常顺序仍等待波次 8 与 M03 `COMPLETE`；当前可依 Wave Plan 已授权的 Dependency-Resolution Lane，在 M03-C Closure PASS 后按 `23-0 → 23-A → 23-B → 23-C → 23-D → 23-E` 严格串行调度。该豁免不允许提前回填 Wave 6–9 或 M03 `COMPLETE`；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
+
+## 工作包与 owner
+
+Ticket 23 是一个 umbrella Ticket，内部拆成六个有序工作包；工作包不是可并行修改共享 owner 的独立 Ticket。每个工作包必须从包含前一工作包的 clean integration HEAD 开始并保留独立 handoff；commit provenance 仍服从 Execution Protocol 与当次用户授权。23-E 对 23-A–D 的最终组合 diff 执行一次 Primary Audit、必要 remediation 与 bounded re-audit；除 Audit Protocol escalation 外，不为每个内部模块重复开启 fresh full review。
+
+Ticket 23 的责任图固定为四个权威 owner；其余 reader、backup、verifier、executor 和 composition 只是对应 owner 内部模块或应用编排，不得成为新的业务事实 owner：
+
+| Owner | 唯一职责 | 禁止拥有 |
+| --- | --- | --- |
+| Migration Contract Owner | `ImportPlanV1`、六种 variant、migration-local V1 DTO/enum 与唯一递归 validator | legacy 分类决策、journal phase、持久化写入 |
+| Legacy Migration Planner Owner | 旧证据分类矩阵、确定性 plan、冲突与 dry-run/count report；reader 是该 cluster 的只读输入边界 | journal、正常 composition 放行、新事实写入 |
+| Workspace Migration Gate Owner | `MigrationJournalV1` phase/recovery 策略、备份/确认前提及正常 composition 是否放行 | SQLite/internal schema、业务事实写入、远端能力 |
+| OperationalStore Import Transaction Owner | 唯一 `importLifecycleFacts`、最终二次校验、事实/schema/`import_committed` 单事务与 journal metadata 原子持久化 | gate 放行策略、legacy 分类、在线命令或第二 publication/order writer |
+
+只有 OperationalStore Import Transaction Owner 是 Ticket 23 新增的持久化 writer；它仍复用 04–22 的既有事实合同和内部不变量，不取代 publication、order、target、tombstone 等既有 owner。Migration Contract Owner 只提供一套共享 validator，planner 与 store 不得分别复制字段或 enum。
+
+### 23-0 — Upstream V1 inventory and contract decision
+
+1. 只读取真实 `src/domain` exports、对应 contract tests、Ticket 08/09/13/15/16/22 最终 handoff 与当前 Git evidence，逐项建立 validator identity/version inventory。
+2. 精确判定 `terminalObservationV1` 与 `nonPublishedTerminal` 的表达冲突；不得在 planner 中偷偷映射 `FAILED` / `PAID_STATUS_4`、伪造无订单 legacy terminal 的 `orderIdentityV1`，或自行改写既有 V1。
+3. 任一要求导出缺失时以 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING` 停止；现有权威合同不能唯一、无伪造地表达 Ticket 23 variant 时以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止并报告最小决策点。
+4. 本工作包只产生 inventory/decision handoff 与必要计划澄清，不写 production implementation、schema、placeholder DTO 或 temporary writer。只有 blocker 经权威合同决策关闭并进入 integration HEAD 后，23-A 才可调度。
+
+### 23-A — Closed migration contracts
+
+1. 建立唯一 Migration Contract Owner，封闭 `ImportPlanV1` envelope、公共 entry、六种 variant 和本 Ticket 的辅助 V1 DTO；递归拒绝 extra fields、未知 enum、未来版本、稀疏数组和非法嵌套。
+2. 所有上游嵌套 DTO 直接调用 23-0 确认的公开 validator；不得复制 publication/order/target/deletion 字段清单或提供 fallback schema。
+3. 建立跨 entry 文章唯一、订单身份唯一、variant 互斥、成功优先级、证据完整性和 runnable-fact absence 的正反合同矩阵。
+4. 本工作包不读取 legacy 文件、不写 OperationalStore、不增加 journal 或 composition。
+
+### 23-B — Read-only evidence and deterministic planning
+
+1. 在 Legacy Migration Planner cluster 内建立只读 reader、集中分类矩阵、deterministic planner、冲突样例和 dry-run/count report；reader 只产生安全、封闭的 legacy evidence，不写新模型。
+2. 覆盖审核/generated/saved、多目标、queue/submission/order/deletion/recovery variant；映射规则集中化，不把 `if legacy` 扩散到正常业务模块。
+3. 同一 source/workspace 输入必须产生相同 source/plan fingerprint 和规范计划；原始数据库行、绝对路径、敏感正文或供应商原始异常不得进入公开 report/diagnostic。
+4. 本工作包只消费 23-A validator，不持有 OperationalStore、journal mutation、publisher、worker、paid executor 或供应商 adapter。
+
+### 23-C — OperationalStore journal and atomic import
+
+1. 在 OperationalStore 公共 migration facade 后建立 journal metadata/bootstrap persistence 与唯一 `importLifecycleFacts` capability；外部不得依赖 `internal/` schema、SQL、table 或 transaction primitive。
+2. store owner 必须再次调用 23-A validator 并独立校验跨事实不变量；planner 通过不能替代最终失败关闭边界。
+3. import 事实、必要 schema/version 更新、import commit fingerprint 与 phase=`import_committed` 在一个 SQLite transaction 中提交；任一 fault 不产生部分事实。
+4. 六种 variant 只写合同允许的事实，绝不生成 runnable queue item、open remote intent、executable paid batch 或远端命令；不得恢复 `commitRemoteOutcome(published)` 或新增第二 publication-success primitive。
+5. 用恶意 plan、重复调用、并发、transaction fault、commit 前后 crash 和 schema/internal layout 变化测试证明原子性、幂等与 seam 稳定。
+
+### 23-D — Workspace gate and isolated migration composition
+
+1. Workspace Migration Gate Owner 独占 `detected → backed_up → confirmed → import_committed → verified` 的策略与正常 composition 放行；OperationalStore metadata port 只持久化 gate 已授权的 transition，不成为第二策略 owner。
+2. 建立备份完整性、确认 fingerprint、post-import verifier、每个 phase 重启恢复和显式 repair 结果；`import_committed` 只重跑验证，不重复 import。
+3. migration composition root 只装配 reader/planner、backup/verifier、journal ports 与单方法 `importLifecycleFacts`；架构/陷阱测试证明 publisher、queue worker、paid executor、订单查询/取消和供应商 adapter 未被构造或调用。
+4. schema 已当前但 journal 未 verified、workspace/source/version/fingerprint 不匹配、备份/import/验证失败时继续阻断正常 composition；放行后所有执行组仍保持暂停，等待正常 startup policy。
+
+### 23-E — Integration, audit, and closure
+
+1. 对 23-A–D 最终组合 diff 执行一次 Primary Audit；修复 blocking findings 后只做 bounded re-audit。
+2. 运行六 variant、分类矩阵、journal phase/crash recovery、malicious plan、no-remote composition、正常公开投影、容量、future-version 和既有四个 migration blocker 的最终专项矩阵。
+3. 在最终 integration HEAD 运行本 Ticket 要求的 lint/typecheck/format/architecture/discovery gate；完整 `npm test` 与 Wave 6–9/M03 状态回填仍按 Wave Plan 最终 reconciliation 执行。
+4. handoff 记录四个 owner 的 public interface、writer 数量、依赖方向、拆分/不拆分理由、映射矩阵、实际命令、显著规模变化、audit 结论和最终 Git evidence。
 
 ## 启动约定
 
