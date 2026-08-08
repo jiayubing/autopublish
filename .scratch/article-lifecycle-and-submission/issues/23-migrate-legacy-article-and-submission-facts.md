@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 — 扩展 SQLite 生命周期与队列事实；05 — 移除审核与生成来源投稿门槛；09 — 普通平台结果分类与人工收口；14 — 网站媒体订单创建结果人工核对；16 — 服务商订单取消与永久历史；22 — 已发布档案与安全删除规则
 
-**Status:** split-ready；仅 23-0 可由新的明确调度启动，23-A–E 依串行 gate 保持 `PENDING`
+**Status:** 23-0=`COMPLETE`；23-A=`READY`；23-B–E 依串行 gate 保持 `PENDING`。15 个上游公开 validator inventory 与 `nonPublishedTerminal` 权威合同决策均已通过；evidence 见 `../handoffs/23-0-upstream-v1-inventory-and-contract-decision.md`
 
 **Scheduling gate:** 正常顺序仍等待波次 8 与 M03 `COMPLETE`；当前可依 Wave Plan 已授权的 Dependency-Resolution Lane，在 M03-C Closure PASS 后按 `23-0 → 23-A → 23-B → 23-C → 23-D → 23-E` 严格串行调度。该豁免不允许提前回填 Wave 6–9 或 M03 `COMPLETE`；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
 
@@ -26,7 +26,7 @@ Ticket 23 的责任图固定为四个权威 owner；其余 reader、backup、ver
 ### 23-0 — Upstream V1 inventory and contract decision
 
 1. 只读取真实 `src/domain` exports、对应 contract tests、Ticket 08/09/13/15/16/22 最终 handoff 与当前 Git evidence，逐项建立 validator identity/version inventory。
-2. 精确判定 `terminalObservationV1` 与 `nonPublishedTerminal` 的表达冲突；不得在 planner 中偷偷映射 `FAILED` / `PAID_STATUS_4`、伪造无订单 legacy terminal 的 `orderIdentityV1`，或自行改写既有 V1。
+2. 精确判定 `terminalObservationV1` 与 `nonPublishedTerminal` 的表达冲突；最终合同固定由 `closedTargetV1` 唯一承载跨渠道非发布终态，`orderHistoryV1 | null` 只在存在真实订单时承载订单历史，不把独立 `terminalObservationV1` 放入该 variant；不得在 planner 中偷偷映射 `FAILED` / `PAID_STATUS_4`、伪造无订单 legacy terminal 的 `orderIdentityV1`，或自行改写既有 V1。
 3. 任一要求导出缺失时以 `BLOCKED_UPSTREAM_V1_CONTRACT_MISSING` 停止；现有权威合同不能唯一、无伪造地表达 Ticket 23 variant 时以 `BLOCKED_CONTRACT_DECISION_REQUIRED` 停止并报告最小决策点。
 4. 本工作包只产生 inventory/decision handoff 与必要计划澄清，不写 production implementation、schema、placeholder DTO 或 temporary writer。只有 blocker 经权威合同决策关闭并进入 integration HEAD 后，23-A 才可调度。
 
@@ -131,7 +131,7 @@ Envelope 精确为 `{ version: 1, migrationRunId, workspaceFingerprint, sourceFi
 | `publishedEvidence`        | `{ publicationEvidenceV1, terminalTargetV1, orderHistoryV1 }`                     | `orderHistoryV1` 为明确对象或 `null`；证据必须可信成功                                                                                                                                                      | 发布档案、终态目标、可选不可变订单历史、永久冻结                       |
 | `trackablePaidOrder`       | `{ orderSnapshotV1, orderObservationV1, paidTargetV1 }`                           | `orderSnapshotV1.orderIdentityV1` 与 `paidTargetV1.orderIdentityV1` 必须相等，article/target/attempt 身份也必须一致；observation status 只能为 `0`、`1`、`9`；订单身份跨 entry 全局唯一                     | 订单快照/observation、一个冻结付费目标                                 |
 | `pendingReadmission`       | `{ legacyQueueEvidenceV1, closedTargetV1, readmissionReason }`                    | reason 只能为 `PROVEN_PRE_REMOTE_QUEUE`；无订单/成功/unknown                                                                                                                                                | 迁移说明、结束旧目标、恢复待投稿                                       |
-| `nonPublishedTerminal`     | `{ terminalObservationV1, closedTargetV1, orderHistoryV1, restoreEligibilityV1 }` | terminal kind 只能为 `FAILED`、`REJECTED`、`CANCELLED`、`PAID_STATUS_4`；order history 为对象或 `null`                                                                                                      | 终态 observation、可选订单历史、结束目标、按 eligibility 恢复          |
+| `nonPublishedTerminal`     | `{ closedTargetV1, orderHistoryV1, restoreEligibilityV1 }`                        | `closedTargetV1.closedKind` 只能为 `FAILED`、`REJECTED`、`CANCELLED`、`PAID_STATUS_4`；存在真实订单身份时 `orderHistoryV1` 为对应封闭对象，否则必须为 `null`；禁止独立或伪造 `terminalObservationV1` | 结束目标、可选不可变订单历史、按 eligibility 恢复                       |
 | `needsAttentionConflict`   | `{ conflictKind, migrationConflictEvidenceV1, freezeReasonCode }`                 | kind 只能为 `SUBMITTING_OR_UNPROVEN_SUBMITTED`、`MISSING_ORDER_ID`、`MULTIPLE_ACTIVE_TARGETS`、`IDENTITY_CONFLICT`、`CONTENT_CONFLICT`、`UNKNOWN_FACT_COMBINATION`；freeze reason 固定 `MIGRATION_CONFLICT` | 封闭冲突证据与需处理冻结                                               |
 | `deletionRecoveryConflict` | `{ deletionConflictKind, migrationDeletionEvidenceV1, freezeReasonCode }`         | kind 只能为 `PUBLISHED_IN_TRASH`、`ORDERED_IN_TRASH`、`ACTIVE_TARGET_IN_TRASH`、`TOMBSTONE_CONFLICT`、`RECOVERY_TRANSACTION_CONFLICT`；freeze reason 固定 `MIGRATION_DELETION_CONFLICT`                     | 封闭 deletion/recovery 证据、需处理冻结、owner DTO 引用的发布/订单历史 |
 
