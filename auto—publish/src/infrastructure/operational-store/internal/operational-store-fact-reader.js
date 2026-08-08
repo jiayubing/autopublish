@@ -52,7 +52,7 @@ function createOperationalStoreFactReader(context) {
     const inList = placeholders(articleIds);
     const publications = db
       .prepare(
-        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS success_evidence,e.remote_url AS success_remote_url FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
+        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS success_evidence,e.remote_url AS success_remote_url,EXISTS(SELECT 1 FROM migration_import_entries m WHERE m.article_id=p.article_id AND m.variant='publishedEvidence') AS migration_success FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
       )
       .all(...articleIds)
       .map((row) => {
@@ -65,6 +65,7 @@ function createOperationalStoreFactReader(context) {
           try {
             successEvidence = domain.parsePublicationEvidenceV1(
               fromText(row.success_evidence),
+              { allowLegacy: row.migration_success === 1 },
             );
           } catch (_) {
             throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
@@ -213,6 +214,32 @@ function createOperationalStoreFactReader(context) {
           updatedAt: row.updated_at,
         });
       });
+    const migrationAttentionItems = db
+      .prepare(
+        `SELECT entry_id,variant,entry_json,imported_at FROM migration_import_entries WHERE article_id IN(${inList}) AND variant IN('needsAttentionConflict','deletionRecoveryConflict') ORDER BY imported_at,entry_id`,
+      )
+      .all(...articleIds)
+      .map((row) => {
+        const entry = fromText(row.entry_json) || {};
+        const payload = entry.payload || {};
+        const deletion = row.variant === "deletionRecoveryConflict";
+        return Object.freeze({
+          attentionId: `migration:${row.entry_id}`,
+          kind: deletion ? "migration_deletion_conflict" : "migration_conflict",
+          attemptId: null,
+          publicationId: null,
+          articleId:
+            entry.articleIdentityV1 && entry.articleIdentityV1.articleId,
+          targetKey: null,
+          status: "uncertain",
+          reasonCode: deletion
+            ? payload.deletionConflictKind
+            : payload.conflictKind,
+          freezeReasonCode: payload.freezeReasonCode,
+          updatedAt: row.imported_at,
+        });
+      });
+    attentionItems.push(...migrationAttentionItems);
     const manualReconciliations = db
       .prepare(
         `SELECT reconciliation_id,attempt_id,article_id,decision,evidence_json,created_at FROM manual_reconciliation_facts WHERE article_id IN(${inList}) ORDER BY created_at,reconciliation_id`,
@@ -230,7 +257,7 @@ function createOperationalStoreFactReader(context) {
       );
     if (internalLifecycleProjectionObserver)
       internalLifecycleProjectionObserver({
-        sqlCount: 5,
+        sqlCount: 6,
         rowCount:
           publications.length +
           submissionItems.length +

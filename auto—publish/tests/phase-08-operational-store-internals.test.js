@@ -139,7 +139,7 @@ test("OperationalStore facade preserves the frozen caller surface", () => {
   let store;
   try {
     store = createOperationalStore({ workspaceRoot });
-    assert.equal(SCHEMA_VERSION, 4);
+    assert.equal(SCHEMA_VERSION, 5);
     assert.deepEqual(Object.keys(store), PUBLIC_SURFACE);
     assert.equal(Object.isFrozen(store), true);
     assert.equal("db" in store, false);

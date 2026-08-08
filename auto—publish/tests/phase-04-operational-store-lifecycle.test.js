@@ -24,6 +24,9 @@ function workspace() {
 function removeV4Schema(databasePath) {
   const db = new DatabaseSync(databasePath);
   db.exec(`
+    DROP TABLE IF EXISTS migration_import_order_identities;
+    DROP TABLE IF EXISTS migration_import_entries;
+    DROP TABLE IF EXISTS migration_journals;
     DROP TABLE IF EXISTS manual_reconciliation_facts;
     DROP TABLE IF EXISTS paid_submission_batches;
     DROP TABLE IF EXISTS submission_queue_items;
@@ -42,7 +45,7 @@ function removeV4Schema(databasePath) {
       SELECT attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at
       FROM order_display_snapshots_v4;
     DROP TABLE order_display_snapshots_v4;
-    DELETE FROM schema_migrations WHERE version=4;
+    DELETE FROM schema_migrations WHERE version>=4;
   `);
   db.close();
 }
@@ -108,14 +111,14 @@ test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiabl
     );
     assert.deepEqual(schemaSnapshot(databasePath), before);
     store = createOperationalStore({ workspaceRoot: root });
-    assert.equal(store.verify().schemaVersion, 4);
+    assert.equal(store.verify().schemaVersion, 5);
     const backup = path.join(root, `backup-${point}.sqlite`);
-    assert.equal(store.backup(backup).schemaVersion, 4);
+    assert.equal(store.backup(backup).schemaVersion, 5);
     store.close();
-    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 4);
+    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 5);
     fs.rmSync(root, { recursive: true, force: true });
   }
-  assert.equal(SCHEMA_VERSION, 4);
+  assert.equal(SCHEMA_VERSION, 5);
 });
 
 test("v4 order snapshot extension preserves rows from a real v3 database", () => {
@@ -204,13 +207,13 @@ test("v3 migration dry-run is read-only and reports the planned v4 step", () => 
   assert.equal(report.mode, "dry-run");
   assert.equal(report.fromVersion, 3);
   assert.equal(report.toVersion, SCHEMA_VERSION);
-  assert.deepEqual(report.migrations, [4]);
+  assert.deepEqual(report.migrations, [4, 5]);
   assert.deepEqual(schemaSnapshot(databasePath), before);
   assert.equal(fileHash(databasePath), beforeHash);
   store = createOperationalStore({ workspaceRoot: root });
   store.close();
   const current = dryRunOperationalStoreMigration({ workspaceRoot: root });
-  assert.equal(current.fromVersion, 4);
+  assert.equal(current.fromVersion, 5);
   assert.deepEqual(current.migrations, []);
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -683,7 +686,7 @@ test("batch lifecycle facts use a fixed-query public port and article snapshot c
     assert.equal(facts.publications.length, 1);
     assert.equal(facts.submissionItems.length, 1);
     assert.equal(facts.orders.length, 0);
-    assert.equal(metrics.at(-1).sqlCount, 5);
+    assert.equal(metrics.at(-1).sqlCount, 6);
 
     const snapshot = createArticleManagementSnapshot({
       workspaceRoot: root,

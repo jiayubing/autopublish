@@ -41,6 +41,10 @@ function createOperationalStoreContext(runtime, options) {
       typeof value.internalPaidExecutionTransitionFault === "function"
         ? value.internalPaidExecutionTransitionFault
         : null,
+    internalMigrationImportFault:
+      typeof value.internalMigrationImportFault === "function"
+        ? value.internalMigrationImportFault
+        : null,
     open,
     transaction: transaction.run,
     fail,

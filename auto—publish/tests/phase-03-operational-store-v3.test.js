@@ -22,7 +22,7 @@ function downgradeToV2(workspaceRoot) {
   store.close();
   const database = new DatabaseSync(databasePath);
   database.exec(
-    "DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS order_display_snapshots; DELETE FROM schema_migrations WHERE version>2;",
+    "DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS order_display_snapshots; DELETE FROM schema_migrations WHERE version>2;",
   );
   database.close();
   return databasePath;
@@ -33,7 +33,9 @@ function snapshotSchema(databasePath) {
   try {
     return {
       history: database
-        .prepare("SELECT version,applied_at FROM schema_migrations ORDER BY version")
+        .prepare(
+          "SELECT version,applied_at FROM schema_migrations ORDER BY version",
+        )
         .all(),
       table: database
         .prepare(
@@ -50,8 +52,8 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
   const workspaceRoot = workspace();
   const databasePath = downgradeToV2(workspaceRoot);
   const upgraded = createOperationalStore({ workspaceRoot });
-  assert.equal(SCHEMA_VERSION, 4);
-  assert.equal(upgraded.verify().schemaVersion, 4);
+  assert.equal(SCHEMA_VERSION, 5);
+  assert.equal(upgraded.verify().schemaVersion, 5);
   upgraded.close();
 
   const database = new DatabaseSync(databasePath, { readOnly: true });
@@ -84,17 +86,21 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4],
+    [1, 2, 3, 4, 5],
   );
   database.close();
 
   const reopened = createOperationalStore({ workspaceRoot });
-  assert.equal(reopened.verify().schemaVersion, 4);
+  assert.equal(reopened.verify().schemaVersion, 5);
   reopened.close();
 });
 
 test("every legacy migration fault rolls back and a clean retry reaches v4", () => {
-  for (const faultPoint of ["before-v3", "after-v3-create", "after-v3-record"]) {
+  for (const faultPoint of [
+    "before-v3",
+    "after-v3-create",
+    "after-v3-record",
+  ]) {
     const workspaceRoot = workspace();
     const databasePath = downgradeToV2(workspaceRoot);
     const before = snapshotSchema(databasePath);
@@ -110,7 +116,7 @@ test("every legacy migration fault rolls back and a clean retry reaches v4", () 
     );
     assert.deepEqual(snapshotSchema(databasePath), before);
     const retried = createOperationalStore({ workspaceRoot });
-    assert.equal(retried.verify().schemaVersion, 4);
+    assert.equal(retried.verify().schemaVersion, 5);
     retried.close();
   }
 });
@@ -178,7 +184,7 @@ test("v3 backup and restored temporary workspace preserve the bounded order snap
     },
   });
   const backupPath = path.join(workspaceRoot, "operations-v3.backup.sqlite");
-  assert.equal(store.backup(backupPath).schemaVersion, 4);
+  assert.equal(store.backup(backupPath).schemaVersion, 5);
   store.close();
 
   const restoredWorkspace = workspace();

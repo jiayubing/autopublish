@@ -43,6 +43,30 @@ const regularOutcomes = require("./internal/operational-store-regular-outcome-ag
 const {
   createOrderCancellationAggregate,
 } = require("./internal/operational-store-order-cancellation-aggregate");
+const {
+  createOperationalStoreMigrationImport,
+} = require("./internal/operational-store-migration-import");
+
+function createOperationalStoreMigrationFacade(options) {
+  const runtime = openOperationalStoreRuntime(options);
+  const context = storeContext.createOperationalStoreContext(runtime, options);
+  try {
+    const migration = createOperationalStoreMigrationImport(context);
+    return Object.freeze({
+      databasePath: runtime.filename,
+      bootstrapMigrationJournal: migration.bootstrapMigrationJournal,
+      readMigrationJournal: migration.readMigrationJournal,
+      persistMigrationJournalMetadata:
+        migration.persistMigrationJournalMetadata,
+      importLifecycleFacts: migration.importLifecycleFacts,
+      listImportedLifecycleFacts: migration.listImportedLifecycleFacts,
+      close: context.close,
+    });
+  } catch (error) {
+    context.close();
+    throw error;
+  }
+}
 function createOperationalStore(options) {
   const runtime = openOperationalStoreRuntime(options);
   const context = storeContext.createOperationalStoreContext(runtime, options);
@@ -170,6 +194,7 @@ function createOperationalStore(options) {
 module.exports = {
   SCHEMA_VERSION,
   createOperationalStore,
+  createOperationalStoreMigrationFacade,
   dryRunOperationalStoreMigration,
   verifyOperationalDatabase,
 };
