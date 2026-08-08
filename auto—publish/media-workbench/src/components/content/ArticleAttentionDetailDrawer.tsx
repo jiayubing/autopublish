@@ -13,12 +13,10 @@ interface ArticleAttentionDetailDrawerProps {
 
 function actionLabel(action: string): string {
   const labels: Record<string, string> = {
-    cleanup: '清理旧队列',
     'retry-publication': '重新投稿',
     'open-publication': '打开发布详情',
     'open-article': '打开文章',
     inspect: '查看差异',
-    finalize: '安全完成',
     'bind-paid-order-number': '补录订单号',
     'confirm-paid-order-absent': '确认没有订单',
   };

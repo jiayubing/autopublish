@@ -19,10 +19,7 @@ describe("renderer content submission batch actions", () => {
       view,
       /const cancelableBatches = useMemo\(\s*\(\) =>\s*cancellationPlans\s*\.map/,
     );
-    assert.match(
-      view,
-      /const cleanableBatches = useMemo\(\s*\(\) =>\s*submissionBatches\s*\.map/,
-    );
+    assert.doesNotMatch(view, /cleanableBatches/);
     assert.doesNotMatch(view, /submissionBatches\[0\]/);
     assert.doesNotMatch(view, /item\.canCancel === true/);
     assert.doesNotMatch(view, /cancelableCount\?: number/);
@@ -36,7 +33,7 @@ describe("renderer content submission batch actions", () => {
   it("tracks cancellation pending state and refreshes authoritative management after stale plans", () => {
     const view = source();
     const management = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench", "src", "features", "content", "article-management-feature.js"), "utf8");
-    const cancel = view.slice(view.indexOf("async function cancelCancelableBatches"), view.indexOf("\n  async function cleanupFailedBatches"));
+    const cancel = view.slice(view.indexOf("async function cancelCancelableBatches"), view.indexOf("\n  async function previewTrashSelections"));
     assert.match(cancel, /setCancellationPending\(\{ clientId: requestedClientId, count: total \}\)/);
     assert.match(cancel, /SUBMISSION_ACTION_STALE/);
     assert.match(cancel, /队列已变化，请重新检查/);
@@ -49,6 +46,6 @@ describe("renderer content submission batch actions", () => {
   });
 
   it("labels an empty action state as applying to all current-client batches", () => {
-    assert.match(source(), /当前客户全部批次均无可撤销或可清理项/);
+    assert.match(source(), /当前客户全部批次均无可撤销的未开始项/);
   });
 });

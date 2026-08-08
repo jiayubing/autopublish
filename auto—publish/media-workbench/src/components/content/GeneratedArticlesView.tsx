@@ -338,25 +338,11 @@ export default function GeneratedArticlesView({
         .filter((entry) => entry.batch && entry.count > 0),
     [cancellationPlans, submissionBatches],
   );
-  const cleanableBatches = useMemo(
-    () =>
-      submissionBatches
-        .map((batch) => ({
-          batch,
-          count: batch.items.filter((item) => item.canCleanup === true).length,
-        }))
-        .filter((entry) => entry.count > 0),
-    [submissionBatches],
-  );
   const cancelableCount = cancelableBatches.reduce(
     (total, entry) => total + entry.count,
     0,
   );
   const cancellationIsPending = cancellationPending?.clientId === clientId;
-  const cleanableCount = cleanableBatches.reduce(
-    (total, entry) => total + entry.count,
-    0,
-  );
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen =
     removalStatus === "pending_auto_recovery" ||
@@ -370,19 +356,6 @@ export default function GeneratedArticlesView({
     return (
       item.displayName || item.targetPlatformId || item.platformId || "未知平台"
     );
-  }
-
-  function groupImpact(
-    items: ArticleTrashImpactItem[],
-  ): Array<[string, number]> {
-    const counts = new Map<string, number>();
-    items.forEach((item) =>
-      counts.set(
-        impactPlatform(item),
-        (counts.get(impactPlatform(item)) || 0) + 1,
-      ),
-    );
-    return [...counts.entries()];
   }
 
   function toggleArticle(article: GeneratedContentArticle) {
@@ -693,7 +666,7 @@ export default function GeneratedArticlesView({
         if (isCurrentClient(requestedClientId))
           setBatchFeedback({
             kind: "status",
-            text: "当前客户全部批次均无可撤销项；明确失败项请使用“清理失败队列项”。",
+            text: "当前客户全部批次均无可撤销项；已发布文章和发布证据不提供清理动作。",
           });
         return;
       }
@@ -792,81 +765,6 @@ export default function GeneratedArticlesView({
     }
   }
 
-  async function cleanupFailedBatches() {
-    const requestedClientId = clientId;
-    if (!cleanableBatches.length) return;
-    if (
-      commandBusy(
-        "previewCleanupFailedContentSubmissionItems",
-        "cleanupFailedContentSubmissionItems",
-      )
-    )
-      return;
-    setError("");
-    try {
-      const previews = [];
-      for (const { batch } of cleanableBatches) {
-        const preview =
-          await commands.previewCleanupFailedContentSubmissionItems({
-            batchId: batch.id,
-          });
-        if (isContentCommandStaleResult(preview)) return;
-        previews.push(preview);
-      }
-      const total = previews.reduce(
-        (count, preview) => count + preview.cleanableCount,
-        0,
-      );
-      if (!total) {
-        if (isCurrentClient(requestedClientId))
-          setBatchFeedback({
-            kind: "status",
-            text: "当前客户全部批次均无可清理的明确失败队列项。",
-          });
-        return;
-      }
-      if (!isCurrentClient(requestedClientId)) return;
-      if (
-        !(await confirm({
-          title: "确认清理失败队列项",
-          message: `确认清理当前客户 ${previews.length} 个批次中的 ${total} 项明确失败队列副本？发布失败记录会保留。`,
-          confirmLabel: "确认清理",
-          tone: "warning",
-        }))
-      )
-        return;
-      try {
-        const results = [];
-        for (const preview of previews)
-          if (preview.cleanableCount) {
-            const result = await commands.cleanupFailedContentSubmissionItems({
-              batchId: preview.batchId,
-            });
-            if (isContentCommandStaleResult(result)) return;
-            results.push(result);
-          }
-        if (isCurrentClient(requestedClientId))
-          setBatchFeedback({
-            kind: "status",
-            text: `已清理 ${results.reduce((count, result) => count + (result.cleanedCount || 0), 0)} 项失败队列副本；发布失败记录仍保留。`,
-          });
-      } catch (value) {
-        if (isCurrentClient(requestedClientId))
-          setBatchFeedback({
-            kind: "error",
-            text: value instanceof Error ? value.message : "清理失败队列项失败",
-          });
-      }
-      return;
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setBatchFeedback({
-          kind: "error",
-          text: value instanceof Error ? value.message : "清理失败队列项失败",
-        });
-    }
-  }
-
   async function previewTrashSelections(
     selections: Array<{ clientId: string; articleId: string }>,
   ) {
@@ -901,7 +799,7 @@ export default function GeneratedArticlesView({
       if (
         await confirm({
           title: "确认移入回收站",
-          message: `将 ${preview.articleCount} 篇文章移入回收站，并清理其本地投稿队列副本；远端已发布内容不会撤回，发布记录会保留。`,
+          message: `将 ${preview.articleCount} 篇文章移入回收站；发布成功的文章不会进入此操作，发布记录会保留。`,
           confirmLabel: "确认移入回收站",
           tone: "danger",
         })
@@ -1280,24 +1178,10 @@ export default function GeneratedArticlesView({
                 : `撤销未开始投稿 (${cancelableCount})`}
             </button>
           )}
-          {cleanableCount > 0 && (
-            <button
-              type="button"
-              onClick={() => void cleanupFailedBatches()}
-              disabled={commandBusy(
-                "previewCleanupFailedContentSubmissionItems",
-                "cleanupFailedContentSubmissionItems",
-              )}
-              className="rounded border border-orange-300 px-3 py-2 text-xs text-orange-700 disabled:opacity-40"
-            >
-              清理失败队列项 ({cleanableCount})
-            </button>
-          )}
           {submissionBatches.length > 0 &&
-            !cancelableCount &&
-            !cleanableCount && (
+            !cancelableCount && (
               <span role="status" className="text-xs text-slate-500">
-                当前客户全部批次均无可撤销或可清理项。
+                当前客户全部批次均无可撤销的未开始项。
               </span>
             )}
         </div>
@@ -1602,7 +1486,7 @@ export default function GeneratedArticlesView({
                   移入回收站预检
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  远端已发布内容不会撤回；发布记录和标题快照会保留。本地文章正文和投稿队列副本会进入回收站/被清理，恢复文章不会自动恢复投稿队列。
+                  发布记录和标题快照会保留；已发布文章不会进入回收站，恢复文章也不会自动恢复投稿队列。
                 </p>
               </div>
               <button
@@ -1619,40 +1503,8 @@ export default function GeneratedArticlesView({
               <div>
                 文章数：<strong>{trashPreview.articleCount}</strong>
               </div>
-              <div>
-                已发布本地副本：
-                {groupImpact(trashPreview.publishedToClean || []).map(
-                  ([platform, count]) => (
-                    <span
-                      key={platform}
-                      className="ml-2 inline-flex rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800"
-                    >
-                      {platform} {count}
-                    </span>
-                  ),
-                )}
-                {!(trashPreview.publishedToClean || []).length && (
-                  <span className="ml-2 text-xs text-slate-400">无</span>
-                )}
-              </div>
-              <div>
-                失败本地副本：
-                {groupImpact(trashPreview.failedToClean).map(
-                  ([platform, count]) => (
-                    <span
-                      key={platform}
-                      className="ml-2 inline-flex rounded bg-orange-50 px-2 py-1 text-xs text-orange-800"
-                    >
-                      {platform} {count}
-                    </span>
-                  ),
-                )}
-                {!trashPreview.failedToClean.length && (
-                  <span className="ml-2 text-xs text-slate-400">无</span>
-                )}
-              </div>
               <div>仍在投稿/待确认：{trashPreview.blockedItems.length}</div>
-              <div>发布记录：保留</div>
+              <div>发布记录和最小证据：保留</div>
             </div>
             {(trashPreview.openTransaction || trashPreview.transaction) && (
               <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
@@ -1679,9 +1531,8 @@ export default function GeneratedArticlesView({
             )}
             {trashPreview.canCommit && !removalSubmitDisabled && (
               <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">
-                确认后会撤销可撤销的 queued、清理终结的
-                failed/published/cancelled
-                本地副本，并将文章移入回收站；远端已发布内容不会撤回。
+                确认后只会撤销尚未开始的 queued 项，并将文章移入回收站；
+                已发布文章和发布证据不会被清理。
               </div>
             )}
             <div className="mt-5 flex justify-end gap-2">

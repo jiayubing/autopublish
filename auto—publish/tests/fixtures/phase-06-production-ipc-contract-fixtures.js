@@ -99,7 +99,6 @@ function contentImpactFixture() {
   return {
     articleCount: 1,
     queuedToCancel: [],
-    failedToClean: [],
     blockedItems: [],
     canCommit: true,
   };
@@ -1599,36 +1598,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "workflow.batch.cancel",
     featureBinding: "cancelContentSubmissionBatch",
   }),
-  "content.previewCleanupFailedSubmissionItems": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "previewCleanupFailedContentSubmissionItems",
-    preloadMethod: "previewCleanupFailedSubmissionItems",
-    command: "content.previewCleanupFailedSubmissionItems",
-    channel: "content:preview-cleanup-failed-submission-items",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.cleanup.previewFailed",
-    featureBinding: "previewCleanupFailedContentSubmissionItems",
-  }),
-  "content.cleanupFailedSubmissionItems": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "cleanupFailedContentSubmissionItems",
-    preloadMethod: "cleanupFailedSubmissionItems",
-    command: "content.cleanupFailedSubmissionItems",
-    channel: "content:cleanup-failed-submission-items",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.cleanup.cleanupFailed",
-    featureBinding: "cleanupFailedContentSubmissionItems",
-  }),
   "content.previewTrashedArticleQueueResidue": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
@@ -2494,16 +2463,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     "cancelContentSubmissionBatch",
   ],
-  "content.previewCleanupFailedSubmissionItems": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "previewCleanupFailedContentSubmissionItems",
-  ],
-  "content.cleanupFailedSubmissionItems": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "cleanupFailedContentSubmissionItems",
-  ],
   "content.previewTrashedArticleQueueResidue": [
     "direct",
     "media-workbench/src/components/PlatformWorkbench.tsx",
@@ -2920,8 +2879,6 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.confirmPaidMediaBatch",
           "content.removePendingQueueItems",
           "content.cancelSubmissionBatch",
-          "content.previewCleanupFailedSubmissionItems",
-          "content.cleanupFailedSubmissionItems",
           "publication.prepareRegularUncertainResolution",
           "publication.confirmRegularAccepted",
           "publication.confirmRegularNotAccepted",
@@ -3092,8 +3049,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "media.confirmPaidOrderAbsent",
           "content.removePendingQueueItems",
           "content.cancelSubmissionBatch",
-          "content.previewCleanupFailedSubmissionItems",
-          "content.cleanupFailedSubmissionItems",
           "content.createQuestion",
           "content.updateQuestion",
           "content.deleteQuestion",
@@ -5109,39 +5064,6 @@ const rawProductionIpcContractFixtures = [
       skippedCount: 0,
       batchStatus: "fixture-1",
       changedScopes: [],
-      items: [],
-    },
-  },
-  {
-    capability: "content.previewCleanupFailedSubmissionItems",
-    channel: "content:preview-cleanup-failed-submission-items",
-    owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:preview-cleanup-failed-submission-items",
-    request: {
-      batchId: "fixture-1",
-    },
-    result: {
-      batchId: "fixture-1",
-      cleanableCount: 0,
-      uncleanableCount: 0,
-      items: [],
-    },
-  },
-  {
-    capability: "content.cleanupFailedSubmissionItems",
-    channel: "content:cleanup-failed-submission-items",
-    owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:cleanup-failed-submission-items",
-    request: {
-      batchId: "fixture-1",
-      confirmed: true,
-    },
-    result: {
-      batchId: "fixture-1",
-      cleanedCount: 0,
-      skippedCount: 0,
       items: [],
     },
   },

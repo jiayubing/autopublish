@@ -148,13 +148,8 @@ function createOperationalContentSubmissionService(options) {
     previewCancelBatch: queueRemoval.previewCancelBatch,
     cancelBatch: queueRemoval.cancelBatch,
     reconcileBatch: resultReconciliation.reconcileBatch,
-    previewCleanupFailedItems: cleanup.previewCleanupFailedItems,
-    cleanupFailedItems: cleanup.cleanupFailedItems,
     previewArticleRemovalImpact: articleRemoval.previewArticleRemovalImpact,
     cancelArticleSubmissionItem: articleRemoval.cancelArticleSubmissionItem,
-    cleanupArticleSubmissionItem: articleRemoval.cleanupArticleSubmissionItem,
-    cleanupPublishedArticleLocal: articleRemoval.cleanupPublishedArticleLocal,
-    cleanupCancelledArticleLocal: articleRemoval.cleanupCancelledArticleLocal,
     reconcileArticleRemovalAction:
       resultReconciliation.reconcileArticleRemovalAction,
     inspectSubmissionPair: resultReconciliation.inspectPair,

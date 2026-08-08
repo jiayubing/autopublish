@@ -20,9 +20,6 @@ function createArticleSubmissionRemovalCoordinator(options) {
       .allItemViews()
       .filter((item) => selected.has(policy.selectionKey(item)));
     const queuedToCancel = [];
-    const failedToClean = [];
-    const publishedToClean = [];
-    const cancelledToClean = [];
     const blockedItems = [];
     const items = views.map((item) => {
       const safe = projection.publicItem(item);
@@ -46,46 +43,13 @@ function createArticleSubmissionRemovalCoordinator(options) {
               reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED",
             }),
           );
-      } else if (item.status === "failed") {
-        const checked = policy.evaluateItemAction(
-          Object.assign({}, safe, { action: "cleanup" }),
-        );
-        if (checked.allowed)
-          failedToClean.push(policy.submissionAction(item, "cleanup"));
-        else
-          blockedItems.push(
-            Object.assign(safe, {
-              reasonCode: checked.reasonCode || "SUBMISSION_QUEUE_CHANGED",
-            }),
-          );
       } else if (item.status === "published") {
-        const checked = policy.evaluateItemAction(
-          Object.assign({}, safe, { action: "cleanupPublishedLocal" }),
+        blockedItems.push(
+          Object.assign(safe, { reasonCode: "ARTICLE_PUBLISHED_IMMUTABLE" }),
         );
-        if (checked.allowed)
-          publishedToClean.push(
-            policy.submissionAction(item, "cleanupPublishedLocal"),
-          );
-        else
-          blockedItems.push(
-            Object.assign(safe, {
-              reasonCode: checked.reasonCode || "SUBMISSION_IDENTITY_CONFLICT",
-            }),
-          );
-      } else if (item.status === "cancelled") {
-        const checked = policy.evaluateItemAction(
-          Object.assign({}, safe, { action: "cleanupCancelledLocal" }),
-        );
-        if (checked.allowed)
-          cancelledToClean.push(
-            policy.submissionAction(item, "cleanupCancelledLocal"),
-          );
-        else
-          blockedItems.push(
-            Object.assign(safe, {
-              reasonCode: checked.reasonCode || "SUBMISSION_IDENTITY_CONFLICT",
-            }),
-          );
+      } else if (item.status === "failed" || item.status === "cancelled") {
+        // Terminal submission evidence remains available to history/repair, but
+        // article removal must not turn it into a user cleanup action.
       } else if (!policy.CLEANED_STATUSES.has(item.storedStatus))
         blockedItems.push(
           Object.assign(safe, { reasonCode: "SUBMISSION_QUEUE_CHANGED" }),
@@ -97,18 +61,8 @@ function createArticleSubmissionRemovalCoordinator(options) {
       articleCount: selections.length,
       items,
       queuedToCancel,
-      failedToClean,
-      publishedToClean,
-      cancelledToClean,
       blockedItems,
       queuedToCancelCount: queuedToCancel.length,
-      failedToCleanCount: failedToClean.length,
-      publishedToCleanCount: publishedToClean.length,
-      cancelledToCleanCount: cancelledToClean.length,
-      terminalCleanupCount:
-        failedToClean.length +
-        publishedToClean.length +
-        cancelledToClean.length,
       canCommit: blockedItems.length === 0,
     };
   }
@@ -123,9 +77,6 @@ function createArticleSubmissionRemovalCoordinator(options) {
   return Object.freeze({
     previewArticleRemovalImpact,
     cancelArticleSubmissionItem: withAction("cancel"),
-    cleanupArticleSubmissionItem: withAction("cleanup"),
-    cleanupPublishedArticleLocal: withAction("cleanupPublishedLocal"),
-    cleanupCancelledArticleLocal: withAction("cleanupCancelledLocal"),
   });
 }
 

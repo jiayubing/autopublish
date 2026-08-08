@@ -202,10 +202,6 @@ export interface ArticleTrashPreview {
   token?: string;
   articleCount: number;
   queuedToCancel: ArticleTrashImpactItem[];
-  failedToClean: ArticleTrashImpactItem[];
-  publishedToClean?: ArticleTrashImpactItem[];
-  cancelledToClean?: ArticleTrashImpactItem[];
-  terminalCleanupCount?: number;
   blockedItems: ArticleTrashImpactItem[];
   canCommit: boolean;
   selections?: ArticleSelection[];
@@ -332,10 +328,7 @@ export type ContentSubmissionItemStatus =
   | "published"
   | "uncertain"
   | "failed"
-  | "failed-cleaned"
-  | "published-cleaned"
   | "cancelled"
-  | "cancelled-cleaned"
   | "skipped"
   | string;
 export interface ContentSubmissionBatchItem {
@@ -358,7 +351,6 @@ export interface ContentSubmissionBatchItem {
   reconciledStatus?: string;
   unchanged?: boolean;
   canCancel?: boolean;
-  canCleanup?: boolean;
   submissionBatchId?: string;
 }
 export interface ContentSubmissionBatchRecord {
@@ -567,18 +559,6 @@ export interface ContentSubmissionCancellationPreview {
   allowedCount: number;
   blockedCount: number;
   items: ContentSubmissionActionPlanItem[];
-}
-export interface ContentSubmissionCleanupPreview {
-  batchId: string;
-  cleanableCount: number;
-  uncleanableCount: number;
-  items: Array<ContentSubmissionBatchItem & { cleanable: boolean }>;
-}
-export interface ContentSubmissionCleanupResult {
-  batchId: string;
-  cleanedCount: number;
-  skippedCount: number;
-  items: ContentSubmissionBatchItem[];
 }
 
 export interface ArticleAttentionItem {

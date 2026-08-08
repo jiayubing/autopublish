@@ -318,10 +318,6 @@ const impactPreview = exactObject({
   token: optionalField(opaqueToken),
   articleCount: integerField({ min: 0, max: 10000 }),
   queuedToCancel: arrayField(impactItem, { max: 10000 }),
-  failedToClean: arrayField(impactItem, { max: 10000 }),
-  publishedToClean: optionalField(arrayField(impactItem, { max: 10000 })),
-  cancelledToClean: optionalField(arrayField(impactItem, { max: 10000 })),
-  terminalCleanupCount: optionalField(integerField({ min: 0, max: 10000 })),
   blockedItems: arrayField(impactItem, { max: 10000 }),
   canCommit: boolean,
   selections: optionalField(arrayField(selection, { max: 10000 })),
@@ -659,23 +655,16 @@ function projectImpactPreview(value) {
   const output = projectFields(value, [
     "token",
     "articleCount",
-    "terminalCleanupCount",
     "canCommit",
     "expiresAt",
     "legacy",
     "transactionId",
     "openTransactionId",
   ]);
-  for (const field of [
-    "queuedToCancel",
-    "failedToClean",
-    "publishedToClean",
-    "cancelledToClean",
-    "blockedItems",
-  ]) {
+  for (const field of ["queuedToCancel", "blockedItems"]) {
     if (
       own(value, field) ||
-      ["queuedToCancel", "failedToClean", "blockedItems"].includes(field)
+      ["queuedToCancel", "blockedItems"].includes(field)
     )
       output[field] = Array.isArray(value && value[field])
         ? value[field].map(projectImpactItem)

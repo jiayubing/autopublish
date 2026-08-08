@@ -136,23 +136,7 @@ function createArticleAttentionResolver(options) {
     }
 
     let result;
-    if (action === "finalize" || action === "cleanup") {
-      const service = opts.contentSubmissionService;
-      if (
-        !service ||
-        typeof service.cleanupArticleSubmissionItem !== "function"
-      )
-        throw attentionError(
-          "ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE",
-          "投稿队列处理服务不可用",
-        );
-      result = service.cleanupArticleSubmissionItem(
-        Object.assign({}, entry.item, {
-          action: "cleanup",
-          evaluationFingerprint: entry.item.evaluationFingerprint,
-        }),
-      );
-    } else if (action === "retry-removal") {
+    if (action === "retry-removal") {
       if (
         !opts.articleRemovalService ||
         typeof opts.articleRemovalService.retryArticleRemovalTransaction !==

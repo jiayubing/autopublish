@@ -14,12 +14,10 @@ import {
   saveManualResearch,
   startPreparedDoubaoBatch,
   pauseDoubaoBatch,
-  previewCleanupFailedContentSubmissionItems,
   previewRegularQueueAdmission,
   resumeDoubaoBatch,
   stopDoubaoBatch,
   cancelContentSubmissionBatch,
-  cleanupFailedContentSubmissionItems,
   admitRegularQueueItems,
   previewPaidMediaPreflight,
   confirmPaidMediaBatch,
@@ -115,11 +113,6 @@ export function useContentWorkbenchFeature() {
         batchId: string;
         planId: string;
       }) => cancelContentSubmissionBatch(input.batchId, input.planId),
-      previewCleanupFailedContentSubmissionItems: (input: {
-        batchId: string;
-      }) => previewCleanupFailedContentSubmissionItems(input.batchId),
-      cleanupFailedContentSubmissionItems: (input: { batchId: string }) =>
-        cleanupFailedContentSubmissionItems(input.batchId),
       previewContentArticleRemoval: (input: {
         selections: Array<{ clientId: string; articleId: string }>;
       }) => previewContentArticleRemoval(input.selections),

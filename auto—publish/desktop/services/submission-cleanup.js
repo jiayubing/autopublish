@@ -15,61 +15,6 @@ function createSubmissionCleanup(options) {
   const projection = value.projection;
   const policy = value.policy;
 
-  function previewCleanupFailedItems(input) {
-    const batch = value.operationalStore.getSubmissionBatch(
-      input && input.batchId,
-    );
-    const items = projection.batchViews(batch).map((item) => {
-      const checked = policy.evaluateItemAction(
-        Object.assign({}, projection.publicItem(item), { action: "cleanup" }),
-      );
-      return Object.assign(projection.publicItem(item), {
-        cleanable: checked.allowed,
-        reasonCode: checked.allowed ? null : checked.reasonCode,
-      });
-    });
-    return {
-      batchId: batch.batchId,
-      cleanableCount: items.filter((item) => item.cleanable).length,
-      uncleanableCount: items.filter((item) => !item.cleanable).length,
-      items,
-    };
-  }
-
-  function cleanupFailedItems(input) {
-    if (!input || input.confirmed !== true || typeof input.batchId !== "string")
-      throw fail("CONTENT_SUBMISSION_CONFIRMATION_REQUIRED");
-    const preview = previewCleanupFailedItems(input);
-    let cleanedCount = 0;
-    let skippedCount = 0;
-    preview.items.forEach((item) => {
-      if (!item.cleanable) {
-        skippedCount += 1;
-        return;
-      }
-      try {
-        const current = projection.findItemView(item);
-        value.actionRecovery.applyItemAction(
-          Object.assign({}, item, {
-            action: "cleanup",
-            evaluationFingerprint:
-              item.actionFingerprint ||
-              projection.actionFingerprint(current, { action: "cleanup" }),
-          }),
-        );
-        cleanedCount += 1;
-      } catch (_) {
-        skippedCount += 1;
-      }
-    });
-    return {
-      batchId: input.batchId,
-      cleanedCount,
-      skippedCount,
-      items: value.operationalStore.getSubmissionBatch(input.batchId).items,
-    };
-  }
-
   function previewTrashedArticleQueueResidue() {
     const items = projection
       .allItemViews()
@@ -193,8 +138,6 @@ function createSubmissionCleanup(options) {
   }
 
   return Object.freeze({
-    previewCleanupFailedItems,
-    cleanupFailedItems,
     previewTrashedArticleQueueResidue,
     cleanupTrashedArticleQueueResidue,
     listArchiveFailures,

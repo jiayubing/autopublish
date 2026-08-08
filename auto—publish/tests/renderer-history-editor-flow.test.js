@@ -175,7 +175,7 @@ function installDesktopFixture(page, fixture) {
       listPaidMediaBatches: () => ok({ items: [] }),
       startPaidMediaBatch: () => ok({}),
       pausePaidMediaBatch: () => ok({}),
-      previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, queuedToCancel: [], failedToClean: [], blockedItems: [], canCommit: true, selections: input.selections }),
+      previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, queuedToCancel: [], blockedItems: [], canCommit: true, selections: input.selections }),
       applyArticleRemovalImpact: (input) => {
         const transaction = { transactionId: "removal-fixture-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH", updatedAt: "2026-07-18T00:30:00.000Z" };
         state.removalTransaction = transaction;
@@ -344,7 +344,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
       await page.getByLabel("文章标题", { exact: true }).fill("未保存后不得投稿");
-      await page.getByRole("button", { name: "测试投稿平台" }).click();
+      await page.getByLabel("普通平台投稿目标").selectOption(platformId);
 
       const queueButton = page.getByRole("button", { name: "加入投稿队列" });
       await page.getByRole("textbox", { name: "付费媒体资源 ID" }).fill("media-1");

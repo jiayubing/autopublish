@@ -1,6 +1,4 @@
 const ACTIONS = Object.freeze({
-  FINALIZE: "finalize",
-  CLEANUP: "cleanup",
   RETRY_REMOVAL: "retry-removal",
   RETRY_PUBLICATION: "retry-publication",
   OPEN_ARTICLE: "open-article",
@@ -10,8 +8,6 @@ const ACTIONS = Object.freeze({
 });
 
 const MESSAGES = Object.freeze({
-  missing_pair_finalize: "队列文件已不存在，只差完成记录收尾",
-  queue_pair_conflict: "队列文件与原投稿记录不一致",
   removal_auto_recovery: "删除事务正在自动恢复",
   removal_needs_repair: "删除事务未完成，需要重新预检并继续",
   publication_uncertain: "远端结果待确认，请先核对发布详情",
@@ -43,10 +39,6 @@ function actionList(facts, capabilities, actions) {
       return (
         capabilities.canOpenArticle !== false && facts.articleExists === true
       );
-    if (action === ACTIONS.FINALIZE)
-      return capabilities.canFinalize !== false && facts.canFinalize !== false;
-    if (action === ACTIONS.CLEANUP)
-      return capabilities.canCleanup !== false && facts.canCleanup === true;
     if (action === ACTIONS.RETRY_REMOVAL)
       return (
         capabilities.canRetryRemoval !== false &&
@@ -90,7 +82,7 @@ function deriveAttentionPolicy(input, capabilities) {
   const facts = input && typeof input === "object" ? input : {};
   const caps =
     capabilities && typeof capabilities === "object" ? capabilities : {};
-  const kind = facts.kind || "queue_pair_conflict";
+  const kind = facts.kind || "unknown";
 
   if (kind === "failed_submission") {
     const removed =
@@ -104,15 +96,6 @@ function deriveAttentionPolicy(input, capabilities) {
       facts.hasRemovalTransaction !== true
     ) {
       return policy(kind, facts, caps, [], null, "removed_failed_history");
-    }
-    if (facts.hasQueueBinding === true && facts.canCleanup === true) {
-      return policy(
-        kind,
-        facts,
-        caps,
-        [ACTIONS.CLEANUP, ACTIONS.OPEN_PUBLICATION],
-        ACTIONS.CLEANUP,
-      );
     }
     if (
       facts.articleExists === true &&
@@ -147,9 +130,6 @@ function deriveAttentionPolicy(input, capabilities) {
     );
   }
 
-  if (kind === "missing_pair_finalize") {
-    return policy(kind, facts, caps, [ACTIONS.FINALIZE], ACTIONS.FINALIZE);
-  }
   if (kind === "removal_needs_repair") {
     return policy(
       kind,

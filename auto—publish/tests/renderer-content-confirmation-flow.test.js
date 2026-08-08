@@ -12,7 +12,7 @@ describe('renderer content confirmation flow', () => {
     const workbench = read('media-workbench/src/components/ContentWorkbench.tsx');
     const editor = read('media-workbench/src/components/content/GeneratedArticleEditorPanel.tsx');
     const queue = view.slice(view.indexOf('async function queueSelected'), view.indexOf('\n  async function removePendingSelected'));
-    const cancel = view.slice(view.indexOf('async function cancelCancelableBatches'), view.indexOf('\n  async function cleanupFailedBatches'));
+    const cancel = view.slice(view.indexOf('async function cancelCancelableBatches'), view.indexOf('\n  async function previewTrashSelections'));
     [view, workbench, editor].forEach((source) => {
       assert.match(source, /useConfirmation/);
       assert.match(source, /const \{ confirm \} = useConfirmation\(\)/);

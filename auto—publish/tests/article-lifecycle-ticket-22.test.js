@@ -346,7 +346,7 @@ function paidPublishedFixture(articleId = "article-22-paid") {
   store.commitRemoteOutcome({
     attemptId,
     outcome: {
-      status: "submitted",
+      status: "uncertain",
       evidence: {
         articleId,
         attemptId,
@@ -845,9 +845,6 @@ test("deletion transaction DTO is versioned while completed history remains quer
     submissionService: {
       previewArticleRemovalImpact: () => ({
         queuedToCancel: [],
-        failedToClean: [],
-        publishedToClean: [],
-        cancelledToClean: [],
         blockedItems: [],
         canCommit: true,
       }),

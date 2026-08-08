@@ -80,15 +80,13 @@ test("ordinary submission mutations have independent legal fixtures", () => {
 test("destructive submission prepare-execute capabilities have independent fixtures", () => {
   const channels = new Set([
     "content:cancel-submission-batch",
-    "content:preview-cleanup-failed-submission-items",
-    "content:cleanup-failed-submission-items",
     "content:preview-trashed-article-queue-residue",
     "content:cleanup-trashed-article-queue-residue",
   ]);
   const fixtures = submissionContractFixtures.filter((entry) =>
     channels.has(entry.channel),
   );
-  assert.equal(fixtures.length, 5);
+  assert.equal(fixtures.length, 3);
   for (const fixture of fixtures) {
     const contract = registry.byChannel(fixture.channel);
     assert.ok(contract, fixture.channel);

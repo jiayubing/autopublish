@@ -44,7 +44,10 @@ function fixture() {
   const service = createContentSubmissionService({
     workspaceRoot: root,
     operationalStore: store,
-    contentStore: { getArticle: () => article() },
+    contentStore: {
+      getArticle: () => article(),
+      isArticleTrashed: () => true,
+    },
     platforms: [
       { id: "toutiao", scanDir: "toutiao", contentQueueImport: true },
     ],
@@ -68,7 +71,7 @@ function closeFixture(value) {
   fs.rmSync(value.root, { recursive: true, force: true });
 }
 
-test("cleans a terminal failed item and its owned queue pair", () => {
+test("keeps failed queue residue behind the explicit repair capability", () => {
   const value = fixture();
   try {
     const stored = value.store.getSubmissionBatch(value.batch.batchId);
@@ -114,12 +117,11 @@ test("cleans a terminal failed item and its owned queue pair", () => {
       ),
     };
     files.sidecarPath = files.filePath + ".submission.json";
-    const preview = value.service.previewCleanupFailedItems({
-      batchId: value.batch.batchId,
-    });
+    assert.equal("previewCleanupFailedItems" in value.service, false);
+    assert.equal("cleanupFailedItems" in value.service, false);
+    const preview = value.service.previewTrashedArticleQueueResidue();
     assert.equal(preview.cleanableCount, 1);
-    const result = value.service.cleanupFailedItems({
-      batchId: value.batch.batchId,
+    const result = value.service.cleanupTrashedArticleQueueResidue({
       confirmed: true,
     });
     assert.equal(result.cleanedCount, 1);

@@ -4,8 +4,6 @@ import type {
   ContentSubmissionBatchItem,
   ContentSubmissionBatchRecord,
   ContentSubmissionCancellationPreview,
-  ContentSubmissionCleanupPreview,
-  ContentSubmissionCleanupResult,
   ContentSubmissionPlatform,
   PaidMediaAdmissionResult,
   PaidMediaConfirmationInput,
@@ -223,13 +221,6 @@ type SubmissionContentApi = {
       items: ContentSubmissionBatchItem[];
     }>
   >;
-  previewCleanupFailedSubmissionItems: (input: {
-    batchId: string;
-  }) => Promise<ContentIpcResponse<ContentSubmissionCleanupPreview>>;
-  cleanupFailedSubmissionItems: (input: {
-    batchId: string;
-    confirmed: true;
-  }) => Promise<ContentIpcResponse<ContentSubmissionCleanupResult>>;
 };
 
 async function callDoubao<TWire, TResult>(
@@ -660,26 +651,5 @@ export async function cancelContentSubmissionBatch(
         confirmed: true,
       }),
     "submission batch cancellation failed",
-  );
-}
-export async function previewCleanupFailedContentSubmissionItems(
-  batchId: string,
-): Promise<ContentSubmissionCleanupPreview> {
-  return callSubmission(
-    (api) =>
-      requireBridgeMethod(api.previewCleanupFailedSubmissionItems)({ batchId }),
-    "failed submission cleanup preview failed",
-  );
-}
-export async function cleanupFailedContentSubmissionItems(
-  batchId: string,
-): Promise<ContentSubmissionCleanupResult> {
-  return callSubmission(
-    (api) =>
-      requireBridgeMethod(api.cleanupFailedSubmissionItems)({
-        batchId,
-        confirmed: true,
-      }),
-    "failed submission cleanup failed",
   );
 }

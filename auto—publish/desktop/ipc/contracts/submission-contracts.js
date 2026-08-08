@@ -101,18 +101,6 @@ const cancelResult = exactObject({
   blockedItems: optionalField(arrayField(batchItem, { max: 10000 })),
   items: arrayField(batchItem, { max: 10000 }),
 });
-const cleanupPreview = exactObject({
-  batchId: id,
-  cleanableCount: count,
-  uncleanableCount: count,
-  items: arrayField(batchItem, { max: 10000 }),
-});
-const cleanupResult = exactObject({
-  batchId: id,
-  cleanedCount: count,
-  skippedCount: count,
-  items: arrayField(batchItem, { max: 10000 }),
-});
 const retryPreview = exactObject({
   publicationId: nullableField(id),
   requiresConfirmation: "boolean",
@@ -849,24 +837,6 @@ const submissionContracts = Object.freeze([
     toArgs: directInput,
   }),
   contract({
-    capability: "content.previewCleanupFailedSubmissionItems",
-    channel: "content:preview-cleanup-failed-submission-items",
-    kind: "query",
-    request: exactObject({ batchId: id }),
-    success: cleanupPreview,
-    fromArgs: directArgs,
-    toArgs: directInput,
-  }),
-  contract({
-    capability: "content.cleanupFailedSubmissionItems",
-    channel: "content:cleanup-failed-submission-items",
-    kind: "command",
-    request: exactObject({ batchId: id, confirmed: literalField(true) }),
-    success: cleanupResult,
-    fromArgs: directArgs,
-    toArgs: directInput,
-  }),
-  contract({
     capability: "content.previewTrashedArticleQueueResidue",
     channel: "content:preview-trashed-article-queue-residue",
     kind: "query",
@@ -1251,20 +1221,6 @@ function projectSubmissionResult(channel, value) {
       result.blockedItems = value.blockedItems.map(projectBatchItem);
     return result;
   }
-  if (channel === "content:preview-cleanup-failed-submission-items")
-    return {
-      batchId: value.batchId,
-      cleanableCount: value.cleanableCount,
-      uncleanableCount: value.uncleanableCount,
-      items: (value.items || []).map(projectBatchItem),
-    };
-  if (channel === "content:cleanup-failed-submission-items")
-    return {
-      batchId: value.batchId,
-      cleanedCount: value.cleanedCount,
-      skippedCount: value.skippedCount,
-      items: (value.items || []).map(projectBatchItem),
-    };
   if (channel === "content:preview-trashed-article-queue-residue") {
     const result = {
       items: (value.items || []).map(projectResidueItem),
@@ -1367,45 +1323,6 @@ const submissionContractFixtures = Object.freeze([
       batchStatus: "cancelled",
       changedScopes: ["articleManagement"],
       items: [],
-    },
-  },
-  {
-    channel: "content:preview-cleanup-failed-submission-items",
-    owner: "content",
-    productionCaller:
-      "desktopConsole.content.previewCleanupFailedSubmissionItems",
-    request: { batchId: "batch-1" },
-    result: {
-      batchId: "batch-1",
-      cleanableCount: 1,
-      uncleanableCount: 0,
-      items: [
-        {
-          articleId: "article-1",
-          targetPlatformId: "toutiao",
-          status: "failed",
-          cleanable: true,
-          reasonCode: null,
-        },
-      ],
-    },
-  },
-  {
-    channel: "content:cleanup-failed-submission-items",
-    owner: "content",
-    productionCaller: "desktopConsole.content.cleanupFailedSubmissionItems",
-    request: { batchId: "batch-1", confirmed: true },
-    result: {
-      batchId: "batch-1",
-      cleanedCount: 1,
-      skippedCount: 0,
-      items: [
-        {
-          articleId: "article-1",
-          targetPlatformId: "toutiao",
-          status: "failed-cleaned",
-        },
-      ],
     },
   },
   {

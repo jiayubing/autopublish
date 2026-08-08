@@ -402,12 +402,6 @@ function retryableQueueFixture() {
         canCommit: true,
         blockedItems: [],
         queuedToCancel: queueProof.status === "completed" ? [] : [action],
-        failedToClean: [],
-        publishedToClean: [],
-        cancelledToClean:
-          queueProof.status === "completed"
-            ? [{ ...action, action: "cleanupCancelledLocal" }]
-            : [],
       };
     },
     reconcileArticleRemovalAction: (_action, operationId) =>
@@ -424,9 +418,6 @@ function retryableQueueFixture() {
       queueProof = { status: "completed", result: { idempotent: true } };
       return { status: "cancelled", idempotent: false };
     },
-    cleanupArticleSubmissionItem: () => ({}),
-    cleanupPublishedArticleLocal: () => ({}),
-    cleanupCancelledArticleLocal: () => ({}),
   };
   const service = createArticleRemovalService({
     contentStore,

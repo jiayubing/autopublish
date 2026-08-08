@@ -25,7 +25,7 @@ test("failed active saved publication exposes retry and publication navigation o
   assert.equal(policy.allowedActions.includes("retry"), false);
 });
 
-test("failed publication with a cleanable queue binding exposes cleanup but not retry-publication", () => {
+test("failed publication with a queue binding has no independent cleanup action", () => {
   const policy = deriveAttentionPolicy({
     kind: "failed_submission",
     status: "failed",
@@ -33,11 +33,11 @@ test("failed publication with a cleanable queue binding exposes cleanup but not 
     articleExists: true,
     hasQueueBinding: true,
     pairState: "intact",
-    canCleanup: true,
+    articleSubmissionEligible: true,
     targetSupportsContentQueueImport: true
   }, retryCapabilities);
 
-  assert.deepEqual(policy.allowedActions, ["cleanup", "open-publication"]);
+  assert.deepEqual(policy.allowedActions, ["retry-publication", "open-publication"]);
 });
 
 test("removed failed publication without residue is historical, not current attention", () => {

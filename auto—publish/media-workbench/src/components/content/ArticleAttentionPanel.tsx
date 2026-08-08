@@ -7,20 +7,16 @@ type AttentionFeature = ReturnType<typeof createAttentionFeature>;
 type ArticleAttentionSnapshot = ReturnType<AttentionFeature["getSnapshot"]>;
 
 function labelFor(item: ArticleAttentionItem): string {
-  if (item.kind === "missing_pair_finalize")
-    return "队列文件已不存在，可安全完成记录收尾";
   if (item.kind === "removal_needs_repair") return "删除事务需要修复";
   if (item.kind === "publication_uncertain") return "远端结果待确认";
   if (item.kind === "published_archive_failed")
     return "远端成功，本地归档待处理";
   if (item.kind === "failed_submission") return "投稿明确失败";
-  return "队列文件与原记录不一致";
+  return "需处理项需要核对";
 }
 
 function actionLabel(action: string): string {
   const labels: Record<string, string> = {
-    finalize: "安全完成",
-    cleanup: "清理旧队列",
     "retry-removal": "重试修复删除",
     "retry-publication": "重新投稿",
     "open-publication": "打开发布详情",

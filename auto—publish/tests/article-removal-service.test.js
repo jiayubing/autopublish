@@ -12,10 +12,9 @@ function fixture(options) {
   const article = { clientId: "c-1", id: "a-1", title: "Title", content: "body", status: "generated" };
   const configuredQueueActions = value.queueActions || [{ clientId: "c-1", articleId: "a-1", batchId: "b", publicationId: "p", targetPlatformId: "x", attemptId: "at" }];
   const submissionService = {
-    previewArticleRemovalImpact: () => ({ canCommit: blocked.length === 0, items: [], queuedToCancel: hasQueue ? value.queuePostcondition && value.queuePostcondition.status === "completed" ? configuredQueueActions.slice(1) : configuredQueueActions : [], failedToClean: [], publishedToClean: [], cancelledToClean: [], blockedItems: blocked }),
+    previewArticleRemovalImpact: () => ({ canCommit: blocked.length === 0, items: [], queuedToCancel: hasQueue ? value.queuePostcondition && value.queuePostcondition.status === "completed" ? configuredQueueActions.slice(1) : configuredQueueActions : [], blockedItems: blocked }),
     cancelArticleSubmissionItem: (action) => { queueCalls += 1; queueBatches.push(action.batchId); if (value.queueError) throw Object.assign(new Error("queue"), { code: value.queueError }); return {}; },
     reconcileArticleRemovalAction: () => value.queuePostcondition || { status: "unknown", reasonCode: "QUEUE_RESULT_UNPROVABLE" },
-    cleanupArticleSubmissionItem: () => ({}), cleanupPublishedArticleLocal: () => ({}), cleanupCancelledArticleLocal: () => ({})
   };
   const articleStore = {
     getArticle: () => { if (trashed) throw Object.assign(new Error("missing"), { code: "ARTICLE_NOT_FOUND" }); if (value.readError) throw Object.assign(new Error("read"), { code: value.readError }); return article; },
@@ -119,9 +118,6 @@ it("keeps the completed cursor when a later article changes in a multi-article r
       canCommit: true,
       items: [],
       queuedToCancel: [],
-      failedToClean: [],
-      publishedToClean: [],
-      cancelledToClean: [],
       blockedItems: [],
     }),
   };

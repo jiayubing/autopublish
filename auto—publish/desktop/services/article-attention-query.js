@@ -8,8 +8,6 @@ const {
 } = require("../../src/content/article-submission-eligibility");
 
 const ATTENTION_KINDS = Object.freeze({
-  MISSING_PAIR_FINALIZE: "missing_pair_finalize",
-  QUEUE_PAIR_CONFLICT: "queue_pair_conflict",
   REMOVAL_AUTO_RECOVERY: "removal_auto_recovery",
   REMOVAL_NEEDS_REPAIR: "removal_needs_repair",
   PUBLICATION_UNCERTAIN: "publication_uncertain",
@@ -57,22 +55,6 @@ function createArticleAttentionQuery(options) {
 
   function reader(name, fallback) {
     return typeof readers[name] === "function" ? readers[name] : fallback;
-  }
-
-  function readResidue() {
-    const value = reader("listResidues", function () {
-      if (
-        opts.contentSubmissionService &&
-        typeof opts.contentSubmissionService
-          .previewTrashedArticleQueueResidue === "function"
-      ) {
-        return opts.contentSubmissionService.previewTrashedArticleQueueResidue();
-      }
-      return { items: [], cleanableItems: [], reportedItems: [] };
-    })();
-    return value && typeof value === "object"
-      ? value
-      : { items: [], cleanableItems: [], reportedItems: [] };
   }
 
   function readTransactions() {
@@ -213,12 +195,6 @@ function createArticleAttentionQuery(options) {
     const archive = opts.archiveActionPort || opts.archiveService;
     return Object.assign(
       {
-        canCleanup: !!(
-          service && typeof service.cleanupArticleSubmissionItem === "function"
-        ),
-        canFinalize: !!(
-          service && typeof service.cleanupArticleSubmissionItem === "function"
-        ),
         canRetryRemoval: !!(
           removal &&
           typeof removal.retryArticleRemovalTransaction === "function"
@@ -295,56 +271,6 @@ function createArticleAttentionQuery(options) {
       allowedActions: policy.allowedActions.slice(),
     };
     return { item: copy, policy: policy, facts: normalizedFacts };
-  }
-
-  function residueEntries() {
-    const report = readResidue();
-    const items = Array.isArray(report.items) ? report.items : [];
-    return items.map(function (item) {
-      const pairState =
-        item.pairState ||
-        (item.mainExists === false && item.sidecarExists === false
-          ? "both_absent"
-          : null);
-      const kind =
-        pairState === "both_absent" && item.repairAction
-          ? ATTENTION_KINDS.MISSING_PAIR_FINALIZE
-          : item.status === "failed" &&
-              item.repairAction &&
-              pairState === "intact"
-            ? ATTENTION_KINDS.FAILED_SUBMISSION
-            : ATTENTION_KINDS.QUEUE_PAIR_CONFLICT;
-      const hasBinding = Boolean(
-        item.batchId &&
-        item.publicationId &&
-        item.attemptId &&
-        (item.targetPlatformId || item.platformId),
-      );
-      const canCleanup =
-        hasBinding &&
-        item.repairAction === "cleanup" &&
-        ["intact", "both_absent"].includes(pairState) &&
-        item.canCleanup !== false;
-      return makeEntry(
-        kind,
-        Object.assign({}, item, {
-          pairState: pairState,
-          updatedAt: item.updatedAt || item.checkedAt,
-        }),
-        {
-          articleStatus:
-            item.articleStatus ||
-            (item.sourceArticleState === "removed" ? "removed" : null),
-          articleExists: item.articleExists,
-          articleState: item.articleState,
-          hasQueueBinding: hasBinding,
-          hasResidue: true,
-          canCleanup: canCleanup,
-          canFinalize: kind === ATTENTION_KINDS.MISSING_PAIR_FINALIZE,
-          targetSupportsContentQueueImport: true,
-        },
-      );
-    });
   }
 
   function transactionEntries() {
@@ -468,11 +394,9 @@ function createArticleAttentionQuery(options) {
   }
 
   function entries() {
-    const residues = residueEntries();
     const transactions = transactionEntries();
     const concretePublicationIds = new Set(
-      residues
-        .concat(transactions)
+      transactions
         .map(function (entry) {
           return entry.item.publicationId;
         })
@@ -481,7 +405,7 @@ function createArticleAttentionQuery(options) {
     const publications = publicationEntries().filter(function (entry) {
       return !concretePublicationIds.has(entry.item.publicationId);
     });
-    const all = residues.concat(transactions, publications, archiveEntries());
+    const all = transactions.concat(publications, archiveEntries());
     const unique = new Map();
     all.forEach(function (entry) {
       if (!entry.policy.included || unique.has(entry.item.attentionId)) return;

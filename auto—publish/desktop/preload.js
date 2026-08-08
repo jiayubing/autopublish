@@ -424,18 +424,6 @@ const api = {
     cancelSubmissionBatch: function (input) {
       return ipcRenderer.invoke("content:cancel-submission-batch", input);
     },
-    previewCleanupFailedSubmissionItems: function (input) {
-      return ipcRenderer.invoke(
-        "content:preview-cleanup-failed-submission-items",
-        input,
-      );
-    },
-    cleanupFailedSubmissionItems: function (input) {
-      return ipcRenderer.invoke(
-        "content:cleanup-failed-submission-items",
-        input,
-      );
-    },
     previewTrashedArticleQueueResidue: function () {
       return ipcRenderer.invoke(
         "content:preview-trashed-article-queue-residue",

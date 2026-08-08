@@ -29,8 +29,6 @@ function createSubmissionInterface(service, regularQueueService, regularQueueGro
       reconcile: bind(service, "reconcileBatch"),
     },
     cleanup: {
-      previewFailed: bind(service, "previewCleanupFailedItems"),
-      cleanupFailed: bind(service, "cleanupFailedItems"),
       previewResidue: bind(service, "previewTrashedArticleQueueResidue"),
       cleanupResidue: bind(service, "cleanupTrashedArticleQueueResidue"),
     },
@@ -220,28 +218,6 @@ function registerContentSubmissionIpc(deps) {
         return projectSubmissionResult(
           "content:cancel-submission-batch",
           workflow.batch.cancel(batchInput(input, true)),
-        );
-      });
-    },
-  );
-  deps.ipcMain.handle(
-    "content:preview-cleanup-failed-submission-items",
-    function (event, input) {
-      return wrap(function () {
-        return projectSubmissionResult(
-          "content:preview-cleanup-failed-submission-items",
-          workflow.cleanup.previewFailed(batchInput(input, false)),
-        );
-      });
-    },
-  );
-  deps.ipcMain.handle(
-    "content:cleanup-failed-submission-items",
-    function (event, input) {
-      return wrap(function () {
-        return projectSubmissionResult(
-          "content:cleanup-failed-submission-items",
-          workflow.cleanup.cleanupFailed(batchInput(input, true)),
         );
       });
     },

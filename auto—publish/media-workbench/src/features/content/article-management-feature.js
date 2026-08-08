@@ -33,8 +33,6 @@ const COMMAND_SCOPES = Object.freeze({
   confirmPaidMediaBatch: "management",
   removePendingQueueItems: "management",
   cancelContentSubmissionBatch: "management",
-  previewCleanupFailedContentSubmissionItems: null,
-  cleanupFailedContentSubmissionItems: "management",
   previewContentArticleRemoval: null,
   trashContentArticles: "management",
   getContentArticleRemovalTransaction: null,
@@ -511,10 +509,6 @@ export function createArticleManagementFeature(adapters = {}) {
       runCommand("removePendingQueueItems", input),
     cancelContentSubmissionBatch: (input) =>
       runCommand("cancelContentSubmissionBatch", input),
-    previewCleanupFailedContentSubmissionItems: (input) =>
-      runCommand("previewCleanupFailedContentSubmissionItems", input),
-    cleanupFailedContentSubmissionItems: (input) =>
-      runCommand("cleanupFailedContentSubmissionItems", input),
     previewContentArticleRemoval: (input) =>
       runCommand("previewContentArticleRemoval", input),
     trashContentArticles: (input) => runCommand("trashContentArticles", input),

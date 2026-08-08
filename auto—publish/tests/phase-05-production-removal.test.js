@@ -9,6 +9,7 @@ const { createOperationalStore } = require("../src/infrastructure/operational-st
 const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
 const { createContentSubmissionService } = require("../desktop/services/content-submission-service");
 const { createArticleRemovalService } = require("../src/content/article-removal-service");
+const { createArticleSubmissionRemovalCoordinator } = require("../desktop/services/article-submission-removal-coordinator");
 
 function article() {
   return {
@@ -59,4 +60,38 @@ test("production removal uses OperationalStore queue facts and cancels before tr
     operationalStore.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("published submission history blocks article removal without a local-copy action", () => {
+  const views = [
+    { clientId: "client-1", articleId: "queued", batchId: "batch-q", status: "queued" },
+    { clientId: "client-1", articleId: "failed", batchId: "batch-f", status: "failed" },
+    { clientId: "client-1", articleId: "published", batchId: "batch-p", status: "published" },
+  ];
+  const coordinator = createArticleSubmissionRemovalCoordinator({
+    projection: {
+      allItemViews: () => views,
+      publicItem: (item) => ({ ...item }),
+    },
+    policy: {
+      CLEANED_STATUSES: new Set(),
+      normalizeSelections: (input) => input.selections,
+      selectionKey: (item) => `${item.clientId}:${item.articleId}`,
+      evaluateItemAction: (item) => ({
+        allowed: item.action === "cancel",
+        reasonCode: "ARTICLE_SUBMISSION_ACTIVE",
+      }),
+      submissionAction: (item, action) => ({ ...item, action }),
+    },
+    actionRecovery: {},
+  });
+  const preview = coordinator.previewArticleRemovalImpact({
+    selections: views.map(({ clientId, articleId }) => ({ clientId, articleId })),
+  });
+  assert.equal(preview.queuedToCancel.length, 1);
+  assert.equal(preview.blockedItems.length, 1);
+  assert.equal(preview.blockedItems[0].reasonCode, "ARTICLE_PUBLISHED_IMMUTABLE");
+  assert.equal(preview.canCommit, false);
+  assert.equal(typeof coordinator.cleanupArticleSubmissionItem, "undefined");
+  assert.equal(typeof coordinator.cleanupPublishedArticleLocal, "undefined");
 });

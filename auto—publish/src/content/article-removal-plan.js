@@ -139,22 +139,7 @@ function submissionServiceActions(impact) {
     (impact.queuedToCancel || [])
       .map(function (item) {
         return Object.assign({}, item, { action: "cancel" });
-      })
-      .concat(
-        (impact.failedToClean || []).map(function (item) {
-          return Object.assign({}, item, { action: "cleanup" });
-        }),
-      )
-      .concat(
-        (impact.publishedToClean || []).map(function (item) {
-          return Object.assign({}, item, { action: "cleanupPublishedLocal" });
-        }),
-      )
-      .concat(
-        (impact.cancelledToClean || []).map(function (item) {
-          return Object.assign({}, item, { action: "cleanupCancelledLocal" });
-        }),
-      ),
+      }),
   );
 }
 

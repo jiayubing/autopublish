@@ -984,7 +984,6 @@ test("content removal preview and commit require typed confirmation and redact q
               claimToken: "secret",
             },
           ],
-          failedToClean: [],
           blockedItems: [],
           canCommit: true,
           workspacePath: "F:\\private",
@@ -1010,7 +1009,6 @@ test("content removal preview and commit require typed confirmation and redact q
       queuedToCancel: [
         { clientId: "client-1", articleId: "article-1", status: "queued" },
       ],
-      failedToClean: [],
       blockedItems: [],
       canCommit: true,
     },

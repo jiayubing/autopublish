@@ -168,22 +168,7 @@ function createArticleRemovalService(options) {
     const impact = buildImpact(transaction.selections);
     if ((impact.blockedItems || []).length) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_BLOCKED", "REMOVAL_BLOCKED_REVALIDATION") };
     const remaining = (transaction.queueActions || []).slice(Number(transaction.queueCursor || 0));
-    let fresh = submissionServiceActions(impact);
-    // A completed cancel operation intentionally changes a queued item into a
-    // cancelled item.  The preview then derives cleanupCancelledLocal, which is
-    // not a new destructive obligation when the original durable operation has
-    // already proven both the state transition and stage cleanup.
-    const completedCancels = (transaction.queueActions || []).slice(0, Number(transaction.queueCursor || 0)).filter(function(action, index) {
-      if (action.action !== "cancel" || typeof submissionService.reconcileArticleRemovalAction !== "function") return false;
-      const expected = operationId(transaction, "queue", index);
-      try { const proof = submissionService.reconcileArticleRemovalAction(Object.assign(clone(action), { operationId: expected }), expected); return proof && proof.operationId === expected && proof.status === "completed"; }
-      catch (_) { return false; }
-    });
-    if (completedCancels.length) fresh = fresh.filter(function(action) {
-      return !(action.action === "cleanupCancelledLocal" && completedCancels.some(function(cancel) {
-        return cancel.clientId === action.clientId && cancel.articleId === action.articleId && cancel.batchId === action.batchId && cancel.itemId === action.itemId;
-      }));
-    });
+    const fresh = submissionServiceActions(impact);
     if (fingerprint(remaining.map(actionIdentity).sort()) !== fingerprint(fresh.map(actionIdentity).sort())) return { ok: false, transaction: transitionToRepair(transaction, "ARTICLE_REMOVAL_FINGERPRINT_CHANGED", "QUEUE_FINGERPRINT_REVALIDATION_FAILED") };
     const start = Number(transaction.articleCursor || 0);
     for (let index = start; index < transaction.selections.length; index += 1) {
@@ -286,7 +271,7 @@ function createArticleRemovalService(options) {
 
   function buildImpact(items) {
     const impact = submissionService.previewArticleRemovalImpact({ selections: items });
-    return impact && typeof impact === "object" ? impact : { items: [], queuedToCancel: [], failedToClean: [], publishedToClean: [], cancelledToClean: [], blockedItems: [] };
+    return impact && typeof impact === "object" ? impact : { items: [], queuedToCancel: [], blockedItems: [] };
   }
 
   function canonicalizeOpenTransactions() {
@@ -446,11 +431,17 @@ function createArticleRemovalService(options) {
         persist(transaction);
         try {
           const command = Object.assign(clone(item), { operationId: expected });
+          if (item.action !== "cancel")
+            return {
+              status: "repair",
+              transaction: transitionToRepair(
+                transaction,
+                "ARTICLE_REMOVAL_QUEUE_ACTION_RETIRED",
+                "LEGACY_QUEUE_CLEANUP_REQUIRES_REPAIR",
+              ),
+            };
           if (mutationPort && typeof mutationPort.markSideEffect === "function") mutationPort.markSideEffect();
-          if (item.action === "cancel") submissionService.cancelArticleSubmissionItem(command);
-          else if (item.action === "cleanupPublishedLocal") submissionService.cleanupPublishedArticleLocal(command);
-          else if (item.action === "cleanupCancelledLocal") submissionService.cleanupCancelledArticleLocal(command);
-          else submissionService.cleanupArticleSubmissionItem(command);
+          submissionService.cancelArticleSubmissionItem(command);
           proof = submissionService.reconcileArticleRemovalAction(command, expected);
         } catch (error) { return { status: "retry", error }; }
       }
@@ -620,17 +611,19 @@ function createArticleRemovalService(options) {
           persist(current); // token-fenced checkpoint and lease renewal before I/O
           beginOperation(current, "queue", index, action);
           const actionWithOperation = Object.assign({}, action, { operationId: operationId(current, "queue", index) });
+          if (action.action !== "cancel")
+            return transitionToRepair(
+              current,
+              "ARTICLE_REMOVAL_QUEUE_ACTION_RETIRED",
+              "LEGACY_QUEUE_CLEANUP_REQUIRES_REPAIR",
+            );
           if (mutationPort && typeof mutationPort.markSideEffect === "function") mutationPort.markSideEffect();
-          const result = action.action === "cancel"
-            ? submissionService.cancelArticleSubmissionItem(actionWithOperation)
-            : action.action === "cleanupPublishedLocal"
-              ? submissionService.cleanupPublishedArticleLocal(actionWithOperation)
-              : action.action === "cleanupCancelledLocal"
-                ? submissionService.cleanupCancelledArticleLocal(actionWithOperation)
-                : submissionService.cleanupArticleSubmissionItem(actionWithOperation);
+          const result = submissionService.cancelArticleSubmissionItem(
+            actionWithOperation,
+          );
           current.queueResults = current.queueResults || [];
           current.queueResults[index] = clone(result);
-          current.resolutionCode = result && result.idempotent ? "QUEUE_PAIR_ALREADY_RESOLVED" : action.action === "cancel" ? "QUEUE_RESERVATION_CANCELLED" : action.action === "cleanupPublishedLocal" ? "PUBLISHED_LOCAL_COPY_CLEANED" : action.action === "cleanupCancelledLocal" ? "CANCELLED_LOCAL_COPY_CLEANED" : "QUEUE_ITEM_CLEANED";
+          current.resolutionCode = result && result.idempotent ? "QUEUE_PAIR_ALREADY_RESOLVED" : "QUEUE_RESERVATION_CANCELLED";
           current.queueCursor = index + 1;
           finishOperation(current);
           persist(current);

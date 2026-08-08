@@ -81,65 +81,28 @@ it("forwards only the preview action plan token for batch cancellation", async f
   });
 });
 
-it("exposes reconciliation cleanup previews and keeps queue paths out of the renderer response", async function () {
+it("does not register the retired failed queue-copy cleanup capability", async function () {
   const handlers = new Map();
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {
-      previewCleanupFailedItems: () => ({
-        batchId: "batch-1",
-        cleanableCount: 1,
-        uncleanableCount: 0,
-        items: [
-          {
-            articleId: "article-1",
-            status: "failed",
-            filePath: "C:\\secret.md",
-            sidecarPath: "C:\\secret.md.submission.json",
-            cleanable: true,
-          },
-        ],
-      }),
-      cleanupFailedItems: () => ({
-        batchId: "batch-1",
-        cleanedCount: 1,
-        skippedCount: 0,
-        items: [
-          {
-            articleId: "article-1",
-            status: "failed-cleaned",
-            filePath: "C:\\secret.md",
-          },
-        ],
-      }),
-    },
+    contentSubmissionService: {},
   });
-
-  const preview = await handlers.get(
-    "content:preview-cleanup-failed-submission-items",
-  )(null, { batchId: "batch-1" });
-  const result = await handlers.get("content:cleanup-failed-submission-items")(
-    null,
-    { batchId: "batch-1", confirmed: true },
+  assert.equal(
+    handlers.has("content:preview-cleanup-failed-submission-items"),
+    false,
   );
-  assert.deepEqual(preview, {
-    ok: true,
-    data: {
-      batchId: "batch-1",
-      cleanableCount: 1,
-      uncleanableCount: 0,
-      items: [{ articleId: "article-1", status: "failed", cleanable: true }],
-    },
-  });
-  assert.deepEqual(result, {
-    ok: true,
-    data: {
-      batchId: "batch-1",
-      cleanedCount: 1,
-      skippedCount: 0,
-      items: [{ articleId: "article-1", status: "failed-cleaned" }],
-    },
-  });
+  assert.equal(
+    handlers.has("content:cleanup-failed-submission-items"),
+    false,
+  );
+  assert.equal(
+    handlers.has("content:preview-trashed-article-queue-residue"),
+    true,
+  );
+  assert.equal(
+    handlers.has("content:cleanup-trashed-article-queue-residue"),
+    true,
+  );
 });
 
 it("keeps residue cleanup counts and reason codes while stripping filesystem fields", async function () {
