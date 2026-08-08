@@ -322,13 +322,8 @@ test("the application publisher can consume the supplier port without reading pr
     systemSubmissionId: "system-submission-application-1",
   });
   assert.deepEqual(result, {
-    status: "submitted",
-    evidence: {
-      articleId: "article-1",
-      attemptId: "attempt-1",
-      targetKey: "media-resource:resource-1",
-      remoteId: "order-application-1",
-    },
+    kind: "order_created",
+    orderId: "order-application-1",
   });
 });
 
@@ -356,7 +351,7 @@ test("the application publisher maps adapter input rejection to a definite valid
   });
 
   assert.deepEqual(result, {
-    status: "failed",
+    kind: "invalid_input",
     error: {
       code: "MEDIA_SUPPLIER_INPUT_INVALID",
       category: "validation",
@@ -390,7 +385,7 @@ test("the application publisher refuses a missing global submission id before su
   });
 
   assert.deepEqual(result, {
-    status: "failed",
+    kind: "order_rejected",
     error: {
       code: "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED",
       category: "validation",
@@ -427,7 +422,7 @@ test("the application publisher keeps supplier identity-provider failures defini
   });
 
   assert.deepEqual(result, {
-    status: "failed",
+    kind: "configuration_error",
     error: {
       code: "MEDIA_CONFIG_INVALID",
       category: "validation",

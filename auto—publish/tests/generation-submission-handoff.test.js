@@ -32,20 +32,27 @@ describe("generation submission handoff", function() {
         articles.push(article(`${clientId}-article-${index}`, clientId, taskId));
       }
     }
-    const batches = [];
-    const submissionService = {
-      previewBatch(input) {
-        return { clientId: input.clientId, totalTaskCount: input.articleIds.length, queueableTaskCount: input.articleIds.length, idempotentCount: 0, conflictCount: 0, items: input.articleIds.map((articleId) => ({ articleId, targetPlatformId: "target-a", status: "queueable" })) };
+    const admissions = [];
+    const regularQueueApplication = {
+      previewRegularQueueAdmission(input) {
+        return {
+          articleRefs: input.articleRefs,
+          queueableCount: input.articleRefs.length,
+          idempotentCount: 0,
+          missingCount: 0,
+          conflictCount: 0,
+          items: input.articleRefs.map((articleRef) => ({ articleRef, articleId: articleRef.articleId, status: "queueable" })),
+        };
       },
-      createBatch(input) {
-        batches.push(input);
-        return { batchId: `submission-${batches.length}`, createdCount: input.articleIds.length, idempotentCount: 0, items: [] };
-      }
+      admitRegularQueueItems(input) {
+        admissions.push(input);
+        return { admittedCount: input.articleRefs.length, idempotentCount: 0, items: [] };
+      },
     };
     const service = createGenerationSubmissionHandoffService({
       generationBatchService: { get(batchId) { return { id: batchId, revision: 3, status: "completed", tasks }; } },
       articleStore: { getArticle(clientId, articleId) { return articles.find((item) => item.clientId === clientId && item.id === articleId); }, findByGenerationTaskId(taskId) { return articles.find((item) => item.generationTaskId === taskId); } },
-      contentSubmissionService: submissionService,
+      regularQueueApplication,
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
 
@@ -55,12 +62,69 @@ describe("generation submission handoff", function() {
     assert.equal(preview.queueableTaskCount, 50);
     const committed = service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true });
     assert.equal(committed.createdCount, 50);
-    assert.equal(batches.length, 2);
-    assert.deepEqual(batches.map((item) => item.clientId).sort(), ["client-a", "client-b"]);
-    assert.equal(batches.every((item) => item.platformId === "target-a" && item.accountProfileId === "account-a"), true);
+    assert.equal(admissions.length, 2);
+    assert.deepEqual(admissions.map((item) => item.articleRefs[0].clientId).sort(), ["client-a", "client-b"]);
+    assert.equal(admissions.every((item) => item.platformId === "target-a" && item.accountProfileId === "account-a"), true);
     const repeated = service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true });
     assert.equal(repeated.createdCount, 0);
-    assert.equal(batches.length, 2);
+    assert.equal(admissions.length, 2);
+  });
+
+  it("uses canonical admission facts and commits only the currently queueable articles", function() {
+    const articles = [
+      article("article-queueable", "client-1", "task-queueable"),
+      article("article-idempotent", "client-1", "task-idempotent"),
+      article("article-published", "client-1", "task-published"),
+      article("article-uncertain", "client-1", "task-uncertain"),
+      article("article-conflict", "client-1", "task-conflict"),
+    ];
+    const tasks = articles.map((value) => ({ id: value.generationTaskId, clientId: value.clientId, status: "succeeded" }));
+    const admissions = [];
+    let previewCalls = 0;
+    const regularQueueApplication = {
+      previewRegularQueueAdmission(input) {
+        previewCalls += 1;
+        const items = input.articleRefs.map((articleRef) => {
+          const statusByArticle = {
+            "article-queueable": { status: "queueable" },
+            "article-idempotent": { status: "idempotent" },
+            "article-published": { status: "conflict", reasonCode: "ARTICLE_PUBLISHED_IMMUTABLE" },
+            "article-uncertain": { status: "conflict", reasonCode: "PUBLICATION_UNCERTAIN" },
+            "article-conflict": { status: "conflict", reasonCode: "ARTICLE_ACTIVE_TARGET_CONFLICT" },
+          };
+          return Object.assign({ articleRef, articleId: articleRef.articleId }, statusByArticle[articleRef.articleId]);
+        });
+        return { articleRefs: input.articleRefs, queueableCount: 1, idempotentCount: 1, missingCount: 0, conflictCount: 3, items };
+      },
+      admitRegularQueueItems(input) {
+        admissions.push(input);
+        return { admittedCount: input.articleRefs.length, idempotentCount: 0, items: [] };
+      },
+    };
+    const service = createGenerationSubmissionHandoffService({
+      generationBatchService: { get(batchId) { return { id: batchId, revision: 1, status: "completed", tasks }; } },
+      articleStore: { findByGenerationTaskId(taskId) { return articles.find((value) => value.generationTaskId === taskId); } },
+      regularQueueApplication,
+      targetPlatforms: [{ id: "target-a", contentQueueImport: true }],
+    });
+
+    const preview = service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" });
+    assert.equal(preview.queueableTaskCount, 1);
+    assert.equal(preview.idempotentCount, 1);
+    assert.equal(preview.blockedPublishedCount, 1);
+    assert.equal(preview.blockedUncertainCount, 1);
+    assert.equal(preview.conflictCount, 1);
+    assert.deepEqual(preview.clientGroups[0].items.map((item) => item.reasonCode), [
+      "ARTICLE_PUBLISHED_IMMUTABLE",
+      "PUBLICATION_UNCERTAIN",
+      "ARTICLE_ACTIVE_TARGET_CONFLICT",
+    ]);
+
+    const committed = service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true });
+    assert.equal(committed.createdCount, 1);
+    assert.equal(admissions.length, 1);
+    assert.deepEqual(admissions[0].articleRefs.map((ref) => ref.articleId), ["article-queueable"]);
+    assert.equal(previewCalls, 2);
   });
 
   it("rejects a commit after the batch revision changes", function() {
@@ -68,7 +132,7 @@ describe("generation submission handoff", function() {
     const service = createGenerationSubmissionHandoffService({
       generationBatchService: { get() { return { id: "generation-1", revision, status: "completed", tasks: [{ id: "task-1", clientId: "client-1", status: "succeeded" }] }; } },
       articleStore: { findByGenerationTaskId() { return article("article-1", "client-1", "task-1"); } },
-      contentSubmissionService: { previewBatch() { return { queueableTaskCount: 1, idempotentCount: 0, conflictCount: 0, items: [] }; }, createBatch() { throw new Error("must not commit stale preview"); } },
+      regularQueueApplication: { previewRegularQueueAdmission() { return { queueableCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: 0, items: [] }; }, admitRegularQueueItems() { throw new Error("must not commit stale preview"); } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
     const preview = service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" });
@@ -82,7 +146,7 @@ describe("generation submission handoff", function() {
     const service = createGenerationSubmissionHandoffService({
       generationBatchService: { get() { return { id: "generation-1", revision: 1, status: "completed", tasks: [{ id: "task-1", clientId: "client-1", status: "succeeded" }, { id: "task-2", clientId: "client-1", status: "succeeded" }] }; } },
       articleStore: { findByGenerationTaskId(taskId) { return duplicateArticles.find((item) => item.generationTaskId === taskId); } },
-      contentSubmissionService: { previewBatch() { previewCalls += 1; return { queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0, items: [] }; }, createBatch() { throw new Error("must not create a duplicate article"); } },
+      regularQueueApplication: { previewRegularQueueAdmission() { previewCalls += 1; return { queueableCount: 0, idempotentCount: 0, missingCount: 0, conflictCount: 0, items: [] }; }, admitRegularQueueItems() { throw new Error("must not create a duplicate article"); } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
 
@@ -100,7 +164,7 @@ describe("generation submission handoff", function() {
     const service = createGenerationSubmissionHandoffService({
       generationBatchService: { get() { return { id: "generation-1", revision: 1, status: "completed", tasks: [{ id: "task-1", clientId: "client-1", status: "succeeded" }] }; } },
       articleStore: { findByGenerationTaskId() { return Object.assign(article("article-1", "client-1", "task-1"), { content: secretBody, filePath: secretPath }); } },
-      contentSubmissionService: { previewBatch() { return { queueableTaskCount: 1, idempotentCount: 0, conflictCount: 0, items: [{ articleId: "article-1", targetPlatformId: "target-a", status: "queueable", filePath: secretPath, content: secretBody } ] }; }, createBatch() { return { createdCount: 1, idempotentCount: 0 }; } },
+      regularQueueApplication: { previewRegularQueueAdmission(input) { return { queueableCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: 0, items: [{ articleRef: input.articleRefs[0], articleId: "article-1", status: "queueable", filePath: secretPath, content: secretBody } ] }; }, admitRegularQueueItems() { return { admittedCount: 1, idempotentCount: 0 }; } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
     const serialized = JSON.stringify(service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" }));
@@ -112,7 +176,7 @@ describe("generation submission handoff", function() {
     const service = createGenerationSubmissionHandoffService({
       generationBatchService: { get() { return { id: "generation-1", revision: 1, status: "completed", tasks: [] }; } },
       articleStore: {},
-      contentSubmissionService: { previewBatch() { throw new Error("must not preview an unsupported target"); }, createBatch() { throw new Error("must not create an unsupported target"); } },
+      regularQueueApplication: { previewRegularQueueAdmission() { throw new Error("must not preview an unsupported target"); }, admitRegularQueueItems() { throw new Error("must not create an unsupported target"); } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: false }]
     });
     assert.throws(() => service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" }), (error) => error.code === "HANDOFF_TARGET_UNSUPPORTED");
@@ -122,7 +186,7 @@ describe("generation submission handoff", function() {
     const service = createGenerationSubmissionHandoffService({
       generationBatchService: { get() { return { id: "generation-1", revision: 1, status: "completed", tasks: [] }; } },
       articleStore: {},
-      contentSubmissionService: { previewBatch() { throw new Error("must not preview invalid input"); }, createBatch() { throw new Error("must not create invalid input"); } },
+      regularQueueApplication: { previewRegularQueueAdmission() { throw new Error("must not preview invalid input"); }, admitRegularQueueItems() { throw new Error("must not create invalid input"); } },
       targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
     });
     assert.throws(() => service.preview({ generationBatchId: "generation-1", targetPlatformIds: ["target-a"], accountProfiles: { "target-a": "account-a" } }), (error) => error.code === "HANDOFF_INPUT_INVALID");

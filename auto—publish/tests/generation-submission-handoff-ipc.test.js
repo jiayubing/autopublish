@@ -28,4 +28,31 @@ describe("generation submission handoff IPC", function() {
     assert.deepEqual(result, { ok: false, error: { code: "HANDOFF_PREVIEW_STALE", message: "投稿交接预检已过期，请重新检查" } });
     assert.equal(JSON.stringify(result).includes("secret"), false);
   });
+
+  it("keeps account-profile admission failures typed and path-free", async function() {
+    const { ipcMain, handlers } = fakeIpc();
+    registerGenerationSubmissionHandoffIpc({
+      ipcMain,
+      generationSubmissionHandoffService: {
+        preview() {
+          throw Object.assign(new Error("C:\\private\\profile.json"), {
+            code: "ACCOUNT_PROFILE_PLATFORM_MISMATCH",
+            filePath: "C:\\private\\profile.json",
+          });
+        },
+        commit() {
+          return {};
+        },
+      },
+    });
+    const result = await handlers.get("content:preview-generation-submission-handoff")(
+      null,
+      { generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" },
+    );
+    assert.deepEqual(result, {
+      ok: false,
+      error: { code: "ACCOUNT_PROFILE_PLATFORM_MISMATCH", message: "投稿账号档案与目标平台不匹配" },
+    });
+    assert.equal(JSON.stringify(result).includes("private"), false);
+  });
 });

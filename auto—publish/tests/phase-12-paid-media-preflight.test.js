@@ -254,7 +254,7 @@ test("confirm rechecks resource, code and content before one atomic paid admissi
           article: Object.assign({}, first, { title: "不能修改" }),
           expectedFingerprint: fingerprintArticle(first),
         }),
-      { code: "ARTICLE_OPERATION_FROZEN" },
+      { code: "MEDIA_ORDER_MISSING" },
     );
     await assert.rejects(
       fixture.service.confirm({ confirmationToken: preview.confirmationToken }),

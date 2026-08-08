@@ -23,7 +23,7 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：24-E legacy boundary、extension seam 与 absence gate 已在 clean integration HEAD `6cb15cf05d31adc41008f04eed7c62973f4a7d5e` 完成；handoff `handoffs/24-E-legacy-boundary-and-absence-gates.md` 记录 24-E 删除清单、222-file 分层 absence gate、63/63 direct matrix、72/72 bounded re-audit、Primary Audit finding 修复及 clean-HEAD evidence。`test:ticket-24-e` 已通过；既有未改动 format 基线问题和未运行的全量/build/package gate 均已如实记录。24-E 未进入 24-F，Wave 10 保持 `PARTIAL`，下一可调度项为 24-F。**
+**当前动作：24-F 已从 clean integration HEAD `af84dcbbf1399eed9540c425cfecf45c586b7bca` 完成 24-A–E 的唯一 Wave/combined audit；handoff `handoffs/24-F-final-wave-combined-audit.md` 记录组合 diff、跨 owner seam finding、blocking remediation、bounded re-audit、最终矩阵与 gate evidence。24-F 未进入 M04、未 push、未执行真实外部操作。提交后的 clean HEAD 由当前任务最终证据确认；Wave 10 已闭合，Wave 10.5 仍为 `PENDING`。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -60,7 +60,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8    | 22                                                       | 06、09、16                                               | `COMPLETE`                                                                            |
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
-| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `PARTIAL`；24-E COMPLETE，下一项 24-F                                                  |
+| 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
 | 10.5 | M04 → M05 → M06                                          | Wave 10 COMPLETE                                         | `PENDING`                                                                             |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |

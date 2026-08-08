@@ -29,9 +29,10 @@ function createGenerationSubmissionHandoffService(options) {
   const opts = options || {};
   const generationBatchService = opts.generationBatchService;
   const contentStore = opts.contentStore;
-  const submissionService = opts.contentSubmissionService;
-  if (!generationBatchService || typeof generationBatchService.get !== "function" || !contentStore || typeof contentStore.findByGenerationTaskId !== "function" || !submissionService ||
-      typeof submissionService.previewBatch !== "function" || typeof submissionService.createBatch !== "function") {
+  const regularQueueApplication = opts.regularQueueApplication;
+  if (!generationBatchService || typeof generationBatchService.get !== "function" || !contentStore || typeof contentStore.findByGenerationTaskId !== "function" || !regularQueueApplication ||
+      typeof regularQueueApplication.previewRegularQueueAdmission !== "function" ||
+      typeof regularQueueApplication.admitRegularQueueItems !== "function") {
     throw handoffError("HANDOFF_SERVICE_INVALID", "Generation submission handoff dependencies are incomplete");
   }
   const tokens = new Map();
@@ -39,7 +40,6 @@ function createGenerationSubmissionHandoffService(options) {
 
   function targetPlatforms() {
     if (Array.isArray(opts.targetPlatforms)) return opts.targetPlatforms.slice();
-    if (typeof submissionService.listPlatforms === "function") return submissionService.listPlatforms();
     return [];
   }
 
@@ -115,8 +115,46 @@ function createGenerationSubmissionHandoffService(options) {
     return hash({ batchId: batch.id, revision: latestRevision(batch), platformId, accountProfileId, articles: entries.map((entry) => ({ taskId: entry.task.id, clientId: entry.task.clientId, articleId: entry.article && entry.article.id || entry.task.articleId || null, fingerprint: entry.fingerprint, reasonCode: entry.reasonCode })) });
   }
 
-  function safeItem(item) {
-    return { articleId: item.articleId, targetPlatformId: item.targetPlatformId, status: item.status, reasonCode: item.reasonCode || null };
+  function safeItem(item, platformId) {
+    return { articleId: item.articleId, targetPlatformId: platformId, status: item.status, reasonCode: item.reasonCode || null };
+  }
+
+  function admissionCounts(preview) {
+    const blockedPublishedReasons = new Set(["ARTICLE_PUBLISHED_IMMUTABLE"]);
+    const blockedUncertainReasons = new Set([
+      "PUBLICATION_UNCERTAIN",
+      "PUBLICATION_STATUS_UNKNOWN",
+      "SUBMISSION_STATUS_UNKNOWN",
+      "MEDIA_ORDER_MISSING",
+      "ORDER_STATUS_UNKNOWN",
+    ]);
+    let blockedPublishedCount = 0;
+    let blockedUncertainCount = 0;
+    for (const item of preview.items || []) {
+      if (item.status !== "conflict") continue;
+      if (blockedPublishedReasons.has(item.reasonCode)) blockedPublishedCount += 1;
+      else if (blockedUncertainReasons.has(item.reasonCode)) blockedUncertainCount += 1;
+    }
+    return {
+      blockedPublishedCount,
+      blockedUncertainCount,
+      blockedContentCount: preview.missingCount || 0,
+      conflictCount: Math.max(
+        0,
+        (preview.conflictCount || 0) - blockedPublishedCount - blockedUncertainCount,
+      ),
+    };
+  }
+
+  function admissionInput(group, platformId, accountProfileId) {
+    return {
+      articleRefs: group.entries.map((entry) => ({
+        clientId: entry.article.clientId,
+        articleId: entry.article.id,
+      })),
+      platformId,
+      accountProfileId,
+    };
   }
 
   function buildPreview(input) {
@@ -140,29 +178,36 @@ function createGenerationSubmissionHandoffService(options) {
     let blockedUncertainCount = 0;
     let conflictCount = invalidArticles.filter((item) => item.reasonCode === "HANDOFF_ARTICLE_IDENTITY_CONFLICT").length;
     let blockedContentCount = invalidArticles.length - conflictCount;
+    const admissionPreviews = new Map();
     byClient.forEach((group) => {
-      const submissionPreview = submissionService.previewBatch({ clientId: group.clientId, articleIds: group.articleIds, platformId: target.platformId, accountProfileId });
-      queueableTaskCount += submissionPreview.queueableTaskCount || 0;
-      idempotentCount += submissionPreview.idempotentCount || 0;
-      blockedPublishedCount += submissionPreview.blockedPublishedCount || 0;
-      blockedUncertainCount += submissionPreview.blockedUncertainCount || 0;
-      conflictCount += submissionPreview.conflictCount || 0;
-      blockedContentCount += submissionPreview.blockedContentCount || 0;
+      const admissionPreview = regularQueueApplication.previewRegularQueueAdmission(
+        admissionInput(group, target.platformId, accountProfileId),
+      );
+      const counts = admissionCounts(admissionPreview);
+      admissionPreviews.set(group.clientId, admissionPreview);
+      queueableTaskCount += admissionPreview.queueableCount || 0;
+      idempotentCount += admissionPreview.idempotentCount || 0;
+      blockedPublishedCount += counts.blockedPublishedCount;
+      blockedUncertainCount += counts.blockedUncertainCount;
+      conflictCount += counts.conflictCount;
+      blockedContentCount += counts.blockedContentCount;
       clientGroups.push({
         clientId: group.clientId,
         articleCount: group.articleIds.length,
-        queueableTaskCount: submissionPreview.queueableTaskCount || 0,
-        idempotentCount: submissionPreview.idempotentCount || 0,
-        blockedPublishedCount: submissionPreview.blockedPublishedCount || 0,
-        blockedUncertainCount: submissionPreview.blockedUncertainCount || 0,
-        blockedContentCount: submissionPreview.blockedContentCount || 0,
-        conflictCount: submissionPreview.conflictCount || 0,
-        items: (submissionPreview.items || []).filter((item) => item.status !== "queueable" && item.status !== "idempotent").map(safeItem)
+        queueableTaskCount: admissionPreview.queueableCount || 0,
+        idempotentCount: admissionPreview.idempotentCount || 0,
+        blockedPublishedCount: counts.blockedPublishedCount,
+        blockedUncertainCount: counts.blockedUncertainCount,
+        blockedContentCount: counts.blockedContentCount,
+        conflictCount: counts.conflictCount,
+        items: (admissionPreview.items || [])
+          .filter((item) => item.status !== "queueable" && item.status !== "idempotent")
+          .map((item) => safeItem(item, target.platformId))
       });
     });
     const fingerprint = baseFingerprint(batch, target.platformId, accountProfileId, entries);
     const previewToken = `handoff:${crypto.randomUUID()}`;
-    tokens.set(previewToken, { fingerprint, generationBatchId: batch.id, platformId: target.platformId, accountProfileId, batchRevision: latestRevision(batch), entries: valid.map((entry) => ({ clientId: entry.task.clientId, articleId: entry.article.id })) });
+    tokens.set(previewToken, { fingerprint, generationBatchId: batch.id, platformId: target.platformId, accountProfileId, batchRevision: latestRevision(batch) });
     const result = {
       generationBatchId: batch.id,
       batchRevision: latestRevision(batch),
@@ -185,6 +230,7 @@ function createGenerationSubmissionHandoffService(options) {
     // Keep the full entries only inside the application service. The property
     // is non-enumerable so IPC/renderer DTOs cannot receive article bodies.
     Object.defineProperty(result, "__entries", { value: entries, enumerable: false });
+    Object.defineProperty(result, "__admissionPreviews", { value: admissionPreviews, enumerable: false });
     return result;
   }
 
@@ -214,9 +260,21 @@ function createGenerationSubmissionHandoffService(options) {
         return;
       }
       try {
-        const result = submissionService.createBatch({ clientId: group.clientId, articleIds: stored.entries.filter((entry) => entry.clientId === group.clientId && entry.articleId).map((entry) => entry.articleId), platformId: stored.platformId, accountProfileId: stored.accountProfileId, confirmed: true });
-        createdCount += result.createdCount || 0;
-        idempotentCount += result.idempotentCount || 0;
+        const admissionPreview = current.__admissionPreviews.get(group.clientId);
+        const queueableRefs = (admissionPreview && admissionPreview.items || [])
+          .filter((item) => item.status === "queueable")
+          .map((item) => item.articleRef);
+        if (queueableRefs.length) {
+          const result = regularQueueApplication.admitRegularQueueItems({
+            articleRefs: queueableRefs,
+            platformId: stored.platformId,
+            accountProfileId: stored.accountProfileId,
+          });
+          createdCount += result.admittedCount || 0;
+          idempotentCount += result.idempotentCount || 0;
+        } else if (admissionPreview) {
+          idempotentCount += admissionPreview.idempotentCount || 0;
+        }
         completed.add(group.clientId);
       } catch (error) {
         failedClientGroups.push({ clientId: group.clientId, code: error && error.code || "HANDOFF_CLIENT_GROUP_FAILED" });

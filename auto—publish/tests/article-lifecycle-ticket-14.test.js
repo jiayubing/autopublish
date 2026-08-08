@@ -631,7 +631,7 @@ test("a trusted late order success wins after no-order confirmation and is never
     const late = value.transitions.recordPaidOrderCreationSuccess(
       lateSuccessInput(uncertain, "late-order-14"),
     );
-    assert.equal(late.status, "submitted");
+    assert.equal(late.status, "order_created");
     assert.equal(value.store.listRemoteOrders()[0].orderId, "late-order-14");
     assert.throws(
       () =>

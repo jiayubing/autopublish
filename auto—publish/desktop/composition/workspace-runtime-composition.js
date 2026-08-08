@@ -845,7 +845,8 @@ async function createWorkspaceRuntimeComposition(deps) {
         {
           generationBatchService: contentGenerationBatchService,
           contentStore,
-          contentSubmissionService,
+          regularQueueApplication,
+          targetPlatforms: loadedPlatforms,
         },
       );
     modules.generationSubmissionHandoffService =

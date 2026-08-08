@@ -4,13 +4,13 @@
 
 **Blocked by:** 02 — 投稿清理、删除协调与恢复深模块；10 — 精简普通平台投稿队列界面；14 — 网站媒体订单创建结果人工核对；16 — 服务商订单取消与永久历史；23 — 旧文章与投稿事实安全迁移
 
-**Status:** `RUNNING`。24-0、24-A、24-B、24-C、24-D 与 24-E 已完成各自实现/定向验证/Primary Audit/bounded re-audit/handoff；下一可调度工作包为 24-F。本状态仍须在执行前以当前 Git、Wave Plan 与 handoff 重新验证。
+**Status:** `COMPLETE`。24-0、24-A、24-B、24-C、24-D、24-E 与 24-F 已完成各自实现/定向验证/Primary Audit、blocking remediation、bounded re-audit、handoff 与最终 clean-HEAD evidence。24-F 完成了 24-A–E 的唯一 Wave/combined audit；未进入 M04。本状态仍须在后续调度前以当前 Git、Wave Plan 与 handoff 重新验证。
 
 **Scheduling gate:** 作为独立 Wave 10，按 `24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F` 严格串行调度；不等待后置 Ticket 18–21。前一工作包未 Closure、未进入新的 clean integration HEAD 时，不得启动后一工作包。
 
 ## 工作包与 owner
 
-Ticket 24 是一个 umbrella Ticket，内部拆成七个有序工作包。每个工作包由一个独立执行任务完成，但这些任务不得并行；主任务只在前一工作包的实现、定向测试、Primary Audit、blocking remediation、bounded re-audit、commit/merge 和 handoff 全部闭合后，才从新的 integration HEAD 创建下一执行任务。24-F 对 24-A–E 的最终组合 diff 执行一次 Wave/combined audit；除 Audit Protocol escalation 外，不为每个后续工作包重新开启 fresh full review。
+Ticket 24 是一个 umbrella Ticket，内部拆成七个有序工作包。每个工作包由一个独立执行任务完成，但这些任务不得并行；主任务只在前一工作包的实现、定向测试、Primary Audit、blocking remediation、bounded re-audit、commit/merge 和 handoff 全部闭合后，才从新的 integration HEAD 创建下一执行任务。24-F 对 24-A–E 的最终组合 diff 执行一次 Wave/combined audit；除 Audit Protocol escalation 外，不为每个后续工作包重新开启 fresh full review。该审计已完成，唯一 blocking seam finding 已修复并通过 bounded re-audit。
 
 | Owner                                   | 唯一职责                                                                        | 禁止拥有                                       |
 | --------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -77,7 +77,7 @@ Ticket 24 是一个 umbrella Ticket，内部拆成七个有序工作包。每个
 2. 修复 blocking findings 后只做 bounded re-audit；只有 Audit Protocol 的 escalation 条件成立才扩大受影响边界，不重新从头审计整个仓库。
 3. 最终矩阵至少覆盖：生成成功直达待投稿、批量文章单目标 admission、普通平台成功/失败/uncertain、媒体订单处理/取消/人工核对、已发布永久只读、删除事务恢复、迁移旧证据读取、正常 composition 无 legacy reader、纯文本 evidence 和后置图片 seam。
 4. 在所有修复进入最终 clean integration HEAD 后运行 Wave 10 要求的最终 gate；完整 `npm test` 仅在 Wave Plan/Execution Protocol 明确要求时运行，Primary Audit 本身不以完整测试代替审计。
-5. handoff 记录各工作包 base/implementation/integration commit、公开能力 before/after、删除清单、保留项理由、迁移 allowlist、测试命令/结果、audit findings/resolution、显著规模变化和最终 Git evidence。全部 PASS 后才将 Ticket 24 / Wave 10 标记 `COMPLETE` 并允许 M04。
+5. handoff 记录各工作包 base/implementation/integration commit、公开能力 before/after、删除清单、保留项理由、迁移 allowlist、测试命令/结果、audit findings/resolution、显著规模变化和最终 Git evidence。该要求已由 `handoffs/24-F-final-wave-combined-audit.md` 覆盖；Ticket 24 / Wave 10 已标记 `COMPLETE`，但本任务不进入 M04。
 
 ## 启动约定
 
@@ -108,15 +108,15 @@ Ticket 24 是一个 umbrella Ticket，内部拆成七个有序工作包。每个
 
 ## Acceptance criteria
 
-- [ ] 24-0 deletion map 覆盖全部废止类别，并区分当前事实、migration-only 与历史 evidence。
-- [ ] 生产代码和界面不存在审核、批量审核、待审核、已审核入口。
-- [ ] 生产投稿命令不存在多目标集合或同篇多活动目标能力。
-- [ ] 新运行时不存在通用 submitted/reviewing 状态或直接重试 uncertain。
-- [ ] 不存在复制新版本、已发布回收或用户可见投稿队列副本能力。
-- [ ] 旧状态只在迁移输入夹具/迁移器和明确历史 evidence 中出现，legacy-absence gate 可以阻止回归。
-- [ ] 清理后核心纯文本链仍使用 `text_only`、空图片清单和 `initial` decision；08/09 封闭扩展合同可供后置 adapter 实现而无需恢复旧业务路径，生产 UI 不宣称图片可用。
-- [ ] 24-F combined audit、blocking remediation、bounded re-audit 与最终 clean-HEAD gate PASS。
-- [ ] 交接记录包含删除清单、静态扫描、公开能力差异、模块职责、依赖方向、显著规模变化说明和全部实际测试结果。
+- [x] 24-0 deletion map 覆盖全部废止类别，并区分当前事实、migration-only 与历史 evidence。
+- [x] 生产代码和界面不存在审核、批量审核、待审核、已审核入口。
+- [x] 生产投稿命令不存在多目标集合或同篇多活动目标能力。
+- [x] 新运行时不存在通用 submitted/reviewing 状态或直接重试 uncertain。
+- [x] 不存在复制新版本、已发布回收或用户可见投稿队列副本能力。
+- [x] 旧状态只在迁移输入夹具/迁移器和明确历史 evidence 中出现，legacy-absence gate 可以阻止回归。
+- [x] 清理后核心纯文本链仍使用 `text_only`、空图片清单和 `initial` decision；08/09 封闭扩展合同可供后置 adapter 实现而无需恢复旧业务路径，生产 UI 不宣称图片可用。
+- [x] 24-F combined audit、blocking remediation、bounded re-audit 与最终 clean-HEAD gate PASS。
+- [x] 交接记录包含删除清单、静态扫描、公开能力差异、模块职责、依赖方向、显著规模变化说明和全部实际测试结果。
 
 ## 审计约定
 

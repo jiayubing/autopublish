@@ -5,6 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { createRegularQueueApplication } = require("../desktop/services/regular-queue-application");
+const { createGenerationSubmissionHandoffService } = require("../desktop/services/generation-submission-handoff-service");
 const { createSubmissionBatchReader } = require("../desktop/services/submission-batch-reader");
 const { createArticleMutationCoordinator } = require("../src/content/article-mutation-coordinator");
 const { createArticleStore } = require("../src/content/article-store");
@@ -199,6 +200,69 @@ test("regular admission creates one FIFO group and atomic facts, hides the immut
     assert.deepEqual(second.items.map((item) => item.status), ["idempotent", "idempotent"]);
     assert.equal(fixture.store.listSubmissionQueueItems().length, 2);
     assert.equal(fixture.store.listPublicationRecords({ articleIds: ["article-a", "article-b"] }).length, 2);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("generation handoff uses the regular admission owner and cannot retarget an active article", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a", "client-a", { generationTaskId: "task-a", status: "generated" }));
+    const generationBatchService = {
+      get(batchId) {
+        return {
+          id: batchId,
+          revision: 1,
+          status: "completed",
+          tasks: [{ id: "task-a", clientId: "client-a", status: "succeeded" }],
+        };
+      },
+    };
+    const handoff = createGenerationSubmissionHandoffService({
+      generationBatchService,
+      contentStore: fixture.contentStore,
+      regularQueueApplication: fixture.application,
+      targetPlatforms: [
+        { id: "toutiao", contentQueueImport: true },
+        { id: "hepan", contentQueueImport: true },
+      ],
+    });
+    const firstPreview = handoff.preview({
+      generationBatchId: "generation-1",
+      platformId: "toutiao",
+      accountProfileId: fixture.profiles.toutiao.accountProfileId,
+    });
+    assert.equal(firstPreview.queueableTaskCount, 1);
+    const firstCommit = handoff.commit({
+      generationBatchId: "generation-1",
+      platformId: "toutiao",
+      accountProfileId: fixture.profiles.toutiao.accountProfileId,
+      previewToken: firstPreview.previewToken,
+      confirmed: true,
+    });
+    assert.equal(firstCommit.createdCount, 1);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 1);
+    assert.equal(fixture.store.listPublicationRecords({ articleIds: ["article-a"] }).length, 1);
+
+    const retargetPreview = handoff.preview({
+      generationBatchId: "generation-1",
+      platformId: "hepan",
+      accountProfileId: fixture.profiles.hepan.accountProfileId,
+    });
+    assert.equal(retargetPreview.queueableTaskCount, 0);
+    assert.equal(retargetPreview.conflictCount, 1);
+    assert.equal(retargetPreview.clientGroups[0].items[0].reasonCode, "ARTICLE_ACTIVE_TARGET_CONFLICT");
+    const retargetCommit = handoff.commit({
+      generationBatchId: "generation-1",
+      platformId: "hepan",
+      accountProfileId: fixture.profiles.hepan.accountProfileId,
+      previewToken: retargetPreview.previewToken,
+      confirmed: true,
+    });
+    assert.equal(retargetCommit.createdCount, 0);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 1);
+    assert.equal(fixture.store.listPublicationRecords({ articleIds: ["article-a"] }).length, 1);
   } finally {
     fixture.close();
   }

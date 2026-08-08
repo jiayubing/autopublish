@@ -59,7 +59,7 @@ test("PublicationWorkflow durably reserves before publishing and commits an evid
     publisher: {
       inspectAccount: async () => ({}),
       publish: async (value) => ({
-        status: "published",
+        status: "accepted",
         evidence: {
           articleId: value.articleId,
           attemptId: value.attemptId,
@@ -72,7 +72,7 @@ test("PublicationWorkflow durably reserves before publishing and commits an evid
     },
   });
   const result = await workflow.publish(command());
-  assert.equal(result.status, "published");
+  assert.equal(result.status, "accepted");
   assert.deepEqual(
     calls.map(([name]) => name),
     ["reserve", "commit"],
@@ -107,7 +107,7 @@ test("PublicationWorkflow verifies the selected account before durable intent an
       publish: async (value) => {
         calls.push("publish");
         return {
-          status: "published",
+          status: "accepted",
           evidence: {
             articleId: value.articleId,
             attemptId: value.attemptId,
@@ -369,7 +369,7 @@ test("PublicationWorkflow drains bounded recovery pages", async () => {
   assert.deepEqual(marked, ["attempt-1", "attempt-2"]);
 });
 
-test("PublicationWorkflow keeps a submitted outcome durable but does not archive it", async () => {
+test("PublicationWorkflow keeps an uncertain outcome durable and does not archive it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-workflow-"));
   const store = createOperationalStore({ workspaceRoot: root });
   try {
@@ -386,14 +386,8 @@ test("PublicationWorkflow keeps a submitted outcome durable but does not archive
           verified: true,
         }),
         publish: async (value) => ({
-          status: "submitted",
-          evidence: {
-            articleId: value.articleId,
-            attemptId: value.attemptId,
-            targetKey: `platform:toutiao:account:${profile.accountProfileId}`,
-            accountProfileId: profile.accountProfileId,
-            remoteId: "receipt-1",
-          },
+          status: "uncertain",
+          error: error("REMOTE_RESULT_UNCERTAIN"),
         }),
       },
     });
@@ -413,9 +407,10 @@ test("PublicationWorkflow keeps a submitted outcome durable but does not archive
           }),
         )
       ).status,
-      "submitted",
+      "uncertain",
     );
-    assert.equal(store.listActionableRecovery().length, 0);
+    assert.equal(store.listActionableRecovery().length, 1);
+    assert.equal(store.listActionableRecovery()[0].state, "manual_check");
     assert.equal(store.claimPostProcessing({ claimToken: "post-1" }), null);
   } finally {
     store.close();
