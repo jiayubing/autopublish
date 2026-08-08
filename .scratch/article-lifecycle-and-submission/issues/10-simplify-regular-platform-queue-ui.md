@@ -4,9 +4,9 @@
 
 **Blocked by:** 09 — 普通平台结果分类与人工收口
 
-**Status:** document-ready；当前不可调度
+**Status:** COMPLETE；Dependency-Resolution Lane implementation `9124f0148eb4b91ba83ead95203135f12b60b99a`，audit / bounded re-audit PASS
 
-**Scheduling gate:** 等待 Ticket 09 完成审计、提交、合并和定向复验，并在波次 6 `COMPLETE` 后作为波次 7 最左执行组调度。
+**Scheduling gate:** Ticket 09 已完成；Wave 6 `COMPLETE` gate 仅由已授权 Dependency-Resolution Lane 豁免。完成 evidence 见 `handoffs/10-simplify-regular-platform-queue-ui.md`。
 
 ## 启动约定
 
@@ -39,12 +39,12 @@
 
 ## Acceptance criteria
 
-- [ ] 队列按平台和账号分组，页面不再为每篇等待文章重复显示具体状态。
-- [ ] 单账号隐藏账号层，多账号必须明确选择且不会串号。
-- [ ] 追加、移除、开始、暂停、开始全部和暂停全部行为与主进程投影一致。
-- [ ] 手工暂停不会被开始全部覆盖，uncertain 不显示重试。
-- [ ] 普通队列页面不触发任何付费媒体动作。
-- [ ] 交接记录包含组件职责图、feature 接口、窄屏证据、依赖方向及显著规模变化说明。
+- [x] 队列按平台和账号分组，页面不再为每篇等待文章重复显示具体状态。
+- [x] 单账号隐藏账号层，多账号必须明确选择且不会串号。
+- [x] 追加、移除、开始、暂停、开始全部和暂停全部行为与主进程投影一致。
+- [x] 手工暂停不会被开始全部覆盖，uncertain 不显示重试。
+- [x] 普通队列页面不触发任何付费媒体动作。
+- [x] 交接记录包含组件职责图、feature 接口、窄屏证据、依赖方向及显著规模变化说明。
 
 ## 审计建议
 
