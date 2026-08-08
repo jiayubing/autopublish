@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 — 扩展 SQLite 生命周期与队列事实；05 — 移除审核与生成来源投稿门槛；09 — 普通平台结果分类与人工收口；14 — 网站媒体订单创建结果人工核对；16 — 服务商订单取消与永久历史；22 — 已发布档案与安全删除规则
 
-**Status:** 23-0/23-A/23-B=`COMPLETE`；23-C–E 依串行 gate 保持 `PENDING`。15 个上游公开 validator inventory 与 `nonPublishedTerminal` 权威合同决策均已通过；唯一 Migration Contract Owner、六种封闭 variant 与递归正反合同矩阵 evidence 见 `../handoffs/23-0-upstream-v1-inventory-and-contract-decision.md`、`../handoffs/23-A-closed-migration-contracts.md`；23-B implementation、Primary Audit、remediation 与 bounded re-audit evidence 见 `../handoffs/23-B-read-only-evidence-and-deterministic-planning.md`
+**Status:** 23-0/23-A/23-B/23-C=`COMPLETE`；23-D–E 依串行 gate 保持 `PENDING`。15 个上游公开 validator inventory 与 `nonPublishedTerminal` 权威合同决策均已通过；唯一 Migration Contract Owner、六种封闭 variant 与递归正反合同矩阵 evidence 见 `../handoffs/23-0-upstream-v1-inventory-and-contract-decision.md`、`../handoffs/23-A-closed-migration-contracts.md`；23-B planner evidence 见 `../handoffs/23-B-read-only-evidence-and-deterministic-planning.md`；23-C schema v5、最小 migration facade、唯一原子 import transaction 与 fault/idempotency evidence 见 `../handoffs/23-C-operational-store-journal-and-atomic-import.md`
 
 **Scheduling gate:** 正常顺序仍等待波次 8 与 M03 `COMPLETE`；当前可依 Wave Plan 已授权的 Dependency-Resolution Lane，在 M03-C Closure PASS 后按 `23-0 → 23-A → 23-B → 23-C → 23-D → 23-E` 严格串行调度。该豁免不允许提前回填 Wave 6–9 或 M03 `COMPLETE`；不得与图片 adapter 混波，也不消费 Ticket 18–21 的事实。
 
