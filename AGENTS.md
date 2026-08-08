@@ -138,6 +138,47 @@ npm run build:preload
 
 测试失败时先复现并建立可证伪假设，再修改。warning、类型错误、格式漂移、生成物漂移、fixture 漂移和本轮遗留 TODO 都按缺陷处理，除非明确记录为与本轮无关的既有债务。
 
+## 审计与复审收敛
+
+审计的目标是证明**当前任务合同和受影响不变量已闭合**，不是通过反复重新扫描追求“永远找不到任何新问题”。除用户明确要求全库审计外，审计必须有限收敛。
+
+默认采用四层流程：
+
+1. **Primary audit（首审）**：在当前 ticket/maintenance 声明范围内检查 owner、公开合同、直接调用方、关键失败/并发/事务/安全边界和专项测试。首审可以主动发现新的 in-scope finding。
+2. **Finding remediation（修复）**：只修已确认 finding 及其最小闭合调用链；不得借 finding 顺手重构无关 owner。
+3. **Bounded re-audit（有限复审）**：只复核已知 findings、修复 diff、被修复直接影响的不变量/调用方和回归测试。默认**不得重新从头进行一次新的广域首审**。
+4. **Wave integration audit（波次集成审计）**：只检查该波共享 owner、跨 Ticket 状态转换、依赖方向和计划中列出的关键故障矩阵；不重新逐 Ticket 做完整深审。
+
+默认一个执行项只做 **1 次 primary audit + 1 次 bounded re-audit**。只有出现下列升级条件，才允许增加一轮复审，而且扩展范围只到受影响边界：
+
+- 修复新引入 P0/P1，或出现数据丢失、权限/安全、不可逆外部副作用风险；
+- 修复实际改变了公开合同、schema、状态 owner、事务边界或远端副作用边界，超出原 finding 的直接闭包；
+- 新证据证明首审依赖的关键前提为假，导致原审计结论失效；
+- 当前波次的定向组合测试暴露此前未覆盖的**跨 Ticket**交互，而且该交互属于本波必须保证的不变量。
+
+finding 必须标注来源类别，避免把历史债务误判成当前修改回归：
+
+- `INTRODUCED_BY_CHANGE`：由本次修改直接引入；
+- `EXPOSED_PREEXISTING`：本次审计暴露的既有债务；
+- `CROSS_TICKET_INTERACTION`：单 Ticket 正确但组合后不一致；
+- `PROCESS_EVIDENCE_GAP`：实现未必错误，但缺少当前 HEAD 的测试、审计或 provenance 证据。
+
+严重度与阻塞规则：
+
+- P0/P1：当前阶段必须关闭。
+- P2：只有直接违反当前 Acceptance criteria、持久事实一致性、幂等/不确定结果/重试安全、当前公开合同或本轮直接回归时才阻塞；其他 P2 必须登记到明确未来 ticket/maintenance owner，不得靠无限复审留在当前阶段。
+- P3：默认不阻塞当前阶段，记录即可。
+
+满足以下条件后审计必须收敛为 `PASS`，不得因为“也许还能再找点问题”继续启动新的通用 review：
+
+- 已知阻塞 finding 全部关闭；
+- bounded re-audit 验证 finding、直接回归和受影响不变量通过；
+- 对应定向测试/门禁通过；
+- 没有触发上述升级条件；
+- 被延期的非阻塞 finding 已记录 owner、理由和未来处理点。
+
+若用户明确要求“重新做一次全新独立审计”，可以另开 primary audit；否则连续的 fresh full review 属于流程漂移。
+
 ## 生成物与工作区边界
 
 不要手改或提交以下内容：`node_modules/`、`media-workbench/dist/`、`build/`、`release*/`、日志、临时目录、Playwright 缓存、`__pycache__/`、运行期 workspace、应用配置目录和下载/解压的 runtime tools。发现 `DO NOT EDIT`、生成合同或打包清单时，找到源文件与生成命令再变更。
