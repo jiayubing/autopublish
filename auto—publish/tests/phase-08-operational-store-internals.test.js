@@ -5,6 +5,10 @@ const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
+const {
+  SCHEMA_VERSION,
+  createOperationalStore,
+} = require("../src/infrastructure/operational-store/operational-store");
 const facadePath = path.join(
   root,
   "src/infrastructure/operational-store/operational-store.js",
@@ -128,11 +132,7 @@ function isAllowedInternalImport(importer, resolved) {
   );
 }
 
-test("OperationalStore facade preserves the frozen caller surface", () => {
-  const {
-    createOperationalStore,
-    SCHEMA_VERSION,
-  } = require("../src/infrastructure/operational-store/operational-store");
+test("OperationalStore facade persists caller-visible facts through its public contract", () => {
   const workspaceRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), "operational-store-facade-"),
   );
@@ -146,6 +146,31 @@ test("OperationalStore facade preserves the frozen caller surface", () => {
     assert.equal("transaction" in store, false);
     assert.equal(typeof store.verify, "function");
     assert.equal(typeof store.backup, "function");
+
+    const profile = store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "Public facade fixture",
+    });
+    const projectProfile = (value) =>
+      value && {
+        accountProfileId: value.accountProfileId,
+        platformId: value.platformId,
+        displayName: value.displayName,
+      };
+    assert.deepEqual(
+      store.listAccountProfiles().map(projectProfile),
+      [profile].map(projectProfile),
+    );
+
+    const databasePath = store.databasePath;
+    store.close();
+    store = createOperationalStore({ workspaceRoot });
+    assert.equal(store.databasePath, databasePath);
+    assert.deepEqual(
+      store.listAccountProfiles().map(projectProfile),
+      [profile].map(projectProfile),
+    );
+    assert.equal(store.verify().schemaVersion, SCHEMA_VERSION);
   } finally {
     if (store) store.close();
     fs.rmSync(workspaceRoot, { recursive: true, force: true });

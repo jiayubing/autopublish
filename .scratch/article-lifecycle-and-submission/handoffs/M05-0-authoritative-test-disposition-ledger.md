@@ -2390,6 +2390,15 @@
 - Domain attention query/resolver 新增 authoritative revision cache、stable identity dedup、client scope、optional lookup/preflight failure fallback、confirmation、explicit failure、success invalidation 与 stale duplicate fencing。Renderer attention feature 未触碰。
 - 其余 lifecycle/coordinator/permission/attention/content-store/removal fault/concurrency tests 保留；未修改 production、OperationalStore transaction/recovery、submission/publication orchestration、Renderer、IPC、adapter 或 migration reader。详细 gates/audit 见 `M05-E1-handoff.md`。
 
+## M05-E2 execution delta (2026-08-09)
+
+- Base HEAD：`f690bf1e61e30fb9e57fe9ca298d3ff1c31514c9`。
+- After inventory：254 files（237 JS / 17 MJS）、1,709 declarations、42 file-level source-reading files / 229 declarations、102 assertion-level source-reading candidates；manifest digest `56a33477e0e4120e3734fb48bbf681c207eb7f22ff31855a5132f7cfa18721ca`，discovery digest `9470ff0afa48f3818ed8456f07be67d71365f02671b3c2a3e0dedfea951d63ef`。
+- E2 `REWRITE_PUBLIC_BEHAVIOR` residual=`0`；E2 package 保持 60 条 ledger rows，当前 replacement 已由 public facade、真实 SQLite close/reopen 与 schema verification 证明。全局剩余 rewrite residual=`11` 属于 E3/F/G，未触碰。
+- `T-1d328a82c5`（`tests/phase-08-operational-store-internals.test.js:131`）迁移为 `T-8d8c14161d`（同文件 `:135`）：移除 test body 内的 production-path coupling，保留 exact `Object.keys` public caller-surface contract，并增加通过 `createAccountProfile`/`listAccountProfiles` 写入、close/reopen 读取持久事实，同时验证 facade frozen、内部 `db`/`transaction` 不可见和 schema verification。
+- 没有删除测试文件或生产文件；其余 59 条 E2 rows 保留，包括 transaction/fault/restart/recovery、真实 SQLite migration、removal lock/scheduler、runtime capacity/lease、file cleanup failure 与直接调用链 evidence。合法的 internal dependency/legacy absence guard 继续保留。
+- Complete E2 owner regression 由 ledger 标注的 10 个文件组成；所有 64 tests 均通过。详细命令、审计与 bounded re-check 见 `M05-E2-handoff.md`。
+
 ## M05-0 gate and boundary
 
 - [x] Discovery 与 runner `collectTestFiles` 文件集合一致；JS/MJS 均覆盖。
@@ -2398,9 +2407,9 @@
 - [x] 每个 declaration 有稳定 ID、disposition、replacement/retention mapping；source-reading candidate 与 duplicate cluster 有 owner/follow-up。
 - [x] A/B/C authoritative Renderer ownership 与 A–H package boundary 冻结；跨 cluster 按实际 feature state/action 归属。
 - [x] E 冻结为 `M05-E1 → M05-E2 → M05-E3`；migration reader 不进入 E1–E3。
-- [x] M05-A/B/C/D/E1 migration complete；各包 rewrite residual=`0`，replacement mapping 与 gates 已记录。
+- [x] M05-A/B/C/D/E1/E2 migration complete；各包 rewrite residual=`0`，replacement mapping 与 gates 已记录。
 - [ ] 后续包不得自行改 ownership/scope/disposition；只有 blocking finding 按 Audit Protocol 先修订本 ledger/合同后才能例外。
-- [ ] M05-E2 是下一且唯一允许启动的 package；本包不实施 E2/E3/F/G/H 测试迁移。
+- [x] M05-E2 已完成；下一且唯一允许启动的 package 是 M05-E3；本包未实施 E3/F/G/H 测试迁移。
 
 ## M05-0 do-not-touch boundary
 
