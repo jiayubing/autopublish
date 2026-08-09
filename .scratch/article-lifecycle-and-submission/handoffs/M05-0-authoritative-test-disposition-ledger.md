@@ -2493,7 +2493,7 @@
 - [x] A/B/C authoritative Renderer ownership 与 A–H package boundary 冻结；跨 cluster 按实际 feature state/action 归属。
 - [x] E 冻结为 `M05-E1 → M05-E2 → M05-E3`；migration reader 不进入 E1–E3。
 - [ ] 后续包不得自行改 ownership/scope/disposition；只有 blocking finding 按 Audit Protocol 先修订本 ledger/合同后才能例外。
-- [x] M05-A 已完成 Renderer content/generation/attention evidence 迁移；下一且唯一允许启动的 package 为 M05-B。
+- [x] M05-A、M05-B 已依次完成 Renderer evidence 迁移；下一且唯一允许启动的 package 为 M05-C。
 
 ## M05-A execution delta (2026-08-09)
 
@@ -2505,6 +2505,16 @@
 - Renderer user-action/layout rows 由 `renderer-question-editor-session`、`renderer-content-client-switch`、`renderer-generation-submission-handoff`、`renderer-article-attention-actions` 的可观察行为替代；paid resolution 在窄视口下实测两个 resolution action 的 visible/disabled/enabled 状态。
 - generation selection/template/source 规则改为 `renderer-batch-generation` 的输入→输出行为；frozen `RETAIN_STATIC_GUARD` 保留，未改 ownership/disposition。
 - 详细测试、audit 与 boundary evidence 见 `M05-A-handoff.md`。
+
+## M05-B execution delta (2026-08-09)
+
+- Base HEAD：`163aa5abdc4fc6f2ef56a838e66e4e62a0d0d908`；implementation/evidence source state：`a49fe1a93d08d0b46098dd313f68de0cce28f413`。
+- After inventory：260 files（243 JS / 17 MJS）、1,740 declarations、54 file-level source-reading files / 321 declarations、133 assertion-level source-reading candidates；manifest digest `7a75ded708ec3fbfebf257f901274083c397c73b3260c61675814225a923eb61`，discovery digest `5ff5ce7094da79bf55002763a9fee7c2c8e5bfa4fe9a949c21b2915a1e00483d`。
+- Delta：files `264 → 260`，declarations `1,748 → 1,740`，file-level candidates `58/333 → 54/321`，assertion-level candidates `144 → 133`；M05-B package declarations `86 → 78`，`REWRITE_PUBLIC_BEHAVIOR` residual=`0`。
+- queue/controller rows 由 `platform-submission-controller` 的 queue identity、terminal revision、workspace/run stale fencing、account query/confirmation/safe error public snapshot 和 `renderer-platform-queue-refresh-lifecycle` 的真实 Renderer explicit refresh/runtime-switch observable behavior 替代。
+- publication/media rows 由 `renderer-publication-history` 的实际 SSR presentation（uncertain direct-retry warning、busy resolution actions、paged media、durable order action）、`phase-06-media-feature` 的 resource/order/anomaly command state，以及 `order-list-projection` / `phase-03-media-order-projection` 的 read-model/canonical observation behavior 替代。
+- `T-356925768c`、`T-1662609838`、`T-31f1e3b32e`、`T-030a8da1bd` 四条 frozen security/legacy-absence/architecture capability static guard 保留并通过；`DUP-08` 仅收敛 B owner assertions，M05-C workspace/settings/shell rows 未触碰。
+- 详细测试、audit 与 boundary evidence 见 `M05-B-handoff.md`。
 
 ## M05-0 do-not-touch boundary
 
