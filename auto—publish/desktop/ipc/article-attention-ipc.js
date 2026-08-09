@@ -4,7 +4,7 @@ const {
   projectArticleAttentionList,
   projectArticleAttentionPreview,
   projectArticleAttentionResolution,
-} = require("./contracts/content-core-contracts");
+} = require("./contracts/article-attention-contracts");
 
 function registerArticleAttentionIpc(deps) {
   const options = deps || {};

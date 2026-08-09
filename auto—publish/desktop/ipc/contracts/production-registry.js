@@ -9,7 +9,14 @@ const {
 const { settingsContracts } = require("./settings-contracts");
 const { mediaContracts, mediaLifecycleContracts } = require("./media-contracts");
 const { platformContracts } = require("./platform-contracts");
-const { contentCoreContracts } = require("./content-core-contracts");
+const { contentLibraryContracts } = require("./content-library-contracts");
+const { articleEditorContracts } = require("./article-editor-contracts");
+const {
+  articleRemovalContracts,
+  articleRemovalEventContracts,
+} = require("./article-removal-contracts");
+const { articleManagementContracts } = require("./article-management-contracts");
+const { articleAttentionContracts } = require("./article-attention-contracts");
 const { generationContracts, generationEventContracts } = require("./generation-contracts");
 const { contentOperationsContracts } = require("./content-operations-contracts");
 const { publicationContracts } = require("./publication-contracts");
@@ -21,7 +28,12 @@ const contracts = [
   ...settingsContracts,
   ...mediaContracts,
   ...platformContracts,
-  ...contentCoreContracts,
+  ...contentLibraryContracts,
+  ...articleEditorContracts,
+  ...articleRemovalContracts,
+  ...articleManagementContracts,
+  ...articleAttentionContracts,
+  ...articleRemovalEventContracts,
   ...generationContracts,
   ...contentOperationsContracts,
   ...publicationContracts,

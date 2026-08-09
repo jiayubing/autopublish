@@ -30,7 +30,7 @@ const {
 const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const { registerAiContentIpc } = require("../desktop/ipc/ai-content-ipc");
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
-const { contentCoreContracts } = require("../desktop/ipc/contracts/content-core-contracts");
+const { articleEditorContracts } = require("../desktop/ipc/contracts/article-editor-contracts");
 const { createArticleStore } = require("../src/content/article-store");
 const { fingerprintArticle } = require("../src/content/content-store");
 
@@ -198,7 +198,7 @@ test("manual content crosses typed save IPC and the real article store into subm
     };
     articleStore.createArticle(initial);
     const manual = Object.assign({}, initial, { content: "没有 AI 来源的手工正文。" });
-    const registry = createContractRegistry(contentCoreContracts);
+    const registry = createContractRegistry(articleEditorContracts);
     const contract = registry.byChannel("content:save-article");
     const request = registry.encodeRequest(contract, {
       article: manual,

@@ -1,6 +1,6 @@
 const { wrap } = require("../services/ipc-response");
 const { createArticleManagementSnapshot } = require("../services/article-management-snapshot");
-const { projectManagementSnapshot } = require("./contracts/content-core-contracts");
+const { projectManagementSnapshot } = require("./contracts/article-management-contracts");
 
 function validateInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(function(key) { return key !== "clientId"; }) || typeof input.clientId !== "string" || !input.clientId.trim()) {

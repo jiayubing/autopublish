@@ -7,9 +7,9 @@
 // testability rather than a mechanical line threshold.
 const MODULE_SIZE_REVIEW_BASELINES = Object.freeze([
   [
-    "desktop/ipc/contracts/content-core-contracts.js",
-    1328,
-    "domain wire declarations and validators",
+    "desktop/ipc/contracts/article-management-contracts.js",
+    474,
+    "article management snapshot DTO and bounded projection",
   ],
   [
     "media-workbench/src/features/media/media-feature.js",

@@ -1,18 +1,19 @@
 const { wrap } = require("../services/ipc-response");
 const {
-  projectArticleRemovalTransaction,
-  projectArticle,
   projectClient,
-  projectImpactPreview,
   projectMaterial,
-  projectPermanentDeleteConfirmation,
-  projectPermanentDeleteResult,
   projectResearch,
   projectTemplate,
   projectTemplateCatalog,
+} = require("./contracts/content-library-contracts");
+const { projectArticle } = require("./contracts/article-editor-contracts");
+const {
+  projectPermanentDeleteConfirmation,
+  projectPermanentDeleteResult,
+  projectArticleRemovalTransaction,
+  projectImpactPreview,
   projectTrashCommitResult,
-  projectTrashRecord,
-} = require("./contracts/content-core-contracts");
+} = require("./contracts/article-removal-contracts");
 
 function contentInputError(message) {
   const error = new Error(message);
