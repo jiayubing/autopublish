@@ -59,10 +59,10 @@ A handoff 中曾记录的 fixture-count wording `PROCESS_EVIDENCE_GAP` 已在 A 
 - `npm run test:phase-08:gates` — PASS, 5/5。
 - `npm run lint` — PASS。
 - `npm run typecheck:main` — PASS；`npm run typecheck:bridge` — PASS；`npm run typecheck:renderer` — PASS。
-- `npm run format:check` — PASS；`git diff --check` — PASS。
+- Targeted formatting for the M04 contract modules — PASS；`git diff --check` — PASS。主 integration HEAD 的全量 `npm run format:check` 复验唯一报告基线已有的 `media-workbench/src/types/generation.ts`；该文件相对 M04 base 未变，未在 C 中扩大范围修改。
 - Static owner/consumer/absence probes — PASS：无旧 production import、无 forwarding export shape、owner capability/channel 无重复；preload/bridge/Renderer 相对 M04 base diff 为 0。
 
-Final clean-HEAD rerun at `5ece9ac83bd1f490e107d17767bc68aa81cfe8db` repeated the targeted 25/25 and 82/82 suites, `test:ticket-24-e`, `test:legacy-absence`, `test:phase-08:gates` (5/5), `test:production-ipc-matrix` (35/35), lint, all three typechecks, format check and `git diff --check`; every command passed.
+Final clean-HEAD rerun at `5ece9ac83bd1f490e107d17767bc68aa81cfe8db` repeated the targeted 25/25 and 82/82 suites, `test:ticket-24-e`, `test:legacy-absence`, `test:phase-08:gates` (5/5), `test:production-ipc-matrix` (35/35), lint, all three typechecks, targeted contract formatting and `git diff --check`; all M04-scoped commands passed. The full format check's inherited `generation.ts` warning is recorded above and is not an M04 finding.
 
 The first parallel invocation hit the orchestrator's 120-second timeout while long-running child tests were still active; those identified test-runner processes were explicitly stopped, then each gate was rerun independently with sufficient timeout. The independent runs above are the evidence; the parallel timeout is not counted as a code failure.
 
