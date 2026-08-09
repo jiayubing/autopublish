@@ -2,9 +2,9 @@
 
 **Purpose:** 在 Ticket 24 删除 legacy surface 后，按最终业务领域重新收缩大型 IPC/contract owner，避免一个文件同时拥有多个独立领域合同；不恢复任何已删除兼容能力。
 
-**Status:** `PENDING`；已拆分为 `M04-A → M04-B → M04-C`，等待用户另行启动执行
+**Status:** `COMPLETE`；`M04-A → M04-B → M04-C` 已完成 combined audit、bounded re-audit、最终 clean-HEAD gate 与 closure evidence
 
-**Scheduling gate:** 波次 10 `COMPLETE` 后调度；维护 10.5 第一项。M04 完成、审计/合并和定向复验后才允许 M05。
+**Scheduling gate:** 波次 10 `COMPLETE` 后调度；维护 10.5 第一项。M04 已完成；M05 的调度 gate 已满足，但本次用户截止点明确停止在 M04，不启动 M05/M06。
 
 ## Candidate scope
 
