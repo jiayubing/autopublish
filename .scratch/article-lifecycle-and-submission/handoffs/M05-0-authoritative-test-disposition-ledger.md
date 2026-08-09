@@ -2493,7 +2493,7 @@
 - [x] A/B/C authoritative Renderer ownership 与 A–H package boundary 冻结；跨 cluster 按实际 feature state/action 归属。
 - [x] E 冻结为 `M05-E1 → M05-E2 → M05-E3`；migration reader 不进入 E1–E3。
 - [ ] 后续包不得自行改 ownership/scope/disposition；只有 blocking finding 按 Audit Protocol 先修订本 ledger/合同后才能例外。
-- [x] M05-A、M05-B 已依次完成 Renderer evidence 迁移；下一且唯一允许启动的 package 为 M05-C。
+- [x] M05-A、M05-B、M05-C 已依次完成 Renderer evidence 迁移；下一且唯一允许启动的 package 为 M05-D。
 
 ## M05-A execution delta (2026-08-09)
 
@@ -2515,6 +2515,17 @@
 - publication/media rows 由 `renderer-publication-history` 的实际 SSR presentation（uncertain direct-retry warning、busy resolution actions、paged media、durable order action）、`phase-06-media-feature` 的 resource/order/anomaly command state，以及 `order-list-projection` / `phase-03-media-order-projection` 的 read-model/canonical observation behavior 替代。
 - `T-356925768c`、`T-1662609838`、`T-31f1e3b32e`、`T-030a8da1bd` 四条 frozen security/legacy-absence/architecture capability static guard 保留并通过；`DUP-08` 仅收敛 B owner assertions，M05-C workspace/settings/shell rows 未触碰。
 - 详细测试、audit 与 boundary evidence 见 `M05-B-handoff.md`。
+
+## M05-C execution delta (2026-08-09)
+
+- Base HEAD：`e09524ed52b315d90307feca5bdd01d2408bf37b`；implementation/evidence source state：`af6356e260e9f8ea0c8c9079ecc9b700cabfb747`。
+- After inventory：255 files（238 JS / 17 MJS）、1,708 declarations、46 file-level source-reading files / 267 declarations、113 assertion-level source-reading candidates；manifest digest `b670d1a2d230890cfd6d73d8552f29e5c43f796d425a6637efa8ff440c1ff496`，discovery digest `1f480cecd797c7f48a9a0583f628eb0c58a3882c9c1ac087cdec73e62bd1affc`。
+- Delta：files `260 → 255`，declarations `1,740 → 1,708`，file-level candidates `54/321 → 46/267`，assertion-level candidates `133 → 113`；M05-C package declarations `191 → 159`，`REWRITE_PUBLIC_BEHAVIOR` residual=`0`。
+- workspace/initial-refresh rows 由 `workspace-feature`、`workspace-coordinator` 的 public snapshot/revision/runtime matrix、workspace runtime public integration 与真实 Renderer queue lifecycle 替代；旧 env/module-reload 扫描与重复 platform invalidation wrapper 退役。
+- settings/provider rows 由 `settings-feature` 的 named query/command、overlap/failure/stale matrix，AI URL public validator，真实 Renderer settings/nav/runtime/storage presentation 与 Electron Hepan save/test/clear focus lifecycle 替代。
+- confirmation/shell rows 由 confirmation host 的 FIFO、abort、workspace-scope cancellation、keyboard trap/focus restoration，以及真实 content/editor dialogs 替代；time utility 改为直接执行公开 formatter。
+- `T-67af0d4657`、`T-962647d3c1`、`T-c0b53000b4`、`T-be1ac3dabf`、`T-98276db88f` 五条 frozen security / architecture / retired-capability static guard 保留并通过；encoding 与 accessibility 窄静态/可观测门禁保留。
+- 详细 replacement mapping、测试、audit 与 boundary evidence 见 `M05-C-handoff.md`。
 
 ## M05-0 do-not-touch boundary
 
