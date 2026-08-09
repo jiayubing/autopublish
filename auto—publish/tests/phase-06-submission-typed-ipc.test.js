@@ -3,12 +3,43 @@ const assert = require("node:assert/strict");
 
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
 const {
-  submissionContracts,
-  submissionContractFixtures,
-} = require("../desktop/ipc/contracts/submission-contracts");
+  submissionPlatformContracts,
+  submissionPlatformContractFixtures,
+} = require("../desktop/ipc/contracts/submission-platform-contracts");
+const {
+  submissionBatchContracts,
+  submissionBatchContractFixtures,
+} = require("../desktop/ipc/contracts/submission-batch-contracts");
+const {
+  submissionMaintenanceContracts,
+  submissionMaintenanceContractFixtures,
+} = require("../desktop/ipc/contracts/submission-maintenance-contracts");
+const {
+  submissionRegularContracts,
+  submissionRegularContractFixtures,
+} = require("../desktop/ipc/contracts/submission-regular-contracts");
+const {
+  submissionPaidMediaContracts,
+  submissionPaidMediaContractFixtures,
+} = require("../desktop/ipc/contracts/submission-paid-media-contracts");
 const {
   registerContentSubmissionIpc,
 } = require("../desktop/ipc/content-submission-ipc");
+
+const submissionContracts = Object.freeze([
+  ...submissionPlatformContracts,
+  ...submissionBatchContracts,
+  ...submissionMaintenanceContracts,
+  ...submissionRegularContracts,
+  ...submissionPaidMediaContracts,
+]);
+const submissionContractFixtures = Object.freeze([
+  ...submissionPlatformContractFixtures,
+  ...submissionBatchContractFixtures,
+  ...submissionMaintenanceContractFixtures,
+  ...submissionRegularContractFixtures,
+  ...submissionPaidMediaContractFixtures,
+]);
 
 const registry = createContractRegistry(submissionContracts);
 
