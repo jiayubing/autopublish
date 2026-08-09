@@ -67,6 +67,33 @@ test("workspace coordinator owns one transport and handles revision/runtime life
   assert.equal(unsubscribed, 1);
 });
 
+test("workspace coordinator gives attention and media one initial refresh per registration", () => {
+  let rawListener;
+  const calls = [];
+  const coordinator = createWorkspaceCoordinator({
+    subscribe: (listener) => {
+      rawListener = listener;
+      return () => {};
+    },
+  });
+  coordinator.register("articleAttention", (input) =>
+    calls.push(["articleAttention", input.kind]),
+  );
+  coordinator.register("orders", (input) => calls.push(["orders", input.kind]));
+  coordinator.start();
+
+  assert.deepEqual(calls, [
+    ["articleAttention", "initial"],
+    ["orders", "initial"],
+  ]);
+  rawListener(event({ scopes: ["articleAttention", "orders"] }));
+  assert.deepEqual(calls.slice(2), [
+    ["articleAttention", "invalidation"],
+    ["orders", "invalidation"],
+  ]);
+  coordinator.dispose();
+});
+
 test("workspace coordinator consumes the production-parsed ARTICLE_SAVED event", () => {
   let rawListener;
   const refreshes = [];

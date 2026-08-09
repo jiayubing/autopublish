@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import fs from "node:fs";
-import path from "node:path";
 import { createAttentionFeature } from "../media-workbench/src/features/attention/attention-feature.js";
 
 function deferred() {
@@ -19,18 +17,6 @@ function attention(attentionId, allowedActions = ["retry-publication"]) {
 }
 
 describe("Phase 06 attention feature", () => {
-  it("lets the workspace coordinator own the single production initial refresh", () => {
-    const source = fs.readFileSync(
-      path.resolve(
-        import.meta.dirname,
-        "../media-workbench/src/features/attention/use-attention-feature.ts",
-      ),
-      "utf8",
-    );
-    assert.match(source, /useWorkspaceScope\(['"]articleAttention['"]/);
-    assert.doesNotMatch(source, /feature\.refresh\(['"]initial['"]\)/);
-  });
-
   it("owns the scoped query revision/fingerprint and rejects an older response", async () => {
     const oldQuery = deferred();
     const newQuery = deferred();

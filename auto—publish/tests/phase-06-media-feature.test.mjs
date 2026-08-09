@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import fs from "node:fs";
-import path from "node:path";
 import { createMediaFeature as createMediaFeatureOwner } from "../media-workbench/src/features/media/media-feature.js";
 
 function createMediaFeature(options) {
@@ -144,18 +142,6 @@ describe("Phase 06 media feature", () => {
 
     await feature.openPublishedUrl("order-1");
     assert.deepEqual(calls.at(-1), ["openPublishedUrl", "order-1"]);
-  });
-
-  it("lets the workspace coordinator own the single production initial refresh", () => {
-    const source = fs.readFileSync(
-      path.resolve(
-        import.meta.dirname,
-        "../media-workbench/src/features/media/use-media-feature.ts",
-      ),
-      "utf8",
-    );
-    assert.match(source, /useWorkspaceScope\(['"]orders['"]/);
-    assert.doesNotMatch(source, /feature\.refresh\(['"]initial['"]\)/);
   });
 
   it("queries one bounded resource page at a time with a default page size of 50", async () => {

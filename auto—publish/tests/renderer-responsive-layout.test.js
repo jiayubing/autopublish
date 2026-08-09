@@ -404,6 +404,7 @@ function installDesktopFixture(page) {
           temporary: { bytes: 0, files: 0 },
           docxCache: { bytes: 0, files: 0 },
           profiles: { bytes: 0, files: 0 },
+          active: true,
         }),
       cleanCaches: () => result({ blocked: false }),
     };
@@ -670,6 +671,30 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       assert.match(measured.text, /工作区/);
       assert.match(measured.text, /运行环境/);
       assert.match(measured.text, /存储与清理/);
+
+      await page.getByRole("button", { name: "AI 生成", exact: true }).click();
+      await page.getByLabel("AI Base URL").fill("http://provider.example/v1");
+      await page.getByLabel("AI API Key").fill("fixture-key");
+      await page.getByLabel("AI model").fill("fixture-model");
+      await page.getByRole("button", { name: "保存配置" }).click();
+      await page
+        .getByRole("alert")
+        .filter({ hasText: "Base URL 只允许 HTTPS" })
+        .waitFor();
+
+      await page.getByRole("button", { name: "运行环境", exact: true }).click();
+      await page.getByRole("button", { name: "运行浏览器自检" }).waitFor();
+      await page.getByText("Playwright Node", { exact: true }).waitFor();
+      await page.getByText("DOCX 解析", { exact: true }).waitFor();
+
+      await page
+        .getByRole("button", { name: "存储与清理", exact: true })
+        .click();
+      const cleanCaches = page.getByRole("button", { name: "清理缓存" });
+      await cleanCaches.waitFor();
+      assert.equal(await cleanCaches.isDisabled(), true);
+      await page.getByText(/日志：0 B/).waitFor();
+      await page.getByText(/DOCX 缓存：0 B/).waitFor();
     } finally {
       await page.close();
     }

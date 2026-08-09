@@ -5,7 +5,20 @@ const path = require("node:path");
 const { it } = require("node:test");
 const { createWorkspaceDataInvalidation, scopesForReason } = require("../desktop/workspace-data-invalidation");
 const { createWorkspaceRuntime } = require("../desktop/workspace-runtime");
+const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
 const { createOperationalStore } = require("../src/infrastructure/operational-store/operational-store");
+
+const serviceRequests = Object.freeze({
+  task: "../desktop/services/desktop-task-service",
+  doubao: "../desktop/services/doubao-collection-service",
+  provider: "../desktop/services/ai-provider-service",
+  submission: "../desktop/services/content-submission-service",
+  content: "../desktop/services/ai-content-service",
+  generation: "../desktop/services/content-generation-batch-service",
+  workbench: "../desktop/services/platform-workbench-service",
+  handoff: "../desktop/services/generation-submission-handoff-service"
+});
+const desktopTaskServicePath = require.resolve(serviceRequests.task);
 
 function replaceModules(replacements) {
   const originals = replacements.map(function(replacement) {
@@ -203,7 +216,6 @@ it("article management reads only the newly started workspace when client ids ov
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-isolation-"));
   const workspaceA = path.join(root, "workspace-a");
   const workspaceB = path.join(root, "workspace-b");
-  const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
   const ipcMain = syntheticIpcMain();
   const options = Object.assign(workspaceRuntimeOptions(root), {
     ipcMain: ipcMain,
@@ -247,7 +259,6 @@ it("workspace startup recovers stranded publication intents before becoming avai
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-publication-recovery-"));
   const workspace = path.join(root, "workspace");
   fs.mkdirSync(workspace, { recursive: true });
-  const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
   createContentLifecycleComposition({ workspaceRoot: workspace }).contentStore.saveArticle(
     Object.assign(generatedArticle("article-recovery", "Recovery fixture"), {
       clientId: "client-recovery",
@@ -285,7 +296,7 @@ it("workspace startup recovers stranded publication intents before becoming avai
 
 it("workspace runtime gives the Hepan task service its configured platform settings", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-hepan-"));
-  const taskServicePath = require.resolve("../desktop/services/desktop-task-service");
+  const taskServicePath = desktopTaskServicePath;
   const originalTaskServiceModule = require.cache[taskServicePath];
   const originalPython = process.env.HEPAN_PYTHON;
   const originalCookie = process.env.HEPAN_COOKIE_PATH;
@@ -336,12 +347,12 @@ it("disposes services already created when a middle workspace factory fails", as
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-factory-failure-"));
   const events = [];
   const restore = replaceModules([
-    { request: "../desktop/services/desktop-task-service", exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
-    { request: "../desktop/services/doubao-collection-service", exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); }; } }); } } },
-    { request: "../desktop/services/ai-provider-service", exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
-    { request: "../desktop/services/content-submission-service", exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
-    { request: "../desktop/services/ai-content-service", exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
-    { request: "../desktop/services/content-generation-batch-service", exports: { createContentGenerationBatchService: function() { throw new Error("generation factory failed"); } } }
+    { request: serviceRequests.task, exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
+    { request: serviceRequests.doubao, exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); }; } }); } } },
+    { request: serviceRequests.provider, exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
+    { request: serviceRequests.submission, exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
+    { request: serviceRequests.content, exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
+    { request: serviceRequests.generation, exports: { createContentGenerationBatchService: function() { throw new Error("generation factory failed"); } } }
   ]);
   try {
     fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
@@ -361,14 +372,14 @@ it("unsubscribes and disposes all started workspace resources when post-subscrip
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-subscription-failure-"));
   const events = [];
   const restore = replaceModules([
-    { request: "../desktop/services/desktop-task-service", exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
-    { request: "../desktop/services/doubao-collection-service", exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); throw new Error("collection unsubscribe failed"); }; } }); } } },
-    { request: "../desktop/services/ai-provider-service", exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
-    { request: "../desktop/services/content-submission-service", exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
-    { request: "../desktop/services/ai-content-service", exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
-    { request: "../desktop/services/content-generation-batch-service", exports: { createContentGenerationBatchService: function() { return lifecycleService("generation", events, { getState: function() { return {}; } }); } } },
-    { request: "../desktop/services/platform-workbench-service", exports: { createPlatformWorkbenchService: function() { return lifecycleService("workbench", events); } } },
-    { request: "../desktop/services/generation-submission-handoff-service", exports: { createGenerationSubmissionHandoffService: function() { throw new Error("handoff setup failed"); } } }
+    { request: serviceRequests.task, exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
+    { request: serviceRequests.doubao, exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); throw new Error("collection unsubscribe failed"); }; } }); } } },
+    { request: serviceRequests.provider, exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
+    { request: serviceRequests.submission, exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
+    { request: serviceRequests.content, exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
+    { request: serviceRequests.generation, exports: { createContentGenerationBatchService: function() { return lifecycleService("generation", events, { getState: function() { return {}; } }); } } },
+    { request: serviceRequests.workbench, exports: { createPlatformWorkbenchService: function() { return lifecycleService("workbench", events); } } },
+    { request: serviceRequests.handoff, exports: { createGenerationSubmissionHandoffService: function() { throw new Error("handoff setup failed"); } } }
   ]);
   try {
     fs.mkdirSync(path.join(root, "workspace"), { recursive: true });

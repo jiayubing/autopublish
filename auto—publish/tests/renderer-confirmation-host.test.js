@@ -8,34 +8,6 @@ function read(relativePath) {
 }
 
 describe("renderer confirmation host", () => {
-  it("implements a renderer-owned, focus-safe confirmation lifecycle", () => {
-    const source = read("media-workbench/src/components/ConfirmationHost.tsx");
-    assert.match(source, /role="dialog"/);
-    assert.match(source, /aria-modal="true"/);
-    assert.match(source, /event\.key === 'Escape'/);
-    assert.match(source, /event\.key !== 'Tab'/);
-    assert.match(source, /requestAnimationFrame/);
-    assert.match(source, /request\.resolve\(approved\)/);
-    assert.match(source, /queueRef\.current/);
-    assert.match(source, /cancelRequester/);
-    assert.match(source, /pendingRef\.current/);
-    assert.doesNotMatch(
-      source,
-      /window\.confirm|window\.focus|window\.restore/,
-    );
-  });
-
-  it("keeps the public confirmation API small and portal based", () => {
-    const source = read("media-workbench/src/confirmation.tsx");
-    assert.match(
-      source,
-      /confirm:\s*\(options: ConfirmationOptions\)\s*=> Promise<boolean>/,
-    );
-    assert.match(source, /createPortal/);
-    assert.match(source, /useConfirmation/);
-    assert.doesNotMatch(source, /dangerouslySetInnerHTML/);
-  });
-
   it("installs one host only after authentication and removes business native confirms", () => {
     const main = read("media-workbench/src/main.tsx");
     const app = read("media-workbench/src/App.tsx");

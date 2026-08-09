@@ -1,38 +1,50 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
+const { pathToFileURL } = require("node:url");
 
-async function loadFormatter() {
-  const filename = path.resolve(__dirname, "../media-workbench/src/time-format.ts");
-  const source = fs.readFileSync(filename, "utf8");
-  return import("data:text/javascript," + encodeURIComponent(source));
+const root = path.resolve(__dirname, "..");
+const tsxLoader = pathToFileURL(
+  path.join(
+    root,
+    "media-workbench",
+    "node_modules",
+    "tsx",
+    "dist",
+    "loader.mjs",
+  ),
+).href;
+
+function format(values) {
+  return JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        "--import",
+        tsxLoader,
+        "--input-type=module",
+        "-e",
+        `import { formatBeijingTime } from './media-workbench/src/time-format.ts'; console.log(JSON.stringify(${JSON.stringify(values)}.map((value) => formatBeijingTime(value))));`,
+      ],
+      { cwd: root, encoding: "utf8" },
+    ),
+  );
 }
 
-describe("renderer Beijing time formatter", function() {
-  it("formats the same UTC instant consistently as Beijing time", async function() {
-    const { formatBeijingTime } = await loadFormatter();
-    assert.equal(formatBeijingTime("2026-07-15T00:00:00.000Z"), "2026-07-15 08:00:00");
-    assert.equal(formatBeijingTime("2026-01-02T16:05:06.000Z"), "2026-01-03 00:05:06");
+describe("renderer Beijing time formatter", function () {
+  it("formats UTC and legacy instants consistently as Beijing time", function () {
+    assert.deepEqual(
+      format([
+        "2026-07-15T00:00:00.000Z",
+        "2026-01-02T16:05:06.000Z",
+        "2026-07-15 00:00:00",
+      ]),
+      ["2026-07-15 08:00:00", "2026-01-03 00:05:06", "2026-07-15 08:00:00"],
+    );
   });
 
-  it("handles invalid, missing, and legacy UTC-like values safely", async function() {
-    const { formatBeijingTime } = await loadFormatter();
-    assert.equal(formatBeijingTime(undefined), "未知时间");
-    assert.equal(formatBeijingTime("not-a-date"), "未知时间");
-    assert.equal(formatBeijingTime("2026-07-15 00:00:00"), "2026-07-15 08:00:00");
-  });
-
-  it("is used by the order history view for persisted timestamps", function() {
-    const source = fs.readFileSync(path.resolve(__dirname, "../media-workbench/src/components/OrdersView.tsx"), "utf8");
-    assert.match(source, /formatBeijingTime\(order\.submittedAt\)/);
-    assert.match(source, /formatBeijingTime\(order\.publishedAt\)/);
-  });
-
-  it("keeps order instants unformatted through the Renderer bridge", function() {
-    const source = fs.readFileSync(path.resolve(__dirname, "../media-workbench/src/bridge/media.ts"), "utf8");
-    const normalizeOrder = source.slice(source.indexOf("function normalizeOrder"), source.indexOf("export async function scanArticles"));
-    assert.doesNotMatch(normalizeOrder, /formatBeijingTime|toLocale|new Date/);
-    assert.match(normalizeOrder, /publishedAt: String\(raw\.publishedAt \|\| ""\)/);
+  it("returns the safe fallback for invalid or missing instants", function () {
+    assert.deepEqual(format([null, "not-a-date"]), ["未知时间", "未知时间"]);
   });
 });

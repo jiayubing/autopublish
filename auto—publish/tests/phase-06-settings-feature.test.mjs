@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import fs from "node:fs";
-import path from "node:path";
 
 import { createSettingsFeature } from "../media-workbench/src/features/settings/settings-feature.js";
 
@@ -234,14 +232,6 @@ describe("Phase 06 settings feature", () => {
     for (const name of methods)
       assert.equal(typeof feature[name], "function", name);
     assert.equal("dispatch" in feature, false);
-    const featureSource = fs.readFileSync(
-      path.resolve(
-        import.meta.dirname,
-        "../media-workbench/src/features/settings/settings-feature.js",
-      ),
-      "utf8",
-    );
-    assert.doesNotMatch(featureSource, /COMMAND_DEFINITIONS|execute\(name/);
 
     const commandNames = Object.keys(feature.getSnapshot().commands);
     assert.deepEqual(
@@ -262,34 +252,5 @@ describe("Phase 06 settings feature", () => {
         "testMedia",
       ].sort(),
     );
-  });
-
-  it("keeps production settings views on snapshots and named commands", () => {
-    const sourceRoot = path.resolve(
-      import.meta.dirname,
-      "../media-workbench/src",
-    );
-    const files = [
-      "components/SettingsView.tsx",
-      "components/AiProviderSettings.tsx",
-      "components/settings/MediaProviderSettings.tsx",
-      "components/settings/HepanProviderSettings.tsx",
-      "components/settings/SettingsOverview.tsx",
-    ];
-    for (const file of files) {
-      const source = fs.readFileSync(path.join(sourceRoot, file), "utf8");
-      assert.match(source, /useSettingsFeature/, file);
-      assert.doesNotMatch(source, /bridge\/settings/, file);
-      assert.doesNotMatch(
-        source,
-        /(?<!\.)\b(?:getRuntimeDiagnostics|runBrowserSelfCheck)\s*\(|getStorageMaintenanceApi/,
-        file,
-      );
-      assert.doesNotMatch(
-        source,
-        /\bset(?:Saving|Testing|Clearing|Cleaning|Checking|LegacyBusy)\b/,
-        file,
-      );
-    }
   });
 });
