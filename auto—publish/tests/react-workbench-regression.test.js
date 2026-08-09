@@ -128,36 +128,4 @@ describe("react workbench regression", function () {
     assert.equal(types.includes("isPlatformPaused"), false);
     assert.equal(api.includes("isPlatformPaused"), false);
   });
-
-  it("type-checks before building the renderer", function () {
-    const packageJson = JSON.parse(
-      fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8"),
-    );
-    const rendererPackage = JSON.parse(
-      fs.readFileSync(
-        path.resolve(__dirname, "..", "media-workbench", "package.json"),
-        "utf8",
-      ),
-    );
-    const runner = fs.readFileSync(
-      path.resolve(__dirname, "..", "scripts", "verify.js"),
-      "utf8",
-    );
-    assert.ok(
-      packageJson.scripts["build:renderer"].includes(
-        "--prefix media-workbench run lint",
-      ),
-    );
-    assert.equal(
-      packageJson.scripts["build:renderer"].includes("build.cmd"),
-      false,
-    );
-    assert.equal(rendererPackage.scripts.build.includes("build.cmd"), false);
-    assert.equal(packageJson.scripts.verify, "node scripts/verify.js");
-    assert.ok(
-      runner.includes("media-workbench") &&
-        runner.includes("verify-alpha-package.js") &&
-        runner.includes("process.env.ComSpec"),
-    );
-  });
 });

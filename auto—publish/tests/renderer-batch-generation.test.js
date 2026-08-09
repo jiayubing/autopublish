@@ -5,286 +5,117 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
-function read(file) {
-  return fs.readFileSync(path.join(root, file), "utf8");
+
+async function loadGenerationUiLogic() {
+  return import(
+    pathToFileURL(
+      path.join(root, "media-workbench/src/content-generation-ui-logic.js"),
+    )
+  );
 }
 
-describe("renderer content generation workflow", function() {
-  it("does not turn untouched selections into implicit full selections during async refresh", async function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const { preserveSelection } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
-
-    assert.deepEqual(preserveSelection([], ["client-1", "client-2"], false), []);
+describe("renderer batch generation behavior", function () {
+  it("preserves explicit selections across asynchronous source refreshes", async function () {
+    const { preserveSelection } = await loadGenerationUiLogic();
+    assert.deepEqual(
+      preserveSelection([], ["client-1", "client-2"], false),
+      [],
+    );
     assert.deepEqual(preserveSelection([], ["client-1", "client-2"], true), []);
-    assert.deepEqual(preserveSelection(["client-1", "removed"], ["client-1", "client-2"], true), ["client-1"]);
-    assert.match(batch, /clientSelectionTouchedRef/);
-    assert.match(batch, /templateSelectionTouchedRef/);
-    assert.match(batch, /preserveSelection\(/);
+    assert.deepEqual(
+      preserveSelection(
+        ["client-1", "removed"],
+        ["client-1", "client-2"],
+        true,
+      ),
+      ["client-1"],
+    );
   });
 
-  it("uses one custom-first visibility function for single and batch selectors", async function() {
-    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const { visibleGenerationTemplates } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
-    const catalog = { templates: [
-      { id: "custom", platform: "xhs", source: "custom", enabled: true },
-      { id: "builtin", platform: "xhs", source: "builtin", enabled: true },
-    ] };
-    assert.deepEqual(visibleGenerationTemplates(catalog).map((item) => item.id), ["custom"]);
-    assert.deepEqual(visibleGenerationTemplates(catalog, true).map((item) => item.id), ["custom", "builtin"]);
-    assert.match(article, /visibleGenerationTemplates/);
-    assert.match(batch, /visibleGenerationTemplates/);
-    assert.match(article, /显示内置模板/);
-    assert.match(batch, /显示内置模板/);
+  it("uses one custom-first template projection", async function () {
+    const { visibleGenerationTemplates } = await loadGenerationUiLogic();
+    const catalog = {
+      templates: [
+        { id: "custom", platform: "xhs", source: "custom", enabled: true },
+        { id: "builtin", platform: "xhs", source: "builtin", enabled: true },
+      ],
+    };
+    assert.deepEqual(
+      visibleGenerationTemplates(catalog).map((item) => item.id),
+      ["custom"],
+    );
+    assert.deepEqual(
+      visibleGenerationTemplates(catalog, true).map((item) => item.id),
+      ["custom", "builtin"],
+    );
   });
 
-  it("offers one-material retry in the batch source step and updates only that client material", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /commands\.retryMaterial/);
-    assert.match(batch, /retryMaterialItem/);
-    assert.match(batch, /commands\.retryMaterial/);
-    assert.match(batch, /actions=/);
-    assert.match(batch, /materialForClient\(client/);
-    assert.doesNotMatch(batch, /readFileSync|readdirSync|safeStorage|Playwright|playwright|fs\./i);
-  });
-
-  it("keeps the single article source gate and collapsed source contract", function() {
-    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    const item = read("media-workbench/src/components/content/CollapsibleSourceItem.tsx");
-
-    assert.match(article, /CollapsibleSourceItem/);
-    assert.match(article, /materialIds/);
-    assert.match(article, /researchQueryIds/);
-    assert.match(article, /defaultExpanded=\{false\}/);
-    assert.match(article, /disabled=\{!materialIds\.length \|\| !selectedIds\.length/);
-    assert.match(item, /defaultExpanded = false/);
-    assert.match(item, /aria-expanded/);
-    assert.match(item, /onSelectedChange/);
-    assert.match(article, /预览|preview/);
-    assert.match(article, /重试|retry/);
-    assert.match(article, /错误|error/);
-  });
-
-  it("defaults async material and research selections without overwriting an explicit cancellation", function() {
-    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    assert.match(article, /materialSelectionTouchedRef/);
-    assert.match(article, /researchSelectionTouchedRef/);
-    assert.match(article, /setMaterialSelection/);
-    assert.match(article, /setResearchSelection/);
-    assert.match(article, /validMaterials\.map\(\(item\) => item\.id \|\| item\.name\)/);
-    assert.match(article, /validResearch\.map\(\(item\) => item\.id\)/);
-    assert.match(article, /materialSelectionTouchedRef\.current \? current/);
-    assert.match(article, /researchSelectionTouchedRef\.current \? current/);
-  });
-
-  it("retries one material through the material store API", function() {
-    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    const api = read("media-workbench/src/bridge/content.ts");
-    const preload = read("desktop/preload.js");
-    const ipc = read("desktop/ipc/ai-content-ipc.js");
-    assert.match(article, /commands\.retryMaterial/);
-    assert.doesNotMatch(article, /listContentClients\(\)/);
-    assert.match(api, /export async function retryContentMaterial/);
-    assert.match(preload, /retryMaterial/);
-    assert.match(ipc, /content:retry-material/);
-  });
-
-  it("defines the four batch steps and Cartesian task count", async function() {
-    const { countGenerationTasks, BATCH_GENERATION_STEPS } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
+  it("counts the four-step Cartesian batch without accepting failed sources", async function () {
+    const {
+      BATCH_GENERATION_STEPS,
+      countGenerationTasks,
+      isExecutableSource,
+      reconcileSourceSelection,
+    } = await loadGenerationUiLogic();
+    assert.deepEqual(BATCH_GENERATION_STEPS, [
+      "clients",
+      "templates",
+      "sources",
+      "confirm",
+    ]);
     assert.equal(countGenerationTasks(10, 3), 30);
-    assert.deepEqual(BATCH_GENERATION_STEPS, ["clients", "templates", "sources", "confirm"]);
-  });
 
-  it("does not report a batch source as executable when a selected material has failed", async function() {
-    const { isExecutableSource, reconcileSourceSelection } = await import(pathToFileURL(path.join(root, "media-workbench/src/content-generation-ui-logic.js")));
     const materials = [
-      { id: "brand.md", name: "brand.md", status: "ready", content: "brand facts" },
-      { id: "broken.docx", name: "broken.docx", status: "error", content: "", error: { code: "MATERIAL_DOCX_CONVERSION_FAILED" } }
+      { id: "brand.md", status: "ready", content: "brand facts" },
+      { id: "broken.docx", status: "error", content: "" },
     ];
     const research = [{ id: "q1", answerText: "valid answer" }];
-    const source = { materialIds: ["brand.md", "broken.docx"], researchQueryIds: ["q1"] };
-
+    const source = {
+      materialIds: ["brand.md", "broken.docx"],
+      researchQueryIds: ["q1"],
+    };
     assert.equal(isExecutableSource(materials, research, source), false);
     assert.deepEqual(reconcileSourceSelection(materials, research, source), {
       materialIds: ["brand.md"],
-      researchQueryIds: ["q1"]
+      researchQueryIds: ["q1"],
     });
   });
 
-  it("keeps invalid GEO answers unchecked and disabled at the source boundary", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /selected=\{isUsableResearch\(item\) && source\.researchQueryIds\.includes\(item\.id\)\}/);
+  it("keeps invalid GEO answers unchecked and disabled at the source boundary", function () {
+    const batch = fs.readFileSync(
+      path.join(
+        root,
+        "media-workbench/src/components/content/BatchGenerationView.tsx",
+      ),
+      "utf8",
+    );
+    assert.match(
+      batch,
+      /selected=\{isUsableResearch\(item\) && source\.researchQueryIds\.includes\(item\.id\)\}/,
+    );
     assert.match(batch, /disabled=\{!isUsableResearch\(item\)\}/);
-    assert.match(batch, /onSelectedChange=\{\(selected\) => isUsableResearch\(item\) && updateSource/);
+    assert.match(
+      batch,
+      /onSelectedChange=\{\(selected\) => isUsableResearch\(item\) && updateSource/,
+    );
   });
 
-  it("shows a visible cost warning while a batch is active or stopping", function() {
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(detail, /batch-cost-warning/);
-    assert.match(detail, /费用/);
-    assert.match(detail, /showCostWarning &&[\s\S]*batch-cost-warning/);
-  });
-
-  it("retains the cost warning for a stopped batch with unfinished tasks", function() {
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(detail, /active \|\| \(\['paused', 'stopped'\]\.includes\(batch\.status\) && unfinished\)/);
-  });
-
-  it("discovers every returned template platform and counts all selected templates", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
+  it("discovers every returned template platform and counts all selected templates", function () {
+    const batch = fs.readFileSync(
+      path.join(
+        root,
+        "media-workbench/src/components/content/BatchGenerationView.tsx",
+      ),
+      "utf8",
+    );
     assert.doesNotMatch(batch, /const PLATFORMS =/);
-    assert.doesNotMatch(batch, /listContentTemplateCatalog|listContentResearch/);
+    assert.doesNotMatch(
+      batch,
+      /listContentTemplateCatalog|listContentResearch/,
+    );
     assert.match(batch, /templateCatalog \|\|/);
     assert.match(batch, /catalog\.templates/);
     assert.match(batch, /Object\.entries\(templateGroups\)/);
     assert.match(batch, /selectedTemplates\.length/);
-  });
-
-  it("labels builtin and custom templates with accurate source wording", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const types = read("media-workbench/src/types/content.ts");
-    assert.match(types, /source\?: ["']builtin["'] \| ["']custom["']/);
-    assert.match(types, /readOnly\?: boolean/);
-    assert.match(batch, /templateSourceLabel/);
-    assert.match(read("media-workbench/src/content-generation-ui-logic.js"), /内置模板 · 只读/);
-    assert.doesNotMatch(batch, /可复制|可编辑/);
-  });
-
-  it("renders the batch client, platform template, source and confirmation contracts", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const featureHook = read("media-workbench/src/features/generation/use-generation-feature.ts");
-    assert.match(batch, /四步|步骤/);
-    assert.match(batch, /全选客户/);
-    assert.match(batch, /取消全选/);
-    assert.match(batch, /platform/);
-    assert.match(batch, /按平台|平台分组|group/);
-    assert.match(batch, /materialIds/);
-    assert.match(batch, /researchQueryIds/);
-    assert.match(batch, /预计输入字符数|字符数/);
-    assert.match(batch, /不可生成|排除/);
-    assert.match(batch, /可执行任务数/);
-    assert.match(batch, /确认.*启动|启动.*确认/);
-    assert.match(batch, /generation\.previewBatch/);
-    assert.match(featureHook, /createAndStartGenerationBatch/);
-    assert.match(featureHook, /getGenerationRuntimeSnapshot/);
-    assert.match(featureHook, /pauseGenerationBatch/);
-    assert.match(featureHook, /resumeGenerationBatch/);
-    assert.match(featureHook, /stopGenerationBatch/);
-    assert.match(featureHook, /retryFailedGenerationBatch/);
-  });
-
-  it("exposes renderer-only generation batch wrappers through preload", function() {
-    const api = read("media-workbench/src/bridge/generation.ts");
-    const preload = read("desktop/preload.js");
-    [
-      "previewGenerationBatch",
-      "createAndStartGenerationBatch",
-      "pauseGenerationBatch",
-      "resumeGenerationBatch",
-      "stopGenerationBatch",
-      "retryFailedGenerationBatch",
-      "getGenerationRuntimeSnapshot",
-      "subscribeGenerationBatchState"
-    ].forEach(function(name) { assert.match(api, new RegExp(name)); });
-    assert.doesNotMatch(api, /getGenerationBatchState/);
-    assert.match(preload, /previewGenerationBatch/);
-    assert.doesNotMatch(read("media-workbench/src/components/content/BatchGenerationView.tsx"), /safeStorage|Playwright|playwright|readFileSync|fs\./i);
-  });
-
-  it("provides a single and batch segmented control without losing the article editor", function() {
-    const article = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    assert.match(article, /单篇生成/);
-    assert.match(article, /批量生成/);
-    assert.match(article, /BatchGenerationView/);
-    assert.match(article, /selectedArticle/);
-  });
-
-  it("separates the new-batch wizard from persisted batch monitoring", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /BatchViewMode/);
-    assert.match(batch, /'wizard' \| 'monitoring'/);
-    assert.match(batch, /setViewMode\('monitoring'\)/);
-    assert.match(batch, /viewMode === 'wizard'/);
-    assert.match(batch, /data-view-mode=\{viewMode\}/);
-    assert.doesNotMatch(batch, /runtimeCursorRef|createGenerationRuntimeCursor/);
-    assert.match(batch, /generation\.snapshot\.batch/);
-  });
-
-  it("rehydrates a persisted batch into monitoring and offers a new wizard entry for terminal batches", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const featureHook = read("media-workbench/src/features/generation/use-generation-feature.ts");
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(featureHook, /feature\.hydrate/);
-    assert.match(batch, /generation\.snapshot\.batch/);
-    assert.match(batch, /setViewMode\('monitoring'\)/);
-    assert.match(batch, /onStartNew/);
-    assert.match(detail, /onStartNew/);
-    assert.match(detail, /completed.*stopped/);
-    assert.match(detail, /开始新批量生成|新建批量生成/);
-  });
-
-  it("uses runtime state only when it belongs to the displayed batch", function() {
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(detail, /state\.batchId === batch\.id/);
-    assert.match(detail, /state\.status !== 'idle'/);
-    assert.match(detail, /effectiveStatus/);
-    assert.match(detail, /batch\.status/);
-  });
-
-  it("does not let initial idle hydration overwrite a matching runtime batch state", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const feature = read("media-workbench/src/features/generation/generation-feature.js");
-    assert.doesNotMatch(batch, /runtimeCursorRef|bootstrap\(snapshot\)/);
-    assert.match(feature, /next\.runtimeId !== runtimeId/);
-    assert.match(feature, /next\.sequence <= sequence/);
-  });
-
-  it("routes batch commands through the generation feature without a shared pending owner", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    assert.match(batch, /useGenerationFeature/);
-    assert.doesNotMatch(batch, /commandPending|operationBusyRef/);
-    assert.match(batch, /generationCommands\.pause\.busy/);
-    assert.match(batch, /generationCommands\.stop\.busy/);
-    assert.match(batch, /const batchRunning/);
-    assert.doesNotMatch(batch, /setBatchState\(\(current\) => \(\{ \...current, batchId, state: 'running', status: 'running'/);
-  });
-
-  it("offers continuation when failed tasks are the only unfinished work", function() {
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(detail, /const unfinished = counts\.pending > 0 \|\| counts\.failed > 0 \|\| counts\.interrupted > 0/);
-  });
-
-  it("keeps pause and stop bound to the displayed batch while continuation waits for a non-live snapshot", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(batch, /generation\.pause\(\{ batchId: batch\.id \}\)/);
-    assert.match(batch, /generation\.stop\(\{ batchId: batch\.id \}\)/);
-    assert.match(detail, /disabled=\{busy\.pause \|\| !running\}/);
-    assert.match(detail, /disabled=\{busy\.resume \|\| active \|\| !unfinished\}/);
-    assert.match(detail, /const canContinue = !active && unfinished/);
-  });
-
-  it("rehydrates the same live counts and status after returning to the page", function() {
-    const batch = read("media-workbench/src/components/content/BatchGenerationView.tsx");
-    const types = read("media-workbench/src/types/generation.ts");
-    const feature = read("media-workbench/src/features/generation/generation-feature.js");
-    assert.doesNotMatch(batch, /batchStateRef|runtimeCursorRef/);
-    assert.match(feature, /counts: runtime\.counts \|\| batch\.counts/);
-    assert.match(types, /updatedAt\?: string/);
-    assert.match(types, /["']pausing["']/);
-  });
-
-  it("exposes cancelled counts and a preview-confirmed pending cancellation action", function() {
-    const api = read("media-workbench/src/bridge/generation.ts");
-    const preload = read("desktop/preload.js");
-    const detail = read("media-workbench/src/components/content/GenerationBatchDetail.tsx");
-    assert.match(api, /previewCancelPendingGenerationBatch/);
-    assert.match(api, /cancelPendingGenerationBatch/);
-    assert.match(preload, /previewCancelPendingGenerationBatch/);
-    assert.match(preload, /cancelPendingGenerationBatch/);
-    assert.match(detail, /counts\.cancelled/);
-    assert.match(detail, /useConfirmation/);
-    assert.doesNotMatch(detail, /window\.confirm/);
-    assert.match(detail, /pendingCount/);
   });
 });

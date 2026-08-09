@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 
 import { createPaidMediaExecutionFeature } from "../media-workbench/src/features/content/paid-media-execution-feature.js";
@@ -55,7 +53,6 @@ test("paid resolution feature exposes named loading and success command states",
   );
   feature.dispose();
 });
-
 test("paid resolution feature keeps safe command errors visible and releases disabled state", async () => {
   const feature = fixture({
     confirmPaidOrderAbsent: async () => {
@@ -83,18 +80,4 @@ test("paid resolution feature keeps safe command errors visible and releases dis
     "文章或订单事实已变化，请刷新后重新核对。",
   );
   feature.dispose();
-});
-
-test("paid resolution drawer keeps both actions usable at narrow width and disabled while busy", () => {
-  const source = fs.readFileSync(
-    path.resolve(
-      "media-workbench/src/components/content/ArticleAttentionDetailDrawer.tsx",
-    ),
-    "utf8",
-  );
-  assert.match(source, /w-full max-w-md/);
-  assert.match(source, /resolutionBusy \|\| !orderId\.trim\(\)/);
-  assert.match(source, /补录服务商订单号/);
-  assert.match(source, /确认服务商没有该订单/);
-  assert.match(source, /role="alert"/);
 });
