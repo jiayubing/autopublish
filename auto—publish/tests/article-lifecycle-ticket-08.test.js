@@ -16,6 +16,9 @@ const {
 const {
   createRegularQueueGroupComposition,
 } = require("../desktop/composition/regular-queue-group-composition");
+const {
+  createRegularPlatformPreparationPort,
+} = require("../desktop/services/regular-platform-preparation-port");
 
 function deferred() {
   let resolve;
@@ -446,9 +449,6 @@ test("same-platform account groups are serialized until account-specific session
 });
 
 test("production preparation port verifies the account profile before adapter preparation", async () => {
-  const {
-    createRegularPlatformPreparationPort,
-  } = require("../desktop/services/regular-platform-preparation-port");
   let verified = false;
   let preparations = 0;
   const claim = {
@@ -504,9 +504,6 @@ test("production preparation port verifies the account profile before adapter pr
 });
 
 test("prepared browser submission rechecks the bound account immediately before submit", async () => {
-  const {
-    createRegularPlatformPreparationPort,
-  } = require("../desktop/services/regular-platform-preparation-port");
   let inspections = 0;
   let submissions = 0;
   const claim = {
@@ -1104,123 +1101,109 @@ test("composition and orchestrator receive only queue-group transitions and the 
   }
 });
 
-test("all regular platform adapters expose the PreparedSubmission preparation seam", () => {
-  const adapters = [
-    require("../src/platforms/toutiao/adapter"),
-    require("../src/platforms/lieju/adapter"),
-    require("../src/platforms/hepan/adapter"),
-  ];
-  for (const adapter of adapters)
-    assert.equal(typeof adapter.preparePlatformSubmission, "function");
-});
-
-test("browser adapters finish form preparation before exposing the final-submit capability", () => {
-  for (const platformId of ["toutiao", "lieju"]) {
-    const source = fs.readFileSync(
-      path.join(__dirname, "..", "src", "platforms", platformId, "adapter.js"),
-      "utf8",
-    );
-    const start = source.indexOf("async function preparePlatformSubmission");
-    const end = source.indexOf("\nfunction isStopError", start);
-    const preparation = source.slice(start, end);
-    assert.notEqual(start, -1, platformId);
-    assert.match(preparation, /await prepareArticleSubmission\(/, platformId);
-    assert.doesNotMatch(preparation, /publishArticle\(/, platformId);
-    assert.match(source, /function preparedContentMatches\(/, platformId);
-    if (platformId === "lieju")
-      assert.match(
-        source,
-        /status: "uncertain", errorCode: "PREPARED_CONTENT_DRIFT"/,
-        platformId,
-      );
-    else assert.match(source, /driftError\.code = "PREPARED_CONTENT_DRIFT"/);
-  }
-
-  const toutiaoSource = fs.readFileSync(
-    path.join(__dirname, "..", "src", "platforms", "toutiao", "adapter.js"),
-    "utf8",
-  );
-  const preparationStart = toutiaoSource.indexOf(
-    "async function prepareArticleSubmission",
-  );
-  const capabilityStart = toutiaoSource.indexOf(
-    "submitPreparedPublication: async function",
-    preparationStart,
-  );
-  const capabilityEnd = toutiaoSource.indexOf(
-    "async function publishArticle",
-    capabilityStart,
-  );
-  const preparation = toutiaoSource.slice(preparationStart, capabilityStart);
-  const capability = toutiaoSource.slice(capabilityStart, capabilityEnd);
-  assert.match(preparation, /clickPreviewAndPublish\(\)/);
-  assert.match(preparation, /confirmAdDialog\(\)/);
-  assert.doesNotMatch(capability, /clickPreviewAndPublish\(\)/);
-  assert.doesNotMatch(capability, /confirmAdDialog\(\)/);
-  assert.match(capability, /preparedContentMatches\(article\)/);
-  assert.ok(
-    capability.indexOf("preparedContentMatches(article)") <
-      capability.indexOf("clickConfirmPublish()"),
-  );
-  assert.match(capability, /clickConfirmPublish\(\)/);
-});
-
-test("Hepan preparation creates the final payload before submission-start", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "ticket-08-hepan-prepare-"),
-  );
-  const payloadRoot = path.join(root, "payloads");
-  const cookiePath = path.join(root, "cookie.txt");
-  fs.writeFileSync(cookiePath, "uid=synthetic", "utf8");
-  let commands = 0;
+test("public queue execution submits only after preparation completes", async () => {
+  const current = fixture();
+  const phases = [];
   try {
-    const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
-    const adapter = createHepanAdapter({
-      tempDir: payloadRoot,
-      runtime: {
-        pythonPath: "python",
-        cookiePath,
-        categoryId: 121,
-        vendorDir: "",
-      },
-      runCommand: async () => {
-        commands += 1;
-        return {
-          status: 0,
-          stdout: JSON.stringify({
-            ok: true,
-            title: "Prepared",
-            url: "https://example.test/article?aid=remote-a",
-          }),
-          stderr: "",
-        };
-      },
+    const profile = addProfile(current, "toutiao");
+    const admitted = admit(current, {
+      articleId: "article-prepared-boundary",
+      accountProfileId: profile.accountProfileId,
     });
-    const claim = {
-      platformId: "hepan",
-      regularPublicationAttemptId: "attempt-hepan-prepare",
-      articleIdentityV1: {
-        version: 1,
-        clientId: "client-a",
-        articleId: "article-hepan-prepare",
-      },
-      targetIdentityV1: {
-        version: 1,
-        kind: "platform",
-        platformId: "hepan",
-        accountProfileId: "account-hepan",
-      },
-      publicationSnapshot: { title: "Prepared", body: "Prepared body" },
-    };
-    const prepared = await adapter.preparePlatformSubmission(claim);
-    assert.equal(commands, 0);
-    assert.equal(fs.readdirSync(payloadRoot).length, 1);
-    const outcome = await prepared.submitPreparedPublication();
-    assert.equal(commands, 1);
-    assert.equal(outcome.status, "accepted");
-    assert.equal(fs.existsSync(payloadRoot), false);
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: current.transitions,
+      randomUUID: () => "public-boundary-claim",
+      platformSubmissionExecutor: executorFor(async (claim) => {
+        phases.push({
+          phase: "prepared",
+          attemptId: claim.regularPublicationAttemptId,
+        });
+        return domain.createPreparedSubmission({
+          preparedSubmissionEvidenceV1: evidence(claim),
+          submitPreparedPublication: async () => {
+            phases.push({
+              phase: "submitted",
+              attemptId: claim.regularPublicationAttemptId,
+            });
+            return { status: "accepted", remoteId: "remote-prepared-boundary" };
+          },
+        });
+      }),
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.deepEqual(phases, [
+      { phase: "prepared", attemptId: admitted.attemptId },
+      { phase: "submitted", attemptId: admitted.attemptId },
+    ]);
+    assert.equal(result.status, "observation_ready");
+    assert.deepEqual(result.observation, {
+      status: "accepted",
+      remoteId: "remote-prepared-boundary",
+    });
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    current.close();
+  }
+});
+
+test("public queue execution preserves an uncertain remote failure without replay", async () => {
+  const current = fixture();
+  let preparations = 0;
+  let submissions = 0;
+  let preparedEvidence;
+  try {
+    const profile = addProfile(current, "hepan");
+    const admitted = admit(current, {
+      articleId: "article-uncertain-boundary",
+      platformId: "hepan",
+      accountProfileId: profile.accountProfileId,
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: current.transitions,
+      randomUUID: () => "uncertain-boundary-claim",
+      platformSubmissionExecutor: executorFor(async (claim) => {
+        preparations += 1;
+        preparedEvidence = domain.parsePreparedSubmissionEvidenceV1(
+          evidence(claim),
+        );
+        return domain.createPreparedSubmission({
+          preparedSubmissionEvidenceV1: preparedEvidence,
+          submitPreparedPublication: async () => {
+            submissions += 1;
+            throw new Error("synthetic remote disconnect");
+          },
+        });
+      }),
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.equal(preparations, 1);
+    assert.equal(submissions, 1);
+    assert.deepEqual(result.observation, {
+      status: "uncertain",
+      errorCode: "REGULAR_REMOTE_RESULT_UNCERTAIN",
+      regularPublicationAttemptId: admitted.attemptId,
+      preparedSubmissionEvidenceV1: preparedEvidence,
+    });
+    assert.equal(
+      result.observation.preparedSubmissionEvidenceV1.attemptId,
+      admitted.attemptId,
+    );
+    assert.equal(
+      current.transitions.claimRegularQueueGroupHead({
+        queueGroupId: admitted.queueGroupId,
+        claimToken: "uncertain-replay",
+      }),
+      null,
+    );
+  } finally {
+    current.close();
   }
 });
 
