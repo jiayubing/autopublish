@@ -8,6 +8,21 @@ function fail(code, message) {
   return error;
 }
 
+function cleanupStorageStatus(item) {
+  if (!item) return null;
+  if (
+    ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(
+      item.storedStatus,
+    )
+  )
+    return item.storedStatus;
+  return {
+    failed: "failed-cleaned",
+    published: "published-cleaned",
+    cancelled: "cancelled-cleaned",
+  }[item.status] || null;
+}
+
 function createSubmissionActionRecovery(options) {
   const value = options || {};
   if (!value.operationalStore) throw fail("OPERATIONAL_STORE_REQUIRED");
@@ -33,13 +48,8 @@ function createSubmissionActionRecovery(options) {
 
   function resumeItemAction(action, item, operation) {
     const desired =
-      action.action === "cancel"
-        ? "cancelled"
-        : action.action === "cleanupPublishedLocal"
-          ? "published-cleaned"
-          : action.action === "cleanupCancelledLocal"
-            ? "cancelled-cleaned"
-            : "failed-cleaned";
+      action.action === "cancel" ? "cancelled" : cleanupStorageStatus(item);
+    if (!desired) throw fail("SUBMISSION_ACTION_INVALID");
     const before = operation.payload && operation.payload.before;
     const staged = files.operationStagePaths(operation.operationId);
     if (

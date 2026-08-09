@@ -31,18 +31,6 @@ function fixture(options) {
     attemptId: "attempt-15",
     target: { kind: "media", mediaResourceId: "resource-15" },
   });
-  store.commitRemoteOutcome({
-    attemptId: "attempt-15",
-    outcome: {
-      status: "submitted",
-      evidence: {
-        articleId: "article-15",
-        attemptId: "attempt-15",
-        targetKey: "media-resource:resource-15",
-        remoteId: "order-15",
-      },
-    },
-  });
   const databasePath = store.verify().databasePath;
   store.close();
   const snapshot = domain.parseOrderSnapshotV1({
@@ -73,9 +61,43 @@ function fixture(options) {
     remoteCallStartedAt: "2026-08-08T00:00:00.000Z",
   });
   const db = new DatabaseSync(databasePath);
-  db.prepare("UPDATE remote_orders SET payload_json=? WHERE order_id=?").run(
-    JSON.stringify(snapshot),
+  db.prepare(
+    "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=?",
+  ).run("2026-08-08T00:00:00.000Z", "publication-15");
+  db.prepare(
+    "UPDATE publication_attempts SET status='remote_started' WHERE attempt_id=?",
+  ).run("attempt-15");
+  db.prepare(
+    "UPDATE article_active_targets SET state='remote_started',updated_at=? WHERE attempt_id=?",
+  ).run("2026-08-08T00:00:00.000Z", "attempt-15");
+  db.prepare(
+    "UPDATE recovery_intents SET state='resolved',payload_json=?,updated_at=? WHERE attempt_id=?",
+  ).run(
+    JSON.stringify({
+      paidSubmission: { batchItemId: "item-15" },
+      detail: {
+        phase: "order_created",
+        orderCreationAttemptId: "paid-attempt-15",
+      },
+      orderCreationAttemptId: "paid-attempt-15",
+    }),
+    "2026-08-08T00:00:00.000Z",
+    "attempt-15",
+  );
+  db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
     "order-15",
+    "attempt-15",
+    "order-15",
+    JSON.stringify(snapshot),
+    "2026-08-08T00:00:01.000Z",
+  );
+  db.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
+    "order-evidence-15",
+    "attempt-15",
+    "order-15",
+    null,
+    JSON.stringify(snapshot),
+    "2026-08-08T00:00:01.000Z",
   );
   db.prepare(
     "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",

@@ -122,7 +122,7 @@ describe("Hepan publish payload contract", () => {
       const article = (await adapter.parseArticleFiles([{ file: sourceFile, filename: "river.md", fileBaseName: "river" }]))[0];
       const result = await adapter.publishArticle(article);
 
-      assert.equal(result.status, "published");
+      assert.equal(result.status, "accepted");
       assert.equal(calls.length, 1);
       assert.equal(calls[0].args.includes("--article"), false);
       assert.equal(fs.existsSync(tempDir) ? fs.readdirSync(tempDir).length : 0, 0);
@@ -156,7 +156,7 @@ describe("Hepan publish payload contract", () => {
 
       const result = await adapter.publishArticle(article);
 
-      assert.equal(result.status, "published");
+      assert.equal(result.status, "accepted");
       assert.equal(calls.length, 1);
       assert.equal(fs.existsSync(tempDir), false);
     } finally {
@@ -181,7 +181,7 @@ describe("Hepan publish payload contract", () => {
 
       const result = await adapter.publishArticle(article);
 
-      assert.deepEqual(result, { status: "failed", errorCode: "HEPAN_PAYLOAD_JSON_INVALID" });
+      assert.deepEqual(result, { status: "group_blocked", errorCode: "HEPAN_PAYLOAD_JSON_INVALID" });
       assert.equal(fs.existsSync(path.join(root, "tmp")), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -192,7 +192,7 @@ describe("Hepan publish payload contract", () => {
     const scenarios = [
       {
         response: { status: 1, stdout: JSON.stringify({ ok: false, errorCode: "HEPAN_PAYLOAD_RUNTIME_FAILED", error: "Hepan payload runtime failed" }) },
-        expected: { status: "failed", errorCode: "HEPAN_PAYLOAD_RUNTIME_FAILED" }
+        expected: { status: "group_blocked", errorCode: "HEPAN_PAYLOAD_RUNTIME_FAILED" }
       },
       {
         response: { status: 1, stdout: JSON.stringify({ ok: false, errorCode: "HEPAN_REMOTE_REQUEST_FAILED", error: "Hepan remote request failed" }) },

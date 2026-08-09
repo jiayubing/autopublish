@@ -38,21 +38,6 @@ function createOrder(store, suffix, status) {
     attemptId: `attempt-${suffix}`,
     target: { kind: "media", mediaResourceId: `resource-${suffix}` },
   });
-  store.commitRemoteOutcome({
-    attemptId: `attempt-${suffix}`,
-    outcome: {
-      status,
-      evidence: {
-        articleId: `article-${suffix}`,
-        attemptId: `attempt-${suffix}`,
-        targetKey: `media-resource:resource-${suffix}`,
-        remoteId: `order-${suffix}`,
-        ...(status === "published"
-          ? { remoteUrl: `https://media.example.test/articles/order-${suffix}` }
-          : {}),
-      },
-    },
-  });
   const snapshot = domain.parseOrderSnapshotV1({
     version: 1,
     orderIdentityV1: { version: 1, orderId: `order-${suffix}` },
@@ -80,10 +65,49 @@ function createOrder(store, suffix, status) {
     ),
     remoteCallStartedAt: "2026-08-08T00:00:00.000Z",
   });
+  const stamp = "2026-08-08T00:00:01.000Z";
   const db = new DatabaseSync(store.databasePath);
-  db.prepare("UPDATE remote_orders SET payload_json=? WHERE order_id=?").run(
-    JSON.stringify(snapshot),
+  db.prepare(
+    "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=?",
+  ).run(status, stamp, `publication-${suffix}`);
+  db.prepare(
+    "UPDATE publication_attempts SET status=? WHERE attempt_id=?",
+  ).run(status, `attempt-${suffix}`);
+  if (status === "failed")
+    db.prepare("DELETE FROM article_active_targets WHERE attempt_id=?").run(
+      `attempt-${suffix}`,
+    );
+  else
+    db.prepare(
+      "UPDATE article_active_targets SET state=?,updated_at=? WHERE attempt_id=?",
+    ).run(status, stamp, `attempt-${suffix}`);
+  db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
     `order-${suffix}`,
+    `attempt-${suffix}`,
+    `order-${suffix}`,
+    JSON.stringify(snapshot),
+    stamp,
+  );
+  db.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
+    `order-evidence-${suffix}`,
+    `attempt-${suffix}`,
+    `order-${suffix}`,
+    null,
+    JSON.stringify({ remoteId: `order-${suffix}` }),
+    stamp,
+  );
+  db.prepare(
+    "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
+  ).run(
+    `attempt-${suffix}`,
+    snapshot.submittedTitle,
+    `${suffix}.md`,
+    snapshot.mediaName,
+    snapshot.quotedPrice,
+    stamp,
+    `resource-${suffix}`,
+    snapshot.estimatedTotal,
+    snapshot.systemSubmissionCode,
   );
   db.prepare("INSERT INTO submission_batches VALUES(?,?,?,?,?)").run(
     `batch-${suffix}`,
@@ -158,12 +182,15 @@ function orderMap(store) {
 test("canonical outcomes never backfill a supplier observation", () => {
   const store = openStore(temporaryWorkspace("canonical-no-supplier"));
   try {
-    for (const status of ["submitted", "failed", "uncertain"])
+    for (const status of ["remote_started", "failed", "uncertain"])
       createOrder(store, `canonical-${status}`, status);
     const views = orderMap(store);
-    for (const status of ["submitted", "failed", "uncertain"]) {
+    for (const status of ["remote_started", "failed", "uncertain"]) {
       const order = views.get(`order-canonical-${status}`);
-      assert.equal(order.publicationStatus, status);
+      assert.equal(
+        order.publicationStatus,
+        status === "remote_started" ? "paid_processing" : "manual_check",
+      );
       assert.equal(order.supplierStatusCode, "");
       assert.equal(order.supplierObservedAt, null);
     }
@@ -180,7 +207,7 @@ test("supplier responses preserve 0/1/2/4/9 while published and rejected observa
   const store = openStore(temporaryWorkspace("supplier-corpus"));
   try {
     for (const code of ["0", "1", "2", "4", "9"]) {
-      const orderId = createOrder(store, `supplier-${code}`, "submitted");
+      const orderId = createOrder(store, `supplier-${code}`, "remote_started");
       await observe(store, orderId, {
         status: Number(code),
         ...(code === "2"
@@ -200,10 +227,10 @@ test("supplier responses preserve 0/1/2/4/9 while published and rejected observa
         code === "2"
           ? "published"
           : code === "4"
-            ? "failed"
-            : code === "9"
-              ? "uncertain"
-              : "submitted",
+            ? "manual_check"
+          : code === "9"
+              ? "manual_check"
+              : "paid_processing",
       );
     }
   } finally {
@@ -214,16 +241,16 @@ test("supplier responses preserve 0/1/2/4/9 while published and rejected observa
 test("supplier status 2 promotes every retained order fact through the Ticket 15 success primitive", async () => {
   const store = openStore(temporaryWorkspace("supplier-promotion"));
   try {
-    for (const status of ["submitted", "uncertain", "failed"])
+    for (const status of ["remote_started", "uncertain", "failed"])
       createOrder(store, `evidence-${status}`, status);
-    for (const status of ["submitted", "uncertain", "failed"])
+    for (const status of ["remote_started", "uncertain", "failed"])
       await observe(store, `order-evidence-${status}`, {
         status: 2,
         order_url: `https://publisher.example/${status}`,
       });
     const views = orderMap(store);
     assert.equal(
-      views.get("order-evidence-submitted").publicationStatus,
+      views.get("order-evidence-remote_started").publicationStatus,
       "published",
     );
     assert.equal(
@@ -241,14 +268,14 @@ test("supplier status 2 promotes every retained order fact through the Ticket 15
   }
 });
 
-test("non-success supplier observations cannot promote submitted work", async () => {
+test("non-success supplier observations cannot promote remote-started work", async () => {
   const store = openStore(temporaryWorkspace("published-monotonic"));
   try {
-    const orderId = createOrder(store, "published-monotonic", "submitted");
+    const orderId = createOrder(store, "published-monotonic", "remote_started");
     for (const code of [0, 1]) {
       await observe(store, orderId, { status: code });
       const order = orderMap(store).get(orderId);
-      assert.equal(order.publicationStatus, "submitted");
+      assert.equal(order.publicationStatus, "paid_processing");
       assert.equal(order.supplierStatusCode, String(code));
     }
     await assert.rejects(() => observe(store, orderId, { status: 0 }), {
@@ -264,7 +291,7 @@ test("published URL evidence remains openable after a later aftercare observatio
   const store = openStore(temporaryWorkspace("published-url-2-to-9"));
   const opened = [];
   try {
-    const orderId = createOrder(store, "published-url-2-to-9", "submitted");
+    const orderId = createOrder(store, "published-url-2-to-9", "remote_started");
     const url = "https://publisher.example/article/persistent-evidence";
     await observe(store, orderId, { status: 2, order_url: url });
     await observe(store, orderId, { status: 9 });
@@ -288,7 +315,7 @@ test("published success and URL evidence win over every later supplier status", 
   );
   try {
     for (const code of [0, 1, 4, 9]) {
-      const orderId = createOrder(store, `published-url-${code}`, "submitted");
+      const orderId = createOrder(store, `published-url-${code}`, "remote_started");
       const url = `https://publisher.example/article/persistent-${code}`;
       await observe(store, orderId, { status: 2, order_url: url });
       await observe(store, orderId, { status: code });
@@ -321,7 +348,7 @@ test("published success and URL evidence win over every later supplier status", 
 test("supplier observation survives restart, backup, and restored temporary SQLite", async () => {
   const workspaceRoot = temporaryWorkspace("supplier-persistence");
   let store = openStore(workspaceRoot);
-  const orderId = createOrder(store, "persistent", "submitted");
+  const orderId = createOrder(store, "persistent", "remote_started");
   await observe(store, orderId, { status: 1 });
   const backupPath = path.join(workspaceRoot, "supplier.backup.sqlite");
   store.backup(backupPath);
@@ -334,7 +361,7 @@ test("supplier observation survives restart, backup, and restored temporary SQLi
         orderMap(store).get(orderId).publicationStatus,
         orderMap(store).get(orderId).supplierStatusCode,
       ],
-      ["submitted", "1"],
+      ["paid_processing", "1"],
     );
   } finally {
     store.close();
@@ -353,7 +380,7 @@ test("supplier observation survives restart, backup, and restored temporary SQLi
     const order = orderMap(restored).get(orderId);
     assert.deepEqual(
       [order.publicationStatus, order.supplierStatusCode],
-      ["submitted", "1"],
+      ["paid_processing", "1"],
     );
   } finally {
     restored.close();
@@ -363,7 +390,7 @@ test("supplier observation survives restart, backup, and restored temporary SQLi
 test("published supplier URL survives restart, backup, and restore", async () => {
   const workspaceRoot = temporaryWorkspace("published-url-persistence");
   let store = openStore(workspaceRoot);
-  const orderId = createOrder(store, "published-url-persistence", "submitted");
+  const orderId = createOrder(store, "published-url-persistence", "remote_started");
   const url = "https://publisher.example/article/persistent-after-restore";
   await observe(store, orderId, { status: 2, order_url: url });
   await observe(store, orderId, { status: 9 });
@@ -412,7 +439,7 @@ test("legacy remote-evidence URLs cannot manufacture an openable Ticket 15 publi
   const cases = [
     [
       "unpublished",
-      "submitted",
+      "remote_started",
       "https://publisher.example/article/unpublished",
       "MEDIA_ORDER_NOT_PUBLISHED",
     ],
@@ -455,7 +482,7 @@ test("legacy remote-evidence URLs cannot manufacture an openable Ticket 15 publi
     ],
   ];
   for (const [suffix] of cases)
-    createOrder(store, `fail-closed-${suffix}`, "submitted");
+    createOrder(store, `fail-closed-${suffix}`, "remote_started");
   const databasePath = store.verify().databasePath;
   store.close();
 

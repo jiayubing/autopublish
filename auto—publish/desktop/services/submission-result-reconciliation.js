@@ -6,6 +6,21 @@ function fail(code, message) {
   return error;
 }
 
+function cleanupStorageStatus(item) {
+  if (!item) return null;
+  if (
+    ["failed-cleaned", "published-cleaned", "cancelled-cleaned"].includes(
+      item.storedStatus,
+    )
+  )
+    return item.storedStatus;
+  return {
+    failed: "failed-cleaned",
+    published: "published-cleaned",
+    cancelled: "cancelled-cleaned",
+  }[item.status] || null;
+}
+
 function createSubmissionResultReconciliation(options) {
   const value = options || {};
   if (!value.operationalStore) throw fail("OPERATIONAL_STORE_REQUIRED");
@@ -78,11 +93,8 @@ function createSubmissionResultReconciliation(options) {
     const terminal =
       action.action === "cancel"
         ? item.storedStatus === "cancelled"
-        : action.action === "cleanup"
-          ? item.storedStatus === "failed-cleaned"
-          : action.action === "cleanupPublishedLocal"
-            ? item.storedStatus === "published-cleaned"
-            : item.storedStatus === "cancelled-cleaned";
+        : action.action === "cleanup" &&
+          item.storedStatus === cleanupStorageStatus(item);
     if (terminal) {
       if (operation && operation.state === "state_applied") {
         try {
@@ -136,11 +148,10 @@ function createSubmissionResultReconciliation(options) {
     const expectedStatus =
       action.action === "cancel"
         ? "queued"
-        : action.action === "cleanup"
-          ? "failed"
-          : action.action === "cleanupPublishedLocal"
-            ? "published"
-            : "cancelled";
+        : action.action === "cleanup" &&
+            ["failed", "published", "cancelled"].includes(item.status)
+          ? item.storedStatus
+          : null;
     if (
       item.storedStatus === expectedStatus &&
       ((operation && operation.expectedFingerprint === expectedFingerprint) ||

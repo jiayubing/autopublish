@@ -148,3 +148,25 @@ test("destructive execution requires confirmation and preserves only preview ide
   });
   assert.equal(executed.ok, true);
 });
+
+test("residue public contracts reject retired cleanup vocabulary", () => {
+  const previewFixture = submissionContractFixtures.find(
+    (entry) => entry.channel === "content:preview-trashed-article-queue-residue",
+  );
+  const contract = registry.byChannel(previewFixture.channel);
+  const retiredAction = structuredClone(previewFixture.result);
+  retiredAction.items[0].repairAction = "cleanupPublishedLocal";
+  assert.throws(
+    () => registry.success(contract, retiredAction),
+    (error) =>
+      ["IPC_RESULT_INVALID", "IPC_UNKNOWN_FIELD"].includes(error.code),
+  );
+
+  const retiredResult = structuredClone(previewFixture.result);
+  retiredResult.items[0].resultStatus = "published-cleaned";
+  assert.throws(
+    () => registry.success(contract, retiredResult),
+    (error) =>
+      ["IPC_RESULT_INVALID", "IPC_UNKNOWN_FIELD"].includes(error.code),
+  );
+});

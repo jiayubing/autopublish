@@ -16,9 +16,9 @@ function target(profile) {
     accountProfileId: profile.accountProfileId,
   };
 }
-function submittedOutcome(profile, attemptId, articleId) {
+function uncertainOutcome(profile, attemptId, articleId) {
   return {
-    status: "submitted",
+    status: "uncertain",
     evidence: {
       articleId,
       attemptId,
@@ -38,13 +38,13 @@ function reserveAndSubmit(store, profile, value) {
   });
   store.commitRemoteOutcome({
     attemptId: value.attemptId,
-    outcome: submittedOutcome(profile, value.attemptId, value.articleId),
+    outcome: uncertainOutcome(profile, value.attemptId, value.articleId),
     batchItemId: value.batchItemId,
     postProcessingPayload: value.payload,
   });
 }
 
-test("generic submitted outcomes do not create retired publication-success archive jobs", () => {
+test("generic uncertain outcomes do not create publication-success archive jobs", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-archive-"));
   const input = path.join(root, "input");
   const published = path.join(root, "published");
@@ -102,7 +102,7 @@ test("generic submitted outcomes do not create retired publication-success archi
   }
 });
 
-test("generic submitted outcomes do not manufacture post-processing attention", () => {
+test("generic uncertain outcomes do not manufacture post-processing attention", () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "phase-03-post-attention-"),
   );

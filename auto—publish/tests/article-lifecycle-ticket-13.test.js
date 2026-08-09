@@ -377,7 +377,7 @@ test("success rejects forged frozen order evidence before writing an order fact"
       value.transitions.listPaidSubmissionBatchSnapshots({
         batchId: admitted.batchId,
       })[0].items[0].status,
-      "submitting",
+      "remote_started",
     );
   } finally {
     value.close();
@@ -534,7 +534,7 @@ test("paid execution creates orders one at a time and completes the confirmed ba
     });
     orchestrator.initializePaused();
     const result = await orchestrator.startBatch({ batchId: admitted.batchId });
-    assert.equal(result.status, "submitted");
+    assert.equal(result.status, "order_created");
     assert.equal(calls.length, 2);
     assert.equal(provider.maximumInFlight(), 1);
     assert.deepEqual(
@@ -694,7 +694,7 @@ test("success and rejection outcome write-point failures never advance the paid 
         const snapshot = value.transitions.listPaidSubmissionBatchSnapshots({
           batchId: admitted.batchId,
         })[0];
-        assert.equal(snapshot.items[0].status, "submitting");
+        assert.equal(snapshot.items[0].status, "remote_started");
         assert.equal(snapshot.items[1].status, "queued");
         assert.equal(snapshot.paused, false);
       } finally {
@@ -817,7 +817,7 @@ test("article/resource rejection continues the batch while account/service rejec
       }),
     });
     const result = await orchestrator.startBatch({ batchId: admitted.batchId });
-    assert.equal(result.status, "submitted");
+    assert.equal(result.status, "order_created");
     assert.equal(calls, 2);
     const facts = value.store.listArticleLifecycleFacts({
       articleIds: ["article-a"],
@@ -896,7 +896,7 @@ test("pause waits for the current order request and prevents the next claim", as
       batchId: admitted.batchId,
     })[0];
     assert.equal(
-      snapshot.items.filter((item) => item.status === "submitting").length,
+      snapshot.items.filter((item) => item.status === "remote_started").length,
       1,
     );
     assert.equal(
@@ -908,7 +908,7 @@ test("pause waits for the current order request and prevents the next claim", as
       orderId: "order-paused-after-current",
     });
     const result = await running;
-    assert.equal(result.status, "submitted");
+    assert.equal(result.status, "order_created");
   } finally {
     value.close();
   }

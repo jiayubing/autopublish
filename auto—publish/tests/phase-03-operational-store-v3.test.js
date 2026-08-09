@@ -48,6 +48,66 @@ function snapshotSchema(databasePath) {
   }
 }
 
+function seedRemoteStartedMediaOrder(databasePath, input) {
+  const value = input || {};
+  const stamp = "2026-08-08T00:00:01.000Z";
+  const database = new DatabaseSync(databasePath);
+  try {
+    database
+      .prepare(
+        "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=?",
+      )
+      .run(stamp, value.publicationId);
+    database
+      .prepare(
+        "UPDATE publication_attempts SET status='remote_started' WHERE attempt_id=?",
+      )
+      .run(value.attemptId);
+    database
+      .prepare(
+        "UPDATE article_active_targets SET state='remote_started',updated_at=? WHERE attempt_id=?",
+      )
+      .run(stamp, value.attemptId);
+    database.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
+      value.orderId,
+      value.attemptId,
+      value.orderId,
+      JSON.stringify({
+        articleId: value.articleId,
+        attemptId: value.attemptId,
+        targetKey: `media-resource:${value.mediaResourceId}`,
+        remoteId: value.orderId,
+      }),
+      stamp,
+    );
+    database.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
+      `order-evidence-${value.orderId}`,
+      value.attemptId,
+      value.orderId,
+      null,
+      JSON.stringify({ remoteId: value.orderId }),
+      stamp,
+    );
+    database
+      .prepare(
+        "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        value.attemptId,
+        value.titleSnapshot,
+        value.filename,
+        value.resourceNameSnapshot,
+        value.quotedPrice,
+        stamp,
+        value.mediaResourceId,
+        null,
+        null,
+      );
+  } finally {
+    database.close();
+  }
+}
+
 test("schema v2 upgrades through v3 to v4 with the exact order display snapshot contract and restarts idempotently", () => {
   const workspaceRoot = workspace();
   const databasePath = downgradeToV2(workspaceRoot);
@@ -170,18 +230,16 @@ test("v3 backup and restored temporary workspace preserve the bounded order snap
     attemptId: "attempt-v3",
     target: { kind: "media", mediaResourceId: "resource-v3" },
   });
-  store.commitRemoteOutcome({
+  seedRemoteStartedMediaOrder(store.verify().databasePath, {
+    articleId: "article-v3",
+    publicationId: "publication-v3",
     attemptId: "attempt-v3",
-    batchItemId: batch.items[0].itemId,
-    outcome: {
-      status: "submitted",
-      evidence: {
-        articleId: "article-v3",
-        attemptId: "attempt-v3",
-        targetKey: "media-resource:resource-v3",
-        remoteId: "order-v3",
-      },
-    },
+    orderId: "order-v3",
+    mediaResourceId: "resource-v3",
+    titleSnapshot: "不可变标题",
+    filename: "article-v3.md",
+    resourceNameSnapshot: "媒体V3",
+    quotedPrice: 36.5,
   });
   const backupPath = path.join(workspaceRoot, "operations-v3.backup.sqlite");
   assert.equal(store.backup(backupPath).schemaVersion, 5);
@@ -259,7 +317,7 @@ test("commitRemoteOutcome rejects a batch item from another article and target w
           attemptId: "attempt-a",
           batchItemId: batch.items[1].itemId,
           outcome: {
-            status: "submitted",
+            status: "failed",
             evidence: {
               articleId: "article-a",
               attemptId: "attempt-a",
@@ -334,7 +392,7 @@ test("commitRemoteOutcome rejects another batch item for the same article and ta
           attemptId: "attempt-owner-a",
           batchItemId: second.items[0].itemId,
           outcome: {
-            status: "submitted",
+            status: "failed",
             evidence: {
               articleId: "article-shared",
               attemptId: "attempt-owner-a",

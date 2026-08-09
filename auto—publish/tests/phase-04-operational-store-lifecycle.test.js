@@ -85,6 +85,61 @@ function platformTarget(accountProfileId) {
   return { kind: "platform", platformId: "toutiao", accountProfileId };
 }
 
+function seedRemoteStartedMediaOrder(databasePath, input) {
+  const value = input || {};
+  const stamp = "2026-08-08T00:00:01.000Z";
+  const database = new DatabaseSync(databasePath);
+  try {
+    database
+      .prepare(
+        "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=?",
+      )
+      .run(stamp, value.publicationId);
+    database
+      .prepare(
+        "UPDATE publication_attempts SET status='remote_started' WHERE attempt_id=?",
+      )
+      .run(value.attemptId);
+    database
+      .prepare(
+        "UPDATE article_active_targets SET state='remote_started',updated_at=? WHERE attempt_id=?",
+      )
+      .run(stamp, value.attemptId);
+    database.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
+      value.orderId,
+      value.attemptId,
+      value.orderId,
+      JSON.stringify({ remoteId: value.orderId }),
+      stamp,
+    );
+    database.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
+      `order-evidence-${value.orderId}`,
+      value.attemptId,
+      value.orderId,
+      null,
+      JSON.stringify({ remoteId: value.orderId }),
+      stamp,
+    );
+    database
+      .prepare(
+        "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        value.attemptId,
+        value.titleSnapshot,
+        value.filename,
+        value.resourceNameSnapshot,
+        value.quotedPrice,
+        stamp,
+        value.mediaResourceId,
+        null,
+        null,
+      );
+  } finally {
+    database.close();
+  }
+}
+
 test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiable", () => {
   for (const point of [
     "before-v4",
@@ -146,18 +201,15 @@ test("v4 order snapshot extension preserves rows from a real v3 database", () =>
     attemptId: "v3-order-attempt",
     target: { kind: "media", mediaResourceId: "v3-resource" },
   });
-  store.commitRemoteOutcome({
+  seedRemoteStartedMediaOrder(store.verify().databasePath, {
+    publicationId: "v3-order-publication",
     attemptId: "v3-order-attempt",
-    batchItemId: batch.items[0].itemId,
-    outcome: {
-      status: "submitted",
-      evidence: {
-        articleId: "v3-order-article",
-        attemptId: "v3-order-attempt",
-        targetKey: "media-resource:v3-resource",
-        remoteId: "v3-order",
-      },
-    },
+    orderId: "v3-order",
+    mediaResourceId: "v3-resource",
+    titleSnapshot: "旧标题",
+    filename: "old.md",
+    resourceNameSnapshot: "旧媒体",
+    quotedPrice: 12,
   });
   const databasePath = store.databasePath;
   store.close();
@@ -301,14 +353,11 @@ test("media remote order ID conflicts roll back another attempt while same-attem
   const root = workspace();
   const store = createOperationalStore({ workspaceRoot: root });
   try {
-    const firstOutcome = {
-      status: "submitted",
-      evidence: {
-        articleId: "order-conflict-first-article",
-        attemptId: "order-conflict-first-attempt",
-        targetKey: "media-resource:order-conflict-first-resource",
-        remoteId: "shared-order-id",
-      },
+    const firstEvidence = {
+      articleId: "order-conflict-first-article",
+      attemptId: "order-conflict-first-attempt",
+      targetKey: "media-resource:order-conflict-first-resource",
+      remoteId: "shared-order-id",
     };
     store.reservePublicationTarget({
       articleId: "order-conflict-first-article",
@@ -319,27 +368,21 @@ test("media remote order ID conflicts roll back another attempt while same-attem
         mediaResourceId: "order-conflict-first-resource",
       },
     });
-    assert.equal(
-      store.commitRemoteOutcome({
+    assert.doesNotThrow(() =>
+      store.attachRemoteOrderEvidence({
         attemptId: "order-conflict-first-attempt",
-        outcome: firstOutcome,
-      }).status,
-      "submitted",
+        orderId: "shared-order-id",
+        remoteId: "shared-order-id",
+        evidence: firstEvidence,
+      }),
     );
     assert.doesNotThrow(() =>
       store.attachRemoteOrderEvidence({
         attemptId: "order-conflict-first-attempt",
         orderId: "shared-order-id",
         remoteId: "shared-order-id",
-        evidence: {},
+        evidence: firstEvidence,
       }),
-    );
-    assert.equal(
-      store.commitRemoteOutcome({
-        attemptId: "order-conflict-first-attempt",
-        outcome: firstOutcome,
-      }).status,
-      "submitted",
     );
 
     store.reservePublicationTarget({
@@ -353,16 +396,15 @@ test("media remote order ID conflicts roll back another attempt while same-attem
     });
     assert.throws(
       () =>
-        store.commitRemoteOutcome({
+        store.attachRemoteOrderEvidence({
           attemptId: "order-conflict-second-attempt",
-          outcome: {
-            status: "submitted",
-            evidence: {
-              articleId: "order-conflict-second-article",
-              attemptId: "order-conflict-second-attempt",
-              targetKey: "media-resource:order-conflict-second-resource",
-              remoteId: "shared-order-id",
-            },
+          orderId: "shared-order-id",
+          remoteId: "shared-order-id",
+          evidence: {
+            articleId: "order-conflict-second-article",
+            attemptId: "order-conflict-second-attempt",
+            targetKey: "media-resource:order-conflict-second-resource",
+            remoteId: "shared-order-id",
           },
         }),
       { code: "OPERATIONAL_ORDER_CONFLICT" },

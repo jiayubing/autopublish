@@ -234,12 +234,7 @@ export interface ArticleTrashResult {
 
 export interface TrashedArticleQueueResidueItem extends ArticleTrashImpactItem {
   sourceArticleState: "trashed";
-  repairAction?:
-    | "cancel"
-    | "cleanup"
-    | "cleanupPublishedLocal"
-    | "cleanupCancelledLocal"
-    | null;
+  repairAction?: "cancel" | "cleanup" | null;
 }
 
 export interface TrashedArticleQueueResiduePreview {

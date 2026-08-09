@@ -37,6 +37,49 @@ const MIGRATION_ONLY_ALLOWLIST = Object.freeze([
   "scripts/migrate-operational-store-v1.js",
 ]);
 
+const KEEP_STORAGE_COMPATIBILITY_ONLY_ALLOWLIST = Object.freeze([
+  "src/infrastructure/operational-store/internal/operational-store-schema.js",
+  "src/infrastructure/operational-store/internal/operational-store-schema-v4.js",
+]);
+
+const INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST = Object.freeze([
+  "desktop/services/submission-action-policy.js",
+  "desktop/services/submission-action-recovery.js",
+  "desktop/services/submission-item-projection.js",
+  "desktop/services/submission-result-reconciliation.js",
+  "src/content/article-lifecycle-facts.js",
+  "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",
+  "src/infrastructure/operational-store/internal/operational-store-submission-aggregate.js",
+]);
+
+const RETIRED_PUBLIC_RESIDUE_VOCABULARY = Object.freeze([
+  "cleanupPublishedLocal",
+  "cleanupCancelledLocal",
+  "published-cleaned",
+  "cancelled-cleaned",
+  "failed-cleaned",
+]);
+
+const RETIRED_RUNTIME_STATUS_LITERALS = Object.freeze([
+  "submitting",
+  "submitted",
+]);
+
+const RETIRED_INTERNAL_MAINTENANCE_LITERALS = Object.freeze([
+  "cleanupPublishedLocal",
+  "cleanupCancelledLocal",
+  "published-cleaned",
+  "cancelled-cleaned",
+  "failed-cleaned",
+]);
+
+const RUNTIME_SOURCE_ROOTS = Object.freeze([
+  "desktop",
+  "src",
+  "media-workbench/src",
+]);
+
 const NORMAL_COMPOSITION_FILES = Object.freeze([
   "desktop/main.js",
   "desktop/preload.js",
@@ -145,15 +188,130 @@ function assertResultRejects(contract, payload, label) {
   );
 }
 
+function tokenPattern(token) {
+  return new RegExp(`\\b${token.replace(/[.*+?^${}()|[\\]\\]/g, "\\\\$&")}\\b`);
+}
+
+function sourceTokenMatches(files, token, wordBoundary) {
+  const pattern = wordBoundary ? tokenPattern(token) : null;
+  return files.flatMap((filename) => {
+    const source = fs.readFileSync(filename, "utf8");
+    if (pattern ? !pattern.test(source) : !source.includes(token)) return [];
+    return [{ file: relative(filename), token }];
+  });
+}
+
+function assertAllowlistFilesExist(allowlist, label) {
+  const missing = allowlist.filter(
+    (entry) => !fs.existsSync(path.join(ROOT, entry)),
+  );
+  if (missing.length)
+    throw absenceError(
+      "TICKET_24_E_COMPATIBILITY_ALLOWLIST_INVALID",
+      `${label} compatibility owner is missing`,
+      { missing },
+    );
+}
+
+function verifyPublicResidueVocabularyAbsence() {
+  const files = [
+    ...sourceFilesAt(["desktop/ipc", "media-workbench/src"]),
+    ...sourceFilesAt(["desktop/preload.js"]),
+  ];
+  const matches = RETIRED_PUBLIC_RESIDUE_VOCABULARY.flatMap((token) =>
+    sourceTokenMatches(files, token, false),
+  );
+  if (matches.length)
+    throw absenceError(
+      "TICKET_24_E_PUBLIC_RESIDUE_VOCABULARY_PRESENT",
+      "retired residue vocabulary entered a public IPC or Renderer surface",
+      { matches },
+    );
+  return {
+    checkedFiles: files.length,
+    checkedTokens: RETIRED_PUBLIC_RESIDUE_VOCABULARY.length,
+    sourceMatches: 0,
+  };
+}
+
+function verifyExactLegacyRuntimeBoundary() {
+  assertAllowlistFilesExist(
+    KEEP_STORAGE_COMPATIBILITY_ONLY_ALLOWLIST,
+    "storage",
+  );
+  assertAllowlistFilesExist(MIGRATION_ONLY_ALLOWLIST, "migration");
+  assertAllowlistFilesExist(
+    INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST,
+    "internal maintenance",
+  );
+
+  const files = sourceFilesAt(RUNTIME_SOURCE_ROOTS);
+  const storageAllowed = new Set(KEEP_STORAGE_COMPATIBILITY_ONLY_ALLOWLIST);
+  const migrationAllowed = new Set(MIGRATION_ONLY_ALLOWLIST);
+  const maintenanceAllowed = new Set(
+    INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST,
+  );
+  const forbiddenRuntimeStatuses = [];
+  const forbiddenMaintenanceLiterals = [];
+  for (const token of RETIRED_RUNTIME_STATUS_LITERALS) {
+    for (const match of sourceTokenMatches(files, token, true)) {
+      if (!storageAllowed.has(match.file) && !migrationAllowed.has(match.file))
+        forbiddenRuntimeStatuses.push(match);
+    }
+  }
+  for (const token of RETIRED_INTERNAL_MAINTENANCE_LITERALS) {
+    for (const match of sourceTokenMatches(files, token, false)) {
+      if (!maintenanceAllowed.has(match.file))
+        forbiddenMaintenanceLiterals.push(match);
+    }
+  }
+  if (forbiddenRuntimeStatuses.length || forbiddenMaintenanceLiterals.length)
+    throw absenceError(
+      "TICKET_24_E_LEGACY_RUNTIME_BOUNDARY_PRESENT",
+      "retired runtime vocabulary escaped the exact compatibility boundary",
+      { forbiddenRuntimeStatuses, forbiddenMaintenanceLiterals },
+    );
+  return {
+    classification: {
+      KEEP_STORAGE_COMPATIBILITY_ONLY:
+        KEEP_STORAGE_COMPATIBILITY_ONLY_ALLOWLIST,
+      KEEP_MIGRATION_ONLY: MIGRATION_ONLY_ALLOWLIST,
+      KEEP_INTERNAL_HISTORICAL_MAINTENANCE:
+        INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST,
+    },
+    checkedFiles: files.length,
+    forbiddenRuntimeStatuses: 0,
+    forbiddenMaintenanceLiterals: 0,
+  };
+}
+
 function verifyPublicDtoAbsence() {
   const preview = productionIpcRegistry.byChannel(
     "content:preview-article-removal-impact",
   );
   const commit = productionIpcRegistry.byChannel("content:trash-articles");
-  if (!preview || !commit)
+  const residuePreview = productionIpcRegistry.byChannel(
+    "content:preview-trashed-article-queue-residue",
+  );
+  const residueCleanup = productionIpcRegistry.byChannel(
+    "content:cleanup-trashed-article-queue-residue",
+  );
+  if (!preview || !commit || !residuePreview || !residueCleanup)
     throw absenceError(
       "TICKET_24_E_DTO_OWNER_MISSING",
       "current article removal DTO owner is not registered",
+      {
+        missing: [
+          !preview ? "content:preview-article-removal-impact" : null,
+          !commit ? "content:trash-articles" : null,
+          !residuePreview
+            ? "content:preview-trashed-article-queue-residue"
+            : null,
+          !residueCleanup
+            ? "content:cleanup-trashed-article-queue-residue"
+            : null,
+        ].filter(Boolean),
+      },
     );
 
   const selection = { clientId: "client-24-e", articleId: "article-24-e" };
@@ -190,7 +348,43 @@ function verifyPublicDtoAbsence() {
     { articles: [] },
     "content commit result articles",
   );
-  return { checkedRequests: 3, checkedResults: 2 };
+  assertResultRejects(
+    residuePreview,
+    {
+      items: [
+        {
+          status: "published",
+          reasonCode: "SOURCE_ARTICLE_TRASHED",
+          repairAction: "cleanupPublishedLocal",
+        },
+      ],
+      cleanableItems: [],
+      reportedItems: [],
+      cleanableCount: 0,
+      reportedCount: 0,
+    },
+    "residue preview retired action",
+  );
+  assertResultRejects(
+    residueCleanup,
+    {
+      status: "completed",
+      cleanedCount: 1,
+      failedCount: 0,
+      remainingCount: 0,
+      items: [
+        {
+          status: "cleaned",
+          reasonCode: null,
+          action: "cleanupCancelledLocal",
+          resultStatus: "cancelled-cleaned",
+        },
+      ],
+      remainingItems: [],
+    },
+    "residue cleanup retired result",
+  );
+  return { checkedRequests: 3, checkedResults: 4 };
 }
 
 function verifyIpcAndRendererMethodAbsence() {
@@ -312,6 +506,8 @@ function verifyTicket24EAbsence() {
   const layers = {
     productionCapability: assertRetiredCapabilitiesAbsent(),
     publicDto: verifyPublicDtoAbsence(),
+    publicResidueVocabulary: verifyPublicResidueVocabularyAbsence(),
+    legacyRuntimeBoundary: verifyExactLegacyRuntimeBoundary(),
     ipcChannel: verifyIpcAndRendererMethodAbsence(),
     extensionSeam: verifyDeadExportAbsence(),
     rendererActionUi: verifyRendererAbsence(),

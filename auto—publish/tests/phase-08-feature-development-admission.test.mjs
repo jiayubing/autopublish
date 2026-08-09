@@ -129,13 +129,12 @@ test("admission: a fake platform is isolated to a Publisher adapter and registry
         publish: async (input) => {
           calls.push(input.target.platformId);
           return {
-            status: "submitted",
-            evidence: {
-              articleId: input.articleId,
-              attemptId: input.attemptId,
-              targetKey: `platform:admission-fake-platform:account:${profile.accountProfileId}`,
-              accountProfileId: profile.accountProfileId,
-              remoteId: "admission-remote-1",
+            status: "uncertain",
+            error: {
+              code: "ADMISSION_FIXTURE_UNCERTAIN",
+              category: "transport",
+              retryability: "manual-check",
+              userMessage: "Admission fixture outcome is uncertain",
             },
           };
         },
@@ -166,7 +165,7 @@ test("admission: a fake platform is isolated to a Publisher adapter and registry
       body: "Fixture only",
     });
 
-    assert.equal(result.status, "submitted");
+    assert.equal(result.status, "uncertain");
     assert.deepEqual(calls, ["admission-fake-platform"]);
     assert.equal(
       store.listPublicationRecords({ articleIds: ["article-admission-1"] })

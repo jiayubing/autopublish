@@ -34,13 +34,9 @@ function createSubmissionCleanup(options) {
         const action =
           item.status === "queued"
             ? "cancel"
-            : item.status === "failed"
+            : ["failed", "published", "cancelled"].includes(item.status)
               ? "cleanup"
-              : item.status === "published"
-                ? "cleanupPublishedLocal"
-                : item.status === "cancelled"
-                  ? "cleanupCancelledLocal"
-                  : null;
+              : null;
         const checked = action
           ? policy.evaluateItemAction(
               Object.assign({}, projection.publicItem(item), { action }),
@@ -79,7 +75,7 @@ function createSubmissionCleanup(options) {
           reasonCode: item.reasonCode || "RESIDUE_NOT_CLEANABLE",
         };
       try {
-        const result = value.actionRecovery.applyItemAction(
+        value.actionRecovery.applyItemAction(
           Object.assign({}, item, {
             action: item.repairAction,
             evaluationFingerprint: item.evaluationFingerprint,
@@ -91,7 +87,6 @@ function createSubmissionCleanup(options) {
           articleId: item.articleId,
           status: "cleaned",
           action: item.repairAction,
-          resultStatus: result.status,
         };
       } catch (error) {
         failedCount += 1;

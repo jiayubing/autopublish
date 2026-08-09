@@ -31,14 +31,14 @@ test("desktop publisher router delegates platform and media targets to their pro
     }),
     publish: async (value) => {
       calls.push(["worker", value.target.kind]);
-      return { status: "published", evidence: { remoteId: "platform-1" } };
+      return { status: "accepted", evidence: { remoteId: "platform-1" } };
     },
   };
   const mediaPublisher = {
     inspectAccount: async () => ({ verified: false }),
     publish: async (value) => {
       calls.push(["media", value.target.kind]);
-      return { status: "submitted", evidence: { remoteId: "media-1" } };
+      return { kind: "order_created", orderId: "media-1" };
     },
   };
   const router = createDesktopPublisherRouter({
@@ -55,13 +55,13 @@ test("desktop publisher router delegates platform and media targets to their pro
         accountProfileId: "account-1",
       }),
     ),
-    { status: "published", evidence: { remoteId: "platform-1" } },
+    { status: "accepted", evidence: { remoteId: "platform-1" } },
   );
   assert.deepEqual(
     await router.publish(
       input({ kind: "media", mediaResourceId: "resource-1" }),
     ),
-    { status: "submitted", evidence: { remoteId: "media-1" } },
+    { kind: "order_created", orderId: "media-1" },
   );
   assert.deepEqual(calls, [
     ["worker", "platform"],
@@ -81,8 +81,8 @@ test("desktop publisher owners preserve remote evidence and target-specific outc
         data: {
           results: [
             {
-              outcome: {
-                status: "published",
+            outcome: {
+                status: "accepted",
                 remoteId: "platform-remote-1",
                 remoteUrl: "https://platform.example/article-1",
               },
@@ -127,10 +127,10 @@ test("desktop publisher owners preserve remote evidence and target-specific outc
     input({ kind: "media", mediaResourceId: "resource-1" }),
   );
 
-  assert.equal(platform.status, "published");
+  assert.equal(platform.status, "accepted");
   assert.equal(platform.evidence.remoteId, "platform-remote-1");
-  assert.equal(media.status, "submitted");
-  assert.equal(media.evidence.remoteId, "media-order-1");
+  assert.equal(media.kind, "order_created");
+  assert.equal(media.orderId, "media-order-1");
   assert.equal(receivedSupplierInput.systemSubmissionId, systemSubmissionId);
   assert.notEqual(receivedSupplierInput.systemSubmissionId, "attempt-1");
 });
@@ -150,7 +150,7 @@ test("desktop publisher router fails closed before supplier transport when the g
     },
   });
   const router = createDesktopPublisherRouter({
-    workerPublisher: { publish: async () => ({ status: "published" }) },
+    workerPublisher: { publish: async () => ({ status: "accepted" }) },
     mediaPublisher,
   });
 
@@ -158,7 +158,7 @@ test("desktop publisher router fails closed before supplier transport when the g
     input({ kind: "media", mediaResourceId: "resource-1" }),
   );
 
-  assert.equal(result.status, "failed");
+  assert.equal(result.kind, "order_rejected");
   assert.equal(result.error.code, "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED");
   assert.equal(supplierProviderCalls, 0);
   assert.equal(createOrderCalls, 0);

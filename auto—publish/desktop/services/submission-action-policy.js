@@ -6,6 +6,16 @@ const CLEANED_STATUSES = new Set([
   "cancelled-cleaned",
 ]);
 
+function cleanupStorageStatus(item) {
+  if (!item) return null;
+  if (CLEANED_STATUSES.has(item.storedStatus)) return item.storedStatus;
+  return {
+    failed: "failed-cleaned",
+    published: "published-cleaned",
+    cancelled: "cancelled-cleaned",
+  }[item.status] || null;
+}
+
 function fail(code, message) {
   const error = new Error(message || code);
   error.code = code;
@@ -52,8 +62,6 @@ function createSubmissionActionPolicy(options) {
       ![
         "cancel",
         "cleanup",
-        "cleanupPublishedLocal",
-        "cleanupCancelledLocal",
       ].includes(action.action)
     )
       return evaluation(null, action, false, "SUBMISSION_ACTION_INVALID");
@@ -88,46 +96,18 @@ function createSubmissionActionPolicy(options) {
         return evaluation(item, action, false, "PUBLICATION_REMOTE_STARTED");
       return evaluation(item, action, true, null);
     }
-    const expected =
-      action.action === "cleanup"
-        ? "failed"
-        : action.action === "cleanupPublishedLocal"
-          ? "published"
-          : "cancelled";
-    const desired =
-      action.action === "cleanup"
-        ? "failed-cleaned"
-        : action.action === "cleanupPublishedLocal"
-          ? "published-cleaned"
-          : "cancelled-cleaned";
+    if (["queued", "claimed", "remote_started", "uncertain"].includes(item.status))
+      return evaluation(item, action, false, "ARTICLE_SUBMISSION_ACTIVE");
+    const desired = cleanupStorageStatus(item);
+    if (!desired || !["failed", "published", "cancelled"].includes(item.status))
+      return evaluation(item, action, false, "PUBLICATION_STATUS_NOT_FAILED");
     if (item.storedStatus === desired)
       return evaluation(item, action, true, null);
-    if (item.status !== expected)
-      return evaluation(
-        item,
-        action,
-        false,
-        ["queued", "claimed", "remote_started", "uncertain"].includes(
-          item.status,
-        )
-          ? "ARTICLE_SUBMISSION_ACTIVE"
-          : "PUBLICATION_STATUS_NOT_FAILED",
-      );
-    if (
-      action.action === "cleanupPublishedLocal" &&
-      (!item.record || item.record.status !== "published")
-    )
+    if (item.status === "published" && (!item.record || item.record.status !== "published"))
       return evaluation(item, action, false, "PUBLICATION_ATTEMPT_MISMATCH");
-    if (
-      action.action === "cleanup" &&
-      item.record &&
-      item.record.status !== "failed"
-    )
+    if (item.status === "failed" && item.record && item.record.status !== "failed")
       return evaluation(item, action, false, "PUBLICATION_STATUS_NOT_FAILED");
-    if (
-      action.action === "cleanupCancelledLocal" &&
-      item.storedStatus !== "cancelled"
-    )
+    if (item.status === "cancelled" && item.storedStatus !== "cancelled")
       return evaluation(item, action, false, "PUBLICATION_ATTEMPT_MISMATCH");
     if (
       action.attemptId &&

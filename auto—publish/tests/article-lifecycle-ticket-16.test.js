@@ -24,18 +24,6 @@ function fixture(options = {}) {
     attemptId: "attempt-16",
     target: { kind: "media", mediaResourceId: "resource-16" },
   });
-  store.commitRemoteOutcome({
-    attemptId: "attempt-16",
-    outcome: {
-      status: "submitted",
-      evidence: {
-        articleId: "article-16",
-        attemptId: "attempt-16",
-        targetKey: "media-resource:resource-16",
-        remoteId: "order-16",
-      },
-    },
-  });
   const databasePath = store.verify().databasePath;
   store.close();
   const orderSnapshotV1 = domain.parseOrderSnapshotV1({
@@ -66,9 +54,43 @@ function fixture(options = {}) {
     remoteCallStartedAt: "2026-08-08T00:00:00.000Z",
   });
   const db = new DatabaseSync(databasePath);
-  db.prepare("UPDATE remote_orders SET payload_json=? WHERE order_id=?").run(
-    JSON.stringify(orderSnapshotV1),
+  db.prepare(
+    "UPDATE publication_records SET status='remote_started',updated_at=? WHERE publication_id=?",
+  ).run("2026-08-08T00:00:00.000Z", "publication-16");
+  db.prepare(
+    "UPDATE publication_attempts SET status='remote_started' WHERE attempt_id=?",
+  ).run("attempt-16");
+  db.prepare(
+    "UPDATE article_active_targets SET state='remote_started',updated_at=? WHERE attempt_id=?",
+  ).run("2026-08-08T00:00:00.000Z", "attempt-16");
+  db.prepare(
+    "UPDATE recovery_intents SET state='resolved',payload_json=?,updated_at=? WHERE attempt_id=?",
+  ).run(
+    JSON.stringify({
+      paidSubmission: { batchItemId: "item-16" },
+      detail: {
+        phase: "order_created",
+        orderCreationAttemptId: "paid-attempt-16",
+      },
+      orderCreationAttemptId: "paid-attempt-16",
+    }),
+    "2026-08-08T00:00:00.000Z",
+    "attempt-16",
+  );
+  db.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
     "order-16",
+    "attempt-16",
+    "order-16",
+    JSON.stringify(orderSnapshotV1),
+    "2026-08-08T00:00:01.000Z",
+  );
+  db.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
+    "order-evidence-16",
+    "attempt-16",
+    "order-16",
+    null,
+    JSON.stringify(orderSnapshotV1),
+    "2026-08-08T00:00:01.000Z",
   );
   db.prepare("INSERT INTO submission_batches VALUES(?,?,?,?,?)").run(
     "batch-16",
@@ -263,7 +285,7 @@ test("rejection preserves the active order while uncertain cancellation stays du
   );
   assert.equal(
     rejected.observations.readOrderTransitionFacts("order-16").publicationStatus,
-    "submitted",
+    "remote_started",
   );
 
   const uncertain = fixture();
@@ -457,7 +479,7 @@ test("verified active evidence closes uncertainty without ending the immutable o
     evidenceFingerprint: verification.evidenceFingerprint,
   });
   assert.equal(result.status, "rejected");
-  assert.equal(value.observations.readOrderTransitionFacts("order-16").publicationStatus, "submitted");
+  assert.equal(value.observations.readOrderTransitionFacts("order-16").publicationStatus, "remote_started");
   assert.equal(value.cancellations.getOrderCancellationView({ orderId: "order-16" }).actionLabel, "尝试取消");
 });
 

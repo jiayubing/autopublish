@@ -10,9 +10,9 @@ describe("renderer published article trash flow", () => {
   it("explains published retention and keeps published articles out of trash actions", () => {
     const view = read("components/content/GeneratedArticlesView.tsx");
     const types = read("types/platform.ts");
-    assert.match(view, /远端已发布内容不会撤回/);
+    assert.match(view, /已发布文章和发布证据不会被清理/);
     assert.match(view, /发布记录和标题快照会保留/);
-    assert.match(view, /恢复文章不会自动恢复投稿队列/);
+    assert.match(view, /恢复文章不会重新加入投稿队列/);
     assert.match(view, /workflow\?\.stage === ["']published["']/);
     assert.match(view, /!isPublishedArticle\(article\)/);
     assert.doesNotMatch(view, /onTrashPublishedArticle/);

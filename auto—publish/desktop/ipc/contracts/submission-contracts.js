@@ -52,25 +52,10 @@ const batchItem = exactObject({
   allowed: optionalField("boolean"),
   fingerprint: optionalField(id),
   repairAction: optionalField(
-    nullableField(
-      enumField([
-        "cancel",
-        "cleanup",
-        "cleanupPublishedLocal",
-        "cleanupCancelledLocal",
-      ]),
-    ),
+    nullableField(enumField(["cancel", "cleanup"])),
   ),
   evaluationFingerprint: optionalField(nullableField(id)),
-  action: optionalField(
-    enumField([
-      "cancel",
-      "cleanup",
-      "cleanupPublishedLocal",
-      "cleanupCancelledLocal",
-    ]),
-  ),
-  resultStatus: optionalField(safeText(64, 1)),
+  action: optionalField(enumField(["cancel", "cleanup"])),
 });
 const batch = exactObject({
   id,
@@ -133,25 +118,10 @@ const residueItem = exactObject({
   status: safeText(64, 1),
   reasonCode: nullableField(code),
   repairAction: optionalField(
-    nullableField(
-      enumField([
-        "cancel",
-        "cleanup",
-        "cleanupPublishedLocal",
-        "cleanupCancelledLocal",
-      ]),
-    ),
+    nullableField(enumField(["cancel", "cleanup"])),
   ),
   evaluationFingerprint: optionalField(nullableField(id)),
-  action: optionalField(
-    enumField([
-      "cancel",
-      "cleanup",
-      "cleanupPublishedLocal",
-      "cleanupCancelledLocal",
-    ]),
-  ),
-  resultStatus: optionalField(safeText(64, 1)),
+  action: optionalField(enumField(["cancel", "cleanup"])),
 });
 const residuePreview = exactObject({
   items: arrayField(residueItem, { max: 10000 }),
@@ -1012,7 +982,6 @@ function projectBatchItem(value) {
     "repairAction",
     "evaluationFingerprint",
     "action",
-    "resultStatus",
   ])
     include(output, input, key);
   return output;
@@ -1188,7 +1157,6 @@ function projectResidueItem(value) {
     "repairAction",
     "evaluationFingerprint",
     "action",
-    "resultStatus",
   ])
     include(output, input, key);
   return output;
@@ -1377,7 +1345,6 @@ const submissionContractFixtures = Object.freeze([
           status: "cleaned",
           reasonCode: null,
           action: "cleanup",
-          resultStatus: "failed-cleaned",
         },
       ],
       remainingItems: [],
