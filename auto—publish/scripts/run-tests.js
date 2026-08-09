@@ -136,6 +136,24 @@ function lastNumber(output, label) {
   return matches.length ? Number(matches.at(-1)[1]) : 0;
 }
 
+function countsFromReporterMarkers(output) {
+  const counts = emptyCounts();
+  const lines = String(output).split(/\r?\n/);
+  for (const line of lines) {
+    if (/#\s*SKIP(?:\s|$)/i.test(line)) counts.skipped += 1;
+    if (/#\s*TODO(?:\s|$)/i.test(line)) counts.todo += 1;
+    if (/#\s*CANCELLED(?:\s|$)/i.test(line)) counts.cancelled += 1;
+  }
+  return counts;
+}
+
+function mergeReporterMarkerCounts(counts, output) {
+  const markerCounts = countsFromReporterMarkers(output);
+  for (const key of ["skipped", "cancelled", "todo"])
+    counts[key] = Math.max(counts[key], markerCounts[key]);
+  return counts;
+}
+
 function countsFromLegacyOutput(output, status) {
   const counts = {
     tests: lastNumber(output, "tests"),
@@ -145,6 +163,7 @@ function countsFromLegacyOutput(output, status) {
     cancelled: lastNumber(output, "cancelled"),
     todo: lastNumber(output, "todo"),
   };
+  mergeReporterMarkerCounts(counts, output);
   if (status !== 0 && counts.failed === 0) counts.failed = 1;
   return counts;
 }
@@ -273,6 +292,7 @@ function runProgrammaticGroup(group) {
           cancelled: Number(summaryCounts.cancelled) || 0,
           todo: Number(summaryCounts.todo) || 0,
         };
+        mergeReporterMarkerCounts(counts, output.join(""));
         if (counts.failed === 0 && summary && summary.success === false)
           counts.failed = 1;
         const unreportedFiles = group.files.filter(
@@ -389,7 +409,8 @@ function summarizeTestResults(results) {
     lifecycle,
     unreportedFiles,
     allFilesReported: unreportedFiles.length === 0,
-    noSkippedTodo: counts.skipped === 0 && counts.todo === 0,
+    noSkippedTodo:
+      counts.skipped === 0 && counts.cancelled === 0 && counts.todo === 0,
   };
 }
 

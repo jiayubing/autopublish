@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -143,6 +144,40 @@ test("summary fails closed for open lifecycle, unreported files, and skipped wor
   assert.equal(summary.allFilesReported, false);
   assert.equal(summary.noSkippedTodo, false);
   assert.deepEqual(summary.unreportedFiles, ["tests/missing.test.js"]);
+});
+
+test("runner fails closed when a top-level suite is skipped", () => {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "m05-h-skipped-suite-"),
+  );
+  const profile = path.join(directory, "profile.json");
+  const excludedFiles = collectTestFiles()
+    .filter(
+      (file) =>
+        file !== "tests/renderer-settings-window-focus.electron.test.js",
+    )
+    .flatMap((file) => ["--exclude", file]);
+  try {
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/run-tests.js", "--profile-output", profile, ...excludedFiles],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          NODE_TEST_CONTEXT: undefined,
+          RUN_ELECTRON_FOCUS_TESTS: undefined,
+        },
+      },
+    );
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const report = JSON.parse(fs.readFileSync(profile, "utf8"));
+    assert.equal(report.counts.skipped, 1);
+    assert.equal(report.noSkippedTodo, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("group summaries aggregate counts and preserve the slowest file timings", () => {
