@@ -2493,7 +2493,18 @@
 - [x] A/B/C authoritative Renderer ownership 与 A–H package boundary 冻结；跨 cluster 按实际 feature state/action 归属。
 - [x] E 冻结为 `M05-E1 → M05-E2 → M05-E3`；migration reader 不进入 E1–E3。
 - [ ] 后续包不得自行改 ownership/scope/disposition；只有 blocking finding 按 Audit Protocol 先修订本 ledger/合同后才能例外。
-- [ ] M05-A 是下一且唯一允许启动的 package；本包不实施任何 A–H 测试迁移。
+- [x] M05-A 已完成 Renderer content/generation/attention evidence 迁移；下一且唯一允许启动的 package 为 M05-B。
+
+## M05-A execution delta (2026-08-09)
+
+- Base HEAD：`91c0e25177a112086dbc23bd327d54768519f476`；implementation/evidence source state：`58592ff03a2c2bd95dc4c265e516c83f2ec395b4`。
+- After inventory：264 files（247 JS / 17 MJS）、1,748 declarations、58 file-level source-reading files / 333 declarations、144 assertion-level source-reading candidates；manifest digest `3f5245d066ff20689c87adc4da95b89b7f540989f17277215810bc017c5b074e`，discovery digest `819d22b01d326e2290483b936c0913ab483bcdb289e304c674c23d302f6cbe45`。
+- Delta：files `268 → 264`，declarations `1,818 → 1,748`，file-level candidates `61/405 → 58/333`，assertion-level candidates `218 → 144`；M05-A `REWRITE_PUBLIC_BEHAVIOR` residual=`0`。
+- `DUP-03` 与 content/Doubao refresh/query/stale rows 由 `phase-06-content-feature`、`phase-06-content-read-model`、`phase-06-content-workbench-feature`、`phase-08-content-renderer-feature-races` 的 public feature snapshot/race matrix 替代。
+- attention/generation ordering rows 由 `phase-06-attention-feature` 的 revision + client-scope stale matrix 和 `phase-06-generation-feature` 的 hydrated runtime ordering 替代；删除两个重复 helper/exec wrapper 文件。
+- Renderer user-action/layout rows 由 `renderer-question-editor-session`、`renderer-content-client-switch`、`renderer-generation-submission-handoff`、`renderer-article-attention-actions` 的可观察行为替代；paid resolution 在窄视口下实测两个 resolution action 的 visible/disabled/enabled 状态。
+- generation selection/template/source 规则改为 `renderer-batch-generation` 的输入→输出行为；frozen `RETAIN_STATIC_GUARD` 保留，未改 ownership/disposition。
+- 详细测试、audit 与 boundary evidence 见 `M05-A-handoff.md`。
 
 ## M05-0 do-not-touch boundary
 
