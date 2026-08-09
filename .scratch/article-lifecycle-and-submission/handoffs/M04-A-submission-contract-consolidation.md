@@ -130,4 +130,5 @@ Re-audit scope is limited to the two Primary Audit findings, their remediation d
 
 - Implementation commit: this single M04-A commit, containing the implementation and this handoff; the final hash is the clean HEAD reported at closure.
 - Final clean HEAD / `git status --short --branch`: verified after the commit containing this handoff; exact final hash is reported in the task closure.
-- No merge, push, real login, publish, payment, cancellation, production database, or other external side-effect operation was performed.
+- The main task integrated implementation commit `e7db055147034c1edd887328e5a8cfa6bc564430` into `codex/article-lifecycle-submission` with merge commit `049f223f467edd4f18f0734ff00b6fac8c93e297`; the integration tree equals the implementation tree and was clean before this state/evidence update.
+- The execution thread itself performed no push, real login, publish, payment, cancellation, production database, or other external side-effect operation; the main task likewise performed no such operation.
