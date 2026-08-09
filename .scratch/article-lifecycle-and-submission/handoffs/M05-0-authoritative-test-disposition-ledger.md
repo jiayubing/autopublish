@@ -2409,6 +2409,15 @@
 - mechanical module line-count advisory/baseline 不属于允许 static categories，已退休；它不作为 architecture pass/fail evidence，也没有通过删除有效 guard 换取 PASS。
 - Ticket 24 migration/storage/internal historical allowlists 保持原语义且 fail closed；未修改 production、业务状态机、Renderer/IPC/store/adapter、runner policy/concurrency/timeout 或真实外部行为。完整 gates/audit 见 `M05-G-handoff.md`。
 
+## M05-H execution delta (2026-08-10)
+
+- Base HEAD：`76416590c9015218f19287e50145da95f10f1029`（M05-G Final clean HEAD）。Final clean HEAD 由 `M05-H-handoff.md` 与最终 Git evidence 确认。
+- Final inventory：248 files（231 JS / 17 MJS）、1,691 declarations；pool=`{"parallel":210,"serial":38}`；manifest digest `29dfa8ca79a86513bea06ff65de62ed7634fa704b32f9458ce9980b56bae6952`，discovery digest `4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f`。
+- Before 对账基于 M05-G final：manifest=`92f42b0fa74c5c2fbe5cc5baa9dc1dda186ea62e48951ff208dc0c738a921c9d`；after 无新增/删除文件、pool mismatch、disposition mismatch、unexpected new declaration 或 removed declaration。
+- H 增加 4 条 runner/discovery/inventory/evidence contract declarations，均归 `M05-H`；`M05-H` rows 从 9 更新为 13。无业务 static rewrite、无 production 改动。
+- Runner final profile：248 files / 1,802 tests；1,800 pass、2 个既有 artifact/runtime environment failures；`lifecycle=CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`，runner 未吞 worker/test failure。完整 matrix、parity、exceptions 与审计见 `M05-H-handoff.md` / `M05-H-evidence.json`。
+- H gates：runner/discovery/inventory/evidence/process-cleanup regression、`npm run test:discover`、small hybrid/serial parity、format、diff check PASS；phase-08 cleanup 与 release evidence 定向回归 PASS。
+
 ## M05-0 gate and boundary
 
 - [x] Discovery 与 runner `collectTestFiles` 文件集合一致；JS/MJS 均覆盖。
@@ -2419,7 +2428,7 @@
 - [x] E 冻结为 `M05-E1 → M05-E2 → M05-E3`；migration reader 不进入 E1–E3。
 - [x] M05-A/B/C/D/E1/E2/E3/F/G migration complete；各包 rewrite residual=`0`，replacement mapping 与 gates 已记录。
 - [ ] 后续包不得自行改 ownership/scope/disposition；只有 blocking finding 按 Audit Protocol 先修订本 ledger/合同后才能例外。
-- [x] M05-G 已完成；下一且唯一允许启动的 package 是 M05-H；本包未实施 H/I/M06。
+- [x] M05-H 已完成；下一且唯一允许启动的 package 是 M05-I；本包未实施 I/M06。
 
 ## M05-0 do-not-touch boundary
 

@@ -1,0 +1,118 @@
+{
+  "package": "M05-H",
+  "base": "76416590c9015218f19287e50145da95f10f1029",
+  "final": "implementation/evidence/handoff commit; verify with git rev-parse HEAD",
+  "discovery": {
+    "status": "PASSED",
+    "files": 248,
+    "jsFiles": 231,
+    "mjsFiles": 17,
+    "sha256": "4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f",
+    "pools": {
+      "parallel": 210,
+      "serial": 38
+    },
+    "poolDigest": "dab08bf8f6b7e063030751ff3d5ed49e5de36936ea4a2830e0af0a8b430da428",
+    "everyFileHasExactlyOnePool": true
+  },
+  "inventory": {
+    "status": "PASSED",
+    "before": {
+      "files": 248,
+      "jsFiles": 231,
+      "mjsFiles": 17,
+      "discoverySha256": "4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f",
+      "manifestDigest": "92f42b0fa74c5c2fbe5cc5baa9dc1dda186ea62e48951ff208dc0c738a921c9d",
+      "declarations": 1687
+    },
+    "after": {
+      "files": 248,
+      "jsFiles": 231,
+      "mjsFiles": 17,
+      "discoverySha256": "4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f",
+      "manifestDigest": "29dfa8ca79a86513bea06ff65de62ed7634fa704b32f9458ce9980b56bae6952",
+      "declarations": 1691
+    },
+    "changedFiles": [
+      "tests/phase-04-platform-run.test.js",
+      "tests/test-discovery-contract.test.js",
+      "tests/test-inventory-contract.test.js"
+    ],
+    "addedFiles": [],
+    "removedFiles": [],
+    "poolMismatches": [],
+    "dispositionMismatches": [],
+    "unexpectedNewDeclarations": [],
+    "removedDeclarations": []
+  },
+  "runner": {
+    "fullHybrid": {
+      "status": "FAILED",
+      "collected": 248,
+      "counts": {
+        "tests": 1802,
+        "passed": 1800,
+        "failed": 2,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      },
+      "lifecycle": "CLOSED",
+      "allFilesReported": true,
+      "noSkippedTodo": true,
+      "groups": {
+        "parallel": {
+          "files": 210,
+          "concurrency": 4,
+          "counts": { "tests": 1536, "passed": 1536, "failed": 0 },
+          "lifecycle": "stream-closed",
+          "unreportedFiles": []
+        },
+        "serial": {
+          "files": 38,
+          "concurrency": 1,
+          "counts": { "tests": 266, "passed": 264, "failed": 2 },
+          "lifecycle": "stream-closed",
+          "unreportedFiles": []
+        }
+      }
+    },
+    "smallParity": {
+      "files": 3,
+      "counts": {
+        "tests": 20,
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      },
+      "hybridLifecycle": "CLOSED",
+      "serialLifecycle": "CLOSED",
+      "hybridAllFilesReported": true,
+      "serialAllFilesReported": true,
+      "countsEqual": true
+    }
+  },
+  "gates": {
+    "runnerDiscoveryInventoryEvidence": "PASSED",
+    "phase04ProcessCleanup": "PASSED",
+    "phase08CleanupGates": "PASSED",
+    "rendererHarnessCleanup": "PASSED",
+    "releaseEvidence": "PASSED",
+    "format": "PASSED",
+    "diffCheck": "PASSED"
+  },
+  "exceptions": [
+    {
+      "kind": "EXPOSED_PREEXISTING",
+      "tests": ["tests/alpha-smoke-verifier.test.js"],
+      "reason": "Bundled Playwright Node is unavailable without a built runtime package; no real pack/build was authorized."
+    },
+    {
+      "kind": "EXPOSED_PREEXISTING",
+      "tests": ["tests/phase-06-capability-specific-inventory.test.js"],
+      "reason": "release-alpha/win-unpacked/resources/app.asar is absent; H does not build or package a real artifact."
+    }
+  ]
+}

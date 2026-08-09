@@ -167,18 +167,23 @@ function runLegacySerial(files) {
     },
   );
   const output = String(result.stdout || "") + String(result.stderr || "");
-  const status =
+  let status =
     result.error || typeof result.status !== "number" ? 1 : result.status;
+  const counts = countsFromLegacyOutput(output, status);
+  if (counts.skipped > 0 || counts.todo > 0 || counts.cancelled > 0) status = 1;
   return {
     name: "serial-baseline",
     pool: "serial",
     concurrency: 1,
     files: files.length,
     status,
-    counts: countsFromLegacyOutput(output, status),
+    counts,
     durationMs: Date.now() - startedAt,
     timings: [],
     output,
+    lifecycle: "process-closed",
+    reportedFiles: [...files],
+    unreportedFiles: [],
   };
 }
 
@@ -194,13 +199,20 @@ function runProgrammaticGroup(group) {
       durationMs: 0,
       timings: [],
       output: "",
+      lifecycle: "stream-closed",
+      reportedFiles: [],
+      unreportedFiles: [],
     });
 
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const timings = new Map();
+    const reportedFiles = new Set();
     let summary = null;
     let streamError = null;
+    let streamClosed = false;
+    let reporterFinished = false;
+    let settled = false;
     const output = [];
     const stream = run({
       files: group.files.map((file) => path.resolve(ROOT, file)),
@@ -209,7 +221,7 @@ function runProgrammaticGroup(group) {
     });
 
     const captureTiming = (event, requireFileEvent) => {
-      if (!event || !event.file || !event.details) return;
+      if (!event || !event.file) return;
       const file = relativeTestFile(event.file);
       if (!group.files.includes(file)) return;
       if (requireFileEvent) {
@@ -218,9 +230,11 @@ function runProgrammaticGroup(group) {
           ? relativeTestFile(eventName)
           : normalizeRelativeFilename(eventName);
         const isFileSuite =
-          event.details.type === "suite" || nameAsFile === file;
+          event.details?.type === "suite" || nameAsFile === file;
         if (!isFileSuite) return;
       }
+      reportedFiles.add(file);
+      if (!event.details) return;
       const durationMs = Number(event.details.duration_ms);
       if (!Number.isFinite(durationMs)) return;
       timings.set(file, {
@@ -243,6 +257,74 @@ function runProgrammaticGroup(group) {
       streamError = error;
     });
 
+    const finalize = () => {
+      if (settled || !streamClosed || !reporterFinished) return;
+      settled = true;
+      // The test stream's close event is the worker lifecycle barrier. Drain
+      // the next turn so ChildProcess handles released by the worker are also
+      // gone before the group result can drive the final summary/profile.
+      setImmediate(() => {
+        const summaryCounts = (summary && summary.counts) || {};
+        const counts = {
+          tests: Number(summaryCounts.tests) || 0,
+          passed: Number(summaryCounts.passed) || 0,
+          failed: Number(summaryCounts.failed) || 0,
+          skipped: Number(summaryCounts.skipped) || 0,
+          cancelled: Number(summaryCounts.cancelled) || 0,
+          todo: Number(summaryCounts.todo) || 0,
+        };
+        if (counts.failed === 0 && summary && summary.success === false)
+          counts.failed = 1;
+        const unreportedFiles = group.files.filter(
+          (file) => !reportedFiles.has(normalizeRelativeFilename(file)),
+        );
+        const status =
+          streamError ||
+          !summary ||
+          unreportedFiles.length > 0 ||
+          counts.failed > 0 ||
+          counts.skipped > 0 ||
+          counts.cancelled > 0 ||
+          counts.todo > 0
+            ? 1
+            : 0;
+        const completed = new Map(timings);
+        group.files.forEach((file) => {
+          const normalized = normalizeRelativeFilename(file);
+          if (!completed.has(normalized))
+            completed.set(normalized, {
+              file: normalized,
+              durationMs: null,
+              passed: false,
+              pool: group.pool,
+              status: reportedFiles.has(normalized)
+                ? "reported-without-duration"
+                : "not-reported",
+            });
+        });
+        resolve({
+          name: group.name,
+          pool: group.pool,
+          concurrency: group.concurrency,
+          files: group.files.length,
+          status,
+          counts,
+          durationMs: Date.now() - startedAt,
+          timings: [...completed.values()],
+          output: output.join(""),
+          error: streamError ? streamError.message : undefined,
+          lifecycle: "stream-closed",
+          reportedFiles: [...reportedFiles].sort(),
+          unreportedFiles,
+        });
+      });
+    };
+
+    stream.once("close", () => {
+      streamClosed = true;
+      finalize();
+    });
+
     const sink = new Writable({
       write(chunk, encoding, callback) {
         output.push(Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk));
@@ -250,45 +332,13 @@ function runProgrammaticGroup(group) {
       },
     });
     sink.once("finish", () => {
-      const summaryCounts = (summary && summary.counts) || {};
-      const counts = {
-        tests: Number(summaryCounts.tests) || 0,
-        passed: Number(summaryCounts.passed) || 0,
-        failed: Number(summaryCounts.failed) || 0,
-        skipped: Number(summaryCounts.skipped) || 0,
-        cancelled: Number(summaryCounts.cancelled) || 0,
-        todo: Number(summaryCounts.todo) || 0,
-      };
-      if (counts.failed === 0 && summary && summary.success === false)
-        counts.failed = 1;
-      const status = streamError || counts.failed > 0 ? 1 : 0;
-      const completed = new Map(timings);
-      group.files.forEach((file) => {
-        const normalized = normalizeRelativeFilename(file);
-        if (!completed.has(normalized))
-          completed.set(normalized, {
-            file: normalized,
-            durationMs: null,
-            passed: false,
-            pool: group.pool,
-            status: "not-reported",
-          });
-      });
-      resolve({
-        name: group.name,
-        pool: group.pool,
-        concurrency: group.concurrency,
-        files: group.files.length,
-        status,
-        counts,
-        durationMs: Date.now() - startedAt,
-        timings: [...completed.values()],
-        output: output.join(""),
-        error: streamError ? streamError.message : undefined,
-      });
+      reporterFinished = true;
+      finalize();
     });
     sink.once("error", (error) => {
       streamError = error;
+      reporterFinished = true;
+      finalize();
     });
     stream.pipe(new spec()).pipe(sink);
   });
@@ -299,13 +349,30 @@ function summarizeTestResults(results) {
   let durationMs = 0;
   let status = 0;
   const timings = [];
+  const unreportedFiles = [];
+  let lifecycle = true;
   for (const result of results) {
     durationMs += Number(result.durationMs) || 0;
     status = status || result.status || 0;
     for (const key of Object.keys(counts))
       counts[key] += Number(result.counts && result.counts[key]) || 0;
     timings.push(...(result.timings || []));
+    if (
+      Object.hasOwn(result, "lifecycle") &&
+      result.lifecycle !== "stream-closed" &&
+      result.lifecycle !== "process-closed"
+    )
+      lifecycle = false;
+    unreportedFiles.push(...(result.unreportedFiles || []));
   }
+  if (
+    !lifecycle ||
+    unreportedFiles.length > 0 ||
+    counts.skipped > 0 ||
+    counts.cancelled > 0 ||
+    counts.todo > 0
+  )
+    status = 1;
   const slowestFiles = timings
     .filter((item) => Number.isFinite(item.durationMs))
     .sort((left, right) => right.durationMs - left.durationMs)
@@ -314,7 +381,16 @@ function summarizeTestResults(results) {
       file: item.file,
       durationMs: item.durationMs,
     }));
-  return { status, counts, durationMs, slowestFiles };
+  return {
+    status,
+    counts,
+    durationMs,
+    slowestFiles,
+    lifecycle,
+    unreportedFiles,
+    allFilesReported: unreportedFiles.length === 0,
+    noSkippedTodo: counts.skipped === 0 && counts.todo === 0,
+  };
 }
 
 function writeProfile(output, mode, plan, results, summary, wallClockMs) {
@@ -329,10 +405,16 @@ function writeProfile(output, mode, plan, results, summary, wallClockMs) {
       files: result.files,
       counts: result.counts,
       durationMs: result.durationMs,
+      lifecycle: result.lifecycle,
+      reportedFiles: result.reportedFiles,
+      unreportedFiles: result.unreportedFiles,
     })),
     counts: summary.counts,
     wallClockMs,
     slowestFiles: summary.slowestFiles,
+    lifecycle: summary.lifecycle ? "CLOSED" : "OPEN_OR_UNKNOWN",
+    allFilesReported: summary.allFilesReported,
+    noSkippedTodo: summary.noSkippedTodo,
     classifications: plan.classifications,
     timings: results.flatMap((result) => result.timings),
   };
@@ -418,6 +500,9 @@ async function main(args) {
         counts: summary.counts,
         wallClockMs: Date.now() - startedAt,
         slowestFiles: summary.slowestFiles,
+        lifecycle: summary.lifecycle ? "CLOSED" : "OPEN_OR_UNKNOWN",
+        allFilesReported: summary.allFilesReported,
+        noSkippedTodo: summary.noSkippedTodo,
         profileOutput,
       }) +
       "\n",

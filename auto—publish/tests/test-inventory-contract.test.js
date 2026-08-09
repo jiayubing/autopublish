@@ -1,11 +1,19 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const test = require("node:test");
 const { collectTestFiles } = require("../scripts/run-tests");
 const {
   collectInventory,
+  createInventorySnapshot,
   E_DECISION,
+  reconcileInventory,
   renderInventory,
 } = require("../scripts/test-inventory");
+const {
+  createTestInventoryEvidence,
+} = require("../scripts/create-test-inventory-evidence");
 
 test("M05-0 inventory uses the runner discovery set and covers JS plus MJS", () => {
   const files = collectTestFiles();
@@ -75,4 +83,44 @@ test("M05-0 rendered ledger includes the stable before gate and do-not-touch bou
   assert.match(rendered, /\.test\.mjs/);
   assert.match(rendered, /M05-E1 → M05-E2 → M05-E3/);
   assert.match(rendered, /do-not-touch boundary/);
+});
+
+test("after inventory reconciles every file and disposition against before", () => {
+  const inventory = collectInventory();
+  const snapshot = createInventorySnapshot(inventory);
+  const reconciliation = reconcileInventory(snapshot, inventory);
+
+  assert.equal(reconciliation.status, "PASSED");
+  assert.deepEqual(reconciliation.addedFiles, []);
+  assert.deepEqual(reconciliation.removedFiles, []);
+  assert.deepEqual(reconciliation.poolMismatches, []);
+  assert.deepEqual(reconciliation.dispositionMismatches, []);
+  assert.deepEqual(reconciliation.unexpectedNewDeclarations, []);
+  assert.deepEqual(reconciliation.missingAfterDisposition, []);
+  assert.equal(reconciliation.uniquePools, true);
+});
+
+test("inventory evidence writes a complete before/after reconciliation report", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "m05-h-inventory-evidence-"),
+  );
+  try {
+    const snapshot = createInventorySnapshot(collectInventory());
+    const before = path.join(root, "before.json");
+    const output = path.join(root, "after.json");
+    fs.writeFileSync(before, JSON.stringify(snapshot), "utf8");
+    const report = createTestInventoryEvidence({ before, output });
+    assert.equal(report.status, "PASSED");
+    assert.equal(report.reconciliation.status, "PASSED");
+    assert.equal(report.reconciliation.uniquePools, true);
+    assert.deepEqual(report.reconciliation.unexpectedNewDeclarations, []);
+    assert.deepEqual(report.reconciliation.missingAfterDisposition, []);
+    assert.equal(report.after.files.length, report.after.discovery.files);
+    assert.equal(
+      JSON.parse(fs.readFileSync(output, "utf8")).reconciliation.status,
+      "PASSED",
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

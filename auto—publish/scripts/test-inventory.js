@@ -1362,6 +1362,199 @@ function collectInventory() {
   };
 }
 
+function createInventorySnapshot(inventory) {
+  const value = inventory || collectInventory();
+  if (Array.isArray(value.files) && !Array.isArray(value.records)) return value;
+  return {
+    inventoryVersion: value.inventoryVersion,
+    discovery: {
+      pattern: value.discovery.pattern,
+      implementation: value.discovery.implementation,
+      files: value.discovery.files,
+      jsFiles: value.discovery.jsFiles,
+      mjsFiles: value.discovery.mjsFiles,
+      sha256: value.discovery.sha256,
+    },
+    manifestDigest: value.manifestDigest,
+    summary: {
+      ...value.summary,
+      dispositions: { ...value.summary.dispositions },
+      packages: { ...value.summary.packages },
+      pools: { ...value.summary.pools },
+    },
+    files: value.records.map((record) => ({
+      path: record.relativePath,
+      extension: record.extension,
+      bytes: record.bytes,
+      sha256: record.sha256,
+      testCount: record.testCount,
+      dynamicMatrixCount: record.dynamicMatrixCount,
+      pool: record.pool,
+      poolReason: record.poolReason,
+      primaryPackage: record.primaryPackage,
+      declarations: record.tests.map((declaration, index) => ({
+        index,
+        id: declaration.id,
+        line: declaration.line,
+        endLine: declaration.endLine,
+        name: declaration.name,
+        modifier: declaration.modifier,
+        dynamicName: declaration.dynamicName,
+        dynamicMatrix: declaration.dynamicMatrix,
+        package: declaration.package,
+        disposition: declaration.disposition,
+        replacement: declaration.replacement,
+      })),
+    })),
+  };
+}
+
+function reconcileInventory(before, after) {
+  const beforeSnapshot = createInventorySnapshot(before);
+  const afterSnapshot = createInventorySnapshot(after);
+  const beforeFiles = new Map(
+    beforeSnapshot.files.map((record) => [record.path, record]),
+  );
+  const afterFiles = new Map(
+    afterSnapshot.files.map((record) => [record.path, record]),
+  );
+  const addedFiles = afterSnapshot.files
+    .filter((record) => !beforeFiles.has(record.path))
+    .map((record) => record.path);
+  const removedFiles = beforeSnapshot.files
+    .filter((record) => !afterFiles.has(record.path))
+    .map((record) => record.path);
+  const changedFiles = [];
+  const poolMismatches = [];
+  const dispositionMismatches = [];
+  const newDeclarations = [];
+  const removedDeclarations = [];
+  const missingAfterDisposition = [];
+
+  for (const afterRecord of afterSnapshot.files) {
+    const beforeRecord = beforeFiles.get(afterRecord.path);
+    if (!beforeRecord) continue;
+    if (
+      beforeRecord.sha256 !== afterRecord.sha256 ||
+      beforeRecord.bytes !== afterRecord.bytes ||
+      beforeRecord.testCount !== afterRecord.testCount
+    )
+      changedFiles.push(afterRecord.path);
+    if (beforeRecord.pool !== afterRecord.pool)
+      poolMismatches.push({
+        path: afterRecord.path,
+        before: beforeRecord.pool,
+        after: afterRecord.pool,
+      });
+
+    const beforeDeclarations = new Map();
+    const beforeNameCounts = new Map();
+    for (const declaration of beforeRecord.declarations) {
+      const occurrence = beforeNameCounts.get(declaration.name) || 0;
+      beforeNameCounts.set(declaration.name, occurrence + 1);
+      beforeDeclarations.set(declaration.name + "#" + occurrence, declaration);
+    }
+    const afterNameCounts = new Map();
+    const afterDeclarationKeys = new Set();
+    for (const declaration of afterRecord.declarations) {
+      const occurrence = afterNameCounts.get(declaration.name) || 0;
+      afterNameCounts.set(declaration.name, occurrence + 1);
+      const declarationKey = declaration.name + "#" + occurrence;
+      afterDeclarationKeys.add(declarationKey);
+      if (!declaration.package || !declaration.disposition) {
+        missingAfterDisposition.push(
+          afterRecord.path + "#" + declaration.index,
+        );
+        continue;
+      }
+      const previous = beforeDeclarations.get(declarationKey);
+      if (!previous) {
+        newDeclarations.push({
+          path: afterRecord.path,
+          index: declaration.index,
+          name: declaration.name,
+          package: declaration.package,
+          disposition: declaration.disposition,
+        });
+        continue;
+      }
+      if (
+        previous.package !== declaration.package ||
+        previous.disposition !== declaration.disposition
+      )
+        dispositionMismatches.push({
+          path: afterRecord.path,
+          index: declaration.index,
+          before: {
+            name: previous.name,
+            package: previous.package,
+            disposition: previous.disposition,
+          },
+          after: {
+            name: declaration.name,
+            package: declaration.package,
+            disposition: declaration.disposition,
+          },
+        });
+    }
+    for (const [declarationKey, declaration] of beforeDeclarations) {
+      if (!afterDeclarationKeys.has(declarationKey))
+        removedDeclarations.push({
+          path: afterRecord.path,
+          index: declaration.index,
+          name: declaration.name,
+          package: declaration.package,
+          disposition: declaration.disposition,
+        });
+    }
+  }
+
+  const uniquePools = afterSnapshot.files.every((record) =>
+    ["parallel", "serial"].includes(record.pool),
+  );
+  const unexpectedNewDeclarations = newDeclarations.filter(
+    (declaration) => declaration.package !== "M05-H",
+  );
+  const status =
+    addedFiles.length === 0 &&
+    removedFiles.length === 0 &&
+    poolMismatches.length === 0 &&
+    dispositionMismatches.length === 0 &&
+    removedDeclarations.length === 0 &&
+    missingAfterDisposition.length === 0 &&
+    unexpectedNewDeclarations.length === 0 &&
+    uniquePools
+      ? "PASSED"
+      : "FAILED";
+  return {
+    status,
+    before: {
+      files: beforeSnapshot.discovery.files,
+      jsFiles: beforeSnapshot.discovery.jsFiles,
+      mjsFiles: beforeSnapshot.discovery.mjsFiles,
+      discoverySha256: beforeSnapshot.discovery.sha256,
+      manifestDigest: beforeSnapshot.manifestDigest,
+    },
+    after: {
+      files: afterSnapshot.discovery.files,
+      jsFiles: afterSnapshot.discovery.jsFiles,
+      mjsFiles: afterSnapshot.discovery.mjsFiles,
+      discoverySha256: afterSnapshot.discovery.sha256,
+      manifestDigest: afterSnapshot.manifestDigest,
+    },
+    addedFiles,
+    removedFiles,
+    changedFiles: [...new Set(changedFiles)].sort(),
+    poolMismatches,
+    dispositionMismatches,
+    newDeclarations,
+    unexpectedNewDeclarations,
+    removedDeclarations,
+    missingAfterDisposition,
+    uniquePools,
+  };
+}
+
 function formatBoolean(value) {
   return value ? "是" : "否";
 }
@@ -1752,10 +1945,12 @@ if (require.main === module) {
 
 module.exports = {
   collectInventory,
+  createInventorySnapshot,
   extractDynamicMatrices,
   extractTests,
   main,
   parseArguments,
+  reconcileInventory,
   renderInventory,
   tokenize,
   E_DECISION,

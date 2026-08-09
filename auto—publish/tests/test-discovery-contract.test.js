@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const {
@@ -8,6 +9,9 @@ const {
   parseArguments,
   summarizeTestResults,
 } = require("../scripts/run-tests");
+const {
+  createTestDiscoveryEvidence,
+} = require("../scripts/create-test-discovery-evidence");
 
 const root = path.resolve(__dirname, "..");
 
@@ -90,6 +94,55 @@ test("runner arguments retain serial baseline and allow bounded parallelism", ()
       parallelConcurrency: 2,
     },
   );
+});
+
+test("discovery evidence records every file and its single pool assignment", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "m05-h-discovery-evidence-"),
+  );
+  try {
+    const report = createTestDiscoveryEvidence({
+      output: path.join(root, "discovery.json"),
+    });
+    assert.equal(report.status, "PASSED");
+    assert.equal(report.files.length, report.count);
+    assert.equal(report.everyFileHasExactlyOnePool, true);
+    assert.equal(report.pools.parallel + report.pools.serial, report.count);
+    assert.equal(new Set(report.files).size, report.count);
+    assert.ok(report.poolDigest);
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, "discovery.json"), "utf8"))
+        .everyFileHasExactlyOnePool,
+      true,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("summary fails closed for open lifecycle, unreported files, and skipped work", () => {
+  const summary = summarizeTestResults([
+    {
+      status: 0,
+      counts: {
+        tests: 1,
+        passed: 1,
+        failed: 0,
+        skipped: 1,
+        cancelled: 0,
+        todo: 0,
+      },
+      durationMs: 5,
+      timings: [],
+      lifecycle: "stream-open",
+      unreportedFiles: ["tests/missing.test.js"],
+    },
+  ]);
+  assert.equal(summary.status, 1);
+  assert.equal(summary.lifecycle, false);
+  assert.equal(summary.allFilesReported, false);
+  assert.equal(summary.noSkippedTodo, false);
+  assert.deepEqual(summary.unreportedFiles, ["tests/missing.test.js"]);
 });
 
 test("group summaries aggregate counts and preserve the slowest file timings", () => {

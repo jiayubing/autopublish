@@ -181,6 +181,11 @@ test("PlatformRun does not kill a worker between remote-finished and its durable
   let onMessage;
   const run = createPlatformRun({
     watchdogMs: 60000,
+    // This case intentionally leaves the durable result pending. Keep the
+    // injected watchdog inert so the contract assertion does not leak a real
+    // timer into the test process.
+    setTimeout: () => ({ testTimer: true }),
+    clearTimeout: () => {},
     launch: (input) => {
       onMessage = input.onMessage;
       return { child: worker, promise: new Promise(() => {}) };

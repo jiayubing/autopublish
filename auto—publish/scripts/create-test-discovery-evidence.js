@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { collectTestFiles } = require("./run-tests");
+const { createExecutionPlan } = require("./test-runner-policy");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -38,6 +39,16 @@ function createTestDiscoveryEvidence(options) {
   const files = collectTestFiles().map((file) => file.replaceAll("\\", "/"));
   const jsFiles = files.filter((file) => file.endsWith(".test.js")).length;
   const mjsFiles = files.filter((file) => file.endsWith(".test.mjs")).length;
+  const plan = createExecutionPlan(files);
+  const assignments = plan.classifications.map((classification) => ({
+    file: classification.file,
+    pool: classification.pool,
+    reason: classification.reason,
+  }));
+  const poolDigest = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(assignments))
+    .digest("hex");
   const status = jsFiles > 0 && mjsFiles > 0 ? "PASSED" : "FAILED";
   const report = {
     status,
@@ -46,6 +57,17 @@ function createTestDiscoveryEvidence(options) {
     jsFiles,
     mjsFiles,
     extensions: [".test.js", ".test.mjs"],
+    files,
+    pools: {
+      parallel: plan.parallelFiles.length,
+      serial: plan.serialFiles.length,
+    },
+    poolDigest,
+    everyFileHasExactlyOnePool:
+      assignments.length === files.length &&
+      new Set(assignments.map((assignment) => assignment.file)).size ===
+        files.length,
+    assignments,
     sha256: crypto.createHash("sha256").update(files.join("\n")).digest("hex"),
   };
   const output = path.resolve(

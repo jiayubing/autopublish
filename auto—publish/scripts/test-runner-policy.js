@@ -98,25 +98,36 @@ function createExecutionPlan(files, options) {
   const classifications = normalized.map((file) =>
     classifyTestFile(file, options),
   );
+  const assigned = new Set();
+  for (const classification of classifications) {
+    if (
+      assigned.has(classification.file) ||
+      !["parallel", "serial"].includes(classification.pool)
+    )
+      throw new Error("TEST_RUNNER_POOL_ASSIGNMENT_INVALID");
+    assigned.add(classification.file);
+  }
+  if (assigned.size !== normalized.length)
+    throw new Error("TEST_RUNNER_POOL_ASSIGNMENT_INCOMPLETE");
   const parallelConcurrency =
     options && Number.isInteger(options.parallelConcurrency)
       ? options.parallelConcurrency
       : DEFAULT_PARALLEL_CONCURRENCY;
   if (parallelConcurrency < 1 || parallelConcurrency > 4)
     throw new Error("TEST_RUNNER_CONCURRENCY_INVALID");
+  const parallelFiles = classifications
+    .filter((item) => item.pool === "parallel")
+    .map((item) => item.file);
+  const serialFiles = classifications
+    .filter((item) => item.pool === "serial")
+    .map((item) => item.file);
+  if (parallelFiles.length + serialFiles.length !== normalized.length)
+    throw new Error("TEST_RUNNER_POOL_PARTITION_INCOMPLETE");
   return Object.freeze({
     allFiles: Object.freeze(normalized),
     classifications: Object.freeze(classifications),
-    parallelFiles: Object.freeze(
-      classifications
-        .filter((item) => item.pool === "parallel")
-        .map((item) => item.file),
-    ),
-    serialFiles: Object.freeze(
-      classifications
-        .filter((item) => item.pool === "serial")
-        .map((item) => item.file),
-    ),
+    parallelFiles: Object.freeze(parallelFiles),
+    serialFiles: Object.freeze(serialFiles),
     parallelConcurrency,
   });
 }
