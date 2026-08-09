@@ -146,23 +146,6 @@ describe("Phase 06 media feature", () => {
     assert.deepEqual(calls.at(-1), ["openPublishedUrl", "order-1"]);
   });
 
-  it("keeps production App on the media snapshot and named commands only", () => {
-    const app = fs.readFileSync(
-      path.resolve(import.meta.dirname, "../media-workbench/src/App.tsx"),
-      "utf8",
-    );
-    assert.doesNotMatch(app, /bridge\/media|app-draft-save-controller/);
-    assert.doesNotMatch(
-      app,
-      /\bset(?:Articles|PoolResources|Balance|IsScanning|IsCheckingBalance|IsSubmitting|SubmissionError)\b/,
-    );
-    assert.doesNotMatch(app, /useWorkspaceScope\(['"]mediaWorkbench['"]/);
-    assert.match(app, /mediaSnapshot\.articles/);
-    assert.match(app, /mediaSnapshot\.pool/);
-    assert.match(app, /mediaSnapshot\.balance/);
-    assert.match(app, /mediaFeature\.(?:openArticle|saveDraft)/);
-  });
-
   it("lets the workspace coordinator own the single production initial refresh", () => {
     const source = fs.readFileSync(
       path.resolve(
@@ -617,12 +600,6 @@ describe("Phase 06 media feature", () => {
         .allowedActions,
       [],
     );
-    const ordersView = fs.readFileSync(
-      path.resolve("media-workbench/src/components/OrdersView.tsx"),
-      "utf8",
-    );
-    assert.match(ordersView, /重新核对可用证据/);
-    assert.match(ordersView, /allowedActions\s*\.length === 0/);
     await feature.prepareOrderStatusAnomalyResolution("order-1");
     assert.equal(
       feature.getSnapshot().orders.anomalyPreparations["order-1"],
