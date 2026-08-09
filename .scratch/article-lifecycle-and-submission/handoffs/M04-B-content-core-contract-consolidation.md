@@ -183,3 +183,10 @@ Scope was limited to the known Primary Audit invariants, the final import/assemb
 
 - Implementation/audit/handoff commit: the final single commit with message `refactor: consolidate content-core contract owners`; its immutable hash is recorded by the final Git evidence and final response.
 - Final worktree must remain clean; no merge or push performed.
+
+## Integration record
+
+- Main task verified the implementation worktree clean at `b53cb722d17e286c262498a0d12be321926b9751`.
+- Main integration branch `codex/article-lifecycle-submission` merged this commit with `--no-ff`; integration merge commit: `505cfbe0f90bffd47d925a112a9c65fdc8c2cc93`.
+- The production tree on the integration HEAD matches the M04-B implementation commit; no push or real external operation was performed.
+- M04-B is closed. The next permitted work package is M04-C only, after the main task re-verifies the clean integration HEAD.
