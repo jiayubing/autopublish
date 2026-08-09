@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `PARTIAL`；M05-0 已完成并冻结 authoritative ledger，A–H 测试迁移与 M05-I Closure 尚未实施。历史分析输入见 `../handoffs/M05-analysis-and-work-package-map.md`，当前唯一 inventory 真源见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移与 M05-I combined audit/closure 均已完成。完整 `npm test` 的两项 H 继承 artifact/runtime failure 已作为明确非 M05 exception 记录，未被宣称为 full gate PASS。详细 evidence 见 `../handoffs/M05-I-combined-closure.md`，当前唯一 inventory 真源见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项，必须按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I` 从新的 clean integration HEAD 严格串行；M05-0 已 Closure，下一且唯一允许动作是 M05-A；M05-I Closure 后才允许 M06。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I` 从 clean integration HEAD 严格串行完成。M05-I Closure 后本任务停止；M06 仍未启动。
 
 ## 1. Evidence policy
 
@@ -276,5 +276,5 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 - [ ] 核心业务 owner 都有稳定公开接口或直接调用方测试，失败能定位到领域边界。
 - [ ] 重复 phase tests 按 invariant/owner 收敛，而非按文件数机械删除；必要故障注入和诊断价值保留。
 - [ ] 未修改 production behavior，未新增 test-only production seam，未执行真实外部操作。
-- [ ] M05-H 产出 after inventory 与 runner cleanup evidence；无 discovery omission、skip/todo 或 summary 后遗留测试进程。
-- [ ] M05-I combined audit、blocking remediation、bounded re-audit 与 final clean-HEAD gates PASS。
+- [x] M05-H 产出 after inventory 与 runner cleanup evidence；无 discovery omission、skip/todo 或 summary 后遗留测试进程。
+- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；完整 `npm test` 已实际运行，两个非 M05 artifact/runtime exception 已明确记录，未计为 full gate PASS。

@@ -2412,11 +2412,19 @@
 ## M05-H execution delta (2026-08-10)
 
 - Base HEAD：`76416590c9015218f19287e50145da95f10f1029`（M05-G Final clean HEAD）。Final clean HEAD 由 `M05-H-handoff.md` 与最终 Git evidence 确认。
-- Final inventory：248 files（231 JS / 17 MJS）、1,691 declarations；pool=`{"parallel":210,"serial":38}`；manifest digest `29dfa8ca79a86513bea06ff65de62ed7634fa704b32f9458ce9980b56bae6952`，discovery digest `4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f`。
+- Final inventory：248 files（231 JS / 17 MJS）、1,691 declarations；pool=`{"parallel":210,"serial":38}`；实际可复现 manifest digest `9b51cb6bef527e7636283204265557db94c9bc69b4214048ab3edf38c3f5e533`，discovery digest `4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f`。H handoff 曾记录 `29dfa8ca...`，该 digest 已在 M05-I 中归类为 `PROCESS_EVIDENCE_GAP` 并更正。
 - Before 对账基于 M05-G final：manifest=`92f42b0fa74c5c2fbe5cc5baa9dc1dda186ea62e48951ff208dc0c738a921c9d`；after 无新增/删除文件、pool mismatch、disposition mismatch、unexpected new declaration 或 removed declaration。
 - H 增加 4 条 runner/discovery/inventory/evidence contract declarations，均归 `M05-H`；`M05-H` rows 从 9 更新为 13。无业务 static rewrite、无 production 改动。
 - Runner final profile：248 files / 1,802 tests；1,800 pass、2 个既有 artifact/runtime environment failures；`lifecycle=CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`，runner 未吞 worker/test failure。完整 matrix、parity、exceptions 与审计见 `M05-H-handoff.md` / `M05-H-evidence.json`。
 - H gates：runner/discovery/inventory/evidence/process-cleanup regression、`npm run test:discover`、small hybrid/serial parity、format、diff check PASS；phase-08 cleanup 与 release evidence 定向回归 PASS。
+
+## M05-I execution delta (2026-08-10)
+
+- Base / H source state：`c50f7d857f7453d8f189f8f9f8d5a99b8e86ace6`；combined audit 未重做全仓初始分类、未启动子代理/并行线程、未进入 M06。
+- Findings：`PROCESS_EVIDENCE_GAP`（H after manifest `29dfa8ca...` 与 H source state 实际重建的 `9b51cb6b...` 不一致）已通过更正 `M05-H-evidence.json`、H handoff 与本 ledger 关闭；`P1 / INTRODUCED_BY_CHANGE`（runner 对 top-level suite skip 漏计）由 `12ee4bfa5ba7659703150d83b35a70866aedb197` 最小修复并由 bounded re-audit 关闭。
+- Final inventory：248 files（231 JS / 17 MJS）、1,692 declarations；parallel=210、serial=38、every-file-one-pool=`true`；manifest=`58de55cbec54a83ce839dcbcdb25240276cc32b1779cd11bed900658dc08f84d`，discovery=`4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f`；G=259（179 behavior / 34 file-heuristic / 46 static），global `REWRITE_PUBLIC_BEHAVIOR` residual=`0`，missing replacement/retention=`0`。
+- Before/after reconciliation（before=`92f42b0f...`，after=`58de55cb...`）：added/removed files=0、pool mismatches=0、disposition mismatches=0、unexpected new declarations=0、removed declarations=0、missing after disposition=0、uniquePools=`true`；5 new declarations are the H discovery/inventory contract rows only。
+- Final full runner was executed and truthfully returned `FAILED`（248 files；1,804 tests，1,802 pass、2 fail、0 skip/todo/cancelled；lifecycle=`CLOSED`、allFilesReported=`true`、noSkippedTodo=`true`）。两项既有 exception 仍为 `tests/alpha-smoke-verifier.test.js` bundled Playwright Node unavailable 与 `tests/phase-06-capability-specific-inventory.test.js` missing `release-alpha/win-unpacked/resources/app.asar`；未宣称 full gate PASS，未构建真实 artifact 或修改 production。
 
 ## M05-0 gate and boundary
 

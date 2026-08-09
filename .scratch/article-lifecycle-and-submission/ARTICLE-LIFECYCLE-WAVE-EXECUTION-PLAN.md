@@ -4,7 +4,7 @@
 
 ## 1. 当前状态
 
-快照日期：2026-08-09。每次执行前必须以当前 Git 状态重新验证，本文不能覆盖 Git 事实。
+快照日期：2026-08-10。每次执行前必须以当前 Git 状态重新验证，本文不能覆盖 Git 事实。
 
 | 项目                       | 状态       | 说明                                                                                                                                                                         |
 | -------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -22,9 +22,9 @@
 | Maintenance M03           | `COMPLETE` | M03-0/A/B/C Closure 与最终 clean-HEAD reconciliation 已闭合                                                                                                                 |
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
-| Maintenance M05             | `PARTIAL`  | M05-0 inventory/disposition ledger、A–H ownership/scope freeze 与 E1→E2→E3 decision 已完成；下一且唯一动作是 M05-A                                    |
+| Maintenance M05             | `COMPLETE`  | M05-I combined audit/closure、blocking remediation、bounded re-audit 与 clean-HEAD M05-specific gates 已闭合；完整 runner 的两项非 M05 artifact/runtime exception 见 `handoffs/M05-I-combined-closure.md` |
 
-**当前动作：Wave 10 与 M04 已闭合；M05-0 已完成 authoritative inventory/disposition ledger、A–H ownership/scope freeze，并将 E 冻结为 `E1 → E2 → E3`。M05=`PARTIAL`，下一且唯一允许动作是从最新 clean integration HEAD 单独执行 M05-A；之后严格按 `M05-A → B → C → D → E1 → E2 → E3 → F → G → H → I` 串行。M05-0 COMPLETE 后后续包不得自行改 ownership/scope，blocking finding 例外必须先显式修订 ledger/合同。M05-I 只做独立 combined audit/closure，不是广泛 implementation。Wave 10.5 仍为 `PARTIAL`；本次执行完成后停止，不进入 M05-A、不修改后续包的 production/test implementation、不 push 或执行真实外部操作。**
+**当前动作：Wave 10 与 M04 已闭合；M05-0 authoritative inventory/disposition ledger、A–H ownership/scope freeze、E1→E2→E3 decision 以及 M05-I combined audit/closure 均已完成。M05=`COMPLETE`；M05-I 的两个既有 artifact/runtime failure 已明确作为非 M05 exception 记录，完整 `npm test` 未被宣称为 PASS。Wave 10.5 的 M05 lane 已闭合；本次执行停止，不进入 M06、不修改后续包的 production/test implementation、不 push 或执行真实外部操作。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -62,7 +62,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
 | 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
-| 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E1 → E2 → E3 → F → G → H → I → M06 | Wave 10 COMPLETE；M05-0 已将 E 冻结为 `E1 → E2 → E3` | `PARTIAL`；M04、M05-0 COMPLETE；下一唯一项 M05-A |
+| 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E1 → E2 → E3 → F → G → H → I → M06 | Wave 10 COMPLETE；M05-0 已将 E 冻结为 `E1 → E2 → E3` | `COMPLETE`；M04、M05-0、M05-I COMPLETE；M06 未启动 |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
 | 13   | 平台逐个探索 → 仅 SUPPORTED 的 19→20→21 → 各平台真实验收 | Wave 12 COMPLETE + 每平台显式授权                        | `PENDING`                                                                             |

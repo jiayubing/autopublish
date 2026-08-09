@@ -4,7 +4,7 @@
 
 - 结果：`COMPLETE`（H scope/gates；完整根测试的两个既有 artifact/runtime failure 保留为 exception，未被 runner 吞掉）。
 - Base：`76416590c9015218f19287e50145da95f10f1029`，启动时已核对 HEAD 与工作树 clean。
-- Final：implementation/evidence/handoff commit；提交后以真实 `git rev-parse HEAD` 与 `git status --porcelain` 作为最终 clean-HEAD evidence。
+- Final：`c50f7d857f7453d8f189f8f9f8d5a99b8e86ace6`（M05-H implementation/evidence source state）。
 - Next：`M05-I`。本任务未启动 I/M06、未创建子代理或并行线程。
 
 ## 范围与实现
@@ -24,7 +24,7 @@
 - Discovery：248 files = 231 `.test.js` + 17 `.test.mjs`；discovery digest=`4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f`。
 - Pool：parallel=210、serial=38；pool digest=`dab08bf8f6b7e063030751ff3d5ed49e5de36936ea4a2830e0af0a8b430da428`；每文件恰好一个 pool。
 - Before（M05-G final）：248 files、1,687 declarations，manifest=`92f42b0fa74c5c2fbe5cc5baa9dc1dda186ea62e48951ff208dc0c738a921c9d`。
-- After：248 files、1,691 declarations，manifest=`29dfa8ca79a86513bea06ff65de62ed7634fa704b32f9458ce9980b56bae6952`。
+- After：248 files、1,691 declarations，实际可复现 manifest=`9b51cb6bef527e7636283204265557db94c9bc69b4214048ab3edf38c3f5e533`。原 handoff 中的 `29dfa8ca...` 为 stale digest，已由 M05-I 复核并在 `M05-H-evidence.json` / authoritative ledger 中更正。
 - 对账：added files=0、removed files=0、pool mismatches=0、disposition mismatches=0、unexpected new declarations=0、removed declarations=0。新增 4 条 declaration 均为 `M05-H`，无业务 static rewrite。
 
 ## Runner evidence / gates
@@ -38,7 +38,7 @@
 - `node --test tests/phase-08-cleanup-gates.test.js`：4/4 PASS（补齐 renderer lockfile 依赖后）。
 - `node --test tests/release-evidence.test.js`：9/9 PASS。
 - `npm run test:discover`：248 files，JS/MJS 均发现。
-- `node scripts/test-inventory.js --output <temp>`：248 files、1,691 declarations，manifest=`29dfa8ca...`。
+- `node scripts/test-inventory.js --output <temp>`：248 files、1,691 declarations，实际可复现 manifest=`9b51cb6b...`；原始记录的 `29dfa8ca...` 已由 M05-I 标为 stale provenance。
 - `node scripts/create-test-discovery-evidence.js --output <temp>`：PASSED，pool 唯一性 PASS。
 - `node scripts/create-test-inventory-evidence.js --before <M05-G snapshot> --output <temp>`：PASSED，逐项 before/after 对账 PASS。
 - 小型 hybrid/serial parity probe（phase-04 + discovery + inventory 三文件）：两模式均 20/20 PASS，counts 相等；两者 `CLOSED`、all files reported、无 skip/todo。
@@ -67,3 +67,7 @@ Bounded re-check 只覆盖该修复、stream close/reporter barrier、pool/disco
 
 - Next：`M05-I` combined audit/closure；H 不启动 I。
 - Do-not-touch：production、A–G behavior/static owner、业务断言与 schema、runner timeout/concurrency 上限、auth-server 业务测试、M06、Ticket 25、真实外部操作。
+
+## M05-I reconciliation note
+
+本节只记录 M05-I 对 H provenance 的校正与 bounded closure，不改变 H 的历史 scope。M05-I 在 H source state `c50f7d857f7453d8f189f8f9f8d5a99b8e86ace6` 重建 after inventory，确认 H 的真实 after digest 为 `9b51cb6b...`，不是原文记录的 `29dfa8c...`。随后仅修复一个 combined-audit blocking finding：runner 原先会把 top-level `describe.skip` 计为零 skip 并返回成功；`12ee4bfa5ba7659703150d83b35a70866aedb197` 增加 reporter marker fail-closed 计数及回归测试。修复后的最终 M05-I inventory 为 248 files / 1,692 declarations，manifest=`58de55cbec54a83ce839dcbcdb25240276cc32b1779cd11bed900658dc08f84d`；完整 closure 见 `M05-I-combined-closure.md`。
