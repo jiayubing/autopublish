@@ -12,6 +12,7 @@
 - A implementation evidence：`e7db055147034c1edd887328e5a8cfa6bc564430`；A handoff 记录 before/after contract digest `06ec5b952119436c3bdaca2bb772914c5c7906e1ad145514b46c5e09fc986749`、fixture digest `16ff564535e3318c5a2889fb23aa757072541abde2e47d4c7db7b63ed96807b4`，均相等。
 - B implementation evidence：`b53cb722d17e286c262498a0d12be321926b9751`；B handoff 记录 before/after public comparison digest `9314491bc3052dbb660317c8067589a513e1e02585e2f16ec6c4b7ca609163bd`、`differenceCount: 0`，以及 17 个 projector 的 `mismatchCount: 0`。
 - Current production tree equality：`git diff --name-only b53cb722d17e286c262498a0d12be321926b9751 HEAD -- auto—publish` 输出 `0`；当前 HEAD 相对 B implementation 只包含 handoff 证据修正。
+- M04-C closure commit：`5ece9ac83bd1f490e107d17767bc68aa81cfe8db`，commit tree `95fb4f81a4bcca2079c64affef9aa39f4231c418`；最终 clean-HEAD gate 在该 sourceState 上完成，`git status --porcelain=v1 --branch` 仅输出 `## HEAD (no branch)`。
 
 ## Checked invariants
 
@@ -25,7 +26,7 @@
 
 ## Combined manifest / absence evidence
 
-本次在 base HEAD 现场 probe（递归 schema、error descriptor 与 argument function 做稳定序列化）得到：
+本次在 C base sourceState 现场 probe（递归 schema、error descriptor 与 argument function 做稳定序列化）得到；最终 clean HEAD 重跑得到相同摘要：
 
 | Surface | Count | Version | Order digest | Current probe manifest digest | Result |
 | --- | ---: | --- | --- | --- | --- |
@@ -61,6 +62,8 @@ A handoff 中曾记录的 fixture-count wording `PROCESS_EVIDENCE_GAP` 已在 A 
 - `npm run format:check` — PASS；`git diff --check` — PASS。
 - Static owner/consumer/absence probes — PASS：无旧 production import、无 forwarding export shape、owner capability/channel 无重复；preload/bridge/Renderer 相对 M04 base diff 为 0。
 
+Final clean-HEAD rerun at `5ece9ac83bd1f490e107d17767bc68aa81cfe8db` repeated the targeted 25/25 and 82/82 suites, `test:ticket-24-e`, `test:legacy-absence`, `test:phase-08:gates` (5/5), `test:production-ipc-matrix` (35/35), lint, all three typechecks, format check and `git diff --check`; every command passed.
+
 The first parallel invocation hit the orchestrator's 120-second timeout while long-running child tests were still active; those identified test-runner processes were explicitly stopped, then each gate was rerun independently with sufficient timeout. The independent runs above are the evidence; the parallel timeout is not counted as a code failure.
 
 ## Bounded re-audit
@@ -71,4 +74,4 @@ Bounded re-audit scope：只复核本 combined audit 的 owner/registry/absence/
 
 - M04-A、M04-B、M04-C 均 `COMPLETE`；Wave 10.5 更新为 `PARTIAL`；M05/M06 保持未启动。
 - 本线程不 merge、不 push，不创建 Goal/子线程/后续任务。
-- Final sourceState、commit、clean-worktree evidence 与 bounded re-audit 的最终 HEAD 结果在提交后补录到本节。
+- Final production sourceState：closure commit `5ece9ac83bd1f490e107d17767bc68aa81cfe8db`、`TREE=95fb4f81a4bcca2079c64affef9aa39f4231c418`；其后仅提交本 handoff 的 evidence-only 修订，`git diff --name-only 5ece9ac83bd1f490e107d17767bc68aa81cfe8db HEAD -- auto—publish` 为 `0`，最终 worktree clean。Final bounded re-audit 已在该 clean production sourceState 上 PASS，所有 blocking finding 已关闭，未触发 escalation。
