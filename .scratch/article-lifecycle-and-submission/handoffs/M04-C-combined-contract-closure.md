@@ -77,3 +77,9 @@ Bounded re-audit scope：只复核本 combined audit 的 owner/registry/absence/
 - M04-A、M04-B、M04-C 均 `COMPLETE`；Wave 10.5 更新为 `PARTIAL`；M05/M06 保持未启动。
 - 本线程不 merge、不 push，不创建 Goal/子线程/后续任务。
 - Final production sourceState：closure commit `5ece9ac83bd1f490e107d17767bc68aa81cfe8db`、`TREE=95fb4f81a4bcca2079c64affef9aa39f4231c418`；其后仅提交本 handoff 的 evidence-only 修订，`git diff --name-only 5ece9ac83bd1f490e107d17767bc68aa81cfe8db HEAD -- auto—publish` 为 `0`，最终 worktree clean。Final bounded re-audit 已在该 clean production sourceState 上 PASS，所有 blocking finding 已关闭，未触发 escalation。
+
+## Main integration closure record
+
+- Main task verified the C worktree clean at evidence commit `2461f050a428bed53f4be005839bee6316ed1bb2` and merged it into `codex/article-lifecycle-submission` with merge commit `60ca6e535a8ebf120dc43d05582316af82594c78`.
+- Main applied only docs/evidence corrections afterward (`09d23c5` and `fd52826`); the production subtree remains exactly `f061993a8d5cceabf948b87ecdcb03018cc31bf3`, equal to the M04-B base production subtree and to the C production sourceState.
+- Final main-branch verification: clean worktree, no Node process residue, submission 25/25, content/lifecycle/IPC 82/82, production matrix 35/35, Phase 8 5/5, Ticket 24-E absence, legacy absence, lint and all three typechecks PASS. Full format check retains only the two documented nonblocking P3 format findings; `git diff --check` PASS.
