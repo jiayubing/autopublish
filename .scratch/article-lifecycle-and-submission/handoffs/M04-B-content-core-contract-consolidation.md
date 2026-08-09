@@ -147,7 +147,7 @@ Dependency direction is one-way: `production-registry → domain contract module
 - `node --test tests/phase-03-six-stage-article-lifecycle.test.js tests/article-mutation-coordinator.test.js tests/article-lifecycle-ticket-22.test.js tests/submission-preparation-lifecycle.test.js tests/ai-content-ipc.test.js tests/article-management-snapshot.test.js` — PASS, 65/65.
 - `npm run lint` — PASS.
 - `npm run typecheck:main`, `npm run typecheck:bridge`, `npm run typecheck:renderer` — PASS.
-- `npm run format:check` — PASS; targeted Prettier check for all six new contract modules — PASS; `git diff --check` — PASS (only normal LF→CRLF working-copy warnings).
+- Targeted Prettier check for all six new contract modules — PASS; `git diff --check` — PASS (only normal LF→CRLF working-copy warnings). The main integration recheck of `npm run format:check` reports only the pre-existing `media-workbench/src/types/generation.ts` warning; that file is byte-for-byte unchanged from the B base and remains outside this work package, so it was not modified as scope expansion.
 - `npm run test:production-ipc-matrix` — PASS, 35/35; all 129 production capabilities close by TypeChecker symbol identity; duration 212.972 seconds.
 - `npm run test:ticket-24-e` — PASS, no forbidden source/runtime/import residue.
 - `npm run test:legacy-absence` — PASS, source/archive matches 0.
@@ -189,4 +189,5 @@ Scope was limited to the known Primary Audit invariants, the final import/assemb
 - Main task verified the implementation worktree clean at `b53cb722d17e286c262498a0d12be321926b9751`.
 - Main integration branch `codex/article-lifecycle-submission` merged this commit with `--no-ff`; integration merge commit: `505cfbe0f90bffd47d925a112a9c65fdc8c2cc93`.
 - The production tree on the integration HEAD matches the M04-B implementation commit; no push or real external operation was performed.
+- Main integration recheck at `8077f2ce139b4b7ef08a2bcf4459598de610c61d`: direct B behavior 17/17 + 65/65, lint, main/bridge/renderer typechecks, production IPC matrix 35/35, Ticket 24-E absence, legacy absence and Phase 8 gates 5/5 all PASS. The only non-PASS check is the inherited format warning recorded above; it does not alter M04 contract behavior or ownership.
 - M04-B is closed. The next permitted work package is M04-C only, after the main task re-verifies the clean integration HEAD.
