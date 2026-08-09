@@ -30,7 +30,7 @@
 ## Inventory / discovery evidence
 
 - Before→after：260→255 files；1,740→1,708 declarations；file-level source candidates 54/321→46/267；assertion-level candidates 133→113；M05-C declarations 191→159；M05-C rewrite residual=0。
-- After manifest：`b670d1a2d230890cfd6d73d8552f29e5c43f796d425a6637efa8ff440c1ff496`；discovery：`1f480cecd797c7f48a9a0583f628eb0c58a3882c9c1ac087cdec73e62bd1affc`。
+- After manifest：`4b0a675bf6fe87a26f7a2e5baf68b9045ec49350a5695eeedab1cfb3e2cebdbe`；discovery：`1f480cecd797c7f48a9a0583f628eb0c58a3882c9c1ac087cdec73e62bd1affc`。
 - Discovery/inventory contract：8/8 PASS；`npm run test:discover` PASS，255 files（238 JS / 17 MJS）。
 
 ## Tests / gates

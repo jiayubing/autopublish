@@ -2519,7 +2519,7 @@
 ## M05-C execution delta (2026-08-09)
 
 - Base HEAD：`e09524ed52b315d90307feca5bdd01d2408bf37b`；implementation/evidence source state：`af6356e260e9f8ea0c8c9079ecc9b700cabfb747`。
-- After inventory：255 files（238 JS / 17 MJS）、1,708 declarations、46 file-level source-reading files / 267 declarations、113 assertion-level source-reading candidates；manifest digest `b670d1a2d230890cfd6d73d8552f29e5c43f796d425a6637efa8ff440c1ff496`，discovery digest `1f480cecd797c7f48a9a0583f628eb0c58a3882c9c1ac087cdec73e62bd1affc`。
+- After inventory：255 files（238 JS / 17 MJS）、1,708 declarations、46 file-level source-reading files / 267 declarations、113 assertion-level source-reading candidates；manifest digest `4b0a675bf6fe87a26f7a2e5baf68b9045ec49350a5695eeedab1cfb3e2cebdbe`，discovery digest `1f480cecd797c7f48a9a0583f628eb0c58a3882c9c1ac087cdec73e62bd1affc`。
 - Delta：files `260 → 255`，declarations `1,740 → 1,708`，file-level candidates `54/321 → 46/267`，assertion-level candidates `133 → 113`；M05-C package declarations `191 → 159`，`REWRITE_PUBLIC_BEHAVIOR` residual=`0`。
 - workspace/initial-refresh rows 由 `workspace-feature`、`workspace-coordinator` 的 public snapshot/revision/runtime matrix、workspace runtime public integration 与真实 Renderer queue lifecycle 替代；旧 env/module-reload 扫描与重复 platform invalidation wrapper 退役。
 - settings/provider rows 由 `settings-feature` 的 named query/command、overlap/failure/stale matrix，AI URL public validator，真实 Renderer settings/nav/runtime/storage presentation 与 Electron Hepan save/test/clear focus lifecycle 替代。
