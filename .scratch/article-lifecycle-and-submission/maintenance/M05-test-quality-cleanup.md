@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `READY`；分析与初始 inventory 已完成，见 `../handoffs/M05-analysis-and-work-package-map.md`。M05-0 至 M05-I 均未实施；本状态不表示任何测试已删除、改写或完成 Closure。
+**Status:** `PARTIAL`；M05-0 已完成并冻结 authoritative ledger，A–H 测试迁移与 M05-I Closure 尚未实施。历史分析输入见 `../handoffs/M05-analysis-and-work-package-map.md`，当前唯一 inventory 真源见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项，必须按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E → M05-F → M05-G → M05-H → M05-I` 从新的 clean integration HEAD 严格串行；M05-I Closure 后才允许 M06。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项，必须按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I` 从新的 clean integration HEAD 严格串行；M05-0 已 Closure，下一且唯一允许动作是 M05-A；M05-I Closure 后才允许 M06。
 
 ## 1. Evidence policy
 
@@ -57,7 +57,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **禁止触碰:** production、现有业务测试断言的删除/降级、runner concurrency/timeout/pool policy、auth-server 业务测试。
 
-**前置依赖:** M04 COMPLETE；`../handoffs/M05-analysis-and-work-package-map.md`。M05-0 是当前唯一可执行项。
+**前置依赖:** M04 COMPLETE；`../handoffs/M05-analysis-and-work-package-map.md`。M05-0 已完成；当前唯一可执行项为 M05-A。
 
 **完成标准:** inventory 与 `npm run test:discover` 文件集合一致；JS/MJS 均覆盖；file-level heuristic 与 assertion-level 人工结论明确区分；所有 source-reading 候选和 phase duplicate cluster 有唯一 disposition/owner/后续包；混合文件不被整文件误分类；before manifest/digest 可供 M05-I 对照。ledger 必须冻结 A/B/C authoritative owner、A–H 每项 scope/disposition、替代 evidence、允许修改范围和直接 gate，并完成下述 M05-E complexity decision。
 
@@ -74,6 +74,8 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 **主要测试/gate:** inventory 自测、`npm run test:discover`、`test-discovery-contract.test.js`、`git diff --check`。
 
 **独立线程:** 是；这是后续实现的硬 gate，不与其他包并行。
+
+**M05-0 Closure freeze（2026-08-09）：** authoritative ledger 已覆盖 runner 实际发现的 251 个 `.test.js` 与 17 个 `.test.mjs`、1,818 个静态声明、动态矩阵、file-level/assertion-level source-reading distinction、合法 static category、duplicate invariant/signature cluster、pool assignment 和逐项 disposition。A/B/C ownership 采用本合同 2.1 表；A–H scope/disposition/replacement mapping 以 `../handoffs/M05-0-authoritative-test-disposition-ledger.md` 为唯一真源。M05-E 已冻结为 `M05-E1 → M05-E2 → M05-E3`，严格顺序为 `D → E1 → E2 → E3 → F`；migration reader 不进入 E1–E3。M05-0 未删除/改写任何业务测试、未改 runner policy、未触碰 production。
 
 ### M05-A — Renderer content, article-management, and generation evidence
 
@@ -241,21 +243,21 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 推荐且唯一默认顺序：
 
-`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E core lifecycle/store/submission（或 M05-0 冻结的 E1 → E2 → E3）→ M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure`
+`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure`
 
 严格依赖表：
 
 | Next | 必须已 COMPLETE 的直接前置 | 启动条件 |
 | --- | --- | --- |
-| M05-0 | M04 | 当前唯一可执行项；从最新 clean integration HEAD 启动 |
+| M05-0 | M04 | COMPLETE；ledger 已集成，下一项为 M05-A |
 | M05-A | M05-0 | authoritative ledger 与 E complexity decision 已冻结并集成 |
 | M05-B | M05-A | A Closure/evidence 已进入新的 clean integration HEAD |
 | M05-C | M05-B | B Closure/evidence 已进入新的 clean integration HEAD |
 | M05-D | M05-C | 三个 Renderer cluster 全部稳定，caller evidence 不再变动 |
-| M05-E 或 E1 | M05-D | 只能执行 M05-0 已冻结的 E 形态 |
-| M05-E2 | M05-E1 | 仅拆分形态存在；E1 Closure 已集成 |
-| M05-E3 | M05-E2 | 仅拆分形态存在；E2 Closure 已集成 |
-| M05-F | M05-E；或 E1/E2/E3 全部 | 核心 lifecycle/store/submission evidence 全部 Closure |
+| M05-E1 | M05-D | M05-0 已冻结拆分形态；D Closure 已集成 |
+| M05-E2 | M05-E1 | E1 Closure 已集成 |
+| M05-E3 | M05-E2 | E2 Closure 已集成 |
+| M05-F | M05-E3 | E1/E2/E3 核心 lifecycle/store/submission evidence 全部 Closure |
 | M05-G | M05-F | 行为替代已完成，才允许收敛合法 static guards |
 | M05-H | M05-G | 最终测试文件集合与 guard 集合已稳定 |
 | M05-I | M05-H | 0–H 全部位于同一 clean integration HEAD；只做 combined audit/closure |
@@ -268,7 +270,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 ## 4. Acceptance criteria
 
-- [ ] M05-0 产出可复现 before inventory，覆盖实际 discovery 的 JS/MJS，并明确每个被删/改 static assertion 的替代行为 evidence。
+- [x] M05-0 产出可复现 before inventory，覆盖实际 discovery 的 JS/MJS，并明确每个被删/改 static assertion 的替代行为 evidence。
 - [ ] 不再存在用私有函数名、实现行数、任意源码片段证明业务行为的测试。
 - [ ] architecture/security/legacy absence/packaging/CI/discovery static guard 被保留并有清晰分类。
 - [ ] 核心业务 owner 都有稳定公开接口或直接调用方测试，失败能定位到领域边界。

@@ -8,6 +8,7 @@
     "snapshot": "scripts\\snapshot.cmd",
     "test": "node scripts/run-tests.js",
     "test:discover": "node scripts/run-tests.js --list",
+    "test:inventory": "node scripts/test-inventory.js",
     "test:desktop-core": "node scripts/run-tests.js --exclude tests/production-packaging.test.js --exclude tests/desktop-packaging.test.js --exclude tests/packaging-runtime.test.js --exclude tests/release-evidence.test.js --exclude tests/alpha-smoke-verifier.test.js --exclude tests/phase-02-runtime-capacity.test.js --exclude tests/phase-03-remote-order-legacy-path-absence.test.js --exclude tests/phase-05-handoff-capacity.test.js --exclude tests/phase-06-capability-specific-inventory.test.js --exclude tests/phase-06-media-renderer-capacity.test.mjs --exclude tests/phase-06-production-ipc-fixture-matrix.test.js --exclude tests/phase-08-cleanup-gates.test.js",
     "test:capacity": "node --test --test-concurrency=1 tests/phase-02-runtime-capacity.test.js tests/phase-05-handoff-capacity.test.js tests/phase-06-media-renderer-capacity.test.mjs",
     "test:production-ipc-matrix": "node --test tests/phase-06-production-ipc-fixture-matrix.test.js",
