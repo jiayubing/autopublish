@@ -23,7 +23,7 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 
-**当前动作：Wave 10 已闭合；M04-A、M04-B、M04-C 均已完成 Closure 并集成到新的 clean integration HEAD，M05、M06 尚未启动。Wave 10.5 为 `PARTIAL`；M04 已 COMPLETE，本次用户截止点到此停止，不进入 M05/M06。A/B 已完成来源 contract owner、直接消费者、Primary Audit 与 bounded re-audit；C 已完成唯一 combined audit、bounded remediation（无 blocking finding）、bounded re-audit、final clean-HEAD gate 与 evidence。不得预创建后续任务、push 或执行真实外部操作。**
+**当前动作：Wave 10 与 M04 已闭合；M05 planning 已最终收敛但 implementation 未启动。M05=`READY`，下一且唯一允许动作是从最新 clean integration HEAD 单独执行 M05-0，产出 A–H 的 authoritative inventory/disposition ledger并冻结 E 为单包或 E1→E2→E3。之后严格按 `M05-0 → A → B → C → D → E（或 E1 → E2 → E3）→ F → G → H → I` 串行；M05-0 COMPLETE 后后续包不得自行改 ownership/scope，blocking finding 例外必须先显式修订 ledger/合同。M05-I 只做独立 combined audit/closure，不是广泛 implementation。Wave 10.5 仍为 `PARTIAL`；本次规划完成后停止，不创建 M05-0 执行线程、不修改 production/test implementation、不 push 或执行真实外部操作。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
@@ -61,7 +61,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 8.5  | M03-0 → M03-A → M03-B → M03-C                            | Wave 8 COMPLETE；当前 lane 仅豁免该调度 gate             | `COMPLETE`                                                                            |
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
 | 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
-| 10.5 | M04-A → M04-B → M04-C → M05 → M06                        | Wave 10 COMPLETE                                         | `PARTIAL`；M04-A、M04-B、M04-C COMPLETE，M05/M06 尚未启动；当前动作明确 M04 已 COMPLETE，主任务按用户截止点停止 |
+| 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E(*) → F → G → H → I → M06 | Wave 10 COMPLETE；`E(*)` 只可由 M05-0 冻结为 E 或 E1→E2→E3 | `PARTIAL`；M04 COMPLETE；M05 planning COMPLETE、implementation READY；下一唯一项 M05-0 |
 | 11   | 25                                                       | 24；M10.5 COMPLETE                                       | `PENDING`                                                                             |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
 | 13   | 平台逐个探索 → 仅 SUPPORTED 的 19→20→21 → 各平台真实验收 | Wave 12 COMPLETE + 每平台显式授权                        | `PENDING`                                                                             |
@@ -86,7 +86,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 
 - **Wave 7**：Ticket 10 拆 Renderer 业务巨型组件；Ticket 16 实现取消状态机。不得为了“等 M03”把完整 cancellation 状态机继续塞进已有巨型 aggregate；Ticket 16 可以建立职责清楚的独立 cancellation owner，但不得执行系统性 M03。
 - **Wave 8.5 / M03**：按 M03-0 职责图、M03-A queue cluster、M03-B ArticleMutationCoordinator cluster、M03-C 统一审计收口串行治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration seam，且不得提前实现 migration-only writer。
-- **Wave 10 / 10.5**：Ticket 24 已按 `24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F` 严格串行删除 legacy surface 并闭合。M04 按 `M04-A → M04-B → M04-C` 从新的 integration HEAD 严格串行收缩 contract owner；A/B 禁止跨 owner 顺手清理并保存 before/after capability manifest，C 只做 combined audit 与 bounded remediation。每个工作包使用独立执行任务，主任务只在前一包 Closure 后创建下一任务，不得预创建并行修改共享 owner。M04 完成后才允许 M05，之后 M06 收口剩余 silent catch。
+- **Wave 10 / 10.5**：Ticket 24 与 M04 已闭合。M05 按真实测试 owner 拆为 authoritative inventory、三个冻结的 Renderer cluster、typed IPC、核心 lifecycle/store/submission、external adapter、合法 static gate、runner/discovery 和 combined closure；顺序与边界以 `maintenance/M05-test-quality-cleanup.md` 为准。M05-0 是唯一 inventory/scope 真源和唯一允许把 E 拆为 E1/E2/E3 的决策点；其后只有 blocking finding 可显式改合同。每包在前包 Closure 和新 clean integration HEAD 后才启动；M05-I 只做 combined audit/closure，完成后才允许 M06。
 - **Wave 11**：Ticket 25 负责最终核心验收 evidence；真实平台操作仍需逐次用户授权。
 - **Wave 12–13**：核心完成后的图片扩展。旧组默认保持 `imageCount=0`；平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。
 
