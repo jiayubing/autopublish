@@ -2,12 +2,14 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const vm = require("node:vm");
-const { pathToFileURL } = require("node:url");
 
 const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");
+const { loadPreloadHarness } = require("./helpers/preload-harness");
+const {
+  loadWorkspaceAndPlatformModules,
+} = require("./helpers/renderer-production-modules");
 
 const RETIRED_WITHOUT_PRODUCTION_CONSUMER = Object.freeze([
   "attention.getArticleAttention",
@@ -80,84 +82,45 @@ test("checkpoint C keeps one Settings owner and zero retired media/navigation pr
 });
 
 test("malformed workspace and platform events cross the real preload into one safe diagnostic sink", async () => {
-  const exposed = {};
-  const transportListeners = new Map();
-  const preload = fs.readFileSync(
-    path.resolve(__dirname, "../desktop/preload.js"),
-    "utf8",
-  );
-  vm.runInNewContext(preload, {
-    require(name) {
-      if (name === "electron")
-        return {
-          contextBridge: {
-            exposeInMainWorld(name, value) {
-              exposed[name] = value;
-            },
-          },
-          ipcRenderer: {
-            invoke() {
-              throw new Error("invoke is not used by this event fixture");
-            },
-            on(channel, listener) {
-              transportListeners.set(channel, listener);
-            },
-            removeListener(channel) {
-              transportListeners.delete(channel);
-            },
-          },
-        };
-      if (name === "./ipc/contracts/production-registry")
-        return { productionIpcRegistry };
-      throw new Error(`Unexpected preload dependency: ${name}`);
-    },
-  });
+  const preload = loadPreloadHarness();
+  const exposed = preload.api;
+  const transportListeners = preload.transportListeners;
 
-  const root = path.resolve(__dirname, "../media-workbench/src/features");
   const [
     { createWorkspaceCoordinator },
     sink,
     { routePlatformTransportEvent },
-  ] = await Promise.all([
-    import(
-      pathToFileURL(path.join(root, "workspace/workspace-coordinator.js"))
-    ),
-    import(
-      pathToFileURL(path.join(root, "workspace/runtime-diagnostic-store.js"))
-    ),
-    import(pathToFileURL(path.join(root, "platform/platform-event-router.js"))),
-  ]);
+  ] = await loadWorkspaceAndPlatformModules();
   let sinkNotifications = 0;
   const unsubscribeSink = sink.subscribeRuntimeDiagnostics(() => {
     sinkNotifications += 1;
   });
   const coordinator = createWorkspaceCoordinator({
-    subscribe: exposed.desktopConsole.workspaceData.onInvalidated,
+    subscribe: exposed.workspaceData.onInvalidated,
     diagnose: (item) => sink.reportRuntimeDiagnostic(item.code, item.category),
   });
   coordinator.start();
   const unsubscribeWorkspaceDiagnostic =
-    exposed.desktopConsole.workspaceData.onInvalidationDiagnostic(() =>
+    exposed.workspaceData.onInvalidationDiagnostic(() =>
       sink.reportRuntimeDiagnostic(
         "WORKSPACE_INVALIDATION_TRANSPORT_REJECTED",
         "workspace-invalidation",
       ),
     );
-  const unsubscribePlatform = exposed.desktopConsole.platforms.onState(
-    (value) =>
-      routePlatformTransportEvent(
-        value,
-        () => assert.fail("malformed platform event reached feature state"),
-        sink.reportRuntimeDiagnostic,
-      ),
+  const unsubscribePlatform = exposed.platforms.onState((value) =>
+    routePlatformTransportEvent(
+      value,
+      () => assert.fail("malformed platform event reached feature state"),
+      sink.reportRuntimeDiagnostic,
+    ),
   );
-  const unsubscribePlatformDiagnostic =
-    exposed.desktopConsole.platforms.onStateDiagnostic(() =>
+  const unsubscribePlatformDiagnostic = exposed.platforms.onStateDiagnostic(
+    () =>
       sink.reportRuntimeDiagnostic(
         "PLATFORM_EVENT_TRANSPORT_REJECTED",
         "platform-event",
       ),
-    );
+  );
 
   const rawSecret = {
     schemaVersion: 1,
@@ -169,8 +132,8 @@ test("malformed workspace and platform events cross the real preload into one sa
     stack: "private stack",
     body: "private article body",
   };
-  transportListeners.get("workspace:data-invalidated")(null, rawSecret);
-  transportListeners.get("platform-state")(null, rawSecret);
+  preload.emit("workspace:data-invalidated", rawSecret);
+  preload.emit("platform-state", rawSecret);
 
   assert.deepEqual(sink.getRuntimeDiagnosticsSnapshot().slice(-2), [
     {

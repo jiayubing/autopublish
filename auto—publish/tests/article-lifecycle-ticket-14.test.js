@@ -5,7 +5,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const vm = require("node:vm");
 
 const domain = require("../src/domain");
 const { createArticleStore } = require("../src/content/article-store");
@@ -22,6 +21,9 @@ const {
 const {
   createPaidOrderCreationResolutionService,
 } = require("../desktop/services/paid-order-creation-resolution-service");
+const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
+const { registerMediaIpc } = require("../desktop/ipc/media-ipc");
+const { loadPreloadHarness } = require("./helpers/preload-harness");
 const {
   createArticleAttentionQuery,
 } = require("../desktop/services/article-attention-query");
@@ -134,7 +136,9 @@ async function admitArticle(value, articleId, mediaResourceId = "media-14") {
     articleRefs: [{ clientId: "client-a", articleId }],
     mediaResourceId,
   });
-  return value.preflight.confirm({ confirmationToken: preview.confirmationToken });
+  return value.preflight.confirm({
+    confirmationToken: preview.confirmationToken,
+  });
 }
 
 function makeUncertain(value, batchId, claimToken) {
@@ -160,7 +164,10 @@ function makeUncertain(value, batchId, claimToken) {
     systemSubmissionCode: claim.systemSubmissionCode,
     submittedTitle,
     submittedBody,
-    contentFingerprint: domain.contentFingerprint(submittedTitle, submittedBody),
+    contentFingerprint: domain.contentFingerprint(
+      submittedTitle,
+      submittedBody,
+    ),
     preparedAt: claim.preparedAt,
   };
   const started = value.transitions.beginOrderCreationRemoteCall({
@@ -262,8 +269,14 @@ test("uncertain order creation stays frozen and can bind only a fully matched qu
       attention.orderCreationAttemptId,
       uncertain.claim.orderCreationAttemptId,
     );
-    assert.equal(attention.allowedActions.includes("bind-paid-order-number"), false);
-    assert.equal(attention.allowedActions.includes("confirm-paid-order-absent"), false);
+    assert.equal(
+      attention.allowedActions.includes("bind-paid-order-number"),
+      false,
+    );
+    assert.equal(
+      attention.allowedActions.includes("confirm-paid-order-absent"),
+      false,
+    );
     assert.deepEqual(attention.resolutionActions, [
       "bind-paid-order-number",
       "confirm-paid-order-absent",
@@ -271,9 +284,9 @@ test("uncertain order creation stays frozen and can bind only a fully matched qu
     const lifecycleAttention = value.store.listArticleLifecycleFacts({
       articleIds: ["article-a"],
     }).attentionItems[0];
-    const publicationAttention = value.store.listPublicationAttention().find(
-      (item) => item.articleId === "article-a",
-    );
+    const publicationAttention = value.store
+      .listPublicationAttention()
+      .find((item) => item.articleId === "article-a");
     assert.deepEqual(
       {
         orderCreationAttemptId: lifecycleAttention.orderCreationAttemptId,
@@ -284,7 +297,10 @@ test("uncertain order creation stays frozen and can bind only a fully matched qu
         resolutionActions: publicationAttention.resolutionActions,
       },
     );
-    assert.deepEqual(attention.resolutionActions, lifecycleAttention.resolutionActions);
+    assert.deepEqual(
+      attention.resolutionActions,
+      lifecycleAttention.resolutionActions,
+    );
 
     const prepared = await resolution.prepareBindOrderNumber({
       orderCreationAttemptId: uncertain.claim.orderCreationAttemptId,
@@ -357,9 +373,12 @@ test("query failure, mismatch, and incomplete supplier identity all keep the att
           orderCreationAttemptId: uncertain.claim.orderCreationAttemptId,
           orderId: "order-query",
         }),
-        { code: result.kind === "transport_error"
-            ? "PAID_ORDER_RESOLUTION_QUERY_FAILED"
-            : "PAID_ORDER_RESOLUTION_EVIDENCE_INSUFFICIENT" },
+        {
+          code:
+            result.kind === "transport_error"
+              ? "PAID_ORDER_RESOLUTION_QUERY_FAILED"
+              : "PAID_ORDER_RESOLUTION_EVIDENCE_INSUFFICIENT",
+        },
       );
       assert.equal(value.store.listRemoteOrders().length, 0);
       assert.equal(
@@ -391,9 +410,12 @@ test("query failure, mismatch, and incomplete supplier identity all keep the att
           orderCreationAttemptId: uncertain.claim.orderCreationAttemptId,
           orderId: "order-match",
         }),
-        { code: Object.hasOwn(overrides, "title") && overrides.title === undefined
-            ? "PAID_ORDER_RESOLUTION_EVIDENCE_INSUFFICIENT"
-            : "PAID_ORDER_RESOLUTION_EVIDENCE_MISMATCH" },
+        {
+          code:
+            Object.hasOwn(overrides, "title") && overrides.title === undefined
+              ? "PAID_ORDER_RESOLUTION_EVIDENCE_INSUFFICIENT"
+              : "PAID_ORDER_RESOLUTION_EVIDENCE_MISMATCH",
+        },
       );
       assert.equal(value.store.listRemoteOrders().length, 0);
     } finally {
@@ -446,7 +468,9 @@ test("confirming no order is token-bound, idempotent, and releases only the orig
     });
     assert.equal(facts.publications[0].status, "failed");
     assert.equal(
-      facts.publications.some((item) => item.articleId === "article-a" && item.status === "failed"),
+      facts.publications.some(
+        (item) => item.articleId === "article-a" && item.status === "failed",
+      ),
       true,
     );
     assert.equal(value.store.listRemoteOrders().length, 0);
@@ -677,7 +701,11 @@ test("a late order after manual unfreeze and a new target is preserved as a free
       })[0].items[0].status,
       "queued",
     );
-    const second = makeUncertain(value, secondBatch.batchId, "claim-new-target");
+    const second = makeUncertain(
+      value,
+      secondBatch.batchId,
+      "claim-new-target",
+    );
     const late = lateSuccessInput(first, "late-conflict-14");
     assert.throws(
       () => value.transitions.recordPaidOrderCreationSuccess(late),
@@ -687,8 +715,15 @@ test("a late order after manual unfreeze and a new target is preserved as a free
     const current = value.store.listArticleLifecycleFacts({
       articleIds: ["article-a"],
     });
-    assert.equal(current.publications.some((item) => item.status === "uncertain"), true);
-    assert.equal(second.claim.orderCreationAttemptId !== first.claim.orderCreationAttemptId, true);
+    assert.equal(
+      current.publications.some((item) => item.status === "uncertain"),
+      true,
+    );
+    assert.equal(
+      second.claim.orderCreationAttemptId !==
+        first.claim.orderCreationAttemptId,
+      true,
+    );
   } finally {
     value.close();
   }
@@ -823,89 +858,101 @@ test("paid-order IPC errors close to safe known mappings and hide unknown errors
 });
 
 test("production registrar and preload forward the four named commands without exposing create-order", async () => {
-  const registrarSource = fs.readFileSync(
-    path.resolve(__dirname, "../desktop/ipc/media-ipc.js"),
-    "utf8",
-  );
   const handlers = new Map();
   const applicationCalls = [];
-  const application = {
-    prepareBindPaidOrderNumber: (input) => applicationCalls.push(["prepare-bind", input]),
-    bindPaidOrderNumber: (input) => applicationCalls.push(["bind", input]),
-    prepareConfirmPaidOrderAbsent: (input) => applicationCalls.push(["prepare-none", input]),
-    confirmPaidOrderAbsent: (input) => applicationCalls.push(["none", input]),
+  const safeFailure = () => {
+    const error = new Error("isolated registrar failure");
+    error.code = "IPC_INTERNAL";
+    throw error;
   };
-  const registrarModule = { exports: {} };
-  vm.runInNewContext(registrarSource, {
-    module: registrarModule,
-    exports: registrarModule.exports,
-    require(name) {
-      if (name === "../services/ipc-response")
-        return { wrap: (handler) => Promise.resolve().then(handler) };
-      if (name === "../services/media-workbench-application")
-        return { createMediaWorkbenchApplication: () => application };
-      throw new Error(`Unexpected dependency: ${name}`);
+  const application = {
+    prepareBindPaidOrderNumber: (input) => {
+      applicationCalls.push(["prepare-bind", input]);
+      return safeFailure();
     },
-  });
-  registrarModule.exports.registerMediaIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    bindPaidOrderNumber: (input) => {
+      applicationCalls.push(["bind", input]);
+      return safeFailure();
+    },
+    prepareConfirmPaidOrderAbsent: (input) => {
+      applicationCalls.push(["prepare-none", input]);
+      return safeFailure();
+    },
+    confirmPaidOrderAbsent: (input) => {
+      applicationCalls.push(["none", input]);
+      return safeFailure();
+    },
+  };
+  const ipcMain = createAuthenticatedIpcMain(
+    { handle: (channel, handler) => handlers.set(channel, handler) },
+    async () => undefined,
+  );
+  registerMediaIpc({
+    ipcMain,
     mediaApplication: application,
   });
   const commands = [
-    ["media:prepare-bind-paid-order-number", { orderCreationAttemptId: "a", orderId: "o" }],
-    ["media:bind-paid-order-number", { orderCreationAttemptId: "a", orderId: "o", confirmationToken: "t" }],
-    ["media:prepare-confirm-paid-order-absent", { orderCreationAttemptId: "a" }],
-    ["media:confirm-paid-order-absent", { orderCreationAttemptId: "a", confirmationToken: "t" }],
+    [
+      "media:prepare-bind-paid-order-number",
+      { orderCreationAttemptId: "a", orderId: "o" },
+    ],
+    [
+      "media:bind-paid-order-number",
+      { orderCreationAttemptId: "a", orderId: "o", confirmationToken: "t" },
+    ],
+    [
+      "media:prepare-confirm-paid-order-absent",
+      { orderCreationAttemptId: "a" },
+    ],
+    [
+      "media:confirm-paid-order-absent",
+      { orderCreationAttemptId: "a", confirmationToken: "t" },
+    ],
   ];
-  for (const [channel, input] of commands) await handlers.get(channel)(null, input);
-  assert.deepEqual(applicationCalls.map(([name]) => name), [
-    "prepare-bind",
-    "bind",
-    "prepare-none",
-    "none",
-  ]);
-
-  const preloadSource = fs.readFileSync(
-    path.resolve(__dirname, "../desktop/preload.js"),
-    "utf8",
+  for (const [channel, input] of commands) {
+    const contract = productionIpcRegistry.byChannel(channel);
+    const response = await handlers.get(channel)(
+      null,
+      productionIpcRegistry.encodeRequest(contract, input),
+    );
+    assert.equal(response.ok, false);
+    assert.equal(response.error.code, "IPC_INTERNAL");
+  }
+  assert.deepEqual(
+    applicationCalls.map(([name]) => name),
+    ["prepare-bind", "bind", "prepare-none", "none"],
   );
-  const exposed = {};
-  const transportCalls = [];
-  vm.runInNewContext(preloadSource, {
-    require(name) {
-      if (name === "electron")
-        return {
-          contextBridge: {
-            exposeInMainWorld: (name, value) => {
-              exposed[name] = value;
-            },
-          },
-          ipcRenderer: {
-            invoke: (channel, input) => {
-              transportCalls.push([channel, input]);
-              return Promise.resolve({});
-            },
-            on() {},
-            removeListener() {},
-          },
-        };
-      if (name === "./ipc/contracts/production-registry")
-        return { productionIpcRegistry };
-      throw new Error(`Unexpected preload dependency: ${name}`);
+
+  const preload = loadPreloadHarness({
+    invoke: (channel) => {
+      const contract = productionIpcRegistry.byChannel(channel);
+      return productionIpcRegistry.failure(contract, { code: "IPC_INTERNAL" });
     },
   });
   for (const [channel, input] of commands) {
     const method = {
       "media:prepare-bind-paid-order-number": "prepareBindPaidOrderNumber",
       "media:bind-paid-order-number": "bindPaidOrderNumber",
-      "media:prepare-confirm-paid-order-absent": "prepareConfirmPaidOrderAbsent",
+      "media:prepare-confirm-paid-order-absent":
+        "prepareConfirmPaidOrderAbsent",
       "media:confirm-paid-order-absent": "confirmPaidOrderAbsent",
     }[channel];
-    await exposed.desktopConsole.orders[method](input);
+    await preload.api.orders[method](input);
   }
   assert.deepEqual(
-    transportCalls.map(([channel]) => channel),
+    preload.transportCalls.map(([channel]) => channel),
     commands.map(([channel]) => channel),
   );
-  assert.equal(Object.hasOwn(exposed.desktopConsole.orders, "createOrder"), false);
+  for (const [index, [channel, input]] of commands.entries()) {
+    const contract = productionIpcRegistry.byChannel(channel);
+    assert.deepEqual(
+      productionIpcRegistry.parseRequest(
+        contract,
+        preload.transportCalls[index][1],
+      ),
+      input,
+      channel,
+    );
+  }
+  assert.equal(Object.hasOwn(preload.api.orders, "createOrder"), false);
 });

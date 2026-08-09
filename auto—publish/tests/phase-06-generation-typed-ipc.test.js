@@ -1,10 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 
-const { productionIpcRegistry } = require("../desktop/ipc/contracts/production-registry");
-const { generationContracts } = require("../desktop/ipc/contracts/generation-contracts");
+const {
+  productionIpcRegistry,
+} = require("../desktop/ipc/contracts/production-registry");
+const {
+  generationContracts,
+} = require("../desktop/ipc/contracts/generation-contracts");
 const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
   registerContentGenerationBatchIpc,
@@ -12,6 +14,8 @@ const {
 const {
   registerGenerationSubmissionHandoffIpc,
 } = require("../desktop/ipc/generation-submission-handoff-ipc");
+const { loadPreloadHarness } = require("./helpers/preload-harness");
+const { runRendererModule } = require("./helpers/run-renderer-module");
 
 const CHANNELS = [
   "content:preview-generation-batch",
@@ -30,7 +34,10 @@ const CHANNELS = [
 
 test("generation inventory has twelve invokes with real feature consumers and one event", () => {
   assert.equal(generationContracts.length, 12);
-  assert.equal(generationContracts.every((contract) => contract.kind !== "event"), true);
+  assert.equal(
+    generationContracts.every((contract) => contract.kind !== "event"),
+    true,
+  );
   for (const channel of CHANNELS) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);
@@ -42,36 +49,114 @@ test("generation inventory has twelve invokes with real feature consumers and on
   );
 });
 
-test("generation main and Renderer callers do not use method-name dispatch", () => {
-  const registrar = fs.readFileSync(
-    path.resolve(__dirname, "..", "desktop/ipc/content-generation-batch-ipc.js"),
-    "utf8",
-  );
-  const bridge = fs.readFileSync(
-    path.resolve(__dirname, "..", "media-workbench/src/bridge/generation.ts"),
-    "utf8",
-  );
-  assert.doesNotMatch(registrar, /service\s*\[\s*method\s*\]/);
-  for (const method of [
-    "previewGenerationBatch",
-    "createAndStartGenerationBatch",
-    "pauseGenerationBatch",
-    "stopGenerationBatch",
-    "continueGenerationBatch",
-    "resumeGenerationBatch",
-    "retryFailedGenerationBatch",
-    "previewCancelPendingGenerationBatch",
-    "cancelPendingGenerationBatch",
-    "getGenerationRuntimeSnapshot",
-    "previewGenerationSubmissionHandoff",
-    "commitGenerationSubmissionHandoff",
-  ]) {
-    assert.doesNotMatch(
-      bridge,
-      new RegExp(`callContent\\(\\s*["']${method}["']`),
+test("generation preload forwards named methods as exact versioned requests", async () => {
+  const preload = loadPreloadHarness({
+    invoke: (channel) => {
+      const contract = productionIpcRegistry.byChannel(channel);
+      return productionIpcRegistry.failure(contract, { code: "IPC_INTERNAL" });
+    },
+  });
+  const plan = {
+    clientIds: ["client-1"],
+    templates: [{ platform: "toutiao", templateId: "template-1" }],
+    clientSources: [],
+  };
+  const methodCalls = [
+    ["previewGenerationBatch", CHANNELS[0], [plan]],
+    ["createAndStartGenerationBatch", CHANNELS[1], [plan]],
+    ["stopGenerationBatch", CHANNELS[2], [{ batchId: "batch-1" }]],
+    ["pauseGenerationBatch", CHANNELS[3], [{ batchId: "batch-1" }]],
+    ["continueGenerationBatch", CHANNELS[4], [{ batchId: "batch-1" }]],
+    ["resumeGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
+    ["retryFailedGenerationBatch", CHANNELS[6], [{ batchId: "batch-1" }]],
+    [
+      "previewCancelPendingGenerationBatch",
+      CHANNELS[7],
+      [{ batchId: "batch-1" }],
+    ],
+    [
+      "cancelPendingGenerationBatch",
+      CHANNELS[8],
+      [{ batchId: "batch-1", confirmed: true }],
+    ],
+    ["getGenerationRuntimeSnapshot", CHANNELS[9], []],
+    [
+      "previewGenerationSubmissionHandoff",
+      CHANNELS[10],
+      [
+        {
+          generationBatchId: "batch-1",
+          platformId: "toutiao",
+          accountProfileId: "account-1",
+        },
+      ],
+    ],
+    [
+      "commitGenerationSubmissionHandoff",
+      CHANNELS[11],
+      [
+        {
+          generationBatchId: "batch-1",
+          platformId: "toutiao",
+          accountProfileId: "account-1",
+          previewToken: "token-1",
+          confirmed: true,
+        },
+      ],
+    ],
+  ];
+  for (const [method, channel, args] of methodCalls) {
+    await preload.api.content[method](...args);
+    const contract = productionIpcRegistry.byChannel(channel);
+    const request = preload.transportCalls.at(-1)[1];
+    assert.equal(preload.transportCalls.at(-1)[0], channel, method);
+    assert.deepEqual(
+      productionIpcRegistry.parseRequest(contract, request),
+      contract.fromArgs(args),
       method,
     );
   }
+
+  const dispose = preload.api.content.onGenerationBatchState(() => {});
+  assert.equal(
+    preload.transportListeners.has("content:generation-batch-state"),
+    true,
+  );
+  dispose();
+  assert.equal(
+    preload.transportListeners.has("content:generation-batch-state"),
+    false,
+  );
+});
+
+test("generation bridge maps a named method and projects a coded safe error", () => {
+  runRendererModule(
+    "bridge/generation",
+    `
+    import assert from "node:assert/strict";
+    const calls = [];
+    globalThis.window = { desktopConsole: { content: {
+      previewGenerationBatch: async (input) => {
+        calls.push(input);
+        return { ok: true, data: { clientCount: 1 } };
+      }
+    } } };
+    const bridge = await __M05_RENDERER_MODULE__;
+    assert.deepEqual(
+      await bridge.previewGenerationBatch({ clientIds: ["client-1"], templates: [] }),
+      { clientCount: 1 },
+    );
+    assert.deepEqual(calls, [{ clientIds: ["client-1"], templates: [] }]);
+    globalThis.window.desktopConsole.content.previewGenerationBatch = async () => ({
+      ok: false,
+      error: { code: "IPC_INTERNAL", category: "internal", retryability: "manual-check", userMessage: "安全失败" },
+    });
+    await assert.rejects(
+      bridge.previewGenerationBatch({ clientIds: [], templates: [] }),
+      (error) => error.code === "IPC_INTERNAL" && error.message === "安全失败",
+    );
+  `,
+  );
 });
 
 function typedIpc() {
@@ -109,30 +194,34 @@ const batchFixture = {
   createdAt: "2026-07-26T00:00:00.000Z",
   updatedAt: "2026-07-26T00:01:00.000Z",
   aiConfigFingerprint: "fixture-fingerprint",
-  clientSources: [{
-    clientId: "client-1",
-    materialIds: ["material-1"],
-    researchQueryIds: ["research-1"],
-  }],
-  templates: [{ platform: "media", templateId: "template-1" }],
-  tasks: [{
-    id: "task-1",
-    clientId: "client-1",
-    platform: "media",
-    templateId: "template-1",
-    materialIds: ["material-1"],
-    researchQueryIds: ["research-1"],
-    status: "failed",
-    attempts: 1,
-    error: {
-      code: "AI_SERVER_ERROR",
-      message: "C:\\private\\provider-response.json contained a secret",
-      stack: "provider stack must not cross IPC",
+  clientSources: [
+    {
+      clientId: "client-1",
+      materialIds: ["material-1"],
+      researchQueryIds: ["research-1"],
     },
-    articleId: null,
-    createdAt: "2026-07-26T00:00:00.000Z",
-    updatedAt: "2026-07-26T00:01:00.000Z",
-  }],
+  ],
+  templates: [{ platform: "media", templateId: "template-1" }],
+  tasks: [
+    {
+      id: "task-1",
+      clientId: "client-1",
+      platform: "media",
+      templateId: "template-1",
+      materialIds: ["material-1"],
+      researchQueryIds: ["research-1"],
+      status: "failed",
+      attempts: 1,
+      error: {
+        code: "AI_SERVER_ERROR",
+        message: "C:\\private\\provider-response.json contained a secret",
+        stack: "provider stack must not cross IPC",
+      },
+      articleId: null,
+      createdAt: "2026-07-26T00:00:00.000Z",
+      updatedAt: "2026-07-26T00:01:00.000Z",
+    },
+  ],
   counts,
   excludedClients: [],
   workspacePath: "C:\\private\\workspace",
@@ -155,13 +244,18 @@ test("generation production wire validates exact input and projects task failure
   const input = {
     clientIds: ["client-1"],
     templates: [{ platform: "media", templateId: "template-1" }],
-    clientSources: [{
-      clientId: "client-1",
-      materialIds: ["material-1"],
-      researchQueryIds: ["research-1"],
-    }],
+    clientSources: [
+      {
+        clientId: "client-1",
+        materialIds: ["material-1"],
+        researchQueryIds: ["research-1"],
+      },
+    ],
   };
-  const response = await ipc.invoke("content:create-and-start-generation-batch", [input]);
+  const response = await ipc.invoke(
+    "content:create-and-start-generation-batch",
+    [input],
+  );
   assert.equal(response.schemaVersion, 1);
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.equal(response.data.batch.id, "batch-1");
@@ -202,44 +296,56 @@ test("generation preview projects production template metadata before result val
           executableTaskCount: 1,
           excludedTaskCount: 0,
           excludedClients: [],
-          templates: [{
-            platform: "media",
-            templateId: "template-1",
-            source: "builtin",
-            readOnly: true,
-          }],
-          clientSources: [{
-            clientId: "client-1",
-            materialIds: ["material-1"],
-            researchQueryIds: ["research-1"],
-          }],
-          tasks: [{
-            clientId: "client-1",
-            platform: "media",
-            templateId: "template-1",
-            materialIds: ["material-1"],
-            researchQueryIds: ["research-1"],
-          }],
+          templates: [
+            {
+              platform: "media",
+              templateId: "template-1",
+              source: "builtin",
+              readOnly: true,
+            },
+          ],
+          clientSources: [
+            {
+              clientId: "client-1",
+              materialIds: ["material-1"],
+              researchQueryIds: ["research-1"],
+            },
+          ],
+          tasks: [
+            {
+              clientId: "client-1",
+              platform: "media",
+              templateId: "template-1",
+              materialIds: ["material-1"],
+              researchQueryIds: ["research-1"],
+            },
+          ],
         };
       },
     },
   });
 
-  const response = await ipc.invoke("content:preview-generation-batch", [{
-    clientIds: ["client-1"],
-    templates: [{ platform: "media", templateId: "template-1" }],
-    clientSources: [{
-      clientId: "client-1",
-      materialIds: ["material-1"],
-      researchQueryIds: ["research-1"],
-    }],
-  }]);
+  const response = await ipc.invoke("content:preview-generation-batch", [
+    {
+      clientIds: ["client-1"],
+      templates: [{ platform: "media", templateId: "template-1" }],
+      clientSources: [
+        {
+          clientId: "client-1",
+          materialIds: ["material-1"],
+          researchQueryIds: ["research-1"],
+        },
+      ],
+    },
+  ]);
 
   assert.equal(response.ok, true, JSON.stringify(response));
-  assert.deepEqual(response.data.templates, [{
-    platform: "media",
-    templateId: "template-1",
-  }]);
+  assert.deepEqual(response.data.templates, [
+    {
+      platform: "media",
+      templateId: "template-1",
+    },
+  ]);
 });
 
 test("generation preview accepts path-free Unicode business identities", async () => {
@@ -259,13 +365,15 @@ test("generation preview accepts path-free Unicode business identities", async (
           excludedClients: [],
           templates: input.templates,
           clientSources: input.clientSources,
-          tasks: [{
-            clientId: input.clientIds[0],
-            platform: input.templates[0].platform,
-            templateId: input.templates[0].templateId,
-            materialIds: input.clientSources[0].materialIds,
-            researchQueryIds: input.clientSources[0].researchQueryIds,
-          }],
+          tasks: [
+            {
+              clientId: input.clientIds[0],
+              platform: input.templates[0].platform,
+              templateId: input.templates[0].templateId,
+              materialIds: input.clientSources[0].materialIds,
+              researchQueryIds: input.clientSources[0].researchQueryIds,
+            },
+          ],
         };
       },
     },
@@ -273,14 +381,18 @@ test("generation preview accepts path-free Unicode business identities", async (
   const input = {
     clientIds: ["畅途"],
     templates: [{ platform: "微信公众号", templateId: "品牌介绍" }],
-    clientSources: [{
-      clientId: "畅途",
-      materialIds: ["品牌资料.docx"],
-      researchQueryIds: ["厦门汽车音响改装推荐"],
-    }],
+    clientSources: [
+      {
+        clientId: "畅途",
+        materialIds: ["品牌资料.docx"],
+        researchQueryIds: ["厦门汽车音响改装推荐"],
+      },
+    ],
   };
 
-  const response = await ipc.invoke("content:preview-generation-batch", [input]);
+  const response = await ipc.invoke("content:preview-generation-batch", [
+    input,
+  ]);
 
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.deepEqual(received, input);
@@ -297,16 +409,24 @@ test("generation service exceptions become SafeOperationalError without raw deta
       },
     },
   });
-  const response = await ipc.invoke("content:create-and-start-generation-batch", [{
-    clientIds: ["client-1"],
-    templates: [{ platform: "media", templateId: "template-1" }],
-  }]);
+  const response = await ipc.invoke(
+    "content:create-and-start-generation-batch",
+    [
+      {
+        clientIds: ["client-1"],
+        templates: [{ platform: "media", templateId: "template-1" }],
+      },
+    ],
+  );
   assert.equal(response.schemaVersion, 1);
   assert.equal(response.ok, false);
   assert.equal(response.error.code, "GENERATION_INPUT_INVALID");
   assert.equal(typeof response.error.userMessage, "string");
   assert.equal(response.error.category, "validation");
-  assert.doesNotMatch(JSON.stringify(response), /private|generation\.db|raw service/i);
+  assert.doesNotMatch(
+    JSON.stringify(response),
+    /private|generation\.db|raw service/i,
+  );
 });
 
 test("handoff wire carries one target binding and omits private preview input", async () => {
@@ -334,23 +454,27 @@ test("handoff wire carries one target binding and omits private preview input", 
           conflictCount: 0,
           unavailableArticleCount: 0,
           invalidArticles: [],
-          clientGroups: [{
-            clientId: "client-1",
-            articleCount: 1,
-            queueableTaskCount: 1,
-            idempotentCount: 0,
-            blockedPublishedCount: 0,
-            blockedUncertainCount: 0,
-            blockedContentCount: 0,
-            conflictCount: 0,
-            items: [{
-              articleId: "article-1",
-              targetPlatformId: "media",
-              status: "queueable",
-              reasonCode: null,
-              filePath: "C:\\private\\article.md",
-            }],
-          }],
+          clientGroups: [
+            {
+              clientId: "client-1",
+              articleCount: 1,
+              queueableTaskCount: 1,
+              idempotentCount: 0,
+              blockedPublishedCount: 0,
+              blockedUncertainCount: 0,
+              blockedContentCount: 0,
+              conflictCount: 0,
+              items: [
+                {
+                  articleId: "article-1",
+                  targetPlatformId: "media",
+                  status: "queueable",
+                  reasonCode: null,
+                  filePath: "C:\\private\\article.md",
+                },
+              ],
+            },
+          ],
           entries: [{ apiKey: "must-not-cross-ipc" }],
         };
       },
@@ -359,11 +483,13 @@ test("handoff wire carries one target binding and omits private preview input", 
 
   const response = await ipc.invoke(
     "content:preview-generation-submission-handoff",
-    [{
-      generationBatchId: "batch-1",
-      platformId: "media",
-      accountProfileId: "account-1",
-    }],
+    [
+      {
+        generationBatchId: "batch-1",
+        platformId: "media",
+        accountProfileId: "account-1",
+      },
+    ],
   );
   assert.equal(received.platformId, "media");
   assert.equal(received.accountProfileId, "account-1");
@@ -372,5 +498,8 @@ test("handoff wire carries one target binding and omits private preview input", 
   assert.equal("accountProfiles" in response.data, false);
   assert.equal("entries" in response.data, false);
   assert.equal("filePath" in response.data.clientGroups[0].items[0], false);
-  assert.doesNotMatch(JSON.stringify(response), /private|apiKey|must-not-cross/i);
+  assert.doesNotMatch(
+    JSON.stringify(response),
+    /private|apiKey|must-not-cross/i,
+  );
 });

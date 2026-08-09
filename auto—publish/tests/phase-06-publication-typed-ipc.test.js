@@ -1,6 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 
 const {
@@ -11,6 +9,7 @@ const {
 } = require("../desktop/ipc/contracts/production-registry");
 const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const { registerPublicationIpc } = require("../desktop/ipc/publication-ipc");
+const { runRendererModule } = require("./helpers/run-renderer-module");
 
 const CHANNELS = [
   "publication:prepare-regular-uncertain-resolution",
@@ -47,15 +46,42 @@ test("publication inventory keeps only the three typed regular outcome commands"
   }
 });
 
-test("publication Renderer uses a fixed named API and SafeOperationalError message", () => {
-  const bridge = fs.readFileSync(
-    path.resolve(__dirname, "..", "media-workbench/src/bridge/publication.ts"),
-    "utf8",
+test("publication bridge maps named commands and projects SafeOperationalError", () => {
+  runRendererModule(
+    "bridge/publication",
+    `
+    import assert from "node:assert/strict";
+    const calls = [];
+    globalThis.window = { desktopConsole: { publication: {
+      prepareRegularUncertainResolution: async (input) => {
+        calls.push(["prepare", input]);
+        return { ok: true, data: { regularPublicationAttemptId: input.regularPublicationAttemptId, confirmationToken: "token-1", expiresAt: "2026-08-09T00:05:00.000Z", actions: ["confirm_accepted", "confirm_not_accepted"], observationFingerprint: "fingerprint-1", preparedEvidenceFingerprint: "fingerprint-2" } };
+      },
+      confirmRegularAccepted: async (input) => {
+        calls.push(["accepted", input]);
+        return { ok: true, data: { attemptId: input.regularPublicationAttemptId, status: "published" } };
+      },
+      confirmRegularNotAccepted: async () => ({
+        ok: false,
+        error: { code: "REGULAR_MANUAL_NOT_ACCEPTED", category: "conflict", retryability: "never", userMessage: "人工核对结果已记录。" },
+      }),
+    } } };
+    const bridge = await __M05_RENDERER_MODULE__;
+    assert.equal((await bridge.prepareRegularUncertainResolution({ regularPublicationAttemptId: "attempt-1" })).confirmationToken, "token-1");
+    assert.deepEqual(
+      await bridge.confirmRegularAccepted({ regularPublicationAttemptId: "attempt-1", confirmationToken: "token-1", manualPositiveEvidence: { observedAt: "2026-08-09T00:00:00.000Z" } }),
+      { attemptId: "attempt-1", status: "published" },
+    );
+    assert.deepEqual(calls, [
+      ["prepare", { regularPublicationAttemptId: "attempt-1" }],
+      ["accepted", { regularPublicationAttemptId: "attempt-1", confirmationToken: "token-1", manualPositiveEvidence: { observedAt: "2026-08-09T00:00:00.000Z" }, confirmed: true }],
+    ]);
+    await assert.rejects(
+      bridge.confirmRegularNotAccepted({ regularPublicationAttemptId: "attempt-1", confirmationToken: "token-1", manualNegativeEvidence: { reasonCode: "MANUAL", observedAt: "2026-08-09T00:00:00.000Z" } }),
+      (error) => error.code === "REGULAR_MANUAL_NOT_ACCEPTED" && error.message === "人工核对结果已记录。",
+    );
+  `,
   );
-  assert.match(bridge, /type PublicationApi/);
-  assert.match(bridge, /ipcError\(error, fallback\)/);
-  assert.match(bridge, /SafeOperationalErrorDto/);
-  assert.doesNotMatch(bridge, /publication\s*\?\.\s*\[/);
 });
 
 test("regular outcome IPC preserves named command identity and confirmation", async () => {

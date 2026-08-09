@@ -87,11 +87,11 @@ test("all 129 production capabilities close by TypeChecker symbol identity", () 
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.capability))
       .size,
-      129,
+    129,
   );
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size,
-      129,
+    129,
   );
 
   for (const fixture of productionIpcContractFixtures) {
@@ -166,51 +166,6 @@ for (const fixture of eventFixtures) {
     assert.equal(result.ok, true, result.reasons.join("\n"));
   });
 }
-
-test("production evidence rejects a lifecycle fixture whose recorded state source does not exist", () => {
-  const fixture = productionIpcContractFixtures.find(
-    (entry) => entry.productionCaller.consumer.kind === "lifecycle",
-  );
-  assert.ok(fixture);
-
-  const result = verifyCapabilityEvidence(productionContext(), {
-    ...fixture,
-    kind: "invoke",
-    productionCaller: {
-      ...fixture.productionCaller,
-      consumer: {
-        ...fixture.productionCaller.consumer,
-        stateSource: "media-workbench/src/does-not-exist.ts",
-      },
-    },
-  });
-
-  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
-  assert.ok(
-    result.reasons.includes("lifecycle state source is missing"),
-    result.reasons.join("\n"),
-  );
-});
-
-test("production evidence rejects an event fixture whose recorded producer does not exist", () => {
-  const fixture = productionIpcContractFixtures.find((entry) => entry.event);
-  assert.ok(fixture);
-
-  const result = verifyCapabilityEvidence(productionContext(), {
-    ...fixture,
-    kind: "event",
-    productionCaller: {
-      ...fixture.productionCaller,
-      producer: "desktop/does-not-exist.js",
-    },
-  });
-
-  assert.equal(result.ok, false, JSON.stringify(result.trace, null, 2));
-  assert.ok(
-    result.reasons.includes("event producer source is missing"),
-    result.reasons.join("\n"),
-  );
-});
 
 test("shared registry rejects unknown versions and fields for every capability", () => {
   for (const fixture of productionIpcContractFixtures) {

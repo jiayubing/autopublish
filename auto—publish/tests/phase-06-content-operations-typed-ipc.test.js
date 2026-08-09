@@ -1,7 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 
 const {
   productionIpcRegistry,
@@ -13,6 +11,7 @@ const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
   registerDoubaoCollectionIpc,
 } = require("../desktop/ipc/doubao-collection-ipc");
+const { loadPreloadHarness } = require("./helpers/preload-harness");
 
 const SUBMISSION_CHANNELS = [
   "content:list-submission-platforms",
@@ -204,21 +203,6 @@ test("regular queue admission requires an explicit account profile identity", ()
   );
 });
 
-test("Doubao event sender uses the shared contract encoder", () => {
-  const source = fs.readFileSync(
-    path.resolve(
-      __dirname,
-      "../desktop/composition/workspace-runtime-composition.js",
-    ),
-    "utf8",
-  );
-  assert.match(source, /productionIpcRegistry\.event\(\s*doubaoQueueContract/);
-  assert.doesNotMatch(
-    source,
-    /sendToRenderer\("content:doubao-queue-state",\s*value\)/,
-  );
-});
-
 test("each Doubao capability has an independent legal request/result fixture", () => {
   for (const channel of DOUBAO_CHANNELS) {
     const contract = productionIpcRegistry.byChannel(channel);
@@ -246,45 +230,84 @@ test("each Doubao capability has an independent legal request/result fixture", (
   }
 });
 
-test("Doubao production callers are fixed named methods owned by content", () => {
-  const preload = fs.readFileSync(
-    path.resolve(__dirname, "../desktop/preload.js"),
-    "utf8",
-  );
-  const bridge = fs.readFileSync(
-    path.resolve(__dirname, "../media-workbench/src/bridge/content.ts"),
-    "utf8",
-  );
-  for (const method of [
-    "listQuestions",
-    "createQuestion",
-    "updateQuestion",
-    "deleteQuestion",
-    "getDoubaoLoginState",
-    "openDoubaoLogin",
-    "collectDoubaoOne",
-    "previewDoubaoBatch",
-    "startPreparedDoubaoBatch",
-    "pauseDoubaoBatch",
-    "resumeDoubaoBatch",
-    "stopDoubaoBatch",
-    "retryFailedDoubao",
-    "getDoubaoQueueState",
-    "saveManualResearch",
-    "onDoubaoQueueState",
-  ]) {
-    assert.match(preload, new RegExp(`${method}: function\\s*\\(`), method);
-    assert.match(
-      bridge,
-      new RegExp(`(?:api\\.${method}|onDoubaoQueueState)`),
-      method,
-    );
-    assert.doesNotMatch(
-      bridge,
-      new RegExp(`callContent\\(\\s*["']${method}["']`),
+test("Doubao preload exposes named methods and exact versioned event mapping", async () => {
+  const preload = loadPreloadHarness({
+    invoke: (channel) => {
+      const contract = productionIpcRegistry.byChannel(channel);
+      return productionIpcRegistry.failure(contract, { code: "IPC_INTERNAL" });
+    },
+  });
+  const methodCalls = [
+    ["listQuestions", "content:list-questions", ["client-1"]],
+    [
+      "createQuestion",
+      "content:create-question",
+      [DOUBAO_FIXTURES["content:create-question"][0]],
+    ],
+    [
+      "updateQuestion",
+      "content:update-question",
+      [DOUBAO_FIXTURES["content:update-question"][0]],
+    ],
+    [
+      "deleteQuestion",
+      "content:delete-question",
+      [DOUBAO_FIXTURES["content:delete-question"][0]],
+    ],
+    ["getDoubaoLoginState", "content:get-doubao-login-state", []],
+    ["openDoubaoLogin", "content:open-doubao-login", []],
+    [
+      "collectDoubaoOne",
+      "content:collect-doubao-one",
+      [DOUBAO_FIXTURES["content:collect-doubao-one"][0]],
+    ],
+    [
+      "previewDoubaoBatch",
+      "content:preview-doubao-batch",
+      [DOUBAO_FIXTURES["content:preview-doubao-batch"][0]],
+    ],
+    [
+      "startPreparedDoubaoBatch",
+      "content:start-prepared-doubao-batch",
+      [DOUBAO_FIXTURES["content:start-prepared-doubao-batch"][0]],
+    ],
+    ["pauseDoubaoBatch", "content:pause-doubao-batch", []],
+    ["resumeDoubaoBatch", "content:resume-doubao-batch", []],
+    ["stopDoubaoBatch", "content:stop-doubao-batch", []],
+    ["retryFailedDoubao", "content:retry-failed-doubao", []],
+    ["getDoubaoQueueState", "content:get-doubao-queue-state", []],
+    [
+      "saveManualResearch",
+      "content:save-manual-research",
+      [DOUBAO_FIXTURES["content:save-manual-research"][0]],
+    ],
+  ];
+  for (const [method, channel, args] of methodCalls) {
+    assert.equal(typeof preload.api.content[method], "function", method);
+    await preload.api.content[method](...args);
+    const contract = productionIpcRegistry.byChannel(channel);
+    const request = preload.transportCalls.at(-1)[1];
+    assert.equal(preload.transportCalls.at(-1)[0], channel, method);
+    assert.deepEqual(
+      productionIpcRegistry.parseRequest(contract, request),
+      method === "listQuestions"
+        ? { clientId: args[0] }
+        : contract.fromArgs(args),
       method,
     );
   }
+
+  const received = [];
+  const dispose = preload.api.content.onDoubaoQueueState((value) =>
+    received.push(value),
+  );
+  const event = productionIpcRegistry.byChannel("content:doubao-queue-state");
+  assert.equal(preload.transportListeners.has(event.channel), true);
+  const encoded = productionIpcRegistry.event(event, queue);
+  preload.emit(event.channel, encoded);
+  assert.deepEqual(received, [queue]);
+  dispose();
+  assert.equal(preload.transportListeners.has(event.channel), false);
 });
 
 test("Doubao contracts reject unknown request fields and raw error or path output", () => {
