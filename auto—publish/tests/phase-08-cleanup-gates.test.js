@@ -8,7 +8,11 @@ const path = require("node:path");
 const test = require("node:test");
 const asar = require("@electron/asar");
 const {
-  classifyModuleSizeSignals,
+  scanArchive: scanLegacyArchive,
+  scanSourceTree: scanLegacySourceTree,
+} = require("../scripts/verify-legacy-absence");
+const {
+  isOperationalFacadeImport,
   isRendererNodeSpecifier,
   packageBoundaryReport,
   publisherOwnerCandidates,
@@ -32,7 +36,6 @@ test("Phase 8 cleanup gates pass against the current production tree", () => {
       "capabilityReachability",
       "dependencyDirection",
       "legacyAbsence",
-      "moduleSize",
       "operationalStoreBoundary",
       "packageBoundary",
       "trackedGeneratedOutput",
@@ -43,76 +46,27 @@ test("Phase 8 cleanup gates pass against the current production tree", () => {
     report.checks.capabilityReachability.reachableCount,
     report.checks.capabilityReachability.capabilityCount,
   );
-  assert.equal(report.checks.moduleSize.violations.length, 0);
-});
-
-test("module size signals are advisory and preserve review-needed growth evidence", () => {
-  const report = classifyModuleSizeSignals(
-    [
-      { file: "src/small.js", lines: 400 },
-      { file: "src/new-large.js", lines: 401 },
-      { file: "src/reviewed-large.js", lines: 450 },
-    ],
-    [["src/reviewed-large.js", 425, "cohesive deep module"]],
-    400,
-  );
-  assert.equal(report.status, "PASSED");
-  assert.equal(report.enforcement, "advisory");
-  assert.equal(report.reviewSignalLines, 400);
-  assert.deepEqual(report.notable, [
-    {
-      file: "src/new-large.js",
-      lines: 401,
-      reviewStatus: "review-needed",
-    },
-    {
-      file: "src/reviewed-large.js",
-      lines: 450,
-      reviewStatus: "reviewed",
-    },
-  ]);
-  assert.deepEqual(report.growthSignals, [
-    {
-      file: "src/reviewed-large.js",
-      lines: 450,
-      baselineLines: 425,
-      reason: "cohesive deep module",
-      growthLines: 25,
-    },
-  ]);
-  assert.equal(report.violations.length, 0);
-});
-
-test("module size baseline registry fails closed for missing or invalid entries", () => {
-  const missing = classifyModuleSizeSignals(
-    [{ file: "src/present.js", lines: 10 }],
-    [["src/missing.js", 100, "reviewed owner"]],
-    400,
-  );
-  assert.equal(missing.status, "FAILED");
-  assert.deepEqual(missing.violations, [
-    {
-      file: "src/missing.js",
-      reason: "review baseline points to a missing module",
-    },
-  ]);
-
-  const invalid = classifyModuleSizeSignals(
-    [{ file: "src/present.js", lines: 10 }],
-    [["src/present.js", 0, ""]],
-    400,
-  );
-  assert.equal(invalid.status, "FAILED");
-  assert.deepEqual(invalid.violations, [
-    {
-      file: "src/present.js",
-      baselineLines: 0,
-      reason: "review baseline entry is invalid or duplicated",
-    },
-  ]);
 });
 
 test("Phase 8 static gates reject bare Node builtins and discover qualified writers/owners", () => {
+  assert.equal(
+    isOperationalFacadeImport(
+      "src/infrastructure/operational-store/operational-store",
+    ),
+    true,
+  );
+  assert.equal(
+    isOperationalFacadeImport(
+      "src/infrastructure/operational-store/operational-store.js",
+    ),
+    true,
+  );
+  assert.equal(
+    isOperationalFacadeImport(
+      "src/infrastructure/operational-store/internal/operational-store-runtime",
+    ),
+    false,
+  );
   assert.equal(isRendererNodeSpecifier("fs"), true);
   assert.equal(isRendererNodeSpecifier("child_process"), true);
   assert.equal(isRendererNodeSpecifier("node:path"), true);
@@ -146,6 +100,39 @@ test("Phase 8 static gates reject bare Node builtins and discover qualified writ
       "desktop/services/submission-transport.js",
     ],
   );
+});
+
+test("legacy absence gate fails closed for each retired source and package capability", async () => {
+  const temporaryRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "legacy-absence-gate-"),
+  );
+  const samples = [
+    "createPublicationLedger()",
+    "const runtime = { publicationLedger: {} };",
+    "createSubmissionBatchStore()",
+    'require("./submission-export-service")',
+    'const channel = "desktop:start-batch";',
+    "reconcileRemoteOrder()",
+    "supplierStatusOrFallback()",
+  ];
+  try {
+    for (const [index, sample] of samples.entries()) {
+      const sourceRoot = path.join(temporaryRoot, `source-${index}`);
+      write(sourceRoot, "desktop/main.js", sample);
+      assert.equal(scanLegacySourceTree(sourceRoot).length, 1, sample);
+    }
+
+    const appRoot = path.join(temporaryRoot, "app");
+    const resources = path.join(temporaryRoot, "resources");
+    write(appRoot, "desktop/main.js", "reconcileRemoteOrder();\n");
+    write(appRoot, "node_modules/vendor/index.js", "reconcileRemoteOrder();\n");
+    await asar.createPackage(appRoot, path.join(resources, "app.asar"));
+    assert.deepEqual(scanLegacyArchive(resources).matches, [
+      "desktop/main.js#remote-order-reconciler",
+    ]);
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test("package gate permits the generated preload but rejects private package content", async () => {

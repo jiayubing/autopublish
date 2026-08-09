@@ -17,31 +17,4 @@ describe("desktop workbench flow", function () {
     assert.doesNotMatch(packaging, /desktop[\\/]renderer/);
     assert.doesNotMatch(main, /desktop[\\/]renderer/);
   });
-
-  it("keeps media, platform, order, and content workbenches on the React app surface", function () {
-    const app = read("media-workbench/src/App.tsx");
-    const platform = read(
-      "media-workbench/src/components/PlatformWorkbench.tsx",
-    );
-    const content = read("media-workbench/src/components/ContentWorkbench.tsx");
-    assert.match(app, /ResourceLibrary/);
-    assert.match(app, /ArticleEditor/);
-    assert.match(app, /OrdersView/);
-    assert.match(app, /PlatformWorkbench/);
-    assert.match(app, /ContentWorkbench/);
-    assert.match(platform, /regularQueueGroupViews/);
-    assert.match(content, /GeneratedArticlesView/);
-  });
-
-  it("keeps the platform page queue-group centered", function () {
-    const platform = read(
-      "media-workbench/src/components/PlatformWorkbench.tsx",
-    );
-    assert.match(platform, /usePlatformFeature/);
-    assert.match(platform, /RegularQueueGroupsPanel/);
-    assert.match(platform, /startAllGroups/);
-    assert.match(platform, /pauseAllGroups/);
-    assert.doesNotMatch(platform, /submitPlatformSelection/);
-    assert.doesNotMatch(platform, /selectedPlatformIds|selectedArticles/);
-  });
 });

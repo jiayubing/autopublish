@@ -160,6 +160,13 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   const artifact = job(workflow, "desktop-artifact");
   assert.ok(artifact.includes("name: required/desktop-artifact-node24"));
   assertStep(artifact, "required/alpha-artifact-gates");
+  assert.ok(
+    artifact
+      .replace(/\s+/g, " ")
+      .includes(
+        "node scripts/verify-legacy-absence.js --resources release-alpha/win-unpacked/resources --output build/evidence/alpha-legacy-absence.json",
+      ),
+  );
   assert.ok(artifact.includes("npm run pack:alpha:dirty"));
 
   const links = job(workflow, "link-security");

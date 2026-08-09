@@ -11,10 +11,6 @@ const {
   scanArchive,
   scanSourceTree,
 } = require("./verify-legacy-absence");
-const {
-  MODULE_SIZE_REVIEW_BASELINES,
-} = require("./module-size-review-baselines");
-
 const ROOT = path.resolve(__dirname, "..");
 const SOURCE_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".ts", ".tsx"]);
 const SOURCE_ROOTS = [
@@ -70,6 +66,25 @@ const OPERATIONAL_FACADE =
   "src/infrastructure/operational-store/operational-store.js";
 const MIGRATION_IMPORTER = "scripts/migrate-operational-store-v1.js";
 const RECOVERY_GUARD_IMPORT = `${INTERNAL_PREFIX}/operational-store-recovery-guard`;
+const OPERATIONAL_FACADE_IMPORTERS = new Set([
+  "desktop/composition/publication-workflow-composition.js",
+  "desktop/composition/workspace-migration-composition.js",
+  "desktop/composition/workspace-runtime-composition.js",
+  "scripts/migrate-operational-store-v1.js",
+]);
+const RETIRED_ARCHITECTURE_PATHS = Object.freeze([
+  "desktop/storage-paths.js",
+  "desktop/workspace-paths.js",
+  "desktop/packaging/packaged-runtime-resolver.js",
+  "desktop/packaging/playwright-runtime-paths.js",
+]);
+const REQUIRED_ARCHITECTURE_PATHS = Object.freeze([
+  "src/infrastructure/workspace/storage-paths.js",
+  "src/infrastructure/workspace/workspace-paths.js",
+  "src/infrastructure/runtime/packaged-runtime-resolver.js",
+  "src/infrastructure/runtime/playwright-runtime-paths.js",
+  "src/infrastructure/runtime/playwright-runtime-resolver.js",
+]);
 const PUBLISHER_OWNER_FILES = Object.freeze([
   "desktop/services/desktop-publisher-router.js",
   "desktop/services/worker-publisher.js",
@@ -111,12 +126,6 @@ function sourceFilesUnder(directory) {
       result.push(filename);
   }
   return result;
-}
-
-function sourceLineCount(filename) {
-  const source = fs.readFileSync(filename, "utf8");
-  const lines = source.split(/\r?\n/);
-  return source.endsWith("\n") ? lines.length - 1 : lines.length;
 }
 
 function productionSourceFiles() {
@@ -226,12 +235,30 @@ function dependencyDirectionReport() {
       }
     }
   }
+  for (const retiredPath of RETIRED_ARCHITECTURE_PATHS) {
+    if (fs.existsSync(path.join(ROOT, retiredPath)))
+      violations.push({ rule: "retired-architecture-path", file: retiredPath });
+  }
+  for (const requiredPath of REQUIRED_ARCHITECTURE_PATHS) {
+    if (!fs.existsSync(path.join(ROOT, requiredPath)))
+      violations.push({
+        rule: "required-architecture-path",
+        file: requiredPath,
+      });
+  }
   return { status: violations.length ? "FAILED" : "PASSED", violations };
 }
 
 function isInternalImport(resolved) {
   return (
     resolved === INTERNAL_PREFIX || resolved.startsWith(`${INTERNAL_PREFIX}/`)
+  );
+}
+
+function isOperationalFacadeImport(resolved) {
+  return (
+    resolved === OPERATIONAL_FACADE ||
+    resolved === OPERATIONAL_FACADE.replace(/\.js$/, "")
   );
 }
 
@@ -261,6 +288,17 @@ function operationalStoreBoundaryReport() {
             file: importer,
             line: source.slice(0, match.index).split(/\r?\n/).length,
             specifier: match[1],
+          });
+        }
+        if (
+          isOperationalFacadeImport(resolved) &&
+          !OPERATIONAL_FACADE_IMPORTERS.has(importer)
+        ) {
+          violations.push({
+            file: importer,
+            line: source.slice(0, match.index).split(/\r?\n/).length,
+            specifier: match[1],
+            rule: "operational-store-facade-importer",
           });
         }
       }
@@ -447,107 +485,6 @@ function capabilityReachabilityReport() {
       unreachable.length,
     violations,
   };
-}
-
-function classifyModuleSizeSignals(files, baselines, reviewSignalLines) {
-  const signalLines = Number.isSafeInteger(reviewSignalLines)
-    ? reviewSignalLines
-    : 400;
-  const registryViolations = [];
-  const inventory = new Map();
-  for (const item of files || []) {
-    if (
-      !item ||
-      typeof item.file !== "string" ||
-      !item.file ||
-      !Number.isSafeInteger(item.lines) ||
-      item.lines < 0 ||
-      inventory.has(item.file)
-    ) {
-      registryViolations.push({
-        file: item && item.file,
-        lines: item && item.lines,
-        reason: "module size inventory entry is invalid or duplicated",
-      });
-      continue;
-    }
-    inventory.set(item.file, item.lines);
-  }
-  const reviewBaselines = new Map();
-  for (const entry of baselines || []) {
-    const [filename, baselineLines, reason] = Array.isArray(entry) ? entry : [];
-    if (
-      typeof filename !== "string" ||
-      !filename ||
-      !Number.isSafeInteger(baselineLines) ||
-      baselineLines < 1 ||
-      typeof reason !== "string" ||
-      !reason ||
-      reviewBaselines.has(filename)
-    ) {
-      registryViolations.push({
-        file: filename,
-        baselineLines,
-        reason: "review baseline entry is invalid or duplicated",
-      });
-      continue;
-    }
-    reviewBaselines.set(filename, { baselineLines, reason });
-    if (!inventory.has(filename))
-      registryViolations.push({
-        file: filename,
-        reason: "review baseline points to a missing module",
-      });
-  }
-  const reviewed = [];
-  const notable = [];
-  const growthSignals = [];
-  for (const [filename, lineCount] of inventory) {
-    const baseline = reviewBaselines.get(filename);
-    if (lineCount > signalLines)
-      notable.push({
-        file: filename,
-        lines: lineCount,
-        reviewStatus: baseline ? "reviewed" : "review-needed",
-      });
-    if (!baseline) continue;
-    const item = {
-      file: filename,
-      lines: lineCount,
-      baselineLines: baseline.baselineLines,
-      reason: baseline.reason,
-    };
-    reviewed.push(item);
-    if (lineCount > baseline.baselineLines)
-      growthSignals.push({
-        ...item,
-        growthLines: lineCount - baseline.baselineLines,
-      });
-  }
-  return {
-    status: registryViolations.length ? "FAILED" : "PASSED",
-    enforcement: "advisory",
-    reviewSignalLines: signalLines,
-    reviewed,
-    notable,
-    growthSignals,
-    violations: registryViolations,
-  };
-}
-
-function moduleSizeReport() {
-  const files = [
-    "src",
-    "desktop",
-    "media-workbench/src",
-    "auth-server/src",
-  ].flatMap((root) =>
-    sourceFilesUnder(path.join(ROOT, root)).map((filename) => ({
-      file: relative(filename),
-      lines: sourceLineCount(filename),
-    })),
-  );
-  return classifyModuleSizeSignals(files, MODULE_SIZE_REVIEW_BASELINES, 400);
 }
 
 function trackedGeneratedOutputReport() {
@@ -744,7 +681,6 @@ function verifyPhase08Gates(options) {
     uniqueOwnersAndWriters: ownershipReport(),
     capabilityReachability: capabilityReachabilityReport(),
     legacyAbsence: legacyReport(opts.resourcesPath),
-    moduleSize: moduleSizeReport(),
     trackedGeneratedOutput: trackedGeneratedOutputReport(),
   };
   if (opts.resourcesPath)
@@ -807,10 +743,8 @@ if (require.main === module) {
 
 module.exports = {
   DEPENDENCY_RULES,
-  MODULE_SIZE_REVIEW_BASELINES,
-  classifyModuleSizeSignals,
+  isOperationalFacadeImport,
   isRendererNodeSpecifier,
-  moduleSizeReport,
   packageBoundaryReport,
   parseArguments,
   publisherOwnerCandidates,

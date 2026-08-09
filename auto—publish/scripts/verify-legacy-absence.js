@@ -22,6 +22,22 @@ const LEGACY_PATHS = [
   "desktop/services/submission/submission-read-snapshot.js",
   "src/platforms/media/preflight.js",
 ];
+const LEGACY_SOURCE_PATTERNS = Object.freeze([
+  ["publication-ledger-factory", /\bcreatePublicationLedger\b/],
+  ["publication-ledger-injection", /\bpublicationLedger\s*[:,]/],
+  ["json-submission-batch-store", /\bcreateSubmissionBatchStore\b/],
+  ["submission-export-service", /submission-export-service/],
+  [
+    "legacy-desktop-batch-channel",
+    /desktop:(?:get-state|refresh-queue|start-batch|stop-batch)|desktopConsole\.batch|\.batch\.(?:getState|refreshQueue|startBatch|stopBatch)/,
+  ],
+  ["remote-order-reconciler", /\breconcileRemoteOrder\b/],
+  ["supplier-status-fallback", /\bsupplierStatusOrFallback\b/],
+]);
+const LEGACY_SCAN_EXCLUSIONS = new Set([
+  "scripts/verify-legacy-absence.js",
+  "scripts/verify-phase-08-gates.js",
+]);
 
 function absenceError(code, message) {
   const error = new Error(message);
@@ -48,6 +64,25 @@ function scanSourceTree(root) {
       const source = fs.readFileSync(filename, "utf8");
       if (source.includes("publish-log"))
         matches.push(path.relative(root, filename).replaceAll("\\", "/"));
+      for (const [rule, pattern] of LEGACY_SOURCE_PATTERNS) {
+        if (pattern.test(source))
+          matches.push(
+            `${path.relative(root, filename).replaceAll("\\", "/")}#${rule}`,
+          );
+      }
+    }
+  }
+  const additionalFiles = [
+    ...sourceFilesUnder(path.join(root, "scripts")),
+    path.join(root, "package.json"),
+  ];
+  for (const filename of additionalFiles) {
+    if (!fs.existsSync(filename)) continue;
+    const name = path.relative(root, filename).replaceAll("\\", "/");
+    if (LEGACY_SCAN_EXCLUSIONS.has(name)) continue;
+    const source = fs.readFileSync(filename, "utf8");
+    for (const [rule, pattern] of LEGACY_SOURCE_PATTERNS) {
+      if (pattern.test(source)) matches.push(`${name}#${rule}`);
     }
   }
   return [...new Set([...legacyPaths, ...matches])].sort();
@@ -69,13 +104,46 @@ function archiveEntries(resourcesPath) {
   return entries;
 }
 
+function isAppOwnedArchiveSource(entry) {
+  return (
+    entry === "package.json" ||
+    [
+      "desktop/",
+      "src/",
+      "scripts/",
+      "build/preload/",
+      "media-workbench/dist/",
+    ].some((prefix) => entry.startsWith(prefix))
+  );
+}
+
 function scanArchive(resourcesPath) {
   const entries = archiveEntries(resourcesPath);
+  const archive = path.join(path.resolve(resourcesPath), "app.asar");
+  const tokenMatches = [];
+  for (const entry of entries) {
+    if (!/\.(?:cjs|js|mjs|ts|tsx|json)$/.test(entry)) continue;
+    if (!isAppOwnedArchiveSource(entry)) continue;
+    if (LEGACY_SCAN_EXCLUSIONS.has(entry)) continue;
+    let source;
+    try {
+      source = asar.extractFile(archive, entry).toString("utf8");
+    } catch (_) {
+      continue;
+    }
+    for (const [rule, pattern] of LEGACY_SOURCE_PATTERNS) {
+      if (pattern.test(source)) tokenMatches.push(`${entry}#${rule}`);
+    }
+  }
   return {
     checkedEntries: entries.length,
-    matches: entries.filter(
-      (entry) => entry.includes("publish-log") || LEGACY_PATHS.includes(entry),
-    ),
+    matches: [
+      ...entries.filter(
+        (entry) =>
+          entry.includes("publish-log") || LEGACY_PATHS.includes(entry),
+      ),
+      ...tokenMatches,
+    ],
     sha256: crypto
       .createHash("sha256")
       .update(entries.join("\n"))
@@ -159,6 +227,8 @@ if (require.main === module) {
 
 module.exports = {
   LEGACY_PATHS,
+  LEGACY_SOURCE_PATTERNS,
+  isAppOwnedArchiveSource,
   scanSourceTree,
   scanArchive,
   verifyLegacyAbsence,

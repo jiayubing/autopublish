@@ -5,48 +5,32 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
+function moduleSpecifiers(source) {
+  return [
+    ...source.matchAll(/\brequire\s*\(\s*["']([^"']+)["']\s*\)/g),
+    ...source.matchAll(/\bfrom\s*["']([^"']+)["']/g),
+    ...source.matchAll(/\bimport\s*["']([^"']+)["']/g),
+  ].map((match) => match[1]);
+}
 
-test("attention and workspace seams keep ownership and dependency direction explicit", () => {
-  const query = read("desktop/services/article-attention-query.js");
-  const resolver = read("desktop/services/article-attention-resolver.js");
-  const platformFeature = read(
-    "media-workbench/src/features/platform/platform-feature.js",
+test("attention readers and workspace runtime keep exact dependency boundaries", () => {
+  const forbiddenReaderDependency =
+    /^(?:node:fs|fs|\.\.\/\.\.\/src\/infrastructure|\.\/.*(?:store|writer)|\.\.\/.*(?:store|writer))/;
+  for (const relative of [
+    "desktop/services/article-attention-query.js",
+    "desktop/services/article-attention-resolver.js",
+  ]) {
+    for (const specifier of moduleSpecifiers(read(relative)))
+      assert.doesNotMatch(specifier, forbiddenReaderDependency, relative);
+  }
+  assert.ok(
+    moduleSpecifiers(read("desktop/main.js")).includes("./workspace-runtime"),
   );
-  const main = read("desktop/main.js");
-  const workspaceRuntime = read("desktop/workspace-runtime.js");
-  const invalidation = read("desktop/workspace-data-invalidation.js");
-  const sidebar = read("media-workbench/src/components/Sidebar.tsx");
-  const platform = read("media-workbench/src/components/PlatformWorkbench.tsx");
-
-  assert.doesNotMatch(
-    query,
-    /writeFile|writeFileSync|unlink|unlinkSync|\.save\(/,
+  assert.ok(
+    moduleSpecifiers(read("desktop/workspace-runtime.js")).includes(
+      "./workspace-data-invalidation",
+    ),
   );
-  assert.doesNotMatch(
-    resolver,
-    /writeFile|writeFileSync|unlink|unlinkSync|\.save\(/,
-  );
-  assert.match(query, /list\(input\)/);
-  assert.match(query, /get\(input\)/);
-  assert.match(resolver, /preview\(input\)/);
-  assert.match(resolver, /resolve\(input\)/);
-  assert.match(platformFeature, /getSnapshot/);
-  assert.match(platformFeature, /refreshQueue/);
-  assert.match(platformFeature, /subscribe\(listener/);
-  assert.doesNotMatch(sidebar, /getPlatformQueue\(/);
-  assert.doesNotMatch(platform, /getPlatformQueue\(/);
-  assert.doesNotMatch(query, /React|Renderer|window\./);
-  assert.doesNotMatch(resolver, /React|Renderer|window\./);
-  assert.match(main, /createWorkspaceRuntime/);
-  assert.match(workspaceRuntime, /createWorkspaceDataInvalidation/);
-  assert.match(workspaceRuntime, /registerIpc/);
-  assert.match(workspaceRuntime, /async function dispose\(\)/);
-  assert.match(invalidation, /workspace:data-invalidated/);
-  assert.match(
-    invalidation,
-    /schemaVersion:\s*1[\s\S]*workspaceRuntimeId[\s\S]*revision[\s\S]*scopes[\s\S]*reasonCode/,
-  );
-  assert.match(invalidation, /reasonCode:/);
   assert.equal(
     fs.existsSync(path.join(root, "desktop/services/workspace-runtime.js")),
     false,
@@ -55,7 +39,6 @@ test("attention and workspace seams keep ownership and dependency direction expl
     fs.existsSync(path.join(root, "desktop/workspace-invalidation-policy.js")),
     false,
   );
-  assert.doesNotMatch(main, /desktop[\\/]services[\\/]workspace-runtime/);
 });
 
 test("business views use domain bridges instead of Electron transport or main-process files", () => {
@@ -76,24 +59,24 @@ test("business views use domain bridges instead of Electron transport or main-pr
   }
 });
 
-test("article management owns one revisioned snapshot seam", () => {
-  const snapshot = read("desktop/services/article-management-snapshot.js");
-  const ipc = read("desktop/ipc/article-management-ipc.js");
-  const view = read(
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+test("article management capability has one service-to-IPC-to-feature assembly path", () => {
+  const {
+    productionIpcRegistry,
+  } = require("../desktop/ipc/contracts/production-registry");
+  assert.equal(
+    productionIpcRegistry.byCapability("content.getArticleManagementSnapshot")
+      .channel,
+    "content:get-article-management-snapshot",
   );
-  const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-
-  assert.match(snapshot, /clientId.*revision/);
-  assert.match(snapshot, /cancellationPlans/);
-  assert.match(snapshot, /workflowByArticle/);
-  assert.match(ipc, /content:get-article-management-snapshot/);
-  assert.match(view, /management: ArticleManagementReadModel/);
-  assert.match(workbench, /useContentWorkbenchFeature/);
-  assert.match(workbench, /management=\{management\}/);
-  assert.doesNotMatch(
-    view,
-    /listContentArticles\(|listContentSubmissionBatches\(|listContentTrash\(|listPublicationHistory\(|previewCancelContentSubmissionBatch\(/,
+  assert.ok(
+    moduleSpecifiers(read("desktop/ipc/article-management-ipc.js")).includes(
+      "../services/article-management-snapshot",
+    ),
+  );
+  assert.ok(
+    moduleSpecifiers(
+      read("media-workbench/src/components/ContentWorkbench.tsx"),
+    ).includes("../features/content/use-content-workbench-feature"),
   );
 });
 
