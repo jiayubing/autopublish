@@ -1,5 +1,20 @@
 const { wrap } = require("../services/ipc-response");
-const { projectSubmissionResult } = require("./contracts/submission-contracts");
+const { projectSubmissionPlatforms } = require("./contracts/submission-platform-contracts");
+const { projectSubmissionBatchResult } = require("./contracts/submission-batch-contracts");
+const {
+  projectSubmissionResiduePreview,
+  projectSubmissionResidueResult,
+} = require("./contracts/submission-maintenance-contracts");
+const {
+  projectRegularAdmission,
+  projectRegularRemovalResult,
+} = require("./contracts/submission-regular-contracts");
+const {
+  projectPaidPreflight,
+  projectPaidAdmission,
+  projectPaidMediaBatchList,
+  projectPaidExecutionResult,
+} = require("./contracts/submission-paid-media-contracts");
 
 function bind(service, name) {
   if (!service || typeof service[name] !== "function") {
@@ -205,18 +220,14 @@ function registerContentSubmissionIpc(deps) {
   }
   deps.ipcMain.handle("content:list-submission-platforms", function () {
     return wrap(function () {
-      return projectSubmissionResult(
-        "content:list-submission-platforms",
-        workflow.preparation.listPlatforms(),
-      );
+      return projectSubmissionPlatforms(workflow.preparation.listPlatforms());
     });
   });
   deps.ipcMain.handle(
     "content:cancel-submission-batch",
     function (event, input) {
       return wrap(function () {
-        return projectSubmissionResult(
-          "content:cancel-submission-batch",
+        return projectSubmissionBatchResult(
           workflow.batch.cancel(batchInput(input, true)),
         );
       });
@@ -226,10 +237,7 @@ function registerContentSubmissionIpc(deps) {
     "content:preview-trashed-article-queue-residue",
     function () {
       return wrap(function () {
-        return projectSubmissionResult(
-          "content:preview-trashed-article-queue-residue",
-          workflow.cleanup.previewResidue(),
-        );
+        return projectSubmissionResiduePreview(workflow.cleanup.previewResidue());
       });
     },
   );
@@ -237,8 +245,7 @@ function registerContentSubmissionIpc(deps) {
     "content:cleanup-trashed-article-queue-residue",
     function (event, input) {
       return wrap(function () {
-        return projectSubmissionResult(
-          "content:cleanup-trashed-article-queue-residue",
+        return projectSubmissionResidueResult(
           workflow.cleanup.cleanupResidue(input),
         );
       });
@@ -248,11 +255,11 @@ function registerContentSubmissionIpc(deps) {
     "content:preview-regular-queue-admission",
     function (event, input) {
       return wrap(function () {
-        return projectSubmissionResult(
-          "content:preview-regular-queue-admission",
+        return projectRegularAdmission(
           workflow.regularQueue.previewAdmission(
             regularAdmissionInput(input, false),
           ),
+          "preview",
         );
       });
     },
@@ -261,9 +268,9 @@ function registerContentSubmissionIpc(deps) {
     "content:admit-regular-queue-items",
     function (event, input) {
       return wrap(function () {
-        return projectSubmissionResult(
-          "content:admit-regular-queue-items",
+        return projectRegularAdmission(
           workflow.regularQueue.admit(regularAdmissionInput(input, true)),
+          "admit",
         );
       });
     },
@@ -272,8 +279,7 @@ function registerContentSubmissionIpc(deps) {
     "content:remove-pending-queue-items",
     function (event, input) {
       return wrap(function () {
-        return projectSubmissionResult(
-          "content:remove-pending-queue-items",
+        return projectRegularRemovalResult(
           workflow.regularQueue.removePending(regularRemovalInput(input)),
         );
       });
@@ -281,43 +287,34 @@ function registerContentSubmissionIpc(deps) {
   );
   deps.ipcMain.handle("content:list-regular-queue-groups", function () {
     return wrap(function () {
-      return projectSubmissionResult(
-        "content:list-regular-queue-groups",
-        { items: workflow.regularQueueGroups.list() },
-      );
+      return { items: workflow.regularQueueGroups.list() };
     });
   });
   deps.ipcMain.handle("content:start-regular-queue-group", function (event, input) {
     return wrap(async function () {
       await workflow.regularQueueGroups.start(input);
-      return projectSubmissionResult("content:start-regular-queue-group", {
+      return {
         items: workflow.regularQueueGroups.list(),
-      });
+      };
     });
   });
   deps.ipcMain.handle("content:pause-regular-queue-group", function (event, input) {
     return wrap(function () {
       workflow.regularQueueGroups.pause(input);
-      return projectSubmissionResult(
-        "content:pause-regular-queue-group",
-        { items: workflow.regularQueueGroups.list() },
-      );
+      return { items: workflow.regularQueueGroups.list() };
     });
   });
   deps.ipcMain.handle("content:start-all-regular-queue-groups", function () {
     return wrap(async function () {
       await workflow.regularQueueGroups.startAll();
-      return projectSubmissionResult("content:start-all-regular-queue-groups", {
+      return {
         items: workflow.regularQueueGroups.list(),
-      });
+      };
     });
   });
   deps.ipcMain.handle("content:pause-all-regular-queue-groups", function () {
     return wrap(function () {
-      return projectSubmissionResult(
-        "content:pause-all-regular-queue-groups",
-        { items: workflow.regularQueueGroups.pauseAll().groups },
-      );
+      return { items: workflow.regularQueueGroups.pauseAll().groups };
     });
   });
   if (paidMedia) {
@@ -333,10 +330,7 @@ function registerContentSubmissionIpc(deps) {
           const result = await paidMedia.preflight(
             paidMediaPreflightInput(input),
           );
-          return projectSubmissionResult(
-            "content:preview-paid-media-preflight",
-            result,
-          );
+          return projectPaidPreflight(result);
         });
       },
     );
@@ -352,10 +346,7 @@ function registerContentSubmissionIpc(deps) {
           const result = await paidMedia.confirm(
             paidMediaConfirmationInput(input),
           );
-          return projectSubmissionResult(
-            "content:confirm-paid-media-batch",
-            result,
-          );
+          return projectPaidAdmission(result);
         });
       },
     );
@@ -369,10 +360,7 @@ function registerContentSubmissionIpc(deps) {
           throw error;
         }
         const result = await paidExecution.list();
-        return projectSubmissionResult(
-          "content:list-paid-media-batches",
-          result,
-        );
+        return projectPaidMediaBatchList(result);
       });
     });
     deps.ipcMain.handle(
@@ -385,10 +373,7 @@ function registerContentSubmissionIpc(deps) {
             throw error;
           }
           const result = await paidExecution.start(paidMediaBatchInput(input));
-          return projectSubmissionResult(
-            "content:start-paid-media-batch",
-            result,
-          );
+          return projectPaidExecutionResult(result);
         });
       },
     );
@@ -402,10 +387,7 @@ function registerContentSubmissionIpc(deps) {
             throw error;
           }
           const result = await paidExecution.pause(paidMediaBatchInput(input));
-          return projectSubmissionResult(
-            "content:pause-paid-media-batch",
-            result,
-          );
+          return projectPaidExecutionResult(result);
         });
       },
     );
