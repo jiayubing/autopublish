@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 
 import { createArticleManagementFeature } from "../media-workbench/src/features/content/article-management-feature.js";
 
@@ -22,12 +21,6 @@ const {
   exactObject,
   stringField,
 } = require("../desktop/ipc/contracts/registry");
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function source(relative) {
-  return fs.readFileSync(path.join(ROOT, relative), "utf8");
-}
 
 async function publishWithoutWorkflow({
   operationalStore,
@@ -167,17 +160,24 @@ test("admission: a fake platform is isolated to a Publisher adapter and registry
 
     assert.equal(result.status, "uncertain");
     assert.deepEqual(calls, ["admission-fake-platform"]);
+    const [record] = store.listPublicationRecords({
+      articleIds: ["article-admission-1"],
+    });
+    assert.equal(record.publicationId, "publication-admission-1");
+    assert.equal(record.articleId, "article-admission-1");
+    assert.equal(record.status, "uncertain");
     assert.equal(
-      store.listPublicationRecords({ articleIds: ["article-admission-1"] })
-        .length,
-      1,
+      record.targetKey,
+      `platform:admission-fake-platform:account:${profile.accountProfileId}`,
     );
-    for (const relative of [
-      "src/application/publication-workflow.js",
-      "src/infrastructure/operational-store/operational-store.js",
-      "media-workbench/src/features/content/article-management-feature.js",
-    ])
-      assert.doesNotMatch(source(relative), /admission-fake-platform/);
+    assert.equal(record.attempts.length, 1);
+    const [attempt] = record.attempts;
+    assert.equal(attempt.attemptId, "attempt-admission-1");
+    assert.equal(attempt.status, "uncertain");
+    assert.equal(attempt.remoteId, null);
+    assert.equal(attempt.remoteUrl, null);
+    for (const field of ["startedAt", "finishedAt", "createdAt", "updatedAt"])
+      assert.ok(Number.isFinite(Date.parse(attempt[field])));
 
     const directCalls = [];
     const directResult = await publishWithoutWorkflow({

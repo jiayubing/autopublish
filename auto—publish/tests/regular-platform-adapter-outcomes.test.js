@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
 
 function claim(platformId) {
   return {
@@ -66,7 +67,6 @@ test("Hepan accepted result carries a closed safe remote identity", async () => 
   const cookiePath = path.join(root, "cookie.txt");
   fs.writeFileSync(cookiePath, "synthetic-cookie", "utf8");
   try {
-    const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
     const adapter = createHepanAdapter({
       tempDir: path.join(root, "payloads"),
       runtime: {
