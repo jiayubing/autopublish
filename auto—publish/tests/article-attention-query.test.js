@@ -83,6 +83,180 @@ it("keeps generic attention read-only for uncertain attempts", () => {
   );
 });
 
+it("deduplicates stable attention identities and rebuilds only for a newer revision", () => {
+  let revision = 4;
+  let reads = 0;
+  let publications = [
+    {
+      publicationId: "publication-1",
+      clientId: "client-1",
+      articleId: "article-1",
+      status: "uncertain",
+      attemptId: "attempt-1",
+    },
+  ];
+  const query = createArticleAttentionQuery({
+    getRevision: () => revision,
+    operationalStore: {
+      listPublicationAttention() {
+        reads += 1;
+        return publications;
+      },
+    },
+  });
+
+  const first = query.list({ clientId: "client-1" });
+  publications = [publications[0], { ...publications[0] }];
+  const cached = query.list({ clientId: "client-1" });
+  assert.equal(first.revision, 4);
+  assert.equal(cached.items.length, 1);
+  assert.equal(reads, 1);
+
+  revision = 5;
+  const rebuilt = query.list({ clientId: "client-1" });
+  assert.equal(rebuilt.revision, 5);
+  assert.equal(rebuilt.items.length, 1);
+  assert.equal(rebuilt.items[0].attentionId, first.items[0].attentionId);
+  assert.equal(reads, 2);
+  assert.equal(query.list({ clientId: "other-client" }).items.length, 0);
+});
+
+it("fails closed to safe read-only attention when optional lookups fail", () => {
+  const query = createArticleAttentionQuery({
+    readers: {
+      getArticle() {
+        throw new Error("synthetic article lookup failure");
+      },
+      getTrashedArticle() {
+        throw new Error("synthetic trash lookup failure");
+      },
+      platformCapabilities() {
+        throw new Error("synthetic capability failure");
+      },
+    },
+    operationalStore: {
+      listPublicationAttention: () => [
+        {
+          publicationId: "publication-failed",
+          clientId: "client-1",
+          articleId: "article-1",
+          articleExists: true,
+          articleStatus: "saved",
+          status: "failed",
+          attemptId: "attempt-1",
+        },
+      ],
+    },
+    capabilities: {
+      failed_submission: { canInspect: false },
+    },
+    contentSubmissionService: {
+      previewRetryFailedPublication() {
+        throw new Error("synthetic retry preview failure");
+      },
+      retryFailedPublication() {
+        throw new Error("must not be exposed");
+      },
+    },
+  });
+
+  const snapshot = query.list();
+  assert.equal(snapshot.items.length, 1);
+  assert.deepEqual(snapshot.items[0].allowedActions, ["open-publication"]);
+  assert.equal(snapshot.counts.actionable, 0);
+});
+
+it("requires confirmation, preserves explicit failures, and fences duplicate resolutions", async () => {
+  let attempts = 0;
+  let fail = true;
+  const query = createArticleAttentionQuery({
+    readers: {
+      listTransactions: () => [
+        {
+          id: "repair-1",
+          transactionId: "repair-1",
+          clientId: "client-1",
+          articleId: "article-1",
+          status: "needs_repair",
+          phase: "needs_repair",
+        },
+      ],
+    },
+    articleRemovalService: {
+      retryArticleRemovalTransaction() {
+        attempts += 1;
+        if (fail) {
+          const error = new Error("synthetic repair failure");
+          error.code = "ARTICLE_REMOVAL_REPAIR_FAILED";
+          throw error;
+        }
+        return { status: "committed" };
+      },
+    },
+  });
+  const resolver = createArticleAttentionResolver({
+    query,
+    articleRemovalService: {
+      retryArticleRemovalTransaction() {
+        attempts += 1;
+        if (fail) {
+          const error = new Error("synthetic repair failure");
+          error.code = "ARTICLE_REMOVAL_REPAIR_FAILED";
+          throw error;
+        }
+        return { status: "committed" };
+      },
+    },
+  });
+  const item = query.list().items[0];
+  const expectedRevision = query.getRevision();
+
+  await assert.rejects(
+    () =>
+      resolver.resolve({
+        attentionId: item.attentionId,
+        action: "retry-removal",
+        expectedRevision,
+      }),
+    { code: "ARTICLE_ATTENTION_CONFIRMATION_REQUIRED" },
+  );
+  await assert.rejects(
+    () =>
+      resolver.resolve({
+        attentionId: item.attentionId,
+        action: "retry-removal",
+        expectedRevision,
+        confirmed: true,
+      }),
+    { code: "ARTICLE_REMOVAL_REPAIR_FAILED" },
+  );
+  assert.equal(query.getRevision(), expectedRevision);
+  assert.equal(attempts, 1);
+
+  fail = false;
+  const resolved = await resolver.resolve({
+    attentionId: item.attentionId,
+    action: "retry-removal",
+    expectedRevision,
+    confirmed: true,
+  });
+  assert.equal(resolved.outcome, "resolved");
+  assert.equal(query.getRevision(), expectedRevision + 1);
+  assert.equal(attempts, 2);
+
+  await assert.rejects(
+    () =>
+      resolver.resolve({
+        attentionId: item.attentionId,
+        action: "retry-removal",
+        expectedRevision,
+        confirmed: true,
+      }),
+    { code: "ARTICLE_ATTENTION_STALE" },
+  );
+  assert.equal(attempts, 2);
+});
+
 it("keeps Ticket 14 resolutions out of generic attention commands while preserving a reachable DTO projection", async () => {
   const query = createArticleAttentionQuery({
     operationalStore: {
