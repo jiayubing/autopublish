@@ -8,7 +8,7 @@ const test = require("node:test");
 
 const { createPublicationWorkflow } = require("../src/application/publication-workflow");
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
-const { contentCoreContracts } = require("../desktop/ipc/contracts/content-core-contracts");
+const { articleEditorContracts } = require("../desktop/ipc/contracts/article-editor-contracts");
 const { createArticleMutationCoordinator } = require("../src/content/article-mutation-coordinator");
 const { createArticleStore } = require("../src/content/article-store");
 const { createArticleTrashService } = require("../src/content/article-trash-service");
@@ -156,7 +156,7 @@ test("existing article save uses opaque fingerprint CAS and returns the next tok
 });
 
 test("save IPC contract requires a fingerprint and accepts only closed typed outcomes", () => {
-  const registry = createContractRegistry(contentCoreContracts);
+  const registry = createContractRegistry(articleEditorContracts);
   const contract = registry.byChannel("content:save-article");
   assert.throws(() => registry.encodeRequest(contract, { article: article("article-1") }), { code: "IPC_REQUEST_INVALID" });
   const conflict = registry.success(contract, {

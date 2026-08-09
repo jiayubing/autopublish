@@ -6,7 +6,7 @@ const {
   deriveArticleLifecycle,
   projectArticleLifecycle,
 } = require("../src/content/article-lifecycle-projection");
-const { projectManagementSnapshot } = require("../desktop/ipc/contracts/content-core-contracts");
+const { projectManagementSnapshot } = require("../desktop/ipc/contracts/article-management-contracts");
 const { publicationSummary } = require("../src/content/article-lifecycle-facts");
 
 function article(overrides) {

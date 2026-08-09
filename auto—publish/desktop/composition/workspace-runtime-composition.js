@@ -4,7 +4,7 @@ const {
 } = require("../ipc/contracts/production-registry");
 const {
   projectArticleRemovalTransaction,
-} = require("../ipc/contracts/content-core-contracts");
+} = require("../ipc/contracts/article-removal-contracts");
 const {
   projectPlatformSnapshot,
 } = require("../ipc/contracts/platform-contracts");

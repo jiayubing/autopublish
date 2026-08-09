@@ -34,8 +34,8 @@ const {
   createContractRegistry,
 } = require("../desktop/ipc/contracts/registry");
 const {
-  contentCoreContracts,
-} = require("../desktop/ipc/contracts/content-core-contracts");
+  articleManagementContracts,
+} = require("../desktop/ipc/contracts/article-management-contracts");
 
 function workspace(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -628,7 +628,7 @@ test("archive query and article-management snapshot preserve an empty client sta
 });
 
 test("typed article-management archive field delegates V1 validation and rejects sensitive extras", () => {
-  const registry = createContractRegistry(contentCoreContracts);
+  const registry = createContractRegistry(articleManagementContracts);
   const contract = registry.byChannel("content:get-article-management-snapshot");
   const evidence = domain.parsePublicationEvidenceV1(evidenceFixture());
   const archive = {

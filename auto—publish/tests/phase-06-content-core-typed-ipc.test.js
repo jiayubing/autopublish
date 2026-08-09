@@ -5,8 +5,32 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
-const contentCore = require("../desktop/ipc/contracts/content-core-contracts");
-const { contentCoreContracts } = contentCore;
+const { contentLibraryContracts } = require("../desktop/ipc/contracts/content-library-contracts");
+const { articleEditorContracts, projectArticle } = require("../desktop/ipc/contracts/article-editor-contracts");
+const {
+  articleRemovalContracts,
+  articleRemovalEventContracts,
+  projectArticleRemovalTransaction,
+} = require("../desktop/ipc/contracts/article-removal-contracts");
+const {
+  articleManagementContracts,
+  projectManagementSnapshot,
+} = require("../desktop/ipc/contracts/article-management-contracts");
+const { articleAttentionContracts } = require("../desktop/ipc/contracts/article-attention-contracts");
+const contentCoreContracts = Object.freeze([
+  ...contentLibraryContracts,
+  ...articleEditorContracts,
+  ...articleRemovalContracts,
+  ...articleManagementContracts,
+  ...articleAttentionContracts,
+  ...articleRemovalEventContracts,
+]);
+const contentCore = {
+  contentCoreContracts,
+  projectArticle,
+  projectArticleRemovalTransaction,
+  projectManagementSnapshot,
+};
 const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
   registerArticleAttentionIpc,
@@ -72,6 +96,21 @@ test("content core declares exactly 19 versioned path-free capabilities", functi
       /(?:^|[.:_-])review(?:$|[.:_-])|copyArticleVersion|(?:^|[.:_-])article-version(?:$|[.:_-])/i.test(
         `${contract.capability} ${contract.channel}`,
       ),
+    ),
+    false,
+  );
+});
+
+test("content core legacy contract and projection modules stay absent", function () {
+  assert.equal(
+    fs.existsSync(
+      path.join(__dirname, "../desktop/ipc/contracts/content-core-contracts.js"),
+    ),
+    false,
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(__dirname, "../desktop/ipc/contracts/content-core-projections.js"),
     ),
     false,
   );
