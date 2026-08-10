@@ -440,6 +440,65 @@ test("classifier follows loop, helper-parameter, recursive scan, and repository-
   }
 });
 
+test("classifier recognizes the checked-in env example contract without promoting runtime environment behavior", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const read = (relativePath) =>
+      fs.readFileSync(path.join(root, relativePath), "utf8");
+    test("workspace AI assignments stay out of the environment contract", () => {
+      const envExample = read(".env.example");
+      assert.doesNotMatch(envExample, /^AI_[A-Z0-9_]+=/m);
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const categories = inferStaticCategories(
+    "tests/desktop-packaging.test.js",
+    declaration.name,
+    declaration.source,
+    source,
+  );
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+    categories,
+  );
+
+  assert.equal(signals.sourceAssertion, true);
+  assert.deepEqual(categories, ["packaging/release/CI"]);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: signals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      categories,
+    ).disposition,
+    "RETAIN_STATIC_GUARD",
+  );
+
+  const runtimeSource = `
+    test("ordinary runtime environment behavior", () => {
+      const environment = process.env;
+      const env = environment.RUNTIME_MODE;
+      assert.equal(env, "test");
+    });
+  `;
+  const runtimeDeclaration = extractTests(runtimeSource)[0];
+  const runtimeSignals = sourceReadSignals(
+    runtimeDeclaration.source,
+    staticSignals(runtimeSource),
+    runtimeSource,
+  );
+  assert.equal(runtimeSignals.level, "none");
+  assert.equal(runtimeSignals.sourceAssertion, false);
+});
+
 test("derived source holders never receive static authorization from their variable names", () => {
   const source = `
     const fs = require("node:fs");

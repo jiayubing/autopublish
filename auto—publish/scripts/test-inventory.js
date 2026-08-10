@@ -599,6 +599,7 @@ const SOURCE_PATH_SEGMENTS = new Set([
 ]);
 
 const SOURCE_FILE_NAMES = Object.freeze([
+  /^\.env\.example$/i,
   /^dockerfile(?:\..*)?$/i,
   /^docker-compose(?:\..*)?$/i,
   /^electron-builder(?:\..*)?\.ya?ml$/i,
@@ -1810,6 +1811,12 @@ function staticCategoryMatches(category, text) {
 }
 
 function staticCategoryContextMatches(category, assertionText, testSource) {
+  if (
+    category === "packaging/release/CI" &&
+    /\.env\.example/i.test(testSource) &&
+    /\bAI_/i.test(assertionText)
+  )
+    return true;
   if (
     category === "packaging/release/CI" &&
     /(?:workflow|runner|check|command)/i.test(assertionText) &&
