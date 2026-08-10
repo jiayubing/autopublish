@@ -537,31 +537,368 @@ function findVariableDeclarations(source) {
   return declarations;
 }
 
-const PRODUCTION_SOURCE_PATH_PATTERN =
-  /(?:media-workbench[\\/](?:src|dist)|media-workbench(?:["'\s,()[\]]{1,40})(?:src|dist)|desktop[\\/]|desktop(?:["'\s,()[\]]{1,40})(?:main|preload|ipc|services|composition|workspace)|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
+const SOURCE_TAINT = Object.freeze({
+  ORDINARY_RUNTIME_VALUE: "ordinary-runtime-value",
+  REPOSITORY_CONFIG_PATH: "repo/config-path",
+  SOURCE_TEXT: "source-text",
+  SOURCE_TEXT_DERIVED_VALUE: "source-text-derived-value",
+});
 
-const PRODUCTION_PATH_SEGMENTS = new Set([
-  "media-workbench",
+const SOURCE_PATH_SEGMENTS = new Set([
+  ".github",
+  "auth-server",
+  "build",
+  "config",
   "desktop",
+  "media-workbench",
+  "release",
+  "resources",
+  "scripts",
   "src",
-  "dist",
 ]);
 
-function isProductionPathExpression(value) {
-  const text = String(value || "");
-  if (PRODUCTION_SOURCE_PATH_PATTERN.test(text)) return true;
-  return tokenize(text).some((token) => {
-    if (token.type !== "string" && token.type !== "template") return false;
-    const normalized = String(token.value || "").replaceAll("\\", "/");
-    return normalized.split("/").some((segment) => {
-      const lower = segment.toLowerCase();
-      return (
-        PRODUCTION_PATH_SEGMENTS.has(lower) ||
-        lower === "package.json" ||
-        /^electron-builder(?:\..+)?\.ya?ml$/.test(lower)
-      );
-    });
+const SOURCE_FILE_NAMES = Object.freeze([
+  /^dockerfile(?:\..*)?$/i,
+  /^docker-compose(?:\..*)?$/i,
+  /^electron-builder(?:\..*)?\.ya?ml$/i,
+  /^eslint\.config\..+$/i,
+  /^package(?:-lock)?\.json$/i,
+  /^prettier(?:\.config)?\..+$/i,
+  /^tsconfig(?:\..*)?\.json$/i,
+]);
+
+const SOURCE_TAINT_METHODS = new Set([
+  "concat",
+  "endsWith",
+  "includes",
+  "indexOf",
+  "length",
+  "match",
+  "replace",
+  "slice",
+  "split",
+  "startsWith",
+  "test",
+  "trim",
+]);
+
+const SOURCE_TEXT_DERIVATION_METHODS = new Set([
+  "concat",
+  "replace",
+  "slice",
+  "split",
+  "trim",
+]);
+
+const PATH_METHODS = new Set([
+  "basename",
+  "dirname",
+  "extname",
+  "join",
+  "normalize",
+  "relative",
+  "resolve",
+]);
+
+const SOURCE_TAINT_CACHE = new Map();
+
+function isSourceTaint(value) {
+  return (
+    value === SOURCE_TAINT.SOURCE_TEXT ||
+    value === SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE
+  );
+}
+
+function isRepositoryPathTaint(value) {
+  return value === SOURCE_TAINT.REPOSITORY_CONFIG_PATH;
+}
+
+function isStaticSourceFileName(value) {
+  const normalized = String(value || "")
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter(Boolean)
+    .pop();
+  return Boolean(
+    normalized && SOURCE_FILE_NAMES.some((pattern) => pattern.test(normalized)),
+  );
+}
+
+function isStaticSourcePathToken(token) {
+  if (!token || (token.type !== "string" && token.type !== "template"))
+    return false;
+  const value = token.value;
+  if (typeof value !== "string") return false;
+  const normalized = value.replaceAll("\\", "/");
+  if (isStaticSourceFileName(normalized)) return true;
+  return normalized.split("/").some((segment) => {
+    const lower = segment.toLowerCase();
+    return SOURCE_PATH_SEGMENTS.has(lower);
   });
+}
+
+function isRepositoryConfigPathExpression(value) {
+  const source = String(value || "");
+  return tokenize(source).some(isStaticSourcePathToken);
+}
+
+function taintRank(value) {
+  switch (value) {
+    case SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE:
+      return 4;
+    case SOURCE_TAINT.SOURCE_TEXT:
+      return 3;
+    case SOURCE_TAINT.REPOSITORY_CONFIG_PATH:
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function mergeTaint(left, right) {
+  return taintRank(right) > taintRank(left) ? right : left;
+}
+
+function splitCallArguments(call) {
+  const tokens = tokenize(call);
+  const openIndex = tokens.findIndex((token) => token.value === "(");
+  if (openIndex === -1) return [];
+  const closeIndex = findMatchingParenthesis(tokens, openIndex);
+  if (closeIndex === -1 || closeIndex === openIndex + 1) return [];
+  const argumentsList = [];
+  let start = openIndex + 1;
+  let depth = 0;
+  for (let index = start; index < closeIndex; index += 1) {
+    const value = tokens[index].value;
+    if (["(", "[", "{"].includes(value)) depth += 1;
+    if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
+    if (depth === 0 && value === ",") {
+      argumentsList.push(call.slice(tokens[start].start, tokens[index].start));
+      start = index + 1;
+    }
+  }
+  if (start < closeIndex)
+    argumentsList.push(
+      call.slice(tokens[start].start, tokens[closeIndex].start),
+    );
+  return argumentsList.map((argument) => argument.trim()).filter(Boolean);
+}
+
+function findLoopBindings(source) {
+  const tokens = tokenize(source);
+  const bindings = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index].value !== "for" || tokens[index + 1]?.value !== "(")
+      continue;
+    const closeIndex = findMatchingParenthesis(tokens, index + 1);
+    if (closeIndex === -1) continue;
+    let depth = 0;
+    let operatorIndex = -1;
+    for (let cursor = index + 2; cursor < closeIndex; cursor += 1) {
+      const value = tokens[cursor].value;
+      if (["(", "[", "{"].includes(value)) depth += 1;
+      if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
+      if (depth === 0 && (value === "of" || value === "in")) {
+        operatorIndex = cursor;
+        break;
+      }
+    }
+    if (operatorIndex === -1) continue;
+    const bindingToken = tokens[index + 2]?.value;
+    const nameToken =
+      ["const", "let", "var"].includes(bindingToken) &&
+      tokens[index + 3]?.type === "identifier"
+        ? tokens[index + 3]
+        : tokens[index + 2];
+    if (!nameToken || nameToken.type !== "identifier") continue;
+    bindings.push({
+      name: nameToken.value,
+      expression: source.slice(
+        tokens[operatorIndex].end,
+        tokens[closeIndex].start,
+      ),
+      start: tokens[index].start,
+      end: tokens[closeIndex].end,
+    });
+  }
+  return bindings;
+}
+
+function parameterNames(tokens) {
+  return tokens
+    .filter((token) => token.type === "identifier")
+    .map((token) => token.value)
+    .filter(
+      (name) =>
+        !new Set(["const", "let", "var", "async", "function"]).has(name),
+    );
+}
+
+function findFunctionRecords(source) {
+  const tokens = tokenize(source);
+  const records = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index].value === "function") {
+      const nameIndex =
+        tokens[index + 1]?.value === "*" ? index + 2 : index + 1;
+      const name = tokens[nameIndex]?.value;
+      const openIndex = nameIndex + 1;
+      if (
+        tokens[nameIndex]?.type !== "identifier" ||
+        tokens[openIndex]?.value !== "("
+      )
+        continue;
+      const closeIndex = findMatchingParenthesis(tokens, openIndex);
+      const bodyOpenIndex = closeIndex + 1;
+      if (
+        closeIndex === -1 ||
+        tokens[bodyOpenIndex]?.value !== "{"
+      )
+        continue;
+      const bodyCloseIndex = findMatchingToken(
+        tokens,
+        bodyOpenIndex,
+        "{",
+        "}",
+      );
+      if (bodyCloseIndex === -1) continue;
+      records.push({
+        name,
+        params: parameterNames(tokens.slice(openIndex + 1, closeIndex)),
+        body: source.slice(
+          tokens[bodyOpenIndex].start,
+          tokens[bodyCloseIndex].end,
+        ),
+        expressionBody: false,
+      });
+      continue;
+    }
+
+    if (
+      !["const", "let", "var"].includes(tokens[index].value) ||
+      tokens[index + 1]?.type !== "identifier" ||
+      tokens[index + 2]?.value !== "="
+    )
+      continue;
+    const name = tokens[index + 1].value;
+    let arrowIndex = -1;
+    for (let cursor = index + 3; cursor < tokens.length; cursor += 1) {
+      if (tokens[cursor].value === "=>") {
+        arrowIndex = cursor;
+        break;
+      }
+      if (tokens[cursor].value === ";") break;
+    }
+    if (arrowIndex === -1) continue;
+    let params = [];
+    if (tokens[index + 3]?.value === "(") {
+      const closeIndex = findMatchingParenthesis(tokens, index + 3);
+      if (closeIndex !== -1 && closeIndex < arrowIndex)
+        params = parameterNames(tokens.slice(index + 4, closeIndex));
+    } else if (tokens[index + 3]?.type === "identifier") {
+      params = [tokens[index + 3].value];
+    }
+    const bodyStart = arrowIndex + 1;
+    if (tokens[bodyStart]?.value === "{") {
+      const bodyCloseIndex = findMatchingToken(
+        tokens,
+        bodyStart,
+        "{",
+        "}",
+      );
+      if (bodyCloseIndex !== -1)
+        records.push({
+          name,
+          params,
+          body: source.slice(tokens[bodyStart].start, tokens[bodyCloseIndex].end),
+          expressionBody: false,
+        });
+    } else {
+      let bodyEnd = bodyStart;
+      while (bodyEnd < tokens.length && tokens[bodyEnd].value !== ";")
+        bodyEnd += 1;
+      records.push({
+        name,
+        params,
+        body: source.slice(
+          tokens[bodyStart]?.start || tokens[index + 2].end,
+          tokens[Math.max(bodyStart, bodyEnd - 1)]?.end || tokens[index + 2].end,
+        ),
+        expressionBody: true,
+      });
+    }
+  }
+  return records;
+}
+
+function findFunctionParameterNames(source) {
+  const tokens = tokenize(source);
+  const names = new Set();
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index].value === "function") {
+      const openIndex =
+        tokens[index + 1]?.type === "identifier" ||
+        tokens[index + 1]?.value === "*"
+          ? index + 2
+          : index + 1;
+      if (tokens[openIndex]?.value !== "(") continue;
+      const closeIndex = findMatchingParenthesis(tokens, openIndex);
+      if (closeIndex !== -1)
+        for (const name of parameterNames(
+          tokens.slice(openIndex + 1, closeIndex),
+        ))
+          names.add(name);
+    }
+    if (tokens[index].value !== "=>") continue;
+    if (tokens[index - 1]?.value === ")") {
+      let depth = 0;
+      let openIndex = -1;
+      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+        if (tokens[cursor].value === ")") depth += 1;
+        if (tokens[cursor].value === "(") {
+          depth -= 1;
+          if (depth === 0) {
+            openIndex = cursor;
+            break;
+          }
+        }
+      }
+      if (openIndex !== -1)
+        for (const name of parameterNames(
+          tokens.slice(openIndex + 1, index - 1),
+        ))
+          names.add(name);
+    } else if (tokens[index - 1]?.type === "identifier") {
+      names.add(tokens[index - 1].value);
+    }
+  }
+  return names;
+}
+
+function findReturnExpressions(source) {
+  const tokens = tokenize(source);
+  const returns = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index].value !== "return") continue;
+    let end = index + 1;
+    let depth = 0;
+    for (; end < tokens.length; end += 1) {
+      const value = tokens[end].value;
+      if (["(", "[", "{"].includes(value)) depth += 1;
+      if ([")", "]", "}"].includes(value)) {
+        if (depth === 0) break;
+        depth -= 1;
+      }
+      if (depth === 0 && value === ";") break;
+    }
+    if (end > index + 1)
+      returns.push(source.slice(tokens[index + 1].start, tokens[end - 1].end));
+  }
+  return returns;
+}
+
+function isProductionPathExpression(value) {
+  return isRepositoryConfigPathExpression(value);
 }
 
 function findProductionPathVariables(source) {
@@ -678,6 +1015,461 @@ const DIRECT_SOURCE_READER_NAMES = Object.freeze([
   "createReadStream",
 ]);
 
+function expressionIdentifierTaints(expression, taints) {
+  const tokens = tokenize(expression);
+  return tokens
+    .filter(
+      (token, index) =>
+        token.type === "identifier" &&
+        tokens[index - 1]?.value !== "." &&
+        tokens[index - 1]?.value !== "?." &&
+        tokens[index + 1]?.value !== ":",
+    )
+    .map((token) => taints.get(token.value) || SOURCE_TAINT.ORDINARY_RUNTIME_VALUE);
+}
+
+function isPathCallExpression(tokens) {
+  return tokens.some(
+    (token, index) =>
+      PATH_METHODS.has(token.value) &&
+      tokens[index - 1]?.value === "." &&
+      tokens[index + 1]?.value === "(",
+  );
+}
+
+function pathCallUsesRepositoryPath(expression, taints, functions) {
+  const calls = findCallSources(expression, PATH_METHODS);
+  return calls.some((call) => {
+    const argumentsList = splitCallArguments(call);
+    return argumentsList.some((argument) => {
+      const argumentTaint = evaluateExpressionTaint(
+        argument,
+        taints,
+        functions,
+      );
+      return (
+        isRepositoryPathTaint(argumentTaint) ||
+        isRepositoryConfigPathExpression(argument)
+      );
+    });
+  });
+}
+
+function callReturnsSourceText(call, taints, functions) {
+  const argumentsList = splitCallArguments(call);
+  const firstArgument = argumentsList[0] || "";
+  if (DIRECT_SOURCE_READER_NAMES.some((name) => callContainsName(call, name)))
+    return isRepositoryPathTaint(
+      evaluateExpressionTaint(firstArgument, taints, functions),
+    );
+
+  for (const [name, summary] of functions) {
+    if (!callContainsName(call, name)) continue;
+    if (summary.returnsSource) return true;
+    if (
+      summary.sourceReturnPathParameters.some((index) =>
+        isRepositoryPathTaint(
+          evaluateExpressionTaint(
+            argumentsList[index] || "",
+            taints,
+            functions,
+          ),
+        ),
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
+function callReadsSourceText(call, taints, functions) {
+  const argumentsList = splitCallArguments(call);
+  const firstArgument = argumentsList[0] || "";
+  if (DIRECT_SOURCE_READER_NAMES.some((name) => callContainsName(call, name)))
+    return isRepositoryPathTaint(
+      evaluateExpressionTaint(firstArgument, taints, functions),
+    );
+  for (const [name, summary] of functions) {
+    if (!callContainsName(call, name)) continue;
+    if (summary.unconditional) return true;
+    if (
+      summary.sourcePathParameters.some((index) =>
+        isRepositoryPathTaint(
+          evaluateExpressionTaint(
+            argumentsList[index] || "",
+            taints,
+            functions,
+          ),
+        ),
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
+function sourceReaderCallHasShapeTransform(text, taints, functions) {
+  const tokens = tokenize(text);
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    if (tokens[index].type !== "identifier" || tokens[index + 1].value !== "(")
+      continue;
+    const closeIndex = findMatchingParenthesis(tokens, index + 1);
+    if (closeIndex === -1) continue;
+    const call = text.slice(tokens[index].start, tokens[closeIndex].end);
+    if (
+      !callReturnsSourceText(call, taints, functions) ||
+      tokens[closeIndex + 1]?.value !== "."
+    )
+      continue;
+    if (
+      SOURCE_TEXT_DERIVATION_METHODS.has(tokens[closeIndex + 2]?.value)
+    )
+      return true;
+  }
+  return false;
+}
+
+function evaluateExpressionTaint(expression, taints, functions) {
+  const text = String(expression || "").trim();
+  if (!text) return SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+  const tokens = tokenize(text);
+  if (
+    tokens.some(
+      (token, index) =>
+        token.value === "require" && tokens[index + 1]?.value === "(",
+    ) ||
+    tokens.some(
+      (token, index) =>
+        token.value === "import" && tokens[index + 1]?.value === "(",
+    )
+  )
+    return SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+  if (
+    tokens.length === 1 &&
+    tokens[0].type === "identifier" &&
+    taints.has(tokens[0].value)
+  )
+    return taints.get(tokens[0].value);
+
+  const directReaderCalls = findCallSources(
+    text,
+    new Set(DIRECT_SOURCE_READER_NAMES),
+  );
+  const readsSource = directReaderCalls.some((call) =>
+    callReturnsSourceText(call, taints, functions),
+  );
+  const helperCalls = [...functions.keys()].flatMap((name) =>
+    findCallSources(text, new Set([name])),
+  );
+  const helperReturnsSource = helperCalls.some((call) =>
+    callReturnsSourceText(call, taints, functions),
+  );
+  if (readsSource || helperReturnsSource) {
+    const callCount = tokens.filter((token) => token.value === "(").length;
+    const pathCallCount = findCallSources(text, PATH_METHODS).length;
+    const knownSourceTransform = sourceReaderCallHasShapeTransform(
+      text,
+      taints,
+      functions,
+    );
+    const exactReaderCall =
+      callCount === 1 + pathCallCount &&
+      directReaderCalls.length === 1 &&
+      !helperCalls.length &&
+      /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?(?:readFileSync|readFile|createReadStream)\s*\(/.test(
+        text,
+      );
+    const exactHelperCall =
+      callCount === 1 &&
+      helperCalls.length === 1 &&
+      !directReaderCalls.length &&
+      /^[A-Za-z_$][A-Za-z0-9_$]*\s*\(/.test(text);
+    if (exactReaderCall || exactHelperCall) return SOURCE_TAINT.SOURCE_TEXT;
+    if (knownSourceTransform) return SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE;
+    return SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+  }
+
+  const identifierTaints = expressionIdentifierTaints(text, taints);
+  const hasSourceText = identifierTaints.some(isSourceTaint);
+  if (hasSourceText) {
+    if (
+      tokens.length === 1 &&
+      tokens[0].type === "identifier" &&
+      isSourceTaint(taints.get(tokens[0].value))
+    )
+      return taints.get(tokens[0].value);
+    const hasKnownSourceTransform = tokens.some(
+      (token, index) =>
+        SOURCE_TEXT_DERIVATION_METHODS.has(token.value) &&
+        tokens[index - 1]?.value === ".",
+    );
+    const hasCall = tokens.some((token) => token.value === "(");
+    return hasKnownSourceTransform || !hasCall
+      ? SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE
+      : SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+  }
+
+  if (
+    isRepositoryConfigPathExpression(text) ||
+    (isPathCallExpression(tokens) &&
+      pathCallUsesRepositoryPath(text, taints, functions)) ||
+    identifierTaints.some(isRepositoryPathTaint)
+  )
+    return SOURCE_TAINT.REPOSITORY_CONFIG_PATH;
+  return SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+}
+
+function functionSummariesEqual(left, right) {
+  return (
+    left.unconditional === right.unconditional &&
+    left.returnsSource === right.returnsSource &&
+    left.sourcePathParameters.join(",") === right.sourcePathParameters.join(",") &&
+    left.sourceReturnPathParameters.join(",") ===
+      right.sourceReturnPathParameters.join(",")
+  );
+}
+
+function runTaintFlow(
+  source,
+  functions,
+  initialTaints = new Map(),
+  shadowNames = new Set(),
+) {
+  const declarations = findVariableDeclarations(source);
+  const loops = findLoopBindings(source);
+  const taints = new Map(initialTaints);
+  for (const name of shadowNames)
+    taints.set(name, SOURCE_TAINT.ORDINARY_RUNTIME_VALUE);
+  for (const declaration of declarations)
+    if (!taints.has(declaration.name))
+      taints.set(declaration.name, SOURCE_TAINT.ORDINARY_RUNTIME_VALUE);
+  for (const binding of loops)
+    if (!taints.has(binding.name))
+      taints.set(binding.name, SOURCE_TAINT.ORDINARY_RUNTIME_VALUE);
+
+  let directSourceRead = false;
+  let helperSourceRead = false;
+  for (let pass = 0; pass < 8; pass += 1) {
+    let changed = false;
+    for (const declaration of declarations) {
+      const next = evaluateExpressionTaint(
+        declaration.expression,
+        taints,
+        functions,
+      );
+      if (taints.get(declaration.name) !== next) {
+        taints.set(declaration.name, next);
+        changed = true;
+      }
+    }
+    for (const binding of loops) {
+      const iterable = evaluateExpressionTaint(
+        binding.expression,
+        taints,
+        functions,
+      );
+      const next = isRepositoryPathTaint(iterable)
+        ? SOURCE_TAINT.REPOSITORY_CONFIG_PATH
+        : SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+      if (taints.get(binding.name) !== next) {
+        taints.set(binding.name, next);
+        changed = true;
+      }
+    }
+
+    const tokens = tokenize(source);
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (
+        tokens[index].type !== "identifier" ||
+        !functions.has(tokens[index].value) ||
+        tokens[index - 1]?.value !== "(" ||
+        tokens[index - 2]?.value !== "forEach" ||
+        tokens[index - 3]?.value !== "."
+      )
+        continue;
+      const summary = functions.get(tokens[index].value);
+      const receiverToken = tokens[index - 4];
+      if (!receiverToken) continue;
+      const receiver = source.slice(receiverToken.start, tokens[index - 3].start);
+      if (
+        summary?.sourcePathParameters.includes(0) &&
+        isRepositoryPathTaint(
+          evaluateExpressionTaint(receiver, taints, functions),
+        ) &&
+        summary.params[0]
+      ) {
+        if (taints.get(summary.params[0]) !== SOURCE_TAINT.REPOSITORY_CONFIG_PATH) {
+          taints.set(summary.params[0], SOURCE_TAINT.REPOSITORY_CONFIG_PATH);
+          changed = true;
+        }
+      }
+    }
+
+    for (const [name, summary] of functions) {
+      for (const call of findCallSources(source, new Set([name]))) {
+        const args = splitCallArguments(call);
+        for (const parameterIndex of summary.sourcePathParameters) {
+          const parameter = summary.params[parameterIndex];
+          if (!parameter) continue;
+          if (
+            isRepositoryPathTaint(
+              evaluateExpressionTaint(args[parameterIndex] || "", taints, functions),
+            ) &&
+            taints.get(parameter) !== SOURCE_TAINT.REPOSITORY_CONFIG_PATH
+          ) {
+            taints.set(parameter, SOURCE_TAINT.REPOSITORY_CONFIG_PATH);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    for (const call of findCallSources(
+      source,
+      new Set(DIRECT_SOURCE_READER_NAMES),
+    )) {
+      if (callReturnsSourceText(call, taints, functions)) directSourceRead = true;
+    }
+    for (const [name, summary] of functions) {
+      if (!summary.unconditional && !summary.sourcePathParameters.length)
+        continue;
+      for (const call of findCallSources(source, new Set([name]))) {
+        if (callReadsSourceText(call, taints, functions)) helperSourceRead = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  return {
+    taints,
+    directSourceRead,
+    helperSourceRead,
+    observedSourceRead: directSourceRead || helperSourceRead,
+  };
+}
+
+function buildFunctionSummaries(
+  source,
+  inheritedFunctions = new Map(),
+  inheritedTaints = new Map(),
+) {
+  const functions = new Map(inheritedFunctions);
+  const records = findFunctionRecords(source);
+  for (let pass = 0; pass < 4; pass += 1) {
+    let changed = false;
+    for (const record of records) {
+      const unconditionalFlow = runTaintFlow(
+        record.body,
+        functions,
+        inheritedTaints,
+      );
+      const sourcePathParameters = [];
+      const sourceReturnPathParameters = [];
+      const returnsSource = (initialTaints) => {
+        const flow = runTaintFlow(
+          record.body,
+          functions,
+          new Map([...inheritedTaints, ...initialTaints]),
+        );
+        const returnExpressions = record.expressionBody
+          ? [record.body]
+          : findReturnExpressions(record.body);
+        return returnExpressions.some((expression) =>
+          isSourceTaint(
+            evaluateExpressionTaint(expression, flow.taints, functions),
+          ),
+        );
+      };
+      const unconditionalReturnsSource = returnsSource(new Map());
+      for (let index = 0; index < record.params.length; index += 1) {
+        const seeded = new Map([
+          [record.params[index], SOURCE_TAINT.REPOSITORY_CONFIG_PATH],
+        ]);
+        const parameterFlow = runTaintFlow(
+          record.body,
+          functions,
+          new Map([...inheritedTaints, ...seeded]),
+        );
+        if (parameterFlow.observedSourceRead) sourcePathParameters.push(index);
+        if (returnsSource(seeded)) sourceReturnPathParameters.push(index);
+      }
+      const next = {
+        params: record.params,
+        unconditional: unconditionalFlow.observedSourceRead,
+        returnsSource: unconditionalReturnsSource,
+        sourcePathParameters,
+        sourceReturnPathParameters,
+      };
+      const previous = functions.get(record.name);
+      if (!previous || !functionSummariesEqual(previous, next)) {
+        functions.set(record.name, next);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return functions;
+}
+
+function sourceTaintAnalysis(fileSource, baseAnalysis = null) {
+  const source = fileSource || "";
+  if (!baseAnalysis && SOURCE_TAINT_CACHE.has(source))
+    return SOURCE_TAINT_CACHE.get(source);
+  const inheritedTaints = baseAnalysis?.taints || new Map();
+  const pathSeeds = new Map(inheritedTaints);
+  for (let pass = 0; pass < 4; pass += 1) {
+    let changed = false;
+    for (const declaration of findVariableDeclarations(source)) {
+      const taint = evaluateExpressionTaint(
+        declaration.expression,
+        pathSeeds,
+        new Map(),
+      );
+      if (
+        isRepositoryPathTaint(taint) &&
+        pathSeeds.get(declaration.name) !== SOURCE_TAINT.REPOSITORY_CONFIG_PATH
+      ) {
+        pathSeeds.set(declaration.name, SOURCE_TAINT.REPOSITORY_CONFIG_PATH);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  const functions = buildFunctionSummaries(
+    source,
+    baseAnalysis?.functions || new Map(),
+    pathSeeds,
+  );
+  const localNames = new Set([
+    ...findVariableDeclarations(source).map((declaration) => declaration.name),
+    ...findLoopBindings(source).map((binding) => binding.name),
+    ...findFunctionParameterNames(source),
+  ]);
+  const flow = runTaintFlow(source, functions, inheritedTaints, localNames);
+  const potentialSourceReader = [...functions.values()].some(
+    (summary) => summary.unconditional || summary.sourcePathParameters.length > 0,
+  );
+  const analysis = {
+    ...flow,
+    functions,
+    taints: flow.taints,
+    pathVariables: new Set(
+      [...flow.taints]
+        .filter(([, taint]) => isRepositoryPathTaint(taint))
+        .map(([name]) => name),
+    ),
+    sourceVariables: new Set(
+      [...flow.taints]
+        .filter(([, taint]) => isSourceTaint(taint))
+        .map(([name]) => name),
+    ),
+    potentialSourceReader,
+    readsProductionSource: flow.observedSourceRead || potentialSourceReader,
+  };
+  if (!baseAnalysis) SOURCE_TAINT_CACHE.set(source, analysis);
+  return analysis;
+}
+
 function callContainsName(call, name) {
   return new RegExp("\\b" + name + "\\s*\\(").test(call);
 }
@@ -688,32 +1480,23 @@ function isProductionSourceReadCall(call) {
 
 function sourceReaderMetadata(fileSource) {
   const source = fileSource || "";
-  const productionPathVariables = findProductionPathVariables(source);
-  const helpers = findProductionSourceReaderHelpers(source);
-  const helperNames = new Set(helpers.keys());
+  const taint = sourceTaintAnalysis(source);
+  const helperNames = new Set(taint.functions.keys());
   const productionHelperNames = new Set(
-    [...helpers]
-      .filter(([, helper]) => helper.readsProductionSource)
+    [...taint.functions]
+      .filter(([, helper]) =>
+        helper.unconditional || helper.sourcePathParameters.length > 0,
+      )
       .map(([name]) => name),
   );
   const readerNames = new Set([...DIRECT_SOURCE_READER_NAMES, ...helperNames]);
-  const fileTestRanges = extractTests(source).map((test) => ({
-    start: test.start,
-    end: test.end,
-  }));
-  const aliases = findSourceDerivedAliases(
-    source,
-    readerNames,
-    fileTestRanges,
-    productionHelperNames,
-    productionPathVariables,
-  );
   return {
     helperNames,
     productionHelperNames,
-    productionPathVariables,
+    productionPathVariables: taint.pathVariables,
     readerNames,
-    aliases,
+    aliases: taint.sourceVariables,
+    taint,
   };
 }
 
@@ -827,30 +1610,8 @@ function findSourceDerivedAliases(
 }
 
 function hasProductionSourceReaderCall(testSource, fileSource) {
-  const metadata = sourceReaderMetadata(fileSource || "");
-  if (hasProductionSourceRead(testSource)) return true;
-  const calls = findCallSources(testSource, metadata.readerNames);
-  if (
-    calls.some((call) =>
-      sourceReaderCallIsProduction(
-        call,
-        metadata.productionHelperNames,
-        metadata.helperNames,
-        metadata.productionPathVariables,
-      ),
-    )
-  )
-    return true;
-  const tokens = tokenize(testSource);
-  return [...metadata.aliases].some((alias) =>
-    tokens.some(
-      (token, index) =>
-        token.type === "identifier" &&
-        token.value === alias &&
-        tokens[index - 1]?.value !== "." &&
-        tokens[index - 1]?.value !== "?.",
-    ),
-  );
+  const base = sourceTaintAnalysis(fileSource || "");
+  return sourceTaintAnalysis(testSource, base).observedSourceRead;
 }
 
 const SOURCE_SHAPE_METHODS = new Set([
@@ -911,14 +1672,23 @@ function staticCategoryMatches(category, text) {
     "architecture/dependency": [
       /Record[\s\S]{0,40}string[\s\S]{0,40}any/i,
       /key\|channel\|method\|name/i,
+      /(?:ipcRenderer|infrastructure|desktop[\\/]main|desktop[\\/]ipc|desktop[\\/]services)/i,
+      /(?:\/types|bridge\/workspace|registerWorkspaceBootstrapIpc|requireAuthenticated|createAuthenticatedIpcMain)/i,
+      /(?:window\.)?confirm\s*\(/i,
+      /(?:ArticleStore|content-lifecycle-composition|moduleSpecifiers|directTransport|directChannel|confirm)/i,
     ],
-    security: [/action:[\s\S]{0,30}deny/i],
+    security: [
+      /action:[\s\S]{0,30}deny/i,
+      /(?:autopublish-auth-data|healthz\/ready|workspacePath|selection\.path|filePath|path-free|token-only)/i,
+      /(?:secrets|\.\/data:\/data)/i,
+    ],
     "packaging/release/CI": [
       /src[\\/][\s\S]{0,12}\*\*/i,
       /\.env/i,
       /!(?:input|data|logs)[\\/][\s\S]{0,8}\*\*/i,
       /!src[\\/]content[\\/]doubao/i,
       /!scripts[\\/]/i,
+      /(?:name:\s*CI|jobs:|required\/|npm\s+run|node-version|docker\s+(?:build|run)|MARKITDOWN_CMD|mammoth|verify-packaged-docx-runtime|desktop\.cmd|electron[\\/].*cli|--test-concurrency=1|\.test\.mjs|\.test\.js|build-info\.json)/i,
     ],
   };
   return (
@@ -931,6 +1701,20 @@ function staticCategoryMatches(category, text) {
 }
 
 function staticCategoryContextMatches(category, assertionText, testSource) {
+  if (
+    category === "packaging/release/CI" &&
+    /(?:workflow|runner|check|command)/i.test(assertionText) &&
+    /(?:required\/|REQUIRED_CHECKS|node-version|npm run)/i.test(testSource)
+  )
+    return true;
+  if (
+    category === "security" &&
+    /(?:workflow|compose|dockerfile)/i.test(assertionText) &&
+    /(?:secrets|autopublish-auth-data|healthz|\.\/data:\/data)/i.test(
+      testSource,
+    )
+  )
+    return true;
   if (category === "architecture/dependency") {
     if (
       /\bchannel\b/.test(assertionText) &&
@@ -957,56 +1741,66 @@ function staticCategoryContextMatches(category, assertionText, testSource) {
   );
 }
 
+function staticCategoryEvidenceForAssertion(
+  assertionText,
+  testSource,
+  fileSource,
+) {
+  const referencedNames = new Set(
+    tokenize(assertionText)
+      .filter((token) => token.type === "identifier")
+      .map((token) => token.value),
+  );
+  const sourceHolders = sourceReaderAnalysis(fileSource).sourceHolders;
+  const declarations = findVariableDeclarations(testSource)
+    .filter(
+      (declaration) =>
+        referencedNames.has(declaration.name) &&
+        !sourceHolders.has(declaration.name),
+    )
+    .map((declaration) => declaration.expression);
+  return [assertionText, ...declarations].join("\n");
+}
+
 function sourceReaderValueAt(source, tokens, metadata, aliases, index) {
   const token = tokens[index];
   if (!token || token.type !== "identifier") return false;
-  if (aliases.has(token.value))
-    return (
-      tokens[index - 1]?.value !== "." &&
-      tokens[index - 1]?.value !== "?." &&
-      !(
-        tokens[index + 1]?.value === "." &&
-        !SOURCE_SHAPE_METHODS.has(tokens[index + 2]?.value)
-      )
-    );
+  const taint = metadata.taint;
+  if (
+    taint?.sourceVariables?.has(token.value) &&
+    tokens[index - 1]?.value !== "." &&
+    tokens[index - 1]?.value !== "?."
+  )
+    return true;
+  if (
+    aliases.has(token.value) &&
+    tokens[index - 1]?.value !== "." &&
+    tokens[index - 1]?.value !== "?."
+  )
+    return true;
   if (!metadata.readerNames.has(token.value)) return false;
-  if (metadata.helperNames.has(token.value)) {
-    if (tokens[index + 1]?.value !== "(") return false;
-    const closeIndex = findMatchingParenthesis(tokens, index + 1);
-    return (
-      closeIndex !== -1 &&
-      sourceReaderCallIsProduction(
-        source.slice(token.start, tokens[closeIndex].end),
-        metadata.productionHelperNames,
-        metadata.helperNames,
-        metadata.productionPathVariables,
-      )
-    );
-  }
   if (tokens[index + 1]?.value !== "(") return false;
   const closeIndex = findMatchingParenthesis(tokens, index + 1);
   if (closeIndex === -1) return false;
   const call = source.slice(token.start, tokens[closeIndex].end);
-  return sourceReaderCallIsProduction(
-    call,
-    metadata.productionHelperNames,
-    metadata.helperNames,
-    metadata.productionPathVariables,
-  );
+  return taint
+    ? callReturnsSourceText(call, taint.taints, taint.functions)
+    : sourceReaderCallIsProduction(
+        call,
+        metadata.productionHelperNames,
+        metadata.helperNames,
+        metadata.productionPathVariables,
+      );
 }
 
 function sourceAssertionDetails(testSource, fileSource, staticCategories = []) {
-  const metadata = sourceReaderMetadata(fileSource || "");
-  const aliases = new Set([
-    ...metadata.aliases,
-    ...findSourceDerivedAliases(
-      testSource,
-      metadata.readerNames,
-      [],
-      metadata.productionHelperNames,
-      metadata.productionPathVariables,
-    ),
-  ]);
+  const fileMetadata = sourceReaderMetadata(fileSource || "");
+  const localTaint = sourceTaintAnalysis(
+    testSource,
+    fileMetadata.taint,
+  );
+  const metadata = { ...fileMetadata, taint: localTaint };
+  const aliases = new Set(localTaint.sourceVariables);
   const tokens = tokenize(testSource);
   const details = [];
 
@@ -1020,9 +1814,14 @@ function sourceAssertionDetails(testSource, fileSource, staticCategories = []) {
 
   function addDetail(start, end, method, kind) {
     const text = testSource.slice(tokens[start].start, tokens[end - 1].end);
+    const categoryEvidence = staticCategoryEvidenceForAssertion(
+      text,
+      testSource,
+      fileSource || testSource,
+    );
     const matchedStaticCategories = staticCategories.filter(
       (category) =>
-        staticCategoryMatches(category, text) ||
+        staticCategoryMatches(category, categoryEvidence) ||
         staticCategoryContextMatches(category, text, testSource),
     );
     const negative =
@@ -1123,52 +1922,17 @@ function sourceAssertionDetails(testSource, fileSource, staticCategories = []) {
 function sourceReaderAnalysis(fileSource) {
   const source = fileSource || "";
   const metadata = sourceReaderMetadata(source);
-  const aliases = new Set([
-    ...metadata.aliases,
-    ...findSourceDerivedAliases(
-      source,
-      metadata.readerNames,
-      [],
-      metadata.productionHelperNames,
-      metadata.productionPathVariables,
-    ),
-  ]);
-  const sourceHolders = new Set();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const declaration of findVariableDeclarations(source)) {
-      const calls = findCallSources(
-        declaration.expression,
-        metadata.readerNames,
-      );
-      const readsProductionSource = calls.some((call) =>
-        sourceReaderCallIsProduction(
-          call,
-          metadata.productionHelperNames,
-          metadata.helperNames,
-          metadata.productionPathVariables,
-        ),
-      );
-      const expressionTokens = tokenize(declaration.expression);
-      const isSourceHolderAlias =
-        expressionTokens.length === 1 &&
-        expressionTokens[0].type === "identifier" &&
-        sourceHolders.has(expressionTokens[0].value);
-      if (
-        (readsProductionSource || isSourceHolderAlias) &&
-        !sourceHolders.has(declaration.name)
-      ) {
-        sourceHolders.add(declaration.name);
-        changed = true;
-      }
-    }
-  }
-  return { metadata, aliases, sourceHolders };
+  const aliases = new Set(metadata.taint.sourceVariables);
+  return {
+    metadata,
+    aliases,
+    sourceHolders: new Set(metadata.taint.sourceVariables),
+    taint: metadata.taint,
+  };
 }
 
 function neutralizeSourceValues(text, fileSource) {
-  const { metadata, sourceHolders } = sourceReaderAnalysis(fileSource);
+  const { metadata, sourceHolders, taint } = sourceReaderAnalysis(fileSource);
   const tokens = tokenize(text);
   const ranges = [];
 
@@ -1189,11 +1953,10 @@ function neutralizeSourceValues(text, fileSource) {
       const closeIndex = findMatchingParenthesis(tokens, index + 1);
       if (
         closeIndex !== -1 &&
-        sourceReaderCallIsProduction(
+        callReturnsSourceText(
           text.slice(token.start, tokens[closeIndex].end),
-          metadata.productionHelperNames,
-          metadata.helperNames,
-          metadata.productionPathVariables,
+          taint.taints,
+          taint.functions,
         )
       )
         end = closeIndex + 1;
@@ -1259,7 +2022,23 @@ function assertionEvidenceTexts(testSource) {
 function staticCategoryEvidenceSource(testSource, fileSource = testSource) {
   const evidence = assertionEvidenceTexts(testSource);
   if (!evidence.length) return testSource;
+  const referencedNames = new Set(
+    evidence.flatMap((text) =>
+      tokenize(text)
+        .filter((token) => token.type === "identifier")
+        .map((token) => token.value),
+    ),
+  );
+  const sourceHolders = sourceReaderAnalysis(fileSource).sourceHolders;
+  const referencedDeclarations = findVariableDeclarations(testSource)
+    .filter(
+      (declaration) =>
+        referencedNames.has(declaration.name) &&
+        !sourceHolders.has(declaration.name),
+    )
+    .map((declaration) => declaration.expression);
   return evidence
+    .concat(referencedDeclarations)
     .map((text) => neutralizeSourceValues(text, fileSource))
     .join("\n");
 }
@@ -1406,24 +2185,7 @@ function hasAny(value, patterns) {
 }
 
 function hasProductionSourceRead(source) {
-  const fileReadNames = new Set(DIRECT_SOURCE_READER_NAMES);
-  const readCalls = findCallSources(source, fileReadNames);
-  if (readCalls.some((call) => isProductionSourceReadCall(call))) return true;
-
-  const helperReadsProductionPath =
-    /\b(?:read|read[A-Z_$][A-Za-z0-9_$]*|readSource)\s*\(\s*['"`][^'"`]*(?:media-workbench[\\/](?:src|dist)|desktop[\\/]|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
-  if (readCalls.length > 0 && helperReadsProductionPath.test(source))
-    return true;
-
-  const rootedVariables = findProductionPathVariables(source);
-  return (
-    rootedVariables.size > 0 &&
-    readCalls.some((call) =>
-      Array.from(rootedVariables).some((variable) =>
-        new RegExp("\\b" + variable + "\\b").test(call),
-      ),
-    )
-  );
+  return sourceTaintAnalysis(source).readsProductionSource;
 }
 
 function staticSignals(source) {
@@ -1467,12 +2229,16 @@ function sourceReadSignals(
   fileSource,
   staticCategories = [],
 ) {
-  const helperRead = hasProductionSourceReaderCall(testSource, fileSource);
-  const directRead = hasProductionSourceRead(testSource);
-  const sourceRead = directRead || helperRead;
-  const sourceAssertions = sourceRead
-    ? sourceAssertionDetails(testSource, fileSource, staticCategories)
-    : [];
+  const base = sourceTaintAnalysis(fileSource || "");
+  const local = sourceTaintAnalysis(testSource, base);
+  const helperRead = local.observedSourceRead;
+  const directRead = local.directSourceRead;
+  const sourceAssertions = sourceAssertionDetails(
+    testSource,
+    fileSource,
+    staticCategories,
+  );
+  const sourceRead = helperRead || sourceAssertions.length > 0;
   const sourceAssertion = sourceRead && sourceAssertions.length > 0;
   if (sourceAssertion) {
     return {
@@ -1510,22 +2276,22 @@ function sourceReadSignals(
 const STATIC_GATE_FILE_RULES = Object.freeze([
   {
     pattern:
-      /^tests\/(?:architecture-seams|phase-01-architecture|phase-03-composition|phase-05-production-seams|phase-05-production-removal|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-06-production-ipc-fixture-matrix|phase-06-renderer-bridge-api-surface|phase-06-typed-ipc-production|phase-08-operational-store-internals|phase-08-platform-media-settings-workspace-renderer-slice|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-cross-page-progress|renderer-resource-library-api|workspace-bootstrap-ipc)(?:\.electron)?\.test\.(?:js|mjs)$/,
+      /^tests\/(?:architecture-seams|ci-workflow-contract|phase-01-architecture|phase-03-composition|phase-05-production-seams|phase-05-production-removal|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-06-production-ipc-fixture-matrix|phase-06-renderer-bridge-api-surface|phase-06-typed-ipc-production|phase-06-workspace-bootstrap-typed-ipc|phase-06-workspace-coordinator|phase-08-operational-store-internals|phase-08-platform-media-settings-workspace-renderer-slice|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-cross-page-progress|renderer-resource-library-api|workspace-bootstrap-ipc)(?:\.electron)?\.test\.(?:js|mjs)$/,
     categories: ["architecture/dependency"],
   },
   {
     pattern:
-      /^tests\/(?:desktop-packaging|electron-security|j4125-auth-contract|phase-06-production-ipc-fixture-matrix|phase-06-typed-ipc-production|phase-06-workspace-bootstrap-typed-ipc|phase-08-operational-store-internals|production-preload-sandbox|renderer-confirmation-host|ticket-24-g-legacy-boundary|workspace-paths)(?:\.electron)?\.test\.(?:js|mjs)$/,
+      /^tests\/(?:ci-workflow-contract|desktop-packaging|electron-security|j4125-auth-contract|phase-06-production-ipc-fixture-matrix|phase-06-typed-ipc-production|phase-06-workspace-bootstrap-typed-ipc|phase-08-operational-store-internals|production-preload-sandbox|renderer-confirmation-host|ticket-24-g-legacy-boundary|workspace-paths)(?:\.electron)?\.test\.(?:js|mjs)$/,
     categories: ["security"],
   },
   {
     pattern:
-      /^tests\/(?:content-library-migration|desktop-packaging|phase-03-composition|phase-03-media-adapter-readonly|phase-03-worker-main-contract|phase-03-workbench-readonly|phase-05-production-seams|phase-05-production-removal|phase-06-capability-specific-inventory|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-08-cleanup-gates|phase-08-publication-submission-orchestration|phase-08-renderer-contract-artifact-absence|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-task-store|ticket-24-g-legacy-boundary)(?:\.electron)?\.test\.(?:js|mjs)$/,
+      /^tests\/(?:content-library-migration|desktop-packaging|phase-03-composition|phase-03-media-adapter-readonly|phase-03-worker-main-contract|phase-03-workbench-readonly|phase-05-production-seams|phase-05-production-removal|phase-06-capability-specific-inventory|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-06-typed-ipc-production|phase-08-cleanup-gates|phase-08-publication-submission-orchestration|phase-08-renderer-contract-artifact-absence|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-task-store|ticket-24-g-legacy-boundary)(?:\.electron)?\.test\.(?:js|mjs)$/,
     categories: ["retired-capability/legacy-absence"],
   },
   {
     pattern:
-      /^tests\/(?:content-library-migration|desktop-packaging|desktop-workbench-flow|packaged-playwright-runtime|phase-05-production-seams|phase-06-capability-specific-inventory|phase-08-cleanup-gates|phase-08-renderer-contract-artifact-absence|production-packaging|production-preload-sandbox|relaunch-environment|renderer-encoding|test-discovery-contract)(?:\.electron)?\.test\.(?:js|mjs)$/,
+      /^tests\/(?:application-identity|ci-workflow-contract|content-library-migration|desktop-packaging|desktop-workbench-flow|packaged-playwright-runtime|phase-05-production-seams|phase-06-capability-specific-inventory|phase-08-cleanup-gates|phase-08-renderer-contract-artifact-absence|production-packaging|production-preload-sandbox|relaunch-environment|renderer-encoding|test-discovery-contract)(?:\.electron)?\.test\.(?:js|mjs)$/,
     categories: ["packaging/release/CI"],
   },
 ]);
@@ -1536,7 +2302,7 @@ const STATIC_CATEGORY_TARGETS = Object.freeze({
   security:
     /\b(?:sandbox|csp|credential|cookie|token|secret|auth|protected|private|permission|isolation|boundary|safe|Documents|process\.cwd|homedir|setWindowOpenHandler|will-navigate|setPermissionRequestHandler|action:\s*["']deny|accessToken|refreshToken|authenticated|randomUUID|deviceName|mac|serial|motherboard|cpu|Content-Security-Policy|default-src|connect-src|passwordHash|node:sqlite|healthz|dotenv\.config)\b/i,
   "retired-capability/legacy-absence":
-    /\b(?:legacy|retired|absence|dead|migration|removed|forbidden|prohibited|old(?:Capability|Surface|Route)?|deprecated|not\s+(?:exist|package|ship)|OldCapability|mockData|INITIAL_ARTICLES|handleAddNewMockArticle|persistArticles|submitPlatformSelection|PreflightModal|prepareSubmission|submitPrepared|window\.confirm|publicationLedger|publication-ledger|migrate-publication|legacyStatus|phase-01-composition|publication-submission-orchestrator|publicationSubmissionService|retryFailedPublication|retryFailedPublicationExecutor|SubmissionOrderStore|record|platform-workbench-service|createPlatformWorkbenchService|PlatformTaskProvider|WorkspaceDataProvider|usePlatformTask|usePlatformQueue|onAddResource|showAddForm|RES-\$|addSelectedResource|添加媒体|录入新媒体资源)\b/i,
+    /\b(?:legacy|retired|absence|dead|migration|removed|forbidden|prohibited|old(?:Capability|Surface|Route)?|deprecated|not\s+(?:exist|package|ship)|OldCapability|mockData|INITIAL_ARTICLES|handleAddNewMockArticle|persistArticles|submitPlatformSelection|PreflightModal|prepareSubmission|submitPrepared|window\.confirm|publicationLedger|publication-ledger|migrate-publication|legacyStatus|publish-log|phase-01-composition|publication-submission-orchestrator|publicationSubmissionService|retryFailedPublication|retryFailedPublicationExecutor|SubmissionOrderStore|record|platform-workbench-service|createPlatformWorkbenchService|PlatformTaskProvider|WorkspaceDataProvider|usePlatformTask|usePlatformQueue|onAddResource|showAddForm|RES-\$|addSelectedResource|添加媒体|录入新媒体资源)\b/i,
   "packaging/release/CI":
     /\b(?:package|packag|asar|artifact|release|build|electron|discovery|runner|relaunch|environment|mojibake|replacement|readable|编码|中文|from:\s*build\/runtime-tools\/node|to:\s*tools\/node|prepare:runtime-tools|verify-alpha-package|asarUnpack|extraResources|media-workbench|dist|index\.html|offline-packaging-smoke|did-finish-load|dotenv\.config|Content-Security-Policy|requiredRuntimeFile|forceCodeSigning|certificateFile|resources\/content-templates|migrate-(?:content-library|content-metadata|publication-ledger)|publication-ledger|src\/\*\*|!\*\*\/\.env|!input\/\*\*|!data\/\*\*|!logs\/\*\*|preload\.js|escapeRegExp|onDoubaoQueueState|desktop.*renderer)\b/i,
 });

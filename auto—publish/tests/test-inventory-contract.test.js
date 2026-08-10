@@ -241,6 +241,173 @@ test("classifier follows dynamic production roots and source aliases in JS and M
   }
 });
 
+test("source taint survives aliases and source-text transforms without tainting runtime results", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const sourceRoot = path.resolve(__dirname, "../media-workbench/src");
+    const readSource = (file) =>
+      fs.readFileSync(path.join(sourceRoot, file), "utf8");
+    const feature = { run: () => ({ status: "done" }) };
+    test("source transforms and ordinary behavior", () => {
+      const sourceText = readSource("components/ContentWorkbench.tsx");
+      const alias = sourceText;
+      const part = sourceText.slice(0, 120);
+      const lines = sourceText.split("\\n");
+      const normalized = sourceText.replace(/\\s+/g, " ");
+      const length = sourceText.length;
+      const result = feature.run();
+      assert.match(alias, /someInternalBusinessThing/);
+      assert.ok(part.includes("someInternalBusinessThing"));
+      assert.ok(lines.includes("someInternalBusinessThing"));
+      assert.doesNotMatch(normalized, /someInternalBusinessThing/);
+      assert.equal(length > 0, true);
+      assert.equal(result.status, "done");
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const result = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+  );
+  assert.equal(result.level, "assertion");
+  assert.equal(result.sourceAssertion, true);
+  assert.ok(result.sourceAssertions.length >= 5);
+  assert.equal(
+    result.sourceAssertions.some((assertion) =>
+      /result\.status/.test(assertion.text),
+    ),
+    false,
+  );
+});
+
+test("classifier follows loop, helper-parameter, recursive scan, and repository-config readers", () => {
+  const cases = [
+    {
+      fileName: "tests/dynamic-reader-loop.test.js",
+      source: `
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const ROOT = path.resolve(__dirname, "..");
+        const files = ["scripts/run-tests.js"];
+        const read = (relative) => fs.readFileSync(relative, "utf8");
+        test("helper parameter and for-of source reader", () => {
+          for (const relative of files) {
+            const source = read(relative);
+            assert.doesNotMatch(source, /someInternalBusinessThing/);
+          }
+        });
+      `,
+    },
+    {
+      fileName: "tests/recursive-production-scan.test.js",
+      source: `
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const productionRoots = ["desktop"];
+        test("recursive production scan", () => {
+          productionRoots.forEach(visit);
+          function visit(target) {
+            const full = path.join(target, "main.js");
+            const source = fs.readFileSync(full, "utf8");
+            assert.doesNotMatch(source, /someInternalBusinessThing/);
+          }
+        });
+      `,
+    },
+    {
+      fileName: "tests/repository-config-reader.test.js",
+      source: `
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const repositoryRoot = path.resolve(__dirname, "..", "..");
+        const workflowPath = path.join(
+          repositoryRoot,
+          ".github",
+          "workflows",
+          "ci.yml",
+        );
+        test("repository CI config reader", () => {
+          const source = fs.readFileSync(workflowPath, "utf8");
+          assert.match(source, /jobs:/);
+        });
+      `,
+    },
+    {
+      fileName: "tests/dynamic-production-root.test.mjs",
+      source: `
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const sourceRoot = path.resolve(
+          import.meta.dirname,
+          "../media-workbench/src",
+        );
+        test("import.meta.dirname source reader", () => {
+          const file = "components/PlatformWorkbench.tsx";
+          const productionFile = path.join(sourceRoot, file);
+          const source = fs.readFileSync(productionFile, "utf8");
+          assert.match(source, /someInternalBusinessThing/);
+        });
+      `,
+    },
+  ];
+
+  for (const fixture of cases) {
+    const declaration = extractTests(fixture.source)[0];
+    const signals = sourceReadSignals(
+      declaration.source,
+      staticSignals(fixture.source),
+      fixture.source,
+    );
+    assert.equal(signals.level, "assertion", fixture.fileName);
+    assert.equal(signals.sourceAssertion, true, fixture.fileName);
+  }
+});
+
+test("derived source holders never receive static authorization from their variable names", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readSource = () =>
+      fs.readFileSync(path.join(root, "desktop", "preload.js"), "utf8");
+    test("derived bridge holder is not an invariant", () => {
+      const sourceText = readSource();
+      const bridge = sourceText.slice(0);
+      assert.match(bridge, /someInternalBusinessThing/);
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const categories = inferStaticCategories(
+    "tests/desktop-packaging.test.js",
+    declaration.name,
+    declaration.source,
+    source,
+  );
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+    categories,
+  );
+  assert.deepEqual(categories, []);
+  assert.equal(signals.level, "assertion");
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: signals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      categories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+});
+
 test("classifier does not treat ordinary path arguments and runtime results as source reads", () => {
   const source = `
     const path = require("node:path");
