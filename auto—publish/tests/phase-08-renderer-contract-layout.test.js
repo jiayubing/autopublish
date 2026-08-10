@@ -345,10 +345,7 @@ test("renderer bridge/type boundaries do not import desktop or infrastructure co
         entry.parentPath.includes(`${path.sep}bridge`),
     )
     .map((entry) =>
-      path.relative(
-        rendererRoot,
-        path.join(entry.parentPath, entry.name),
-      ),
+      path.relative(rendererRoot, path.join(entry.parentPath, entry.name)),
     );
   const readRendererSource = (relative) =>
     fs.readFileSync(path.join(rendererRoot, relative), "utf8");
