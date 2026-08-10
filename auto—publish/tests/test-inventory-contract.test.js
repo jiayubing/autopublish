@@ -115,6 +115,123 @@ test("classifier recognizes split path.join production readers and keeps runtime
   );
 });
 
+test("classifier catches file-scope helpers, aliases, inline readers, and all source-shape matchers", () => {
+  const helperSource = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readSource = (file) =>
+      fs.readFileSync(path.join(root, "src", file), "utf8");
+    const source = readSource("View.tsx");
+    test("source assertions", () => {
+      assert.ok(source.includes("foo"));
+      assert.equal(source.indexOf("bar") >= 0, true);
+      assert.ok(source.startsWith("<"));
+      assert.ok(source.endsWith(">"));
+      assert.ok(source.match(/foo/));
+      assert.ok(/foo/.test(source));
+      assert.match(readSource("Other.tsx"), /baz/);
+    });
+  `;
+  const helperDeclaration = extractTests(helperSource)[0];
+  const helperResult = sourceReadSignals(
+    helperDeclaration.source,
+    staticSignals(helperSource),
+    helperSource,
+  );
+
+  assert.equal(helperResult.level, "assertion");
+  assert.equal(helperResult.sourceAssertion, true);
+  assert.equal(helperResult.assertionProfile.assertionCount, 7);
+  assert.equal(helperResult.assertionProfile.businessCount, 7);
+
+  const inlineSource = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    test("inline source assertions", () => {
+      assert.match(
+        fs.readFileSync(path.join(root, "src", "Inline.tsx"), "utf8"),
+        /inline/,
+      );
+      assert.equal(
+        fs.readFileSync(path.join(root, "src", "Inline.tsx"), "utf8")
+          .endsWith("tsx"),
+        true,
+      );
+    });
+  `;
+  const inlineDeclaration = extractTests(inlineSource)[0];
+  const inlineResult = sourceReadSignals(
+    inlineDeclaration.source,
+    staticSignals(inlineSource),
+    inlineSource,
+  );
+  assert.equal(inlineResult.level, "assertion");
+  assert.equal(inlineResult.assertionProfile.assertionCount, 2);
+});
+
+test("classifier does not treat ordinary path arguments and runtime results as source reads", () => {
+  const source = `
+    const path = require("node:path");
+    const feature = require("../src/feature");
+    test("public behavior", () => {
+      const result = feature.run(path.join("src", "fixture.json"));
+      assert.equal(result.status, "ready");
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const result = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+  );
+  assert.equal(result.level, "none");
+  assert.equal(result.sourceAssertion, false);
+});
+
+test("mixed static and business source assertions fail closed at declaration disposition", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const readSource = () =>
+      fs.readFileSync(path.join(root, "src", "GeneratedArticlesView.tsx"), "utf8");
+    const sourceText = readSource();
+    test("legacy absence plus public behavior", () => {
+      assert.doesNotMatch(sourceText, /OldCapability/);
+      assert.match(sourceText, /startPaidMediaBatch/);
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const categories = inferStaticCategories(
+    "tests/renderer-confirmation-host.test.js",
+    declaration.name,
+    declaration.source,
+  );
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+    categories,
+  );
+
+  assert.deepEqual(categories, ["retired-capability/legacy-absence"]);
+  assert.equal(signals.assertionProfile.mixed, true);
+  assert.equal(signals.assertionProfile.allStatic, false);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: signals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      categories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+});
+
 test("classifier does not infer a legal static category from behavior-test title keywords", () => {
   const source = `
     const value = fs.readFileSync(path.join(root, "media-workbench/src/View.tsx"), "utf8");

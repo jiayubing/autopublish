@@ -505,12 +505,9 @@ function findMatchingToken(tokens, openIndex, openValue, closeValue) {
   return -1;
 }
 
-const PRODUCTION_SOURCE_PATH_PATTERN =
-  /(?:media-workbench[\\/](?:src|dist)|media-workbench(?:["'\s,()[\]]{1,40})(?:src|dist)|desktop[\\/]|desktop(?:["'\s,()[\]]{1,40})(?:main|preload|ipc|services|composition|workspace)|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
-
-function findProductionPathVariables(source) {
+function findVariableDeclarations(source) {
   const tokens = tokenize(source);
-  const variables = new Set();
+  const declarations = [];
   for (let index = 0; index < tokens.length - 3; index += 1) {
     if (
       !["const", "let", "var"].includes(tokens[index]?.value) ||
@@ -518,6 +515,7 @@ function findProductionPathVariables(source) {
       tokens[index + 2]?.value !== "="
     )
       continue;
+
     let depth = 0;
     let end = index + 3;
     for (; end < tokens.length; end += 1) {
@@ -526,12 +524,51 @@ function findProductionPathVariables(source) {
       if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
       if (depth === 0 && value === ";") break;
     }
-    const expression = source.slice(
-      tokens[index + 2].end,
-      tokens[Math.min(end, tokens.length - 1)].end,
-    );
-    if (PRODUCTION_SOURCE_PATH_PATTERN.test(expression))
-      variables.add(tokens[index + 1].value);
+    declarations.push({
+      name: tokens[index + 1].value,
+      start: tokens[index].start,
+      end: tokens[Math.min(end, tokens.length - 1)].end,
+      expression: source.slice(
+        tokens[index + 2].end,
+        tokens[Math.min(end, tokens.length - 1)].end,
+      ),
+    });
+  }
+  return declarations;
+}
+
+const PRODUCTION_SOURCE_PATH_PATTERN =
+  /(?:media-workbench[\\/](?:src|dist)|media-workbench(?:["'\s,()[\]]{1,40})(?:src|dist)|desktop[\\/]|desktop(?:["'\s,()[\]]{1,40})(?:main|preload|ipc|services|composition|workspace)|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
+
+const PRODUCTION_PATH_SEGMENTS = new Set([
+  "media-workbench",
+  "desktop",
+  "src",
+  "dist",
+]);
+
+function isProductionPathExpression(value) {
+  const text = String(value || "");
+  if (PRODUCTION_SOURCE_PATH_PATTERN.test(text)) return true;
+  return tokenize(text).some((token) => {
+    if (token.type !== "string" && token.type !== "template") return false;
+    const normalized = String(token.value || "").replaceAll("\\", "/");
+    return normalized.split("/").some((segment) => {
+      const lower = segment.toLowerCase();
+      return (
+        PRODUCTION_PATH_SEGMENTS.has(lower) ||
+        lower === "package.json" ||
+        /^electron-builder(?:\..+)?\.ya?ml$/.test(lower)
+      );
+    });
+  });
+}
+
+function findProductionPathVariables(source) {
+  const variables = new Set();
+  for (const declaration of findVariableDeclarations(source)) {
+    if (isProductionPathExpression(declaration.expression))
+      variables.add(declaration.name);
   }
   return variables;
 }
@@ -553,6 +590,7 @@ function findProductionSourceReaderHelpers(source) {
     helpers.set(name, {
       readsProductionSource:
         hasProductionSourceRead(body) ||
+        readCalls.some((call) => isProductionSourceReadCall(call)) ||
         readCalls.some((call) =>
           [...productionPathVariables].some((variable) =>
             new RegExp("\\b" + variable + "\\b").test(call),
@@ -630,110 +668,297 @@ function findProductionSourceReaderHelpers(source) {
   return helpers;
 }
 
-function hasProductionSourceReaderCall(testSource, fileSource) {
-  const helpers = findProductionSourceReaderHelpers(fileSource || "");
-  for (const [name, helper] of helpers) {
-    const calls = findCallSources(testSource, new Set([name]));
-    if (
-      calls.some(
-        (call) =>
-          helper.readsProductionSource ||
-          PRODUCTION_SOURCE_PATH_PATTERN.test(call),
-      )
-    )
-      return true;
-  }
-  return false;
+const DIRECT_SOURCE_READER_NAMES = Object.freeze([
+  "readFileSync",
+  "readFile",
+  "createReadStream",
+]);
+
+function callContainsName(call, name) {
+  return new RegExp("\\b" + name + "\\s*\\(").test(call);
 }
 
-function hasSourceTextAssertion(testSource, fileSource) {
-  const helperNames = [
-    ...findProductionSourceReaderHelpers(fileSource || "").keys(),
-  ];
-  const readerNames = [
-    "readFileSync",
-    "readFile",
-    "createReadStream",
+function isProductionSourceReadCall(call) {
+  return isProductionPathExpression(call);
+}
+
+function sourceReaderMetadata(fileSource) {
+  const source = fileSource || "";
+  const helpers = findProductionSourceReaderHelpers(source);
+  const helperNames = new Set(helpers.keys());
+  const productionHelperNames = new Set(
+    [...helpers]
+      .filter(([, helper]) => helper.readsProductionSource)
+      .map(([name]) => name),
+  );
+  const readerNames = new Set([
+    ...DIRECT_SOURCE_READER_NAMES,
     ...helperNames,
-  ];
-  if (!readerNames.length) return false;
-  const tokens = tokenize(testSource);
-  const aliases = new Set();
-  for (let index = 0; index < tokens.length - 3; index += 1) {
-    if (
-      !["const", "let", "var"].includes(tokens[index]?.value) ||
-      tokens[index + 1]?.type !== "identifier" ||
-      tokens[index + 2]?.value !== "="
+  ]);
+  const fileTestRanges = extractTests(source).map((test) => ({
+    start: test.start,
+    end: test.end,
+  }));
+  const aliases = findSourceDerivedAliases(
+    source,
+    readerNames,
+    fileTestRanges,
+    productionHelperNames,
+  );
+  return { helperNames, productionHelperNames, readerNames, aliases };
+}
+
+function sourceReaderCallIsProduction(
+  call,
+  productionHelperNames,
+  helperNames = productionHelperNames,
+) {
+  if ([...productionHelperNames].some((name) => callContainsName(call, name)))
+    return true;
+  if (
+    [...helperNames].some(
+      (name) => callContainsName(call, name) && isProductionSourceReadCall(call),
     )
-      continue;
-    const name = tokens[index + 1].value;
-    let depth = 0;
-    let hasReaderCall = false;
-    for (let cursor = index + 3; cursor < tokens.length; cursor += 1) {
-      const value = tokens[cursor].value;
-      if (["(", "[", "{"].includes(value)) depth += 1;
-      if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
+  )
+    return true;
+  return DIRECT_SOURCE_READER_NAMES.some(
+    (name) => callContainsName(call, name) && isProductionSourceReadCall(call),
+  );
+}
+
+function expressionUsesSourceReader(
+  expression,
+  readerNames,
+  productionHelperNames,
+  aliases,
+  helperNames,
+) {
+  const calls = findCallSources(expression, readerNames);
+  if (
+    calls.some((call) =>
+      sourceReaderCallIsProduction(call, productionHelperNames, helperNames),
+    )
+  )
+    return true;
+  if (!aliases.size) return false;
+  const tokens = tokenize(expression);
+  return tokens.some(
+    (token, index) =>
+      token.type === "identifier" &&
+      aliases.has(token.value) &&
+      tokens[index - 1]?.value !== "." &&
+      tokens[index - 1]?.value !== "?." &&
+      !["(", ",", ":", "?", "&&", "||"].includes(
+        tokens[index - 1]?.value,
+      ) &&
+      !(
+        tokens[index + 1]?.value === "." &&
+        SOURCE_SHAPE_METHODS.has(tokens[index + 2]?.value)
+      ),
+  );
+}
+
+function findSourceDerivedAliases(
+  source,
+  readerNames,
+  excludedRanges = [],
+  productionHelperNames = new Set(
+    [...readerNames].filter((name) => !DIRECT_SOURCE_READER_NAMES.includes(name)),
+  ),
+) {
+  const aliases = new Set();
+  const helperNames = new Set(
+    [...readerNames].filter((name) => !DIRECT_SOURCE_READER_NAMES.includes(name)),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const declaration of findVariableDeclarations(source)) {
       if (
-        depth === 0 &&
-        value === ";"
+        excludedRanges.some(
+          (range) =>
+            declaration.start >= range.start && declaration.start < range.end,
+        )
       )
-        break;
+        continue;
+      if (/=>/.test(declaration.expression)) continue;
       if (
-        tokens[cursor].type === "identifier" &&
-        readerNames.includes(value) &&
-        tokens[cursor + 1]?.value === "("
+        !aliases.has(declaration.name) &&
+        expressionUsesSourceReader(
+          declaration.expression,
+          readerNames,
+          productionHelperNames,
+          aliases,
+          helperNames,
+        )
       ) {
-        hasReaderCall = true;
-        break;
+        aliases.add(declaration.name);
+        changed = true;
       }
     }
-    if (hasReaderCall) aliases.add(name);
   }
-  if (!aliases.size) return false;
+  return aliases;
+}
 
-  const assertionMethods = new Set([
-    "match",
-    "doesNotMatch",
-    "equal",
-    "strictEqual",
-    "deepEqual",
-    "deepStrictEqual",
-    "ok",
-    "throws",
-    "rejects",
+function hasProductionSourceReaderCall(testSource, fileSource) {
+  const metadata = sourceReaderMetadata(fileSource || "");
+  if (hasProductionSourceRead(testSource)) return true;
+  const calls = findCallSources(testSource, metadata.readerNames);
+  if (
+    calls.some((call) =>
+      sourceReaderCallIsProduction(
+        call,
+        metadata.productionHelperNames,
+        metadata.helperNames,
+      ),
+    )
+  )
+    return true;
+  const tokens = tokenize(testSource);
+  return [...metadata.aliases].some((alias) =>
+    tokens.some(
+      (token, index) =>
+        token.type === "identifier" &&
+        token.value === alias &&
+        tokens[index - 1]?.value !== "." &&
+        tokens[index - 1]?.value !== "?.",
+    ),
+  );
+}
+
+const SOURCE_SHAPE_METHODS = new Set([
+  "includes",
+  "indexOf",
+  "match",
+  "test",
+  "startsWith",
+  "endsWith",
+]);
+
+const ASSERTION_METHODS = new Set([
+  "match",
+  "doesNotMatch",
+  "equal",
+  "strictEqual",
+  "notEqual",
+  "notStrictEqual",
+  "deepEqual",
+  "deepStrictEqual",
+  "notDeepEqual",
+  "ok",
+  "ifError",
+  "ifStrictEqual",
+  "throws",
+  "rejects",
+]);
+
+const EXPECT_MATCHER_METHODS = new Set([
+  "toMatch",
+  "toContain",
+  "toEqual",
+  "toStrictEqual",
+  "toBe",
+  "toHaveProperty",
+  "toThrow",
+]);
+
+const NEGATIVE_ASSERTION_METHODS = new Set([
+  "doesNotMatch",
+  "notEqual",
+  "notStrictEqual",
+  "notDeepEqual",
+]);
+
+const STATIC_ABSENCE_PATTERN =
+  /(?:old(?:capability|surface|route)?|legacy|retired|deprecated|removed|forbidden|prohibited|dead|preflightmodal|preparesubmission|submitprepared)/i;
+
+function staticCategoryMatches(category, text) {
+  const target = STATIC_CATEGORY_TARGETS[category];
+  if (!target) return false;
+  const normalized = String(text)
+    .replaceAll("\\b", " ")
+    .replaceAll("\\", "");
+  return target.test(text) || target.test(normalized);
+}
+
+function sourceReaderValueAt(
+  source,
+  tokens,
+  metadata,
+  aliases,
+  index,
+) {
+  const token = tokens[index];
+  if (!token || token.type !== "identifier") return false;
+  if (aliases.has(token.value))
+    return tokens[index - 1]?.value !== "." && tokens[index - 1]?.value !== "?.";
+  if (!metadata.readerNames.has(token.value)) return false;
+  if (metadata.helperNames.has(token.value)) {
+    if (tokens[index + 1]?.value !== "(") return false;
+    const closeIndex = findMatchingParenthesis(tokens, index + 1);
+    return (
+      closeIndex !== -1 &&
+      sourceReaderCallIsProduction(
+        source.slice(token.start, tokens[closeIndex].end),
+        metadata.productionHelperNames,
+        metadata.helperNames,
+      )
+    );
+  }
+  if (tokens[index + 1]?.value !== "(") return false;
+  const closeIndex = findMatchingParenthesis(tokens, index + 1);
+  return (
+    closeIndex !== -1 &&
+    isProductionSourceReadCall(
+      source.slice(token.start, tokens[closeIndex].end),
+    )
+  );
+}
+
+function sourceAssertionDetails(testSource, fileSource, staticCategories = []) {
+  const metadata = sourceReaderMetadata(fileSource || "");
+  const aliases = new Set([
+    ...metadata.aliases,
+    ...findSourceDerivedAliases(testSource, metadata.readerNames),
   ]);
-  const matcherMethods = new Set([
-    "toMatch",
-    "toContain",
-    "toEqual",
-    "toStrictEqual",
-    "toBe",
-    "toHaveProperty",
-    "toThrow",
-  ]);
+  const tokens = tokenize(testSource);
+  const details = [];
 
   function containsSourceValue(start, end) {
     for (let index = start; index < end; index += 1) {
-      const token = tokens[index];
-      if (token.type !== "identifier") continue;
-      if (!aliases.has(token.value) && !readerNames.includes(token.value))
-        continue;
-      const previous = tokens[index - 1]?.value;
-      if (previous === "." || previous === "?.") continue;
-      if (
-        aliases.has(token.value) ||
-        tokens[index + 1]?.value === "("
-      )
+      if (sourceReaderValueAt(testSource, tokens, metadata, aliases, index))
         return true;
     }
     return false;
+  }
+
+  function addDetail(start, end, method, kind) {
+    const text = testSource.slice(tokens[start].start, tokens[end - 1].end);
+    const matchedStaticCategories = staticCategories.filter((category) =>
+      staticCategoryMatches(category, text),
+    );
+    const negative =
+      NEGATIVE_ASSERTION_METHODS.has(method) ||
+      /,\s*(?:false|null|undefined)\s*\)?\s*$/i.test(text);
+    const staticAssertion =
+      matchedStaticCategories.length > 0 ||
+      (staticCategories.length > 0 && negative && STATIC_ABSENCE_PATTERN.test(text));
+    details.push({
+      start,
+      end,
+      kind,
+      method,
+      text,
+      staticCategories: matchedStaticCategories,
+      staticAssertion,
+    });
   }
 
   for (let index = 0; index < tokens.length; index += 1) {
     if (
       tokens[index]?.value === "assert" &&
       tokens[index + 1]?.value === "." &&
-      assertionMethods.has(tokens[index + 2]?.value) &&
+      ASSERTION_METHODS.has(tokens[index + 2]?.value) &&
       tokens[index + 3]?.value === "("
     ) {
       const closeIndex = findMatchingToken(
@@ -743,7 +968,7 @@ function hasSourceTextAssertion(testSource, fileSource) {
         ")",
       );
       if (closeIndex !== -1 && containsSourceValue(index + 4, closeIndex))
-        return true;
+        addDetail(index, closeIndex + 1, tokens[index + 2].value, "assert");
     }
 
     if (tokens[index]?.value !== "expect" || tokens[index + 1]?.value !== "(")
@@ -751,29 +976,78 @@ function hasSourceTextAssertion(testSource, fileSource) {
     const closeIndex = findMatchingToken(tokens, index + 1, "(", ")");
     if (closeIndex === -1 || !containsSourceValue(index + 2, closeIndex))
       continue;
+    let matcher = null;
+    let matcherEnd = closeIndex + 1;
     for (
       let matcherIndex = closeIndex + 1;
-      matcherIndex < Math.min(tokens.length, closeIndex + 5);
+      matcherIndex < Math.min(tokens.length, closeIndex + 8);
       matcherIndex += 1
     ) {
-      if (matcherMethods.has(tokens[matcherIndex]?.value)) return true;
+      if (EXPECT_MATCHER_METHODS.has(tokens[matcherIndex]?.value)) {
+        matcher = tokens[matcherIndex].value;
+        if (tokens[matcherIndex + 1]?.value === "(") {
+          const matcherClose = findMatchingParenthesis(
+            tokens,
+            matcherIndex + 1,
+          );
+          matcherEnd = matcherClose === -1 ? matcherIndex + 2 : matcherClose + 1;
+        } else {
+          matcherEnd = matcherIndex + 1;
+        }
+        break;
+      }
     }
+    if (matcher) addDetail(index, matcherEnd, matcher, "expect");
   }
 
-  for (let index = 0; index < tokens.length - 2; index += 1) {
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    if (!sourceReaderValueAt(testSource, tokens, metadata, aliases, index))
+      continue;
+    let methodIndex = index + 1;
+    if (tokens[methodIndex]?.value === "(") {
+      const closeIndex = findMatchingParenthesis(tokens, methodIndex);
+      if (closeIndex === -1) continue;
+      methodIndex = closeIndex + 1;
+    }
+    if (![".", "?\."].includes(tokens[methodIndex]?.value)) continue;
+    const method = tokens[methodIndex + 1]?.value;
     if (
-      tokens[index]?.type === "identifier" &&
-      aliases.has(tokens[index].value) &&
-      tokens[index - 1]?.value !== "." &&
-      tokens[index + 1]?.value === "." &&
-      ["includes", "indexOf", "match", "test"].includes(
-        tokens[index + 2]?.value,
-      ) &&
-      tokens[index + 3]?.value === "("
+      !SOURCE_SHAPE_METHODS.has(method) ||
+      tokens[methodIndex + 2]?.value !== "("
     )
-      return true;
+      continue;
+    const closeIndex = findMatchingParenthesis(tokens, methodIndex + 2);
+    const alreadyCovered = details.some(
+      (detail) =>
+        tokens[index].start >= tokens[detail.start]?.start &&
+        tokens[index].end <= tokens[detail.end - 1]?.end,
+    );
+    if (!alreadyCovered)
+      addDetail(
+        index,
+        closeIndex === -1 ? methodIndex + 3 : closeIndex + 1,
+        method,
+        "source-shape",
+      );
   }
-  return false;
+
+  return details;
+}
+
+function sourceAssertionProfile(details) {
+  const staticCount = details.filter((detail) => detail.staticAssertion).length;
+  const businessCount = details.length - staticCount;
+  return {
+    assertionCount: details.length,
+    staticCount,
+    businessCount,
+    mixed: staticCount > 0 && businessCount > 0,
+    allStatic: details.length > 0 && businessCount === 0,
+  };
+}
+
+function hasSourceTextAssertion(testSource, fileSource) {
+  return sourceAssertionDetails(testSource, fileSource).length > 0;
 }
 
 function lineAt(source, offset) {
@@ -902,13 +1176,9 @@ function hasAny(value, patterns) {
 }
 
 function hasProductionSourceRead(source) {
-  const fileReadNames = new Set([
-    "readFileSync",
-    "readFile",
-    "createReadStream",
-  ]);
+  const fileReadNames = new Set(DIRECT_SOURCE_READER_NAMES);
   const readCalls = findCallSources(source, fileReadNames);
-  if (readCalls.some((call) => PRODUCTION_SOURCE_PATH_PATTERN.test(call)))
+  if (readCalls.some((call) => isProductionSourceReadCall(call)))
     return true;
 
   const helperReadsProductionPath =
@@ -962,17 +1232,26 @@ function staticSignals(source) {
   };
 }
 
-function sourceReadSignals(testSource, fileSignals, fileSource) {
+function sourceReadSignals(
+  testSource,
+  fileSignals,
+  fileSource,
+  staticCategories = [],
+) {
   const helperRead = hasProductionSourceReaderCall(testSource, fileSource);
   const directRead = hasProductionSourceRead(testSource);
   const sourceRead = directRead || helperRead;
-  const sourceAssertion =
-    sourceRead && hasSourceTextAssertion(testSource, fileSource);
+  const sourceAssertions = sourceRead
+    ? sourceAssertionDetails(testSource, fileSource, staticCategories)
+    : [];
+  const sourceAssertion = sourceRead && sourceAssertions.length > 0;
   if (sourceAssertion) {
     return {
       level: "assertion",
       direct: directRead,
       sourceAssertion: true,
+      sourceAssertions,
+      assertionProfile: sourceAssertionProfile(sourceAssertions),
       reason: helperRead
         ? "测试声明调用了文件级生产源码读取 helper"
         : "测试声明内部直接读取生产路径或生产源码辅助函数",
@@ -983,6 +1262,8 @@ function sourceReadSignals(testSource, fileSignals, fileSource) {
       level: "file-heuristic",
       direct: false,
       sourceAssertion: false,
+      sourceAssertions: [],
+      assertionProfile: null,
       reason:
         "文件级 source-reading heuristic 命中，但本测试声明未提取到 assertion-level 读取；保留并由后续包人工确认",
     };
@@ -991,6 +1272,8 @@ function sourceReadSignals(testSource, fileSignals, fileSource) {
     level: "none",
     direct: false,
     sourceAssertion: false,
+    sourceAssertions: [],
+    assertionProfile: null,
     reason: null,
   };
 }
@@ -1008,7 +1291,7 @@ const STATIC_GATE_FILE_RULES = Object.freeze([
   },
   {
     pattern:
-      /^tests\/(?:content-library-migration|desktop-packaging|phase-03-composition|phase-03-workbench-readonly|phase-05-production-seams|phase-05-production-removal|phase-06-capability-specific-inventory|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-08-cleanup-gates|phase-08-publication-submission-orchestration|phase-08-renderer-contract-artifact-absence|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-task-store|ticket-24-g-legacy-boundary)(?:\.electron)?\.test\.(?:js|mjs)$/,
+      /^tests\/(?:content-library-migration|desktop-packaging|phase-03-composition|phase-03-media-adapter-readonly|phase-03-worker-main-contract|phase-03-workbench-readonly|phase-05-production-seams|phase-05-production-removal|phase-06-capability-specific-inventory|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-08-cleanup-gates|phase-08-publication-submission-orchestration|phase-08-renderer-contract-artifact-absence|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-task-store|ticket-24-g-legacy-boundary)(?:\.electron)?\.test\.(?:js|mjs)$/,
     categories: ["retired-capability/legacy-absence"],
   },
   {
@@ -1020,13 +1303,13 @@ const STATIC_GATE_FILE_RULES = Object.freeze([
 
 const STATIC_CATEGORY_TARGETS = Object.freeze({
   "architecture/dependency":
-    /\b(?:moduleSpecifiers|dependency|forbidden|assembly|bridge|import|require|capability|surface|seam|owner|registry|typedIpcMain|PlatformFeatureProvider|usePlatformFeature|RegularQueueGroupsPanel|createArticleStore|ArticleStore|articleStore|content-store|content stores|physical store|preload|IpcResponse|platform status|ConfirmationHost|scopeKey|WorkspaceBootstrap|registrar|LocalStorage|Workspace switching|AES-256|clearAll)\b/i,
+    /\b(?:moduleSpecifiers|dependency|forbidden|assembly|bridge|import|require|capability|surface|seam|owner|registry|typedIpcMain|ipcMain|PlatformFeatureProvider|usePlatformFeature|RegularQueueGroupsPanel|createArticleStore|ArticleStore|articleStore|content-store|content stores|physical store|preload|IpcResponse|IpcError|PlatformStatus|platform status|ConfirmationHost|scopeKey|WorkspaceBootstrap|WorkspaceCoordinatorProvider|WorkspaceScopedConfirmationHost|WorkspaceFeatureProvider|useWorkspaceRuntimeIdentity|useConfirmationScope|registrar|LocalStorage|VITE_ENABLE_FIXTURES|AES-256|clearAll|mockData|INITIAL_ARTICLES|handleAddNewMockArticle|persistArticles|submitPlatformSelection|getPlatformQueue|listRegularQueueGroups|startRegularQueueGroup|isBatchRunning|isStopPending|isPlatformRunning|isPlatformPaused|createWorkspaceRuntime|phase-01-composition|src\/infrastructure|node|publication-submission-orchestrator|publicationSubmissionService|retryFailedPublication|retryFailedPublicationExecutor|regularQueueGroupComposition|regularPlatformOutcomeService|SubmissionOrderStore|platform-workbench-service|createPlatformWorkbenchService|desktopConsole|const\s+attention|articleAttention|productionIpcRegistry|exposeInMainWorld|electronIpcRenderer|AUTH_INVOKE_EXEMPTIONS|AUTH_EVENT_EXEMPTIONS|requireBridgeApi|requireContentApi|new\s+Proxy|Reflect\.get|PlatformTaskProvider|WorkspaceDataProvider|usePlatformTask|usePlatformQueue|getPlatformState|onPlatformState|registerWorkspaceBootstrapIpc|deriveNavigationSummary|onAddResource|showAddForm|RES-\$|addSelectedResource|添加媒体|录入新媒体资源|channel|preloadMethod|symbol)\b/i,
   security:
-    /\b(?:sandbox|csp|credential|cookie|token|secret|auth|protected|private|path|permission|isolation|boundary|safe|Documents|process\.cwd|homedir)\b/i,
+    /\b(?:sandbox|csp|credential|cookie|token|secret|auth|protected|private|path|permission|isolation|boundary|safe|Documents|process\.cwd|process|homedir|setWindowOpenHandler|will-navigate|setPermissionRequestHandler|action|initializeAuth|createAuthenticatedIpcMain|accessToken|refreshToken|authenticated|randomUUID|deviceName|mac|serial|motherboard|cpu|Content-Security-Policy|default-src|connect-src|passwordHash|node:sqlite|healthz|activateAuthenticatedRuntime|WORKSPACE_OPEN_FAILED|disposeRuntime|dotenv\.config)\b/i,
   "retired-capability/legacy-absence":
-    /\b(?:legacy|retired|absence|dead|migration|removed|forbidden|prohibited|not\s+(?:exist|package|ship)|PreflightModal|window\.confirm|publicationLedger|legacyStatus)\b/i,
+    /\b(?:legacy|retired|absence|dead|migration|removed|forbidden|prohibited|old(?:Capability|Surface|Route)?|deprecated|not\s+(?:exist|package|ship)|OldCapability|mockData|INITIAL_ARTICLES|handleAddNewMockArticle|persistArticles|submitPlatformSelection|PreflightModal|prepareSubmission|submitPrepared|window\.confirm|publicationLedger|legacyStatus|phase-01-composition|publication-submission-orchestrator|publicationSubmissionService|retryFailedPublication|retryFailedPublicationExecutor|SubmissionOrderStore|record|orderNid|platform-workbench-service|createPlatformWorkbenchService|PlatformTaskProvider|WorkspaceDataProvider|usePlatformTask|usePlatformQueue|onAddResource|showAddForm|RES-\$|addSelectedResource|添加媒体|录入新媒体资源)\b/i,
   "packaging/release/CI":
-    /\b(?:package|packag|asar|artifact|release|build|runtime|resource|preload|electron|discovery|runner|config|relaunch|environment|mojibake|replacement|readable|编码|中文)\b/i,
+    /\b(?:package|packag|asar|artifact|release|build|runtime|resource|preload|electron|discovery|runner|config|relaunch|environment|mojibake|replacement|readable|编码|中文|from:\s*build\/runtime-tools\/node|to:\s*tools\/node|prepare:runtime-tools|verify-alpha-package|asarUnpack|extraResources|media-workbench|dist|index\.html|rendererEntryPath|offline-packaging-smoke|did-finish-load|createRendererSmokeProbeSource|captureEnvironmentValue|restoreEnvironmentValue|app\.relaunch|dotenv\.config|Content-Security-Policy|requiredRuntimeFile|escapeRegExp|desktop.*renderer|activateAuthenticatedRuntime|WORKSPACE_OPEN_FAILED|disposeRuntime)\b/i,
 });
 
 const STATIC_CATEGORY_RATIONALES = Object.freeze({
@@ -1051,9 +1334,7 @@ function inferStaticCategories(fileName, _testName, testSource) {
   ];
   if (!allowedCategories.length) return [];
   const target = file + "\n" + testSource;
-  return allowedCategories.filter((category) =>
-    STATIC_CATEGORY_TARGETS[category].test(target),
-  );
+  return allowedCategories.filter((category) => staticCategoryMatches(category, target));
 }
 
 function staticRationaleFor(categories) {
@@ -1391,6 +1672,7 @@ function escapeMarkdown(value) {
 
 function dispositionFor(test, packageId, staticCategories) {
   const sourceLevel = test.sourceRead.level;
+  const assertionProfile = test.sourceRead.assertionProfile;
   if (test.modifier && /(?:skip|todo|only|failing)/.test(test.modifier)) {
     return {
       disposition: "REVIEW_MODIFIER_WITHOUT_WEAKENING",
@@ -1398,7 +1680,11 @@ function dispositionFor(test, packageId, staticCategories) {
         "后续 owner 必须解释 modifier 的产品/测试语义；M05-0 不删除、放宽或把它计为 PASS。",
     };
   }
-  if (sourceLevel === "assertion" && staticCategories.length > 0) {
+  if (
+    sourceLevel === "assertion" &&
+    staticCategories.length > 0 &&
+    assertionProfile?.allStatic
+  ) {
     return {
       disposition: "RETAIN_STATIC_GUARD",
       replacement:
@@ -1410,13 +1696,17 @@ function dispositionFor(test, packageId, staticCategories) {
       return {
         disposition: "REWRITE_PUBLIC_BEHAVIOR_KEEP_MATRIX",
         replacement:
-          "后续 owner 以公开行为/contract/harness observable result 替换源码断言，并保留当前动态故障/输入矩阵。",
+          assertionProfile?.mixed
+            ? "同一 declaration 混合了合法 static invariant 与业务/source-shape assertion；先拆分并以公开行为/contract/harness observable result 替换业务部分，同时保留当前动态故障/输入矩阵。"
+            : "后续 owner 以公开行为/contract/harness observable result 替换源码断言，并保留当前动态故障/输入矩阵。",
       };
     }
     return {
       disposition: "REWRITE_PUBLIC_BEHAVIOR",
       replacement:
-        "后续 owner 先确认等价 public behavior evidence，再移除实现形状断言；不得按文件整体删除。",
+        assertionProfile?.mixed
+          ? "同一 declaration 混合了合法 static invariant 与业务/source-shape assertion；必须先拆分，无法确定的部分 fail closed，不得整条作为 static guard 放行。"
+          : "后续 owner 先确认等价 public behavior evidence，再移除实现形状断言；不得按文件整体删除。",
     };
   }
   if (test.dynamicMatrix || test.dynamicName) {
@@ -1462,11 +1752,16 @@ function collectInventory() {
     const signals = staticSignals(source);
     const matrices = extractDynamicMatrices(source);
     const tests = extractTests(source).map((test, index) => {
-      const sourceRead = sourceReadSignals(test.source, signals, source);
       const staticCategories = inferStaticCategories(
         relativePath,
         test.name,
         test.source,
+      );
+      const sourceRead = sourceReadSignals(
+        test.source,
+        signals,
+        source,
+        staticCategories,
       );
       const packageId = classifyPackage(relativePath, test.name);
       const classifiedTest = { ...test, sourceRead };

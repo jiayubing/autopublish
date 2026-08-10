@@ -5,8 +5,6 @@ const { describe, it } = require("node:test");
 
 const MW = path.resolve(__dirname, "..", "media-workbench", "src");
 const readApp = (file) => fs.readFileSync(path.join(MW, file), "utf8");
-const readComponent = (file) =>
-  fs.readFileSync(path.join(MW, "components", file), "utf8");
 
 describe("react workbench regression", function () {
   it("gates renderer localStorage fixtures behind an explicit development flag", function () {
@@ -15,30 +13,8 @@ describe("react workbench regression", function () {
     assert.equal(source.includes("VITE_ENABLE_FIXTURES"), false);
   });
 
-  it("keeps Settings limited to manual workflow features", function () {
-    const source = readComponent("SettingsView.tsx");
-    ["AES-256", "LocalStorage", "clearAll"].forEach((claim) =>
-      assert.equal(source.includes(claim), false),
-    );
-    assert.ok(
-      source.includes(
-        "Workspace switching does not copy, move, or delete the original data",
-      ),
-    );
-  });
-
-  it("keeps the platforms workbench reachable", function () {
-    assert.ok(
-      fs.existsSync(path.join(MW, "components", "PlatformWorkbench.tsx")),
-    );
-    assert.ok(readComponent("Sidebar.tsx").includes("platforms"));
-    assert.ok(readApp("App.tsx").includes("PlatformWorkbench"));
-  });
-
   it("keeps renderer APIs free of mock article persistence", function () {
     const api = readApp("bridge/platform.ts");
-    const contentApi = readApp("bridge/content.ts");
-    const media = readApp("bridge/media.ts");
     const sharedApi = readApp("bridge/transport.ts");
     const app = readApp("App.tsx");
     assert.equal(sharedApi.includes("mockData"), false);
@@ -48,11 +24,6 @@ describe("react workbench regression", function () {
     assert.equal(app.includes("INITIAL_ARTICLES"), false);
     assert.ok(api.includes("getPlatformQueue"));
     assert.equal(api.includes("submitPlatformSelection"), false);
-    assert.ok(
-      contentApi.includes("listRegularQueueGroups") &&
-        contentApi.includes("startRegularQueueGroup"),
-    );
-    assert.ok(media.includes("Number(") && media.includes("balance"));
   });
 
   it("exposes platform commands through preload", function () {
@@ -67,64 +38,24 @@ describe("react workbench regression", function () {
     );
   });
 
-  it("exposes browser login controls for platform accounts", function () {
-    const api = readApp("bridge/platform.ts");
-    const workbench = readComponent("content/AccountProfileSelector.tsx");
-    assert.ok(
-      api.includes("openPlatformLogin") && api.includes("checkPlatformLogin"),
-    );
-    assert.ok(workbench.includes("打开登录") && workbench.includes("检查登录"));
-  });
-
   it("shares the structured IPC response envelope", function () {
     const types = readApp("types/ipc.ts");
     const api = readApp("bridge/content.ts");
-    const response = fs.readFileSync(
-      path.resolve(__dirname, "..", "desktop", "services", "ipc-response.js"),
-      "utf8",
-    );
     assert.ok(
       types.includes("interface IpcError") && types.includes("IpcResponse<T>"),
     );
     assert.ok(api.includes("IpcResponse<"));
-    assert.ok(
-      response.includes("ok: true") &&
-        response.includes("data: data") &&
-        response.includes("ok: false"),
-    );
   });
 
-  it("uses the complete main-process platform status shape", function () {
+  it("keeps the public platform status contract free of retired pause state", function () {
     const types = readApp("types/platform.ts");
     const api = readApp("bridge/platform.ts");
-    const taskService = fs.readFileSync(
-      path.resolve(
-        __dirname,
-        "..",
-        "desktop",
-        "services",
-        "desktop-task-service.js",
-      ),
-      "utf8",
-    );
     assert.ok(
       types.includes("interface PlatformStatus") &&
         types.includes("isBatchRunning: boolean") &&
         types.includes("isStopPending: boolean") &&
         types.includes("isPlatformRunning: boolean"),
     );
-    assert.match(taskService, /isBatchRunning:\s*false/);
-    assert.match(
-      taskService,
-      /isStopPending:\s*(?:false|snapshot\.isStopPending)/,
-    );
-    assert.match(
-      taskService,
-      /isPlatformRunning:\s*Boolean\(platformRun && platformRun\.snapshot\(\)\)/,
-    );
-    assert.match(taskService, /platformTaskStateStore/);
-    assert.match(taskService, /createPlatformRun/);
-    assert.doesNotMatch(taskService, /activePlatformRunId/);
     assert.equal(types.includes("isPlatformPaused"), false);
     assert.equal(api.includes("isPlatformPaused"), false);
   });

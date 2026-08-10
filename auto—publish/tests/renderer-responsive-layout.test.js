@@ -671,6 +671,16 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       assert.match(measured.text, /工作区/);
       assert.match(measured.text, /运行环境/);
       assert.match(measured.text, /存储与清理/);
+      for (const label of ["付费媒体投稿", "其他平台投稿", "投稿订单记录"])
+        assert.match(measured.text, new RegExp(label));
+
+      await page.getByRole("button", { name: "工作区", exact: true }).click();
+      const workspaceText = await page
+        .locator("main")
+        .filter({ hasText: /^工作区未选择/ })
+        .innerText();
+      assert.match(workspaceText, /工作区切换不会复制、移动或删除原有业务数据/);
+      assert.doesNotMatch(workspaceText, /AES-256|LocalStorage|clearAll/);
 
       await page.getByRole("button", { name: "AI 生成", exact: true }).click();
       await page.getByLabel("AI Base URL").fill("http://provider.example/v1");

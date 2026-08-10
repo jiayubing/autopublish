@@ -42,10 +42,4 @@ describe("renderer encoding", function() {
     });
   });
 
-  it("keeps expected Chinese labels readable in React renderer files", function() {
-    assert.match(readRendererFile("components/Sidebar.tsx"), /付费媒体投稿|其他平台投稿|投稿订单记录/);
-    assert.match(readRendererFile("components/ResourceLibrary.tsx"), /媒体资源池|搜索资源名称/);
-    assert.match(readRendererFile("components/OrdersView.tsx"), /暂无订单记录|已发布/);
-    assert.match(readRendererFile("components/PlatformWorkbench.tsx"), /普通平台队列/);
-  });
 });

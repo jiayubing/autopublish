@@ -149,6 +149,7 @@ describe("publication history renderer boundary", async function () {
   it("renders paged media and durable order actions from public read models", function () {
     assert.match(presentation.resources, /公共媒体资源池/);
     assert.match(presentation.resources, /中央媒体资源/);
+    assert.match(presentation.resources, /搜索资源名称/);
     assert.match(presentation.resources, /刷新库/);
     assert.match(
       presentation.resources,

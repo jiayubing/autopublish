@@ -47,6 +47,13 @@ describe("workspace bootstrap IPC", function () {
       "utf8",
     );
     assert.match(source, /typedIpcMain\.handle\(/);
+  });
+
+  it("does not bypass the typed IPC adapter with raw handlers", function () {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "desktop", "ipc", "workspace-bootstrap-ipc.js"),
+      "utf8",
+    );
     assert.doesNotMatch(source, /\bipcMain\.handle\(/);
   });
 

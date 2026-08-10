@@ -39,20 +39,10 @@ describe("renderer confirmation host", () => {
     }
   });
 
-  it("removes the legacy media submit modal and renders paid execution controls", () => {
+  it("keeps legacy paid-media submit capabilities absent", () => {
     const app = read("media-workbench/src/App.tsx");
     const feature = read("media-workbench/src/features/media/media-feature.js");
-    const generatedArticles = read(
-      "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    );
     assert.doesNotMatch(app, /PreflightModal|mediaFeature\.submitPrepared/);
     assert.doesNotMatch(feature, /prepareSubmission|submitPrepared/);
-    assert.match(generatedArticles, /付费媒体批次控制/);
-    assert.match(generatedArticles, /startPaidMediaBatch/);
-    assert.match(generatedArticles, /pausePaidMediaBatch/);
-    assert.doesNotMatch(
-      app,
-      /setConfirmation|setIsSubmitting|setSubmissionError/,
-    );
   });
 });
