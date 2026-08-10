@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4 final evidence reconciliation 均已完成。M05-J4 已关闭最后 2 个 static-classification residual、完成 bounded re-audit，并在 implementation HEAD 上取得完整 `npm test` PASS；最新 closure handoff 见 `../handoffs/M05-J4-final-static-guard-closure.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4/J5 final evidence reconciliation 均已完成。M05-J5 已关闭 dynamic source-reader false negative、generic static authorization、source-shape residual 与 format gate，并在 implementation HEAD 上取得完整 `npm test` PASS；最新 closure handoff 见 `../handoffs/M05-J5-final-inventory-gate-closure.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4` 从 clean integration HEAD 严格串行完成。M05-J4 Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 尚未完成。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5` 从 clean integration HEAD 严格串行完成。M05-J5 Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 尚未完成。
 
 ## 1. Evidence policy
 
@@ -253,11 +253,13 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **M05-J4 final static guard closure（2026-08-10）：** implementation commit `bf5bd711007548ded0d6eca74cce50053f0afb3e` 仅修改测试/测试工具；删除 `orderNid` 的 legacy-absence 特赦和 adapter 的 source assertion，新增 synthetic fake-transport behavior coverage；classifier 移除 generic `preload` context token，以真实 capability/invariant token 保留合法 public IPC/preload/packaging guards，并新增 `preload` 与 `orderNid` classifier regressions。最终 inventory 为 248 files（231 JS、17 MJS）、1,683 declarations、35 file-level source-reading files / 231 declarations、53 assertion-level source candidates、53 retained static guards、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`。完整 runner 为 248/248 files、1,795/1,795 passed、0 failed、0 skipped、0 todo、0 cancelled，`CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`。M06=`READY`（`PENDING TO START`）；维护 10.5 保持 `PARTIAL`，Ticket 25 等待 M06。详见 `../handoffs/M05-J4-final-static-guard-closure.md`。
 
+**M05-J5 final inventory/gate closure（2026-08-10）：** implementation commit `3a6db8749bb53c335feb35528ceeca9d0f320a39` 仅修改测试与 inventory tooling；dynamic production-root/path/helper/source aliases 均进入 assertion-level classification，generic context token 不再授权 arbitrary static。已确认 private helper/factory、arbitrary slice、line-count、component implementation residual 清零；最终 inventory 为 248 files（231 JS、17 MJS）、1,683 declarations、35 file-level source-reading files / 232 declarations、58 assertion-level source candidates、58 retained static guards、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`。`format:check` 与全部 final gates PASS；完整 runner 为 248/248 files、1,795/1,795 passed、0 failed/skipped/todo/cancelled，`CLOSED`、`allFilesReported=true`。详见 `../handoffs/M05-J5-final-inventory-gate-closure.md`。
+
 ## 3. Serial order and dependency rationale
 
 推荐且唯一默认顺序：
 
-`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure → M05-J → M05-J3 → M05-J4 final evidence reconciliation`
+`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure → M05-J → M05-J3 → M05-J4 → M05-J5 final evidence reconciliation`
 
 严格依赖表：
 
@@ -278,6 +280,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 | M05-J | M05-I | 只做 closure evidence reconciliation；不重做 A–I、不修改 production、不进入 M06 |
 | M05-J3 | M05-J | 只做 bounded classifier/residual closure；不重做 A–I/J、不修改 production、不进入 M06 |
 | M05-J4 | M05-J3 | 只做最后 2 个 static-classification residual 的 bounded closure；不重做 M05、不修改 production、不进入 M06 |
+| M05-J5 | M05-J4 | 只做 final inventory false-negative、generic static authorization、已确认 residual 与 format/full-gate closure；不重做 M05、不修改 production、不进入 M06 |
 
 - M05-0 ledger 是 A–H 的唯一 ownership/scope/disposition 真源；后续 handoff 只记录执行 delta/evidence，不创建竞争分类表。
 - A/B/C 都可能共享 Renderer harness、fixture 和 source-reading ledger，必须串行，但按 2.1 冻结的 feature owner 分开以限制单线程心智模型。
@@ -289,10 +292,10 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 - [x] M05-0 产出可复现 before inventory，覆盖实际 discovery 的 JS/MJS，并明确每个被删/改 static assertion 的替代行为 evidence。
 - [x] 不再存在用私有函数名、实现行数、任意源码片段证明业务行为的测试；任意私有实现名 name-only regression 不再被 classifier 授权为 static guard。
-- [x] architecture/security/legacy absence/packaging/CI/discovery static guard 被保留并有清晰分类；53 个 retained guards 均落入合法 category。
+- [x] architecture/security/legacy absence/packaging/CI/discovery static guard 被保留并有清晰分类；58 个 retained guards 均落入合法 category。
 - [x] 核心业务 owner 都有稳定公开接口或直接调用方测试，失败能定位到领域边界；本次删除项的 replacement mapping 已记录。
 - [x] 重复 phase tests 按 invariant/owner 收敛，而非按文件数机械删除；必要故障注入和诊断价值保留。
 - [x] 未修改 production behavior，未新增 test-only production seam，未执行真实外部操作。
 - [x] M05-H 产出 after inventory 与 runner cleanup evidence；无 discovery omission、skip/todo 或 summary 后遗留测试进程。
-- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；其 full-run provenance 由 M05-J/J3/J4 重新绑定到最终 implementation HEAD。
-- [x] M05-J/J3/J4 classifier、residual migration、static-category ledger 与 full-test contract reconciliation 完成；implementation HEAD 上完整 runner PASS；M06 已 READY/PENDING TO START，10.5 未提前 COMPLETE。
+- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；其 full-run provenance 由 M05-J/J3/J4/J5 重新绑定到最终 implementation HEAD。
+- [x] M05-J/J3/J4/J5 classifier、residual migration、static-category ledger、format 与 full-test contract reconciliation 完成；implementation HEAD 上完整 runner PASS；M06 已 READY/PENDING TO START，10.5 未提前 COMPLETE。
