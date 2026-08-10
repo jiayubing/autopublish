@@ -2,7 +2,7 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J final evidence reconciliation 均已完成。完整 `npm test` 的明确 artifact/runtime prerequisite failures 作为非 M05 exception 记录，未被宣称为 full gate PASS；当前结论与替代 evidence 见 `../handoffs/M05-J-final-evidence-reconciliation.md`，当前唯一 inventory 真源见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J final evidence reconciliation 均已完成。M05-J3 已关闭 classifier/P1 residual、完成 bounded re-audit，并在 implementation HEAD 上取得完整 `npm test` PASS；最新 closure handoff 见 `../handoffs/M05-J3-final-static-guard-closure.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
 **Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J` 从 clean integration HEAD 严格串行完成。M05-J Closure 后本任务停止；M06 仍未启动。
 
@@ -75,7 +75,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **独立线程:** 是；这是后续实现的硬 gate，不与其他包并行。
 
-**M05-0 Closure freeze（2026-08-09）：** authoritative ledger 已覆盖 runner 实际发现的 251 个 `.test.js` 与 17 个 `.test.mjs`、1,818 个静态声明、动态矩阵、file-level/assertion-level source-reading distinction、合法 static category、duplicate invariant/signature cluster、pool assignment 和逐项 disposition。A/B/C ownership 采用本合同 2.1 表；A–H scope/disposition/replacement mapping 以 `../handoffs/M05-0-authoritative-test-disposition-ledger.md` 为唯一真源。M05-E 已冻结为 `M05-E1 → M05-E2 → M05-E3`，严格顺序为 `D → E1 → E2 → E3 → F`；migration reader 不进入 E1–E3。M05-0 未删除/改写任何业务测试、未改 runner policy、未触碰 production。
+**M05-0 Closure freeze（2026-08-09，ledger after inventory）：** authoritative ledger 已覆盖 runner 实际发现的 231 个 `.test.js` 与 17 个 `.test.mjs`、1,680 个静态声明、动态矩阵、file-level/assertion-level source-reading distinction、合法 static category、duplicate invariant/signature cluster、pool assignment 和逐项 disposition。A/B/C ownership 采用本合同 2.1 表；A–H scope/disposition/replacement mapping 以 `../handoffs/M05-0-authoritative-test-disposition-ledger.md` 为唯一真源。M05-E 已冻结为 `M05-E1 → M05-E2 → M05-E3`，严格顺序为 `D → E1 → E2 → E3 → F`；migration reader 不进入 E1–E3。M05-0 未删除/改写任何业务测试、未改 runner policy、未触碰 production。
 
 ### M05-A — Renderer content, article-management, and generation evidence
 
@@ -233,7 +233,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **前置依赖:** M05-H Closure，且 0–H 全部进入同一 clean integration HEAD。
 
-**完成标准:** before/after inventory 完整；每个删除/改写的业务 static assertion 有等价 public behavior evidence；保留 static guard 分类正确；blocking findings 关闭；bounded re-audit PASS；最终 clean HEAD 上 M05-specific gate PASS。完整 `npm test` 必须实际运行且 runner `CLOSED`、`allFilesReported=true`、`skipped/todo/cancelled=0`；只有已登记、可复现、非 M05 owner 的外部 artifact/runtime prerequisite failure 才能作为窄范围 full-run exception，且不得写成 full gate PASS。M05 标记 COMPLETE 后停止，不自动进入 M06。
+**完成标准:** before/after inventory 完整；每个删除/改写的业务 static assertion 有等价 public behavior evidence；保留 static guard 分类正确；blocking findings 关闭；bounded re-audit PASS；最终 clean HEAD 上 M05-specific gate PASS。完整 `npm test` 必须实际运行且 runner `CLOSED`、`allFilesReported=true`、`skipped/todo/cancelled=0`；仅在真实 artifact/runtime prerequisite failure 时登记窄范围 exception，本次 M05-J3 已无该 exception。M05 标记 COMPLETE 后停止，不自动进入 M06。
 
 **主要测试/gate:** 所有工作包定向矩阵、`npm run test:discover`、完整 `npm test`、auth discovery/专项（仅若 M05-0 纳入其改动）、main/bridge/renderer typecheck、lint、format/diff check、architecture/security/absence/packaging gates。
 
@@ -243,11 +243,13 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **Scope:** 只处理 M05-I closure 后发现的 classifier false negative、业务 source assertion residual 与 full-test closure contract/evidence 对账；不重做 M05-A–I，不进入 M06，不修改 production behavior、runner concurrency/timeout/pool policy 或真实 artifact。
 
-**完成标准:** classifier 能识别 file-scope production reader helper、拆分 path reader 与 source-text assertion，并以回归测试区分 runtime harness；最终 `REWRITE_PUBLIC_BEHAVIOR=0`；业务/UI/runtime residual 已迁移到 public behavior/contract/Renderer harness/owner seam；所有 retained static guard 绑定允许 category、owner、invariant、不可由 behavior test 替代的理由；完整 runner 在 clean HEAD 实际运行并记录 `CLOSED`、`allFilesReported`、无 skip/todo/cancelled，非零结果只保留明确、可复现、非 M05 owner 的 artifact/runtime prerequisite exception；最终 handoff 写明 Base/Final HEAD、manifest、commands/results、replacement mapping 与 verdict。
+**完成标准:** classifier 能识别 file-scope production reader helper、拆分 path reader 与 source-text assertion，并以回归测试区分 runtime harness；最终 `REWRITE_PUBLIC_BEHAVIOR=0`；业务/UI/runtime residual 已迁移到 public behavior/contract/Renderer harness/owner seam；所有 retained static guard 绑定允许 category、owner、invariant、不可由 behavior test 替代的理由；完整 runner 在 implementation HEAD 实际运行并记录 `CLOSED`、`allFilesReported=true`、无 skip/todo/cancelled；最终 handoff 写明 Base/implementation/closure HEAD、manifest、commands/results、replacement mapping 与 verdict。
 
 **主要测试/gate:** `tests/test-inventory-contract.test.js`、M05-J residual 定向 tests、`npm run test:discover`、`node auto—publish/scripts/test-inventory.js`、完整 PowerShell 命令 `$env:RUN_ELECTRON_FOCUS_TESTS='1'; npm test -- --profile-output <temp>`、`git diff --check`。
 
 **独立线程:** 是；完成后 M05 保持 `COMPLETE`，不得自动进入 M06。
+
+**M05-J3 final closure（2026-08-10）：** implementation commit `35ff6998419af1f1ae7d5708862bc9634ca13409` 仅修改测试/测试工具；classifier regression 证明任意私有实现名本身为 `REWRITE_PUBLIC_BEHAVIOR`，真实 sandbox boundary guard 仍为 `RETAIN_STATIC_GUARD`。最终 inventory 为 248 files（231 JS、17 MJS）、1,680 declarations、53 source-assertion candidates、53 retained static guards、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`。完整 runner 为 248/248 files、1,792/1,792 passed、0 failed、0 skipped、0 todo、0 cancelled，`CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`。具体替代映射、P1 closure、production diff、P3 non-blocking note 和完整命令结果见 `../handoffs/M05-J3-final-static-guard-closure.md`；closure commit 为 docs/evidence-only，准确 hash 以最终 Git 验证为准。
 
 ## 3. Serial order and dependency rationale
 
@@ -282,11 +284,11 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 ## 4. Acceptance criteria
 
 - [x] M05-0 产出可复现 before inventory，覆盖实际 discovery 的 JS/MJS，并明确每个被删/改 static assertion 的替代行为 evidence。
-- [ ] 不再存在用私有函数名、实现行数、任意源码片段证明业务行为的测试。
-- [ ] architecture/security/legacy absence/packaging/CI/discovery static guard 被保留并有清晰分类。
-- [ ] 核心业务 owner 都有稳定公开接口或直接调用方测试，失败能定位到领域边界。
-- [ ] 重复 phase tests 按 invariant/owner 收敛，而非按文件数机械删除；必要故障注入和诊断价值保留。
-- [ ] 未修改 production behavior，未新增 test-only production seam，未执行真实外部操作。
+- [x] 不再存在用私有函数名、实现行数、任意源码片段证明业务行为的测试；任意私有实现名 name-only regression 不再被 classifier 授权为 static guard。
+- [x] architecture/security/legacy absence/packaging/CI/discovery static guard 被保留并有清晰分类；53 个 retained guards 均落入合法 category。
+- [x] 核心业务 owner 都有稳定公开接口或直接调用方测试，失败能定位到领域边界；本次删除项的 replacement mapping 已记录。
+- [x] 重复 phase tests 按 invariant/owner 收敛，而非按文件数机械删除；必要故障注入和诊断价值保留。
+- [x] 未修改 production behavior，未新增 test-only production seam，未执行真实外部操作。
 - [x] M05-H 产出 after inventory 与 runner cleanup evidence；无 discovery omission、skip/todo 或 summary 后遗留测试进程。
 - [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；其 full-run provenance 由 M05-J 重新绑定到最终 clean HEAD。
-- [x] M05-J classifier、residual migration、static-category ledger 与 full-test contract reconciliation 完成；完整 runner 的非 M05 artifact/runtime exception 已明确记录，未计为 full gate PASS；M06 未启动。
+- [x] M05-J classifier、residual migration、static-category ledger 与 full-test contract reconciliation 完成；implementation HEAD 上完整 runner PASS；M06 未启动。

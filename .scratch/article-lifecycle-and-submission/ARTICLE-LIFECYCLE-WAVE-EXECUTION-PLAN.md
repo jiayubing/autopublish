@@ -22,9 +22,9 @@
 | Maintenance M03           | `COMPLETE` | M03-0/A/B/C Closure 与最终 clean-HEAD reconciliation 已闭合                                                                                                                 |
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
-| Maintenance M05             | `COMPLETE`  | M05-I combined audit/closure、M05-J final evidence reconciliation、blocking remediation、bounded re-audit 与 clean-HEAD M05-specific gates 已闭合；完整 runner 的明确非 M05 artifact/runtime exception 见 `handoffs/M05-J-final-evidence-reconciliation.md` |
+| Maintenance M05             | `COMPLETE`  | M05-I combined audit/closure、M05-J/M05-J3 final evidence reconciliation、blocking remediation、bounded re-audit 与 implementation-HEAD M05-specific gates 已闭合；最新 handoff 见 `handoffs/M05-J3-final-static-guard-closure.md` |
 
-**当前动作：Wave 10 与 M04 已闭合；M05-0 authoritative inventory/disposition ledger、A–H ownership/scope freeze、E1→E2→E3 decision、M05-I combined audit/closure 以及 M05-J final evidence reconciliation 均已完成。M05=`COMPLETE`；classifier residual 已清零，完整 runner 的明确 artifact/runtime prerequisite failures 已作为非 M05 exception 记录，完整 `npm test` 未被宣称为 PASS。Wave 10.5 的 M05 lane 已闭合；本次执行停止，不进入 M06、不修改后续包的 production/test implementation、不 push 或执行真实外部操作。**
+**当前动作：Wave 10 与 M04 已闭合；M05-0 authoritative inventory/disposition ledger、A–H ownership/scope freeze、E1→E2→E3 decision、M05-I combined audit/closure 以及 M05-J/M05-J3 final evidence reconciliation 均已完成。M05=`COMPLETE`；private implementation source-shape residual 已清零，classifier `REWRITE_PUBLIC_BEHAVIOR=0`，完整 runner 在 implementation HEAD 上 `CLOSED` 且 1,792/1,792 通过。Wave 10.5 的 M05 lane 已闭合；本次执行停止，不进入 M06、不修改后续包的 production/test implementation、不 push 或执行真实外部操作。**
 
 当前 integration HEAD、clean/dirty 状态、最新 commit/test evidence 必须从真实 Git 和当前 handoff 获取；不要把旧 hash 从历史计划复制到本表。
 
