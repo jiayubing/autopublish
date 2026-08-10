@@ -2,9 +2,9 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `PENDING`；实时可调度性只由波次执行计划与 Git 预检决定
+**Status:** `READY`（`PENDING TO START`）；M05 `COMPLETE` 与实现/文档 clean-HEAD gate 已满足，实时可调度性仍由波次执行计划与 Git 预检决定
 
-**Scheduling gate:** M05 `COMPLETE` 后调度；维护 10.5 最后一项。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25。
+**Scheduling gate:** M05 `COMPLETE` 后调度；当前为维护 10.5 最后一项且尚未开始。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
 
 ## Scope
 
