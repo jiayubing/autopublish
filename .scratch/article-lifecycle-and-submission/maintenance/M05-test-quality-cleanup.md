@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4/J5/J6/J7/J8 final evidence reconciliation 均已完成。M05-J8 已关闭 authoritative source-taint inventory/classifier closure，并在 implementation HEAD `a297b48` 上确认 required gates 全部 PASS；最新 closure handoff 见 `../handoffs/M05-J8-final-inventory-authoritative-closure.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4/J5/J6/J7/J8/J9 final evidence reconciliation 均已完成。M05-J9 已关闭 checked-in `.env.example` repo/config source recognition 缺口，并在 implementation HEAD `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 上确认 required gates 全部 PASS；最新 closure handoff 见 `../handoffs/M05-J9-final-authoritative-closure-remediation.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 → M05-J8` 从 clean integration HEAD 严格串行完成。M05-J8 docs-only Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 仍为 `PARTIAL`，Ticket 25 继续受 M06 gate 约束。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 → M05-J8 → M05-J9` 从 clean integration HEAD 严格串行完成。M05-J9 docs-only Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 仍为 `PARTIAL`，Ticket 25 继续受 M06 gate 约束。
 
 ## 1. Evidence policy
 
@@ -257,11 +257,13 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **M05-J7 final inventory source-taint closure（2026-08-10）：** implementation commit `179577fd6e7849b7b6ab6e10cdb61a5e22929e05` 仅修改 inventory classifier 与 contract tests；source taint 统一区分 repository/config path、source text、source-text-derived value 与 ordinary runtime value，并覆盖 alias、`slice`/`split`/`replace`/`length`、`for...of`、helper parameter、recursive `forEach`、`import.meta.dirname` 与 repository CI/config readers。普通 runtime result 不再被提升为 source assertion，derived source holder 也不再因变量名取得 static authorization。最终 inventory 为 248 files（231 JS、17 MJS）、1,686 declarations、46 file-level source-reading files / 340 declarations、66 assertion-level source candidates、66 retained static guards、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`；20/20 inventory contract、全部 M05 static/full gates 与完整 runner 1,798/1,798 PASS。详见 `../handoffs/M05-J7-final-inventory-source-taint-closure.md`。M06 保持 `READY`（`PENDING TO START`），维护 10.5 保持 `PARTIAL`。
 
+**M05-J9 final authoritative closure remediation（2026-08-11）：** implementation commit `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 只修改 inventory classifier 与 classifier regression contract；checked-in `.env.example` 现在作为窄 repository config contract 进入 source taint，`.env`、`.env.local` 与普通 `process.env` runtime behavior 不会被提升。最终 inventory 为 248 files（231 JS、17 MJS）、1,689 declarations、46 file-level source-reading files / 340 declarations、76 assertion-level source candidates、76 retained static guards、262 `RETAIN_BEHAVIOR_FILE_HEURISTIC_NOT_ASSERTION`、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`；23/23 inventory contract、全部 M05 static/full gates与完整 runner 1,801/1,801 PASS。production behavior diff=0。详见 `../handoffs/M05-J9-final-authoritative-closure-remediation.md`。M06 保持 `READY`（`PENDING TO START`），维护 10.5 保持 `PARTIAL`，Ticket 25 继续受 M06 gate 约束。
+
 ## 3. Serial order and dependency rationale
 
 推荐且唯一默认顺序：
 
-`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 final evidence reconciliation`
+`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 → M05-J8 → M05-J9 final evidence reconciliation`
 
 严格依赖表：
 
