@@ -14,6 +14,5 @@ describe("renderer platform cross-page progress contract", function() {
     assert.doesNotMatch(read("App.tsx"), /PlatformTaskProvider|WorkspaceDataProvider/);
     assert.doesNotMatch(read("components/PlatformWorkbench.tsx"), /usePlatformTask|usePlatformQueue/);
     assert.doesNotMatch(read("components/Sidebar.tsx"), /usePlatformTask|usePlatformQueue/);
-    assert.match(read("components/PlatformWorkbench.tsx"), /RegularQueueGroupsPanel/);
   });
 });

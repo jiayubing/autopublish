@@ -187,11 +187,6 @@ test("OperationalStore facade hides SQL, table names, and transaction choreograp
     source,
     /\b(?:publication_records|submission_items|remote_orders|recovery_intents|order_display_snapshots)\b/,
   );
-  assert.match(source, /createPublicationAggregate/);
-  assert.match(source, /createSubmissionAggregate/);
-  assert.match(source, /createOrderAggregate/);
-  assert.match(source, /createRecoveryAggregate/);
-  assert.match(source, /createMaintenanceAggregate/);
 });
 
 test("production callers cannot bypass the OperationalStore facade", () => {

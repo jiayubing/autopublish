@@ -102,7 +102,7 @@ test("classifier recognizes split path.join production readers and keeps runtime
 
   const assertionSource = source.replace(
     'assert.equal(runtime.status, "ready");',
-    'assert.match(sourceText, /createContentSourcesFeature/);',
+    "assert.match(sourceText, /createContentSourcesFeature/);",
   );
   const assertionDeclaration = extractTests(assertionSource)[0];
   assert.equal(
@@ -170,6 +170,77 @@ test("classifier catches file-scope helpers, aliases, inline readers, and all so
   assert.equal(inlineResult.assertionProfile.assertionCount, 2);
 });
 
+test("classifier follows dynamic production roots and source aliases in JS and MJS declarations", () => {
+  const cases = [
+    {
+      fileName: "tests/dynamic-production-root.test.mjs",
+      source: `
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const sourceRoot = path.resolve(import.meta.dirname, "../media-workbench/src");
+        test("MJS dynamic root", () => {
+          const file = "components/PlatformWorkbench.tsx";
+          const productionFile = path.join(sourceRoot, file);
+          const source = fs.readFileSync(productionFile, "utf8");
+          const body = source.slice(0, 1800);
+          assert.match(body, /someInternalBusinessThing/);
+        });
+      `,
+    },
+    {
+      fileName: "tests/dynamic-production-root.test.js",
+      source: `
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const bridgeDirectory = path.join(
+          __dirname,
+          "..",
+          "media-workbench",
+          "src",
+          "bridge",
+        );
+        const read = (relative) => fs.readFileSync(relative, "utf8");
+        test("JS helper parameter", () => {
+          const relative = path.resolve(bridgeDirectory, "content.ts");
+          const source = read(relative);
+          assert.match(source, /someInternalBusinessThing/);
+        });
+      `,
+    },
+  ];
+
+  for (const fixture of cases) {
+    const declaration = extractTests(fixture.source)[0];
+    const categories = inferStaticCategories(
+      fixture.fileName,
+      declaration.name,
+      declaration.source,
+    );
+    const signals = sourceReadSignals(
+      declaration.source,
+      staticSignals(fixture.source),
+      fixture.source,
+      categories,
+    );
+    assert.equal(signals.level, "assertion", fixture.fileName);
+    assert.equal(signals.sourceAssertion, true, fixture.fileName);
+    assert.equal(
+      dispositionFor(
+        {
+          sourceRead: signals,
+          modifier: null,
+          dynamicMatrix: false,
+          dynamicName: false,
+        },
+        "M05-G",
+        categories,
+      ).disposition,
+      "REWRITE_PUBLIC_BEHAVIOR",
+      fixture.fileName,
+    );
+  }
+});
+
 test("classifier does not treat ordinary path arguments and runtime results as source reads", () => {
   const source = `
     const path = require("node:path");
@@ -187,6 +258,23 @@ test("classifier does not treat ordinary path arguments and runtime results as s
   );
   assert.equal(result.level, "none");
   assert.equal(result.sourceAssertion, false);
+
+  const ordinaryRead = `
+    const fs = require("node:fs");
+    test("fixture behavior", () => {
+      const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
+      assert.equal(fixture.status, "ready");
+    });
+  `;
+  const ordinaryDeclaration = extractTests(ordinaryRead)[0];
+  assert.equal(
+    sourceReadSignals(
+      ordinaryDeclaration.source,
+      staticSignals(ordinaryRead),
+      ordinaryRead,
+    ).level,
+    "none",
+  );
 });
 
 test("mixed static and business source assertions fail closed at declaration disposition", () => {
@@ -285,6 +373,33 @@ test("classifier retains narrow static gates only when the source target is an a
       securitySource,
     ),
     ["security"],
+  );
+
+  const publicCapabilitySource = `
+    const source = fs.readFileSync(path.join(root, "media-workbench/src/bridge/transport.ts"), "utf8");
+    assert.match(source, /DesktopConsoleApi/);
+    assert.match(source, /requireContentApi/);
+  `;
+  assert.deepEqual(
+    inferStaticCategories(
+      "tests/phase-06-renderer-bridge-api-surface.test.js",
+      "public bridge capability",
+      publicCapabilitySource,
+    ),
+    ["architecture/dependency"],
+  );
+
+  const legacyPackagingSource = `
+    const config = fs.readFileSync(path.join(root, "electron-builder.alpha.yml"), "utf8");
+    assert.doesNotMatch(config, /migrate-publication-ledger-v1/);
+  `;
+  assert.deepEqual(
+    inferStaticCategories(
+      "tests/desktop-packaging.test.js",
+      "retired package surface",
+      legacyPackagingSource,
+    ),
+    ["retired-capability/legacy-absence", "packaging/release/CI"],
   );
 });
 
@@ -406,6 +521,48 @@ test("classifier does not grant static status from a generic source variable nam
     ).disposition,
     "REWRITE_PUBLIC_BEHAVIOR",
   );
+});
+
+test("classifier does not treat generic context tokens as static invariants", () => {
+  const cases = [
+    {
+      fileName: "tests/desktop-packaging.test.js",
+      variables: "config runtime resource",
+    },
+    {
+      fileName: "tests/phase-06-production-ipc-fixture-matrix.test.js",
+      variables: "path action process channel symbol",
+    },
+  ];
+
+  for (const fixture of cases) {
+    for (const variable of fixture.variables.split(" ")) {
+      const source = `
+        const ${variable} = readProductionSource();
+        assert.match(${variable}, /someInternalBusinessThing/);
+      `;
+      const categories = inferStaticCategories(
+        fixture.fileName,
+        "generic context is not an invariant",
+        source,
+      );
+      assert.deepEqual(categories, [], `${fixture.fileName}: ${variable}`);
+      assert.equal(
+        dispositionFor(
+          {
+            sourceRead: { level: "assertion" },
+            modifier: null,
+            dynamicMatrix: false,
+            dynamicName: false,
+          },
+          "M05-G",
+          categories,
+        ).disposition,
+        "REWRITE_PUBLIC_BEHAVIOR",
+        `${fixture.fileName}: ${variable}`,
+      );
+    }
+  }
 });
 
 test("classifier does not infer legacy absence from the orderNid name alone", () => {

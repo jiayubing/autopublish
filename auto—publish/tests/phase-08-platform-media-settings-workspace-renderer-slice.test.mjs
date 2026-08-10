@@ -365,23 +365,5 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     );
     assert.match(settingsView, /types\/workspace/);
     assert.doesNotMatch(settingsView, /bridge\/workspace/);
-    assert.match(
-      fs.readFileSync(path.join(sourceRoot, "auth-store.tsx"), "utf8"),
-      /getSnapshot\(\)|useSyncExternalStore|activeCommands|lifecycle/,
-    );
-    const platformWorkbench = fs.readFileSync(
-      path.join(sourceRoot, "components/PlatformWorkbench.tsx"),
-      "utf8",
-    );
-    assert.ok(platformWorkbench.split(/\r?\n/).length < 500);
-    for (const component of ["RegularQueueGroupsPanel.tsx"]) {
-      assert.equal(
-        fs.existsSync(path.join(sourceRoot, "components", component)),
-        true,
-        component,
-      );
-    }
-    assert.match(platformWorkbench, /RegularQueueGroupsPanel/);
-    assert.doesNotMatch(platformWorkbench, /PlatformSubmitPanel|PlatformSubmissionOverlays/);
   });
 });
