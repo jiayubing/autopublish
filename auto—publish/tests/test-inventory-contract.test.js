@@ -367,6 +367,88 @@ test("classifier does not grant static status to private implementation names al
   );
 });
 
+test("classifier does not grant static status from a generic source variable name", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readProductionSource = () =>
+      fs.readFileSync(path.join(root, "desktop", "preload.js"), "utf8");
+    test("generic source variable is not an invariant", () => {
+      const preload = readProductionSource();
+      assert.match(preload, /someInternalBusinessThing/);
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const categories = inferStaticCategories(
+    "tests/desktop-packaging.test.js",
+    declaration.name,
+    declaration.source,
+  );
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+    categories,
+  );
+
+  assert.equal(signals.assertionProfile.allStatic, false);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: signals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      categories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+});
+
+test("classifier does not infer legacy absence from the orderNid name alone", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readProductionSource = () =>
+      fs.readFileSync(path.join(root, "src", "platforms", "media", "adapter.js"), "utf8");
+    test("remote order result", () => {
+      const source = readProductionSource();
+      assert.match(source, /orderNid/);
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const categories = inferStaticCategories(
+    "tests/phase-03-media-adapter-readonly.test.js",
+    declaration.name,
+    declaration.source,
+  );
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+    categories,
+  );
+
+  assert.deepEqual(categories, []);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: signals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      categories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+});
+
 test("M05-0 inventory is reproducible and records every disposition boundary", () => {
   const first = collectInventory();
   const second = collectInventory();

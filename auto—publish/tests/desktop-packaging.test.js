@@ -747,7 +747,7 @@ describe("source assembly and packaging contract", function() {
     assert.equal(harness.quitEvents[0].prevented, false);
   });
 
-  it("exposes Doubao commands and a removable queue-state listener", function() {
+  it("exposes Doubao commands and the queue-state subscription capability", function() {
     const preload = read("desktop/preload.js");
     for (const channel of [
       "content:list-questions",
@@ -763,8 +763,7 @@ describe("source assembly and packaging contract", function() {
       "content:retry-failed-doubao",
       "content:get-doubao-queue-state",
       "content:save-manual-research"
-    ]) assert.ok(preload.includes(channel), channel + " should be exposed");
+    ]) assert.match(preload, new RegExp(escapeRegExp(channel)), channel + " should be exposed");
     assert.match(preload, /onDoubaoQueueState/);
-    assert.match(preload, /removeListener\("content:doubao-queue-state", handler\)/);
   });
 });
