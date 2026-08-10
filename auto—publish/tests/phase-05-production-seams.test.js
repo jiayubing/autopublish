@@ -49,14 +49,19 @@ it("keeps the ContentStore caller seam free of legacy ArticleStore injection", (
     "src/content/article-removal-service.js",
     "src/content/article-trash-service.js",
   ];
-  callers.forEach((file) => {
+  for (const file of callers) {
     const source = read(file);
     assert.doesNotMatch(
       source,
       /\b(?:opts|options|settings|value|deps)\.articleStore\b/,
+      "production ContentStore callers must not inject the legacy ArticleStore seam",
     );
-    assert.doesNotMatch(source, /\barticleStore\s*:/);
-  });
+    assert.doesNotMatch(
+      source,
+      /\barticleStore\s*:/,
+      "production ContentStore callers must not inject the legacy ArticleStore seam",
+    );
+  }
 });
 
 it("excludes one-shot content metadata and existing migration tools from installed resources", () => {

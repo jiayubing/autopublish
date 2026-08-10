@@ -218,7 +218,11 @@ test("production callers cannot bypass the OperationalStore facade", () => {
       }
     }
   }
-  assert.deepEqual(violations, []);
+  assert.deepEqual(
+    violations,
+    [],
+    "production modules must not import OperationalStore internal modules",
+  );
 });
 
 test("production importer scan recognizes static side-effect imports", () => {

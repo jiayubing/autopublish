@@ -266,24 +266,35 @@ test("workspace coordinator replays a StrictMode effect without losing its trans
 
 test("only workspace coordinator consumes the raw invalidation bridge", () => {
   const root = path.join(import.meta.dirname, "..", "media-workbench", "src");
-  const matches = [];
+  const files = [];
+  const readProductionSource = (relative) =>
+    fs.readFileSync(path.join(root, relative), "utf8");
   const visit = (directory) => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const file = path.join(directory, entry.name);
       if (entry.isDirectory()) visit(file);
-      else if (/\.(?:ts|tsx|js)$/.test(entry.name)) {
-        const source = fs.readFileSync(file, "utf8");
-        if (/onWorkspaceDataInvalidated/.test(source))
-          matches.push(path.relative(root, file));
-      }
+      else if (/\.(?:ts|tsx|js)$/.test(entry.name))
+        files.push(path.relative(root, file));
     }
   };
   visit(root);
-  assert.deepEqual(
-    matches.sort(),
-    [
-      path.join("bridge", "workspace.ts"),
-      path.join("features", "workspace", "workspace-coordinator-context.tsx"),
-    ].sort(),
-  );
+  const allowed = new Set([
+    path.join("bridge", "workspace.ts"),
+    path.join("features", "workspace", "workspace-coordinator-context.tsx"),
+  ]);
+  for (const file of files) {
+    const source = readProductionSource(file);
+    if (allowed.has(file))
+      assert.match(
+        source,
+        /onWorkspaceDataInvalidated/,
+        `${file} must consume the workspace invalidation bridge`,
+      );
+    else
+      assert.doesNotMatch(
+        source,
+        /onWorkspaceDataInvalidated/,
+        `${file} must not consume the raw workspace invalidation bridge`,
+      );
+  }
 });

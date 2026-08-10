@@ -336,7 +336,7 @@ test("renderer bridges expose named domain entries without method dispatch", () 
 });
 
 test("renderer bridge/type boundaries do not import desktop or infrastructure code", () => {
-  const sources = fs
+  const files = fs
     .readdirSync(rendererRoot, { recursive: true, withFileTypes: true })
     .filter(
       (entry) =>
@@ -345,8 +345,24 @@ test("renderer bridge/type boundaries do not import desktop or infrastructure co
         entry.parentPath.includes(`${path.sep}bridge`),
     )
     .map((entry) =>
-      fs.readFileSync(path.join(entry.parentPath, entry.name), "utf8"),
+      path.relative(
+        rendererRoot,
+        path.join(entry.parentPath, entry.name),
+      ),
     );
-  assert.doesNotMatch(sources.join("\n"), /(?:desktop|infrastructure)[\\/]/i);
-  assert.doesNotMatch(sources.join("\n"), /ipcRenderer/);
+  const readRendererSource = (relative) =>
+    fs.readFileSync(path.join(rendererRoot, relative), "utf8");
+  const sources = files.map(readRendererSource);
+  for (const source of sources) {
+    assert.doesNotMatch(
+      source,
+      /(?:desktop|infrastructure)[\\/]/i,
+      "renderer bridge architecture dependency boundary must not import desktop or infrastructure code",
+    );
+    assert.doesNotMatch(
+      source,
+      /ipcRenderer/,
+      "renderer bridge architecture dependency boundary must not access Electron transport",
+    );
+  }
 });
