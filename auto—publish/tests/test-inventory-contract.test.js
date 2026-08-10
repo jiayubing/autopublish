@@ -282,6 +282,81 @@ test("source taint survives aliases and source-text transforms without tainting 
   );
 });
 
+test("source taint survives collection aggregation and object properties", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readProductionSource = (file) =>
+      fs.readFileSync(path.join(root, "desktop", file), "utf8");
+    test("array map concat join and object property", () => {
+      const files = ["main.js", "preload.js"];
+      const parts = [readProductionSource("main.js")];
+      const source = ["prefix"].concat(parts).map(String).join("\\n");
+      const mapped = files.map(readProductionSource).join("\\n");
+      const box = { bridge: source, status: "done" };
+      assert.match(box.bridge, /someInternalBusinessThing/);
+      assert.match(mapped, /someInternalBusinessThing/);
+      assert.equal(box.status, "done");
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+  );
+  assert.equal(signals.sourceAssertion, true);
+  assert.equal(signals.level, "assertion");
+  assert.equal(signals.sourceAssertions.length, 2);
+  const categories = inferStaticCategories(
+    "tests/desktop-packaging.test.js",
+    declaration.name,
+    declaration.source,
+    source,
+  );
+  assert.deepEqual(categories, []);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: signals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      categories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+});
+
+test("source taint survives regex parsing into an accumulator", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readProductionSource = () =>
+      fs.readFileSync(path.join(root, "desktop", "main.js"), "utf8");
+    test("accumulator source scan", () => {
+      const violations = [];
+      const source = readProductionSource();
+      for (const match of source.matchAll(/someInternalBusinessThing/g)) {
+        violations.push(match);
+      }
+      assert.deepEqual(violations, []);
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const signals = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+  );
+  assert.equal(signals.sourceAssertion, true);
+  assert.equal(signals.level, "assertion");
+});
+
 test("classifier follows loop, helper-parameter, recursive scan, and repository-config readers", () => {
   const cases = [
     {

@@ -537,6 +537,47 @@ function findVariableDeclarations(source) {
   return declarations;
 }
 
+function objectPropertyExpressions(expression) {
+  const tokens = tokenize(expression);
+  const objectEnd =
+    tokens[tokens.length - 1]?.value === ";"
+      ? tokens.length - 2
+      : tokens.length - 1;
+  if (tokens[0]?.value !== "{" || tokens[objectEnd]?.value !== "}")
+    return new Map();
+  const properties = new Map();
+  let index = 1;
+  while (index < objectEnd) {
+    const key = tokens[index];
+    if (
+      !key ||
+      !["identifier", "string"].includes(key.type) ||
+      tokens[index + 1]?.value !== ":"
+    ) {
+      index += 1;
+      continue;
+    }
+    const valueStart = index + 2;
+    let valueEnd = valueStart;
+    let depth = 0;
+    while (valueEnd < objectEnd) {
+      const value = tokens[valueEnd].value;
+      if (["(", "[", "{"].includes(value)) depth += 1;
+      if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
+      if (depth === 0 && value === ",") break;
+      valueEnd += 1;
+    }
+    if (valueEnd > valueStart) {
+      properties.set(
+        key.value,
+        expression.slice(tokens[valueStart].start, tokens[valueEnd - 1].end),
+      );
+    }
+    index = valueEnd + 1;
+  }
+  return properties;
+}
+
 const SOURCE_TAINT = Object.freeze({
   ORDINARY_RUNTIME_VALUE: "ordinary-runtime-value",
   REPOSITORY_CONFIG_PATH: "repo/config-path",
@@ -584,11 +625,19 @@ const SOURCE_TAINT_METHODS = new Set([
 
 const SOURCE_TEXT_DERIVATION_METHODS = new Set([
   "concat",
+  "join",
+  "matchAll",
   "replace",
+  "replaceAll",
   "slice",
   "split",
+  "substr",
+  "substring",
   "trim",
+  "toString",
 ]);
+
+const SOURCE_COLLECTION_METHODS = new Set(["concat", "filter", "join", "map"]);
 
 const PATH_METHODS = new Set([
   "basename",
@@ -1164,7 +1213,15 @@ function evaluateExpressionTaint(expression, taints, functions) {
   const helperReturnsSource = helperCalls.some((call) =>
     callReturnsSourceText(call, taints, functions),
   );
-  if (readsSource || helperReturnsSource) {
+  const collectionCallbackReturnsSource = tokens.some(
+    (token, index) =>
+      token.value === "map" &&
+      tokens[index - 1]?.value === "." &&
+      tokens[index + 1]?.value === "(" &&
+      tokens[index + 2]?.type === "identifier" &&
+      functions.get(tokens[index + 2].value)?.returnsSource,
+  );
+  if (readsSource || helperReturnsSource || collectionCallbackReturnsSource) {
     const callCount = tokens.filter((token) => token.value === "(").length;
     const pathCallCount = findCallSources(text, PATH_METHODS).length;
     const knownSourceTransform = sourceReaderCallHasShapeTransform(
@@ -1172,6 +1229,12 @@ function evaluateExpressionTaint(expression, taints, functions) {
       taints,
       functions,
     );
+    const collectionTransform =
+      tokens.some(
+        (token, index) =>
+          token.value === "." &&
+          SOURCE_COLLECTION_METHODS.has(tokens[index + 1]?.value),
+      ) || tokens.some((token) => token.value === "[");
     const exactReaderCall =
       callCount === 1 + pathCallCount &&
       directReaderCalls.length === 1 &&
@@ -1185,7 +1248,8 @@ function evaluateExpressionTaint(expression, taints, functions) {
       !directReaderCalls.length &&
       /^[A-Za-z_$][A-Za-z0-9_$]*\s*\(/.test(text);
     if (exactReaderCall || exactHelperCall) return SOURCE_TAINT.SOURCE_TEXT;
-    if (knownSourceTransform) return SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE;
+    if (knownSourceTransform || collectionTransform)
+      return SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE;
     return SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
   }
 
@@ -1270,10 +1334,44 @@ function runTaintFlow(
       );
       const next = isRepositoryPathTaint(iterable)
         ? SOURCE_TAINT.REPOSITORY_CONFIG_PATH
-        : SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
+        : isSourceTaint(iterable)
+          ? SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE
+          : SOURCE_TAINT.ORDINARY_RUNTIME_VALUE;
       if (taints.get(binding.name) !== next) {
         taints.set(binding.name, next);
         changed = true;
+      }
+    }
+
+    const mutationTokens = tokenize(source);
+    for (let index = 0; index < mutationTokens.length - 2; index += 1) {
+      if (
+        mutationTokens[index]?.type !== "identifier" ||
+        mutationTokens[index + 1]?.value !== "." ||
+        mutationTokens[index + 2]?.value !== "push" ||
+        mutationTokens[index + 3]?.value !== "("
+      )
+        continue;
+      const closeIndex = findMatchingParenthesis(mutationTokens, index + 3);
+      if (closeIndex === -1) continue;
+      const push = source.slice(
+        mutationTokens[index + 2].start,
+        mutationTokens[closeIndex].end,
+      );
+      const argumentsList = splitCallArguments(push);
+      if (
+        argumentsList.some((argument) =>
+          isSourceTaint(evaluateExpressionTaint(argument, taints, functions)),
+        )
+      ) {
+        const receiverName = mutationTokens[index].value;
+        if (
+          receiverName &&
+          taints.get(receiverName) !== SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE
+        ) {
+          taints.set(receiverName, SOURCE_TAINT.SOURCE_TEXT_DERIVED_VALUE);
+          changed = true;
+        }
       }
     }
 
@@ -1446,6 +1544,16 @@ function sourceTaintAnalysis(fileSource, baseAnalysis = null) {
     ...findFunctionParameterNames(source),
   ]);
   const flow = runTaintFlow(source, functions, inheritedTaints, localNames);
+  const sourceProperties = new Map(baseAnalysis?.sourceProperties || []);
+  for (const declaration of findVariableDeclarations(source)) {
+    const properties = objectPropertyExpressions(declaration.expression);
+    for (const [property, expression] of properties) {
+      sourceProperties.set(
+        declaration.name + "." + property,
+        isSourceTaint(evaluateExpressionTaint(expression, flow.taints, functions)),
+      );
+    }
+  }
   const potentialSourceReader = [...functions.values()].some(
     (summary) => summary.unconditional || summary.sourcePathParameters.length > 0,
   );
@@ -1463,6 +1571,7 @@ function sourceTaintAnalysis(fileSource, baseAnalysis = null) {
         .filter(([, taint]) => isSourceTaint(taint))
         .map(([name]) => name),
     ),
+    sourceProperties,
     potentialSourceReader,
     readsProductionSource: flow.observedSourceRead || potentialSourceReader,
   };
@@ -1766,6 +1875,14 @@ function sourceReaderValueAt(source, tokens, metadata, aliases, index) {
   const token = tokens[index];
   if (!token || token.type !== "identifier") return false;
   const taint = metadata.taint;
+  if (
+    tokens[index + 1]?.value === "." &&
+    tokens[index + 2]?.type === "identifier" &&
+    taint?.sourceProperties?.has(token.value + "." + tokens[index + 2].value)
+  )
+    return taint.sourceProperties.get(
+      token.value + "." + tokens[index + 2].value,
+    );
   if (
     taint?.sourceVariables?.has(token.value) &&
     tokens[index - 1]?.value !== "." &&
