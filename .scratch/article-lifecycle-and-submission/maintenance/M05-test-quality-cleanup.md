@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4/J5/J6/J7 final evidence reconciliation 均已完成。M05-J7 已关闭 source-taint inventory false negative、source-text transform/runtime-result 混淆、helper/loop/recursive reader 漏报与 derived-holder static authorization residual，并在 implementation HEAD 上取得完整 `npm test` PASS；最新 closure handoff 见 `../handoffs/M05-J7-final-inventory-source-taint-closure.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4/J5/J6/J7/J8 final evidence reconciliation 均已完成。M05-J8 已关闭 authoritative source-taint inventory/classifier closure，并在 implementation HEAD `a297b48` 上确认 required gates 全部 PASS；最新 closure handoff 见 `../handoffs/M05-J8-final-inventory-authoritative-closure.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7` 从 clean integration HEAD 严格串行完成。M05-J7 Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 尚未完成。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 → M05-J8` 从 clean integration HEAD 严格串行完成。M05-J8 docs-only Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 仍为 `PARTIAL`，Ticket 25 继续受 M06 gate 约束。
 
 ## 1. Evidence policy
 
