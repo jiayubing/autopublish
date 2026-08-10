@@ -1,6 +1,5 @@
 const { after, before, describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
@@ -359,12 +358,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
-  it("locks the history selection seam to an in-place editor instead of the generate tab", () => {
-    const source = fs.readFileSync(path.join(rootDir, "media-workbench", "src", "components", "ContentWorkbench.tsx"), "utf8");
-    assert.doesNotMatch(source, /setTab\(["']generate["']\)/);
-    assert.match(source, /GeneratedArticleEditorPanel/);
-  });
-
   it("tracks a removal transaction by id from needs_repair through terminal recovery", async () => {
     const { page, fixture } = await openHistory();
     page.on("dialog", (dialog) => void dialog.accept());
@@ -387,12 +380,4 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
-  it("shows repairable removal transactions as manual repair instead of automatic recovery", () => {
-    const source = fs.readFileSync(path.join(rootDir, "media-workbench", "src", "components", "content", "GeneratedArticlesView.tsx"), "utf8");
-    assert.match(source, /pending_auto_recovery/);
-    assert.match(source, /needs_repair/);
-    assert.match(source, /删除事务需要修复/);
-    assert.match(source, /重试|修复/);
-    assert.match(source, /transactionId/);
-  });
 });

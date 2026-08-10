@@ -1,7 +1,5 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("fs");
-const path = require("path");
 
 let groupArticlesByTemplate;
 let resolveAvailableTemplateId;
@@ -9,13 +7,6 @@ let summarizeTemplateSnapshot;
 let articleSelectionKey;
 let selectableArticles;
 let selectionState;
-
-function readHistoryView() {
-  return [
-    fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesView.tsx"), "utf8"),
-    fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/content/GeneratedArticlesList.tsx"), "utf8"),
-  ].join("\n");
-}
 
 function item(id, platform, templateId, createdAt, overrides) {
   return Object.assign({
@@ -73,74 +64,6 @@ describe("article history grouping", async function() {
 
     assert.deepStrictEqual(groups.map((group) => group.key), ["toutiao:old-news", "ctrip:old-guide"]);
     assert.deepStrictEqual(groups.map((group) => group.articles.map((article) => article.id)), [["toutiao-legacy"], ["ctrip-legacy"]]);
-  });
-
-  it("keeps article opening separate from queue selection", function() {
-    const view = readHistoryView();
-    assert.doesNotMatch(view, /reviewContentArticles|审核已选|待审核/);
-    assert.match(view, /useConfirmation/);
-    assert.match(view, /const \{ confirm \} = useConfirmation\(\)/);
-    assert.match(view, /isArticleSelectable/);
-    assert.match(
-      view,
-      /function openArticle\(\s*article: GeneratedContentArticle/,
-    );
-    assert.match(view, /if \(!workflow\) return/);
-    assert.doesNotMatch(view, /onArticleSelect\(article, null, false\)/);
-    assert.match(view, /全选当前结果/);
-    assert.match(view, /templateSnapshot/);
-    assert.match(view, /正文解释|body/);
-  });
-
-  it("offers a current-client trash view with restore and confirmed permanent deletion", function() {
-    const view = readHistoryView();
-    assert.match(view, /management: ArticleManagementReadModel/);
-    assert.doesNotMatch(view, /getArticleManagementSnapshot/);
-    assert.match(view, /commands\.restoreContentArticle/);
-    assert.match(view, /commands\.preparePermanentDeleteContentArticle/);
-    assert.match(
-      view,
-      /await confirm\(\{\s*title: ["']确认永久删除文章["']/,
-    );
-    assert.match(view, /commands\.permanentlyDeleteContentArticle/);
-    assert.match(view, /移入回收站/);
-    assert.match(view, /永久删除/);
-  });
-
-  it("keeps saved articles selectable for submission queueing", function() {
-    const view = readHistoryView();
-    assert.match(
-      view,
-      /selectedQueueableArticles = selectedDirtyArticle\s*\? \[\]\s*: selectedArticles\.filter\(canQueueArticle\)/,
-    );
-    assert.match(
-      view,
-      /disabled=\{\s*!selectedQueueableArticles\.length/,
-    );
-    assert.match(view, /阶段：/);
-    assert.match(view, /撤销未开始投稿/);
-    assert.match(view, /management: ArticleManagementReadModel/);
-    assert.match(view, /const \[selected, setSelected\]/);
-    assert.match(
-      view,
-      /function openArticle\(\s*article: GeneratedContentArticle/,
-    );
-    assert.match(view, /previewRegularQueueAdmission/);
-    assert.match(view, /queueableCount/);
-    assert.match(view, /idempotentCount/);
-    assert.match(view, /conflictCount/);
-    assert.match(view, /新增/);
-    assert.match(view, /已存在跳过/);
-    assert.match(view, /冲突/);
-
-  });
-
-  it("blocks ordinary and paid submission together for a dirty editor article", function() {
-    const view = readHistoryView();
-    assert.match(view, /dirtyArticleId/);
-    assert.match(view, /const selectedDirtyArticle = selectedArticles\.find/);
-    assert.match(view, /当前编辑文章有未保存修改，请先保存后投稿/);
-    assert.match(view, /selectedQueueableArticles/);
   });
 
   it("selects a manually saved result without a review status gate", function() {

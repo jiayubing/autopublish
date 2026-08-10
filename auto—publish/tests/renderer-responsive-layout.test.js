@@ -869,20 +869,5 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       }
     }
 
-    const historySource = fs.readFileSync(
-      path.join(
-        rootDir,
-        "media-workbench",
-        "src",
-        "components",
-        "content",
-        "GeneratedArticlesList.tsx",
-      ),
-      "utf8",
-    );
-    assert.match(
-      historySource,
-      /<div key=\{article\.id\} className="[^\"]*min-w-0[^\"]*flex-wrap[^\"]*items-start/,
-    );
   });
 });

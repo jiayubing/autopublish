@@ -1,22 +1,35 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const { describe, it } = require("node:test");
+const test = require("node:test");
+const { deriveArticleLifecycle } = require("../src/content/article-lifecycle-projection");
 
-const root = path.resolve(__dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, "media-workbench/src", file), "utf8");
+const article = (status = "saved") => ({
+  id: "article-1",
+  clientId: "client-1",
+  title: "文章",
+  content: "正文",
+  status,
+});
 
-describe("renderer article management filters", () => {
-  it("uses one six-stage navigation axis and one recycle-bin entry", () => {
-    const workflow = read("article-workflow.ts");
-    const content = read("components/ContentWorkbench.tsx");
-    const list = read("components/content/GeneratedArticlesView.tsx");
-    const tabs = read("components/content/ArticleStageTabs.tsx");
-    assert.match(workflow, /pending_submission.*queued.*paid_processing.*failed.*published.*trash/s);
-    assert.doesNotMatch(workflow, /待审核|pending_review/);
-    assert.doesNotMatch(content, /statusFilter|publicationFilter/);
-    assert.doesNotMatch(list, /statusFilter|publicationFilter|PUBLICATION_STATUS_FILTERS|打开回收站|showTrash/);
-    assert.match(tabs, /ARTICLE_WORKFLOW_STAGES\.map/);
-    assert.doesNotMatch(list, /打开回收站/);
-  });
+test("article management exposes one public stage axis with no review compatibility state", () => {
+  const cases = [
+    ["pending_submission", {}],
+    ["queued", { submissionItems: [{ articleId: "article-1", status: "queued" }] }],
+    ["paid_processing", { orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "0", mediaResourceId: "resource-1" }] }],
+    ["failed", { publications: [{ articleId: "article-1", status: "failed" }] }],
+    ["published", { publications: [{ articleId: "article-1", status: "published" }] }],
+    ["trash", { article: article("trashed") }],
+  ];
+  const stages = cases.map(([expectedStage, overrides]) =>
+    deriveArticleLifecycle({
+      article: article(),
+      publications: [],
+      submissionItems: [],
+      orders: [],
+      attentionItems: [],
+      removalTransactions: [],
+      ...overrides,
+    }).stage,
+  );
+  assert.deepEqual(stages, cases.map(([stage]) => stage));
+  assert.equal(stages.includes("pending_review"), false);
 });

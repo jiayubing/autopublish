@@ -1,24 +1,30 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const { describe, it } = require("node:test");
+const test = require("node:test");
+const { deriveArticleLifecycle } = require("../src/content/article-lifecycle-projection");
 
-const root = path.resolve(__dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, "media-workbench/src", file), "utf8");
-
-describe("renderer published article trash flow", () => {
-  it("explains published retention and keeps published articles out of trash actions", () => {
-    const view = read("components/content/GeneratedArticlesView.tsx");
-    const types = read("types/platform.ts");
-    assert.match(view, /已发布文章和发布证据不会被清理/);
-    assert.match(view, /发布记录和标题快照会保留/);
-    assert.match(view, /恢复文章不会重新加入投稿队列/);
-    assert.match(view, /workflow\?\.stage === ["']published["']/);
-    assert.match(view, /!isPublishedArticle\(article\)/);
-    assert.doesNotMatch(view, /onTrashPublishedArticle/);
-    assert.match(types, /keep_local.*offer_trash.*auto_trash_requested.*auto_trash_blocked/s);
-    assert.match(types, /IDENTITY_MISSING.*REMOVAL_BLOCKED.*REMOVAL_NEEDS_REPAIR/s);
-    assert.match(view, /previewContentArticleRemoval/);
-    assert.match(view, /trashContentArticles/);
+test("published article lifecycle preserves publication evidence and blocks trash", () => {
+  const workflow = deriveArticleLifecycle({
+    article: {
+      id: "published-article",
+      clientId: "client-1",
+      title: "已发布文章",
+      content: "正文",
+      status: "saved",
+    },
+    publications: [
+      {
+        articleId: "published-article",
+        status: "published",
+        targetKey: "platform:fixture",
+      },
+    ],
+    submissionItems: [],
+    orders: [],
+    attentionItems: [],
+    removalTransactions: [],
   });
+  assert.equal(workflow.stage, "published");
+  assert.equal(workflow.primaryAction, "view_publication");
+  assert.equal(workflow.locks.canTrash, false);
+  assert.equal(workflow.operations.trash.allowed, false);
 });

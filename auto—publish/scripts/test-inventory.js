@@ -493,6 +493,289 @@ function findCallSources(source, names) {
   return calls;
 }
 
+function findMatchingToken(tokens, openIndex, openValue, closeValue) {
+  let depth = 0;
+  for (let index = openIndex; index < tokens.length; index += 1) {
+    if (tokens[index].value === openValue) depth += 1;
+    if (tokens[index].value === closeValue) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+const PRODUCTION_SOURCE_PATH_PATTERN =
+  /(?:media-workbench[\\/](?:src|dist)|media-workbench(?:["'\s,()[\]]{1,40})(?:src|dist)|desktop[\\/]|desktop(?:["'\s,()[\]]{1,40})(?:main|preload|ipc|services|composition|workspace)|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
+
+function findProductionPathVariables(source) {
+  const tokens = tokenize(source);
+  const variables = new Set();
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    if (
+      !["const", "let", "var"].includes(tokens[index]?.value) ||
+      tokens[index + 1]?.type !== "identifier" ||
+      tokens[index + 2]?.value !== "="
+    )
+      continue;
+    let depth = 0;
+    let end = index + 3;
+    for (; end < tokens.length; end += 1) {
+      const value = tokens[end].value;
+      if (["(", "[", "{"].includes(value)) depth += 1;
+      if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
+      if (depth === 0 && value === ";") break;
+    }
+    const expression = source.slice(
+      tokens[index + 2].end,
+      tokens[Math.min(end, tokens.length - 1)].end,
+    );
+    if (PRODUCTION_SOURCE_PATH_PATTERN.test(expression))
+      variables.add(tokens[index + 1].value);
+  }
+  return variables;
+}
+
+function findProductionSourceReaderHelpers(source) {
+  const tokens = tokenize(source);
+  const helpers = new Map();
+  const productionPathVariables = findProductionPathVariables(source);
+
+  function addHelper(name, start, end) {
+    const body = source.slice(start, end);
+    if (!/\b(?:readFileSync|readFile|createReadStream)\s*\(/i.test(body))
+      return;
+    const readCalls = findCallSources(body, new Set([
+      "readFileSync",
+      "readFile",
+      "createReadStream",
+    ]));
+    helpers.set(name, {
+      readsProductionSource:
+        hasProductionSourceRead(body) ||
+        readCalls.some((call) =>
+          [...productionPathVariables].some((variable) =>
+            new RegExp("\\b" + variable + "\\b").test(call),
+          ),
+        ),
+    });
+  }
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (
+      token.value === "function" &&
+      tokens[index + 1]?.type === "identifier"
+    ) {
+      const name = tokens[index + 1].value;
+      const openParen = index + 2;
+      const closeParen = findMatchingToken(tokens, openParen, "(", ")");
+      const openBrace = closeParen + 1;
+      if (
+        closeParen !== -1 &&
+        tokens[openBrace]?.value === "{"
+      ) {
+        const closeBrace = findMatchingToken(
+          tokens,
+          openBrace,
+          "{",
+          "}",
+        );
+        if (closeBrace !== -1)
+          addHelper(name, tokens[openBrace].start, tokens[closeBrace].end);
+      }
+    }
+
+    if (
+      !["const", "let", "var"].includes(token.value) ||
+      tokens[index + 1]?.type !== "identifier" ||
+      tokens[index + 2]?.value !== "="
+    )
+      continue;
+
+    const name = tokens[index + 1].value;
+    let arrow = -1;
+    for (let cursor = index + 3; cursor < tokens.length; cursor += 1) {
+      if (tokens[cursor].value === "=>") {
+        arrow = cursor;
+        break;
+      }
+      if (tokens[cursor].value === ";") break;
+    }
+    if (arrow === -1) continue;
+
+    const bodyStart = arrow + 1;
+    if (tokens[bodyStart]?.value === "{") {
+      const closeBrace = findMatchingToken(
+        tokens,
+        bodyStart,
+        "{",
+        "}",
+      );
+      if (closeBrace !== -1)
+        addHelper(name, tokens[bodyStart].start, tokens[closeBrace].end);
+      continue;
+    }
+
+    let bodyEnd = bodyStart;
+    while (bodyEnd < tokens.length && tokens[bodyEnd].value !== ";")
+      bodyEnd += 1;
+    addHelper(
+      name,
+      tokens[bodyStart]?.start || token.end,
+      tokens[Math.max(bodyStart, bodyEnd - 1)]?.end || token.end,
+    );
+  }
+
+  return helpers;
+}
+
+function hasProductionSourceReaderCall(testSource, fileSource) {
+  const helpers = findProductionSourceReaderHelpers(fileSource || "");
+  for (const [name, helper] of helpers) {
+    const calls = findCallSources(testSource, new Set([name]));
+    if (
+      calls.some(
+        (call) =>
+          helper.readsProductionSource ||
+          PRODUCTION_SOURCE_PATH_PATTERN.test(call),
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
+function hasSourceTextAssertion(testSource, fileSource) {
+  const helperNames = [
+    ...findProductionSourceReaderHelpers(fileSource || "").keys(),
+  ];
+  const readerNames = [
+    "readFileSync",
+    "readFile",
+    "createReadStream",
+    ...helperNames,
+  ];
+  if (!readerNames.length) return false;
+  const tokens = tokenize(testSource);
+  const aliases = new Set();
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    if (
+      !["const", "let", "var"].includes(tokens[index]?.value) ||
+      tokens[index + 1]?.type !== "identifier" ||
+      tokens[index + 2]?.value !== "="
+    )
+      continue;
+    const name = tokens[index + 1].value;
+    let depth = 0;
+    let hasReaderCall = false;
+    for (let cursor = index + 3; cursor < tokens.length; cursor += 1) {
+      const value = tokens[cursor].value;
+      if (["(", "[", "{"].includes(value)) depth += 1;
+      if ([")", "]", "}"].includes(value)) depth = Math.max(0, depth - 1);
+      if (
+        depth === 0 &&
+        value === ";"
+      )
+        break;
+      if (
+        tokens[cursor].type === "identifier" &&
+        readerNames.includes(value) &&
+        tokens[cursor + 1]?.value === "("
+      ) {
+        hasReaderCall = true;
+        break;
+      }
+    }
+    if (hasReaderCall) aliases.add(name);
+  }
+  if (!aliases.size) return false;
+
+  const assertionMethods = new Set([
+    "match",
+    "doesNotMatch",
+    "equal",
+    "strictEqual",
+    "deepEqual",
+    "deepStrictEqual",
+    "ok",
+    "throws",
+    "rejects",
+  ]);
+  const matcherMethods = new Set([
+    "toMatch",
+    "toContain",
+    "toEqual",
+    "toStrictEqual",
+    "toBe",
+    "toHaveProperty",
+    "toThrow",
+  ]);
+
+  function containsSourceValue(start, end) {
+    for (let index = start; index < end; index += 1) {
+      const token = tokens[index];
+      if (token.type !== "identifier") continue;
+      if (!aliases.has(token.value) && !readerNames.includes(token.value))
+        continue;
+      const previous = tokens[index - 1]?.value;
+      if (previous === "." || previous === "?.") continue;
+      if (
+        aliases.has(token.value) ||
+        tokens[index + 1]?.value === "("
+      )
+        return true;
+    }
+    return false;
+  }
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (
+      tokens[index]?.value === "assert" &&
+      tokens[index + 1]?.value === "." &&
+      assertionMethods.has(tokens[index + 2]?.value) &&
+      tokens[index + 3]?.value === "("
+    ) {
+      const closeIndex = findMatchingToken(
+        tokens,
+        index + 3,
+        "(",
+        ")",
+      );
+      if (closeIndex !== -1 && containsSourceValue(index + 4, closeIndex))
+        return true;
+    }
+
+    if (tokens[index]?.value !== "expect" || tokens[index + 1]?.value !== "(")
+      continue;
+    const closeIndex = findMatchingToken(tokens, index + 1, "(", ")");
+    if (closeIndex === -1 || !containsSourceValue(index + 2, closeIndex))
+      continue;
+    for (
+      let matcherIndex = closeIndex + 1;
+      matcherIndex < Math.min(tokens.length, closeIndex + 5);
+      matcherIndex += 1
+    ) {
+      if (matcherMethods.has(tokens[matcherIndex]?.value)) return true;
+    }
+  }
+
+  for (let index = 0; index < tokens.length - 2; index += 1) {
+    if (
+      tokens[index]?.type === "identifier" &&
+      aliases.has(tokens[index].value) &&
+      tokens[index - 1]?.value !== "." &&
+      tokens[index + 1]?.value === "." &&
+      ["includes", "indexOf", "match", "test"].includes(
+        tokens[index + 2]?.value,
+      ) &&
+      tokens[index + 3]?.value === "("
+    )
+      return true;
+  }
+  return false;
+}
+
 function lineAt(source, offset) {
   return source.slice(0, offset).split("\n").length;
 }
@@ -619,27 +902,21 @@ function hasAny(value, patterns) {
 }
 
 function hasProductionSourceRead(source) {
-  const productionPathPattern =
-    /(?:media-workbench[\\/](?:src|dist)|desktop[\\/]|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
   const fileReadNames = new Set([
     "readFileSync",
     "readFile",
     "createReadStream",
   ]);
   const readCalls = findCallSources(source, fileReadNames);
-  if (readCalls.some((call) => productionPathPattern.test(call))) return true;
+  if (readCalls.some((call) => PRODUCTION_SOURCE_PATH_PATTERN.test(call)))
+    return true;
 
   const helperReadsProductionPath =
     /\b(?:read|read[A-Z_$][A-Za-z0-9_$]*|readSource)\s*\(\s*['"`][^'"`]*(?:media-workbench[\\/](?:src|dist)|desktop[\\/]|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i;
   if (readCalls.length > 0 && helperReadsProductionPath.test(source))
     return true;
 
-  const rootedVariables = new Set();
-  const variablePattern =
-    /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*[^;\n]*(?:media-workbench[\\/]src|media-workbench['"`]\s*,\s*['"`]src|desktop[\\/]|src[\\/])/gi;
-  let match;
-  while ((match = variablePattern.exec(source)) !== null)
-    rootedVariables.add(match[1]);
+  const rootedVariables = findProductionPathVariables(source);
   return (
     rootedVariables.size > 0 &&
     readCalls.some((call) =>
@@ -685,21 +962,23 @@ function staticSignals(source) {
   };
 }
 
-function sourceReadSignals(testSource, fileSignals) {
-  const productionPathLiteral =
-    /(?:media-workbench[\\/](?:src|dist)|desktop[\\/]|src[\\/]|electron-builder(?:\.[^'"`\s]+)?\.ya?ml|package\.json)/i.test(
-      testSource,
-    );
-  const direct = hasProductionSourceRead(testSource) || productionPathLiteral;
-  if (direct) {
+function sourceReadSignals(testSource, fileSignals, fileSource) {
+  const helperRead = hasProductionSourceReaderCall(testSource, fileSource);
+  const directRead = hasProductionSourceRead(testSource);
+  const sourceRead = directRead || helperRead;
+  const sourceAssertion =
+    sourceRead && hasSourceTextAssertion(testSource, fileSource);
+  if (sourceAssertion) {
     return {
       level: "assertion",
-      direct,
+      direct: directRead,
       sourceAssertion: true,
-      reason: "测试声明内部直接读取生产路径或生产源码辅助函数",
+      reason: helperRead
+        ? "测试声明调用了文件级生产源码读取 helper"
+        : "测试声明内部直接读取生产路径或生产源码辅助函数",
     };
   }
-  if (fileSignals.readsProductionSource) {
+  if (fileSignals.readsProductionSource || sourceRead) {
     return {
       level: "file-heuristic",
       direct: false,
@@ -716,39 +995,72 @@ function sourceReadSignals(testSource, fileSignals) {
   };
 }
 
-function inferStaticCategories(fileName, testName, testSource) {
-  // This is an assertion-intent hint. A fixture variable named `path` or
-  // `source` must not turn a behavior test into a security/architecture gate.
-  const value = fileName + "\n" + testName;
-  const categories = [];
-  const add = (category) => {
-    if (!categories.includes(category)) categories.push(category);
-  };
-  if (
-    /architecture|reverse-depend|dependency|production-seam|composition|symbol-identity|capability|contract-layout|domain-contract/i.test(
-      value,
-    )
-  )
-    add("architecture/dependency");
-  if (
-    /security|auth|sandbox|credential|token|cookie|protected|path|symlink|isolation|injection|permission|boundary/i.test(
-      value,
-    )
-  )
-    add("security");
-  if (
-    /legacy|absence|retired|dead-|migration|runtime-no-legacy|remote-order-legacy/i.test(
-      value,
-    )
-  )
-    add("retired-capability/legacy-absence");
-  if (
-    /packag|release|ci-workflow|workflow-contract|artifact|runtime-tools|application-identity|manifest|discover|runner/i.test(
-      value,
-    )
-  )
-    add("packaging/release/CI");
-  return categories;
+const STATIC_GATE_FILE_RULES = Object.freeze([
+  {
+    pattern:
+      /^tests\/(?:architecture-seams|phase-01-architecture|phase-03-composition|phase-05-production-seams|phase-05-production-removal|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-06-production-ipc-fixture-matrix|phase-06-typed-ipc-production|phase-08-operational-store-internals|phase-08-platform-media-settings-workspace-renderer-slice|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-cross-page-progress|renderer-resource-library-api|workspace-bootstrap-ipc)(?:\.electron)?\.test\.(?:js|mjs)$/,
+    categories: ["architecture/dependency"],
+  },
+  {
+    pattern:
+      /^tests\/(?:desktop-packaging|electron-security|j4125-auth-contract|phase-06-production-ipc-fixture-matrix|phase-06-typed-ipc-production|phase-06-workspace-bootstrap-typed-ipc|phase-08-operational-store-internals|production-preload-sandbox|renderer-confirmation-host|ticket-24-g-legacy-boundary|workspace-paths)(?:\.electron)?\.test\.(?:js|mjs)$/,
+    categories: ["security"],
+  },
+  {
+    pattern:
+      /^tests\/(?:content-library-migration|desktop-packaging|phase-03-composition|phase-03-workbench-readonly|phase-05-production-seams|phase-05-production-removal|phase-06-capability-specific-inventory|phase-06-content-core-typed-ipc|phase-06-dead-content-ipc|phase-06-production-caller-inventory|phase-08-cleanup-gates|phase-08-publication-submission-orchestration|phase-08-renderer-contract-artifact-absence|phase-08-renderer-contract-layout|react-workbench-regression|renderer-confirmation-host|renderer-platform-task-store|ticket-24-g-legacy-boundary)(?:\.electron)?\.test\.(?:js|mjs)$/,
+    categories: ["retired-capability/legacy-absence"],
+  },
+  {
+    pattern:
+      /^tests\/(?:content-library-migration|desktop-packaging|desktop-workbench-flow|packaged-playwright-runtime|phase-05-production-seams|phase-06-capability-specific-inventory|phase-08-cleanup-gates|phase-08-renderer-contract-artifact-absence|production-packaging|production-preload-sandbox|relaunch-environment|renderer-encoding|test-discovery-contract)(?:\.electron)?\.test\.(?:js|mjs)$/,
+    categories: ["packaging/release/CI"],
+  },
+]);
+
+const STATIC_CATEGORY_TARGETS = Object.freeze({
+  "architecture/dependency":
+    /\b(?:moduleSpecifiers|dependency|forbidden|assembly|bridge|import|require|capability|surface|seam|owner|registry|typedIpcMain|PlatformFeatureProvider|usePlatformFeature|RegularQueueGroupsPanel|createArticleStore|ArticleStore|articleStore|content-store|content stores|physical store|preload|IpcResponse|platform status|ConfirmationHost|scopeKey|WorkspaceBootstrap|registrar|LocalStorage|Workspace switching|AES-256|clearAll)\b/i,
+  security:
+    /\b(?:sandbox|csp|credential|cookie|token|secret|auth|protected|private|path|permission|isolation|boundary|safe|Documents|process\.cwd|homedir)\b/i,
+  "retired-capability/legacy-absence":
+    /\b(?:legacy|retired|absence|dead|migration|removed|forbidden|prohibited|not\s+(?:exist|package|ship)|PreflightModal|window\.confirm|publicationLedger|legacyStatus)\b/i,
+  "packaging/release/CI":
+    /\b(?:package|packag|asar|artifact|release|build|runtime|resource|preload|electron|discovery|runner|config|relaunch|environment|mojibake|replacement|readable|编码|中文)\b/i,
+});
+
+const STATIC_CATEGORY_RATIONALES = Object.freeze({
+  "architecture/dependency":
+    "保护模块依赖、唯一装配或 capability/bridge 边界；行为测试无法证明未被调用路径覆盖的 import graph invariant。",
+  security:
+    "保护 sandbox、鉴权、凭据、路径或敏感数据边界；行为测试无法穷举入口并证明不安全 surface 不存在。",
+  "retired-capability/legacy-absence":
+    "保护已退役能力或 legacy surface 的 source/package absence；行为测试无法证明未调用的旧能力不存在。",
+  "packaging/release/CI":
+    "保护生成 artifact、package inclusion/exclusion、discovery 或 CI contract；运行时行为无法替代构建前/打包边界验证。",
+});
+
+function inferStaticCategories(fileName, _testName, testSource) {
+  const file = fileName.replaceAll("\\", "/");
+  const allowedCategories = [
+    ...new Set(
+      STATIC_GATE_FILE_RULES.filter((item) => item.pattern.test(file)).flatMap(
+        (item) => item.categories,
+      ),
+    ),
+  ];
+  if (!allowedCategories.length) return [];
+  const target = file + "\n" + testSource;
+  return allowedCategories.filter((category) =>
+    STATIC_CATEGORY_TARGETS[category].test(target),
+  );
+}
+
+function staticRationaleFor(categories) {
+  return categories
+    .map((category) => STATIC_CATEGORY_RATIONALES[category])
+    .filter(Boolean)
+    .join("；");
 }
 
 function classifyPackage(fileName, testName) {
@@ -826,7 +1138,7 @@ function classifyPackage(fileName, testName) {
     return "M05-D";
 
   if (
-    /^tests\/(?:article-lifecycle-ticket-14-renderer|article-attention-invalidation|article-attention-policy|article-attention-query|article-editor-session|content-workbench-regression|doubao-content-workbench|generation-snapshot-(?:event|order)|generation-batch-runner|generation-batch-store|content-generation-batch-service|renderer-(?:content|article|batch|generation|question|template)[a-z0-9-]*|react-workbench-regression|client-image-library|client-image-selector|content-workspace|phase-06-(?:attention-feature|content-feature|content-read-model|content-workbench-feature|generation-feature|query-identity)|phase-08-content-renderer-feature-races|phase-12-paid-media-preflight)\.test\./.test(
+    /^tests\/(?:article-lifecycle-ticket-14-renderer|article-attention-invalidation|article-attention-policy|article-attention-query|article-editor-session|content-workbench-regression|doubao-content-workbench|generation-snapshot-(?:event|order)|generation-batch-runner|generation-batch-store|content-generation-batch-service|renderer-(?:content|article|batch|generation|history|question|template)[a-z0-9-]*|react-workbench-regression|client-image-library|client-image-selector|content-workspace|phase-06-(?:attention-feature|content-feature|content-read-model|content-workbench-feature|generation-feature|query-identity)|phase-08-content-renderer-feature-races|phase-12-paid-media-preflight)\.test\./.test(
       file,
     )
   )
@@ -1150,7 +1462,7 @@ function collectInventory() {
     const signals = staticSignals(source);
     const matrices = extractDynamicMatrices(source);
     const tests = extractTests(source).map((test, index) => {
-      const sourceRead = sourceReadSignals(test.source, signals);
+      const sourceRead = sourceReadSignals(test.source, signals, source);
       const staticCategories = inferStaticCategories(
         relativePath,
         test.name,
@@ -1170,6 +1482,7 @@ function collectInventory() {
           sourceHash(relativePath + ":" + test.line + ":" + index).slice(0, 10),
         sourceRead,
         staticCategories,
+        staticRationale: staticRationaleFor(staticCategories),
         package: packageId,
         owner:
           packageId === "NONE"
@@ -1295,6 +1608,7 @@ function collectInventory() {
         dynamicMatrix: test.dynamicMatrix,
         sourceReadLevel: test.sourceRead.level,
         staticCategories: test.staticCategories,
+        staticRationale: test.staticRationale,
         package: test.package,
         disposition: test.disposition,
       })),
@@ -1403,6 +1717,8 @@ function createInventorySnapshot(inventory) {
         dynamicMatrix: declaration.dynamicMatrix,
         package: declaration.package,
         disposition: declaration.disposition,
+        staticCategories: declaration.staticCategories,
+        staticRationale: declaration.staticRationale,
         replacement: declaration.replacement,
       })),
     })),
@@ -1751,8 +2067,8 @@ function renderInventory(inventory) {
     "",
     "每条静态声明都有稳定 ID 与 disposition。`RETAIN_BEHAVIOR_FILE_HEURISTIC_NOT_ASSERTION` 明确表示文件级 source-reading 命中没有扩展成 assertion-level 删除候选；`REWRITE_*` 只授权后续包在等价公开行为证据落地后改写，不授权 M05-0 直接删除。",
     "",
-    "| ID | Location | Test name | Package / owner | Disposition | Source evidence | Static category | Dynamic | Invariant | Replacement mapping |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| ID | Location | Test name | Package / owner | Disposition | Source evidence | Static category | Static rationale | Dynamic | Invariant | Replacement mapping |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   );
   for (const test of inventory.allTests) {
     const owner =
@@ -1779,6 +2095,8 @@ function renderInventory(inventory) {
         escapeMarkdown(sourceEvidence) +
         " | " +
         escapeMarkdown(test.staticCategories.join("；") || "—") +
+        " | " +
+        escapeMarkdown(test.staticRationale || "—") +
         " | " +
         escapeMarkdown(dynamic) +
         " | " +
@@ -1952,6 +2270,11 @@ module.exports = {
   parseArguments,
   reconcileInventory,
   renderInventory,
+  dispositionFor,
+  hasProductionSourceRead,
+  inferStaticCategories,
+  sourceReadSignals,
+  staticSignals,
   tokenize,
   E_DECISION,
   PACKAGE_FREEZE,

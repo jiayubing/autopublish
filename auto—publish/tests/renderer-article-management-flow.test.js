@@ -1,26 +1,31 @@
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { describe, it } = require('node:test');
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const { deriveArticleLifecycle } = require("../src/content/article-lifecycle-projection");
 
-const root = path.resolve(__dirname, '..');
-const read = (file) => fs.readFileSync(path.join(root, 'media-workbench/src', file), 'utf8');
-
-describe('renderer article management workflow seam', () => {
-  it('exposes visible stage tabs and a failure entry without replacing the existing editor flow', () => {
-    const content = read('components/ContentWorkbench.tsx');
-    const list = read('components/content/GeneratedArticlesView.tsx');
-    const listItems = read('components/content/GeneratedArticlesList.tsx');
-    const tabs = read('components/content/ArticleStageTabs.tsx');
-    assert.match(tabs, /文章流程阶段/);
-    assert.match(tabs, /role="tab"/);
-    assert.match(content, /articleStageFilter/);
-    assert.match(`${list}\n${listItems}`, /snapshotWorkflowByArticle/);
-    assert.match(`${list}\n${listItems}`, /management:\s*ArticleManagementReadModel/);
-    assert.match(content, /management[\s\S]+content\.snapshot/);
-    assert.match(content, /GeneratedArticlesView[^>]+management=\{management\}/);
-    assert.doesNotMatch(list, /getArticleManagementSnapshot/);
-    assert.match(`${list}\n${listItems}`, /打开需处理/);
-    assert.match(content, /GeneratedArticleEditorPanel/);
+test("article management keeps failure attention actionable while published articles stay read-only", () => {
+  const base = {
+    article: {
+      id: "article-1",
+      clientId: "client-1",
+      title: "文章",
+      content: "正文",
+      status: "saved",
+    },
+    submissionItems: [],
+    orders: [],
+    attentionItems: [],
+    removalTransactions: [],
+  };
+  const failed = deriveArticleLifecycle({
+    ...base,
+    publications: [{ articleId: "article-1", status: "failed" }],
   });
+  const published = deriveArticleLifecycle({
+    ...base,
+    publications: [{ articleId: "article-1", status: "published" }],
+  });
+  assert.equal(failed.stage, "failed");
+  assert.equal(failed.locks.canTrash, true);
+  assert.equal(published.stage, "published");
+  assert.equal(published.locks.canTrash, false);
 });

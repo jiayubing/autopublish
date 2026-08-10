@@ -1,26 +1,55 @@
-const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const test = require("node:test");
 
-function read(file) {
-  return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
-}
-
-describe("media resource ux", function() {
-  it("keeps normalized balance and resource paging on the service boundary", function() {
-    const service = read("desktop/services/media-resource-service.js");
-    const library = read("media-workbench/src/components/ResourceLibrary.tsx");
-    const app = read("media-workbench/src/App.tsx");
-    const feature = read("media-workbench/src/features/media/media-feature.js");
-    assert.match(service, /extractBalanceValue/);
-    assert.match(service, /balance:/);
-    assert.match(library, /resource\.price/);
-    assert.match(library, /setSearchQuery/);
-    assert.match(library, /setCurrentPage/);
-    assert.match(app, /mediaSnapshot\.balance\.value/);
-    assert.match(app, /mediaFeature\.checkBalance/);
-    assert.doesNotMatch(app, /getBalance\s*\(/);
-    assert.match(feature, /checkBalance/);
+test("media resource feature exposes normalized balance and bounded resource paging", async () => {
+  const { createMediaFeature } = await import(
+    "../media-workbench/src/features/media/media-feature.js"
+  );
+  let lastPage;
+  const feature = createMediaFeature({
+    getResourcePage: async (input) => {
+      lastPage = input;
+      return {
+        items: [
+          { resourceId: "resource-1", name: "资源一" },
+          { resourceId: "resource-1", name: "重复资源" },
+        ],
+        total: 2,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    },
+    searchResourcePage: async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize }),
+    refreshResources: async () => ({}),
+    getPoolPage: async (input) => ({ items: [], memberResourceIds: [], total: 0, page: input.page, pageSize: input.pageSize }),
+    addToPool: async () => ({}),
+    removeFromPool: async () => ({}),
+    getBalance: async () => 12.5,
+    getDrafts: async () => [],
+    getDraft: async () => null,
+    setDraft: async () => ({}),
+    scanArticles: async () => [],
+    previewArticle: async () => ({}),
+    getOrders: async () => [],
+    syncOrder: async () => ({}),
+    syncAllOrders: async () => ({}),
+    prepareOrderCancellation: async () => ({}),
+    cancelOrder: async () => ({}),
+    prepareCancellationResolution: async () => ({}),
+    confirmCancellationSucceeded: async () => ({}),
+    confirmCancellationNotApplied: async () => ({}),
+    prepareOrderStatusAnomalyResolution: async () => ({}),
+    resumeOrderTracking: async () => ({}),
+    confirmOrderPublished: async () => ({}),
+    confirmOrderNotPublished: async () => ({}),
+    openPublishedUrl: async () => ({}),
   });
+  feature.setScope({ workspaceRuntimeId: "workspace-1" });
+  await feature.loadResourcePage(2, "manual");
+  assert.deepEqual(lastPage, { page: 2, pageSize: 50 });
+  assert.deepEqual(feature.getSnapshot().resources.items.map((item) => item.resourceId), ["resource-1"]);
+  assert.equal(feature.getSnapshot().resources.pageSize, 50);
+  await feature.checkBalance();
+  assert.equal(feature.getSnapshot().balance.value, 12.5);
+  feature.dispose();
 });

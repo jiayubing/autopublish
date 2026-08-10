@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移与 M05-I combined audit/closure 均已完成。完整 `npm test` 的两项 H 继承 artifact/runtime failure 已作为明确非 M05 exception 记录，未被宣称为 full gate PASS。详细 evidence 见 `../handoffs/M05-I-combined-closure.md`，当前唯一 inventory 真源见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J final evidence reconciliation 均已完成。完整 `npm test` 的明确 artifact/runtime prerequisite failures 作为非 M05 exception 记录，未被宣称为 full gate PASS；当前结论与替代 evidence 见 `../handoffs/M05-J-final-evidence-reconciliation.md`，当前唯一 inventory 真源见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I` 从 clean integration HEAD 严格串行完成。M05-I Closure 后本任务停止；M06 仍未启动。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J` 从 clean integration HEAD 严格串行完成。M05-J Closure 后本任务停止；M06 仍未启动。
 
 ## 1. Evidence policy
 
@@ -233,17 +233,27 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **前置依赖:** M05-H Closure，且 0–H 全部进入同一 clean integration HEAD。
 
-**完成标准:** before/after inventory 完整；每个删除/改写的业务 static assertion 有等价 public behavior evidence；保留 static guard 分类正确；blocking findings 关闭；bounded re-audit PASS；最终 clean HEAD 上完整 gate PASS；M05 标记 COMPLETE 后停止，不自动进入 M06。
+**完成标准:** before/after inventory 完整；每个删除/改写的业务 static assertion 有等价 public behavior evidence；保留 static guard 分类正确；blocking findings 关闭；bounded re-audit PASS；最终 clean HEAD 上 M05-specific gate PASS。完整 `npm test` 必须实际运行且 runner `CLOSED`、`allFilesReported=true`、`skipped/todo/cancelled=0`；只有已登记、可复现、非 M05 owner 的外部 artifact/runtime prerequisite failure 才能作为窄范围 full-run exception，且不得写成 full gate PASS。M05 标记 COMPLETE 后停止，不自动进入 M06。
 
 **主要测试/gate:** 所有工作包定向矩阵、`npm run test:discover`、完整 `npm test`、auth discovery/专项（仅若 M05-0 纳入其改动）、main/bridge/renderer typecheck、lint、format/diff check、architecture/security/absence/packaging gates。
 
 **独立线程:** 是；必须独立于实现包。
 
+### M05-J — Final evidence reconciliation
+
+**Scope:** 只处理 M05-I closure 后发现的 classifier false negative、业务 source assertion residual 与 full-test closure contract/evidence 对账；不重做 M05-A–I，不进入 M06，不修改 production behavior、runner concurrency/timeout/pool policy 或真实 artifact。
+
+**完成标准:** classifier 能识别 file-scope production reader helper、拆分 path reader 与 source-text assertion，并以回归测试区分 runtime harness；最终 `REWRITE_PUBLIC_BEHAVIOR=0`；业务/UI/runtime residual 已迁移到 public behavior/contract/Renderer harness/owner seam；所有 retained static guard 绑定允许 category、owner、invariant、不可由 behavior test 替代的理由；完整 runner 在 clean HEAD 实际运行并记录 `CLOSED`、`allFilesReported`、无 skip/todo/cancelled，非零结果只保留明确、可复现、非 M05 owner 的 artifact/runtime prerequisite exception；最终 handoff 写明 Base/Final HEAD、manifest、commands/results、replacement mapping 与 verdict。
+
+**主要测试/gate:** `tests/test-inventory-contract.test.js`、M05-J residual 定向 tests、`npm run test:discover`、`node auto—publish/scripts/test-inventory.js`、完整 PowerShell 命令 `$env:RUN_ELECTRON_FOCUS_TESTS='1'; npm test -- --profile-output <temp>`、`git diff --check`。
+
+**独立线程:** 是；完成后 M05 保持 `COMPLETE`，不得自动进入 M06。
+
 ## 3. Serial order and dependency rationale
 
 推荐且唯一默认顺序：
 
-`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure`
+`M05-0 inventory → M05-A Renderer content/generation → M05-B Renderer publication/platform/media → M05-C Renderer workspace/settings/shell → M05-D typed IPC → M05-E1 lifecycle/projection → M05-E2 OperationalStore/transaction/recovery → M05-E3 submission/publication/outcome → M05-F external adapters → M05-G legal static gates → M05-H runner/after inventory → M05-I combined audit/closure → M05-J final evidence reconciliation`
 
 严格依赖表：
 
@@ -261,6 +271,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 | M05-G | M05-F | 行为替代已完成，才允许收敛合法 static guards |
 | M05-H | M05-G | 最终测试文件集合与 guard 集合已稳定 |
 | M05-I | M05-H | 0–H 全部位于同一 clean integration HEAD；只做 combined audit/closure |
+| M05-J | M05-I | 只做 closure evidence reconciliation；不重做 A–I、不修改 production、不进入 M06 |
 
 - M05-0 ledger 是 A–H 的唯一 ownership/scope/disposition 真源；后续 handoff 只记录执行 delta/evidence，不创建竞争分类表。
 - A/B/C 都可能共享 Renderer harness、fixture 和 source-reading ledger，必须串行，但按 2.1 冻结的 feature owner 分开以限制单线程心智模型。
@@ -277,4 +288,5 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 - [ ] 重复 phase tests 按 invariant/owner 收敛，而非按文件数机械删除；必要故障注入和诊断价值保留。
 - [ ] 未修改 production behavior，未新增 test-only production seam，未执行真实外部操作。
 - [x] M05-H 产出 after inventory 与 runner cleanup evidence；无 discovery omission、skip/todo 或 summary 后遗留测试进程。
-- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；完整 `npm test` 已实际运行，两个非 M05 artifact/runtime exception 已明确记录，未计为 full gate PASS。
+- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；其 full-run provenance 由 M05-J 重新绑定到最终 clean HEAD。
+- [x] M05-J classifier、residual migration、static-category ledger 与 full-test contract reconciliation 完成；完整 runner 的非 M05 artifact/runtime exception 已明确记录，未计为 full gate PASS；M06 未启动。

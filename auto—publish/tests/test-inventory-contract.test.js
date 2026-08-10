@@ -7,9 +7,14 @@ const { collectTestFiles } = require("../scripts/run-tests");
 const {
   collectInventory,
   createInventorySnapshot,
+  dispositionFor,
   E_DECISION,
+  inferStaticCategories,
   reconcileInventory,
   renderInventory,
+  sourceReadSignals,
+  staticSignals,
+  extractTests,
 } = require("../scripts/test-inventory");
 const {
   createTestInventoryEvidence,
@@ -30,6 +35,140 @@ test("M05-0 inventory uses the runner discovery set and covers JS plus MJS", () 
     files.length,
   );
   assert.equal(inventory.summary.declarations, inventory.allTests.length);
+});
+
+test("classifier promotes file-scope production readers without treating imports as source assertions", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = __dirname;
+    const read = (file) => fs.readFileSync(path.resolve(root, "..", file), "utf8");
+    const { owner } = require("../src/owner");
+    test("business behavior", () => {
+      const view = read("media-workbench/src/View.tsx");
+      assert.match(view, /button/);
+      assert.equal(owner(), "ready");
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const result = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+  );
+
+  assert.equal(result.level, "assertion");
+  assert.equal(result.sourceAssertion, true);
+  assert.match(result.reason, /helper/);
+
+  const importOnly = `
+    const { owner } = require("../src/owner");
+    test("public behavior", () => assert.equal(owner(), "ready"));
+  `;
+  const importDeclaration = extractTests(importOnly)[0];
+  assert.equal(
+    sourceReadSignals(
+      importDeclaration.source,
+      staticSignals(importOnly),
+      importOnly,
+    ).level,
+    "none",
+  );
+});
+
+test("classifier recognizes split path.join production readers and keeps runtime harness reads heuristic-only", () => {
+  const source = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const readSource = (file) => fs.readFileSync(
+      path.join(root, "media-workbench", "src", file),
+      "utf8",
+    );
+    test("runtime harness behavior", () => {
+      const sourceText = readSource("features/content.js");
+      const runtime = vm.runInNewContext(sourceText);
+      assert.equal(runtime.status, "ready");
+    });
+  `;
+  const declaration = extractTests(source)[0];
+  const result = sourceReadSignals(
+    declaration.source,
+    staticSignals(source),
+    source,
+  );
+
+  assert.equal(result.level, "file-heuristic");
+  assert.equal(result.sourceAssertion, false);
+
+  const assertionSource = source.replace(
+    'assert.equal(runtime.status, "ready");',
+    'assert.match(sourceText, /createContentSourcesFeature/);',
+  );
+  const assertionDeclaration = extractTests(assertionSource)[0];
+  assert.equal(
+    sourceReadSignals(
+      assertionDeclaration.source,
+      staticSignals(assertionSource),
+      assertionSource,
+    ).level,
+    "assertion",
+  );
+});
+
+test("classifier does not infer a legal static category from behavior-test title keywords", () => {
+  const source = `
+    const value = fs.readFileSync(path.join(root, "media-workbench/src/View.tsx"), "utf8");
+    assert.match(value, /safe capability/);
+  `;
+  const categories = inferStaticCategories(
+    "tests/renderer-hepan-settings.test.js",
+    "renders independent safe capability guidance and never renders the Cookie",
+    source,
+  );
+
+  assert.deepEqual(categories, []);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: { level: "assertion" },
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-C",
+      categories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+});
+
+test("classifier retains narrow static gates only when the source target is an allowed gate", () => {
+  const architectureSource = `
+    const source = fs.readFileSync(path.join(root, "desktop/main.js"), "utf8");
+    const moduleSpecifiers = parse(source);
+    assert.doesNotMatch(moduleSpecifiers, /infrastructure/);
+  `;
+  assert.deepEqual(
+    inferStaticCategories(
+      "tests/architecture-seams.test.js",
+      "safe boundary",
+      architectureSource,
+    ),
+    ["architecture/dependency"],
+  );
+
+  const securitySource = `
+    const source = fs.readFileSync(path.join(root, "desktop/preload.js"), "utf8");
+    assert.match(source, /sandbox/);
+  `;
+  assert.deepEqual(
+    inferStaticCategories(
+      "tests/electron-security.test.js",
+      "cookie boundary",
+      securitySource,
+    ),
+    ["security"],
+  );
 });
 
 test("M05-0 inventory is reproducible and records every disposition boundary", () => {

@@ -1,29 +1,8 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const { after, before } = require("node:test");
-const fs = require("node:fs");
 const path = require("node:path");
 const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
-
-function read(file) {
-  return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
-}
-
-describe("renderer question editor session", function () {
-  it("contains the real renderer regression hooks for focus and pointer isolation", function () {
-    const panel = read(
-      "media-workbench/src/components/content/ManualResearchEditorPanel.tsx",
-    );
-    assert.match(panel, /role="dialog"/);
-    assert.match(panel, /关闭/);
-    assert.match(panel, /stopPropagation/);
-    assert.match(panel, /focus\(\)/);
-    assert.match(
-      read("media-workbench/src/index.css"),
-      /manual-research-editor-panel/,
-    );
-  });
-});
 
 const rootDir = path.resolve(__dirname, "..");
 const rendererUrl = "http://127.0.0.1:4174/";

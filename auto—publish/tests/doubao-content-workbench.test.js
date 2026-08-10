@@ -1,81 +1,100 @@
-const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const test = require("node:test");
 
-function read(file) {
-  return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
+function deferred() {
+  let resolve;
+  const promise = new Promise((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
-describe("Doubao content workbench static boundaries", function () {
-  it("derives collection pending state from feature command state and clears its run token on every exit", function () {
-    const questions = read(
-      "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    );
-    assert.match(
-      questions,
-      /const collectionPending = commandStates\.collectDoubaoQuestion\.busy/,
-    );
-    assert.match(questions, /commandStates\.previewDoubaoBatch\.busy/);
-    assert.match(questions, /commandStates\.startPreparedDoubaoBatch\.busy/);
-    assert.match(questions, /commandStates\.retryFailedDoubao\.busy/);
-    assert.match(questions, /const isCollecting = collectionPending/);
-    assert.doesNotMatch(
-      questions,
-      /pendingCollectionToken|tryBeginCollection|finishCollection/,
-    );
-  });
+function sourceAdapters(overrides = {}) {
+  return {
+    listClients: async () => [{ id: "client-1", name: "客户一" }],
+    listTemplateCatalog: async () => ({ revision: "r1", platforms: [], templates: [], diagnostics: [] }),
+    listQuestions: async () => [],
+    listResearch: async () => [],
+    ...overrides,
+  };
+}
 
-  it("deduplicates collection refreshes by run token and refreshes empty/external completions", function () {
-    const feature = read(
-      "media-workbench/src/features/content/content-sources-feature.js",
-    );
-    assert.match(feature, /queueRefreshKey/);
-    assert.match(feature, /nextQueue\.total === 0/);
-    assert.match(feature, /key !== lastQueueRefreshKey/);
-    assert.doesNotMatch(feature, /skipNextCompletionRefresh/);
-  });
+test("Doubao collection command owns pending state at the public feature boundary", async () => {
+  const { createContentSourcesFeature } = await import(
+    "../media-workbench/src/features/content/content-sources-feature.js"
+  );
+  const collection = deferred();
+  const feature = createContentSourcesFeature(
+    sourceAdapters({ collectDoubaoQuestion: () => collection.promise }),
+  );
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+  const pending = feature.commands.collectDoubaoQuestion({ clientId: "client-1" });
+  assert.equal(feature.getSnapshot().commands.collectDoubaoQuestion.busy, true);
+  collection.resolve({ ok: true });
+  await pending;
+  assert.equal(feature.getSnapshot().commands.collectDoubaoQuestion.busy, false);
+  feature.dispose();
+});
 
-  it("maps legacy history templates by platform and scenario without replacing snapshots", async function () {
-    const generation = read(
-      "media-workbench/src/components/content/ArticleGenerationView.tsx",
-    );
-    const { resolveAvailableTemplateId } =
-      await import("../media-workbench/src/article-history-logic.js");
-    assert.equal(
-      resolveAvailableTemplateId(
-        { platform: "ctrip", scenario: "guide", templateId: "missing" },
-        [{ id: "current", platform: "ctrip", scenario: "guide" }],
-      ),
-      "current",
-    );
-    assert.equal(
-      resolveAvailableTemplateId(
-        {
-          platform: "ctrip",
-          templateId: "deleted",
-          templateSnapshot: {
-            platform: "ctrip",
-            id: "deleted",
-            name: "Old",
-            scenario: "guide",
-            body: "old",
-          },
-        },
-        [{ id: "current", platform: "ctrip", scenario: "guide" }],
-      ),
-      "deleted",
-    );
-    assert.match(generation, /resolveAvailableTemplateId/);
-    assert.match(
-      generation,
-      /onArticleChange\(\{ \.\.\.currentArticle, templateId: resolvedTemplateId \}\)/,
-    );
-    assert.match(
-      generation,
-      /commands\.saveArticle\(\{ article: \{ \.\.\.editorArticle, templateId: resolvedTemplateId/,
-    );
-    assert.match(generation, /expectedFingerprint/);
-    assert.match(generation, /templateId: resolvedTemplateId/);
-  });
+test("completed empty queue refreshes client data once per queue identity", async () => {
+  const { createContentSourcesFeature } = await import(
+    "../media-workbench/src/features/content/content-sources-feature.js"
+  );
+  let subscribe;
+  let questionReads = 0;
+  let researchReads = 0;
+  const feature = createContentSourcesFeature(
+    sourceAdapters({
+      listQuestions: async () => {
+        questionReads += 1;
+        return [];
+      },
+      listResearch: async () => {
+        researchReads += 1;
+        return [];
+      },
+      subscribeDoubaoQueue: (listener) => {
+        subscribe = listener;
+        return () => {};
+      },
+    }),
+  );
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+  const before = { questionReads, researchReads };
+  const completed = { status: "completed", completed: 0, total: 0, tasks: [] };
+  subscribe(completed);
+  await new Promise((resolve) => setImmediate(resolve));
+  const afterFirst = { questionReads, researchReads };
+  subscribe(completed);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(afterFirst.questionReads > before.questionReads);
+  assert.ok(afterFirst.researchReads > before.researchReads);
+  assert.deepEqual({ questionReads, researchReads }, afterFirst);
+  feature.dispose();
+});
+
+test("history template resolution preserves a deleted snapshot while using the current catalog when available", async () => {
+  const { resolveAvailableTemplateId } = await import(
+    "../media-workbench/src/article-history-logic.js"
+  );
+  assert.equal(
+    resolveAvailableTemplateId(
+      { platform: "ctrip", scenario: "guide", templateId: "missing" },
+      [{ id: "current", platform: "ctrip", scenario: "guide" }],
+    ),
+    "current",
+  );
+  assert.equal(
+    resolveAvailableTemplateId(
+      {
+        platform: "ctrip",
+        templateId: "deleted",
+        templateSnapshot: { platform: "ctrip", id: "deleted", scenario: "guide" },
+      },
+      [{ id: "current", platform: "ctrip", scenario: "guide" }],
+    ),
+    "deleted",
+  );
 });

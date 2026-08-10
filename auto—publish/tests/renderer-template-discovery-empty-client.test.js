@@ -12,8 +12,6 @@ function write(root, relative, content) {
   fs.mkdirSync(path.dirname(filename), { recursive: true });
   fs.writeFileSync(filename, content, "utf8");
 }
-function read(file) { return fs.readFileSync(path.resolve(__dirname, "..", file), "utf8"); }
-
 describe("empty-client template discovery", function() {
   it("discovers custom templates from an empty-client workspace and refreshes the revision", function() {
     const root = tempDirectory();
@@ -29,22 +27,28 @@ describe("empty-client template discovery", function() {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
-  it("loads the writing-template catalog without a selected client", function() {
-    const source = read("media-workbench/src/components/content/ArticleGenerationView.tsx");
-    const workbench = read("media-workbench/src/components/ContentWorkbench.tsx");
-    const feature = read("media-workbench/src/features/content/use-content-workbench-feature.ts");
-    assert.doesNotMatch(source, /if \(!clientId\) \{ setResearch\(\[\]\); setTemplates\(\[\]\);/);
-    assert.match(workbench, /templateCatalog/);
-    assert.doesNotMatch(workbench, /submissionPlatforms=\{management\.submissionPlatforms\}/);
-    assert.match(feature, /listTemplateCatalog:\s*listContentTemplateCatalog/);
-    assert.doesNotMatch(source, /listContentTemplateCatalog|listContentSubmissionPlatforms/);
-    assert.match(source, /当前工作区还没有客户|没有客户/);
-  });
-
-  it("provides an explicit refresh action for clients and templates", function() {
-    const source = read("media-workbench/src/components/ContentWorkbench.tsx");
-    assert.match(source, /刷新客户与模板/);
-    assert.match(source, /content\.refresh\(["']manual["']\)/);
-    assert.doesNotMatch(source, /listContentClients\(\)|refreshToken/);
+  it("refreshes clients and templates through the public workbench owner", async function() {
+    const { createContentWorkbenchFeature } = await import(
+      "../media-workbench/src/features/content/content-workbench-feature.js",
+    );
+    let refreshes = 0;
+    const feature = createContentWorkbenchFeature({
+      listClients: async () => [{ id: "client-1", name: "客户一" }],
+      listTemplateCatalog: async () => {
+        refreshes += 1;
+        return { revision: `revision-${refreshes}`, platforms: [], templates: [], diagnostics: [] };
+      },
+      listQuestions: async () => [],
+      listResearch: async () => [],
+      loadManagement: async () => ({}),
+      listPaidMediaBatches: async () => [],
+      startPaidMediaBatch: async () => ({}),
+      pausePaidMediaBatch: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "runtime-1" });
+    await feature.refresh("manual");
+    assert.equal(refreshes, 1);
+    assert.equal(feature.getSnapshot().selectedClientId, "client-1");
+    feature.dispose();
   });
 });

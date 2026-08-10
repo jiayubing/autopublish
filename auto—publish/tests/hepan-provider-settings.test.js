@@ -235,12 +235,4 @@ describe("Hepan provider settings", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
-  it("renders configured paths as safe status and submits only changed setting fields", () => {
-    const source = fs.readFileSync(path.resolve(__dirname, "..", "media-workbench/src/components/settings/HepanProviderSettings.tsx"), "utf8");
-    assert.match(source, /if \(pythonPath\.trim\(\)\) patch\.pythonPath/);
-    assert.match(source, /if \(cookie\.trim\(\)\) patch\.cookie/);
-    assert.match(source, /clearVendorDir: true/);
-    assert.match(source, /已配置（留空保留）/);
-    assert.doesNotMatch(source, /pythonPath: pythonPath\.trim\(\), cookie, categoryId/);
-  });
 });

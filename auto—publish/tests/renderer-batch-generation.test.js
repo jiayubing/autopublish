@@ -1,6 +1,5 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
@@ -81,41 +80,44 @@ describe("renderer batch generation behavior", function () {
     });
   });
 
-  it("keeps invalid GEO answers unchecked and disabled at the source boundary", function () {
-    const batch = fs.readFileSync(
-      path.join(
-        root,
-        "media-workbench/src/components/content/BatchGenerationView.tsx",
-      ),
-      "utf8",
-    );
-    assert.match(
-      batch,
-      /selected=\{isUsableResearch\(item\) && source\.researchQueryIds\.includes\(item\.id\)\}/,
-    );
-    assert.match(batch, /disabled=\{!isUsableResearch\(item\)\}/);
-    assert.match(
-      batch,
-      /onSelectedChange=\{\(selected\) => isUsableResearch\(item\) && updateSource/,
+  it("keeps incomplete GEO answers out of the executable source selection", async function () {
+    const { isUsableResearch, reconcileSourceSelection } =
+      await loadGenerationUiLogic();
+    const research = [
+      { id: "valid", answerText: "有效回答" },
+      { id: "incomplete", answerText: "仍在编辑", isAnswerComplete: false },
+      { id: "empty", answerText: "" },
+    ];
+    assert.equal(isUsableResearch(research[0]), true);
+    assert.equal(isUsableResearch(research[1]), false);
+    assert.deepEqual(
+      reconcileSourceSelection([], research, {
+        materialIds: [],
+        researchQueryIds: ["valid", "incomplete", "empty"],
+      }).researchQueryIds,
+      ["valid"],
     );
   });
 
-  it("discovers every returned template platform and counts all selected templates", function () {
-    const batch = fs.readFileSync(
-      path.join(
-        root,
-        "media-workbench/src/components/content/BatchGenerationView.tsx",
-      ),
-      "utf8",
+  it("groups every returned template platform through the public catalog projection", async function () {
+    const { groupTemplatesByPlatform, templatePlatformDisplayName } =
+      await loadGenerationUiLogic();
+    const catalog = {
+      platforms: [{ id: "new-platform", displayName: "新平台" }],
+      templates: [
+        { id: "one", platform: "new-platform", enabled: true },
+        { id: "two", platform: "another-platform", enabled: true },
+      ],
+    };
+    const groups = groupTemplatesByPlatform(catalog.templates);
+    assert.deepEqual(Object.keys(groups), ["new-platform", "another-platform"]);
+    assert.equal(
+      templatePlatformDisplayName(catalog, "new-platform"),
+      "新平台",
     );
-    assert.doesNotMatch(batch, /const PLATFORMS =/);
-    assert.doesNotMatch(
-      batch,
-      /listContentTemplateCatalog|listContentResearch/,
+    assert.equal(
+      templatePlatformDisplayName(catalog, "another-platform"),
+      "another-platform",
     );
-    assert.match(batch, /templateCatalog \|\|/);
-    assert.match(batch, /catalog\.templates/);
-    assert.match(batch, /Object\.entries\(templateGroups\)/);
-    assert.match(batch, /selectedTemplates\.length/);
   });
 });
