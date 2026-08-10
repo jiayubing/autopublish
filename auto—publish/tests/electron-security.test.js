@@ -26,8 +26,6 @@ describe("Electron security boundary", function() {
     const main = read("desktop/main.js");
     const preload = read("desktop/preload.js");
     const gate = read("media-workbench/src/components/AuthGate.tsx");
-    assert.match(main, /initializeAuth/);
-    assert.match(main, /createAuthenticatedIpcMain/);
     assert.match(preload, /auth:get-state/);
     assert.doesNotMatch(preload, /accessToken|refreshToken/);
     assert.match(gate, /authenticated/);

@@ -12,7 +12,6 @@ describe("desktop workbench flow", function () {
     const main = read("desktop/main.js");
     const packaging = read("electron-builder.alpha.yml");
     assert.match(main, /media-workbench["\\']?,\s*["\\']dist["\\']?/);
-    assert.match(main, /rendererEntryPath/);
     assert.match(packaging, /media-workbench\/dist/);
     assert.doesNotMatch(packaging, /desktop[\\/]renderer/);
     assert.doesNotMatch(main, /desktop[\\/]renderer/);

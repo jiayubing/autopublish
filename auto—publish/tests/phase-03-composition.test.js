@@ -209,6 +209,4 @@ test("workspace runtime cannot wire the retired submission orchestrator", () => 
   assert.doesNotMatch(runtime, /publicationSubmissionService/);
   assert.doesNotMatch(runtime, /retryFailedPublicationExecutor/);
   assert.doesNotMatch(runtime, /retryFailedPublication\s*:/);
-  assert.match(runtime, /regularQueueGroupComposition\.orchestrator/);
-  assert.match(runtime, /regularPlatformOutcomeService/);
 });

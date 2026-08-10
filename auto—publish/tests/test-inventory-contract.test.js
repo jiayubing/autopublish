@@ -288,6 +288,85 @@ test("classifier retains narrow static gates only when the source target is an a
   );
 });
 
+test("classifier does not grant static status to private implementation names alone", () => {
+  const privateSource = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readProductionSource = () =>
+      fs.readFileSync(path.join(root, "desktop", "main.js"), "utf8");
+    test("private implementation source assertion", () => {
+      const source = readProductionSource();
+      assert.match(source, /someInternalRuntimeHelper/);
+      assert.match(source, /disposeRuntime/);
+    });
+  `;
+  const privateDeclaration = extractTests(privateSource)[0];
+  const privateCategories = inferStaticCategories(
+    "tests/desktop-packaging.test.js",
+    privateDeclaration.name,
+    privateDeclaration.source,
+  );
+  const privateSignals = sourceReadSignals(
+    privateDeclaration.source,
+    staticSignals(privateSource),
+    privateSource,
+    privateCategories,
+  );
+  assert.equal(privateSignals.assertionProfile.allStatic, false);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: privateSignals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      privateCategories,
+    ).disposition,
+    "REWRITE_PUBLIC_BEHAVIOR",
+  );
+
+  const securitySource = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const root = path.resolve(__dirname, "..");
+    const readProductionSource = () =>
+      fs.readFileSync(path.join(root, "desktop", "preload.js"), "utf8");
+    test("sandbox security invariant", () => {
+      const source = readProductionSource();
+      assert.match(source, /sandbox/);
+    });
+  `;
+  const securityDeclaration = extractTests(securitySource)[0];
+  const securityCategories = inferStaticCategories(
+    "tests/electron-security.test.js",
+    securityDeclaration.name,
+    securityDeclaration.source,
+  );
+  const securitySignals = sourceReadSignals(
+    securityDeclaration.source,
+    staticSignals(securitySource),
+    securitySource,
+    securityCategories,
+  );
+  assert.deepEqual(securityCategories, ["security"]);
+  assert.equal(
+    dispositionFor(
+      {
+        sourceRead: securitySignals,
+        modifier: null,
+        dynamicMatrix: false,
+        dynamicName: false,
+      },
+      "M05-G",
+      securityCategories,
+    ).disposition,
+    "RETAIN_STATIC_GUARD",
+  );
+});
+
 test("M05-0 inventory is reproducible and records every disposition boundary", () => {
   const first = collectInventory();
   const second = collectInventory();

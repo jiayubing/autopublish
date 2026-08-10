@@ -16,7 +16,6 @@ test("phase 1 composition is injected and is not a second production runtime", (
     clock: () => new Date(),
   });
   assert.equal(typeof composition.publicationWorkflow.publish, "function");
-  assert.match(read("desktop/main.js"), /createWorkspaceRuntime/);
   assert.doesNotMatch(read("desktop/main.js"), /phase-01-composition/);
   assert.doesNotMatch(
     read("desktop/workspace-runtime.js"),

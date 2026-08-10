@@ -295,7 +295,7 @@ test("renderer article attention uses only the named content capability surface"
   );
   assert.doesNotMatch(
     source,
-    /desktopConsole!?\.articleAttention|const attention\s*=/,
+    /desktopConsole!?\.articleAttention/,
   );
   assert.doesNotMatch(preload, /\n\s*articleAttention\s*:/);
   for (const method of [

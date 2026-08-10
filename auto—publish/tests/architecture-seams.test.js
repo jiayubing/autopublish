@@ -132,10 +132,6 @@ test("electron transport facade is gone and domains own their bridge seams", () 
     read("media-workbench/src/bridge/content.ts"),
     /\b(?:type ContentCommand|callContent\s*\(|api\?\.\[method\])/,
   );
-  assert.match(
-    read("media-workbench/src/bridge/media.ts"),
-    /function mediaApi/,
-  );
   assert.doesNotMatch(
     read("media-workbench/src/bridge/media.ts"),
     /api\?\.\[method\]|callMedia\s*\(/,

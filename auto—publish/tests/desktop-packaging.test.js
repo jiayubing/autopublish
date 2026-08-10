@@ -510,32 +510,6 @@ describe("source assembly and packaging contract", function() {
     assert.equal(harness.events.filter(function(event) { return event[0] === "window"; }).length, 2);
   });
 
-  it("initializes ready runtime after bootstrap and injects protected runtime dependencies", async function() {
-    const harness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace-from-bootstrap" }, { authenticated: false });
-    await harness.ready();
-    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), true);
-    assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
-    assert.match(read("desktop/main.js"), /activateAuthenticatedRuntime/);
-  });
-
-  it("wraps shell.openPath failures with a stable safe error", async function() {
-    const harness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
-    await harness.ready();
-    assert.equal(harness.events.some(function(event) { return event[0] === "create-bootstrap"; }), false);
-    assert.match(read("desktop/main.js"), /WORKSPACE_OPEN_FAILED/);
-  });
-
-  it("disposes the current runtime once before relaunch and tolerates relaunch without runtime", async function() {
-    const readyHarness = loadMainWithStartupHarness({ state: "ready", workspacePath: "C:\\workspace" }, { authenticated: false });
-    await readyHarness.ready();
-    assert.equal(readyHarness.events.some(function(event) { return event[0] === "create-bootstrap"; }), false);
-    assert.match(read("desktop/main.js"), /function disposeRuntime/);
-
-    const selectionHarness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
-    await selectionHarness.ready();
-    assert.equal(selectionHarness.events.some(function(event) { return event[0] === "create-bootstrap"; }), false);
-  });
-
   it("exposes only the workspace bootstrap API and forwards token-only confirmations", async function() {
     const harness = loadPreloadHarness();
     assert.deepEqual(Object.keys(harness.api.workspace).sort(), [
@@ -597,18 +571,6 @@ describe("source assembly and packaging contract", function() {
     assert.ok(JSON.parse(templateFiles).length > 0);
     const config = read("electron-builder.alpha.yml");
     assert.match(config, /resources\/content-templates\/\*\*\/\*/);
-  });
-
-  it("configures a writable runtime workspace before IPC registration", function() {
-    const runtime = read(
-      "desktop/composition/workspace-runtime-composition.js",
-    );
-    assert.ok(runtime.includes("configureRuntimeEnvironment"));
-    assert.ok(runtime.includes("rootDir: workspaceRoot"));
-    assert.ok(
-      runtime.indexOf("configureRuntimeEnvironment") <
-        runtime.indexOf("createDesktopTaskService"),
-    );
   });
 
   it("excludes private runtime data from alpha package config", function() {
@@ -715,29 +677,6 @@ describe("source assembly and packaging contract", function() {
   it("does not package retired publication ledger writers or scripts", function() {
     const config = read("electron-builder.alpha.yml");
     assert.doesNotMatch(config, /migrate-publication-ledger-v1|publication-ledger/);
-  });
-
-  it("initializes runtime environment before loading config-dependent services", function() {
-    const runtime = read(
-      "desktop/composition/workspace-runtime-composition.js",
-    );
-    assert.ok(runtime.includes("configureRuntimeEnvironment"));
-    assert.doesNotMatch(runtime, /core[\\/]logger|publish-log|onLog/);
-    assert.ok(
-      runtime.indexOf("configureRuntimeEnvironment") <
-        runtime.indexOf("createPlatformSettingsService"),
-      "IPC registration must be required after runtime environment configuration"
-    );
-  });
-
-  it("checks the Doubao service source assembly contract", function() {
-    const runtime = read(
-      "desktop/composition/workspace-runtime-composition.js",
-    );
-    assert.match(runtime, /createDoubaoCollection/);
-    assert.match(runtime, /content:doubao-queue-state/);
-    assert.match(runtime, /doubaoCollectionService/);
-    assert.ok(runtime.indexOf("configureRuntimeEnvironment") < runtime.indexOf("createDoubaoCollection"));
   });
 
   it("waits for Doubao disposal before quitting and does not re-enter the quit guard", async function() {

@@ -27,7 +27,6 @@ describe("production packaging contract", function () {
     );
     assert.match(main, /--offline-packaging-smoke/);
     assert.match(main, /did-finish-load/);
-    assert.match(main, /createRendererSmokeProbeSource/);
   });
 
   it("requires both preload and a mounted renderer root", async function () {

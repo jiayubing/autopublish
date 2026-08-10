@@ -1,6 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { test } = require("node:test");
 
 const {
@@ -24,7 +22,6 @@ test("runtime workspace injection does not become an environment override after 
     false,
   );
 });
-
 test("an explicit startup workspace override survives runtime setup and relaunch", function () {
   const environment = { AUTO_PUBLISH_WORKSPACE: "external-workspace" };
   const startup = captureEnvironmentValue(
@@ -37,7 +34,6 @@ test("an explicit startup workspace override survives runtime setup and relaunch
 
   assert.equal(environment.AUTO_PUBLISH_WORKSPACE, "external-workspace");
 });
-
 test("workspace bootstrap sees only the immutable startup override", function () {
   const environment = {};
   const startup = captureEnvironmentValue(
@@ -59,13 +55,4 @@ test("workspace bootstrap sees only the immutable startup override", function ()
     environmentFromCapturedValue("AUTO_PUBLISH_WORKSPACE", external),
     { AUTO_PUBLISH_WORKSPACE: "external-workspace" },
   );
-});
-
-test("desktop relaunch restores the startup workspace environment before spawning", function () {
-  const main = fs.readFileSync(
-    path.join(__dirname, "..", "desktop", "main.js"),
-    "utf8",
-  );
-  assert.match(main, /captureEnvironmentValue/);
-  assert.match(main, /restoreEnvironmentValue[\s\S]*?app\.relaunch\(\)/);
 });

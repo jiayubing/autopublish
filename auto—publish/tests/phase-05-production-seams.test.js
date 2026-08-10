@@ -8,12 +8,22 @@ function read(relative) {
   return fs.readFileSync(path.join(root, relative), "utf8");
 }
 
+function moduleSpecifiers(source) {
+  return [
+    ...source.matchAll(/\brequire\s*\(\s*["']([^"']+)["']\s*\)/g),
+    ...source.matchAll(/\bfrom\s*["']([^"']+)["']/g),
+    ...source.matchAll(/\bimport\s*["']([^"']+)["']/g),
+  ].map((match) => match[1]);
+}
+
 it("has exactly one desktop production ArticleStore composition owner", () => {
   const files = fs
     .readdirSync(path.join(root, "desktop"), { recursive: true })
     .filter((file) => String(file).endsWith(".js"));
   const references = files.filter((file) =>
-    read(path.join("desktop", file)).includes("createArticleStore"),
+    moduleSpecifiers(read(path.join("desktop", file))).includes(
+      "../../src/content/article-store",
+    ),
   );
   assert.deepEqual(references, [
     path.join("composition", "content-lifecycle-composition.js"),

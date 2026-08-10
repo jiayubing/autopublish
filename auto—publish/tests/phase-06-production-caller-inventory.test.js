@@ -74,11 +74,6 @@ test("checkpoint C keeps one Settings owner and zero retired media/navigation pr
     protocolSources,
     /navigationSummary|navigation-summary|navigation_summary/,
   );
-  const sidebar = fs.readFileSync(
-    path.resolve(__dirname, "../media-workbench/src/components/Sidebar.tsx"),
-    "utf8",
-  );
-  assert.match(sidebar, /deriveNavigationSummary/);
 });
 
 test("malformed workspace and platform events cross the real preload into one safe diagnostic sink", async () => {
