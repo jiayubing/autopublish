@@ -421,6 +421,7 @@ test("classifier does not grant static status to private implementation names al
     "tests/desktop-packaging.test.js",
     privateDeclaration.name,
     privateDeclaration.source,
+    privateSource,
   );
   const privateSignals = sourceReadSignals(
     privateDeclaration.source,
@@ -459,6 +460,7 @@ test("classifier does not grant static status to private implementation names al
     "tests/electron-security.test.js",
     securityDeclaration.name,
     securityDeclaration.source,
+    securitySource,
   );
   const securitySignals = sourceReadSignals(
     securityDeclaration.source,
@@ -482,45 +484,58 @@ test("classifier does not grant static status to private implementation names al
   );
 });
 
-test("classifier does not grant static status from a generic source variable name", () => {
-  const source = `
-    const fs = require("node:fs");
-    const path = require("node:path");
-    const root = path.resolve(__dirname, "..");
-    const readProductionSource = () =>
-      fs.readFileSync(path.join(root, "desktop", "preload.js"), "utf8");
-    test("generic source variable is not an invariant", () => {
-      const preload = readProductionSource();
-      assert.match(preload, /someInternalBusinessThing/);
-    });
-  `;
-  const declaration = extractTests(source)[0];
-  const categories = inferStaticCategories(
-    "tests/desktop-packaging.test.js",
-    declaration.name,
-    declaration.source,
-  );
-  const signals = sourceReadSignals(
-    declaration.source,
-    staticSignals(source),
-    source,
-    categories,
-  );
-
-  assert.equal(signals.assertionProfile.allStatic, false);
-  assert.equal(
-    dispositionFor(
-      {
-        sourceRead: signals,
-        modifier: null,
-        dynamicMatrix: false,
-        dynamicName: false,
-      },
-      "M05-G",
+test("classifier does not grant static status from source-holder variable names", () => {
+  for (const name of [
+    "bridge",
+    "owner",
+    "capability",
+    "auth",
+    "package",
+    "sandbox",
+    "artifact",
+  ]) {
+    const source = `
+      const fs = require("node:fs");
+      const path = require("node:path");
+      const root = path.resolve(__dirname, "..");
+      const readProductionSource = () =>
+        fs.readFileSync(path.join(root, "desktop", "preload.js"), "utf8");
+      test("generic source variable is not an invariant", () => {
+        const ${name} = readProductionSource();
+        assert.match(${name}, /someInternalBusinessThing/);
+      });
+    `;
+    const declaration = extractTests(source)[0];
+    const categories = inferStaticCategories(
+      "tests/desktop-packaging.test.js",
+      declaration.name,
+      declaration.source,
+      source,
+    );
+    const signals = sourceReadSignals(
+      declaration.source,
+      staticSignals(source),
+      source,
       categories,
-    ).disposition,
-    "REWRITE_PUBLIC_BEHAVIOR",
-  );
+    );
+
+    assert.deepEqual(categories, [], name);
+    assert.equal(signals.assertionProfile.allStatic, false, name);
+    assert.equal(
+      dispositionFor(
+        {
+          sourceRead: signals,
+          modifier: null,
+          dynamicMatrix: false,
+          dynamicName: false,
+        },
+        "M05-G",
+        categories,
+      ).disposition,
+      "REWRITE_PUBLIC_BEHAVIOR",
+      name,
+    );
+  }
 });
 
 test("classifier does not treat generic context tokens as static invariants", () => {

@@ -771,7 +771,6 @@ function expressionUsesSourceReader(
       aliases.has(token.value) &&
       tokens[index - 1]?.value !== "." &&
       tokens[index - 1]?.value !== "?." &&
-      !["(", ",", ":", "?", "&&", "||"].includes(tokens[index - 1]?.value) &&
       !(
         tokens[index + 1]?.value === "." &&
         SOURCE_SHAPE_METHODS.has(tokens[index + 2]?.value)
@@ -963,7 +962,12 @@ function sourceReaderValueAt(source, tokens, metadata, aliases, index) {
   if (!token || token.type !== "identifier") return false;
   if (aliases.has(token.value))
     return (
-      tokens[index - 1]?.value !== "." && tokens[index - 1]?.value !== "?."
+      tokens[index - 1]?.value !== "." &&
+      tokens[index - 1]?.value !== "?." &&
+      !(
+        tokens[index + 1]?.value === "." &&
+        !SOURCE_SHAPE_METHODS.has(tokens[index + 2]?.value)
+      )
     );
   if (!metadata.readerNames.has(token.value)) return false;
   if (metadata.helperNames.has(token.value)) {
@@ -1114,6 +1118,150 @@ function sourceAssertionDetails(testSource, fileSource, staticCategories = []) {
   }
 
   return details;
+}
+
+function sourceReaderAnalysis(fileSource) {
+  const source = fileSource || "";
+  const metadata = sourceReaderMetadata(source);
+  const aliases = new Set([
+    ...metadata.aliases,
+    ...findSourceDerivedAliases(
+      source,
+      metadata.readerNames,
+      [],
+      metadata.productionHelperNames,
+      metadata.productionPathVariables,
+    ),
+  ]);
+  const sourceHolders = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const declaration of findVariableDeclarations(source)) {
+      const calls = findCallSources(
+        declaration.expression,
+        metadata.readerNames,
+      );
+      const readsProductionSource = calls.some((call) =>
+        sourceReaderCallIsProduction(
+          call,
+          metadata.productionHelperNames,
+          metadata.helperNames,
+          metadata.productionPathVariables,
+        ),
+      );
+      const expressionTokens = tokenize(declaration.expression);
+      const isSourceHolderAlias =
+        expressionTokens.length === 1 &&
+        expressionTokens[0].type === "identifier" &&
+        sourceHolders.has(expressionTokens[0].value);
+      if (
+        (readsProductionSource || isSourceHolderAlias) &&
+        !sourceHolders.has(declaration.name)
+      ) {
+        sourceHolders.add(declaration.name);
+        changed = true;
+      }
+    }
+  }
+  return { metadata, aliases, sourceHolders };
+}
+
+function neutralizeSourceValues(text, fileSource) {
+  const { metadata, sourceHolders } = sourceReaderAnalysis(fileSource);
+  const tokens = tokenize(text);
+  const ranges = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const isSourceHolder =
+      token?.type === "identifier" &&
+      sourceHolders.has(token.value) &&
+      tokens[index - 1]?.value !== "." &&
+      tokens[index - 1]?.value !== "?.";
+    const isProductionReaderCall =
+      token?.type === "identifier" &&
+      metadata.readerNames.has(token.value) &&
+      tokens[index + 1]?.value === "(";
+    if (!isSourceHolder && !isProductionReaderCall) continue;
+    let end = index + 1;
+    if (isProductionReaderCall) {
+      const closeIndex = findMatchingParenthesis(tokens, index + 1);
+      if (
+        closeIndex !== -1 &&
+        sourceReaderCallIsProduction(
+          text.slice(token.start, tokens[closeIndex].end),
+          metadata.productionHelperNames,
+          metadata.helperNames,
+          metadata.productionPathVariables,
+        )
+      )
+        end = closeIndex + 1;
+    }
+    if (isProductionReaderCall && end === index + 1) continue;
+    ranges.push([tokens[index].start, tokens[end - 1].end]);
+    index = end - 1;
+  }
+
+  if (!ranges.length) return text;
+  let result = "";
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    result += text.slice(cursor, start) + " ".repeat(end - start);
+    cursor = end;
+  }
+  return result + text.slice(cursor);
+}
+
+function assertionEvidenceTexts(testSource) {
+  const tokens = tokenize(testSource);
+  const details = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (
+      tokens[index]?.value === "assert" &&
+      tokens[index + 1]?.value === "." &&
+      ASSERTION_METHODS.has(tokens[index + 2]?.value) &&
+      tokens[index + 3]?.value === "("
+    ) {
+      const closeIndex = findMatchingToken(tokens, index + 3, "(", ")");
+      if (closeIndex !== -1)
+        details.push(
+          testSource.slice(tokens[index].start, tokens[closeIndex].end),
+        );
+    }
+
+    if (tokens[index]?.value !== "expect" || tokens[index + 1]?.value !== "(")
+      continue;
+    const closeIndex = findMatchingToken(tokens, index + 1, "(", ")");
+    if (closeIndex === -1) continue;
+    for (
+      let matcherIndex = closeIndex + 1;
+      matcherIndex < Math.min(tokens.length, closeIndex + 8);
+      matcherIndex += 1
+    ) {
+      if (!EXPECT_MATCHER_METHODS.has(tokens[matcherIndex]?.value)) continue;
+      let matcherEnd = matcherIndex + 1;
+      if (tokens[matcherIndex + 1]?.value === "(") {
+        const matcherClose = findMatchingParenthesis(tokens, matcherIndex + 1);
+        if (matcherClose !== -1) matcherEnd = matcherClose + 1;
+      }
+      details.push(
+        testSource.slice(tokens[index].start, tokens[matcherEnd - 1].end),
+      );
+      break;
+    }
+  }
+
+  return details.concat(extractTests(testSource).map((test) => test.name));
+}
+
+function staticCategoryEvidenceSource(testSource, fileSource = testSource) {
+  const evidence = assertionEvidenceTexts(testSource);
+  if (!evidence.length) return testSource;
+  return evidence
+    .map((text) => neutralizeSourceValues(text, fileSource))
+    .join("\n");
 }
 
 function sourceAssertionProfile(details) {
@@ -1404,7 +1552,12 @@ const STATIC_CATEGORY_RATIONALES = Object.freeze({
     "保护生成 artifact、package inclusion/exclusion、discovery 或 CI contract；运行时行为无法替代构建前/打包边界验证。",
 });
 
-function inferStaticCategories(fileName, _testName, testSource) {
+function inferStaticCategories(
+  fileName,
+  _testName,
+  testSource,
+  fileSource = testSource,
+) {
   const file = fileName.replaceAll("\\", "/");
   const allowedCategories = [
     ...new Set(
@@ -1414,8 +1567,9 @@ function inferStaticCategories(fileName, _testName, testSource) {
     ),
   ];
   if (!allowedCategories.length) return [];
+  const evidenceSource = staticCategoryEvidenceSource(testSource, fileSource);
   return allowedCategories.filter((category) =>
-    staticCategoryMatches(category, testSource),
+    staticCategoryMatches(category, evidenceSource),
   );
 }
 
@@ -1836,6 +1990,7 @@ function collectInventory() {
         relativePath,
         test.name,
         test.source,
+        source,
       );
       const sourceRead = sourceReadSignals(
         test.source,
