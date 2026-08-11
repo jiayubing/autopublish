@@ -35,4 +35,4 @@
 
 ## 当前调度状态
 
-25-F 已完成 package closure 并进入新的 clean integration HEAD；下一包为 `25-G`，尚未创建。主任务只有在本状态核验完成后才创建唯一的 25-G `luna/max` 用户可见执行任务；25-G 完成后按本 handoff 顶部合同在 package closure、Independent Audit Handoff、集成和状态更新后停止。
+25-F 已完成 package closure 并进入新的 clean integration HEAD；随后主任务严格串行创建并等待唯一的 25-G `luna/max` 用户可见执行任务。25-G 已完成 execution/package closure 和 Independent Audit Handoff：执行任务为 `019ff2cf-0ef5-7a23-8574-eefc340c81e5`，worktree 为 `C:\Users\violet\.codex\worktrees\8c4c\官媒投稿-refactor`，implementation commit 为 `fa96f0868bb4ddff07ddd33fb632276a03044335`，主任务已将其与 handoff/docs 集成到新的 clean integration HEAD `c9a4ed8d692da6fd4714e25e12e6086085640c7d`。本次 Goal 在 25-G package closure、Independent Audit Handoff、主任务集成和本次状态更新后停止；不进入 Independent Combined Audit、remediation、bounded re-audit、final clean smoke、真实登录/发布/付费/订单刷新、其他真实外部验收或 Wave 11 `COMPLETE`，且不 push。

@@ -4,7 +4,7 @@
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** `RUNNING`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E`、`25-F` 已完成 package closure；25-F 已由主任务 fast-forward 集成到当前真实 clean integration HEAD `72ba6e136977f089405e9a1993747e368e0f8615`，并完成主任务侧直接复核。下一合同包为 `25-G`，当前尚未调度。本次用户 Goal 在 25-G package closure、Independent Audit Handoff、集成和状态更新后停止；Ticket 25 / Wave 11 尚未完成 combined audit、最终 closure 或 `COMPLETE`。
+**Status:** `PARTIAL`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E`、`25-F`、`25-G` 已完成 package closure；25-G implementation、Independent Audit Handoff 与主任务侧 provenance 已核验并集成到新的 clean integration HEAD `c9a4ed8d692da6fd4714e25e12e6086085640c7d`。本次用户 Goal 在 25-G package closure、Independent Audit Handoff、集成和状态更新后停止；Ticket 25 / Wave 11 尚未执行 Independent Combined Audit、remediation、bounded closure re-audit、最终 clean smoke 或真实外部验收，也未达到 `COMPLETE`。
 
 **Scheduling gate:** `SATISFIED`；波次 10 Ticket 24 与维护插槽 10.5（M04 → M05 → M06）均为 `COMPLETE`。Ticket 18–21 不属于前置依赖。启动基线与执行边界见 `../handoffs/25-0-startup-readiness.md`。
 
