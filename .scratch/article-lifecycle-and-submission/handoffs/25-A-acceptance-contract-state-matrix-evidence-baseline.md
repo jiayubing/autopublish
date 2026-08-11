@@ -57,3 +57,10 @@ Generated reports均在 ignored `auto—publish/build/evidence/`，并包含精�
 ## 下一包入口与停止边界
 
 下一包入口是 `25-B`，但必须由主任务在集成 `dde5dfa` 到新的 clean integration HEAD 后另行调度；本执行任务不分析、实现或预建 25-B/C/D/E/F/G，也不更新后续包状态。
+
+## 主任务集成核验
+
+- 实现提交：`dde5dfa`；handoff 提交：`a599e6c`；handoff EOF 修复提交：`2eb834c8`。
+- 主任务 merge/integration commit：`3ce0eb3de4fa495975cf68dda38600c2cd8cadcd`。
+- 主任务在该 clean integration HEAD 重跑 `test:ticket-25-a`、`benchmark:ticket-25-a`、43 项直接回归、`test:discover`、`lint`、`format:check` 和 `git diff --check`，全部通过；benchmark query/scan hard gate 为 7/7，wall-clock 仍为 observation-only。
+- 以上只证明 25-A package closure；不替代 25-G 后的独立 combined audit、final clean smoke 或 Ticket 25/Wave 11 closure。
