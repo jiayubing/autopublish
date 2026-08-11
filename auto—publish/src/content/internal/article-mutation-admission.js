@@ -9,6 +9,18 @@ const {
   normalizeArticleRef,
 } = require("../article-ref");
 
+const ACTIVE_TARGET_STATUSES = new Set([
+  "queued",
+  "claimed",
+  "reserving",
+  "remote_started",
+  "paid_processing",
+  "uncertain",
+  "unknown",
+  "0",
+  "1",
+]);
+
 function createArticleMutationAdmission(kernel) {
   const regularQueueTransitions = kernel.ports.regularQueueTransitions;
   const paidAdmissionTransitions = kernel.ports.paidAdmissionTransitions;
@@ -197,7 +209,11 @@ function createArticleMutationAdmission(kernel) {
               candidate.queueGroupId
             );
           });
-          const activeTargetKeys = Object.keys(workflow.targetFacts || {});
+          const activeTargetKeys = Object.entries(workflow.targetFacts || {})
+            .filter(([, fact]) =>
+              ACTIVE_TARGET_STATUSES.has(fact && fact.status),
+            )
+            .map(([activeTargetKey]) => activeTargetKey);
           if (
             activeTargetKeys.some(function (activeTargetKey) {
               return activeTargetKey !== targetKey;
