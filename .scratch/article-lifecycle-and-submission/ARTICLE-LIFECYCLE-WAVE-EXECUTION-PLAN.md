@@ -23,9 +23,9 @@
 | Wave 9                     | `COMPLETE` | Ticket 23 Closure、migration/专项矩阵与最终 clean-HEAD reconciliation 已闭合                                                                                                |
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 | Maintenance M05             | `COMPLETE`  | M05-I combined audit/closure、`M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9` final evidence reconciliation、blocking remediation、bounded re-audit 与 implementation-HEAD M05-specific gates 已闭合；最新 handoff 见 `handoffs/M05-J9-final-authoritative-closure-remediation.md` |
-| Maintenance M06             | `COMPLETE`  | M06-H 最终 bounded remediation 已在 `af3d116` 完成 queue `inputDir` 非法类型 fail-closed 修复；bounded re-audit 与最终 clean-HEAD full gate PASS；handoff 见 `handoffs/M06-H-final-queue-failure-closure.md`；Ticket 25 保持 PENDING/blocked/not started |
+| Maintenance M06             | `COMPLETE`  | M06-H 最终 bounded remediation 已在 `af3d116` 完成 queue `inputDir` 非法类型 fail-closed 修复；bounded re-audit 与最终 clean-HEAD full gate PASS；handoff 见 `handoffs/M06-H-final-queue-failure-closure.md` |
 
-**当前动作：M05=`COMPLETE`、M06/M06-G/M06-H=`COMPLETE`、Maintenance 10.5=`COMPLETE`。M06-H final implementation commit `af3d116` 已在最终 clean source state 通过 queue-reader fault-injection、AST、M06 static gates 与完整 root 1,848/1,848 runner；交接见 `handoffs/M06-H-final-queue-failure-closure.md`。Ticket 25 保持 `PENDING`/blocked/not started；未 push、release 或执行真实外部操作。**
+**当前动作：Ticket 25=`READY`，启动准备已在 clean integration HEAD `292a2f4` 完成；下一步从 85 条 user stories tracked 追踪矩阵与版本化查询/扫描预算开始，不复用旧 HEAD generated evidence。Ticket 25 尚未进入实现/验收执行，未执行真实登录、发布、付费或平台操作。启动基线见 `handoffs/25-0-startup-readiness.md`。**
 
 **M05 final non-blocking finding:** Inventory manifest digest remains sensitive to cross-platform working-tree byte representation / line endings. Core inventory structure is stable: 248 files / 1689 declarations / 76 static guards / 0 rewrite. Defer to future tooling ownership.
 
@@ -66,7 +66,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
 | 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
 | 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E1 → E2 → E3 → F → G → H → I → J → J3 → J4 → J5 → J6 → J7 → J8 → J9 → M06-0 → M06-A → M06-B → M06-C → M06-D → M06-E → M06-F → M06-G → M06-H | Wave 10 COMPLETE；M06-H final bounded remediation 与 implementation-HEAD clean evidence 已闭合 | `COMPLETE`；M04/M05/M06-0/M06-A～H 全部 closure、gate 与 evidence 已闭合 |
-| 11   | 25                                                       | 24；10.5 COMPLETE（含 M06）                             | `PENDING`；blocked/not started by explicit post-M06 scheduling gate |
+| 11   | 25                                                       | 24；10.5 COMPLETE（含 M06）                             | `READY`；startup preparation complete，尚未进入实现/验收执行 |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
 | 13   | 平台逐个探索 → 仅 SUPPORTED 的 19→20→21 → 各平台真实验收 | Wave 12 COMPLETE + 每平台显式授权                        | `PENDING`                                                                             |
 

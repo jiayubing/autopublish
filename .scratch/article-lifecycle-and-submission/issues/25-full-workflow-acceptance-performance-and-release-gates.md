@@ -4,9 +4,9 @@
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** document-ready；当前不可调度
+**Status:** `READY`；启动准备已完成，尚未进入实现/验收执行
 
-**Scheduling gate:** 作为波次 11 唯一 ticket，等待波次 10 Ticket 24 完成并使波次 10 `COMPLETE`，随后维护插槽 10.5（M04 → M05 → M06）也 `COMPLETE` 后调度；Ticket 18–21 不属于前置依赖。
+**Scheduling gate:** `SATISFIED`；波次 10 Ticket 24 与维护插槽 10.5（M04 → M05 → M06）均为 `COMPLETE`。Ticket 18–21 不属于前置依赖。启动基线与执行边界见 `../handoffs/25-0-startup-readiness.md`。
 
 ## 启动约定
 

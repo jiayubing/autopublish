@@ -4,7 +4,7 @@
 
 **Status:** `COMPLETE`；M06-H 后续 bounded audit 暴露的 queue `inputDir` 非法文件系统类型 finding 已在最终 implementation commit `af3d116` 完成最小修复、fault-injection coverage、bounded re-audit 与 final clean-HEAD root/supplemental gates；最终 evidence 见 `../handoffs/M06-H-final-bounded-remediation-clean-head-evidence.json`。
 
-**Scheduling gate:** M05、M06-A～G 与 Maintenance 10.5=`COMPLETE`。Ticket 25 保持 `PENDING`/blocked/not started，不能由本 closure 自动启动。
+**Scheduling gate:** M05、M06-A～H 与 Maintenance 10.5=`COMPLETE`。M06 closure 未自动启动 Ticket 25；Ticket 25 已由后续独立启动准备切换为 `READY`，见 `../handoffs/25-0-startup-readiness.md`。
 
 ## Scope
 
@@ -63,7 +63,7 @@ M06-A closure 时状态为 `M06-A=COMPLETE`、`M06-B=READY`；其后的 M06-B cl
 
 M06-B 已完成 content / file persistence / lifecycle owner 的实现、定向故障注入验证、Primary Audit、blocking finding 检查、bounded re-audit 与 AST reconciliation。文章文件事务、锁与 removal recovery、生成 batch/AI test state、attention lookup、materials/questions/files 及 Doubao collection/generation persistence 均按失败语义收敛；读失败不再伪装为不存在，写入、rollback、lock、recovery 和关键 state cleanup 不再伪装成功。保留的 6 个 `EMPTY` handler 仅为已注释且可观察语义成立的 optional diagnostic artifact cleanup / historical optional parse probe。完整证据见 `handoffs/M06-B-content-file-persistence-lifecycle-cleanup.md`。
 
-历史推进快照已由下方 M06-G closure supersede；当前状态为 `M06-A～G=COMPLETE`、`M06/Maintenance 10.5=COMPLETE`、`Ticket 25=PENDING/blocked/not started`。
+历史推进快照已由下方 M06-G/M06-H closure supersede；当前状态为 `M06-A～H=COMPLETE`、`M06/Maintenance 10.5=COMPLETE`、`Ticket 25=READY`。
 
 ## M06-C package closure
 
@@ -91,8 +91,8 @@ M06-F 已完成 operator / release / migration scripts 全量 F inventory 对账
 
 F 的 exact-parent 是 `2c3e97d57c32316b214ce8cbfc1f2281a4f1a0dd`。parent AST 为 505 个扫描文件、274 个含 handler 文件、1,138 个 handler；F 为 42 个文件/138 个 handler，shape 为 `DIAGNOSTIC=42`、`ASSIGNMENT_MAPPING=4`、`RETURN_OR_FALLBACK=14`、`PROPAGATE_OR_RETHROW=44`、`SIDE_EFFECT_OR_MAPPING=6`、`EMPTY=26`、`OTHER=2`。implementation tree 的最终 reconciliation 为 505/274/1,151；F 为 42 个文件/151 个 handler，shape 为 `DIAGNOSTIC=42`、`ASSIGNMENT_MAPPING=18`、`RETURN_OR_FALLBACK=16`、`PROPAGATE_OR_RETHROW=54`、`SIDE_EFFECT_OR_MAPPING=21`、`EMPTY=0`、`OTHER=0`，parse diagnostics 为 0。新增 13 个 handler 仅位于 metadata migration (+3)、operational-store migration (+2)、offline smoke cleanup (+1)、alpha package verifier (+3)、packaged DOCX verifier (+2)、packaged Playwright verifier (+2)，分别用于主错误保留、稳定 outcome、受控 cleanup 或 fail-closed provenance/package evidence；未新增 writer、第二状态机、schema 或兼容旁路。
 
-本包已闭合：migration 的 `NEEDS_REPAIR`、lock/lease、rollback、partial/uncertain/operator action；package/manifest/provenance unreadable 或不可验证时的 fail-closed；release/operator result 与实际 HEAD/sourceState/command 的绑定；cleanup failure 与主业务错误隔离；以及 CLI/diagnostic 的稳定 code 与敏感信息屏蔽。F 的 26 个 baseline `EMPTY` 与 2 个 baseline `OTHER` 均已在 authoritative inventory 中逐项解释并清零。M06-G 已完成 combined audit、全量 reconciliation 与最终 clean-HEAD full gate；当前 `M06=COMPLETE`、`Maintenance 10.5=COMPLETE`，Ticket 25 继续 `PENDING/blocked/not started`。
+本包已闭合：migration 的 `NEEDS_REPAIR`、lock/lease、rollback、partial/uncertain/operator action；package/manifest/provenance unreadable 或不可验证时的 fail-closed；release/operator result 与实际 HEAD/sourceState/command 的绑定；cleanup failure 与主业务错误隔离；以及 CLI/diagnostic 的稳定 code 与敏感信息屏蔽。F 的 26 个 baseline `EMPTY` 与 2 个 baseline `OTHER` 均已在 authoritative inventory 中逐项解释并清零。M06-G/H 已完成 combined audit、bounded remediation、全量 reconciliation 与最终 clean-HEAD full gate；当前 `M06=COMPLETE`、`Maintenance 10.5=COMPLETE`，Ticket 25 已由独立启动准备切换为 `READY`。
 
 ## M06-G final closure
 
-M06-G 的完整 provenance、combined Primary Audit、blocking remediation、bounded re-audit、authoritative AST ledger、故障矩阵、最终 clean-HEAD 命令与未跑项见 `handoffs/M06-G-closure-audit-and-clean-head-evidence.md`。本节只保留调度结论：所有 M06 gate 已满足，M06 与 Maintenance 10.5 标记 `COMPLETE`；Ticket 25 保持 `PENDING`/blocked/not started；本 closure 后停止等待集成，不自动启动后续任务。
+M06-G 的完整 provenance、combined Primary Audit、blocking remediation、bounded re-audit、authoritative AST ledger、故障矩阵、最终 clean-HEAD 命令与未跑项见 `handoffs/M06-G-closure-audit-and-clean-head-evidence.md`。本节只保留 M06 closure 结论：所有 M06 gate 已满足，M06 与 Maintenance 10.5 标记 `COMPLETE`；该 closure 当时未自动启动后续任务。Ticket 25 后续已通过独立启动准备切换为 `READY`。
