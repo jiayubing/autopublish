@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "ticket-25-a-runner-contract-v1",
+  "ticket": "25",
+  "package": "25-A",
+  "executionMode": "synthetic_only",
+  "entryPoints": [
+    {
+      "entryId":"contract-test",
+      "command":"npm run test:ticket-25-a -- --output build/evidence/ticket-25-a-contract.json",
+      "script":"auto—publish/scripts/ticket-25-a-evidence.js",
+      "test":"auto—publish/tests/ticket-25-a-contract.test.js",
+      "output":"build/evidence/ticket-25-a-contract.json",
+      "resultKind":"contract_validation",
+      "externalTransport":"forbidden"
+    },
+    {
+      "entryId":"benchmark",
+      "command":"npm run benchmark:ticket-25-a -- --output build/evidence/ticket-25-a-benchmark.json",
+      "script":"auto—publish/scripts/run-ticket-25-a-benchmark.js",
+      "output":"build/evidence/ticket-25-a-benchmark.json",
+      "resultKind":"query_scan_observation",
+      "externalTransport":"forbidden",
+      "wallClock":"observation_only_without_approved_baseline"
+    }
+  ],
+  "productionSmoke": {
+    "dirty": {
+      "command":"npm run pack:production:smoke:dirty -- --output build/evidence/ticket-25-production-smoke-dirty.json",
+      "script":"pack:production:smoke:dirty",
+      "output":"build/evidence/ticket-25-production-smoke-dirty.json",
+      "mode":"dirty_diagnostic",
+      "genericOutputForbidden":"build/evidence/production-smoke.json"
+    },
+    "clean": {
+      "command":"npm run pack:production:smoke -- --output build/evidence/ticket-25-production-smoke-clean.json",
+      "script":"pack:production:smoke",
+      "output":"build/evidence/ticket-25-production-smoke-clean.json",
+      "mode":"clean_integration_reserved",
+      "genericOutputForbidden":"build/evidence/production-smoke.json"
+    },
+    "forwardingRule":"The final --output supplied after npm run is authoritative; repeated --output arguments resolve to the last value. The contract test freezes this parser behavior without building or launching a package.",
+    "notRunIn25A":"The real production packaging smoke commands are not run by the 25-A contract test; 25-A only verifies the command/output/provenance contract."
+  },
+  "outputIsolation": {
+    "root":"build/evidence",
+    "requiredRelativePaths":["ticket-25-a-contract.json","ticket-25-a-benchmark.json","ticket-25-production-smoke-dirty.json","ticket-25-production-smoke-clean.json"],
+    "forbiddenRelativePaths":["production-smoke.json"],
+    "distinctDirtyClean":true,
+    "noPathTraversal":true,
+    "noAbsolutePathInReportCommand":true
+  },
+  "provenance": {
+    "requiredFields":["commit","sourceState","nodeVersion","command","startedAt","finishedAt","durationMs","environment"],
+    "sourceStateStatuses":["CLEAN","DIRTY"],
+    "commitPattern":"^[a-f0-9]{40,64}$",
+    "nodeVersionPattern":"^v[0-9]+\\.[0-9]+\\.[0-9]+$",
+    "environmentRequired":{"externalOperations":"none","credentials":"not-collected","sensitiveValues":"excluded"}
+  },
+  "failureBehavior": {
+    "invalidContract":"fail closed with a stable TICKET_25_A_* code",
+    "hardBudgetExceeded":"write FAILED evidence and return non-zero",
+    "externalOperationRequested":"reject before any transport call",
+    "rawErrorSerialization":"forbidden"
+  }
+}

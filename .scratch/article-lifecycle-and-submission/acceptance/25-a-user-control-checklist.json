@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "ticket-25-a-user-control-checklist-v1",
+  "ticket": "25",
+  "package": "25-A",
+  "status": "USER_EXTERNAL_ACCEPTANCE_REQUIRED",
+  "purpose": "Define the later human-controlled evidence entries without performing any real account, publication, payment or order action in 25-A.",
+  "entries": [
+    {
+      "evidenceId": "regular-platform-two-groups-text-only",
+      "stories": [25],
+      "evidenceCategory": "user_controlled",
+      "status": "USER_EXTERNAL_ACCEPTANCE_REQUIRED",
+      "requiredAuthorization": "One explicit authorization for this exact two-group text-only acceptance run.",
+      "safeIdentityFields": ["platformAliasA","accountProfileAliasA","platformAliasB","accountProfileAliasB","targetAliasA","targetAliasB"],
+      "riskSummary": "Real publication can create publicly visible content; no image upload or extra target is allowed.",
+      "prerequisites": ["two approved ordinary-platform accounts","two text-only synthetic articles","operator-visible stop control","no shared article identity across targets"],
+      "recordFields": ["safe account aliases","target aliases","start/stop timestamps","queue group order","accepted or not-accepted result","remote link only if the user authorizes recording it"],
+      "stopConditions": ["unexpected login challenge","target/account mismatch","any image request","uncertain remote result","unexpected fee or non-text side effect"]
+    },
+    {
+      "evidenceId": "website-media-order-status-refresh",
+      "stories": [64],
+      "evidenceCategory": "user_controlled",
+      "status": "USER_EXTERNAL_ACCEPTANCE_REQUIRED",
+      "requiredAuthorization": "Separate explicit authorization for a bounded real website-media order status refresh; this is not order creation authorization.",
+      "safeIdentityFields": ["supplierAlias","orderAlias","mediaResourceAlias","articleAlias"],
+      "riskSummary": "A real order refresh can expose supplier state and may have cost or account consequences; no create, cancel, appeal or payment action is allowed by this entry.",
+      "prerequisites": ["known existing order chosen by the user","supplier/account safety review","refresh-only capability","operator-visible stop control"],
+      "recordFields": ["safe supplier/order/resource aliases","previous local status","observed status","observation timestamp","refresh result","stop reason"],
+      "stopConditions": ["order identity cannot be verified","refresh would create or cancel an order","supplier requests payment or login","missing/contradictory observation","unexpected remote write capability"]
+    }
+  ],
+  "automationBoundary": {
+    "syntheticOnlyIn25A": true,
+    "forbiddenActions": ["login","publish","create order","payment","refresh real order","cancel","appeal","image upload"],
+    "missingEvidenceCode": "USER_EXTERNAL_ACCEPTANCE_REQUIRED"
+  }
+}
