@@ -6,6 +6,9 @@ const {
   isRecoveryGuardBusy,
   withRecoveryGuard,
 } = require("./operational-store-recovery-guard");
+const {
+  reportDiagnostic,
+} = require("../../../diagnostics/diagnostic-producer");
 
 const activeStores = new Set();
 
@@ -17,24 +20,63 @@ function migrationLockPath(filename) {
   return path.join(path.dirname(filename), "migration.lock");
 }
 
-function ownerProcessAlive(pid) {
+function ownerFailure(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function reportOwnerCleanupFailure(operation, failureKind) {
+  reportDiagnostic({
+    code: "OPERATIONAL_OWNER_CLEANUP_FAILED",
+    module: "operational-store-owner-lease",
+    category: "storage",
+    metadata: { operation, phase: "cleanup", failureKind },
+  });
+}
+
+function lockFailure(fail, code) {
+  return typeof fail === "function" ? fail(code) : ownerFailure(code);
+}
+
+function ownerProcessAlive(pid, fail, unavailableCode) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return error && error.code === "EPERM";
+    if (error && error.code === "EPERM") return true;
+    if (error && error.code === "ESRCH") return false;
+    throw lockFailure(
+      fail,
+      unavailableCode || "OPERATIONAL_WRITE_OWNER_UNAVAILABLE",
+    );
   }
 }
 
-function readLock(filename) {
+function readLock(
+  filename,
+  fail,
+  unavailableCode = "OPERATIONAL_WRITE_OWNER_UNAVAILABLE",
+) {
   try {
     const stat = fs.lstatSync(filename);
-    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw lockFailure(fail, unavailableCode);
     const value = JSON.parse(fs.readFileSync(filename, "utf8"));
-    return value && Number.isInteger(value.pid) ? value : null;
-  } catch (_) {
-    return null;
+    if (
+      !value ||
+      !Number.isInteger(value.pid) ||
+      value.pid <= 0 ||
+      typeof value.token !== "string" ||
+      value.token.length === 0
+    )
+      throw lockFailure(fail, unavailableCode);
+    return value;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    if (error && error.code === unavailableCode) throw error;
+    throw lockFailure(fail, unavailableCode);
   }
 }
 
@@ -42,36 +84,50 @@ function assertStoreAvailable(filename, fail) {
   if (activeStores.has(filename)) throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
 }
 
-function ownsMigrationLease(lock, migrationOwner) {
-  return Boolean(
+function assertMigrationLeaseAvailable(filename, fail, migrationOwner) {
+  const lock = migrationLockPath(filename);
+  let value;
+  try {
+    value = readLock(lock, fail, "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE");
+  } catch (error) {
+    if (error && error.code === "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE")
+      throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
+    throw error;
+  }
+  if (!value) return;
+  if (
     migrationOwner &&
     migrationOwner.lock === lock &&
     typeof migrationOwner.token === "string" &&
-    readLock(lock)?.token === migrationOwner.token,
-  );
-}
-
-function assertMigrationLeaseAvailable(filename, fail, migrationOwner) {
-  const lock = migrationLockPath(filename);
-  if (!fs.existsSync(lock)) return;
-  if (ownsMigrationLease(lock, migrationOwner)) return;
-  const value = readLock(lock);
-  if (!value || ownerProcessAlive(value.pid))
+    value.token === migrationOwner.token
+  )
+    return;
+  if (
+    ownerProcessAlive(
+      value.pid,
+      fail,
+      "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE",
+    )
+  )
     throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
   try {
     fs.unlinkSync(lock);
-  } catch (_) {
+  } catch (error) {
+    if (error && error.code === "ENOENT") return;
     throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
   }
 }
 
-function releaseRuntimeOwnerUnderGuard(runtimeOwner) {
+function releaseRuntimeOwnerUnderGuard(runtimeOwner, fail) {
   if (!runtimeOwner) return;
-  const value = readLock(runtimeOwner.lock);
+  const value = readLock(runtimeOwner.lock, fail);
   if (value && value.token === runtimeOwner.token) {
     try {
       fs.unlinkSync(runtimeOwner.lock);
-    } catch (_) {}
+    } catch (error) {
+      if (error && error.code === "ENOENT") return;
+      throw lockFailure(fail, "OPERATIONAL_WRITE_OWNER_RELEASE_FAILED");
+    }
   }
 }
 
@@ -96,12 +152,12 @@ function acquireRuntimeOwner(
         } catch (error) {
           if (!error || error.code !== "EEXIST")
             throw fail("OPERATIONAL_WRITE_OWNER_UNAVAILABLE");
-          const owner = readLock(lock);
+          const owner = readLock(lock, fail);
           if (!owner) throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
-          if (ownerProcessAlive(owner && owner.pid))
+          if (ownerProcessAlive(owner && owner.pid, fail))
             throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
           if (fs.existsSync(filename)) verifyExistingDatabase(filename);
-          const currentOwner = readLock(lock);
+          const currentOwner = readLock(lock, fail);
           if (!currentOwner || currentOwner.token !== owner.token) continue;
           try {
             fs.unlinkSync(lock);
@@ -116,7 +172,13 @@ function acquireRuntimeOwner(
           assertMigrationLeaseAvailable(filename, fail, migrationOwner);
           return runtimeOwner;
         } catch (error) {
-          releaseRuntimeOwnerUnderGuard(runtimeOwner);
+          try {
+            releaseRuntimeOwnerUnderGuard(runtimeOwner, fail);
+          } catch (cleanupError) {
+            if (error && !error.cleanupCode)
+              error.cleanupCode = cleanupError.code;
+            reportOwnerCleanupFailure("runtime-owner-acquire", "release");
+          }
           throw error;
         }
       }
@@ -141,12 +203,26 @@ function acquireMigrationOwner(filename, fail, verifyExistingDatabase) {
       assertStoreAvailable(filename, fail);
       const runtimeLock = ownerLockPath(filename);
       for (;;) {
-        const runtimeOwner = readLock(runtimeLock);
+        const runtimeOwner = readLock(
+          runtimeLock,
+          fail,
+          "OPERATIONAL_WRITE_OWNER_UNAVAILABLE",
+        );
         if (!runtimeOwner) break;
-        if (ownerProcessAlive(runtimeOwner.pid))
+        if (
+          ownerProcessAlive(
+            runtimeOwner.pid,
+            fail,
+            "OPERATIONAL_WRITE_OWNER_UNAVAILABLE",
+          )
+        )
           throw fail("OPERATIONAL_WRITE_OWNER_EXISTS");
         if (fs.existsSync(filename)) verifyExistingDatabase(filename);
-        const current = readLock(runtimeLock);
+        const current = readLock(
+          runtimeLock,
+          fail,
+          "OPERATIONAL_WRITE_OWNER_UNAVAILABLE",
+        );
         if (!current || current.token !== runtimeOwner.token) continue;
         try {
           fs.unlinkSync(runtimeLock);
@@ -166,14 +242,30 @@ function acquireMigrationOwner(filename, fail, verifyExistingDatabase) {
         } catch (error) {
           if (!error || error.code !== "EEXIST")
             throw fail("OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE");
-          const owner = readLock(lock);
-          if (!owner || ownerProcessAlive(owner.pid))
+          const owner = readLock(
+            lock,
+            fail,
+            "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE",
+          );
+          if (
+            !owner ||
+            ownerProcessAlive(
+              owner.pid,
+              fail,
+              "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE",
+            )
+          )
             throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
-          const current = readLock(lock);
+          const current = readLock(
+            lock,
+            fail,
+            "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE",
+          );
           if (!current || current.token !== owner.token) continue;
           try {
             fs.unlinkSync(lock);
-          } catch (_) {
+          } catch (error) {
+            if (error && error.code === "ENOENT") continue;
             throw fail("OPERATIONAL_MIGRATION_LEASE_ACTIVE");
           }
         }
@@ -190,19 +282,26 @@ function acquireMigrationOwner(filename, fail, verifyExistingDatabase) {
 
 function releaseMigrationOwner(filename, migrationOwner) {
   if (!migrationOwner) return;
-  try {
-    withRecoveryGuard(
-      filename,
-      () => {
-        const owner = readLock(migrationOwner.lock);
-        if (owner && owner.token === migrationOwner.token)
-          try {
-            fs.unlinkSync(migrationOwner.lock);
-          } catch (_) {}
-      },
-      5000,
-    );
-  } catch (_) {}
+  const fail = (code) => ownerFailure(code);
+  withRecoveryGuard(
+    filename,
+    () => {
+      const owner = readLock(
+        migrationOwner.lock,
+        fail,
+        "OPERATIONAL_MIGRATION_LEASE_UNAVAILABLE",
+      );
+      if (owner && owner.token === migrationOwner.token) {
+        try {
+          fs.unlinkSync(migrationOwner.lock);
+        } catch (error) {
+          if (error && error.code === "ENOENT") return;
+          throw fail("OPERATIONAL_MIGRATION_LEASE_RELEASE_FAILED");
+        }
+      }
+    },
+    5000,
+  );
 }
 
 function registerStore(filename) {
@@ -210,15 +309,29 @@ function registerStore(filename) {
 }
 
 function releaseRuntimeOwner(filename, runtimeOwner) {
-  activeStores.delete(filename);
-  if (!runtimeOwner) return;
+  if (!runtimeOwner) {
+    activeStores.delete(filename);
+    return;
+  }
+  const fail = (code) => ownerFailure(code);
   try {
     withRecoveryGuard(
       filename,
-      () => releaseRuntimeOwnerUnderGuard(runtimeOwner),
+      () => releaseRuntimeOwnerUnderGuard(runtimeOwner, fail),
       5000,
     );
-  } catch (_) {}
+  } catch (error) {
+    if (
+      error &&
+      [
+        "OPERATIONAL_RECOVERY_GUARD_BUSY",
+        "OPERATIONAL_RECOVERY_GUARD_UNAVAILABLE",
+      ].includes(error.code)
+    )
+      throw fail("OPERATIONAL_WRITE_OWNER_RELEASE_FAILED");
+    throw error;
+  }
+  activeStores.delete(filename);
 }
 
 module.exports = {

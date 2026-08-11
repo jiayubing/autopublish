@@ -45,7 +45,10 @@ test("unsafe or malformed existing binding state cannot be overwritten", () => {
   try {
     fs.writeFileSync(filename, "not json", "utf8");
     const store = createPlatformAccountBindingStore({ localStateRoot: root });
-    assert.equal(store.get("account-123"), null);
+    assert.throws(
+      () => store.get("account-123"),
+      (error) => error.code === "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+    );
     assert.throws(
       () =>
         store.bind({
@@ -53,7 +56,7 @@ test("unsafe or malformed existing binding state cannot be overwritten", () => {
           platformId: "toutiao",
           remoteFingerprint: "a".repeat(64),
         }),
-      /binding storage is invalid/,
+      (error) => error.code === "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
     );
     assert.equal(fs.readFileSync(filename, "utf8"), "not json");
   } finally {

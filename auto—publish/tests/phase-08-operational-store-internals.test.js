@@ -9,6 +9,12 @@ const {
   SCHEMA_VERSION,
   createOperationalStore,
 } = require("../src/infrastructure/operational-store/operational-store");
+const {
+  runTransaction,
+} = require("../src/infrastructure/operational-store/internal/operational-store-transaction");
+const {
+  setDiagnosticReporter,
+} = require("../src/diagnostics/diagnostic-producer");
 const facadePath = path.join(
   root,
   "src/infrastructure/operational-store/operational-store.js",
@@ -187,6 +193,41 @@ test("OperationalStore facade hides SQL, table names, and transaction choreograp
     source,
     /\b(?:publication_records|submission_items|remote_orders|recovery_intents|order_display_snapshots)\b/,
   );
+});
+
+test("transaction rollback cleanup preserves the primary failure and records a safe code", () => {
+  const events = [];
+  const restore = setDiagnosticReporter(function (record) {
+    events.push(record);
+    return true;
+  });
+  const primary = new Error("primary transaction failure");
+  const db = {
+    exec(statement) {
+      if (statement === "ROLLBACK") throw new Error("rollback unavailable");
+    },
+  };
+  try {
+    assert.throws(
+      () =>
+        runTransaction(db, () => {
+          throw primary;
+        }),
+      (error) =>
+        error === primary &&
+        error.cleanupCode === "OPERATIONAL_TRANSACTION_ROLLBACK_FAILED",
+    );
+    assert.deepEqual(
+      events.map((record) => record.code),
+      ["OPERATIONAL_TRANSACTION_ROLLBACK_FAILED"],
+    );
+    assert.equal(
+      JSON.stringify(events).includes("primary transaction failure"),
+      false,
+    );
+  } finally {
+    restore();
+  }
 });
 
 test("production callers cannot bypass the OperationalStore facade", () => {

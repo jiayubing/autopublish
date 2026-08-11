@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -69,6 +70,8 @@ function clone(value) {
 function createPlatformTaskStateStore(options) {
   const opts = options || {};
   const now = opts.now || (() => new Date().toISOString());
+  const io = opts.fs || fs;
+  const pathApi = opts.path || path;
   const persistedSnapshotPath = opts.persistedSnapshotPath || null;
   let snapshot = createEmptySnapshot();
   let taskKeys = new Set();
@@ -77,26 +80,71 @@ function createPlatformTaskStateStore(options) {
 
   if (persistedSnapshotPath) {
     try {
-      const restored = JSON.parse(fs.readFileSync(persistedSnapshotPath, "utf8"));
-      if (restored && restored.phase === "interrupted" && restored.runId) snapshot = Object.assign(createEmptySnapshot(), restored);
-    } catch (_) {}
+      const restored = JSON.parse(io.readFileSync(persistedSnapshotPath, "utf8"));
+      if (restored && restored.phase === "interrupted" && restored.runId) {
+        snapshot = Object.assign(createEmptySnapshot(), restored);
+      } else {
+        reportDiagnostic({
+          code: "PLATFORM_TASK_SNAPSHOT_RESTORE_REJECTED",
+          module: "platform-task-state-store",
+          category: "storage",
+          metadata: { operation: "restore", phase: "validate" },
+        });
+      }
+    } catch (error) {
+      if (!error || error.code !== "ENOENT") {
+        reportDiagnostic({
+          code: "PLATFORM_TASK_SNAPSHOT_RESTORE_FAILED",
+          module: "platform-task-state-store",
+          category: "storage",
+          metadata: { operation: "restore", phase: "read" },
+        });
+      }
+    }
   }
 
   function persist() {
     if (!persistedSnapshotPath) return;
+    const temporary = `${persistedSnapshotPath}.tmp-${process.pid}`;
     try {
-      fs.mkdirSync(path.dirname(persistedSnapshotPath), { recursive: true });
-      const temporary = `${persistedSnapshotPath}.tmp-${process.pid}`;
-      fs.writeFileSync(temporary, JSON.stringify(snapshot) + "\n", { mode: 0o600 });
-      fs.renameSync(temporary, persistedSnapshotPath);
-    } catch (_) {}
+      io.mkdirSync(pathApi.dirname(persistedSnapshotPath), { recursive: true });
+      io.writeFileSync(temporary, JSON.stringify(snapshot) + "\n", { mode: 0o600 });
+      io.renameSync(temporary, persistedSnapshotPath);
+    } catch (_) {
+      reportDiagnostic({
+        code: "PLATFORM_TASK_SNAPSHOT_PERSIST_FAILED",
+        module: "platform-task-state-store",
+        category: "storage",
+        metadata: { operation: "persist", phase: "write" },
+      });
+    } finally {
+      try {
+        if (io.existsSync(temporary)) io.unlinkSync(temporary);
+      } catch (_) {
+        reportDiagnostic({
+          code: "PLATFORM_TASK_SNAPSHOT_TEMP_CLEANUP_FAILED",
+          module: "platform-task-state-store",
+          category: "storage",
+          metadata: { operation: "persist", phase: "cleanup", action: "unlink" },
+        });
+      }
+    }
   }
 
   function notify() {
     persist();
     const value = getSnapshot();
     listeners.forEach((listener) => {
-      try { listener(value); } catch (_) {}
+      try {
+        listener(value);
+      } catch (_) {
+        reportDiagnostic({
+          code: "PLATFORM_TASK_STATE_LISTENER_FAILED",
+          module: "platform-task-state-store",
+          category: "internal",
+          metadata: { operation: "notify", phase: "listener" },
+        });
+      }
     });
   }
 

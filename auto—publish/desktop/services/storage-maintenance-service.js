@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LIMITS = Object.freeze({
@@ -145,7 +146,14 @@ function createStorageMaintenanceService(options) {
       let rootStat;
       try {
         rootStat = io.lstatSync(current);
-      } catch (_) {
+      } catch (error) {
+        if (error && error.code === "ENOENT") return;
+        reportDiagnostic({
+          code: "STORAGE_SCAN_FAILED",
+          module: "storage-maintenance-service",
+          category: "storage",
+          metadata: { operation: "scan", phase: "root-stat" },
+        });
         return;
       }
       if (rootStat.isSymbolicLink()) {
@@ -156,7 +164,14 @@ function createStorageMaintenanceService(options) {
       let entries;
       try {
         entries = io.readdirSync(current);
-      } catch (_) {
+      } catch (error) {
+        if (error && error.code === "ENOENT") return;
+        reportDiagnostic({
+          code: "STORAGE_SCAN_FAILED",
+          module: "storage-maintenance-service",
+          category: "storage",
+          metadata: { operation: "scan", phase: "directory-read" },
+        });
         return;
       }
       entries.forEach(function (name) {
@@ -164,7 +179,14 @@ function createStorageMaintenanceService(options) {
         let stat;
         try {
           stat = io.lstatSync(filePath);
-        } catch (_) {
+        } catch (error) {
+          if (error && error.code === "ENOENT") return;
+          reportDiagnostic({
+            code: "STORAGE_SCAN_FAILED",
+            module: "storage-maintenance-service",
+            category: "storage",
+            metadata: { operation: "scan", phase: "entry-stat" },
+          });
           return;
         }
         if (stat.isSymbolicLink()) {

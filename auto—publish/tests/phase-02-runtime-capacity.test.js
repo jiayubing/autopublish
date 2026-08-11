@@ -217,6 +217,22 @@ test("a migration contender never removes a lease it did not acquire", () => {
   }
 });
 
+test("a malformed runtime owner lock fails closed and remains intact", () => {
+  const workspaceRoot = root();
+  const operations = path.join(workspaceRoot, ".autopublish", "operations");
+  const lock = path.join(operations, "runtime.lock");
+  try {
+    fs.mkdirSync(operations, { recursive: true });
+    fs.writeFileSync(lock, "not-json");
+    assert.throws(() => createOperationalStore({ workspaceRoot }), {
+      code: "OPERATIONAL_WRITE_OWNER_UNAVAILABLE",
+    });
+    assert.equal(fs.readFileSync(lock, "utf8"), "not-json");
+  } finally {
+    cleanup(workspaceRoot);
+  }
+});
+
 test("SQLITE_FULL-equivalent commit failure, inaccessible paths and corruption fail closed without partial facts", () => {
   const workspaceRoot = root();
   try {

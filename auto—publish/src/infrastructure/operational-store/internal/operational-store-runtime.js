@@ -11,6 +11,9 @@ const {
   releaseRuntimeOwner,
 } = require("./operational-store-owner-lease");
 const { verifyOperationalDatabase } = require("./operational-store-verifier");
+const {
+  reportDiagnostic,
+} = require("../../../diagnostics/diagnostic-producer");
 
 function databasePath(root, filename, temporary) {
   const expected = path.resolve(
@@ -67,25 +70,61 @@ function openOperationalStoreRuntime(options) {
         : null,
     );
   } catch (error) {
+    let cleanupCode = null;
     try {
       if (db) db.close();
-    } catch (_) {}
-    releaseRuntimeOwner(filename, runtimeOwner);
+    } catch (_) {
+      cleanupCode = "OPERATIONAL_DATABASE_CLOSE_FAILED";
+      reportDiagnostic({
+        code: cleanupCode,
+        module: "operational-store-runtime",
+        category: "storage",
+        metadata: {
+          operation: "open",
+          phase: "cleanup",
+          failureKind: "database-close",
+        },
+      });
+    }
+    try {
+      releaseRuntimeOwner(filename, runtimeOwner);
+    } catch (_) {
+      const failureCode = "OPERATIONAL_WRITE_OWNER_RELEASE_FAILED";
+      cleanupCode = cleanupCode || failureCode;
+      reportDiagnostic({
+        code: failureCode,
+        module: "operational-store-runtime",
+        category: "storage",
+        metadata: {
+          operation: "open",
+          phase: "cleanup",
+          failureKind: "owner-release",
+        },
+      });
+    }
+    if (cleanupCode && error && !error.cleanupCode)
+      error.cleanupCode = cleanupCode;
     throw error && error.code
       ? error
       : fail("OPERATIONAL_DATABASE_OPEN_FAILED");
   }
   registerStore(filename);
-  let closed = false;
+  let databaseClosed = false;
+  let ownerReleased = runtimeOwner === null;
   return Object.freeze({
     filename,
     db,
     close() {
-      if (closed) return;
-      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-      db.close();
-      closed = true;
-      releaseRuntimeOwner(filename, runtimeOwner);
+      if (databaseClosed && ownerReleased) return;
+      if (!databaseClosed) {
+        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        db.close();
+        databaseClosed = true;
+      }
+      if (!ownerReleased) {
+        releaseRuntimeOwner(filename, runtimeOwner);
+        ownerReleased = true;
+      }
     },
   });
 }

@@ -11,6 +11,9 @@ const {
 const {
   createContentSubmissionService,
 } = require("../desktop/services/content-submission-service");
+const {
+  createSubmissionCleanup,
+} = require("../desktop/services/submission-cleanup");
 
 function article() {
   return {
@@ -148,4 +151,49 @@ test("reconciles a batch through the public item projection", () => {
   } finally {
     closeFixture(value);
   }
+});
+
+test("fails closed when the source article state cannot be read", () => {
+  const cleanup = createSubmissionCleanup({
+    operationalStore: {},
+    contentStore: {
+      isArticleTrashed: () => {
+        throw new Error("source state unavailable");
+      },
+    },
+    projection: {
+      allItemViews: () => [
+        { clientId: "client-cleanup", articleId: "article-cleanup", storedStatus: "queued" },
+      ],
+    },
+    policy: {
+      CLEANED_STATUSES: new Set(),
+      evaluateItemAction: () => ({ allowed: false }),
+    },
+    actionRecovery: {},
+  });
+
+  assert.throws(
+    () => cleanup.previewTrashedArticleQueueResidue(),
+    { code: "SUBMISSION_SOURCE_STATE_READ_FAILED" },
+  );
+});
+
+test("fails closed when published archive attention cannot be read", () => {
+  const cleanup = createSubmissionCleanup({
+    operationalStore: {
+      listPostProcessingAttention: () => {
+        throw new Error("archive state unavailable");
+      },
+    },
+    contentStore: {},
+    projection: {},
+    policy: {},
+    actionRecovery: {},
+  });
+
+  assert.throws(
+    () => cleanup.listArchiveFailures(),
+    { code: "PUBLISHED_ARCHIVE_STATE_READ_FAILED" },
+  );
 });

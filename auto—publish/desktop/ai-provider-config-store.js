@@ -1,6 +1,7 @@
 const defaultFs = require("node:fs");
 const defaultPath = require("node:path");
 const crypto = require("node:crypto");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 const FILE_NAME = "ai-provider.json";
 
@@ -108,7 +109,16 @@ function createAiProviderConfigStore(options) {
         io.writeFileSync(temporaryPath, JSON.stringify(disk), { encoding: "utf8", mode: 0o600 });
         io.renameSync(temporaryPath, filePath);
       } finally {
-        try { if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath); } catch (_) {}
+        try {
+          if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath);
+        } catch (_) {
+          reportDiagnostic({
+            code: "AI_CONFIG_TEMP_CLEANUP_FAILED",
+            module: "ai-provider-config-store",
+            category: "storage",
+            metadata: { operation: "write", phase: "cleanup", action: "unlink" },
+          });
+        }
       }
       return decrypt(disk);
     } catch (error) {

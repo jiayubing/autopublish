@@ -5,6 +5,7 @@ const { createStoragePaths } = require("../src/infrastructure/workspace/storage-
 const { createWorkspacePaths, ensureWorkspaceDirectories } = require("../src/infrastructure/workspace/workspace-paths");
 const { createRuntimeConfigStore, SUPPORTED_RUNTIME_CONFIG_KEYS, LEGACY_RUNTIME_CONFIG_KEYS } = require("./runtime-config-store");
 const { createRuntimeDiagnosticsService } = require("./services/runtime-diagnostics-service");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 let loadedWorkspaceEnv;
 let loadedWorkspaceValues = {};
@@ -29,7 +30,17 @@ function loadApplicationEnvironment(configRoot, store) {
   unloadValues(loadedApplicationValues);
   loadedApplicationValues = {};
   let values = {};
-  try { values = store.read(); } catch (_) { values = {}; }
+  try {
+    values = store.read();
+  } catch (_) {
+    reportDiagnostic({
+      code: "RUNTIME_CONFIG_READ_FAILED",
+      module: "runtime-config",
+      category: "storage",
+      metadata: { operation: "load-application-environment", phase: "read" },
+    });
+    values = {};
+  }
   SUPPORTED_RUNTIME_CONFIG_KEYS.forEach(function(key) {
     if (process.env[key] !== undefined || values[key] === undefined) return;
     process.env[key] = values[key];
@@ -73,18 +84,44 @@ function safeLegacyFile(filename, io) {
     return stat;
   } catch (error) {
     if (error && error.code === "ENOENT") return null;
+    reportDiagnostic({
+      code: "LEGACY_RUNTIME_CONFIG_PROBE_FAILED",
+      module: "runtime-config",
+      category: "storage",
+      metadata: { operation: "legacy-file-probe", phase: "inspect" },
+    });
     return null;
   }
 }
 
 function readLegacyEnvironmentFile(filename, io) {
   if (!safeLegacyFile(filename, io)) return {};
-  try { return dotenv.parse(io.readFileSync(filename, "utf8")); } catch (_) { return {}; }
+  try {
+    return dotenv.parse(io.readFileSync(filename, "utf8"));
+  } catch (_) {
+    reportDiagnostic({
+      code: "LEGACY_ENV_PARSE_FAILED",
+      module: "runtime-config",
+      category: "storage",
+      metadata: { operation: "legacy-environment", phase: "parse" },
+    });
+    return {};
+  }
 }
 
 function readLegacyRuntimeValues(store) {
   if (!store || typeof store.readLegacy !== "function") return {};
-  try { return store.readLegacy(); } catch (_) { return {}; }
+  try {
+    return store.readLegacy();
+  } catch (_) {
+    reportDiagnostic({
+      code: "LEGACY_RUNTIME_CONFIG_READ_FAILED",
+      module: "runtime-config",
+      category: "storage",
+      metadata: { operation: "legacy-runtime-config", phase: "read" },
+    });
+    return {};
+  }
 }
 
 function legacyCandidate(values, source) {
@@ -152,7 +189,15 @@ function createLegacyProviderSettingsMigration(options) {
         updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : null,
         entries: record.entries.map((entry) => ({ platform: entry.platform, source: entry.source, status: entry.status, code: entry.code || null }))
       };
-    } catch (_) { return null; }
+    } catch (_) {
+      reportDiagnostic({
+        code: "PLATFORM_CONFIG_MIGRATION_RECORD_READ_FAILED",
+        module: "runtime-config",
+        category: "storage",
+        metadata: { operation: "platform-settings-migration", phase: "read" },
+      });
+      return null;
+    }
   }
 
   function writeRecord(entries) {
@@ -163,7 +208,16 @@ function createLegacyProviderSettingsMigration(options) {
       io.writeFileSync(temporary, JSON.stringify(record, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
       io.renameSync(temporary, migrationFile);
     } finally {
-      try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch (_) {}
+      try {
+        if (io.existsSync(temporary)) io.unlinkSync(temporary);
+      } catch (_) {
+        reportDiagnostic({
+          code: "PLATFORM_CONFIG_MIGRATION_TEMP_CLEANUP_FAILED",
+          module: "runtime-config",
+          category: "storage",
+          metadata: { operation: "platform-settings-migration", phase: "cleanup", action: "unlink" },
+        });
+      }
     }
     return record;
   }

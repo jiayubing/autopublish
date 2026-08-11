@@ -345,8 +345,8 @@ function createWorkspaceMigrationGate(options) {
       let latest = current;
       try {
         latest = readJournal({ migrationRunId: plan.migrationRunId });
-      } catch (_) {
-        return safeFailure(error, "MIGRATION_JOURNAL_UNAVAILABLE");
+      } catch (journalError) {
+        return safeFailure(journalError, "MIGRATION_JOURNAL_UNAVAILABLE");
       }
       return blocked(
         error && typeof error.code === "string"

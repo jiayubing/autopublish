@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 const DEVICE_IDENTITY_VERSION = 1;
 
@@ -51,7 +52,16 @@ function createDeviceIdentityStore(options) {
       fsApi.writeFileSync(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
       fsApi.renameSync(temporary, filePath);
     } catch (error) {
-      try { fsApi.rmSync(temporary, { force: true }); } catch (_) {}
+      try {
+        fsApi.rmSync(temporary, { force: true });
+      } catch (_) {
+        reportDiagnostic({
+          code: "AUTH_DEVICE_ID_TEMP_CLEANUP_FAILED",
+          module: "device-identity-store",
+          category: "storage",
+          metadata: { operation: "create", phase: "cleanup", action: "remove" },
+        });
+      }
       throw deviceIdentityError("AUTH_DEVICE_ID_UNAVAILABLE", "无法保存本机设备身份");
     }
     return record;

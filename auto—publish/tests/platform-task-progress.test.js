@@ -1,9 +1,13 @@
 const assert = require("node:assert/strict");
 const { describe, it } = require("node:test");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const { createPlatformTaskStateStore } = require("../desktop/services/platform-task-state-store");
+const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 
-describe("platform task progress snapshot", function() {
+describe("platform task progress snapshot", { concurrency: false }, function() {
   it("restores 7 of 20 processed tasks without exposing paths", function() {
     const store = createPlatformTaskStateStore({ now: () => "2026-07-19T00:01:00.000Z" });
     store.start({
@@ -46,9 +50,6 @@ describe("platform task progress snapshot", function() {
   });
 
   it("restores an interrupted marker without pretending the worker is running", function() {
-    const fs = require("node:fs");
-    const os = require("node:os");
-    const path = require("node:path");
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "platform-task-marker-"));
     const marker = path.join(root, "platform-task-snapshot.json");
     try {
@@ -59,5 +60,56 @@ describe("platform task progress snapshot", function() {
       assert.equal(restored.getSnapshot().phase, "interrupted");
       assert.equal(restored.getSnapshot().isPlatformRunning, false);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("reports snapshot persistence failure without leaking the marker path", function() {
+    const events = [];
+    const restore = setDiagnosticReporter(function(record) {
+      events.push(record);
+      return true;
+    });
+    const marker = path.join(os.tmpdir(), "platform-task-persistence-failure.json");
+    const failingFs = Object.assign({}, fs, {
+      writeFileSync: function() {
+        throw Object.assign(new Error("disk is full"), { code: "ENOSPC" });
+      },
+    });
+    try {
+      const store = createPlatformTaskStateStore({
+        fs: failingFs,
+        persistedSnapshotPath: marker,
+      });
+      store.start({
+        runId: "run-persistence-failure",
+        tasks: [{ sourcePlatformId: "hepan", filename: "one.md", targetPlatformId: "hepan" }],
+      });
+      assert.equal(store.getSnapshot().phase, "running");
+      assert.ok(events.some((record) => record.code === "PLATFORM_TASK_SNAPSHOT_PERSIST_FAILED"));
+      assert.equal(JSON.stringify(events).includes(marker), false);
+    } finally {
+      restore();
+    }
+  });
+
+  it("isolates one listener failure while notifying the remaining listeners", function() {
+    const events = [];
+    const restore = setDiagnosticReporter(function(record) {
+      events.push(record);
+      return true;
+    });
+    try {
+      const store = createPlatformTaskStateStore();
+      const snapshots = [];
+      store.subscribe(() => { throw new Error("listener failed"); });
+      store.subscribe((snapshot) => snapshots.push(snapshot));
+      store.start({
+        runId: "run-listener-isolation",
+        tasks: [],
+      });
+      assert.equal(snapshots.length, 1);
+      assert.ok(events.some((record) => record.code === "PLATFORM_TASK_STATE_LISTENER_FAILED"));
+    } finally {
+      restore();
+    }
   });
 });

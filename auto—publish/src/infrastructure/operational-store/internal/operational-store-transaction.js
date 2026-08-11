@@ -1,3 +1,7 @@
+const {
+  reportDiagnostic,
+} = require("../../../diagnostics/diagnostic-producer");
+
 function runTransaction(db, callback, beforeCommit) {
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -8,7 +12,16 @@ function runTransaction(db, callback, beforeCommit) {
   } catch (error) {
     try {
       db.exec("ROLLBACK");
-    } catch (_) {}
+    } catch (_) {
+      const cleanupCode = "OPERATIONAL_TRANSACTION_ROLLBACK_FAILED";
+      if (error && !error.cleanupCode) error.cleanupCode = cleanupCode;
+      reportDiagnostic({
+        code: cleanupCode,
+        module: "operational-store-transaction",
+        category: "storage",
+        metadata: { operation: "transaction", phase: "rollback" },
+      });
+    }
     throw error;
   }
 }

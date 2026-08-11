@@ -1,6 +1,7 @@
 const defaultFs = require("node:fs");
 const defaultPath = require("node:path");
 const crypto = require("node:crypto");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 function providerError(code, message) {
   const error = new Error(message);
@@ -156,7 +157,16 @@ function createPlatformProviderConfigStore(options) {
         io.writeFileSync(temporaryPath, JSON.stringify({ version: 1, values: plain, secrets: encrypted, updatedAt: new Date().toISOString() }) + "\n", { encoding: "utf8", mode: 0o600 });
         io.renameSync(temporaryPath, filePath);
       } finally {
-        try { if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath); } catch (_) {}
+        try {
+          if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath);
+        } catch (_) {
+          reportDiagnostic({
+            code: "PLATFORM_CONFIG_TEMP_CLEANUP_FAILED",
+            module: "platform-provider-config-store",
+            category: "storage",
+            metadata: { operation: "write", phase: "cleanup", action: "unlink" },
+          });
+        }
       }
       return config;
     } catch (error) {

@@ -1,6 +1,7 @@
 const defaultFs = require("node:fs");
 const defaultPath = require("node:path");
 const crypto = require("node:crypto");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 const FILE_NAME = "runtime-config.json";
 const SUPPORTED_RUNTIME_CONFIG_KEYS = Object.freeze([
@@ -130,7 +131,16 @@ function createRuntimeConfigStore(options) {
         io.writeFileSync(temporaryPath, JSON.stringify({ version: 1, values: normalizeRuntimeConfig(values) }) + "\n", { encoding: "utf8", mode: 0o600 });
         io.renameSync(temporaryPath, filePath);
       } finally {
-        try { if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath); } catch (_) {}
+        try {
+          if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath);
+        } catch (_) {
+          reportDiagnostic({
+            code: "RUNTIME_CONFIG_TEMP_CLEANUP_FAILED",
+            module: "runtime-config-store",
+            category: "storage",
+            metadata: { operation: "remove-keys", phase: "cleanup", action: "unlink" },
+          });
+        }
       }
     } catch (error) {
       if (error && error.code && error.code.startsWith("RUNTIME_CONFIG_")) throw error;
@@ -151,7 +161,16 @@ function createRuntimeConfigStore(options) {
         io.writeFileSync(temporaryPath, JSON.stringify({ version: 1, values: normalized }) + "\n", { encoding: "utf8", mode: 0o600 });
         io.renameSync(temporaryPath, filePath);
       } finally {
-        try { if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath); } catch (_) {}
+        try {
+          if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath);
+        } catch (_) {
+          reportDiagnostic({
+            code: "RUNTIME_CONFIG_TEMP_CLEANUP_FAILED",
+            module: "runtime-config-store",
+            category: "storage",
+            metadata: { operation: "write", phase: "cleanup", action: "unlink" },
+          });
+        }
       }
       return normalized;
     } catch (error) {

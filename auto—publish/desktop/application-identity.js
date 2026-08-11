@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 const APPLICATION_NAME = "AutoPublish";
 const APPLICATION_ID = "com.autopublish.desktop";
@@ -66,11 +67,29 @@ function importLegacyApplicationConfig(options) {
     return { imported: imported, source: legacyRoot, target: canonicalRoot };
   } catch (error) {
     imported.forEach(function(filename) {
-      try { if (fs.existsSync(path.join(canonicalRoot, filename))) fs.unlinkSync(path.join(canonicalRoot, filename)); } catch (_) {}
+      try {
+        if (fs.existsSync(path.join(canonicalRoot, filename))) fs.unlinkSync(path.join(canonicalRoot, filename));
+      } catch (_) {
+        reportDiagnostic({
+          code: "APP_CONFIG_IMPORT_ROLLBACK_FAILED",
+          module: "application-identity",
+          category: "storage",
+          metadata: { operation: "legacy-import", phase: "rollback", action: "unlink" },
+        });
+      }
     });
     throw error;
   } finally {
-    fs.rmSync(staging, { recursive: true, force: true });
+    try {
+      fs.rmSync(staging, { recursive: true, force: true });
+    } catch (_) {
+      reportDiagnostic({
+        code: "APP_CONFIG_IMPORT_STAGING_CLEANUP_FAILED",
+        module: "application-identity",
+        category: "storage",
+        metadata: { operation: "legacy-import", phase: "cleanup", action: "remove" },
+      });
+    }
   }
 }
 

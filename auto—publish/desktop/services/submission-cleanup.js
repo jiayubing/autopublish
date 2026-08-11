@@ -1,5 +1,7 @@
 "use strict";
 
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+
 function fail(code, message) {
   const error = new Error(message || code);
   error.code = code;
@@ -27,7 +29,16 @@ function createSubmissionCleanup(options) {
             ) && !policy.CLEANED_STATUSES.has(item.storedStatus)
           );
         } catch (_) {
-          return false;
+          reportDiagnostic({
+            code: "SUBMISSION_SOURCE_STATE_READ_FAILED",
+            module: "submission-cleanup",
+            category: "storage",
+            metadata: { operation: "preview-trashed-residue", phase: "read-source-state" },
+          });
+          throw fail(
+            "SUBMISSION_SOURCE_STATE_READ_FAILED",
+            "Submission source article state could not be read",
+          );
         }
       })
       .map((item) => {
@@ -128,7 +139,16 @@ function createSubmissionCleanup(options) {
         }),
       );
     } catch (_) {
-      return [];
+      reportDiagnostic({
+        code: "PUBLISHED_ARCHIVE_STATE_READ_FAILED",
+        module: "submission-cleanup",
+        category: "storage",
+        metadata: { operation: "list-archive-failures", phase: "read" },
+      });
+      throw fail(
+        "PUBLISHED_ARCHIVE_STATE_READ_FAILED",
+        "Published archive state could not be read",
+      );
     }
   }
 

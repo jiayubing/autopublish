@@ -55,6 +55,22 @@ const {
 const {
   createOperationalStoreMigrationImport,
 } = require("./internal/operational-store-migration-import");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
+
+function closeAfterFailure(context, error, operation) {
+  try {
+    context.close();
+  } catch (cleanupError) {
+    if (error && !error.cleanupCode)
+      error.cleanupCode = cleanupError.code || "OPERATIONAL_STORE_CLOSE_FAILED";
+    reportDiagnostic({
+      code: "OPERATIONAL_STORE_CLOSE_FAILED",
+      module: "operational-store",
+      category: "storage",
+      metadata: { operation, phase: "cleanup" },
+    });
+  }
+}
 
 function createOperationalStoreMigrationFacade(options) {
   const runtime = openOperationalStoreRuntime(options);
@@ -72,7 +88,7 @@ function createOperationalStoreMigrationFacade(options) {
       close: context.close,
     });
   } catch (error) {
-    context.close();
+    closeAfterFailure(context, error, "migration-facade-create");
     throw error;
   }
 }
@@ -214,7 +230,7 @@ function createOperationalStore(options) {
       close: context.close,
     });
   } catch (error) {
-    context.close();
+    closeAfterFailure(context, error, "store-create");
     throw error;
   }
 }

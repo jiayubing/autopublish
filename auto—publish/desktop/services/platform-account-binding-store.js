@@ -2,6 +2,13 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+
+function bindingError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
 
 function valid(value, pattern) {
   return typeof value === "string" && pattern.test(value);
@@ -25,15 +32,24 @@ function createPlatformAccountBindingStore(options) {
       stat = io.lstatSync(filename);
     } catch (error) {
       if (error && error.code === "ENOENT") return {};
-      throw new Error("Platform account binding storage is unreadable");
+      throw bindingError(
+        "PLATFORM_ACCOUNT_BINDING_STORAGE_UNAVAILABLE",
+        "Platform account binding storage is unreadable",
+      );
     }
     if (!stat.isFile() || stat.isSymbolicLink())
-      throw new Error("Platform account binding storage is unsafe");
+      throw bindingError(
+        "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+        "Platform account binding storage is unsafe",
+      );
     let parsed;
     try {
       parsed = JSON.parse(io.readFileSync(filename, "utf8"));
     } catch (_) {
-      throw new Error("Platform account binding storage is invalid");
+      throw bindingError(
+        "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+        "Platform account binding storage is invalid",
+      );
     }
     if (
       !parsed ||
@@ -50,15 +66,21 @@ function createPlatformAccountBindingStore(options) {
     try {
       const stat = io.lstatSync(filename);
       if (!stat.isFile() || stat.isSymbolicLink())
-        throw new Error("Platform account binding storage is unsafe");
+        throw bindingError(
+          "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+          "Platform account binding storage is unsafe",
+        );
     } catch (error) {
       if (error && error.code === "ENOENT") return;
       if (
         error &&
-        error.message === "Platform account binding storage is unsafe"
+        error.code === "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID"
       )
         throw error;
-      throw new Error("Platform account binding storage is unreadable");
+      throw bindingError(
+        "PLATFORM_ACCOUNT_BINDING_STORAGE_UNAVAILABLE",
+        "Platform account binding storage is unreadable",
+      );
     }
   }
   function write(bindings) {
@@ -78,18 +100,21 @@ function createPlatformAccountBindingStore(options) {
       if (!renamed) {
         try {
           io.unlinkSync(temporary);
-        } catch (_) {}
+        } catch (_) {
+          reportDiagnostic({
+            code: "PLATFORM_ACCOUNT_BINDING_TEMP_CLEANUP_FAILED",
+            module: "platform-account-binding-store",
+            category: "storage",
+            metadata: { operation: "write", phase: "cleanup", action: "unlink" },
+          });
+        }
       }
     }
   }
   return Object.freeze({
     get: function (accountProfileId) {
       let entry;
-      try {
-        entry = read()[accountProfileId];
-      } catch (_) {
-        return null;
-      }
+      entry = read()[accountProfileId];
       return entry &&
         valid(entry.platformId, /^[a-z][a-z0-9-]{0,63}$/) &&
         valid(entry.remoteFingerprint, /^[a-f0-9]{64}$/)
@@ -106,7 +131,10 @@ function createPlatformAccountBindingStore(options) {
         !valid(item.platformId, /^[a-z][a-z0-9-]{0,63}$/) ||
         !valid(item.remoteFingerprint, /^[a-f0-9]{64}$/)
       )
-        throw new Error("Platform account binding is invalid");
+        throw bindingError(
+          "PLATFORM_ACCOUNT_BINDING_INVALID",
+          "Platform account binding is invalid",
+        );
       const bindings = read();
       bindings[item.accountProfileId] = {
         platformId: item.platformId,

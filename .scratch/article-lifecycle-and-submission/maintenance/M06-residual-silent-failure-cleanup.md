@@ -2,9 +2,9 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成，下一项为 M06-A
+**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成；M06-A 已完成，下一 gate 为 M06-B
 
-**Scheduling gate:** M05 `COMPLETE` 后调度；当前为维护 10.5 最后一项且尚未开始。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
+**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A 已完成并将 M06-B 置为 `READY`，但 M06 仍在运行。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
 
 ## Scope
 
@@ -25,8 +25,8 @@ M06-0 的唯一 inventory/scope 真源为：
 | 包    | Owner / failure domain                                                                                                                                     | 状态       |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | M06-0 | 全量 residual catch / rejection inventory、classification、scope freeze；不改 production                                                                   | `COMPLETE` |
-| M06-A | OperationalStore / workspace / state persistence / cleanup                                                                                                 | `READY`    |
-| M06-B | content / file persistence / lifecycle                                                                                                                     | `PENDING`  |
+| M06-A | OperationalStore / workspace / state persistence / cleanup                                                                                                 | `COMPLETE` |
+| M06-B | content / file persistence / lifecycle                                                                                                                     | `READY`    |
 | M06-C | remote / process / platform runtime                                                                                                                        | `PENDING`  |
 | M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `PENDING`  |
 | M06-E | auth / security                                                                                                                                            | `PENDING`  |
@@ -52,3 +52,9 @@ M06-0 的唯一 inventory/scope 真源为：
 - [ ] 完整测试与关键故障注入通过，交接记录保留项及理由。
 
 M06-G 完成前，M06 与 Maintenance 10.5 均不得标记 `COMPLETE`，Ticket 25 不得启动。G 完成后停止，不自动进入 Ticket 25。
+
+## M06-A package closure
+
+M06-A 已完成其独立合同：OperationalStore owner/lease/recovery/transaction、workspace/config persistence、platform task state persistence、submission cleanup/staging 与 storage maintenance 的全部 A inventory handlers 均已逐项复核；无 A 包残留 `EMPTY` handler。定向测试、故障注入、Phase 08 architecture/package gate、AST before/after reconciliation、Primary Audit 与 bounded re-audit evidence 见 `handoffs/M06-A-operational-store-workspace-state-persistence-cleanup.md`。
+
+当前推进状态：`M06-A=COMPLETE`、`M06-B=READY`、`M06/Maintenance 10.5=PARTIAL`、`Ticket 25=PENDING/blocked`。M06-B 未在本包启动；M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。

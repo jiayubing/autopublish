@@ -218,7 +218,14 @@ function createSubmissionOperationStaging(options) {
         fs.readdirSync(staged.directory).length === 0
       )
         fs.rmdirSync(staged.directory);
-    } catch (_) {}
+    } catch (error) {
+      if (error && error.code === "SUBMISSION_ACTION_OPERATION_CONFLICT")
+        throw error;
+      throw fail(
+        "CONTENT_SUBMISSION_QUEUE_STAGE_CLEANUP_FAILED",
+        "Submission operation staging could not be cleaned",
+      );
+    }
   }
 
   return Object.freeze({
