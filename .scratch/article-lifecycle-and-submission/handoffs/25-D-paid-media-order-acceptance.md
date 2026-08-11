@@ -87,3 +87,10 @@ tests/phase-06-media-feature.test.mjs
 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`：`user-control:website-media-order-status-refresh` 仍未执行；真实服务商订单刷新需要用户另行明确授权，并记录安全账号/资源身份、订单号、状态、金额/链接、结果和停止条件。
 
 禁止并未执行：真实登录、真实平台发布、真实付费或订单创建、真实订单刷新/取消/申诉、真实余额/账号操作、生产数据库修改、公开页面轮询、图片上传、外部供应商写操作以及 `git push`。
+
+## 主任务集成核验
+
+- Implementation：`45244e5`；matrix/evidence：`f2a49c9`；handoff：`73647e5`。
+- 主任务 merge/integration commit：`d2ce21ff27f4e5bfca61f68ec5643dac669e0de7`。
+- 主任务在该 clean integration HEAD 重跑 D package test（6/6）、D 组合回归（143/143）、25-A contract validator（85 stories、95 rows、21 cases、10 deferred image rows、14 tracked artifacts）、discovery（253）、lint、format 和 diff check，全部通过。
+- 以上只证明 25-D package closure；不替代 25-G 后的独立 combined audit、final clean smoke 或 Ticket 25/Wave 11 closure。
