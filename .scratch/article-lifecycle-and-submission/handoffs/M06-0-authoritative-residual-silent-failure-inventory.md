@@ -495,3 +495,34 @@ exact parent 的 26 个 `EMPTY` 与 2 个 `OTHER` 逐项如下。每一行对应
 | `scripts/workspace-manifest.js` | `58: PROPAGATE_OR_RETHROW`; `137: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；manifest unreadable 不输出完整结果 |
 
 表内 handler 数量核对为 `DIAGNOSTIC=42`、`ASSIGNMENT_MAPPING=18`、`RETURN_OR_FALLBACK=16`、`PROPAGATE_OR_RETHROW=54`、`SIDE_EFFECT_OR_MAPPING=21`，合计 151；`EMPTY=0`、`OTHER=0`。F 的 33 项 priority set 全部在上述全量 ledger 中，未将非 priority handler 当作自动安全白名单。
+
+## 11. Post-closure blocking remediation reconciliation
+
+`696f5cff183632bd4700df96cb006da98504adf9` 后续 audit 暴露 queue reader 与 paid-media 的 blocking failure-semantics finding。本节只对 remediation 直接改变的 A/C handler 做增量对账，不重开 A～F fresh full review。
+
+候选树命令：
+
+```powershell
+node --check .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs
+node .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs --summary
+```
+
+结果为 `scannedFiles=505`、`filesWithCatches=274`、`catches=1154`、`parseDiagnostics=[]`。相对 `696f5cff` 的 1,151 handlers 净增 3；A 只发生 shape 收敛，C 新增 3 个显式主错误传播 handler。B/D/E/F 的 files/handler totals 均未变化。
+
+| package | files | handlers | propagate | diagnostic | return/fallback | side/mapping | assignment | EMPTY | OTHER |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 44 | 197 | 106 | 40 | 29 | 5 | 17 | 0 | 0 |
+| B | 47 | 282 | 140 | 74 | 26 | 26 | 10 | 6 | 0 |
+| C | 67 | 257 | 76 | 20 | 92 | 52 | 12 | 4 | 1 |
+| D | 54 | 190 | 48 | 28 | 50 | 53 | 11 | 0 | 0 |
+| E | 20 | 77 | 32 | 3 | 15 | 20 | 7 | 0 | 0 |
+| F | 42 | 151 | 54 | 42 | 16 | 21 | 18 | 0 | 0 |
+
+受影响 ledger：
+
+- `desktop/composition/workspace-runtime-composition.js:203,726`：`PROPAGATE_OR_RETHROW → FAIL_CLOSED + EXPLICIT_ABSENCE`；只有 `PLATFORM_CONFIG_NOT_SET` 返回空配置，配置存储/解密/路径读取失败继续传播。
+- `desktop/services/paid-media-preflight-service.js:289,523,540`：`PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME + PROPAGATE_PRIMARY`；preflight 使用 `PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE` blocker，confirmation 的文章/配置读取失败保留稳定错误并复位本地 `inFlight`，未消费 token、未创建 admission fact。
+- `desktop/services/platform-workbench/queue-reader.js:83,204,315`：`PROPAGATE_OR_RETHROW → EXPLICIT_ABSENCE + PROPAGATE_PRIMARY`；仅 `ENOENT` 代表真实缺失/并发消失，其他 primary/sidecar inspection failure 映射为 `PLATFORM_QUEUE_READ_FAILED`。
+- `desktop/services/platform-workbench/queue-reader.js:103`：`RETURN_OR_FALLBACK → EXPLICIT_INVALID_INPUT`；JSON malformed 仍是 invalid sidecar，不与上面的 I/O inspection failure 竞争。
+
+本增量没有新增 `EMPTY`/`OTHER`、writer、状态机、schema、compatibility path 或远端副作用。最终 post-commit clean-HEAD full gate evidence 尚未生成，因此本节当前只证明候选 AST reconciliation，不能单独恢复 M06=`COMPLETE`。

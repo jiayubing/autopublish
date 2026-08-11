@@ -343,6 +343,49 @@ it("workspace runtime gives the Hepan task service its configured platform setti
   }
 });
 
+it("workspace paid-media configuration provider preserves storage read failures", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-media-config-"));
+  const mediaApplicationPath = require.resolve("../desktop/services/media-workbench-application");
+  const originalMediaApplicationModule = require.cache[mediaApplicationPath];
+  let systemSubmissionCodeProvider = null;
+  require.cache[mediaApplicationPath] = {
+    id: mediaApplicationPath,
+    filename: mediaApplicationPath,
+    loaded: true,
+    exports: {
+      createMediaWorkbenchApplication: function(options) {
+        systemSubmissionCodeProvider = options.systemSubmissionCodeProvider;
+        return {
+          preflightPaidMedia: function() {},
+          confirmPaidMedia: function() {},
+          getPaidMediaBatches: function() {},
+          startPaidMediaBatch: function() {},
+          pausePaidMediaBatch: function() {}
+        };
+      }
+    }
+  };
+  try {
+    const workspace = path.join(root, "workspace");
+    const userDataPath = path.join(root, "user-data");
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.mkdirSync(userDataPath, { recursive: true });
+    fs.writeFileSync(path.join(userDataPath, "media-provider.json"), "not-json", "utf8");
+    const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
+    try {
+      await runtime.start({ workspacePath: workspace });
+      assert.equal(typeof systemSubmissionCodeProvider, "function");
+      assert.throws(systemSubmissionCodeProvider, { code: "PLATFORM_CONFIG_STORAGE_INVALID" });
+    } finally {
+      await runtime.dispose();
+    }
+  } finally {
+    if (originalMediaApplicationModule) require.cache[mediaApplicationPath] = originalMediaApplicationModule;
+    else delete require.cache[mediaApplicationPath];
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("disposes services already created when a middle workspace factory fails", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-factory-failure-"));
   const events = [];

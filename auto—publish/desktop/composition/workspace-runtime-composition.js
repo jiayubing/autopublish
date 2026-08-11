@@ -200,7 +200,9 @@ async function createWorkspaceRuntimeComposition(deps) {
                 platformSettingsService.getRuntimeConfig("media")
                   .thirdPartyId || ""
               );
-            } catch (_) {
+            } catch (error) {
+              if (error && error.code !== "PLATFORM_CONFIG_NOT_SET")
+                throw error;
               return "";
             }
           },
@@ -721,7 +723,9 @@ async function createWorkspaceRuntimeComposition(deps) {
                 platformSettingsService.getRuntimeConfig("media")
                   .thirdPartyId || ""
               );
-            } catch (_) {
+            } catch (error) {
+              if (error && error.code !== "PLATFORM_CONFIG_NOT_SET")
+                throw error;
               return "";
             }
           },

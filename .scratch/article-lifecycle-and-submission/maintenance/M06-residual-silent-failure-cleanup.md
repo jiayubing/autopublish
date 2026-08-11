@@ -2,9 +2,9 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `COMPLETE`；M06-0 authoritative inventory/classification、M06-A～F remediation、M06-G combined closure 与 Maintenance 10.5 final gates 已完成。
+**Status:** `RUNNING`；`696f5cff` 后续 audit 暴露的 1 个 P1、2 个 blocking P2 正在做 bounded post-closure remediation。两个 production failure-semantics finding 已在 dirty candidate 修复并通过定向复审；post-commit clean-HEAD full gate evidence 尚未保存，M06 与 Maintenance 10.5 不得标记 `COMPLETE`。
 
-**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A～F 与 M06-G 已完成，Maintenance 10.5 final gates 已通过。Ticket 25 保持 `PENDING`/blocked/not started，不能由本 closure 自动启动。
+**Scheduling gate:** M05 与 M06-A～F 保持历史 `COMPLETE`；M06-G remediation=`RUNNING`，Maintenance 10.5=`PARTIAL`。只有 remediation commit 后的 clean-HEAD full gate evidence 保存并对账，才可恢复 M06/10.5=`COMPLETE`。Ticket 25 保持 `PENDING`/blocked/not started。
 
 ## Scope
 
@@ -31,7 +31,7 @@ M06-0 的唯一 inventory/scope 真源为：
 | M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `COMPLETE` |
 | M06-E | auth / security                                                                                                                                            | `COMPLETE` |
 | M06-F | operator / release / migration scripts                                                                                                                     | `COMPLETE` |
-| M06-G | combined audit、inventory/failure-semantics reconciliation、blocking remediation、bounded re-audit、final clean-HEAD full gate 与 Maintenance 10.5 closure | `COMPLETE` |
+| M06-G | combined audit、inventory/failure-semantics reconciliation、blocking remediation、bounded re-audit、final clean-HEAD full gate 与 Maintenance 10.5 closure | `RUNNING` |
 
 不得按 catch 数量重新平均拆包。M06-0 census 为 505 个扫描文件、276 个有 catch 的文件、1,099 个 catch/rejection handler、0 parse diagnostics；其中 `EMPTY=148`。高优先级复核集去重后为 217 项：A=34、B=45、C=44、D=43、E=18、F=33。每包仍需检查其全部 inventory，不得把 priority set 当作其余项自动安全的白名单。
 
@@ -49,7 +49,7 @@ M06-0 的唯一 inventory/scope 真源为：
 - [x] persistence/security/remote/process 路径没有 silent swallow；保留项均为明确 outcome、optional probe/parse、listener isolation 或 best-effort cleanup。
 - [x] 保留的 cleanup/probe 都有明确语义，且不会把失败伪装成成功；cleanup failure 不覆盖主错误。
 - [x] 敏感错误不写入日志；diagnostic metadata 仍为 allowlisted/sanitized，provenance 缺失时 fail closed。
-- [x] 完整测试、故障矩阵、auth/format/type/build/audit/特殊 gates 与最终 clean-HEAD evidence 已记录在 M06-G handoff。
+- [ ] `696f5cff` 后续 blocking remediation 的 post-commit clean-HEAD full gate evidence 已保存并与最终 HEAD 对账。
 
 M06-G 完成前，M06 与 Maintenance 10.5 均不得标记 `COMPLETE`，Ticket 25 不得启动。G 完成后停止，不自动进入 Ticket 25。
 

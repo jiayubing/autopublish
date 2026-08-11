@@ -266,6 +266,11 @@ const COMMON_ERRORS = Object.freeze({
     retryability: "never",
     userMessage: "所选付费文章不存在。",
   },
+  PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE: {
+    category: "storage",
+    retryability: "safe",
+    userMessage: "文章状态读取失败，未创建付费批次。",
+  },
   PAID_MEDIA_RESOURCE_REQUIRED: {
     category: "validation",
     retryability: "never",

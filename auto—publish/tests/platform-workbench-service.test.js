@@ -67,6 +67,32 @@ describe("platform-workbench-service", function () {
     assert.strictEqual(queue[0].articles[0].accountProfileId, "account-lieju");
   });
 
+  it("fails the queue read when an article or sidecar entry cannot be inspected", function () {
+    const articlePath = path.join(root, "input", "lieju", "a.txt");
+    const sidecarPath = articlePath + ".submission.json";
+    const originalLstatSync = fs.lstatSync;
+    try {
+      [articlePath, sidecarPath].forEach(function (failedPath) {
+        fs.lstatSync = function (candidate) {
+          if (candidate === failedPath) {
+            const error = new Error("synthetic queue lstat failure");
+            error.code = "EACCES";
+            throw error;
+          }
+          return originalLstatSync.apply(fs, arguments);
+        };
+        assert.throws(
+          function () {
+            service.scanQueue();
+          },
+          { code: "PLATFORM_QUEUE_READ_FAILED" },
+        );
+      });
+    } finally {
+      fs.lstatSync = originalLstatSync;
+    }
+  });
+
   it("scans and resolves platform queues from the injected content input path", function () {
     const portableInput = path.join(root, ".autopublish", "input");
     fs.mkdirSync(path.join(portableInput, "lieju"), { recursive: true });

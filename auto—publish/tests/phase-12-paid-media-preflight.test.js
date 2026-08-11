@@ -480,6 +480,107 @@ test("article fingerprint, title/body validity and system identifier changes can
   }
 });
 
+test("article state read failures stay unavailable during confirmation and remain safely retryable", async () => {
+  const persisted = article("article-a");
+  let articleReadFails = false;
+  let admitted = 0;
+  const service = createPaidMediaPreflightService({
+    contentStore: {
+      getArticle() {
+        if (articleReadFails)
+          throw new Error("synthetic article state read failure");
+        return persisted;
+      },
+    },
+    paidAdmission: {
+      admitPaidBatch() {
+        admitted += 1;
+        return { batchId: "paid-batch-fixture", items: [] };
+      },
+    },
+    queryResource: async () => ({
+      resourceId: "media-12",
+      name: "媒体十二",
+      remarks: "",
+      price: 12.5,
+      available: true,
+    }),
+    systemSubmissionCodeProvider: () => "system-submission-12",
+    clientSnapshotResolver: (clientId) => ({
+      version: 1,
+      clientId,
+      displayName: "客户甲",
+    }),
+    clock: () => new Date("2026-08-07T00:00:00.000Z"),
+  });
+  const preview = await service.preflight({
+    articleRefs: refs("article-a"),
+    mediaResourceId: "media-12",
+  });
+
+  articleReadFails = true;
+  await assert.rejects(
+    service.confirm({ confirmationToken: preview.confirmationToken }),
+    { code: "PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE" },
+  );
+  assert.equal(admitted, 0);
+
+  articleReadFails = false;
+  await service.confirm({ confirmationToken: preview.confirmationToken });
+  assert.equal(admitted, 1);
+});
+
+test("configuration read failures stay distinct during confirmation and remain safely retryable", async () => {
+  const persisted = article("article-a");
+  let configReadFails = false;
+  let admitted = 0;
+  const service = createPaidMediaPreflightService({
+    contentStore: { getArticle: () => persisted },
+    paidAdmission: {
+      admitPaidBatch() {
+        admitted += 1;
+        return { batchId: "paid-batch-fixture", items: [] };
+      },
+    },
+    queryResource: async () => ({
+      resourceId: "media-12",
+      name: "媒体十二",
+      remarks: "",
+      price: 12.5,
+      available: true,
+    }),
+    systemSubmissionCodeProvider: () => {
+      if (configReadFails) {
+        const error = new Error("synthetic configuration read failure");
+        error.code = "PLATFORM_CONFIG_STORAGE_INVALID";
+        throw error;
+      }
+      return "system-submission-12";
+    },
+    clientSnapshotResolver: (clientId) => ({
+      version: 1,
+      clientId,
+      displayName: "客户甲",
+    }),
+    clock: () => new Date("2026-08-07T00:00:00.000Z"),
+  });
+  const preview = await service.preflight({
+    articleRefs: refs("article-a"),
+    mediaResourceId: "media-12",
+  });
+
+  configReadFails = true;
+  await assert.rejects(
+    service.confirm({ confirmationToken: preview.confirmationToken }),
+    { code: "PLATFORM_CONFIG_STORAGE_INVALID" },
+  );
+  assert.equal(admitted, 0);
+
+  configReadFails = false;
+  await service.confirm({ confirmationToken: preview.confirmationToken });
+  assert.equal(admitted, 1);
+});
+
 test("preflight blocks a missing authoritative body before paid admission", async () => {
   let admitted = false;
   const service = createPaidMediaPreflightService({

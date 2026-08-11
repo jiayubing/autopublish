@@ -2,7 +2,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { reportDiagnostic } = require("../../../src/diagnostics/diagnostic-producer");
+const {
+  reportDiagnostic,
+} = require("../../../src/diagnostics/diagnostic-producer");
 
 const ARTICLE_EXTENSIONS = Object.freeze([".md", ".txt", ".docx"]);
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -11,6 +13,13 @@ function submissionInputError(code, message) {
   const error = new Error(message || "Invalid submission input");
   error.code = code || "SUBMISSION_INPUT_INVALID";
   return error;
+}
+
+function queueReadError() {
+  return submissionInputError(
+    "PLATFORM_QUEUE_READ_FAILED",
+    "Platform queue could not be read",
+  );
 }
 
 function diagnoseSourceState() {
@@ -68,11 +77,28 @@ function readSubmissionMetadata(filePath) {
   if (!fs.existsSync(sidecarPath))
     return { path: null, data: null, valid: true };
 
+  let stat;
+  try {
+    stat = fs.lstatSync(sidecarPath);
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") throw queueReadError();
+    return {
+      path: sidecarPath,
+      data: null,
+      valid: false,
+      reason: "SUBMISSION_SIDECAR_INVALID",
+    };
+  }
+  if (stat.isSymbolicLink() || !stat.isFile())
+    return {
+      path: sidecarPath,
+      data: null,
+      valid: false,
+      reason: "SUBMISSION_SIDECAR_INVALID",
+    };
+
   let data;
   try {
-    const stat = fs.lstatSync(sidecarPath);
-    if (stat.isSymbolicLink() || !stat.isFile())
-      throw new Error("sidecar is not a file");
     data = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
   } catch (_) {
     return {
@@ -119,10 +145,7 @@ function readSubmissionMetadata(filePath) {
       valid: false,
       reason: "SUBMISSION_SIDECAR_CONTENT_MISMATCH",
     };
-  if (
-    !isSafeToken(data.clientId) ||
-    !isSafeToken(data.generatedArticleId)
-  )
+  if (!isSafeToken(data.clientId) || !isSafeToken(data.generatedArticleId))
     return {
       path: sidecarPath,
       data,
@@ -178,7 +201,8 @@ function resolvePlatformSubmissionFile(
   let stat;
   try {
     stat = fs.lstatSync(filePath);
-  } catch (_) {
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") throw queueReadError();
     throw submissionInputError();
   }
   if (!stat.isFile() || stat.isSymbolicLink()) throw submissionInputError();
@@ -288,7 +312,8 @@ function createPlatformQueueReader(options) {
               let stat;
               try {
                 stat = fs.lstatSync(path.join(inputDir, name));
-              } catch (_) {
+              } catch (error) {
+                if (!error || error.code !== "ENOENT") throw queueReadError();
                 return false;
               }
               if (!stat.isFile() || stat.isSymbolicLink()) return false;

@@ -163,7 +163,13 @@ function resourceForConfirmation(resource) {
   });
 }
 
-function safeArticleSummary(ref, article, workflow, riskWarnings, readErrorCode) {
+function safeArticleSummary(
+  ref,
+  article,
+  workflow,
+  riskWarnings,
+  readErrorCode,
+) {
   const title = text(article && article.title);
   const content = text(article && article.content);
   const reasonCodes = article
@@ -272,7 +278,8 @@ function createPaidMediaPreflightService(options) {
     );
   }
 
-  function readArticles(refs) {
+  function readArticles(refs, options) {
+    const readOptions = options || {};
     const facts = factsFor(refs);
     return refs.map((ref) => {
       let article = null;
@@ -280,6 +287,11 @@ function createPaidMediaPreflightService(options) {
       try {
         article = contentStore.getArticle(ref.clientId, ref.articleId);
       } catch (_) {
+        if (readOptions.throwOnUnavailable === true)
+          throw preflightError(
+            "PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE",
+            "文章状态读取失败，未创建付费批次",
+          );
         readErrorCode = "PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE";
       }
       const workflow = article
@@ -505,7 +517,13 @@ function createPaidMediaPreflightService(options) {
       );
     }
 
-    const systemSubmissionCode = currentSystemSubmissionCode();
+    let systemSubmissionCode;
+    try {
+      systemSubmissionCode = currentSystemSubmissionCode();
+    } catch (error) {
+      entry.inFlight = false;
+      throw error;
+    }
     if (
       !systemSubmissionCode ||
       systemSubmissionCode !== model.systemSubmissionCode
@@ -516,7 +534,13 @@ function createPaidMediaPreflightService(options) {
         "系统投稿标识码已变化，请重新预检",
       );
     }
-    const currentArticles = readArticles(entry.refs);
+    let currentArticles;
+    try {
+      currentArticles = readArticles(entry.refs, { throwOnUnavailable: true });
+    } catch (error) {
+      entry.inFlight = false;
+      throw error;
+    }
     const currentFingerprints = currentArticles.map((item) => ({
       articleRef: item.ref,
       fingerprint: item.article ? fingerprintArticle(item.article) : null,
