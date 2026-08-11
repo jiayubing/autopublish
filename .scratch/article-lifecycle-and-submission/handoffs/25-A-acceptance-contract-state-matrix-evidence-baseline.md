@@ -57,4 +57,3 @@ Generated reports均在 ignored `auto—publish/build/evidence/`，并包含精�
 ## 下一包入口与停止边界
 
 下一包入口是 `25-B`，但必须由主任务在集成 `dde5dfa` 到新的 clean integration HEAD 后另行调度；本执行任务不分析、实现或预建 25-B/C/D/E/F/G，也不更新后续包状态。
-
