@@ -845,6 +845,41 @@ describe("content library v2 migration", function () {
     }
   });
 
+  it("runs the migration CLI in packaged mode without repository-only provenance", function () {
+    const fixture = makeFixture();
+    const script = path.resolve(
+      __dirname,
+      "..",
+      "scripts",
+      "migrate-content-library-v2.js",
+    );
+    try {
+      const result = childProcess.spawnSync(
+        process.execPath,
+        [
+          script,
+          "--source",
+          fixture.sourceRoot,
+          "--content-library",
+          fixture.contentLibraryRoot,
+          "--local-state",
+          fixture.localStateRoot,
+          "--app-config",
+          fixture.appConfigPath,
+          "--dry-run",
+        ],
+        {
+          encoding: "utf8",
+          env: { ...process.env, AUTO_PUBLISH_PACKAGED: "1" },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).mode, "dry-run");
+    } finally {
+      fs.rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("excludes the one-shot migration script from the desktop package", function () {
     const config = fs.readFileSync(
       path.resolve(__dirname, "..", "electron-builder.alpha.yml"),

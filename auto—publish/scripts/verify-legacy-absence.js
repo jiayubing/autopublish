@@ -127,7 +127,9 @@ function scanArchive(resourcesPath) {
     if (LEGACY_SCAN_EXCLUSIONS.has(entry)) continue;
     let source;
     try {
-      source = asar.extractFile(archive, entry).toString("utf8");
+      source = asar
+        .extractFile(archive, path.normalize(entry))
+        .toString("utf8");
     } catch (error) {
       throw absenceError(
         "LEGACY_ARCHIVE_ENTRY_UNAVAILABLE",

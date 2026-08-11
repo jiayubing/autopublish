@@ -3,7 +3,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 const MIGRATION_VERSION = 2;
 const MANIFEST_NAME = "content-library-v2-migration-manifest.json";
@@ -1316,15 +1315,28 @@ function main(argv) {
   return migrator.migrate({ confirmed: true });
 }
 
+function isPackagedRuntime() {
+  return (
+    process.env.AUTO_PUBLISH_PACKAGED === "1" ||
+    fs.existsSync(path.join(__dirname, "..", "production-artifact-manifest.json"))
+  );
+}
+
+function createMigrationProvenance(startedAt) {
+  if (isPackagedRuntime()) return {};
+  const { createExecutionProvenance } = require("./release-evidence-inputs");
+  return createExecutionProvenance({
+    root: path.resolve(__dirname, ".."),
+    command: "node scripts/migrate-content-library-v2.js",
+    startedAt,
+  });
+}
+
 if (require.main === module) {
   try {
     const startedAt = Date.now();
     const result = main(process.argv.slice(2));
-    const provenance = createExecutionProvenance({
-      root: path.resolve(__dirname, ".."),
-      command: "node scripts/migrate-content-library-v2.js",
-      startedAt,
-    });
+    const provenance = createMigrationProvenance(startedAt);
     process.stdout.write(JSON.stringify({ ...result, ...provenance }) + "\n");
   } catch (error) {
     const code =

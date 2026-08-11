@@ -102,7 +102,7 @@ const PRIVATE_PACKAGE_PATHS = [
   /(?:publish-log|legacy-adapter-publisher|src\/infrastructure\/publishers\/publisher-router)/i,
 ];
 const SENSITIVE_VALUE_PATTERN =
-  /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|cookie)\s*["']?\s*[:=]\s*["'][^"'\r\n]{6,}["']/i;
+  /(?<![A-Za-z0-9_])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|cookie)\s*["']?\s*[:=]\s*["'][^"'\r\n]{6,}["']/i;
 const TEXT_FILE_PATTERN =
   /\.(?:cjs|js|mjs|ts|tsx|json|env|log|md|txt|csv|yaml|yml|py|html|css|xml|sql|sh|bat|cmd|ps1)$/i;
 const TRACKED_GENERATED_PATTERN =
