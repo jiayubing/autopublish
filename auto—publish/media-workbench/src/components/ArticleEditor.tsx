@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { articleIdentity, createArticleEditorSession } from './article-editor-session';
 import { useConfirmation } from '../confirmation';
+import { reportRuntimeDiagnostic } from '../features/workspace/runtime-diagnostic-sink';
 
 interface ArticleEditorProps {
   activeArticle: Article | null;
@@ -48,7 +49,10 @@ export default function ArticleEditor({
   const saveDraftRef = useRef(onSaveDraft);
   saveDraftRef.current = onSaveDraft;
   const editorSession = useRef<ReturnType<typeof createArticleEditorSession> | null>(null);
-  if (!editorSession.current) editorSession.current = createArticleEditorSession({ saveDraft: (draft, article) => saveDraftRef.current(draft, article) });
+  if (!editorSession.current) editorSession.current = createArticleEditorSession({
+    saveDraft: (draft, article) => saveDraftRef.current(draft, article),
+    onDiagnostic: () => reportRuntimeDiagnostic('ARTICLE_EDITOR_LISTENER_FAILED', 'workspace-invalidation'),
+  });
 
   const draftIsDirty = (): boolean => Boolean(editorSession.current?.snapshot().dirty);
 
@@ -106,7 +110,11 @@ export default function ArticleEditor({
   };
 
   const handleSave = () => {
-    void saveDraft().catch(() => undefined);
+    void saveDraft().catch(() => {
+      const session = editorSession.current;
+      if (session) setEditorState(stateFromSnapshot(session.snapshot()));
+      reportRuntimeDiagnostic('ARTICLE_EDITOR_SAVE_OUTCOME_UNAVAILABLE', 'workspace-invalidation');
+    });
   };
 
   const handleClose = async () => {
@@ -124,7 +132,11 @@ export default function ArticleEditor({
     try {
       const result = await saveDraft();
       if (result.saved && !draftIsDirty()) onCloseArticle();
-    } catch (_) { /* The session consumes expected save failures; keep the editor open for unexpected errors. */ }
+    } catch (_) {
+      const session = editorSession.current;
+      if (session) setEditorState(stateFromSnapshot(session.snapshot()));
+      reportRuntimeDiagnostic('ARTICLE_EDITOR_CLOSE_SAVE_OUTCOME_UNAVAILABLE', 'workspace-invalidation');
+    }
   };
 
   const getMediaIcon = (type: string) => {

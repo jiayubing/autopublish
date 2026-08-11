@@ -40,6 +40,41 @@ it("exposes bounded runtime lifecycle events through the diagnostics IPC", async
   }]);
 });
 
+it("preserves bounded observation status while sanitizing diagnostic sink metadata", async function() {
+  const handlers = new Map();
+  registerRuntimeDiagnosticsIpc({
+    ipcMain: { handle: function(channel, handler) { handlers.set(channel, handler); } },
+    runtimeDiagnosticsService: {
+      safeDiagnostics: function() {
+        return {
+          ok: true,
+          buildInfo: { version: "1", commit: "fixture", dirty: false, source: "package", observation: "partial" },
+          errors: [],
+          warnings: [],
+          runtimeEvents: [{ metadata: "malformed" }],
+          diagnosticSink: {
+            status: "degraded",
+            startupStatus: "token-secret",
+            memoryFailureCount: 0,
+            fileFailureCount: 2,
+            lastFailureCode: "DIAGNOSTIC_FILE_WRITE_FAILED",
+          },
+          runtimeEventsObservation: { status: "partial", droppedCount: "malformed" },
+        };
+      },
+      probeBrowser: async function() { return {}; },
+    },
+  });
+  const diagnostics = await handlers.get("runtime-diagnostics:get")();
+  assert.equal(diagnostics.ok, true);
+  assert.equal(diagnostics.data.buildInfo.observation, "partial");
+  assert.equal(diagnostics.data.diagnosticSink.fileFailureCount, 2);
+  assert.equal(diagnostics.data.diagnosticSink.startupStatus, "NOT_CONFIGURED");
+  assert.equal(diagnostics.data.runtimeEventsObservation.status, "partial");
+  assert.equal(diagnostics.data.runtimeEventsObservation.droppedCount, 1);
+  assert.deepEqual(diagnostics.data.runtimeEvents, []);
+});
+
 it("forwards the updated browser capability returned by a successful self-check", async function() {
   const handlers = new Map();
   const capability = { channel: "msedge", configured: true, state: "ready", probed: true, source: "default", errorCode: null, lastCheckedAt: "2026-07-17T00:00:00.000Z" };

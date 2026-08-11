@@ -53,7 +53,12 @@ export function WorkspaceCoordinatorProvider({
       .then((identity) => {
         if (!cancelled) coordinator.initialize(identity);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        reportRuntimeDiagnostic(
+          "WORKSPACE_RUNTIME_IDENTITY_UNAVAILABLE",
+          "workspace-invalidation",
+        );
+      });
     return () => {
       cancelled = true;
       disposeDiagnostic();

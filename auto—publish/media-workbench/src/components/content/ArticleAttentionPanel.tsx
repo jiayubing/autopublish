@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { useConfirmation } from "../../confirmation";
 import type { createAttentionFeature } from "../../features/attention/attention-feature.js";
 import type { ArticleAttentionItem } from "../../types/publication";
+import { reportRuntimeDiagnostic } from "../../features/workspace/runtime-diagnostic-sink";
 
 type AttentionFeature = ReturnType<typeof createAttentionFeature>;
 type ArticleAttentionSnapshot = ReturnType<AttentionFeature["getSnapshot"]>;
@@ -113,7 +114,10 @@ export default function ArticleAttentionPanel({
         confirmed: preview.requiresConfirmation ? true : undefined,
       });
     } catch {
-      /* Command errors are rendered from the attention feature snapshot. */
+      reportRuntimeDiagnostic(
+        "ARTICLE_ATTENTION_COMMAND_FAILED",
+        "workspace-invalidation",
+      );
     }
   }
 

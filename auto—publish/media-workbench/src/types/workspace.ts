@@ -58,7 +58,13 @@ export interface RuntimeDiagnosticEvent {
 }
 export interface RuntimeDiagnostics {
   ok: boolean;
-  buildInfo: { version: string; commit: string; dirty: boolean };
+  buildInfo: {
+    version: string;
+    commit: string;
+    dirty: boolean;
+    source?: string;
+    observation?: "complete" | "partial" | "fallback" | "unavailable";
+  };
   browserChannel: RuntimeBrowserCapability;
   capabilities: {
     playwrightNode: RuntimeCapability;
@@ -75,6 +81,14 @@ export interface RuntimeDiagnostics {
   errors: Array<{ code: string; message: string }>;
   warnings: Array<{ code: string; message: string }>;
   runtimeEvents?: RuntimeDiagnosticEvent[];
+  runtimeEventsObservation?: { status: "complete" | "partial"; droppedCount: number };
+  diagnosticSink?: {
+    status: "ready" | "degraded" | "not_configured" | "unavailable";
+    startupStatus: string;
+    memoryFailureCount: number;
+    fileFailureCount: number;
+    lastFailureCode: string | null;
+  };
 }
 
 export type WorkspaceDataInvalidationScope =

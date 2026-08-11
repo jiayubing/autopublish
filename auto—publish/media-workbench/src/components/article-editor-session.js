@@ -26,7 +26,16 @@ function createArticleEditorSession(options) {
   const saveSuccessTtlMs = Number.isFinite(value.saveSuccessTtlMs) ? Math.max(0, value.saveSuccessTtlMs) : 2000;
   const listeners = new Set();
   let sessionId = 0; let disposed = false; let article = null; let draft = null; let baseline = null; let isSaving = false; let saveError = null; let saveSuccess = false; let successTimer = null;
-  function emit() { listeners.forEach((listener) => { try { listener(); } catch (_) {} }); }
+  function reportListenerFailure() {
+    if (typeof value.onDiagnostic !== "function") return;
+    try {
+      value.onDiagnostic({ code: "ARTICLE_EDITOR_LISTENER_FAILED" });
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+  function emit() { listeners.forEach((listener) => { try { listener(); } catch (_) { reportListenerFailure(); } }); }
   function subscribe(listener) { if (typeof listener !== "function") throw new Error("ARTICLE_EDITOR_LISTENER_REQUIRED"); listeners.add(listener); return () => listeners.delete(listener); }
   function resetOutcome() { isSaving = false; saveError = null; saveSuccess = false; if (successTimer) { clearTimeout(successTimer); successTimer = null; } }
   function open(nextArticle) { disposed = false; sessionId += 1; article = nextArticle; draft = nextArticle ? draftFromArticle(nextArticle) : null; baseline = draft ? clone(draft) : null; resetOutcome(); const next = snapshot(); emit(); return next; }

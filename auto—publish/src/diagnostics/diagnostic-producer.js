@@ -6,7 +6,14 @@ const {
 } = require("./diagnostic-schema");
 
 const NOOP = () => false;
+const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9_]{1,127}$/;
 let activeReporter = NOOP;
+
+function safeErrorCode(value) {
+  return value && typeof value.code === "string" && SAFE_ERROR_CODE.test(value.code)
+    ? value.code
+    : null;
+}
 
 function createDiagnosticProducer(options) {
   const opts = options || {};
@@ -14,9 +21,14 @@ function createDiagnosticProducer(options) {
     (sink) => sink && typeof sink.append === "function",
   );
   const failOnSinkError = opts.failOnSinkError === true;
+  let attemptedCount = 0;
+  let deliveredCount = 0;
+  let failedCount = 0;
+  let lastFailureCode = null;
 
   function append(input) {
     const record = parseDiagnosticRecord(input);
+    attemptedCount += 1;
     let firstError = null;
     for (const sink of sinks) {
       try {
@@ -25,11 +37,27 @@ function createDiagnosticProducer(options) {
         if (!firstError) firstError = error;
       }
     }
-    if (firstError && failOnSinkError) throw firstError;
+    if (firstError) {
+      failedCount += 1;
+      lastFailureCode = safeErrorCode(firstError);
+      if (failOnSinkError) throw firstError;
+    } else {
+      deliveredCount += 1;
+    }
     return record;
   }
 
-  return Object.freeze({ append, add: append, write: append });
+  function getStatus() {
+    return Object.freeze({
+      status: failedCount > 0 ? "degraded" : "ready",
+      attemptedCount,
+      deliveredCount,
+      failedCount,
+      lastFailureCode,
+    });
+  }
+
+  return Object.freeze({ append, add: append, write: append, getStatus });
 }
 
 function setDiagnosticReporter(reporter) {

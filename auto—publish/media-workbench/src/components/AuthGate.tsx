@@ -1,6 +1,7 @@
 import React, { FormEvent, useState } from "react";
 import { AuthProvider, useAuth } from "../auth-store";
 import authContract from "../../../src/contracts/auth-contract.json";
+import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
 // getAuthState is called by auth-store before any workspace component mounts.
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = authContract.messages;
@@ -83,7 +84,7 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
         <div className="flex flex-wrap items-center gap-3">
           {state.sessionStatus === "recovering" && <span role="status" className="text-amber-800">授权连接恢复中：{state.errorCode ? (AUTH_ERROR_MESSAGES[state.errorCode] || state.errorCode) : "网络恢复后将自动续期，无需重新登录"}</span>}
           {logoutCommand.error && <span role="alert" className="text-rose-700">{logoutCommand.error.userMessage}</span>}
-          <button type="button" onClick={() => { void auth.logout().catch(() => undefined); }} disabled={logoutCommand.busy} className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 disabled:opacity-50">{logoutCommand.busy ? "退出中…" : "退出登录"}</button>
+          <button type="button" onClick={() => { void auth.logout().catch(() => { reportRuntimeDiagnostic("AUTH_LOGOUT_FAILED", "workspace-invalidation"); }); }} disabled={logoutCommand.busy} className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 disabled:opacity-50">{logoutCommand.busy ? "退出中…" : "退出登录"}</button>
         </div>
       </div>
     </div>

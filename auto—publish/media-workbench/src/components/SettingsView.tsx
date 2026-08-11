@@ -199,6 +199,14 @@ function RuntimeSettings() {
           {diagnostics.buildInfo.dirty ? "dirty" : "clean"}
         </p>
       )}
+      {diagnostics?.diagnosticSink && (
+        <p role="status" className="text-xs text-slate-500">
+          诊断记录：{diagnostics.diagnosticSink.status === "ready" ? "正常" : "部分不可用"}
+          {diagnostics.diagnosticSink.fileFailureCount > 0 || diagnostics.diagnosticSink.memoryFailureCount > 0
+            ? ` · 已记录 ${diagnostics.diagnosticSink.fileFailureCount + diagnostics.diagnosticSink.memoryFailureCount} 次写入失败`
+            : ""}
+        </p>
+      )}
     </section>
   );
 }

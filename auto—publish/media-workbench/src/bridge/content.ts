@@ -258,7 +258,7 @@ function normalizeLoginState(
 ): DoubaoLoginState {
   const status = raw?.status;
   if (status === "authenticated" || status === "login_required")
-    return { status };
+    return { status, observation: "complete" };
   if (
     status === "session_error" ||
     status === "challenge" ||
@@ -266,34 +266,42 @@ function normalizeLoginState(
   )
     return {
       status: "session_error",
+      observation: "complete",
       errorText: typeof raw?.errorText === "string" ? raw.errorText : undefined,
     };
-  return { status: "unknown" };
+  return { status: "unknown", observation: "unavailable" };
 }
 
 const DOUBAO_LOGIN_STATE_KEY = "auto-publish:doubao-login-state";
 
 export function getCachedDoubaoLoginState(): DoubaoLoginState {
-  if (typeof localStorage === "undefined") return { status: "unknown" };
+  if (typeof localStorage === "undefined")
+    return { status: "unknown", observation: "unavailable" };
   try {
     const saved = JSON.parse(
       localStorage.getItem(DOUBAO_LOGIN_STATE_KEY) || "null",
     ) as { status?: unknown } | null;
     if (saved?.status === "authenticated" || saved?.status === "login_required")
-      return { status: saved.status };
-  } catch (_) {}
-  return { status: "unknown" };
+      return { status: saved.status, observation: "complete" };
+  } catch (_) {
+    return { status: "unknown", observation: "unavailable" };
+  }
+  return { status: "unknown", observation: "unavailable" };
 }
 
-export function rememberDoubaoLoginState(state: DoubaoLoginState): void {
+export function rememberDoubaoLoginState(state: DoubaoLoginState): boolean {
   if (state.status !== "authenticated" && state.status !== "login_required")
-    return;
+    return false;
+  if (typeof localStorage === "undefined") return false;
   try {
     localStorage.setItem(
       DOUBAO_LOGIN_STATE_KEY,
       JSON.stringify({ status: state.status }),
     );
-  } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 export async function listContentClients(): Promise<ContentClient[]> {

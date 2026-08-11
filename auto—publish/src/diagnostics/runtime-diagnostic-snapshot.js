@@ -1,13 +1,29 @@
 "use strict";
 
 const { parseDiagnosticRecord } = require("./diagnostic-schema");
-const { projectDiagnostics } = require("./diagnostic-projection");
 
 const SAFE_CAPABILITY_STATES = new Set([
   "ready",
   "not_checked",
   "optional_unconfigured",
   "unavailable",
+]);
+const SAFE_BUILD_INFO_OBSERVATIONS = new Set([
+  "complete",
+  "partial",
+  "fallback",
+  "unavailable",
+]);
+const SAFE_DIAGNOSTIC_SINK_STATES = new Set([
+  "ready",
+  "degraded",
+  "not_configured",
+  "unavailable",
+]);
+const SAFE_DIAGNOSTIC_STARTUP_STATES = new Set([
+  "PASSED",
+  "FAILED",
+  "NOT_CONFIGURED",
 ]);
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{1,127}$/;
@@ -59,6 +75,37 @@ function safeBuildInfo(value) {
     version: safeToken(input.version, "unknown"),
     commit: safeToken(input.commit, "unknown"),
     dirty: input.dirty === true,
+    source: safeToken(input.source, "fallback"),
+    observation: SAFE_BUILD_INFO_OBSERVATIONS.has(input.observation)
+      ? input.observation
+      : "fallback",
+  };
+}
+
+function safeObservation(droppedCount) {
+  const count = Number.isSafeInteger(droppedCount) && droppedCount > 0
+    ? droppedCount
+    : 0;
+  return {
+    status: count > 0 ? "partial" : "complete",
+    droppedCount: count,
+  };
+}
+
+function safeDiagnosticSink(value) {
+  const input = value || {};
+  const count = (name) =>
+    Number.isSafeInteger(input[name]) && input[name] >= 0 ? input[name] : 0;
+  return {
+    status: SAFE_DIAGNOSTIC_SINK_STATES.has(input.status)
+      ? input.status
+      : "unavailable",
+    startupStatus: SAFE_DIAGNOSTIC_STARTUP_STATES.has(input.startupStatus)
+      ? input.startupStatus
+      : "NOT_CONFIGURED",
+    memoryFailureCount: count("memoryFailureCount"),
+    fileFailureCount: count("fileFailureCount"),
+    lastFailureCode: safeCode(input.lastFailureCode, null),
   };
 }
 
@@ -71,14 +118,21 @@ function safeDiagnosticItems(items, fallbackMessage) {
   });
 }
 
-function safeRuntimeEvents(items) {
+function safeRuntimeEventsResult(items) {
   const result = [];
+  let droppedCount = 0;
   (Array.isArray(items) ? items : []).slice(-100).forEach(function (item) {
     try {
       result.push(parseDiagnosticRecord(item));
-    } catch (_) {}
+    } catch (_) {
+      droppedCount += 1;
+    }
   });
-  return result;
+  return { items: result, droppedCount };
+}
+
+function safeRuntimeEvents(items) {
+  return safeRuntimeEventsResult(items).items;
 }
 
 function safeDiagnostics(diagnostics) {
@@ -116,6 +170,7 @@ function safeDiagnostics(diagnostics) {
         ),
     ),
   };
+  const runtimeEvents = safeRuntimeEventsResult(source.runtimeEvents);
   return {
     ok: source.ok === true,
     buildInfo: safeBuildInfo(source.buildInfo),
@@ -134,7 +189,9 @@ function safeDiagnostics(diagnostics) {
       source.warnings,
       "运行环境诊断项，请检查诊断代码。",
     ),
-    runtimeEvents: safeRuntimeEvents(source.runtimeEvents),
+    runtimeEvents: runtimeEvents.items,
+    runtimeEventsObservation: safeObservation(runtimeEvents.droppedCount),
+    diagnosticSink: safeDiagnosticSink(source.diagnosticSink),
   };
 }
 
@@ -160,7 +217,10 @@ module.exports = {
   safeCapability,
   safeBrowserCapability,
   safeBuildInfo,
+  safeObservation,
+  safeDiagnosticSink,
   safeDiagnosticItems,
+  safeRuntimeEventsResult,
   safeRuntimeEvents,
   safeDiagnostics,
   safeTool,

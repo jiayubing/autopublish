@@ -592,4 +592,34 @@ describe("Phase 06 media feature", () => {
       undefined,
     );
   });
+
+  it("does not turn a draft read failure into an empty draft", async () => {
+    const article = { filename: "article-read-failure.md", title: "Article" };
+    const feature = createMediaFeature({
+      getResourcePage: emptyPoolPage,
+      searchResourcePage: emptyPoolPage,
+      refreshResources: async () => ({}),
+      getPoolPage: emptyPoolPage,
+      addToPool: async () => ({}),
+      removeFromPool: async () => ({}),
+      getBalance: async () => 0,
+      getDrafts: async () => [],
+      getDraft: async () => { throw new Error("private draft read failure"); },
+      setDraft: async () => ({}),
+      scanArticles: async () => [article],
+      previewArticle: async () => ({ ...article, content: "preview" }),
+      getOrders: async () => [],
+      syncOrder: async () => ({}),
+      syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
+      prepareOrderStatusAnomalyResolution: async () => ({}),
+      resumeOrderTracking: async () => ({}),
+      confirmOrderPublished: async () => ({}),
+      confirmOrderNotPublished: async () => ({}),
+      openPublishedUrl: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "workspace-draft-read-failure" });
+    await feature.openArticle(article.filename);
+    assert.equal(feature.getSnapshot().commands.openArticle.error.code, "MEDIA_ARTICLE_PREVIEW_FAILED");
+    assert.equal(feature.getSnapshot().articles.activeArticle, null);
+  });
 });

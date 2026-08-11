@@ -11,6 +11,7 @@ import { type ArticleWorkflowStage } from "../article-workflow";
 import ArticleStageTabs from "./content/ArticleStageTabs";
 import { useConfirmation, useConfirmationScope } from "../confirmation";
 import { useContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
+import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
 
 type RefreshState = "idle" | "refreshing" | "success" | "error";
 
@@ -170,6 +171,10 @@ export default function ContentWorkbench({
         .catch(() => {
           // The management snapshot remains a safe read-only fallback when the
           // optional editor query is unavailable in an older renderer fixture.
+          reportRuntimeDiagnostic(
+            "ARTICLE_HISTORY_EDITOR_QUERY_UNAVAILABLE",
+            "workspace-invalidation",
+          );
         });
     };
     if (historyEditingArticle && historyEditingArticle.id !== nextArticle.id)

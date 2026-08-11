@@ -1,6 +1,7 @@
 const { wrap } = require("../services/ipc-response");
 const { SAFE_MESSAGES } = require("../services/content-generation-batch-service");
 const { productionIpcRegistry } = require("./contracts/production-registry");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const GENERATION_TASK_PAGE_SIZE = 256;
 
@@ -186,7 +187,20 @@ function registerContentGenerationBatchIpc(deps) {
     try {
       const eventState = state && state.batch ? Object.assign({}, state, { batch: safeBatch(state.batch) }) : state;
       sendToRenderer(runtimeEvent.channel, productionIpcRegistry.event(runtimeEvent, eventState));
-    } catch (_) {}
+    } catch (_) {
+      reportDiagnostic({
+        code: "GENERATION_RUNTIME_EVENT_DELIVERY_FAILED",
+        module: "content-generation-batch-ipc",
+        category: "transport",
+        operationId: "generation-runtime-event",
+        metadata: {
+          action: "send",
+          channel: runtimeEvent.channel,
+          transport: "ipc",
+          outcome: "failed",
+        },
+      });
+    }
   }) : function() {};
   return { dispose: unsubscribe };
 }

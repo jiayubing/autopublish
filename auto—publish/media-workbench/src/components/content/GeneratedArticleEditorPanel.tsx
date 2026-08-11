@@ -76,6 +76,7 @@ export default function GeneratedArticleEditorPanel({ article, published = false
     } catch (value) {
       const code = value && typeof value === 'object' && 'code' in value && typeof value.code === 'string' ? value.code : '';
       if (code === 'ARTICLE_EDIT_CONFLICT' && onConflict) {
+        let refreshFailed = false;
         try {
           const refreshed = await onConflict();
           if (refreshed) {
@@ -86,7 +87,10 @@ export default function GeneratedArticleEditorPanel({ article, published = false
           }
         } catch (_) {
           // Keep the conflict visible when the refresh read is unavailable.
+          refreshFailed = true;
+          setError('保存发生冲突，刷新文章状态失败，请重新打开文章后重试。');
         }
+        if (refreshFailed) return;
       }
       setError(value instanceof Error ? value.message : '保存文章失败');
     } finally {

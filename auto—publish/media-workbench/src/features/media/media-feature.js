@@ -52,9 +52,11 @@ function safeError(value, fallbackCode, fallbackMessage) {
   const candidateMessage =
     value && typeof value === "object" && typeof value.userMessage === "string"
       ? value.userMessage
-      : value instanceof Error && typeof value.message === "string"
-        ? value.message
-        : null;
+      : null;
+  const candidateCode = value && typeof value.code === "string" &&
+    /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
+    ? value.code
+    : fallbackCode;
   const isSafeOperationalError = Boolean(
     value &&
     typeof value === "object" &&
@@ -63,10 +65,11 @@ function safeError(value, fallbackCode, fallbackMessage) {
     typeof value.retryability === "string" &&
     typeof candidateMessage === "string" &&
     candidateMessage.length <= 1000 &&
-    !/[\x00-\x1f\x7f]/.test(candidateMessage),
+    !/[\\/\x00-\x1f\x7f]/.test(candidateMessage) &&
+    !/\b(?:cookie|authorization|bearer|token|api[-_ ]?key|password|secret|header|body|database|path)\b/i.test(candidateMessage),
   );
   return Object.freeze({
-    code: value && typeof value.code === "string" ? value.code : fallbackCode,
+    code: candidateCode,
     category: isSafeOperationalError ? value.category : "internal",
     retryability: isSafeOperationalError ? value.retryability : "manual-check",
     userMessage: isSafeOperationalError ? candidateMessage : fallbackMessage,
@@ -675,7 +678,7 @@ export function createMediaFeature(adapters = {}) {
         async () => {
           const [preview, draft] = await Promise.all([
             adapters.previewArticle(filename),
-            adapters.getDraft(filename).catch(() => null),
+            adapters.getDraft(filename),
           ]);
           return {
             ...preview,

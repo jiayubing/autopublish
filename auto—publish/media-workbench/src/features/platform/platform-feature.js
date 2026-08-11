@@ -42,11 +42,30 @@ const EMPTY_QUEUE = Object.freeze({
 });
 
 function message(value, fallback) {
-  return value instanceof Error && value.message ? value.message : fallback;
+  const candidate = value && typeof value.userMessage === 'string'
+    ? value.userMessage
+    : null;
+  return candidate && candidate.length <= 256 &&
+    !/[\\/\x00-\x1f\x7f]/.test(candidate) &&
+    !/\b(?:cookie|authorization|bearer|token|api[-_ ]?key|password|secret|header|body|database|path)\b/i.test(candidate)
+    ? candidate
+    : fallback;
 }
 
 function errorCode(value, fallback) {
-  return typeof value?.code === 'string' && value.code ? value.code : fallback;
+  return typeof value?.code === 'string' && /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
+    ? value.code
+    : fallback;
+}
+
+function reportRefreshFailure(bridge, code) {
+  if (typeof bridge.reportDiagnostic !== 'function') return;
+  try {
+    bridge.reportDiagnostic(code);
+  } catch (_) {
+    return false;
+  }
+  return true;
 }
 
 function timestamp(value) {
@@ -208,7 +227,9 @@ export function createPlatformFeature(bridge = {}) {
     runQueryState = Object.freeze({ loading: false, error: null, reason: "event" });
     publish();
     if (wasActive && !isRunActive(run) && Number.isFinite(run.queueRevision)) {
-      void feature.refreshTerminal(run.queueRevision).catch(() => undefined);
+      void feature.refreshTerminal(run.queueRevision).catch(() => {
+        reportRefreshFailure(bridge, 'PLATFORM_TERMINAL_REFRESH_FAILED');
+      });
     }
     return true;
   }
@@ -275,7 +296,9 @@ export function createPlatformFeature(bridge = {}) {
       residue = { phase: "idle", cleanableCount: 0, reportedCount: 0, feedback: null };
       publish();
       if (started) {
-        void feature.refreshRun('runtime-switch').catch(() => undefined);
+        void feature.refreshRun('runtime-switch').catch(() => {
+          reportRefreshFailure(bridge, 'PLATFORM_RUN_REFRESH_FAILED');
+        });
       }
       return true;
     },
@@ -292,7 +315,9 @@ export function createPlatformFeature(bridge = {}) {
         })
         : null;
       if (scope) {
-        await feature.refreshRun('initial').catch(() => undefined);
+        await feature.refreshRun('initial').catch(() => {
+          reportRefreshFailure(bridge, 'PLATFORM_RUN_REFRESH_FAILED');
+        });
       }
     },
     stopTransport() {
@@ -433,7 +458,9 @@ export function createPlatformFeature(bridge = {}) {
           });
         },
       );
-      void feature.refreshRegularQueueGroups('start-requested').catch(() => undefined);
+      void feature.refreshRegularQueueGroups('start-requested').catch(() => {
+        reportRefreshFailure(bridge, 'PLATFORM_REGULAR_GROUP_REFRESH_FAILED');
+      });
       return pending;
     },
     pauseGroup(queueGroupId) {
@@ -468,7 +495,9 @@ export function createPlatformFeature(bridge = {}) {
           });
         },
       );
-      void feature.refreshRegularQueueGroups('start-all-requested').catch(() => undefined);
+      void feature.refreshRegularQueueGroups('start-all-requested').catch(() => {
+        reportRefreshFailure(bridge, 'PLATFORM_REGULAR_GROUP_REFRESH_FAILED');
+      });
       return pending;
     },
     pauseAllGroups() {

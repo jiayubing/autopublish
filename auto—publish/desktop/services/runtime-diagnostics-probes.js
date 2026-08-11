@@ -7,39 +7,65 @@ function existing(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function hasBundledMammoth(appRoot, override) {
-  if (override !== undefined) return override === true;
+function probeBundledMammoth(appRoot, override) {
+  if (override !== undefined)
+    return {
+      available: override === true,
+      observation: "override",
+    };
   try {
     require.resolve("mammoth", { paths: [appRoot] });
-    return true;
+    return { available: true, observation: "module" };
   } catch (_) {
-    return false;
+    return { available: false, observation: "unavailable" };
+  }
+}
+
+function hasBundledMammoth(appRoot, override) {
+  return probeBundledMammoth(appRoot, override).available;
+}
+
+function readJsonObject(filename) {
+  try {
+    const value = JSON.parse(fs.readFileSync(filename, "utf8"));
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? { value, observation: "complete" }
+      : { value: {}, observation: "invalid" };
+  } catch (_) {
+    return { value: {}, observation: "unavailable" };
   }
 }
 
 function readBuildInfo(appRoot, environment) {
   const env = environment || process.env;
+  let source = "fallback";
+  let observation = "fallback";
   let value = {};
-  try {
-    value = JSON.parse(
-      fs.readFileSync(path.join(appRoot, "config", "build-info.json"), "utf8"),
-    );
-  } catch (_) {
-    try {
-      value = JSON.parse(
-        fs.readFileSync(path.join(appRoot, "build-info.json"), "utf8"),
-      );
-    } catch (_) {}
+  const configured = readJsonObject(
+    path.join(appRoot, "config", "build-info.json"),
+  );
+  if (configured.observation === "complete") {
+    value = configured.value;
+    source = "config";
+    observation = "complete";
+  } else {
+    const root = readJsonObject(path.join(appRoot, "build-info.json"));
+    if (root.observation === "complete") {
+      value = root.value;
+      source = "root";
+      observation = "fallback";
+    }
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) value = {};
   let version = existing(value.version);
   if (!version) {
-    try {
-      version = existing(
-        JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"))
-          .version,
-      );
-    } catch (_) {}
+    const packageInfo = readJsonObject(path.join(appRoot, "package.json"));
+    if (packageInfo.observation === "complete") {
+      version = existing(packageInfo.value.version);
+      if (version) {
+        if (source === "fallback") source = "package";
+        observation = "partial";
+      }
+    }
   }
   return {
     version: version || "unknown",
@@ -48,6 +74,8 @@ function readBuildInfo(appRoot, environment) {
       existing(env.AUTO_PUBLISH_COMMIT_SHA) ||
       "unknown",
     dirty: value.dirty === true || env.AUTO_PUBLISH_DIRTY === "1",
+    source,
+    observation,
   };
 }
 
@@ -138,7 +166,9 @@ function execFileAsync(executor, file, args, options) {
 
 module.exports = {
   existing,
+  probeBundledMammoth,
   hasBundledMammoth,
+  readJsonObject,
   readBuildInfo,
   capability,
   diagnosticErrors,

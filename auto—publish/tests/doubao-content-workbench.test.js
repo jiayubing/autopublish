@@ -37,6 +37,37 @@ test("Doubao collection command owns pending state at the public feature boundar
   feature.dispose();
 });
 
+test("malformed cached Doubao login state remains explicitly unavailable", async () => {
+  const { createContentSourcesFeature } = await import(
+    "../media-workbench/src/features/content/content-sources-feature.js"
+  );
+  const feature = createContentSourcesFeature(sourceAdapters({
+    getCachedDoubaoLoginState: () => ({ status: "unexpected", observation: "complete" }),
+  }));
+  assert.deepEqual(feature.getSnapshot().doubaoLogin, {
+    status: "unknown",
+    observation: "unavailable",
+  });
+  feature.dispose();
+});
+
+test("content source command errors do not expose raw transport messages", async () => {
+  const { createContentSourcesFeature } = await import(
+    "../media-workbench/src/features/content/content-sources-feature.js"
+  );
+  const feature = createContentSourcesFeature(sourceAdapters({
+    getDoubaoLoginStatus: async () => { throw new Error("C:\\private\\cookie=secret"); },
+  }));
+  feature.setScope({ workspaceRuntimeId: "runtime-login-error" });
+  await assert.rejects(feature.commands.getDoubaoLoginStatus());
+  assert.equal(
+    feature.getSnapshot().doubaoLoginQuery.error.userMessage,
+    "无法加载客户与模板。",
+  );
+  assert.doesNotMatch(JSON.stringify(feature.getSnapshot()), /private|cookie|secret/i);
+  feature.dispose();
+});
+
 test("completed empty queue refreshes client data once per queue identity", async () => {
   const { createContentSourcesFeature } = await import(
     "../media-workbench/src/features/content/content-sources-feature.js"

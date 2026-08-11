@@ -128,6 +128,66 @@ test("generation hydrates its runtime snapshot and owns the event subscription l
   assert.equal(unsubscribeCount, 1);
 });
 
+test("generation exposes an incomplete hydration observation when the runtime read fails", async () => {
+  const feature = createGenerationFeature(runtimeAdapters({
+    hydrate: async () => {
+      throw new Error("private runtime transport detail");
+    },
+    start: async () => null,
+    pause: async () => null,
+    resume: async () => null,
+    stop: async () => null,
+    continue: async () => null,
+    retry: async () => null,
+  }));
+  feature.setScope({ workspaceRuntimeId: "workspace-hydration-failure", batchId: "batch-1" });
+  await assert.rejects(feature.hydrate("initial"));
+  assert.deepEqual(feature.getSnapshot().hydration.error, {
+    code: "GENERATION_RUNTIME_HYDRATION_FAILED",
+    category: "internal",
+    retryability: "safe",
+    userMessage: "批量生成状态读取失败，请刷新重试。",
+  });
+  assert.equal(feature.getSnapshot().hydration.loading, false);
+  assert.doesNotMatch(JSON.stringify(feature.getSnapshot()), /private runtime transport detail/);
+  feature.dispose();
+});
+
+test("generation keeps a successful action result when its follow-up refresh fails", async () => {
+  let hydrationCount = 0;
+  const reports = [];
+  const feature = createGenerationFeature(runtimeAdapters({
+    hydrate: async (reason, scope) => {
+      hydrationCount += 1;
+      if (reason === "command-result") throw new Error("private refresh transport detail");
+      return {
+        runtimeId: "runner-1",
+        sequence: 0,
+        runtime: { batchId: scope.batchId, status: "idle", state: "idle" },
+        batch: { id: scope.batchId, status: "idle" },
+        capabilities: {},
+      };
+    },
+    start: async () => ({ id: "batch-refresh-failure" }),
+    pause: async () => null,
+    resume: async () => null,
+    stop: async () => null,
+    continue: async () => null,
+    retry: async () => null,
+    reportDiagnostic: (code) => reports.push(code),
+  }));
+  feature.setScope({ workspaceRuntimeId: "workspace-refresh-failure", batchId: "batch-refresh-failure" });
+  await feature.hydrate("initial");
+  const result = await feature.start({ batchId: "batch-refresh-failure" });
+  assert.deepEqual(result, { id: "batch-refresh-failure" });
+  assert.equal(feature.getSnapshot().commands.start.error, null);
+  assert.equal(feature.getSnapshot().hydration.error.code, "GENERATION_RUNTIME_HYDRATION_FAILED");
+  assert.equal(hydrationCount, 2);
+  assert.deepEqual(reports, ["GENERATION_RUNTIME_REFRESH_FAILED"]);
+  assert.doesNotMatch(JSON.stringify(feature.getSnapshot()), /private refresh transport detail/);
+  feature.dispose();
+});
+
 test("generation accepts only newer events from the hydrated runtime and displayed batch", async () => {
   let emitRuntime;
   const feature = createGenerationFeature(runtimeAdapters({

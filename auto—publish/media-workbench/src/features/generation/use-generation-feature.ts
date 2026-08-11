@@ -17,6 +17,7 @@ import {
 } from '../../bridge/generation';
 import { useWorkspaceRuntimeIdentity } from '../workspace/workspace-coordinator-context';
 import { createGenerationFeature } from './generation-feature.js';
+import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 
 export function useGenerationFeature() {
   const workspace = useWorkspaceRuntimeIdentity();
@@ -37,13 +38,16 @@ export function useGenerationFeature() {
       commitSubmissionHandoff: commitGenerationSubmissionHandoff,
       hydrate: getGenerationRuntimeSnapshot,
       subscribeRuntime: subscribeGenerationBatchState,
+      reportDiagnostic: (code: string) => reportRuntimeDiagnostic(code, 'workspace-invalidation'),
     });
   }
   const feature = featureRef.current;
   useEffect(() => {
     if (workspace.workspaceRuntimeId) {
       feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId, batchId: 'current' });
-      void feature.hydrate('initial').catch(() => undefined);
+      void feature.hydrate('initial').catch(() => {
+        reportRuntimeDiagnostic('GENERATION_RUNTIME_HYDRATION_FAILED', 'workspace-invalidation');
+      });
     }
   }, [feature, workspace.workspaceRuntimeId]);
   useEffect(() => () => feature.dispose(), [feature]);

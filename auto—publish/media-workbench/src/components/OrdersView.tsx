@@ -138,6 +138,7 @@ export default function OrdersView({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedOrderNid, setExpandedOrderNid] = useState<string | null>(null);
   const [openingOrderNid, setOpeningOrderNid] = useState<string | null>(null);
+  const [openPublishedUrlError, setOpenPublishedUrlError] = useState<string | null>(null);
   const [cancellationPreparations, setCancellationPreparations] = useState<Record<string, any>>({});
   const [cancellationResolutions, setCancellationResolutions] = useState<Record<string, any>>({});
 
@@ -155,9 +156,11 @@ export default function OrdersView({
   const handleOpenPublishedUrl = async (orderNid: string) => {
     if (!orderNid) return;
     setOpeningOrderNid(orderNid);
+    setOpenPublishedUrlError(null);
     try {
       await onOpenPublishedUrl(orderNid);
     } catch (_) {
+      setOpenPublishedUrlError("打开发布链接失败，请检查订单状态或诊断信息。");
     } finally {
       setOpeningOrderNid(null);
     }
@@ -205,6 +208,14 @@ export default function OrdersView({
         >
           {syncFailures.map((failure) => failure.orderNid).join("、")}{" "}
           刷新失败；已保留原订单事实。
+        </div>
+      )}
+      {openPublishedUrlError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+        >
+          {openPublishedUrlError}
         </div>
       )}
 

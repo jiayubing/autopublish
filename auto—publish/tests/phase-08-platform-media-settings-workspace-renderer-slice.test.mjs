@@ -191,6 +191,21 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     feature.dispose();
   });
 
+  it("records an initial run refresh failure while preserving the query error", async () => {
+    const reports = [];
+    const feature = createPlatformFeature({
+      getRunState: async () => { throw new Error("private platform transport detail"); },
+      reportDiagnostic: (code) => reports.push(code),
+    });
+    feature.setScope({ workspaceRuntimeId: "platform-refresh-failure" });
+    await feature.start();
+    assert.equal(feature.getSnapshot().runQuery.loading, false);
+    assert.equal(feature.getSnapshot().runQuery.error.code, "PLATFORM_RUN_QUERY_FAILED");
+    assert.deepEqual(reports, ["PLATFORM_RUN_REFRESH_FAILED"]);
+    assert.doesNotMatch(JSON.stringify(feature.getSnapshot()), /private platform transport detail/);
+    feature.dispose();
+  });
+
   it("coordinates queue-group commands through the renderer feature without overriding manual pause", async () => {
     const group = {
       queueGroupId: "group-a",

@@ -14,6 +14,10 @@ const {
 } = require("../src/diagnostics/diagnostic-directory-policy");
 const { createDiagnosticFileSink } = require("../src/diagnostics/diagnostic-file-sink");
 const { projectDiagnostic } = require("../src/diagnostics/diagnostic-projection");
+const {
+  projectDiagnosticsResult,
+} = require("../src/diagnostics/diagnostic-projection");
+const { createDiagnosticProducer } = require("../src/diagnostics/diagnostic-producer");
 
 function record(id, overrides) {
   return createDiagnosticRecord(Object.assign({
@@ -94,6 +98,24 @@ test("memory sink bounds records, deduplicates, and preserves run correlation", 
   assert.deepEqual(sink.getSnapshot({ runId: "run-2" }).map((item) => item.diagnosticId), ["diag-third"]);
   assert.equal(sink.findByDiagnosticId("diag-first"), null);
   assert.equal(sink.findByDiagnosticId("diag-third").runId, "run-2");
+});
+
+test("diagnostic producer isolates sink failure and exposes sanitized delivery status", () => {
+  const producer = createDiagnosticProducer({
+    sinks: [
+      { append() { throw Object.assign(new Error("private path"), { code: "DIAGNOSTIC_FILE_WRITE_FAILED" }); } },
+      { append() {} },
+    ],
+  });
+  producer.append(record("producer-failure"));
+  assert.deepEqual(producer.getStatus(), {
+    status: "degraded",
+    attemptedCount: 1,
+    deliveredCount: 0,
+    failedCount: 1,
+    lastFailureCode: "DIAGNOSTIC_FILE_WRITE_FAILED",
+  });
+  assert.doesNotMatch(JSON.stringify(producer.getStatus()), /private|path/i);
 });
 
 test("file sink rotates by file size and keeps the configured file count", () => withTemporaryRoot((root) => {
@@ -250,4 +272,29 @@ test("file sink classifies write permission failures and projection is exact", (
   assert.equal("occurredAt" in projected, false);
   assert.equal("metadata" in projected, false);
   assert.equal("module" in projected, false);
+}));
+
+test("diagnostic projection reports malformed records without exposing their contents", () => {
+  const projected = projectDiagnosticsResult([record("valid"), { metadata: "invalid" }]);
+  assert.equal(projected.items.length, 1);
+  assert.equal(projected.droppedCount, 1);
+  assert.doesNotMatch(JSON.stringify(projected), /invalid/);
+});
+
+test("file sink does not fake success when lock cleanup fails", () => withTemporaryRoot((root) => {
+  const logs = path.join(root, "logs");
+  const originalClose = fs.closeSync;
+  try {
+    fs.closeSync = function () {
+      const error = new Error("private cleanup detail");
+      error.code = "EIO";
+      throw error;
+    };
+    const sink = createDiagnosticFileSink({ directory: logs, root });
+    assert.throws(() => sink.append(record("lock-cleanup")), {
+      code: "DIAGNOSTIC_LOCK_CLOSE_FAILED",
+    });
+  } finally {
+    fs.closeSync = originalClose;
+  }
 }));

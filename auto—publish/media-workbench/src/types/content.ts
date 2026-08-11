@@ -74,6 +74,7 @@ export interface DoubaoQueueState {
 }
 export interface DoubaoLoginState {
   status: DoubaoLoginStatus;
+  observation?: "complete" | "unavailable";
   errorText?: string;
 }
 export interface ContentResearch {

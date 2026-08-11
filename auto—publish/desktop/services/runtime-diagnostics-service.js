@@ -22,7 +22,7 @@ const {
   resolvePlaywrightRuntime,
 } = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
 const {
-  hasBundledMammoth,
+  probeBundledMammoth,
   readBuildInfo,
   diagnosticErrors,
   diagnosticWarnings,
@@ -73,6 +73,30 @@ function createRuntimeDiagnosticsService(options) {
     fileSink && opts.initializeFileSink !== false
       ? initializeDiagnosticSink(fileSink)
       : { status: "NOT_CONFIGURED" };
+  let memoryFailureCount = 0;
+  let fileFailureCount = 0;
+  let lastFailureCode = null;
+
+  function safeFailureCode(value) {
+    return value && typeof value.code === "string" &&
+      /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
+      ? value.code
+      : null;
+  }
+
+  function diagnosticSinkStatus() {
+    return {
+      status: memoryFailureCount > 0 || fileFailureCount > 0
+        ? "degraded"
+        : fileSink
+          ? "ready"
+          : "not_configured",
+      startupStatus: startupCleanup.status,
+      memoryFailureCount,
+      fileFailureCount,
+      lastFailureCode,
+    };
+  }
 
   function currentBrowserCapability(browserChannel) {
     if (!browserChannel.configured) {
@@ -113,7 +137,7 @@ function createRuntimeDiagnosticsService(options) {
           : opts.hepanProvider,
       }),
     );
-    const mammoth = hasBundledMammoth(appRoot, opts.docxAvailable);
+    const mammoth = probeBundledMammoth(appRoot, opts.docxAvailable);
     const capabilities = {
       playwrightNode: capability(
         tools.playwrightNode.command ? "ready" : "unavailable",
@@ -127,9 +151,9 @@ function createRuntimeDiagnosticsService(options) {
       ),
       browserChannel: currentBrowserCapability(tools.browserChannel),
       docx: capability(
-        mammoth ? "ready" : "unavailable",
+        mammoth.available ? "ready" : "unavailable",
         "bundled",
-        mammoth ? null : "DOCX_RUNTIME_UNAVAILABLE",
+        mammoth.available ? null : "DOCX_RUNTIME_UNAVAILABLE",
       ),
       hepan: capability(
         tools.hepanPython.command ? "ready" : "optional_unconfigured",
@@ -149,6 +173,7 @@ function createRuntimeDiagnosticsService(options) {
       errors,
       warnings,
       runtimeEvents: memorySink.getSnapshot(),
+      diagnosticSink: diagnosticSinkStatus(),
     };
   }
 
@@ -198,16 +223,22 @@ function createRuntimeDiagnosticsService(options) {
       }
       try {
         memorySink.append(record);
-      } catch (_) {
+      } catch (error) {
+        memoryFailureCount += 1;
+        lastFailureCode = safeFailureCode(error);
         return false;
       }
       try {
         if (fileSink) fileSink.append(record);
-      } catch (_) {}
+      } catch (error) {
+        fileFailureCount += 1;
+        lastFailureCode = safeFailureCode(error);
+      }
       return true;
     },
     memorySink,
     fileSink,
+    getDiagnosticSinkStatus: diagnosticSinkStatus,
     setPlatformSettingsService: function (service) {
       platformSettingsService = service || null;
     },

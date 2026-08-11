@@ -580,7 +580,9 @@ function createContractRegistry(contracts) {
             errorCode = descriptor.value;
           diagnosticId = safeDiagnosticId(error.diagnosticId);
         }
-      } catch (_) {}
+      } catch (_) {
+        safe = null;
+      }
       if (
         !safe &&
         errorCode &&

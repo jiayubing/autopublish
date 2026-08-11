@@ -2,9 +2,9 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成；M06-A、M06-B、M06-C 已完成，下一 gate 为 M06-D
+**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成；M06-A、M06-B、M06-C、M06-D 已完成，下一 gate 为 M06-E
 
-**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A、M06-B、M06-C 已完成并将 M06-D 置为 `READY`，但 M06 仍在运行。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
+**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A、M06-B、M06-C、M06-D 已完成并将 M06-E 置为 `READY`，但 M06 仍在运行。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
 
 ## Scope
 
@@ -28,8 +28,8 @@ M06-0 的唯一 inventory/scope 真源为：
 | M06-A | OperationalStore / workspace / state persistence / cleanup                                                                                                 | `COMPLETE` |
 | M06-B | content / file persistence / lifecycle                                                                                                                     | `COMPLETE` |
 | M06-C | remote / process / platform runtime                                                                                                                        | `COMPLETE` |
-| M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `READY`    |
-| M06-E | auth / security                                                                                                                                            | `PENDING`  |
+| M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `COMPLETE` |
+| M06-E | auth / security                                                                                                                                            | `READY`    |
 | M06-F | operator / release / migration scripts                                                                                                                     | `PENDING`  |
 | M06-G | combined audit、inventory/failure-semantics reconciliation、blocking remediation、bounded re-audit、final clean-HEAD full gate 与 Maintenance 10.5 closure | `PENDING`  |
 
@@ -63,7 +63,7 @@ M06-A closure 时状态为 `M06-A=COMPLETE`、`M06-B=READY`；其后的 M06-B cl
 
 M06-B 已完成 content / file persistence / lifecycle owner 的实现、定向故障注入验证、Primary Audit、blocking finding 检查、bounded re-audit 与 AST reconciliation。文章文件事务、锁与 removal recovery、生成 batch/AI test state、attention lookup、materials/questions/files 及 Doubao collection/generation persistence 均按失败语义收敛；读失败不再伪装为不存在，写入、rollback、lock、recovery 和关键 state cleanup 不再伪装成功。保留的 6 个 `EMPTY` handler 仅为已注释且可观察语义成立的 optional diagnostic artifact cleanup / historical optional parse probe。完整证据见 `handoffs/M06-B-content-file-persistence-lifecycle-cleanup.md`。
 
-当前推进状态：`M06-A=COMPLETE`、`M06-B=COMPLETE`、`M06-C=COMPLETE`、`M06-D=READY`、`M06/Maintenance 10.5=PARTIAL`、`Ticket 25=PENDING/blocked`。M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。
+当前推进状态：`M06-A=COMPLETE`、`M06-B=COMPLETE`、`M06-C=COMPLETE`、`M06-D=COMPLETE`、`M06-E=READY`、`M06/Maintenance 10.5=PARTIAL`、`Ticket 25=PENDING/blocked`。M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。
 
 ## M06-C package closure
 
@@ -72,3 +72,7 @@ M06-C 已完成 remote / process / platform runtime owner 的实现、定向故�
 本包收敛了 desktop task/workbench/orchestrator/worker、regular/paid submission、stop signal、browser session、Hepan/Lieju/Toutiao/media adapter/transport/store 的失败语义：远端请求在明确拒绝、明确接受和 uncertain 之间保持区分；缺少订单身份、协议/transport timeout、断线、浏览器探测未知和进程控制失败不再伪装成功或自动重试；关键 stop/pause signal、lease/state/article/publication store 读取异常进入稳定错误或 fail-closed outcome；cleanup 失败保留安全诊断且不覆盖主错误。保留的 4 个 `EMPTY` handler 分别是 Electron 可选能力加载、两处 Hepan 可选 JSON 行解析与媒体风险确认无效输入 no-op；另有 1 个 `OTHER` handler 将 paid preflight 异常映射为稳定 `PAID_ORDER_PRECHECK_FAILED`，均已在 handoff 登记公开语义。
 
 C inventory after 为 67 个文件、254 个 handler、0 parse diagnostics；全库为 505 个扫描文件、275 个含 handler 文件、1,129 个 handler。相对 M06-C 起点（全库 1,116、C 241），C 新增的 13 个 handler 均服务于主错误保留、远端/进程/存储诊断或 unavailable/uncertain outcome；未新增 writer、状态机或兼容旁路。定向 209 个测试、diagnostics 30 个测试、Phase 08 cleanup 4 个测试、architecture/package gate（129/129 capabilities）与 format check 均通过；完整 `npm test` 仍保留给 M06-G。
+
+## M06-D package closure
+
+M06-D 已完成 optional probe / parse、diagnostics、IPC 与 Renderer owner 的实现、定向故障注入、Primary Audit、blocking finding 最小根因修复、bounded re-audit 与 AST reconciliation。独立证据见 `handoffs/M06-D-optional-probe-parse-diagnostics-ipc-renderer-cleanup.md`。下一 gate 为 M06-E；M06-G combined closure 前 M06 与 Maintenance 10.5 仍保持 `PARTIAL`，Ticket 25 继续 blocked。

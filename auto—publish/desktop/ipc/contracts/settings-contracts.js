@@ -252,12 +252,25 @@ const runtimeEvent = exactObject({
   userMessage: text(256, 1),
   summary: diagnosticSummary,
 });
+const runtimeEventsObservation = exactObject({
+  status: enumField(["complete", "partial"]),
+  droppedCount: integerField({ min: 0, max: 100 }),
+});
+const diagnosticSink = exactObject({
+  status: enumField(["ready", "degraded", "not_configured", "unavailable"]),
+  startupStatus: token(),
+  memoryFailureCount: integerField({ min: 0, max: 1000000 }),
+  fileFailureCount: integerField({ min: 0, max: 1000000 }),
+  lastFailureCode: nullableField(token()),
+});
 const runtimeDiagnostics = exactObject({
   ok: "boolean",
   buildInfo: exactObject({
     version: text(128, 1),
     commit: text(128, 1),
     dirty: "boolean",
+    source: optionalField(token()),
+    observation: optionalField(enumField(["complete", "partial", "fallback", "unavailable"])),
   }),
   browserChannel: browserCapability,
   capabilities: exactObject({
@@ -275,6 +288,8 @@ const runtimeDiagnostics = exactObject({
   errors: arrayField(diagnosticItem, { max: 100 }),
   warnings: arrayField(diagnosticItem, { max: 100 }),
   runtimeEvents: optionalField(arrayField(runtimeEvent, { max: 100 })),
+  runtimeEventsObservation: optionalField(runtimeEventsObservation),
+  diagnosticSink: optionalField(diagnosticSink),
 });
 const browserSmoke = exactObject({
   ok: literalField(true),

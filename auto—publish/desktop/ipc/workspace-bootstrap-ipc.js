@@ -1,5 +1,6 @@
 const { productionIpcRegistry } = require("./contracts/production-registry");
 const { createTypedIpcMain } = require("./register");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const STATE_VALUES = new Set([
   "checking",
@@ -147,7 +148,17 @@ function registerWorkspaceBootstrapIpc(deps) {
     registeredChannels.push("workspace:request-switch");
   } catch (error) {
     registeredChannels.reverse().forEach(function(channel) {
-      try { typedIpcMain.removeHandler(channel); } catch (_) {}
+      try {
+        typedIpcMain.removeHandler(channel);
+      } catch (_) {
+        reportDiagnostic({
+          code: "WORKSPACE_BOOTSTRAP_IPC_CLEANUP_FAILED",
+          module: "workspace-bootstrap-ipc",
+          category: "transport",
+          operationId: "workspace-bootstrap-registration-rollback",
+          metadata: { action: "remove-handler", transport: "ipc", outcome: "failed" },
+        });
+      }
     });
     throw error;
   }

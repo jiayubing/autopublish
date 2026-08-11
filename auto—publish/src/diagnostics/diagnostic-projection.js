@@ -39,22 +39,34 @@ function projectDiagnostic(input, options) {
 }
 
 function projectDiagnostics(records, options) {
-  if (!Array.isArray(records)) return Object.freeze([]);
+  return projectDiagnosticsResult(records, options).items;
+}
+
+function projectDiagnosticsResult(records, options) {
+  if (!Array.isArray(records))
+    return Object.freeze({ items: Object.freeze([]), droppedCount: 0 });
   const limit =
     Number.isSafeInteger(options && options.limit) && options.limit > 0
       ? Math.min(options.limit, 100)
       : 100;
   const result = [];
+  let droppedCount = 0;
   records.slice(-limit).forEach(function (record) {
     try {
       result.push(projectDiagnostic(record, options));
-    } catch (_) {}
+    } catch (_) {
+      droppedCount += 1;
+    }
   });
-  return Object.freeze(result);
+  return Object.freeze({
+    items: Object.freeze(result),
+    droppedCount,
+  });
 }
 
 module.exports = {
   DEFAULT_MESSAGES,
   projectDiagnostic,
   projectDiagnostics,
+  projectDiagnosticsResult,
 };

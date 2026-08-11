@@ -7,6 +7,10 @@ const path = require("path");
 const {
   createRuntimeDiagnosticsService,
 } = require("../desktop/services/runtime-diagnostics-service");
+const {
+  readBuildInfo,
+  probeBundledMammoth,
+} = require("../desktop/services/runtime-diagnostics-probes");
 
 it("retains safe runtime diagnostic events reported by lifecycle services", () => {
   const workspace = fs.mkdtempSync(
@@ -44,6 +48,81 @@ it("retains safe runtime diagnostic events reported by lifecycle services", () =
     assert.equal(JSON.stringify(safe).includes(appRoot), false);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(appRoot, { recursive: true, force: true });
+  }
+});
+
+it("exposes sink degradation without recursively recording sink failures", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-sink-workspace-"));
+  const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-sink-app-"));
+  try {
+    const service = createRuntimeDiagnosticsService({
+      workspaceRoot: workspace,
+      appRoot,
+      initializeFileSink: false,
+      fileSink: {
+        append() {
+          throw Object.assign(new Error("C:\\private\\diagnostic.log"), {
+            code: "DIAGNOSTIC_FILE_WRITE_FAILED",
+          });
+        },
+      },
+    });
+    assert.equal(service.report({
+      code: "RUNTIME_EVENT_TEST",
+      module: "runtime-test",
+      category: "internal",
+      operationId: "runtime-test",
+      metadata: { action: "test" },
+    }), true);
+    const safe = service.safeDiagnostics();
+    assert.equal(safe.diagnosticSink.status, "degraded");
+    assert.equal(safe.diagnosticSink.fileFailureCount, 1);
+    assert.equal(safe.diagnosticSink.lastFailureCode, "DIAGNOSTIC_FILE_WRITE_FAILED");
+    assert.equal(safe.runtimeEvents.length, 1);
+    assert.doesNotMatch(JSON.stringify(safe), /private|diagnostic\.log/i);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(appRoot, { recursive: true, force: true });
+  }
+});
+
+it("reports fallback sources for malformed optional build metadata", () => {
+  const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-build-info-"));
+  try {
+    fs.mkdirSync(path.join(appRoot, "config"), { recursive: true });
+    fs.writeFileSync(path.join(appRoot, "config", "build-info.json"), "{malformed", "utf8");
+    fs.writeFileSync(path.join(appRoot, "package.json"), JSON.stringify({ version: "fixture-version" }), "utf8");
+    assert.deepEqual(readBuildInfo(appRoot, {}), {
+      version: "fixture-version",
+      commit: "unknown",
+      dirty: false,
+      source: "package",
+      observation: "partial",
+    });
+    assert.deepEqual(probeBundledMammoth(appRoot, false), {
+      available: false,
+      observation: "override",
+    });
+  } finally {
+    fs.rmSync(appRoot, { recursive: true, force: true });
+  }
+});
+
+it("marks a valid secondary build metadata source as fallback after primary read failure", () => {
+  const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-diagnostics-build-fallback-"));
+  try {
+    fs.mkdirSync(path.join(appRoot, "config"), { recursive: true });
+    fs.writeFileSync(path.join(appRoot, "config", "build-info.json"), "{malformed", "utf8");
+    fs.writeFileSync(path.join(appRoot, "build-info.json"), JSON.stringify({ version: "root-version" }), "utf8");
+    assert.deepEqual(readBuildInfo(appRoot, {}), {
+      version: "root-version",
+      commit: "unknown",
+      dirty: false,
+      source: "root",
+      observation: "fallback",
+    });
+  } finally {
     fs.rmSync(appRoot, { recursive: true, force: true });
   }
 });

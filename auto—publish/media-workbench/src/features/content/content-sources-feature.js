@@ -20,7 +20,8 @@ const EMPTY_QUEUE = Object.freeze({
   tasks: Object.freeze([]),
 });
 
-const EMPTY_LOGIN = Object.freeze({ status: 'unknown' });
+const EMPTY_LOGIN = Object.freeze({ status: 'unknown', observation: 'unavailable' });
+const LOGIN_STATUSES = new Set(['unknown', 'checking', 'login_required', 'authenticated', 'session_error']);
 
 const SOURCE_COMMANDS = Object.freeze({
   createQuestion: 'client',
@@ -62,17 +63,20 @@ const CLIENT_IDENTITY = Object.freeze({
 });
 
 function safeError(value) {
+  const userMessage = value && typeof value.userMessage === 'string' &&
+    value.userMessage.length <= 256 &&
+    !/[\\/\x00-\x1f\x7f]/.test(value.userMessage) &&
+    !/\b(?:cookie|authorization|bearer|token|api[-_ ]?key|password|secret|header|body|database|path)\b/i.test(value.userMessage)
+    ? value.userMessage
+    : '无法加载客户与模板。';
   return Object.freeze({
     code:
-      value && typeof value.code === 'string'
+      value && typeof value.code === 'string' && /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
         ? value.code
         : 'CONTENT_SOURCES_QUERY_FAILED',
     category: 'internal',
     retryability: 'safe',
-    userMessage:
-      value instanceof Error && value.message
-        ? value.message
-        : '无法加载客户与模板。',
+    userMessage,
   });
 }
 
@@ -91,9 +95,12 @@ function normalizeQueue(value) {
 
 function normalizeLogin(value) {
   if (!value || typeof value !== 'object') return EMPTY_LOGIN;
-  const status = typeof value.status === 'string' ? value.status : 'unknown';
+  const status = LOGIN_STATUSES.has(value.status) ? value.status : 'unknown';
   return Object.freeze({
     status,
+    observation: status === 'unknown' || value.observation === 'unavailable'
+      ? 'unavailable'
+      : 'complete',
     ...(typeof value.errorText === 'string' ? { errorText: value.errorText } : {}),
   });
 }
@@ -255,8 +262,10 @@ export function createContentSourcesFeature(adapters = {}) {
     if (token && !loginIdentity.isCurrent(token)) return false;
     doubaoLogin = normalizeLogin(value);
     doubaoLoginQuery = Object.freeze({ loading: false, error: null, reason });
-    if (typeof adapters.rememberDoubaoLoginState === 'function')
-      adapters.rememberDoubaoLoginState(doubaoLogin);
+    if (typeof adapters.rememberDoubaoLoginState === 'function' &&
+      adapters.rememberDoubaoLoginState(doubaoLogin) === false) {
+      doubaoLogin = Object.freeze({ ...doubaoLogin, observation: 'unavailable' });
+    }
     publish();
     return true;
   };

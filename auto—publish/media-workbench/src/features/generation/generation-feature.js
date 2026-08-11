@@ -4,11 +4,28 @@ const COMMANDS = Object.freeze(['previewBatch', 'start', 'pause', 'resume', 'sto
 const LIVE_STATUSES = new Set(['running', 'pausing', 'stopping']);
 
 function safeError(value) {
+  const userMessage = value && typeof value.userMessage === 'string' &&
+    value.userMessage.length <= 256 &&
+    !/[\\/\x00-\x1f\x7f]/.test(value.userMessage) &&
+    !/\b(?:cookie|authorization|bearer|token|api[-_ ]?key|password|secret|header|body|database|path)\b/i.test(value.userMessage)
+    ? value.userMessage
+    : '批量生成命令失败。';
   return Object.freeze({
-    code: value && typeof value.code === 'string' ? value.code : 'GENERATION_COMMAND_FAILED',
+    code: value && typeof value.code === 'string' && /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
+      ? value.code
+      : 'GENERATION_COMMAND_FAILED',
     category: 'internal',
     retryability: 'safe',
-    userMessage: value instanceof Error && value.message ? value.message : '批量生成命令失败。',
+    userMessage,
+  });
+}
+
+function safeHydrationError() {
+  return Object.freeze({
+    code: 'GENERATION_RUNTIME_HYDRATION_FAILED',
+    category: 'internal',
+    retryability: 'safe',
+    userMessage: '批量生成状态读取失败，请刷新重试。',
   });
 }
 
@@ -90,6 +107,7 @@ export function createGenerationFeature(adapters = {}) {
   let runtime = null;
   let batch = null;
   let capabilities = Object.freeze({});
+  let hydration = Object.freeze({ loading: false, error: null, reason: null });
   let unsubscribeRuntime = null;
   let hydrationToken = 0;
   let snapshot;
@@ -103,6 +121,7 @@ export function createGenerationFeature(adapters = {}) {
       runtime,
       batch,
       capabilities,
+      hydration,
       commands: Object.freeze(Object.fromEntries(COMMANDS.map((name) => [name, owners[name].getSnapshot()]))),
     });
     emit();
@@ -146,14 +165,40 @@ export function createGenerationFeature(adapters = {}) {
     unsubscribeRuntime = typeof unsubscribe === 'function' ? unsubscribe : () => {};
   };
 
+  const reportHydrationFailure = (code) => {
+    if (typeof adapters.reportDiagnostic !== 'function') return false;
+    try {
+      adapters.reportDiagnostic(code);
+    } catch (_) {
+      return false;
+    }
+    return true;
+  };
+
   const hydrate = async (reason = 'manual-refresh') => {
     if (disposed || !scope) return false;
     ensureSubscription();
     const token = ++hydrationToken;
     const requestScope = scope;
-    const value = await adapters.hydrate(reason, requestScope);
-    if (disposed || token !== hydrationToken || scope !== requestScope) return false;
-    return applyHydration(value);
+    hydration = Object.freeze({ loading: true, error: null, reason });
+    publish();
+    try {
+      const value = await adapters.hydrate(reason, requestScope);
+      if (disposed || token !== hydrationToken || scope !== requestScope) return false;
+      const applied = applyHydration(value);
+      hydration = Object.freeze({
+        loading: false,
+        error: applied ? null : safeHydrationError(),
+        reason,
+      });
+      publish();
+      return applied;
+    } catch (value) {
+      if (disposed || token !== hydrationToken || scope !== requestScope) return false;
+      hydration = Object.freeze({ loading: false, error: safeHydrationError(), reason });
+      publish();
+      throw value;
+    }
   };
 
   const applyCommandResult = (value) => {
@@ -167,20 +212,14 @@ export function createGenerationFeature(adapters = {}) {
     if (owner.getSnapshot().busy) return { ignored: true };
     const token = owner.begin(scope);
     publish();
+    let result;
     try {
-      const result = await adapters[name](input);
-      if (!owner.isCurrent(token)) {
-        await hydrate('stale-command-result');
-        return undefined;
-      }
-      owner.finalize(token, { result });
-      applyCommandResult(result);
-      publish();
-      await hydrate('command-result');
-      return result;
+      result = await adapters[name](input);
     } catch (value) {
       if (!owner.isCurrent(token)) {
-        await hydrate('stale-command-result');
+        try { await hydrate('stale-command-result'); } catch (_) {
+          reportHydrationFailure('GENERATION_RUNTIME_REFRESH_FAILED');
+        }
         return undefined;
       }
       const error = safeError(value);
@@ -188,6 +227,19 @@ export function createGenerationFeature(adapters = {}) {
       publish();
       throw Object.assign(new Error(error.userMessage), error);
     }
+    if (!owner.isCurrent(token)) {
+      try { await hydrate('stale-command-result'); } catch (_) {
+        reportHydrationFailure('GENERATION_RUNTIME_REFRESH_FAILED');
+      }
+      return undefined;
+    }
+    owner.finalize(token, { result });
+    applyCommandResult(result);
+    publish();
+    try { await hydrate('command-result'); } catch (_) {
+      reportHydrationFailure('GENERATION_RUNTIME_REFRESH_FAILED');
+    }
+    return result;
   };
 
   publish();
@@ -207,6 +259,7 @@ export function createGenerationFeature(adapters = {}) {
       runtime = null;
       batch = null;
       capabilities = Object.freeze({});
+      hydration = Object.freeze({ loading: false, error: null, reason: null });
       COMMANDS.forEach((name) => owners[name].invalidate());
       ensureSubscription();
       publish();
@@ -237,6 +290,7 @@ export function createGenerationFeature(adapters = {}) {
       sequence = -1;
       runtime = null;
       batch = null;
+      hydration = Object.freeze({ loading: false, error: null, reason: null });
     },
   });
 }

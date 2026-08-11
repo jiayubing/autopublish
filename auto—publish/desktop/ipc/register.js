@@ -1,4 +1,15 @@
 const { productionIpcRegistry } = require("./contracts/production-registry");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+
+function reportCleanupFailure(action) {
+  reportDiagnostic({
+    code: "IPC_CLEANUP_FAILED",
+    module: "ipc-register",
+    category: "transport",
+    operationId: "ipc-registration-cleanup",
+    metadata: { action, transport: "ipc", outcome: "failed" },
+  });
+}
 
 function createTypedIpcMain(ipcMain, requireAuthenticated) {
   function contractFor(channel) {
@@ -127,15 +138,29 @@ function registerIpc(deps) {
   const modules = {};
   async function disposeModules() {
     const moduleList = Object.keys(modules).map(function(name) { return modules[name]; }).reverse();
+    let firstError = null;
     for (const module of moduleList) {
       if (!module || typeof module.dispose !== "function") continue;
-      try { await module.dispose(); } catch (_) {}
+      try {
+        await module.dispose();
+      } catch (error) {
+        reportCleanupFailure("dispose-module");
+        if (!firstError) firstError = error;
+      }
     }
+    if (firstError) throw firstError;
   }
   function removeHandlers() {
+    let firstError = null;
     [...new Set(channels)].reverse().forEach(function(channel) {
-      try { guardedIpcMain.removeHandler(channel); } catch (_) {}
+      try {
+        guardedIpcMain.removeHandler(channel);
+      } catch (error) {
+        reportCleanupFailure("remove-handler");
+        if (!firstError) firstError = error;
+      }
     });
+    if (firstError) throw firstError;
   }
   try {
     modules.workspace = require("./workspace-runtime-ipc").registerWorkspaceRuntimeIpc(guarded);
@@ -179,13 +204,30 @@ function registerIpc(deps) {
       dispose: async function() {
         if (disposed) return;
         disposed = true;
-        await disposeModules();
-        removeHandlers();
+        let firstError = null;
+        try {
+          await disposeModules();
+        } catch (error) {
+          firstError = error;
+        } finally {
+          try {
+            removeHandlers();
+          } catch (error) {
+            if (!firstError) firstError = error;
+          }
+        }
+        if (firstError) throw firstError;
       }
     };
   } catch (error) {
-    disposeModules().catch(function() {});
-    removeHandlers();
+    disposeModules().catch(function() {
+      reportCleanupFailure("registration-rollback");
+    });
+    try {
+      removeHandlers();
+    } catch (_) {
+      reportCleanupFailure("registration-rollback-handlers");
+    }
     throw error;
   }
 }

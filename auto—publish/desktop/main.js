@@ -24,6 +24,7 @@ const { createWorkspaceRuntime } = require("./workspace-runtime");
 const {
   createRendererSmokeProbeSource,
 } = require("./packaging/renderer-smoke-probe");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 const startupWorkspaceEnvironment = captureEnvironmentValue(
   process.env,
@@ -402,13 +403,29 @@ function initializeAuth() {
       if (state && state.authenticated) return activateAuthenticatedRuntime();
       return undefined;
     })
-    .catch(function () {});
+    .catch(function () {
+      reportDiagnostic({
+        code: "AUTH_INITIALIZE_FAILED",
+        module: "desktop-main",
+        category: "authentication",
+        operationId: "auth-initialize",
+        metadata: { action: "initialize", outcome: "failed" },
+      });
+    });
 }
 
 function failStartup() {
   startupStatus = "failed";
   return disposeRuntime()
-    .catch(function () {})
+    .catch(function () {
+      reportDiagnostic({
+        code: "DESKTOP_RUNTIME_DISPOSE_FAILED",
+        module: "desktop-main",
+        category: "internal",
+        operationId: "startup-failure-cleanup",
+        metadata: { action: "dispose-runtime", outcome: "failed" },
+      });
+    })
     .then(function () {
       if (PACKAGED_SMOKE) finishPackagedSmoke({ ok: false });
       else app.quit();

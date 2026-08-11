@@ -7,6 +7,9 @@ const {
   safeBatch,
   safePreview,
 } = require("../desktop/ipc/content-generation-batch-ipc");
+const {
+  setDiagnosticReporter,
+} = require("../src/diagnostics/diagnostic-producer");
 
 function fakeIpc() {
   const handlers = new Map();
@@ -146,6 +149,40 @@ describe("content generation batch IPC", function() {
     assert.equal(typeof listener, "function");
     listener({ runtimeId: "runner-1", sequence: 1, batchId: "batch-1", status: "running", taskId: "task-1", counts: null, updatedAt: "2026-07-26T00:00:00.000Z" });
     assert.deepStrictEqual(sent, [["content:generation-batch-state", { schemaVersion: 1, runtimeId: "runner-1", sequence: 1, batchId: "batch-1", status: "running", taskId: "task-1", counts: null, updatedAt: "2026-07-26T00:00:00.000Z" }]]);
+  });
+
+  it("isolates renderer event delivery failure and records a sanitized diagnostic", function() {
+    const { ipcMain } = fakeIpc();
+    const reports = [];
+    let listener;
+    const restore = setDiagnosticReporter((record) => {
+      reports.push(record);
+      return true;
+    });
+    try {
+      registerContentGenerationBatchIpc({
+        ipcMain,
+        sendToRenderer() {
+          throw new Error("private renderer transport detail");
+        },
+        contentGenerationBatchService: {
+          getState() { return { status: "idle" }; },
+          subscribe(value) { listener = value; return () => {}; },
+        },
+      });
+      assert.doesNotThrow(() => listener({
+        runtimeId: "runner-1",
+        sequence: 2,
+        batchId: "batch-1",
+        status: "running",
+      }));
+      assert.equal(reports.length, 1);
+      assert.equal(reports[0].code, "GENERATION_RUNTIME_EVENT_DELIVERY_FAILED");
+      assert.equal(reports[0].metadata.transport, "ipc");
+      assert.doesNotMatch(JSON.stringify(reports), /private|renderer transport detail/i);
+    } finally {
+      restore();
+    }
   });
 
   it("forwards the batch id and configuration confirmation for continuation commands", async function() {

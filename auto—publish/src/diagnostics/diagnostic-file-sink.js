@@ -102,22 +102,37 @@ function createDiagnosticFileSink(options) {
           }
         } catch (statError) {
           if (statError && statError.code === "ENOENT") continue;
+          if (permissionError(statError))
+            throw sinkError("DIAGNOSTIC_FILE_PERMISSION_DENIED");
+          throw sinkError("DIAGNOSTIC_LOCK_INSPECTION_FAILED");
         }
         if (Date.now() - startedAt >= 5000)
           throw sinkError("DIAGNOSTIC_LOCK_TIMEOUT");
         pause(5);
       }
     }
+    let result;
+    let callbackError = null;
     try {
-      return callback();
-    } finally {
-      try {
-        io.closeSync(handle);
-      } catch (_) {}
-      try {
-        io.unlinkSync(lockPath);
-      } catch (_) {}
+      result = callback();
+    } catch (error) {
+      callbackError = error;
     }
+    let cleanupError = null;
+    try {
+      io.closeSync(handle);
+    } catch (error) {
+      cleanupError = sinkError("DIAGNOSTIC_LOCK_CLOSE_FAILED");
+    }
+    try {
+      io.unlinkSync(lockPath);
+    } catch (error) {
+      if (!error || error.code !== "ENOENT")
+        cleanupError = cleanupError || sinkError("DIAGNOSTIC_LOCK_RELEASE_FAILED");
+    }
+    if (callbackError) throw callbackError;
+    if (cleanupError) throw cleanupError;
+    return result;
   }
 
   function safePath(filename) {

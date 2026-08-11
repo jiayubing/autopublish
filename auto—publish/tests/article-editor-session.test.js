@@ -92,3 +92,18 @@ it("merges same-identity resource props without reopening or losing local edits"
   assert.deepEqual(merged.draft.selectedResources, [resource]);
   assert.equal(merged.dirty, true);
 });
+
+it("isolates a failing subscriber and reports the listener failure", async () => {
+  const { createArticleEditorSession } = await sessionModule;
+  const reports = [];
+  let healthyNotifications = 0;
+  const session = createArticleEditorSession({
+    saveDraft: async () => {},
+    onDiagnostic: (value) => reports.push(value),
+  });
+  session.subscribe(() => { throw new Error("subscriber failure"); });
+  session.subscribe(() => { healthyNotifications += 1; });
+  session.open(article("listener-isolation"));
+  assert.equal(healthyNotifications, 1);
+  assert.deepEqual(reports, [{ code: "ARTICLE_EDITOR_LISTENER_FAILED" }]);
+});
