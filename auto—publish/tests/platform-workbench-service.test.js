@@ -159,6 +159,36 @@ describe("platform-workbench-service", function () {
     }
   });
 
+  it("fails the queue read when an input path is a regular file", function () {
+    const inputDir = path.join(root, "input", "lieju");
+    fs.rmSync(inputDir, { recursive: true, force: true });
+    fs.writeFileSync(inputDir, "not a directory", "utf8");
+    assert.throws(
+      function () {
+        service.scanQueue();
+      },
+      { code: "PLATFORM_QUEUE_READ_FAILED" },
+    );
+  });
+
+  it("fails the queue read when an input path is a symlink", function () {
+    const inputDir = path.join(root, "input", "lieju");
+    const targetDir = path.join(root, "symlink-target");
+    fs.rmSync(inputDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir);
+    try {
+      fs.symlinkSync(targetDir, inputDir, "junction");
+    } catch (error) {
+      assert.fail(`symlink setup failed: ${error.message}`);
+    }
+    assert.throws(
+      function () {
+        service.scanQueue();
+      },
+      { code: "PLATFORM_QUEUE_READ_FAILED" },
+    );
+  });
+
   it("scans and resolves platform queues from the injected content input path", function () {
     const portableInput = path.join(root, ".autopublish", "input");
     fs.mkdirSync(path.join(portableInput, "lieju"), { recursive: true });

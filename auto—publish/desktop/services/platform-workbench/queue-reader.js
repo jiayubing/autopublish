@@ -313,16 +313,17 @@ function createPlatformQueueReader(options) {
             return { platformId, scanDir, articles };
           throw queueReadError();
         }
-        if (inputStat.isDirectory() && !inputStat.isSymbolicLink()) {
-          let entries;
-          try {
-            entries = fs.readdirSync(inputDir);
-          } catch (error) {
-            if (error && error.code === "ENOENT")
-              return { platformId, scanDir, articles };
-            throw queueReadError();
-          }
-          articles = entries
+        if (!inputStat.isDirectory() || inputStat.isSymbolicLink())
+          throw queueReadError();
+        let entries;
+        try {
+          entries = fs.readdirSync(inputDir);
+        } catch (error) {
+          if (error && error.code === "ENOENT")
+            return { platformId, scanDir, articles };
+          throw queueReadError();
+        }
+        articles = entries
             .filter((name) => {
               if (isTemporaryQueueArtifact(name) || !isPrimaryArticle(name))
                 return false;
@@ -361,7 +362,6 @@ function createPlatformQueueReader(options) {
                 archiveError: null,
               };
             });
-        }
         return { platformId, scanDir, articles };
       });
   }
