@@ -2,7 +2,7 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `COMPLETE`；`696f5cff` 后续 audit 暴露的 1 个 P1、2 个 blocking P2 已在 implementation commit `8cd5c1c` 完成 bounded remediation、post-commit clean-HEAD root/supplemental gates 与结构化 evidence 保存。
+**Status:** `COMPLETE`；M06-H 后续 bounded audit 暴露的 queue `inputDir` 非法文件系统类型 finding 已在最终 implementation commit `af3d116` 完成最小修复、fault-injection coverage、bounded re-audit 与 final clean-HEAD root/supplemental gates；最终 evidence 见 `../handoffs/M06-H-final-bounded-remediation-clean-head-evidence.json`。
 
 **Scheduling gate:** M05、M06-A～G 与 Maintenance 10.5=`COMPLETE`。Ticket 25 保持 `PENDING`/blocked/not started，不能由本 closure 自动启动。
 
@@ -49,7 +49,7 @@ M06-0 的唯一 inventory/scope 真源为：
 - [x] persistence/security/remote/process 路径没有 silent swallow；保留项均为明确 outcome、optional probe/parse、listener isolation 或 best-effort cleanup。
 - [x] 保留的 cleanup/probe 都有明确语义，且不会把失败伪装成成功；cleanup failure 不覆盖主错误。
 - [x] 敏感错误不写入日志；diagnostic metadata 仍为 allowlisted/sanitized，provenance 缺失时 fail closed。
-- [x] `696f5cff` 后续 blocking remediation 的 post-commit clean-HEAD full gate evidence 已保存并与 implementation HEAD `8cd5c1c` 对账。
+- [x] 最终 bounded remediation 的 clean-HEAD full gate evidence 已保存并与 implementation HEAD `af3d116` 对账；旧 `8cd5c1c`/`2af0cb0` evidence 不作为最终 HEAD 证明。
 
 M06-G 完成前，M06 与 Maintenance 10.5 均不得标记 `COMPLETE`，Ticket 25 不得启动。G 完成后停止，不自动进入 Ticket 25。
 

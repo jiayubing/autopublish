@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "status": "PASSED",
+  "operation": "m06-h-final-bounded-remediation-clean-head-gate",
+  "testedCommit": "af3d11654399810a8bd97343392138ea2f1d22f2",
+  "parent": "7b9b61ba2e445af63c16210968caf8bf9f6ccf96",
+  "tree": "9f36a272dc8660a4fa5f591ae184a1853428db23",
+  "sourceState": {
+    "status": "CLEAN",
+    "diffSha256": "712c7e70e629e881f202187c87838c85a6da7cab4759191860fc1a7a8a44126e",
+    "summary": {
+      "changedEntries": 0,
+      "stagedEntries": 0,
+      "unstagedEntries": 0,
+      "untrackedEntries": 0
+    }
+  },
+  "runtime": {
+    "os": "Windows",
+    "timezone": "Asia/Shanghai",
+    "nodeVersion": "v24.16.0",
+    "npmVersion": "11.13.0",
+    "runElectronFocusTests": true
+  },
+  "targetedGate": {
+    "status": "PASSED",
+    "command": "node --test --test-concurrency=1 tests/platform-workbench-service.test.js",
+    "tests": 12,
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "todo": 0,
+    "coveredInputDirectoryTypes": ["regular-file", "symlink"]
+  },
+  "rootGate": {
+    "status": "PASSED",
+    "command": "$env:RUN_ELECTRON_FOCUS_TESTS='1'; node scripts/create-root-test-evidence.js --output $env:TEMP\\m06-final-root-evidence-af3d116.json",
+    "underlyingSuite": "node scripts/run-tests.js",
+    "startedAt": "2026-08-11T14:37:27.802Z",
+    "finishedAt": "2026-08-11T14:44:40.768Z",
+    "durationMs": 432966,
+    "testFiles": 249,
+    "tests": 1848,
+    "passed": 1848,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "todo": 0,
+    "runnerLifecycle": "CLOSED",
+    "allFilesReported": true,
+    "noSkippedTodo": true,
+    "testInventorySha256": "bdc5b70a82594cf89a2922b84baf741de9564ce177625d0272a46cbda98e5231"
+  },
+  "supplementalGates": {
+    "status": "PASSED",
+    "observedDurationMs": 414600,
+    "commands": [
+      "npm run format:check",
+      "npm run lint",
+      "npm run typecheck:main",
+      "npm run typecheck:bridge",
+      "npm run typecheck:renderer",
+      "npm run build:renderer",
+      "npm run build:preload",
+      "npm run test:diagnostics",
+      "npm run test:production-ipc-matrix",
+      "npm run test:phase-08:gates",
+      "npm run verify:phase-08",
+      "npm run test:legacy-absence",
+      "npm run test:ticket-24-e",
+      "npm run test:packaging",
+      "node .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs --summary",
+      "git diff --check"
+    ],
+    "diagnostics": "37/37",
+    "productionIpcMatrix": "33/33",
+    "phase08CleanupGates": "4/4",
+    "phase08CapabilityReachability": "129/129",
+    "packaging": "47/47",
+    "legacyAbsence": "PASSED",
+    "ticket24EAbsence": "PASSED",
+    "ast": {
+      "scannedFiles": 505,
+      "filesWithHandlers": 274,
+      "handlers": 1157,
+      "parseDiagnostics": 0
+    }
+  },
+  "boundedReaudit": {
+    "status": "PASSED",
+    "scope": "queue-reader inputDir type validation, direct filesystem failure matrix, and direct regression gates",
+    "remainingFindings": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0,
+      "P3": 0
+    },
+    "escalated": false
+  }
+}
