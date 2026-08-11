@@ -9,6 +9,12 @@ const PASSWORD_PARALLELISM = 1;
 const PASSWORD_KEY_LENGTH = 32;
 const MIN_PASSWORD_LENGTH = 6;
 const PASSWORD_MAX_MEMORY = 64 * 1024 * 1024;
+const MAX_PASSWORD_HASH_LENGTH = 512;
+const MAX_SCRYPT_COST = 1024 * 1024;
+const MAX_SCRYPT_BLOCK_SIZE = 32;
+const MAX_SCRYPT_PARALLELISM = 16;
+const MIN_DERIVED_KEY_LENGTH = 16;
+const MAX_DERIVED_KEY_LENGTH = 64;
 const DUMMY_PASSWORD_HASH = `${PASSWORD_SCHEME}$${PASSWORD_COST}$${PASSWORD_BLOCK_SIZE}$${PASSWORD_PARALLELISM}$autopublish-invalid-salt$${"0".repeat(PASSWORD_KEY_LENGTH * 2)}`;
 const scrypt = promisify(crypto.scrypt);
 
@@ -109,7 +115,9 @@ function createPasswordHash(password, options) {
 }
 
 function verifyPassword(password, encoded, options) {
-  const parts = String(encoded || "").split("$");
+  if (typeof password !== "string" || typeof encoded !== "string" || encoded.length > MAX_PASSWORD_HASH_LENGTH)
+    return Promise.resolve(false);
+  const parts = encoded.split("$");
   if (parts.length !== 6 || parts[0] !== PASSWORD_SCHEME)
     return Promise.resolve(false);
   const cost = Number(parts[1]);
@@ -117,16 +125,28 @@ function verifyPassword(password, encoded, options) {
   const parallelism = Number(parts[3]);
   if (
     !Number.isSafeInteger(cost) ||
+    cost < 2 ||
+    cost > MAX_SCRYPT_COST ||
+    (cost & (cost - 1)) !== 0 ||
     !Number.isSafeInteger(blockSize) ||
+    blockSize < 1 ||
+    blockSize > MAX_SCRYPT_BLOCK_SIZE ||
     !Number.isSafeInteger(parallelism) ||
+    parallelism < 1 ||
+    parallelism > MAX_SCRYPT_PARALLELISM ||
     !parts[4] ||
+    parts[4].length > 256 ||
+    !parts[5] ||
+    parts[5].length % 2 !== 0 ||
+    parts[5].length < MIN_DERIVED_KEY_LENGTH * 2 ||
+    parts[5].length > MAX_DERIVED_KEY_LENGTH * 2 ||
     !/^[0-9a-f]+$/i.test(parts[5])
   )
     return Promise.resolve(false);
   const limiter = (options && options.limiter) || new ScryptLimiter(1);
   return limiter
     .run(() =>
-      scrypt(String(password), parts[4], parts[5].length / 2, {
+      scrypt(password, parts[4], parts[5].length / 2, {
         N: cost,
         r: blockSize,
         p: parallelism,
@@ -136,11 +156,14 @@ function verifyPassword(password, encoded, options) {
     .then((derived) => {
       const actual = Buffer.from(parts[5], "hex");
       return (
+        Buffer.isBuffer(derived) &&
         actual.length === derived.length &&
         crypto.timingSafeEqual(actual, derived)
       );
     })
-    .catch(() => false);
+    .catch((_error) => {
+      return false;
+    });
 }
 
 module.exports = {

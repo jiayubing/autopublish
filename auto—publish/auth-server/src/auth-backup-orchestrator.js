@@ -5,6 +5,7 @@ const {
   assertRegularReadableFile,
   verifyDatabaseFile,
   databaseError,
+  annotateCleanupFailure,
 } = require("./auth-database-verifier");
 
 function operationError(code, details, cause) {
@@ -42,7 +43,7 @@ async function backupAuthDatabase(options) {
   if (path.resolve(source) === path.resolve(destination)) throw operationError("AUTH_BACKUP_DESTINATION_INVALID", { reasonCode: "AUTH_BACKUP_SOURCE_EQUALS_DESTINATION" });
   assertDestinationCandidate(destination);
   try { assertRegularReadableFile(source); } catch (error) {
-    throw operationError("AUTH_BACKUP_SOURCE_INVALID", { reasonCode: error.code }, error);
+    throw operationError("AUTH_BACKUP_SOURCE_INVALID", { reasonCode: error && error.code ? error.code : "source_check_failed" }, error);
   }
 
   let repository;
@@ -61,6 +62,7 @@ async function backupAuthDatabase(options) {
     if (repository) {
       try { repository.close(); sourceClosed = true; } catch (error) {
         if (!failure) failure = operationError("AUTH_BACKUP_SOURCE_CLOSE_FAILED", { stage: "close" }, error);
+        else annotateCleanupFailure(failure, "AUTH_BACKUP_SOURCE_CLOSE_FAILED");
       }
     }
   }
@@ -70,7 +72,7 @@ async function backupAuthDatabase(options) {
   try {
     verification = verifyDatabaseFile(destination);
   } catch (error) {
-    throw operationError("AUTH_BACKUP_DESTINATION_UNRECOVERABLE", { reasonCode: error.code }, error);
+    throw operationError("AUTH_BACKUP_DESTINATION_UNRECOVERABLE", { reasonCode: error && error.code ? error.code : "verification_failed" }, error);
   }
   return {
     ok: true,

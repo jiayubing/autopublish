@@ -6,6 +6,7 @@ const {
   assertRegularReadableFile,
   verifyDatabaseFile,
   databaseError,
+  annotateCleanupFailure,
 } = require("./auth-database-verifier");
 
 function tempParent(options) {
@@ -24,27 +25,40 @@ function copyToIsolation(source, parent) {
   }
   const isolatedFile = path.join(isolatedRoot, path.basename(source));
   let sourceDb;
+  let result;
+  let failure;
   try {
     sourceDb = new DatabaseSync(source, { readOnly: true });
     try {
       const quotedDestination = `'${isolatedFile.replaceAll("'", "''")}'`;
       sourceDb.exec(`VACUUM INTO ${quotedDestination}`);
-      return { isolatedRoot, isolatedFile, wal: false, shm: false };
+      result = { isolatedRoot, isolatedFile, wal: false, shm: false };
     } catch (error) {
       if (!/not a database|malformed/i.test(String(error && error.message))) throw error;
-      try {
-        fs.copyFileSync(source, isolatedFile);
-        return { isolatedRoot, isolatedFile, wal: false, shm: false };
-      } catch (_) {
-        throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
-      }
+      try { fs.copyFileSync(source, isolatedFile); result = { isolatedRoot, isolatedFile, wal: false, shm: false }; }
+      catch (_) { failure = databaseError("AUTH_RESTORE_ISOLATION_FAILED"); }
     }
   } catch (_) {
-    try { fs.rmSync(isolatedRoot, { recursive: true, force: true }); } catch (_) { /* preserve the isolation failure */ }
-    throw databaseError("AUTH_RESTORE_ISOLATION_FAILED");
+    failure = databaseError("AUTH_RESTORE_ISOLATION_FAILED");
   } finally {
-    if (sourceDb) { try { sourceDb.close(); } catch (_) { /* preserve the isolation result */ } }
+    if (sourceDb) {
+      try {
+        sourceDb.close();
+      } catch (_) {
+        if (failure) annotateCleanupFailure(failure, "AUTH_RESTORE_SOURCE_CLOSE_FAILED");
+        else failure = databaseError("AUTH_RESTORE_SOURCE_CLOSE_FAILED");
+      }
+    }
   }
+  if (failure) {
+    try {
+      fs.rmSync(isolatedRoot, { recursive: true, force: true });
+    } catch (_) {
+      annotateCleanupFailure(failure, "AUTH_RESTORE_CLEANUP_FAILED");
+    }
+    throw failure;
+  }
+  return result;
 }
 
 function checkAuthRestore(filePath, options) {
@@ -60,6 +74,7 @@ function checkAuthRestore(filePath, options) {
   } finally {
     try { fs.rmSync(isolation.isolatedRoot, { recursive: true, force: true }); } catch (error) {
       if (!failure) failure = databaseError("AUTH_RESTORE_CLEANUP_FAILED");
+      else annotateCleanupFailure(failure, "AUTH_RESTORE_CLEANUP_FAILED");
     }
   }
   if (failure) throw failure;

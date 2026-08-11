@@ -6,7 +6,7 @@ const {
 } = require("./repositories/sqlite-auth-repository");
 const { backupAuthDatabase } = require("./auth-backup-orchestrator");
 const { checkAuthRestore } = require("./auth-recovery-check");
-const { databaseError } = require("./auth-database-verifier");
+const { databaseError, annotateCleanupFailure } = require("./auth-database-verifier");
 
 function within(parent, child) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));
@@ -64,6 +64,7 @@ async function runRecoveryDrill(root) {
   const temporaryRoot = assertTemporaryRoot(root);
   let runRoot;
   let repository;
+  let primaryError;
   try {
     runRoot = fs.mkdtempSync(
       path.join(temporaryRoot, "autopublish-auth-drill-"),
@@ -108,20 +109,28 @@ async function runRecoveryDrill(root) {
       },
       corruptCode,
     };
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
+    let cleanupCode = null;
     if (repository) {
       try {
         repository.close();
       } catch (_) {
-        /* cleanup still runs */
+        cleanupCode = "AUTH_RECOVERY_REPOSITORY_CLOSE_FAILED";
       }
     }
     if (runRoot) {
       try {
         fs.rmSync(runRoot, { recursive: true, force: true });
       } catch (_) {
-        /* caller receives the drill result */
+        cleanupCode = cleanupCode || "AUTH_RECOVERY_CLEANUP_FAILED";
       }
+    }
+    if (cleanupCode) {
+      if (primaryError) annotateCleanupFailure(primaryError, cleanupCode);
+      else throw databaseError(cleanupCode);
     }
   }
 }

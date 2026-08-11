@@ -8,6 +8,7 @@ const {
   REQUIRED_COLUMNS,
   verifyOpenDatabase,
   verifySchemaOnly,
+  annotateCleanupFailure,
 } = require("../auth-database-verifier");
 
 function ensureDirectory(filename) {
@@ -89,7 +90,13 @@ class SqliteAuthRepository {
       configureDatabase(db);
       verifySchema(db);
     } catch (error) {
-      if (db) { try { db.close(); } catch (_) { /* fail closed */ } }
+      if (db) {
+        try {
+          db.close();
+        } catch (_) {
+          annotateCleanupFailure(error, "AUTH_DB_CLOSE_FAILED");
+        }
+      }
       throw error;
     }
     this.db = db;
@@ -102,7 +109,11 @@ class SqliteAuthRepository {
       this.db.exec("COMMIT");
       return result;
     } catch (error) {
-      try { this.db.exec("ROLLBACK"); } catch (_) { /* preserve original error */ }
+      try {
+        this.db.exec("ROLLBACK");
+      } catch (_) {
+        annotateCleanupFailure(error, "AUTH_DB_ROLLBACK_FAILED");
+      }
       throw error;
     }
   }

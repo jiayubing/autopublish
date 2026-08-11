@@ -2,9 +2,10 @@ const path = require("node:path");
 const { Worker } = require("node:worker_threads");
 const { normalizeMaintenancePolicy } = require("./maintenance-diagnostics");
 
-function codedError(code) {
+function codedError(code, details) {
   const error = new Error("integrity check failed");
   error.code = code;
+  if (details) error.details = details;
   return error;
 }
 
@@ -38,7 +39,12 @@ function runSqliteIntegrityCheck(options) {
       if (settled) return;
       settled = true;
       cleanup();
-      void worker.terminate().catch(() => {}).finally(() => reject(codedError(code)));
+      Promise.resolve()
+        .then(() => worker.terminate())
+        .then(
+          () => reject(codedError(code)),
+          () => reject(codedError(code, { cleanupCode: "AUTH_HEALTH_WORKER_TERMINATION_FAILED" })),
+        );
     };
     worker.on("message", (message) => {
       if (!message || message.type !== "result") {

@@ -1,13 +1,18 @@
 const fs = require("node:fs");
 const { DatabaseSync } = require("node:sqlite");
 const { isMainThread, parentPort, workerData } = require("node:worker_threads");
-const { verifySchemaOnly, verifyIntegrity } = require("../auth-database-verifier");
+const {
+  verifySchemaOnly,
+  verifyIntegrity,
+  annotateCleanupFailure,
+} = require("../auth-database-verifier");
 const { diagnoseMaintenance, normalizeMaintenancePolicy } = require("./maintenance-diagnostics");
 const { classifyHealthError } = require("./health-diagnostic-mapper");
 
-function codedError(code) {
+function codedError(code, details) {
   const error = new Error("integrity check failed");
   error.code = code;
+  if (details) error.details = details;
   return error;
 }
 
@@ -33,6 +38,8 @@ function runIntegrityChecks(options) {
   if (!opts.filePath || opts.filePath === ":memory:" || String(opts.filePath).startsWith("file:")) throw codedError("AUTH_HEALTH_CHECK_INPUT_INVALID");
   const size = databaseBytes(opts.filePath);
   let db;
+  let result;
+  let failure;
   try {
     db = new DatabaseSync(opts.filePath, { readOnly: true });
     verifySchemaOnly(db);
@@ -46,7 +53,7 @@ function runIntegrityChecks(options) {
     } catch (_) {
       throw codedError("AUTH_HEALTH_AUDIT_MAINTENANCE_FAILED");
     }
-    return diagnoseMaintenance({
+    result = diagnoseMaintenance({
       oldestAuditAt,
       nowMs: opts.nowMs,
       policy: normalizeMaintenancePolicy(opts.policy),
@@ -54,11 +61,20 @@ function runIntegrityChecks(options) {
       walBytes: size.walBytes,
       shmBytes: size.shmBytes,
     });
+  } catch (error) {
+    failure = error;
   } finally {
     if (db) {
-      try { db.close(); } catch (_) { /* preserve the check result */ }
+      try {
+        db.close();
+      } catch (_) {
+        if (failure) annotateCleanupFailure(failure, "AUTH_HEALTH_DATABASE_CLOSE_FAILED");
+        else failure = codedError("AUTH_HEALTH_INTEGRITY_FAILED", { cleanupCode: "AUTH_HEALTH_DATABASE_CLOSE_FAILED" });
+      }
     }
   }
+  if (failure) throw failure;
+  return result;
 }
 
 if (!isMainThread) {

@@ -44,6 +44,17 @@ function databaseError(code, details) {
   return error;
 }
 
+function annotateCleanupFailure(error, cleanupCode) {
+  if (!error || typeof error !== "object")
+    return databaseError("AUTH_DB_OPERATION_FAILED", { cleanupCode });
+  const details =
+    error.details && typeof error.details === "object" && !Array.isArray(error.details)
+      ? error.details
+      : {};
+  error.details = Object.assign({}, details, { cleanupCode });
+  return error;
+}
+
 function quoteIdentifier(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -217,14 +228,23 @@ function verifyDatabaseFile(filePath, options) {
   if (Number(stats.size) > 0 && Number(stats.size) < 100) throw databaseError("AUTH_DB_CORRUPT", { reason: "sqlite_header" });
   let db;
   let report;
+  let failure;
   try {
     db = new DatabaseSync(filePath, { readOnly: true });
     report = verifyOpenDatabase(db);
   } catch (error) {
-    throw error && error.code && error.code.startsWith("AUTH_") ? error : mapOpenError(error);
+    failure = error && error.code && error.code.startsWith("AUTH_") ? error : mapOpenError(error);
   } finally {
-    if (db) { try { db.close(); } catch (_) { /* preserve verification result */ } }
+    if (db) {
+      try {
+        db.close();
+      } catch (_) {
+        if (failure) annotateCleanupFailure(failure, "AUTH_DB_CLOSE_FAILED");
+        else failure = databaseError("AUTH_DB_CLOSE_FAILED", { stage: "verification" });
+      }
+    }
   }
+  if (failure) throw failure;
   report.fileHash = sha256File(filePath, fileSystem);
   return report;
 }
@@ -238,6 +258,7 @@ module.exports = {
   REQUIRED_COLUMNS,
   LEGACY_REQUIRED_COLUMNS,
   databaseError,
+  annotateCleanupFailure,
   detectSchema,
   verifyTargetSchema,
   verifySchemaOnly,

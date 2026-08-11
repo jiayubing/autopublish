@@ -247,3 +247,67 @@ G 必须在所有 remediation 进入最终 clean integration HEAD 后重跑 AST 
 - AST parse diagnostics：0
 - 本包未运行完整 `npm test`：inventory-only、无 production/test/schema/gate 行为变更；完整测试属于 G 的最终 clean-HEAD gate。
 - 未执行真实登录、投稿、付费、取消、上传、生产数据库、打包、发布、push 或 Ticket 25。
+
+## 8. M06-E authoritative reconciliation
+
+本节是 M06-E 对本 inventory 的当前增量闭合记录；上文 M06-0 census 仍保留其历史基线语义，不覆盖 exact-parent 上已完成的 M06-A～D 代码。M06-E 严格从 integration parent `ed9f8ec48a315ab21d4ac2fdb45dfdacebab67a7` 开始，未执行真实账号、生产数据库、发布、付费或外部写操作。
+
+### AST before/after
+
+命令：`node .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs --summary`。扫描根、排除规则和 AST shape 定义未改变；最终 parse diagnostics 为 0。
+
+| source state | scanned files | files with handlers | handlers | E files | E handlers | E shapes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| M06-E exact parent `ed9f8ec48a315ab21d4ac2fdb45dfdacebab67a7` | 505 | 275 | 1,137 | 21 | 76 | `PROPAGATE_OR_RETHROW=34`, `SIDE_EFFECT_OR_MAPPING=10`, `ASSIGNMENT_MAPPING=3`, `RETURN_OR_FALLBACK=13`, `DIAGNOSTIC=3`, `EMPTY=12`, `OTHER=1` |
+| M06-E implementation tree before commit | 505 | 274 | 1,138 | 20 | 77 | `PROPAGATE_OR_RETHROW=32`, `SIDE_EFFECT_OR_MAPPING=20`, `ASSIGNMENT_MAPPING=7`, `RETURN_OR_FALLBACK=15`, `DIAGNOSTIC=3`, `EMPTY=0`, `OTHER=0` |
+
+Reconciliation：E handler 数量净增 1，不是遗漏或机械补 catch。`sqlite-integrity-check.js:41` 的空 Promise rejection handler 被改成显式 worker termination outcome，因此该 AST handler 被移除；其余新增 2 个 side-effect/mapping、4 个 assignment mapping、2 个 return/fallback 与若干主错误保留/cleanup 分支均服务于 close/rollback/cleanup 可观察性、稳定 health mapping 或 auth-session outcome。E 全量 76 个 parent handlers 与最终 77 个 handlers 均已登记如下；优先清单的原始行号因上述修改发生位移，以当前 AST 行号为准。
+
+### EMPTY / OTHER 清零证据
+
+exact parent 的 12 个 `EMPTY` 与 1 个 `OTHER` 逐项闭合如下：
+
+| parent row | original shape | final disposition |
+| --- | --- | --- |
+| `auth-database-verifier.js:226` | `EMPTY`，close catch 注释 preserve verification result | close failure 生成 `AUTH_DB_CLOSE_FAILED` 或给主错误追加 `cleanupCode`；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `auth-domain.js:209` | `EMPTY`，secondary device audit 注释 preserve stable domain error | 保留主错误并写入安全 `auditStatus=write_failed`；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `auth-migration-guard.js:110` | `EMPTY`，rollback 注释 preserve migration failure | rollback failure 写入 `AUTH_DB_ROLLBACK_FAILED`；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `auth-recovery-check.js:43` | `EMPTY`，isolation failure cleanup 注释 | 失败显式为 `AUTH_RESTORE_ISOLATION_FAILED` 并执行可观察 cleanup；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `auth-recovery-check.js:46` | `EMPTY`，source close 注释 preserve isolation result | source close failure 显式 outcome/cleanup code；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `auth-password-policy.js:143` | `OTHER`，password verifier `false` fallback | 编码、类型、参数和 scrypt failure 全部 fail-closed `false`；当前 `RETURN_OR_FALLBACK` |
+| `integrity-runner.js:84` | `EMPTY`，already-aborted controller | abort failure 进入稳定 timeout/cancel outcome 的 `cleanupCode`；当前 `ASSIGNMENT_MAPPING` |
+| `sqlite-integrity-check.js:41` | `EMPTY`，worker termination rejection | 保留原 timeout/cancel code，termination rejection 追加安全 cleanup code；该 handler 已移除，不再计入最终 AST |
+| `sqlite-integrity-worker.js:59` | `EMPTY`，preserve check result | DB close failure 不再伪装 health success；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `recovery-fixtures.js:115` | `EMPTY`，repository cleanup | close failure 记录稳定 cleanup code；当前 `ASSIGNMENT_MAPPING` |
+| `recovery-fixtures.js:122` | `EMPTY`，drill result cleanup | temp-root cleanup failure 记录稳定 cleanup code；当前 `ASSIGNMENT_MAPPING` |
+| `sqlite-auth-repository.js:92` | `EMPTY`，constructor close fail-closed | close failure 追加安全 cleanup code，原初始化错误继续传播；当前 `SIDE_EFFECT_OR_MAPPING` |
+| `sqlite-auth-repository.js:105` | `EMPTY`，transaction rollback | rollback failure 追加安全 cleanup code，原 transaction error 继续传播；当前 `SIDE_EFFECT_OR_MAPPING` |
+
+### E full handler disposition ledger
+
+以下缩写仅用于表格压缩：`PROPAGATE_PRIMARY`=主错误继续传播/在直接边界稳定映射；`EXPLICIT_OUTCOME`=稳定 code/result/fallback；`FAIL_CLOSED`=拒绝或不可用而不放行；`BEST_EFFORT_CLEANUP`=cleanup 尝试失败可附加安全 metadata 且不覆盖主错误；`CONTROLLED_DIAGNOSTIC`=allowlisted diagnostic；`LISTENER_ISOLATION`=隔离消费者失败。每个条目同时保留 authoritative AST shape、当前行号和 disposition。
+
+| E owner/file | final AST row ledger (`line: SHAPE → disposition`) |
+| --- | --- |
+| `auth-server/src/auth-backup-orchestrator.js` | `26: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `32: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `45: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `58: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME`; `63: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP+EXPLICIT_OUTCOME`; `74: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME` |
+| `auth-server/src/auth-database-verifier.js` | `125: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `128: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `194: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `200: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `218: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `235: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME`; `241: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP+EXPLICIT_OUTCOME` |
+| `auth-server/src/auth-domain.js` | `203: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `222: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC` |
+| `auth-server/src/auth-migration-guard.js` | `28: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `113: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP`; `131: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `152: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY+BEST_EFFORT_CLEANUP` |
+| `auth-server/src/auth-recovery-check.js` | `16: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `23: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `36: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `39: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME`; `41: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME`; `47: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP+EXPLICIT_OUTCOME`; `56: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP`; `72: ASSIGNMENT_MAPPING → EXPLICIT_OUTCOME`; `75: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP+EXPLICIT_OUTCOME` |
+| `auth-server/src/domain/auth-password-policy.js` | `164: RETURN_OR_FALLBACK → FAIL_CLOSED` |
+| `auth-server/src/health/http-health-handler.js` | `36: ASSIGNMENT_MAPPING → EXPLICIT_OUTCOME` |
+| `auth-server/src/health/integrity-runner.js` | `63: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME`; `88: ASSIGNMENT_MAPPING → EXPLICIT_OUTCOME+BEST_EFFORT_CLEANUP` |
+| `auth-server/src/health/liveness-probe.js` | `13: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME` |
+| `auth-server/src/health/repository-probe.js` | `18: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME` |
+| `auth-server/src/health/sqlite-integrity-worker.js` | `23: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `31: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `46: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `53: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `64: ASSIGNMENT_MAPPING → EXPLICIT_OUTCOME`; `70: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP+EXPLICIT_OUTCOME`; `83: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME` |
+| `auth-server/src/recovery-fixtures.js` | `36: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `90: ASSIGNMENT_MAPPING → EXPLICIT_OUTCOME`; `112: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `120: ASSIGNMENT_MAPPING → BEST_EFFORT_CLEANUP`; `127: ASSIGNMENT_MAPPING → BEST_EFFORT_CLEANUP+EXPLICIT_OUTCOME` |
+| `auth-server/src/repositories/in-memory-auth-repository.js` | `22: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY` |
+| `auth-server/src/repositories/sqlite-auth-repository.js` | `92: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `96: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP`; `111: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `114: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP` |
+| `auth-server/src/security/proxy-config-adapter.js` | `50: PROPAGATE_OR_RETHROW → FAIL_CLOSED` |
+| `auth-server/src/security/source-resolver.js` | `86: RETURN_OR_FALLBACK → FAIL_CLOSED` |
+| `auth-server/src/server.js` | `115: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME`; `176: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME`; `315: DIAGNOSTIC → CONTROLLED_DIAGNOSTIC`; `359: DIAGNOSTIC → CONTROLLED_DIAGNOSTIC` |
+| `desktop/ipc/auth-ipc.js` | `38: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME`; `50: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME`; `62: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME`; `71: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME`; `79: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME` |
+| `desktop/services/auth-service.js` | `62: DIAGNOSTIC → CONTROLLED_DIAGNOSTIC`; `140: SIDE_EFFECT_OR_MAPPING → LISTENER_ISOLATION`; `181: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC`; `207: PROPAGATE_OR_RETHROW → EXPLICIT_OUTCOME`; `211: SIDE_EFFECT_OR_MAPPING → BEST_EFFORT_CLEANUP+CONTROLLED_DIAGNOSTIC`; `225: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC`; `271: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC`; `287: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC`; `405: PROPAGATE_OR_RETHROW → FAIL_CLOSED`; `437: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `485: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `514: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY`; `548: RETURN_OR_FALLBACK → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC`; `579: SIDE_EFFECT_OR_MAPPING → EXPLICIT_OUTCOME+CONTROLLED_DIAGNOSTIC` |
+| `desktop/services/authenticated-runtime.js` | `20: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY` |
+
+总数核对：表内 `PROPAGATE_OR_RETHROW=32`、`SIDE_EFFECT_OR_MAPPING=20`、`ASSIGNMENT_MAPPING=7`、`RETURN_OR_FALLBACK=15`、`DIAGNOSTIC=3`，合计 77；与 AST summary 一致。E 的 18 项 priority set 全部落入以上 ledger，未只处理 priority rows。

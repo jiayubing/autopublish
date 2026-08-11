@@ -5,9 +5,10 @@ const { runSqliteIntegrityCheck } = require("./sqlite-integrity-check");
 const DEFAULT_TIMEOUT_MS = 10000;
 const MAX_TIMEOUT_MS = 300000;
 
-function codedError(code) {
+function codedError(code, details) {
   const error = new Error("integrity check failed");
   error.code = code;
+  if (details) error.details = details;
   return error;
 }
 
@@ -81,8 +82,16 @@ class IntegrityRunner {
         callback(value);
       };
       const abort = (code) => {
-        try { opts.controller.abort(); } catch (_) { /* already aborted */ }
-        finish(reject, codedError(code));
+        let abortFailed = false;
+        try {
+          opts.controller.abort();
+        } catch (_) {
+          abortFailed = true;
+        }
+        finish(
+          reject,
+          codedError(code, abortFailed ? { cleanupCode: "AUTH_HEALTH_ABORT_FAILED" } : undefined),
+        );
       };
       externalAbort = () => abort(HEALTH_CODES.INTEGRITY_CANCELLED);
       if (opts.externalSignal) opts.externalSignal.addEventListener("abort", externalAbort, { once: true });

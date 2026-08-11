@@ -320,8 +320,9 @@ function createAuthServer(options) {
         return errorResponse(response, error);
       logger({
         code: "AUTH_REQUEST_FAILED",
-        method: request.method,
-        path: url.pathname,
+        method: ["GET", "POST", "OPTIONS"].includes(request.method)
+          ? request.method
+          : "UNKNOWN",
       });
       return errorResponse(response, "AUTH_SERVICE_UNAVAILABLE");
     }

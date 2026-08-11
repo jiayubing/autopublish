@@ -28,6 +28,15 @@ const { composeAuthPolicies } = require("./domain/auth-domain-composition");
 const { AuthDomainManagement } = require("./domain/auth-domain-management");
 const { LoginPolicy } = require("./security/login-policy");
 
+function annotateAuditFailure(error) {
+  if (!error || typeof error !== "object") return;
+  const details =
+    error.details && typeof error.details === "object" && !Array.isArray(error.details)
+      ? error.details
+      : {};
+  error.details = Object.assign({}, details, { auditStatus: "write_failed" });
+}
+
 class AuthDomain extends AuthDomainManagement {
   constructor(options) {
     super();
@@ -80,7 +89,7 @@ class AuthDomain extends AuthDomainManagement {
   }
 
   _audit(eventCode, userId, deviceId, sourceFingerprint, resultCode) {
-    this.repository.addAuditEvent({
+    const event = {
       id: createOpaqueToken(12),
       eventCode,
       userId: userId || null,
@@ -90,7 +99,11 @@ class AuthDomain extends AuthDomainManagement {
         : null,
       resultCode: resultCode || null,
       createdAt: this._nowIso(),
-    });
+    };
+    const written = this.repository.addAuditEvent(event);
+    if (!written)
+      throw new AuthError("AUTH_SERVER_ERROR", { auditStatus: "write_failed" });
+    return written;
   }
 
   _publicSession(tokens, user, entitlements, device) {
@@ -127,7 +140,7 @@ class AuthDomain extends AuthDomainManagement {
     );
     return this._withMutation(() => {
       const current = this._userByLogin(loginName);
-      if (!current || !validPassword || current.passwordHash !== passwordHash) {
+      if (!current || validPassword !== true || current.passwordHash !== passwordHash) {
         const failure = this.loginPolicy.recordFailure(current);
         if (current && failure.update)
           this.repository.updateUser(
@@ -206,8 +219,8 @@ class AuthDomain extends AuthDomainManagement {
                 error.code,
               ),
             );
-          } catch (_) {
-            /* preserve the stable domain error */
+          } catch (_auditError) {
+            annotateAuditFailure(error);
           }
         }
         throw error;
@@ -389,7 +402,7 @@ class AuthDomain extends AuthDomainManagement {
         const current = this._userByLogin(loginName);
         if (
           !current ||
-          !valid ||
+          valid !== true ||
           current.passwordHash !== checkedPasswordHash
         ) {
           const failure = this.loginPolicy.recordFailure(current);
@@ -425,7 +438,7 @@ class AuthDomain extends AuthDomainManagement {
         currentUser.passwordHash,
         this.passwordOptions,
       );
-      if (!valid) throw new AuthError("AUTH_INVALID_CREDENTIALS");
+      if (valid !== true) throw new AuthError("AUTH_INVALID_CREDENTIALS");
       verifiedPasswordHash = currentUser.passwordHash;
     }
     if (request.currentPassword === newPassword)

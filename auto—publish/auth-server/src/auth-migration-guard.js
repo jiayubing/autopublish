@@ -8,6 +8,7 @@ const {
   detectSchema,
   verifyOpenDatabase,
   verifyTargetSchema,
+  annotateCleanupFailure,
 } = require("./auth-database-verifier");
 const { hashToken } = require("./token-service");
 
@@ -106,8 +107,12 @@ function markerTable(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
 }
 
-function rollback(db) {
-  try { db.exec("ROLLBACK"); } catch (_) { /* preserve the migration failure */ }
+function rollback(db, failure) {
+  try {
+    db.exec("ROLLBACK");
+  } catch (_) {
+    annotateCleanupFailure(failure, "AUTH_DB_ROLLBACK_FAILED");
+  }
 }
 
 function wrapMigrationError(error) {
@@ -145,8 +150,9 @@ function applyMigrations(db, options) {
     inTransaction = false;
     return { migrated: true, schemaVersion: CURRENT_SCHEMA_VERSION, verification };
   } catch (error) {
-    if (inTransaction) rollback(db);
-    throw wrapMigrationError(error);
+    const failure = wrapMigrationError(error);
+    if (inTransaction) rollback(db, failure);
+    throw failure;
   }
 }
 

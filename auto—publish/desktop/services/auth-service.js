@@ -218,11 +218,13 @@ function createAuthService(options) {
   }
 
   function clearStoredRefreshToken() {
-    if (!sessionFile) return;
+    if (!sessionFile) return true;
     try {
       fs.rmSync(sessionFile, { force: true });
+      return true;
     } catch (_) {
       diagnose("AUTH_SESSION_CLEAR_FAILED", "session-clear");
+      return false;
     }
   }
 
@@ -337,17 +339,17 @@ function createAuthService(options) {
     accessToken = null;
     refreshToken = null;
     accessExpiresAt = 0;
+    const storedTokenCleared = clearStoredRefreshToken();
     state = {
       authenticated: false,
       user: null,
       entitlements: [],
       device: null,
-      errorCode: errorCode || null,
+      errorCode: errorCode || (storedTokenCleared ? null : "AUTH_SERVER_ERROR"),
       passwordChangeRequired: errorCode === "AUTH_PASSWORD_CHANGE_REQUIRED",
       pendingLoginName: pendingLoginName || null,
       sessionStatus: "signed_out",
     };
-    clearStoredRefreshToken();
     notify();
     return getState();
   }
@@ -552,11 +554,12 @@ function createAuthService(options) {
   async function logout() {
     const token = refreshToken;
     const currentAccessToken = accessToken;
+    let remoteFailure = false;
     sessionGeneration += 1;
     clearRefreshSchedules();
     try {
-      if (currentAccessToken || token)
-        await request({
+      if (currentAccessToken || token) {
+        const response = await request({
           url: `${AUTH_BASE_URL}/v1/auth/logout`,
           method: "POST",
           body: { refreshToken: token },
@@ -564,10 +567,20 @@ function createAuthService(options) {
             ? { authorization: `Bearer ${currentAccessToken}` }
             : {},
         });
+        if (
+          !response ||
+          !Number.isInteger(response.statusCode) ||
+          response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          (response.body && response.body.ok === false)
+        )
+          throw new Error("remote logout was not confirmed");
+      }
     } catch (_) {
+      remoteFailure = true;
       diagnose("AUTH_LOGOUT_REMOTE_FAILED", "logout-remote");
     }
-    return clearSession(null);
+    return clearSession(remoteFailure ? "AUTH_SERVICE_UNAVAILABLE" : null);
   }
 
   async function requireAuthenticated() {
