@@ -31,12 +31,14 @@ function canOpenPublication(facts, capabilities) {
 }
 
 function actionList(facts, capabilities, actions) {
+  const articleLookupUnavailable = facts.articleLookupStatus === "unavailable";
   return actions.filter(function (action) {
     if (action === ACTIONS.INSPECT) return canInspect(facts, capabilities);
     if (action === ACTIONS.OPEN_PUBLICATION)
       return canOpenPublication(facts, capabilities);
     if (action === ACTIONS.OPEN_ARTICLE)
       return (
+        !articleLookupUnavailable &&
         capabilities.canOpenArticle !== false && facts.articleExists === true
       );
     if (action === ACTIONS.RETRY_REMOVAL)
@@ -85,11 +87,13 @@ function deriveAttentionPolicy(input, capabilities) {
   const kind = facts.kind || "unknown";
 
   if (kind === "failed_submission") {
+    const articleLookupUnavailable = facts.articleLookupStatus === "unavailable";
     const removed =
-      facts.articleStatus === "removed" ||
+      !articleLookupUnavailable &&
+      (facts.articleStatus === "removed" ||
       (facts.articleExists === false &&
         facts.hasResidue !== true &&
-        facts.hasRemovalTransaction !== true);
+        facts.hasRemovalTransaction !== true));
     if (
       removed &&
       facts.hasResidue !== true &&

@@ -135,6 +135,23 @@ describe("AI provider service", function() {
     assert.equal(service.getStatus().configured, false);
   });
 
+  it("does not report a remote test as successful when test status persistence fails", async function() {
+    const store = createStore(config);
+    const testStatusStore = {
+      read: function() { return null; },
+      write: function() { throw Object.assign(new Error("disk"), { code: "EIO" }); },
+      clear: function() { return { cleared: true }; },
+    };
+    const service = createAiProviderService({
+      configStore: store,
+      testStatusStore: testStatusStore,
+      aiClientFactory: function() { return { complete: async function() { return "OK"; } }; },
+    });
+    await assert.rejects(service.testConnection(config), { code: "AI_TEST_STATUS_PERSISTENCE_FAILED" });
+    assert.equal(service.getStatus().lastTest.ok, false);
+    assert.equal(service.getStatus().lastTest.code, "AI_TEST_STATUS_PERSISTENCE_FAILED");
+  });
+
   it("tests a first draft without creating formal application configuration", async function() {
     const store = createStore();
     const testStatusStore = createTestStatusStore();

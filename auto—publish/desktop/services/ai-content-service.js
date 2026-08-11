@@ -7,6 +7,7 @@ const { createArticleGenerator } = require("../../src/content/article-generator"
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const crypto = require("crypto");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function contentError(code, message) {
   const error = new Error(message);
@@ -125,7 +126,22 @@ function createAiContentService(opts) {
       event.changedScopes = ["articleManagement", "articleAttention", "platformQueue"];
     }
     if (typeof options.onArticleRemovalTransaction === "function") {
-      try { options.onArticleRemovalTransaction(event); } catch (_) {}
+      try { options.onArticleRemovalTransaction(event); } catch (error) {
+        reportDiagnostic({
+          code: "ARTICLE_REMOVAL_LISTENER_FAILED",
+          module: "ai-content-service",
+          category: "internal",
+          operationId: "article-removal-notify",
+          metadata: {
+            operation: "transaction-listener",
+            phase: "notify",
+            outcome: "listener-isolated",
+            errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+              ? error.code
+              : "LISTENER_FAILED"
+          }
+        });
+      }
     }
     if (terminal && typeof options.onArticleRemovalInvalidation === "function") {
       try {
@@ -134,13 +150,46 @@ function createAiContentService(opts) {
           scopes: event.changedScopes.slice(),
           reasonCode: event.resolutionCode || "ARTICLE_REMOVAL_TERMINAL"
         });
-      } catch (_) {}
+      } catch (error) {
+        reportDiagnostic({
+          code: "ARTICLE_REMOVAL_INVALIDATION_LISTENER_FAILED",
+          module: "ai-content-service",
+          category: "internal",
+          operationId: "article-removal-invalidation-notify",
+          metadata: {
+            operation: "invalidation-listener",
+            phase: "notify",
+            outcome: "listener-isolated",
+            errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+              ? error.code
+              : "LISTENER_FAILED"
+          }
+        });
+      }
     }
   }
 
   function notifyAttentionChange(reasonCode) {
     if (typeof options.onDataInvalidated !== "function") return;
-    try { options.onDataInvalidated(reasonCode); } catch (_) {}
+    try { options.onDataInvalidated(reasonCode); } catch (error) {
+      reportDiagnostic({
+        code: "AI_CONTENT_INVALIDATION_LISTENER_FAILED",
+        module: "ai-content-service",
+        category: "internal",
+        operationId: "ai-content-invalidation-notify",
+        metadata: {
+          operation: "data-invalidation-listener",
+          phase: "notify",
+          outcome: "listener-isolated",
+          reasonCode: typeof reasonCode === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(reasonCode)
+            ? reasonCode
+            : "UNSPECIFIED",
+          errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+            ? error.code
+            : "LISTENER_FAILED"
+        }
+      });
+    }
   }
 
   async function materializeClient(client) {

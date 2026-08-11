@@ -17,6 +17,7 @@ const {
   submissionServiceActions,
   tombstoneReferences,
 } = require("./article-removal-plan");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function createArticleRemovalService(options) {
   const opts = options || {};
@@ -65,7 +66,25 @@ function createArticleRemovalService(options) {
       Object.assign(transaction, clone(saved));
     } else saved = transactionStore.save(transaction);
     if (typeof opts.onTransactionStatus === "function") {
-      try { opts.onTransactionStatus(clone(saved)); } catch (_) {}
+      try { opts.onTransactionStatus(clone(saved)); } catch (error) {
+        reportDiagnostic({
+          code: "ARTICLE_REMOVAL_STATUS_LISTENER_FAILED",
+          module: "article-removal-service",
+          category: "internal",
+          operationId: "article-removal-status-notify",
+          metadata: {
+            operation: "transaction-status-listener",
+            phase: "notify",
+            outcome: "listener-isolated",
+            status: saved && typeof saved.status === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(saved.status)
+              ? saved.status
+              : "unknown",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "LISTENER_FAILED"
+          }
+        });
+      }
     }
     return saved;
   }
@@ -142,7 +161,23 @@ function createArticleRemovalService(options) {
       const expected = operationId(transaction, "queue", Number(transaction.queueCursor || 0) + offset);
       let proof;
       try { proof = submissionService.reconcileArticleRemovalAction(Object.assign(clone(action), { operationId: expected }), expected); }
-      catch (_) { return; }
+      catch (error) {
+        reportDiagnostic({
+          code: "ARTICLE_REMOVAL_QUEUE_RECONCILIATION_FAILED",
+          module: "article-removal-service",
+          category: "storage",
+          operationId: expected,
+          metadata: {
+            operation: "queue-action-reconcile",
+            phase: "revalidate",
+            outcome: "action-not-proven",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "QUEUE_RECONCILIATION_FAILED"
+          }
+        });
+        return;
+      }
       if (proof && proof.operationId === expected && ["retryable", "completed"].includes(proof.status)) recoverable.push(action);
     });
     const effectiveFresh = fresh.slice();
@@ -240,8 +275,10 @@ function createArticleRemovalService(options) {
       return contentStore.getArticle(item.clientId, item.articleId);
     }
     catch (error) {
-      if (mutationCoordinator && ["ARTICLE_MUTATION_BUSY", "ARTICLE_MUTATION_RESULT_UNCERTAIN"].includes(error && error.code)) throw error;
-      return { missing: true, clientId: item.clientId, articleId: item.articleId, code: error && error.code || "ARTICLE_NOT_FOUND" };
+      if (error && error.code === "ARTICLE_NOT_FOUND") {
+        return { missing: true, clientId: item.clientId, articleId: item.articleId, code: "ARTICLE_NOT_FOUND" };
+      }
+      throw error;
     }
   }
 
@@ -863,8 +900,22 @@ function createArticleRemovalService(options) {
     const claimed = claim(transaction);
     if (!claimed) return transactionDto(transaction);
     try { return transactionDto(performThroughCoordinator(claimed, true)); }
-    catch (_) {
-      return transactionDto(transactionStore.get(transaction.id));
+    catch (error) {
+      reportDiagnostic({
+        code: "ARTICLE_REMOVAL_RETRY_FAILED",
+        module: "article-removal-service",
+        category: "storage",
+        operationId: transaction.id,
+        metadata: {
+          operation: "removal-retry",
+          phase: "recover",
+          outcome: "failed",
+          errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+            ? error.code
+            : "ARTICLE_REMOVAL_RETRY_FAILED"
+        }
+      });
+      throw error;
     }
   }
 

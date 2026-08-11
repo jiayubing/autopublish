@@ -140,6 +140,19 @@ describe("generation submission handoff", function() {
     assert.throws(() => service.commit({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a", previewToken: preview.previewToken, confirmed: true }), (error) => error.code === "HANDOFF_PREVIEW_STALE");
   });
 
+  it("surfaces an article persistence read failure instead of classifying it as an identity conflict", function() {
+    const service = createGenerationSubmissionHandoffService({
+      generationBatchService: { get() { return { id: "generation-1", revision: 1, status: "completed", tasks: [{ id: "task-1", clientId: "client-1", status: "succeeded" }] }; } },
+      articleStore: { findByGenerationTaskId() { throw Object.assign(new Error("article store unavailable"), { code: "ARTICLE_STORE_READ_FAILED" }); } },
+      regularQueueApplication: { previewRegularQueueAdmission() { throw new Error("must not preview after read failure"); }, admitRegularQueueItems() { throw new Error("must not create after read failure"); } },
+      targetPlatforms: [{ id: "target-a", contentQueueImport: true }]
+    });
+    assert.throws(
+      () => service.preview({ generationBatchId: "generation-1", platformId: "target-a", accountProfileId: "account-a" }),
+      { code: "HANDOFF_ARTICLE_LOOKUP_FAILED" },
+    );
+  });
+
   it("blocks duplicate article identities before delegating to the submission service", function() {
     const duplicateArticles = [article("same-article", "client-1", "task-1"), article("same-article", "client-1", "task-2")];
     let previewCalls = 0;

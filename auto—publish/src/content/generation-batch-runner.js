@@ -8,6 +8,7 @@ const RETRYABLE_CODES = new Set([
   "AI_RATE_LIMITED", "AI_TIMEOUT", "AI_NETWORK_ERROR", "AI_SERVER_ERROR",
   "ECONNRESET", "ECONNREFUSED", "ENETUNREACH", "ETIMEDOUT", "EAI_AGAIN"
 ]);
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function runnerError(code, message) {
   const error = new Error(message);
@@ -85,7 +86,22 @@ function createGenerationBatchRunner(options) {
       if (event[key] === undefined) delete event[key];
     });
     listeners.forEach(function(listener) {
-      try { listener(clone(event)); } catch (_) {}
+      try { listener(clone(event)); } catch (error) {
+        reportDiagnostic({
+          code: "GENERATION_BATCH_LISTENER_FAILED",
+          module: "generation-batch-runner",
+          category: "internal",
+          operationId: "generation-batch-notify",
+          metadata: {
+            operation: "subscriber-notify",
+            phase: "notify",
+            outcome: "listener-isolated",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "LISTENER_FAILED"
+          }
+        });
+      }
     });
   }
 

@@ -1,5 +1,6 @@
 const defaultFs = require("node:fs");
 const defaultPath = require("node:path");
+const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
 const FILE_NAME = "ai-provider-test-status.json";
 
@@ -67,7 +68,24 @@ function createAiProviderTestStatusStore(options) {
         io.writeFileSync(temporaryPath, JSON.stringify(status) + "\n", { encoding: "utf8", mode: 0o600 });
         io.renameSync(temporaryPath, filePath);
       } finally {
-        try { if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath); } catch (_) {}
+        try {
+          if (io.existsSync(temporaryPath)) io.unlinkSync(temporaryPath);
+        } catch (error) {
+          reportDiagnostic({
+            code: "AI_TEST_STATUS_TEMP_CLEANUP_FAILED",
+            module: "ai-provider-test-status",
+            category: "storage",
+            operationId: "ai-provider-test-status-write",
+            metadata: {
+              operation: "temp-cleanup",
+              phase: "cleanup",
+              outcome: "best-effort-failed",
+              errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+                ? error.code
+                : "AI_TEST_STATUS_STORAGE_WRITE_FAILED"
+            }
+          });
+        }
       }
       return status;
     } catch (error) {

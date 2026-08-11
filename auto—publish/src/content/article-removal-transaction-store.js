@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { createContentPathPolicy } = require("./content-path-policy");
 const { createAtomicFileWriter } = require("./content-file-transaction");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function removalError(code, message) {
   const error = new Error(message);
@@ -37,6 +38,23 @@ function createArticleRemovalTransactionStore(options) {
   const lockTtlMs = Number.isFinite(opts.lockTtlMs) ? Math.max(1000, opts.lockTtlMs) : 5 * 60 * 1000;
   const atomicWriter = opts.atomicWriter || createAtomicFileWriter({ fs: fs });
 
+  function reportFailure(code, operation, outcome, error) {
+    reportDiagnostic({
+      code: code,
+      module: "article-removal-transaction-store",
+      category: "storage",
+      operationId: "article-removal-transaction-lock",
+      metadata: {
+        operation: operation,
+        phase: "lock",
+        outcome: outcome,
+        errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+          ? error.code
+          : code
+      }
+    });
+  }
+
   function filename(id) {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]+$/.test(id)) {
       throw removalError("ARTICLE_REMOVAL_TRANSACTION_ID_INVALID", "Removal transaction id is invalid");
@@ -70,8 +88,7 @@ function createArticleRemovalTransactionStore(options) {
 
   function get(id) {
     const file = filename(id);
-    if (!fs.existsSync(file)) throw removalError("ARTICLE_REMOVAL_TRANSACTION_NOT_FOUND", "Removal transaction was not found");
-    assertRegularFile(file);
+    if (!assertRegularFile(file)) throw removalError("ARTICLE_REMOVAL_TRANSACTION_NOT_FOUND", "Removal transaction was not found");
     try { return JSON.parse(fs.readFileSync(file, "utf8")); }
     catch (_) { throw removalError("ARTICLE_REMOVAL_TRANSACTION_CORRUPT", "Removal transaction is corrupt"); }
   }
@@ -117,23 +134,49 @@ function createArticleRemovalTransactionStore(options) {
         mtimeMs = fs.statSync(lock).mtimeMs;
         const currentTime = Date.parse(typeof now === "function" ? now() : now);
         stale = Number.isFinite(currentTime) && currentTime - mtimeMs >= lockTtlMs;
-      } catch (_) { return null; }
+      } catch (lockReadError) {
+        reportFailure("ARTICLE_REMOVAL_LOCK_INSPECTION_FAILED", "lock-inspection", "fail-closed", lockReadError);
+        return null;
+      }
       const ownerState = lockOwnerState(info);
       if (ownerState !== "dead" || !stale) return null;
       // Rename is the ABA fence. Once this succeeds, a competing writer can
       // create a new lock at the original path; it can never be unlinked by
       // this reclaimer. A plain read-then-unlink would delete that new lock.
       const quarantine = lock + ".reclaim-" + crypto.randomUUID();
-      try { fs.renameSync(lock, quarantine); } catch (_) { return null; }
+      try { fs.renameSync(lock, quarantine); }
+      catch (renameError) {
+        reportFailure("ARTICLE_REMOVAL_LOCK_RECLAIM_FAILED", "lock-quarantine", "fail-closed", renameError);
+        return null;
+      }
       try {
         assertRegularFile(quarantine);
         const quarantined = JSON.parse(fs.readFileSync(quarantine, "utf8"));
         if (!quarantined || quarantined.token !== info.token) return null;
-      } catch (_) { return null; }
-      try { fs.unlinkSync(quarantine); } catch (_) {}
-      try { descriptor = fs.openSync(lock, "wx"); } catch (_) { return null; }
+      } catch (quarantineError) {
+        reportFailure("ARTICLE_REMOVAL_LOCK_RECLAIM_FAILED", "lock-quarantine-verify", "fail-closed", quarantineError);
+        return null;
+      }
+      try { fs.unlinkSync(quarantine); }
+      catch (cleanupError) {
+        reportFailure("ARTICLE_REMOVAL_LOCK_RECLAIM_FAILED", "lock-quarantine-cleanup", "fail-closed", cleanupError);
+        return null;
+      }
+      try { descriptor = fs.openSync(lock, "wx"); }
+      catch (openError) {
+        reportFailure("ARTICLE_REMOVAL_LOCK_ACQUIRE_FAILED", "lock-reacquire", "fail-closed", openError);
+        return null;
+      }
     }
-    try { writeLock(); } catch (error) { try { fs.closeSync(descriptor); fs.unlinkSync(lock); } catch (_) {} throw error; }
+    try { writeLock(); }
+    catch (error) {
+      try { fs.closeSync(descriptor); }
+      catch (cleanupError) { reportFailure("ARTICLE_REMOVAL_LOCK_RELEASE_FAILED", "lock-close", "secondary-failure", cleanupError); }
+      try { fs.unlinkSync(lock); }
+      catch (cleanupError) { reportFailure("ARTICLE_REMOVAL_LOCK_RELEASE_FAILED", "lock-unlink", "secondary-failure", cleanupError); }
+      throw error;
+    }
+    let operationError = null;
     try {
       const current = get(id);
       if (Number(current.revision || 0) !== Number(expectedRevision || 0)) return null;
@@ -145,13 +188,30 @@ function createArticleRemovalTransactionStore(options) {
       next.revision = Number(current.revision || 0) + 1;
       next.updatedAt = next.updatedAt || now();
       return save(next);
+    } catch (error) {
+      operationError = error;
+      throw error;
     } finally {
-      try { fs.closeSync(descriptor); } catch (_) {}
+      let cleanupError = null;
+      try { fs.closeSync(descriptor); }
+      catch (error) { cleanupError = cleanupError || error; }
       try {
-        assertRegularFile(lock);
-        const info = JSON.parse(fs.readFileSync(lock, "utf8"));
-        if (info && info.token === lockToken) fs.unlinkSync(lock);
-      } catch (_) {}
+        if (assertRegularFile(lock)) {
+          const info = JSON.parse(fs.readFileSync(lock, "utf8"));
+          if (info && info.token === lockToken) fs.unlinkSync(lock);
+        }
+      } catch (error) {
+        cleanupError = cleanupError || error;
+      }
+      if (cleanupError) {
+        reportFailure(
+          "ARTICLE_REMOVAL_LOCK_RELEASE_FAILED",
+          "lock-release",
+          operationError ? "secondary-failure" : "failed",
+          cleanupError,
+        );
+        if (!operationError) throw removalError("ARTICLE_REMOVAL_LOCK_RELEASE_FAILED", "Removal transaction lock could not be released", cleanupError);
+      }
     }
   }
 
@@ -167,7 +227,7 @@ function createArticleRemovalTransactionStore(options) {
 
   function remove(id) {
     const file = filename(id);
-    if (fs.existsSync(file)) { assertRegularFile(file); fs.unlinkSync(file); }
+    if (assertRegularFile(file)) fs.unlinkSync(file);
     return true;
   }
 

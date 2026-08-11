@@ -9,6 +9,7 @@ const { createArticleGenerator } = require("../../src/content/article-generator"
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const { createGenerationBatchStore } = require("../../src/content/generation-batch-store");
 const { createGenerationBatchRunner } = require("../../src/content/generation-batch-runner");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const MAX_CLIENTS = 1000;
 const MAX_TEMPLATES = 1000;
@@ -45,6 +46,8 @@ const SAFE_MESSAGES = {
   GENERATION_TASK_BUSY: "Generation task is already running",
   GENERATION_CANCEL_CONFIRMATION_REQUIRED: "Confirm before permanently cancelling pending generation tasks",
   GENERATION_ARTICLE_INVALID: "Generation task did not produce a valid article",
+  GENERATION_BATCH_STATE_UNAVAILABLE: "Generation batch state could not be confirmed",
+  GENERATION_CONTROL_FAILED: "Generation batch control request failed",
   AI_CONFIG_INVALID: "AI provider configuration is invalid",
   AI_UNAUTHORIZED: "AI provider authorization failed",
   AI_FORBIDDEN: "AI provider access was denied",
@@ -189,7 +192,25 @@ function createContentGenerationBatchService(options) {
 
   function notifyData(reasonCode) {
     if (typeof opts.onDataInvalidated !== "function") return;
-    try { opts.onDataInvalidated(reasonCode); } catch (_) {}
+    try { opts.onDataInvalidated(reasonCode); } catch (error) {
+      reportDiagnostic({
+        code: "GENERATION_BATCH_INVALIDATION_LISTENER_FAILED",
+        module: "content-generation-batch-service",
+        category: "internal",
+        operationId: "generation-batch-invalidation",
+        metadata: {
+          operation: "data-invalidation-listener",
+          phase: "notify",
+          outcome: "listener-isolated",
+          reasonCode: typeof reasonCode === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(reasonCode)
+            ? reasonCode
+            : "UNSPECIFIED",
+          errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+            ? error.code
+            : "LISTENER_FAILED"
+        }
+      });
+    }
   }
 
   function fingerprint() {
@@ -211,7 +232,22 @@ function createContentGenerationBatchService(options) {
     event.runtimeId = runtimeId;
     event.sequence = ++sequence;
     listeners.forEach(function(listener) {
-      try { listener(clone(event)); } catch (_) {}
+      try { listener(clone(event)); } catch (error) {
+        reportDiagnostic({
+          code: "GENERATION_BATCH_LISTENER_FAILED",
+          module: "content-generation-batch-service",
+          category: "internal",
+          operationId: "generation-batch-notify",
+          metadata: {
+            operation: "subscriber-notify",
+            phase: "notify",
+            outcome: "listener-isolated",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "LISTENER_FAILED"
+          }
+        });
+      }
     });
   }
 
@@ -229,15 +265,15 @@ function createContentGenerationBatchService(options) {
   }
 
   async function listMaterials(clientId) {
-    try { return await materialStore.listMaterials(clientId); } catch (error) { return []; }
+    return materialStore.listMaterials(clientId);
   }
 
   function listResearch(clientId) {
-    try { return researchStore.listResearch(clientId); } catch (error) { return []; }
+    return researchStore.listResearch(clientId);
   }
 
   function clientExists(clientId) {
-    try { return Boolean(clientKnowledge.getClient(clientId)); } catch (_) { return false; }
+    return Boolean(clientKnowledge.getClient(clientId));
   }
 
   async function resolveSources(input, clientIds) {
@@ -374,9 +410,8 @@ function createContentGenerationBatchService(options) {
     let updatedAt = runnerState.updatedAt || now();
     const batchId = activeBatchId || runnerState.batchId || null;
     if (batchId && !persistedBatch) {
-      try {
-        persistedBatch = batchStore.getBatch(batchId);
-      } catch (_) {}
+      persistedBatch = batchStore.getBatch(batchId);
+      if (!persistedBatch) throw generationError("GENERATION_BATCH_STATE_UNAVAILABLE");
     }
     if (persistedBatch) {
       counts = persistedBatch.counts || runnerState.counts || null;
@@ -483,15 +518,41 @@ function createContentGenerationBatchService(options) {
         })
         .catch(function(error) {
           let failedBatch = null;
+          let stateUnavailable = false;
           try {
             failedBatch = batchStore.getBatch(batchId);
-            if (["pending", "running", "stopping", "interrupted"].includes(failedBatch.status) && typeof batchStore.updateBatchStatus === "function") {
+            if (!failedBatch) {
+              stateUnavailable = true;
+            } else if (["pending", "running", "stopping", "interrupted"].includes(failedBatch.status) && typeof batchStore.updateBatchStatus === "function") {
               failedBatch = batchStore.updateBatchStatus(batchId, "failed");
+            } else if (["pending", "running", "stopping", "interrupted"].includes(failedBatch.status)) {
+              stateUnavailable = true;
             }
-          } catch (_) {}
-          if (failedBatch) emitBatch(failedBatch, "failed", error);
-          else emit({ batchId: batchId, status: "failed", counts: null, updatedAt: now(), error: error });
-          return runtimeBatch(failedBatch || batch, "failed", error);
+          } catch (stateError) {
+            stateUnavailable = true;
+            reportDiagnostic({
+              code: "GENERATION_BATCH_STATE_READ_FAILED",
+              module: "content-generation-batch-service",
+              category: "storage",
+              operationId: "generation-batch-failure-state",
+              metadata: {
+                operation: "batch-state-read",
+                phase: "failure-recovery",
+                outcome: "uncertain",
+                errorCode: stateError && /^[A-Z][A-Z0-9_]{1,127}$/.test(stateError.code || "")
+                  ? stateError.code
+                  : "GENERATION_BATCH_STATE_READ_FAILED"
+              }
+            });
+          }
+          if (stateUnavailable) {
+            const uncertain = generationError("GENERATION_BATCH_STATE_UNAVAILABLE");
+            emit({ batchId: batchId, status: "interrupted", counts: null, updatedAt: now(), error: uncertain });
+            return runtimeBatch(batch, "interrupted", uncertain);
+          }
+          if (failedBatch && failedBatch.status === "failed") emitBatch(failedBatch, "failed", error);
+          else if (failedBatch) emitBatch(failedBatch, failedBatch.status, error);
+          return runtimeBatch(failedBatch || batch, failedBatch ? failedBatch.status : "interrupted", error);
         })
         .finally(function() {
           if (activeRun === reservation) {
@@ -567,7 +628,25 @@ function createContentGenerationBatchService(options) {
     const batch = batchStore.getBatch(activeBatchId);
     emitBatch(batch, commandStatus);
     Promise.resolve().then(function() { return typeof runner[commandStatus === "pausing" ? "pause" : "stop"] === "function" ? runner[commandStatus === "pausing" ? "pause" : "stop"]() : runner.stop(); })
-      .catch(function() { return undefined; });
+      .catch(function(error) {
+        const controlError = generationError("GENERATION_CONTROL_FAILED");
+        activeStatus = "running";
+        reportDiagnostic({
+          code: "GENERATION_CONTROL_FAILED",
+          module: "content-generation-batch-service",
+          category: "internal",
+          operationId: "generation-batch-control",
+          metadata: {
+            operation: commandStatus === "pausing" ? "pause" : "stop",
+            phase: "command",
+            outcome: "failed",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "GENERATION_CONTROL_FAILED"
+          }
+        });
+        emitBatch(batch, "running", controlError);
+      });
     return runtimeBatch(batch, commandStatus);
   }
 
@@ -591,7 +670,30 @@ function createContentGenerationBatchService(options) {
     listeners.add(listener);
     return function() { listeners.delete(listener); };
   }
-  async function dispose() { if (disposed) return; disposed = true; if (runner && typeof runner.dispose === "function") await runner.dispose(); if (activeRun && activeRun.promise) await activeRun.promise.catch(function() { return undefined; }); listeners.clear(); }
+  async function dispose() {
+    if (disposed) return;
+    disposed = true;
+    if (runner && typeof runner.dispose === "function") await runner.dispose();
+    if (activeRun && activeRun.promise) {
+      try { await activeRun.promise; } catch (error) {
+        reportDiagnostic({
+          code: "GENERATION_BATCH_DISPOSE_RUN_FAILED",
+          module: "content-generation-batch-service",
+          category: "storage",
+          operationId: "generation-batch-dispose",
+          metadata: {
+            operation: "active-run-wait",
+            phase: "cleanup",
+            outcome: "best-effort-failed",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "GENERATION_BATCH_DISPOSE_RUN_FAILED"
+          }
+        });
+      }
+    }
+    listeners.clear();
+  }
 
   return {
     preview: preview, previewBatch: preview, prepare: prepareBatch, prepareBatch: prepareBatch, revalidate: revalidateBatch, revalidateBatch: revalidateBatch,

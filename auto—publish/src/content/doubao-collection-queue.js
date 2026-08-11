@@ -2,6 +2,7 @@ const MAX_TASKS = 500;
 const MIN_DELAY_MS = 15000;
 const MAX_DELAY_MS = 30000;
 const DEFAULT_COUNTDOWN_INTERVAL_MS = 1000;
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function queueError(code, message) {
   const error = new Error(message);
@@ -85,7 +86,22 @@ function createDoubaoCollectionQueue(options) {
     const state = snapshot();
     const event = Object.assign({ type: type || "state", state: state }, state);
     Array.from(subscribers).forEach(function(listener) {
-      try { listener(event); } catch (_) {}
+      try { listener(event); } catch (error) {
+        reportDiagnostic({
+          code: "DOUBAO_COLLECTION_LISTENER_FAILED",
+          module: "doubao-collection-queue",
+          category: "internal",
+          operationId: "doubao-collection-queue-notify",
+          metadata: {
+            operation: "subscriber-notify",
+            phase: "notify",
+            outcome: "listener-isolated",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "LISTENER_FAILED"
+          }
+        });
+      }
     });
   }
 

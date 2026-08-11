@@ -6,6 +6,7 @@ const {
 const {
   createArticleAttentionResolver,
 } = require("../desktop/services/article-attention-resolver");
+const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 
 it("distinguishes automatic removal recovery from a transaction needing manual repair", () => {
   const query = createArticleAttentionQuery({
@@ -122,6 +123,11 @@ it("deduplicates stable attention identities and rebuilds only for a newer revis
 });
 
 it("fails closed to safe read-only attention when optional lookups fail", () => {
+  const diagnostics = [];
+  const restoreDiagnostics = setDiagnosticReporter(function(record) {
+    diagnostics.push(record);
+    return true;
+  });
   const query = createArticleAttentionQuery({
     readers: {
       getArticle() {
@@ -160,10 +166,18 @@ it("fails closed to safe read-only attention when optional lookups fail", () => 
     },
   });
 
-  const snapshot = query.list();
-  assert.equal(snapshot.items.length, 1);
-  assert.deepEqual(snapshot.items[0].allowedActions, ["open-publication"]);
-  assert.equal(snapshot.counts.actionable, 0);
+  try {
+    const snapshot = query.list();
+    assert.equal(snapshot.items.length, 1);
+    assert.deepEqual(snapshot.items[0].allowedActions, ["open-publication"]);
+    assert.equal(snapshot.counts.actionable, 0);
+    assert.ok(diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_LOOKUP_FAILED"));
+    assert.ok(diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_CAPABILITY_PROBE_FAILED"));
+    assert.ok(diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_RETRY_PREVIEW_FAILED"));
+    assert.equal(JSON.stringify(diagnostics).includes("synthetic"), false);
+  } finally {
+    restoreDiagnostics();
+  }
 });
 
 it("requires confirmation, preserves explicit failures, and fences duplicate resolutions", async () => {

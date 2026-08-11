@@ -119,7 +119,22 @@ function copyToFailed(sourceFile, filename) {
         fs.copyFileSync(sidecar, path.join(DIRS.failedDir, filename + suffix));
       }
     });
-  } catch (e) {}
+  } catch (error) {
+    reportDiagnostic({
+      code: "CONTENT_FAILED_COPY_ARTIFACT_FAILED",
+      module: "core-files",
+      category: "storage",
+      operationId: "failed-article-artifact",
+      metadata: {
+        operation: "failed-artifact-copy",
+        phase: "persist",
+        outcome: "best-effort-failed",
+        errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+          ? error.code
+          : "CONTENT_FAILED_COPY_ARTIFACT_FAILED"
+      }
+    });
+  }
 }
 
 function archivePublishedArticle(article, suppliedPaths) {

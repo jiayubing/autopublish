@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function createGenerationBatchFileStore(options) {
   const opts = options || {};
@@ -186,15 +187,35 @@ function createGenerationBatchFileStore(options) {
         { encoding: "utf8", flag: "wx" },
       );
       const descriptor = fsApi.openSync(transaction.temporary, "r");
+      let syncError = null;
       try {
         try {
           fsApi.fsyncSync(descriptor);
         } catch (error) {
-          if (error.code !== "EPERM" && error.code !== "EINVAL") throw error;
+          if (error.code !== "EPERM" && error.code !== "EINVAL") syncError = error;
         }
       } finally {
-        fsApi.closeSync(descriptor);
+        try { fsApi.closeSync(descriptor); }
+        catch (error) {
+          if (syncError) {
+            reportDiagnostic({
+              code: "GENERATION_BATCH_DESCRIPTOR_CLOSE_FAILED",
+              module: "generation-batch-file-store",
+              category: "storage",
+              operationId: "generation-batch-write",
+              metadata: {
+                operation: "descriptor-close",
+                phase: "cleanup",
+                outcome: "secondary-failure",
+                errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+                  ? error.code
+                  : "GENERATION_BATCH_DESCRIPTOR_CLOSE_FAILED"
+              }
+            });
+          } else syncError = error;
+        }
       }
+      if (syncError) throw syncError;
       fsApi.writeFileSync(
         transaction.journal,
         JSON.stringify({ version: 1 }) + "\n",
@@ -215,7 +236,22 @@ function createGenerationBatchFileStore(options) {
         removeRegular(transaction.temporary);
         removeRegular(transaction.journal);
         removeRegular(transaction.backup);
-      } catch (_) {}
+      } catch (cleanupError) {
+        reportDiagnostic({
+          code: "GENERATION_BATCH_ROLLBACK_CLEANUP_FAILED",
+          module: "generation-batch-file-store",
+          category: "storage",
+          operationId: "generation-batch-write",
+          metadata: {
+            operation: "rollback-cleanup",
+            phase: "cleanup",
+            outcome: "secondary-failure",
+            errorCode: cleanupError && /^[A-Z][A-Z0-9_]{1,127}$/.test(cleanupError.code || "")
+              ? cleanupError.code
+              : "GENERATION_BATCH_ROLLBACK_CLEANUP_FAILED"
+          }
+        });
+      }
       throw error;
     }
     return clone(normalized);
@@ -232,14 +268,7 @@ function createGenerationBatchFileStore(options) {
   function list() {
     return policy
       .listGenerationBatchFiles()
-      .map(function (filename) {
-        try {
-          return read(filename);
-        } catch (_) {
-          return null;
-        }
-      })
-      .filter(Boolean)
+      .map(function (filename) { return read(filename); })
       .sort(function (left, right) {
         return String(right.createdAt).localeCompare(String(left.createdAt));
       })

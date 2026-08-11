@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 const { fingerprintArticle } = require("./content-store");
 const { createContentPathPolicy } = require("./content-path-policy");
@@ -246,7 +247,23 @@ function createArticleStore(workspaceRoot, options) {
     } catch (error) {
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         if (!entries[index].held) continue;
-        try { articleLock.release(entries[index].held); } catch (_) {}
+        try { articleLock.release(entries[index].held); }
+        catch (error) {
+          reportDiagnostic({
+            code: "ARTICLE_STORE_LOCK_RELEASE_FAILED",
+            module: "article-store",
+            category: "storage",
+            operationId: "article-mutation-session-acquire",
+            metadata: {
+              operation: "held-lock-release",
+              phase: "cleanup",
+              outcome: "secondary-failure",
+              errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+                ? error.code
+                : "ARTICLE_LOCK_RELEASE_FAILED"
+            }
+          });
+        }
       }
       throw error;
     }

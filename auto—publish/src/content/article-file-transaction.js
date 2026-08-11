@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function transactionError(code, message, cause) {
   const error = new Error(message || code);
@@ -18,6 +19,33 @@ function createArticleFileTransaction(options) {
 
   function fail(code, message, cause) {
     throw makeError(code, message, cause);
+  }
+
+  function reportCleanup(operation, error) {
+    reportDiagnostic({
+      code: "ARTICLE_FILE_CLEANUP_FAILED",
+      module: "article-file-transaction",
+      category: "storage",
+      operationId: "article-file-transaction",
+      metadata: {
+        operation: operation,
+        phase: "cleanup",
+        outcome: "best-effort-failed",
+        errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+          ? error.code
+          : "ARTICLE_FILE_CLEANUP_FAILED"
+      }
+    });
+  }
+
+  function tryRemove(filename, operation) {
+    try {
+      removeRegularFile(filename);
+      return true;
+    } catch (error) {
+      reportCleanup(operation, error);
+      return false;
+    }
   }
 
   function exists(filename) {
@@ -57,19 +85,31 @@ function createArticleFileTransaction(options) {
       Date.now() +
       "-" +
       (suffix || crypto.randomUUID());
-    fsApi.writeFileSync(temporary, contents, "utf8");
-    const descriptor = fsApi.openSync(temporary, "r");
+    let operationError = null;
     try {
+      fsApi.writeFileSync(temporary, contents, "utf8");
+      const descriptor = fsApi.openSync(temporary, "r");
       try {
-        fsApi.fsyncSync(descriptor);
-      } catch (error) {
-        if (error.code !== "EPERM" && error.code !== "EINVAL") throw error;
+        try {
+          fsApi.fsyncSync(descriptor);
+        } catch (error) {
+          if (error.code !== "EPERM" && error.code !== "EINVAL") operationError = error;
+        }
+      } finally {
+        try { fsApi.closeSync(descriptor); }
+        catch (error) {
+          if (operationError) reportCleanup("temporary-close", error);
+          else operationError = error;
+        }
       }
-    } finally {
-      fsApi.closeSync(descriptor);
+      if (operationError) throw operationError;
+      assertRegularFile(temporary);
+      return temporary;
+    } catch (error) {
+      try { if (exists(temporary)) fsApi.unlinkSync(temporary); }
+      catch (cleanupError) { reportCleanup("temporary-write", cleanupError); }
+      throw error;
     }
-    assertRegularFile(temporary);
-    return temporary;
   }
 
   function transactionFiles(files) {
@@ -149,9 +189,18 @@ function createArticleFileTransaction(options) {
   }
 
   function replaceArticlePair(files, jsonContents, markdownContents) {
-    const temporaryMarkdown = writeTemporary(files.markdown, markdownContents);
-    const temporaryJson = writeTemporary(files.json, jsonContents);
+    let temporaryMarkdown = null;
+    let temporaryJson = null;
+    try {
+      temporaryMarkdown = writeTemporary(files.markdown, markdownContents);
+      temporaryJson = writeTemporary(files.json, jsonContents);
+    } catch (error) {
+      if (temporaryMarkdown) tryRemove(temporaryMarkdown, "article-pair-markdown-temp");
+      if (temporaryJson) tryRemove(temporaryJson, "article-pair-json-temp");
+      throw error;
+    }
     const transaction = transactionFiles(files);
+    let operationError = null;
     try {
       fsApi.writeFileSync(
         transaction.journal,
@@ -181,10 +230,15 @@ function createArticleFileTransaction(options) {
       removeRegularFile(transaction.markdownBackup);
       removeRegularFile(transaction.jsonBackup);
       removeRegularFile(transaction.journal);
+    } catch (error) {
+      operationError = error;
+      throw error;
     } finally {
       if (!exists(transaction.journal)) {
-        removeRegularFile(temporaryMarkdown);
-        removeRegularFile(temporaryJson);
+        const markdownClean = tryRemove(temporaryMarkdown, "article-pair-markdown-temp");
+        const jsonClean = tryRemove(temporaryJson, "article-pair-json-temp");
+        if (!operationError && (!markdownClean || !jsonClean))
+          fail("ARTICLE_FILE_TRANSACTION_INCOMPLETE", "Article file cleanup needs recovery");
       }
     }
   }
@@ -205,10 +259,15 @@ function createArticleFileTransaction(options) {
       JSON.stringify(value) + "\n",
       "journal",
     );
+    let operationError = null;
     try {
       fsApi.renameSync(temporary, filename);
+    } catch (error) {
+      operationError = error;
+      throw error;
     } finally {
-      removeRegularFile(temporary);
+      if (!tryRemove(temporary, "journal-temp" ) && !operationError)
+        fail("ARTICLE_FILE_TRANSACTION_INCOMPLETE", "Article journal cleanup needs recovery");
     }
   }
 
@@ -249,21 +308,26 @@ function createArticleFileTransaction(options) {
       value.tombstoneContents,
     );
     const moves = [];
-    writeJournal(journal, {
-      version: 1,
-      kind: "move-to-trash",
-      operationId: value.operationId || null,
-      json: {
-        from: path.basename(source.json),
-        to: path.basename(destination.json),
-      },
-      markdown: {
-        from: path.basename(source.markdown),
-        to: path.basename(destination.markdown),
-      },
-      tombstone: path.basename(destination.tombstone),
-      temporaryTombstone: path.basename(temporaryTombstone),
-    });
+    try {
+      writeJournal(journal, {
+        version: 1,
+        kind: "move-to-trash",
+        operationId: value.operationId || null,
+        json: {
+          from: path.basename(source.json),
+          to: path.basename(destination.json),
+        },
+        markdown: {
+          from: path.basename(source.markdown),
+          to: path.basename(destination.markdown),
+        },
+        tombstone: path.basename(destination.tombstone),
+        temporaryTombstone: path.basename(temporaryTombstone),
+      });
+    } catch (error) {
+      tryRemove(temporaryTombstone, "trash-tombstone-temp");
+      throw error;
+    }
     try {
       fsApi.renameSync(source.json, destination.json);
       moves.push({ from: source.json, to: destination.json });
@@ -282,16 +346,16 @@ function createArticleFileTransaction(options) {
       clearJournal(journal);
       return;
     } catch (error) {
-      removeRegularFile(temporaryTombstone);
-      removeRegularFile(destination.tombstone);
+      const temporaryClean = tryRemove(temporaryTombstone, "trash-tombstone-temp");
+      const tombstoneClean = tryRemove(destination.tombstone, "trash-tombstone");
       const rollbackError = rollbackMoves(moves);
-      if (!rollbackError) clearJournal(journal);
       if (rollbackError)
         fail(
           "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
           "Article trash transaction needs recovery",
           rollbackError,
         );
+      if (temporaryClean && tombstoneClean) tryRemove(journal, "trash-journal");
       throw error;
     }
   }
@@ -530,13 +594,13 @@ function createArticleFileTransaction(options) {
       clearJournal(journal);
     } catch (error) {
       const rollbackError = rollbackMoves(moves);
-      if (!rollbackError) clearJournal(journal);
       if (rollbackError)
         fail(
           "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
           "Article restore transaction needs recovery",
           rollbackError,
         );
+      tryRemove(journal, "restore-journal");
       throw error;
     }
   }
@@ -558,10 +622,15 @@ function createArticleFileTransaction(options) {
       removeRegularFile(backup);
     } catch (error) {
       if (installed && exists(files.tombstone))
-        removeRegularFile(files.tombstone);
-      if (backedUp && exists(backup) && !exists(files.tombstone))
-        fsApi.renameSync(backup, files.tombstone);
-      removeRegularFile(temporary);
+        tryRemove(files.tombstone, "terminal-tombstone-installed");
+      if (backedUp && exists(backup) && !exists(files.tombstone)) {
+        try {
+          fsApi.renameSync(backup, files.tombstone);
+        } catch (restoreError) {
+          reportCleanup("terminal-tombstone-backup-restore", restoreError);
+        }
+      }
+      tryRemove(temporary, "terminal-tombstone-temp");
       throw error;
     }
   }
@@ -612,10 +681,14 @@ function createArticleFileTransaction(options) {
           }),
         );
         if (!rollbackError) {
+          let stagingClean = true;
           try {
             fsApi.rmSync(staging, { recursive: true, force: true });
-          } catch (_) {}
-          clearJournal(journal);
+          } catch (cleanupError) {
+            stagingClean = false;
+            reportCleanup("permanent-delete-staging", cleanupError);
+          }
+          if (stagingClean) tryRemove(journal, "permanent-delete-journal");
         }
         if (rollbackError)
           fail(

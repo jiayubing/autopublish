@@ -6,6 +6,7 @@ const {
 const {
   evaluateArticleSubmissionEligibility,
 } = require("../../src/content/article-submission-eligibility");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const ATTENTION_KINDS = Object.freeze({
   REMOVAL_AUTO_RECOVERY: "removal_auto_recovery",
@@ -38,6 +39,12 @@ function stableId(kind, value) {
 function safeText(value, maxLength) {
   if (typeof value !== "string" || !value.trim()) return null;
   return value.trim().slice(0, maxLength || 200);
+}
+
+function diagnosticErrorCode(error, fallback) {
+  return error && typeof error.code === "string" && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code)
+    ? error.code
+    : fallback;
 }
 
 function normalizeRevision(value, fallback) {
@@ -114,8 +121,30 @@ function createArticleAttentionQuery(options) {
             title: article.title || null,
             submissionEligible:
               evaluateArticleSubmissionEligibility(article).eligible,
+            lookupStatus: "available",
           };
-      } catch (_) {}
+      } catch (error) {
+        if (!error || error.code !== "ARTICLE_NOT_FOUND") {
+          reportDiagnostic({
+            code: "ARTICLE_ATTENTION_LOOKUP_FAILED",
+            module: "article-attention-query",
+            category: "storage",
+            operationId: "article-attention-article-read",
+            metadata: {
+              operation: "article-read",
+              phase: "read",
+              outcome: "unavailable",
+              errorCode: diagnosticErrorCode(error, "ARTICLE_READ_FAILED")
+            }
+          });
+          return {
+            exists: null,
+            status: value.articleStatus || null,
+            title: null,
+            lookupStatus: "unavailable",
+          };
+        }
+      }
     }
     const getTrashedArticle = reader("getTrashedArticle", null);
     if (getTrashedArticle && value.clientId && value.articleId) {
@@ -123,32 +152,80 @@ function createArticleAttentionQuery(options) {
         const trashed = getTrashedArticle(value.clientId, value.articleId);
         const tombstone =
           trashed && trashed.tombstone ? trashed.tombstone : trashed;
-        return {
-          exists: false,
-          removed: true,
-          status: "removed",
-          title:
-            (tombstone && (tombstone.titleSnapshot || tombstone.title)) || null,
-        };
-      } catch (_) {}
+        if (tombstone && typeof tombstone === "object") {
+          return {
+            exists: false,
+            removed: true,
+            status: "removed",
+            title:
+              (tombstone.titleSnapshot || tombstone.title) || null,
+            lookupStatus: "available",
+          };
+        }
+      } catch (error) {
+        if (!error || error.code !== "ARTICLE_NOT_FOUND") {
+          reportDiagnostic({
+            code: "ARTICLE_ATTENTION_LOOKUP_FAILED",
+            module: "article-attention-query",
+            category: "storage",
+            operationId: "article-attention-trash-read",
+            metadata: {
+              operation: "trashed-article-read",
+              phase: "read",
+              outcome: "unavailable",
+              errorCode: diagnosticErrorCode(error, "ARTICLE_TRASH_READ_FAILED")
+            }
+          });
+          return {
+            exists: null,
+            status: value.articleStatus || null,
+            title: null,
+            lookupStatus: "unavailable",
+          };
+        }
+      }
     }
     const getTrashedTombstone = reader("getTrashedTombstone", null);
     if (getTrashedTombstone && value.clientId && value.articleId) {
       try {
         const tombstone = getTrashedTombstone(value.clientId, value.articleId);
-        return {
-          exists: false,
-          removed: true,
-          status: "removed",
-          title:
-            (tombstone && (tombstone.titleSnapshot || tombstone.title)) || null,
-        };
-      } catch (_) {}
+        if (tombstone && typeof tombstone === "object") {
+          return {
+            exists: false,
+            removed: true,
+            status: "removed",
+            title: (tombstone.titleSnapshot || tombstone.title) || null,
+            lookupStatus: "available",
+          };
+        }
+      } catch (error) {
+        if (!error || error.code !== "ARTICLE_NOT_FOUND") {
+          reportDiagnostic({
+            code: "ARTICLE_ATTENTION_LOOKUP_FAILED",
+            module: "article-attention-query",
+            category: "storage",
+            operationId: "article-attention-tombstone-read",
+            metadata: {
+              operation: "trashed-tombstone-read",
+              phase: "read",
+              outcome: "unavailable",
+              errorCode: diagnosticErrorCode(error, "ARTICLE_TOMBSTONE_READ_FAILED")
+            }
+          });
+          return {
+            exists: null,
+            status: value.articleStatus || null,
+            title: null,
+            lookupStatus: "unavailable",
+          };
+        }
+      }
     }
     return {
-      exists: value.articleExists === true,
+      exists: getArticle && value.clientId && value.articleId ? false : value.articleExists === true,
       status: value.articleStatus || null,
       title: null,
+      lookupStatus: getArticle && value.clientId && value.articleId ? "not_found" : "available",
     };
   }
 
@@ -163,7 +240,19 @@ function createArticleAttentionQuery(options) {
       value = reader("platformCapabilities", function () {
         return null;
       })();
-    } catch (_) {
+    } catch (error) {
+      reportDiagnostic({
+        code: "ARTICLE_ATTENTION_CAPABILITY_PROBE_FAILED",
+        module: "article-attention-query",
+        category: "storage",
+        operationId: "article-attention-platform-capabilities",
+        metadata: {
+          operation: "platform-capability-read",
+          phase: "probe",
+          outcome: "fail-closed",
+          errorCode: diagnosticErrorCode(error, "PLATFORM_CAPABILITY_READ_FAILED")
+        }
+      });
       value = null;
     }
     if (
@@ -173,7 +262,19 @@ function createArticleAttentionQuery(options) {
     ) {
       try {
         value = opts.contentSubmissionService.listPlatforms();
-      } catch (_) {
+      } catch (error) {
+        reportDiagnostic({
+          code: "ARTICLE_ATTENTION_CAPABILITY_PROBE_FAILED",
+          module: "article-attention-query",
+          category: "storage",
+          operationId: "article-attention-platform-capabilities-fallback",
+          metadata: {
+            operation: "platform-capability-fallback",
+            phase: "probe",
+            outcome: "fail-closed",
+            errorCode: diagnosticErrorCode(error, "PLATFORM_CAPABILITY_READ_FAILED")
+          }
+        });
         value = null;
       }
     }
@@ -229,6 +330,7 @@ function createArticleAttentionQuery(options) {
         facts.articleSubmissionEligible !== undefined
           ? facts.articleSubmissionEligible
           : articleState.submissionEligible,
+      articleLookupStatus: facts.articleLookupStatus || articleState.lookupStatus || "available",
       articleState,
     });
     const policy = deriveAttentionPolicy(
@@ -331,7 +433,19 @@ function createArticleAttentionQuery(options) {
               opts.contentSubmissionService.previewRetryFailedPublication({
                 publicationId: item.publicationId,
               }).eligible === true;
-          } catch (_) {
+          } catch (error) {
+            reportDiagnostic({
+              code: "ARTICLE_ATTENTION_RETRY_PREVIEW_FAILED",
+              module: "article-attention-query",
+              category: "storage",
+              operationId: "article-attention-retry-preview",
+              metadata: {
+                operation: "retry-preview",
+                phase: "probe",
+                outcome: "fail-closed",
+                errorCode: diagnosticErrorCode(error, "PUBLICATION_RETRY_PREVIEW_FAILED")
+              }
+            });
             retryEligible = false;
           }
         }

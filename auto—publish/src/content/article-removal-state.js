@@ -88,9 +88,7 @@ function createArticleRemovalStateMachine(options) {
           recoveryBackoffMs * Math.pow(2, transaction.retryCount - 1),
       ).toISOString();
     }
-    try {
-      persist(transaction);
-    } catch (_) {}
+    persist(transaction);
     return transaction;
   }
 

@@ -4,6 +4,7 @@ const { createDoubaoBrowserAdapter } = require("../../src/content/doubao-browser
 const { createDoubaoCollectionService: createSourceCollectionService } = require("../../src/content/doubao-collection-service");
 const { createDoubaoCollectionQueue } = require("../../src/content/doubao-collection-queue");
 const { pwSessionConfig } = require("../../src/core/playwright");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function serviceError(code, message) {
   const error = new Error(message);
@@ -50,7 +51,25 @@ function createDoubaoCollectionDesktopService(options) {
 
   function notifyContentSources(reasonCode) {
     if (typeof opts.onDataInvalidated !== "function") return;
-    try { opts.onDataInvalidated(reasonCode); } catch (_) {}
+    try { opts.onDataInvalidated(reasonCode); } catch (error) {
+      reportDiagnostic({
+        code: "DOUBAO_CONTENT_INVALIDATION_LISTENER_FAILED",
+        module: "doubao-collection-service",
+        category: "internal",
+        operationId: "doubao-content-invalidation",
+        metadata: {
+          operation: "content-invalidation-listener",
+          phase: "notify",
+          outcome: "listener-isolated",
+          reasonCode: typeof reasonCode === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(reasonCode)
+            ? reasonCode
+            : "UNSPECIFIED",
+          errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+            ? error.code
+            : "LISTENER_FAILED"
+        }
+      });
+    }
   }
 
   function clientIdOf(input) {
@@ -97,7 +116,36 @@ function createDoubaoCollectionDesktopService(options) {
       await collectionService.close();
     } catch (error) {
       lastCloseError = safeError(error);
-      if (typeof opts.onCloseError === "function") opts.onCloseError(lastCloseError);
+      reportDiagnostic({
+        code: "DOUBAO_SESSION_CLOSE_FAILED",
+        module: "doubao-collection-service",
+        category: "storage",
+        operationId: "doubao-session-close",
+        metadata: {
+          operation: "session-close",
+          phase: "cleanup",
+          outcome: "best-effort-failed",
+          errorCode: lastCloseError.code
+        }
+      });
+      if (typeof opts.onCloseError === "function") {
+        try { opts.onCloseError(lastCloseError); } catch (callbackError) {
+          reportDiagnostic({
+            code: "DOUBAO_SESSION_CLOSE_LISTENER_FAILED",
+            module: "doubao-collection-service",
+            category: "internal",
+            operationId: "doubao-session-close-listener",
+            metadata: {
+              operation: "close-error-listener",
+              phase: "notify",
+              outcome: "listener-isolated",
+              errorCode: callbackError && /^[A-Z][A-Z0-9_]{1,127}$/.test(callbackError.code || "")
+                ? callbackError.code
+                : "LISTENER_FAILED"
+            }
+          });
+        }
+      }
     }
   }
 
@@ -106,8 +154,25 @@ function createDoubaoCollectionDesktopService(options) {
       return await operation();
     } finally {
       let state;
-      try { state = queue.getState(); } catch (_) {}
-      if (!hasPendingWork(state)) await closeSessionSafely();
+      let stateReadFailed = false;
+      try { state = queue.getState(); } catch (error) {
+        stateReadFailed = true;
+        reportDiagnostic({
+          code: "DOUBAO_QUEUE_STATE_READ_FAILED",
+          module: "doubao-collection-service",
+          category: "storage",
+          operationId: "doubao-queue-state-read",
+          metadata: {
+            operation: "queue-state-read",
+            phase: "cleanup-gate",
+            outcome: "session-left-open",
+            errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+              ? error.code
+              : "DOUBAO_QUEUE_STATE_READ_FAILED"
+          }
+        });
+      }
+      if (!stateReadFailed && !hasPendingWork(state)) await closeSessionSafely();
     }
   }
 

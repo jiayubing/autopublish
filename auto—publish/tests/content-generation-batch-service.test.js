@@ -84,10 +84,22 @@ function makeHarness(options) {
   };
 
   const articleStore = settings.contentStore || { saveArticle: function(article) { savedArticles.push(article); return article; }, findByGenerationTaskId: function() { return null; } };
+  const clientKnowledge = settings.clientKnowledge || {
+    getClient: function(id) { if (!clients[id]) throw Object.assign(new Error("missing"), { code: "CLIENT_NOT_FOUND" }); return clients[id]; },
+    listClients: function() { return Object.values(clients); }
+  };
+  const materialStore = settings.materialStore || {
+    listMaterials: async function(id) { return materials[id] || []; },
+    getSelectedMaterials: async function(id, ids) { return (materials[id] || []).filter(function(item) { return ids.includes(item.id); }); }
+  };
+  const researchStore = settings.researchStore || {
+    listResearch: function(id) { return research[id] || []; },
+    getResearch: function(id, queryId) { return (research[id] || []).find(function(item) { return item.id === queryId; }); }
+  };
   const service = createContentGenerationBatchService({
-    clientKnowledge: { getClient: function(id) { if (!clients[id]) throw Object.assign(new Error("missing"), { code: "CLIENT_NOT_FOUND" }); return clients[id]; }, listClients: function() { return Object.values(clients); } },
-    materialStore: { listMaterials: async function(id) { return materials[id] || []; }, getSelectedMaterials: async function(id, ids) { return (materials[id] || []).filter(function(item) { return ids.includes(item.id); }); } },
-    researchStore: { listResearch: function(id) { return research[id] || []; }, getResearch: function(id, queryId) { return (research[id] || []).find(function(item) { return item.id === queryId; }); } },
+    clientKnowledge: clientKnowledge,
+    materialStore: materialStore,
+    researchStore: researchStore,
     templateStore: { getTemplate: function(platform, id) { return templates[platform + ":" + id]; }, listTemplates: function() { return Object.values(templates); } },
     contentStore: articleStore,
     articleGeneratorFactory: function() { return { generateArticle: async function(input) { calls.generate.push(input); return { id: "article-1", clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } }; },
@@ -226,6 +238,59 @@ describe("content generation batch service", function() {
     assert.equal(preview.executableTaskCount, 1);
     assert.deepStrictEqual(preview.excludedClients, [{ clientId: "c2", codes: ["CLIENT_MATERIAL_REQUIRED", "GEO_RESEARCH_REQUIRED"] }]);
     assert.deepStrictEqual(preview.tasks.map(function(task) { return [task.clientId, task.platform, task.templateId]; }), [["c1", "ctrip", "guide"]]);
+  });
+
+  it("does not turn source or client read failures into empty or missing inputs", async function() {
+    const materialFailure = Object.assign(new Error("materials unavailable"), { code: "MATERIAL_READ_FAILED" });
+    const materialHarness = makeHarness({ materialStore: { listMaterials: async function() { throw materialFailure; } } });
+    await assert.rejects(
+      materialHarness.service.preview({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] }),
+      { code: "MATERIAL_READ_FAILED" },
+    );
+
+    const researchFailure = Object.assign(new Error("research unavailable"), { code: "RESEARCH_READ_FAILED" });
+    const researchHarness = makeHarness({ researchStore: { listResearch: function() { throw researchFailure; } } });
+    await assert.rejects(
+      researchHarness.service.preview({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] }),
+      { code: "RESEARCH_READ_FAILED" },
+    );
+
+    const clientFailure = Object.assign(new Error("clients unavailable"), { code: "CLIENT_READ_FAILED" });
+    const clientHarness = makeHarness({ clientKnowledge: { getClient: function() { throw clientFailure; } } });
+    await assert.rejects(
+      clientHarness.service.preview({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] }),
+      { code: "CLIENT_READ_FAILED" },
+    );
+  });
+
+  it("returns an interrupted outcome when failure-state persistence cannot be confirmed", async function() {
+    let service;
+    const events = [];
+    const harness = makeHarness({
+      runnerFactory: function(options) {
+        return {
+          run: async function() {
+            options.batchStore.getBatch = function() {
+              throw Object.assign(new Error("batch state unavailable"), { code: "EIO" });
+            };
+            throw Object.assign(new Error("runner failed"), { code: "RUNNER_FAILED" });
+          },
+          getState: function() { return { status: "running", batchId: null }; },
+          subscribe: function() { return function() {}; },
+          dispose: async function() {},
+        };
+      },
+    });
+    service = harness.service;
+    service.subscribe(function(event) { events.push(event); });
+    const batch = await service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    assert.equal(batch.status, "running");
+    for (let attempt = 0; attempt < 20 && !events.some((event) => event.status === "interrupted"); attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    const interrupted = events.find((event) => event.status === "interrupted");
+    assert.ok(interrupted);
+    assert.equal(interrupted.error.code, "GENERATION_BATCH_STATE_UNAVAILABLE");
+    await service.dispose();
   });
 
   it("returns an accepted running snapshot before a delayed run completes and rejects a second active run", async function() {

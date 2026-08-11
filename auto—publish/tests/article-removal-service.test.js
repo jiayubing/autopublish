@@ -39,7 +39,7 @@ function fixture(options) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "article-removal-"));
   const store = createArticleRemovalTransactionStore({ workspaceRoot: root, createId: () => "tx" });
   const service = createArticleRemovalService({ contentStore: articleStore, submissionService, transactionStore: store, now, recoveryBackoffMs: 1, maxRecoveryAttempts: 2, runnerId: value.runnerId || "runner-a", afterQueueAction: value.afterQueueAction ? () => value.afterQueueAction(article) : undefined });
-  return { service, store, article, now, setNow: (next) => { time = next; }, setBlocked: (next) => { blocked = next; }, setQueue: (next) => { hasQueue = next; }, setMoveError: (next) => { value.moveError = next; }, setQueuePostcondition: (next) => { value.queuePostcondition = next; }, setTrashed: (next, tombstone) => { trashed = next; trashTombstone = tombstone || trashTombstone; }, calls: () => ({ queueCalls, queueBatches, moves, moveEffects }), root, submissionService, articleStore };
+  return { service, store, article, now, setNow: (next) => { time = next; }, setBlocked: (next) => { blocked = next; }, setQueue: (next) => { hasQueue = next; }, setReadError: (next) => { value.readError = next; }, setMoveError: (next) => { value.moveError = next; }, setQueuePostcondition: (next) => { value.queuePostcondition = next; }, setTrashed: (next, tombstone) => { trashed = next; trashTombstone = tombstone || trashTombstone; }, calls: () => ({ queueCalls, queueBatches, moves, moveEffects }), root, submissionService, articleStore };
 }
 
 function begin(f) {
@@ -163,7 +163,7 @@ it("fences a runner whose lease expires during an action before it can move an a
   const f = fixture({ runnerId: "runner-a" }); let reentered = false;
   const other = createArticleRemovalService({ contentStore: f.articleStore, submissionService: f.submissionService, transactionStore: f.store, now: f.now, runnerId: "runner-b", recoveryBackoffMs: 1 });
   f.submissionService.cancelArticleSubmissionItem = () => { if (!reentered) { reentered = true; f.setNow("2026-07-25T00:05:01.000Z"); other.recoverPendingRemovals(); } return {}; };
-  begin(f);
+  assert.throws(() => begin(f), { code: "ARTICLE_REMOVAL_CLAIM_LOST" });
   assert.equal(f.calls().moves, 0);
 });
 
@@ -185,15 +185,23 @@ it("explicit retry keeps needs_repair when content identity or queue fingerprint
   }
 });
 
-it("queue, read and move failures share bounded retry accounting", () => {
-  for (const scenario of [{ queueError: "IO_DOWN" }, { readError: "IO_DOWN", queue: false }, { moveError: "IO_DOWN", queue: false }]) {
-    const f = fixture(scenario); const first = begin(f); const pending = f.store.get(first.transactionId);
+it("queue and move failures share bounded retry accounting", () => {
+  for (const scenario of [{ queueError: "IO_DOWN" }, { moveError: "IO_DOWN", queue: false }]) {
+    const f = fixture(scenario);
+    const first = begin(f);
+    const pending = f.store.get(first.transactionId);
     assert.equal(pending.retryCount, 1); assert.equal(pending.status, "pending_auto_recovery");
     pending.nextAttemptAt = "2020-01-01T00:00:00.000Z"; f.store.save(pending);
     f.service.recoverPendingRemovals();
     const exhausted = f.store.get(first.transactionId);
     assert.equal(exhausted.status, "needs_repair"); assert.equal(exhausted.retryCount, 2);
   }
+});
+
+it("surfaces an article read failure during removal preview", () => {
+  const f = fixture({ queue: false });
+  f.setReadError("IO_DOWN");
+  assert.throws(() => f.service.previewArticleRemovalImpact({ selections: [{ clientId: "c-1", articleId: "a-1" }] }), { code: "IO_DOWN" });
 });
 
 it("persistence failures are recorded through the same retry path", () => {
@@ -261,9 +269,9 @@ it("does not duplicate an article move when another runner takes over during the
   let takeover = false;
   const move = f.articleStore.moveArticleToTrash;
   f.articleStore.moveArticleToTrash = () => { move(); f.setNow("2026-07-25T00:05:01.000Z"); if (!takeover) { takeover = true; other.recoverPendingRemovals(); } };
-  const result = begin(f);
+  assert.throws(() => begin(f), { code: "ARTICLE_REMOVAL_CLAIM_LOST" });
   assert.equal(takeover, true); assert.equal(f.calls().moves, 1);
-  assert.equal(f.store.get(result.transactionId).status, "needs_repair");
+  assert.equal(f.store.get("tx").status, "needs_repair");
 });
 
 it("reconciles an article active operation after its trash postcondition is proven", () => {
@@ -272,7 +280,8 @@ it("reconciles an article active operation after its trash postcondition is prov
   let takeover = false;
   const move = f.articleStore.moveArticleToTrash;
   f.articleStore.moveArticleToTrash = (clientId, articleId, tombstone, operationId) => { const result = move(clientId, articleId, tombstone, operationId); f.setNow("2026-07-25T00:05:01.000Z"); if (!takeover) { takeover = true; other.recoverPendingRemovals(); } return result; };
-  const started = begin(f);
+  assert.throws(() => begin(f), { code: "ARTICLE_REMOVAL_CLAIM_LOST" });
+  const started = { transactionId: "tx" };
   const result = other.retryArticleRemovalTransaction({ transactionId: started.transactionId, confirmed: true });
   assert.equal(result.status, "committed");
   assert.equal(f.calls().moves, 1);

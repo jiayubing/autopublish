@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const { createAiClient, validateAiConfig } = require("../../src/content/ai-client");
 const { createAiProviderConfigStore } = require("../ai-provider-config-store");
 const { createAiProviderTestStatusStore } = require("../ai-provider-test-status-store");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function providerError(code, message) {
   const error = new Error(message);
@@ -126,9 +127,34 @@ function createAiProviderService(options) {
     const current = applicationConfig();
     if (draftInput.apiKey === "" && current && current.apiKey) draftInput.apiKey = current.apiKey;
     const config = validate(Object.keys(draftInput).length ? draftInput : (current || {}));
-    function recordTest(result) {
+    function recordTest(result, primaryError) {
       lastTransientTest = result;
-      try { testStatusStore.write(result); } catch (_) {}
+      try {
+        testStatusStore.write(result);
+      } catch (error) {
+        reportDiagnostic({
+          code: "AI_TEST_STATUS_PERSIST_FAILED",
+          module: "ai-provider-service",
+          category: "storage",
+          operationId: "ai-provider-test-status",
+          metadata: {
+            operation: "test-status-write",
+            phase: "persist",
+            outcome: primaryError ? "secondary-failure" : "failed",
+            errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+              ? error.code
+              : "AI_TEST_STATUS_STORAGE_WRITE_FAILED"
+          }
+        });
+        if (!primaryError) {
+          lastTransientTest = {
+            testedAt: result.testedAt,
+            ok: false,
+            code: "AI_TEST_STATUS_PERSISTENCE_FAILED"
+          };
+          throw providerError("AI_TEST_STATUS_PERSISTENCE_FAILED", "AI provider test status could not be saved");
+        }
+      }
       return result;
     }
 
@@ -136,12 +162,14 @@ function createAiProviderService(options) {
     try {
       client = aiClientFactory({ apiKey: config.apiKey, baseUrl: config.baseUrl, model: config.model, timeoutMs: config.timeoutMs });
     } catch (_) {
-      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" });
-      return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
+      const failure = providerError("AI_CONNECTION_FAILED", "AI connection test failed");
+      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" }, failure);
+      return Promise.reject(failure);
     }
     if (!client || typeof client.complete !== "function") {
-      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" });
-      return Promise.reject(providerError("AI_CONNECTION_FAILED", "AI connection test failed"));
+      const failure = providerError("AI_CONNECTION_FAILED", "AI connection test failed");
+      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" }, failure);
+      return Promise.reject(failure);
     }
     return Promise.resolve().then(function() {
       return client.complete([
@@ -153,8 +181,9 @@ function createAiProviderService(options) {
       recordTest(result);
       return result;
     }, function() {
-      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" });
-      throw providerError("AI_CONNECTION_FAILED", "AI connection test failed");
+      const failure = providerError("AI_CONNECTION_FAILED", "AI connection test failed");
+      recordTest({ testedAt: now(), ok: false, code: "AI_CONNECTION_FAILED" }, failure);
+      throw failure;
     });
   }
 

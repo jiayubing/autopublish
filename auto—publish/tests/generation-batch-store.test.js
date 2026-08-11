@@ -140,7 +140,7 @@ describe("generation batch store", function() {
     fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 999, kind: "unknown" }) + "\n", "utf8");
 
     const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
-    assert.deepStrictEqual(restarted.listBatches(), []);
+    assert.throws(function() { restarted.listBatches(); }, { code: "GENERATION_BATCH_INVALID" });
     assert.equal(fs.existsSync(filename), false);
     assert.equal(fs.existsSync(filename + ".tmp"), true);
     assert.equal(fs.existsSync(filename + ".journal"), true);
@@ -157,7 +157,7 @@ describe("generation batch store", function() {
     fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
 
     const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
-    assert.deepStrictEqual(restarted.listBatches(), []);
+    assert.throws(function() { restarted.listBatches(); }, { code: "GENERATION_BATCH_INVALID" });
     assert.equal(fs.existsSync(filename), false);
     assert.equal(fs.existsSync(filename + ".tmp"), true);
   });
@@ -173,7 +173,7 @@ describe("generation batch store", function() {
     fs.writeFileSync(filename + ".journal", JSON.stringify({ version: 1 }) + "\n", "utf8");
 
     const restarted = createGenerationBatchStore({ workspaceRoot: workspaceRoot });
-    assert.deepStrictEqual(restarted.listBatches(), []);
+    assert.throws(function() { restarted.listBatches(); }, { code: "GENERATION_BATCH_INVALID" });
     assert.equal(fs.existsSync(filename), true);
     assert.equal(fs.existsSync(filename + ".bak"), true);
     assert.equal(fs.existsSync(filename + ".journal"), true);
@@ -286,7 +286,7 @@ describe("generation batch store", function() {
     assert.equal(restarted.getBatch(batch.id).tasks[0].status, "interrupted");
   });
 
-  it("only returns resumable tasks and reports corrupt batches without hiding valid batches", function() {
+  it("fails closed when a persisted batch is corrupt instead of hiding it", function() {
     const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-3"; } });
     const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
     store.markTaskSucceeded(batch.id, batch.tasks[0].id, "article-1");
@@ -294,7 +294,9 @@ describe("generation batch store", function() {
 
     const batchDirectory = createWorkspacePaths(workspaceRoot).generationBatches;
     fs.writeFileSync(path.join(batchDirectory, "batch-corrupt.json"), "{not-json", "utf8");
-    assert.deepStrictEqual(store.listBatches().map(function(item) { return item.id; }), [batch.id]);
+    assert.throws(function() { store.listBatches(); }, function(error) {
+      return error.code === "GENERATION_BATCH_INVALID";
+    });
     assert.throws(function() { store.getBatch("corrupt"); }, function(error) {
       return error.code === "GENERATION_BATCH_INVALID";
     });

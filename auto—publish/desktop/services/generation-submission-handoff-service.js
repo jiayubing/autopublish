@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { evaluateArticleSubmissionEligibility } = require("../../src/content/article-submission-eligibility");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function handoffError(code, message) {
   const error = new Error(message);
@@ -64,7 +65,23 @@ function createGenerationSubmissionHandoffService(options) {
       const result = (generationIndex || contentStore).findByGenerationTaskId(task.id);
       if (result.kind === "many") return { article: null, reasonCode: "HANDOFF_ARTICLE_IDENTITY_CONFLICT" };
       article = result.kind === "one" ? result.article : null;
-    } catch (_) { article = null; }
+    } catch (error) {
+      reportDiagnostic({
+        code: "HANDOFF_ARTICLE_LOOKUP_FAILED",
+        module: "generation-submission-handoff",
+        category: "storage",
+        operationId: "generation-handoff-article-read",
+        metadata: {
+          operation: "article-read",
+          phase: "resolve",
+          outcome: "failed",
+          errorCode: error && typeof error.code === "string" && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code)
+            ? error.code
+            : "ARTICLE_LOOKUP_FAILED"
+        }
+      });
+      throw handoffError("HANDOFF_ARTICLE_LOOKUP_FAILED", "Generated article could not be read for submission handoff");
+    }
     if (!article && task.articleId && generationIndex && typeof generationIndex.findByArticleId === "function") {
       const byArticle = generationIndex.findByArticleId(task.articleId);
       if (byArticle.kind === "many") return { article: null, reasonCode: "HANDOFF_ARTICLE_IDENTITY_CONFLICT" };

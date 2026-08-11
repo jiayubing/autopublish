@@ -2,9 +2,9 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成；M06-A 已完成，下一 gate 为 M06-B
+**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成；M06-A、M06-B 已完成，下一 gate 为 M06-C
 
-**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A 已完成并将 M06-B 置为 `READY`，但 M06 仍在运行。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
+**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A、M06-B 已完成并将 M06-C 置为 `READY`，但 M06 仍在运行。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
 
 ## Scope
 
@@ -26,8 +26,8 @@ M06-0 的唯一 inventory/scope 真源为：
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | M06-0 | 全量 residual catch / rejection inventory、classification、scope freeze；不改 production                                                                   | `COMPLETE` |
 | M06-A | OperationalStore / workspace / state persistence / cleanup                                                                                                 | `COMPLETE` |
-| M06-B | content / file persistence / lifecycle                                                                                                                     | `READY`    |
-| M06-C | remote / process / platform runtime                                                                                                                        | `PENDING`  |
+| M06-B | content / file persistence / lifecycle                                                                                                                     | `COMPLETE` |
+| M06-C | remote / process / platform runtime                                                                                                                        | `READY`    |
 | M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `PENDING`  |
 | M06-E | auth / security                                                                                                                                            | `PENDING`  |
 | M06-F | operator / release / migration scripts                                                                                                                     | `PENDING`  |
@@ -57,4 +57,10 @@ M06-G 完成前，M06 与 Maintenance 10.5 均不得标记 `COMPLETE`，Ticket 2
 
 M06-A 已完成其独立合同：OperationalStore owner/lease/recovery/transaction、workspace/config persistence、platform task state persistence、submission cleanup/staging 与 storage maintenance 的全部 A inventory handlers 均已逐项复核；无 A 包残留 `EMPTY` handler。定向测试、故障注入、Phase 08 architecture/package gate、AST before/after reconciliation、Primary Audit 与 bounded re-audit evidence 见 `handoffs/M06-A-operational-store-workspace-state-persistence-cleanup.md`。
 
-当前推进状态：`M06-A=COMPLETE`、`M06-B=READY`、`M06/Maintenance 10.5=PARTIAL`、`Ticket 25=PENDING/blocked`。M06-B 未在本包启动；M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。
+M06-A closure 时状态为 `M06-A=COMPLETE`、`M06-B=READY`；其后的 M06-B closure 与当前调度状态见下节。M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。
+
+## M06-B package closure
+
+M06-B 已完成 content / file persistence / lifecycle owner 的实现、定向故障注入验证、Primary Audit、blocking finding 检查、bounded re-audit 与 AST reconciliation。文章文件事务、锁与 removal recovery、生成 batch/AI test state、attention lookup、materials/questions/files 及 Doubao collection/generation persistence 均按失败语义收敛；读失败不再伪装为不存在，写入、rollback、lock、recovery 和关键 state cleanup 不再伪装成功。保留的 6 个 `EMPTY` handler 仅为已注释且可观察语义成立的 optional diagnostic artifact cleanup / historical optional parse probe。完整证据见 `handoffs/M06-B-content-file-persistence-lifecycle-cleanup.md`。
+
+当前推进状态：`M06-A=COMPLETE`、`M06-B=COMPLETE`、`M06-C=READY`、`M06/Maintenance 10.5=PARTIAL`、`Ticket 25=PENDING/blocked`。M06-C 尚未启动；M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。

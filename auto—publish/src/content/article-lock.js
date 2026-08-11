@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 function lockError(code, message, cause) {
   const error = new Error(message || code);
@@ -149,8 +150,46 @@ function createArticleLock(options) {
         fault("after-acquire-rename", { files: files, owner: owner });
         return { lock: lock, owner: owner };
       } catch (error) {
-        if (exists(candidate.owner)) removeRegularFile(candidate.owner);
-        if (exists(candidate.directory)) fsApi.rmdirSync(candidate.directory);
+        let cleanupError = null;
+        try {
+          if (exists(candidate.owner)) removeRegularFile(candidate.owner);
+        } catch (failure) {
+          cleanupError = cleanupError || failure;
+          reportDiagnostic({
+            code: "ARTICLE_LOCK_CANDIDATE_CLEANUP_FAILED",
+            module: "article-lock",
+            category: "storage",
+            operationId: "article-lock-acquire",
+            metadata: {
+              operation: "candidate-owner-cleanup",
+              phase: "cleanup",
+              outcome: "failed",
+              errorCode: failure && /^[A-Z][A-Z0-9_]{1,127}$/.test(failure.code || "")
+                ? failure.code
+                : "ARTICLE_LOCK_CLEANUP_FAILED"
+            }
+          });
+        }
+        try {
+          if (exists(candidate.directory)) fsApi.rmdirSync(candidate.directory);
+        } catch (failure) {
+          cleanupError = cleanupError || failure;
+          reportDiagnostic({
+            code: "ARTICLE_LOCK_CANDIDATE_CLEANUP_FAILED",
+            module: "article-lock",
+            category: "storage",
+            operationId: "article-lock-acquire",
+            metadata: {
+              operation: "candidate-directory-cleanup",
+              phase: "cleanup",
+              outcome: "failed",
+              errorCode: failure && /^[A-Z][A-Z0-9_]{1,127}$/.test(failure.code || "")
+                ? failure.code
+                : "ARTICLE_LOCK_CLEANUP_FAILED"
+            }
+          });
+        }
+        if (cleanupError) throw error;
         if (!exists(lock.directory)) throw error;
       }
       const existing = readLockOwner(lock);
@@ -183,10 +222,32 @@ function createArticleLock(options) {
   }
   function withLock(files, operation) {
     const held = acquire(files);
+    let operationError = null;
     try {
       return operation();
+    } catch (error) {
+      operationError = error;
+      throw error;
     } finally {
-      release(held);
+      try {
+        release(held);
+      } catch (releaseError) {
+        reportDiagnostic({
+          code: "ARTICLE_LOCK_RELEASE_FAILED",
+          module: "article-lock",
+          category: "storage",
+          operationId: "article-lock-release",
+          metadata: {
+            operation: "lock-release",
+            phase: "cleanup",
+            outcome: operationError ? "secondary-failure" : "failed",
+            errorCode: releaseError && /^[A-Z][A-Z0-9_]{1,127}$/.test(releaseError.code || "")
+              ? releaseError.code
+              : "ARTICLE_LOCK_RELEASE_FAILED"
+          }
+        });
+        if (!operationError) throw releaseError;
+      }
     }
   }
   return { acquire, release, withLock, readOwner: readLockOwner };

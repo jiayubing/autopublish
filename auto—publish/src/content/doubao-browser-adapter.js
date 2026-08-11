@@ -168,6 +168,8 @@ function safeTimestamp(value) {
 }
 
 function trimDiagnostics(directory, limit) {
+  // BEST_EFFORT_CLEANUP: pruning optional diagnostic artifacts never changes
+  // the collection outcome; failed removals remain available for inspection.
   if (!fs.existsSync(directory)) return;
   const groups = new Map();
   fs.readdirSync(directory).forEach(function(name) {
