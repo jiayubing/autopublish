@@ -904,9 +904,14 @@ if (require.main === module) {
     });
     process.stdout.write(JSON.stringify(report) + "\n");
   } catch (error) {
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^RENDERER_CONTRACT_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "RENDERER_CONTRACT_ABSENCE_FAILED";
     process.stderr.write(
-      (error.code || "RENDERER_CONTRACT_ABSENCE_FAILED") +
-        ":renderer contract absence verification failed\n",
+      code + ":renderer contract absence verification failed\n",
     );
     process.exitCode = 1;
   }

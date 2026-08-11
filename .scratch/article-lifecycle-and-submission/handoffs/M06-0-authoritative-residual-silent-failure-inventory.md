@@ -311,3 +311,110 @@ exact parent 的 12 个 `EMPTY` 与 1 个 `OTHER` 逐项闭合如下：
 | `desktop/services/authenticated-runtime.js` | `20: PROPAGATE_OR_RETHROW → PROPAGATE_PRIMARY` |
 
 总数核对：表内 `PROPAGATE_OR_RETHROW=32`、`SIDE_EFFECT_OR_MAPPING=20`、`ASSIGNMENT_MAPPING=7`、`RETURN_OR_FALLBACK=15`、`DIAGNOSTIC=3`，合计 77；与 AST summary 一致。E 的 18 项 priority set 全部落入以上 ledger，未只处理 priority rows。
+
+## 9. M06-F authoritative reconciliation
+
+本节为 M06-F 的最终 inventory 增量；F 严格从 integration parent `2c3e97d57c32316b214ce8cbfc1f2281a4f1a0dd` 开始，未执行真实发布、生产迁移、生产数据库、真实账号、付费、push、release 或其他外部写操作。`M06-F-operator-release-migration-scripts-cleanup.md` 是本包实现、测试、审计和 handoff evidence；本节保留 authoritative AST 对账与全量 F disposition。
+
+### AST before/after
+
+命令：
+
+```powershell
+node .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs --summary
+```
+
+扫描根、扩展名、排除规则与 shape 定义未改变，两个状态均为 parse diagnostics `[]`。
+
+| source state | scanned files | files with handlers | all handlers | F files | F handlers | F shapes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| exact parent `2c3e97d57c32316b214ce8cbfc1f2281a4f1a0dd` | 505 | 274 | 1,138 | 42 | 138 | `DIAGNOSTIC=42`, `ASSIGNMENT_MAPPING=4`, `RETURN_OR_FALLBACK=14`, `PROPAGATE_OR_RETHROW=44`, `SIDE_EFFECT_OR_MAPPING=6`, `EMPTY=26`, `OTHER=2` |
+| F implementation tree before docs/commit | 505 | 274 | 1,151 | 42 | 151 | `DIAGNOSTIC=42`, `ASSIGNMENT_MAPPING=18`, `RETURN_OR_FALLBACK=16`, `PROPAGATE_OR_RETHROW=54`, `SIDE_EFFECT_OR_MAPPING=21`, `EMPTY=0`, `OTHER=0` |
+
+当前全库 package reconciliation 为：A `44/197`、B `47/282`、C `67/254`、D `54/190`、E `20/77`、F `42/151`（格式均为 files/handlers）；全库为 `505/274/1,151`。F 净增 13 个 handler 仅来自 `migrate-content-metadata-v1.js` (+3)、`migrate-operational-store-v1.js` (+2)、`offline-smoke-checks.js` (+1)、`verify-alpha-package.js` (+3)、`verify-packaged-docx-runtime.js` (+2)、`verify-packaged-playwright-runtime.js` (+2)，均是主错误保留、稳定 outcome、受控 cleanup 或 fail-closed provenance/package evidence 分支；没有新增 writer、第二状态机、schema 或兼容旁路。
+
+### Baseline EMPTY / OTHER 清零证据
+
+exact parent 的 26 个 `EMPTY` 与 2 个 `OTHER` 逐项如下。每一行对应一个 parent AST handler；右列是当前实现的公开语义与最终 shape，未用增加日志替代失败处理。
+
+| parent handler | parent shape | F disposition / final result |
+| --- | --- | --- |
+| `scripts/migrate-content-library-v2.js:411` | `EMPTY` | temporary unlink 是 best-effort，但 cleanup failure 现在进入 `MIGRATION_TEMP_CLEANUP_FAILED` 且不覆盖主错误；非 EMPTY |
+| `scripts/migrate-content-library-v2.js:435` | `EMPTY` | 同上，atomic copy temporary cleanup 显式保留 cleanup outcome；非 EMPTY |
+| `scripts/migrate-content-library-v2.js:1022` | `EMPTY` | 同上，per-record temporary cleanup 显式保留 cleanup outcome；非 EMPTY |
+| `scripts/migrate-content-metadata-v1.js:98` | `EMPTY` | temporary unlink 进入 `CONTENT_METADATA_TEMP_CLEANUP_FAILED`，主错误优先；非 EMPTY |
+| `scripts/migrate-content-metadata-v1.js:598` | `EMPTY` | `NEEDS_REPAIR` persistence failure 不再吞掉，进入 `CONTENT_METADATA_REPAIR_STATE_UNAVAILABLE`；非 EMPTY |
+| `scripts/migrate-content-metadata-v1.js:1016` | `EMPTY` | installed-state probe 变为显式 repair/recovery evidence，不再把异常当作未安装；非 EMPTY |
+| `scripts/migrate-operational-store-v1.js:54` | `EMPTY` | lease cleanup 校验 identity/token，失败保留安全 cleanup code，不删除 replacement lease；非 EMPTY |
+| `scripts/migrate-operational-store-v1.js:558` | `EMPTY` | fd close 记录 cleanup status，保留 migration primary result；非 EMPTY |
+| `scripts/migrate-operational-store-v1.js:603` | `EMPTY` | store close 记录 cleanup status，失败不伪装迁移成功；非 EMPTY |
+| `scripts/migrate-operational-store-v1.js:620` | `EMPTY` | lock unlink failure 映射稳定 cleanup outcome；非 EMPTY |
+| `scripts/migrate-operational-store-v1.js:624` | `EMPTY` | guarded lease cleanup 失败可诊断且不覆盖主错误；非 EMPTY |
+| `scripts/migrate-operational-store-v1.js:630` | `EMPTY` | temporary suffix cleanup failure 显式保留；非 EMPTY |
+| `scripts/offline-smoke-checks.js:239` | `EMPTY` | Hepan payload cleanup failure 进入 `OFFLINE_HEPAN_PAYLOAD_CLEANUP_FAILED`；非 EMPTY |
+| `scripts/offline-smoke-runtime.js:92` | `EMPTY` | JSONL parse 失败返回 `parseFailed`/safe observation，调用方可见；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:16` | `EMPTY` | package version unreadable 时 `readBuildInfo` fail closed，不生成伪 provenance；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:19` | `EMPTY` | Git HEAD unreadable 时 fail closed，不回退到 fake commit；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:20` | `EMPTY` | dirty/source state unreadable 时 fail closed；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:72` | `EMPTY` | destination cleanup failure 记录稳定 runtime-tool cleanup code；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:76` | `EMPTY` | stream destroy failure 保留 primary download error；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:77` | `EMPTY` | destination unlink failure 不覆盖 primary download error；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:132` | `EMPTY` | download temporary cleanup failure 显式返回；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:161` | `EMPTY` | staging cleanup failure 显式返回且不伪装 install success；非 EMPTY |
+| `scripts/prepare-runtime-tools.js:163` | `EMPTY` | extraction cleanup failure 显式返回且不覆盖 archive/install error；非 EMPTY |
+| `scripts/verify-legacy-absence.js:131` | `OTHER` | archive entry unreadable 现在 fail closed 为 `LEGACY_ARCHIVE_ENTRY_UNAVAILABLE`，不再 `continue` 后 false PASS |
+| `scripts/verify-link-capability.js:42` | `EMPTY` | temporary root cleanup status 进入 result，`--strict` 在 cleanup 未通过时失败；非 EMPTY |
+| `scripts/verify-packaged-playwright-runtime.js:70` | `EMPTY` | static entry unreadable 进入 failed evidence，不再缺失/不可读即 PASS；非 EMPTY |
+| `scripts/verify-packaged-playwright-runtime.js:163` | `EMPTY` | isolated CLI close failure 保留安全 cleanup code，不覆盖主 verifier result；非 EMPTY |
+| `scripts/verify-phase-08-gates.js:551` | `OTHER` | package entry unreadable 形成 violation，不能通过 `continue` 隐藏；非 OTHER |
+
+### F full handler disposition ledger
+
+以下表格覆盖最终 AST 的全部 151 个 F handler，而非仅覆盖 33 个 priority handler。每个 `line: SHAPE` 是一个独立 authoritative AST 项；同一行的 disposition 对该项生效。`PROPAGATE_PRIMARY` 表示主错误继续传播或在 CLI 边界稳定映射；`EXPLICIT_OUTCOME` 表示稳定 code/result/partial/uncertain；`FAIL_CLOSED` 表示不可验证时拒绝通过；`BEST_EFFORT_CLEANUP` 表示 cleanup 失败可附加安全 metadata 但不得覆盖主错误；`CONTROLLED_DIAGNOSTIC` 表示 allowlisted/sanitized diagnostic；`OPTIONAL_PROBE_PARSE` 表示缺失、不可读或 malformed observation 对调用方显式可见。
+
+| F owner/file | final AST handler ledger (`line: SHAPE`) | disposition |
+| --- | --- | --- |
+| `auth-server/scripts/admin.js` | `16: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；CLI 只输出 `AUTH_*` code 或 generic safe text |
+| `auth-server/scripts/apctl.js` | `128: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；不输出原始异常 |
+| `auth-server/scripts/authctl.js` | `208: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；不输出 token/cookie/key/path |
+| `auth-server/scripts/backup-restore-evidence.js` | `92: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；backup/restore evidence 不可验证即拒绝 |
+| `auth-server/scripts/backup.js` | `27: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；operator result 使用稳定 `AUTH_*` code |
+| `auth-server/scripts/container-smoke.js` | `40: ASSIGNMENT_MAPPING`; `87: DIAGNOSTIC` | `EXPLICIT_OUTCOME + CONTROLLED_DIAGNOSTIC`；container smoke 失败不变成 healthy |
+| `auth-server/scripts/create-test-summary-evidence.js` | `86: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；summary evidence 缺失不输出 PASS |
+| `auth-server/scripts/integrity-check.js` | `108: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；完整性检查失败保持失败 |
+| `auth-server/scripts/migrate.js` | `45: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；migration CLI 不输出 raw error |
+| `auth-server/scripts/migration-roundtrip-evidence.js` | `101: ASSIGNMENT_MAPPING`; `162: DIAGNOSTIC` | `EXPLICIT_OUTCOME + FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；round-trip partial/uncertain 可见 |
+| `auth-server/scripts/recovery-drill.js` | `31: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；recovery drill 不伪装成功 |
+| `auth-server/scripts/restore-check.js` | `29: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；restore verification 不可读即拒绝 |
+| `scripts/artifact-manifest-collector.js` | `19: RETURN_OR_FALLBACK`; `34: PROPAGATE_OR_RETHROW` | `OPTIONAL_PROBE_PARSE + PROPAGATE_PRIMARY`；artifact entry observation 显式区分缺失/失败 |
+| `scripts/create-production-artifact-manifest.js` | `63: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；manifest 绑定实际 HEAD/sourceState/command |
+| `scripts/create-release-evidence-manifest.js` | `114: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；不可验证 evidence 不得 PASS |
+| `scripts/create-root-test-evidence.js` | `70: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；test result 只保留安全摘要 |
+| `scripts/create-test-discovery-evidence.js` | `97: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；discovery failure 使用稳定 code |
+| `scripts/create-test-inventory-evidence.js` | `48: PROPAGATE_OR_RETHROW`; `105: DIAGNOSTIC` | `PROPAGATE_PRIMARY + FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；inventory unreadable 不生成 evidence |
+| `scripts/create-test-suite-evidence.js` | `104: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；suite evidence 不输出 fake PASS |
+| `scripts/migrate-content-library-v2.js` | `182: RETURN_OR_FALLBACK`; `261: PROPAGATE_OR_RETHROW`; `428: ASSIGNMENT_MAPPING`; `461: ASSIGNMENT_MAPPING`; `472: PROPAGATE_OR_RETHROW`; `582: PROPAGATE_OR_RETHROW`; `752: SIDE_EFFECT_OR_MAPPING`; `1050: ASSIGNMENT_MAPPING`; `1126: PROPAGATE_OR_RETHROW`; `1329: DIAGNOSTIC` | `EXPLICIT_OUTCOME + PROPAGATE_PRIMARY + BEST_EFFORT_CLEANUP + FAIL_CLOSED`；目标冲突、rollback、manifest/completion provenance、cleanup 与 CLI code 均显式可见 |
+| `scripts/migrate-content-metadata-v1.js` | `25: PROPAGATE_OR_RETHROW`; `97: ASSIGNMENT_MAPPING`; `103: ASSIGNMENT_MAPPING`; `129: PROPAGATE_OR_RETHROW`; `143: PROPAGATE_OR_RETHROW`; `301: DIAGNOSTIC`; `385: DIAGNOSTIC`; `500: PROPAGATE_OR_RETHROW`; `698: PROPAGATE_OR_RETHROW`; `789: SIDE_EFFECT_OR_MAPPING`; `880: PROPAGATE_OR_RETHROW`; `912: SIDE_EFFECT_OR_MAPPING`; `943: SIDE_EFFECT_OR_MAPPING`; `996: SIDE_EFFECT_OR_MAPPING`; `1059: PROPAGATE_OR_RETHROW`; `1070: ASSIGNMENT_MAPPING`; `1244: PROPAGATE_OR_RETHROW`; `1269: PROPAGATE_OR_RETHROW`; `1336: PROPAGATE_OR_RETHROW`; `1426: DIAGNOSTIC` | `EXPLICIT_OUTCOME + PROPAGATE_PRIMARY + BEST_EFFORT_CLEANUP + FAIL_CLOSED`；`NEEDS_REPAIR`、rollback、partial staging、recovery conflict 与 cleanup 保真 |
+| `scripts/migrate-geo-data.js` | `36: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；legacy database 错误只输出 allowlisted code |
+| `scripts/migrate-operational-store-v1.js` | `41: RETURN_OR_FALLBACK`; `57: PROPAGATE_OR_RETHROW`; `68: PROPAGATE_OR_RETHROW`; `90: PROPAGATE_OR_RETHROW`; `113: RETURN_OR_FALLBACK`; `128: PROPAGATE_OR_RETHROW`; `149: RETURN_OR_FALLBACK`; `225: PROPAGATE_OR_RETHROW`; `238: PROPAGATE_OR_RETHROW`; `316: DIAGNOSTIC`; `379: DIAGNOSTIC`; `446: DIAGNOSTIC`; `551: DIAGNOSTIC`; `639: PROPAGATE_OR_RETHROW`; `670: ASSIGNMENT_MAPPING`; `682: SIDE_EFFECT_OR_MAPPING`; `705: PROPAGATE_OR_RETHROW`; `738: ASSIGNMENT_MAPPING`; `744: SIDE_EFFECT_OR_MAPPING`; `754: SIDE_EFFECT_OR_MAPPING`; `773: SIDE_EFFECT_OR_MAPPING`; `793: SIDE_EFFECT_OR_MAPPING`; `832: DIAGNOSTIC` | `FAIL_CLOSED + EXPLICIT_OUTCOME + PROPAGATE_PRIMARY + BEST_EFFORT_CLEANUP`；lock/lease liveness、manual review、rollback、post-rename uncertain 与 operator action 保真 |
+| `scripts/offline-self-test.js` | `60: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；offline result 不泄露绝对路径或原始异常 |
+| `scripts/offline-smoke-checks.js` | `238: ASSIGNMENT_MAPPING`; `243: SIDE_EFFECT_OR_MAPPING`; `288: PROPAGATE_OR_RETHROW` | `EXPLICIT_OUTCOME + BEST_EFFORT_CLEANUP + PROPAGATE_PRIMARY`；payload cleanup 不覆盖 smoke primary |
+| `scripts/offline-smoke-runtime.js` | `64: PROPAGATE_OR_RETHROW`; `94: ASSIGNMENT_MAPPING`; `118: RETURN_OR_FALLBACK`; `130: PROPAGATE_OR_RETHROW` | `OPTIONAL_PROBE_PARSE + EXPLICIT_OUTCOME + PROPAGATE_PRIMARY`；parseFailed/validator/runner outcome 可见 |
+| `scripts/prepare-runtime-tools.js` | `41: PROPAGATE_OR_RETHROW`; `69: PROPAGATE_OR_RETHROW`; `107: RETURN_OR_FALLBACK`; `125: PROPAGATE_OR_RETHROW`; `169: PROPAGATE_OR_RETHROW`; `182: PROPAGATE_OR_RETHROW`; `258: SIDE_EFFECT_OR_MAPPING`; `316: PROPAGATE_OR_RETHROW`; `357: PROPAGATE_OR_RETHROW`; `396: SIDE_EFFECT_OR_MAPPING`; `456: PROPAGATE_OR_RETHROW`; `482: SIDE_EFFECT_OR_MAPPING`; `516: DIAGNOSTIC` | `FAIL_CLOSED + EXPLICIT_OUTCOME + PROPAGATE_PRIMARY + BEST_EFFORT_CLEANUP`；archive checksum、regular-file boundary、actual build provenance、install uncertain 与 cleanup 保真 |
+| `scripts/release-evidence-inputs.js` | `89: PROPAGATE_OR_RETHROW`; `100: PROPAGATE_OR_RETHROW`; `206: PROPAGATE_OR_RETHROW`; `292: RETURN_OR_FALLBACK`; `344: SIDE_EFFECT_OR_MAPPING`; `365: RETURN_OR_FALLBACK` | `FAIL_CLOSED + EXPLICIT_OUTCOME`；缺少 execution provenance 的 PASSED report 降为 `PENDING_HUMAN`，artifact manifest 不可验证即拒绝 |
+| `scripts/run-tests.js` | `543: DIAGNOSTIC` | `CONTROLLED_DIAGNOSTIC`；stream failure 只输出稳定 code |
+| `scripts/test-inventory.js` | `3680: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；inventory evidence 失败不输出完整 PASS |
+| `scripts/test-runner-policy.js` | `59: PROPAGATE_OR_RETHROW` | `FAIL_CLOSED + PROPAGATE_PRIMARY`；缺少 test source 进入稳定 `TEST_RUNNER_SOURCE_UNAVAILABLE` |
+| `scripts/validate-release-checklist.js` | `200: PROPAGATE_OR_RETHROW`; `218: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；human gate 与 automated result 不混淆 |
+| `scripts/verify-alpha-package.js` | `125: RETURN_OR_FALLBACK`; `134: RETURN_OR_FALLBACK`; `291: ASSIGNMENT_MAPPING`; `381: ASSIGNMENT_MAPPING`; `409: DIAGNOSTIC` | `FAIL_CLOSED + BEST_EFFORT_CLEANUP + CONTROLLED_DIAGNOSTIC`；package boundary、private entry 与 cleanup failure 不伪装通过 |
+| `scripts/verify-legacy-absence.js` | `98: PROPAGATE_OR_RETHROW`; `131: PROPAGATE_OR_RETHROW`; `235: DIAGNOSTIC` | `FAIL_CLOSED + PROPAGATE_PRIMARY + CONTROLLED_DIAGNOSTIC`；source/archive unreadable 不继续扫描为 PASS |
+| `scripts/verify-link-capability.js` | `32: ASSIGNMENT_MAPPING`; `38: ASSIGNMENT_MAPPING`; `43: ASSIGNMENT_MAPPING` | `EXPLICIT_OUTCOME + BEST_EFFORT_CLEANUP`；cleanup status 绑定 strict result |
+| `scripts/verify-packaged-docx-runtime.js` | `148: SIDE_EFFECT_OR_MAPPING`; `166: SIDE_EFFECT_OR_MAPPING`; `174: SIDE_EFFECT_OR_MAPPING`; `193: DIAGNOSTIC` | `FAIL_CLOSED + BEST_EFFORT_CLEANUP + CONTROLLED_DIAGNOSTIC`；runtime/license/temp failure 保留主结果 |
+| `scripts/verify-packaged-playwright-runtime.js` | `53: RETURN_OR_FALLBACK`; `72: RETURN_OR_FALLBACK`; `99: RETURN_OR_FALLBACK`; `137: PROPAGATE_OR_RETHROW`; `188: PROPAGATE_OR_RETHROW`; `256: PROPAGATE_OR_RETHROW`; `315: ASSIGNMENT_MAPPING`; `322: SIDE_EFFECT_OR_MAPPING`; `334: SIDE_EFFECT_OR_MAPPING`; `371: DIAGNOSTIC` | `FAIL_CLOSED + OPTIONAL_PROBE_PARSE + BEST_EFFORT_CLEANUP + CONTROLLED_DIAGNOSTIC`；unreadable entry、CLI close、temp cleanup 均不产生 fake PASS |
+| `scripts/verify-phase-08-gates.js` | `401: PROPAGATE_OR_RETHROW`; `414: PROPAGATE_OR_RETHROW`; `551: SIDE_EFFECT_OR_MAPPING`; `599: PROPAGATE_OR_RETHROW`; `743: DIAGNOSTIC` | `FAIL_CLOSED + BEST_EFFORT_CLEANUP + CONTROLLED_DIAGNOSTIC`；package source/entry unreadable 为 violation |
+| `scripts/verify-production-package.js` | `52: PROPAGATE_OR_RETHROW`; `65: RETURN_OR_FALLBACK`; `154: PROPAGATE_OR_RETHROW`; `232: DIAGNOSTIC` | `FAIL_CLOSED + OPTIONAL_PROBE_PARSE + CONTROLLED_DIAGNOSTIC`；production package 不完整即拒绝 |
+| `scripts/verify-renderer-contract-absence.js` | `243: RETURN_OR_FALLBACK`; `262: PROPAGATE_OR_RETHROW`; `906: DIAGNOSTIC` | `FAIL_CLOSED + OPTIONAL_PROBE_PARSE + CONTROLLED_DIAGNOSTIC`；legacy contract absence 不可验证即失败 |
+| `scripts/verify-ticket-24-e-absence.js` | `156: PROPAGATE_OR_RETHROW`; `173: PROPAGATE_OR_RETHROW`; `520: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；retired capability evidence 不可读即拒绝 |
+| `scripts/workspace-manifest.js` | `58: PROPAGATE_OR_RETHROW`; `137: DIAGNOSTIC` | `FAIL_CLOSED + CONTROLLED_DIAGNOSTIC`；manifest unreadable 不输出完整结果 |
+
+表内 handler 数量核对为 `DIAGNOSTIC=42`、`ASSIGNMENT_MAPPING=18`、`RETURN_OR_FALLBACK=16`、`PROPAGATE_OR_RETHROW=54`、`SIDE_EFFECT_OR_MAPPING=21`，合计 151；`EMPTY=0`、`OTHER=0`。F 的 33 项 priority set 全部在上述全量 ledger 中，未将非 priority handler 当作自动安全白名单。

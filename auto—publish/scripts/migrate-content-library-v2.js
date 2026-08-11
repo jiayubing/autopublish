@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 const MIGRATION_VERSION = 2;
 const MANIFEST_NAME = "content-library-v2-migration-manifest.json";
@@ -159,6 +160,29 @@ function migrationError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+function cleanupFailure(code) {
+  return migrationError(code, "Migration cleanup could not be verified");
+}
+
+function attachCleanupFailure(primary, cleanup) {
+  if (!cleanup) return primary;
+  if (primary) {
+    primary.cleanupCode = cleanup.code;
+    return primary;
+  }
+  return cleanup;
+}
+
+function removeTemporary(filename) {
+  try {
+    fs.unlinkSync(filename);
+    return null;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    return cleanupFailure("MIGRATION_TEMP_CLEANUP_FAILED");
+  }
 }
 
 function absolute(value, name) {
@@ -394,22 +418,26 @@ function atomicWrite(filename, contents) {
       process.pid +
       "-" +
       crypto.randomBytes(6).toString("hex");
+    let primaryError = null;
     try {
       fs.writeFileSync(temp, contents, "utf8");
       // A locked destination may make Windows rename fail temporarily. Retry
       // the atomic replacement, but never fall back to copy/write: both
       // operations can truncate or overwrite the last valid migration proof.
       fs.renameSync(temp, filename);
-      return;
     } catch (error) {
-      lastError = error;
-      if (!retryable.has(error.code) || attempt === 19) throw error;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
-    } finally {
-      try {
-        fs.unlinkSync(temp);
-      } catch (_) {}
+      primaryError = error;
     }
+    const cleanup = removeTemporary(temp);
+    if (primaryError) {
+      lastError = attachCleanupFailure(primaryError, cleanup);
+      if (cleanup) throw lastError;
+      if (!retryable.has(primaryError.code) || attempt === 19) throw lastError;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+      continue;
+    }
+    if (cleanup) throw cleanup;
+    return;
   }
   throw lastError;
 }
@@ -425,15 +453,17 @@ function copyAtomic(source, target) {
     process.pid +
     "-" +
     crypto.randomBytes(6).toString("hex");
+  let primaryError = null;
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, temporary);
     fs.renameSync(temporary, target);
-  } finally {
-    try {
-      fs.unlinkSync(temporary);
-    } catch (_) {}
+  } catch (error) {
+    primaryError = error;
   }
+  const cleanup = removeTemporary(temporary);
+  if (primaryError) throw attachCleanupFailure(primaryError, cleanup);
+  if (cleanup) throw cleanup;
 }
 
 function readJson(filename, code) {
@@ -1001,6 +1031,7 @@ function createContentLibraryMigrator(options) {
             process.pid +
             "-" +
             crypto.randomBytes(6).toString("hex");
+          let copyError = null;
           try {
             copyFile(record.sourcePath, temporary);
             if (sha256(temporary) !== record.sha256)
@@ -1016,11 +1047,12 @@ function createContentLibraryMigrator(options) {
               );
             }
             fs.renameSync(temporary, record.targetPath);
-          } finally {
-            try {
-              fs.unlinkSync(temporary);
-            } catch (_) {}
+          } catch (error) {
+            copyError = error;
           }
+          const cleanup = removeTemporary(temporary);
+          if (copyError) throw attachCleanupFailure(copyError, cleanup);
+          if (cleanup) throw cleanup;
           copied += 1;
         }
         if (!manifest.completedFiles.includes(record.target))
@@ -1286,11 +1318,22 @@ function main(argv) {
 
 if (require.main === module) {
   try {
-    process.stdout.write(JSON.stringify(main(process.argv.slice(2))) + "\n");
+    const startedAt = Date.now();
+    const result = main(process.argv.slice(2));
+    const provenance = createExecutionProvenance({
+      root: path.resolve(__dirname, ".."),
+      command: "node scripts/migrate-content-library-v2.js",
+      startedAt,
+    });
+    process.stdout.write(JSON.stringify({ ...result, ...provenance }) + "\n");
   } catch (error) {
-    process.stderr.write(
-      (error.message || "Content library migration failed") + "\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^MIGRATION_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "MIGRATION_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

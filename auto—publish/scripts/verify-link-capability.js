@@ -25,6 +25,7 @@ function probeLinkCapability() {
   let fileSymlink = false;
   let directoryJunction = false;
   let errorCode = null;
+  let cleanupCode = null;
   try {
     fs.symlinkSync(targetFile, fileLink, "file");
     fileSymlink = true;
@@ -39,13 +40,17 @@ function probeLinkCapability() {
   }
   try {
     fs.rmSync(root, { recursive: true, force: true });
-  } catch (_) {}
+  } catch (_) {
+    cleanupCode = "LINK_CAPABILITY_CLEANUP_FAILED";
+  }
+  const safeErrorCode =
+    errorCode && LINK_PERMISSION_CODES.has(errorCode) ? errorCode : "UNKNOWN";
   cached = Object.freeze({
-    supported: fileSymlink || directoryJunction,
+    supported: !cleanupCode && (fileSymlink || directoryJunction),
     fileSymlink,
     directoryJunction,
-    errorCode:
-      errorCode && LINK_PERMISSION_CODES.has(errorCode) ? errorCode : errorCode,
+    errorCode: cleanupCode || (errorCode ? safeErrorCode : null),
+    cleanupStatus: cleanupCode ? "failed" : "passed",
   });
   return cached;
 }
@@ -55,7 +60,10 @@ if (require.main === module) {
   process.stdout.write(
     `link capability: file-symlink=${capability.fileSymlink ? "yes" : "no"}, directory-junction=${capability.directoryJunction ? "yes" : "no"}${capability.errorCode ? ` (${capability.errorCode})` : ""}\n`,
   );
-  if (process.argv.includes("--strict") && !capability.fileSymlink) {
+  if (
+    process.argv.includes("--strict") &&
+    (!capability.fileSymlink || capability.cleanupStatus !== "passed")
+  ) {
     process.stderr.write(
       "Link security tests require real file symlink capability; enable Windows Developer Mode or run with symlink permission.\n",
     );

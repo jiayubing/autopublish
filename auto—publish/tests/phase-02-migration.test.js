@@ -245,12 +245,20 @@ test("retired importer scan faults and gate refusal leave legacy sources untouch
             fault: (at, report) => {
               if (at === point)
                 throw Object.assign(new Error("injected"), {
-                  code: "INJECTED_" + point,
+                  code: "INJECTED_" + point.toUpperCase(),
                   migrationReport: report,
                 });
             },
           }).execute(),
-        { code: "INJECTED_" + point },
+        (error) => {
+          if (point === "before_start") {
+            assert.equal(error.code, "MIGRATION_EXECUTE_FAILED");
+            assert.equal(error.causeCode, "INJECTED_" + point.toUpperCase());
+          } else {
+            assert.equal(error.code, "INJECTED_" + point.toUpperCase());
+          }
+          return true;
+        },
       );
       assert.deepEqual(sourceHashes(root), before);
       const operations = path.join(root, ".autopublish", "operations");
@@ -289,9 +297,14 @@ test("migration payload write failure removes its own incomplete lease", () => {
       }
       return originalWriteFileSync.call(fs, filename, ...args);
     };
-    assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
-      code: "ENOSPC",
-    });
+    assert.throws(
+      () => createMigration({ workspaceRoot: root }).execute(),
+      (error) => {
+        assert.equal(error.code, "MIGRATION_LEASE_WRITE_FAILED");
+        assert.equal(error.causeCode, "ENOSPC");
+        return true;
+      },
+    );
     assert.equal(
       fs.existsSync(
         path.join(root, ".autopublish", "operations", "migration.lock"),
@@ -303,6 +316,49 @@ test("migration payload write failure removes its own incomplete lease", () => {
     );
   } finally {
     fs.writeFileSync = originalWriteFileSync;
+    cleanup(root);
+  }
+});
+
+test("malformed migration leases fail closed and remain for operator inspection", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "operational-migration-"));
+  const lock = path.join(root, ".autopublish", "operations", "migration.lock");
+  try {
+    fs.mkdirSync(path.dirname(lock), { recursive: true });
+    fs.writeFileSync(
+      lock,
+      JSON.stringify({ version: 1, pid: process.pid }),
+      "utf8",
+    );
+    assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
+      code: "MIGRATION_LEASE_INVALID",
+    });
+    assert.equal(fs.existsSync(lock), true);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test("unreadable legacy input directories fail closed instead of becoming absent", () => {
+  const root = fixture();
+  const inputRoot = path.join(
+    root,
+    ".autopublish",
+    "submission-records",
+    "publications",
+  );
+  const originalLstat = fs.lstatSync;
+  try {
+    fs.lstatSync = function patchedLstat(filename, ...args) {
+      if (filename === inputRoot)
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+      return originalLstat.call(fs, filename, ...args);
+    };
+    assert.throws(() => createMigration({ workspaceRoot: root }).dryRun(), {
+      code: "MIGRATION_INPUT_UNAVAILABLE",
+    });
+  } finally {
+    fs.lstatSync = originalLstat;
     cleanup(root);
   }
 });
@@ -326,9 +382,14 @@ test("migration payload write failure never removes a replacement lease", () => 
       }
       return originalWriteFileSync.call(fs, filename, ...args);
     };
-    assert.throws(() => createMigration({ workspaceRoot: root }).execute(), {
-      code: "ENOSPC",
-    });
+    assert.throws(
+      () => createMigration({ workspaceRoot: root }).execute(),
+      (error) => {
+        assert.equal(error.code, "MIGRATION_LEASE_WRITE_FAILED");
+        assert.equal(error.causeCode, "ENOSPC");
+        return true;
+      },
+    );
     assert.deepEqual(JSON.parse(fs.readFileSync(lock, "utf8")), {
       version: 1,
       pid: process.pid,
@@ -427,7 +488,11 @@ test("rename failure cannot overwrite an existing valid target, and post-rename 
             });
           },
         }).execute(),
-      { code: "INJECTED_RENAME" },
+      (error) => {
+        assert.equal(error.code, "MIGRATION_EXECUTE_FAILED");
+        assert.equal(error.causeCode, "INJECTED_RENAME");
+        return true;
+      },
     );
     assert.equal(
       fs.existsSync(
@@ -446,7 +511,13 @@ test("rename failure cannot overwrite an existing valid target, and post-rename 
               });
           },
         }).execute(),
-      { code: "INJECTED_AFTER_RENAME" },
+      (error) => {
+        assert.equal(error.code, "MIGRATION_INSTALL_UNCERTAIN");
+        assert.equal(error.causeCode, "INJECTED_AFTER_RENAME");
+        assert.equal(error.installationState, "INSTALLED");
+        assert.equal(error.operatorAction, "VERIFY_OPERATIONAL_DATABASE");
+        return true;
+      },
     );
     const target = path.join(
       second,

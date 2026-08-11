@@ -216,10 +216,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "RELEASE_CHECKLIST_INVALID") +
-        ":release checklist validation failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^RELEASE_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "RELEASE_CHECKLIST_INVALID";
+    process.stderr.write(code + ":release checklist validation failed\n");
     process.exitCode = 1;
   }
 }

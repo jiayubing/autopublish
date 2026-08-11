@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 const VERSION = 1;
 const SCHEMA = "content-metadata-v1";
@@ -89,13 +90,64 @@ function siblingEvidenceRoot(workspaceRoot, prefix, transactionId, suffix) {
 function atomicWrite(filename, value) {
   const temporary =
     filename + ".tmp-" + process.pid + "-" + crypto.randomUUID();
+  let primaryError = null;
   try {
     fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", "utf8");
     fs.renameSync(temporary, filename);
-  } finally {
-    try {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-    } catch (_) {}
+  } catch (error) {
+    primaryError = error;
+  }
+  let cleanupError = null;
+  try {
+    fs.unlinkSync(temporary);
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") cleanupError = error;
+  }
+  if (primaryError) {
+    if (cleanupError)
+      primaryError.cleanupCode = "CONTENT_METADATA_TEMP_CLEANUP_FAILED";
+    throw primaryError;
+  }
+  if (cleanupError)
+    throw fail(
+      "CONTENT_METADATA_TEMP_CLEANUP_FAILED",
+      "Migration temporary cleanup could not be verified",
+    );
+}
+
+function stableCauseCode(error) {
+  return error &&
+    typeof error.code === "string" &&
+    /^[A-Z0-9_]{1,80}$/.test(error.code)
+    ? error.code
+    : "UNKNOWN";
+}
+
+function writeRecoveryState(manifestPath, manifest, state, primaryCode) {
+  try {
+    writeManifest(manifestPath, manifest, state);
+  } catch (error) {
+    const unavailable = fail(
+      "CONTENT_METADATA_REPAIR_STATE_UNAVAILABLE",
+      "Migration repair state could not be persisted",
+    );
+    unavailable.primaryCode = primaryCode || stableCauseCode(error);
+    unavailable.causeCode = stableCauseCode(error);
+    throw unavailable;
+  }
+}
+
+function writeCleanupPendingState(manifestPath, manifest, primaryCode) {
+  try {
+    writeManifest(manifestPath, manifest, "CLEANUP_PENDING");
+  } catch (error) {
+    const unavailable = fail(
+      "CONTENT_METADATA_RECOVERY_STATE_UNAVAILABLE",
+      "Migration recovery state could not be persisted",
+    );
+    unavailable.primaryCode = primaryCode || stableCauseCode(error);
+    unavailable.causeCode = stableCauseCode(error);
+    throw unavailable;
   }
 }
 
@@ -446,7 +498,10 @@ function validateSnapshot(manifest, snapshotRoot) {
   try {
     inventory = collectFiles(snapshotRoot);
   } catch (error) {
-    throw fail("CONTENT_METADATA_BACKUP_HASH_MISMATCH", error.message);
+    throw fail(
+      "CONTENT_METADATA_BACKUP_HASH_MISMATCH",
+      "Backup snapshot could not be verified",
+    );
   }
   if (!inventoryEqual(inventory, manifest.files))
     throw fail(
@@ -586,16 +641,14 @@ function writeManifest(manifestPath, manifest, state) {
 }
 function recoveryConflict(manifestPath, manifest, message, cause, intent) {
   const error = fail("CONTENT_METADATA_RECOVERY_CONFLICT", message);
-  if (cause && cause.code) error.causeCode = cause.code;
+  if (cause) error.causeCode = stableCauseCode(cause);
   manifest.repairIntent =
     intent ||
     manifest.repairIntent ||
     (["ROLLBACK", "ROLLBACK_COMMITTING"].includes(manifest.state)
       ? "rollback"
       : "forward");
-  try {
-    writeManifest(manifestPath, manifest, "NEEDS_REPAIR");
-  } catch (_) {}
+  writeRecoveryState(manifestPath, manifest, "NEEDS_REPAIR", error.code);
   throw error;
 }
 function removeOldRoot(roots, manifest) {
@@ -1008,13 +1061,24 @@ function createMigration(options) {
         throw error;
       }
       if (error.code === "CONTENT_METADATA_OLDROOT_CONFLICT") {
-        writeManifest(manifestPath, manifest, "NEEDS_REPAIR");
+        writeRecoveryState(manifestPath, manifest, "NEEDS_REPAIR", error.code);
       } else {
         let installed = false;
+        let installedCheckError = null;
         try {
           installed = Boolean(matches(roots.workspaceRoot, manifest, true));
-        } catch (_) {}
-        if (installed) writeManifest(manifestPath, manifest, "CLEANUP_PENDING");
+        } catch (checkError) {
+          installedCheckError = checkError;
+        }
+        if (installedCheckError)
+          recoveryConflict(
+            manifestPath,
+            manifest,
+            "Migration recovery state is unavailable",
+            installedCheckError,
+          );
+        if (installed)
+          writeCleanupPendingState(manifestPath, manifest, error.code);
         else
           recoveryConflict(
             manifestPath,
@@ -1265,9 +1329,19 @@ function createMigration(options) {
           "Early migration evidence is not safe to abort",
         );
       }
-      if (pathPresent(migrationStaging))
-        fs.rmSync(migrationStaging, { recursive: true });
-      writeManifest(manifestPath, manifest, "ROLLED_BACK");
+      try {
+        if (pathPresent(migrationStaging))
+          fs.rmSync(migrationStaging, { recursive: true });
+        writeManifest(manifestPath, manifest, "ROLLED_BACK");
+      } catch (error) {
+        writeRecoveryState(
+          manifestPath,
+          manifest,
+          "NEEDS_REPAIR",
+          stableCauseCode(error),
+        );
+        throw error;
+      }
       return {
         version: VERSION,
         mode: "rollback",
@@ -1341,12 +1415,23 @@ function main(argv) {
 }
 if (require.main === module) {
   try {
-    process.stdout.write(JSON.stringify(main()) + "\n");
+    const startedAt = Date.now();
+    const result = main();
+    const provenance = createExecutionProvenance({
+      root: path.resolve(__dirname, ".."),
+      command: "node scripts/migrate-content-metadata-v1.js",
+      startedAt,
+    });
+    process.stdout.write(JSON.stringify({ ...result, ...provenance }) + "\n");
   } catch (error) {
     process.stderr.write(
       JSON.stringify({
-        code: error.code || "CONTENT_METADATA_MIGRATION_FAILED",
-        message: error.message,
+        code:
+          error &&
+          typeof error.code === "string" &&
+          /^CONTENT_METADATA_[A-Z0-9_]{1,72}$/.test(error.code)
+            ? error.code
+            : "CONTENT_METADATA_MIGRATION_FAILED",
       }) + "\n",
     );
     process.exitCode = 1;

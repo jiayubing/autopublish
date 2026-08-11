@@ -68,6 +68,21 @@ function safeRollbackPackage(value) {
     : null;
 }
 
+function hasExecutionProvenance(value) {
+  const sourceState = normalizeSourceState(value && value.sourceState);
+  return Boolean(
+    value &&
+    typeof value.commit === "string" &&
+    /^[a-f0-9]{40,64}$/i.test(value.commit) &&
+    sourceState &&
+    ["CLEAN", "DIRTY"].includes(sourceState.status) &&
+    typeof value.command === "string" &&
+    value.command.trim() !== "" &&
+    value.command.length <= 1024 &&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value.command),
+  );
+}
+
 function readJson(filename, code) {
   try {
     return JSON.parse(fs.readFileSync(filename, "utf8"));
@@ -133,6 +148,10 @@ function summarizeReport(filename, kind) {
     source: kind,
     inputSha256: inputHash(filename, "RELEASE_EVIDENCE_INPUT_INVALID"),
   };
+  if (summary.status === "PASSED" && !hasExecutionProvenance(value)) {
+    summary.status = "PENDING_HUMAN";
+    summary.code = "RELEASE_EVIDENCE_PROVENANCE_MISSING";
+  }
   if (typeof value.code === "string" && /^[A-Z0-9_]{1,80}$/.test(value.code))
     summary.code = value.code;
   [
@@ -243,6 +262,11 @@ function summarizeArtifactManifest(filename) {
     throw evidenceError(
       "RELEASE_ARTIFACT_MANIFEST_INVALID",
       "Artifact package version is invalid",
+    );
+  if (!hasExecutionProvenance(value))
+    throw evidenceError(
+      "RELEASE_ARTIFACT_MANIFEST_PROVENANCE_INVALID",
+      "Artifact manifest provenance is unavailable",
     );
   return {
     status: "PASSED",
@@ -432,6 +456,7 @@ module.exports = {
   safeIdentifier,
   safeRelative,
   safeRollbackPackage,
+  hasExecutionProvenance,
   readJson,
   inputHash,
   summarizeRollbackReport,

@@ -68,7 +68,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write((error.message || "ROOT_TEST_EVIDENCE_FAILED") + "\n");
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^[A-Z0-9_]{1,80}$/.test(error.code)
+        ? error.code
+        : "ROOT_TEST_EVIDENCE_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

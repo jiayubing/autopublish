@@ -85,10 +85,13 @@ if (require.main === module) {
   runContainerSmoke()
     .then((report) => process.stdout.write(JSON.stringify(report) + "\n"))
     .catch((error) => {
-      process.stderr.write(
-        (error.code || "AUTH_CONTAINER_SMOKE_FAILED") +
-          ":auth container smoke failed\n",
-      );
+      const code =
+        error &&
+        typeof error.code === "string" &&
+        /^AUTH_[A-Z0-9_]{1,72}$/.test(error.code)
+          ? error.code
+          : "AUTH_CONTAINER_SMOKE_FAILED";
+      process.stderr.write(code + ":auth container smoke failed\n");
       process.exitCode = 1;
     });
 }

@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const asar = require("@electron/asar");
+const { execFileSync } = require("node:child_process");
 
 const {
   createPackagedRuntimeResolver,
@@ -99,12 +100,27 @@ async function makeManifestFixture() {
       );
     }
   });
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["config", "user.name", "fixture"], {
+    cwd: root,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["config", "user.email", "fixture@example.test"], {
+    cwd: root,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["add", "."], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "fixture"], {
+    cwd: root,
+    stdio: "ignore",
+  });
   const manifestPath = path.join(
     root,
     "build",
     "production-artifact-manifest.json",
   );
   createProductionArtifactManifest({ root, output: manifestPath });
+  fs.rmSync(path.join(root, ".git"), { recursive: true, force: true });
   const resources = path.join(root, "resources-out");
   const unpacked = path.join(resources, "app.asar.unpacked");
   fs.mkdirSync(unpacked, { recursive: true });

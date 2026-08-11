@@ -102,10 +102,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "TEST_SUITE_EVIDENCE_FAILED") +
-        ":test suite evidence failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^TEST_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "TEST_SUITE_EVIDENCE_FAILED";
+    process.stderr.write(code + ":test suite evidence failed\n");
     process.exitCode = 1;
   }
 }

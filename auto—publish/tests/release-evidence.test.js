@@ -32,6 +32,7 @@ const {
 const {
   createExecutionProvenance,
   currentSourceState,
+  summarizeReport,
 } = require("../scripts/release-evidence-inputs");
 const applicationVersion = require("../package.json").version;
 
@@ -63,6 +64,9 @@ function artifactManifestValue(packageVersion = "1.0.1") {
     manifestVersion: 1,
     packageVersion,
     workspaceSchemaVersion: 1,
+    commit: currentHead(),
+    sourceState: currentSourceState(repositoryRoot),
+    command: "fixture artifact manifest",
     artifacts: REQUIRED_ARTIFACTS.map((artifact, index) => ({
       name: artifact.name,
       location: artifact.location,
@@ -84,11 +88,16 @@ function artifactManifestValue(packageVersion = "1.0.1") {
 
 function writeEvidenceReports(root) {
   const files = {};
+  const provenance = {
+    commit: currentHead(),
+    sourceState: currentSourceState(repositoryRoot),
+    command: "fixture release evidence",
+  };
   EVIDENCE_FIELDS.filter((name) => name !== "artifact").forEach((name) => {
     const filename = path.join(root, name + ".json");
     fs.writeFileSync(
       filename,
-      JSON.stringify({ status: "PASSED", count: 1 }),
+      JSON.stringify({ status: "PASSED", count: 1, ...provenance }),
       "utf8",
     );
     files[name] = filename;
@@ -137,7 +146,15 @@ test("release evidence records safe artifact hashes and fixed check names", () =
       legacyReport: reports.legacyAbsence,
     });
     const value = JSON.parse(fs.readFileSync(output, "utf8"));
-    assert.equal(value.releaseState, "READY_FOR_HUMAN_RELEASE");
+    const actualSourceState = currentSourceState(repositoryRoot);
+    const expectedReleaseState =
+      actualSourceState.status === "CLEAN"
+        ? "READY_FOR_HUMAN_RELEASE"
+        : "BLOCKED_RELEASE";
+    assert.equal(value.releaseState, expectedReleaseState);
+    assert.equal(value.commit, currentHead());
+    assert.equal(value.sourceState.status, actualSourceState.status);
+    assert.equal(value.sourceState.diffSha256, actualSourceState.diffSha256);
     assert.deepEqual(Object.keys(value.requiredChecks), [...REQUIRED_CHECKS]);
     assert.equal(
       value.artifact.artifacts.find((item) => item.name === "playwright-node")
@@ -152,8 +169,10 @@ test("release evidence records safe artifact hashes and fixed check names", () =
       /C:\\release|rollback\\.zip.*C:/i,
     );
     assert.deepEqual(
-      validateReleaseChecklistFile(output).status,
-      "READY_FOR_HUMAN_RELEASE",
+      validateReleaseChecklistFile(output, {
+        allowBlocked: expectedReleaseState === "BLOCKED_RELEASE",
+      }).status,
+      expectedReleaseState,
     );
     const incompleteRollback = Object.assign({}, value, {
       rollback: { status: "PASSED" },
@@ -287,6 +306,19 @@ test("execution provenance fails closed when Git source state is unavailable", (
         return true;
       },
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("release evidence does not promote a passed report without execution provenance", () => {
+  const fixture = tempRoot();
+  try {
+    const report = path.join(fixture.root, "report.json");
+    fs.writeFileSync(report, JSON.stringify({ status: "PASSED" }), "utf8");
+    const summary = summarizeReport(report, "fixture-report");
+    assert.equal(summary.status, "PENDING_HUMAN");
+    assert.equal(summary.code, "RELEASE_EVIDENCE_PROVENANCE_MISSING");
   } finally {
     fixture.cleanup();
   }

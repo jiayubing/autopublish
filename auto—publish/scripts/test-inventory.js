@@ -800,17 +800,8 @@ function findFunctionRecords(source) {
         continue;
       const closeIndex = findMatchingParenthesis(tokens, openIndex);
       const bodyOpenIndex = closeIndex + 1;
-      if (
-        closeIndex === -1 ||
-        tokens[bodyOpenIndex]?.value !== "{"
-      )
-        continue;
-      const bodyCloseIndex = findMatchingToken(
-        tokens,
-        bodyOpenIndex,
-        "{",
-        "}",
-      );
+      if (closeIndex === -1 || tokens[bodyOpenIndex]?.value !== "{") continue;
+      const bodyCloseIndex = findMatchingToken(tokens, bodyOpenIndex, "{", "}");
       if (bodyCloseIndex === -1) continue;
       records.push({
         name,
@@ -850,17 +841,15 @@ function findFunctionRecords(source) {
     }
     const bodyStart = arrowIndex + 1;
     if (tokens[bodyStart]?.value === "{") {
-      const bodyCloseIndex = findMatchingToken(
-        tokens,
-        bodyStart,
-        "{",
-        "}",
-      );
+      const bodyCloseIndex = findMatchingToken(tokens, bodyStart, "{", "}");
       if (bodyCloseIndex !== -1)
         records.push({
           name,
           params,
-          body: source.slice(tokens[bodyStart].start, tokens[bodyCloseIndex].end),
+          body: source.slice(
+            tokens[bodyStart].start,
+            tokens[bodyCloseIndex].end,
+          ),
           expressionBody: false,
         });
     } else {
@@ -872,7 +861,8 @@ function findFunctionRecords(source) {
         params,
         body: source.slice(
           tokens[bodyStart]?.start || tokens[index + 2].end,
-          tokens[Math.max(bodyStart, bodyEnd - 1)]?.end || tokens[index + 2].end,
+          tokens[Math.max(bodyStart, bodyEnd - 1)]?.end ||
+            tokens[index + 2].end,
         ),
         expressionBody: true,
       });
@@ -1075,7 +1065,9 @@ function expressionIdentifierTaints(expression, taints) {
         tokens[index - 1]?.value !== "?." &&
         tokens[index + 1]?.value !== ":",
     )
-    .map((token) => taints.get(token.value) || SOURCE_TAINT.ORDINARY_RUNTIME_VALUE);
+    .map(
+      (token) => taints.get(token.value) || SOURCE_TAINT.ORDINARY_RUNTIME_VALUE,
+    );
 }
 
 function isPathCallExpression(tokens) {
@@ -1171,9 +1163,7 @@ function sourceReaderCallHasShapeTransform(text, taints, functions) {
       tokens[closeIndex + 1]?.value !== "."
     )
       continue;
-    if (
-      SOURCE_TEXT_DERIVATION_METHODS.has(tokens[closeIndex + 2]?.value)
-    )
+    if (SOURCE_TEXT_DERIVATION_METHODS.has(tokens[closeIndex + 2]?.value))
       return true;
   }
   return false;
@@ -1288,7 +1278,8 @@ function functionSummariesEqual(left, right) {
   return (
     left.unconditional === right.unconditional &&
     left.returnsSource === right.returnsSource &&
-    left.sourcePathParameters.join(",") === right.sourcePathParameters.join(",") &&
+    left.sourcePathParameters.join(",") ===
+      right.sourcePathParameters.join(",") &&
     left.sourceReturnPathParameters.join(",") ===
       right.sourceReturnPathParameters.join(",")
   );
@@ -1389,7 +1380,10 @@ function runTaintFlow(
       const summary = functions.get(tokens[index].value);
       const receiverToken = tokens[index - 4];
       if (!receiverToken) continue;
-      const receiver = source.slice(receiverToken.start, tokens[index - 3].start);
+      const receiver = source.slice(
+        receiverToken.start,
+        tokens[index - 3].start,
+      );
       if (
         summary?.sourcePathParameters.includes(0) &&
         isRepositoryPathTaint(
@@ -1397,7 +1391,9 @@ function runTaintFlow(
         ) &&
         summary.params[0]
       ) {
-        if (taints.get(summary.params[0]) !== SOURCE_TAINT.REPOSITORY_CONFIG_PATH) {
+        if (
+          taints.get(summary.params[0]) !== SOURCE_TAINT.REPOSITORY_CONFIG_PATH
+        ) {
           taints.set(summary.params[0], SOURCE_TAINT.REPOSITORY_CONFIG_PATH);
           changed = true;
         }
@@ -1412,7 +1408,11 @@ function runTaintFlow(
           if (!parameter) continue;
           if (
             isRepositoryPathTaint(
-              evaluateExpressionTaint(args[parameterIndex] || "", taints, functions),
+              evaluateExpressionTaint(
+                args[parameterIndex] || "",
+                taints,
+                functions,
+              ),
             ) &&
             taints.get(parameter) !== SOURCE_TAINT.REPOSITORY_CONFIG_PATH
           ) {
@@ -1427,13 +1427,15 @@ function runTaintFlow(
       source,
       new Set(DIRECT_SOURCE_READER_NAMES),
     )) {
-      if (callReturnsSourceText(call, taints, functions)) directSourceRead = true;
+      if (callReturnsSourceText(call, taints, functions))
+        directSourceRead = true;
     }
     for (const [name, summary] of functions) {
       if (!summary.unconditional && !summary.sourcePathParameters.length)
         continue;
       for (const call of findCallSources(source, new Set([name]))) {
-        if (callReadsSourceText(call, taints, functions)) helperSourceRead = true;
+        if (callReadsSourceText(call, taints, functions))
+          helperSourceRead = true;
       }
     }
     if (!changed) break;
@@ -1551,12 +1553,15 @@ function sourceTaintAnalysis(fileSource, baseAnalysis = null) {
     for (const [property, expression] of properties) {
       sourceProperties.set(
         declaration.name + "." + property,
-        isSourceTaint(evaluateExpressionTaint(expression, flow.taints, functions)),
+        isSourceTaint(
+          evaluateExpressionTaint(expression, flow.taints, functions),
+        ),
       );
     }
   }
   const potentialSourceReader = [...functions.values()].some(
-    (summary) => summary.unconditional || summary.sourcePathParameters.length > 0,
+    (summary) =>
+      summary.unconditional || summary.sourcePathParameters.length > 0,
   );
   const analysis = {
     ...flow,
@@ -1594,8 +1599,9 @@ function sourceReaderMetadata(fileSource) {
   const helperNames = new Set(taint.functions.keys());
   const productionHelperNames = new Set(
     [...taint.functions]
-      .filter(([, helper]) =>
-        helper.unconditional || helper.sourcePathParameters.length > 0,
+      .filter(
+        ([, helper]) =>
+          helper.unconditional || helper.sourcePathParameters.length > 0,
       )
       .map(([name]) => name),
   );
@@ -1919,10 +1925,7 @@ function sourceReaderValueAt(source, tokens, metadata, aliases, index) {
 
 function sourceAssertionDetails(testSource, fileSource, staticCategories = []) {
   const fileMetadata = sourceReaderMetadata(fileSource || "");
-  const localTaint = sourceTaintAnalysis(
-    testSource,
-    fileMetadata.taint,
-  );
+  const localTaint = sourceTaintAnalysis(testSource, fileMetadata.taint);
   const metadata = { ...fileMetadata, taint: localTaint };
   const aliases = new Set(localTaint.sourceVariables);
   const tokens = tokenize(testSource);
@@ -3675,8 +3678,13 @@ if (require.main === module) {
   try {
     main(process.argv.slice(2));
   } catch (error) {
-    process.stderr.write((error && error.stack) || String(error));
-    process.stderr.write("\n");
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^TEST_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "TEST_INVENTORY_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

@@ -87,9 +87,14 @@ function lastJson(value) {
     .map((line) => line.trim())
     .filter(Boolean);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
+    let parsed;
+    let parseFailed = false;
     try {
-      return JSON.parse(lines[index]);
-    } catch (_) {}
+      parsed = JSON.parse(lines[index]);
+    } catch (_) {
+      parseFailed = true;
+    }
+    if (!parseFailed) return parsed;
   }
   return null;
 }

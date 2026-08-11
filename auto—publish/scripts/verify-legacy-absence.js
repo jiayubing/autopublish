@@ -128,8 +128,11 @@ function scanArchive(resourcesPath) {
     let source;
     try {
       source = asar.extractFile(archive, entry).toString("utf8");
-    } catch (_) {
-      continue;
+    } catch (error) {
+      throw absenceError(
+        "LEGACY_ARCHIVE_ENTRY_UNAVAILABLE",
+        "packaged archive entry is unavailable",
+      );
     }
     for (const [rule, pattern] of LEGACY_SOURCE_PATTERNS) {
       if (pattern.test(source)) tokenMatches.push(`${entry}#${rule}`);
@@ -175,6 +178,19 @@ function parseArguments(argv) {
 
 function verifyLegacyAbsence(options) {
   const opts = options || {};
+  for (const requiredRoot of [
+    "desktop",
+    "src",
+    path.join("media-workbench", "src"),
+    "scripts",
+  ]) {
+    const filename = path.join(ROOT, requiredRoot);
+    if (!fs.existsSync(filename))
+      throw absenceError(
+        "LEGACY_SOURCE_UNAVAILABLE",
+        "legacy source inventory is unavailable",
+      );
+  }
   const sourceMatches = scanSourceTree(ROOT);
   const archive = opts.resourcesPath
     ? scanArchive(opts.resourcesPath)
@@ -217,10 +233,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "LEGACY_ABSENCE_FAILED") +
-        ":legacy absence verification failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^LEGACY_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "LEGACY_ABSENCE_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

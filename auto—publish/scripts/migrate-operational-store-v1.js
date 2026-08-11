@@ -11,6 +11,7 @@ const {
   isRecoveryGuardBusy,
   withRecoveryGuard,
 } = require("../src/infrastructure/operational-store/internal/operational-store-recovery-guard");
+const { createExecutionProvenance } = require("./release-evidence-inputs");
 const VERSION = 1;
 
 function fail(code, report) {
@@ -19,23 +20,77 @@ function fail(code, report) {
   if (report) error.migrationReport = report;
   return error;
 }
+
+function stableCleanupFailure(code) {
+  return fail(code);
+}
+
+function attachCleanupFailure(primary, cleanup) {
+  if (!cleanup) return primary;
+  if (primary) {
+    primary.cleanupCode = cleanup.code;
+    return primary;
+  }
+  return cleanup;
+}
+
+function cleanupFile(filename, code) {
+  try {
+    fs.unlinkSync(filename);
+    return null;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    return stableCleanupFailure(code);
+  }
+}
+
+function safeCauseCode(error) {
+  return error && /^[A-Z0-9_]{1,80}$/.test(error.code || "")
+    ? error.code
+    : "UNKNOWN";
+}
+
+function pathPresent(filename) {
+  try {
+    fs.lstatSync(filename);
+    return true;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return false;
+    throw fail("MIGRATION_INPUT_UNAVAILABLE");
+  }
+}
+
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return error && error.code === "EPERM";
+    if (error && error.code === "ESRCH") return false;
+    if (error && error.code === "EPERM") return true;
+    throw fail("MIGRATION_PROCESS_LIVENESS_UNKNOWN");
   }
 }
 function readLease(filename) {
   try {
     const stat = fs.lstatSync(filename);
-    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw fail("MIGRATION_LEASE_INVALID");
     const value = JSON.parse(fs.readFileSync(filename, "utf8"));
-    return value && Number.isInteger(value.pid) ? value : null;
-  } catch (_) {
-    return null;
+    if (
+      !value ||
+      value.version !== VERSION ||
+      !Number.isInteger(value.pid) ||
+      value.pid <= 0 ||
+      typeof value.token !== "string" ||
+      value.token.length === 0
+    )
+      throw fail("MIGRATION_LEASE_INVALID");
+    return value;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    if (error && /^MIGRATION_/.test(error.code || "")) throw error;
+    throw fail("MIGRATION_LEASE_UNAVAILABLE");
   }
 }
 function sameFile(left, right) {
@@ -47,11 +102,18 @@ function removeIncompleteLease(filename, token, identity) {
   try {
     const stat = fs.lstatSync(filename);
     if (!stat.isFile() || stat.isSymbolicLink() || !sameFile(stat, identity))
-      return;
-    const lease = readLease(filename);
-    if (lease && lease.token !== token) return;
+      return null;
+    const contents = fs.readFileSync(filename, "utf8");
+    if (contents.trim() !== "") {
+      const lease = readLease(filename);
+      if (lease && lease.token !== token) return null;
+    }
     fs.unlinkSync(filename);
-  } catch (_) {}
+    return null;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    return stableCleanupFailure("MIGRATION_LEASE_CLEANUP_FAILED");
+  }
 }
 function digest(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -63,8 +125,9 @@ function regular(filename) {
   try {
     const s = fs.lstatSync(filename);
     return s.isFile() && !s.isSymbolicLink();
-  } catch (_) {
-    return false;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return false;
+    throw fail("MIGRATION_INPUT_UNAVAILABLE");
   }
 }
 function readJson(filename) {
@@ -147,15 +210,37 @@ function diagnostic(report, source, kind, code, manual) {
   else report.counts.conflicts += 1;
   if (manual) report.counts.manualItems += 1;
 }
+
+function inputDiagnosticCode(error, fallback) {
+  const code = error && error.code;
+  return code === "MIGRATION_INPUT_UNAVAILABLE" || /^E[A-Z]+$/.test(code || "")
+    ? "LEGACY_INPUT_UNAVAILABLE"
+    : fallback;
+}
+
 function walk(root) {
-  if (!fs.existsSync(root)) return [];
+  let rootStat;
+  try {
+    rootStat = fs.lstatSync(root);
+  } catch (error) {
+    if (error && error.code === "ENOENT") return [];
+    throw fail("MIGRATION_INPUT_UNAVAILABLE");
+  }
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory())
+    throw fail("MIGRATION_INPUT_UNAVAILABLE");
   const out = [];
   (function visit(dir) {
-    for (const entry of fs
-      .readdirSync(dir, { withFileTypes: true })
-      .sort((a, b) => a.name.localeCompare(b.name))) {
+    let entries;
+    try {
+      entries = fs
+        .readdirSync(dir, { withFileTypes: true })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (error) {
+      throw fail("MIGRATION_INPUT_UNAVAILABLE");
+    }
+    for (const entry of entries) {
       const filename = path.join(dir, entry.name);
-      if (entry.isSymbolicLink()) continue;
+      if (entry.isSymbolicLink()) throw fail("MIGRATION_INPUT_UNAVAILABLE");
       if (entry.isDirectory()) visit(filename);
       else if (entry.isFile()) out.push(filename);
     }
@@ -228,12 +313,12 @@ function scanPublications(root, plan, report, fault) {
       );
       if (candidate && target.kind === "legacy-unknown-account")
         report.counts.unknownAccounts += 1;
-    } catch (_) {
+    } catch (error) {
       diagnostic(
         report,
         source,
         "publication",
-        "LEGACY_PUBLICATION_INVALID",
+        inputDiagnosticCode(error, "LEGACY_PUBLICATION_INVALID"),
         true,
       );
     }
@@ -291,8 +376,14 @@ function scanBatches(root, plan, report, fault) {
         source,
         items,
       });
-    } catch (_) {
-      diagnostic(report, source, "batch", "BATCH_JSON_INVALID", true);
+    } catch (error) {
+      diagnostic(
+        report,
+        source,
+        "batch",
+        inputDiagnosticCode(error, "BATCH_JSON_INVALID"),
+        true,
+      );
     }
     fault("scan_batch", report);
   }
@@ -352,8 +443,14 @@ function scanSidecars(root, plan, report, fault) {
       );
       if (candidate && target.kind === "legacy-unknown-account")
         report.counts.unknownAccounts += 1;
-    } catch (_) {
-      diagnostic(report, source, "sidecar", "QUEUE_SIDECAR_MISMATCH", true);
+    } catch (error) {
+      diagnostic(
+        report,
+        source,
+        "sidecar",
+        inputDiagnosticCode(error, "QUEUE_SIDECAR_MISMATCH"),
+        true,
+      );
     }
     fault("scan_sidecar", report);
   }
@@ -451,8 +548,14 @@ function scanOrders(root, plan, report, fault) {
           "order",
         );
         if (candidate) report.counts.orders += candidate.order ? 1 : 0;
-      } catch (_) {
-        diagnostic(report, marker, "order", "ORDER_UNMAPPABLE", true);
+      } catch (error) {
+        diagnostic(
+          report,
+          marker,
+          "order",
+          inputDiagnosticCode(error, "ORDER_UNMAPPABLE"),
+          true,
+        );
       }
       fault("scan_order", report);
     });
@@ -507,20 +610,27 @@ function createMigration(options) {
     let leaseToken = null;
     let temp = null;
     let installed = false;
+    let result = null;
+    let primaryError = null;
+    let cleanupError = null;
+    const noteCleanupFailure = (failure) => {
+      if (failure && !cleanupError) cleanupError = failure;
+    };
     try {
       fault("before_start", p.report);
       fs.mkdirSync(operations, { recursive: true });
-      if (fs.existsSync(runtimeLock))
+      if (pathPresent(runtimeLock))
         throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
-      if (fs.existsSync(target))
-        throw fail("MIGRATION_TARGET_EXISTS", p.report);
+      if (pathPresent(target)) throw fail("MIGRATION_TARGET_EXISTS", p.report);
+      if (p.report.counts.manualItems > 0)
+        throw fail("MIGRATION_MANUAL_REVIEW_REQUIRED", p.report);
       if (p.candidates.length > 0 || p.batches.length > 0)
         throw fail("MIGRATION_WORKSPACE_GATE_REQUIRED", p.report);
       try {
         withRecoveryGuard(target, () => {
-          if (fs.existsSync(runtimeLock))
+          if (pathPresent(runtimeLock))
             throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
-          if (fs.existsSync(target))
+          if (pathPresent(target))
             throw fail("MIGRATION_TARGET_EXISTS", p.report);
           for (;;) {
             const token = crypto.randomUUID();
@@ -534,15 +644,20 @@ function createMigration(options) {
               const currentLease = readLease(lock);
               if (!currentLease || currentLease.token !== lease.token)
                 throw fail("MIGRATION_LEASE_ACTIVE", p.report);
-              try {
-                fs.unlinkSync(lock);
-              } catch (_) {
-                throw fail("MIGRATION_LEASE_ACTIVE", p.report);
-              }
+              const staleLeaseCleanup = cleanupFile(
+                lock,
+                "MIGRATION_LEASE_CLEANUP_FAILED",
+              );
+              if (staleLeaseCleanup)
+                throw attachCleanupFailure(
+                  fail("MIGRATION_LEASE_ACTIVE", p.report),
+                  staleLeaseCleanup,
+                );
               continue;
             }
             leaseToken = token;
             const leaseIdentity = fs.fstatSync(fd);
+            let leaseWriteError = null;
             try {
               fs.writeFileSync(
                 fd,
@@ -553,23 +668,43 @@ function createMigration(options) {
                 }),
               );
             } catch (error) {
+              leaseWriteError = error;
+            }
+            if (leaseWriteError) {
+              const stableLeaseWriteError = fail(
+                "MIGRATION_LEASE_WRITE_FAILED",
+                p.report,
+              );
+              stableLeaseWriteError.causeCode = safeCauseCode(leaseWriteError);
+              let closeError = null;
               try {
                 fs.closeSync(fd);
-              } catch (_) {}
+              } catch (error) {
+                closeError = stableCleanupFailure(
+                  "MIGRATION_LEASE_CLOSE_FAILED",
+                );
+              }
               fd = undefined;
-              removeIncompleteLease(lock, token, leaseIdentity);
+              const leaseCleanup = removeIncompleteLease(
+                lock,
+                token,
+                leaseIdentity,
+              );
               leaseToken = null;
-              throw error;
+              throw attachCleanupFailure(
+                stableLeaseWriteError,
+                closeError || leaseCleanup,
+              );
             }
             fault("after_lease", p.report);
-            if (fs.existsSync(runtimeLock))
+            if (pathPresent(runtimeLock))
               throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
             break;
           }
         });
       } catch (error) {
         if (isRecoveryGuardBusy(error)) {
-          if (fs.existsSync(runtimeLock))
+          if (pathPresent(runtimeLock))
             throw fail("MIGRATION_RUNTIME_OWNER_ACTIVE", p.report);
           throw fail("MIGRATION_LEASE_ACTIVE", p.report);
         }
@@ -587,48 +722,93 @@ function createMigration(options) {
         migrationTemporary: true,
         internalBeforeCommit: () => fault("before_sqlite_commit", p.report),
       });
+      let storeError = null;
+      let storeClosed = false;
       try {
         store.verify();
         store.close();
+        storeClosed = true;
         verifyOperationalDatabase(temp);
         fault("verify", p.report);
         fault("before_rename", p.report);
         rename(temp, target);
         installed = true;
         fault("after_rename", p.report);
-        return { mode: "execute", databasePath: target, report: p.report };
+        result = { mode: "execute", databasePath: target, report: p.report };
       } catch (error) {
-        try {
-          store.close();
-        } catch (_) {}
-        throw error;
+        storeError = error;
+      } finally {
+        if (!storeClosed) {
+          try {
+            store.close();
+          } catch (_) {
+            const failure = stableCleanupFailure(
+              "MIGRATION_STORE_CLOSE_FAILED",
+            );
+            if (storeError) storeError.cleanupCode = failure.code;
+            else noteCleanupFailure(failure);
+          }
+        }
       }
+      if (storeError) throw storeError;
     } catch (error) {
-      if (error && !error.migrationReport) error.migrationReport = p.report;
-      throw error.code ? error : fail("MIGRATION_EXECUTE_FAILED", p.report);
+      primaryError = installed
+        ? fail("MIGRATION_INSTALL_UNCERTAIN", p.report)
+        : error && /^MIGRATION_[A-Z0-9_]{1,72}$/.test(error.code || "")
+          ? error
+          : fail("MIGRATION_EXECUTE_FAILED", p.report);
+      if (installed) {
+        primaryError.causeCode = safeCauseCode(error);
+        primaryError.installationState = "INSTALLED";
+        primaryError.operatorAction = "VERIFY_OPERATIONAL_DATABASE";
+      } else if (primaryError.code === "MIGRATION_EXECUTE_FAILED") {
+        primaryError.causeCode = safeCauseCode(error);
+      }
+      if (!primaryError.migrationReport)
+        primaryError.migrationReport = p.report;
     } finally {
-      if (fd !== undefined) fs.closeSync(fd);
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch (_) {
+          noteCleanupFailure(
+            stableCleanupFailure("MIGRATION_LEASE_CLOSE_FAILED"),
+          );
+        }
+        fd = undefined;
+      }
       if (leaseToken) {
         try {
-          withRecoveryGuard(
+          const leaseCleanup = withRecoveryGuard(
             target,
             () => {
               const lease = readLease(lock);
               if (lease && lease.token === leaseToken)
-                try {
-                  fs.unlinkSync(lock);
-                } catch (_) {}
+                return cleanupFile(lock, "MIGRATION_LEASE_CLEANUP_FAILED");
+              return null;
             },
             5000,
           );
-        } catch (_) {}
+          if (leaseCleanup) noteCleanupFailure(leaseCleanup);
+        } catch (_) {
+          noteCleanupFailure(
+            stableCleanupFailure("MIGRATION_LEASE_CLEANUP_FAILED"),
+          );
+        }
+        leaseToken = null;
       }
       if (temp && !installed)
         for (const suffix of ["", "-wal", "-shm"])
-          try {
-            fs.unlinkSync(temp + suffix);
-          } catch (_) {}
+          noteCleanupFailure(
+            cleanupFile(temp + suffix, "MIGRATION_TEMP_CLEANUP_FAILED"),
+          );
     }
+    if (primaryError) {
+      if (cleanupError) primaryError.cleanupCode = cleanupError.code;
+      throw primaryError;
+    }
+    if (cleanupError) throw cleanupError;
+    return result;
   }
   return { plan, dryRun, execute };
 }
@@ -641,9 +821,22 @@ function main(argv) {
 }
 if (require.main === module) {
   try {
-    process.stdout.write(JSON.stringify(main()) + "\n");
+    const startedAt = Date.now();
+    const result = main();
+    const provenance = createExecutionProvenance({
+      root: path.resolve(__dirname, ".."),
+      command: "node scripts/migrate-operational-store-v1.js",
+      startedAt,
+    });
+    process.stdout.write(JSON.stringify({ ...result, ...provenance }) + "\n");
   } catch (error) {
-    process.stderr.write((error.code || "MIGRATION_FAILED") + "\n");
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^MIGRATION_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "MIGRATION_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

@@ -248,9 +248,7 @@ function verifyExactLegacyRuntimeBoundary() {
   const files = sourceFilesAt(RUNTIME_SOURCE_ROOTS);
   const storageAllowed = new Set(KEEP_STORAGE_COMPATIBILITY_ONLY_ALLOWLIST);
   const migrationAllowed = new Set(MIGRATION_ONLY_ALLOWLIST);
-  const maintenanceAllowed = new Set(
-    INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST,
-  );
+  const maintenanceAllowed = new Set(INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST);
   const forbiddenRuntimeStatuses = [];
   const forbiddenMaintenanceLiterals = [];
   for (const token of RETIRED_RUNTIME_STATUS_LITERALS) {
@@ -520,9 +518,13 @@ if (require.main === module) {
   try {
     process.stdout.write(JSON.stringify(verifyTicket24EAbsence()) + "\n");
   } catch (error) {
-    process.stderr.write(
-      `${error.code || "TICKET_24_E_ABSENCE_FAILED"}:ticket 24-E absence verification failed\n`,
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^TICKET_24_E_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "TICKET_24_E_ABSENCE_FAILED";
+    process.stderr.write(`${code}:ticket 24-E absence verification failed\n`);
     process.exitCode = 1;
   }
 }

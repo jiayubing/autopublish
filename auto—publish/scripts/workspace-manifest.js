@@ -135,9 +135,13 @@ function main(args) {
     );
     return 0;
   } catch (error) {
-    process.stderr.write(
-      `${error.code || "WORKSPACE_MANIFEST_FAILED"}:${error.message || "Manifest generation failed"}\n`,
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^WORKSPACE_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "WORKSPACE_MANIFEST_FAILED";
+    process.stderr.write(code + "\n");
     return 1;
   }
 }

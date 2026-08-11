@@ -230,10 +230,13 @@ if (require.main === module) {
       );
     process.stdout.write(JSON.stringify(result) + "\n");
   } catch (error) {
-    process.stderr.write(
-      (error.code || "PRODUCTION_PACKAGE_VERIFY_FAILED") +
-        ":Production package verification failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^PRODUCTION_PACKAGE_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "PRODUCTION_PACKAGE_VERIFY_FAILED";
+    process.stderr.write(code + ":Production package verification failed\n");
     process.exitCode = 1;
   }
 }

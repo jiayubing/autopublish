@@ -57,7 +57,9 @@ function sourceFor(filename, root) {
   try {
     return fs.readFileSync(absolute, "utf8");
   } catch (_) {
-    return "";
+    const error = new Error("Test source is unavailable");
+    error.code = "TEST_RUNNER_SOURCE_UNAVAILABLE";
+    throw error;
   }
 }
 

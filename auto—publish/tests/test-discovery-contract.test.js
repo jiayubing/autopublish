@@ -85,6 +85,13 @@ test("hybrid execution partitions every discovered file exactly once", () => {
   assert.equal(plan.parallelConcurrency, 4);
 });
 
+test("test discovery fails closed when a discovered source file is unreadable", () => {
+  assert.throws(
+    () => createExecutionPlan(["tests/does-not-exist.test.js"]),
+    (error) => error.code === "TEST_RUNNER_SOURCE_UNAVAILABLE",
+  );
+});
+
 test("runner arguments retain serial baseline and allow bounded parallelism", () => {
   assert.deepEqual(
     parseArguments(["--serial", "--parallel-concurrency", "2"]),

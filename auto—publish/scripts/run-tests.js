@@ -332,7 +332,11 @@ function runProgrammaticGroup(group) {
           durationMs: Date.now() - startedAt,
           timings: [...completed.values()],
           output: output.join(""),
-          error: streamError ? streamError.message : undefined,
+          error: streamError
+            ? streamError.code && /^[A-Z0-9_]{1,80}$/.test(streamError.code)
+              ? streamError.code
+              : "TEST_STREAM_FAILED"
+            : undefined,
           lifecycle: "stream-closed",
           reportedFiles: [...reportedFiles].sort(),
           unreportedFiles,
@@ -537,9 +541,13 @@ if (require.main === module) {
       process.exitCode = status;
     })
     .catch((error) => {
-      process.stderr.write(
-        (error && error.stack) || String(error) || "Test runner failed\n",
-      );
+      const code =
+        error &&
+        typeof error.code === "string" &&
+        /^TEST_[A-Z0-9_]{1,72}$/.test(error.code)
+          ? error.code
+          : "TEST_RUNNER_FAILED";
+      process.stderr.write(code + "\n");
       process.exitCode = 1;
     });
 }

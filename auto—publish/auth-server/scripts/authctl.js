@@ -206,9 +206,13 @@ async function run(argv, io) {
 
 if (require.main === module) {
   run(process.argv.slice(2), {}).catch((error) => {
-    process.stderr.write(
-      `${error.code || "AUTH_ADMIN_FAILED"}: admin command failed\n`,
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^AUTH_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "AUTH_ADMIN_FAILED";
+    process.stderr.write(`${code}: admin command failed\n`);
     process.exitCode = 1;
   });
 }

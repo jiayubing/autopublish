@@ -17,7 +17,6 @@ const {
   summarizeArtifactManifest,
   currentCommit,
   currentSourceState,
-  normalizeSourceState,
   safeSchemaVersion,
 } = require("./release-evidence-inputs");
 
@@ -63,6 +62,11 @@ function buildReleaseEvidenceManifest(options) {
     "RELEASE_EVIDENCE_PACKAGE_INVALID",
   );
   const actualCommit = currentCommit(ROOT);
+  if (!/^[a-f0-9]{40,64}$/i.test(actualCommit || ""))
+    throw evidenceError(
+      "RELEASE_EVIDENCE_COMMIT_UNAVAILABLE",
+      "Release evidence HEAD is unavailable",
+    );
   if (
     typeof opts.commit === "string" &&
     (!/^[a-f0-9]{7,64}$/i.test(opts.commit) ||
@@ -123,8 +127,12 @@ function buildReleaseEvidenceManifest(options) {
   const rollback = Object.assign({}, rollbackEvidence, {
     package: rollbackPackage,
   });
-  const sourceState =
-    normalizeSourceState(opts.sourceState) || currentSourceState(ROOT);
+  const sourceState = currentSourceState(ROOT);
+  if (sourceState.status === "UNKNOWN")
+    throw evidenceError(
+      "RELEASE_EVIDENCE_SOURCE_STATE_UNAVAILABLE",
+      "Release evidence source state is unavailable",
+    );
   const blockers = [];
   REQUIRED_CHECKS.forEach((name) => {
     if (checks[name].status !== "PASSED")

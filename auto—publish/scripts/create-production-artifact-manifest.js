@@ -12,12 +12,14 @@ const {
   readJson,
   collectProductionArtifactEntries,
 } = require("./artifact-manifest-collector");
+const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUTPUT = path.join(ROOT, "build", "production-artifact-manifest.json");
 
 function createProductionArtifactManifest(options) {
   const opts = options || {};
+  const startedAt = Date.now();
   const root = path.resolve(opts.root || ROOT);
   const output = path.resolve(
     opts.output ||
@@ -27,11 +29,17 @@ function createProductionArtifactManifest(options) {
   if (!packageValue.version || typeof packageValue.version !== "string")
     throw manifestError("Application package version is unavailable");
   const artifacts = collectProductionArtifactEntries(root);
+  const provenance = createExecutionProvenance({
+    root,
+    command: "node scripts/create-production-artifact-manifest.js",
+    startedAt,
+  });
   const manifest = {
     manifestVersion: ARTIFACT_MANIFEST_VERSION,
     packageVersion: String(packageValue.version),
     workspaceSchemaVersion: WORKSPACE_SCHEMA_VERSION,
     artifacts,
+    ...provenance,
   };
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(manifest, null, 2) + "\n", {
@@ -43,6 +51,7 @@ function createProductionArtifactManifest(options) {
     packageVersion: manifest.packageVersion,
     workspaceSchemaVersion: WORKSPACE_SCHEMA_VERSION,
     artifacts: artifacts.map((item) => item.name),
+    ...provenance,
   };
 }
 
@@ -52,12 +61,13 @@ if (require.main === module) {
       JSON.stringify(createProductionArtifactManifest()) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "ARTIFACT_MANIFEST_BUILD_FAILED") +
-        ":" +
-        (error.message || "Artifact manifest build failed") +
-        "\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^[A-Z0-9_]{1,80}$/.test(error.code)
+        ? error.code
+        : "ARTIFACT_MANIFEST_BUILD_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

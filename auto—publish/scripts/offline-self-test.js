@@ -58,12 +58,13 @@ if (require.main === module) {
       : runOfflineSelfTest(parsed.resourcesPath, parsed.options);
     process.stdout.write(JSON.stringify(result) + "\n");
   } catch (error) {
-    process.stderr.write(
-      (error.code || "OFFLINE_SELF_TEST_FAILED") +
-        ":" +
-        (error.message || "Offline self-test failed") +
-        "\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^OFFLINE_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "OFFLINE_SELF_TEST_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

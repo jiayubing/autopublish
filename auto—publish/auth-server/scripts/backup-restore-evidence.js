@@ -90,10 +90,13 @@ if (require.main === module) {
   createBackupRestoreEvidence(parseArguments(process.argv.slice(2)))
     .then((report) => process.stdout.write(JSON.stringify(report) + "\n"))
     .catch((error) => {
-      process.stderr.write(
-        (error.code || "AUTH_BACKUP_EVIDENCE_FAILED") +
-          ":backup restore evidence failed\n",
-      );
+      const code =
+        error &&
+        typeof error.code === "string" &&
+        /^AUTH_[A-Z0-9_]{1,72}$/.test(error.code)
+          ? error.code
+          : "AUTH_BACKUP_EVIDENCE_FAILED";
+      process.stderr.write(code + ":backup restore evidence failed\n");
       process.exitCode = 1;
     });
 }

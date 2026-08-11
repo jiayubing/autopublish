@@ -510,7 +510,6 @@ function trackedGeneratedOutputReport() {
     .split("\0")
     .filter(Boolean)
     .map((filename) => filename.replaceAll("\\", "/"))
-    .filter((filename) => fs.existsSync(path.join(gitRoot, filename)))
     .filter((filename) => TRACKED_GENERATED_PATTERN.test(filename));
   return { status: matches.length ? "FAILED" : "PASSED", matches };
 }
@@ -542,6 +541,7 @@ function privatePackageMatches(entries) {
 
 function sensitivePackageMatches(entries, readEntry) {
   const matches = [];
+  const unreadable = [];
   for (const entry of entries) {
     if (!isAppOwnedPackagePath(entry) || !TEXT_FILE_PATTERN.test(entry))
       continue;
@@ -549,11 +549,12 @@ function sensitivePackageMatches(entries, readEntry) {
     try {
       content = readEntry(entry).toString("utf8");
     } catch (_) {
+      unreadable.push(entry);
       continue;
     }
     if (SENSITIVE_VALUE_PATTERN.test(content)) matches.push(entry);
   }
-  return matches;
+  return { matches, unreadable };
 }
 
 function listRegularFiles(directory, prefix, output) {
@@ -618,7 +619,7 @@ function packageBoundaryReport(resourcesPath) {
     ),
   );
   const sensitiveMatches = sensitivePackageMatches(entries, (entry) =>
-    asar.extractFile(archive, entry),
+    asar.extractFile(archive, entry.replaceAll("/", path.sep)),
   );
   const unpackedSensitiveMatches = sensitivePackageMatches(
     unpackedPaths,
@@ -636,9 +637,15 @@ function packageBoundaryReport(resourcesPath) {
       entry,
     })),
     ...legacyMatches.map((entry) => ({ rule: "retired-source", entry })),
-    ...sensitiveMatches
-      .concat(unpackedSensitiveMatches, extraSensitiveMatches)
+    ...sensitiveMatches.matches
+      .concat(unpackedSensitiveMatches.matches, extraSensitiveMatches.matches)
       .map((entry) => ({ rule: "sensitive-content", entry })),
+    ...sensitiveMatches.unreadable
+      .concat(
+        unpackedSensitiveMatches.unreadable,
+        extraSensitiveMatches.unreadable,
+      )
+      .map((entry) => ({ rule: "unreadable-package-entry", entry })),
     ...linkMatches.map((entry) => ({ rule: "resource-link", entry })),
   ];
   return {
@@ -734,9 +741,13 @@ if (require.main === module) {
     process.stdout.write(JSON.stringify(report) + "\n");
     if (report.status !== "PASSED") process.exitCode = 1;
   } catch (error) {
-    process.stderr.write(
-      `${error.code || "PHASE08_GATE_FAILED"}:phase-08 gate failed\n`,
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^PHASE08_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "PHASE08_GATE_FAILED";
+    process.stderr.write(code + "\n");
     process.exitCode = 1;
   }
 }

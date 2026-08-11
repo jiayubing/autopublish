@@ -84,10 +84,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "AUTH_TEST_EVIDENCE_FAILED") +
-        ":auth test evidence failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^AUTH_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "AUTH_TEST_EVIDENCE_FAILED";
+    process.stderr.write(code + ":auth test evidence failed\n");
     process.exitCode = 1;
   }
 }

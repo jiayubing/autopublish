@@ -112,10 +112,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "RELEASE_EVIDENCE_FAILED") +
-        ":release evidence manifest failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^RELEASE_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "RELEASE_EVIDENCE_FAILED";
+    process.stderr.write(code + ":release evidence manifest failed\n");
     process.exitCode = 1;
   }
 }

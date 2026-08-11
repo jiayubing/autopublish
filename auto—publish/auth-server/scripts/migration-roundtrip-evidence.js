@@ -160,10 +160,13 @@ if (require.main === module) {
       ) + "\n",
     );
   } catch (error) {
-    process.stderr.write(
-      (error.code || "AUTH_MIGRATION_EVIDENCE_FAILED") +
-        ":migration evidence failed\n",
-    );
+    const code =
+      error &&
+      typeof error.code === "string" &&
+      /^AUTH_[A-Z0-9_]{1,72}$/.test(error.code)
+        ? error.code
+        : "AUTH_MIGRATION_EVIDENCE_FAILED";
+    process.stderr.write(code + ":migration evidence failed\n");
     process.exitCode = 1;
   }
 }

@@ -209,6 +209,8 @@ function verifyHepan(
   );
   const payload = path.join(tempRoot, "hepan-payload.json");
   fs.writeFileSync(payload, HEPAN_PAYLOAD, { encoding: "utf8", mode: 0o600 });
+  let resultValue = null;
+  let primaryError = null;
   try {
     const result = runCommand(
       python.value.path,
@@ -229,15 +231,29 @@ function verifyHepan(
         "OFFLINE_HEPAN_SMOKE_FAILED",
         "Offline Hepan payload smoke failed",
       );
-    return {
+    resultValue = {
       status: "passed",
       script: "app.asar.unpacked/src/platforms/hepan/hepan_publish.py",
     };
-  } finally {
-    try {
-      fs.unlinkSync(payload);
-    } catch (_) {}
+  } catch (error) {
+    primaryError = error;
   }
+  try {
+    fs.unlinkSync(payload);
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") {
+      if (primaryError) {
+        primaryError.cleanupCode = "OFFLINE_HEPAN_PAYLOAD_CLEANUP_FAILED";
+      } else {
+        primaryError = smokeError(
+          "OFFLINE_HEPAN_PAYLOAD_CLEANUP_FAILED",
+          "Offline Hepan payload cleanup could not be verified",
+        );
+      }
+    }
+  }
+  if (primaryError) throw primaryError;
+  return resultValue;
 }
 
 function verifyPackagedElectronApplication(
