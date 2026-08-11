@@ -13,7 +13,8 @@
 - 本 ticket 是最终验收执行与证据收集，不自行承担代码/架构审计；它必须从公开行为重新生成证据，不以各 ticket 自报完成代替运行结果。完成后由用户另派独立审计 subagent 审查 diff、证据真实性和遗漏项。
 - 自动化不得使用真实服务商、真实付费订单或真实平台账号；真实验证只生成用户可执行清单，不自行触发外部费用或发布。核心验收只要求纯文本外部链，不含图片专项验证。
 - `25-0 — Startup Readiness` 是已完成的历史准备包，不得复用该编号。Ticket 25 的执行包固定为 `25-A → 25-B → 25-C → 25-D → 25-E → 25-F → 25-G`，全部属于同一个 Ticket 25 scope，不重开历史 Ticket，也不按 M05/M06 owner 重新分类。
-- A～G 是同一个 Ticket 25 执行线程内的串行 checkpoint，不是七个独立 Ticket Closure，也不自动启用 `EXECUTION-PROTOCOL.md` 1.3 的 task-per-work-package 调度。每包必须完成自身定向验证并留下可审计 evidence，但不各自开启 fresh full audit；`25-G` 后只执行一次独立 Ticket 25 / Wave 11 combined audit，finding 修复后只做 bounded closure re-audit，除 `AUDIT-PROTOCOL.md` 定义的 escalation 外不得再开启第三轮全量审计。包间传递的是前一包验证过的精确 sourceState；是否产生包级 commit 只由届时用户授权决定，不能为了串行推进擅自 commit/merge。
+- Ticket 25 当前固定采用 **Manual Dispatch package-by-package**：用户每次只调度当前最左、gate 已满足的一个执行包；不得自动进入下一包、commit/merge、审计或真实外部验收。A～G 是同一 Ticket 25 scope 下的串行 package gate，不是七个独立 Ticket Closure；每包完成定向验证并留下可审计 evidence，但不各自开启 fresh full audit，`25-G` 后只执行一次独立 Ticket 25 / Wave 11 combined audit。当前未授权 Continuous Goal；若用户以后要求“持续执行 Ticket 25/Wave 11 到 COMPLETE”，启动 Goal 前必须先显式解决 `EXECUTION-PROTOCOL.md` 1.3 的一包一任务/包级 audit-commit evidence 与本 Ticket 单次 combined-audit closure 的关系，并同步本合同、Wave Plan 和必要协议，不能仅凭该指令自动套用两套互斥流程。
+- 包间传递的是前一包验证过的精确 sourceState；是否产生包级 commit 只由届时用户授权决定，不能为了串行推进擅自 commit/merge。finding 修复后只做 bounded closure re-audit，除 `AUDIT-PROTOCOL.md` 定义的 escalation 外不得再开启第三轮全量审计。
 - 每个新执行包开始前必须在实际仓库重做 `EXECUTION-PROTOCOL.md` 第 2 节调度预检。前一包的退出门禁未满足时不得开始后一包分析或实现；包内发现真实产品缺陷时回到对应唯一 owner 修复，不创建 acceptance-owned service/store/state machine。
 
 ## 串行工作包与统一门禁
@@ -34,10 +35,10 @@
 **范围与产物：**
 
 1. 建立受 Git 管理的 85-story tracked matrix。每个 story/可拆分 portion 至少记录 `storyId`、`portion`、`workPackage`、公开行为、证据类别（自动、模拟、用户控制）、evidence/test 引用、状态和 deferred reason；story 6、29、78–85 的图片部分逐条标记 `DEFERRED_IMAGE_EXTENSION`，纯文本部分单独映射，不得把 deferred 标为通过。
-2. 建立有限状态/故障矩阵，覆盖正常成功、明确失败、uncertain/unknown、duplicate/idempotent、stale/reordered、restart/recovery、共享 owner 关键先后顺序、首次成功后的迟到远端 observation，以及删除/恢复与活动目标竞态。后续 B～E 只能补充实例和结果，不得另建第二份状态矩阵。
+2. 建立有限状态/故障矩阵，覆盖正常成功、明确失败、uncertain/unknown、duplicate/idempotent、stale/reordered、restart/recovery、共享 owner 关键先后顺序、first-wins/terminal-priority、首次成功后的迟到远端 observation，以及删除/恢复与活动目标竞态。first-wins 至少冻结 publication success、普通平台 manual uncertain resolution、网站媒体 order-creation resolution 和 cancel-vs-publish 的竞争优先级；后续 B～E 只能补充实例和结果，不得另建第二份状态矩阵。
 3. 盘点现有公开行为测试并区分“已有候选覆盖、需要补测、用户控制证据”；盘点本身不等于 PASS，不以测试名或源码字符串代替行为映射。
 4. 在任何性能结果采集前，固定版本化 query/scan budget：合成数据规模、fixture 生成规则、计数边界、warm-up/重复协议、具体最大查询/扫描次数和失败输出。wall-clock 若没有执行前已批准的同环境 baseline，只定义观察协议，不现场发明通过阈值。
-5. 固定 tracked evidence manifest/runner contract。dirty 与 clean smoke 必须使用不同文件名；至少保留 Ticket 25 专用 test、benchmark、`ticket-25-production-smoke-dirty.json` 和 `ticket-25-production-smoke-clean.json` 结果入口。每份 generated evidence 必须包含精确 commit、sourceState、Node 版本、命令、时间、结果和安全环境摘要。
+5. 固定 tracked evidence manifest/runner contract。production smoke 的精确调用固定为：执行态 dirty smoke 使用 `npm run pack:production:smoke:dirty -- --output build/evidence/ticket-25-production-smoke-dirty.json`；合并后的 final clean smoke 使用 `npm run pack:production:smoke -- --output build/evidence/ticket-25-production-smoke-clean.json`。25-A 必须以自动化合同验证 npm 参数透传、指定文件实际生成、provenance 完整及两条路径互不覆盖；通用 `build/evidence/production-smoke.json` 不能替代任一 Ticket 25 专用 evidence。另至少保留 Ticket 25 专用 test 与 benchmark 结果入口。每份 generated evidence 必须包含精确 commit、sourceState、Node 版本、命令、时间、结果和安全环境摘要。
 
 **边界：** 本包不修改生命周期、队列、订单或迁移业务语义；若为了 evidence runner 增加工具，只能消费公开测试/诊断接缝，不得为测试暴露新的生产 API。tracked source 定义“验收什么”，`build/evidence/` 下 ignored generated evidence 只记录“实际运行了什么”。
 
@@ -51,7 +52,7 @@
 
 **入口门禁：** `25-A=COMPLETE`；stories 1–21、76–77 的纯文本/核心部分已有唯一主工作包映射。
 
-**范围与产物：** 验证生成即待投稿、显式保存、审核/来源门槛 absence、标题正文必需、队列冻结与尚未开始项单个/批量移除、一文单活动目标、旧目标结束后改投、六类入口互斥及计数、编辑权限、无复制入口、首次成功永久优先、已发布只读档案、回收/恢复/永久删除和最小订单审计保留。覆盖成功高于售后/退稿、uncertain 永远冻结、已发布不回收、相似内容文章身份独立，以及 publication archive 展示实际投稿内容而不声称远端最终正文一致。
+**范围与产物：** 验证生成即待投稿、显式保存、审核/来源门槛 absence、标题正文必需、队列冻结与尚未开始项单个/批量移除、一文单活动目标、旧目标结束后改投、六类入口互斥及计数、编辑权限、无复制入口、首次成功永久优先、已发布只读档案、回收/恢复/永久删除和最小订单审计保留。生产 UI 不再出现待审核、已审核或批量审核；已发布列表至少展示标题、客户、目标、时间和结果。覆盖成功高于售后/退稿、uncertain 永远冻结、已发布不回收、相似内容文章身份独立，以及 publication archive 展示实际投稿内容而不声称远端最终正文一致。
 
 验证核心 evidence 接缝只接受并冻结 `deliveryMode=text_only`、空图片清单、`decisionKind=initial`；生产 UI 不暴露 0–5 配图、换图、降级或网站媒体图片入口。Ticket 17 图片库可以存在，但不得接入生产投稿。
 
@@ -67,7 +68,7 @@
 
 **入口门禁：** `25-B=COMPLETE`；生命周期冻结、活动目标和 publication-success 公开合同稳定。
 
-**范围与产物：** 使用合成文章和假 transport 覆盖 stories 22–39：单次只选一个平台+账号、平台/账号分组、单账号隐藏层、至少两个不同普通平台组并行、当前核心同平台多账号组共享平台级锁、同组 FIFO、队列总体/当前项/剩余顺序、运行中追加到队尾、尚未开始项单个/批量移除、开始全部、手动暂停不被开始全部恢复、暂停全部、restart 后全部暂停、明确接受即成功、文章级失败继续、平台/认证/系统级失败仅暂停受影响组，以及第三方自媒体能力/UI absence。
+**范围与产物：** 使用合成文章和假 transport 覆盖 stories 22–39：单次只选一个平台+账号、平台/账号分组、单账号隐藏层、至少两个不同普通平台组并行、当前核心同平台多账号组共享平台级锁、同组 FIFO、队列总体/当前项/剩余顺序、运行中追加到队尾并继承当前平台/账号、尚未开始项单个/批量移除、开始全部、手动暂停不被开始全部恢复、暂停全部、restart 后全部暂停、明确接受即成功、文章级失败继续、平台/认证/系统级失败仅暂停受影响组，以及第三方自媒体能力/UI absence。Story 29 的 `imageCount` portion 保持 `DEFERRED_IMAGE_EXTENSION`，不得用默认值或现有 UI 假装图片继承已验收。
 
 对 uncertain 运行两个具名人工收口：确认已接受与确认未接受。验证 uncertain 不自动重试、暂停对应组并冻结文章；重复/重排人工决定、迟到明确成功和跨组结果不能覆盖 first-wins/单目标不变量。普通平台 submission-start 冻结的 evidence 必须为 text-only 初始决定，成功档案复用同一摘要。
 
@@ -83,13 +84,13 @@
 
 **入口门禁：** `25-C=COMPLETE`；单目标、冻结、首次成功和 text-only evidence 合同稳定。
 
-**范围与产物：** 使用假供应商覆盖 stories 40–75：独立费用确认、文章数/媒体/最新价格/预计费用/系统标识展示、媒体不可用、价格变化重确认、标题 30 字限制、手机号/网址风险提示且不自动改正文、全局投稿标识及缺失阻断、全局串行扣费、已确认批次禁止追加、独立暂停、restart 不续费、订单号门槛、余额/账号/服务级暂停、文章/资源级失败继续、成功后离队，以及文章管理高层投影。
+**范围与产物：** 使用假供应商覆盖 stories 40–75：独立费用确认、文章数/媒体/最新价格/预计费用/系统标识展示、媒体不可用、价格变化重确认、标题 30 字限制、手机号/网址等内容风险提示与媒体备注同时展示且不自动改正文、全局投稿标识及缺失阻断、全局串行扣费、已确认批次禁止追加、独立暂停、restart 不续费、订单号门槛、余额/账号/服务级暂停、文章/资源级失败继续、成功后离队，以及文章管理高层投影。
 
 覆盖订单创建 uncertain 禁止自动重试、可信订单号补录前远端核对、确认无订单、success/补录/无订单共享 attempt guard、不同可信订单号/解冻后不兼容新目标冲突；覆盖默认筛选、各状态计数、页面首次刷新/全部刷新/单笔刷新、刷新失败保留原事实、长期等待仅提醒、订单缺失/状态异常人工收口。覆盖待安排取消、已安排尝试取消、拒绝取消、取消传输不确定、取消与发布竞态、退稿恢复编辑、发布后售后不解冻，以及媒体/价格/标识/金额快照和不可删除历史。订单成功与档案继续冻结 text-only 初始 evidence。
 
 **边界：** 自动化不得创建真实订单、扣费、刷新或取消真实服务商对象。供应商 adapter 只拥有传输/字段/状态映射；费用确认、批次串行与暂停、attempt guard、文章冻结、订单 observation 和人工 resolution 仍由各自现有 owner 负责。传输异常保留结果不确定或原远端事实，不自动重试、不猜测成功/失败。
 
-**定向门禁：** preflight/价格/标识/风险提示、批次串行/暂停/restart、错误范围、订单号门槛、uncertain 三路竞争、刷新/缺失/人工 resolution、取消状态与竞态、退稿/售后/历史不可变、text-only evidence 的公开行为和故障注入矩阵通过。
+**定向门禁：** preflight/价格/标识/风险提示与媒体备注、批次串行/暂停/restart、错误范围、订单号门槛、uncertain 三路竞争、刷新/缺失/人工 resolution、取消状态与竞态、退稿/售后/历史不可变、text-only evidence 的公开行为和故障注入矩阵通过。
 
 **审计目标：** combined audit 检查付费确认与普通平台控制隔离、串行扣费及停止点、订单唯一 writer/attempt guard、unknown/uncertain 保真、取消与迟到发布 first-wins、订单历史和全局 published 事实分离、adapter 是否越权。
 
@@ -131,7 +132,7 @@
 
 **入口门禁：** `25-F=COMPLETE`；85-story matrix、状态矩阵、查询预算、B～E 行为 evidence 和 F 责任 evidence 均绑定当前 sourceState。
 
-**范围与产物：** 运行完整 `npm test`、typed IPC、legacy absence、安全、Renderer/Preload build、packaging gates 和 `pack:production:smoke:dirty`。dirty smoke 必须显式写入 `ticket-25-production-smoke-dirty.json`，不得覆盖 clean smoke。任何失败都按真实 owner 修复，并重跑受影响包直接回归与 G 的完整 gate；生产源码、schema、关键测试或 gate 变化后旧 G evidence 立即失效。
+**范围与产物：** 运行完整 `npm test`、typed IPC、legacy absence、安全、Renderer/Preload build、packaging gates，并使用 25-A 冻结的精确命令 `npm run pack:production:smoke:dirty -- --output build/evidence/ticket-25-production-smoke-dirty.json` 运行 dirty smoke。不得接受通用 `production-smoke.json` 或覆盖 clean smoke。任何失败都按真实 owner 修复，并重跑受影响包直接回归与 G 的完整 gate；生产源码、schema、关键测试或 gate 变化后旧 G evidence 立即失效。
 
 汇总 tracked matrix/budget、所有 generated evidence、测试计数、benchmark、责任 manifest、失败与修复 diff、残余风险、`DEFERRED_IMAGE_EXTENSION` 清单、独立审计 scope 和用户控制的真实外部验收清单。外部清单至少包含普通平台纯文本两组并行及网站媒体真实订单状态刷新，并写明账号/目标安全身份、费用/发布风险、前置配置、记录字段和停止条件；本包不执行这些操作。
 
@@ -150,7 +151,7 @@
 1. 用户另派独立审计任务执行一次 **Ticket 25 Primary Audit + Wave 11 Integration Audit 的 combined audit**；只输出 findings、blocking/deferred、required remediation 和 bounded re-audit scope，不由 Ticket 25 执行线程给自己盖章。
 2. 在真实 owner 修复 P0/P1 和直接违反当前 acceptance、一致性、幂等/uncertain 安全、公开合同或直接回归的 blocking P2。修复后重跑直接包级回归以及所有因 sourceState 变化而失效的 25-G gates/evidence。
 3. 执行 bounded closure re-audit，只检查已知 finding、修复 diff、直接不变量/调用方/状态矩阵和刷新后的 evidence；除 escalation 外不得 fresh full review。
-4. 只有用户当前授权时才 commit/merge。所有修复进入最终 clean integration HEAD 后，运行正式 `pack:production:smoke` 并写入独立 `ticket-25-production-smoke-clean.json`；它不能被 dirty smoke 替代。之后 source/test/gate 再变化则 clean evidence 失效并重跑。
+4. 只有用户当前授权时才 commit/merge。所有修复进入最终 clean integration HEAD 后，使用 25-A 冻结的精确命令 `npm run pack:production:smoke -- --output build/evidence/ticket-25-production-smoke-clean.json` 运行正式 clean smoke；通用 `production-smoke.json` 和 dirty smoke 都不能替代该证据。之后 source/test/gate 再变化则 clean evidence 失效并重跑。
 5. 用户针对每次真实登录、发布、付费或订单刷新另行明确授权并按清单执行。缺少真实普通平台纯文本两组并行或网站媒体订单刷新任一 evidence 时，Wave 11=`BLOCKED`，原因固定 `USER_EXTERNAL_ACCEPTANCE_REQUIRED`；图片 evidence 缺失不阻塞核心完成。
 6. 只有 combined audit/bounded re-audit、授权 commit/merge、最终 clean smoke、真实外部核心验收及全部 provenance 均闭合后，Ticket 25 / Wave 11 才能标记 `COMPLETE`。
 
@@ -176,7 +177,7 @@
 - [ ] 85 条 user stories 全部进入 tracked 追踪矩阵；图片相关部分明确标记 `DEFERRED_IMAGE_EXTENSION`，其余条目映射到自动化、模拟或明确的用户控制证据，不把 deferred 伪称已通过。
 - [ ] 六类文章入口、普通平台并行链和网站媒体订单链端到端通过。
 - [ ] 迁移、删除恢复、unknown/uncertain 和故障注入场景通过；核心纯文本 evidence 的图片清单为空且 UI 无不可用图片入口。Ticket 18–21 图片实现不属于本验收通过项。
-- [ ] 批量投影在固定合成规模下满足版本化查询/扫描次数预算且没有 N+1；耗时满足执行前已存在的同环境预算，若无该预算则只作为观察数据并明确记录，不能阻塞或伪称性能门禁通过。
+- [ ] 批量投影在固定合成规模下满足版本化查询/扫描次数预算且没有 N+1；query/scan 硬预算可以独立判定 PASS。wall-clock 只有在执行前已存在同环境批准 baseline 时才判定耗时 PASS/FAIL；没有该 baseline 时只记录观察数据，不得伪称“耗时门禁通过”，也不得因此否定已经通过的 query/scan 硬门禁。
 - [ ] 模块职责证据清单与规模观察已生成并记录，依赖方向、legacy absence、安全、typed IPC、完整测试与构建通过，ticket worktree 的 `pack:production:smoke:dirty` 诊断通过；dirty smoke 产出独立 JSON 且不覆盖 clean smoke，执行线程不据此给出自我审计结论。
 - [ ] 证据清单包含每个受影响生产模块的 owner、职责、公开接口/最小 capability、调用方、依赖方向、隐藏不变量和公开合同测试，不能只列模块名称或行数。
 - [ ] Ticket 25 修复经用户审计、提交并合并后，在干净集成工作树运行正式 `pack:production:smoke` 并记录证据；该项未完成前波次 11 不得标记 `COMPLETE`。
