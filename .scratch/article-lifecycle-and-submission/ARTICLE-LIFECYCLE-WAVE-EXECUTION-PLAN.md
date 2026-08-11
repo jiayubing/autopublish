@@ -4,7 +4,7 @@
 
 ## 1. 当前状态
 
-快照日期：2026-08-11。每次执行前必须以当前 Git 状态重新验证，本文不能覆盖 Git 事实。
+快照日期：2026-08-12。每次执行前必须以当前 Git 状态重新验证，本文不能覆盖 Git 事实。
 
 | 项目                       | 状态       | 说明                                                                                                                                                                         |
 | -------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -25,7 +25,7 @@
 | Maintenance M05             | `COMPLETE`  | M05-I combined audit/closure、`M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9` final evidence reconciliation、blocking remediation、bounded re-audit 与 implementation-HEAD M05-specific gates 已闭合；最新 handoff 见 `handoffs/M05-J9-final-authoritative-closure-remediation.md` |
 | Maintenance M06             | `COMPLETE`  | M06-H 最终 bounded remediation 已在 `af3d116` 完成 queue `inputDir` 非法类型 fail-closed 修复；bounded re-audit 与最终 clean-HEAD full gate PASS；handoff 见 `handoffs/M06-H-final-queue-failure-closure.md` |
 
-**当前动作：Ticket 25=`READY`，启动准备已在 clean integration HEAD `292a2f4` 完成；下一步从 85 条 user stories tracked 追踪矩阵与版本化查询/扫描预算开始，不复用旧 HEAD generated evidence。Ticket 25 尚未进入实现/验收执行，未执行真实登录、发布、付费或平台操作。启动基线见 `handoffs/25-0-startup-readiness.md`。**
+**当前动作：Ticket 25=`READY`；`25-0 — Startup Readiness` 已完成并记录在 `handoffs/25-0-startup-readiness.md`，下一执行包为 `25-A — Acceptance Contract, State Matrix & Evidence Baseline`。启动准备记录的 base integration HEAD 为 `292a2f4`，其 docs-only preparation commit 为 `cb6711a`；真正调度 25-A 时仍必须以实际 Git HEAD/status 为准，不复用任一旧 HEAD generated evidence。Ticket 25 尚未进入实现/验收执行，未执行真实登录、发布、付费或平台操作。**
 
 **M05 final non-blocking finding:** Inventory manifest digest remains sensitive to cross-platform working-tree byte representation / line endings. Core inventory structure is stable: 248 files / 1689 declarations / 76 static guards / 0 rewrite. Defer to future tooling ownership.
 
@@ -66,7 +66,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 9    | 23-0 → 23-A → 23-B → 23-C → 23-D → 23-E                  | 04、05、09、14、16、22；M8.5 COMPLETE 仅由当前 lane 豁免 | `COMPLETE`                                                                            |
 | 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
 | 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E1 → E2 → E3 → F → G → H → I → J → J3 → J4 → J5 → J6 → J7 → J8 → J9 → M06-0 → M06-A → M06-B → M06-C → M06-D → M06-E → M06-F → M06-G → M06-H | Wave 10 COMPLETE；M06-H final bounded remediation 与 implementation-HEAD clean evidence 已闭合 | `COMPLETE`；M04/M05/M06-0/M06-A～H 全部 closure、gate 与 evidence 已闭合 |
-| 11   | 25                                                       | 24；10.5 COMPLETE（含 M06）                             | `READY`；startup preparation complete，尚未进入实现/验收执行 |
+| 11   | 25-0 → 25-A → 25-B → 25-C → 25-D → 25-E → 25-F → 25-G → Independent Combined Audit → Remediation → Bounded Closure Re-audit → authorized commit/merge → final clean smoke → authorized external acceptance | 24；10.5 COMPLETE（含 M06）；各包严格依赖左侧已验证 sourceState；真实外部操作逐次授权 | `READY`；25-0 COMPLETE，下一包 25-A；A～G 尚未进入实现/验收执行 |
 | 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
 | 13   | 平台逐个探索 → 仅 SUPPORTED 的 19→20→21 → 各平台真实验收 | Wave 12 COMPLETE + 每平台显式授权                        | `PENDING`                                                                             |
 
@@ -91,7 +91,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 - **Wave 7**：Ticket 10 拆 Renderer 业务巨型组件；Ticket 16 实现取消状态机。不得为了“等 M03”把完整 cancellation 状态机继续塞进已有巨型 aggregate；Ticket 16 可以建立职责清楚的独立 cancellation owner，但不得执行系统性 M03。
 - **Wave 8.5 / M03**：按 M03-0 职责图、M03-A queue cluster、M03-B ArticleMutationCoordinator cluster、M03-C 统一审计收口串行治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration seam，且不得提前实现 migration-only writer。
 - **Wave 10 / 10.5**：Ticket 24、M04、M05 已闭合。M06-0 inventory/scope 真源为 `handoffs/M06-0-authoritative-residual-silent-failure-inventory.md`，后续严格串行 `A → B → C → D → E → F → G`；按失败语义与 owner 修改，不按 catch 数量平均。G 单独执行 combined audit、blocking remediation、bounded re-audit、inventory/failure-semantics reconciliation 与 final clean-HEAD full gate。M06-G 完成前 10.5 不得标记 COMPLETE，Ticket 25 不得启动。
-- **Wave 11**：Ticket 25 负责最终核心验收 evidence；真实平台操作仍需逐次用户授权。
+- **Wave 11**：Ticket 25 在同一 umbrella scope 下严格串行执行 `25-A → B → C → D → E → F → G`；包内只做定向验证和 combined audit evidence，不各自开启 fresh full audit。G 之后由用户另派一次 Ticket 25 / Wave 11 独立 combined audit，blocking remediation 后只做 bounded closure re-audit；授权 commit/merge 后在最终 clean integration HEAD 运行正式 smoke。真实平台发布、付费和订单刷新仍需逐次用户授权；缺少核心外部 evidence 时保持 `BLOCKED/USER_EXTERNAL_ACCEPTANCE_REQUIRED`。
 - **Wave 12–13**：核心完成后的图片扩展。旧组默认保持 `imageCount=0`；平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。
 
 ## 5. Wave Integration Audit 最低矩阵
@@ -106,7 +106,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 | M03            | 重组后公开门面、transaction/capability、生命周期行为不变；Ticket 23 migration 不依赖 OperationalStore internal schema                                   |
 | Wave 9         | migration journal crash recovery；迁移 root 无远端能力；封闭 payload 不生成 runnable facts                                                              |
 | Wave 10/10.5   | 正常运行 legacy absence；contract 最终收敛；业务源码 regex 测试减少；silent-catch residual 有明确语义/owner                                             |
-| Wave 11        | 核心追踪矩阵、最终门禁、版本化性能预算、独立验收审计与用户授权的真实外部验收                                                                            |
+| Wave 11        | 85-story/有限状态矩阵、六类生命周期与删除档案、普通平台/付费/迁移故障链、版本化 query/scan 硬预算、owner/capability evidence、独立 combined audit、bounded closure re-audit、final clean smoke 与用户授权的真实外部验收 |
 | Wave 12–13     | 图片配置升级安全、逐平台探索/实现/验收隔离，不重定义核心 submission/outcome 合同                                                                        |
 
 ## 6. 状态与更新规则
