@@ -2,7 +2,7 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `READY`（`PENDING TO START`）；M05 `COMPLETE` 与实现/文档 clean-HEAD gate 已满足，实时可调度性仍由波次执行计划与 Git 预检决定
+**Status:** `RUNNING`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成，下一项为 M06-A
 
 **Scheduling gate:** M05 `COMPLETE` 后调度；当前为维护 10.5 最后一项且尚未开始。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
 
@@ -10,6 +10,30 @@
 
 - 全部生产 JS/TS/TSX（排除测试、生成物、vendor）；
 - scripts/migration 仅在其会影响正式 operator/release/migration 结果时纳入；纯历史/一次性工具需记录但不为追求零数量机械修改。
+
+## Authoritative inventory and execution order
+
+M06-0 的唯一 inventory/scope 真源为：
+
+- `M06-0-catch-inventory.mjs`：可复现 AST census；
+- `../handoffs/M06-0-authoritative-residual-silent-failure-inventory.md`：classification、priority set、owner/failure semantics、A–G scope 与 closure matrix。
+
+最终顺序冻结为：
+
+`M06-0 → A → B → C → D → E → F → G`
+
+| 包    | Owner / failure domain                                                                                                                                     | 状态       |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| M06-0 | 全量 residual catch / rejection inventory、classification、scope freeze；不改 production                                                                   | `COMPLETE` |
+| M06-A | OperationalStore / workspace / state persistence / cleanup                                                                                                 | `READY`    |
+| M06-B | content / file persistence / lifecycle                                                                                                                     | `PENDING`  |
+| M06-C | remote / process / platform runtime                                                                                                                        | `PENDING`  |
+| M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `PENDING`  |
+| M06-E | auth / security                                                                                                                                            | `PENDING`  |
+| M06-F | operator / release / migration scripts                                                                                                                     | `PENDING`  |
+| M06-G | combined audit、inventory/failure-semantics reconciliation、blocking remediation、bounded re-audit、final clean-HEAD full gate 与 Maintenance 10.5 closure | `PENDING`  |
+
+不得按 catch 数量重新平均拆包。M06-0 census 为 505 个扫描文件、276 个有 catch 的文件、1,099 个 catch/rejection handler、0 parse diagnostics；其中 `EMPTY=148`。高优先级复核集去重后为 217 项：A=34、B=45、C=44、D=43、E=18、F=33。每包仍需检查其全部 inventory，不得把 priority set 当作其余项自动安全的白名单。
 
 ## Rules
 
@@ -20,8 +44,11 @@
 
 ## Acceptance criteria
 
-- [ ] 生产代码 residual catch inventory 全部有分类；无未解释空 catch。
+- [x] M06-0 已完成生产代码/正式脚本 catch inventory、classification 与 A–G scope freeze；未修改 production。
+- [ ] 生产代码 residual catch inventory 全部有最终 disposition；无未解释空 catch。
 - [ ] persistence/security/remote/process 路径没有 silent swallow。
 - [ ] 保留的 cleanup/probe 都有明确语义，且不会把失败伪装成成功。
 - [ ] 敏感错误不写入日志；diagnostic metadata 仍为 allowlisted/sanitized。
 - [ ] 完整测试与关键故障注入通过，交接记录保留项及理由。
+
+M06-G 完成前，M06 与 Maintenance 10.5 均不得标记 `COMPLETE`，Ticket 25 不得启动。G 完成后停止，不自动进入 Ticket 25。
