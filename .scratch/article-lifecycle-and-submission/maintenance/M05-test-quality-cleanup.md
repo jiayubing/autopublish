@@ -2,9 +2,9 @@
 
 **Purpose:** 在业务规则和 contract surface 最终稳定后，减少“测试源码长什么样”的脆弱测试，把业务保证迁移到公开行为/合同/集成测试，同时保留真正有价值的 architecture/security/static absence/packaging 门禁。
 
-**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 M05-J/J3/J4/J5/J6/J7/J8/J9 final evidence reconciliation 均已完成。M05-J9 已关闭 checked-in `.env.example` repo/config source recognition 缺口，并在 implementation HEAD `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 上确认 required gates 全部 PASS；最新 closure handoff 见 `../handoffs/M05-J9-final-authoritative-closure-remediation.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
+**Status:** `COMPLETE`；M05-0 authoritative ledger、A–H 测试迁移、M05-I combined audit/closure 与 `M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9` final evidence reconciliation 均已完成。M05-J9 已关闭 checked-in `.env.example` repo/config source recognition 缺口，并在 implementation HEAD `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 上确认 required gates 全部 PASS；最新 closure handoff 见 `../handoffs/M05-J9-final-authoritative-closure-remediation.md`，当前唯一 inventory 真源仍见 `../handoffs/M05-0-authoritative-test-disposition-ledger.md`。
 
-**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 → M05-J8 → M05-J9` 从 clean integration HEAD 严格串行完成。M05-J9 docs-only Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 仍为 `PARTIAL`，Ticket 25 继续受 M06 gate 约束。
+**Scheduling gate:** M04 `COMPLETE` 后调度；该 gate 已满足。维护 10.5 第二项已按 `M05-0 → M05-A → M05-B → M05-C → M05-D → M05-E1 → M05-E2 → M05-E3 → M05-F → M05-G → M05-H → M05-I → M05-J → M05-J3 → M05-J4 → M05-J5 → M05-J6 → M05-J7 → M05-J8 → M05-J9` 从 clean integration HEAD 严格串行完成。M05-J9 docs-only Closure 后本任务停止；M06 已满足 gate，状态为 `READY`（`PENDING TO START`），10.5 仍为 `PARTIAL`，Ticket 25 blocked by M06。
 
 ## 1. Evidence policy
 
@@ -257,7 +257,7 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 **M05-J7 final inventory source-taint closure（2026-08-10）：** implementation commit `179577fd6e7849b7b6ab6e10cdb61a5e22929e05` 仅修改 inventory classifier 与 contract tests；source taint 统一区分 repository/config path、source text、source-text-derived value 与 ordinary runtime value，并覆盖 alias、`slice`/`split`/`replace`/`length`、`for...of`、helper parameter、recursive `forEach`、`import.meta.dirname` 与 repository CI/config readers。普通 runtime result 不再被提升为 source assertion，derived source holder 也不再因变量名取得 static authorization。最终 inventory 为 248 files（231 JS、17 MJS）、1,686 declarations、46 file-level source-reading files / 340 declarations、66 assertion-level source candidates、66 retained static guards、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`；20/20 inventory contract、全部 M05 static/full gates 与完整 runner 1,798/1,798 PASS。详见 `../handoffs/M05-J7-final-inventory-source-taint-closure.md`。M06 保持 `READY`（`PENDING TO START`），维护 10.5 保持 `PARTIAL`。
 
-**M05-J9 final authoritative closure remediation（2026-08-11）：** implementation commit `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 只修改 inventory classifier 与 classifier regression contract；checked-in `.env.example` 现在作为窄 repository config contract 进入 source taint，`.env`、`.env.local` 与普通 `process.env` runtime behavior 不会被提升。最终 inventory 为 248 files（231 JS、17 MJS）、1,689 declarations、46 file-level source-reading files / 340 declarations、76 assertion-level source candidates、76 retained static guards、262 `RETAIN_BEHAVIOR_FILE_HEURISTIC_NOT_ASSERTION`、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`；23/23 inventory contract、全部 M05 static/full gates与完整 runner 1,801/1,801 PASS。production behavior diff=0。详见 `../handoffs/M05-J9-final-authoritative-closure-remediation.md`。M06 保持 `READY`（`PENDING TO START`），维护 10.5 保持 `PARTIAL`，Ticket 25 继续受 M06 gate 约束。
+**M05-J9 final authoritative closure remediation（2026-08-11）：** implementation commit `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 只修改 inventory classifier 与 classifier regression contract；checked-in `.env.example` 现在作为窄 repository config contract 进入 source taint，`.env`、`.env.local` 与普通 `process.env` runtime behavior 不会被提升。最终 inventory 为 248 files（231 JS、17 MJS）、1,689 declarations、46 file-level source-reading files / 340 declarations、76 assertion-level source candidates、76 retained static guards、262 `RETAIN_BEHAVIOR_FILE_HEURISTIC_NOT_ASSERTION`、`REWRITE_PUBLIC_BEHAVIOR=0`、`semantic REWRITE_PUBLIC_BEHAVIOR=0`；23/23 inventory contract、全部 M05 static/full gates与完整 runner 1,801/1,801 PASS。production behavior diff=0。详见 `../handoffs/M05-J9-final-authoritative-closure-remediation.md`。M06 保持 `READY`（`PENDING TO START`），维护 10.5 保持 `PARTIAL`，Ticket 25 blocked by M06。
 
 ## 3. Serial order and dependency rationale
 
@@ -287,6 +287,8 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 | M05-J5 | M05-J4 | 只做 final inventory false-negative、generic static authorization、已确认 residual 与 format/full-gate closure；不重做 M05、不修改 production、不进入 M06 |
 | M05-J6 | M05-J5 | 只做 classifier/source-reader bounded closure；不重做 M05、不修改 production、不进入 M06 |
 | M05-J7 | M05-J6 | 只做 source-taint inventory final closure 与 implementation-HEAD evidence reconciliation；不重做 M05、不修改 production、不进入 M06 |
+| M05-J8 | M05-J7 | 只做 authoritative inventory/source-taint closure；不重做 M05、不修改 production、不进入 M06 |
+| M05-J9 | M05-J8 | 只做 checked-in repo/config source recognition 与最终 evidence reconciliation；不重做 M05、不修改 production、不进入 M06 |
 
 - M05-0 ledger 是 A–H 的唯一 ownership/scope/disposition 真源；后续 handoff 只记录执行 delta/evidence，不创建竞争分类表。
 - A/B/C 都可能共享 Renderer harness、fixture 和 source-reading ledger，必须串行，但按 2.1 冻结的 feature owner 分开以限制单线程心智模型。
@@ -298,10 +300,26 @@ Component 只展示并收集用户意图，不因被某组件 import 就成为 a
 
 - [x] M05-0 产出可复现 before inventory，覆盖实际 discovery 的 JS/MJS，并明确每个被删/改 static assertion 的替代行为 evidence。
 - [x] 不再存在用私有函数名、实现行数、任意源码片段证明业务行为的测试；任意私有实现名 name-only regression 不再被 classifier 授权为 static guard。
-- [x] architecture/security/legacy absence/packaging/CI/discovery static guard 被保留并有清晰分类；66 个 retained guards 均落入合法 category。
+- [x] 最终 authoritative inventory 与 ledger 一致：248 files、1,689 declarations、76 source assertion candidates、76 retained static guards、`REWRITE_PUBLIC_BEHAVIOR=0`、semantic `REWRITE_PUBLIC_BEHAVIOR=0`；所有 retained static guards 均落入合法 category。
 - [x] 核心业务 owner 都有稳定公开接口或直接调用方测试，失败能定位到领域边界；本次删除项的 replacement mapping 已记录。
 - [x] 重复 phase tests 按 invariant/owner 收敛，而非按文件数机械删除；必要故障注入和诊断价值保留。
 - [x] 未修改 production behavior，未新增 test-only production seam，未执行真实外部操作。
 - [x] M05-H 产出 after inventory 与 runner cleanup evidence；无 discovery omission、skip/todo 或 summary 后遗留测试进程。
-- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；其 full-run provenance 由 M05-J/J3/J4/J5/J6/J7 重新绑定到最终 implementation HEAD。
-- [x] M05-J/J3/J4/J5/J6/J7 classifier、residual migration、static-category ledger、format 与 full-test contract reconciliation 完成；implementation HEAD 上完整 runner PASS；M06 已 READY/PENDING TO START，10.5 未提前 COMPLETE。
+- [x] M05-I combined audit、blocking remediation、bounded re-audit 与 M05-specific final clean-HEAD gates PASS；其 full-run provenance 由 `M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9` 重新绑定到最终 implementation HEAD。
+- [x] `M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9` classifier、residual migration、static-category ledger、format 与 full-test contract reconciliation 完成；implementation HEAD 上完整 runner PASS；M06 已 READY/PENDING TO START，10.5 未提前 COMPLETE，Ticket 25 blocked by M06。
+
+### Final findings
+
+```text
+P0: none
+P1: none
+P2: none
+P3:
+Inventory manifest digest remains sensitive to cross-platform
+working-tree byte representation / line endings.
+
+Core inventory structure is stable:
+248 files / 1689 declarations / 76 static guards / 0 rewrite.
+
+Non-blocking; defer to future tooling ownership.
+```

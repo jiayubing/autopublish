@@ -12,7 +12,8 @@
 - M05：`COMPLETE`
 - M06：`READY / PENDING TO START`
 - 维护 10.5：`PARTIAL`
-- Ticket 25：受 M06 gate 约束，保持 `PENDING`
+- Ticket 25：blocked by M06，保持 `PENDING`
+- Final provenance：`M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9`
 
 ## Scope and remediation
 
@@ -60,7 +61,7 @@ bounded semantic check 快速检查全部 76 retained static guards，只覆盖 
 
 ## Closure and Git evidence
 
-Closure 只允许修改 maintenance contract、authoritative ledger、Wave Plan 与本 handoff。交付时验证：
+Closure 只允许修改 maintenance contract、authoritative ledger、Wave Plan 与本 handoff。本次 correction 不改变绑定 implementation HEAD `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 的 implementation evidence；production/test/classifier/runner/discovery diff 均为 0。交付时验证：
 
 ```text
 git diff --name-only 85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7..<closure-head>
@@ -74,7 +75,14 @@ git diff --name-only 85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7..<closure-head>
 P0: none
 P1: none
 P2: none
-P3: none
+P3:
+Inventory manifest digest remains sensitive to cross-platform
+working-tree byte representation / line endings.
+
+Core inventory structure is stable:
+248 files / 1689 declarations / 76 static guards / 0 rewrite.
+
+Non-blocking; defer to future tooling ownership.
 ```
 
 达到 J9 closure 后停止，不进入 M06。

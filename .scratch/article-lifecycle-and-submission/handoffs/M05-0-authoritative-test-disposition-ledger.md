@@ -1,6 +1,6 @@
 # M05-0 authoritative test disposition ledger
 
-> J9 closure（2026-08-11）：本 ledger 继续是 M05-A–H 的唯一 authoritative inventory。最终结果为 248 files、1,689 declarations、76 source assertion candidates、76 retained static guards、262 `RETAIN_BEHAVIOR_FILE_HEURISTIC_NOT_ASSERTION`、`REWRITE_PUBLIC_BEHAVIOR=0`、semantic `REWRITE_PUBLIC_BEHAVIOR=0`；required gates 已在 implementation HEAD `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 上 PASS。M05=`COMPLETE`；M06=`READY / PENDING TO START`；10.5=`PARTIAL`；Ticket 25 继续受 M06 gate 约束。
+> J9 closure（2026-08-11）：本 ledger 继续是 M05-A–H 的唯一 authoritative inventory。最终结果为 248 files、1,689 declarations、76 source assertion candidates、76 retained static guards、262 `RETAIN_BEHAVIOR_FILE_HEURISTIC_NOT_ASSERTION`、`REWRITE_PUBLIC_BEHAVIOR=0`、semantic `REWRITE_PUBLIC_BEHAVIOR=0`；required gates 已在 implementation HEAD `85fc7a1b8dc442fc55e57a54f8637ab3b5d759c7` 上 PASS。M05=`COMPLETE`；M06=`READY / PENDING TO START`；10.5=`PARTIAL`；Ticket 25 blocked by M06。
 
 > 本文件由 `node scripts/test-inventory.js` 基于 `scripts/run-tests.js::collectTestFiles` 生成；它是 M05-A–H 的唯一 before inventory、ownership、disposition、replacement mapping 真源。分析 handoff 只作为历史输入。
 
@@ -11,6 +11,26 @@
 - 本清单只静态读取测试文件，不 require/执行测试，不启动 Electron、Renderer、浏览器、Vite、Python、外部服务，不发起网络请求。
 - `file-heuristic` 与 `assertion` 是两个不同证据级别；文件级命中不自动授权删除该文件内所有声明。
 - before manifest digest：`d8beb2476bb0298d2f6570e4fb5a5e64337513468436b1a709f81c9ed6f4bdb6`；discovery path digest：`4703caa064cbd3036cb97eba0f66ff4efcc7451fc645f366843850454ab4822f`。
+
+## Final closure reconciliation
+
+- Final provenance：`M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9`。
+- Final authoritative inventory：248 files / 1689 declarations / 76 source assertion candidates / 76 retained static guards / `REWRITE_PUBLIC_BEHAVIOR=0` / semantic `REWRITE_PUBLIC_BEHAVIOR=0`。
+- State：M05=`COMPLETE`；M06=`READY / PENDING TO START`；10.5=`PARTIAL`；Ticket 25 blocked by M06。
+
+```text
+P0: none
+P1: none
+P2: none
+P3:
+Inventory manifest digest remains sensitive to cross-platform
+working-tree byte representation / line endings.
+
+Core inventory structure is stable:
+248 files / 1689 declarations / 76 static guards / 0 rewrite.
+
+Non-blocking; defer to future tooling ownership.
+```
 
 ## Frozen package ownership
 
