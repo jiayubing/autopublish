@@ -24,3 +24,15 @@
 ## 当前状态
 
 本 handoff 创建时尚未创建 25-F 执行任务；下一动作是主任务按本合同重做 25-F 调度预检并创建唯一的 25-F 用户可见 `luna/max` 任务。历史 `25-goal-mode-dispatch-reconciliation.md` 记录的是上一轮在 25-E 停止的 Goal，不覆盖本轮 F→G 授权。
+
+## 25-F package closure 与主任务集成
+
+- 25-F 用户可见执行任务：`019ff2ae-edfb-74b2-92ed-059838d309be`；模型为 `gpt-5.6-luna`，推理强度为 `max`。任务返回 idle，未创建/预建 25-G。
+- 25-F implementation/contract/test：`a91346499458c08fbb403ac64ed901fed94053b4`；matrix/evidence：`944dfcae2a180d0e62f481f6ec1607e4e00f7432`；package handoff：`72ba6e136977f089405e9a1993747e368e0f8615`。
+- 主任务已从 `de72d734c47baca3129ddf43ee182eaa49a866f1` fast-forward 集成上述提交到 `72ba6e136977f089405e9a1993747e368e0f8615`；当前主工作树 clean，未 push。
+- 主任务在 `72ba6e1` 重新运行并通过：`npm run benchmark:ticket-25-f -- --output build/evidence/ticket-25-f-benchmark.json`（三项 query/scan hard budget PASS，wall-clock observation-only）、`npm run test:ticket-25-a -- --output build/evidence/ticket-25-a-contract.json`（85 stories/95 rows/21 cases/17 tracked artifacts/4 responsibility facts）、25-A/F direct tests `7/7 PASS`、architecture/dependency `15/15 PASS`、capacity `13/13 PASS`、discovery `255`、lint、format、diff check。
+- 主任务复核确认 F 只修改 acceptance/evidence runner/contract/test/handoff，不修改文章、队列、订单、迁移 schema、IPC/bridge、Renderer 业务状态 owner；所有生成 evidence 为 synthetic/in-memory/fake transport，敏感字段排除。
+
+## 当前调度状态
+
+25-F 已完成 package closure 并进入新的 clean integration HEAD；下一包为 `25-G`，尚未创建。主任务只有在本状态核验完成后才创建唯一的 25-G `luna/max` 用户可见执行任务；25-G 完成后按本 handoff 顶部合同在 package closure、Independent Audit Handoff、集成和状态更新后停止。

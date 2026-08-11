@@ -4,7 +4,7 @@
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** `RUNNING`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E` 已完成 package closure，并已集成到当前真实 integration HEAD `64e0762600d0f3149287d13d0bf3b9ecd0d94ab5`；本次用户 Goal 明确授权严格完成 `25-F → 25-G`。Ticket 25 / Wave 11 尚未完成 combined audit、最终 closure 或 `COMPLETE`；本次 Goal 在 25-G package closure、Independent Audit Handoff、集成和状态更新后停止。
+**Status:** `RUNNING`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E`、`25-F` 已完成 package closure；25-F 已由主任务 fast-forward 集成到当前真实 clean integration HEAD `72ba6e136977f089405e9a1993747e368e0f8615`，并完成主任务侧直接复核。下一合同包为 `25-G`，当前尚未调度。本次用户 Goal 在 25-G package closure、Independent Audit Handoff、集成和状态更新后停止；Ticket 25 / Wave 11 尚未完成 combined audit、最终 closure 或 `COMPLETE`。
 
 **Scheduling gate:** `SATISFIED`；波次 10 Ticket 24 与维护插槽 10.5（M04 → M05 → M06）均为 `COMPLETE`。Ticket 18–21 不属于前置依赖。启动基线与执行边界见 `../handoffs/25-0-startup-readiness.md`。
 
@@ -112,7 +112,7 @@
 
 **退出门禁：** 迁移与恢复矩阵在合成旧库闭合；所有故障点保留真实 journal/事实；没有真实数据操作、远端副作用、第二 writer 或 legacy 路线复活。
 
-**本次 Goal 的 package closure 记录（2026-08-12）：** 25-E 执行提交 `de07190ffcf25a0fce48bcb087827f394194e37d`、matrix/evidence 提交 `33657f217a2bc4edbc5dcbce5d5f9835204d497a`、handoff 提交 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6` 已由主任务 fast-forward 集成；主任务随后在最终状态更新 HEAD 重跑 E 直接组合 `93/93 PASS`、Ticket 25 contract（85 stories、95 rows、21 state cases、15 tracked artifacts、`sourceState=CLEAN`）、discovery `254`、lint、format 和 `git diff --check`，均通过。A～E package closure 已完成；Ticket 25/Wave 11 保持 `PARTIAL`。25-F 未调度，且本次 Goal 不进入 25-F/G、independent combined audit、bounded closure re-audit、final clean smoke 或 Wave 11 final closure。
+**上一轮 Goal 的 package closure 记录（2026-08-12，历史）：** 25-E 执行提交 `de07190ffcf25a0fce48bcb087827f394194e37d`、matrix/evidence 提交 `33657f217a2bc4edbc5dcbce5d5f9835204d497a`、handoff 提交 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6` 已由主任务 fast-forward 集成；主任务随后在最终状态更新 HEAD 重跑 E 直接组合 `93/93 PASS`、Ticket 25 contract（85 stories、95 rows、21 state cases、15 tracked artifacts、`sourceState=CLEAN`）、discovery `254`、lint、format 和 `git diff --check`，均通过。上一轮 A～E package closure 已完成；Ticket 25/Wave 11 保持 `PARTIAL`，上一轮 Goal 在 E 后停止。
 
 ### 25-F — Performance & Responsibility Gates
 
@@ -129,6 +129,8 @@
 **审计目标：** combined audit 检查预算是否未事后调宽、测量是否覆盖用户可感知批量路径、N+1 判据是否确定、责任清单是否真实反映 owner/caller/invariant、是否用规模或清单替代架构判断。
 
 **退出门禁：** 硬预算通过，耗时结论符合 baseline 规则，责任 evidence 可供独立审计；性能修复的直接功能回归已刷新到当前 sourceState。
+
+**当前 Goal 的 25-F package closure 记录（2026-08-12）：** 25-F implementation/contract/test 提交 `a91346499458c08fbb403ac64ed901fed94053b4`、matrix/evidence 提交 `944dfcae2a180d0e62f481f6ec1607e4e00f7432`、handoff 提交 `72ba6e136977f089405e9a1993747e368e0f8615` 已由主任务从 `de72d734c47baca3129ddf43ee182eaa49a866f1` fast-forward 集成到 `72ba6e136977f089405e9a1993747e368e0f8615`。主任务在该 clean integration HEAD 重跑 F benchmark（三项 query/scan hard budget PASS，wall-clock observation-only）、25-A contract（85 stories、95 rows、21 cases、17 tracked artifacts、4 responsibility facts）、25-A/F direct tests `7/7 PASS`、architecture/dependency `15/15 PASS`、capacity `13/13 PASS`、discovery `255`、lint、format 和 `git diff --check`，均通过。25-G 尚未调度；Ticket 25/Wave 11 仍为 `RUNNING/PARTIAL`，不得把 F package closure 或当前 Goal 状态写成 Ticket 25/Wave 11 `COMPLETE`。
 
 ### 25-G — Execution Gate & Independent Audit Handoff
 
