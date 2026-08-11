@@ -236,6 +236,6 @@ it("account profile confirmation failure settles busy and exposes a safe command
   assert.equal(controller.getSnapshot().commands.confirmAccountProfile.busy, false);
   assert.deepEqual(controller.getSnapshot().commands.confirmAccountProfile.error, {
     code: "ACCOUNT_PROFILE_CONFIRM_FAILED",
-    userMessage: "账号确认失败",
+    userMessage: "确认平台账号档案失败",
   });
 });

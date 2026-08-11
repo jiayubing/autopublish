@@ -99,7 +99,10 @@ test("workspace login command results survive a selected-client switch", async (
   pending.resolve({ status: "authenticated" });
 
   assert.equal((await command).status, "authenticated");
-  assert.deepEqual(feature.getSnapshot().doubaoLogin, { status: "authenticated" });
+  assert.deepEqual(feature.getSnapshot().doubaoLogin, {
+    status: "authenticated",
+    observation: "complete",
+  });
   assert.equal(feature.getSnapshot().doubaoLoginQuery.loading, false);
   feature.dispose();
 });

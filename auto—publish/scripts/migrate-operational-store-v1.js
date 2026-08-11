@@ -90,6 +90,7 @@ function readLease(filename) {
   } catch (error) {
     if (error && error.code === "ENOENT") return null;
     if (error && /^MIGRATION_/.test(error.code || "")) throw error;
+    if (error instanceof SyntaxError) throw fail("MIGRATION_LEASE_ACTIVE");
     throw fail("MIGRATION_LEASE_UNAVAILABLE");
   }
 }

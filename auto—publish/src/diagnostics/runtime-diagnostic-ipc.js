@@ -50,7 +50,8 @@ function sanitizeDiagnostics(value) {
   };
   diagnostics.diagnosticSink = safeDiagnosticSink(input.diagnosticSink);
   diagnostics.runtimeEventsObservation = safeObservation(
-    input.runtimeEventsObservation && input.runtimeEventsObservation.droppedCount,
+    input.runtimeEventsObservation &&
+      input.runtimeEventsObservation.droppedCount,
   );
   if (input.tools) diagnostics.tools = safeTools(input.tools);
   if (Array.isArray(input.runtimeEvents)) {
@@ -61,13 +62,11 @@ function sanitizeDiagnostics(value) {
     const declaredDroppedCount =
       input.runtimeEventsObservation &&
       input.runtimeEventsObservation.droppedCount;
-    const droppedCount = Number.isSafeInteger(declaredDroppedCount) &&
-      declaredDroppedCount >= 0
-      ? declaredDroppedCount
-      : projected.droppedCount;
-    diagnostics.runtimeEventsObservation = safeObservation(
-      droppedCount,
-    );
+    const droppedCount =
+      Number.isSafeInteger(declaredDroppedCount) && declaredDroppedCount >= 0
+        ? declaredDroppedCount
+        : projected.droppedCount;
+    diagnostics.runtimeEventsObservation = safeObservation(droppedCount);
   }
   return diagnostics;
 }

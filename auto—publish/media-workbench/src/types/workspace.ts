@@ -81,7 +81,10 @@ export interface RuntimeDiagnostics {
   errors: Array<{ code: string; message: string }>;
   warnings: Array<{ code: string; message: string }>;
   runtimeEvents?: RuntimeDiagnosticEvent[];
-  runtimeEventsObservation?: { status: "complete" | "partial"; droppedCount: number };
+  runtimeEventsObservation?: {
+    status: "complete" | "partial";
+    droppedCount: number;
+  };
   diagnosticSink?: {
     status: "ready" | "degraded" | "not_configured" | "unavailable";
     startupStatus: string;

@@ -83,9 +83,8 @@ function safeBuildInfo(value) {
 }
 
 function safeObservation(droppedCount) {
-  const count = Number.isSafeInteger(droppedCount) && droppedCount > 0
-    ? droppedCount
-    : 0;
+  const count =
+    Number.isSafeInteger(droppedCount) && droppedCount > 0 ? droppedCount : 0;
   return {
     status: count > 0 ? "partial" : "complete",
     droppedCount: count,

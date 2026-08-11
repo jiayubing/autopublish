@@ -10,7 +10,9 @@ const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9_]{1,127}$/;
 let activeReporter = NOOP;
 
 function safeErrorCode(value) {
-  return value && typeof value.code === "string" && SAFE_ERROR_CODE.test(value.code)
+  return value &&
+    typeof value.code === "string" &&
+    SAFE_ERROR_CODE.test(value.code)
     ? value.code
     : null;
 }

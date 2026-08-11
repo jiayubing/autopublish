@@ -128,7 +128,8 @@ function createDiagnosticFileSink(options) {
       io.unlinkSync(lockPath);
     } catch (error) {
       if (!error || error.code !== "ENOENT")
-        cleanupError = cleanupError || sinkError("DIAGNOSTIC_LOCK_RELEASE_FAILED");
+        cleanupError =
+          cleanupError || sinkError("DIAGNOSTIC_LOCK_RELEASE_FAILED");
     }
     if (callbackError) throw callbackError;
     if (cleanupError) throw cleanupError;

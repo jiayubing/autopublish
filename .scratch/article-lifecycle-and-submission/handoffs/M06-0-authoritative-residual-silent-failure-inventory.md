@@ -248,6 +248,83 @@ G 必须在所有 remediation 进入最终 clean integration HEAD 后重跑 AST 
 - 本包未运行完整 `npm test`：inventory-only、无 production/test/schema/gate 行为变更；完整测试属于 G 的最终 clean-HEAD gate。
 - 未执行真实登录、投稿、付费、取消、上传、生产数据库、打包、发布、push 或 Ticket 25。
 
+## 10. M06-G final authoritative reconciliation
+
+本节是 M06-G 对 A–F 全库 inventory 的最终对账；它不改变 M06-0 的扫描口径，也不把历史 handoff 当作实时调度真源。最终候选以 integration HEAD `b87028b98645f3fe3e34ae18abe1336034ac6d9e` 为 parent，在本隔离 worktree 中验证；最终 closure commit 的 parent 必须仍为该 hash。Node 为 `v24.16.0`，npm 为 `11.13.0`。所有外部/生产操作均未执行。
+
+### 10.1 Final AST summary and package ledger
+
+命令：
+
+```powershell
+node --check .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs
+node .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs --summary
+node .scratch/article-lifecycle-and-submission/maintenance/M06-0-catch-inventory.mjs
+```
+
+最终全库：`scannedFiles=505`、`filesWithCatches=274`、`catches=1151`、`parseDiagnostics=[]`（0）。A–F handler 文件互不重复且合计 274；handler 合计 1,151。
+
+| package | files | handlers | propagate | diagnostic | return/fallback | side/mapping | assignment | EMPTY | OTHER |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 44 | 197 | 104 | 40 | 31 | 5 | 17 | 0 | 0 |
+| B | 47 | 282 | 140 | 74 | 26 | 26 | 10 | 6 | 0 |
+| C | 67 | 254 | 71 | 20 | 93 | 52 | 13 | 4 | 1 |
+| D | 54 | 190 | 48 | 28 | 50 | 53 | 11 | 0 | 0 |
+| E | 20 | 77 | 32 | 3 | 15 | 20 | 7 | 0 | 0 |
+| F | 42 | 151 | 54 | 42 | 16 | 21 | 18 | 0 | 0 |
+
+This reconciles the final A/B/C/D/E/F handoffs exactly. A, D, E and F have no EMPTY/OTHER. B's six EMPTY items and C's four EMPTY plus one OTHER are listed and proven below; there is no unexplained residual.
+
+### 10.2 Remaining EMPTY/OTHER proof
+
+| package | record | final disposition / proof |
+| --- | --- | --- |
+| B | `src/content/doubao-browser-adapter.js:176,180,191` | optional artifact cleanup after the primary browser/content result; cleanup is best-effort and cannot replace the primary result |
+| B | `src/content/legacy-migration-planner.js:559,570,593` | optional historical fingerprint/probe parse; malformed optional legacy evidence stays absent/unknown and never authorizes a write or success |
+| C | `desktop/runtime-paths.js:3` | optional Electron capability import; non-Electron runtime keeps the optional capability absent |
+| C | `desktop/services/paid-media-batch-orchestrator.js:166` | stable `PAID_ORDER_PRECHECK_FAILED` mapping; primary precheck failure remains visible |
+| C | `desktop/services/platform-settings/hepan-settings-adapter.js:356` | malformed optional JSONL entry is ignored as an optional parse record, not treated as a valid remote fact |
+| C | `desktop/services/platform-settings/media-risk-confirmation-adapter.js:50` | invalid optional endpoint is invalidated/no-op and cannot authorize a submission |
+| C | `src/platforms/hepan/adapter.js:154` | optional JSONL parse failure is absent/unknown and cannot become accepted/success |
+
+### 10.3 Combined audit and bounded re-audit
+
+Primary Audit covered owner/public contract, failure propagation, primary-error preservation through cleanup, remote uncertain/manual-check semantics, idempotency/concurrency/lease/lock/rollback, provenance/evidence fail-closed behavior, sensitive diagnostics, unique writer/state-machine ownership and bypass absence. Findings were classified under the protocol:
+
+| classification | severity | finding | disposition |
+| --- | --- | --- | --- |
+| `INTRODUCED_BY_CHANGE` | P1 | malformed migration lease JSON was mapped to `MIGRATION_LEASE_UNAVAILABLE`, while the existing contender contract requires `MIGRATION_LEASE_ACTIVE`; a contender never removed a lease it did not own | fixed in `scripts/migrate-operational-store-v1.js`; `SyntaxError → MIGRATION_LEASE_ACTIVE`, structured migration errors still propagate, unreadable I/O remains unavailable; direct regression and `npm run test:migration` pass |
+| `EXPOSED_PREEXISTING` | P1 | typed renderer IPC `ipcError` kept safe text only in `Error.message`, so feature `safeError` lost the public `userMessage` and fell back to a generic message | fixed at the bridge owner by retaining `userMessage`; renderer media-refresh failure now exposes the safe contract text; affected 45/45 regression passes |
+| `EXPOSED_PREEXISTING` | P2 | three renderer fixtures/assertions lagged current public capabilities/DTO/fallback contracts (`listRegularQueueGroups`, login observation, account-profile fallback) | bounded test-contract/fixture correction; no production bypass or weakened assertion; affected 45/45 passes |
+| `CROSS_COMPONENT_INTERACTION` | P1 | release-evidence source-state hashing used `auto—publish/` while M06 closure documents are tracked at the Git top-level, producing a false provenance mismatch | fixed `currentSourceState` to resolve the Git top-level; release-evidence 10/10 and packaging 47/47 pass |
+| `PROCESS_EVIDENCE_GAP` | P2 | an earlier 604-second full-run timeout was initially unclassified | resolved by process-tree timing: 249 files = 210 parallel + 39 serial; Phase 05 ~191s, production IPC ~284s, Phase 08 ~230s; runner children closed normally and the bounded 1,200-second run completed. No runner code change was needed |
+| `EXPOSED_PREEXISTING` | P2 non-blocking | full development dependency audit reports the existing 5 vulnerability tree; production-only audit is clean | recorded to dependency owner; no manifest/lock upgrade in M06-G |
+
+After remediation only a bounded re-audit was run: repaired lease/error-propagation paths, direct callers, affected renderer contracts, relevant invariants, and the final gates. No fresh unbounded full review was reopened.
+
+### 10.4 Failure matrix and gate evidence
+
+The combined matrix used synthetic/temp workspaces, fault injection and fake transports only:
+
+| failure class | evidence |
+| --- | --- |
+| persistence read/write/rollback/lock/lease | M06-A/B tests; migration 67/67; capacity/lease regression; final root suite |
+| content parse/rename/file cleanup/recovery | M06-B direct suite; links 189/189; final root suite |
+| remote explicit failure / uncertain / manual check / no automatic retry | M06-C 209/209; final root suite and production IPC matrix |
+| process timeout/stop/cleanup and primary-error preservation | M06-C 209/209; Phase 08 4/4; final root suite |
+| optional parse/probe and diagnostic sink failure | diagnostics 37/37; M06-D 81/81; final root suite |
+| auth audit/repository/rollback/cleanup | auth-server 63/63, including M06-E 9/9 |
+| migration/operator/release/provenance partial failure | migration 67/67; packaging 47/47; local alpha smoke verifier PASS; provenance fail-closed tests |
+| sensitive diagnostics | diagnostics, auth, IPC and final root suite; no raw token/Cookie/API key/password/body/database row/path accepted |
+
+Final gate commands included auth-server full test, format check, lint, main/bridge/renderer typechecks, renderer/preload build, migration, links, diagnostics, production IPC/renderer/Phase 08/package gates, legacy absence, Ticket 24-E absence, dependency audits and the exact complete root `npm test` with the Electron focus gate explicitly enabled (`RUN_ELECTRON_FOCUS_TESTS=1`). The final handoff records actual post-commit exit codes/counts; a skipped test was never accepted as PASS.
+
+### 10.5 Ownership / provenance boundary
+
+`verify-phase-08-gates.js` reported `capabilityReachability=129/129`, `uniqueOwnersAndWriters=PASSED`, `dependencyDirection=PASSED`, `operationalStoreBoundary=PASSED`, `legacyAbsence=PASSED`, and `trackedGeneratedOutput=PASSED`; the publication owner remained `src/infrastructure/operational-store/operational-store.js`, the remote publisher owner remained `desktop/services/desktop-publisher-router.js`, and no second writer/state machine/compatibility path was introduced. Provenance and artifact gates fail closed when HEAD/sourceState/command/metadata are missing or unreadable.
+
+M06-G changed only the M06 closure candidate and its direct regressions/evidence. No real login, publish, payment, upload, production database, migration, external account, push, release or Ticket 25 operation was performed.
+
 ## 8. M06-E authoritative reconciliation
 
 本节是 M06-E 对本 inventory 的当前增量闭合记录；上文 M06-0 census 仍保留其历史基线语义，不覆盖 exact-parent 上已完成的 M06-A～D 代码。M06-E 严格从 integration parent `ed9f8ec48a315ab21d4ac2fdb45dfdacebab67a7` 开始，未执行真实账号、生产数据库、发布、付费或外部写操作。

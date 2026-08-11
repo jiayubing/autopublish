@@ -40,9 +40,12 @@ export function ipcError(
   category?: IpcError["category"];
   retryability?: IpcError["retryability"];
   diagnosticId?: string;
+  userMessage?: string;
 } {
+  const userMessage = error?.userMessage || fallback;
   const value = Object.assign(new Error(error?.userMessage || fallback), {
     name: "OperationalError",
+    userMessage,
     code: error?.code || "IPC_RESULT_INVALID",
     category: error?.category || "transport",
     retryability: error?.retryability || "safe",

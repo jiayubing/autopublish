@@ -2,9 +2,9 @@
 
 **Purpose:** 在核心业务、legacy cleanup、contract 与测试体系稳定后，完成 M02 延后的剩余空 catch/隐式吞错分类，使生产代码中的静默失败只剩经过明确证明的 best-effort cleanup 或 optional probe。
 
-**Status:** `PARTIAL`；M06-0 authoritative inventory/classification 与 A–G scope freeze 已完成；M06-A、M06-B、M06-C、M06-D、M06-E、M06-F 已完成，下一 gate 为 M06-G
+**Status:** `COMPLETE`；M06-0 authoritative inventory/classification、M06-A～F remediation、M06-G combined closure 与 Maintenance 10.5 final gates 已完成。
 
-**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A、M06-B、M06-C、M06-D、M06-E、M06-F 已完成并将 M06-G 置为 `READY`，但 M06 仍为 `PARTIAL`。M06 完成并通过维护 10.5 最终门禁后才允许波次 11 Ticket 25；M06 未完成前 10.5 不得标记 `COMPLETE`。
+**Scheduling gate:** M05 `COMPLETE` 后调度；M06-A～F 与 M06-G 已完成，Maintenance 10.5 final gates 已通过。Ticket 25 保持 `PENDING`/blocked/not started，不能由本 closure 自动启动。
 
 ## Scope
 
@@ -31,7 +31,7 @@ M06-0 的唯一 inventory/scope 真源为：
 | M06-D | optional probe / parse / diagnostics / IPC / Renderer                                                                                                      | `COMPLETE` |
 | M06-E | auth / security                                                                                                                                            | `COMPLETE` |
 | M06-F | operator / release / migration scripts                                                                                                                     | `COMPLETE` |
-| M06-G | combined audit、inventory/failure-semantics reconciliation、blocking remediation、bounded re-audit、final clean-HEAD full gate 与 Maintenance 10.5 closure | `READY`    |
+| M06-G | combined audit、inventory/failure-semantics reconciliation、blocking remediation、bounded re-audit、final clean-HEAD full gate 与 Maintenance 10.5 closure | `COMPLETE` |
 
 不得按 catch 数量重新平均拆包。M06-0 census 为 505 个扫描文件、276 个有 catch 的文件、1,099 个 catch/rejection handler、0 parse diagnostics；其中 `EMPTY=148`。高优先级复核集去重后为 217 项：A=34、B=45、C=44、D=43、E=18、F=33。每包仍需检查其全部 inventory，不得把 priority set 当作其余项自动安全的白名单。
 
@@ -45,11 +45,11 @@ M06-0 的唯一 inventory/scope 真源为：
 ## Acceptance criteria
 
 - [x] M06-0 已完成生产代码/正式脚本 catch inventory、classification 与 A–G scope freeze；未修改 production。
-- [ ] 生产代码 residual catch inventory 全部有最终 disposition；无未解释空 catch。M06-F 已闭合 F 包；M06-G 仍负责 combined inventory reconciliation 与最终 closure。
-- [ ] persistence/security/remote/process 路径没有 silent swallow。M06-E auth/security owner 已闭合；其余包仍按串行 gate 推进。
-- [ ] 保留的 cleanup/probe 都有明确语义，且不会把失败伪装成成功。M06-E 已完成 close/rollback/backup/recovery/remote logout 故障注入。
-- [ ] 敏感错误不写入日志；diagnostic metadata 仍为 allowlisted/sanitized。M06-E 已移除请求 path 及原始错误正文诊断出口。
-- [ ] 完整测试与关键故障注入通过，交接记录保留项及理由。M06-F 定向与相关 gates 已记录；完整 `npm test` 仍属于 M06-G。
+- [x] 生产代码 residual catch inventory 全部有最终 disposition；无未解释空 catch。A～F ledger 已由 M06-G 全库 reconciliation 闭合。
+- [x] persistence/security/remote/process 路径没有 silent swallow；保留项均为明确 outcome、optional probe/parse、listener isolation 或 best-effort cleanup。
+- [x] 保留的 cleanup/probe 都有明确语义，且不会把失败伪装成成功；cleanup failure 不覆盖主错误。
+- [x] 敏感错误不写入日志；diagnostic metadata 仍为 allowlisted/sanitized，provenance 缺失时 fail closed。
+- [x] 完整测试、故障矩阵、auth/format/type/build/audit/特殊 gates 与最终 clean-HEAD evidence 已记录在 M06-G handoff。
 
 M06-G 完成前，M06 与 Maintenance 10.5 均不得标记 `COMPLETE`，Ticket 25 不得启动。G 完成后停止，不自动进入 Ticket 25。
 
@@ -63,7 +63,7 @@ M06-A closure 时状态为 `M06-A=COMPLETE`、`M06-B=READY`；其后的 M06-B cl
 
 M06-B 已完成 content / file persistence / lifecycle owner 的实现、定向故障注入验证、Primary Audit、blocking finding 检查、bounded re-audit 与 AST reconciliation。文章文件事务、锁与 removal recovery、生成 batch/AI test state、attention lookup、materials/questions/files 及 Doubao collection/generation persistence 均按失败语义收敛；读失败不再伪装为不存在，写入、rollback、lock、recovery 和关键 state cleanup 不再伪装成功。保留的 6 个 `EMPTY` handler 仅为已注释且可观察语义成立的 optional diagnostic artifact cleanup / historical optional parse probe。完整证据见 `handoffs/M06-B-content-file-persistence-lifecycle-cleanup.md`。
 
-当前推进状态：`M06-A=COMPLETE`、`M06-B=COMPLETE`、`M06-C=COMPLETE`、`M06-D=COMPLETE`、`M06-E=COMPLETE`、`M06-F=COMPLETE`、`M06-G=READY`、`M06/Maintenance 10.5=PARTIAL`、`Ticket 25=PENDING/blocked`。M06-G combined closure 与维护 10.5 final gate 仍待后续串行工作包。
+历史推进快照已由下方 M06-G closure supersede；当前状态为 `M06-A～G=COMPLETE`、`M06/Maintenance 10.5=COMPLETE`、`Ticket 25=PENDING/blocked/not started`。
 
 ## M06-C package closure
 
@@ -91,4 +91,8 @@ M06-F 已完成 operator / release / migration scripts 全量 F inventory 对账
 
 F 的 exact-parent 是 `2c3e97d57c32316b214ce8cbfc1f2281a4f1a0dd`。parent AST 为 505 个扫描文件、274 个含 handler 文件、1,138 个 handler；F 为 42 个文件/138 个 handler，shape 为 `DIAGNOSTIC=42`、`ASSIGNMENT_MAPPING=4`、`RETURN_OR_FALLBACK=14`、`PROPAGATE_OR_RETHROW=44`、`SIDE_EFFECT_OR_MAPPING=6`、`EMPTY=26`、`OTHER=2`。implementation tree 的最终 reconciliation 为 505/274/1,151；F 为 42 个文件/151 个 handler，shape 为 `DIAGNOSTIC=42`、`ASSIGNMENT_MAPPING=18`、`RETURN_OR_FALLBACK=16`、`PROPAGATE_OR_RETHROW=54`、`SIDE_EFFECT_OR_MAPPING=21`、`EMPTY=0`、`OTHER=0`，parse diagnostics 为 0。新增 13 个 handler 仅位于 metadata migration (+3)、operational-store migration (+2)、offline smoke cleanup (+1)、alpha package verifier (+3)、packaged DOCX verifier (+2)、packaged Playwright verifier (+2)，分别用于主错误保留、稳定 outcome、受控 cleanup 或 fail-closed provenance/package evidence；未新增 writer、第二状态机、schema 或兼容旁路。
 
-本包已闭合：migration 的 `NEEDS_REPAIR`、lock/lease、rollback、partial/uncertain/operator action；package/manifest/provenance unreadable 或不可验证时的 fail-closed；release/operator result 与实际 HEAD/sourceState/command 的绑定；cleanup failure 与主业务错误隔离；以及 CLI/diagnostic 的稳定 code 与敏感信息屏蔽。F 的 26 个 baseline `EMPTY` 与 2 个 baseline `OTHER` 均已在 authoritative inventory 中逐项解释并清零。M06-G 仍需执行 combined audit、全量 reconciliation 与最终 clean-HEAD full gate；因此 M06、Maintenance 10.5 继续保持 `PARTIAL`，Ticket 25 继续 `PENDING/blocked` 且未启动。
+本包已闭合：migration 的 `NEEDS_REPAIR`、lock/lease、rollback、partial/uncertain/operator action；package/manifest/provenance unreadable 或不可验证时的 fail-closed；release/operator result 与实际 HEAD/sourceState/command 的绑定；cleanup failure 与主业务错误隔离；以及 CLI/diagnostic 的稳定 code 与敏感信息屏蔽。F 的 26 个 baseline `EMPTY` 与 2 个 baseline `OTHER` 均已在 authoritative inventory 中逐项解释并清零。M06-G 已完成 combined audit、全量 reconciliation 与最终 clean-HEAD full gate；当前 `M06=COMPLETE`、`Maintenance 10.5=COMPLETE`，Ticket 25 继续 `PENDING/blocked/not started`。
+
+## M06-G final closure
+
+M06-G 的完整 provenance、combined Primary Audit、blocking remediation、bounded re-audit、authoritative AST ledger、故障矩阵、最终 clean-HEAD 命令与未跑项见 `handoffs/M06-G-closure-audit-and-clean-head-evidence.md`。本节只保留调度结论：所有 M06 gate 已满足，M06 与 Maintenance 10.5 标记 `COMPLETE`；Ticket 25 保持 `PENDING`/blocked/not started；本 closure 后停止等待集成，不自动启动后续任务。

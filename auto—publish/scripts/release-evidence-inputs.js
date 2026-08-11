@@ -296,11 +296,18 @@ function currentCommit(root) {
 
 function currentSourceState(root) {
   try {
+    const repositoryRoot = path.resolve(
+      execFileSync("git", ["rev-parse", "--show-toplevel"], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+    );
     const porcelain = execFileSync(
       "git",
       ["status", "--porcelain=v1", "--untracked-files=all"],
       {
-        cwd: root,
+        cwd: repositoryRoot,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "ignore"],
       },
@@ -308,12 +315,12 @@ function currentSourceState(root) {
     const diff = execFileSync(
       "git",
       ["diff", "--binary", "--no-ext-diff", "HEAD"],
-      { cwd: root, stdio: ["ignore", "pipe", "ignore"] },
+      { cwd: repositoryRoot, stdio: ["ignore", "pipe", "ignore"] },
     );
     const untracked = execFileSync(
       "git",
       ["ls-files", "--others", "--exclude-standard", "-z"],
-      { cwd: root, stdio: ["ignore", "pipe", "ignore"] },
+      { cwd: repositoryRoot, stdio: ["ignore", "pipe", "ignore"] },
     );
     const digest = crypto.createHash("sha256");
     digest.update("status\0");
@@ -329,7 +336,7 @@ function currentSourceState(root) {
       digest.update("\0path\0");
       digest.update(relativePath);
       digest.update("\0");
-      const filename = path.resolve(root, relativePath);
+      const filename = path.resolve(repositoryRoot, relativePath);
       try {
         const stats = fs.lstatSync(filename);
         if (stats.isSymbolicLink()) {

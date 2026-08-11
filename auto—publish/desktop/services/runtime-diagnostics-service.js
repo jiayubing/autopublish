@@ -78,7 +78,8 @@ function createRuntimeDiagnosticsService(options) {
   let lastFailureCode = null;
 
   function safeFailureCode(value) {
-    return value && typeof value.code === "string" &&
+    return value &&
+      typeof value.code === "string" &&
       /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
       ? value.code
       : null;
@@ -86,11 +87,12 @@ function createRuntimeDiagnosticsService(options) {
 
   function diagnosticSinkStatus() {
     return {
-      status: memoryFailureCount > 0 || fileFailureCount > 0
-        ? "degraded"
-        : fileSink
-          ? "ready"
-          : "not_configured",
+      status:
+        memoryFailureCount > 0 || fileFailureCount > 0
+          ? "degraded"
+          : fileSink
+            ? "ready"
+            : "not_configured",
       startupStatus: startupCleanup.status,
       memoryFailureCount,
       fileFailureCount,
