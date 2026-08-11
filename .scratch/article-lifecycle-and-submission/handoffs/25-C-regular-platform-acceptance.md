@@ -69,3 +69,10 @@ Generated contract evidence 位于 ignored `auto—publish/build/evidence/ticket
 - Implementation：`e925dbf90ff82f6028956092ce4240ab717d3c52` — `test: cover Ticket 25-C regular platform acceptance`
 - Matrix/evidence docs：`8e00b4ba5ac8409bf4f06aea4c87910bbea99768` — `docs: record Ticket 25-C acceptance evidence`
 - Handoff docs commit：本文件随最终 handoff-only docs commit 写入；其 hash 由最终 Git 状态返回并在主任务集成时核验。
+
+## 主任务集成核验
+
+- Implementation：`e925dbf`；matrix/evidence：`8e00b4b`；handoff：`c47cc98`。
+- 主任务 merge/integration commit：`c645fe19a83502e320e845833111e6b6a520f8b4`。
+- 主任务在该 clean integration HEAD 重跑 C acceptance（4/4）、直接回归（78/78）、renderer/absence gate（16/16）、25-A contract validator（85 stories、95 rows、21 cases、10 deferred image rows、13 tracked artifacts）、discovery（252）、lint、format 和 diff check，全部通过。
+- 以上只证明 25-C package closure；不替代 25-G 后的独立 combined audit、final clean smoke 或 Ticket 25/Wave 11 closure。
