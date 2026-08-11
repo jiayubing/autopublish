@@ -111,6 +111,15 @@ function deriveArticleLifecycle(input) {
   const publicationStatuses = publications.map(publicationLifecycleStatus);
   const submissionStatuses = submissionItems.map(submissionLifecycleStatus);
   const orderStatuses = orders.map(orderStatusOf);
+  const cancelledTargetKeys = new Set(
+    Object.entries(targetFacts)
+      .filter(([, fact]) => fact.status === "cancelled")
+      .map(([targetKey]) => targetKey),
+  );
+  const failureBelongsToCancelledTarget = (fact) => {
+    const targetKey = targetKeyOf(fact);
+    return targetKey !== null && cancelledTargetKeys.has(targetKey);
+  };
   const mediaFacts = publications.filter(isMediaTarget).concat(submissionItems.filter(isMediaTarget));
   const hasPublished = publications.some((record, index) => publicationStatuses[index] === "published" && !isMediaTarget(record))
     || submissionItems.some((item, index) => submissionStatuses[index] === "published" && !isMediaTarget(item))
@@ -121,7 +130,10 @@ function deriveArticleLifecycle(input) {
   const hasActivePublication = publications.some(activePublicationFact);
   const hasActiveSubmission = submissionItems.some(activeSubmissionFact);
   const hasPaidOrder = orders.some((order) => isKnownOrder(order) && ["0", "1"].includes(orderStatusOf(order)));
-  const hasUnknownOrder = orders.some((order) => !isKnownOrder(order) || !SUPPLIER_STATUSES.has(orderStatusOf(order)));
+  const hasUnknownOrder = orders.some((order) => {
+    const status = orderStatusOf(order);
+    return !isKnownOrder(order) || (!SUPPLIER_STATUSES.has(status) && status !== "cancelled");
+  });
   const hasUnknownPublicationStatus = publicationStatuses.some((status) => !KNOWN_PUBLICATION_STATUSES.has(status));
   const hasUnknownSubmissionStatus = submissionStatuses.some((status) => !KNOWN_SUBMISSION_STATUSES.has(status));
   const activeTargetKeys = new Set(
@@ -137,7 +149,9 @@ function deriveArticleLifecycle(input) {
   const hasMissingMediaOrder = mediaFacts.some((fact) => ["queued", "remote_started", "paid_processing", "published"].includes(rawStatusOf(fact))
     && !orders.some((order) => matchesOrderTarget(fact, order, mediaFacts, orders)));
   const hasRepair = removalTransactions.some((transaction) => transaction.status === "needs_repair" || transaction.phase === "needs_repair");
-  const explicitFailure = text(article.status) === "failed" || publicationStatuses.includes("failed") || submissionStatuses.some((status) => FAILURE_STATUSES.has(status));
+  const explicitFailure = text(article.status) === "failed"
+    || publications.some((record, index) => publicationStatuses[index] === "failed" && !failureBelongsToCancelledTarget(record))
+    || submissionItems.some((item, index) => FAILURE_STATUSES.has(submissionStatuses[index]) && !failureBelongsToCancelledTarget(item));
   const hasAttention = attentionItems.length > 0 || hasRepair || hasUncertain || hasUnknownOrder || hasUnknownPublicationStatus || hasUnknownSubmissionStatus || hasMissingMediaOrder || hasMultipleActiveTargets || (!hasPublished && (explicitFailure || hasRejectedOrder || hasAfterSalesOrder));
   const isTrash = ["trash", "trashed"].includes(text(article.status)) || value.deleted === true;
   const reasonCodes = [];
