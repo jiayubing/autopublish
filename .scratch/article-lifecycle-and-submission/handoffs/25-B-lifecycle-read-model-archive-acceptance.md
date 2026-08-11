@@ -58,3 +58,10 @@
 - B 当前未发现未闭合的 blocking product failure。仍缺真实外部验收、图片能力和后续 C/D/E 的队列并行、付费订单、迁移恢复证据；这些不能在 B 预建或假装通过。
 - 下一包入口：主任务将本实现与 docs/evidence commit 集成到新的 clean integration HEAD 后，再按串行协议另行调度 `25-C`。本执行任务不进入 25-C/D/E/F/G，不更新 Ticket 25/Wave 11 COMPLETE。
 - 禁止的外部操作：真实登录、真实平台发布、真实付费/订单创建、真实订单刷新/取消/申诉、生产数据库修改、图片上传以及 push。
+
+## 主任务集成核验
+
+- 实现提交：`bd3b9b11`；matrix/manifest/handoff 提交：`15cb051`。
+- 主任务 merge/integration commit：`750c41d3ea283f902560aa5248d91261e893d0e8`。
+- 主任务在该 clean integration HEAD 重跑 B package test（4/4）、104 项直接回归、25-A contract validator（85 stories、95 rows、21 cases、10 deferred image rows、manifest 12）、test discovery（251）、lint、format 和 diff check，全部通过。
+- 以上只证明 25-B package closure；不替代 25-G 后的独立 combined audit、final clean smoke 或 Ticket 25/Wave 11 closure。
