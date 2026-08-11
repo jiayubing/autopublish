@@ -4,7 +4,7 @@
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** `PARTIAL`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E` 已完成 package closure，并已集成到 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6`；下一合同包为 `25-F`，但本次 Goal 未调度且在 25-E closure 后停止。Ticket 25 / Wave 11 尚未完成 combined audit、最终 closure 或 `COMPLETE`。
+**Status:** `RUNNING`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E` 已完成 package closure，并已集成到当前真实 integration HEAD `64e0762600d0f3149287d13d0bf3b9ecd0d94ab5`；本次用户 Goal 明确授权严格完成 `25-F → 25-G`。Ticket 25 / Wave 11 尚未完成 combined audit、最终 closure 或 `COMPLETE`；本次 Goal 在 25-G package closure、Independent Audit Handoff、集成和状态更新后停止。
 
 **Scheduling gate:** `SATISFIED`；波次 10 Ticket 24 与维护插槽 10.5（M04 → M05 → M06）均为 `COMPLETE`。Ticket 18–21 不属于前置依赖。启动基线与执行边界见 `../handoffs/25-0-startup-readiness.md`。
 
@@ -13,7 +13,7 @@
 - 本 ticket 是最终验收执行与证据收集，不自行承担代码/架构审计；它必须从公开行为重新生成证据，不以各 ticket 自报完成代替运行结果。完成后由用户另派独立审计 subagent 审查 diff、证据真实性和遗漏项。
 - 自动化不得使用真实服务商、真实付费订单或真实平台账号；真实验证只生成用户可执行清单，不自行触发外部费用或发布。核心验收只要求纯文本外部链，不含图片专项验证。
 - `25-0 — Startup Readiness` 是已完成的历史准备包，不得复用该编号。Ticket 25 的执行包固定为 `25-A → 25-B → 25-C → 25-D → 25-E → 25-F → 25-G`，全部属于同一个 Ticket 25 scope，不重开历史 Ticket，也不按 M05/M06 owner 重新分类。
-- Ticket 25 的默认合同仍是 **Manual Dispatch package-by-package**：用户未授权 Continuous Goal 时，每次只调度当前最左、gate 已满足的一个执行包，不自动进入下一包、commit/merge、审计或真实外部验收。对本次用户明确授权的 Goal，已在 25-A 前按 `EXECUTION-PROTOCOL.md` 1.3 完成模式收敛：`25-A → 25-E` 每个包对应一个新的用户可见执行任务，主任务必须逐包等待实现/定向测试/evidence，核验后集成到新的 clean integration HEAD，再创建下一包；本次用户授权范围内允许 commit/merge，仍禁止 push。A～G 仍是同一 Ticket 25 scope 下的串行 package gate，不是七个独立 Ticket Closure；每包完成定向验证并留下可审计 evidence，但不各自开启 fresh full audit，`25-G` 后只执行一次独立 Ticket 25 / Wave 11 combined audit。为避免两套流程重叠，本次 Goal 只推进到 `25-E` package closure、集成和状态更新；不进入 25-F/G、独立 combined audit、bounded closure re-audit 或 Wave 11 final closure，也不把 25-E package closure 记为 Ticket 25/Wave 11 `COMPLETE`。该关系与停止边界见 `../handoffs/25-goal-mode-dispatch-reconciliation.md`。
+- Ticket 25 的默认合同仍是 **Manual Dispatch package-by-package**：用户未授权 Continuous Goal 时，每次只调度当前最左、gate 已满足的一个执行包，不自动进入下一包、commit/merge、审计或真实外部验收。对本次用户明确授权的 Goal，`EXECUTION-PROTOCOL.md` 1.3 负责 `25-F → 25-G` 的严格 task-per-work-package 调度：每个包对应一个新的用户可见 `luna`/`max` 执行任务，主任务必须逐包等待实现/定向测试/evidence，核验后集成到新的 clean integration HEAD，再创建下一包；不得预建或并行 25-G。本次用户授权范围内允许 commit/merge，仍禁止 push。A～G 仍是同一 Ticket 25 scope 下的串行 package gate，不是七个独立 Ticket Closure；每包完成定向验证并留下可审计 evidence，但不各自开启 fresh full audit，`25-G` 后只执行一次独立 Ticket 25 / Wave 11 combined audit。本次 Goal 在 `25-G` package closure、Independent Audit Handoff、主任务集成和状态更新后停止；不进入 Independent Combined Audit、remediation、bounded closure re-audit、final clean smoke、真实外部验收或 Wave 11 final closure，也不把 25-G package closure 记为 Ticket 25/Wave 11 `COMPLETE`。该关系与停止边界见 `../handoffs/25-f-g-goal-mode-dispatch-reconciliation.md`。
 - 包间传递的是前一包验证过的精确 sourceState；是否产生包级 commit 只由届时用户授权决定，不能为了串行推进擅自 commit/merge。finding 修复后只做 bounded closure re-audit，除 `AUDIT-PROTOCOL.md` 定义的 escalation 外不得再开启第三轮全量审计。
 - 每个新执行包开始前必须在实际仓库重做 `EXECUTION-PROTOCOL.md` 第 2 节调度预检。前一包的退出门禁未满足时不得开始后一包分析或实现；包内发现真实产品缺陷时回到对应唯一 owner 修复，不创建 acceptance-owned service/store/state machine。
 
