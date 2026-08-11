@@ -111,3 +111,7 @@ The earlier run without this variable produced 1,838 passed and 1 skipped and re
 ## 8. Status and handoff boundary
 
 After the final clean-HEAD gate passes, M06-G is `COMPLETE`, M06 is `COMPLETE`, and Maintenance 10.5 is `COMPLETE`. Ticket 25 remains `PENDING` and explicitly blocked/not started. This closure does not pre-create or schedule Ticket 25 and stops for integration.
+
+## 9. Post-closure remediation supersession
+
+The original delivery at `696f5cff` was later found to have one P1, two blocking P2 findings, including a missing saved post-commit clean-HEAD evidence artifact. Those findings are superseded and closed by implementation commit `8cd5c1c3971e3ce38c28e772958fcf8f2284dcb8`, `M06-G-post-closure-blocking-remediation.md`, and the checked-in `M06-G-post-closure-clean-head-evidence.json`. The new clean implementation HEAD passed 1,843/1,843 complete root tests with zero skipped and all supplemental gates. This historical handoff must not be used to replace the newer evidence.

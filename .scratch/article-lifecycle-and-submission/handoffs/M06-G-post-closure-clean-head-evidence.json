@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "status": "PASSED",
+  "operation": "m06-g-post-closure-clean-head-gate",
+  "testedCommit": "8cd5c1c3971e3ce38c28e772958fcf8f2284dcb8",
+  "parent": "696f5cff183632bd4700df96cb006da98504adf9",
+  "tree": "22965453e27a807d9244a779722b0b04d4cc1d05",
+  "sourceState": {
+    "status": "CLEAN",
+    "diffSha256": "712c7e70e629e881f202187c87838c85a6da7cab4759191860fc1a7a8a44126e",
+    "summary": {
+      "changedEntries": 0,
+      "stagedEntries": 0,
+      "unstagedEntries": 0,
+      "untrackedEntries": 0
+    }
+  },
+  "runtime": {
+    "nodeVersion": "v24.16.0",
+    "npmVersion": "11.13.0",
+    "runElectronFocusTests": true
+  },
+  "rootGate": {
+    "status": "PASSED",
+    "command": "$env:RUN_ELECTRON_FOCUS_TESTS='1'; node scripts/create-root-test-evidence.js --output $env:TEMP\\m06-g-remediation-root-evidence-8cd5c1c.json",
+    "underlyingSuite": "node scripts/run-tests.js",
+    "startedAt": "2026-08-11T12:53:15.876Z",
+    "finishedAt": "2026-08-11T13:00:53.052Z",
+    "durationMs": 457176,
+    "testFiles": 249,
+    "tests": 1843,
+    "passed": 1843,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "todo": 0,
+    "runnerLifecycle": "CLOSED",
+    "allFilesReported": true,
+    "noSkippedTodo": true,
+    "testInventorySha256": "bdc5b70a82594cf89a2922b84baf741de9564ce177625d0272a46cbda98e5231"
+  },
+  "supplementalGates": {
+    "status": "PASSED",
+    "observedDurationMs": 476200,
+    "commands": [
+      "npm run test:auth",
+      "npm run format:check",
+      "npm run lint",
+      "npm run typecheck:main",
+      "npm run typecheck:bridge",
+      "npm run typecheck:renderer",
+      "npm run build:renderer",
+      "npm run build:preload",
+      "npm run test:migration",
+      "npm run test:links",
+      "npm run test:diagnostics",
+      "npm run test:production-ipc-matrix",
+      "npm run test:phase-08:gates",
+      "npm run verify:phase-08",
+      "npm run test:legacy-absence",
+      "npm run test:ticket-24-e",
+      "npm run test:packaging",
+      "npm audit --omit=dev --audit-level=high"
+    ],
+    "authTests": 63,
+    "packagingTests": 47,
+    "phase08CapabilityReachability": "129/129",
+    "productionAuditVulnerabilities": 0
+  },
+  "knownNonBlockingFinding": {
+    "command": "npm audit --audit-level=high",
+    "exitCode": 1,
+    "vulnerabilities": 5,
+    "high": 4,
+    "moderate": 1,
+    "packages": [
+      "brace-expansion",
+      "fast-uri",
+      "js-yaml",
+      "tar",
+      "undici"
+    ],
+    "classification": "EXPOSED_PREEXISTING",
+    "disposition": "NON_BLOCKING_FUTURE_DEPENDENCY_OWNER"
+  }
+}
