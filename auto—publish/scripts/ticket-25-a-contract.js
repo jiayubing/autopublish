@@ -376,7 +376,7 @@ function validateEvidenceManifest(value) {
     throw contractError("TICKET_25_A_TRACKED_EVIDENCE_INCOMPLETE");
   if (
     !Array.isArray(value.generatedArtifacts) ||
-    value.generatedArtifacts.length !== 4
+    value.generatedArtifacts.length < 5
   )
     throw contractError("TICKET_25_A_GENERATED_EVIDENCE_INCOMPLETE");
   const paths = new Set();
@@ -407,6 +407,7 @@ function validateEvidenceManifest(value) {
   for (const pathValue of [
     "build/evidence/ticket-25-a-contract.json",
     "build/evidence/ticket-25-a-benchmark.json",
+    "build/evidence/ticket-25-f-benchmark.json",
     "build/evidence/ticket-25-production-smoke-dirty.json",
     "build/evidence/ticket-25-production-smoke-clean.json",
   ])
@@ -426,10 +427,78 @@ function validateEvidenceManifest(value) {
   ])
     if (!requiredFields.has(field))
       throw contractError("TICKET_25_A_PROVENANCE_FIELD_MISSING");
+  const responsibilities = validateModuleResponsibilityEvidence(
+    value.moduleResponsibilityEvidence,
+  );
   return {
     status: "DEFINED_NOT_ACCEPTANCE_RESULT",
     trackedCount: value.trackedArtifacts.length,
     generatedCount: value.generatedArtifacts.length,
+    moduleCount: responsibilities.moduleCount,
+    moduleDisposition: responsibilities.disposition,
+  };
+}
+
+function validateModuleResponsibilityEvidence(value) {
+  if (!Array.isArray(value) || value.length < 3)
+    throw contractError("TICKET_25_A_MODULE_RESPONSIBILITY_INCOMPLETE");
+  const ids = new Set();
+  const paths = new Set();
+  const arrayFields = [
+    "directCallers",
+    "dependencyDirection",
+    "hiddenInvariants",
+    "contractTests",
+    "failureEvidence",
+  ];
+  const stringFields = [
+    "moduleId",
+    "path",
+    "owner",
+    "responsibilityBoundary",
+    "publicInterface",
+    "minimumCapability",
+    "scaleChangeReason",
+  ];
+  value.forEach((entry) => {
+    assertObject(entry, "TICKET_25_A_MODULE_RESPONSIBILITY_INVALID");
+    stringFields.forEach((field) =>
+      assertNonEmptyString(
+        entry[field],
+        "TICKET_25_A_MODULE_RESPONSIBILITY_FIELD_INVALID",
+      ),
+    );
+    if (entry.disposition !== "FACTS_FOR_INDEPENDENT_AUDIT")
+      throw contractError(
+        "TICKET_25_A_MODULE_RESPONSIBILITY_DISPOSITION_INVALID",
+      );
+    if (ids.has(entry.moduleId))
+      throw contractError("TICKET_25_A_MODULE_RESPONSIBILITY_ID_DUPLICATE");
+    ids.add(entry.moduleId);
+    assertRelativeEvidencePath(entry.path);
+    const sourcePath = path.join(REPOSITORY_ROOT, normalizePath(entry.path));
+    if (!fs.existsSync(sourcePath))
+      throw contractError("TICKET_25_A_MODULE_RESPONSIBILITY_PATH_MISSING");
+    if (paths.has(normalizePath(entry.path)))
+      throw contractError("TICKET_25_A_MODULE_RESPONSIBILITY_PATH_DUPLICATE");
+    paths.add(normalizePath(entry.path));
+    arrayFields.forEach((field) => {
+      if (!Array.isArray(entry[field]) || entry[field].length === 0)
+        throw contractError("TICKET_25_A_MODULE_RESPONSIBILITY_ARRAY_INVALID");
+      entry[field].forEach((item) =>
+        assertNonEmptyString(
+          item,
+          "TICKET_25_A_MODULE_RESPONSIBILITY_ARRAY_ITEM_INVALID",
+        ),
+      );
+    });
+    [...entry.contractTests, ...entry.failureEvidence].forEach(
+      validateReference,
+    );
+  });
+  return {
+    disposition: "FACTS_FOR_INDEPENDENT_AUDIT",
+    moduleCount: value.length,
   };
 }
 
@@ -437,10 +506,14 @@ function validateRunnerContract(value) {
   assertObject(value, "TICKET_25_A_RUNNER_CONTRACT_INVALID");
   if (value.schemaVersion !== "ticket-25-a-runner-contract-v1")
     throw contractError("TICKET_25_A_RUNNER_CONTRACT_VERSION_INVALID");
-  if (!Array.isArray(value.entryPoints) || value.entryPoints.length !== 2)
+  if (!Array.isArray(value.entryPoints) || value.entryPoints.length < 3)
     throw contractError("TICKET_25_A_ENTRY_POINTS_INVALID");
   const entryIds = new Set(value.entryPoints.map((entry) => entry.entryId));
-  if (!entryIds.has("contract-test") || !entryIds.has("benchmark"))
+  if (
+    !entryIds.has("contract-test") ||
+    !entryIds.has("benchmark") ||
+    !entryIds.has("ticket-25-f-benchmark")
+  )
     throw contractError("TICKET_25_A_ENTRY_POINT_MISSING");
   const dirty = value.productionSmoke && value.productionSmoke.dirty;
   const clean = value.productionSmoke && value.productionSmoke.clean;
@@ -681,6 +754,7 @@ module.exports = {
   validateStateMatrix,
   validateQueryScanBudget,
   validateEvidenceManifest,
+  validateModuleResponsibilityEvidence,
   validateRunnerContract,
   validateAllContracts,
   parseOutputArgument,

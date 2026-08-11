@@ -21,6 +21,16 @@
       "resultKind":"query_scan_observation",
       "externalTransport":"forbidden",
       "wallClock":"observation_only_without_approved_baseline"
+    },
+    {
+      "entryId":"ticket-25-f-benchmark",
+      "command":"npm run benchmark:ticket-25-f -- --output build/evidence/ticket-25-f-benchmark.json",
+      "script":"auto—publish/scripts/run-ticket-25-f-benchmark.js",
+      "test":"auto—publish/tests/ticket-25-f-performance.test.js",
+      "output":"build/evidence/ticket-25-f-benchmark.json",
+      "resultKind":"query_scan_observation",
+      "externalTransport":"forbidden",
+      "wallClock":"observation_only_without_approved_baseline"
     }
   ],
   "productionSmoke": {
@@ -43,7 +53,7 @@
   },
   "outputIsolation": {
     "root":"build/evidence",
-    "requiredRelativePaths":["ticket-25-a-contract.json","ticket-25-a-benchmark.json","ticket-25-production-smoke-dirty.json","ticket-25-production-smoke-clean.json"],
+    "requiredRelativePaths":["ticket-25-a-contract.json","ticket-25-a-benchmark.json","ticket-25-f-benchmark.json","ticket-25-production-smoke-dirty.json","ticket-25-production-smoke-clean.json"],
     "forbiddenRelativePaths":["production-smoke.json"],
     "distinctDirtyClean":true,
     "noPathTraversal":true,

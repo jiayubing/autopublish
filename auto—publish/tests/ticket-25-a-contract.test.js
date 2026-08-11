@@ -30,8 +30,10 @@ test("Ticket 25-A tracked contracts cover 85 stories without claiming acceptance
   assert.ok(summary.state.coverageTags.includes("uncertain_unknown"));
   assert.equal(summary.budget.status, "FROZEN_BEFORE_RESULT");
   assert.equal(summary.budget.operationCount, 3);
-  assert.equal(summary.evidence.generatedCount, 4);
-  assert.equal(summary.runner.entryPoints, 2);
+  assert.equal(summary.evidence.generatedCount, 5);
+  assert.equal(summary.evidence.moduleCount, 4);
+  assert.equal(summary.evidence.moduleDisposition, "FACTS_FOR_INDEPENDENT_AUDIT");
+  assert.equal(summary.runner.entryPoints, 3);
   assert.equal(summary.userControl.status, "USER_EXTERNAL_ACCEPTANCE_REQUIRED");
   assert.equal(summary.userControl.entryCount, 2);
 
