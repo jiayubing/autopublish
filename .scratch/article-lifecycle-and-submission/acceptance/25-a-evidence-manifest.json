@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "ticket-25-a-evidence-manifest-v1",
+  "ticket": "25",
+  "package": "25-A",
+  "sourceStateRule": "Tracked contracts define what must be accepted. Every generated record describes only the exact commit/sourceState on which its command actually ran.",
+  "trackedArtifacts": [
+    {"artifactId":"story-matrix","kind":"tracked_contract","path":".scratch/article-lifecycle-and-submission/acceptance/25-a-story-matrix.json","owner":"Ticket 25-A acceptance contract","purpose":"85 story ids and pure-text/image portions with non-PASS dispositions."},
+    {"artifactId":"state-matrix","kind":"tracked_contract","path":".scratch/article-lifecycle-and-submission/acceptance/25-a-state-matrix.json","owner":"Ticket 25-A acceptance contract","purpose":"Single finite state/failure matrix and cross-owner precedence rules."},
+    {"artifactId":"query-scan-budget","kind":"tracked_contract","path":".scratch/article-lifecycle-and-submission/acceptance/25-a-query-scan-budget.json","owner":"Ticket 25-A acceptance contract","purpose":"Frozen synthetic scale, count boundary, hard budgets and wall-clock observation rule."},
+    {"artifactId":"evidence-manifest","kind":"tracked_contract","path":".scratch/article-lifecycle-and-submission/acceptance/25-a-evidence-manifest.json","owner":"Ticket 25-A evidence owner","purpose":"Tracked/ignored evidence ownership and provenance requirements."},
+    {"artifactId":"runner-contract","kind":"tracked_contract","path":".scratch/article-lifecycle-and-submission/acceptance/25-a-runner-contract.json","owner":"Ticket 25-A evidence runner","purpose":"Ticket-specific test, benchmark and dirty/clean smoke command/output contract."},
+    {"artifactId":"user-control-checklist","kind":"tracked_contract","path":".scratch/article-lifecycle-and-submission/acceptance/25-a-user-control-checklist.json","owner":"Ticket 25-A external acceptance boundary","purpose":"Explicit later user-controlled evidence entries with safety fields and stop conditions."},
+    {"artifactId":"contract-test","kind":"tracked_test","path":"auto—publish/tests/ticket-25-a-contract.test.js","owner":"Ticket 25-A evidence runner","purpose":"Publicly observable contract validation of tracked artifacts and smoke argument isolation."},
+    {"artifactId":"contract-runner","kind":"tracked_runner","path":"auto—publish/scripts/ticket-25-a-evidence.js","owner":"Ticket 25-A evidence runner","purpose":"Validates contracts and writes safe Ticket 25-A contract evidence."},
+    {"artifactId":"benchmark-runner","kind":"tracked_runner","path":"auto—publish/scripts/run-ticket-25-a-benchmark.js","owner":"Ticket 25-A performance evidence entry","purpose":"Synthetic public snapshot observation using the frozen query/scan budget; no external transport."},
+    {"artifactId":"smoke-argument-parser","kind":"tracked_runner","path":"auto—publish/scripts/production-smoke-arguments.js","owner":"Production smoke argument owner","purpose":"Parses and freezes final --output forwarding for dirty/clean smoke commands."},
+    {"artifactId":"smoke-evidence-writer","kind":"tracked_runner","path":"auto—publish/scripts/production-smoke-evidence.js","owner":"Production smoke evidence owner","purpose":"Writes provenance-bound safe reports with an environment summary."}
+  ],
+  "generatedArtifacts": [
+    {"artifactId":"contract-result","kind":"generated_ignored","path":"build/evidence/ticket-25-a-contract.json","command":"npm run test:ticket-25-a -- --output build/evidence/ticket-25-a-contract.json","statusMeaning":"Contract validation result for this exact sourceState."},
+    {"artifactId":"benchmark-result","kind":"generated_ignored","path":"build/evidence/ticket-25-a-benchmark.json","command":"npm run benchmark:ticket-25-a -- --output build/evidence/ticket-25-a-benchmark.json","statusMeaning":"Query/scan hard-budget result plus wall-clock observation; not a final Ticket 25 performance closure."},
+    {"artifactId":"production-smoke-dirty","kind":"generated_ignored","path":"build/evidence/ticket-25-production-smoke-dirty.json","command":"npm run pack:production:smoke:dirty -- --output build/evidence/ticket-25-production-smoke-dirty.json","statusMeaning":"Dirty worktree diagnostic only; does not prove final clean integration."},
+    {"artifactId":"production-smoke-clean","kind":"generated_ignored","path":"build/evidence/ticket-25-production-smoke-clean.json","command":"npm run pack:production:smoke -- --output build/evidence/ticket-25-production-smoke-clean.json","statusMeaning":"Reserved for post-audit clean integration; not produced by 25-A."}
+  ],
+  "generatedEvidenceRequiredFields": [
+    "status",
+    "operation",
+    "commit",
+    "sourceState",
+    "nodeVersion",
+    "command",
+    "startedAt",
+    "finishedAt",
+    "durationMs",
+    "environment"
+  ],
+  "safeEnvironmentSummary": {
+    "allowedFields": ["platform","arch","ci","externalOperations","credentials","sensitiveValues"],
+    "requiredValues": {"externalOperations":"none","credentials":"not-collected","sensitiveValues":"excluded"},
+    "forbidden": "Do not copy process.env, request headers, cookies, tokens, API keys, provider response bodies, absolute workspace paths or raw exception messages into generated evidence."
+  },
+  "statusSemantics": {
+    "PASSED":"The command's own contract checks completed with no hard failure; it is not a Ticket 25/Wave 11 audit conclusion.",
+    "FAILED":"A contract, hard query/scan budget or package check failed; preserve the safe failure code and exact sourceState.",
+    "OBSERVED_NOT_A_FINAL_GATE":"A benchmark recorded data without an approved wall-clock baseline; query/scan status remains independently visible.",
+    "NOT_RUN":"The entry is defined but no command was executed on this sourceState.",
+    "USER_EXTERNAL_ACCEPTANCE_REQUIRED":"A real account/service action is intentionally outside automation and requires later explicit authorization."
+  },
+  "sensitivityPolicy": {
+    "forbiddenKeyNames": ["password","token","cookie","apiKey","secret","authorization","requestHeaders","responseBody","rawError","credential","accessKey"],
+    "forbiddenValuePatterns": ["(?i)bearer\\s+[A-Za-z0-9._-]+","(?i)api[_-]?key\\s*[:=]","(?i)cookie\\s*[:=]","(?i)password\\s*[:=]"],
+    "safeFailureRule":"Use stable error codes and generic messages only; do not serialize raw errors."
+  },
+  "externalOperations": {
+    "automationPolicy":"synthetic fixtures and fake/in-memory transport only",
+    "forbiddenIn25A":["real login","real publication","real payment","real order creation","real order refresh","real cancellation","production database","image upload"],
+    "missingExternalEvidence":"USER_EXTERNAL_ACCEPTANCE_REQUIRED"
+  }
+}

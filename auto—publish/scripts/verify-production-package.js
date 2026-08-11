@@ -3,7 +3,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { runOfflineSelfTest } = require("./offline-self-test");
 const {
   verifyRendererContractAbsence,
 } = require("./verify-renderer-contract-absence");
@@ -15,6 +14,7 @@ const {
   summarizeChecks,
   writeEvidenceReport,
 } = require("./production-smoke-evidence");
+const { parseArguments } = require("./production-smoke-arguments");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -72,41 +72,6 @@ function findPackagedApplication(resourcesPath) {
       { code: "PRODUCTION_PACKAGE_APPLICATION_INVALID" },
     );
   return candidates[0];
-}
-
-function parseArguments(argv) {
-  const args = Array.from(argv || []);
-  const options = {};
-  const resourcesPath = args.shift();
-  if (!resourcesPath)
-    throw Object.assign(
-      new Error("Production resources directory is required"),
-      { code: "PRODUCTION_PACKAGE_ARGUMENT_INVALID" },
-    );
-  while (args.length) {
-    const arg = args.shift();
-    if (["--python", "--application", "--output"].includes(arg)) {
-      const value = args.shift();
-      if (!value || value.startsWith("--"))
-        throw packageEvidenceError(
-          "PRODUCTION_PACKAGE_ARGUMENT_INVALID",
-          arg + " requires a value",
-        );
-      options[
-        arg === "--python"
-          ? "pythonPath"
-          : arg === "--application"
-            ? "applicationPath"
-            : "output"
-      ] = path.resolve(value);
-    } else if (arg === "--require-python") options.requirePython = true;
-    else if (arg === "--static-only") options.staticOnly = true;
-    else
-      throw Object.assign(new Error("Unknown production package argument"), {
-        code: "PRODUCTION_PACKAGE_ARGUMENT_INVALID",
-      });
-  }
-  return { resourcesPath: path.resolve(resourcesPath), options };
 }
 
 function runPackagedPreloadSandbox(resourcesPath) {
@@ -180,6 +145,7 @@ function verifyProductionPackage(resourcesPath, options) {
         runtime: "not_run",
       },
     };
+  const { runOfflineSelfTest } = require("./offline-self-test");
   const offline = runOfflineSelfTest(
     resourcesPath,
     Object.assign({}, opts, {

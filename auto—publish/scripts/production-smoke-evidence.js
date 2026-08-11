@@ -65,6 +65,17 @@ function summarizeChecks(checks) {
   };
 }
 
+function safeEnvironmentSummary() {
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    ci: process.env.CI === "1" || process.env.CI === "true",
+    externalOperations: "none",
+    credentials: "not-collected",
+    sensitiveValues: "excluded",
+  };
+}
+
 function writeEvidenceReport(output, result, provenanceOptions) {
   const checks = summarizeChecks(result && result.offline);
   const provenance = createExecutionProvenance(provenanceOptions);
@@ -72,6 +83,7 @@ function writeEvidenceReport(output, result, provenanceOptions) {
     status: result.ok === true && checks.failed === 0 ? "PASSED" : "FAILED",
     operation: "production-directory-smoke",
     ...provenance,
+    environment: safeEnvironmentSummary(),
     packageVersion: result.packageVersion,
     workspaceSchemaVersion: result.workspaceSchemaVersion,
     artifactCount: result.artifactCount,
@@ -93,6 +105,7 @@ function writeEvidenceReport(output, result, provenanceOptions) {
 module.exports = {
   packageEvidenceError,
   checkStatus,
+  safeEnvironmentSummary,
   summarizeChecks,
   writeEvidenceReport,
 };

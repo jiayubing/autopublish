@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "ticket-25-a-query-scan-budget-v1",
+  "ticket": "25",
+  "package": "25-A",
+  "status": "FROZEN_BEFORE_RESULT",
+  "purpose": "Define the hard query/scan gate before any Ticket 25 performance result is collected.",
+  "syntheticFixture": {
+    "seed": "ticket-25-a-v1",
+    "clients": 20,
+    "articles": 2000,
+    "trashedArticles": 200,
+    "regularQueueGroups": 8,
+    "regularQueueItems": 400,
+    "paidOrders": 2000,
+    "attentionItems": 200,
+    "publicationFacts": 2000,
+    "identityRule": "All ids are deterministic, unique within their owner and cross-linked only by explicit articleId/clientId fields.",
+    "transportRule": "No network, browser, vendor, account, credential or production workspace is allowed; adapters are replaced by in-memory fakes.",
+    "fixtureRule": "Each measured public call receives the same frozen fixture; generation and projection work is included, but fixture construction and JSON serialization are excluded from query/scan counters."
+  },
+  "countBoundary": {
+    "query": "Count each call from the public batch/projection seam to a persistence or injected read capability. Do not count pure in-memory filtering, projection loops or cache hits.",
+    "scan": "Count each logical directory/file/database collection read exposed by the fixture capability. Do not claim OS syscall telemetry.",
+    "transport": "A Ticket 25 projection benchmark must use zero external transport calls; fake transport calls, if a later package measures an adapter, are counted separately and never treated as query savings.",
+    "nPlusOneFailure": "Any query or scan count that grows with articles, queue items or orders, or exceeds its operation budget, is a hard failure even when wall-clock time looks acceptable."
+  },
+  "protocol": {
+    "warmupRuns": 2,
+    "measuredRuns": 7,
+    "discardWarmup": true,
+    "sampleOrder": "Run warmups first, then measured runs in ascending operation order; do not mix fixture sizes within a sample set.",
+    "repeatIsolation": "Create a fresh in-memory read harness for every measured run and reset counters before the public call.",
+    "wallClock": "Record p50 and p95 for observation only. No approved same-environment baseline exists in 25-A, so no wall-clock pass/fail threshold may be invented.",
+    "failureOutput": "Write a safe report with status FAILED and the operation/counter that exceeded budget; do not include fixture contents, credentials or raw exceptions."
+  },
+  "operations": [
+    {
+      "operationId": "article_management_snapshot",
+      "publicSeam": "createArticleManagementSnapshot(...).get({ clientId })",
+      "fixtureSlice": ["articles","trashedArticles","regularQueueItems","publicationFacts","paidOrders","attentionItems"],
+      "maxQueries": 8,
+      "maxScans": 8,
+      "maxExternalTransportCalls": 0,
+      "hardRule": "Counts stay constant as article/queue/order fixture counts scale within the frozen fixture.",
+      "existingBenchmarkSeed": "auto—publish/tests/article-management-snapshot-benchmark.test.js"
+    },
+    {
+      "operationId": "regular_queue_snapshot",
+      "publicSeam": "regular queue application public queue/read projection",
+      "fixtureSlice": ["articles","regularQueueGroups","regularQueueItems"],
+      "maxQueries": 6,
+      "maxScans": 6,
+      "maxExternalTransportCalls": 0,
+      "hardRule": "One batch read per required persistence category; no per-item read for FIFO, current item or remaining order.",
+      "existingBenchmarkSeed": "auto—publish/tests/phase-07-regular-queue.test.js"
+    },
+    {
+      "operationId": "paid_order_snapshot",
+      "publicSeam": "paid-media/order public list and projection",
+      "fixtureSlice": ["paidOrders","articles","attentionItems"],
+      "maxQueries": 6,
+      "maxScans": 6,
+      "maxExternalTransportCalls": 0,
+      "hardRule": "Order list/filter/count projection is batch-read; no per-order refresh or query is issued by a list operation.",
+      "existingBenchmarkSeed": "auto—publish/tests/order-list-projection.test.mjs"
+    }
+  ],
+  "wallClockBaseline": {
+    "status": "NOT_APPROVED",
+    "sameEnvironmentBaseline": null,
+    "p50ThresholdMs": null,
+    "p95ThresholdMs": null,
+    "decision": "OBSERVATION_ONLY"
+  },
+  "resultSchema": {
+    "requiredFields": ["schemaVersion","operationId","status","fixture","counts","p50Ms","p95Ms","commit","sourceState","nodeVersion","command","startedAt","finishedAt","environment"],
+    "allowedStatus": ["PASSED","FAILED","OBSERVED_NOT_A_FINAL_GATE","NOT_RUN"],
+    "outputPath": "build/evidence/ticket-25-a-benchmark.json"
+  }
+}
