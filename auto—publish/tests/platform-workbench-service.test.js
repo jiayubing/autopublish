@@ -93,6 +93,72 @@ describe("platform-workbench-service", function () {
     }
   });
 
+  it("fails the queue read when a sidecar cannot be read", function () {
+    const sidecarPath = path.join(
+      root,
+      "input",
+      "lieju",
+      "a.txt.submission.json",
+    );
+    const originalReadFileSync = fs.readFileSync;
+    try {
+      fs.readFileSync = function (candidate) {
+        if (candidate === sidecarPath) {
+          const error = new Error("synthetic sidecar read failure");
+          error.code = "EACCES";
+          throw error;
+        }
+        return originalReadFileSync.apply(fs, arguments);
+      };
+      assert.throws(
+        function () {
+          service.scanQueue();
+        },
+        { code: "PLATFORM_QUEUE_READ_FAILED" },
+      );
+    } finally {
+      fs.readFileSync = originalReadFileSync;
+    }
+  });
+
+  it("keeps malformed sidecars as invalid input", function () {
+    const sidecarPath = path.join(
+      root,
+      "input",
+      "lieju",
+      "a.txt.submission.json",
+    );
+    fs.writeFileSync(sidecarPath, "{ malformed", "utf8");
+    assert.deepEqual(service.scanQueue()[0].articles, []);
+    assert.equal(
+      service.readSubmissionMetadata("lieju", "a.txt").reason,
+      "SUBMISSION_SIDECAR_INVALID",
+    );
+  });
+
+  it("fails the queue read when an input directory cannot be read", function () {
+    const inputDir = path.join(root, "input", "lieju");
+    const originalReaddirSync = fs.readdirSync;
+    try {
+      fs.readdirSync = function (candidate) {
+        if (candidate === inputDir) {
+          const error = new Error("synthetic input directory read failure");
+          error.code = "EIO";
+          throw error;
+        }
+        return originalReaddirSync.apply(fs, arguments);
+      };
+      assert.throws(
+        function () {
+          service.scanQueue();
+        },
+        { code: "PLATFORM_QUEUE_READ_FAILED" },
+      );
+    } finally {
+      fs.readdirSync = originalReaddirSync;
+    }
+  });
+
   it("scans and resolves platform queues from the injected content input path", function () {
     const portableInput = path.join(root, ".autopublish", "input");
     fs.mkdirSync(path.join(portableInput, "lieju"), { recursive: true });

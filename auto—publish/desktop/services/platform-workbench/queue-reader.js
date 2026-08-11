@@ -74,20 +74,13 @@ function firstTitle(raw, fallback) {
 
 function readSubmissionMetadata(filePath) {
   const sidecarPath = filePath + ".submission.json";
-  if (!fs.existsSync(sidecarPath))
-    return { path: null, data: null, valid: true };
-
   let stat;
   try {
     stat = fs.lstatSync(sidecarPath);
   } catch (error) {
-    if (!error || error.code !== "ENOENT") throw queueReadError();
-    return {
-      path: sidecarPath,
-      data: null,
-      valid: false,
-      reason: "SUBMISSION_SIDECAR_INVALID",
-    };
+    if (error && error.code === "ENOENT")
+      return { path: null, data: null, valid: true };
+    throw queueReadError();
   }
   if (stat.isSymbolicLink() || !stat.isFile())
     return {
@@ -97,9 +90,18 @@ function readSubmissionMetadata(filePath) {
       reason: "SUBMISSION_SIDECAR_INVALID",
     };
 
+  let raw;
+  try {
+    raw = fs.readFileSync(sidecarPath, "utf8");
+  } catch (error) {
+    if (error && error.code === "ENOENT")
+      return { path: null, data: null, valid: true };
+    throw queueReadError();
+  }
+
   let data;
   try {
-    data = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
+    data = JSON.parse(raw);
   } catch (_) {
     return {
       path: sidecarPath,
@@ -303,9 +305,24 @@ function createPlatformQueueReader(options) {
         const scanDir = platform.scanDir || platform.id;
         const inputDir = path.join(inputRoot, scanDir);
         let articles = [];
-        if (fs.existsSync(inputDir)) {
-          articles = fs
-            .readdirSync(inputDir)
+        let inputStat;
+        try {
+          inputStat = fs.lstatSync(inputDir);
+        } catch (error) {
+          if (error && error.code === "ENOENT")
+            return { platformId, scanDir, articles };
+          throw queueReadError();
+        }
+        if (inputStat.isDirectory() && !inputStat.isSymbolicLink()) {
+          let entries;
+          try {
+            entries = fs.readdirSync(inputDir);
+          } catch (error) {
+            if (error && error.code === "ENOENT")
+              return { platformId, scanDir, articles };
+            throw queueReadError();
+          }
+          articles = entries
             .filter((name) => {
               if (isTemporaryQueueArtifact(name) || !isPrimaryArticle(name))
                 return false;
