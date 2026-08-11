@@ -377,4 +377,5 @@ module.exports = {
   parseCreatedOrderResponse,
   parseOrderDetailsResponse,
   parseCancelledOrderResponse,
+  hasExplicitFailure,
 };

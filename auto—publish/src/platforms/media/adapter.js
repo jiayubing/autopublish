@@ -8,9 +8,37 @@ const { createMediaSupplierAdapter } = require('./media-supplier-adapter');
 const { convertArticle } = require('./article-converter');
 const { detectDocxImages } = require('./article-converter');
 const { MediaDraftStore } = require('./media-draft-store');
+const { MEDIA_ERROR_DEFINITIONS } = require('./media-errors');
+const { hasExplicitFailure } = require('./media-supplier-response');
 const { resolveApiKey } = require('./config');
 const { DIRS } = require('../../../scripts/config');
 const path = require('path');
+
+const UNCERTAIN_CODES = new Set([
+  'MEDIA_CONNECT_TIMEOUT',
+  'MEDIA_READ_TIMEOUT',
+  'MEDIA_NETWORK_ERROR',
+  'MEDIA_SERVER_ERROR',
+  'MEDIA_PROTOCOL_ERROR',
+  'MEDIA_TRANSPORT_UNAVAILABLE',
+  'MEDIA_REDIRECT_REJECTED',
+  'MEDIA_TLS_CERTIFICATE_ERROR',
+  'MEDIA_TLS_HOSTNAME_MISMATCH',
+]);
+
+function safeMediaCode(error, fallback) {
+  const code = error && typeof error.code === 'string' ? error.code : '';
+  return MEDIA_ERROR_DEFINITIONS[code] ? code : fallback;
+}
+
+function mediaFailure(error, remote, fallback) {
+  const code = safeMediaCode(error, fallback);
+  return {
+    platform: 'media',
+    status: remote && UNCERTAIN_CODES.has(code) ? 'uncertain' : 'error',
+    errorCode: code,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // createMediaAdapter — standalone API adapter
@@ -63,13 +91,19 @@ function createMediaAdapter(opts) {
           status: 'error',
           title: title,
           resourceId: resourceId,
-          error: '文章转换失败: ' + err.message
+          errorCode: 'MEDIA_ARTICLE_CONVERSION_FAILED'
         };
       }
 
+      var client;
+      try {
+        client = getClient();
+      } catch (err) {
+        return Object.assign({ title: title, resourceId: resourceId }, mediaFailure(err, false, 'MEDIA_CONFIG_INVALID'));
+      }
       var response;
       try {
-        response = await getClient().sendArticle({
+        response = await client.sendArticle({
           resourceId: resourceId,
           title: title,
           content: article.html,
@@ -77,37 +111,40 @@ function createMediaAdapter(opts) {
           thirdId: thirdId
         });
       } catch (err) {
-        return {
-          platform: 'media',
-          status: 'error',
-          title: title,
-          resourceId: resourceId,
-          error: err.message
-        };
+        return Object.assign({ title: title, resourceId: resourceId }, mediaFailure(err, true, 'MEDIA_NETWORK_ERROR'));
       }
 
+      if (!response)
+        return Object.assign({ title: title, resourceId: resourceId }, mediaFailure({ code: 'MEDIA_PROTOCOL_ERROR' }, true, 'MEDIA_PROTOCOL_ERROR'));
+      if (hasExplicitFailure(response))
+        return Object.assign({ title: title, resourceId: resourceId }, mediaFailure({ code: 'MEDIA_REMOTE_REJECTED' }, false, 'MEDIA_REMOTE_REJECTED'));
       var data = response && response.data ? response.data : {};
+      var nestedData = data && data.data && typeof data.data === 'object' ? data.data : {};
+      var orderNid = data.order_nid || data.orderNid || nestedData.order_nid || nestedData.orderNid || response.order_nid || response.orderNid || null;
+      if (orderNid === null || orderNid === undefined || String(orderNid).trim() === '') {
+        return {
+          platform: 'media',
+          status: 'uncertain',
+          title: title,
+          resourceId: resourceId,
+          errorCode: 'MEDIA_ORDER_ID_MISSING'
+        };
+      }
       return {
         platform: 'media',
         status: 'order_created',
         title: title,
         resourceId: resourceId,
         thirdId: thirdId || null,
-        orderNid: data.order_nid || null,
+        orderNid: String(orderNid),
       };
     },
 
     queryOrder: async function (orderNid) {
-      var response;
       try {
-        response = await getClient().orderInfo(orderNid);
+        await getClient().orderInfo(orderNid);
       } catch (err) {
-        return {
-          platform: 'media',
-          status: 'error',
-          orderNid: orderNid,
-          error: err.message
-        };
+        return Object.assign({ orderNid: orderNid }, mediaFailure(err, true, 'MEDIA_NETWORK_ERROR'));
       }
 
       return {
@@ -118,15 +155,10 @@ function createMediaAdapter(opts) {
     },
 
     getBalance: async function () {
-      var response;
       try {
-        response = await getClient().getBalance();
+        await getClient().getBalance();
       } catch (err) {
-        return {
-          platform: 'media',
-          status: 'error',
-          error: err.message
-        };
+        return mediaFailure(err, true, 'MEDIA_NETWORK_ERROR');
       }
 
       return {

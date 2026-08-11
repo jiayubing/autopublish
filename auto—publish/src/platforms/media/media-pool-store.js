@@ -4,6 +4,23 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveStorePath } = require('./store-paths');
+const { reportDiagnostic } = require('../../diagnostics/diagnostic-producer');
+
+function storeError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: 'media-pool-store',
+    category: 'storage',
+    operationId: 'media-pool-store',
+    metadata: { action },
+  });
+}
 
 class MediaPoolStore {
   constructor(opts) {
@@ -12,11 +29,21 @@ class MediaPoolStore {
   }
 
   _read() {
+    let raw;
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
-      return JSON.parse(raw);
+      raw = fs.readFileSync(this.filePath, 'utf-8');
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return [];
+      diagnose('MEDIA_POOL_STORE_READ_FAILED', 'read');
+      throw storeError('MEDIA_POOL_STORE_READ_FAILED');
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('invalid pool store shape');
+      return parsed;
     } catch (_) {
-      return [];
+      diagnose('MEDIA_POOL_STORE_CORRUPT', 'parse');
+      throw storeError('MEDIA_POOL_STORE_CORRUPT');
     }
   }
 

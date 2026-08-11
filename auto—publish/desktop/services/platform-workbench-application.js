@@ -3,10 +3,21 @@ const mammoth = require("mammoth");
 const { loadPlatforms } = require("../../src/core/platforms");
 const { assertPlaywrightAvailable } = require("./playwright-capability");
 const { createPlatformSessionService } = require("./platform-session-service");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 const {
   projectPlatformQueue,
   projectPlatformSnapshot,
 } = require("../ipc/contracts/platform-contracts");
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "platform-workbench-application",
+    category: "validation",
+    operationId: "platform-workbench-application",
+    metadata: { action },
+  });
+}
 
 function createPlatformWorkbenchApplication(options) {
   const values = options || {};
@@ -40,7 +51,9 @@ function createPlatformWorkbenchApplication(options) {
                 break;
               }
             }
-          } catch (_) {}
+          } catch (_) {
+            diagnose("PLATFORM_DOCX_TITLE_PROBE_FAILED", "docx-title");
+          }
         }
         queue.push({
           filename: article.filename,

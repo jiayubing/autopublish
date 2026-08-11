@@ -4,6 +4,23 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveStorePath } = require('./store-paths');
+const { reportDiagnostic } = require('../../diagnostics/diagnostic-producer');
+
+function storeError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: 'media-resource-store',
+    category: 'storage',
+    operationId: 'media-resource-store',
+    metadata: { action },
+  });
+}
 
 class MediaResourceStore {
   constructor(opts) {
@@ -11,13 +28,24 @@ class MediaResourceStore {
     this.filePath = resolveStorePath(opts, 'media-resources.json');
   }
 
-  /** Read the cache file and return parsed data, or null if missing/corrupt. */
+  /** Read the cache file and return parsed data, or null when it is missing. */
   _read() {
+    let raw;
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
-      return JSON.parse(raw);
+      raw = fs.readFileSync(this.filePath, 'utf-8');
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return null;
+      diagnose('MEDIA_RESOURCE_STORE_READ_FAILED', 'read');
+      throw storeError('MEDIA_RESOURCE_STORE_READ_FAILED');
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('invalid resource store shape');
+      return parsed;
     } catch (_) {
-      return null;
+      diagnose('MEDIA_RESOURCE_STORE_CORRUPT', 'parse');
+      throw storeError('MEDIA_RESOURCE_STORE_CORRUPT');
     }
   }
 
@@ -109,7 +137,13 @@ class MediaResourceStore {
    * Clear the cache.
    */
   clear() {
-    try { fs.unlinkSync(this.filePath); } catch (_) {}
+    try {
+      fs.unlinkSync(this.filePath);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return;
+      diagnose('MEDIA_RESOURCE_STORE_CLEAR_FAILED', 'clear');
+      throw storeError('MEDIA_RESOURCE_STORE_CLEAR_FAILED');
+    }
   }
 }
 

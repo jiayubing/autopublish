@@ -24,7 +24,7 @@ function reportRunDiagnostic(context, code, operation) {
   reportDiagnostic({
     code,
     module: "platform-run",
-    category: "process",
+    category: "internal",
     operationId: operation || "platform-run",
     runId: context && context.runId ? context.runId : null,
     metadata: { action: operation || "process" },
@@ -312,10 +312,18 @@ function createPlatformRun(options) {
     emit(context);
     try {
       if (context.child && typeof context.child.send === "function") {
-        context.child.send({
+        const message = {
           schemaVersion: WORKER_SCHEMA_VERSION,
           runId: context.runId,
           type: context.stopReason === "operator_pause" ? "pause" : "stop",
+        };
+        context.child.send(message, function (error) {
+          if (error)
+            reportRunDiagnostic(
+              context,
+              "PLATFORM_RUN_STOP_SIGNAL_FAILED",
+              "stop-signal",
+            );
         });
       }
     } catch (_) {

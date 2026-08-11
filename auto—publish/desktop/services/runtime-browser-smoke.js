@@ -7,6 +7,19 @@ const {
   execFileAsync,
   safeProbeError,
 } = require("./runtime-diagnostics-probes");
+const {
+  reportDiagnostic,
+} = require("../../src/diagnostics/diagnostic-producer");
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "runtime-browser-smoke",
+    category: "transport",
+    operationId: "runtime-browser-smoke",
+    metadata: { action },
+  });
+}
 
 async function probeBrowserRuntime(options) {
   const opts = options || {};
@@ -103,9 +116,15 @@ async function probeBrowserRuntime(options) {
     if (opened) {
       try {
         await invoke(["-s=runtime-self-check", "close"], 10000);
-      } catch (_) {}
+      } catch (_) {
+        diagnose("PLAYWRIGHT_SMOKE_CLOSE_FAILED", "close");
+      }
     }
-    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    try {
+      fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    } catch (_) {
+      diagnose("PLAYWRIGHT_SMOKE_TEMPORARY_CLEANUP_FAILED", "cleanup");
+    }
   }
 }
 

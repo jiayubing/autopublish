@@ -5,6 +5,7 @@ const path = require("node:path");
 const {
   inspectSubmissionPair,
 } = require("../../src/diagnostics/submission-pair-inspector");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function fail(code, message) {
   const error = new Error(message || code);
@@ -14,6 +15,16 @@ function fail(code, message) {
 
 function hash(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "submission-item-projection",
+    category: "storage",
+    operationId: "submission-item-projection",
+    metadata: { action },
+  });
 }
 
 function createSubmissionItemProjection(options) {
@@ -29,7 +40,11 @@ function createSubmissionItemProjection(options) {
         articleIds: Array.from(new Set(articleIds)),
       });
     } catch (_) {
-      return [];
+      diagnose("SUBMISSION_PUBLICATION_STATE_UNAVAILABLE", "publication-records");
+      throw fail(
+        "SUBMISSION_PUBLICATION_STATE_UNAVAILABLE",
+        "Submission publication state is unavailable",
+      );
     }
   }
 
@@ -155,7 +170,11 @@ function createSubmissionItemProjection(options) {
     try {
       batch = value.operationalStore.getSubmissionBatch(action.batchId);
     } catch (_) {
-      return null;
+      diagnose("SUBMISSION_BATCH_STATE_UNAVAILABLE", "submission-batch");
+      throw fail(
+        "SUBMISSION_BATCH_STATE_UNAVAILABLE",
+        "Submission batch state is unavailable",
+      );
     }
     return (
       batchViews(batch).find(

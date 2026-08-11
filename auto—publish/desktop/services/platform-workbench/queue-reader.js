@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { reportDiagnostic } = require("../../../src/diagnostics/diagnostic-producer");
 
 const ARTICLE_EXTENSIONS = Object.freeze([".md", ".txt", ".docx"]);
 const SAFE_ID = /^[^<>:"/\\|?*\x00-\x1f]+$/;
@@ -10,6 +11,16 @@ function submissionInputError(code, message) {
   const error = new Error(message || "Invalid submission input");
   error.code = code || "SUBMISSION_INPUT_INVALID";
   return error;
+}
+
+function diagnoseSourceState() {
+  reportDiagnostic({
+    code: "SOURCE_ARTICLE_STATE_UNAVAILABLE",
+    module: "platform-queue-reader",
+    category: "storage",
+    operationId: "platform-queue-reader",
+    metadata: { action: "article-state" },
+  });
 }
 
 function isSafeToken(value) {
@@ -240,7 +251,13 @@ function createPlatformQueueReader(options) {
           sourceArticleState: "trashed",
           reasonCode: "SOURCE_ARTICLE_TRASHED",
         };
-    } catch (_) {}
+    } catch (_) {
+      diagnoseSourceState();
+      return {
+        sourceArticleState: "unknown",
+        reasonCode: "SOURCE_ARTICLE_STATE_UNAVAILABLE",
+      };
+    }
     return { sourceArticleState: "active", reasonCode: null };
   }
 

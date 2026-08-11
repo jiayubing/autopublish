@@ -163,12 +163,12 @@ function resourceForConfirmation(resource) {
   });
 }
 
-function safeArticleSummary(ref, article, workflow, riskWarnings) {
+function safeArticleSummary(ref, article, workflow, riskWarnings, readErrorCode) {
   const title = text(article && article.title);
   const content = text(article && article.content);
   const reasonCodes = article
     ? articleReasonCodes(article, workflow)
-    : ["PAID_MEDIA_ARTICLE_NOT_FOUND"];
+    : [readErrorCode || "PAID_MEDIA_ARTICLE_NOT_FOUND"];
   return Object.freeze({
     articleRef: Object.freeze({
       clientId: ref.clientId,
@@ -276,10 +276,11 @@ function createPaidMediaPreflightService(options) {
     const facts = factsFor(refs);
     return refs.map((ref) => {
       let article = null;
+      let readErrorCode = null;
       try {
         article = contentStore.getArticle(ref.clientId, ref.articleId);
       } catch (_) {
-        article = null;
+        readErrorCode = "PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE";
       }
       const workflow = article
         ? deriveArticleLifecycle({
@@ -294,7 +295,7 @@ function createPaidMediaPreflightService(options) {
       const risks = article
         ? scanRiskWarnings(text(article.title).trim(), text(article.content))
         : Object.freeze([]);
-      return { ref, article, workflow, risks };
+      return { ref, article, workflow, risks, readErrorCode };
     });
   }
 
@@ -306,7 +307,13 @@ function createPaidMediaPreflightService(options) {
     const safeResource = resourceForConfirmation(resource);
     const systemSubmissionCode = currentSystemSubmissionCode();
     const articleSummaries = articles.map((entry) =>
-      safeArticleSummary(entry.ref, entry.article, entry.workflow, entry.risks),
+      safeArticleSummary(
+        entry.ref,
+        entry.article,
+        entry.workflow,
+        entry.risks,
+        entry.readErrorCode,
+      ),
     );
     const risks = Object.freeze(
       articles

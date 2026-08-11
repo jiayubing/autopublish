@@ -3,9 +3,20 @@
 const crypto = require("node:crypto");
 const { parsePublishInput } = require("../../src/domain/publisher-contract");
 const domain = require("../../src/domain");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function operationId(prefix) {
   return `${prefix}-${crypto.randomUUID()}`;
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "publication-submission-orchestrator",
+    category: "storage",
+    operationId: "publication-submission-orchestrator",
+    metadata: { action },
+  });
 }
 
 function preflightClaimError(error) {
@@ -17,7 +28,8 @@ function preflightClaimError(error) {
     code === "PUBLICATION_TARGET_INVALID" ||
     code === "PUBLICATION_TARGET_EXTRA_FIELD" ||
     code === "PUBLICATION_DUPLICATE" ||
-    code === "PUBLICATION_UNCERTAIN"
+    code === "PUBLICATION_UNCERTAIN" ||
+    code === "SUBMISSION_CLAIM_RENEWAL_FAILED"
   );
 }
 
@@ -128,23 +140,31 @@ function createPublicationSubmissionOrchestrator(options) {
     };
   }
 
-  function startClaimLease(claimed) {
+  function startClaimLease(claimed, onLeaseFailure) {
     if (
       typeof value.operationalStore.renewSubmissionItemClaim !== "function"
     )
       return function () {};
     const leaseMs = 30000;
+    let failureReported = false;
+    const reportFailure = function () {
+      if (failureReported) return;
+      failureReported = true;
+      diagnose("SUBMISSION_CLAIM_RENEWAL_FAILED", "claim-renewal");
+      if (typeof onLeaseFailure === "function") onLeaseFailure();
+    };
     const interval = setInterval(function () {
       try {
-        value.operationalStore.renewSubmissionItemClaim({
+        const result = value.operationalStore.renewSubmissionItemClaim({
           batchId: claimed.batchId,
           itemId: claimed.itemId,
           claimToken: claimed.claimToken,
           leaseMs,
         });
+        if (result && typeof result.then === "function")
+          result.catch(reportFailure);
       } catch (_) {
-        // The eventual outcome commit remains the authority if the lease is
-        // lost; do not turn a timer callback into an unhandled rejection.
+        reportFailure();
       }
     }, Math.max(1000, Math.floor(leaseMs / 3)));
     return function () {
@@ -161,7 +181,8 @@ function createPublicationSubmissionOrchestrator(options) {
     try {
       return value.workerPublisher.isStopRequested() === true;
     } catch (_) {
-      return false;
+      diagnose("SUBMISSION_STOP_STATE_UNAVAILABLE", "stop-state");
+      return true;
     }
   }
 
@@ -215,7 +236,10 @@ function createPublicationSubmissionOrchestrator(options) {
       });
       let registered = false;
       let registerAttempted = false;
-      const stopClaimLease = startClaimLease(claimed);
+      let claimLeaseFailed = false;
+      const stopClaimLease = startClaimLease(claimed, function () {
+        claimLeaseFailed = true;
+      });
       try {
         if (
           value.workerPublisher &&
@@ -225,6 +249,11 @@ function createPublicationSubmissionOrchestrator(options) {
           registerAttempted = true;
           value.workerPublisher.registerAttempt(attemptId, command.workerTask);
           registered = true;
+        }
+        if (claimLeaseFailed) {
+          const error = new Error("Submission claim renewal failed");
+          error.code = "SUBMISSION_CLAIM_RENEWAL_FAILED";
+          throw error;
         }
         const execute = config.retryFailed === true ? value.workflow.retry : value.workflow.publish;
         if (typeof execute !== "function") throw new Error("Publication retry workflow is unavailable");

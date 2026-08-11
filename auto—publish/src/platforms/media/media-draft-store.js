@@ -5,6 +5,23 @@
 const fs = require("fs");
 const path = require("path");
 const { resolveStorePath } = require("./store-paths");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
+
+function storeError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "media-draft-store",
+    category: "storage",
+    operationId: "media-draft-store",
+    metadata: { action },
+  });
+}
 
 function normalizeResource(resource) {
   if (!resource) return null;
@@ -47,11 +64,22 @@ class MediaDraftStore {
   }
 
   _read() {
+    let raw;
     try {
-      const raw = fs.readFileSync(this.filePath, "utf-8");
-      return JSON.parse(raw);
+      raw = fs.readFileSync(this.filePath, "utf-8");
+    } catch (error) {
+      if (error && error.code === "ENOENT") return {};
+      diagnose("MEDIA_DRAFT_STORE_READ_FAILED", "read");
+      throw storeError("MEDIA_DRAFT_STORE_READ_FAILED");
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        throw new Error("invalid draft store shape");
+      return parsed;
     } catch (_) {
-      return {};
+      diagnose("MEDIA_DRAFT_STORE_CORRUPT", "parse");
+      throw storeError("MEDIA_DRAFT_STORE_CORRUPT");
     }
   }
 
@@ -115,7 +143,13 @@ class MediaDraftStore {
   }
 
   clearAll() {
-    try { fs.unlinkSync(this.filePath); } catch (_) {}
+    try {
+      fs.unlinkSync(this.filePath);
+    } catch (error) {
+      if (error && error.code === "ENOENT") return;
+      diagnose("MEDIA_DRAFT_STORE_CLEAR_FAILED", "clear");
+      throw storeError("MEDIA_DRAFT_STORE_CLEAR_FAILED");
+    }
   }
 }
 

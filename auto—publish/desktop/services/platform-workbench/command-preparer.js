@@ -8,6 +8,7 @@ const mammoth = require("mammoth");
 const {
   resolveArticleIdentity,
 } = require("../../../src/publication/article-identity");
+const { reportDiagnostic } = require("../../../src/diagnostics/diagnostic-producer");
 const { isSafeToken, submissionInputError } = require("./queue-reader");
 
 function escapeHtml(value) {
@@ -33,6 +34,16 @@ function mediaBodyHtml(value) {
       return `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`;
     })
     .join("\n");
+}
+
+function diagnoseArticleRead() {
+  reportDiagnostic({
+    code: "SUBMISSION_ARTICLE_STATE_UNAVAILABLE",
+    module: "platform-command-preparer",
+    category: "storage",
+    operationId: "platform-command-preparer",
+    metadata: { action: "article-read" },
+  });
 }
 
 function createPlatformCommandPreparer(options) {
@@ -204,9 +215,33 @@ function createPlatformCommandPreparer(options) {
       if (contentStore && typeof contentStore.getArticle === "function") {
         try {
           const persisted = contentStore.getArticle(articleRef.clientId, articleRef.articleId);
-          if (!persisted || persisted.clientId !== articleRef.clientId || persisted.id !== articleRef.articleId) articleRef = null;
-        } catch (_) {
-          articleRef = null;
+          if (!persisted)
+            throw submissionInputError(
+              "SUBMISSION_ARTICLE_NOT_FOUND",
+              "The queued article is no longer available",
+            );
+          if (
+            persisted.clientId !== articleRef.clientId ||
+            persisted.id !== articleRef.articleId
+          )
+            throw submissionInputError(
+              "SUBMISSION_ARTICLE_IDENTITY_MISMATCH",
+              "The queued article identity does not match the content store",
+            );
+        } catch (error) {
+          if (
+            error &&
+            [
+              "SUBMISSION_ARTICLE_NOT_FOUND",
+              "SUBMISSION_ARTICLE_IDENTITY_MISMATCH",
+            ].includes(error.code)
+          )
+            throw error;
+          diagnoseArticleRead();
+          throw submissionInputError(
+            "SUBMISSION_ARTICLE_STATE_UNAVAILABLE",
+            "The queued article state is unavailable",
+          );
         }
       }
     }

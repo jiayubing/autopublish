@@ -459,6 +459,7 @@ async function prepareArticleSubmission(article, options) {
         // article/attempt. Browser submission has no response evidence yet.
         return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
       } catch (_) {
+        diagnose("PLATFORM_SUBMIT_UNCERTAIN", "remote", "submit");
         return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
       }
     },
@@ -501,11 +502,7 @@ async function preparePlatformSubmission(claim) {
 }
 
 function isStopError(error) {
-  return !!(
-    error &&
-    error.message &&
-    error.message.indexOf("Stop requested") !== -1
-  );
+  return Boolean(error && error.code === "STOP_REQUESTED");
 }
 
 function scanArticles(scanDir) {

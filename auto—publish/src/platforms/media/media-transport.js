@@ -5,8 +5,19 @@ const {
   createMediaError,
   isKnownMediaError,
 } = require("./media-errors");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 const DEFAULT_TIMEOUT_MS = 30000;
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "media-transport",
+    category: "transport",
+    operationId: "media-transport",
+    metadata: { action },
+  });
+}
 
 function timeoutValue(value, fallback) {
   const number = Number(value == null ? fallback : value);
@@ -155,7 +166,9 @@ class MediaTransport {
         timedOut = true;
         try {
           controller.abort();
-        } catch (_) {}
+        } catch (_) {
+          diagnose("MEDIA_TRANSPORT_ABORT_FAILED", "abort");
+        }
         reject(createMediaError(
           phase === "read" ? "MEDIA_READ_TIMEOUT" : "MEDIA_CONNECT_TIMEOUT",
           undefined,

@@ -21,6 +21,16 @@ const {
 const HEPAN_PAYLOAD_FILE = /^\.hepan-payload-[0-9a-f-]{36}\.json$/i;
 const HEPAN_PAYLOAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+function diagnoseHepanRuntime(code, action) {
+  reportDiagnostic({
+    code,
+    module: "platform-hepan",
+    category: "storage",
+    operationId: "platform-hepan",
+    metadata: { platformId: "hepan", action },
+  });
+}
+
 function cleanupExpiredHepanPayloads(options) {
   const values = options || {};
   const io = values.fs || fs;
@@ -37,7 +47,9 @@ function cleanupExpiredHepanPayloads(options) {
   let names;
   try {
     names = io.readdirSync(directory);
-  } catch (_) {
+  } catch (error) {
+    if (error && error.code === "ENOENT") return { removed, skipped: 0 };
+    diagnoseHepanRuntime("HEPAN_PAYLOAD_SCAN_FAILED", "payload-scan");
     return { removed, skipped: 0 };
   }
   let skipped = 0;
@@ -54,7 +66,9 @@ function cleanupExpiredHepanPayloads(options) {
     let stat;
     try {
       stat = io.lstatSync(candidate);
-    } catch (_) {
+    } catch (error) {
+      if (!error || error.code !== "ENOENT")
+        diagnoseHepanRuntime("HEPAN_PAYLOAD_STAT_FAILED", "payload-stat");
       return;
     }
     if (
@@ -68,7 +82,8 @@ function cleanupExpiredHepanPayloads(options) {
     try {
       io.unlinkSync(candidate);
       removed.push(name);
-    } catch (_) {
+    } catch (error) {
+      diagnoseHepanRuntime("HEPAN_PAYLOAD_DELETE_FAILED", "payload-delete");
       skipped += 1;
     }
   });
@@ -83,7 +98,10 @@ function resolveHepanRuntime(workspaceRoot, environment) {
     configured = JSON.parse(
       fs.readFileSync(path.join(root, "config", "hepan.json"), "utf8"),
     );
-  } catch (_) {}
+  } catch (error) {
+    if (!error || error.code !== "ENOENT")
+      diagnoseHepanRuntime("HEPAN_RUNTIME_CONFIG_READ_FAILED", "runtime-config");
+  }
   return {
     cookiePath:
       configured.cookiePath ||
@@ -224,7 +242,9 @@ function createHepanAdapter(options) {
           terminalResult = result;
           try {
             child.kill();
-          } catch (_) {}
+          } catch (_) {
+            diagnose("HEPAN_PROCESS_TERMINATION_FAILED", "process-terminate");
+          }
         };
         const abort = function () {
           terminate({
@@ -336,7 +356,9 @@ function createHepanAdapter(options) {
     } catch (error) {
       try {
         if (io.existsSync(filename)) io.unlinkSync(filename);
-      } catch (_) {}
+      } catch (_) {
+        diagnose("HEPAN_PAYLOAD_DELETE_FAILED", "payload-delete");
+      }
       if (!existed) {
         try {
           if (
@@ -344,7 +366,9 @@ function createHepanAdapter(options) {
             io.readdirSync(payloadDirectory).length === 0
           )
             io.rmdirSync(payloadDirectory);
-        } catch (_) {}
+        } catch (_) {
+          diagnose("HEPAN_PAYLOAD_DIRECTORY_CLEANUP_FAILED", "payload-directory");
+        }
       }
       throw error;
     }
@@ -353,7 +377,9 @@ function createHepanAdapter(options) {
       cleanup: function () {
         try {
           if (io.existsSync(filename)) io.unlinkSync(filename);
-        } catch (_) {}
+        } catch (_) {
+          diagnose("HEPAN_PAYLOAD_DELETE_FAILED", "payload-delete");
+        }
         if (!existed) {
           try {
             if (
@@ -361,7 +387,9 @@ function createHepanAdapter(options) {
               io.readdirSync(payloadDirectory).length === 0
             )
               io.rmdirSync(payloadDirectory);
-          } catch (_) {}
+          } catch (_) {
+            diagnose("HEPAN_PAYLOAD_DIRECTORY_CLEANUP_FAILED", "payload-directory");
+          }
         }
       },
     };
@@ -657,6 +685,7 @@ function createHepanAdapter(options) {
     };
     const temporaryPayload = createTemporaryPayload(preparedArticle);
     let consumed = false;
+    let remoteCallStarted = false;
     try {
       return domain.createPreparedSubmission({
         preparedSubmissionEvidenceV1: evidence,
@@ -685,6 +714,7 @@ function createHepanAdapter(options) {
               "--payload-path",
               temporaryPayload.filename,
             ];
+            remoteCallStarted = true;
             const payload = await runHepan(args);
             if (payload.errorCode && /^HEPAN_/.test(payload.errorCode)) {
               return {
@@ -720,6 +750,11 @@ function createHepanAdapter(options) {
               remoteUrl: remoteUrl || undefined,
             };
           } catch (error) {
+            if (!remoteCallStarted && error && /^HEPAN_/.test(error.code || ""))
+              return {
+                status: "group_blocked",
+                errorCode: error.code,
+              };
             return {
               status: "uncertain",
               errorCode:

@@ -10,6 +10,7 @@ function createBrowserSessionLifecycle(options) {
   const io = opts.fs || fs;
   if (!session || typeof run !== "function")
     throw new Error("Browser session lifecycle dependencies are required");
+  let probeFailed = false;
 
   function diagnose(code, category, operation) {
     reportDiagnostic({
@@ -23,14 +24,20 @@ function createBrowserSessionLifecycle(options) {
 
   function isAlive() {
     try {
-      return (
-        run(["list"], { timeout: 8000, session: session }).indexOf(
-          session.session,
-        ) !== -1
-      );
+      const output = run(["list"], { timeout: 8000, session: session });
+      probeFailed = false;
+      return output.indexOf(session.session) !== -1;
     } catch (_) {
+      probeFailed = true;
+      diagnose("BROWSER_SESSION_PROBE_FAILED", "transport", "probe");
       return false;
     }
+  }
+
+  function probeError() {
+    const error = new Error("Browser session status is unavailable");
+    error.code = "BROWSER_SESSION_PROBE_FAILED";
+    return error;
   }
 
   function ensureStarted() {
@@ -38,6 +45,7 @@ function createBrowserSessionLifecycle(options) {
       diagnose("BROWSER_SESSION_ALREADY_RUNNING", "transport", "ensure");
       return;
     }
+    if (probeFailed) throw probeError();
     if (typeof opts.start !== "function")
       throw new Error("Browser daemon start command is unavailable");
     diagnose("BROWSER_SESSION_STARTING", "transport", "start");
@@ -56,6 +64,7 @@ function createBrowserSessionLifecycle(options) {
         diagnose("BROWSER_SESSION_READY", "transport", "ready");
         return;
       }
+      if (probeFailed) throw probeError();
     }
     diagnose("BROWSER_SESSION_START_TIMEOUT", "transport", "start");
     throw new Error("Failed to start browser daemon");

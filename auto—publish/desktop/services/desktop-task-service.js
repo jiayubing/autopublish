@@ -7,6 +7,7 @@ const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapt
 const { resolvePlaywrightRuntime } = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
 const { productionIpcRegistry } = require("../ipc/contracts/production-registry");
 const { projectPlatformSnapshot } = require("../ipc/contracts/platform-contracts");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
 
@@ -46,10 +47,22 @@ function createDesktopTaskService(opts) {
   var stopRequested = false;
   var stateListeners = new Set();
 
+  function diagnose(code, category, action) {
+    reportDiagnostic({
+      code,
+      module: "desktop-task-service",
+      category,
+      operationId: "desktop-task-service",
+      metadata: { action },
+    });
+  }
+
   function publishPlatformState(snapshot) {
     var value = Object.assign({}, snapshot, { workspaceRuntimeId: workspaceRuntimeId });
     stateListeners.forEach(function(listener) {
-      try { listener(value); } catch (_) {}
+      try { listener(value); } catch (_) {
+        diagnose("PLATFORM_STATE_LISTENER_FAILED", "internal", "state-listener");
+      }
     });
   }
 
@@ -126,7 +139,10 @@ function createDesktopTaskService(opts) {
           !["state", "result"].includes(message.type)) return;
         var safePayload = message.type === "result" ? redactWorkerPayload(message.payload || {}) : message.payload || {};
         var serialized;
-        try { serialized = JSON.stringify(safePayload); } catch (_) { return; }
+        try { serialized = JSON.stringify(safePayload); } catch (_) {
+          diagnose("PLATFORM_WORKER_MESSAGE_SERIALIZE_FAILED", "transport", "worker-message");
+          return;
+        }
         if (Buffer.byteLength(serialized, "utf8") > 32768 || (message.type !== "result" && /(?:cookie|api[_-]?key|contentHtml|filePath|body|accountName)/i.test(serialized))) return;
         if (message.type === "state" && message.payload) {
           if (hooks && typeof hooks.onState === "function") hooks.onState(safePayload);
@@ -158,25 +174,40 @@ function createDesktopTaskService(opts) {
   }
 
 function closeBrowserSessions() {
-    var resolved = resolvePlaywrightRuntime({
-      appRoot: storagePaths.installation || process.env.AUTO_PUBLISH_APP_ROOT || cwd,
-      paths: storagePaths,
-      applicationTools: {
-        nodeExecPath: storagePaths.playwrightNodeExecPath,
-        playwrightCliJs: storagePaths.playwrightCliJs
-      },
-      env: process.env,
-      packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
-    });
+    var resolved;
+    try {
+      resolved = resolvePlaywrightRuntime({
+        appRoot: storagePaths.installation || process.env.AUTO_PUBLISH_APP_ROOT || cwd,
+        paths: storagePaths,
+        applicationTools: {
+          nodeExecPath: storagePaths.playwrightNodeExecPath,
+          playwrightCliJs: storagePaths.playwrightCliJs
+        },
+        env: process.env,
+        packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
+      });
+    } catch (_) {
+      diagnose("PLATFORM_BROWSER_RUNTIME_RESOLUTION_FAILED", "transport", "browser-runtime");
+      return;
+    }
     var nodeExe = resolved.playwrightNode.command;
     var cliJs = resolved.playwrightCli.command;
-    if (!nodeExe || !cliJs) return;
+    if (!nodeExe || !cliJs) {
+      diagnose("PLATFORM_BROWSER_RUNTIME_UNAVAILABLE", "transport", "browser-runtime");
+      return;
+    }
     var workDir = storagePaths.browser || path.join(cwd, "work", "playwright-cli");
 
     PLATFORM_SESSIONS.forEach(function(session) {
       var sessionDir = path.join(workDir, "sessions", session);
       var env = Object.assign({}, process.env, { PLAYWRIGHT_DAEMON_SESSION_DIR: sessionDir });
-      execFileProcess(nodeExe, [cliJs, "-s=" + session, "close"], { timeout: 5000, windowsHide: true, env: env }, function() {});
+      try {
+        execFileProcess(nodeExe, [cliJs, "-s=" + session, "close"], { timeout: 5000, windowsHide: true, env: env }, function(error) {
+          if (error) diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
+        });
+      } catch (_) {
+        diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
+      }
     });
 }
 
@@ -205,9 +236,13 @@ function closeBrowserSessions() {
         throw missingCookie;
       }
       if (typeof runtime.adapter.cleanupExpiredTemporaryFiles === "function") {
-        try { runtime.adapter.cleanupExpiredTemporaryFiles(); } catch (_) {}
+        try { runtime.adapter.cleanupExpiredTemporaryFiles(); } catch (_) {
+          diagnose("HEPAN_TEMPORARY_CLEANUP_FAILED", "storage", "hepan-cleanup");
+        }
       }
-      try { cleanupExpiredHepanPayloads({ tempDir: path.join(stopSignalDirectory(), "hepan") }); } catch (_) {}
+      try { cleanupExpiredHepanPayloads({ tempDir: path.join(stopSignalDirectory(), "hepan") }); } catch (_) {
+        diagnose("HEPAN_PAYLOAD_CLEANUP_FAILED", "storage", "hepan-payload-cleanup");
+      }
       var temporaryCookie = runtime.adapter.createTemporaryCookie(runtime.config);
       hepanCleanup = temporaryCookie.cleanup;
       activeRuntimeCleanup = hepanCleanup;
@@ -222,7 +257,17 @@ function closeBrowserSessions() {
       };
     }
 
-    clearStopSignal(stopSignalDirectory());
+    try {
+      clearStopSignal(stopSignalDirectory());
+    } catch (error) {
+      if (hepanCleanup) {
+        try { hepanCleanup(); } catch (_) {
+          diagnose("PLATFORM_RUNTIME_CLEANUP_FAILED", "storage", "runtime-cleanup-after-signal-failure");
+        }
+        if (activeRuntimeCleanup === hepanCleanup) activeRuntimeCleanup = null;
+      }
+      throw error;
+    }
 
     var result = null;
     try {
@@ -297,11 +342,20 @@ function closeBrowserSessions() {
     if (!platformRun || !platformRun.snapshot()) return { ok: true };
 
     stopRequested = true;
-    closeBrowserSessions();
-    requestStopSignal("operator_pause", stopSignalDirectory());
+    try { closeBrowserSessions(); } catch (_) {
+      diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
+    }
+    var signalError = null;
+    try {
+      requestStopSignal("operator_pause", stopSignalDirectory());
+    } catch (error) {
+      signalError = error;
+      diagnose("PLATFORM_STOP_SIGNAL_FAILED", "storage", "pause-stop-signal");
+    }
 
     platformRun.stop(runId, "operator_pause");
     emitPlatformState();
+    if (signalError) throw signalError;
     return { ok: true };
   }
 
@@ -309,9 +363,16 @@ function closeBrowserSessions() {
     assertActivePlatformRun(runId);
     if (!platformRun || !platformRun.snapshot()) return { alreadyStopped: true };
     stopRequested = true;
-    requestStopSignal("desktop_stop_button", stopSignalDirectory());
+    var signalError = null;
+    try {
+      requestStopSignal("desktop_stop_button", stopSignalDirectory());
+    } catch (error) {
+      signalError = error;
+      diagnose("PLATFORM_STOP_SIGNAL_FAILED", "storage", "stop-signal");
+    }
     var stopped = platformRun.stop(runId, "operator_stop");
     emitPlatformState();
+    if (signalError) throw signalError;
     return stopped;
   }
 
@@ -323,7 +384,9 @@ function closeBrowserSessions() {
 
   function dispose() {
     if (activeRuntimeCleanup) {
-      try { activeRuntimeCleanup(); } catch (_) {}
+      try { activeRuntimeCleanup(); } catch (_) {
+        diagnose("PLATFORM_RUNTIME_CLEANUP_FAILED", "storage", "runtime-cleanup");
+      }
       activeRuntimeCleanup = null;
     }
     if (platformRun && platformRun.snapshot()) { platformTaskStateStore.markInterrupted(); platformRun.stop(null, "dispose"); }

@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 const MAX_ARTICLE_BYTES = 5 * 1024 * 1024;
 const SUPPORTED_FORMATS = Object.freeze({
@@ -17,6 +18,16 @@ const ERROR_MESSAGES = Object.freeze({
   HEPAN_ARTICLE_EMPTY_TITLE: "Hepan article title is empty",
   HEPAN_ARTICLE_EMPTY_BODY: "Hepan article body is empty"
 });
+
+function diagnoseScan(action) {
+  reportDiagnostic({
+    code: "HEPAN_ARTICLE_SCAN_FAILED",
+    module: "hepan-article-source",
+    category: "storage",
+    operationId: "hepan-article-source",
+    metadata: { action },
+  });
+}
 
 function articleError(code) {
   const error = new Error(ERROR_MESSAGES[code] || "Hepan article is invalid");
@@ -230,7 +241,10 @@ function scanArticles(directory, options) {
   const io = values.fs || fs;
   const pathApi = values.path || path;
   let names;
-  try { names = io.readdirSync(directory); } catch (_) { return []; }
+  try { names = io.readdirSync(directory); } catch (error) {
+    if (!error || error.code !== "ENOENT") diagnoseScan("directory-read");
+    return [];
+  }
   return names.filter(function(name) {
     if (isTemporaryName(name)) return false;
     const extension = pathApi.extname(name).toLowerCase();
@@ -238,7 +252,10 @@ function scanArticles(directory, options) {
     try {
       const stat = io.lstatSync(pathApi.join(directory, name));
       return stat.isFile() && !stat.isSymbolicLink();
-    } catch (_) { return false; }
+    } catch (error) {
+      if (!error || error.code !== "ENOENT") diagnoseScan("article-stat");
+      return false;
+    }
   }).sort().map(function(name) {
     const extension = pathApi.extname(name).toLowerCase();
     return {

@@ -1,9 +1,20 @@
 "use strict";
 const { parsePublishOutcome } = require("../../src/domain/publisher-contract");
 const { publicationTargetKey } = require("../../src/domain/publication-target");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function safeError(code, category, retryability, userMessage) {
   return { code, category, retryability, userMessage };
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "worker-publisher",
+    category: "transport",
+    operationId: "worker-publisher",
+    metadata: { action },
+  });
 }
 
 function createWorkerPublisher(options) {
@@ -21,7 +32,10 @@ function createWorkerPublisher(options) {
   async function inspectRegisteredAccount() {
     if (tasksByAttempt.size !== 1) return { verified: false };
     const task = tasksByAttempt.values().next().value;
-    try { return await value.inspectAccount(task); } catch (_) { return { verified: false }; }
+    try { return await value.inspectAccount(task); } catch (_) {
+      diagnose("WORKER_ACCOUNT_INSPECTION_FAILED", "account-inspection");
+      return { verified: false };
+    }
   }
   function isStopRequested() {
     if (stopRequested) return true;
@@ -38,7 +52,8 @@ function createWorkerPublisher(options) {
         terminal.results.some((item) => item && item.error === "STOP_REQUESTED"),
       );
     } catch (_) {
-      return false;
+      diagnose("WORKER_STOP_STATE_UNAVAILABLE", "stop-state");
+      return true;
     }
   }
   return Object.freeze({
@@ -71,7 +86,9 @@ function createWorkerPublisher(options) {
           remoteId: raw.remoteId,
           ...(typeof raw.remoteUrl === "string" ? { remoteUrl: raw.remoteUrl } : {}),
         };
-        try { return parsePublishOutcome({ status: "accepted", evidence }, Object.assign({}, input, { version: 1, target })); } catch (_) {}
+        try { return parsePublishOutcome({ status: "accepted", evidence }, Object.assign({}, input, { version: 1, target })); } catch (_) {
+          diagnose("WORKER_ACCEPTED_EVIDENCE_INVALID", "publish-outcome");
+        }
       }
       if (raw.status === "article_rejected" || raw.status === "group_blocked")
         return { status: raw.status, error: safeError(raw.errorCode || "PUBLISHER_REJECTED", "remote", "safe", "远端未接受投稿") };

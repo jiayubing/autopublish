@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const domain = require("../../src/domain");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const TRANSITION_METHODS = Object.freeze([
   "beginRegularRemoteSubmission",
@@ -28,6 +29,16 @@ function fail(code) {
   const error = new Error(code);
   error.code = code;
   return error;
+}
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "regular-queue-group-orchestrator",
+    category: "storage",
+    operationId: "regular-queue-group-orchestrator",
+    metadata: { action },
+  });
 }
 
 function validateTransitions(value) {
@@ -95,15 +106,24 @@ function createRegularQueueGroupOrchestrator(options) {
 
   async function executeClaim(claim) {
     let renewalError = null;
+    let renewalReported = false;
+    const recordRenewalFailure = function (error) {
+      if (renewalReported) return;
+      renewalReported = true;
+      renewalError = error || fail("REGULAR_CLAIM_RENEWAL_FAILED");
+      diagnose("REGULAR_CLAIM_RENEWAL_FAILED", "claim-renewal");
+    };
     const timer = setTimer(function () {
       try {
-        transitions.renewRegularQueueGroupClaim({
+        const result = transitions.renewRegularQueueGroupClaim({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           claimToken: claim.claimToken,
           leaseMs: 30000,
         });
+        if (result && typeof result.then === "function")
+          result.catch(recordRenewalFailure);
       } catch (error) {
-        renewalError = error;
+        recordRenewalFailure(error);
       }
     }, 10000);
     if (timer && typeof timer.unref === "function") timer.unref();
@@ -137,7 +157,7 @@ function createRegularQueueGroupOrchestrator(options) {
     } finally {
       clearTimer(timer);
     }
-    if (renewalError) throw renewalError;
+    if (renewalError) throw fail("REGULAR_CLAIM_RENEWAL_FAILED");
     const evidence = prepared.preparedSubmissionEvidenceV1;
     if (
       evidence.attemptId !== claim.regularPublicationAttemptId ||
@@ -190,7 +210,10 @@ function createRegularQueueGroupOrchestrator(options) {
     if (!group) return Promise.reject(fail("REGULAR_QUEUE_GROUP_NOT_FOUND"));
     const previousPlatformOperation = activePlatforms.get(group.platformId);
     const operation = Promise.resolve(previousPlatformOperation)
-      .catch(() => undefined)
+      .catch(() => {
+        diagnose("REGULAR_PREVIOUS_OPERATION_FAILED", "previous-operation");
+        return undefined;
+      })
       .then(async function () {
         const completed = [];
         while (true) {

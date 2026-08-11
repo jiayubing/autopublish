@@ -5,6 +5,7 @@ const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
 const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("../../../src/platforms/hepan/runtime-paths");
+const { reportDiagnostic } = require("../../../src/diagnostics/diagnostic-producer");
 
 const HEPAN_SELF_TEST_PAYLOAD = JSON.stringify({
   title: "Hepan payload self-test",
@@ -15,6 +16,16 @@ const HEPAN_CHECK_STAGES = new Set(["authentication", "publish_access", "upload_
 const HEPAN_UPLOAD_CONTEXTS = new Set(["available", "changed", "not_checked"]);
 const HEPAN_TEMPORARY_FILE = /^\.hepan-(?:cookie-[0-9a-f-]{36}\.tmp|payload-[0-9a-f-]{36}\.json|payload-self-test-[0-9a-f-]{36}\.json)$/i;
 const HEPAN_TEMPORARY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function diagnose(code, action) {
+  reportDiagnostic({
+    code,
+    module: "hepan-settings-adapter",
+    category: "storage",
+    operationId: "hepan-settings-adapter",
+    metadata: { platformId: "hepan", action },
+  });
+}
 
 function adapterError(code, message) {
   const error = new Error(message);
@@ -105,16 +116,26 @@ function cleanupExpiredHepanTemporaryFiles(options) {
   const tmpRoot = path.resolve(values.tmpRoot || path.join(values.localStateRoot || path.join(defaultOs.tmpdir(), "auto-publish-hepan-runtime"), "tmp"));
   const removed = [];
   let names;
-  try { names = io.readdirSync(tmpRoot); } catch (_) { return { removed, skipped: 0 }; }
+  try { names = io.readdirSync(tmpRoot); } catch (error) {
+    if (error && error.code === "ENOENT") return { removed, skipped: 0 };
+    diagnose("HEPAN_TEMPORARY_SCAN_FAILED", "temporary-scan");
+    return { removed, skipped: 0 };
+  }
   let skipped = 0;
   names.forEach((name) => {
     if (!HEPAN_TEMPORARY_FILE.test(name)) { skipped += 1; return; }
     const candidate = path.resolve(tmpRoot, name);
     if (path.dirname(candidate) !== tmpRoot) { skipped += 1; return; }
     let stat;
-    try { stat = io.lstatSync(candidate); } catch (_) { return; }
+    try { stat = io.lstatSync(candidate); } catch (error) {
+      if (!error || error.code !== "ENOENT") diagnose("HEPAN_TEMPORARY_STAT_FAILED", "temporary-stat");
+      return;
+    }
     if (!stat.isFile() || stat.isSymbolicLink() || now() - stat.mtimeMs < maxAgeMs) { skipped += 1; return; }
-    try { io.unlinkSync(candidate); removed.push(name); } catch (_) { skipped += 1; }
+    try { io.unlinkSync(candidate); removed.push(name); } catch (_) {
+      diagnose("HEPAN_TEMPORARY_DELETE_FAILED", "temporary-delete");
+      skipped += 1;
+    }
   });
   return { removed, skipped };
 }
@@ -138,7 +159,10 @@ function createHepanSettingsAdapter(options) {
     child.once("error", (error) => finish({ status: null, stdout, stderr, error }));
     child.once("close", (status) => finish({ status, stdout, stderr, error: null }));
     const timeoutMs = Number.isInteger(settings.timeout) ? settings.timeout : 120000;
-    const timer = setTimeout(() => { try { child.kill(); } catch (_) {} finish({ status: null, stdout, stderr, error: Object.assign(new Error("HEPAN_PROCESS_TIMEOUT"), { code: "ETIMEDOUT" }) }); }, timeoutMs);
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch (_) { diagnose("HEPAN_PROCESS_TERMINATION_FAILED", "process-terminate"); }
+      finish({ status: null, stdout, stderr, error: Object.assign(new Error("HEPAN_PROCESS_TIMEOUT"), { code: "ETIMEDOUT" }) });
+    }, timeoutMs);
     child.once("close", () => clearTimeout(timer));
   }));
   const adapter = {
@@ -261,9 +285,13 @@ async function withTemporaryPayload(callback, io, path, localStateRoot) {
     io.writeFileSync(payloadPath, HEPAN_SELF_TEST_PAYLOAD, { encoding: "utf8", mode: 0o600 });
     return await callback(payloadPath);
   } finally {
-    try { if (io.existsSync(payloadPath)) io.unlinkSync(payloadPath); } catch (_) {}
+    try { if (io.existsSync(payloadPath)) io.unlinkSync(payloadPath); } catch (_) {
+      diagnose("HEPAN_TEMPORARY_DELETE_FAILED", "temporary-delete");
+    }
     if (createdRoot) {
-      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
+      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {
+        diagnose("HEPAN_TEMPORARY_DIRECTORY_CLEANUP_FAILED", "temporary-directory");
+      }
     }
   }
 }
@@ -277,9 +305,13 @@ async function withTemporaryCookie(config, callback, io, path, localStateRoot) {
     io.writeFileSync(cookiePath, normalizeHepanCookie(config.cookie || ""), { encoding: "utf8", mode: 0o600 });
     return await callback(cookiePath);
   } finally {
-    try { if (io.existsSync(cookiePath)) io.unlinkSync(cookiePath); } catch (_) {}
+    try { if (io.existsSync(cookiePath)) io.unlinkSync(cookiePath); } catch (_) {
+      diagnose("HEPAN_TEMPORARY_DELETE_FAILED", "temporary-delete");
+    }
     if (createdRoot) {
-      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
+      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {
+        diagnose("HEPAN_TEMPORARY_DIRECTORY_CLEANUP_FAILED", "temporary-directory");
+      }
     }
   }
 }
@@ -297,7 +329,9 @@ function createTemporaryCookie(config, io, path, localStateRoot) {
     cookie = normalizeHepanCookie(cookie);
     io.writeFileSync(cookiePath, cookie, { encoding: "utf8", mode: 0o600 });
   } catch (error) {
-    try { if (!existed && io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
+    try { if (!existed && io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {
+      diagnose("HEPAN_TEMPORARY_DIRECTORY_CLEANUP_FAILED", "temporary-directory");
+    }
     throw error;
   }
   let cleaned = false;
@@ -306,8 +340,12 @@ function createTemporaryCookie(config, io, path, localStateRoot) {
     cleanup: () => {
       if (cleaned) return;
       cleaned = true;
-      try { if (io.existsSync(cookiePath)) io.unlinkSync(cookiePath); } catch (_) {}
-      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {}
+      try { if (io.existsSync(cookiePath)) io.unlinkSync(cookiePath); } catch (_) {
+        diagnose("HEPAN_TEMPORARY_DELETE_FAILED", "temporary-delete");
+      }
+      try { if (io.existsSync(tmpRoot) && io.readdirSync(tmpRoot).length === 0) io.rmdirSync(tmpRoot); } catch (_) {
+        diagnose("HEPAN_TEMPORARY_DIRECTORY_CLEANUP_FAILED", "temporary-directory");
+      }
     }
   };
 }

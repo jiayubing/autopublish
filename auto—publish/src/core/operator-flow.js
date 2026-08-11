@@ -10,7 +10,9 @@ function resolveInteractive(options) {
 
 function throwIfStopped() {
   if (isStopRequested()) {
-    throw new Error("Stop requested");
+    const error = new Error("Stop requested");
+    error.code = "STOP_REQUESTED";
+    throw error;
   }
 }
 
