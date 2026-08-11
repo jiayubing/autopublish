@@ -14,8 +14,9 @@
 - Base integration commit：`ccc87d830f8170294bd389b05ab904c473a00cd2`；当前 worktree 为 `C:\Users\violet\.codex\worktrees\8560\官媒投稿-refactor`，最终保持 detached HEAD，没有夺取 `codex/article-lifecycle-submission`。
 - 工具 worktree 初始实际为 clean detached `814ad92d6576ccd8c66208b1b813da438e0cb9d1`，不是合同基线；切换前 `git status --porcelain` 为空，已记录差异后安全切到精确 `ccc87d8`，未覆盖用户改动。
 - 当前主任务 worktree `F:\官媒投稿-refactor` 的 `codex/article-lifecycle-submission` 在预检时指向 `ccc87d8`。25-A/B/C/D implementation 与 integration commits 均经 `git merge-base --is-ancestor` 核验在 base 祖先链：A `dde5dfa` / `3ce0eb3`、B `bd3b9b1` / `750c41d`、C `e925dbf` / `c645fe1`、D `45244e5` / `d2ce21f`。
+- 主任务已将本包的 `de07190f`、`33657f2`、`3e21b86`、`3b1bc0f` 按授权 fast-forward 集成到 `codex/article-lifecycle-submission`；本包执行任务未自行 merge 或 push。最终状态更新后的 clean integration HEAD 由主任务 closure response 绑定。
 - `git status --porcelain=v2 --branch`、staged/unstaged diff、`git worktree list --porcelain`、`git submodule status` 和 nested `.git` 扫描已复核；最终 clean，未发现 nested repository/submodule 或已有 25-E branch/worktree/handoff。未创建新线程，未使用 spawn/subagent；source thread reference 为 `019ff1af-f015-7111-8af5-7fcb7003ad3c`。
-- 直接调度 gate：25-0、24、Maintenance 10.5 和 25-A/B/C/D 均已集成到 base，Wave Plan 明确当前最左包为 25-E；未分析、实现或预建 25-F/G。
+- 直接调度 gate：25-0、24、Maintenance 10.5 和 25-A/B/C/D/E 均已集成，Wave Plan 已记录 A-E package closure；未分析、实现或预建 25-F/G。
 
 ## 变更与真实 owner
 
@@ -53,7 +54,7 @@ E 专项测试在 implementation commit 上为 `7/7 PASS`，最终 clean docs HE
 
 候选盘点阶段首次运行 23-A～D 因 worktree 未安装 `@noble/hashes` 失败；安装依赖后同一命令 `36/36 PASS`。扩展候选第一次为 `64/67 PASS`，剩余 3 项均为缺少 `media-workbench/node_modules/typescript` 的环境加载错误；补齐前端依赖后直接重跑为 `7/7 PASS`（Phase 08 cleanup、24-E absence、24-G legacy boundary）。这些失败均为依赖环境，不是产品行为失败。
 
-最终在 clean docs HEAD `33657f217a2bc4edbc5dcbce5d5f9835204d497a` 实际运行：
+执行任务最终在其 clean docs HEAD `33657f217a2bc4edbc5dcbce5d5f9835204d497a` 实际运行：
 
 ```text
 node --test --test-concurrency=1 tests/ticket-25-e-migration-acceptance.test.js tests/article-lifecycle-ticket-23-a.test.js tests/article-lifecycle-ticket-23-b.test.js tests/article-lifecycle-ticket-23-c.test.js tests/article-lifecycle-ticket-23-d.test.js tests/phase-02-migration.test.js tests/phase-02-operational-store.test.js tests/phase-03-composition.test.js tests/phase-04-operational-store-lifecycle.test.js tests/phase-08-operational-store-internals.test.js tests/ticket-24-e-absence.test.js tests/ticket-24-g-legacy-boundary.test.js
@@ -83,7 +84,14 @@ PASS
 - `.scratch/article-lifecycle-and-submission/acceptance/25-a-evidence-manifest.json` 只新增 `ticket-25-e-migration-acceptance` tracked test，tracked artifact count 从 14 增至 15；没有创建第二份 manifest。
 - `25-a-story-matrix.json` 的 85 stories/95 rows、所有 A-D rows、两个 `USER_CONTROLLED_REQUIRED` rows 和全部 10 个 `DEFERRED_IMAGE_EXTENSION` rows 未改；当前 matrix 没有独立 25-E story row，因此没有为了 E 新增 story 或改写已有 image/public user-control 状态。
 - `25-a-query-scan-budget.json` 未改。E 的 128-entry capacity 是 migration import synthetic capacity evidence，不是 25-F query/scan benchmark，也不发明 wall-clock threshold。
-- E 的行为 sourceState 绑定 implementation commit `de07190f`；contract/discovery/lint/format/diff evidence 绑定最终 clean docs HEAD `33657f2`。两者之间只有 tracked evidence docs 变化，没有生产行为 owner 漂移。
+- E 的行为 sourceState 绑定 implementation commit `de07190f`；执行任务的 contract/discovery/lint/format/diff evidence 绑定 clean docs HEAD `33657f2`。主任务集成及最终状态更新后的复验 evidence 绑定最终 clean integration HEAD；两者之间没有生产行为 owner 漂移。
+
+## 主任务集成、状态更新与最终复验
+
+- 25-E 提交已进入主任务 `codex/article-lifecycle-submission` 的 integration history；主任务在最终状态更新前的集成 HEAD 为 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6`，采用 fast-forward，无 merge conflict。
+- 最终状态更新后的主任务 clean HEAD 上，E 直接组合命令为 `93/93 PASS`；`npm run test:ticket-25-a -- --output build/evidence/ticket-25-a-contract.json` 为 `PASSED`，绑定 `sourceState=CLEAN`、85 stories、95 rows、21 state cases、15 tracked artifacts；`npm run test:discover` 收集 `254` 个测试文件；`npm run lint`、`npm run format:check`、`git diff --check` 均通过。
+- 本次 Goal 的状态为：25-A～25-E package closure 已完成，Ticket 25/Wave 11 保持 `PARTIAL`；下一合同包为 `25-F`，但未调度。本次 Goal 在 25-E closure、集成和状态更新后停止，不进入 25-F/G 或后续 combined/final closure。
+- 最终状态更新后的 integration HEAD 完整 SHA 及 clean 状态由主任务 closure response 绑定；本 handoff 不在自身内容中自引用该最终 SHA。
 
 ## 未运行、残余风险与外部边界
 
@@ -94,4 +102,4 @@ PASS
 
 ## 禁止外部操作确认
 
-本包未执行且不得由本 handoff 推断已执行：真实账号登录、平台投稿/公开页面轮询、供应商 HTTP、真实订单创建/刷新/取消/申诉、付费、生产数据库读写/迁移、真实图片上传、发布打包 smoke、push、merge 到主任务 branch 或 Ticket 25/Wave 11 COMPLETE 状态更新。
+本包执行任务未执行且不得由本 handoff 推断已执行：真实账号登录、平台投稿/公开页面轮询、供应商 HTTP、真实订单创建/刷新/取消/申诉、付费、生产数据库读写/迁移、真实图片上传、发布打包 smoke 或 push。主任务仅执行了授权范围内的本地 fast-forward 集成、最终定向门禁和状态文档更新；Ticket 25/Wave 11 仍未完成 combined/final closure，也未标记 `COMPLETE`。

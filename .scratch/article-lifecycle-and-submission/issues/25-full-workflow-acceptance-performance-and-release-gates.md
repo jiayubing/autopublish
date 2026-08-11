@@ -4,7 +4,7 @@
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** `RUNNING`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D` 已完成，当前下一执行包为 `25-E`
+**Status:** `PARTIAL`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E` 已完成 package closure，并已集成到 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6`；下一合同包为 `25-F`，但本次 Goal 未调度且在 25-E closure 后停止。Ticket 25 / Wave 11 尚未完成 combined audit、最终 closure 或 `COMPLETE`。
 
 **Scheduling gate:** `SATISFIED`；波次 10 Ticket 24 与维护插槽 10.5（M04 → M05 → M06）均为 `COMPLETE`。Ticket 18–21 不属于前置依赖。启动基线与执行边界见 `../handoffs/25-0-startup-readiness.md`。
 
@@ -111,6 +111,8 @@
 **审计目标：** combined audit 检查迁移是否复用唯一 owner/V1、journal 与 import 事务边界、成功/冲突优先级、不可得证据真实性、故障恢复是否重复 import、migration composition 是否绝无远端 capability 或 runnable facts。
 
 **退出门禁：** 迁移与恢复矩阵在合成旧库闭合；所有故障点保留真实 journal/事实；没有真实数据操作、远端副作用、第二 writer 或 legacy 路线复活。
+
+**本次 Goal 的 package closure 记录（2026-08-12）：** 25-E 执行提交 `de07190ffcf25a0fce48bcb087827f394194e37d`、matrix/evidence 提交 `33657f217a2bc4edbc5dcbce5d5f9835204d497a`、handoff 提交 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6` 已由主任务 fast-forward 集成；主任务随后在最终状态更新 HEAD 重跑 E 直接组合 `93/93 PASS`、Ticket 25 contract（85 stories、95 rows、21 state cases、15 tracked artifacts、`sourceState=CLEAN`）、discovery `254`、lint、format 和 `git diff --check`，均通过。A～E package closure 已完成；Ticket 25/Wave 11 保持 `PARTIAL`。25-F 未调度，且本次 Goal 不进入 25-F/G、independent combined audit、bounded closure re-audit、final clean smoke 或 Wave 11 final closure。
 
 ### 25-F — Performance & Responsibility Gates
 

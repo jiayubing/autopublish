@@ -19,4 +19,10 @@
 
 ## 结论
 
-`EXECUTION-PROTOCOL.md` 1.3 负责本次 Goal 的逐包调度、任务可见性、HEAD 集成和授权 Git 操作；Ticket 25 合同继续负责包级 evidence 与 combined-audit 时序。两者不存在需要改变产品语义的冲突。当前 Ticket 25 仍为 `READY`，25-A 是下一包；本次 Goal 的明确停止点为 25-E package closure。
+`EXECUTION-PROTOCOL.md` 1.3 负责本次 Goal 的逐包调度、任务可见性、HEAD 集成和授权 Git 操作；Ticket 25 合同继续负责包级 evidence 与 combined-audit 时序。两者不存在需要改变产品语义的冲突。记录本关系时 Ticket 25 为 `READY`、25-A 是下一包；该历史结论随后由下方 25-E closure 状态更新取代。本次 Goal 的明确停止点为 25-E package closure。
+
+## 25-E closure 后的状态更新
+
+截至本次 Goal 的最终状态更新，`25-0`、`25-A`、`25-B`、`25-C`、`25-D`、`25-E` 均已完成 package closure；25-E 已通过主任务 fast-forward 集成到 `3b1bc0fc9878667ee553531dc7a3a97fa1b7a8e6`。Ticket 25 与 Wave 11 保持 `PARTIAL`，下一合同包为 `25-F` 但未调度。
+
+本次 Goal 在 25-E closure、集成和状态更新后停止，不进入 25-F/G、independent combined audit、bounded closure re-audit、final clean smoke 或 Wave 11 final closure；不得据此把 Ticket 25 或 Wave 11 标记为 `COMPLETE`。最终状态更新后的 clean integration HEAD、实际命令和结果以主任务 closure response 绑定。
