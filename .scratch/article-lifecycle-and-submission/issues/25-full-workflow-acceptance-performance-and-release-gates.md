@@ -4,7 +4,7 @@
 
 **Blocked by:** 24 — 收缩并删除全部旧业务规则
 
-**Status:** `READY`；`25-0 — Startup Readiness` 已完成，下一执行包为 `25-A`
+**Status:** `RUNNING`；`25-0 — Startup Readiness` 已完成，当前执行包为 `25-A`
 
 **Scheduling gate:** `SATISFIED`；波次 10 Ticket 24 与维护插槽 10.5（M04 → M05 → M06）均为 `COMPLETE`。Ticket 18–21 不属于前置依赖。启动基线与执行边界见 `../handoffs/25-0-startup-readiness.md`。
 
