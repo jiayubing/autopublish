@@ -127,8 +127,15 @@ function createOrderObservationAggregate(
   }
 
   function historyFor(row) {
-    if (row.history_json)
-      return domain.parseOrderHistoryV1(fromText(row.history_json));
+    if (Object.prototype.hasOwnProperty.call(row, "history_json")) {
+      if (row.history_json)
+        return domain.parseOrderHistoryV1(fromText(row.history_json));
+      return domain.parseOrderHistoryV1({
+        version: 1,
+        orderIdentityV1: row.orderSnapshotV1.orderIdentityV1,
+        entries: [],
+      });
+    }
     const saved = evidenceRow(row.attempt_id, `order-history:${row.order_id}`);
     if (!saved)
       return domain.parseOrderHistoryV1({

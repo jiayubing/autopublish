@@ -71,6 +71,9 @@ const OPERATIONAL_FACADE_IMPORTERS = new Set([
   "desktop/composition/workspace-migration-composition.js",
   "desktop/composition/workspace-runtime-composition.js",
   "scripts/migrate-operational-store-v1.js",
+  // Ticket 25-F evidence tooling measures the public persistence boundary;
+  // it does not write business facts or depend on OperationalStore internals.
+  "scripts/run-ticket-25-f-benchmark.js",
 ]);
 const RETIRED_ARCHITECTURE_PATHS = Object.freeze([
   "desktop/storage-paths.js",

@@ -10,6 +10,7 @@ const {
 } = require("../scripts/production-smoke-arguments");
 const {
   APPLICATION_ROOT,
+  parseOutputArgument,
   readContract,
   validateAllContracts,
   assertSafeGeneratedEvidence,
@@ -31,8 +32,11 @@ test("Ticket 25-A tracked contracts cover 85 stories without claiming acceptance
   assert.equal(summary.budget.status, "FROZEN_BEFORE_RESULT");
   assert.equal(summary.budget.operationCount, 3);
   assert.equal(summary.evidence.generatedCount, 5);
-  assert.equal(summary.evidence.moduleCount, 4);
-  assert.equal(summary.evidence.moduleDisposition, "FACTS_FOR_INDEPENDENT_AUDIT");
+  assert.equal(summary.evidence.moduleCount, 9);
+  assert.equal(
+    summary.evidence.moduleDisposition,
+    "FACTS_FOR_INDEPENDENT_AUDIT",
+  );
   assert.equal(summary.runner.entryPoints, 3);
   assert.equal(summary.userControl.status, "USER_EXTERNAL_ACCEPTANCE_REQUIRED");
   assert.equal(summary.userControl.entryCount, 2);
@@ -128,6 +132,22 @@ test("Ticket 25-A smoke output forwarding uses the final dedicated path and neve
   assert.notEqual(dirtyOutput, cleanOutput);
   assert.notEqual(dirtyOutput, "build/evidence/production-smoke.json");
   assert.notEqual(cleanOutput, "build/evidence/production-smoke.json");
+});
+
+test("Ticket 25 evidence output parsers reject traversal outside build/evidence", () => {
+  const traversal = "build/evidence/../../ticket-25-outside.json";
+  assert.throws(() => parseOutputArgument(["--output", traversal]), {
+    code: "TICKET_25_A_OUTPUT_PATH_INVALID",
+  });
+  assert.throws(
+    () =>
+      parseProductionArguments([
+        "release-production-smoke/win-unpacked/resources",
+        "--output",
+        traversal,
+      ]),
+    { code: "PRODUCTION_PACKAGE_OUTPUT_PATH_INVALID" },
+  );
 });
 
 test("Ticket 25-A generated contract and smoke reports contain safe provenance and isolated files", () => {

@@ -5,6 +5,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { performance } = require("node:perf_hooks");
+const { DatabaseSync } = require("node:sqlite");
+const domain = require("../src/domain");
 const {
   createArticleManagementSnapshot,
 } = require("../desktop/services/article-management-snapshot");
@@ -14,6 +16,9 @@ const {
 const {
   createMediaOrderService,
 } = require("../desktop/services/media-order-service");
+const {
+  createOperationalStore,
+} = require("../src/infrastructure/operational-store/operational-store");
 const {
   APPLICATION_ROOT,
   contractError,
@@ -70,166 +75,259 @@ function relativeOutput(output) {
   return relative;
 }
 
-function readCapability(counters, valueFactory) {
-  counters.queries += 1;
-  counters.scans += 1;
-  return valueFactory();
-}
-
-function makeRegularQueueSnapshots(scale) {
-  const groups = [];
+function createOperationalFixture(scale) {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "ticket-25-f-operational-"),
+  );
+  const store = createOperationalStore({ workspaceRoot: root });
+  const databasePath = store.databasePath;
+  store.close();
+  const db = new DatabaseSync(databasePath);
+  const stamp = "2026-08-12T00:00:00.000Z";
   const itemsPerGroup = Math.floor(
     scale.regularQueueItems / scale.regularQueueGroups,
   );
   const remainder = scale.regularQueueItems % scale.regularQueueGroups;
-  for (
-    let groupIndex = 0;
-    groupIndex < scale.regularQueueGroups;
-    groupIndex += 1
-  ) {
-    const itemCount = itemsPerGroup + (groupIndex < remainder ? 1 : 0);
-    const items = Array.from({ length: itemCount }, (_, itemIndex) => ({
-      itemId: `ticket-25-f-queue-item-${groupIndex + 1}-${itemIndex + 1}`,
-      batchId: `ticket-25-f-queue-batch-${groupIndex + 1}`,
-      articleId: `ticket-25-a-article-${
-        ((groupIndex * itemCount + itemIndex) % scale.articles) + 1
-      }`,
-      regularPublicationAttemptId: `ticket-25-f-attempt-${
-        groupIndex + 1
-      }-${itemIndex + 1}`,
-      position: itemIndex + 1,
-    }));
-    const current = groupIndex % 2 === 0 ? items[0] : null;
-    const remaining = current ? items.slice(1) : items;
-    groups.push({
-      queueGroupId: `ticket-25-f-queue-group-${groupIndex + 1}`,
-      platformId: `synthetic-platform-${groupIndex % 2}`,
-      accountProfileId: `synthetic-account-${groupIndex + 1}`,
-      runState: current ? "in_flight" : "paused",
-      pauseIntent: current ? "none" : "system",
-      manuallyPaused: false,
-      current: current
-        ? {
-            ...current,
-            phase: "prepared",
-            claimUntil: "2026-08-12T00:01:00.000Z",
-          }
-        : null,
-      remaining,
-      actions: {
-        canStart: !current,
-        canPause: Boolean(current),
-        reasonCode: null,
-      },
-      revision: 1,
-      createdAt: "2026-08-12T00:00:00.000Z",
-      updatedAt: "2026-08-12T00:00:00.000Z",
-    });
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    const insertProfile = db.prepare(
+      "INSERT INTO account_profiles(account_profile_id,platform_id,display_name,created_at) VALUES(?,?,?,?)",
+    );
+    const insertGroup = db.prepare(
+      "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+    );
+    const insertBatch = db.prepare(
+      "INSERT INTO submission_batches(batch_id,status,revision,created_at,updated_at) VALUES(?,?,?,?,?)",
+    );
+    const insertItem = db.prepare(
+      "INSERT INTO submission_items(item_id,batch_id,article_id,target_key,revision,status,claim_token,claim_until,payload_json) VALUES(?,?,?,?,?,?,?,?,?)",
+    );
+    const insertQueueItem = db.prepare(
+      "INSERT INTO submission_queue_items(item_id,queue_group_id,position,created_at) VALUES(?,?,?,?)",
+    );
+    for (
+      let groupIndex = 0;
+      groupIndex < scale.regularQueueGroups;
+      groupIndex += 1
+    ) {
+      const groupNumber = groupIndex + 1;
+      const profileId = `ticket-25-f-account-${groupNumber}`;
+      const groupId = `ticket-25-f-queue-group-${groupNumber}`;
+      const batchId = `ticket-25-f-queue-batch-${groupNumber}`;
+      const platformId = `synthetic-platform-${groupIndex % 2}`;
+      const hasCurrent = groupIndex % 2 === 0;
+      insertProfile.run(profileId, platformId, `Account ${groupNumber}`, stamp);
+      insertGroup.run(
+        groupId,
+        platformId,
+        profileId,
+        hasCurrent ? "none" : "system",
+        1,
+        stamp,
+        stamp,
+      );
+      insertBatch.run(batchId, "queued", 1, stamp, stamp);
+      const itemCount = itemsPerGroup + (groupIndex < remainder ? 1 : 0);
+      for (let itemIndex = 0; itemIndex < itemCount; itemIndex += 1) {
+        const itemNumber = itemIndex + 1;
+        const itemId = `ticket-25-f-queue-item-${groupNumber}-${itemNumber}`;
+        const attemptId = `ticket-25-f-attempt-${groupNumber}-${itemNumber}`;
+        const articleId = `ticket-25-a-article-${
+          ((groupIndex * itemsPerGroup + itemIndex) % scale.articles) + 1
+        }`;
+        const current = hasCurrent && itemIndex === 0;
+        insertItem.run(
+          itemId,
+          batchId,
+          articleId,
+          `platform:${platformId}`,
+          1,
+          current ? "claimed" : "queued",
+          current ? `claim-${itemId}` : null,
+          current ? "2026-08-12T00:01:00.000Z" : null,
+          JSON.stringify({ attemptId }),
+        );
+        insertQueueItem.run(itemId, groupId, itemNumber, stamp);
+      }
+    }
+
+    const insertPublication = db.prepare(
+      "INSERT INTO publication_records(publication_id,article_id,target_key,target_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+    );
+    const insertAttempt = db.prepare(
+      "INSERT INTO publication_attempts(attempt_id,publication_id,status,created_at,finished_at) VALUES(?,?,?,?,?)",
+    );
+    const insertOrder = db.prepare(
+      "INSERT INTO remote_orders(order_id,attempt_id,remote_id,payload_json,created_at) VALUES(?,?,?,?,?)",
+    );
+    const insertDisplay = db.prepare(
+      "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
+    );
+    for (let index = 0; index < scale.paidOrders; index += 1) {
+      const number = index + 1;
+      const orderId = `ticket-25-f-order-${number}`;
+      const attemptId = `ticket-25-f-order-attempt-${number}`;
+      const publicationId = `ticket-25-f-order-publication-${number}`;
+      const articleId = `ticket-25-f-order-article-${number}`;
+      const resourceId = `ticket-25-f-media-${(index % 8) + 1}`;
+      const title = `Synthetic order ${number}`;
+      const body = `Synthetic order body ${number}`;
+      const createdAt = new Date(
+        Date.parse(stamp) + index * 1000,
+      ).toISOString();
+      const target = { kind: "media", mediaResourceId: resourceId };
+      const snapshot = domain.parseOrderSnapshotV1({
+        version: 1,
+        orderIdentityV1: { version: 1, orderId },
+        articleIdentityV1: {
+          version: 1,
+          clientId: "ticket-25-f-client",
+          articleId,
+        },
+        targetIdentityV1: { version: 1, ...target },
+        orderCreationAttemptId: `ticket-25-f-order-creation-${number}`,
+        mediaName: `Synthetic media ${(index % 8) + 1}`,
+        quotedPrice: 12.5,
+        estimatedTotal: 12.5,
+        actualAmount: null,
+        systemSubmissionCode: `ticket-25-f-system-${number}`,
+        submittedTitle: title,
+        submittedBody: body,
+        contentFingerprint: domain.contentFingerprint(title, body),
+        remoteCallStartedAt: stamp,
+      });
+      insertPublication.run(
+        publicationId,
+        articleId,
+        `media-resource:${resourceId}`,
+        JSON.stringify(target),
+        "remote_started",
+        stamp,
+        createdAt,
+      );
+      insertAttempt.run(
+        attemptId,
+        publicationId,
+        "remote_started",
+        stamp,
+        null,
+      );
+      insertOrder.run(
+        orderId,
+        attemptId,
+        orderId,
+        JSON.stringify(snapshot),
+        createdAt,
+      );
+      insertDisplay.run(
+        attemptId,
+        title,
+        `article-${number}.md`,
+        snapshot.mediaName,
+        snapshot.quotedPrice,
+        createdAt,
+        resourceId,
+        snapshot.estimatedTotal,
+        snapshot.systemSubmissionCode,
+      );
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    try {
+      db.exec("ROLLBACK");
+    } catch (_) {
+      // The fixture database is disposable; preserve the construction error.
+    }
+    throw error;
+  } finally {
+    db.close();
   }
-  return groups;
+  return Object.freeze({ root });
 }
 
-function makePaidOrderViews(scale) {
-  const statusCodes = ["0", "1", "2", "4", "9", "cancelled"];
-  return Array.from({ length: scale.paidOrders }, (_, index) => {
-    const statusCode = statusCodes[index % statusCodes.length];
+function measureOperationalFixture(fixture, operation) {
+  const transitionPorts = {};
+  const store = createOperationalStore({
+    workspaceRoot: fixture.root,
+    transitionPorts,
+  });
+  const originalPrepare = DatabaseSync.prototype.prepare;
+  const counters = { queries: 0, scans: 0, externalTransportCalls: 0 };
+  DatabaseSync.prototype.prepare = function observedPrepare(sql) {
+    if (/^\s*(?:SELECT|WITH)\b/i.test(String(sql))) {
+      counters.queries += 1;
+      counters.scans += 1;
+    }
+    return originalPrepare.call(this, sql);
+  };
+  try {
+    return operation({ transitionPorts, counters });
+  } finally {
+    DatabaseSync.prototype.prepare = originalPrepare;
+    store.close();
+  }
+}
+
+function measureRegularQueue(fixture) {
+  return measureOperationalFixture(fixture, ({ transitionPorts, counters }) => {
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions:
+        transitionPorts.regularQueueGroupTransitions,
+      platformSubmissionExecutor: { preparePlatformSubmission: () => null },
+    });
+    const startedAt = performance.now();
+    const groups = orchestrator.snapshot();
     return {
-      orderId: `ticket-25-f-order-${index + 1}`,
-      title: `Synthetic order ${index + 1}`,
-      filename: `article-${index + 1}.md`,
-      resourceName: `Synthetic media ${index % 8}`,
-      quotedPrice: 12.5,
-      createdAt: `2026-08-12T00:${String(index % 60).padStart(2, "0")}:00.000Z`,
-      submittedAt: "2026-08-12T00:00:00.000Z",
-      publishedAt: statusCode === "2" ? "2026-08-12T00:01:00.000Z" : null,
-      statusCode,
-      remoteUrl:
-        statusCode === "2"
-          ? "https://publisher.example/synthetic-article"
-          : null,
-      actualAmount: null,
-      anomaly: null,
+      elapsedMs: Number((performance.now() - startedAt).toFixed(3)),
+      counters,
+      loadedGroupCount: groups.length,
+      loadedQueueItemCount: groups.reduce(
+        (total, group) =>
+          total + (group.current ? 1 : 0) + group.remaining.length,
+        0,
+      ),
     };
   });
 }
 
-function regularTransitions(fixture, counters) {
-  return {
-    beginRegularRemoteSubmission: () => null,
-    claimRegularQueueGroupHead: () => null,
-    listRegularQueueGroupSnapshots: () =>
-      readCapability(counters, () => fixture.regularQueueGroups),
-    pauseAllRegularQueueGroups: () => null,
-    pauseRegularQueueGroupsOnStartup: () => null,
-    renewRegularQueueGroupClaim: () => null,
-    setRegularQueueGroupRunIntent: () => null,
-    startAllRegularQueueGroups: () => null,
-  };
-}
-
-function measureRegularQueue(fixture) {
-  const counters = { queries: 0, scans: 0, externalTransportCalls: 0 };
-  const orchestrator = createRegularQueueGroupOrchestrator({
-    regularQueueGroupTransitions: regularTransitions(fixture, counters),
-    platformSubmissionExecutor: { preparePlatformSubmission: () => null },
-  });
-  const startedAt = performance.now();
-  const groups = orchestrator.snapshot();
-  return {
-    elapsedMs: Number((performance.now() - startedAt).toFixed(3)),
-    counters,
-    loadedGroupCount: groups.length,
-    loadedQueueItemCount: groups.reduce(
-      (total, group) =>
-        total + (group.current ? 1 : 0) + group.remaining.length,
-      0,
-    ),
-  };
-}
-
-function orderTransitions(fixture, counters) {
-  return {
-    listOrderObservationViews: () =>
-      readCapability(counters, () => fixture.paidOrders),
-    getOrderObservationContext: () => ({
-      orderSnapshotFingerprint: "a".repeat(64),
-      remoteUrl: null,
-    }),
-    recordOrderObservation: (input) => input,
-    recordOrderStatusAnomaly: (input) => input,
-    prepareOrderStatusAnomalyResolution: (input) => input,
-    resumeOrderTracking: (input) => input,
-    confirmOrderPublished: (input) => input,
-    confirmOrderNotPublished: (input) => input,
-  };
-}
-
 async function measurePaidOrders(fixture, projectOrderList) {
-  const counters = { queries: 0, scans: 0, externalTransportCalls: 0 };
-  const service = createMediaOrderService({
-    orderObservationTransitions: orderTransitions(fixture, counters),
+  return measureOperationalFixture(fixture, ({ transitionPorts, counters }) => {
+    const service = createMediaOrderService({
+      orderObservationTransitions: transitionPorts.orderObservationTransitions,
+    });
+    const startedAt = performance.now();
+    const orders = service.listOrderViews();
+    const all = projectOrderList(orders, { status: "all" });
+    const pending = projectOrderList(orders, { status: "0" });
+    return {
+      elapsedMs: Number((performance.now() - startedAt).toFixed(3)),
+      counters,
+      loadedOrderCount: orders.length,
+      projectedOrderCount: all.items.length,
+      projectedPendingCount: pending.items.length,
+      projectedCounts: all.counts,
+    };
   });
-  const startedAt = performance.now();
-  const orders = service.listOrderViews();
-  const all = projectOrderList(orders, { status: "all" });
-  const pending = projectOrderList(orders, { status: "0" });
-  return {
-    elapsedMs: Number((performance.now() - startedAt).toFixed(3)),
-    counters,
-    loadedOrderCount: orders.length,
-    projectedOrderCount: all.items.length,
-    projectedPendingCount: pending.items.length,
-    projectedCounts: all.counts,
-  };
 }
 
 function operationMeasure(operationId, fixture, projectOrderList) {
   if (operationId === "article_management_snapshot")
     return measureArticleManagement(fixture);
-  if (operationId === "regular_queue_snapshot")
-    return measureRegularQueue(fixture);
-  if (operationId === "paid_order_snapshot")
-    return measurePaidOrders(fixture, projectOrderList);
+  if (
+    operationId === "regular_queue_snapshot" ||
+    operationId === "paid_order_snapshot"
+  ) {
+    const operationalFixture = createOperationalFixture(
+      readContract("queryScanBudget").syntheticFixture,
+    );
+    try {
+      return operationId === "regular_queue_snapshot"
+        ? measureRegularQueue(operationalFixture)
+        : measurePaidOrders(operationalFixture, projectOrderList);
+    } finally {
+      fs.rmSync(operationalFixture.root, { recursive: true, force: true });
+    }
+  }
   throw contractError("TICKET_25_F_BENCHMARK_OPERATION_UNKNOWN");
 }
 
@@ -303,10 +401,6 @@ async function runBenchmark(output) {
     return operation;
   });
   const fixture = makeFixture(budget.syntheticFixture);
-  fixture.regularQueueGroups = makeRegularQueueSnapshots(
-    budget.syntheticFixture,
-  );
-  fixture.paidOrders = makePaidOrderViews(budget.syntheticFixture);
   const { projectOrderList } =
     await import("../media-workbench/src/features/media/order-list-projection.js");
   const samplesByOperation = Object.fromEntries(
@@ -366,6 +460,7 @@ async function runBenchmark(output) {
       regularQueueItems: budget.syntheticFixture.regularQueueItems,
       paidOrders: budget.syntheticFixture.paidOrders,
       attentionItems: budget.syntheticFixture.attentionItems,
+      persistence: "isolated_operational_store_sqlite",
       transport: "in_memory_fake_only",
     },
     protocol: {
@@ -425,8 +520,7 @@ if (require.main === module) {
 
 module.exports = {
   OPERATION_IDS,
-  makePaidOrderViews,
-  makeRegularQueueSnapshots,
+  createOperationalFixture,
   measurePaidOrders,
   measureRegularQueue,
   runBenchmark,

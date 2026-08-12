@@ -403,6 +403,10 @@ test("production smoke evidence summarizes offline checks and rejects empty resu
     assert.equal(passed.status, "PASSED");
     assert.equal(passed.checkCount, 2);
     assert.equal(passed.passed, 2);
+    assert.deepEqual(passed.checks, [
+      { checkId: "main", status: "PASSED" },
+      { checkId: "storage.cleanup", status: "PASSED" },
+    ]);
     assert.match(passed.commit, /^[a-f0-9]{40,64}$/);
     assert.match(passed.nodeVersion, /^v\d+\.\d+\.\d+$/);
     assert.equal(passed.command, "node tests/packaging-runtime.test.js");

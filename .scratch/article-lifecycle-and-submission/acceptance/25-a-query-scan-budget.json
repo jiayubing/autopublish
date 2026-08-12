@@ -29,7 +29,7 @@
     "measuredRuns": 7,
     "discardWarmup": true,
     "sampleOrder": "Run warmups first, then measured runs in ascending operation order; do not mix fixture sizes within a sample set.",
-    "repeatIsolation": "Create a fresh in-memory read harness for every measured run and reset counters before the public call.",
+    "repeatIsolation": "Create a fresh isolated SQLite-backed OperationalStore read harness for every measured run and reset counters before the public call; fixture construction is excluded from the timed call.",
     "wallClock": "Record p50 and p95 for observation only. No approved same-environment baseline exists in 25-A, so no wall-clock pass/fail threshold may be invented.",
     "failureOutput": "Write a safe report with status FAILED and the operation/counter that exceeded budget; do not include fixture contents, credentials or raw exceptions."
   },

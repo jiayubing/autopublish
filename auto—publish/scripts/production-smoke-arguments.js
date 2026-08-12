@@ -3,6 +3,24 @@
 const path = require("node:path");
 const { packageEvidenceError } = require("./production-smoke-evidence");
 
+const EVIDENCE_ROOT = path.resolve(__dirname, "..", "build", "evidence");
+
+function resolveEvidenceOutput(candidate) {
+  const output = path.resolve(candidate);
+  const relative = path.relative(EVIDENCE_ROOT, output);
+  if (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(".." + path.sep) ||
+    path.isAbsolute(relative)
+  )
+    throw packageEvidenceError(
+      "PRODUCTION_PACKAGE_OUTPUT_PATH_INVALID",
+      "Production package evidence output must stay within build/evidence",
+    );
+  return output;
+}
+
 function parseArguments(argv) {
   const args = Array.from(argv || []);
   const options = {};
@@ -21,13 +39,14 @@ function parseArguments(argv) {
           "PRODUCTION_PACKAGE_ARGUMENT_INVALID",
           arg + " requires a value",
         );
-      options[
+      const key =
         arg === "--python"
           ? "pythonPath"
           : arg === "--application"
             ? "applicationPath"
-            : "output"
-      ] = path.resolve(value);
+            : "output";
+      options[key] =
+        key === "output" ? resolveEvidenceOutput(value) : path.resolve(value);
     } else if (arg === "--require-python") options.requirePython = true;
     else if (arg === "--static-only") options.staticOnly = true;
     else

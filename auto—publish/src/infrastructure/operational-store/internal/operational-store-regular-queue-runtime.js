@@ -86,7 +86,30 @@ function createRegularQueueRuntime(context) {
       );
   }
 
-  function regularQueueGroupSnapshot(row) {
+  function regularQueueRemainingRows(input) {
+    const value = input || {};
+    const params = [];
+    let groupFilter = "";
+    if (value.queueGroupId !== undefined) {
+      groupFilter = " AND q.queue_group_id=?";
+      params.push(
+        requiredText(
+          value.queueGroupId,
+          128,
+          "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+        ),
+      );
+    }
+    return db
+      .prepare(
+        "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE s.status='queued'" +
+          groupFilter +
+          " ORDER BY q.queue_group_id,q.position LIMIT 20000",
+      )
+      .all(...params);
+  }
+
+  function regularQueueGroupSnapshot(row, remainingRows) {
     if (!row) return null;
     const current = row.current_item_id
       ? Object.freeze({
@@ -98,20 +121,18 @@ function createRegularQueueRuntime(context) {
           claimUntil: row.current_claim_until,
         })
       : null;
-    const remaining = db
-      .prepare(
-        "SELECT q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE q.queue_group_id=? AND s.status='queued' ORDER BY q.position LIMIT 20000",
-      )
-      .all(row.queue_group_id)
-      .map((item) =>
-        Object.freeze({
-          itemId: item.item_id,
-          batchId: item.batch_id,
-          articleId: item.article_id,
-          regularPublicationAttemptId: item.attempt_id,
-          position: item.position,
-        }),
-      );
+    const remaining = (
+      remainingRows ||
+      regularQueueRemainingRows({ queueGroupId: row.queue_group_id })
+    ).map((item) =>
+      Object.freeze({
+        itemId: item.item_id,
+        batchId: item.batch_id,
+        articleId: item.article_id,
+        regularPublicationAttemptId: item.attempt_id,
+        position: item.position,
+      }),
+    );
     const hasWork = Boolean(current) || remaining.length > 0;
     return Object.freeze({
       queueGroupId: row.queue_group_id,
@@ -135,6 +156,22 @@ function createRegularQueueRuntime(context) {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     });
+  }
+
+  function regularQueueGroupSnapshots(input) {
+    const groupRows = regularQueueGroupRows(input);
+    const remainingByGroup = new Map();
+    for (const item of regularQueueRemainingRows(input)) {
+      const rows = remainingByGroup.get(item.queue_group_id) || [];
+      rows.push(item);
+      remainingByGroup.set(item.queue_group_id, rows);
+    }
+    return groupRows.map((row) =>
+      regularQueueGroupSnapshot(
+        row,
+        remainingByGroup.get(row.queue_group_id) || [],
+      ),
+    );
   }
 
   function createSubmissionQueueGroup(input) {
@@ -242,9 +279,7 @@ function createRegularQueueRuntime(context) {
 
   function listRegularQueueGroupSnapshots(input) {
     open();
-    return Object.freeze(
-      regularQueueGroupRows(input).map(regularQueueGroupSnapshot),
-    );
+    return Object.freeze(regularQueueGroupSnapshots(input));
   }
 
   function setRegularQueueGroupRunIntent(input) {
@@ -265,9 +300,7 @@ function createRegularQueueRuntime(context) {
         .run(intent, stamp, queueGroupId).changes;
       if (changed !== 1) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
       regularQueueFault("after-group-run-intent", { queueGroupId, intent });
-      return regularQueueGroupSnapshot(
-        regularQueueGroupRows({ queueGroupId })[0],
-      );
+      return regularQueueGroupSnapshots({ queueGroupId })[0];
     });
   }
 
@@ -291,9 +324,7 @@ function createRegularQueueRuntime(context) {
       return Object.freeze({
         mode,
         changedCount: changed,
-        groups: Object.freeze(
-          regularQueueGroupRows({}).map(regularQueueGroupSnapshot),
-        ),
+        groups: Object.freeze(regularQueueGroupSnapshots({})),
       });
     });
   }

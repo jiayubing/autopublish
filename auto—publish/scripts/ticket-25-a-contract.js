@@ -30,6 +30,17 @@ const ALLOWED_WORK_PACKAGES = new Set([
   "USER_CONTROLLED_EXTERNAL",
   "IMAGE_EXTENSION",
 ]);
+const REQUIRED_TICKET_25_RESPONSIBILITY_PATHS = new Set([
+  "auto—publish/desktop/services/article-management-snapshot.js",
+  "auto—publish/desktop/services/regular-queue-group-orchestrator.js",
+  "auto—publish/desktop/services/media-order-service.js",
+  "auto—publish/media-workbench/src/features/media/order-list-projection.js",
+  "auto—publish/src/content/internal/article-mutation-admission.js",
+  "auto—publish/src/content/article-lifecycle-projection.js",
+  "auto—publish/scripts/migrate-content-library-v2.js",
+  "auto—publish/src/infrastructure/operational-store/internal/operational-store-regular-queue-runtime.js",
+  "auto—publish/src/infrastructure/operational-store/internal/operational-store-order-observation-aggregate.js",
+]);
 const FORBIDDEN_EVIDENCE_KEY =
   /password|token|cookie|apikey|secret|authorization|requestheaders|responsebody|rawerror|credential|accesskey/i;
 
@@ -496,6 +507,9 @@ function validateModuleResponsibilityEvidence(value) {
       validateReference,
     );
   });
+  for (const requiredPath of REQUIRED_TICKET_25_RESPONSIBILITY_PATHS)
+    if (!paths.has(requiredPath))
+      throw contractError("TICKET_25_A_MODULE_RESPONSIBILITY_INCOMPLETE");
   return {
     disposition: "FACTS_FOR_INDEPENDENT_AUDIT",
     moduleCount: value.length,
@@ -656,10 +670,24 @@ function parseOutputArgument(args, defaultOutput) {
     const candidate = values[index + 1];
     if (!candidate || candidate.startsWith("--"))
       throw contractError("TICKET_25_A_OUTPUT_ARGUMENT_INVALID");
-    output = path.resolve(candidate);
+    output = resolveEvidenceOutput(candidate);
     index += 1;
   }
   if (!output) throw contractError("TICKET_25_A_OUTPUT_REQUIRED");
+  return resolveEvidenceOutput(output);
+}
+
+function resolveEvidenceOutput(candidate) {
+  const evidenceRoot = path.resolve(APPLICATION_ROOT, "build", "evidence");
+  const output = path.resolve(candidate);
+  const relative = path.relative(evidenceRoot, output);
+  if (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(".." + path.sep) ||
+    path.isAbsolute(relative)
+  )
+    throw contractError("TICKET_25_A_OUTPUT_PATH_INVALID");
   return output;
 }
 

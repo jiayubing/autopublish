@@ -22,7 +22,7 @@ function temporaryRoot() {
 test("25-F validates the single tracked evidence contract and responsibility facts", () => {
   const summary = validateAllContracts();
   assert.equal(summary.budget.operationCount, 3);
-  assert.equal(summary.evidence.moduleCount, 4);
+  assert.equal(summary.evidence.moduleCount, 9);
   assert.equal(
     summary.evidence.moduleDisposition,
     "FACTS_FOR_INDEPENDENT_AUDIT",
@@ -34,6 +34,18 @@ test("25-F validates the single tracked evidence contract and responsibility fac
     ),
     OPERATION_IDS,
   );
+  const behaviorSources = new Map([
+    [15, "bd3b9b11a8adcf78a00e7ce46b6dd39fd402b492"],
+    [16, "bd3b9b11a8adcf78a00e7ce46b6dd39fd402b492"],
+    [27, "e925dbf90ff82f6028956092ce4240ab717d3c52"],
+    [61, "45244e5d0e967db1e48f2220762d5dc99042a07e"],
+    [63, "45244e5d0e967db1e48f2220762d5dc99042a07e"],
+  ]);
+  for (const row of readContract("storyMatrix").rows) {
+    if (!behaviorSources.has(row.storyId)) continue;
+    assert.equal(row.observedResult, "PUBLIC_BEHAVIOR_VERIFIED");
+    assert.equal(row.observedSourceState, behaviorSources.get(row.storyId));
+  }
 });
 
 test("25-F measures public batch/read projections at the frozen scale with hard query/scan budgets", async () => {
@@ -51,6 +63,10 @@ test("25-F measures public batch/read projections at the frozen scale with hard 
     assert.equal(report.fixture.regularQueueGroups, 8);
     assert.equal(report.fixture.regularQueueItems, 400);
     assert.equal(report.fixture.paidOrders, 2000);
+    assert.equal(
+      report.fixture.persistence,
+      "isolated_operational_store_sqlite",
+    );
     assert.equal(report.fixture.transport, "in_memory_fake_only");
     assert.equal(report.protocol.warmupRuns, 2);
     assert.equal(report.protocol.measuredRuns, 7);
@@ -62,7 +78,7 @@ test("25-F measures public batch/read projections at the frozen scale with hard 
 
     const expectedCounts = {
       article_management_snapshot: [7, 7],
-      regular_queue_snapshot: [1, 1],
+      regular_queue_snapshot: [2, 2],
       paid_order_snapshot: [1, 1],
     };
     for (const operation of report.operations) {

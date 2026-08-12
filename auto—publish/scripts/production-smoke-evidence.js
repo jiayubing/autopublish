@@ -58,6 +58,7 @@ function summarizeChecks(checks) {
     passed: counts.passed,
     failed: counts.failed,
     skipped: counts.skipped,
+    checks: entries.map(([checkId, status]) => ({ checkId, status })),
     sha256: crypto
       .createHash("sha256")
       .update(JSON.stringify(entries))
@@ -91,6 +92,7 @@ function writeEvidenceReport(output, result, provenanceOptions) {
     passed: checks.passed,
     failed: checks.failed,
     skipped: checks.skipped,
+    checks: checks.checks,
     sha256: checks.sha256,
   };
   const filename = path.resolve(output);
