@@ -3,6 +3,13 @@ const { MediaResourceStore } = require("../../src/platforms/media/media-resource
 const { MediaPoolStore } = require("../../src/platforms/media/media-pool-store");
 
 const {
+  MEDIA_ERROR_DEFINITIONS,
+  createMediaError,
+  safeDiagnostics,
+} = require("../../src/platforms/media/media-errors");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+
+const {
   boundedPageSize,
   canonicalPrice,
   extractBalanceValue,
@@ -215,17 +222,32 @@ function createMediaResourceService(opts) {
 
     var refreshedAt = new Date().toISOString();
     var status = truncated ? "truncated" : "complete";
-    resourceStore.setAll(allResources, {
-      total: allResources.length,
-      pageSizeHint: pageSizeHint,
-      pageCount: pageCount,
-      refreshedAt: refreshedAt,
-      status: status,
-      complete: !truncated,
-      truncated: truncated,
-      truncationReason: truncationReason,
-      diagnostics: diagnostics
-    });
+    try {
+      resourceStore.setAll(allResources, {
+        total: allResources.length,
+        pageSizeHint: pageSizeHint,
+        pageCount: pageCount,
+        refreshedAt: refreshedAt,
+        status: status,
+        complete: !truncated,
+        truncated: truncated,
+        truncationReason: truncationReason,
+        diagnostics: diagnostics
+      });
+    } catch (error) {
+      reportDiagnostic({
+        code: "MEDIA_RESOURCE_PERSISTENCE_FAILED",
+        module: "media-resource-service",
+        category: "storage",
+        operationId: "media-resource-refresh",
+        metadata: {
+          operation: "resources",
+          failureStage: "persistence",
+          errorCode: safeErrorCode(error, "MEDIA_RESOURCE_PERSISTENCE_FAILED"),
+        },
+      });
+      throw createMediaError("MEDIA_RESOURCE_PERSISTENCE_FAILED");
+    }
 
     return {
       ok: true,
@@ -265,11 +287,24 @@ function createMediaResourceService(opts) {
   }
 
   async function fetchResourcePage(client, page, pageSize) {
-    if (!supplierProvider) return client.mediaList({ page: page, pageSize: pageSize });
-    var result = await supplierProvider().refreshMediaResources({ page: page, pageSize: pageSize });
-    if (!result || result.kind !== "resources_refreshed") {
-      throw serviceError("MEDIA_RESOURCE_REFRESH_FAILED", "Media resource refresh failed");
+    if (!supplierProvider) {
+      if (!client || typeof client.mediaList !== "function")
+        throw createMediaError("MEDIA_SUPPLIER_PORT_UNAVAILABLE");
+      try {
+        return await client.mediaList({ page: page, pageSize: pageSize });
+      } catch (error) {
+        throw mapResourceRefreshError(error);
+      }
     }
+    var result;
+    try {
+      var supplier = supplierProvider();
+      result = await supplier.refreshMediaResources({ page: page, pageSize: pageSize });
+    } catch (error) {
+      throw mapResourceRefreshError(error);
+    }
+    if (!result || result.kind !== "resources_refreshed")
+      throw mapResourceRefreshOutcome(result);
     return {
       data: result.resources,
       total: result.total,
@@ -422,6 +457,69 @@ function toPoolStoreShape(resource) {
 function preserveAvailability(normalized, resource) {
   if (resource && typeof resource.available === "boolean") normalized.available = resource.available;
   return normalized;
+}
+
+function mapResourceRefreshOutcome(result) {
+  var source = result && result.error;
+  var diagnostics = safeDiagnostics(result && result.diagnostics) ||
+    safeDiagnostics(source && source.diagnostics);
+  var code = "MEDIA_RESOURCE_REFRESH_FAILED";
+  if (result && result.kind === "configuration_error") {
+    code = source && [
+      "MEDIA_CONFIG_NOT_SET",
+      "MEDIA_CONFIG_INVALID",
+      "MEDIA_ENDPOINT_REQUIRED",
+      "MEDIA_HTTP_CONFIRMATION_REQUIRED",
+      "MEDIA_SUPPLIER_PORT_UNAVAILABLE",
+    ].includes(source.code)
+      ? source.code
+      : "MEDIA_CONFIG_NOT_SET";
+  } else if (result && result.kind === "resources_rejected") {
+    code = "MEDIA_RESOURCE_REMOTE_REJECTED";
+  } else if (result && result.kind === "resources_protocol_error") {
+    code = "MEDIA_RESOURCE_SUPPLIER_PROTOCOL_ERROR";
+  } else if (result && result.kind === "resources_normalization_failed") {
+    code = "MEDIA_RESOURCE_NORMALIZATION_FAILED";
+  } else if (result && result.kind === "transport_error") {
+    code = resourceTransportCode(source && source.code);
+  }
+  return createMediaError(code, undefined, diagnostics);
+}
+
+function mapResourceRefreshError(error) {
+  var code = error && typeof error.code === "string" ? error.code : "";
+  if (code === "MEDIA_REMOTE_REJECTED" || code === "MEDIA_SUPPLIER_REJECTED")
+    code = "MEDIA_RESOURCE_REMOTE_REJECTED";
+  else if (code === "MEDIA_PROTOCOL_ERROR" || code === "MEDIA_SUPPLIER_PROTOCOL_ERROR")
+    code = "MEDIA_RESOURCE_SUPPLIER_PROTOCOL_ERROR";
+  else if (code === "MEDIA_SUPPLIER_TRANSPORT_ERROR")
+    code = "MEDIA_RESOURCE_TRANSPORT_ERROR";
+  else if (!MEDIA_ERROR_DEFINITIONS[code]) code = "MEDIA_RESOURCE_TRANSPORT_ERROR";
+  return createMediaError(code, undefined, safeDiagnostics(error && error.diagnostics));
+}
+
+function resourceTransportCode(code) {
+  if (
+    code &&
+    [
+      "MEDIA_CONNECT_TIMEOUT",
+      "MEDIA_READ_TIMEOUT",
+      "MEDIA_NETWORK_ERROR",
+      "MEDIA_SERVER_ERROR",
+      "MEDIA_REDIRECT_REJECTED",
+      "MEDIA_TLS_CERTIFICATE_ERROR",
+      "MEDIA_TLS_HOSTNAME_MISMATCH",
+      "MEDIA_TRANSPORT_UNAVAILABLE",
+      "MEDIA_CONNECTION_FAILED",
+      "MEDIA_RESOURCE_TIMEOUT",
+    ].includes(code)
+  ) return code;
+  return "MEDIA_RESOURCE_TRANSPORT_ERROR";
+}
+
+function safeErrorCode(error, fallback) {
+  var code = error && typeof error.code === "string" ? error.code : "";
+  return MEDIA_ERROR_DEFINITIONS[code] ? code : fallback;
 }
 
 module.exports = { createMediaResourceService, resourceFingerprint: canonicalResourceFingerprint };

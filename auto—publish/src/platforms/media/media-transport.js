@@ -5,6 +5,7 @@ const {
   createMediaError,
   isKnownMediaError,
 } = require("./media-errors");
+const { attachResponseDiagnostics } = require("./media-supplier-response");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -154,7 +155,7 @@ class MediaTransport {
         { path: values.path, status },
       );
     }
-    return data;
+    return attachResponseDiagnostics(data, { status, path: values.path });
   }
 
   async _phase(operation, phase, timeoutMs, controller, path) {

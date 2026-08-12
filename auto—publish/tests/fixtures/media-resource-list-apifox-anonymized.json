@@ -1,0 +1,27 @@
+{
+  "code": 1,
+  "msg": "success",
+  "time": "0",
+  "data": [
+    {
+      "resource_id": 101,
+      "title": "example-one",
+      "remarks": "example remark",
+      "case_link": "https://example.test/case/one",
+      "publish_rate": null,
+      "publish_time": 0,
+      "status": 1,
+      "price": "1.00"
+    },
+    {
+      "resource_id": 102,
+      "title": "example-two",
+      "remarks": "",
+      "case_link": "https://example.test/case/two",
+      "publish_rate": "0",
+      "publish_time": 1,
+      "status": 0,
+      "price": "2.00"
+    }
+  ]
+}

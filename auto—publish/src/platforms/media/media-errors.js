@@ -11,6 +11,11 @@ const MEDIA_ERROR_DEFINITIONS = Object.freeze({
     retryability: "never",
     message: "媒体服务配置无效",
   },
+  MEDIA_CONFIG_NOT_SET: {
+    category: "validation",
+    retryability: "never",
+    message: "付费媒体服务配置未设置",
+  },
   MEDIA_HTTP_CONFIRMATION_REQUIRED: {
     category: "validation",
     retryability: "never",
@@ -96,6 +101,41 @@ const MEDIA_ERROR_DEFINITIONS = Object.freeze({
     retryability: "manual-check",
     message: "媒体供应商传输失败",
   },
+  MEDIA_RESOURCE_TIMEOUT: {
+    category: "transport",
+    retryability: "safe",
+    message: "媒体资源列表请求超时",
+  },
+  MEDIA_RESOURCE_TRANSPORT_ERROR: {
+    category: "transport",
+    retryability: "safe",
+    message: "媒体资源列表请求失败",
+  },
+  MEDIA_RESOURCE_REMOTE_REJECTED: {
+    category: "remote",
+    retryability: "never",
+    message: "媒体服务拒绝获取资源列表",
+  },
+  MEDIA_RESOURCE_SUPPLIER_PROTOCOL_ERROR: {
+    category: "transport",
+    retryability: "manual-check",
+    message: "媒体资源列表响应格式无法识别",
+  },
+  MEDIA_RESOURCE_NORMALIZATION_FAILED: {
+    category: "internal",
+    retryability: "manual-check",
+    message: "媒体服务返回的资源数据无法识别",
+  },
+  MEDIA_RESOURCE_PERSISTENCE_FAILED: {
+    category: "storage",
+    retryability: "manual-check",
+    message: "媒体资源库保存失败",
+  },
+  MEDIA_RESOURCE_REFRESH_FAILED: {
+    category: "internal",
+    retryability: "manual-check",
+    message: "媒体资源刷新未能安全完成",
+  },
 });
 
 const MEDIA_ERROR_CODES = new Set(Object.keys(MEDIA_ERROR_DEFINITIONS));
@@ -106,13 +146,42 @@ function safeDiagnostics(value) {
   if (Number.isInteger(value.status) && value.status >= 100 && value.status <= 599) {
     output.status = value.status;
   }
+  if (Number.isInteger(value.httpStatus) && value.httpStatus >= 100 && value.httpStatus <= 599) {
+    output.httpStatus = value.httpStatus;
+  }
   if (["connect", "read", "response"].includes(value.phase)) {
     output.phase = value.phase;
   }
   if (typeof value.path === "string" && /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,160}$/u.test(value.path)) {
     output.path = value.path;
   }
+  if (typeof value.endpointPath === "string" && /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,160}$/u.test(value.endpointPath)) {
+    output.endpointPath = value.endpointPath;
+  }
   if (value.redirect === true) output.redirect = true;
+  for (const key of [
+    "supplierCode",
+    "supplierStatus",
+    "supplierSuccess",
+    "supplierOk",
+    "topLevelFields",
+    "dataType",
+    "dataFields",
+    "candidateListFields",
+    "paginationFields",
+  ]) {
+    if (
+      typeof value[key] === "string" &&
+      value[key].length >= 1 &&
+      value[key].length <= 128 &&
+      /^[A-Za-z0-9._:-]+$/u.test(value[key])
+    ) {
+      output[key] = value[key];
+    }
+  }
+  if (Number.isSafeInteger(value.itemCount) && value.itemCount >= 0) {
+    output.itemCount = value.itemCount;
+  }
   return Object.keys(output).length ? Object.freeze(output) : undefined;
 }
 
@@ -213,4 +282,5 @@ module.exports = {
   createMediaError,
   isKnownMediaError,
   classifyMediaTransportError,
+  safeDiagnostics,
 };

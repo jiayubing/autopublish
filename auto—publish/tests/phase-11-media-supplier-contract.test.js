@@ -5,6 +5,10 @@ const test = require("node:test");
 const {
   createMediaSupplierAdapter,
 } = require("../src/platforms/media/media-supplier-adapter");
+const {
+  parseOrderDetailsResponse,
+  parseResourceResponse,
+} = require("../src/platforms/media/media-supplier-response");
 const { createMediaPublisher } = require("../desktop/services/media-publisher");
 const {
   createMediaOrderService,
@@ -17,13 +21,16 @@ function successful(value) {
   return { code: 0, data: value };
 }
 
+function resourceSuccessful(value) {
+  return { code: 1, msg: "success", time: "0", data: value };
+}
+
 test("refreshMediaResources maps supplier resource fields into a closed DTO", async () => {
   const adapter = createMediaSupplierAdapter({
     client: {
       refreshMediaResources: async (input) => {
         assert.deepEqual(input, { page: 2, pageSize: 20 });
-        return successful({
-          list: [
+        return resourceSuccessful([
             {
               resource_id: "resource-1",
               title: "媒体甲",
@@ -32,9 +39,7 @@ test("refreshMediaResources maps supplier resource fields into a closed DTO", as
               remark: "只收工作日稿件",
               provider_only: "must not escape",
             },
-          ],
-          total: 1,
-        });
+          ]);
       },
     },
   });
@@ -54,17 +59,19 @@ test("refreshMediaResources maps supplier resource fields into a closed DTO", as
     ],
     page: 2,
     pageSize: 20,
-    total: 1,
   });
   assert.equal(Object.hasOwn(result.resources[0], "provider_only"), false);
   assert.equal(Object.hasOwn(result.resources[0], "resource_id"), false);
 });
 
-test("refreshMediaResources accepts a successful paged data envelope without a code field", async () => {
+test("refreshMediaResources accepts the documented successful paged data envelope", async () => {
   const adapter = createMediaSupplierAdapter({
-    client: {
-      refreshMediaResources: async () => ({
-        data: [
+      client: {
+        refreshMediaResources: async () => ({
+          code: 1,
+          msg: "success",
+          time: "0",
+          data: [
           {
             resource_id: "resource-page-1",
             title: "分页媒体",
@@ -95,6 +102,41 @@ test("refreshMediaResources accepts a successful paged data envelope without a c
       total: 3,
       hasNext: true,
     },
+  );
+});
+
+test("resource parser classifies only the documented failure code as remote rejection", () => {
+  assert.throws(
+    () => parseResourceResponse({ code: 0, msg: "rejected", data: [] }),
+    (error) => error.code === "MEDIA_SUPPLIER_REJECTED",
+  );
+
+  assert.throws(
+    () => parseResourceResponse({ code: 200, msg: "unsupported", data: [] }),
+    (error) =>
+      error.code === "MEDIA_SUPPLIER_PROTOCOL_ERROR" &&
+      error.diagnostics.endpointPath === "/api/media/media_list" &&
+      error.diagnostics.supplierCode === "200",
+  );
+});
+
+test("malformed resource envelopes expose only a safe candidate-list schema summary", () => {
+  assert.throws(
+    () => parseResourceResponse({ code: 1, msg: "success", data: { list: [] } }),
+    (error) =>
+      error.code === "MEDIA_SUPPLIER_PROTOCOL_ERROR" &&
+      error.diagnostics.dataType === "object" &&
+      error.diagnostics.candidateListFields === "data.list" &&
+      !JSON.stringify(error.diagnostics).includes("success"),
+  );
+});
+
+test("generic order parser protocol errors do not claim the media-list endpoint", () => {
+  assert.throws(
+    () => parseOrderDetailsResponse({ data: {} }),
+    (error) =>
+      error.code === "MEDIA_SUPPLIER_PROTOCOL_ERROR" &&
+      (!error.diagnostics || error.diagnostics.endpointPath !== "/api/media/media_list"),
   );
 });
 

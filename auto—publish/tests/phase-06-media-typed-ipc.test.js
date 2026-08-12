@@ -415,6 +415,9 @@ test("media registrar projects resources and articles without exposing legacy pa
   const client = {
     endpointPolicy: { hostname: "api.supplier.example" },
     mediaList: async () => ({
+      code: 1,
+      msg: "success",
+      time: "0",
       data: [
         {
           resource_id: "resource-2",

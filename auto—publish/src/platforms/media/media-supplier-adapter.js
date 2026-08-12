@@ -2,6 +2,7 @@
 
 const {
   MEDIA_ERROR_DEFINITIONS,
+  safeDiagnostics: safeMediaDiagnostics,
 } = require("./media-errors");
 const {
   MediaSupplierProtocolError,
@@ -11,6 +12,7 @@ const {
   parseOrderDetailsResponse,
   parseResourceResponse,
 } = require("./media-supplier-response");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 function createMediaSupplierAdapter(options) {
   const values = options || {};
@@ -185,13 +187,106 @@ function unavailable() {
 }
 
 function resourceFailure(error) {
+  const code = safeErrorCode(error);
+  const diagnostics = safeMediaDiagnostics(error && error.diagnostics);
+  let failure;
   if (error instanceof MediaSupplierRejectedError) {
-    return { kind: "resources_rejected", scope: error.scope };
+    failure = {
+      kind: "resources_rejected",
+      scope: error.scope,
+      error: safeError(error),
+      ...(diagnostics ? { diagnostics } : {}),
+    };
+  } else if (isCode(error, "MEDIA_REMOTE_REJECTED")) {
+    failure = {
+      kind: "resources_rejected",
+      scope: "service",
+      error: safeError(error),
+      ...(diagnostics ? { diagnostics } : {}),
+    };
+  } else if (isCode(error, "MEDIA_RESOURCE_NORMALIZATION_FAILED")) {
+    failure = {
+      kind: "resources_normalization_failed",
+      operation: "resources",
+      error: safeError(error),
+      ...(diagnostics ? { diagnostics } : {}),
+    };
+  } else if (isProtocolError(error)) {
+    failure = {
+      kind: "resources_protocol_error",
+      operation: "resources",
+      error: safeError(error),
+      ...(diagnostics ? { diagnostics } : {}),
+    };
+  } else if (
+    isCode(error, "MEDIA_CONFIG_NOT_SET") ||
+    isCode(error, "MEDIA_CONFIG_INVALID") ||
+    isCode(error, "MEDIA_ENDPOINT_REQUIRED") ||
+    isCode(error, "MEDIA_HTTP_CONFIRMATION_REQUIRED") ||
+    isCode(error, "MEDIA_SUPPLIER_PORT_UNAVAILABLE")
+  ) {
+    failure = {
+      kind: "configuration_error",
+      operation: "resources",
+      error: safeError(error),
+      ...(diagnostics ? { diagnostics } : {}),
+    };
+  } else {
+    failure = {
+      kind: "transport_error",
+      operation: "resources",
+      error: safeError(error),
+      ...(diagnostics ? { diagnostics } : {}),
+    };
   }
-  if (isCode(error, "MEDIA_REMOTE_REJECTED")) {
-    return { kind: "resources_rejected", scope: "service" };
+  reportResourceFailureDiagnostic(code, failure.kind, diagnostics);
+  return failure;
+}
+
+function reportResourceFailureDiagnostic(code, kind, diagnostics) {
+  const metadata = {
+    operation: "resources",
+    failureStage: failureStage(kind),
+    errorCode: code,
+  };
+  if (diagnostics) {
+    if (diagnostics.endpointPath) metadata.endpointPath = diagnostics.endpointPath;
+    else if (diagnostics.path) metadata.endpointPath = diagnostics.path;
+    for (const key of [
+      "phase",
+      "supplierCode",
+      "supplierStatus",
+      "supplierSuccess",
+      "supplierOk",
+      "topLevelFields",
+      "dataType",
+      "dataFields",
+      "candidateListFields",
+      "paginationFields",
+    ]) {
+      if (diagnostics[key] !== undefined) metadata[key] = diagnostics[key];
+    }
+    if (diagnostics.httpStatus !== undefined) metadata.httpStatus = diagnostics.httpStatus;
+    else if (diagnostics.status !== undefined) metadata.httpStatus = diagnostics.status;
+    if (diagnostics.itemCount !== undefined) metadata.itemCount = diagnostics.itemCount;
   }
-  return { kind: "transport_error", operation: "resources", error: safeError(error) };
+  reportDiagnostic({
+    code: "MEDIA_RESOURCE_REFRESH_FAILED",
+    module: "media-supplier-adapter",
+    category: MEDIA_ERROR_DEFINITIONS[code]
+      ? MEDIA_ERROR_DEFINITIONS[code].category
+      : "transport",
+    operationId: "media-resource-refresh",
+    metadata,
+  });
+}
+
+function failureStage(kind) {
+  if (kind === "configuration_error") return "configuration";
+  if (kind === "resources_rejected") return "supplier-rejection";
+  if (kind === "resources_protocol_error") return "supplier-protocol";
+  if (kind === "resources_normalization_failed") return "normalization";
+  return "transport";
 }
 
 function queryFailure(error) {

@@ -21,11 +21,22 @@ const METADATA_RULES = Object.freeze({
   targetPlatformId: "token",
   accountProfileId: "token",
   operation: "token",
+  endpointPath: "path",
   phase: "token",
   state: "token",
   status: "token",
   outcome: "token",
   errorCode: "token",
+  supplierCode: "control",
+  supplierStatus: "control",
+  supplierSuccess: "control",
+  supplierOk: "control",
+  topLevelFields: "token",
+  dataType: "token",
+  dataFields: "token",
+  candidateListFields: "token",
+  paginationFields: "token",
+  failureStage: "token",
   reasonCode: "token",
   category: "token",
   capability: "token",
@@ -139,6 +150,30 @@ function safeOpaque(value, max, code) {
   return value;
 }
 
+function safePath(value, max, code) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > max ||
+    !/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,160}$/u.test(value)
+  )
+    throw diagnosticError(code || "DIAGNOSTIC_PATH_INVALID");
+  return value;
+}
+
+function safeControl(value, max, code) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > max ||
+    !/^[A-Za-z0-9._:-]+$/u.test(value) ||
+    value === "." ||
+    value === ".."
+  )
+    throw diagnosticError(code || "DIAGNOSTIC_CONTROL_INVALID");
+  return value;
+}
+
 function isSafeDiagnosticId(value) {
   if (
     typeof value !== "string" ||
@@ -176,6 +211,14 @@ function normalizeMetadata(value) {
       output[key] = item;
       return;
     }
+    if (rule === "path") {
+      output[key] = safePath(item, 192, "DIAGNOSTIC_METADATA_VALUE_INVALID");
+      return;
+    }
+    if (rule === "control") {
+      output[key] = safeControl(item, 128, "DIAGNOSTIC_METADATA_VALUE_INVALID");
+      return;
+    }
     if (typeof item !== "string" || item.length > 128 || unsafeText(item))
       throw diagnosticError("DIAGNOSTIC_METADATA_VALUE_INVALID");
     output[key] = safeToken(item, 128, "DIAGNOSTIC_METADATA_VALUE_INVALID");
@@ -196,6 +239,8 @@ module.exports = {
   isSafeDiagnosticId,
   isSafeDiagnosticText,
   safeOpaque,
+  safeControl,
+  safePath,
   safeToken,
   normalizeOccurredAt,
   normalizeMetadata,
