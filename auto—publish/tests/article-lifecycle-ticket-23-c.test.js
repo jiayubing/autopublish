@@ -434,7 +434,7 @@ test("23-C v4 to v5 schema migration is atomic and retryable at every fault", ()
     facade.close();
     const database = new DatabaseSync(databasePath);
     database.exec(
-      "DROP TABLE migration_import_order_identities; DROP TABLE migration_import_entries; DROP TABLE migration_journals; DELETE FROM schema_migrations WHERE version=5;",
+      "DROP TABLE paid_staging_items; DROP TABLE migration_import_order_identities; DROP TABLE migration_import_entries; DROP TABLE migration_journals; DELETE FROM schema_migrations WHERE version>=5;",
     );
     database.close();
 
@@ -474,7 +474,7 @@ test("23-C v4 to v5 schema migration is atomic and retryable at every fault", ()
         .prepare("SELECT version FROM schema_migrations ORDER BY version")
         .all()
         .map((row) => row.version),
-      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5, 6],
     );
     upgraded.close();
     fs.rmSync(root, { recursive: true, force: true });

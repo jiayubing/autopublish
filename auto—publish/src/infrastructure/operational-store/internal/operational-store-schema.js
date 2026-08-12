@@ -17,8 +17,13 @@ const {
   verifyV5Structure,
   migrateV5Schema,
 } = require("./operational-store-schema-v5");
+const {
+  V6_SCHEMA,
+  verifyV6Structure,
+  migrateV6Schema,
+} = require("./operational-store-schema-v6");
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 const V1_SCHEMA = `CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE account_profiles(account_profile_id TEXT PRIMARY KEY, platform_id TEXT NOT NULL, display_name TEXT, created_at TEXT NOT NULL);
@@ -342,7 +347,9 @@ function dryRunSchema(filename) {
             ? [1, 2, 3]
             : version === 4
               ? [1, 2, 3, 4]
-              : [1, 2, 3, 4, 5];
+              : version === 5
+                ? [1, 2, 3, 4, 5]
+                : [1, 2, 3, 4, 5, 6];
     verifyMigrationHistory(db, history, "OPERATIONAL_SCHEMA_INVALID");
     verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
     if (version >= 2) verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
@@ -352,6 +359,7 @@ function dryRunSchema(filename) {
       });
     if (version >= 4) verifyV4Structure(db, "OPERATIONAL_SCHEMA_INVALID");
     if (version >= 5) verifyV5Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+    if (version >= 6) verifyV6Structure(db, "OPERATIONAL_SCHEMA_INVALID");
     return Object.freeze({
       mode: "dry-run",
       databasePath: filename,
@@ -395,9 +403,11 @@ function migrateSchema(db, migrationHook) {
         ? [1, 2]
         : version === 3
           ? [1, 2, 3]
-          : version === 4
-            ? [1, 2, 3, 4]
-            : [1, 2, 3, 4, 5];
+            : version === 4
+              ? [1, 2, 3, 4]
+              : version === 5
+                ? [1, 2, 3, 4, 5]
+                : [1, 2, 3, 4, 5, 6];
   verifyMigrationHistory(db, history, "OPERATIONAL_SCHEMA_INVALID");
   verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   if (version === 1) {
@@ -465,13 +475,23 @@ function migrateSchema(db, migrationHook) {
     });
     version = 5;
   }
+  if (version === 5) {
+    migrateV6Schema(db, migrationHook, {
+      runTransaction,
+      tableDataHashes,
+      verifyTableDataHashes,
+      verifyMigrationHistory,
+    });
+    version = 6;
+  }
   if (version !== SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_INVALID");
-  verifyMigrationHistory(db, [1, 2, 3, 4, 5], "OPERATIONAL_SCHEMA_INVALID");
+  verifyMigrationHistory(db, [1, 2, 3, 4, 5, 6], "OPERATIONAL_SCHEMA_INVALID");
   verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   verifyV3Structure(db, "OPERATIONAL_SCHEMA_INVALID", { allowV4Columns: true });
   verifyV4Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   verifyV5Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+  verifyV6Structure(db, "OPERATIONAL_SCHEMA_INVALID");
 }
 
 function integrityOk(db) {
@@ -487,6 +507,7 @@ module.exports = {
   V4_SCHEMA,
   V4_CREATE_SCHEMA,
   V5_SCHEMA,
+  V6_SCHEMA,
   tableNames,
   schemaVersion,
   verifyMigrationHistory,
@@ -499,6 +520,7 @@ module.exports = {
   installV4Schema,
   verifyV4Structure,
   verifyV5Structure,
+  verifyV6Structure,
   dryRunSchema,
   migrateSchema,
   integrityOk,

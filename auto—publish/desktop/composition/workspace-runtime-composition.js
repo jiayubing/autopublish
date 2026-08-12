@@ -168,11 +168,23 @@ async function createWorkspaceRuntimeComposition(deps) {
     const { loadPlatforms } = require("../../src/core/platforms");
     const loadedPlatforms = loadPlatforms();
     const operationalStoreTransitionPorts = {};
+    let contentStore = null;
+    const articleReader = Object.freeze({
+      getArticle: function (clientId, articleId) {
+        if (!contentStore || typeof contentStore.getArticle !== "function") {
+          const error = new Error("Paid staging article reader is unavailable");
+          error.code = "PAID_STAGING_ARTICLE_STATE_UNAVAILABLE";
+          throw error;
+        }
+        return contentStore.getArticle(clientId, articleId);
+      },
+    });
     const operationalStore =
       require("../../src/infrastructure/operational-store/operational-store").createOperationalStore(
         {
           workspaceRoot,
           clock: options.clock,
+          articleReader,
           transitionPorts: operationalStoreTransitionPorts,
         },
       );
@@ -210,7 +222,7 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       ),
     );
-    const contentStore = contentLifecycleComposition.contentStore;
+    contentStore = contentLifecycleComposition.contentStore;
     const articleMutationCoordinator =
       contentLifecycleComposition.articleMutationCoordinator;
     const regularQueueApplication =

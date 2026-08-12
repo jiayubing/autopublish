@@ -9,6 +9,7 @@ const paidMediaOrder = require("./paid-media-order-contract");
 const orderObservation = require("./order-observation-contract");
 const articleLifecycleTerminal = require("./article-lifecycle-terminal-contract");
 const migrationImport = require("./migration-import-contract");
+const paidMediaStaging = require("./paid-media-staging-contract");
 module.exports = Object.freeze({
   ...identities,
   ...target,
@@ -21,4 +22,5 @@ module.exports = Object.freeze({
   ...orderObservation,
   ...articleLifecycleTerminal,
   ...migrationImport,
+  ...paidMediaStaging,
 });
