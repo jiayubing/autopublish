@@ -206,6 +206,8 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueTransitions,
           paidAdmissionTransitions:
             operationalStoreTransitionPorts.paidAdmissionTransitions,
+          paidStagingTransitions:
+            operationalStoreTransitionPorts.paidStagingTransitions,
           systemSubmissionCodeProvider: function () {
             try {
               return (
@@ -232,6 +234,8 @@ async function createWorkspaceRuntimeComposition(deps) {
           articleMutationCoordinator,
           regularQueueTransitions:
             operationalStoreTransitionPorts.regularQueueTransitions,
+          paidStagingTransitions:
+            operationalStoreTransitionPorts.paidStagingTransitions,
           accountProfileResolver:
             operationalStore.assertExecutableAccountProfile,
           clientSnapshotResolver: function (clientId) {

@@ -44,6 +44,7 @@ function createContentLifecycleComposition(options) {
       value.operationalStore,
     regularQueueTransitions: value.regularQueueTransitions,
     paidAdmissionTransitions: value.paidAdmissionTransitions,
+    paidStagingTransitions: value.paidStagingTransitions,
     systemSubmissionCodeProvider: value.systemSubmissionCodeProvider,
     removalTransactionStore: articleRemovalTransactionStore,
     articleRemovalTransitionPort,

@@ -160,6 +160,7 @@ function createOperationalStore(options) {
       orderObservation,
       orderCancellation,
       publishedArchiveQueries,
+      paidStaging,
     });
     return Object.freeze({
       databasePath: runtime.filename,

@@ -671,6 +671,12 @@ function createQueueAdmissionTransaction(context) {
     const targetKey = domain.publicationTargetKey(item.target);
     const stamp = iso(clock);
     return transaction(() => {
+      const staged = db
+        .prepare(
+          "SELECT 1 FROM paid_staging_items WHERE client_id=? AND article_id=? LIMIT 1",
+        )
+        .get(item.clientId, item.articleId);
+      if (staged) throw fail("PAID_STAGING_REGULAR_QUEUE_CONFLICT");
       const existing = existingRegularAdmission(
         db,
         item.articleId,

@@ -59,6 +59,7 @@ function createArticleMutationKernel(options) {
     value.paidAdmissionTransitions;
   const regularQueueTransitions = value.regularQueueTransitions || null;
   const paidAdmissionTransitions = value.paidAdmissionTransitions || null;
+  const paidStagingTransitions = value.paidStagingTransitions || null;
   const removalTransactionStore = value.removalTransactionStore || null;
   const articleRemovalTransitionPort =
     value.articleRemovalTransitionPort || null;
@@ -321,6 +322,7 @@ function createArticleMutationKernel(options) {
       publicationTransitions,
       regularQueueTransitions,
       paidAdmissionTransitions,
+      paidStagingTransitions,
       articleRemovalTransitionPort,
     }),
     systemSubmissionCodeProvider,

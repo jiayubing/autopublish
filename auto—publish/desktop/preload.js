@@ -379,6 +379,21 @@ const api = {
     listSubmissionPlatforms: function () {
       return ipcRenderer.invoke("content:list-submission-platforms");
     },
+    addPaidSubmissionStaging: function (input) {
+      return ipcRenderer.invoke("content:add-paid-submission-staging", input);
+    },
+    removePaidSubmissionStaging: function (input) {
+      return ipcRenderer.invoke("content:remove-paid-submission-staging", input);
+    },
+    setPaidSubmissionStagingMedia: function (input) {
+      return ipcRenderer.invoke(
+        "content:set-paid-submission-staging-media",
+        input,
+      );
+    },
+    getPaidSubmissionStaging: function (input) {
+      return ipcRenderer.invoke("content:get-paid-submission-staging", input);
+    },
     previewRegularQueueAdmission: function (input) {
       return ipcRenderer.invoke(
         "content:preview-regular-queue-admission",

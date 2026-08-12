@@ -4,6 +4,7 @@ const { submissionBatchContracts } = require("./submission-batch-contracts");
 const { submissionMaintenanceContracts } = require("./submission-maintenance-contracts");
 const { submissionRegularContracts } = require("./submission-regular-contracts");
 const { submissionPaidMediaContracts } = require("./submission-paid-media-contracts");
+const { submissionPaidStagingContracts } = require("./submission-paid-staging-contracts");
 
 module.exports = {
   contentOperationsContracts: Object.freeze([
@@ -12,6 +13,7 @@ module.exports = {
     ...submissionMaintenanceContracts,
     ...submissionRegularContracts,
     ...submissionPaidMediaContracts,
+    ...submissionPaidStagingContracts,
     ...doubaoContracts,
   ]),
 };

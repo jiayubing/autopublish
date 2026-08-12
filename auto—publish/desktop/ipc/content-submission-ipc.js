@@ -15,6 +15,12 @@ const {
   projectPaidMediaBatchList,
   projectPaidExecutionResult,
 } = require("./contracts/submission-paid-media-contracts");
+const {
+  projectPaidStagingAddResult,
+  projectPaidStagingRemoveResult,
+  projectPaidStagingMediaResult,
+  projectPaidStagingList,
+} = require("./contracts/submission-paid-staging-contracts");
 
 function bind(service, name) {
   if (!service || typeof service[name] !== "function") {
@@ -56,6 +62,12 @@ function createSubmissionInterface(service, regularQueueService, regularQueueGro
       admit: bind(regular, "admitRegularQueueItems"),
       removePending: bind(regular, "removePendingQueueItems"),
     },
+    paidStaging: {
+      add: bind(service, "addPaidSubmissionStaging"),
+      remove: bind(service, "removePaidSubmissionStaging"),
+      setMedia: bind(service, "setPaidSubmissionStagingMedia"),
+      list: bind(service, "getPaidSubmissionStaging"),
+    },
     regularQueueGroups: {
       list: bind(regularQueueGroups, "snapshot"),
       start: bind(regularQueueGroups, "startGroup"),
@@ -64,6 +76,59 @@ function createSubmissionInterface(service, regularQueueService, regularQueueGro
       pauseAll: bind(regularQueueGroups, "pauseAll"),
     },
   });
+}
+
+function stagingRefsInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) { return key !== "articleRefs"; }) ||
+    !Array.isArray(input.articleRefs) ||
+    input.articleRefs.length === 0
+  ) {
+    const error = new Error("Invalid paid staging article input");
+    error.code = "STAGING_INPUT_INVALID";
+    throw error;
+  }
+  return input;
+}
+
+function stagingMediaInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) {
+      return !["articleRefs", "mediaResourceId"].includes(key);
+    }) ||
+    !Array.isArray(input.articleRefs) ||
+    input.articleRefs.length === 0 ||
+    (input.mediaResourceId !== null &&
+      (typeof input.mediaResourceId !== "string" ||
+        !input.mediaResourceId.trim()))
+  ) {
+    const error = new Error("Invalid paid staging media input");
+    error.code = "STAGING_INPUT_INVALID";
+    throw error;
+  }
+  return input;
+}
+
+function stagingListInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) { return key !== "clientId"; }) ||
+    typeof input.clientId !== "string" ||
+    !input.clientId.trim()
+  ) {
+    const error = new Error("Invalid paid staging scope");
+    error.code = "STAGING_INPUT_INVALID";
+    throw error;
+  }
+  return input;
 }
 
 function paidMediaPreflightInput(input) {
@@ -281,6 +346,46 @@ function registerContentSubmissionIpc(deps) {
       return wrap(function () {
         return projectRegularRemovalResult(
           workflow.regularQueue.removePending(regularRemovalInput(input)),
+        );
+      });
+    },
+  );
+  deps.ipcMain.handle(
+    "content:add-paid-submission-staging",
+    function (event, input) {
+      return wrap(function () {
+        return projectPaidStagingAddResult(
+          workflow.paidStaging.add(stagingRefsInput(input)),
+        );
+      });
+    },
+  );
+  deps.ipcMain.handle(
+    "content:remove-paid-submission-staging",
+    function (event, input) {
+      return wrap(function () {
+        return projectPaidStagingRemoveResult(
+          workflow.paidStaging.remove(stagingRefsInput(input)),
+        );
+      });
+    },
+  );
+  deps.ipcMain.handle(
+    "content:set-paid-submission-staging-media",
+    function (event, input) {
+      return wrap(function () {
+        return projectPaidStagingMediaResult(
+          workflow.paidStaging.setMedia(stagingMediaInput(input)),
+        );
+      });
+    },
+  );
+  deps.ipcMain.handle(
+    "content:get-paid-submission-staging",
+    function (event, input) {
+      return wrap(function () {
+        return projectPaidStagingList(
+          workflow.paidStaging.list(stagingListInput(input)),
         );
       });
     },

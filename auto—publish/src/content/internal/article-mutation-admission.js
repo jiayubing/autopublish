@@ -24,6 +24,7 @@ const ACTIVE_TARGET_STATUSES = new Set([
 function createArticleMutationAdmission(kernel) {
   const regularQueueTransitions = kernel.ports.regularQueueTransitions;
   const paidAdmissionTransitions = kernel.ports.paidAdmissionTransitions;
+  const paidStagingTransitions = kernel.ports.paidStagingTransitions;
 
   function regularErrorCode(error) {
     const code = kernel.safeErrorCode(error);
@@ -160,6 +161,20 @@ function createArticleMutationAdmission(kernel) {
       .filter(Boolean);
   }
 
+  function isPaidStaged(ref) {
+    if (
+      !paidStagingTransitions ||
+      typeof paidStagingTransitions.hasPaidStagingItem !== "function"
+    )
+      return false;
+    try {
+      return paidStagingTransitions.hasPaidStagingItem({ articleRef: ref }) === true;
+    } catch (error) {
+      if (error && error.code === "STAGING_PERSISTENCE_FAILED") throw error;
+      throw kernel.mutationError("STAGING_PERSISTENCE_FAILED");
+    }
+  }
+
   function admitRegularQueueItems(input) {
     if (
       !regularQueueTransitions ||
@@ -197,6 +212,15 @@ function createArticleMutationAdmission(kernel) {
             });
           }
           throw error;
+        }
+        if (isPaidStaged(ref)) {
+          return Object.freeze({
+            articleRef: ref,
+            articleId: ref.articleId,
+            status: "conflict",
+            reasonCode: "PAID_STAGING_REGULAR_QUEUE_CONFLICT",
+            reasonCodes: Object.freeze(["PAID_STAGING_REGULAR_QUEUE_CONFLICT"]),
+          });
         }
         try {
           const workflow = kernel.workflowFor(article, [ref], facts);

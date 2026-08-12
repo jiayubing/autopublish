@@ -1,5 +1,6 @@
 const CONTROL_OR_PATH = /[<>:"/\\|?*\x00-\x1f\x7f]/;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const CLIENT_ID_PATTERN = /^(?!\.{1,2}$)(?=\S)[^<>:"/\\|?*\x00-\x1f\x7f]*\S$/u;
 
 function domainError(code) {
   const error = new Error("Domain identity is invalid");
@@ -7,7 +8,7 @@ function domainError(code) {
   return error;
 }
 
-function createIdentity(kind, maxLength) {
+function createIdentity(kind, maxLength, pattern) {
   function parse(value) {
     if (typeof value !== "string") throw domainError("DOMAIN_ID_INVALID");
     const normalized = value.normalize("NFKC").trim();
@@ -17,7 +18,7 @@ function createIdentity(kind, maxLength) {
       normalized === ".." ||
       normalized.length > maxLength ||
       CONTROL_OR_PATH.test(normalized) ||
-      !ID_PATTERN.test(normalized)
+      !(pattern || ID_PATTERN).test(normalized)
     )
       throw domainError("DOMAIN_ID_INVALID");
     return Object.freeze({ kind, value: normalized });
@@ -39,7 +40,7 @@ function createIdentity(kind, maxLength) {
 
 module.exports = Object.freeze({
   ApplicationAccountId: createIdentity("ApplicationAccountId", 128),
-  ClientId: createIdentity("ClientId", 128),
+  ClientId: createIdentity("ClientId", 128, CLIENT_ID_PATTERN),
   ArticleId: createIdentity("ArticleId", 128),
   PublicationId: createIdentity("PublicationId", 128),
   AttemptId: createIdentity("AttemptId", 128),

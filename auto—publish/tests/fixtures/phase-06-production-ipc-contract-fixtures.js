@@ -1368,6 +1368,62 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "workflow.preparation.listPlatforms",
     featureBinding: "listSubmissionPlatforms",
   }),
+  "content.addPaidSubmissionStaging": Object.freeze({
+    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "addPaidSubmissionStaging",
+    preloadMethod: "addPaidSubmissionStaging",
+    command: "content.addPaidSubmissionStaging",
+    channel: "content:add-paid-submission-staging",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "workflow.paidStaging.add",
+    featureBinding: "addPaidSubmissionStaging",
+  }),
+  "content.removePaidSubmissionStaging": Object.freeze({
+    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "removePaidSubmissionStaging",
+    preloadMethod: "removePaidSubmissionStaging",
+    command: "content.removePaidSubmissionStaging",
+    channel: "content:remove-paid-submission-staging",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "workflow.paidStaging.remove",
+    featureBinding: "removePaidSubmissionStaging",
+  }),
+  "content.setPaidSubmissionStagingMedia": Object.freeze({
+    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "setPaidSubmissionStagingMedia",
+    preloadMethod: "setPaidSubmissionStagingMedia",
+    command: "content.setPaidSubmissionStagingMedia",
+    channel: "content:set-paid-submission-staging-media",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "workflow.paidStaging.setMedia",
+    featureBinding: "setPaidSubmissionStagingMedia",
+  }),
+  "content.getPaidSubmissionStaging": Object.freeze({
+    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "getPaidSubmissionStaging",
+    preloadMethod: "getPaidSubmissionStaging",
+    command: "content.getPaidSubmissionStaging",
+    channel: "content:get-paid-submission-staging",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "workflow.paidStaging.list",
+    featureBinding: "getPaidSubmissionStaging",
+  }),
   "content.previewRegularQueueAdmission": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "useContentWorkbenchFeature",
@@ -4805,6 +4861,83 @@ const rawProductionIpcContractFixtures = [
     request: {},
     result: {
       platforms: [],
+    },
+  },
+  {
+    capability: "content.addPaidSubmissionStaging",
+    channel: "content:add-paid-submission-staging",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:add-paid-submission-staging",
+    request: {
+      articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
+    },
+    result: {
+      items: [
+        {
+          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+          status: "staged",
+          idempotent: false,
+        },
+      ],
+      addedCount: 1,
+      idempotentCount: 0,
+    },
+  },
+  {
+    capability: "content.removePaidSubmissionStaging",
+    channel: "content:remove-paid-submission-staging",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:remove-paid-submission-staging",
+    request: {
+      articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
+    },
+    result: {
+      items: [
+        {
+          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+          status: "removed",
+          idempotent: false,
+        },
+      ],
+      removedCount: 1,
+      idempotentCount: 0,
+    },
+  },
+  {
+    capability: "content.setPaidSubmissionStagingMedia",
+    channel: "content:set-paid-submission-staging-media",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:set-paid-submission-staging-media",
+    request: {
+      articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
+      mediaResourceId: "fixture-1",
+    },
+    result: {
+      items: [
+        {
+          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
+          status: "media-updated",
+          idempotent: false,
+        },
+      ],
+      updatedCount: 1,
+      idempotentCount: 0,
+      selectedMediaResourceId: "fixture-1",
+    },
+  },
+  {
+    capability: "content.getPaidSubmissionStaging",
+    channel: "content:get-paid-submission-staging",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:get-paid-submission-staging",
+    request: { clientId: "fixture-1" },
+    result: {
+      clientId: "fixture-1",
+      items: [],
     },
   },
   {
