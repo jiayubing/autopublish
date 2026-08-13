@@ -139,6 +139,8 @@ describe("renderer content client switching", function () {
         orderCalls: [],
         holdNextStart: false,
         resolveStart: null,
+        holdNextPause: false,
+        resolvePause: null,
       };
       const updatePaidBatch = (batchId, patch) => {
         const current = state.paidBatches.find(
@@ -505,9 +507,17 @@ describe("renderer content client switching", function () {
             paused: true,
             runState: "paused",
           });
-          return ok({
+          const result = ok({
             executionStatus: "paused",
             batch,
+          });
+          if (!state.holdNextPause) return result;
+          state.holdNextPause = false;
+          return new Promise((resolve) => {
+            state.resolvePause = () => {
+              state.resolvePause = null;
+              resolve(result);
+            };
           });
         },
         getPaidSubmissionStaging: ({ clientId }) =>
@@ -1627,36 +1637,77 @@ describe("renderer content client switching", function () {
         () => window.__clientSwitchFlow.orderCalls.length === 1,
       );
       assert.deepEqual(
-        await page.evaluate(() => window.__clientSwitchFlow.orderCalls[0]),
-        {
-          type: "start",
-          input: { batchId: "paid-batch-client-b" },
-        },
+        await page.evaluate(() => window.__clientSwitchFlow.orderCalls),
+        [
+          {
+            type: "start",
+            input: { batchId: "paid-batch-client-b" },
+          },
+        ],
       );
-      await page.evaluate(() => window.__clientSwitchFlow.resolveStart());
-      await executionPanel
-        .getByRole("button", { name: "暂停后续订单" })
-        .waitFor();
-
-      assert.equal(
-        await executionPanel
-          .getByRole("button", { name: "暂停后续订单" })
-          .count(),
-        1,
+      await page.waitForFunction(() =>
+        window.__clientSwitchFlow.paidBatches.some(
+          (batch) =>
+            batch.batchId === "paid-batch-client-b" &&
+            batch.runState === "running" &&
+            batch.paused === false,
+        ),
       );
       await executionPanel
-        .getByRole("button", { name: "暂停后续订单" })
+        .getByRole("button", { name: "刷新付费批次" })
         .click();
+      const pauseButton = executionPanel.getByRole("button", {
+        name: "暂停后续订单",
+      });
+      await pauseButton.waitFor();
+      assert.equal(
+        await pauseButton.isDisabled(),
+        false,
+        "Start pending 时 authoritative running snapshot 仍应允许 Pause",
+      );
+      await page.evaluate(() => {
+        window.__clientSwitchFlow.holdNextPause = true;
+      });
+      await pauseButton.click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.orderCalls.length === 2,
+      );
+      await page.waitForFunction(
+        () =>
+          document.querySelector('button[aria-label="暂停后续订单"]')?.disabled,
+      );
+      await page.evaluate(() => {
+        const button = document.querySelector(
+          'button[aria-label="暂停后续订单"]',
+        );
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
       await page.waitForFunction(
         () => window.__clientSwitchFlow.orderCalls.length === 2,
       );
       assert.deepEqual(
-        await page.evaluate(() => window.__clientSwitchFlow.orderCalls[1]),
-        {
-          type: "pause",
-          input: { batchId: "paid-batch-client-b" },
-        },
+        await page.evaluate(() => window.__clientSwitchFlow.orderCalls),
+        [
+          {
+            type: "start",
+            input: { batchId: "paid-batch-client-b" },
+          },
+          {
+            type: "pause",
+            input: { batchId: "paid-batch-client-b" },
+          },
+        ],
       );
+      await page.evaluate(() => window.__clientSwitchFlow.resolveStart());
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.resolveStart === null,
+      );
+      await page.waitForFunction(
+        () =>
+          document.querySelector('button[aria-label="开始创建订单"]')
+            ?.disabled === false,
+      );
+      await page.evaluate(() => window.__clientSwitchFlow.resolvePause());
       await executionPanel
         .getByRole("button", { name: "开始创建订单" })
         .waitFor();

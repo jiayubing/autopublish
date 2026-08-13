@@ -187,13 +187,11 @@ export default function PaidSubmissionStagingPanel({
     .sort()
     .join("|");
   const canPreflight = Boolean(selectedItems.length && selectedMediaResourceId);
-  const commandBusy =
+  const nonExecutionBusy =
     removeCommand.busy ||
     setMediaCommand.busy ||
     preflightCommand.busy ||
-    confirmCommand.busy ||
-    startCommand.busy ||
-    pauseCommand.busy;
+    confirmCommand.busy;
   const activePaidBatches = (
     Array.isArray(paidMediaBatches) ? paidMediaBatches : []
   ).filter(
@@ -232,7 +230,7 @@ export default function PaidSubmissionStagingPanel({
     targetItems: PaidSubmissionStagingItem[],
     mediaResourceId: string | null,
   ) => {
-    if (!targetItems.length || commandBusy) return;
+    if (!targetItems.length || nonExecutionBusy) return;
     setActionError("");
     try {
       const result = await onSetMedia(
@@ -286,7 +284,7 @@ export default function PaidSubmissionStagingPanel({
   );
 
   const runPreflight = async () => {
-    if (commandBusy) return;
+    if (nonExecutionBusy) return;
     if (!canPreflight || !selectedMediaResourceId) {
       setPreflightState(null);
       setPreflightError(selectionMessage);
@@ -314,7 +312,7 @@ export default function PaidSubmissionStagingPanel({
       !model ||
       model.canConfirm !== true ||
       !model.confirmationToken ||
-      commandBusy
+      nonExecutionBusy
     )
       return;
     setPreflightError("");
@@ -350,7 +348,7 @@ export default function PaidSubmissionStagingPanel({
   };
 
   const startPaidBatch = async (batchId: string) => {
-    if (commandBusy) return;
+    if (startCommand.busy) return;
     setActionError("");
     try {
       const result = await onStart({ batchId });
@@ -361,7 +359,7 @@ export default function PaidSubmissionStagingPanel({
   };
 
   const pausePaidBatch = async (batchId: string) => {
-    if (commandBusy) return;
+    if (pauseCommand.busy) return;
     setActionError("");
     try {
       const result = await onPause({ batchId });
@@ -482,7 +480,7 @@ export default function PaidSubmissionStagingPanel({
                       type="button"
                       aria-label={`清除已选媒体 ${title}`}
                       onClick={() => void clearOneMedia(item)}
-                      disabled={commandBusy}
+                      disabled={nonExecutionBusy}
                       className="shrink-0 rounded border border-slate-300 px-2 py-1.5 font-semibold text-slate-700 disabled:opacity-40"
                     >
                       清除媒体
@@ -492,7 +490,7 @@ export default function PaidSubmissionStagingPanel({
                     type="button"
                     aria-label={`移出付费媒体投稿队列 ${title}`}
                     onClick={() => void removeOne(item)}
-                    disabled={commandBusy}
+                    disabled={nonExecutionBusy}
                     className="shrink-0 rounded border border-amber-300 px-2 py-1.5 font-semibold text-amber-800 disabled:opacity-40"
                   >
                     移出
@@ -521,7 +519,7 @@ export default function PaidSubmissionStagingPanel({
                   type="button"
                   aria-label="清除所选文章媒体"
                   onClick={() => void clearSelectedMedia()}
-                  disabled={commandBusy}
+                  disabled={nonExecutionBusy}
                   className="rounded border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-40"
                 >
                   清除所选媒体（{selectedItems.length}）
@@ -547,7 +545,7 @@ export default function PaidSubmissionStagingPanel({
                     aria-label={`选择收藏媒体 ${resource.name}`}
                     title="资源编码只读，媒体来自当前收藏池分页"
                     onClick={() => void chooseMedia(resource)}
-                    disabled={commandBusy || paidMediaPool.loading}
+                    disabled={nonExecutionBusy || paidMediaPool.loading}
                     className={`grid min-w-0 gap-1 rounded border bg-white p-2 text-left text-[11px] transition-colors disabled:opacity-50 ${
                       pickerResourceId === resource.resourceId &&
                       pickerClientId === currentClientId
@@ -586,7 +584,7 @@ export default function PaidSubmissionStagingPanel({
                       void paidMediaPool.loadPage(Math.max(currentPage - 1, 1))
                     }
                     disabled={
-                      commandBusy ||
+                      nonExecutionBusy ||
                       paidMediaPool.loading ||
                       !paidMediaPool.hasPrev
                     }
@@ -599,7 +597,7 @@ export default function PaidSubmissionStagingPanel({
                     aria-label="下一页收藏媒体"
                     onClick={() => void paidMediaPool.loadPage(currentPage + 1)}
                     disabled={
-                      commandBusy ||
+                      nonExecutionBusy ||
                       paidMediaPool.loading ||
                       !paidMediaPool.hasNext
                     }
@@ -629,7 +627,7 @@ export default function PaidSubmissionStagingPanel({
                   type="button"
                   aria-label={preflightState ? "重新费用预检" : "费用预检"}
                   onClick={() => void runPreflight()}
-                  disabled={!canPreflight || commandBusy}
+                  disabled={!canPreflight || nonExecutionBusy}
                   className="rounded bg-violet-700 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40"
                 >
                   {preflightCommand.busy ? "预检中…" : "费用预检"}
@@ -727,7 +725,9 @@ export default function PaidSubmissionStagingPanel({
                       type="button"
                       aria-label="确认费用并创建暂停付费批次"
                       onClick={() => void confirmPreflight()}
-                      disabled={!preflightState.model.canConfirm || commandBusy}
+                      disabled={
+                        !preflightState.model.canConfirm || nonExecutionBusy
+                      }
                       className="rounded bg-emerald-700 px-3 py-1.5 font-semibold text-white disabled:opacity-40"
                     >
                       {confirmCommand.busy
@@ -804,7 +804,7 @@ export default function PaidSubmissionStagingPanel({
                       type="button"
                       aria-label="开始创建订单"
                       onClick={() => void startPaidBatch(batch.batchId)}
-                      disabled={commandBusy}
+                      disabled={startCommand.busy}
                       className="rounded bg-emerald-700 px-2 py-1.5 font-semibold text-white disabled:opacity-40"
                     >
                       {startCommand.busy ? "开始中…" : "开始创建订单"}
@@ -815,7 +815,7 @@ export default function PaidSubmissionStagingPanel({
                       type="button"
                       aria-label="暂停后续订单"
                       onClick={() => void pausePaidBatch(batch.batchId)}
-                      disabled={commandBusy}
+                      disabled={pauseCommand.busy}
                       className="rounded border border-amber-300 px-2 py-1.5 font-semibold text-amber-800 disabled:opacity-40"
                     >
                       {pauseCommand.busy ? "暂停中…" : "暂停后续订单"}
