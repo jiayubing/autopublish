@@ -85,6 +85,12 @@ function makeFixture() {
       },
     });
     const articleStore = createArticleStore(root, { clock: CLOCK });
+    let saveCalls = 0;
+    const saveArticle = articleStore.saveArticle;
+    articleStore.saveArticle = function (...args) {
+      saveCalls += 1;
+      return saveArticle.apply(articleStore, args);
+    };
     const contentStore = createContentStore({
       articleStore,
       listClientIds: () => [...clients],
@@ -127,6 +133,9 @@ function makeFixture() {
         clients.add(saved.clientId);
         articles.set(key(saved.clientId, saved.id), saved);
         return saved;
+      },
+      getSaveCalls() {
+        return saveCalls;
       },
       close() {
         store.close();
@@ -183,14 +192,14 @@ function stagingFixtures() {
   };
 }
 
-test("application staging capability enforces saved admission, stable conflicts, idempotency, and durable facts", () => {
+test("application staging capability accepts persisted generated and saved articles while preserving guards", () => {
   const fixture = makeFixture();
   try {
     const saved = ref("client-a", "saved-1");
-    const dirty = ref("client-a", "dirty-1");
+    const generated = ref("client-a", "generated-1");
     const active = ref("client-a", "active-1");
     fixture.add(article(saved.clientId, saved.articleId));
-    fixture.add(article(dirty.clientId, dirty.articleId, "generated"));
+    fixture.add(article(generated.clientId, generated.articleId, "generated"));
     fixture.add(article(active.clientId, active.articleId));
 
     const added = fixture.contentSubmission.addPaidSubmissionStaging({
@@ -205,13 +214,17 @@ test("application staging capability enforces saved admission, stable conflicts,
     assert.equal(duplicate.idempotentCount, 1);
     assert.equal(duplicate.items[0].reasonCode, "ALREADY_STAGED");
 
-    assert.throws(
-      () =>
-        fixture.contentSubmission.addPaidSubmissionStaging({
-          articleRefs: [dirty],
-        }),
-      { code: "ARTICLE_NOT_SAVED" },
+    const generatedAdded = fixture.contentSubmission.addPaidSubmissionStaging({
+      articleRefs: [generated],
+    });
+    assert.equal(generatedAdded.addedCount, 1);
+    assert.equal(generatedAdded.items[0].status, "staged");
+    assert.equal(
+      fixture.contentStore.getArticle(generated.clientId, generated.articleId).status,
+      "generated",
     );
+    assert.equal(fixture.getSaveCalls(), 0);
+
     assert.throws(
       () =>
         fixture.contentSubmission.addPaidSubmissionStaging({
@@ -250,8 +263,9 @@ test("application staging capability enforces saved admission, stable conflicts,
     const list = fixture.contentSubmission.getPaidSubmissionStaging({
       clientId: saved.clientId,
     });
-    assert.deepEqual(list.items.map((item) => item.articleRef), [saved]);
-    assert.equal(list.items[0].selectedMediaResourceId, "media-1");
+    assert.deepEqual(list.items.map((item) => item.articleRef), [generated, saved]);
+    assert.equal(list.items[0].selectedMediaResourceId, null);
+    assert.equal(list.items[1].selectedMediaResourceId, "media-1");
 
     assert.equal(fixture.store.listPaidSubmissionBatches().length, 0);
     assert.equal(fixture.store.listRemoteOrders().length, 0);

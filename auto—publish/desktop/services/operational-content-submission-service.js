@@ -80,7 +80,7 @@ function runPaidStaging(operation) {
   }
 }
 
-function assertSavedPaidStagingArticles(contentStore, input) {
+function assertPaidStagingEligibleArticles(contentStore, input) {
   const refs = input && input.articleRefs;
   if (!Array.isArray(refs) || refs.length === 0) return;
   for (const ref of refs) {
@@ -90,7 +90,11 @@ function assertSavedPaidStagingArticles(contentStore, input) {
     } catch (error) {
       throw mapPaidStagingError(error);
     }
-    if (!article || article.status !== "saved") throw fail("ARTICLE_NOT_SAVED");
+    if (
+      !article ||
+      (article.status !== "generated" && article.status !== "saved")
+    )
+      throw fail("ARTICLE_NOT_SAVED");
   }
 }
 
@@ -237,7 +241,7 @@ function createOperationalContentSubmissionService(options) {
   });
 
   function addPaidSubmissionStaging(input) {
-    assertSavedPaidStagingArticles(value.contentStore, input);
+    assertPaidStagingEligibleArticles(value.contentStore, input);
     return projectPaidStagingMutation(
       runPaidStaging(function () {
         return value.operationalStore.addPaidStagingItems(input);

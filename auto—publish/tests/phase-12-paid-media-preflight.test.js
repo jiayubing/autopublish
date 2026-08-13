@@ -870,13 +870,14 @@ test("configuration read failures stay distinct during confirmation and remain s
   assert.equal(admitted, 1);
 });
 
-test("preflight blocks a missing authoritative body before paid admission", async () => {
+test("preflight blocks an empty authoritative title or body before paid admission", async () => {
   let admitted = false;
+  let emptyField = "content";
   const service = createPaidMediaPreflightService({
     contentStore: {
       getArticle(clientId, articleId) {
         assert.equal(clientId, "client-a");
-        return article(articleId, { content: "" });
+        return article(articleId, { [emptyField]: "" });
       },
     },
     paidStaging: {
@@ -917,6 +918,19 @@ test("preflight blocks a missing authoritative body before paid admission", asyn
   assert.ok(preview.blockers.includes("PAID_MEDIA_ARTICLE_CONTENT_REQUIRED"));
   await assert.rejects(
     service.confirm({ confirmationToken: preview.confirmationToken }),
+    { code: "PAID_MEDIA_CONFIRMATION_BLOCKED" },
+  );
+  assert.equal(admitted, false);
+
+  emptyField = "title";
+  const titlePreview = await service.preflight({
+    articleRefs: refs("article-a"),
+    mediaResourceId: "media-12",
+  });
+  assert.equal(titlePreview.canConfirm, false);
+  assert.ok(titlePreview.blockers.includes("PAID_MEDIA_ARTICLE_CONTENT_REQUIRED"));
+  await assert.rejects(
+    service.confirm({ confirmationToken: titlePreview.confirmationToken }),
     { code: "PAID_MEDIA_CONFIRMATION_BLOCKED" },
   );
   assert.equal(admitted, false);
