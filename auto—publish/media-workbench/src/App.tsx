@@ -330,6 +330,19 @@ function AppContent() {
                       setArticleAttentionIntent(null)
                     }
                     onOpenOrders={() => setCurrentView("orders")}
+                    paidMediaPool={{
+                      items: mediaSnapshot.pool.items,
+                      page: mediaSnapshot.pool.page || 1,
+                      pageSize: mediaSnapshot.pool.pageSize || 50,
+                      total: mediaSnapshot.pool.total || 0,
+                      totalPages: mediaSnapshot.pool.totalPages || 0,
+                      hasPrev: mediaSnapshot.pool.hasPrev === true,
+                      hasNext: mediaSnapshot.pool.hasNext === true,
+                      loading: mediaSnapshot.pool.query.loading,
+                      error: mediaSnapshot.pool.query.error,
+                      loadPage: (page) =>
+                        mediaFeature.loadPoolPage(page, "manual"),
+                    }}
                   />
                 </motion.div>
               )}

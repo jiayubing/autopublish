@@ -716,6 +716,10 @@ async function createWorkspaceRuntimeComposition(deps) {
           paidAdmissionFacade: Object.freeze({
             admitPaidBatch: articleMutationCoordinator.admitPaidBatch,
           }),
+          paidStaging: Object.freeze({
+            listPaidStagingItems: (input) =>
+              operationalStore.listPaidStagingItems(input),
+          }),
           clientSnapshotResolver: function (clientId) {
             const client =
               require("../../src/content/client-knowledge").getClient(

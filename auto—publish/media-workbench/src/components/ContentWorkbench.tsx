@@ -6,6 +6,9 @@ import type { ArticleEditorSnapshot } from "../bridge/content";
 import ArticleGenerationView from "./content/ArticleGenerationView";
 import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
 import GeneratedArticlesView from "./content/GeneratedArticlesView";
+import PaidSubmissionStagingPanel, {
+  type PaidMediaPoolSnapshot,
+} from "./content/PaidSubmissionStagingPanel";
 import QuestionCollectionView from "./content/QuestionCollectionView";
 import { type ArticleWorkflowStage } from "../article-workflow";
 import ArticleStageTabs from "./content/ArticleStageTabs";
@@ -19,12 +22,14 @@ interface ContentWorkbenchProps {
   attentionIntent?: { attentionId?: string; clientId?: string } | null;
   onAttentionIntentConsumed?: () => void;
   onOpenOrders?: () => void;
+  paidMediaPool: PaidMediaPoolSnapshot;
 }
 
 export default function ContentWorkbench({
   attentionIntent,
   onAttentionIntentConsumed,
   onOpenOrders,
+  paidMediaPool,
 }: ContentWorkbenchProps) {
   const content = useContentWorkbenchFeature();
   const { confirm } = useConfirmation();
@@ -38,6 +43,8 @@ export default function ContentWorkbench({
     research,
     researchByClient,
     management,
+    paidStaging,
+    paidMediaExecution,
     clientQuery,
     managementQuery,
     doubaoQueue,
@@ -326,6 +333,52 @@ export default function ContentWorkbench({
               onChange={setArticleStageFilter}
               counts={management.lifecycleCounts}
             />
+            <PaidSubmissionStagingPanel
+              currentClientId={clientId}
+              currentClientName={
+                clients.find((client) => client.id === clientId)?.name
+              }
+              items={paidStaging.items}
+              articles={management.articles}
+              query={paidStaging.query}
+              removeCommand={
+                content.snapshot.commands.removePaidSubmissionStaging
+              }
+              setMediaCommand={
+                content.snapshot.commands.setPaidSubmissionStagingMedia
+              }
+              preflightCommand={
+                content.snapshot.commands.previewPaidMediaPreflight
+              }
+              confirmCommand={content.snapshot.commands.confirmPaidMediaBatch}
+              startCommand={content.snapshot.commands.startPaidMediaBatch}
+              pauseCommand={content.snapshot.commands.pausePaidMediaBatch}
+              onRemove={(articleRef) =>
+                content.commands.removePaidSubmissionStaging({
+                  articleRefs: [articleRef],
+                })
+              }
+              paidMediaPool={paidMediaPool}
+              paidMediaBatches={paidMediaExecution.items}
+              paidMediaBatchesQuery={paidMediaExecution.query}
+              onPreflight={(input) =>
+                content.commands.previewPaidMediaPreflight(input)
+              }
+              onConfirm={(input) =>
+                content.commands.confirmPaidMediaBatch(input)
+              }
+              onStart={(input) => content.commands.startPaidMediaBatch(input)}
+              onPause={(input) => content.commands.pausePaidMediaBatch(input)}
+              onRefreshPaidMediaBatches={() =>
+                content.refreshPaidMediaBatches("paid-confirm")
+              }
+              onSetMedia={(articleRefs, mediaResourceId) =>
+                content.commands.setPaidSubmissionStagingMedia({
+                  articleRefs,
+                  mediaResourceId,
+                })
+              }
+            />
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
               <div className="min-h-0 min-w-0 flex-1">
                 <GeneratedArticlesView
@@ -335,8 +388,6 @@ export default function ContentWorkbench({
                   commands={content.commands}
                   commandStates={content.snapshot.commands}
                   removal={content.snapshot.removal}
-                  paidMediaExecution={content.snapshot.paidMediaExecution}
-                  refreshPaidMediaBatches={content.refreshPaidMediaBatches}
                   watchRemovalTransaction={content.watchRemovalTransaction}
                   stageFilter={articleStageFilter}
                   dirtyArticleId={historyDirtyArticleId}

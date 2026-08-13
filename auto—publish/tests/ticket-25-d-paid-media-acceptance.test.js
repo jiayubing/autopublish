@@ -66,20 +66,32 @@ function createFixture(options) {
   const remoteOrders = new Map();
   let orderSequence = 0;
   let store;
+  let contentStore;
 
   try {
     store = createOperationalStore({
       workspaceRoot: root,
       clock: () => new Date(NOW),
       transitionPorts,
+      articleReader: {
+        getArticle(clientId, articleId) {
+          return contentStore.getArticle(clientId, articleId);
+        },
+      },
     });
     const articleStore = createArticleStore(root);
-    const contentStore = createContentStore({
+    contentStore = createContentStore({
       articleStore,
       listClientIds: () => ["client-d"],
     });
-    for (const item of value.articles || [article("article-d")])
-      contentStore.createArticle(item);
+    const initialArticles = value.articles || [article("article-d")];
+    for (const item of initialArticles) contentStore.createArticle(item);
+    const initialRefs = initialArticles.map((item) => ({
+      clientId: item.clientId,
+      articleId: item.id,
+    }));
+    store.addPaidStagingItems(initialRefs);
+    store.setPaidStagingMedia(initialRefs, "media-d");
 
     const coordinator = createArticleMutationCoordinator({
       articleStore,
@@ -180,7 +192,7 @@ function createFixture(options) {
       mediaSupplierProvider: () => supplier,
       mediaResourceService: resourceService,
       resourceStore: { getAll: () => ({ resources: [] }) },
-      poolStore: { getAll: () => [] },
+      poolStore: { getAll: () => [], contains: () => true },
       draftStore: { getAll: () => ({}), get: () => null, set: () => {} },
       mediaWorkbenchService: {
         resolveSubmissionFile: (filename) => filename,
@@ -190,6 +202,9 @@ function createFixture(options) {
       contentStore,
       paidAdmissionFacade: {
         admitPaidBatch: coordinator.admitPaidBatch,
+      },
+      paidStaging: {
+        listPaidStagingItems: (input) => store.listPaidStagingItems(input),
       },
       paidLifecycleFacts: transitionPorts.paidAdmissionTransitions,
       clientSnapshotResolver: (clientId) => ({
@@ -225,6 +240,14 @@ function createFixture(options) {
       management,
       createCalls,
       cancelCalls,
+      stage(...articleIds) {
+        const refs = articleIds.map((articleId) => ({
+          clientId: "client-d",
+          articleId,
+        }));
+        store.addPaidStagingItems(refs);
+        store.setPaidStagingMedia(refs, "media-d");
+      },
       close() {
         store.close();
         fs.rmSync(root, { recursive: true, force: true });
@@ -312,6 +335,7 @@ test("paid media application exposes the fee and risk snapshot before admitting 
     assert.equal(fixture.createCalls.length, 0);
 
     fixture.contentStore.createArticle(article("new-batch-d"));
+    fixture.stage("new-batch-d");
     const secondPreview = await fixture.application.preflightPaidMedia({
       articleRefs: [{ clientId: "client-d", articleId: "new-batch-d" }],
       mediaResourceId: "media-d",

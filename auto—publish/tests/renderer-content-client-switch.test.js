@@ -67,10 +67,59 @@ describe("renderer content client switching", function () {
       });
       const state = {
         articles: {
-          "client-a": [article("client-a", "article-a", "客户 A 文章")],
-          "client-b": [article("client-b", "article-b", "客户 B 文章")],
+          "client-a": [
+            article("client-a", "article-a", "客户 A 文章"),
+            article("client-a", "article-a-2", "客户 A 第二文章"),
+          ],
+          "client-b": [
+            article("client-b", "article-b", "客户 B 文章"),
+            {
+              ...article("client-b", "article-b-2", "客户 B 第二文章"),
+              content: "详情见 https://example.test",
+            },
+          ],
         },
         batches: { "client-a": [] },
+        staging: {
+          "client-a": [],
+          "client-b": [
+            {
+              articleRef: { clientId: "client-b", articleId: "article-b" },
+              selectedMediaResourceId: "media-b",
+              createdAt: "2026-07-20T00:00:00.000Z",
+              updatedAt: "2026-07-20T00:00:00.000Z",
+            },
+            {
+              articleRef: { clientId: "client-b", articleId: "article-b-2" },
+              selectedMediaResourceId: "media-b",
+              createdAt: "2026-07-20T00:00:00.000Z",
+              updatedAt: "2026-07-20T00:00:00.000Z",
+            },
+          ],
+        },
+        paidBatches: [
+          {
+            batchId: "foreign-batch",
+            mediaResourceId: "media-a",
+            status: "queued",
+            pauseIntent: "manual",
+            paused: true,
+            runState: "paused",
+            articleCount: 1,
+            quotedPrice: 12.5,
+            estimatedTotal: 12.5,
+            createdAt: "2026-07-20T00:00:00.000Z",
+            updatedAt: "2026-07-20T00:00:00.000Z",
+            items: [
+              {
+                itemId: "foreign-item",
+                articleRef: { clientId: "client-a", articleId: "article-a" },
+                status: "queued",
+                phase: "queued",
+              },
+            ],
+          },
+        ],
         queueCalls: [],
         resolveQueue: null,
         regularQueueCalls: [],
@@ -79,7 +128,32 @@ describe("renderer content client switching", function () {
         cancellationCalls: [],
         resolveCancellation: null,
         cancelPreviewCalls: [],
+        paidStagingAddCalls: [],
+        paidStagingRemoveCalls: [],
+        paidStagingMediaSetCalls: [],
+        poolPageCalls: [],
         paidPreflightCalls: [],
+        paidConfirmCalls: [],
+        lastPaidPreflight: null,
+        failNextPaidConfirm: false,
+        orderCalls: [],
+        holdNextStart: false,
+        resolveStart: null,
+      };
+      const updatePaidBatch = (batchId, patch) => {
+        const current = state.paidBatches.find(
+          (batch) => batch.batchId === batchId,
+        );
+        if (!current) return null;
+        const next = {
+          ...current,
+          ...patch,
+          updatedAt: "2026-08-13T00:01:00.000Z",
+        };
+        state.paidBatches = state.paidBatches.map((batch) =>
+          batch.batchId === batchId ? next : batch,
+        );
+        return next;
       };
       const generationBatch = {
         id: "generation-batch-a",
@@ -281,23 +355,39 @@ describe("renderer content client switching", function () {
             ],
           }),
         previewRegularQueueAdmission: (input) =>
-          ok({
-            target: {
-              platformId: input.platformId,
-              accountProfileId: input.accountProfileId,
-            },
-            articleRefs: input.articleRefs,
-            items: input.articleRefs.map((articleRef) => ({
-              articleRef,
-              articleId: articleRef.articleId,
-              status: "queueable",
-            })),
-            totalCount: input.articleRefs.length,
-            queueableCount: input.articleRefs.length,
-            idempotentCount: 0,
-            missingCount: 0,
-            conflictCount: 0,
-          }),
+          (() => {
+            const stagedIds = new Set(
+              (state.staging[input.articleRefs[0]?.clientId] || []).map(
+                (item) => item.articleRef.articleId,
+              ),
+            );
+            const conflictCount = input.articleRefs.filter((articleRef) =>
+              stagedIds.has(articleRef.articleId),
+            ).length;
+            const queueableCount = input.articleRefs.length - conflictCount;
+            return ok({
+              target: {
+                platformId: input.platformId,
+                accountProfileId: input.accountProfileId,
+              },
+              articleRefs: input.articleRefs,
+              items: input.articleRefs.map((articleRef) => ({
+                articleRef,
+                articleId: articleRef.articleId,
+                status: stagedIds.has(articleRef.articleId)
+                  ? "conflict"
+                  : "queueable",
+                reasonCode: stagedIds.has(articleRef.articleId)
+                  ? "PAID_STAGING_REGULAR_QUEUE_CONFLICT"
+                  : null,
+              })),
+              totalCount: input.articleRefs.length,
+              queueableCount,
+              idempotentCount: 0,
+              missingCount: 0,
+              conflictCount,
+            });
+          })(),
         admitRegularQueueItems: (input) => {
           const clientId = input.articleRefs[0].clientId;
           const batchId = `regular-batch-${++state.regularQueueBatchSequence}`;
@@ -385,11 +475,116 @@ describe("renderer content client switching", function () {
               resolve({ ok: true, data: state.batches[input.clientId][0] });
           });
         },
-        listPaidMediaBatches: () => ok({ items: [] }),
-        startPaidMediaBatch: () => ok({}),
-        pausePaidMediaBatch: () => ok({}),
+        listPaidMediaBatches: () => {
+          return ok({ items: state.paidBatches });
+        },
+        startPaidMediaBatch: (input) => {
+          state.orderCalls.push({ type: "start", input });
+          const batch = updatePaidBatch(input.batchId, {
+            pauseIntent: "none",
+            paused: false,
+            runState: "running",
+          });
+          const result = ok({
+            executionStatus: "running",
+            batch,
+          });
+          if (!state.holdNextStart) return result;
+          state.holdNextStart = false;
+          return new Promise((resolve) => {
+            state.resolveStart = () => {
+              state.resolveStart = null;
+              resolve(result);
+            };
+          });
+        },
+        pausePaidMediaBatch: (input) => {
+          state.orderCalls.push({ type: "pause", input });
+          const batch = updatePaidBatch(input.batchId, {
+            pauseIntent: "manual",
+            paused: true,
+            runState: "paused",
+          });
+          return ok({
+            executionStatus: "paused",
+            batch,
+          });
+        },
+        getPaidSubmissionStaging: ({ clientId }) =>
+          ok({ clientId, items: state.staging[clientId] || [] }),
+        addPaidSubmissionStaging: (input) => {
+          state.paidStagingAddCalls.push(input);
+          const clientId = input.articleRefs[0]?.clientId;
+          const current = state.staging[clientId] || [];
+          const existing = new Set(
+            current.map((item) => item.articleRef.articleId),
+          );
+          const added = input.articleRefs
+            .filter((articleRef) => !existing.has(articleRef.articleId))
+            .map((articleRef) => ({
+              articleRef,
+              selectedMediaResourceId: null,
+              createdAt: "2026-07-20T00:00:00.000Z",
+              updatedAt: "2026-07-20T00:00:00.000Z",
+            }));
+          state.staging[clientId] = [...current, ...added];
+          return ok({
+            addedCount: added.length,
+            idempotentCount: input.articleRefs.length - added.length,
+            items: input.articleRefs.map((articleRef) => ({
+              articleRef,
+              status: existing.has(articleRef.articleId)
+                ? "idempotent"
+                : "added",
+              idempotent: existing.has(articleRef.articleId),
+            })),
+          });
+        },
+        removePaidSubmissionStaging: (input) => {
+          state.paidStagingRemoveCalls.push(input);
+          const clientId = input.articleRefs[0]?.clientId;
+          const current = state.staging[clientId] || [];
+          const ids = new Set(input.articleRefs.map((item) => item.articleId));
+          const removedCount = current.filter((item) =>
+            ids.has(item.articleRef.articleId),
+          ).length;
+          state.staging[clientId] = current.filter(
+            (item) => !ids.has(item.articleRef.articleId),
+          );
+          return ok({
+            removedCount,
+            idempotentCount: input.articleRefs.length - removedCount,
+            items: [],
+          });
+        },
+        setPaidSubmissionStagingMedia: (input) => {
+          state.paidStagingMediaSetCalls.push(input);
+          const clientId = input.articleRefs[0]?.clientId;
+          const ids = new Set(input.articleRefs.map((item) => item.articleId));
+          const current = state.staging[clientId] || [];
+          state.staging[clientId] = current.map((item) =>
+            ids.has(item.articleRef.articleId)
+              ? {
+                  ...item,
+                  selectedMediaResourceId: input.mediaResourceId,
+                  updatedAt: "2026-07-20T00:00:01.000Z",
+                }
+              : item,
+          );
+          return ok({
+            updatedCount: input.articleRefs.length,
+            idempotentCount: 0,
+            selectedMediaResourceId: input.mediaResourceId,
+            items: input.articleRefs.map((articleRef) => ({
+              articleRef,
+              status: "updated",
+              idempotent: false,
+            })),
+          });
+        },
         previewPaidMediaPreflight: (input) => {
           state.paidPreflightCalls.push(input);
+          state.lastPaidPreflight = input;
           return ok({
             version: 1,
             status: "ready",
@@ -401,27 +596,105 @@ describe("renderer content client switching", function () {
             articles: input.articleRefs.map((articleRef) => ({
               articleRef,
               articleId: articleRef.articleId,
-              title: "客户 A 文章",
+              title:
+                state.articles[articleRef.clientId]?.find(
+                  (item) => item.id === articleRef.articleId,
+                )?.title || articleRef.articleId,
               contentFingerprint: "content-fingerprint-1",
               status: "ready",
               reasonCodes: [],
-              riskCodes: [],
+              riskCodes:
+                articleRef.articleId === "article-b"
+                  ? ["PHONE_NUMBER"]
+                  : ["URL"],
             })),
             mediaResourceId: input.mediaResourceId,
             mediaName: "测试媒体",
-            mediaRemarks: "",
+            mediaRemarks: "只收工作日稿件，正文风险请人工确认",
             resourceFingerprint: "resource-fingerprint-1",
             resourceAvailable: true,
-            quotedPrice: 1,
-            estimatedTotal: input.articleRefs.length,
+            quotedPrice: 12.5,
+            estimatedTotal: input.articleRefs.length * 12.5,
             systemSubmissionCode: "system-1",
             blockers: [],
-            risks: [],
+            risks: [
+              {
+                code: "PHONE_NUMBER",
+                message: "正文包含手机号风险，请结合媒体备注人工确认。",
+                count: 1,
+              },
+              {
+                code: "URL",
+                message: "正文包含网址风险，请结合媒体备注人工确认。",
+                count: 1,
+              },
+            ],
             createdAt: "2026-08-07T00:00:00.000Z",
             expiresAt: "2026-08-07T00:05:00.000Z",
           });
         },
-        confirmPaidMediaBatch: () => ok({}),
+        confirmPaidMediaBatch: (input) => {
+          state.paidConfirmCalls.push(input);
+          if (state.failNextPaidConfirm) {
+            state.failNextPaidConfirm = false;
+            return Promise.reject(new Error("费用确认失败，请重新预检。"));
+          }
+          const preview = state.lastPaidPreflight;
+          const batchId = "paid-batch-client-b";
+          const batch = {
+            batchId,
+            mediaResourceId: preview.mediaResourceId,
+            status: "queued",
+            pauseIntent: "manual",
+            paused: true,
+            runState: "paused",
+            articleCount: preview.articleRefs.length,
+            quotedPrice: 12.5,
+            estimatedTotal: preview.articleRefs.length * 12.5,
+            createdAt: "2026-08-13T00:00:00.000Z",
+            updatedAt: "2026-08-13T00:00:00.000Z",
+            items: preview.articleRefs.map((articleRef, index) => ({
+              itemId: `paid-item-client-b-${index + 1}`,
+              articleRef,
+              status: "queued",
+              phase: "queued",
+            })),
+          };
+          state.paidBatches = [
+            ...state.paidBatches.filter((item) => item.batchId !== batchId),
+            batch,
+          ];
+          const clientId = preview.articleRefs[0].clientId;
+          const articleIds = new Set(
+            preview.articleRefs.map((articleRef) => articleRef.articleId),
+          );
+          state.staging[clientId] = (state.staging[clientId] || []).filter(
+            (item) => !articleIds.has(item.articleRef.articleId),
+          );
+          return ok({
+            batchId,
+            targetKey: `media-resource:${preview.mediaResourceId}`,
+            mediaResourceId: preview.mediaResourceId,
+            status: "queued",
+            articleCount: preview.articleRefs.length,
+            idempotent: false,
+            items: preview.articleRefs.map((articleRef, index) => ({
+              articleRef,
+              articleId: articleRef.articleId,
+              itemId: `paid-item-client-b-${index + 1}`,
+              batchId,
+              publicationId: `publication-client-b-${index + 1}`,
+              attemptId: `attempt-client-b-${index + 1}`,
+              targetKey: `media-resource:${preview.mediaResourceId}`,
+              status: "queued",
+              idempotent: false,
+            })),
+            articleRefs: preview.articleRefs,
+            confirmationFingerprint: "paid-fingerprint-1",
+            quotedPrice: 12.5,
+            estimatedTotal: preview.articleRefs.length * 12.5,
+          });
+        },
         previewCancelSubmissionBatch: ({ batchId }) => {
           state.cancelPreviewCalls.push(batchId);
           const batch = Object.values(state.batches)
@@ -562,8 +835,47 @@ describe("renderer content client switching", function () {
         media: {
           scanArticles: () => ok({ items: [] }),
           getResourcePage: () =>
-            ok({ items: [], total: 0, page: 1, pageSize: 1 }),
-          getPool: () => ok({ items: [] }),
+            ok({
+              items: [
+                {
+                  resourceId: "not-favorited",
+                  name: "未收藏媒体",
+                  price: 99,
+                  type: "image",
+                },
+              ],
+              total: 1,
+              page: 1,
+              pageSize: 1,
+            }),
+          getPool: (input) => {
+            state.poolPageCalls.push(input);
+            const page = input.page === 2 ? 2 : 1;
+            const item =
+              page === 1
+                ? {
+                    resourceId: "media-a",
+                    name: "收藏媒体 A",
+                    price: 12.5,
+                    type: "image",
+                  }
+                : {
+                    resourceId: "media-b",
+                    name: "收藏媒体 B",
+                    price: 18,
+                    type: "image",
+                  };
+            return ok({
+              items: [item],
+              memberResourceIds: ["media-a", "media-b"],
+              total: 2,
+              page,
+              pageSize: input.pageSize,
+              totalPages: 2,
+              hasPrev: page > 1,
+              hasNext: page < 2,
+            });
+          },
           getBalance: () => ok({ balance: "0" }),
         },
         orders: { getOrders: () => ok({ items: [] }) },
@@ -661,21 +973,354 @@ describe("renderer content client switching", function () {
       await page
         .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
         .check();
-      await page.getByRole("textbox", { name: "付费媒体资源 ID" }).fill("media-1");
-      await page.getByRole("button", { name: "付费媒体预检" }).click();
+      assert.equal(
+        await page.getByRole("textbox", { name: "付费媒体资源 ID" }).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "付费媒体预检" }).count(),
+        0,
+      );
+      await page.getByRole("button", { name: "加入付费媒体投稿队列" }).click();
       await page
-        .getByRole("dialog", { name: "付费媒体费用确认" })
+        .getByText("付费媒体投稿队列：已加入 1 篇。", { exact: true })
         .waitFor();
-      await page.waitForFunction(() => window.__clientSwitchFlow.paidPreflightCalls.length === 1);
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingAddCalls.length === 1,
+      );
+      const stagingPanel = page.getByRole("region", {
+        name: "付费媒体投稿队列",
+      });
+      await stagingPanel.getByText("客户 A 文章", { exact: true }).waitFor();
+      await stagingPanel.getByText("客户：客户 A", { exact: true }).waitFor();
+      await stagingPanel.getByText("媒体：未选择", { exact: true }).waitFor();
+
+      const picker = stagingPanel.getByRole("region", {
+        name: "收藏媒体选择器",
+      });
+      assert.equal(
+        await picker
+          .locator('button[aria-label="选择收藏媒体 收藏媒体 A"]')
+          .count(),
+        1,
+      );
+      assert.equal(
+        await picker
+          .locator('button[aria-label="选择收藏媒体 未收藏媒体"]')
+          .count(),
+        0,
+      );
+      await picker.getByText("缓存价格：¥12.50", { exact: true }).waitFor();
+      await stagingPanel
+        .getByRole("checkbox", { name: "选择付费媒体投稿 客户 A 文章" })
+        .check();
+      await picker
+        .locator('button[aria-label="选择收藏媒体 收藏媒体 A"]')
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingMediaSetCalls.length === 1,
+      );
       assert.deepEqual(
-        await page.evaluate(() => window.__clientSwitchFlow.paidPreflightCalls[0]),
+        await page.evaluate(
+          () => window.__clientSwitchFlow.paidStagingMediaSetCalls[0],
+        ),
         {
           articleRefs: [{ clientId: "client-a", articleId: "article-a" }],
-          mediaResourceId: "media-1",
+          mediaResourceId: "media-a",
         },
       );
-      await page.getByRole("button", { name: "取消" }).click();
-      await page.getByRole("combobox", { name: "普通平台投稿目标" }).selectOption("fixture-platform");
+      assert.equal(
+        await page.getByRole("textbox", { name: "付费媒体资源 ID" }).count(),
+        0,
+      );
+      await stagingPanel
+        .getByText("媒体：已选 media-a", { exact: true })
+        .waitFor();
+
+      await stagingPanel
+        .getByRole("button", { name: "清除已选媒体 客户 A 文章" })
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingMediaSetCalls.length === 2,
+      );
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.__clientSwitchFlow.paidStagingMediaSetCalls[1]
+              .mediaResourceId,
+        ),
+        null,
+      );
+      await stagingPanel.getByText("媒体：未选择", { exact: true }).waitFor();
+
+      await page
+        .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
+        .check();
+      await page.getByRole("button", { name: "加入付费媒体投稿队列" }).click();
+      await page
+        .getByText("付费媒体投稿队列：1 篇已在队列中。", { exact: true })
+        .waitFor();
+      assert.equal(
+        await page.evaluate(
+          () => window.__clientSwitchFlow.paidStagingAddCalls.length,
+        ),
+        2,
+      );
+
+      await page
+        .locator('input[type="checkbox"][aria-label="选择 客户 A 第二文章"]')
+        .check();
+      await page.getByRole("button", { name: "加入付费媒体投稿队列" }).click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingAddCalls.length === 3,
+      );
+      await stagingPanel
+        .getByText("客户 A 第二文章", { exact: true })
+        .waitFor();
+
+      await stagingPanel
+        .getByRole("checkbox", { name: "选择付费媒体投稿 客户 A 文章" })
+        .check();
+      await stagingPanel
+        .getByRole("checkbox", { name: "选择付费媒体投稿 客户 A 第二文章" })
+        .check();
+      await picker
+        .locator('button[aria-label="选择收藏媒体 收藏媒体 A"]')
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingMediaSetCalls.length === 3,
+      );
+      assert.deepEqual(
+        await page.evaluate(
+          () => window.__clientSwitchFlow.paidStagingMediaSetCalls[2],
+        ),
+        {
+          articleRefs: [
+            { clientId: "client-a", articleId: "article-a" },
+            { clientId: "client-a", articleId: "article-a-2" },
+          ],
+          mediaResourceId: "media-a",
+        },
+      );
+      await stagingPanel
+        .getByText("媒体：已选 media-a", { exact: true })
+        .first()
+        .waitFor();
+
+      await picker.locator('button[aria-label="下一页收藏媒体"]').click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.poolPageCalls.at(-1)?.page === 2,
+      );
+      await picker
+        .locator('button[aria-label="选择收藏媒体 收藏媒体 B"]')
+        .waitFor();
+      await stagingPanel
+        .getByText("媒体：已选 media-a", { exact: true })
+        .first()
+        .waitFor();
+      assert.equal(
+        await stagingPanel.getByText(/取消收藏|已失效|stale/i).count(),
+        0,
+      );
+
+      await picker.locator('button[aria-label="上一页收藏媒体"]').click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.poolPageCalls.at(-1)?.page === 1,
+      );
+      await changeClient(page, clientSelect, "client-b");
+      const clientBPicker = page.getByRole("region", {
+        name: "收藏媒体选择器",
+      });
+      await clientBPicker
+        .locator('button[aria-label="选择收藏媒体 收藏媒体 A"]')
+        .waitFor();
+      await changeClient(page, clientSelect, "client-a");
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[aria-label="当前客户（单篇/问题/历史）"]')
+            ?.value === "client-a" &&
+          !document
+            .querySelector('[aria-label="选择收藏媒体 收藏媒体 A"]')
+            ?.className.includes("ring-1"),
+      );
+      await stagingPanel
+        .getByRole("checkbox", { name: "选择付费媒体投稿 客户 A 文章" })
+        .check();
+      await stagingPanel
+        .getByRole("checkbox", { name: "选择付费媒体投稿 客户 A 第二文章" })
+        .check();
+      assert.equal(
+        await picker.locator('button[aria-label="清除所选文章媒体"]').count(),
+        1,
+      );
+      await picker.locator('button[aria-label="清除所选文章媒体"]').click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingMediaSetCalls.length === 4,
+      );
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.__clientSwitchFlow.paidStagingMediaSetCalls[3]
+              .mediaResourceId,
+        ),
+        null,
+      );
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.__clientSwitchFlow.paidStagingMediaSetCalls[3].articleRefs
+              .length,
+        ),
+        2,
+      );
+      await stagingPanel
+        .getByText("媒体：未选择", { exact: true })
+        .first()
+        .waitFor();
+
+      const stagingCheckbox = stagingPanel.getByRole("checkbox", {
+        name: "选择付费媒体投稿 客户 A 文章",
+      });
+      await stagingCheckbox.check();
+      await changeClient(page, clientSelect, "client-b");
+      assert.equal(await clientSelect.inputValue(), "client-b");
+      const clientBPanel = page.getByRole("region", {
+        name: "付费媒体投稿队列",
+      });
+      await clientBPanel.getByText("客户 B 文章", { exact: true }).waitFor();
+      await clientBPanel
+        .getByText("客户：客户 B", { exact: true })
+        .first()
+        .waitFor();
+      await clientBPanel
+        .getByText("媒体：已选 media-b", { exact: true })
+        .first()
+        .waitFor();
+      await clientBPanel
+        .getByText("客户 B 第二文章", { exact: true })
+        .waitFor();
+      await clientBPanel
+        .getByRole("button", { name: "清除已选媒体 客户 B 第二文章" })
+        .click();
+      const clientBStagingPicker = clientBPanel.getByRole("region", {
+        name: "收藏媒体选择器",
+      });
+      const clientBArticleCheckbox = clientBPanel.getByRole("checkbox", {
+        name: "选择付费媒体投稿 客户 B 文章",
+      });
+      const clientBSecondArticleCheckbox = clientBPanel.getByRole("checkbox", {
+        name: "选择付费媒体投稿 客户 B 第二文章",
+      });
+      await clientBArticleCheckbox.check();
+      await clientBSecondArticleCheckbox.check();
+      await clientBPanel
+        .getByText("请先为所有选中文章选择媒体进行费用预检。", {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(
+        await clientBPanel
+          .getByRole("button", { name: "费用预检" })
+          .isDisabled(),
+        true,
+      );
+      assert.equal(
+        await page.evaluate(
+          () => window.__clientSwitchFlow.paidPreflightCalls.length,
+        ),
+        0,
+      );
+      await clientBArticleCheckbox.uncheck();
+      await clientBSecondArticleCheckbox.uncheck();
+      await clientBSecondArticleCheckbox.check();
+      await clientBStagingPicker
+        .locator('button[aria-label="选择收藏媒体 收藏媒体 A"]')
+        .click();
+      await clientBPanel
+        .getByText("媒体：已选 media-a", { exact: true })
+        .waitFor();
+      await clientBArticleCheckbox.check();
+      await clientBSecondArticleCheckbox.check();
+      await clientBPanel
+        .getByText("请选择同一媒体的文章进行费用预检", { exact: true })
+        .waitFor();
+      assert.equal(
+        await clientBPanel
+          .getByRole("button", { name: "费用预检" })
+          .isDisabled(),
+        true,
+      );
+      await clientBArticleCheckbox.uncheck();
+      await clientBSecondArticleCheckbox.uncheck();
+      await clientBSecondArticleCheckbox.check();
+      await clientBStagingPicker
+        .locator('button[aria-label="下一页收藏媒体"]')
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.poolPageCalls.at(-1)?.page === 2,
+      );
+      await clientBStagingPicker
+        .locator('button[aria-label="选择收藏媒体 收藏媒体 B"]')
+        .click();
+      await clientBPanel
+        .getByText("媒体：已选 media-b", { exact: true })
+        .last()
+        .waitFor();
+      assert.equal(
+        await clientBPanel
+          .getByRole("checkbox", { name: "选择付费媒体投稿 客户 B 文章" })
+          .isChecked(),
+        false,
+      );
+      await changeClient(page, clientSelect, "client-a");
+      const clientAPanel = page.getByRole("region", {
+        name: "付费媒体投稿队列",
+      });
+      assert.equal(
+        await clientAPanel
+          .getByRole("checkbox", { name: "选择付费媒体投稿 客户 A 文章" })
+          .isChecked(),
+        false,
+      );
+      await page
+        .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
+        .check();
+
+      await page
+        .getByRole("combobox", { name: "普通平台投稿目标" })
+        .selectOption("fixture-platform");
+      await page.getByRole("button", { name: "加入投稿队列" }).click();
+      assert.equal(
+        await page.evaluate(
+          () => window.__clientSwitchFlow.regularQueueCalls.length,
+        ),
+        0,
+      );
+      await page
+        .getByRole("alert")
+        .filter({ hasText: "没有符合普通平台队列规则的文章" })
+        .waitFor();
+
+      await clientAPanel
+        .getByRole("button", {
+          name: "移出付费媒体投稿队列 客户 A 文章",
+        })
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingRemoveCalls.length === 1,
+      );
+      await clientAPanel
+        .getByRole("button", {
+          name: "移出付费媒体投稿队列 客户 A 第二文章",
+        })
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidStagingRemoveCalls.length === 2,
+      );
+      await clientAPanel
+        .getByText("当前客户暂无付费媒体投稿文章。", { exact: true })
+        .waitFor();
+
       await page.getByRole("button", { name: "加入投稿队列" }).click();
       await page
         .getByRole("dialog", { name: "确认加入普通平台队列" })
@@ -721,7 +1366,7 @@ describe("renderer content client switching", function () {
       );
       assert.equal(
         await page.getByText("客户 B 文章", { exact: true }).count(),
-        1,
+        2,
       );
       assert.equal(
         await page.getByText("客户 A 文章", { exact: true }).count(),
@@ -801,7 +1446,9 @@ describe("renderer content client switching", function () {
       await page
         .getByRole("button", { name: "将成功文章加入投稿队列" })
         .click();
-      await page.getByRole("combobox", { name: "生成批次投稿目标" }).selectOption("fixture-platform");
+      await page
+        .getByRole("combobox", { name: "生成批次投稿目标" })
+        .selectOption("fixture-platform");
       await page.getByRole("button", { name: "检查并确认" }).click();
       await page
         .getByRole("button", { name: "一次确认并加入投稿队列" })
@@ -812,6 +1459,272 @@ describe("renderer content client switching", function () {
       assert.equal(
         await page.getByTestId("generation-handoff-summary").count(),
         1,
+      );
+      await page.getByRole("button", { name: "历史文章" }).click();
+      const finalPaidPanel = page.getByRole("region", {
+        name: "付费媒体投稿队列",
+      });
+      await finalPaidPanel.getByText("客户 B 文章", { exact: true }).waitFor();
+      await finalPaidPanel
+        .getByText("客户 B 第二文章", { exact: true })
+        .waitFor();
+      const finalFirstCheckbox = finalPaidPanel.getByRole("checkbox", {
+        name: "选择付费媒体投稿 客户 B 文章",
+      });
+      const finalSecondCheckbox = finalPaidPanel.getByRole("checkbox", {
+        name: "选择付费媒体投稿 客户 B 第二文章",
+      });
+      await finalFirstCheckbox.check();
+      await finalSecondCheckbox.check();
+      await finalPaidPanel.getByRole("button", { name: "费用预检" }).click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidPreflightCalls.length === 1,
+      );
+      const preflightInput = await page.evaluate(
+        () => window.__clientSwitchFlow.paidPreflightCalls[0],
+      );
+      assert.deepEqual(Object.keys(preflightInput).sort(), [
+        "articleRefs",
+        "mediaResourceId",
+      ]);
+      assert.deepEqual(preflightInput, {
+        articleRefs: [
+          { clientId: "client-b", articleId: "article-b" },
+          { clientId: "client-b", articleId: "article-b-2" },
+        ],
+        mediaResourceId: "media-b",
+      });
+      await finalPaidPanel
+        .getByText("媒体名称：测试媒体", { exact: true })
+        .waitFor();
+      await finalPaidPanel
+        .getByText("媒体备注：只收工作日稿件，正文风险请人工确认", {
+          exact: true,
+        })
+        .waitFor();
+      await finalPaidPanel
+        .getByText("最新单价（预检）：¥12.50", { exact: true })
+        .waitFor();
+      await finalPaidPanel.getByText("文章数：2", { exact: true }).waitFor();
+      await finalPaidPanel
+        .getByText("预计总费用：¥25.00", { exact: true })
+        .waitFor();
+      await finalPaidPanel
+        .getByText("系统投稿标识：system-1", { exact: true })
+        .waitFor();
+      await finalPaidPanel
+        .getByText(/PHONE_NUMBER/)
+        .first()
+        .waitFor();
+      await finalPaidPanel.getByText(/URL/).first().waitFor();
+      await finalPaidPanel.getByText("阻断项", { exact: true }).waitFor();
+      await finalPaidPanel.getByText("无", { exact: true }).waitFor();
+
+      await page.evaluate(() => {
+        window.__clientSwitchFlow.failNextPaidConfirm = true;
+      });
+      await finalPaidPanel
+        .getByRole("button", { name: "确认费用并创建暂停付费批次" })
+        .click();
+      await finalPaidPanel
+        .getByRole("alert")
+        .filter({ hasText: "费用确认失败，请重新预检。" })
+        .waitFor();
+      await finalPaidPanel.getByText("客户 B 文章", { exact: true }).waitFor();
+      await finalPaidPanel
+        .getByText("客户 B 第二文章", { exact: true })
+        .waitFor();
+      assert.equal(
+        await page.evaluate(() => window.__clientSwitchFlow.paidBatches.length),
+        1,
+      );
+
+      await finalPaidPanel.getByRole("button", { name: "费用预检" }).click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidPreflightCalls.length === 2,
+      );
+      await finalPaidPanel
+        .getByRole("button", { name: "确认费用并创建暂停付费批次" })
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.paidConfirmCalls.length === 2,
+      );
+      await finalPaidPanel
+        .getByText("当前客户暂无付费媒体投稿文章。", { exact: true })
+        .waitFor();
+      await finalPaidPanel.getByText(/批次：paid-batch-client-b/).waitFor();
+      await finalPaidPanel
+        .getByText("已暂停，等待用户开始投稿", { exact: true })
+        .waitFor();
+      assert.equal(await finalPaidPanel.getByText(/foreign-batch/).count(), 0);
+      const confirmInput = await page.evaluate(
+        () => window.__clientSwitchFlow.paidConfirmCalls[1],
+      );
+      assert.deepEqual(Object.keys(confirmInput).sort(), [
+        "confirmationToken",
+        "confirmed",
+      ]);
+      assert.deepEqual(confirmInput, {
+        confirmationToken: "paid-token-1",
+        confirmed: true,
+      });
+      assert.deepEqual(
+        await page.evaluate(() => window.__clientSwitchFlow.orderCalls),
+        [],
+      );
+
+      assert.equal(
+        await finalPaidPanel
+          .getByRole("button", { name: "开始创建订单" })
+          .count(),
+        1,
+      );
+
+      await changeClient(page, clientSelect, "client-a");
+      const clientAPaidPanel = page.getByRole("region", {
+        name: "付费媒体投稿队列",
+      });
+      await clientAPaidPanel.getByText(/foreign-batch/).waitFor();
+      assert.equal(
+        await clientAPaidPanel
+          .getByRole("button", { name: "开始创建订单" })
+          .count(),
+        1,
+      );
+      assert.equal(
+        await clientAPaidPanel.getByText(/paid-batch-client-b/).count(),
+        0,
+      );
+
+      await changeClient(page, clientSelect, "client-b");
+      const executionPanel = page.getByRole("region", {
+        name: "付费媒体投稿队列",
+      });
+      await executionPanel.getByText(/paid-batch-client-b/).waitFor();
+      assert.equal(await executionPanel.getByText(/foreign-batch/).count(), 0);
+
+      await page.evaluate(() => {
+        window.__clientSwitchFlow.holdNextStart = true;
+      });
+      const startButton = executionPanel.getByRole("button", {
+        name: "开始创建订单",
+      });
+      await startButton.click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.orderCalls.length === 1,
+      );
+      await page.waitForFunction(
+        () =>
+          document.querySelector('button[aria-label="开始创建订单"]')?.disabled,
+      );
+      await page.evaluate(() => {
+        const button = document.querySelector(
+          'button[aria-label="开始创建订单"]',
+        );
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.orderCalls.length === 1,
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.__clientSwitchFlow.orderCalls[0]),
+        {
+          type: "start",
+          input: { batchId: "paid-batch-client-b" },
+        },
+      );
+      await page.evaluate(() => window.__clientSwitchFlow.resolveStart());
+      await executionPanel
+        .getByRole("button", { name: "暂停后续订单" })
+        .waitFor();
+
+      assert.equal(
+        await executionPanel
+          .getByRole("button", { name: "暂停后续订单" })
+          .count(),
+        1,
+      );
+      await executionPanel
+        .getByRole("button", { name: "暂停后续订单" })
+        .click();
+      await page.waitForFunction(
+        () => window.__clientSwitchFlow.orderCalls.length === 2,
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.__clientSwitchFlow.orderCalls[1]),
+        {
+          type: "pause",
+          input: { batchId: "paid-batch-client-b" },
+        },
+      );
+      await executionPanel
+        .getByRole("button", { name: "开始创建订单" })
+        .waitFor();
+
+      await page.evaluate(() => {
+        window.__clientSwitchFlow.paidBatches =
+          window.__clientSwitchFlow.paidBatches.map((batch) =>
+            batch.batchId === "paid-batch-client-b"
+              ? {
+                  ...batch,
+                  status: "needs_attention",
+                  pauseIntent: "system",
+                  paused: true,
+                  runState: "paused",
+                }
+              : batch,
+          );
+      });
+      await executionPanel
+        .getByRole("button", { name: "刷新付费批次" })
+        .click();
+      await executionPanel
+        .getByText("需要人工处理，禁止直接开始", { exact: true })
+        .waitFor();
+      assert.equal(
+        await executionPanel
+          .getByRole("button", { name: "开始创建订单" })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await executionPanel
+          .getByRole("button", { name: "暂停后续订单" })
+          .count(),
+        0,
+      );
+
+      await page.evaluate(() => {
+        window.__clientSwitchFlow.paidBatches =
+          window.__clientSwitchFlow.paidBatches.map((batch) =>
+            batch.batchId === "paid-batch-client-b"
+              ? { ...batch, status: "completed" }
+              : batch,
+          );
+      });
+      await executionPanel
+        .getByRole("button", { name: "刷新付费批次" })
+        .click();
+      await page.waitForFunction(
+        () => !document.body.innerText.includes("paid-batch-client-b"),
+      );
+      assert.equal(
+        await executionPanel
+          .getByRole("button", { name: "开始创建订单" })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await executionPanel
+          .getByRole("button", { name: "暂停后续订单" })
+          .count(),
+        0,
+      );
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.__clientSwitchFlow.paidBatches.map((batch) => batch.batchId),
+        ),
+        ["foreign-batch", "paid-batch-client-b"],
       );
     } finally {
       await page.close();

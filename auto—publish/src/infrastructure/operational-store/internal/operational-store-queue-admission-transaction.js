@@ -369,6 +369,34 @@ function createQueueAdmissionTransaction(context) {
     });
   }
 
+  function assertPaidStagingForNewBatch(items, mediaResourceId) {
+    for (const item of items) {
+      const staging = db
+        .prepare(
+          "SELECT selected_media_resource_id FROM paid_staging_items WHERE client_id=? AND article_id=?",
+        )
+        .get(item.clientId, item.articleId);
+      if (!staging) throw fail("PAID_ADMISSION_STAGING_REQUIRED");
+      if (staging.selected_media_resource_id !== mediaResourceId)
+        throw fail("PAID_ADMISSION_STAGING_MEDIA_MISMATCH");
+    }
+  }
+
+  function consumePaidStagingForNewBatch(items, mediaResourceId) {
+    const deleteStaging = db.prepare(
+      "DELETE FROM paid_staging_items WHERE client_id=? AND article_id=? AND selected_media_resource_id=?",
+    );
+    let deletedCount = 0;
+    for (const item of items)
+      deletedCount += deleteStaging.run(
+        item.clientId,
+        item.articleId,
+        mediaResourceId,
+      ).changes;
+    if (deletedCount !== items.length)
+      throw fail("PAID_ADMISSION_STAGING_CONSUME_FAILED");
+  }
+
   function admitPaidBatch(input) {
     open();
     const value = input || {};
@@ -481,6 +509,8 @@ function createQueueAdmissionTransaction(context) {
           .get(batchId);
         if (existingBatch) throw fail("PAID_ADMISSION_BATCH_CONFLICT");
 
+        assertPaidStagingForNewBatch(items, mediaResourceId);
+
         for (const item of items) {
           const active = db
             .prepare(
@@ -583,6 +613,7 @@ function createQueueAdmissionTransaction(context) {
           stamp,
           stamp,
         );
+        consumePaidStagingForNewBatch(items, mediaResourceId);
         return paidBatchResult(
           batchId,
           targetKey,

@@ -60,6 +60,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
       ...sourceSnapshot,
       management: managementSnapshot.management,
       managementQuery: managementSnapshot.query,
+      paidStaging: managementSnapshot.paidStaging,
       removal: managementSnapshot.removal,
       paidMediaExecution: paidMediaExecution.getSnapshot(),
       commands: Object.freeze({

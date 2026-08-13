@@ -172,6 +172,17 @@ describe("M06-C remote/process/runtime outcomes", function () {
           throw new Error("private article store failure");
         },
       },
+      paidStaging: {
+        listPaidStagingItems: function () {
+          return [
+            {
+              articleRef: { clientId: "client-1", articleId: "article-1" },
+              selectedMediaResourceId: "resource-1",
+            },
+          ];
+        },
+      },
+      mediaPoolStore: { contains: function () { return true; } },
       paidAdmission: { admitPaidBatch: function () {} },
       queryResource: async function () {
         return { resourceId: "resource-1", name: "Fixture", price: 1, available: true };

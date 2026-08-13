@@ -174,6 +174,8 @@ function installDesktopFixture(page, fixture) {
       listPaidMediaBatches: () => ok({ items: [] }),
       startPaidMediaBatch: () => ok({}),
       pausePaidMediaBatch: () => ok({}),
+      getPaidSubmissionStaging: ({ clientId }) =>
+        ok({ clientId, items: [] }),
       previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, queuedToCancel: [], blockedItems: [], canCommit: true, selections: input.selections }),
       applyArticleRemovalImpact: (input) => {
         const transaction = { transactionId: "removal-fixture-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH", updatedAt: "2026-07-18T00:30:00.000Z" };
@@ -336,7 +338,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
-  it("blocks ordinary and paid submission entry points while the selected article has unsaved edits", async () => {
+  it("blocks ordinary and paid staging entry points while the selected article has unsaved edits", async () => {
     const { page, fixture } = await openHistory();
     try {
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板/ }).click();
@@ -346,12 +348,15 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByLabel("普通平台投稿目标").selectOption(platformId);
 
       const queueButton = page.getByRole("button", { name: "加入投稿队列" });
-      await page.getByRole("textbox", { name: "付费媒体资源 ID" }).fill("media-1");
-      const mediaButton = page.getByRole("button", { name: "付费媒体预检" });
+      const stagingButton = page.getByRole("button", {
+        name: "加入付费媒体投稿队列",
+      });
       assert.equal(await queueButton.isDisabled(), true);
-      assert.equal(await mediaButton.isDisabled(), true);
+      assert.equal(await stagingButton.isDisabled(), true);
       assert.equal(await queueButton.getAttribute("title"), "当前编辑文章有未保存修改，请先保存后投稿。");
-      assert.equal(await mediaButton.getAttribute("title"), "当前编辑文章有未保存修改，请先保存后投稿。");
+      assert.equal(await stagingButton.getAttribute("title"), "当前编辑文章有未保存修改，请先保存后投稿。");
+      assert.equal(await page.getByRole("textbox", { name: "付费媒体资源 ID" }).count(), 0);
+      assert.equal(await page.getByRole("button", { name: "付费媒体预检" }).count(), 0);
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.submission), []);
     } finally {
       await page.close();

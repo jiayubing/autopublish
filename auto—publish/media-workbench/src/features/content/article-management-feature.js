@@ -21,6 +21,11 @@ const EMPTY_MANAGEMENT = Object.freeze({
   submissionPlatforms: Object.freeze([]),
 });
 
+const EMPTY_PAID_STAGING = Object.freeze({
+  items: Object.freeze([]),
+  query: Object.freeze({ loading: false, error: null, reason: null }),
+});
+
 const COMMAND_SCOPES = Object.freeze({
   getArticleEditor: null,
   saveArticle: "management",
@@ -31,6 +36,9 @@ const COMMAND_SCOPES = Object.freeze({
   admitRegularQueueItems: "management",
   previewPaidMediaPreflight: null,
   confirmPaidMediaBatch: "management",
+  addPaidSubmissionStaging: "management",
+  removePaidSubmissionStaging: "management",
+  setPaidSubmissionStagingMedia: "management",
   removePendingQueueItems: "management",
   cancelContentSubmissionBatch: "management",
   previewContentArticleRemoval: null,
@@ -62,6 +70,12 @@ const CLIENT_IDENTITY = Object.freeze({
       (item) => item?.clientId || item?.articleRef?.clientId,
     ),
   previewPaidMediaPreflight: (input) =>
+    (input?.articleRefs || []).map((item) => item?.clientId),
+  addPaidSubmissionStaging: (input) =>
+    (input?.articleRefs || []).map((item) => item?.clientId),
+  removePaidSubmissionStaging: (input) =>
+    (input?.articleRefs || []).map((item) => item?.clientId),
+  setPaidSubmissionStagingMedia: (input) =>
     (input?.articleRefs || []).map((item) => item?.clientId),
   removePendingQueueItems: (input) =>
     (input?.items || input?.selections || []).map(
@@ -123,10 +137,18 @@ function removalEventKey(transaction, fallbackTransactionId = "") {
 export function createArticleManagementFeature(adapters = {}) {
   if (typeof adapters.loadManagement !== "function")
     throw new TypeError("Article management feature dependencies are required");
+  const loadPaidSubmissionStaging =
+    typeof adapters.getPaidSubmissionStaging === "function"
+      ? adapters.getPaidSubmissionStaging
+      : async () => [];
 
   const managementIdentity = createQueryIdentity({
     feature: "content",
     query: "articleManagement",
+  });
+  const paidStagingIdentity = createQueryIdentity({
+    feature: "content",
+    query: "paidSubmissionStaging",
   });
   const removalIdentity = createQueryIdentity({
     feature: "content",
@@ -142,6 +164,7 @@ export function createArticleManagementFeature(adapters = {}) {
   let disposed = false;
   let scope = null;
   let management = EMPTY_MANAGEMENT;
+  let paidStaging = EMPTY_PAID_STAGING;
   let query = Object.freeze({ loading: false, error: null, reason: null });
   let removal = Object.freeze({
     transactionId: null,
@@ -160,6 +183,7 @@ export function createArticleManagementFeature(adapters = {}) {
     snapshot = Object.freeze({
       scope,
       management,
+      paidStaging,
       query,
       removal,
       commands: Object.freeze(
@@ -358,6 +382,54 @@ export function createArticleManagementFeature(adapters = {}) {
     publish();
   };
 
+  const refreshPaidStaging = async (reason = "manual") => {
+    if (disposed || !scope || !scope.clientId || scope.clientId === "none")
+      return false;
+    const requestedClientId = scope.clientId;
+    const token = paidStagingIdentity.begin(
+      {
+        workspaceRuntimeId: scope.workspaceRuntimeId,
+        clientId: requestedClientId,
+      },
+      reason,
+    );
+    paidStaging = Object.freeze({
+      items: paidStaging.items,
+      query: Object.freeze({ loading: true, error: null, reason }),
+    });
+    publish();
+    try {
+      const next = await loadPaidSubmissionStaging(requestedClientId);
+      if (
+        !paidStagingIdentity.isCurrent(token) ||
+        requestedClientId !== scope.clientId
+      )
+        return false;
+      paidStaging = Object.freeze({
+        items: Object.freeze(Array.isArray(next) ? [...next] : []),
+        query: Object.freeze({ loading: false, error: null, reason }),
+      });
+      publish();
+      return true;
+    } catch (value) {
+      if (
+        !paidStagingIdentity.isCurrent(token) ||
+        requestedClientId !== scope.clientId
+      )
+        return false;
+      paidStaging = Object.freeze({
+        items: paidStaging.items,
+        query: Object.freeze({
+          loading: false,
+          error: safeError(value),
+          reason,
+        }),
+      });
+      publish();
+      return false;
+    }
+  };
+
   const refreshManagement = async (reason = "manual") => {
     if (disposed || !scope || !scope.clientId || scope.clientId === "none")
       return false;
@@ -372,7 +444,10 @@ export function createArticleManagementFeature(adapters = {}) {
     query = Object.freeze({ loading: true, error: null, reason });
     publish();
     try {
-      const next = await adapters.loadManagement(requestedClientId);
+      const [next, stagingResult] = await Promise.all([
+        adapters.loadManagement(requestedClientId),
+        refreshPaidStaging(reason),
+      ]);
       if (
         !managementIdentity.isCurrent(token) ||
         requestedClientId !== scope.clientId
@@ -381,7 +456,7 @@ export function createArticleManagementFeature(adapters = {}) {
       management = Object.freeze({ ...EMPTY_MANAGEMENT, ...(next || {}) });
       query = Object.freeze({ loading: false, error: null, reason });
       publish();
-      return true;
+      return stagingResult;
     } catch (value) {
       if (
         !managementIdentity.isCurrent(token) ||
@@ -505,6 +580,12 @@ export function createArticleManagementFeature(adapters = {}) {
       runCommand("previewPaidMediaPreflight", input),
     confirmPaidMediaBatch: (input) =>
       runCommand("confirmPaidMediaBatch", input),
+    addPaidSubmissionStaging: (input) =>
+      runCommand("addPaidSubmissionStaging", input),
+    removePaidSubmissionStaging: (input) =>
+      runCommand("removePaidSubmissionStaging", input),
+    setPaidSubmissionStagingMedia: (input) =>
+      runCommand("setPaidSubmissionStagingMedia", input),
     removePendingQueueItems: (input) =>
       runCommand("removePendingQueueItems", input),
     cancelContentSubmissionBatch: (input) =>
@@ -558,8 +639,10 @@ export function createArticleManagementFeature(adapters = {}) {
         clientId: nextScope.clientId,
       });
       managementIdentity.setScope(scope);
+      paidStagingIdentity.setScope(scope);
       removalIdentity.setScope(scope);
       management = EMPTY_MANAGEMENT;
+      paidStaging = EMPTY_PAID_STAGING;
       query = Object.freeze({ loading: false, error: null, reason: null });
       removal = Object.freeze({
         transactionId: null,
@@ -580,11 +663,13 @@ export function createArticleManagementFeature(adapters = {}) {
       lastRemovalRefreshTransactionId = null;
       pendingCommandRemovalRefresh = null;
       managementIdentity.dispose();
+      paidStagingIdentity.dispose();
       removalIdentity.dispose();
       Object.values(commandOwners).forEach((owner) => owner.dispose());
       listeners.clear();
       scope = null;
       management = EMPTY_MANAGEMENT;
+      paidStaging = EMPTY_PAID_STAGING;
     },
   });
 }

@@ -16,7 +16,6 @@ import type {
   ArticleTrashImpactItem,
   ArticleTrashPreview,
   ArticleTrashRecord,
-  PaidMediaPreflight,
   PublicationArchiveEntry,
   PublicationHistoryRecord,
 } from "../../types/publication";
@@ -30,7 +29,6 @@ import { formatBeijingTime } from "../../time-format";
 import PublicationHistoryDrawer from "./PublicationHistoryDrawer";
 import ArticleAttentionPanel from "./ArticleAttentionPanel";
 import ArticleAttentionDetailDrawer from "./ArticleAttentionDetailDrawer";
-import PaidMediaPreflightDialog from "./PaidMediaPreflightDialog";
 import AccountProfileSelector from "./AccountProfileSelector";
 import GeneratedArticlesList from "./GeneratedArticlesList";
 import ArticleTrashPanel from "./ArticleTrashPanel";
@@ -78,8 +76,6 @@ export default function GeneratedArticlesView({
   commands,
   commandStates,
   removal,
-  paidMediaExecution,
-  refreshPaidMediaBatches,
   watchRemovalTransaction,
   stageFilter = "all",
   dirtyArticleId,
@@ -138,13 +134,6 @@ export default function GeneratedArticlesView({
   const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(
     null,
   );
-  const [paidMediaResourceId, setPaidMediaResourceId] = useState("");
-  const [paidMediaPreflight, setPaidMediaPreflight] =
-    useState<PaidMediaPreflight | null>(null);
-  const [paidMediaError, setPaidMediaError] = useState("");
-  const activePaidMediaBatches = paidMediaExecution.items.filter(
-    (batch) => batch.status !== "completed",
-  );
   const [trashFeedback, setTrashFeedback] = useState<{
     kind: "status" | "error";
     text: string;
@@ -180,8 +169,6 @@ export default function GeneratedArticlesView({
     setBatchFeedback(null);
     setTrashFeedback(null);
     setTrashPreview(null);
-    setPaidMediaPreflight(null);
-    setPaidMediaError("");
     setDrawerArticle(null);
     setAttentionDetail(null);
     cancellationRequestIdRef.current += 1;
@@ -192,8 +179,6 @@ export default function GeneratedArticlesView({
     setSelected((current) =>
       typeof next === "function" ? next(current) : next,
     );
-    setPaidMediaPreflight(null);
-    setPaidMediaError("");
   }, []);
 
   useEffect(() => {
@@ -479,96 +464,38 @@ export default function GeneratedArticlesView({
     }
   }
 
-  async function previewPaidMedia() {
+  async function addPaidStagingSelected() {
     const requestedClientId = clientId;
     const selectedQueueable = selectedQueueableArticles;
-    const mediaResourceId = paidMediaResourceId.trim();
-    if (
-      !selectedQueueable.length ||
-      !mediaResourceId ||
-      commandBusy("previewPaidMediaPreflight", "confirmPaidMediaBatch")
-    )
+    if (!selectedQueueable.length || commandBusy("addPaidSubmissionStaging"))
       return;
     setError("");
-    setPaidMediaError("");
     try {
-      const preview = await commands.previewPaidMediaPreflight({
+      const result = await commands.addPaidSubmissionStaging({
         articleRefs: selectedQueueable.map((article) => ({
           clientId: requestedClientId,
           articleId: article.id,
         })),
-        mediaResourceId,
-      });
-      if (
-        isContentCommandStaleResult(preview) ||
-        !isCurrentClient(requestedClientId)
-      )
-        return;
-      setPaidMediaPreflight(preview);
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setPaidMediaError(
-          value instanceof Error ? value.message : "付费媒体预检失败",
-        );
-    }
-  }
-
-  async function confirmPaidMedia() {
-    const requestedClientId = clientId;
-    const preview = paidMediaPreflight;
-    if (!preview || commandBusy("confirmPaidMediaBatch")) return;
-    setPaidMediaError("");
-    try {
-      const result = await commands.confirmPaidMediaBatch({
-        confirmationToken: preview.confirmationToken,
       });
       if (
         isContentCommandStaleResult(result) ||
         !isCurrentClient(requestedClientId)
       )
         return;
-      setPaidMediaPreflight(null);
       updateSelected([]);
-      await refreshPaidMediaBatches();
+      const addedCount = result?.addedCount || 0;
+      const idempotentCount = result?.idempotentCount || 0;
+      const details = [
+        addedCount ? `已加入 ${addedCount} 篇` : "",
+        idempotentCount ? `${idempotentCount} 篇已在队列中` : "",
+      ].filter(Boolean);
       setBatchFeedback({
         kind: "status",
-        text: `已确认付费媒体投稿 ${result.articleCount || preview.articleCount} 篇，资源 ${result.mediaResourceId}。批次保持暂停，请在下方明确开始创建订单。`,
+        text: `付费媒体投稿队列：${details.join("；") || "已刷新"}。`,
       });
     } catch (value) {
       if (isCurrentClient(requestedClientId))
-        setPaidMediaError(
-          value instanceof Error ? value.message : "付费媒体确认失败",
-        );
-    }
-  }
-
-  async function startPaidBatch(batchId: string) {
-    setPaidMediaError("");
-    try {
-      await commands.startPaidMediaBatch({ batchId });
-      setBatchFeedback({
-        kind: "status",
-        text: `付费批次 ${batchId} 本轮执行已返回。`,
-      });
-    } catch (value) {
-      setPaidMediaError(
-        value instanceof Error ? value.message : "开始付费批次失败",
-      );
-    }
-  }
-
-  async function pausePaidBatch(batchId: string) {
-    setPaidMediaError("");
-    try {
-      await commands.pausePaidMediaBatch({ batchId });
-      setBatchFeedback({
-        kind: "status",
-        text: `已请求暂停付费批次 ${batchId}；当前在途订单返回后不会领取下一笔。`,
-      });
-    } catch (value) {
-      setPaidMediaError(
-        value instanceof Error ? value.message : "暂停付费批次失败",
-      );
+        setError(value instanceof Error ? value.message : "加入付费媒体投稿队列失败");
     }
   }
 
@@ -1239,95 +1166,6 @@ export default function GeneratedArticlesView({
           </div>
         )}
 
-        {(activePaidMediaBatches.length > 0 ||
-          paidMediaExecution.query.error) && (
-          <section
-            className="grid gap-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-3"
-            aria-label="付费媒体批次控制"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold text-emerald-900">
-                  付费媒体批次
-                </h3>
-                <p className="mt-0.5 text-xs text-emerald-800">
-                  确认费用后批次默认暂停；开始和暂停只影响网站媒体订单，不影响普通平台队列。
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void refreshPaidMediaBatches()}
-                disabled={paidMediaExecution.query.loading}
-                className="rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-800 disabled:opacity-40"
-              >
-                {paidMediaExecution.query.loading ? "刷新中…" : "刷新批次"}
-              </button>
-            </div>
-            {paidMediaExecution.query.error?.userMessage && (
-              <div role="alert" className="text-xs text-rose-700">
-                {paidMediaExecution.query.error.userMessage}
-              </div>
-            )}
-            {activePaidMediaBatches.map((batch) => {
-              const completed = batch.items.filter((item) =>
-                ["completed", "failed", "cancelled"].includes(item.status),
-              ).length;
-              const needsAttention = batch.status === "needs_attention";
-              const statusLabel = needsAttention
-                ? "需要人工核对"
-                : batch.runState === "paused"
-                  ? "已暂停"
-                  : batch.runState === "in_flight"
-                    ? "订单创建中"
-                    : "运行中";
-              return (
-                <div
-                  key={batch.batchId}
-                  className="flex min-w-0 flex-wrap items-center gap-2 rounded border border-emerald-100 bg-white p-2 text-xs text-slate-700"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold">
-                      资源 {batch.mediaResourceId} · {completed}/
-                      {batch.articleCount} 已收口
-                    </div>
-                    <div className="mt-0.5 text-slate-500">
-                      预计 ¥{batch.estimatedTotal.toFixed(2)} · {statusLabel}
-                    </div>
-                  </div>
-                  {needsAttention ? (
-                    <span className="rounded bg-amber-100 px-2 py-1 font-medium text-amber-800">
-                      需处理，禁止继续
-                    </span>
-                  ) : batch.paused ? (
-                    <button
-                      type="button"
-                      onClick={() => void startPaidBatch(batch.batchId)}
-                      disabled={commandBusy("startPaidMediaBatch")}
-                      className="rounded bg-emerald-700 px-2 py-1 font-semibold text-white disabled:opacity-40"
-                    >
-                      开始创建订单
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void pausePaidBatch(batch.batchId)}
-                      disabled={commandBusy("pausePaidMediaBatch")}
-                      className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-800 disabled:opacity-40"
-                    >
-                      暂停后续订单
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            {paidMediaError && (
-              <div role="alert" className="text-xs text-rose-700">
-                {paidMediaError}
-              </div>
-            )}
-          </section>
-        )}
-
         <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <span className="shrink-0 text-xs font-medium text-slate-500">
@@ -1371,35 +1209,22 @@ export default function GeneratedArticlesView({
           >
             加入投稿队列
           </button>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <input
-              value={paidMediaResourceId}
-              onChange={(event) => setPaidMediaResourceId(event.target.value)}
-              placeholder="媒体资源 ID"
-              aria-label="付费媒体资源 ID"
-              className="h-8 w-36 min-w-0 rounded border border-slate-300 px-2 text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => void previewPaidMedia()}
-              title={
-                selectedDirtyArticle
-                  ? "当前编辑文章有未保存修改，请先保存后投稿。"
-                  : "服务端会重新读取媒体状态和价格；预检不会创建订单"
-              }
-              disabled={
-                !selectedQueueableArticles.length ||
-                !paidMediaResourceId.trim() ||
-                commandBusy(
-                  "previewPaidMediaPreflight",
-                  "confirmPaidMediaBatch",
-                )
-              }
-              className="shrink-0 rounded border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-40"
-            >
-              付费媒体预检
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void addPaidStagingSelected()}
+            title={
+              selectedDirtyArticle
+                ? "当前编辑文章有未保存修改，请先保存后投稿。"
+                : undefined
+            }
+            disabled={
+              !selectedQueueableArticles.length ||
+              commandBusy("addPaidSubmissionStaging")
+            }
+            className="shrink-0 rounded border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-40"
+          >
+            加入付费媒体投稿队列
+          </button>
           <AccountProfileSelector
             platforms={submissionPlatforms}
             platformId={platformId}
@@ -1600,20 +1425,6 @@ export default function GeneratedArticlesView({
         }
         resolutionError={paidResolutionError}
       />
-      {paidMediaPreflight && (
-        <PaidMediaPreflightDialog
-          model={paidMediaPreflight}
-          busy={commandStates.confirmPaidMediaBatch?.busy === true}
-          error={paidMediaError}
-          onClose={() => {
-            if (!commandStates.confirmPaidMediaBatch?.busy) {
-              setPaidMediaPreflight(null);
-              setPaidMediaError("");
-            }
-          }}
-          onConfirm={confirmPaidMedia}
-        />
-      )}
     </div>
   );
 }

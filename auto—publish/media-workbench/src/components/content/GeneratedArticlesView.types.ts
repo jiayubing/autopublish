@@ -8,7 +8,6 @@ import type {
   PublicationHistoryRecord,
   PublicationHistorySummary,
   PublicationArchiveEntry,
-  PaidMediaExecutionBatch,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
 import type {
@@ -53,9 +52,7 @@ export type ArticleManagementReadModel = {
 export type GeneratedArticlesCommandName =
   | "cancelContentSubmissionBatch"
   | "admitRegularQueueItems"
-  | "confirmPaidMediaBatch"
-  | "startPaidMediaBatch"
-  | "pausePaidMediaBatch"
+  | "addPaidSubmissionStaging"
   | "prepareBindPaidOrderNumber"
   | "bindPaidOrderNumber"
   | "prepareConfirmPaidOrderAbsent"
@@ -65,7 +62,6 @@ export type GeneratedArticlesCommandName =
   | "preparePermanentDeleteContentArticle"
   | "previewContentArticleRemoval"
   | "previewRegularQueueAdmission"
-  | "previewPaidMediaPreflight"
   | "prepareRegularUncertainResolution"
   | "confirmRegularAccepted"
   | "confirmRegularNotAccepted"
@@ -93,11 +89,6 @@ export interface GeneratedArticlesViewProps {
     transaction: ArticleRemovalTransaction | null;
     query: { loading: boolean; error?: { userMessage?: string } | null };
   };
-  paidMediaExecution: {
-    items: PaidMediaExecutionBatch[];
-    query: { loading: boolean; error?: { userMessage?: string } | null };
-  };
-  refreshPaidMediaBatches: () => Promise<unknown>;
   watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
   stageFilter?: ArticleWorkflowStage | "all";
   dirtyArticleId?: string | null;

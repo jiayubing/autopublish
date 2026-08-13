@@ -201,6 +201,21 @@ function createPaidMediaPreflightService(options) {
   const paidAdmission = value.paidAdmission || value.paidAdmissionFacade;
   if (!paidAdmission || typeof paidAdmission.admitPaidBatch !== "function")
     throw preflightError("PAID_MEDIA_ADMISSION_REQUIRED");
+  const paidStaging = value.paidStaging || value.paidStagingStore;
+  if (
+    !paidStaging ||
+    typeof paidStaging.listPaidStagingItems !== "function"
+  )
+    throw preflightError(
+      "PAID_MEDIA_PREFLIGHT_UNAVAILABLE",
+      "付费投稿队列读取能力不可用，未创建付费批次",
+    );
+  const mediaPoolStore = value.mediaPoolStore || value.favoriteMediaPool;
+  if (!mediaPoolStore || typeof mediaPoolStore.contains !== "function")
+    throw preflightError(
+      "PAID_MEDIA_PREFLIGHT_UNAVAILABLE",
+      "收藏媒体状态读取能力不可用，未创建付费批次",
+    );
   const resourceService = value.resourceService || null;
   const queryResource =
     typeof value.queryResource === "function"
@@ -265,17 +280,127 @@ function createPaidMediaPreflightService(options) {
         attentionItems: [],
         removalTransactions: [],
       };
-    return (
-      lifecycleFacts.listArticleLifecycleFacts({
-        articleIds: [...new Set(refs.map((ref) => ref.articleId))],
-      }) || {
-        publications: [],
-        submissionItems: [],
-        orders: [],
-        attentionItems: [],
-        removalTransactions: [],
-      }
+    try {
+      return (
+        lifecycleFacts.listArticleLifecycleFacts({
+          articleIds: [...new Set(refs.map((ref) => ref.articleId))],
+        }) || {
+          publications: [],
+          submissionItems: [],
+          orders: [],
+          attentionItems: [],
+          removalTransactions: [],
+        }
+      );
+    } catch (_) {
+      throw preflightError(
+        "PAID_MEDIA_ARTICLE_STATE_UNAVAILABLE",
+        "文章状态读取失败，未创建付费批次",
+      );
+    }
+  }
+
+  function mapStagingReadError() {
+    return preflightError(
+      "STAGING_PERSISTENCE_FAILED",
+      "付费投稿队列状态读取失败，请刷新后重试",
     );
+  }
+
+  async function stagingByRef(refs) {
+    const byRef = new Map();
+    const clientIds = [...new Set(refs.map((ref) => ref.clientId))];
+    for (const clientId of clientIds) {
+      let items;
+      try {
+        items = await paidStaging.listPaidStagingItems({ clientId });
+      } catch (_) {
+        throw mapStagingReadError();
+      }
+      if (!Array.isArray(items)) throw mapStagingReadError();
+      for (const item of items) {
+        const itemRef = item && item.articleRef;
+        if (
+          !itemRef ||
+          itemRef.clientId !== clientId ||
+          typeof itemRef.articleId !== "string" ||
+          byRef.has(articleRefKey(itemRef))
+        )
+          throw mapStagingReadError();
+        const selectedMediaResourceId =
+          item.selectedMediaResourceId === null ||
+          item.selectedMediaResourceId === undefined
+            ? null
+            : typeof item.selectedMediaResourceId === "string" &&
+                item.selectedMediaResourceId.trim()
+              ? item.selectedMediaResourceId.trim()
+              : null;
+        if (
+          item.selectedMediaResourceId !== null &&
+          item.selectedMediaResourceId !== undefined &&
+          selectedMediaResourceId === null
+        )
+          throw mapStagingReadError();
+        byRef.set(articleRefKey(itemRef), { selectedMediaResourceId });
+      }
+    }
+    return byRef;
+  }
+
+  async function assertStagingState(refs, mediaResourceId, phase) {
+    const staged = await stagingByRef(refs);
+    for (const ref of refs) {
+      if (!staged.has(articleRefKey(ref)))
+        throw preflightError(
+          "NOT_IN_STAGING",
+          "文章不在付费投稿队列中，请刷新后重试",
+        );
+    }
+    for (const ref of refs) {
+      const selectedMediaResourceId = staged.get(
+        articleRefKey(ref),
+      ).selectedMediaResourceId;
+      if (!selectedMediaResourceId)
+        throw preflightError(
+          phase === "confirm"
+            ? "PAID_MEDIA_CONFIRMATION_STALE"
+            : "INVALID_MEDIA_RESOURCE_ID",
+          phase === "confirm"
+            ? "付费投稿媒体选择已变化，请重新预检"
+            : "请先为所有文章选择媒体资源",
+        );
+      if (selectedMediaResourceId !== mediaResourceId)
+        throw preflightError(
+          phase === "confirm"
+            ? "PAID_MEDIA_CONFIRMATION_STALE"
+            : "PAID_STAGING_CONFLICT",
+          phase === "confirm"
+            ? "付费投稿媒体选择已变化，请重新预检"
+            : "付费投稿队列中的文章必须选择同一媒体资源",
+        );
+    }
+    return staged;
+  }
+
+  async function assertFavoriteMembership(mediaResourceId, phase) {
+    let isFavorite;
+    try {
+      isFavorite = await mediaPoolStore.contains(mediaResourceId);
+    } catch (_) {
+      throw preflightError(
+        "PAID_MEDIA_RESOURCE_QUERY_FAILED",
+        "收藏媒体状态读取失败，请重新预检",
+      );
+    }
+    if (isFavorite !== true)
+      throw preflightError(
+        phase === "confirm"
+          ? "PAID_MEDIA_CONFIRMATION_STALE"
+          : "INVALID_MEDIA_RESOURCE_ID",
+        phase === "confirm"
+          ? "媒体已不在当前收藏媒体池中，请重新预检"
+          : "媒体资源不在当前收藏媒体池中",
+      );
   }
 
   function readArticles(refs, options) {
@@ -312,7 +437,48 @@ function createPaidMediaPreflightService(options) {
   }
 
   function currentSystemSubmissionCode() {
-    return normalizeSystemSubmissionCode(systemSubmissionCodeProvider());
+    try {
+      return normalizeSystemSubmissionCode(systemSubmissionCodeProvider());
+    } catch (_) {
+      throw preflightError(
+        "PAID_MEDIA_PREFLIGHT_UNAVAILABLE",
+        "系统投稿标识码读取失败，未创建付费批次",
+      );
+    }
+  }
+
+  function mapPaidAdmissionError(error) {
+    const code = error && typeof error.code === "string" ? error.code : "";
+    if (code === "PAID_ADMISSION_STAGING_REQUIRED")
+      return preflightError(
+        "NOT_IN_STAGING",
+        "文章不在付费投稿队列中，请刷新后重试",
+      );
+    if (code === "PAID_ADMISSION_STAGING_MEDIA_MISMATCH")
+      return preflightError(
+        "PAID_MEDIA_CONFIRMATION_STALE",
+        "付费投稿媒体选择已变化，请重新预检",
+      );
+    if (code === "PAID_ADMISSION_STAGING_CONSUME_FAILED")
+      return preflightError(
+        "PAID_ADMISSION_TRANSACTION_FAILED",
+        "付费批次事务已回滚，请重试确认",
+      );
+    if (code === "PLATFORM_CONFIG_STORAGE_INVALID")
+      return preflightError(
+        "PAID_MEDIA_PREFLIGHT_UNAVAILABLE",
+        "系统投稿标识码读取失败，未创建付费批次",
+      );
+    return error;
+  }
+
+  function shouldInvalidateAfterStateChange(code) {
+    return new Set([
+      "NOT_IN_STAGING",
+      "INVALID_MEDIA_RESOURCE_ID",
+      "PAID_STAGING_CONFLICT",
+      "PAID_MEDIA_CONFIRMATION_STALE",
+    ]).has(code);
   }
 
   function modelFor(refs, resource, articles, createdAt, expiresAt) {
@@ -414,6 +580,8 @@ function createPaidMediaPreflightService(options) {
   async function preflight(input) {
     const refs = refsFrom(input);
     const mediaResourceId = mediaResourceIdFrom(input);
+    await assertStagingState(refs, mediaResourceId, "preflight");
+    await assertFavoriteMembership(mediaResourceId, "preflight");
     let resource;
     try {
       resource = await queryResource(mediaResourceId);
@@ -491,6 +659,16 @@ function createPaidMediaPreflightService(options) {
       );
     }
     entry.inFlight = true;
+
+    try {
+      await assertStagingState(entry.refs, model.mediaResourceId, "confirm");
+      await assertFavoriteMembership(model.mediaResourceId, "confirm");
+    } catch (error) {
+      entry.inFlight = false;
+      if (shouldInvalidateAfterStateChange(error && error.code))
+        confirmations.delete(token);
+      throw error;
+    }
 
     let currentResource;
     try {
@@ -615,15 +793,18 @@ function createPaidMediaPreflightService(options) {
         customerSnapshotsV1,
       });
     } catch (error) {
+      const mappedError = mapPaidAdmissionError(error);
       if (
         [
           "PAID_MEDIA_CONFIRMATION_STALE",
           "PAID_MEDIA_SYSTEM_SUBMISSION_CODE_CHANGED",
-        ].includes(error && error.code)
+        ].includes(mappedError && mappedError.code)
       )
         confirmations.delete(token);
+      else if (shouldInvalidateAfterStateChange(mappedError && mappedError.code))
+        confirmations.delete(token);
       else entry.inFlight = false;
-      throw error;
+      throw mappedError;
     }
     entry.consumed = true;
     entry.result = result;

@@ -24,6 +24,9 @@ const {
 const {
   createRegularQueueApplication,
 } = require("../desktop/services/regular-queue-application");
+const {
+  productionIpcRegistry,
+} = require("../desktop/ipc/contracts/production-registry");
 
 function article(articleId, overrides) {
   return Object.assign(
@@ -50,17 +53,33 @@ function makeFixture(options) {
   );
   const transitionPorts = {};
   const code = { value: "system-submission-12" };
+  const stagingReads = [];
+  const favorite = {
+    resourceIds: new Set(["media-12"]),
+    contains(resourceId) {
+      if (typeof value.onFavoriteCheck === "function")
+        value.onFavoriteCheck(resourceId);
+      return this.resourceIds.has(resourceId);
+    },
+  };
+  let resourceQueryCount = 0;
   let store;
+  let contentStore;
   try {
     store = createOperationalStore({
       workspaceRoot: root,
       clock: () => new Date("2026-08-07T00:00:00.000Z"),
       transitionPorts,
+      articleReader: {
+        getArticle(clientId, articleId) {
+          return contentStore.getArticle(clientId, articleId);
+        },
+      },
     });
     const articleStore = createArticleStore(root, {
       internalArticleLockFault: value.lockFault,
     });
-    const contentStore = createContentStore({
+    contentStore = createContentStore({
       articleStore,
       listClientIds: () => ["client-a"],
     });
@@ -80,13 +99,30 @@ function makeFixture(options) {
       price: 12.5,
       available: true,
     };
+    const paidStaging = Object.freeze({
+      listPaidStagingItems(input) {
+        stagingReads.push(input.clientId);
+        if (typeof value.onStagingRead === "function")
+          value.onStagingRead(input.clientId);
+        return store.listPaidStagingItems(input);
+      },
+    });
     const service = createPaidMediaPreflightService({
       contentStore,
+      paidStaging,
+      mediaPoolStore: favorite,
       lifecycleFacts: transitionPorts.paidAdmissionTransitions,
       paidAdmission: Object.freeze({
-        admitPaidBatch: coordinator.admitPaidBatch,
+        admitPaidBatch(input) {
+          if (value.admissionError) throw value.admissionError;
+          if (typeof value.onAdmission === "function") value.onAdmission(input);
+          return coordinator.admitPaidBatch(input);
+        },
       }),
       queryResource: async (resourceId) => {
+        resourceQueryCount += 1;
+        if (typeof value.onResourceQuery === "function")
+          value.onResourceQuery(resourceId);
         assert.equal(resourceId, resource.resourceId);
         if (typeof value.queryResource === "function")
           return value.queryResource(resource);
@@ -129,8 +165,33 @@ function makeFixture(options) {
       profile,
       resource,
       code,
+      favorite,
+      stagingReads,
+      getResourceQueryCount() {
+        return resourceQueryCount;
+      },
       add(valueArticle) {
         contentStore.createArticle(valueArticle);
+      },
+      stage(...articleIds) {
+        const articleRefs = articleIds.map((articleId) => ({
+          clientId: "client-a",
+          articleId,
+        }));
+        store.addPaidStagingItems(articleRefs);
+        store.setPaidStagingMedia(articleRefs, "media-12");
+      },
+      setStagingMedia(articleId, mediaResourceId) {
+        const articleRefs = [{ clientId: "client-a", articleId }];
+        store.setPaidStagingMedia(articleRefs, mediaResourceId);
+      },
+      removeStaging(...articleIds) {
+        store.removePaidStagingItems(
+          articleIds.map((articleId) => ({
+            clientId: "client-a",
+            articleId,
+          })),
+        );
       },
       close() {
         store.close();
@@ -183,6 +244,7 @@ test("paid preflight is a single-resource immutable snapshot and emits local ris
   try {
     fixture.add(article("article-b", { title: "带网址 https://example.test" }));
     fixture.add(article("article-a", { content: "联系方式 13800138000" }));
+    fixture.stage("article-a", "article-b");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-b", "article-a"),
       mediaResourceId: fixture.resource.resourceId,
@@ -203,9 +265,206 @@ test("paid preflight is a single-resource immutable snapshot and emits local ris
       preview.risks.map((risk) => risk.code),
       ["PHONE_NUMBER", "URL"],
     );
+    assert.deepEqual(fixture.stagingReads, ["client-a"]);
+    assert.equal(fixture.getResourceQueryCount(), 1);
     assert.equal(fixture.store.listPaidSubmissionBatches().length, 0);
   } finally {
     fixture.close();
+  }
+});
+
+test("paid preflight and confirm use the fixed guard order and one staging read per client", async () => {
+  const events = [];
+  const fixture = makeFixture({
+    onStagingRead: () => events.push("staging"),
+    onFavoriteCheck: () => events.push("favorite"),
+    onResourceQuery: () => events.push("resource"),
+    onAdmission: () => events.push("admission"),
+  });
+  try {
+    fixture.add(article("article-a"));
+    fixture.add(article("article-b"));
+    fixture.stage("article-a", "article-b");
+    const preview = await fixture.service.preflight({
+      articleRefs: refs("article-a", "article-b"),
+      mediaResourceId: "media-12",
+    });
+    assert.deepEqual(events, ["staging", "favorite", "resource"]);
+    assert.deepEqual(fixture.stagingReads, ["client-a"]);
+
+    events.length = 0;
+    await fixture.service.confirm({
+      confirmationToken: preview.confirmationToken,
+    });
+    assert.deepEqual(events, ["staging", "favorite", "resource", "admission"]);
+    assert.deepEqual(fixture.stagingReads, ["client-a", "client-a"]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("staging membership, selected media, and authoritative favorite checks block before resource query", async () => {
+  const cases = [
+    {
+      name: "not staged",
+      prepare: (fixture) => fixture.add(article("article-a")),
+      code: "NOT_IN_STAGING",
+    },
+    {
+      name: "no selected media",
+      prepare: (fixture) => {
+        fixture.add(article("article-a"));
+        fixture.store.addPaidStagingItems(refs("article-a"));
+      },
+      code: "INVALID_MEDIA_RESOURCE_ID",
+    },
+    {
+      name: "selected media mismatch",
+      prepare: (fixture) => {
+        fixture.add(article("article-a"));
+        fixture.stage("article-a");
+        fixture.setStagingMedia("article-a", "media-other");
+      },
+      code: "PAID_STAGING_CONFLICT",
+    },
+    {
+      name: "not favorite",
+      prepare: (fixture) => {
+        fixture.add(article("article-a"));
+        fixture.stage("article-a");
+        fixture.favorite.resourceIds.clear();
+      },
+      code: "INVALID_MEDIA_RESOURCE_ID",
+    },
+  ];
+  for (const item of cases) {
+    const fixture = makeFixture();
+    try {
+      item.prepare(fixture);
+      await assert.rejects(
+        fixture.service.preflight({
+          articleRefs: refs("article-a"),
+          mediaResourceId: "media-12",
+        }),
+        { code: item.code },
+        item.name,
+      );
+      assert.equal(fixture.getResourceQueryCount(), 0, item.name);
+      assertNoSubmissionFacts(fixture, ["article-a"]);
+    } finally {
+      fixture.close();
+    }
+  }
+});
+
+test("staging, favorite, and Phase 4A admission changes invalidate or map confirmation safely", async () => {
+  const selectedMediaChanged = makeFixture();
+  try {
+    selectedMediaChanged.add(article("article-a"));
+    selectedMediaChanged.stage("article-a");
+    const preview = await selectedMediaChanged.service.preflight({
+      articleRefs: refs("article-a"),
+      mediaResourceId: "media-12",
+    });
+    selectedMediaChanged.setStagingMedia("article-a", "media-other");
+    await assert.rejects(
+      selectedMediaChanged.service.confirm({
+        confirmationToken: preview.confirmationToken,
+      }),
+      { code: "PAID_MEDIA_CONFIRMATION_STALE" },
+    );
+    await assert.rejects(
+      selectedMediaChanged.service.confirm({
+        confirmationToken: preview.confirmationToken,
+      }),
+      { code: "PAID_MEDIA_CONFIRMATION_STALE" },
+    );
+  } finally {
+    selectedMediaChanged.close();
+  }
+
+  const stagingDeleted = makeFixture();
+  try {
+    stagingDeleted.add(article("article-a"));
+    stagingDeleted.stage("article-a");
+    const preview = await stagingDeleted.service.preflight({
+      articleRefs: refs("article-a"),
+      mediaResourceId: "media-12",
+    });
+    stagingDeleted.removeStaging("article-a");
+    await assert.rejects(
+      stagingDeleted.service.confirm({
+        confirmationToken: preview.confirmationToken,
+      }),
+      { code: "NOT_IN_STAGING" },
+    );
+    assert.equal(stagingDeleted.store.listPaidSubmissionBatches().length, 0);
+  } finally {
+    stagingDeleted.close();
+  }
+
+  const unfavorited = makeFixture();
+  try {
+    unfavorited.add(article("article-a"));
+    unfavorited.stage("article-a");
+    const preview = await unfavorited.service.preflight({
+      articleRefs: refs("article-a"),
+      mediaResourceId: "media-12",
+    });
+    unfavorited.favorite.resourceIds.clear();
+    await assert.rejects(
+      unfavorited.service.confirm({
+        confirmationToken: preview.confirmationToken,
+      }),
+      { code: "PAID_MEDIA_CONFIRMATION_STALE" },
+    );
+    assert.equal(unfavorited.store.listPaidSubmissionBatches().length, 0);
+  } finally {
+    unfavorited.close();
+  }
+
+  const admissionFailure = Object.assign(
+    new Error("synthetic staging consume failure"),
+    { code: "PAID_ADMISSION_STAGING_CONSUME_FAILED" },
+  );
+  const mapped = makeFixture({ admissionError: admissionFailure });
+  try {
+    mapped.add(article("article-a"));
+    mapped.stage("article-a");
+    const preview = await mapped.service.preflight({
+      articleRefs: refs("article-a"),
+      mediaResourceId: "media-12",
+    });
+    await assert.rejects(
+      mapped.service.confirm({ confirmationToken: preview.confirmationToken }),
+      { code: "PAID_ADMISSION_TRANSACTION_FAILED" },
+    );
+    assert.equal(mapped.store.listPaidSubmissionBatches().length, 0);
+  } finally {
+    mapped.close();
+  }
+});
+
+test("known paid guard and admission failures remain typed at the IPC boundary", () => {
+  const contract = productionIpcRegistry.byChannel(
+    "content:preview-paid-media-preflight",
+  );
+  assert.ok(contract);
+  for (const code of [
+    "NOT_IN_STAGING",
+    "INVALID_MEDIA_RESOURCE_ID",
+    "PAID_STAGING_CONFLICT",
+    "PAID_MEDIA_CONFIRMATION_STALE",
+    "PAID_ADMISSION_TRANSACTION_FAILED",
+    "STAGING_PERSISTENCE_FAILED",
+    "PAID_MEDIA_PREFLIGHT_UNAVAILABLE",
+  ]) {
+    const result = productionIpcRegistry.failure(
+      contract,
+      Object.assign(new Error(code), { code }),
+    );
+    assert.equal(result.error.code, code);
+    assert.notEqual(result.error.code, "IPC_INTERNAL");
   }
 });
 
@@ -216,6 +475,7 @@ test("confirm rechecks resource, code and content before one atomic paid admissi
     const second = article("article-b");
     fixture.add(first);
     fixture.add(second);
+    fixture.stage("article-a", "article-b");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-b", "article-a"),
       mediaResourceId: "media-12",
@@ -235,6 +495,11 @@ test("confirm rechecks resource, code and content before one atomic paid admissi
       2,
     );
     assert.equal(fixture.store.listSubmissionQueueItems().length, 0);
+    assert.equal(
+      fixture.store.listPaidStagingItems({ clientId: "client-a" }).length,
+      0,
+    );
+    assert.equal(fixture.store.listRemoteOrders().length, 0);
     const db = new DatabaseSync(fixture.store.databasePath);
     const storedItems = db
       .prepare("SELECT payload_json FROM submission_items ORDER BY article_id")
@@ -269,6 +534,7 @@ test("resource price and system-id changes invalidate the old confirmation witho
   const fixture = makeFixture();
   try {
     fixture.add(article("article-a"));
+    fixture.stage("article-a");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",
@@ -306,6 +572,7 @@ test("invalid resource prices remain visible as a blocked preflight through the 
   });
   try {
     fixture.add(article("article-a"));
+    fixture.stage("article-a");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",
@@ -329,6 +596,7 @@ test("preflight blocks an estimated total above the paid admission amount limit"
   try {
     fixture.add(article("article-a"));
     fixture.add(article("article-b"));
+    fixture.stage("article-a", "article-b");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a", "article-b"),
       mediaResourceId: "media-12",
@@ -366,6 +634,7 @@ test("paid admission locks articles in canonical order and exposes only its tran
   try {
     fixture.add(article("article-b"));
     fixture.add(article("article-a"));
+    fixture.stage("article-a", "article-b");
     assert.deepEqual(
       Object.keys(fixture.transitionPorts.paidAdmissionTransitions).sort(),
       ["admitPaidBatch", "listArticleLifecycleFacts"],
@@ -406,6 +675,7 @@ test("confirmation resource failures, stop-order state and resource fingerprint 
   });
   try {
     fixture.add(article("article-a"));
+    fixture.stage("article-a");
     for (const [nextMode, expectedCode] of [
       ["failed", "PAID_MEDIA_RESOURCE_RECHECK_FAILED"],
       ["stopped", "PAID_MEDIA_CONFIRMATION_STALE"],
@@ -441,6 +711,7 @@ test("article fingerprint, title/body validity and system identifier changes can
   try {
     const original = article("article-a");
     fixture.add(original);
+    fixture.stage("article-a");
     const changedArticlePreview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",
@@ -492,6 +763,15 @@ test("article state read failures stay unavailable during confirmation and remai
         return persisted;
       },
     },
+    paidStaging: {
+      listPaidStagingItems: () => [
+        {
+          articleRef: { clientId: "client-a", articleId: "article-a" },
+          selectedMediaResourceId: "media-12",
+        },
+      ],
+    },
+    mediaPoolStore: { contains: () => true },
     paidAdmission: {
       admitPaidBatch() {
         admitted += 1;
@@ -536,6 +816,15 @@ test("configuration read failures stay distinct during confirmation and remain s
   let admitted = 0;
   const service = createPaidMediaPreflightService({
     contentStore: { getArticle: () => persisted },
+    paidStaging: {
+      listPaidStagingItems: () => [
+        {
+          articleRef: { clientId: "client-a", articleId: "article-a" },
+          selectedMediaResourceId: "media-12",
+        },
+      ],
+    },
+    mediaPoolStore: { contains: () => true },
     paidAdmission: {
       admitPaidBatch() {
         admitted += 1;
@@ -572,7 +861,7 @@ test("configuration read failures stay distinct during confirmation and remain s
   configReadFails = true;
   await assert.rejects(
     service.confirm({ confirmationToken: preview.confirmationToken }),
-    { code: "PLATFORM_CONFIG_STORAGE_INVALID" },
+    { code: "PAID_MEDIA_PREFLIGHT_UNAVAILABLE" },
   );
   assert.equal(admitted, 0);
 
@@ -590,6 +879,15 @@ test("preflight blocks a missing authoritative body before paid admission", asyn
         return article(articleId, { content: "" });
       },
     },
+    paidStaging: {
+      listPaidStagingItems: () => [
+        {
+          articleRef: { clientId: "client-a", articleId: "article-a" },
+          selectedMediaResourceId: "media-12",
+        },
+      ],
+    },
+    mediaPoolStore: { contains: () => true },
     paidAdmission: {
       admitPaidBatch() {
         admitted = true;
@@ -654,6 +952,7 @@ test("lock acquisition failure releases earlier locks and leaves no paid admissi
   try {
     fixture.add(article("article-a"));
     fixture.add(article("article-b"));
+    fixture.stage("article-a", "article-b");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-b", "article-a"),
       mediaResourceId: "media-12",
@@ -689,6 +988,9 @@ test("lock acquisition failure releases earlier locks and leaves no paid admissi
 test("paid admission transaction rollback removes rows written before a later constraint failure", () => {
   const fixture = makeFixture();
   try {
+    fixture.add(article("article-a"));
+    fixture.add(article("article-b"));
+    fixture.stage("article-a", "article-b");
     assert.throws(
       () =>
         fixture.transitionPorts.paidAdmissionTransitions.admitPaidBatch({
@@ -729,6 +1031,7 @@ test("save racing a delayed confirmation wins cleanly and makes confirmation sta
   try {
     const original = article("article-a");
     fixture.add(original);
+    fixture.stage("article-a");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",
@@ -736,7 +1039,7 @@ test("save racing a delayed confirmation wins cleanly and makes confirmation sta
     const confirming = fixture.service.confirm({
       confirmationToken: preview.confirmationToken,
     });
-    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     const saved = fixture.coordinator.saveExistingArticle({
       article: Object.assign({}, original, { content: "并发保存胜出" }),
       expectedFingerprint: fingerprintArticle(original),
@@ -754,6 +1057,7 @@ test("regular and paid admission race through the shared coordinator and establi
   const fixture = makeFixture();
   try {
     fixture.add(article("article-a"));
+    fixture.stage("article-a");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",
@@ -784,7 +1088,7 @@ test("regular and paid admission race through the shared coordinator and establi
       assert.equal(outcomes[1].status, "fulfilled");
       assert.equal(
         outcomes[1].value.items[0].reasonCode,
-        "ARTICLE_ACTIVE_TARGET_CONFLICT",
+        "PAID_STAGING_REGULAR_QUEUE_CONFLICT",
       );
     }
     assert.equal(
@@ -806,7 +1110,7 @@ test("regular and paid admission race through the shared coordinator and establi
   }
 });
 
-test("regular admission can win while paid resource recheck is pending without paid orphan facts", async () => {
+test("paid staging blocks regular admission while paid resource recheck is pending", async () => {
   let queryCount = 0;
   let releaseRecheck;
   const fixture = makeFixture({
@@ -820,6 +1124,7 @@ test("regular admission can win while paid resource recheck is pending without p
   });
   try {
     fixture.add(article("article-a"));
+    fixture.stage("article-a");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",
@@ -827,23 +1132,28 @@ test("regular admission can win while paid resource recheck is pending without p
     const paid = fixture.service.confirm({
       confirmationToken: preview.confirmationToken,
     });
-    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     const regular = fixture.regularApplication.admitRegularQueueItems({
       articleRefs: refs("article-a"),
       platformId: "toutiao",
       accountProfileId: fixture.profile.accountProfileId,
     });
-    assert.equal(regular.admittedCount, 1);
+    assert.equal(regular.admittedCount, 0);
+    assert.equal(
+      regular.items[0].reasonCode,
+      "PAID_STAGING_REGULAR_QUEUE_CONFLICT",
+    );
     releaseRecheck();
-    await assert.rejects(paid, { code: "ARTICLE_OPERATION_FROZEN" });
+    const admitted = await paid;
+    assert.equal(admitted.status, "queued");
     assert.equal(
       fixture.store.listPublicationRecords({ articleIds: ["article-a"] })
         .length,
       1,
     );
     assert.equal(fixture.store.listSubmissionBatches().length, 1);
-    assert.equal(fixture.store.listSubmissionQueueItems().length, 1);
-    assert.equal(fixture.store.listPaidSubmissionBatches().length, 0);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 0);
+    assert.equal(fixture.store.listPaidSubmissionBatches().length, 1);
   } finally {
     fixture.close();
   }
@@ -853,6 +1163,7 @@ test("duplicate confirmation race admits once and leaves no duplicate or orphan 
   const fixture = makeFixture();
   try {
     fixture.add(article("article-a"));
+    fixture.stage("article-a");
     const preview = await fixture.service.preflight({
       articleRefs: refs("article-a"),
       mediaResourceId: "media-12",

@@ -43,16 +43,22 @@ function fixture(options) {
   const settings = options || {};
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "paid-execution-13-"));
   const transitionPorts = {};
+  let contentStore;
   const store = createOperationalStore({
     workspaceRoot: root,
     clock: () => new Date(NOW),
     transitionPorts,
+    articleReader: {
+      getArticle(clientId, articleId) {
+        return contentStore.getArticle(clientId, articleId);
+      },
+    },
     internalPaidExecutionTransitionFault: (point) => {
       if (point === settings.faultPoint) throw new Error(`fault:${point}`);
     },
   });
   const articleStore = createArticleStore(root);
-  const contentStore = createContentStore({
+  contentStore = createContentStore({
     articleStore,
     listClientIds: () => ["client-a"],
   });
@@ -76,6 +82,10 @@ function fixture(options) {
   const preflight = createPaidMediaPreflightService({
     contentStore,
     paidAdmission: { admitPaidBatch: coordinator.admitPaidBatch },
+    paidStaging: {
+      listPaidStagingItems: (input) => store.listPaidStagingItems(input),
+    },
+    mediaPoolStore: { contains: () => true },
     lifecycleFacts: transitionPorts.paidAdmissionTransitions,
     queryResource: async () => Object.assign({}, resource),
     systemSubmissionCodeProvider: () => code,
@@ -88,6 +98,12 @@ function fixture(options) {
   });
   contentStore.createArticle(article("article-a"));
   contentStore.createArticle(article("article-b"));
+  const stagedRefs = [
+    { clientId: "client-a", articleId: "article-a" },
+    { clientId: "client-a", articleId: "article-b" },
+  ];
+  store.addPaidStagingItems(stagedRefs);
+  store.setPaidStagingMedia(stagedRefs, "media-13");
   return {
     root,
     store,
