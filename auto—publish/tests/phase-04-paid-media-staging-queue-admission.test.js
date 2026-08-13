@@ -169,6 +169,7 @@ test("staged matching media admits once, consumes staging, and starts paused", (
     assert.equal(snapshots[0].runState, "paused");
     assert.equal(snapshots[0].pauseIntent, "manual");
     assert.equal(snapshots[0].paused, true);
+    assert.deepEqual(snapshots[0].actions, { canStart: true, canPause: false });
     assert.equal(fixture.store.listRemoteOrders().length, 0);
   } finally {
     fixture.close();

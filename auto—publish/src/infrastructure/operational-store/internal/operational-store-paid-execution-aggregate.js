@@ -133,28 +133,19 @@ function createPaidExecutionAggregate(context) {
       });
     });
     const first = items[0];
+    const status = items.some((item) => item.status === "uncertain" || item.status === "blocked")
+      ? "needs_attention"
+      : items.every((item) => ["completed", "failed", "cancelled"].includes(item.status)) ? "completed" : "queued";
+    const paused = row.pause_intent !== "none";
+    const runState = paused ? "paused" : items.some((item) => ["claimed", "remote_started"].includes(item.status)) ? "in_flight" : "running";
     return Object.freeze({
       batchId: row.batch_id,
       mediaResourceId: row.media_resource_id,
-      status: items.some(
-        (item) => item.status === "uncertain" || item.status === "blocked",
-      )
-        ? "needs_attention"
-        : items.every((item) =>
-              ["completed", "failed", "cancelled"].includes(item.status),
-            )
-          ? "completed"
-          : "queued",
+      status,
       pauseIntent: row.pause_intent,
-      paused: row.pause_intent !== "none",
-      runState:
-        row.pause_intent !== "none"
-          ? "paused"
-          : items.some((item) =>
-                ["claimed", "remote_started"].includes(item.status),
-              )
-            ? "in_flight"
-            : "running",
+      paused,
+      runState,
+      actions: Object.freeze({ canStart: status === "queued" && paused && runState === "paused", canPause: status === "queued" && !paused && ["running", "in_flight"].includes(runState) }),
       articleCount: row.article_count,
       quotedPrice: row.quoted_price,
       estimatedTotal: row.estimated_total,

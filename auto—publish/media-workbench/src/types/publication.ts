@@ -525,6 +525,7 @@ export interface PaidMediaExecutionBatch {
   pauseIntent: "none" | "manual" | "system";
   paused: boolean;
   runState: "paused" | "running" | "in_flight";
+  actions: { canStart: boolean; canPause: boolean };
   articleCount: number;
   quotedPrice: number;
   estimatedTotal: number;

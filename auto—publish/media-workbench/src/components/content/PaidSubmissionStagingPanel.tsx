@@ -90,20 +90,6 @@ function batchBelongsToClient(
     : false;
 }
 
-function canStartPaidBatch(batch: PaidMediaExecutionBatch): boolean {
-  return (
-    batch.status === "queued" && batch.paused && batch.runState === "paused"
-  );
-}
-
-function canPausePaidBatch(batch: PaidMediaExecutionBatch): boolean {
-  return (
-    batch.status === "queued" &&
-    !batch.paused &&
-    (batch.runState === "running" || batch.runState === "in_flight")
-  );
-}
-
 export default function PaidSubmissionStagingPanel({
   currentClientId,
   currentClientName,
@@ -799,7 +785,7 @@ export default function PaidSubmissionStagingPanel({
                         ? "已暂停，等待用户开始投稿"
                         : `批次状态：${batch.status}`}
                   </span>
-                  {canStartPaidBatch(batch) && (
+                  {batch.actions?.canStart && (
                     <button
                       type="button"
                       aria-label="开始创建订单"
@@ -810,7 +796,7 @@ export default function PaidSubmissionStagingPanel({
                       {startCommand.busy ? "开始中…" : "开始创建订单"}
                     </button>
                   )}
-                  {canPausePaidBatch(batch) && (
+                  {batch.actions?.canPause && (
                     <button
                       type="button"
                       aria-label="暂停后续订单"
