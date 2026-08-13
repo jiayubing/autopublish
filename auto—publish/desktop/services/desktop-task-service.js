@@ -5,16 +5,9 @@ const { createPlatformRun, WORKER_SCHEMA_VERSION } = require("./platform-run");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapter");
 const { resolvePlaywrightRuntime } = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
-const { productionIpcRegistry } = require("../ipc/contracts/production-registry");
-const { projectPlatformSnapshot } = require("../ipc/contracts/platform-contracts");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
-
-function encodePlatformStateEvent(snapshot) {
-  var contract = productionIpcRegistry.byChannel("platform-state");
-  return productionIpcRegistry.event(contract, projectPlatformSnapshot(snapshot));
-}
 
 function sanitizePlatformPlan(plan) {
   var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
@@ -409,4 +402,4 @@ function closeBrowserSessions() {
   };
 }
 
-module.exports = { createDesktopTaskService, encodePlatformStateEvent };
+module.exports = { createDesktopTaskService };

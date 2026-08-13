@@ -13,7 +13,7 @@ const {
 } = require("../desktop/ipc/register");
 const {
   encodePlatformStateEvent,
-} = require("../desktop/services/desktop-task-service");
+} = require("../desktop/ipc/platform-state-event");
 const {
   createContractRegistry,
 } = require("../desktop/ipc/contracts/registry");

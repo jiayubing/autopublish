@@ -7,7 +7,7 @@ const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer"
 const {
   projectPlatformQueue,
   projectPlatformSnapshot,
-} = require("../ipc/contracts/platform-contracts");
+} = require("../application/read-models/platform-read-model");
 
 function diagnose(code, action) {
   reportDiagnostic({

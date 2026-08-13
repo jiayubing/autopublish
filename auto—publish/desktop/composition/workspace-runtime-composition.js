@@ -6,8 +6,8 @@ const {
   projectArticleRemovalTransaction,
 } = require("../ipc/contracts/article-removal-contracts");
 const {
-  projectPlatformSnapshot,
-} = require("../ipc/contracts/platform-contracts");
+  encodePlatformStateEvent,
+} = require("../ipc/platform-state-event");
 const {
   reportDiagnostic,
 } = require("../../src/diagnostics/diagnostic-producer");
@@ -30,10 +30,7 @@ function subscribePlatformState(taskService, sendToRenderer) {
   return taskService.subscribe(function (value) {
     sendToRenderer(
       eventContract.channel,
-      productionIpcRegistry.event(
-        eventContract,
-        projectPlatformSnapshot(value),
-      ),
+      encodePlatformStateEvent(value),
     );
   });
 }

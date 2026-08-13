@@ -28,7 +28,7 @@ const {
   projectMediaPoolPage,
   projectMediaRefreshResult,
   projectMediaOrder,
-} = require("../ipc/contracts/media-contracts");
+} = require("../application/read-models/media-read-model");
 
 function resolveMediaInputDir(values) {
   if (values.paths && values.paths.mediaInput) return values.paths.mediaInput;

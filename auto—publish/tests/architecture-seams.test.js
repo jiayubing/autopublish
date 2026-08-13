@@ -59,6 +59,18 @@ test("business views use domain bridges instead of Electron transport or main-pr
   }
 });
 
+test("application services do not depend on IPC contracts or transport registry", () => {
+  const servicesRoot = path.join(root, "desktop/services");
+  const forbidden = /(?:^|[\\/])ipc[\\/]contracts(?:[\\/]|$)/;
+
+  for (const file of fs.readdirSync(servicesRoot)) {
+    if (!file.endsWith(".js")) continue;
+    const relative = `desktop/services/${file}`;
+    for (const specifier of moduleSpecifiers(read(relative)))
+      assert.doesNotMatch(specifier, forbidden, relative);
+  }
+});
+
 test("article management capability has one service-to-IPC-to-feature assembly path", () => {
   const {
     productionIpcRegistry,
