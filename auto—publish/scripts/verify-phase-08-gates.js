@@ -26,6 +26,12 @@ const NODE_BUILTIN_SPECIFIERS = new Set([
 ]);
 const DEPENDENCY_RULES = [
   {
+    name: "application-service-to-ipc-contract",
+    roots: ["desktop/services"],
+    forbidden: (specifier) =>
+      /(?:^|\/)desktop\/ipc\/contracts(?:\/|$)/.test(specifier),
+  },
+  {
     name: "src-to-desktop",
     roots: ["src"],
     forbidden: (specifier) => /^desktop(?:\/|$)/.test(specifier),
@@ -45,6 +51,25 @@ const DEPENDENCY_RULES = [
       isRendererNodeSpecifier(specifier) ||
       /^(?:electron|sqlite3?|better-sqlite3)$/.test(specifier) ||
       /^(?:desktop|src\/infrastructure)(?:\/|$)/.test(specifier),
+  },
+  {
+    name: "renderer-to-platform-automation",
+    roots: ["media-workbench/src"],
+    forbidden: (specifier) =>
+      /^(?:src\/platforms|desktop\/services|desktop\/worker)(?:\/|$)/.test(
+        specifier,
+      ),
+  },
+  {
+    name: "platform-adapter-to-global-runtime-config",
+    roots: ["src/platforms"],
+    allowlist: new Map([
+      ["src/platforms/hepan/adapter.js", 1],
+      ["src/platforms/lieju/adapter.js", 1],
+      ["src/platforms/media/adapter.js", 1],
+      ["src/platforms/toutiao/adapter.js", 1],
+    ]),
+    forbidden: (specifier) => /^(?:scripts\/config)(?:\.js)?$/.test(specifier),
   },
   {
     name: "worker-adapter-to-operational-writer",
@@ -228,13 +253,17 @@ function dependencyDirectionReport() {
     for (const root of rule.roots) {
       for (const filename of filesByRoot.get(root) ||
         sourceFilesUnder(path.join(ROOT, root))) {
-        violations.push(
-          ...findImports(
-            fs.readFileSync(filename, "utf8"),
-            filename,
-            rule.forbidden,
-          ).map((item) => Object.assign({ rule: rule.name }, item)),
-        );
+        const found = findImports(
+          fs.readFileSync(filename, "utf8"),
+          filename,
+          rule.forbidden,
+        ).map((item) => Object.assign({ rule: rule.name }, item));
+        if (rule.allowlist instanceof Map) {
+          const allowed = rule.allowlist.get(relative(filename)) || 0;
+          violations.push(...found.slice(allowed));
+        } else {
+          violations.push(...found);
+        }
       }
     }
   }
@@ -757,6 +786,7 @@ if (require.main === module) {
 
 module.exports = {
   DEPENDENCY_RULES,
+  dependencyDirectionReport,
   isOperationalFacadeImport,
   isRendererNodeSpecifier,
   packageBoundaryReport,

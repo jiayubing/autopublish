@@ -12,6 +12,8 @@ const {
   scanSourceTree: scanLegacySourceTree,
 } = require("../scripts/verify-legacy-absence");
 const {
+  dependencyDirectionReport,
+  DEPENDENCY_RULES,
   isOperationalFacadeImport,
   isRendererNodeSpecifier,
   packageBoundaryReport,
@@ -45,6 +47,44 @@ test("Phase 8 cleanup gates pass against the current production tree", () => {
   assert.equal(
     report.checks.capabilityReachability.reachableCount,
     report.checks.capabilityReachability.capabilityCount,
+  );
+});
+
+test("architecture guards cover Workstream D boundaries with a bounded legacy allowlist", () => {
+  const ruleNames = new Set(DEPENDENCY_RULES.map((rule) => rule.name));
+  for (const name of [
+    "application-service-to-ipc-contract",
+    "platform-adapter-to-global-runtime-config",
+    "renderer-to-platform-automation",
+  ])
+    assert.equal(ruleNames.has(name), true, name);
+
+  const runtimeRule = DEPENDENCY_RULES.find(
+    (rule) => rule.name === "platform-adapter-to-global-runtime-config",
+  );
+  assert.deepEqual([...runtimeRule.allowlist.keys()].sort(), [
+    "src/platforms/hepan/adapter.js",
+    "src/platforms/lieju/adapter.js",
+    "src/platforms/media/adapter.js",
+    "src/platforms/toutiao/adapter.js",
+  ]);
+  assert.equal(runtimeRule.forbidden("scripts/config"), true);
+  assert.equal(runtimeRule.forbidden("scripts/config.js"), true);
+  assert.equal(runtimeRule.forbidden("src/platforms/runtime-context"), false);
+  const serviceRule = DEPENDENCY_RULES.find(
+    (rule) => rule.name === "application-service-to-ipc-contract",
+  );
+  assert.equal(serviceRule.forbidden("desktop/ipc/contracts/example"), true);
+  const rendererRule = DEPENDENCY_RULES.find(
+    (rule) => rule.name === "renderer-to-platform-automation",
+  );
+  assert.equal(rendererRule.forbidden("src/platforms/example"), true);
+  assert.equal(
+    dependencyDirectionReport().violations.some(
+      (violation) =>
+        violation.rule === "platform-adapter-to-global-runtime-config",
+    ),
+    false,
   );
 });
 
