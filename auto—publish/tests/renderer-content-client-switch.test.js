@@ -105,6 +105,7 @@ describe("renderer content client switching", function () {
             pauseIntent: "manual",
             paused: true,
             runState: "paused",
+            actions: { canStart: true, canPause: false },
             articleCount: 1,
             quotedPrice: 12.5,
             estimatedTotal: 12.5,
@@ -486,6 +487,7 @@ describe("renderer content client switching", function () {
             pauseIntent: "none",
             paused: false,
             runState: "running",
+            actions: { canStart: false, canPause: true },
           });
           const result = ok({
             executionStatus: "running",
@@ -506,6 +508,7 @@ describe("renderer content client switching", function () {
             pauseIntent: "manual",
             paused: true,
             runState: "paused",
+            actions: { canStart: true, canPause: false },
           });
           const result = ok({
             executionStatus: "paused",
@@ -658,6 +661,7 @@ describe("renderer content client switching", function () {
             pauseIntent: "manual",
             paused: true,
             runState: "paused",
+            actions: { canStart: true, canPause: false },
             articleCount: preview.articleRefs.length,
             quotedPrice: 12.5,
             estimatedTotal: preview.articleRefs.length * 12.5,
@@ -1773,6 +1777,7 @@ describe("renderer content client switching", function () {
                   pauseIntent: "system",
                   paused: true,
                   runState: "paused",
+                  actions: { canStart: false, canPause: false },
                 }
               : batch,
           );

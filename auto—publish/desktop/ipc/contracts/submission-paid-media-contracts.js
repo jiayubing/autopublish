@@ -280,6 +280,7 @@ const paidExecutionBatchFixture = {
   pauseIntent: "manual",
   paused: true,
   runState: "paused",
+  actions: { canStart: true, canPause: false },
   articleCount: 1,
   quotedPrice: 12.5,
   estimatedTotal: 12.5,
