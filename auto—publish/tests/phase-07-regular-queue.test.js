@@ -7,6 +7,8 @@ const test = require("node:test");
 const { createRegularQueueApplication } = require("../desktop/services/regular-queue-application");
 const { createGenerationSubmissionHandoffService } = require("../desktop/services/generation-submission-handoff-service");
 const { createSubmissionBatchReader } = require("../desktop/services/submission-batch-reader");
+const { createWorkspaceDataInvalidation } = require("../desktop/workspace-data-invalidation");
+const { createArticleManagementSnapshot } = require("../desktop/services/article-management-snapshot");
 const { createArticleMutationCoordinator } = require("../src/content/article-mutation-coordinator");
 const { createArticleStore } = require("../src/content/article-store");
 const { createContentStore, fingerprintArticle } = require("../src/content/content-store");
@@ -35,6 +37,7 @@ function makeFixture(options) {
   const value = options || {};
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "regular-queue-07-"));
   const lockEvents = [];
+  const invalidationReasons = [];
   const clients = new Set(["client-a", "client-b"]);
   let store;
   const transitionPorts = {};
@@ -71,6 +74,11 @@ function makeFixture(options) {
       articleMutationCoordinator: coordinator,
       regularQueueTransitions: transitionPorts.regularQueueTransitions,
       accountProfileResolver: store.assertExecutableAccountProfile,
+      onDataInvalidated: (reasonCode) => {
+        invalidationReasons.push(reasonCode);
+        if (typeof value.onDataInvalidated === "function")
+          value.onDataInvalidated(reasonCode);
+      },
       platforms: [
         { id: "toutiao", contentQueueImport: true, publicationTarget: { kind: "platform" } },
         { id: "hepan", contentQueueImport: true, publicationTarget: { kind: "platform" } },
@@ -87,6 +95,7 @@ function makeFixture(options) {
       application,
       profiles,
       lockEvents,
+      invalidationReasons,
       add(valueArticle) {
         clients.add(valueArticle.clientId);
         contentStore.createArticle(valueArticle);
@@ -121,6 +130,15 @@ function removalInput(result, articleRef) {
       targetKey: item.targetKey,
     }],
   };
+}
+
+async function waitFor(predicate, message) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.fail(message || "synthetic refresh condition was not reached");
 }
 
 test("regular queue application enforces one platform/account and returns per-article preview results", () => {
@@ -201,6 +219,119 @@ test("regular admission creates one FIFO group and atomic facts, hides the immut
     assert.equal(fixture.store.listSubmissionQueueItems().length, 2);
     assert.equal(fixture.store.listPublicationRecords({ articleIds: ["article-a", "article-b"] }).length, 2);
   } finally {
+    fixture.close();
+  }
+});
+
+test("regular admission invalidates exactly once for new items and not for idempotent replay", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a"));
+    const input = admissionInput(fixture, [ref("article-a")]);
+
+    const first = fixture.application.admitRegularQueueItems(input);
+    assert.equal(first.admittedCount, 1);
+    assert.deepEqual(fixture.invalidationReasons, ["SUBMISSION_BATCH_CREATED"]);
+
+    const replay = fixture.application.admitRegularQueueItems(input);
+    assert.equal(replay.admittedCount, 0);
+    assert.deepEqual(fixture.invalidationReasons, ["SUBMISSION_BATCH_CREATED"]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("regular admission invalidation refreshes article management from the new workspace revision", async () => {
+  let managementSnapshot = null;
+  const invalidation = createWorkspaceDataInvalidation({
+    workspaceRuntimeId: "r2-article-management",
+    sendToRenderer: (_channel, event) => {
+      if (event.scopes.includes("articleManagement") && managementSnapshot)
+        managementSnapshot.invalidate();
+    },
+  });
+  const fixture = makeFixture({
+    onDataInvalidated: (reasonCode) => invalidation.invalidate(reasonCode),
+  });
+  try {
+    fixture.add(article("article-a"));
+    const batchReader = createSubmissionBatchReader({ operationalStore: fixture.store });
+    managementSnapshot = createArticleManagementSnapshot({
+      workspaceRoot: fixture.root,
+      getRevision: invalidation.getRevision,
+      aiContentService: {
+        listGeneratedArticles: (clientId) => fixture.contentStore.listArticles(clientId),
+        listTrashedArticles: (clientId) => fixture.contentStore.listTrashedArticles(clientId),
+      },
+      contentSubmissionService: {
+        listBatches: (clientId) => batchReader.listBatches(clientId),
+        listPlatforms: () => [],
+      },
+      operationalStore: fixture.store,
+    });
+
+    const before = await managementSnapshot.get({ clientId: "client-a" });
+    assert.equal(before.revision, 0);
+    assert.equal(before.workflowByArticle["article-a"].stage, "pending_submission");
+
+    const admitted = fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-a")]),
+    );
+    assert.equal(admitted.admittedCount, 1);
+
+    const after = await managementSnapshot.get({ clientId: "client-a" });
+    assert.equal(after.revision, 1);
+    assert.equal(after.workflowByArticle["article-a"].stage, "queued");
+    assert.notEqual(after.workflowByArticle["article-a"].stage, "pending_submission");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("regular admission invalidation refreshes the platform queue view with the new queue item", async () => {
+  const platformModule = await import("../media-workbench/src/features/platform/platform-feature.js");
+  let platformFeature = null;
+  const invalidation = createWorkspaceDataInvalidation({
+    workspaceRuntimeId: "r2-platform-queue",
+    sendToRenderer: (_channel, event) => {
+      if (event.scopes.includes("platformQueue") && platformFeature)
+        void platformFeature.refreshRegularQueueGroups(event.reasonCode);
+    },
+  });
+  const fixture = makeFixture({
+    onDataInvalidated: (reasonCode) => invalidation.invalidate(reasonCode),
+  });
+  try {
+    platformFeature = platformModule.createPlatformFeature({
+      platformDisplayName: (platformId) => platformId,
+      listAccountProfiles: async () => fixture.store.listAccountProfiles(),
+      listRegularQueueGroups: async () =>
+        fixture.transitionPorts.regularQueueGroupTransitions.listRegularQueueGroupSnapshots({}),
+    });
+    platformFeature.setScope({ workspaceRuntimeId: "r2-platform-queue" });
+    await platformFeature.refreshAccountProfiles("initial");
+    await platformFeature.refreshRegularQueueGroups("initial");
+    assert.deepEqual(platformFeature.getSnapshot().regularQueueGroupViews, []);
+
+    fixture.add(article("article-a"));
+    const admitted = fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-a")]),
+    );
+    assert.equal(admitted.admittedCount, 1);
+
+    await waitFor(
+      () => platformFeature.getSnapshot().regularQueueGroupViews.some(
+        (group) => group.remaining.some((item) => item.articleId === "article-a"),
+      ),
+      "platform queue view should refresh after regular admission",
+    );
+    const view = platformFeature.getSnapshot().regularQueueGroupViews.find(
+      (group) => group.remaining.some((item) => item.articleId === "article-a"),
+    );
+    assert.equal(view.platformId, "toutiao");
+    assert.equal(view.accountProfileId, fixture.profiles.toutiao.accountProfileId);
+  } finally {
+    if (platformFeature) platformFeature.dispose();
     fixture.close();
   }
 });

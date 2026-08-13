@@ -6,6 +6,7 @@ const {
   normalizeArticleRef,
 } = require("../../src/content/article-ref");
 const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function fail(code, message) {
   const error = new Error(message || code);
@@ -38,6 +39,34 @@ function createRegularQueueApplication(options) {
         return { version: 1, clientId, displayName: clientId };
       };
   const configuredPlatforms = Array.isArray(value.platforms) ? value.platforms : null;
+  const onDataInvalidated = typeof value.onDataInvalidated === "function"
+    ? value.onDataInvalidated
+    : null;
+
+  function notifyDataInvalidated(reasonCode) {
+    if (!onDataInvalidated) return;
+    try {
+      onDataInvalidated(reasonCode);
+    } catch (error) {
+      reportDiagnostic({
+        code: "REGULAR_QUEUE_INVALIDATION_LISTENER_FAILED",
+        module: "regular-queue-application",
+        category: "internal",
+        operationId: "regular-queue-invalidation",
+        metadata: {
+          operation: "data-invalidation-listener",
+          phase: "notify",
+          outcome: "listener-isolated",
+          reasonCode: typeof reasonCode === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(reasonCode)
+            ? reasonCode
+            : "UNSPECIFIED",
+          errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+            ? error.code
+            : "LISTENER_FAILED",
+        },
+      });
+    }
+  }
 
   function platformList() {
     return (configuredPlatforms || []).filter(function (platform) {
@@ -252,6 +281,8 @@ function createRegularQueueApplication(options) {
       customerSnapshotsV1,
       queueConfig,
     });
+    if (result.admittedCount > 0)
+      notifyDataInvalidated("SUBMISSION_BATCH_CREATED");
     return Object.freeze(Object.assign({}, result, {
       target,
       articleRefs: Object.freeze(refs),
