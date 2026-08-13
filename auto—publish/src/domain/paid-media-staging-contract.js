@@ -1,10 +1,6 @@
 "use strict";
 
-const {
-  ArticleId,
-  ClientId,
-  MediaResourceId,
-} = require("./identities");
+const { ArticleId, ClientId, MediaResourceId } = require("./identities");
 const { dtoError } = require("./safe-operational-error");
 
 function invalid(code) {
@@ -78,7 +74,10 @@ function parsePaidStagingArticleRefs(input) {
       value && value.articleRef ? value.articleRef : value,
       "PAID_STAGING_ARTICLE_IDENTITY_INVALID",
     );
-    byKey.set(`${articleRef.clientId}\u0000${articleRef.articleId}`, articleRef);
+    byKey.set(
+      `${articleRef.clientId}\u0000${articleRef.articleId}`,
+      articleRef,
+    );
   });
   return Object.freeze(
     [...byKey.values()].sort((left, right) => {

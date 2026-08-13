@@ -403,11 +403,11 @@ function migrateSchema(db, migrationHook) {
         ? [1, 2]
         : version === 3
           ? [1, 2, 3]
-            : version === 4
-              ? [1, 2, 3, 4]
-              : version === 5
-                ? [1, 2, 3, 4, 5]
-                : [1, 2, 3, 4, 5, 6];
+          : version === 4
+            ? [1, 2, 3, 4]
+            : version === 5
+              ? [1, 2, 3, 4, 5]
+              : [1, 2, 3, 4, 5, 6];
   verifyMigrationHistory(db, history, "OPERATIONAL_SCHEMA_INVALID");
   verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   if (version === 1) {

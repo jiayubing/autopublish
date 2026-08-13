@@ -39,11 +39,11 @@ function verifyV6Structure(db, errorCode) {
   )
     throw fail(errorCode);
 
-  const indexes = db
-    .prepare("PRAGMA index_list('paid_staging_items')")
-    .all();
+  const indexes = db.prepare("PRAGMA index_list('paid_staging_items')").all();
   const primaryKey = indexes.find((index) => index.origin === "pk");
-  const clientIndex = indexes.find((index) => index.name === "paid_staging_client");
+  const clientIndex = indexes.find(
+    (index) => index.name === "paid_staging_client",
+  );
   if (
     !primaryKey ||
     JSON.stringify(indexColumns(db, "paid_staging_items", primaryKey.name)) !==

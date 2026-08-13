@@ -37,7 +37,11 @@ function verifyOperationalDatabase(filename) {
       version !== SCHEMA_VERSION
     )
       throw fail("OPERATIONAL_RESTORE_INVALID");
-    verifyMigrationHistory(db, [1, 2, 3, 4, 5, 6], "OPERATIONAL_RESTORE_INVALID");
+    verifyMigrationHistory(
+      db,
+      [1, 2, 3, 4, 5, 6],
+      "OPERATIONAL_RESTORE_INVALID",
+    );
     verifyV1Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV2Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV3Structure(db, "OPERATIONAL_RESTORE_INVALID", {

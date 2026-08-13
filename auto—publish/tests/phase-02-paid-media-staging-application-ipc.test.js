@@ -220,7 +220,8 @@ test("application staging capability accepts persisted generated and saved artic
     assert.equal(generatedAdded.addedCount, 1);
     assert.equal(generatedAdded.items[0].status, "staged");
     assert.equal(
-      fixture.contentStore.getArticle(generated.clientId, generated.articleId).status,
+      fixture.contentStore.getArticle(generated.clientId, generated.articleId)
+        .status,
       "generated",
     );
     assert.equal(fixture.getSaveCalls(), 0);
@@ -263,7 +264,10 @@ test("application staging capability accepts persisted generated and saved artic
     const list = fixture.contentSubmission.getPaidSubmissionStaging({
       clientId: saved.clientId,
     });
-    assert.deepEqual(list.items.map((item) => item.articleRef), [generated, saved]);
+    assert.deepEqual(
+      list.items.map((item) => item.articleRef),
+      [generated, saved],
+    );
     assert.equal(list.items[0].selectedMediaResourceId, null);
     assert.equal(list.items[1].selectedMediaResourceId, "media-1");
 
@@ -288,7 +292,8 @@ test("regular admission is blocked while staged and recovers only after explicit
       articleRefs: [articleRef],
     });
 
-    const blockedPreview = fixture.regularQueue.previewRegularQueueAdmission(input);
+    const blockedPreview =
+      fixture.regularQueue.previewRegularQueueAdmission(input);
     assert.equal(blockedPreview.items[0].status, "conflict");
     assert.equal(
       blockedPreview.items[0].reasonCode,
@@ -318,7 +323,8 @@ test("regular admission is blocked while staged and recovers only after explicit
       }).items.length,
       0,
     );
-    const recoveredPreview = fixture.regularQueue.previewRegularQueueAdmission(input);
+    const recoveredPreview =
+      fixture.regularQueue.previewRegularQueueAdmission(input);
     assert.equal(recoveredPreview.items[0].status, "queueable");
     const admitted = fixture.regularQueue.admitRegularQueueItems(input);
     assert.equal(admitted.admittedCount, 1);
@@ -370,12 +376,14 @@ test("typed staging IPC preserves known business errors and preload forwards the
   const addInput = {
     articleRefs: [{ clientId: "东方视光", articleId: "article-1" }],
   };
-  const addWire = await handlers
-    .get(addContract.channel)(
-      null,
-      productionIpcRegistry.encodeRequest(addContract, addInput),
-    );
-  assert.deepEqual(productionIpcRegistry.parseResult(addContract, addWire), fixtures.add);
+  const addWire = await handlers.get(addContract.channel)(
+    null,
+    productionIpcRegistry.encodeRequest(addContract, addInput),
+  );
+  assert.deepEqual(
+    productionIpcRegistry.parseResult(addContract, addWire),
+    fixtures.add,
+  );
   assert.deepEqual(receivedInput, addInput);
 
   for (const code of [
@@ -397,7 +405,10 @@ test("typed staging IPC preserves known business errors and preload forwards the
     assert.equal(wire.ok, false);
     assert.equal(wire.error.code, code);
     assert.notEqual(wire.error.code, "IPC_INTERNAL");
-    assert.equal(productionIpcRegistry.parseResult(addContract, wire).code, code);
+    assert.equal(
+      productionIpcRegistry.parseResult(addContract, wire).code,
+      code,
+    );
   }
 
   const preload = loadPreloadHarness({
@@ -415,7 +426,10 @@ test("typed staging IPC preserves known business errors and preload forwards the
                   mediaResourceId: "media-1",
                 }
               : { clientId: "client-1" };
-      assert.deepEqual(productionIpcRegistry.parseRequest(contract, request), expected);
+      assert.deepEqual(
+        productionIpcRegistry.parseRequest(contract, request),
+        expected,
+      );
       const result =
         channel === "content:add-paid-submission-staging"
           ? fixtures.add
@@ -449,7 +463,9 @@ test("typed staging IPC preserves known business errors and preload forwards the
 
 test("ClientId accepts Unicode customer identities but rejects dangerous path values at domain and IPC boundaries", () => {
   assert.equal(ClientId.parse(" 东方视光 ").value, "东方视光");
-  assert.throws(() => ClientId.parse("../escape"), { code: "DOMAIN_ID_INVALID" });
+  assert.throws(() => ClientId.parse("../escape"), {
+    code: "DOMAIN_ID_INVALID",
+  });
   const contract = productionIpcRegistry.byCapability(
     "content.addPaidSubmissionStaging",
   );

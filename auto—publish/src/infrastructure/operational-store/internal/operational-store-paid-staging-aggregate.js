@@ -32,10 +32,7 @@ function createPaidStagingAggregate(context) {
   }
 
   function articleState(ref) {
-    if (
-      !articleReader ||
-      typeof articleReader.getArticle !== "function"
-    )
+    if (!articleReader || typeof articleReader.getArticle !== "function")
       throw fail("PAID_STAGING_ARTICLE_STATE_UNAVAILABLE");
     try {
       const article = articleReader.getArticle(ref.clientId, ref.articleId);
@@ -51,8 +48,7 @@ function createPaidStagingAggregate(context) {
     } catch (error) {
       if (error && error.code === "ARTICLE_NOT_FOUND")
         throw fail("ARTICLE_NOT_FOUND");
-      if (error && error.code === "ARTICLE_NOT_SAVED")
-        throw error;
+      if (error && error.code === "ARTICLE_NOT_SAVED") throw error;
       throw fail("PAID_STAGING_ARTICLE_STATE_UNAVAILABLE");
     }
   }
@@ -129,7 +125,11 @@ function createPaidStagingAggregate(context) {
             "DELETE FROM paid_staging_items WHERE client_id=? AND article_id=?",
           )
           .run(ref.clientId, ref.articleId).changes;
-        return itemResult(ref, changed === 1 ? "removed" : "not-staged", changed !== 1);
+        return itemResult(
+          ref,
+          changed === 1 ? "removed" : "not-staged",
+          changed !== 1,
+        );
       }),
     );
     return Object.freeze({
@@ -144,7 +144,9 @@ function createPaidStagingAggregate(context) {
     const value = input || {};
     let clientId;
     try {
-      clientId = domain.ClientId.serialize(domain.ClientId.parse(value.clientId));
+      clientId = domain.ClientId.serialize(
+        domain.ClientId.parse(value.clientId),
+      );
     } catch (_) {
       throw fail("PAID_STAGING_CLIENT_SCOPE_INVALID");
     }
@@ -178,7 +180,8 @@ function createPaidStagingAggregate(context) {
                 .prepare(
                   "UPDATE paid_staging_items SET selected_media_resource_id=?,updated_at=? WHERE client_id=? AND article_id=?",
                 )
-                .run(mediaResourceId, stamp, ref.clientId, ref.articleId).changes;
+                .run(mediaResourceId, stamp, ref.clientId, ref.articleId)
+                .changes;
         return itemResult(
           ref,
           changed === 1 ? "media-updated" : "already-set",
