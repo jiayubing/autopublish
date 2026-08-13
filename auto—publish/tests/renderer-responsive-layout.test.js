@@ -603,6 +603,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       page.setDefaultTimeout(5000);
       await installDesktopFixture(page);
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.locator("#nav-item-resources").click();
       await page.evaluate(() => {
         window.__mediaSubmissionState.refreshShouldFail = true;
       });
@@ -624,6 +625,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       page.setDefaultTimeout(5000);
       await installDesktopFixture(page);
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.locator("#nav-item-resources").click();
       await page.getByRole("button", { name: "刷新库" }).click();
       await page
         .getByRole("status")

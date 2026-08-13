@@ -52,6 +52,7 @@ export default function Sidebar({
     { id: 'content' as ViewMode, label: 'AI内容生成', icon: PenLine, badge: undefined, badgeTitle: undefined },
     { id: 'platforms' as ViewMode, label: '其他平台投稿', icon: Globe, badge: navigationSummary.platformQueue.count, badgeTitle: navigationSummary.platformQueue.label },
     { id: 'workbench' as ViewMode, label: '付费媒体投稿', icon: Files, badge: navigationSummary.contentArticles.count, badgeTitle: undefined },
+    { id: 'resources' as ViewMode, label: '公共媒体资源', icon: FolderOpen, badge: undefined, badgeTitle: undefined },
     { id: 'orders' as ViewMode, label: '投稿订单记录', icon: ClipboardList, badge: navigationSummary.orders.count, badgeTitle: undefined },
     { id: 'settings' as ViewMode, label: '配置中心', icon: Settings, badge: undefined, badgeTitle: undefined },
   ];

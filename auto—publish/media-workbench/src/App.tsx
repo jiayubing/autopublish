@@ -1,8 +1,6 @@
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
-import ArticleList from "./components/ArticleList";
-import ArticleEditor from "./components/ArticleEditor";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
@@ -20,6 +18,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
+import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import MediaThirdPartyIdControl from "./components/MediaThirdPartyIdControl";
 
@@ -28,6 +27,7 @@ const OrdersView = lazy(() => import("./components/OrdersView"));
 const SettingsView = lazy(() => import("./components/SettingsView"));
 const PlatformWorkbench = lazy(() => import("./components/PlatformWorkbench"));
 const ContentWorkbench = lazy(() => import("./components/ContentWorkbench"));
+const PaidMediaWorkbench = lazy(() => import("./components/PaidMediaWorkbench"));
 export default function App() {
   return (
     <PlatformFeatureProvider>
@@ -56,10 +56,9 @@ function AppContent() {
     clientId?: string;
   } | null>(null);
   const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
+  const content = useContentWorkbenchFeature();
   const articles = mediaSnapshot.articles.items;
-  const activeArticle = mediaSnapshot.articles.activeArticle;
   const resources = mediaSnapshot.resources.items;
-  const poolResources = mediaSnapshot.pool.items;
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
   useEffect(() => {
@@ -75,7 +74,6 @@ function AppContent() {
       mediaSnapshot.balance.query,
       mediaSnapshot.orders.query,
     ].every((query) => !query.loading);
-  const isScanning = mediaSnapshot.commands.scanArticles.busy;
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
   const mediaRefreshResult = mediaSnapshot.commands.refreshResources.result as {
     truncated?: boolean;
@@ -145,7 +143,7 @@ function AppContent() {
             }
           >
             <AnimatePresence mode="wait">
-              {/* View 1: Workbench Workspace */}
+              {/* View 1: Paid media submission workbench */}
               {currentView === "workbench" && (
                 <motion.div
                   key="workbench-view"
@@ -153,115 +151,24 @@ function AppContent() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
                   transition={{ duration: 0.15 }}
-                  className="grid grid-cols-1 xl:grid-cols-12 gap-6 h-full items-start"
+                  className="h-full"
                 >
-                  {/* Articles List block */}
-                  <div className="xl:col-span-4 h-full">
-                    <ArticleList
-                      articles={articles}
-                      activeArticle={activeArticle}
-                      onOpenArticle={(article) =>
-                        mediaFeature.openArticle(article.filename)
-                      }
-                      onScanArticles={() => mediaFeature.scanArticles()}
-                      isScanning={isScanning}
-                    />
-                  </div>
-
-                  {/* Article detail Editor block */}
-                  <div className="xl:col-span-5 h-full">
-                    <ArticleEditor
-                      activeArticle={activeArticle}
-                      onSaveDraft={(draft) => mediaFeature.saveDraft(draft)}
-                      onCloseArticle={() => mediaFeature.closeArticle()}
-                      onRemoveSelectedResource={(resourceId) =>
-                        mediaFeature.removeSelectedResource(resourceId)
-                      }
-                    />
-                  </div>
-
-                  {/* Right side Sticky Resources Media Pool */}
-                  <div className="xl:col-span-3 h-full">
-                    <ResourceLibrary
-                      resources={activeArticle ? poolResources : resources}
-                      selectedResourceIds={
-                        activeArticle
-                          ? activeArticle.selectedResources.map(
-                              (r) => r.resourceId,
-                            )
-                          : []
-                      }
-                      poolResourceIds={
-                        activeArticle
-                          ? poolResources.map((resource) => resource.resourceId)
-                          : mediaSnapshot.pool.memberResourceIds
-                      }
-                      onTogglePool={(resource) => {
-                        void mediaFeature.togglePool(resource);
-                      }}
-                      onRefreshResources={() => {
-                        void mediaFeature.refreshResources();
-                      }}
-                      isRefreshingResources={
-                        mediaSnapshot.commands.refreshResources.busy
-                      }
-                      mode={activeArticle ? "picker" : "management"}
-                      activeArticleLabel={
-                        activeArticle ? activeArticle.title : ""
-                      }
-                      onPickResource={(resource) =>
-                        mediaFeature.toggleSelectedResource(resource)
-                      }
-                      totalResources={
-                        activeArticle
-                          ? mediaSnapshot.pool.total
-                          : mediaSnapshot.resources.total
-                      }
-                      resourcePage={
-                        activeArticle
-                          ? mediaSnapshot.pool.page
-                          : mediaSnapshot.resources.page
-                      }
-                      resourcePageSize={
-                        activeArticle
-                          ? mediaSnapshot.pool.pageSize
-                          : mediaSnapshot.resources.pageSize
-                      }
-                      resourceSearch={
-                        activeArticle ? "" : mediaSnapshot.resources.search
-                      }
-                      onResourceSearch={
-                        activeArticle
-                          ? undefined
-                          : (query) => {
-                              void mediaFeature.searchResources(query);
-                            }
-                      }
-                      onResourcePageChange={
-                        activeArticle
-                          ? (page) => {
-                              void mediaFeature.loadPoolPage(page, "manual");
-                            }
-                          : (page) => {
-                              void mediaFeature.loadResourcePage(
-                                page,
-                                "manual",
-                              );
-                            }
-                      }
-                      errorMessage={
-                        mediaSnapshot.commands.openArticle.error?.userMessage ||
-                        mediaSnapshot.commands.refreshResources.error
-                          ?.userMessage ||
-                        mediaSnapshot.commands.togglePool.error?.userMessage ||
-                        (activeArticle
-                          ? mediaSnapshot.pool.query.error
-                          : mediaSnapshot.resources.query.error
-                        )?.userMessage
-                      }
-                      statusMessage={mediaRefreshMessage}
-                    />
-                  </div>
+                  <PaidMediaWorkbench
+                    content={content}
+                    paidMediaPool={{
+                      items: mediaSnapshot.pool.items,
+                      page: mediaSnapshot.pool.page || 1,
+                      pageSize: mediaSnapshot.pool.pageSize || 50,
+                      total: mediaSnapshot.pool.total || 0,
+                      totalPages: mediaSnapshot.pool.totalPages || 0,
+                      hasPrev: mediaSnapshot.pool.hasPrev === true,
+                      hasNext: mediaSnapshot.pool.hasNext === true,
+                      loading: mediaSnapshot.pool.query.loading,
+                      error: mediaSnapshot.pool.query.error,
+                      loadPage: (page) =>
+                        mediaFeature.loadPoolPage(page, "manual"),
+                    }}
+                  />
                 </motion.div>
               )}
 
@@ -325,24 +232,12 @@ function AppContent() {
                   className="h-full"
                 >
                   <ContentWorkbench
+                    content={content}
                     attentionIntent={articleAttentionIntent}
                     onAttentionIntentConsumed={() =>
                       setArticleAttentionIntent(null)
                     }
                     onOpenOrders={() => setCurrentView("orders")}
-                    paidMediaPool={{
-                      items: mediaSnapshot.pool.items,
-                      page: mediaSnapshot.pool.page || 1,
-                      pageSize: mediaSnapshot.pool.pageSize || 50,
-                      total: mediaSnapshot.pool.total || 0,
-                      totalPages: mediaSnapshot.pool.totalPages || 0,
-                      hasPrev: mediaSnapshot.pool.hasPrev === true,
-                      hasNext: mediaSnapshot.pool.hasNext === true,
-                      loading: mediaSnapshot.pool.query.loading,
-                      error: mediaSnapshot.pool.query.error,
-                      loadPage: (page) =>
-                        mediaFeature.loadPoolPage(page, "manual"),
-                    }}
                   />
                 </motion.div>
               )}

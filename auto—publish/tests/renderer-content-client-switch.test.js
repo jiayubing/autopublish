@@ -966,20 +966,33 @@ describe("renderer content client switching", function () {
       await page.goto("http://127.0.0.1:4179/", {
         waitUntil: "domcontentloaded",
       });
-      await page.locator("#nav-item-content").click();
-      const clientSelect = page.getByRole("combobox", {
+      const openArticleManagement = async () => {
+        await page.locator("#nav-item-content").click();
+        await page.getByRole("button", { name: "历史文章" }).click();
+        await page.getByRole("heading", { name: "历史文章" }).waitFor();
+        const articleGroup = page
+          .getByRole("button", { name: /fixture-platform.*测试模板/ });
+        await articleGroup.waitFor();
+        await articleGroup.click();
+      };
+      const openPaidWorkbench = async () => {
+        await page.locator("#nav-item-workbench").click();
+        await page
+          .getByRole("region", { name: "付费媒体投稿队列" })
+          .waitFor();
+      };
+      const contentClientSelect = page.getByRole("combobox", {
         name: "当前客户（单篇/问题/历史）",
       });
+      const paidClientSelect = page.getByRole("combobox", {
+        name: "当前客户（付费媒体投稿）",
+      });
+      await openArticleManagement();
       await page.waitForFunction(
         () =>
           document.querySelector('[aria-label="当前客户（单篇/问题/历史）"]')
             ?.value === "client-a",
       );
-      await page.getByRole("button", { name: "历史文章" }).click();
-      await page.getByRole("heading", { name: "历史文章" }).waitFor();
-      await page
-        .getByRole("button", { name: /fixture-platform.*测试模板/ })
-        .click();
       await page
         .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
         .check();
@@ -998,6 +1011,24 @@ describe("renderer content client switching", function () {
       await page.waitForFunction(
         () => window.__clientSwitchFlow.paidStagingAddCalls.length === 1,
       );
+      assert.equal(
+        await page.getByRole("region", { name: "付费媒体投稿队列" }).count(),
+        0,
+        "文章管理只提供 paid staging admission，不渲染完整 paid workbench",
+      );
+      assert.equal(
+        await page.getByRole("region", { name: "收藏媒体选择器" }).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "费用预检" }).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "开始创建订单" }).count(),
+        0,
+      );
+      await openPaidWorkbench();
       const stagingPanel = page.getByRole("region", {
         name: "付费媒体投稿队列",
       });
@@ -1063,6 +1094,7 @@ describe("renderer content client switching", function () {
       );
       await stagingPanel.getByText("媒体：未选择", { exact: true }).waitFor();
 
+      await openArticleManagement();
       await page
         .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
         .check();
@@ -1084,6 +1116,7 @@ describe("renderer content client switching", function () {
       await page.waitForFunction(
         () => window.__clientSwitchFlow.paidStagingAddCalls.length === 3,
       );
+      await openPaidWorkbench();
       await stagingPanel
         .getByText("客户 A 第二文章", { exact: true })
         .waitFor();
@@ -1137,17 +1170,17 @@ describe("renderer content client switching", function () {
       await page.waitForFunction(
         () => window.__clientSwitchFlow.poolPageCalls.at(-1)?.page === 1,
       );
-      await changeClient(page, clientSelect, "client-b");
+      await changeClient(page, paidClientSelect, "client-b");
       const clientBPicker = page.getByRole("region", {
         name: "收藏媒体选择器",
       });
       await clientBPicker
         .locator('button[aria-label="选择收藏媒体 收藏媒体 A"]')
         .waitFor();
-      await changeClient(page, clientSelect, "client-a");
+      await changeClient(page, paidClientSelect, "client-a");
       await page.waitForFunction(
         () =>
-          document.querySelector('[aria-label="当前客户（单篇/问题/历史）"]')
+          document.querySelector('[aria-label="当前客户（付费媒体投稿）"]')
             ?.value === "client-a" &&
           !document
             .querySelector('[aria-label="选择收藏媒体 收藏媒体 A"]')
@@ -1192,8 +1225,8 @@ describe("renderer content client switching", function () {
         name: "选择付费媒体投稿 客户 A 文章",
       });
       await stagingCheckbox.check();
-      await changeClient(page, clientSelect, "client-b");
-      assert.equal(await clientSelect.inputValue(), "client-b");
+      await changeClient(page, paidClientSelect, "client-b");
+      assert.equal(await paidClientSelect.inputValue(), "client-b");
       const clientBPanel = page.getByRole("region", {
         name: "付费媒体投稿队列",
       });
@@ -1282,7 +1315,7 @@ describe("renderer content client switching", function () {
           .isChecked(),
         false,
       );
-      await changeClient(page, clientSelect, "client-a");
+      await changeClient(page, paidClientSelect, "client-a");
       const clientAPanel = page.getByRole("region", {
         name: "付费媒体投稿队列",
       });
@@ -1292,6 +1325,7 @@ describe("renderer content client switching", function () {
           .isChecked(),
         false,
       );
+      await openArticleManagement();
       await page
         .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
         .check();
@@ -1311,6 +1345,7 @@ describe("renderer content client switching", function () {
         .filter({ hasText: "没有符合普通平台队列规则的文章" })
         .waitFor();
 
+      await openPaidWorkbench();
       await clientAPanel
         .getByRole("button", {
           name: "移出付费媒体投稿队列 客户 A 文章",
@@ -1331,6 +1366,21 @@ describe("renderer content client switching", function () {
         .getByText("当前客户暂无付费媒体投稿文章。", { exact: true })
         .waitFor();
 
+      await openArticleManagement();
+      await page
+        .locator('input[type="checkbox"][aria-label="选择 客户 A 文章"]')
+        .check();
+      await page
+        .getByRole("combobox", { name: "普通平台投稿目标" })
+        .selectOption("fixture-platform");
+      await page.waitForFunction(
+        () => {
+          const button = [...document.querySelectorAll("button")].find(
+            (candidate) => candidate.textContent?.trim() === "加入投稿队列",
+          );
+          return Boolean(button && !button.disabled);
+        },
+      );
       await page.getByRole("button", { name: "加入投稿队列" }).click();
       await page
         .getByRole("dialog", { name: "确认加入普通平台队列" })
@@ -1369,14 +1419,14 @@ describe("renderer content client switching", function () {
       await page.waitForFunction(
         () => window.__clientSwitchFlow.regularQueueCalls.length === 2,
       );
-      await changeClient(page, clientSelect, "client-b");
-      assert.equal(await clientSelect.inputValue(), "client-b");
+      await changeClient(page, contentClientSelect, "client-b");
+      assert.equal(await contentClientSelect.inputValue(), "client-b");
       await page.evaluate(() =>
         window.__clientSwitchFlow.resolveRegularQueue(),
       );
       assert.equal(
         await page.getByText("客户 B 文章", { exact: true }).count(),
-        2,
+        1,
       );
       assert.equal(
         await page.getByText("客户 A 文章", { exact: true }).count(),
@@ -1400,8 +1450,8 @@ describe("renderer content client switching", function () {
         await page.getByRole("button", { name: "加入投稿队列" }).isDisabled(),
         true,
       );
-      await changeClient(page, clientSelect, "client-a");
-      assert.equal(await clientSelect.inputValue(), "client-a");
+      await changeClient(page, contentClientSelect, "client-a");
+      assert.equal(await contentClientSelect.inputValue(), "client-a");
       await page.getByRole("button", { name: /撤销未开始投稿/ }).waitFor();
       assert.deepEqual(
         await page.evaluate(() => window.__clientSwitchFlow.cancelPreviewCalls),
@@ -1423,12 +1473,12 @@ describe("renderer content client switching", function () {
         await page.getByRole("button", { name: /正在撤销/ }).isDisabled(),
         true,
       );
-      await changeClient(page, clientSelect, "client-b");
-      assert.equal(await clientSelect.inputValue(), "client-b");
+      await changeClient(page, contentClientSelect, "client-b");
+      assert.equal(await contentClientSelect.inputValue(), "client-b");
       await page.evaluate(() =>
         window.__clientSwitchFlow.resolveCancellation(),
       );
-      await changeClient(page, clientSelect, "client-a");
+      await changeClient(page, contentClientSelect, "client-a");
       await page.waitForFunction(
         () => !document.body.innerText.includes("正在撤销"),
       );
@@ -1464,13 +1514,14 @@ describe("renderer content client switching", function () {
         .getByRole("button", { name: "一次确认并加入投稿队列" })
         .click();
       await page.getByTestId("generation-handoff-summary").waitFor();
-      await changeClient(page, clientSelect, "client-b");
-      assert.equal(await clientSelect.inputValue(), "client-b");
+      await changeClient(page, contentClientSelect, "client-b");
+      assert.equal(await contentClientSelect.inputValue(), "client-b");
       assert.equal(
         await page.getByTestId("generation-handoff-summary").count(),
         1,
       );
-      await page.getByRole("button", { name: "历史文章" }).click();
+      await openArticleManagement();
+      await openPaidWorkbench();
       const finalPaidPanel = page.getByRole("region", {
         name: "付费媒体投稿队列",
       });
@@ -1590,7 +1641,7 @@ describe("renderer content client switching", function () {
         1,
       );
 
-      await changeClient(page, clientSelect, "client-a");
+      await changeClient(page, paidClientSelect, "client-a");
       const clientAPaidPanel = page.getByRole("region", {
         name: "付费媒体投稿队列",
       });
@@ -1606,7 +1657,7 @@ describe("renderer content client switching", function () {
         0,
       );
 
-      await changeClient(page, clientSelect, "client-b");
+      await changeClient(page, paidClientSelect, "client-b");
       const executionPanel = page.getByRole("region", {
         name: "付费媒体投稿队列",
       });
@@ -1776,6 +1827,24 @@ describe("renderer content client switching", function () {
           window.__clientSwitchFlow.paidBatches.map((batch) => batch.batchId),
         ),
         ["foreign-batch", "paid-batch-client-b"],
+      );
+
+      await page.locator("#nav-item-resources").click();
+      await page.locator("#mediaResourceLibraryRoot").waitFor();
+      await page.locator("#nav-item-platforms").click();
+      await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
+      await openArticleManagement();
+      await page
+        .getByRole("button", { name: "加入付费媒体投稿队列" })
+        .waitFor();
+      assert.equal(
+        await page.getByRole("region", { name: "付费媒体投稿队列" }).count(),
+        0,
+      );
+      await openPaidWorkbench();
+      assert.equal(
+        await page.getByRole("region", { name: "付费媒体投稿队列" }).count(),
+        1,
       );
     } finally {
       await page.close();

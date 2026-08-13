@@ -194,3 +194,7 @@ export function useContentWorkbenchFeature() {
     clearRemovalTransaction: feature.clearRemovalTransaction,
   };
 }
+
+export type ContentWorkbenchFeature = ReturnType<
+  typeof useContentWorkbenchFeature
+>;
