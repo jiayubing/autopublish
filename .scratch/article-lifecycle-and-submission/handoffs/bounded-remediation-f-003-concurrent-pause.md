@@ -8,7 +8,7 @@ severity: P2 BLOCKING
 classification: INTRODUCED_BY_CHANGE
 base integration HEAD: 6516607f002fd6e780290756feec30bf8f91e7df
 start status: dirty; preserved the existing deleted M05-J8 plan and untracked PAID-SUBMISSION-ACCEPTANCE-REMEDIATION-R1-R4.md
-thread: 019ff8d3-3af2-7a50-86fe-4d01204bdff9
+thread: 019ff8d8-1131-7cc3-b75b-2f33867bf4dd
 worktree: C:\Users\violet\.codex\worktrees\4d74\官媒投稿-refactor
 branch: detached HEAD
 subagents: none
