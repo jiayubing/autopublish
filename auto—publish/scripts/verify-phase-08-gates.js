@@ -56,7 +56,10 @@ const DEPENDENCY_RULES = [
     name: "renderer-to-platform-automation",
     roots: ["media-workbench/src"],
     forbidden: (specifier) =>
-      /^(?:src\/platforms|desktop\/services|desktop\/worker)(?:\/|$)/.test(
+      /^(?:src\/platforms|src\/core\/playwright|desktop\/services|desktop\/worker)(?:\/|$)/.test(
+        specifier,
+      ) ||
+      /^(?:playwright|playwright-core|@playwright|puppeteer(?:-core)?)(?:\/|$)/.test(
         specifier,
       ),
   },
@@ -261,6 +264,14 @@ function dependencyDirectionReport() {
         if (rule.allowlist instanceof Map) {
           const allowed = rule.allowlist.get(relative(filename)) || 0;
           violations.push(...found.slice(allowed));
+          if (allowed > 0 && found.length < allowed) {
+            violations.push({
+              rule: `${rule.name}-stale-allowlist`,
+              file: relative(filename),
+              allowed,
+              found: found.length,
+            });
+          }
         } else {
           violations.push(...found);
         }

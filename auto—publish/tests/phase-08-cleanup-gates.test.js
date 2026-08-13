@@ -79,10 +79,13 @@ test("architecture guards cover Workstream D boundaries with a bounded legacy al
     (rule) => rule.name === "renderer-to-platform-automation",
   );
   assert.equal(rendererRule.forbidden("src/platforms/example"), true);
+  assert.equal(rendererRule.forbidden("src/core/playwright"), true);
+  assert.equal(rendererRule.forbidden("playwright"), true);
+  assert.equal(rendererRule.forbidden("@playwright/test"), true);
+  assert.equal(rendererRule.forbidden("puppeteer-core"), true);
   assert.equal(
-    dependencyDirectionReport().violations.some(
-      (violation) =>
-        violation.rule === "platform-adapter-to-global-runtime-config",
+    dependencyDirectionReport().violations.some((violation) =>
+      violation.rule.startsWith("platform-adapter-to-global-runtime-config"),
     ),
     false,
   );
