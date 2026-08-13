@@ -67,7 +67,7 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
 | 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E1 → E2 → E3 → F → G → H → I → J → J3 → J4 → J5 → J6 → J7 → J8 → J9 → M06-0 → M06-A → M06-B → M06-C → M06-D → M06-E → M06-F → M06-G → M06-H | Wave 10 COMPLETE；M06-H final bounded remediation 与 implementation-HEAD clean evidence 已闭合 | `COMPLETE`；M04/M05/M06-0/M06-A～H 全部 closure、gate 与 evidence 已闭合 |
 | 11   | 25-0 → 25-A → 25-B → 25-C → 25-D → 25-E → 25-F → 25-G → Independent Combined Audit → Remediation → Bounded Closure Re-audit → authorized commit/merge → final clean smoke → authorized external acceptance | 24；10.5 COMPLETE（含 M06）；各包严格依赖左侧已验证 sourceState；真实外部操作逐次授权 | `PARTIAL`；25-0、25-A、25-B、25-C、25-D、25-E、25-F、25-G package closure COMPLETE；G implementation 与 Independent Audit Handoff 已由主任务集成到 clean integration HEAD `c9a4ed8`；本次 Goal 在此停止，不进入后续 closure |
-| 12   | 18                                                       | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
+| 12   | 18-0 → 18-A → 18-B → 18-C → 18-D → 18-E                | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
 | 13   | 平台逐个探索 → 仅 SUPPORTED 的 19→20→21 → 各平台真实验收 | Wave 12 COMPLETE + 每平台显式授权                        | `PENDING`                                                                             |
 
 Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本表、对应 `Blocked by`/`Scheduling gate` 和真实 Git 状态共同决定。
@@ -92,7 +92,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 - **Wave 8.5 / M03**：按 M03-0 职责图、M03-A queue cluster、M03-B ArticleMutationCoordinator cluster、M03-C 统一审计收口串行治理核心深模块；不得重新拥有 Ticket 10 已完成的 Renderer 业务拆分；必须保持公开门面/transaction/capability 与 Ticket 23 migration seam，且不得提前实现 migration-only writer。
 - **Wave 10 / 10.5**：Ticket 24、M04、M05 已闭合。M06-0 inventory/scope 真源为 `handoffs/M06-0-authoritative-residual-silent-failure-inventory.md`，后续严格串行 `A → B → C → D → E → F → G`；按失败语义与 owner 修改，不按 catch 数量平均。G 单独执行 combined audit、blocking remediation、bounded re-audit、inventory/failure-semantics reconciliation 与 final clean-HEAD full gate。M06-G 完成前 10.5 不得标记 COMPLETE，Ticket 25 不得启动。
 - **Wave 11**：Ticket 25 的合同顺序仍是 `25-A → B → C → D → E → F → G`，包内只收集定向验证和 combined-audit 所需 evidence，不各自开启 fresh full audit；`25-G` 之后由独立任务执行一次 Ticket 25 / Wave 11 combined audit。当前 combined audit 的 F1–F6 remediation 正在真实 owner 上收敛；修复后只做 finding-bounded re-audit，不重开无边界 full review。最终 clean smoke 与真实外部验收仍需后续授权，缺失时保持 `BLOCKED/USER_EXTERNAL_ACCEPTANCE_REQUIRED`。
-- **Wave 12–13**：核心完成后的图片扩展。旧组默认保持 `imageCount=0`；平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。
+- **Wave 12–13**：核心完成后的图片扩展。Wave 12 按 `18-0 → 18-A → 18-B → 18-C → 18-D → 18-E` 严格串行：旧组 `imageCount=0`、新组默认 1、文章 claim 时从客户专用图片目录完全随机选择 0–N 张；图片不足/读取/准备失败一律 best-effort 自动减量直至纯文本，不建立 retry/换图/人工降级 decision 状态机。Wave 13 各平台必须先真实探索并得到 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`，只有 `SUPPORTED` 才实施对应 adapter；真实带图验收另行授权。
 
 ## 5. Wave Integration Audit 最低矩阵
 
@@ -107,7 +107,7 @@ Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本�
 | Wave 9         | migration journal crash recovery；迁移 root 无远端能力；封闭 payload 不生成 runnable facts                                                              |
 | Wave 10/10.5   | 正常运行 legacy absence；contract 最终收敛；业务源码 regex 测试减少；silent-catch residual 有明确语义/owner                                             |
 | Wave 11        | 85-story/有限状态矩阵、六类生命周期与删除档案、普通平台/付费/迁移故障链、版本化 query/scan 硬预算、owner/capability evidence、独立 combined audit、bounded closure re-audit、final clean smoke 与用户授权的真实外部验收 |
-| Wave 12–13     | 图片配置升级安全、逐平台探索/实现/验收隔离，不重定义核心 submission/outcome 合同                                                                        |
+| Wave 12–13     | 图片配置升级安全、客户专用目录与 claim-time 完全随机、图片失败自动降级不阻断文字、逐平台探索/实现/验收隔离，不重定义核心 submission/outcome 合同                 |
 
 ## 6. 状态与更新规则
 

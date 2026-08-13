@@ -41,13 +41,13 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 - `title` 为 1–256 个 JavaScript UTF-16 code units；`body` 为 1–200,000 个 JavaScript UTF-16 code units，与 07 已验收的 `publicationSnapshot` 持久化上界和控制字符规则一致；二者都是 adapter 最终准备并将实际提交的内容，不得回退 admission 原文。`contentFingerprint` 为 64 位小写十六进制 SHA-256，精确覆盖稳定 UTF-8 规范序列化后的 `{ title, body }` 对象，不得使用无边界字符串拼接或包含文章其他可变 metadata。
 - `deliveryMode` 只允许 `text_only|with_images`。核心纯文本阶段固定为 `text_only`；`images` 必须是空数组；`decisionKind` 固定为 `initial`。
 - `images` 最多 5 项，条目字段精确为 `{ assetFingerprint, layoutSlot }`；`assetFingerprint` 为 64 位小写十六进制 SHA-256，`layoutSlot` 为 `0..9999` 的整数，条目按最终正文顺序排列且 fingerprint 不重复。此结构现在即固定，Ticket 18 只能填充值，不能添加字段或另建 V1。
-- `decisionKind` 的完整 V1 enum 现在固定为 `initial|retry_preparation|replace_image|continue_text_only`；后 3 项只供 Ticket 18 后置图片扩展使用。`continue_text_only` 必须搭配 `deliveryMode=text_only` 和空 `images`。
+- `decisionKind` 的完整 V1 enum 仍固定为 `initial|retry_preparation|replace_image|continue_text_only` 以保持既有 V1 兼容；后 3 项不再由 Ticket 18 新自动配图路径产生，新路径固定使用 `initial`。`continue_text_only` 的历史合同仍要求 `deliveryMode=text_only` 和空 `images`。
 - validator 必须递归拒绝顶层和嵌套 extra fields、未知 enum、超界字符串/数组/slot、重复图片、不一致 mode/decision 组合，以及绝对路径、二进制、DOM、Cookie、token、原始请求/响应、任意 metadata 或其他敏感字段。持久化、日志和 IPC 只能接触通过该 validator 的 safe evidence；`PreparedSubmission` capability 本身永不进入 validator 或持久化。
 
 ## 职责边界
 
 - 组编排器只负责领取顺序、并发隔离和暂停意图，不解释远端结果类别。
-- 平台 executor 只协调 `preparePlatformSubmission → freeze evidence + beginRegularRemoteSubmission → PreparedSubmission.submitPreparedPublication`，只能读取安全 evidence 并调用具名方法，不能取得 adapter 私有 token/会话；Ticket 08 先为纯文本建立完整稳定 seam，Ticket 18–21 在核心完成后只能填充已声明图片字段、选择已声明 enum 并扩展阶段一交付，不改变 schema、submission-start 所有权或结果合同。平台 adapter 不获得 OperationalStore capability。
+- 平台 executor 只协调 `preparePlatformSubmission → freeze evidence + beginRegularRemoteSubmission → PreparedSubmission.submitPreparedPublication`，只能读取安全 evidence 并调用具名方法，不能取得 adapter 私有 token/会话；Ticket 08 先为纯文本建立完整稳定 seam，Ticket 18–21 在核心完成后只能填充已声明图片字段并保持新自动路径 `decisionKind=initial`，再扩展阶段一交付，不改变 schema、submission-start 所有权或结果合同。平台 adapter 不获得 OperationalStore capability。
 - 状态存储只保存组和任务事实，不启动 worker。
 - 全局控制器只向符合条件的组发命令，不拥有组状态机。
 - OperationalStore 的 `regularQueueGroupTransitions` 最小 capability 封装组快照读取、开始/暂停意图、“复核 FIFO 头项 + claim/lease + 组当前项 + 唯一 prepared intent”的领取事务，以及冻结 evidence 的幂等 `beginRegularRemoteSubmission`；它是普通平台 intent、实际提交 evidence 与 submission-start phase 的唯一 writer。组编排器不得用多个公开写操作拼接领取/证据/边界，也不得通过该 capability 写入 09 outcome/resolution。
@@ -71,7 +71,7 @@ V1 顶层字段精确为 `{ version, attemptId, articleIdentityV1, targetIdentit
 - [ ] 应用重启后所有组保持暂停且不会自动产生投稿。
 - [ ] 在 claim 后、submission-start 前、远端返回前和 observation 落库前分别注入崩溃：prepared 项不会被当作已投稿，可在用户重新开始并复核后重做准备；remote_call_started 项绝不再次调用平台，缺少明确结果时由 09 接管。
 - [ ] 在 `beginRegularRemoteSubmission` 提交前后分别注入崩溃：标记前没有远端调用且只能在用户重新开始、复核后重做准备；标记后即使 adapter 尚未来得及执行也保守进入 uncertain，绝不自动重放。`remoteCallStartedAt` 只写一次。
-- [ ] 纯文本默认路径生成图片清单为空、`deliveryMode=text_only` 的完整 `preparedSubmissionEvidenceV1`；begin 事务故障不保存半份 evidence也不调用提交，事务成功后的崩溃仍可从持久 evidence 完整人工收口。换图、带图和显式纯文本降级留给 Ticket 18 在不改变本 ticket submission-start owner 的前提下扩展并验收。
+- [ ] 纯文本默认路径生成图片清单为空、`deliveryMode=text_only` 的完整 `preparedSubmissionEvidenceV1`；begin 事务故障不保存半份 evidence也不调用提交，事务成功后的崩溃仍可从持久 evidence 完整人工收口。带图由 Ticket 18–21 在不改变本 ticket submission-start owner 的前提下扩展；新自动配图路径不建立换图/显式纯文本降级 decision 流程。
 - [ ] 唯一 V1 validator 按上述精确字段、enum 和上界递归拒绝 extra/sensitive fields；Ticket 18 合同测试只能填充已存在的 `images`、`deliveryMode`、`decisionKind`，不能修改 schema 或创建平行 validator。
 - [ ] `src/domain/` 唯一导出的 `articleIdentityV1` / `targetIdentityV1` validator 覆盖全部正反 variant；prepared evidence 只接受普通平台 target，当前宽松 articleRef/IPC 对象不能绕过版本和 extra-field 拒绝。交接必须列出导出位置和 09/13/23 的复用方式。
 - [ ] `PreparedSubmission` 公开面只有安全 evidence 与具名 submit 方法；序列化、日志、IPC、跨平台传递、读取私有 session/token 和注入通用 callback/metadata 的架构测试均失败关闭。

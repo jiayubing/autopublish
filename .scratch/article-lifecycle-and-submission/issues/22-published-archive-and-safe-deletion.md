@@ -55,7 +55,7 @@
 - [ ] 恢复/永久删除与保存、普通入队、付费 admission 和活动目标建立的正序/反序并发测试证明使用同一规范文章锁；锁内事实变化会拒绝删除，故障恢复不留下正文已删但运行事实随后建立的竞态。
 - [ ] composition/架构测试证明档案 UI 只能消费只读 `publicationEvidenceV1`，不能旁路成功 writer、订单删除或通用 store。
 - [ ] 普通平台和网站媒体档案正确展示提交时间与首次发布时间；对合成的 `legacy_unavailable` publication evidence，档案投影显示规范缺失原因且不以当前时间或另一个时间字段替代。本 ticket 不声称真实 migration import → archive query 链已通过，该生产链由 Ticket 23 及波次 9 集成复验完成。
-- [ ] 当前生产纯文本档案展示 `text_only`、空图片清单和 `initial`，历史图片摘要不可得时展示规范缺失原因；使用 09 validator 的合成前向兼容 fixture 证明后置带图/换图/降级摘要可只读展示且不暴露路径或二进制，但本 ticket 不声称 Ticket 18–21 生产链已实现。
+- [ ] 当前生产纯文本档案展示 `text_only`、空图片清单和 `initial`，历史图片摘要不可得时展示规范缺失原因；使用 09 validator 的合成前向兼容 fixture 证明后置带图/自动减量至纯文本摘要可只读展示且不暴露路径或二进制，但本 ticket 不声称 Ticket 18–21 生产链已实现。
 - [ ] 交接记录包含保留矩阵、隐私边界、删除故障测试、公开接口、依赖方向及显著规模变化说明。
 - [ ] 上述四个 V1 身份/目标合同具有精确公开导出、上界与 extra/sensitive-field 反例测试，并在交接中列出 Ticket 23 的只读复用入口。
 

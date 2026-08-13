@@ -148,8 +148,8 @@
 80. As an 内容运营者, I want 图片只从文章所属客户的本地图片库选择, so that 不同客户的素材不会混用。
 81. As an 内容运营者, I want 同一篇文章内图片不重复而不同文章可复用, so that 图片使用既自然又不消耗过多素材。
 82. As an 内容运营者, I want 图片不足时使用实际数量且无图时发布纯文本, so that 图片库规模不会阻塞文字投稿。
-83. As an 内容运营者, I want 图片在正文段落间自动均匀分布, so that 不需要手工决定位置。
-84. As an 内容运营者, I want 本地图片处理失败时重试、换图或明确降级纯文本, so that 系统不会静默丢图。
+83. As an 内容运营者, I want 图片由各平台按自身真实图文能力自动放置, so that 我不需要逐篇手工决定图片位置。
+84. As an 内容运营者, I want 任意图片不足、读取或上传失败都自动减少图片数量直至纯文本, so that 可选图片永远不会阻塞 GEO 文字投稿。
 85. As an 内容运营者, I want 网站媒体最终未显示图片时仍将正文成功视为已发布, so that 可选图片不会推翻文本发布结果。
 
 ## Implementation Decisions
@@ -161,7 +161,7 @@
 - 一篇文章最多拥有一个活动发布目标。活动目标结束且未成功后可以改投；首次成功建立全局发布事实，永久阻止再次入队、改投和回收。
 - 投稿队列项是文章与目标之间的待执行任务，不是独立文章副本。执行时允许保存不可变投稿快照作为审计证据，但不向用户暴露“文章版本”或“队列副本”。
 - 普通平台队列以平台和平台账号档案作为分组身份；不同平台可并行，同组串行 FIFO。当前核心阶段同一平台的多个账号档案组由平台级执行锁串行，只有核验当前登录账号与目标档案一致的组才能准备投稿；账号专属会话与同平台多账号并行后置扩展。只有一个账号时界面隐藏账号层，但内部目标身份仍包含账号。
-- 普通平台 attempt 先以 `prepared` 持久化。平台阶段一产生仅进程内 `PreparedSubmission` capability，同时提供安全平台无关 `preparedSubmissionEvidenceV1`，记录实际标题/正文/content fingerprint、delivery mode、图片安全 fingerprint/布局和最终降级决定。executor 在最终提交紧前通过一个事务冻结该 evidence 并写入一次 `remote_call_started`；capability 私有会话不持久化。该标记是禁止安全自动重放的保守本地边界：标记前可在用户重新开始并复核后重做准备，标记后即使进程内 capability 消失，人工核对仍只能使用已冻结的实际提交 evidence。
+- 普通平台 attempt 先以 `prepared` 持久化。平台阶段一产生仅进程内 `PreparedSubmission` capability，同时提供安全平台无关 `preparedSubmissionEvidenceV1`，记录实际标题/正文/content fingerprint、delivery mode 和实际成功图片的安全 fingerprint/布局；既有 `decisionKind` 仅作 V1 兼容，新自动配图路径固定 `initial`。executor 在最终提交紧前通过一个事务冻结该 evidence 并写入一次 `remote_call_started`；capability 私有会话不持久化。该标记是禁止安全自动重放的保守本地边界：标记前可在用户重新开始并复核后重做准备，标记后即使进程内 capability 消失，人工核对仍只能使用已冻结的实际提交 evidence。
 - 普通平台的远端明确接受响应直接产生全局已发布事实。系统不新增公开页面轮询、审核等待或后续可见性判定。
 - 普通平台文章级失败继续下一篇；平台、认证或系统级失败暂停对应组；不确定结果同时冻结文章并暂停对应组。其他组始终独立运行。
 - 普通平台不确定结果只允许“确认已接受”和“确认未接受”两种人工收口，不提供直接重试。
@@ -181,16 +181,16 @@
 - 订单刷新、取消或申诉发生传输异常时保留原有远端事实，不猜测成功或失败。已知订单查询缺失进入状态异常并冻结，直到基于订单身份、最新 observation 与可核对证据完成人工收口；只允许恢复订单跟踪、确认已发布或确认明确非发布终态三类具名结果，证据不足继续冻结。
 - 待安排显示取消订单；已安排显示尝试取消并提示可能被拒绝；已发布、已退稿和售后中不提供取消。明确取消成功且订单转换 guard 确认不存在全局已发布事实后恢复文章编辑；若取消在途期间已发布，取消只追加证据，不恢复编辑，历史订单永久保留。
 - 已发布后的售后、退款、未收录、链接失效或结果不一致不撤销文章的全局已发布事实。用户需要再次铺设时必须创建全新文章。
-- 已发布档案使用版本化 `publicationEvidenceV1` 保存实际提交正文（或明确不可得标记）、标题、content fingerprint、图片安全 fingerprint/布局/降级摘要或历史不可得标记、客户安全快照、目标、`submittedAt/submittedAtSource`、`firstPublishedAt/firstPublishedAtSource`、发布结果、订单号和安全远端链接。09 是该封闭 schema 与 validator 的唯一 owner，15、22、23 必须复用而不得平行解释。普通平台内容只来自 submission-start 同事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文或重建已丢失的浏览器会话；网站媒体内容来自订单创建不可变快照。首次发布时间优先可信远端事件，其次首次正面 observation，人工确认使用明确标记的 `manual_positive_evidence_time`。历史缺失使用 `null + legacy_unavailable + missing reason`，不得伪造，也不得以空图片清单冒充未知历史图片事实。界面称其为投稿内容，不抓取网页覆盖。
+- 已发布档案使用版本化 `publicationEvidenceV1` 保存实际提交正文（或明确不可得标记）、标题、content fingerprint、图片安全 fingerprint/布局/实际交付摘要或历史不可得标记、客户安全快照、目标、`submittedAt/submittedAtSource`、`firstPublishedAt/firstPublishedAtSource`、发布结果、订单号和安全远端链接。09 是该封闭 schema 与 validator 的唯一 owner，15、22、23 必须复用而不得平行解释。普通平台内容只来自 submission-start 同事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文或重建已丢失的浏览器会话；网站媒体内容来自订单创建不可变快照。首次发布时间优先可信远端事件，其次首次正面 observation，人工确认使用明确标记的 `manual_positive_evidence_time`。历史缺失使用 `null + legacy_unavailable + missing reason`，不得伪造，也不得以空图片清单冒充未知历史图片事实。界面称其为投稿内容，不抓取网页覆盖。
 - 回收站只接收未发布且没有活动队列、订单或不确定结果的文章。永久删除正文后仍保留订单、标题、客户、目标、金额、时间和结果等最小审计信息。
 - 订单保存媒体名称、资源 ID、确认单价、预计费用、系统投稿标识和文章标题快照；资源列表变更不改写历史。服务商若返回实际金额则单独记录。
 - 旧数据迁移时忽略审核状态。workspace/schema gate 在正常 composition 前独占迁移，并以同一 operational SQLite migration metadata 中的持久 `MigrationJournalV1` 管理 `detected → backed_up → confirmed → import_committed → verified`；import 事实、schema/version 与 import_committed 同事务，正常 composition 只认可匹配当前稳定 workspace identity/source/version 的 verified journal。import 后验证前崩溃只重跑验证，不重复 import或因 schema 当前而放行。migration root 不构造任何远端能力。`ImportPlanV1` envelope、公共 entry 和六种 variant payload 全部版本化封闭、递归拒绝 extra fields/未知 enum；六种 variant 为 `publishedEvidence`、`trackablePaidOrder`、`pendingReadmission`、`nonPublishedTerminal`、`needsAttentionConflict`、`deletionRecoveryConflict`，均不得产生 runnable 事实或自动远端动作。`nonPublishedTerminal` 由 `closedTargetV1` 唯一承载跨渠道非发布终态；只有存在真实订单身份时才允许用 `orderHistoryV1` 对象承载订单 observation/terminal history，否则必须为 `null`，不得另行强制或伪造 `terminalObservationV1`。
 - 模块边界按深模块设计：文章分类、编辑权限、队列编排、普通平台执行、网站媒体付费批次、订单同步与人工核对、图片库与图片准备、供应商适配分别拥有清晰职责。界面仅消费应用级命令和只读模型，不包含业务状态机；composition 只向应用服务注入其职责所需的最小具名持久化/外部能力，不把完整 OperationalStore 或供应商对象作为万能依赖传播。
 - 每个模块提供少量稳定接口并封装状态转换、幂等和错误分类；不得以一个超长服务或页面组件承载全部流程。跨模块交互使用文章身份、目标身份、订单号和明确结果对象，避免共享可变结构；持久化 capability 只暴露调用方所需的具名事务，不传播完整 store。
-- 图片库归属于客户，支持 JPG、PNG 和 WebP，允许子目录。新任务开始时扫描，损坏或不支持文件跳过。同篇不重复、跨篇可复用，数量范围 0 至 5、默认 1。
+- 图片库归属于客户，支持 JPG、PNG 和 WebP，允许子目录。生产普通平台图片源必须显式收窄到客户专用图片子目录；损坏或不支持文件跳过。同篇不重复、跨篇可复用，数量范围 0 至 5、默认 1。
 - 图片扩展启用前已经存在、且没有 `imageCount` 字段的普通平台队列组必须迁移为 0，继续保持原纯文本确认结果；只有图片扩展启用后新建的组默认 1。旧组只有在用户明确修改并重新确认后才能启用图片，追加文章继承组当前配置。
-- 图片准备在文章真正开始投稿时发生。图片在正文段落之间均匀插入，不置于标题前，不连续堆叠；图片不足使用实际数量，无图时文本投稿。
-- 普通平台图片交付使用两阶段封闭端口：提交前阶段可返回 ready、图片决策、文章拒绝或组阻塞；图片决策只允许重做准备、换图或用户明确纯文本。ready 携带的 `PreparedSubmission` 是仅进程内窄 capability，公开 safe manifest 与唯一具名 submit，平台 session/token 隐藏在内部且禁止序列化、日志、IPC 或跨平台传递。executor 原子冻结 manifest并写 submission-start 后才调用 submit；submit 不得再改变标题、正文、图片布局或降级模式，内部状态漂移只能 uncertain。最终阶段只返回 accepted、article_rejected、group_blocked、uncertain。
+- 图片准备在文章真正开始投稿时发生。每篇都从文章所属客户的专用图片目录当前可用集合完全随机选择；同篇不重复、跨篇可重复。请求数量不足时使用实际数量，无图或任意图片读取/准备失败时自动减量直至纯文本。Ticket 18 不拥有通用均匀插图算法，图片位置/图集/封面语义由各平台 adapter 按真实能力决定。
+- 普通平台图片交付继续使用 08 的两阶段 `PreparedSubmission` 边界：提交前先完成文字与 best-effort 图片准备，图片失败不得生成新的用户 decision、文章失败或组阻塞；既有 V1 `decisionKind` 为历史兼容保留，但新自动路径固定 `initial`。ready 携带的 `PreparedSubmission` 是仅进程内窄 capability，公开 safe manifest 与唯一具名 submit，平台 session/token 隐藏在内部且禁止序列化、日志、IPC 或跨平台传递。executor 原子冻结 manifest 并写 submission-start 后才调用 submit；submit 不得再改变标题、正文或最终成功图片集合，内部状态漂移只能 uncertain。最终阶段仍只返回 accepted、article_rejected、group_blocked、uncertain。
 - 网站媒体图片的业务规则已经确定，但传输机制尚未确定。当前桌面端预览和真实付费提交都只提取 DOCX 文字，不能用于带图验证；不得把“预览未显示但远端可能带图”作为实现假设。
 
 ## Testing Decisions
@@ -209,7 +209,7 @@
 - Renderer 测试覆盖六个入口、队列精简展示、默认订单筛选、刷新按钮、付费确认、取消提示、需处理允许动作以及窄宽度布局，不复制领域状态判断。
 - 迁移测试覆盖 journal 每个 phase、import commit 后立即崩溃、备份复用/失效、验证重跑、六种封闭 payload、extra fields、未知 enum、重复文章/订单身份、正文/时间缺失和回收冲突。schema 当前但 journal 未 verified 必须阻断；`importLifecycleFacts` 拒绝任何 runnable 事实，migration root 不构造远端能力，失败不写部分事实。
 - 性能测试重点验证分类投影和导航计数在大量文章、队列和订单下仍使用批量读取，不发生逐文章磁盘或数据库查询。手机号和网址风险检测只扫描本次确认内容。
-- 图片库测试覆盖客户隔离、随机数量、不重复、损坏文件、数量不足和自动布局；普通平台图片合同还覆盖核心旧组迁移为 0、新组默认 1、用户重新确认、prepare/decision、safe manifest、进程内 capability、submission-start/submit 顺序，以及换图/纯文本降级后崩溃的人工 accepted。网站媒体图片传输合同测试必须等真实低价媒体验证出传输方式和限制后再编写。
+- 图片库测试覆盖客户隔离、完全随机数量、同篇不重复/跨篇可复用、损坏文件、数量不足和零图；生产图片源必须显式收窄到客户专用图片子目录。普通平台图片合同覆盖核心旧组迁移为 0、新组默认 1、配置继承/修改、claim-time 选图、best-effort 自动降级、safe manifest、进程内 capability 与 submission-start/submit 顺序；新图片路径不建立 retry/换图/人工降级 decision 状态机，既有 V1 `decisionKind` 仅为历史兼容且自动路径固定 `initial`。图片具体位置/图集/封面语义由各平台 adapter 依据真实能力拥有。网站媒体图片传输合同测试必须等真实低价媒体验证出传输方式和限制后再编写。
 - 核心里程碑的手工验收至少覆盖普通平台纯文本两组同时运行和网站媒体真实订单状态刷新；真实付费验证必须由用户明确确认并记录订单号、媒体资源、最终链接和结果。图片专项验证移至核心完成后的独立图片扩展/探索阶段，不是核心完成门槛。普通平台必须逐个先以本次明确授权完成真实能力探索并输出 `SUPPORTED|UNSUPPORTED|INCONCLUSIVE`；只有 `SUPPORTED` 进入 adapter 实施，实施后的真实带图投稿验收必须再次获得该平台的单独明确授权。前置探索授权不自动延伸为实施或验收授权。
 - 普通平台图片 adapter 的自动化只使用假页面/假运行时；仅对前置真实探索结论为 `SUPPORTED` 的平台实施 Ticket 19/20/21。对应 adapter 实施并合并后，图片扩展里程碑还必须由用户对该平台另行明确授权真实带图投稿，记录安全目标身份、图片格式/尺寸/数量、提交边界、结果和停止条件。缺少任一已实施平台的验收证据时只能标记实现待外部验收；对已有合规 `UNSUPPORTED` / `INCONCLUSIVE` 结论的平台，保持图片入口关闭即可收口。
 - 优先复用现有文章管理快照、投稿资格、发布工作流、网站媒体传输、订单投影、Renderer 文章管理和队列控制测试模式；新增接缝只允许出现在集中分类器或供应商图片适配边界。

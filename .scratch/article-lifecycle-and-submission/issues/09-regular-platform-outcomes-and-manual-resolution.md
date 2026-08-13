@@ -15,7 +15,7 @@
 
 ## 执行过程
 
-1. 定义投稿执行的规范 outcome：accepted、article_rejected、group_blocked、uncertain；每类包含安全原因和必要远端证据。accepted/uncertain 只能来自 submission-start 后的最终提交阶段；提交前阶段可在明确内容拒绝或平台/认证阻塞时返回 article_rejected/group_blocked。Ticket 18 的 `preSubmitImageDecisionRequired` 不是第五种投稿 outcome，也不进入本结果策略。
+1. 定义投稿执行的规范 outcome：accepted、article_rejected、group_blocked、uncertain；每类包含安全原因和必要远端证据。accepted/uncertain 只能来自 submission-start 后的最终提交阶段；提交前阶段可在明确内容拒绝或平台/认证阻塞时返回 article_rejected/group_blocked。后置 Ticket 18–21 的图片 best-effort 失败不是第五种 outcome，也不得进入本结果策略。
 2. 固化下述唯一、版本化、递归封闭的 `publicationEvidenceV1` owner/validator。普通平台实际内容必须只读取 08 在 submission-start 事务冻结的 `preparedSubmissionEvidenceV1`，不得回退 admission 原文、重建图片布局或读取已丢失的 adapter 会话；网站媒体读取 13 的不可变提交快照。15、22、23 只能复用此 validator 和嵌套 DTO，不得复制字段、放宽 missing/time 规则或建立平行 schema。
 3. 在 OperationalStore 内建立唯一的 `applyFirstPublicationSuccess` 内部 primitive，集中拥有证据校验、首次成功 first-wins、幂等、不可变 `publicationEvidenceV1`、全局永久冻结和既有成功不可覆盖规则。它不作为调用方可自由调用的通用写接口，只能由 transition-specific 事务端口在同一 SQLite 事务内委托；09 的普通平台 accepted outcome 首先消费该 primitive。
 4. 在适配器边界映射平台特有响应，平台明确接受后通过 regular accepted outcome 事务按 `regularPublicationAttemptId` 原子读取冻结的 prepared evidence、写入 observation、调用唯一 publication-success primitive、保存证据、收口 intent、终结队列项和活动目标，不再生成通用 `submitted/reviewing` 新事实。
@@ -48,7 +48,7 @@ V1 顶层字段精确为 `{ version, articleIdentityV1, customerSnapshotV1, cont
 
 ## 职责边界
 
-- 平台适配器阶段一可返回 ready、pre-submit decision 或明确 article_rejected/group_blocked；阶段二识别供应商/网页提交响应并只返回四种规范 outcome。两阶段都不决定队列下一步，09 只忽略 decision、消费规范 outcome。
+- 平台适配器阶段一返回 ready 或既有明确 article_rejected/group_blocked；后置 Ticket 18–21 的图片失败只能自动减量/纯文本，不建立 pre-submit 图片 decision。阶段二识别供应商/网页提交响应并只返回四种规范 outcome。两阶段都不决定队列下一步，09 只消费规范 outcome。
 - 结果策略决定文章和队列组转换，不操作浏览器。
 - 人工核对用例只收口 uncertain，不提供重试捷径。
 - 发布存储保存成功/失败/不确定事实和证据，不解释 UI 标签。
@@ -78,7 +78,7 @@ V1 顶层字段精确为 `{ version, articleIdentityV1, customerSnapshotV1, cont
 - [ ] 普通 accepted 与人工确认已接受都保存完整 `publicationEvidenceV1` 必需字段；缺少实际在线投稿正文、目标快照或关键证据时事务失败关闭，不写不完整成功事实。
 - [ ] `publicationEvidenceV1` 只有一个 owner/validator；15、22、23 的直接合同测试证明它们复用同一精确 schema、时间来源和 missing reason 规则，递归 extra/sensitive fields 一律失败关闭。
 - [ ] `customerSnapshotV1` / `targetSnapshotV1` 的三个 target variant、在线/迁移允许矩阵、展示文本上界和敏感字段拒绝由 domain owner 的公开合同测试固定；15、22、23 不复制嵌套 schema。
-- [ ] 使用合成的最终 manifest 合同覆盖带图、换图和纯文本降级摘要，证明 `confirmRegularAccepted` 只按冻结 evidence 恢复相同标题/正文/content fingerprint/图片布局/降级摘要，不会用 admission 原文冒充实际提交内容；本 ticket 不声称图片选择、换图或降级生产链已实现，真实应用链由核心完成后的 Ticket 18 及波次 12 集成复验完成。
+- [ ] 使用合成的最终 manifest 合同覆盖带图与自动减量至纯文本摘要，证明 `confirmRegularAccepted` 只按冻结 evidence 恢复相同标题/正文/content fingerprint/实际成功图片布局摘要，不会用 admission 原文冒充实际提交内容；本 ticket 不声称图片选择/上传生产链已实现，真实应用链由核心完成后的 Ticket 18–21 集成复验完成。
 - [ ] 在线成功同时保存有规范来源的 `submittedAt` 与 `firstPublishedAt`；历史不可得只允许由 23 写入 `null + missing reason`，任何路径都不得拿 observation/迁移执行时间冒充未知时间。
 - [ ] 直接 accepted 与 `confirmRegularAccepted` 分别覆盖 provider event、positive observation 和 manual positive evidence 三类来源；人工确认时间可作为明确标记的正面证据时间，但绝不伪装成供应商发布时间。
 - [ ] composition/架构测试证明结果服务只获得不含 intent 创建能力的 `regularOutcomeTransitions`，无法调用 08 creator、付费、取消、迁移或其他无关写能力。

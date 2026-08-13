@@ -1,65 +1,43 @@
 # 19 — 列举网图片投稿适配
 
-**What to build:** 按列举网当前编辑器的真实交互要求，将 18 准备的本地随机图片随正文提交，并在图片不可用时提供明确重试、换图或纯文本降级。
+**What to build:** 按列举网当前真实图文能力，消费 Ticket 18 的随机 image plan，将可成功处理的图片随正文提交；任意图片失败只减少最终图片数量，全部失败自动纯文本，正文投稿优先。
 
-**Blocked by:** 18 — 普通平台队列组图片准备
+**Blocked by:** 18 — 普通平台随机配图准备
 
 **Status:** deferred-until-core-complete；当前不可调度
 
-**Scheduling gate:** 等待波次 12 Ticket 18 完成审计、提交、合并、定向复验及波次验收；此后必须由用户对列举网单独明确授权一次真实能力探索，且安全证据结论为 `SUPPORTED`，才可将本 ticket 作为波次 13 最左可实施组调度。`UNSUPPORTED` / `INCONCLUSIVE` 不创建本 ticket 线程，列举网图片入口保持关闭。
-
-## 启动约定
-
-- 只修改列举网平台适配边界；不得把列举网选择器、上传步骤或限制加入通用编排器。
-- 验证调度记录中存在用户对列举网本次探索的独立授权、安全证据摘要和 `SUPPORTED` 结论；本 ticket 不得以假页面、历史经验或其他平台结果代替该 gate，也不因此获得再次真实登录/发布授权。
-- 先检查现有适配器和安全测试能否在不使用真实账号的情况下模拟文件上传与正文插入。
+**Scheduling gate:** Wave 12 `COMPLETE` 后，必须由用户对列举网单独明确授权真实能力探索并得到 `SUPPORTED`。`UNSUPPORTED` / `INCONCLUSIVE` 不创建实施线程且图片入口保持关闭。探索授权不等于实施期真实发布授权；adapter 合并后的真实带图验收需再次单独授权。
 
 ## 执行过程
 
-1. 将已获得的 `SUPPORTED` 探索证据收敛为 adapter 的格式、数量、上传时机和成功证据封闭合同；任一实施所需限制仍未知时停止并返回 scheduling gate 重新探索，不得猜测或在 ticket 中自行登录探测。
-2. 实现阶段一 `preparePlatformSubmission`：消费规范投稿命令和 18 图片计划，按列举网要求上传/插入图片并保持段落顺序；成功返回符合 08/18 合同的进程内 `PreparedSubmission`，其 safe manifest 精确反映最终标题、正文、图片顺序/布局和降级决定，列举网会话只隐藏在 capability 内部。
-3. 上传前验证文件仍存在且属于客户边界；不把路径写入持久发布事实或日志。
-4. 阶段一图片级可恢复失败返回 18 的 `preSubmitImageDecisionRequired`，平台/认证明确失败返回 group_blocked；用户明确选择纯文本后才能重新准备。executor 冻结 manifest 后调用 capability 的 `submitPreparedPublication()`，它只返回 09 四种 outcome；缺少明确结果必须 uncertain，不得重试、换图、降级或再次提交正文。
-5. 普通平台“接受即发布”仍以列举网明确接受正文为准，图片结果不能新增审核等待。
-6. 使用假页面/内存浏览器覆盖 0 张、1–5 张、上传失败、换图、降级和正文成功。
-7. 输出实施后真实列举网带图验收清单，只记录所需安全账号/目标身份、图片格式/尺寸/数量、预期提交边界、结果字段和停止条件；ticket 线程不得登录或发布。该验收是与前置能力探索分离的第二次真实操作，必须在本 adapter 合并后由用户对列举网再次单独明确授权后执行。
+1. 将 `SUPPORTED` 探索证据冻结为列举网图片格式、数量、上传/插入方式、实际成功信号与限制；未知事实不得猜。
+2. 在列举网 adapter 内建立图片交付深模块，消费 18 的安全 image plan；通过 Ticket 17 resolver 在准备期临时取得文件路径并再次验证客户边界。
+3. 每张图片独立 best-effort：成功则进入最终编辑器/图集和 manifest；失败只记录安全 warning 并跳过。0 张成功时继续纯文本 `PreparedSubmission`。
+4. 最终 `preparedSubmissionEvidenceV1` 只记录**实际成功**图片，`deliveryMode=with_images|text_only`，`decisionKind=initial`，`layoutSlot` 反映列举网真实提交位置/顺序。
+5. adapter 不返回图片 retry/replace/continue-text-only decision；只有账号/平台本身明确不可用等非图片问题才按既有 `group_blocked/article_rejected` 规则处理。
+6. executor 仍按 `prepare → beginRegularRemoteSubmission → submitPreparedPublication`。manifest 冻结后不得换图/补图/降级/重做正文；边界后未知只能 `uncertain`。
+7. 使用假页面覆盖 0、1–5、N>M、单图失败、部分失败、全部失败、上传成功但编辑器未落图、账号错误、提交边界前后故障。
+8. 输出真实列举网带图验收清单；ticket 线程不得自行登录或发布。
 
 ## 职责边界
 
-- 列举网适配器拥有所有平台选择器和上传协议。
-- 通用图片准备器不因列举网而增加条件分支。
-- 平台结果分类仍由 09 的规范结果合同负责。
-- Renderer 不显示或操作平台 DOM 细节。
-- 列举网 adapter 只消费规范投稿命令和 18 的图片计划，不读取迁移 DTO、生命周期事实或订单状态；它拥有平台准备/最终提交协议和结果解析，但不写 submission-start，executor 通过 08 capability 持有两阶段调用顺序。
-
-## 架构硬门槛
-
-- 图片上传协议在列举网适配边界内形成可测试的深模块，隐藏 DOM 与上传细节；仅在接口更窄、变化更局部时从正文流程提取，禁止为缩短文件增加转发层。
-- 适配器对外接口不因 DOM 变化泄漏更多细节。
-- 不复制路径安全、随机选择和布局算法。
-- 不新增真实账号依赖到自动化测试。
-- 不让 adapter 通过通用 OperationalStore 或迁移门面自行判断文章是否可发布。
-- `PreparedSubmission` 不暴露列举网 DOM/session/token，不可序列化或日志化；adapter 私有状态与 safe manifest 分离。
+- 列举网 adapter 拥有该平台上传、插入、实际图片成功集合和 `layoutSlot`。
+- Ticket 18 拥有随机选择，不知道列举网 DOM/API。
+- Ticket 17 拥有路径边界与 resolver；adapter 不复制扫描逻辑。
+- 09 继续拥有最终 outcome；图片失败不是新的 outcome。
 
 ## Acceptance criteria
 
-- [ ] 列举网能按 0–5 配置提交纯文本或带图正文。
-- [ ] 图片顺序与 18 的布局一致，上传失败不会静默丢图。
-- [ ] 重试、换图和明确纯文本降级均可验证且不重复发布正文。
-- [ ] 在提交边界前后注入图片/传输故障，证明边界前可恢复、边界后只进入 uncertain 且不会再次提交。
-- [ ] 阶段一只返回 ready/decision/article_rejected/group_blocked，阶段二只返回 09 四种 outcome；capability 私有状态不泄漏，safe manifest 与实际编辑器最终内容一致。
-- [ ] 所有文件重新验证客户边界，日志/持久化不泄漏绝对路径。
-- [ ] 列举网完成或失败不影响其他平台队列组。
-- [ ] 交接记录包含平台能力、假页面证据、失败分类、公开接口、依赖方向及显著规模变化说明。
-- [ ] 前置真实探索证据有独立用户授权且结论为 `SUPPORTED`；本 ticket 没有将该授权扩张为实施期真实操作。
-- [ ] 交接包含用户可执行的真实列举网带图验收清单，并明确假页面通过不等于真实平台已验收；缺少用户后续证据时波次 13 保持 `USER_EXTERNAL_IMAGE_ACCEPTANCE_REQUIRED`。
-
-## 审计建议
-
-- 等级：定向独立复核；该复核 findings 已处理、复验并获用户确认后，才能提交/合并并放行 Ticket 20，不与尚未创建的 20/21 并行组织。
-- 范围：列举网上传/插入合同、0–5 图片、文件客户边界、平台接受证据、提交前重试/换图/降级与提交后 uncertain；不穿透通用队列状态机。
-- 不重复审计 18 布局或 09 结果策略，不运行完整 `npm test`，实施线程和独立复核只使用假页面和内存浏览器证据；真实发布由用户另行授权。
+- [ ] 0–5 image plan 均可准备；成功几张 manifest 就记录几张，0 张成功仍可提交正文。
+- [ ] 单图/部分/全部图片失败不会生成图片 decision、不会暂停组、不会把文字文章改成失败。
+- [ ] 实际成功图片 fingerprint/layoutSlot 与编辑器最终内容一致；失败图片不进入 evidence。
+- [ ] 文件上传前重新验证客户边界，日志/持久化无绝对路径/Cookie/DOM 原文。
+- [ ] submission-start 前失败可结束 prepare；边界后 unknown 只 uncertain 且不重复正文投稿。
+- [ ] 平台 DOM/API 只存在列举网适配边界，通用队列无 platform 分支。
+- [ ] 假页面测试 PASS；handoff 包含能力限制、best-effort 矩阵、提交边界和真实验收清单。
+- [ ] 前置真实探索结论为 `SUPPORTED` 且有独立授权；未获得实施后真实验收授权时保持 `USER_EXTERNAL_IMAGE_ACCEPTANCE_REQUIRED`。
 
 ## Non-goals
 
-- 不修改今日头条、蓝色河畔或网站媒体适配器。
+- 不修改今日头条、蓝色河畔或网站媒体图片流程。
+- 不建立图片重试/换图/人工降级状态机。
