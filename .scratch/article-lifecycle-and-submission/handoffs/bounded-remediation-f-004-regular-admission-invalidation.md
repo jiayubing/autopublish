@@ -7,7 +7,7 @@
 ## Git、worktree 与执行上下文
 
 - Base integration HEAD：`add4628b2a1fcd26feea7332039527e53e52fedb`，与主线程提供的 integration HEAD 一致。
-- 实际 R2 thread：`019ff8eb-74c2-70d0-a82c-b2fb0a012fcc`；source thread：`019ff8d3-3af2-7a50-86fe-4d01204bdff9`。
+- 实际 R2 thread：`019ff8eb-74c2-70d0-a82c-b2fb0a012fcc`；source thread：`019ff8d3-3af2-7a50-86fe-4d01204bdff9`（主调度线程）。
 - 实际 worktree：`C:\Users\violet\.codex\worktrees\aa80\官媒投稿-refactor`；最终保持 detached HEAD，没有夺取主分支、没有创建 subagent、没有并行修改其他 owner。
 - 初始工作树用户变更已保留且未 stage：删除的 `M05-J8_Inventory_Authoritative_Closure_Execution_Plan.md` 与未跟踪的 `PAID-SUBMISSION-ACCEPTANCE-REMEDIATION-R1-R4.md`。
 - Implementation commit：`d3f5a70b32e2d5266a4dcf0399856c402a98c933` — `fix(r2): invalidate workspace after regular admission`。
