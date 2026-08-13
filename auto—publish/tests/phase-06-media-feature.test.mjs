@@ -82,16 +82,7 @@ describe("Phase 06 media feature", () => {
       },
       getBalance: async () => 80,
       getDrafts: async () => [],
-      getDraft: async () => ({
-        filename: article.filename,
-        title: article.title,
-        selectedResources: [],
-      }),
-      setDraft: async (filename, draft) => {
-        calls.push(["setDraft", filename, draft.title]);
-      },
       scanArticles: async () => [article],
-      previewArticle: async () => ({ ...article, content: "preview" }),
       getOrders: async () => [],
       syncOrder: async () => ({}),
       syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
@@ -109,36 +100,10 @@ describe("Phase 06 media feature", () => {
     assert.equal(feature.getSnapshot().drafts.items.length, 0);
     assert.equal(feature.getSnapshot().pool.pageSize, 50);
     assert.equal(feature.getSnapshot().balance.value, 80);
-
-    await feature.openArticle(article.filename);
-    feature.toggleSelectedResource(resource);
-    assert.equal(
-      feature.getSnapshot().articles.activeArticle.selectedResources[0]
-        .resourceId,
-      "resource-1",
-    );
-    assert.equal(feature.getSnapshot().selectionRevision, 1);
-    await feature.saveDraft({
-      filename: article.filename,
-      title: "Saved title",
-      remark: "",
-      ignoreImages: false,
-      selectedResources: [resource],
-    });
-    assert.deepEqual(calls.at(-1), [
-      "setDraft",
-      article.filename,
-      "Saved title",
-    ]);
-    assert.equal(
-      feature.getSnapshot().articles.activeArticle.title,
-      "Saved title",
-    );
-    assert.equal(
-      feature.getSnapshot().articles.activeArticle.selectedResources[0]
-        .resourceId,
-      "resource-1",
-    );
+    assert.equal(typeof feature.openArticle, "undefined");
+    assert.equal(typeof feature.saveDraft, "undefined");
+    assert.equal("activeArticle" in feature.getSnapshot().articles, false);
+    assert.equal("selectionRevision" in feature.getSnapshot(), false);
 
     await feature.openPublishedUrl("order-1");
     assert.deepEqual(calls.at(-1), ["openPublishedUrl", "order-1"]);
@@ -593,8 +558,7 @@ describe("Phase 06 media feature", () => {
     );
   });
 
-  it("does not turn a draft read failure into an empty draft", async () => {
-    const article = { filename: "article-read-failure.md", title: "Article" };
+  it("does not expose retired media article editor operations", async () => {
     const feature = createMediaFeature({
       getResourcePage: emptyPoolPage,
       searchResourcePage: emptyPoolPage,
@@ -604,10 +568,7 @@ describe("Phase 06 media feature", () => {
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
       getDrafts: async () => [],
-      getDraft: async () => { throw new Error("private draft read failure"); },
-      setDraft: async () => ({}),
-      scanArticles: async () => [article],
-      previewArticle: async () => ({ ...article, content: "preview" }),
+      scanArticles: async () => [],
       getOrders: async () => [],
       syncOrder: async () => ({}),
       syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
@@ -618,8 +579,10 @@ describe("Phase 06 media feature", () => {
       openPublishedUrl: async () => ({}),
     });
     feature.setScope({ workspaceRuntimeId: "workspace-draft-read-failure" });
-    await feature.openArticle(article.filename);
-    assert.equal(feature.getSnapshot().commands.openArticle.error.code, "MEDIA_ARTICLE_PREVIEW_FAILED");
-    assert.equal(feature.getSnapshot().articles.activeArticle, null);
+    assert.equal(typeof feature.openArticle, "undefined");
+    assert.equal(typeof feature.saveDraft, "undefined");
+    assert.equal(typeof feature.toggleSelectedResource, "undefined");
+    assert.equal(typeof feature.removeSelectedResource, "undefined");
+    feature.dispose();
   });
 });

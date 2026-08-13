@@ -71,9 +71,7 @@ function mediaAdapters(overrides = {}) {
 }
 
 describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
-  it("deduplicates a bounded resource page and rejects a late article open after close", async () => {
-    const preview = deferred();
-    const draft = deferred();
+  it("deduplicates a bounded resource page without a retired article editor", async () => {
     const feature = createMediaFeature(
       mediaAdapters({
         getResourcePage: async (input) => ({
@@ -86,8 +84,6 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
           page: input.page,
           pageSize: input.pageSize,
         }),
-        previewArticle: () => preview.promise,
-        getDraft: () => draft.promise,
       }),
     );
     feature.setScope({ workspaceRuntimeId: "media-runtime-a" });
@@ -97,12 +93,8 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       ["resource-1", "resource-2"],
     );
 
-    const opening = feature.openArticle("article-1");
-    feature.closeArticle();
-    preview.resolve({ filename: "article-1", title: "late" });
-    draft.resolve({ filename: "article-1", selectedResources: [] });
-    await opening;
-    assert.equal(feature.getSnapshot().articles.activeArticle, null);
+    assert.equal(typeof feature.openArticle, "undefined");
+    assert.equal(typeof feature.saveDraft, "undefined");
     feature.dispose();
   });
 

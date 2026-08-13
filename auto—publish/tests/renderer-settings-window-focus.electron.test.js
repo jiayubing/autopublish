@@ -38,7 +38,7 @@ function writeFixture(directory) {
     '  aiProvider: { getStatus: () => data({ source: "application", configured: false, baseUrl: "", model: "", timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: null }), save: () => data({}), testConnection: () => data({}), clear: () => data({ cleared: true }) },',
     '  platformSettings,',
     '  runtimeDiagnostics: { get: () => data({ ok: true, buildInfo: { version: "fixture", commit: "fixture", dirty: false }, capabilities: {}, errors: [], warnings: [] }) },',
-    '  content: { onGenerationBatchState: () => () => {}, listClients: () => data([]), listResearch: () => data([]), listQuestions: () => data([]), listTemplateCatalog: () => data({ revision: "fixture", platforms: [], templates: [], diagnostics: [] }) }',
+    '  content: { onGenerationBatchState: () => () => {}, onDoubaoQueueState: () => () => {}, listClients: () => data([]), listResearch: () => data([]), listQuestions: () => data([]), listTemplateCatalog: () => data({ revision: "fixture", platforms: [], templates: [], diagnostics: [] }) }',
     '});',
     'contextBridge.exposeInMainWorld("__focusTest", { getState: () => ({ saves, clears }) });'
   ].join("\n");

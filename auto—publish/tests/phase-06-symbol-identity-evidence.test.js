@@ -1615,6 +1615,52 @@ test("single production evidence core follows a lazy component prop through an i
   assert.equal(result.ok, true, result.reasons.join("\n"));
 });
 
+test("single production evidence core follows a feature snapshot through a hook wrapper and component props", () => {
+  const result = verify(
+    queryFiles({
+      "/react.ts": `export function useSyncExternalStore(_subscribe:()=>()=>void,getSnapshot:()=>unknown,_serverSnapshot:()=>unknown){return getSnapshot()}`,
+      "/feature.ts": `
+        export function createFeature(deps) {
+          let snapshot = { orders: [] };
+          function subscribe() { return () => {}; }
+          function getSnapshot() { return snapshot; }
+          async function refresh() { snapshot = { orders: await deps.loadOrders() }; }
+          return { subscribe, getSnapshot, refresh };
+        }
+      `,
+      "/hook.ts": `
+        import { useSyncExternalStore } from "./react";
+        import { feature } from "./composition";
+        export function useFeature() {
+          const snapshot = useSyncExternalStore(feature.subscribe, feature.getSnapshot, feature.getSnapshot);
+          return { snapshot, refresh: () => feature.refresh() };
+        }
+      `,
+      "/view.tsx": `import { useFeature } from "./hook"; declare function lazy<T>(load:()=>Promise<{default:T}>):T; const Child=lazy(()=>import("./child")); export function View(){const content=useFeature();const orders=content.snapshot.orders;return <Child content={content} orders={orders}/>} `,
+      "/child.tsx": `export default function Child({content}:{content:{snapshot:{orders:unknown[]}}}){return content.snapshot.orders}`,
+      "/entry.ts": `import { View } from "./view.tsx"; const root={render(_value:unknown){}}; root.render(View());`,
+    }),
+    {
+      ...queryFixture,
+      productionCaller: {
+        ...queryFixture.productionCaller,
+        consumer: {
+          ...queryFixture.productionCaller.consumer,
+          source: "/hook.ts",
+          entrySource: "/entry.ts",
+          owner: "useFeature",
+          stateSource: "/view.tsx",
+          stateRoot: "content.snapshot",
+          stateField: "orders",
+          stateOwner: "View",
+        },
+      },
+    },
+  );
+
+  assert.equal(result.ok, true, result.reasons.join("\n"));
+});
+
 test("single production evidence core follows a component prop through a ref and an invoked options callback", () => {
   const result = verify(
     queryFiles({

@@ -15,9 +15,6 @@ const QUERY_NAMES = [
 ];
 const COMMAND_NAMES = [
   "scanArticles",
-  "openArticle",
-  "saveDraft",
-  "selection",
   "refreshResources",
   "togglePool",
   "checkBalance",
@@ -115,12 +112,6 @@ function emptyPage() {
   };
 }
 
-function articleIdentity(article) {
-  return (
-    (article && (article.articleId || article.id || article.filename)) || null
-  );
-}
-
 export function createMediaFeature(adapters = {}) {
   const required = [
     "getResourcePage",
@@ -131,10 +122,7 @@ export function createMediaFeature(adapters = {}) {
     "removeFromPool",
     "getBalance",
     "getDrafts",
-    "getDraft",
-    "setDraft",
     "scanArticles",
-    "previewArticle",
     "getOrders",
     "syncOrder",
     "syncAllOrders",
@@ -169,7 +157,7 @@ export function createMediaFeature(adapters = {}) {
   const listeners = new Set();
   let disposed = false;
   let scope = null;
-  let articles = { items: [], activeArticle: null, query: emptyQuery() };
+  let articles = { items: [], query: emptyQuery() };
   let drafts = { items: [], query: emptyQuery() };
   let resources = { ...emptyPage(), search: "" };
   let pool = { ...emptyPage(), memberResourceIds: [] };
@@ -181,7 +169,6 @@ export function createMediaFeature(adapters = {}) {
     anomalyPreparations: {},
   };
   let autoRefreshedOrderScope = null;
-  let selectionRevision = 0;
   let syncingOrderNid = null;
   let syncingOrderRevision = 0;
   let snapshot;
@@ -219,7 +206,6 @@ export function createMediaFeature(adapters = {}) {
           (name) => owners[name].getSnapshot().busy,
         ),
       }),
-      selectionRevision,
       commands: Object.freeze(
         Object.fromEntries(
           Object.entries(owners).map(([name, owner]) => [
@@ -248,15 +234,8 @@ export function createMediaFeature(adapters = {}) {
       const items = await adapters.scanArticles();
       if (!queries.articles.isCurrent(token)) return;
       const nextItems = Array.isArray(items) ? items : [];
-      const activeId = articleIdentity(articles.activeArticle);
-      const nextActive = activeId
-        ? nextItems.find((item) => articleIdentity(item) === activeId) || null
-        : null;
       articles = {
         items: nextItems,
-        activeArticle: nextActive
-          ? { ...articles.activeArticle, ...nextActive }
-          : null,
         query: Object.freeze({ loading: false, error: null, reason }),
       };
       publish();
@@ -515,27 +494,6 @@ export function createMediaFeature(adapters = {}) {
     }
   }
 
-  function updateSelectedResources(updater) {
-    const activeId = articleIdentity(articles.activeArticle);
-    if (!activeId) return;
-    const apply = (article) =>
-      articleIdentity(article) === activeId
-        ? {
-            ...article,
-            selectedResources: updater(article.selectedResources || []),
-          }
-        : article;
-    articles = {
-      ...articles,
-      items: articles.items.map(apply),
-      activeArticle: apply(articles.activeArticle),
-    };
-    selectionRevision += 1;
-    const token = owners.selection.begin(scope);
-    owners.selection.finalize(token, { result: { selectionRevision } });
-    publish();
-  }
-
   function resolvePreparedOrderStatusAnomaly(orderId, action, adapter) {
     const preparation = orders.anomalyPreparations[orderId];
     if (!preparation) {
@@ -609,7 +567,7 @@ export function createMediaFeature(adapters = {}) {
       });
       for (const query of Object.values(queries)) query.setScope(scope);
       for (const owner of Object.values(owners)) owner.invalidate();
-      articles = { items: [], activeArticle: null, query: emptyQuery() };
+      articles = { items: [], query: emptyQuery() };
       drafts = { items: [], query: emptyQuery() };
       resources = { ...emptyPage(), search: "" };
       pool = { ...emptyPage(), memberResourceIds: [] };
@@ -621,7 +579,6 @@ export function createMediaFeature(adapters = {}) {
         anomalyPreparations: {},
       };
       autoRefreshedOrderScope = null;
-      selectionRevision = 0;
       syncingOrderNid = null;
       syncingOrderRevision += 1;
       publish();
@@ -672,99 +629,6 @@ export function createMediaFeature(adapters = {}) {
         "扫描媒体稿件失败。",
         async () => loadArticles("command-result"),
       ),
-    openArticle(filename) {
-      return runCommand(
-        "openArticle",
-        async () => {
-          const [preview, draft] = await Promise.all([
-            adapters.previewArticle(filename),
-            adapters.getDraft(filename),
-          ]);
-          return {
-            ...preview,
-            ...(draft || {}),
-            filename,
-            selectedResources:
-              draft?.selectedResources || preview?.selectedResources || [],
-          };
-        },
-        "MEDIA_ARTICLE_PREVIEW_FAILED",
-        "无法打开媒体稿件。",
-        (opened) => {
-          const current = articles.items.find(
-            (item) => articleIdentity(item) === filename,
-          );
-          const merged = { ...(current || {}), ...opened };
-          articles = {
-            ...articles,
-            items: articles.items.map((item) =>
-              articleIdentity(item) === filename ? merged : item,
-            ),
-            activeArticle: merged,
-          };
-          publish();
-        },
-      );
-    },
-    closeArticle() {
-      owners.openArticle.invalidate();
-      articles = { ...articles, activeArticle: null };
-      publish();
-    },
-    saveDraft(draft) {
-      const targetId = articleIdentity(articles.activeArticle);
-      return runCommand(
-        "saveDraft",
-        () => adapters.setDraft(draft.filename, draft),
-        "MEDIA_DRAFT_SAVE_FAILED",
-        "保存媒体草稿失败。",
-        () => {
-          const apply = (article) =>
-            articleIdentity(article) === targetId
-              ? {
-                  ...article,
-                  title: draft.title,
-                  remark: draft.remark,
-                  ignoreImages: draft.ignoreImages,
-                  selectedResources: article.selectedResources || [],
-                }
-              : article;
-          articles = {
-            ...articles,
-            items: articles.items.map(apply),
-            activeArticle: apply(articles.activeArticle),
-          };
-          drafts = {
-            ...drafts,
-            items: [
-              ...drafts.items.filter(
-                (item) => item.filename !== draft.filename,
-              ),
-              {
-                ...draft,
-                selectedResources:
-                  articles.activeArticle?.selectedResources ||
-                  draft.selectedResources ||
-                  [],
-              },
-            ],
-          };
-          publish();
-        },
-      );
-    },
-    removeSelectedResource(resourceId) {
-      updateSelectedResources((items) =>
-        items.filter((item) => item.resourceId !== resourceId),
-      );
-    },
-    toggleSelectedResource(resource) {
-      updateSelectedResources((items) =>
-        items.some((item) => item.resourceId === resource.resourceId)
-          ? items.filter((item) => item.resourceId !== resource.resourceId)
-          : [...items, resource],
-      );
-    },
     refreshResources() {
       return runCommand(
         "refreshResources",

@@ -20,12 +20,10 @@ const { createMediaResourceService } = require("./media-resource-service");
 const {
   createPaidMediaPreflightService,
 } = require("./paid-media-preflight-service");
-const { validateDraft } = require("./submission-boundary");
 const {
   projectMediaResource,
   projectMediaDraft,
   projectMediaArticleSummary,
-  projectMediaArticlePreview,
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,
@@ -225,26 +223,10 @@ function createMediaWorkbenchApplication(options) {
         ),
       };
     },
-    getDraft: (filename) => {
-      workbenchService.resolveSubmissionFile(filename);
-      const draft = draftStore.get(filename);
-      return { draft: draft ? projectMediaDraft(filename, draft) : null };
-    },
-    setDraft: (filename, draft) => {
-      workbenchService.resolveSubmissionFile(filename);
-      draftStore.set(filename, validateDraft(draft));
-      return { completed: true };
-    },
     scanArticles: () =>
       Promise.resolve(workbenchService.scanArticles()).then((items) => ({
         items: items.map(projectMediaArticleSummary),
       })),
-    previewArticle: (filename) =>
-      Promise.resolve(workbenchService.previewArticle(filename)).then(
-        (article) => ({
-          article: projectMediaArticlePreview(article),
-        }),
-      ),
     preflightPaidMedia: async (input) => {
       if (
         !paidMediaPreflightService ||

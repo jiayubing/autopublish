@@ -249,17 +249,8 @@ const api = {
     scanArticles: function () {
       return ipcRenderer.invoke("media:scan-articles");
     },
-    previewArticle: function (filename) {
-      return ipcRenderer.invoke("media:preview-article", filename);
-    },
     getDrafts: function () {
       return ipcRenderer.invoke("media:get-drafts");
-    },
-    getDraft: function (filename) {
-      return ipcRenderer.invoke("media:get-draft", filename);
-    },
-    setDraft: function (filename, draft) {
-      return ipcRenderer.invoke("media:set-draft", filename, draft);
     },
     refreshResources: function (opts) {
       return ipcRenderer.invoke("media:refresh-resources", opts || {});

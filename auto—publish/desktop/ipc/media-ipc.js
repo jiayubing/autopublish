@@ -39,17 +39,8 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:get-drafts", () =>
     invoke(() => application.getDrafts()),
   );
-  ipcMain.handle("media:get-draft", (event, filename) =>
-    invoke(() => application.getDraft(filename)),
-  );
-  ipcMain.handle("media:set-draft", (event, filename, draft) =>
-    invoke(() => application.setDraft(filename, draft)),
-  );
   ipcMain.handle("media:scan-articles", () =>
     invoke(() => application.scanArticles()),
-  );
-  ipcMain.handle("media:preview-article", (event, filename) =>
-    invoke(() => application.previewArticle(filename)),
   );
   ipcMain.handle("media:get-orders", () =>
     invoke(() => application.getOrders()),

@@ -10,6 +10,7 @@ const { DatabaseSync } = require("node:sqlite");
 const {
   createOperationalStore,
   verifyOperationalDatabase,
+  SCHEMA_VERSION,
 } = require("../src/infrastructure/operational-store/operational-store");
 const {
   acquireRuntimeOwner,
@@ -101,7 +102,7 @@ test("real child processes enforce runtime writer and migration lease ownership,
     }).execute();
     assert.equal(
       verifyOperationalDatabase(afterMigration.databasePath).schemaVersion,
-      5,
+      SCHEMA_VERSION,
     );
     cleanup(migrationRoot);
 

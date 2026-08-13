@@ -7383,6 +7383,50 @@ function lifecycleConsumerDerivesFromFeatureSnapshot(
     .split(".")
     .filter(Boolean);
   if (!parts.length) return false;
+
+  function jsxTagRepresents(element, targetSymbol) {
+    const tagSymbol = canonicalSymbol(checker, element.tagName);
+    if (!tagSymbol) return false;
+    if (tagSymbol === targetSymbol) return true;
+    for (const declaration of tagSymbol.declarations || []) {
+      if (!ts.isVariableDeclaration(declaration) || !declaration.initializer)
+        continue;
+      for (const call of walk(declaration.initializer, ts.isCallExpression)) {
+        if (call.expression.kind !== ts.SyntaxKind.ImportKeyword) continue;
+        const specifier = call.arguments[0];
+        if (!specifier || !ts.isStringLiteral(specifier)) continue;
+        const sources = new Set();
+        const moduleSymbol = canonicalSymbol(checker, specifier);
+        for (const moduleDeclaration of moduleSymbol?.declarations || []) {
+          if (ts.isSourceFile(moduleDeclaration)) sources.add(moduleDeclaration);
+        }
+        if (specifier.text.startsWith(".")) {
+          const base = path.resolve(
+            path.dirname(call.getSourceFile().fileName),
+            specifier.text,
+          );
+          for (const candidate of [
+            base,
+            `${base}.js`,
+            `${base}.ts`,
+            `${base}.tsx`,
+          ]) {
+            const source = program.getSourceFile(candidate);
+            if (source) sources.add(source);
+          }
+        }
+        if (
+          [...sources].some(
+            (source) =>
+              exportedSymbol(checker, source, "default") === targetSymbol,
+          )
+        )
+          return true;
+      }
+    }
+    return false;
+  }
+
   const nodes = reachableNodesFromCallable(checker, ownerDeclaration);
   const roots = new Set();
   for (const node of nodes) {
@@ -7440,10 +7484,7 @@ function lifecycleConsumerDerivesFromFeatureSnapshot(
                   ts.isJsxOpeningElement(node) ||
                   ts.isJsxSelfClosingElement(node),
               )) {
-                if (
-                  canonicalSymbol(checker, element.tagName) !== callableSymbol
-                )
-                  continue;
+                if (!jsxTagRepresents(element, callableSymbol)) continue;
                 const elementOwner = containingFunction(element);
                 if (
                   isStaticallyUnreachableBranch(checker, element) ||

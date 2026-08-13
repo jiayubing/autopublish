@@ -15,10 +15,7 @@ async function createFeature() {
     removeFromPool: async () => ({}),
     getBalance: async () => 80,
     getDrafts: async () => [],
-    getDraft: async () => null,
-    setDraft: async () => ({}),
     scanArticles: async () => [{ filename: "article-1", title: "文章", selectedResources: [] }],
-    previewArticle: async () => ({ filename: "article-1", title: "文章", selectedResources: [] }),
     getOrders: async () => [],
     syncOrder: async () => ({}),
     syncAllOrders: async () => ({}),
@@ -35,23 +32,13 @@ async function createFeature() {
   });
 }
 
-test("media article feature keeps preview, editing, and selected resource removal in one public snapshot", async () => {
+test("media feature omits the retired article editor workflow", async () => {
   const feature = await createFeature();
   feature.setScope({ workspaceRuntimeId: "workspace-1" });
   await feature.refresh("initial");
-  await feature.openArticle("article-1");
-  feature.toggleSelectedResource({ resourceId: "resource-1", name: "资源一", price: 10, type: "image" });
-  assert.deepEqual(
-    feature.getSnapshot().articles.activeArticle.selectedResources.map((item) => item.resourceId),
-    ["resource-1"],
-  );
-  await feature.saveDraft({ filename: "article-1", title: "更新后的文章", selectedResources: [] });
-  assert.equal(feature.getSnapshot().articles.activeArticle.title, "更新后的文章");
-  assert.deepEqual(
-    feature.getSnapshot().articles.activeArticle.selectedResources.map((item) => item.resourceId),
-    ["resource-1"],
-  );
-  feature.removeSelectedResource("resource-1");
-  assert.deepEqual(feature.getSnapshot().articles.activeArticle.selectedResources, []);
+  assert.equal(typeof feature.openArticle, "undefined");
+  assert.equal(typeof feature.saveDraft, "undefined");
+  assert.equal("activeArticle" in feature.getSnapshot().articles, false);
+  assert.equal("selectionRevision" in feature.getSnapshot(), false);
   feature.dispose();
 });

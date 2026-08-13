@@ -109,14 +109,6 @@ test("missing query and command capabilities fail closed instead of resolving bu
   });
 
   await rejectsCapability(() => bridges.media.getDrafts());
-  await rejectsCapability(() =>
-    bridges.media.setDraft("draft.md", {
-      filename: "draft.md",
-      title: "draft",
-      content: "body",
-      selectedResources: [],
-    }),
-  );
   await rejectsCapability(() => bridges.media.syncOrder("order-1"));
   await rejectsCapability(() => bridges.platform.openPlatformLogin("toutiao"));
   await rejectsCapability(() => bridges.platform.pausePlatformSubmit(null));

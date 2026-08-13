@@ -28,10 +28,7 @@ const MEDIA_CHANNELS = [
   "media:remove-from-pool",
   "media:get-balance",
   "media:get-drafts",
-  "media:get-draft",
-  "media:set-draft",
   "media:scan-articles",
-  "media:preview-article",
   "media:get-orders",
   "media:sync-order",
   "media:sync-all-orders",
@@ -67,14 +64,6 @@ test("media projections and draft requests preserve all supported resource types
     types,
   );
 
-  const contract = productionIpcRegistry.byChannel("media:set-draft");
-  const request = productionIpcRegistry.encodeRequest(contract, {
-    filename: "article.md",
-    draft: {
-      selectedResources: [{ resourceId: "audio", type: "audio" }],
-    },
-  });
-  assert.equal(request.payload.draft.selectedResources[0].type, "audio");
 });
 
 test("media order IPC projection preserves a zero actual amount", () => {
@@ -224,11 +213,11 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
   assert.equal(order.hasPublishedUrl, true);
 });
 
-test("all 29 consumed media invokes have versioned exact contracts", () => {
+test("all 26 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 29);
+  assert.equal(media.length, 26);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),
@@ -382,7 +371,7 @@ test("media refresh and projections reject full resources, paths, and raw provid
   );
 });
 
-test("media registrar projects resources and articles without exposing legacy paid-submit commands", async (t) => {
+test("media registrar projects resources and articles without exposing retired editor commands", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-06-media-ipc-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const data = path.join(root, "data");
@@ -485,23 +474,14 @@ test("media registrar projects resources and articles without exposing legacy pa
   assert.equal(articles.data.items[0].filename, "article.md");
   assert.equal("filePath" in articles.data.items[0], false);
 
-  const previewContract = productionIpcRegistry.byChannel(
-    "media:preview-article",
-  );
-  const preview = await handlers.get(previewContract.channel)(
-    {},
-    productionIpcRegistry.encodeRequest(previewContract, {
-      filename: "article.md",
-    }),
-  );
-  assert.equal(preview.ok, true, JSON.stringify(preview));
-  assert.equal(preview.data.article.content, "# Fixture article\nBody");
-
   assert.equal(
     productionIpcRegistry.byChannel("media:build-confirmation"),
     null,
   );
   assert.equal(productionIpcRegistry.byChannel("media:submit-selected"), null);
+  assert.equal(productionIpcRegistry.byChannel("media:get-draft"), null);
+  assert.equal(productionIpcRegistry.byChannel("media:set-draft"), null);
+  assert.equal(productionIpcRegistry.byChannel("media:preview-article"), null);
 
   const openContract = productionIpcRegistry.byChannel(
     "media:open-published-url",

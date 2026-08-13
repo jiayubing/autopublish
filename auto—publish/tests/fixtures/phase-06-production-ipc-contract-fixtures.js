@@ -519,34 +519,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "application.getDrafts",
     featureBinding: "getDrafts",
   }),
-  "media.getDraft": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "getDraft",
-    preloadMethod: "getDraft",
-    command: "media.getDraft",
-    channel: "media:get-draft",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.getDraft",
-    featureBinding: "getDraft",
-  }),
-  "media.setDraft": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "setDraft",
-    preloadMethod: "setDraft",
-    command: "media.setDraft",
-    channel: "media:set-draft",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.setDraft",
-    featureBinding: "setDraft",
-  }),
   "media.scanArticles": Object.freeze({
     view: "media-workbench/src/App.tsx",
     viewSymbol: "useMediaFeature",
@@ -560,20 +532,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/media-ipc.js",
     application: "application.scanArticles",
     featureBinding: "scanArticles",
-  }),
-  "media.previewArticle": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "previewArticle",
-    preloadMethod: "previewArticle",
-    command: "media.previewArticle",
-    channel: "media:preview-article",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.previewArticle",
-    featureBinding: "previewArticle",
   }),
   "media.getOrders": Object.freeze({
     view: "media-workbench/src/App.tsx",
@@ -1383,7 +1341,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "addPaidSubmissionStaging",
   }),
   "content.removePaidSubmissionStaging": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
     feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1397,7 +1355,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "removePaidSubmissionStaging",
   }),
   "content.setPaidSubmissionStagingMedia": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
     feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1411,7 +1369,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "setPaidSubmissionStagingMedia",
   }),
   "content.getPaidSubmissionStaging": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
     feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -2159,7 +2117,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/App.tsx",
     "searchResources",
   ],
-  "media.getPool": ["direct", "media-workbench/src/App.tsx", "loadPoolPage"],
+  "media.getPool": [
+    "lifecycle",
+    "media-workbench/src/features/media/use-media-feature.ts",
+    "refresh",
+  ],
   "media.addToPool": ["direct", "media-workbench/src/App.tsx", "togglePool"],
   "media.removeFromPool": [
     "direct",
@@ -2171,17 +2133,10 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/media/use-media-feature.ts",
     "refresh",
   ],
-  "media.getDraft": ["direct", "media-workbench/src/App.tsx", "openArticle"],
-  "media.setDraft": ["direct", "media-workbench/src/App.tsx", "saveDraft"],
   "media.scanArticles": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "scanArticles",
-  ],
-  "media.previewArticle": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "openArticle",
+    "lifecycle",
+    "media-workbench/src/features/media/use-media-feature.ts",
+    "refresh",
   ],
   "media.getOrders": [
     "lifecycle",
@@ -2359,6 +2314,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
     "refreshManagement",
   ],
+  "content.getPaidSubmissionStaging": [
+    "lifecycle",
+    "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    "refreshManagement",
+  ],
   "attention.listArticleAttention": [
     "lifecycle",
     "media-workbench/src/features/attention/use-attention-feature.ts",
@@ -2484,14 +2444,34 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/PlatformWorkbench.tsx",
     "pauseAllGroups",
   ],
-  "content.previewPaidMediaPreflight": [
+  "content.addPaidSubmissionStaging": [
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "addPaidSubmissionStaging",
+  ],
+  "content.removePaidSubmissionStaging": [
+    "direct",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "removePaidSubmissionStaging",
+  ],
+  "content.setPaidSubmissionStagingMedia": [
+    "direct",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "setPaidSubmissionStagingMedia",
+  ],
+  "content.getPaidSubmissionStaging": [
+    "lifecycle",
+    "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    "refreshManagement",
+  ],
+  "content.previewPaidMediaPreflight": [
+    "direct",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "previewPaidMediaPreflight",
   ],
   "content.confirmPaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "confirmPaidMediaBatch",
   ],
   "content.listPaidMediaBatches": [
@@ -2501,12 +2481,12 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.startPaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "startPaidMediaBatch",
   ],
   "content.pausePaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "pausePaidMediaBatch",
   ],
   "content.removePendingQueueItems": [
@@ -2683,6 +2663,12 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "runtime",
   ],
   "media.getDrafts": ["media-workbench/src/App.tsx", "mediaSnapshot", "drafts"],
+  "media.getPool": ["media-workbench/src/App.tsx", "mediaSnapshot", "pool"],
+  "media.scanArticles": [
+    "media-workbench/src/App.tsx",
+    "mediaSnapshot",
+    "articles",
+  ],
   "media.getOrders": ["media-workbench/src/App.tsx", "mediaSnapshot", "orders"],
   "platform.getQueue": [
     "media-workbench/src/components/PlatformWorkbench.tsx",
@@ -2719,13 +2705,18 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "content.snapshot",
     "templateCatalog",
   ],
+  "content.getPaidSubmissionStaging": [
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "content.snapshot",
+    "paidStaging",
+  ],
   "content.getArticleManagementSnapshot": [
     "media-workbench/src/components/ContentWorkbench.tsx",
     "content.snapshot",
     "management",
   ],
   "content.listPaidMediaBatches": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "content.snapshot",
     "paidMediaExecution",
   ],
@@ -2862,6 +2853,14 @@ const PRODUCTION_NESTED_FEATURES = Object.freeze({
     binding: "loadManagement",
     stateField: "management",
   }),
+  "content.getPaidSubmissionStaging": Object.freeze({
+    source:
+      "media-workbench/src/features/content/article-management-feature.js",
+    factory: "createArticleManagementFeature",
+    method: "refreshManagement",
+    binding: "getPaidSubmissionStaging",
+    stateField: "paidStaging",
+  }),
   "content.listPaidMediaBatches": Object.freeze({
     source:
       "media-workbench/src/features/content/paid-media-execution-feature.js",
@@ -2931,6 +2930,9 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.retryArticleRemovalTransaction",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
+          "content.addPaidSubmissionStaging",
+          "content.removePaidSubmissionStaging",
+          "content.setPaidSubmissionStagingMedia",
           "content.previewPaidMediaPreflight",
           "content.confirmPaidMediaBatch",
           "content.removePendingQueueItems",
@@ -2969,8 +2971,8 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
 
 const PRODUCTION_PROP_WIRINGS = Object.freeze({
   "content.listPaidMediaBatches": [
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "refreshPaidMediaBatches",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "onRefreshPaidMediaBatches",
   ],
   "attention.previewArticleAttention": [
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -3028,6 +3030,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.listResearch",
           "content.listTemplateCatalog",
           "content.getArticleManagementSnapshot",
+          "content.getPaidSubmissionStaging",
           "content.listPaidMediaBatches",
           "attention.listArticleAttention",
           "generation.getRuntimeSnapshot",
@@ -3047,10 +3050,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "media.getPool",
           "media.addToPool",
           "media.removeFromPool",
-          "media.getDraft",
-          "media.setDraft",
           "media.scanArticles",
-          "media.previewArticle",
           "media.syncOrder",
           "media.syncAllOrders",
           "media.prepareOrderCancellation",
@@ -3095,10 +3095,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.retryArticleRemovalTransaction",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
-          "content.previewPaidMediaPreflight",
-          "content.confirmPaidMediaBatch",
-          "content.startPaidMediaBatch",
-          "content.pausePaidMediaBatch",
+          "content.addPaidSubmissionStaging",
           "media.prepareBindPaidOrderNumber",
           "media.bindPaidOrderNumber",
           "media.prepareConfirmPaidOrderAbsent",
@@ -3121,6 +3118,17 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "publication.prepareRegularUncertainResolution",
           "publication.confirmRegularAccepted",
           "publication.confirmRegularNotAccepted",
+        ],
+      ],
+      [
+        "content.commands",
+        [
+          "content.removePaidSubmissionStaging",
+          "content.setPaidSubmissionStagingMedia",
+          "content.previewPaidMediaPreflight",
+          "content.confirmPaidMediaBatch",
+          "content.startPaidMediaBatch",
+          "content.pausePaidMediaBatch",
         ],
       ],
       ["generationFeature", ["content.generateArticle"]],
@@ -3312,6 +3320,8 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
     "SettingsOverview",
   "media-workbench/src/App.tsx": "AppContent",
   "media-workbench/src/components/PlatformWorkbench.tsx": "PlatformWorkbench",
+  "media-workbench/src/components/PaidMediaWorkbench.tsx":
+    "PaidMediaWorkbench",
   "media-workbench/src/components/content/ArticleGenerationView.tsx":
     "ArticleGenerationView",
   "media-workbench/src/components/ContentWorkbench.tsx": "ContentWorkbench",
@@ -3963,31 +3973,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "media.getDraft",
-    channel: "media:get-draft",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:get-draft",
-    request: {
-      filename: "fixture-1",
-    },
-    result: {
-      draft: null,
-    },
-  },
-  {
-    capability: "media.setDraft",
-    channel: "media:set-draft",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:set-draft",
-    request: {
-      filename: "fixture-1",
-      draft: {},
-    },
-    result: {
-      completed: false,
-    },
-  },
-  {
     capability: "media.scanArticles",
     channel: "media:scan-articles",
     owner: "media",
@@ -3995,23 +3980,6 @@ const rawProductionIpcContractFixtures = [
     request: {},
     result: {
       items: [],
-    },
-  },
-  {
-    capability: "media.previewArticle",
-    channel: "media:preview-article",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:preview-article",
-    request: {
-      filename: "fixture-1",
-    },
-    result: {
-      article: {
-        filename: "fixture-1",
-        title: "fixture-1",
-        content: "fixture-1",
-        selectedResources: [],
-      },
     },
   },
   {

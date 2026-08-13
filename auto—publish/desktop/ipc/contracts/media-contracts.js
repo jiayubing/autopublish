@@ -427,13 +427,6 @@ const selectedResource = exactObject({
   type: optionalField(mediaResourceType),
 });
 
-const draftInput = exactObject({
-  title: optionalField(safeText(1000)),
-  remark: optionalField(safeText(10000)),
-  ignoreImages: optionalField("boolean"),
-  selectedResources: optionalField(arrayField(selectedResource, { max: 100 })),
-});
-
 const draft = exactObject({
   filename,
   title: safeText(1000),
@@ -451,13 +444,6 @@ const articleSummary = exactObject({
   hasImages: "boolean",
   imageCount: integerField({ min: 0, max: 10000 }),
   ignoreImages: "boolean",
-  selectedResources: arrayField(resource, { max: 100 }),
-});
-
-const articlePreview = exactObject({
-  filename,
-  title: safeText(1000),
-  content: multilineStringField({ min: 0, max: 2000000 }),
   selectedResources: arrayField(resource, { max: 100 }),
 });
 
@@ -746,30 +732,6 @@ const mediaContracts = [
     fromArgs: noArgs,
     toArgs: noLegacyInput,
   }),
-  contract(
-    {
-      capability: "media.getDraft",
-      channel: "media:get-draft",
-      kind: "query",
-      request: exactObject({ filename }),
-      success: exactObject({ draft: nullableField(draft) }),
-      fromArgs: (args) => ({ filename: args[0] }),
-      toArgs: (payload) => [payload.filename],
-    },
-    ["SUBMISSION_INPUT_INVALID"],
-  ),
-  contract(
-    {
-      capability: "media.setDraft",
-      channel: "media:set-draft",
-      kind: "command",
-      request: exactObject({ filename, draft: draftInput }),
-      success: completed,
-      fromArgs: (args) => ({ filename: args[0], draft: args[1] }),
-      toArgs: (payload) => [payload.filename, payload.draft],
-    },
-    ["SUBMISSION_INPUT_INVALID", "DRAFT_INVALID"],
-  ),
   contract({
     capability: "media.scanArticles",
     channel: "media:scan-articles",
@@ -779,18 +741,6 @@ const mediaContracts = [
     fromArgs: noArgs,
     toArgs: noLegacyInput,
   }),
-  contract(
-    {
-      capability: "media.previewArticle",
-      channel: "media:preview-article",
-      kind: "query",
-      request: exactObject({ filename }),
-      success: exactObject({ article: articlePreview }),
-      fromArgs: (args) => ({ filename: args[0] }),
-      toArgs: (payload) => [payload.filename],
-    },
-    ["SUBMISSION_INPUT_INVALID"],
-  ),
   contract({
     capability: "media.getOrders",
     channel: "media:get-orders",
@@ -1164,18 +1114,6 @@ function projectMediaArticleSummary(value) {
   };
 }
 
-function projectMediaArticlePreview(value) {
-  const article = value || {};
-  return {
-    filename: String(article.filename || ""),
-    title: String(article.title || ""),
-    content: String(article.content || ""),
-    selectedResources: Array.isArray(article.selectedResources)
-      ? article.selectedResources.map(projectMediaResource)
-      : [],
-  };
-}
-
 function projectMediaResourcePage(value) {
   const page = value || {};
   return {
@@ -1288,7 +1226,6 @@ module.exports = {
   projectMediaResource,
   projectMediaDraft,
   projectMediaArticleSummary,
-  projectMediaArticlePreview,
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,
