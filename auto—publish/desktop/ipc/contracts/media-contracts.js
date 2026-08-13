@@ -826,7 +826,10 @@ const mediaContracts = [
       fromArgs: (args) => args[0],
       toArgs: (payload) => [payload],
     },
-    ["ORDER_CANCELLATION_ATTEMPT_NOT_FOUND", "ORDER_CANCELLATION_ALREADY_RESOLVED"],
+    [
+      "ORDER_CANCELLATION_ATTEMPT_NOT_FOUND",
+      "ORDER_CANCELLATION_ALREADY_RESOLVED",
+    ],
   ),
   ...[
     ["confirmCancellationSucceeded", "confirm-cancellation-succeeded"],

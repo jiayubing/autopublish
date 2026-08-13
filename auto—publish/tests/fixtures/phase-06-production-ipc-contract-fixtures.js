@@ -736,8 +736,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "listAccountProfiles",
   }),
   "platform.confirmAccountProfile": Object.freeze({
-    view:
-      "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
     viewSymbol: "AccountProfileSelector",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
@@ -752,8 +751,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "confirmAccountProfile",
   }),
   "platform.openLogin": Object.freeze({
-    view:
-      "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
     viewSymbol: "AccountProfileSelector",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
@@ -768,8 +766,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "openLogin",
   }),
   "platform.checkLogin": Object.freeze({
-    view:
-      "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
     viewSymbol: "AccountProfileSelector",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
@@ -1329,7 +1326,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.addPaidSubmissionStaging": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "useContentWorkbenchFeature",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "addPaidSubmissionStaging",
@@ -1343,7 +1341,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.removePaidSubmissionStaging": Object.freeze({
     view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "removePaidSubmissionStaging",
@@ -1357,7 +1356,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.setPaidSubmissionStagingMedia": Object.freeze({
     view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "setPaidSubmissionStagingMedia",
@@ -1371,7 +1371,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.getPaidSubmissionStaging": Object.freeze({
     view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "useContentWorkbenchFeature",
-    feature: "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "getPaidSubmissionStaging",
@@ -1440,7 +1441,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.listRegularQueueGroups": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
-    feature: "media-workbench/src/features/platform/platform-feature-context.tsx",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "listRegularQueueGroups",
@@ -1454,7 +1456,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.startRegularQueueGroup": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
-    feature: "media-workbench/src/features/platform/platform-feature-context.tsx",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "startRegularQueueGroup",
@@ -1468,7 +1471,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.pauseRegularQueueGroup": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
-    feature: "media-workbench/src/features/platform/platform-feature-context.tsx",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "pauseRegularQueueGroup",
@@ -1482,7 +1486,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.startAllRegularQueueGroups": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
-    feature: "media-workbench/src/features/platform/platform-feature-context.tsx",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "startAllRegularQueueGroups",
@@ -1496,7 +1501,8 @@ const PRODUCTION_CALLERS = Object.freeze({
   "content.pauseAllRegularQueueGroups": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
-    feature: "media-workbench/src/features/platform/platform-feature-context.tsx",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "pauseAllRegularQueueGroups",
@@ -2414,11 +2420,27 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     "admitRegularQueueItems",
   ],
-  "media.prepareOrderCancellation": ["direct", "media-workbench/src/App.tsx", "prepareOrderCancellation"],
+  "media.prepareOrderCancellation": [
+    "direct",
+    "media-workbench/src/App.tsx",
+    "prepareOrderCancellation",
+  ],
   "media.cancelOrder": ["direct", "media-workbench/src/App.tsx", "cancelOrder"],
-  "media.prepareCancellationResolution": ["direct", "media-workbench/src/App.tsx", "prepareCancellationResolution"],
-  "media.confirmCancellationSucceeded": ["direct", "media-workbench/src/App.tsx", "confirmCancellationSucceeded"],
-  "media.confirmCancellationNotApplied": ["direct", "media-workbench/src/App.tsx", "confirmCancellationNotApplied"],
+  "media.prepareCancellationResolution": [
+    "direct",
+    "media-workbench/src/App.tsx",
+    "prepareCancellationResolution",
+  ],
+  "media.confirmCancellationSucceeded": [
+    "direct",
+    "media-workbench/src/App.tsx",
+    "confirmCancellationSucceeded",
+  ],
+  "media.confirmCancellationNotApplied": [
+    "direct",
+    "media-workbench/src/App.tsx",
+    "confirmCancellationNotApplied",
+  ],
   "content.listRegularQueueGroups": [
     "lifecycle",
     "media-workbench/src/features/platform/platform-feature-context.tsx",
@@ -3320,8 +3342,7 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
     "SettingsOverview",
   "media-workbench/src/App.tsx": "AppContent",
   "media-workbench/src/components/PlatformWorkbench.tsx": "PlatformWorkbench",
-  "media-workbench/src/components/PaidMediaWorkbench.tsx":
-    "PaidMediaWorkbench",
+  "media-workbench/src/components/PaidMediaWorkbench.tsx": "PaidMediaWorkbench",
   "media-workbench/src/components/content/ArticleGenerationView.tsx":
     "ArticleGenerationView",
   "media-workbench/src/components/ContentWorkbench.tsx": "ContentWorkbench",
@@ -4835,8 +4856,7 @@ const rawProductionIpcContractFixtures = [
     capability: "content.addPaidSubmissionStaging",
     channel: "content:add-paid-submission-staging",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:add-paid-submission-staging",
+    productionCaller: "desktop/preload.js:content:add-paid-submission-staging",
     request: {
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
     },
@@ -4900,8 +4920,7 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getPaidSubmissionStaging",
     channel: "content:get-paid-submission-staging",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:get-paid-submission-staging",
+    productionCaller: "desktop/preload.js:content:get-paid-submission-staging",
     request: { clientId: "fixture-1" },
     result: {
       clientId: "fixture-1",
@@ -5000,7 +5019,15 @@ const rawProductionIpcContractFixtures = [
     owner: "media",
     productionCaller: "desktop/preload.js:media:prepare-order-cancellation",
     request: { orderId: "order-1" },
-    result: { orderId: "order-1", cancellationAttemptId: "cancel-1", expectedObservationFingerprint: "a".repeat(64), actionLabel: "取消订单", riskCode: null, confirmationToken: "token-1", expiresAt: "2026-08-08T00:05:00.000Z" },
+    result: {
+      orderId: "order-1",
+      cancellationAttemptId: "cancel-1",
+      expectedObservationFingerprint: "a".repeat(64),
+      actionLabel: "取消订单",
+      riskCode: null,
+      confirmationToken: "token-1",
+      expiresAt: "2026-08-08T00:05:00.000Z",
+    },
   },
   {
     capability: "media.cancelOrder",
@@ -5008,22 +5035,59 @@ const rawProductionIpcContractFixtures = [
     owner: "media",
     productionCaller: "desktop/preload.js:media:cancel-order",
     request: { orderId: "order-1", confirmationToken: "token-1" },
-    result: { status: "cancelled", cancellationAttemptId: "cancel-1", manualCheckRequired: false, idempotent: false, publishedWins: false },
+    result: {
+      status: "cancelled",
+      cancellationAttemptId: "cancel-1",
+      manualCheckRequired: false,
+      idempotent: false,
+      publishedWins: false,
+    },
   },
   {
     capability: "media.prepareCancellationResolution",
     channel: "media:prepare-cancellation-resolution",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:prepare-cancellation-resolution",
+    productionCaller:
+      "desktop/preload.js:media:prepare-cancellation-resolution",
     request: { cancellationAttemptId: "cancel-1" },
-    result: { version: 1, cancellationAttemptId: "cancel-1", orderId: "order-1", expectedObservationFingerprint: "a".repeat(64), classification: "verified_cancelled", evidenceFingerprint: "b".repeat(64), evidenceSummary: { source: "supplier_query", status: "cancelled", observed: true }, confirmationToken: "token-2", preparedAt: "2026-08-08T00:00:00.000Z", expiresAt: "2026-08-08T00:05:00.000Z" },
+    result: {
+      version: 1,
+      cancellationAttemptId: "cancel-1",
+      orderId: "order-1",
+      expectedObservationFingerprint: "a".repeat(64),
+      classification: "verified_cancelled",
+      evidenceFingerprint: "b".repeat(64),
+      evidenceSummary: {
+        source: "supplier_query",
+        status: "cancelled",
+        observed: true,
+      },
+      confirmationToken: "token-2",
+      preparedAt: "2026-08-08T00:00:00.000Z",
+      expiresAt: "2026-08-08T00:05:00.000Z",
+    },
   },
   ...[
-    ["media.confirmCancellationSucceeded", "media:confirm-cancellation-succeeded", "cancelled"],
-    ["media.confirmCancellationNotApplied", "media:confirm-cancellation-not-applied", "rejected"],
+    [
+      "media.confirmCancellationSucceeded",
+      "media:confirm-cancellation-succeeded",
+      "cancelled",
+    ],
+    [
+      "media.confirmCancellationNotApplied",
+      "media:confirm-cancellation-not-applied",
+      "rejected",
+    ],
   ].map(([capability, channel, status]) => ({
-    capability, channel, owner: "media", productionCaller: `desktop/preload.js:${channel}`,
-    request: { cancellationAttemptId: "cancel-1", confirmationToken: "token-2", evidenceFingerprint: "b".repeat(64) },
+    capability,
+    channel,
+    owner: "media",
+    productionCaller: `desktop/preload.js:${channel}`,
+    request: {
+      cancellationAttemptId: "cancel-1",
+      confirmationToken: "token-2",
+      evidenceFingerprint: "b".repeat(64),
+    },
     result: { status, idempotent: false, publishedWins: false },
   })),
   {
@@ -5054,7 +5118,8 @@ const rawProductionIpcContractFixtures = [
     capability: "content.startAllRegularQueueGroups",
     channel: "content:start-all-regular-queue-groups",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:start-all-regular-queue-groups",
+    productionCaller:
+      "desktop/preload.js:content:start-all-regular-queue-groups",
     request: {},
     result: { items: [] },
   },
@@ -5062,7 +5127,8 @@ const rawProductionIpcContractFixtures = [
     capability: "content.pauseAllRegularQueueGroups",
     channel: "content:pause-all-regular-queue-groups",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:pause-all-regular-queue-groups",
+    productionCaller:
+      "desktop/preload.js:content:pause-all-regular-queue-groups",
     request: {},
     result: { items: [] },
   },

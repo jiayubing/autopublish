@@ -374,7 +374,10 @@ const api = {
       return ipcRenderer.invoke("content:add-paid-submission-staging", input);
     },
     removePaidSubmissionStaging: function (input) {
-      return ipcRenderer.invoke("content:remove-paid-submission-staging", input);
+      return ipcRenderer.invoke(
+        "content:remove-paid-submission-staging",
+        input,
+      );
     },
     setPaidSubmissionStagingMedia: function (input) {
       return ipcRenderer.invoke(
@@ -645,7 +648,10 @@ const api = {
       return ipcRenderer.invoke("media:confirm-cancellation-succeeded", input);
     },
     confirmCancellationNotApplied: function (input) {
-      return ipcRenderer.invoke("media:confirm-cancellation-not-applied", input);
+      return ipcRenderer.invoke(
+        "media:confirm-cancellation-not-applied",
+        input,
+      );
     },
     prepareOrderStatusAnomalyResolution: function (input) {
       return ipcRenderer.invoke(

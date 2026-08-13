@@ -2,20 +2,42 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 async function createFeature() {
-  const { createMediaFeature } = await import(
-    "../media-workbench/src/features/media/media-feature.js"
-  );
-  const resource = { resourceId: "resource-1", name: "资源一", price: 10, type: "image" };
+  const { createMediaFeature } =
+    await import("../media-workbench/src/features/media/media-feature.js");
+  const resource = {
+    resourceId: "resource-1",
+    name: "资源一",
+    price: 10,
+    type: "image",
+  };
   return createMediaFeature({
-    getResourcePage: async () => ({ items: [resource], total: 1, page: 1, pageSize: 50 }),
-    searchResourcePage: async () => ({ items: [resource], total: 1, page: 1, pageSize: 50 }),
+    getResourcePage: async () => ({
+      items: [resource],
+      total: 1,
+      page: 1,
+      pageSize: 50,
+    }),
+    searchResourcePage: async () => ({
+      items: [resource],
+      total: 1,
+      page: 1,
+      pageSize: 50,
+    }),
     refreshResources: async () => ({ status: "complete" }),
-    getPoolPage: async () => ({ items: [], memberResourceIds: [], total: 0, page: 1, pageSize: 50 }),
+    getPoolPage: async () => ({
+      items: [],
+      memberResourceIds: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+    }),
     addToPool: async () => ({}),
     removeFromPool: async () => ({}),
     getBalance: async () => 80,
     getDrafts: async () => [],
-    scanArticles: async () => [{ filename: "article-1", title: "文章", selectedResources: [] }],
+    scanArticles: async () => [
+      { filename: "article-1", title: "文章", selectedResources: [] },
+    ],
     getOrders: async () => [],
     syncOrder: async () => ({}),
     syncAllOrders: async () => ({}),

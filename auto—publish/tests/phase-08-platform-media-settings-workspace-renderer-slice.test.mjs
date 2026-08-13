@@ -186,15 +186,23 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
   it("records an initial run refresh failure while preserving the query error", async () => {
     const reports = [];
     const feature = createPlatformFeature({
-      getRunState: async () => { throw new Error("private platform transport detail"); },
+      getRunState: async () => {
+        throw new Error("private platform transport detail");
+      },
       reportDiagnostic: (code) => reports.push(code),
     });
     feature.setScope({ workspaceRuntimeId: "platform-refresh-failure" });
     await feature.start();
     assert.equal(feature.getSnapshot().runQuery.loading, false);
-    assert.equal(feature.getSnapshot().runQuery.error.code, "PLATFORM_RUN_QUERY_FAILED");
+    assert.equal(
+      feature.getSnapshot().runQuery.error.code,
+      "PLATFORM_RUN_QUERY_FAILED",
+    );
     assert.deepEqual(reports, ["PLATFORM_RUN_REFRESH_FAILED"]);
-    assert.doesNotMatch(JSON.stringify(feature.getSnapshot()), /private platform transport detail/);
+    assert.doesNotMatch(
+      JSON.stringify(feature.getSnapshot()),
+      /private platform transport detail/,
+    );
     feature.dispose();
   });
 
@@ -207,7 +215,15 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       pauseIntent: "manual",
       manuallyPaused: true,
       current: null,
-      remaining: [{ itemId: "item-a", batchId: "batch-a", articleId: "article-a", regularPublicationAttemptId: "attempt-a", position: 1 }],
+      remaining: [
+        {
+          itemId: "item-a",
+          batchId: "batch-a",
+          articleId: "article-a",
+          regularPublicationAttemptId: "attempt-a",
+          position: 1,
+        },
+      ],
       actions: { canStart: true, canPause: false, reasonCode: null },
       revision: 1,
       createdAt: "2026-08-08T00:00:00.000Z",
@@ -216,10 +232,15 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     let listedGroups = [group];
     let startAllCalls = 0;
     const feature = createPlatformFeature({
-      platformDisplayName: (platformId) => platformId === "toutiao" ? "头条" : platformId,
+      platformDisplayName: (platformId) =>
+        platformId === "toutiao" ? "头条" : platformId,
       listRegularQueueGroups: async () => listedGroups,
       listAccountProfiles: async () => [
-        { accountProfileId: "profile-a", platformId: "toutiao", displayName: "机构主账号" },
+        {
+          accountProfileId: "profile-a",
+          platformId: "toutiao",
+          displayName: "机构主账号",
+        },
       ],
       confirmAccountProfile: async () => ({
         accountProfileId: "profile-b",
@@ -237,26 +258,53 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     feature.setScope({ workspaceRuntimeId: "platform-queue-groups" });
     await feature.refreshAccountProfiles();
     await feature.refreshRegularQueueGroups();
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].showAccount, false);
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].platformLabel, "头条");
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].accountLabel, "机构主账号");
-    await feature.confirmAccountProfile({ platformId: "toutiao", displayName: "机构备用账号" });
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].showAccount, true);
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].showAccount,
+      false,
+    );
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].platformLabel,
+      "头条",
+    );
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].accountLabel,
+      "机构主账号",
+    );
+    await feature.confirmAccountProfile({
+      platformId: "toutiao",
+      displayName: "机构备用账号",
+    });
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].showAccount,
+      true,
+    );
     const first = feature.startAllGroups();
     const second = feature.startAllGroups();
     await Promise.all([first, second]);
     assert.equal(startAllCalls, 1);
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].pauseIntent, "manual");
-    listedGroups = [{
-      ...group,
-      runState: "running",
-      pauseIntent: "none",
-      manuallyPaused: false,
-      remaining: [],
-      actions: { canStart: false, canPause: false, reasonCode: "REGULAR_QUEUE_GROUP_EMPTY" },
-    }];
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].pauseIntent,
+      "manual",
+    );
+    listedGroups = [
+      {
+        ...group,
+        runState: "running",
+        pauseIntent: "none",
+        manuallyPaused: false,
+        remaining: [],
+        actions: {
+          canStart: false,
+          canPause: false,
+          reasonCode: "REGULAR_QUEUE_GROUP_EMPTY",
+        },
+      },
+    ];
     await feature.refreshRegularQueueGroups();
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].stateLabel, "队列为空");
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].stateLabel,
+      "队列为空",
+    );
     feature.dispose();
   });
 
@@ -271,7 +319,15 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       pauseIntent: "manual",
       manuallyPaused: true,
       current: null,
-      remaining: [{ itemId: "item-running", batchId: "batch-running", articleId: "article-running", regularPublicationAttemptId: "attempt-running", position: 1 }],
+      remaining: [
+        {
+          itemId: "item-running",
+          batchId: "batch-running",
+          articleId: "article-running",
+          regularPublicationAttemptId: "attempt-running",
+          position: 1,
+        },
+      ],
       actions: { canStart: true, canPause: false, reasonCode: null },
       revision: 1,
       createdAt: "2026-08-08T00:00:00.000Z",
@@ -308,7 +364,10 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     const starting = feature.startGroup("group-running");
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(feature.getSnapshot().commands.startGroup.busy, true);
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].actions.canPause, true);
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].actions.canPause,
+      true,
+    );
     await feature.pauseGroup("group-running");
     assert.equal(pauseCalls, 1);
 
@@ -327,7 +386,15 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       pauseIntent: "manual",
       manuallyPaused: true,
       current: null,
-      remaining: [{ itemId: "item-stale-query", batchId: "batch-stale-query", articleId: "article-stale-query", regularPublicationAttemptId: "attempt-stale-query", position: 1 }],
+      remaining: [
+        {
+          itemId: "item-stale-query",
+          batchId: "batch-stale-query",
+          articleId: "article-stale-query",
+          regularPublicationAttemptId: "attempt-stale-query",
+          position: 1,
+        },
+      ],
       actions: { canStart: true, canPause: false, reasonCode: null },
       revision: 2,
       createdAt: "2026-08-08T00:00:00.000Z",
@@ -341,10 +408,22 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
 
     const staleQuery = feature.refreshRegularQueueGroups("initial");
     await feature.pauseGroup(paused.queueGroupId);
-    queryGate.resolve([{ ...paused, runState: "running", pauseIntent: "none", manuallyPaused: false, actions: { canStart: false, canPause: true, reasonCode: null }, revision: 1 }]);
+    queryGate.resolve([
+      {
+        ...paused,
+        runState: "running",
+        pauseIntent: "none",
+        manuallyPaused: false,
+        actions: { canStart: false, canPause: true, reasonCode: null },
+        revision: 1,
+      },
+    ]);
     await staleQuery;
 
-    assert.equal(feature.getSnapshot().regularQueueGroupViews[0].pauseIntent, "manual");
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].pauseIntent,
+      "manual",
+    );
     assert.equal(feature.getSnapshot().regularQueueGroupViews[0].revision, 2);
     feature.dispose();
   });

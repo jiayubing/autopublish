@@ -50,10 +50,12 @@ function safeError(value, fallbackCode, fallbackMessage) {
     value && typeof value === "object" && typeof value.userMessage === "string"
       ? value.userMessage
       : null;
-  const candidateCode = value && typeof value.code === "string" &&
+  const candidateCode =
+    value &&
+    typeof value.code === "string" &&
     /^[A-Z][A-Z0-9_]{1,127}$/.test(value.code)
-    ? value.code
-    : fallbackCode;
+      ? value.code
+      : fallbackCode;
   const isSafeOperationalError = Boolean(
     value &&
     typeof value === "object" &&
@@ -63,7 +65,9 @@ function safeError(value, fallbackCode, fallbackMessage) {
     typeof candidateMessage === "string" &&
     candidateMessage.length <= 1000 &&
     !/[\\/\x00-\x1f\x7f]/.test(candidateMessage) &&
-    !/\b(?:cookie|authorization|bearer|token|api[-_ ]?key|password|secret|header|body|database|path)\b/i.test(candidateMessage),
+    !/\b(?:cookie|authorization|bearer|token|api[-_ ]?key|password|secret|header|body|database|path)\b/i.test(
+      candidateMessage,
+    ),
   );
   return Object.freeze({
     code: candidateCode,

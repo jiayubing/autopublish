@@ -1908,7 +1908,12 @@ function jsxReceiverWiresFeature(
     return false;
   }
 
-  function parameterCallsites(ownerSymbol, parameterIndex, parameterName, visit) {
+  function parameterCallsites(
+    ownerSymbol,
+    parameterIndex,
+    parameterName,
+    visit,
+  ) {
     for (const candidateSource of program.getSourceFiles()) {
       if (candidateSource.isDeclarationFile) continue;
       for (const candidate of walk(
@@ -1923,8 +1928,7 @@ function jsxReceiverWiresFeature(
       for (const element of walk(
         candidateSource,
         (node) =>
-          (ts.isJsxOpeningElement(node) ||
-            ts.isJsxSelfClosingElement(node)) &&
+          (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
           canonicalSymbol(checker, node.tagName) === ownerSymbol,
       )) {
         const attribute = element.attributes.properties.find(
@@ -2007,11 +2011,7 @@ function jsxReceiverWiresFeature(
         (ts.isVariableDeclaration(declaration) ||
           ts.isPropertyAssignment(declaration)) &&
         declaration.initializer &&
-        expressionTargetsFeature(
-          declaration.initializer,
-          propertyPath,
-          visited,
-        )
+        expressionTargetsFeature(declaration.initializer, propertyPath, visited)
       )
         return true;
       if (ts.isParameter(declaration)) {
@@ -2879,24 +2879,26 @@ function bridgeCallsPreloadMember(
 
   function symbolHasWrites(callable, target, afterPosition = -1) {
     if (!callable || !target) return false;
-    return walk(
-      callable,
-      (node) => {
-        const left = assignmentTarget(node);
-        return Boolean(
-          left &&
+    return (
+      walk(
+        callable,
+        (node) => {
+          const left = assignmentTarget(node);
+          return Boolean(
+            left &&
             node.pos > afterPosition &&
             assignmentTargetNodes(left).some(
               (candidate) => canonicalSymbol(checker, candidate) === target,
             ),
-        );
-      },
-      (node) =>
-        ts.isFunctionLike(node) &&
-        node !== callable &&
-        !functionIsImmediatelyInvoked(node),
-      checker,
-    ).length > 0;
+          );
+        },
+        (node) =>
+          ts.isFunctionLike(node) &&
+          node !== callable &&
+          !functionIsImmediatelyInvoked(node),
+        checker,
+      ).length > 0
+    );
   }
 
   function returnsParameter(callable, parameterIndex) {
@@ -3132,10 +3134,10 @@ function bridgeCallsPreloadMember(
       const returns = desktopConsole ? returnStatements(desktopConsole) : [];
       return Boolean(
         desktopConsole &&
-          returns.length > 0 &&
-          returns.every(({ expression }) =>
-            reachesDesktopConsole(expression, new Set(visited), desktopConsole),
-          ),
+        returns.length > 0 &&
+        returns.every(({ expression }) =>
+          reachesDesktopConsole(expression, new Set(visited), desktopConsole),
+        ),
       );
     }
     if (
@@ -5604,8 +5606,10 @@ function eventCleanupFollowsStart(
       ? expression.text
       : ts.isPropertyAccessExpression(expression)
         ? expression.name.text
-        : '';
-    return ['useEffect', 'useLayoutEffect', 'useInsertionEffect'].includes(name);
+        : "";
+    return ["useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
+      name,
+    );
   }
 
   function invocationSites(call) {
@@ -5881,7 +5885,8 @@ function eventCleanupFollowsStart(
       const crossSource =
         allowCrossSource && cleanup.getSourceFile() !== start.getSourceFile();
       if (
-        (!allowCrossSource && cleanup.getSourceFile() !== start.getSourceFile()) ||
+        (!allowCrossSource &&
+          cleanup.getSourceFile() !== start.getSourceFile()) ||
         (!crossSource && cleanup.pos <= start.pos && !registeredAfterStart) ||
         !callsCanSharePath(start, cleanup) ||
         startMayRepeat(start) ||
@@ -5889,8 +5894,9 @@ function eventCleanupFollowsStart(
         hasIndirectRecursiveInvocationBetween(start, cleanup)
       )
         return false;
-      const effectCleanup =
-        Boolean(cleanupRegistration && isReactEffectRegistration(cleanupRegistration));
+      const effectCleanup = Boolean(
+        cleanupRegistration && isReactEffectRegistration(cleanupRegistration),
+      );
       if (
         cleanupHasConditionalPath(cleanup) ||
         cleanupHasReachableExitBetween(start, cleanup) ||
@@ -7398,7 +7404,8 @@ function lifecycleConsumerDerivesFromFeatureSnapshot(
         const sources = new Set();
         const moduleSymbol = canonicalSymbol(checker, specifier);
         for (const moduleDeclaration of moduleSymbol?.declarations || []) {
-          if (ts.isSourceFile(moduleDeclaration)) sources.add(moduleDeclaration);
+          if (ts.isSourceFile(moduleDeclaration))
+            sources.add(moduleDeclaration);
         }
         if (specifier.text.startsWith(".")) {
           const base = path.resolve(
@@ -7577,9 +7584,8 @@ function factoryPassesParameterToNestedFactory(
   outerParameter,
 ) {
   if (!factory || !nestedFactorySymbol || !outerParameter) return false;
-  const nestedFactory = declarationOf(
-    nestedFactorySymbol,
-    (candidate) => ts.isFunctionLike(candidate),
+  const nestedFactory = declarationOf(nestedFactorySymbol, (candidate) =>
+    ts.isFunctionLike(candidate),
   );
   if (!nestedFactory) return false;
   const nestedParameter = nestedFactory.parameters[0];
@@ -8254,7 +8260,9 @@ function walk(node, predicate, boundary, checker = null) {
   function visit(current) {
     const stopsHere = current !== node && boundary?.(current);
     if (
-      (!stopsHere || !checker || !isStaticallyUnreachableBranch(checker, current)) &&
+      (!stopsHere ||
+        !checker ||
+        !isStaticallyUnreachableBranch(checker, current)) &&
       predicate(current)
     )
       matches.push(current);

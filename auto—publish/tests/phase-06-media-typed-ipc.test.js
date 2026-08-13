@@ -63,7 +63,6 @@ test("media projections and draft requests preserve all supported resource types
     }).selectedResources.map((resource) => resource.type),
     types,
   );
-
 });
 
 test("media order IPC projection preserves a zero actual amount", () => {
