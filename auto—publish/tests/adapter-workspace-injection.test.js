@@ -3,6 +3,9 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { createWorkspacePaths } = require("../src/infrastructure/workspace/workspace-paths");
+const { createPlatformRuntimeContext } = require("../src/platforms/platform-runtime-context");
+const { loadPlatforms } = require("../src/core/platforms");
 
 it("media adapters scan only their injected workspace input without module reload", function() {
   const { createMediaAdapter } = require("../src/platforms/media/adapter");
@@ -27,4 +30,39 @@ it("Hepan workspace config overrides inherited global configuration", function()
     fs.writeFileSync(path.join(root, "config", "hepan.json"), JSON.stringify({ cookiePath: "workspace-cookie", pythonPath: "workspace-python" }));
     assert.deepStrictEqual(resolveHepanRuntime(root, { HEPAN_COOKIE_PATH: "global-cookie", HEPAN_PYTHON: "global-python" }), { cookiePath: "workspace-cookie", pythonPath: "workspace-python" });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+it("platform loader constructs adapters from explicit workspace and browser runtime dependencies", function() {
+  const one = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-one-"));
+  const two = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-two-"));
+  try {
+    const onePaths = createWorkspacePaths(one);
+    const twoPaths = createWorkspacePaths(two);
+    fs.mkdirSync(onePaths.hepanInput, { recursive: true });
+    fs.mkdirSync(twoPaths.mediaInput, { recursive: true });
+    fs.writeFileSync(path.join(onePaths.hepanInput, "one.txt"), "one");
+    fs.writeFileSync(path.join(twoPaths.mediaInput, "two.txt"), "two");
+
+    const oneContext = createPlatformRuntimeContext({
+      workspacePaths: onePaths,
+      browserRuntime: { browserChannel: "chromium", profileDir: path.join(one, "profiles") },
+    });
+    const twoContext = createPlatformRuntimeContext({
+      workspacePaths: twoPaths,
+      browserRuntime: { browserChannel: "msedge", profileDir: path.join(two, "profiles") },
+    });
+    const oneAdapters = loadPlatforms({ platformIds: ["hepan", "media"], runtimeContext: oneContext });
+    const twoAdapters = loadPlatforms({ platformIds: ["hepan", "media"], runtimeContext: twoContext });
+
+    assert.deepStrictEqual(oneAdapters.find((adapter) => adapter.id === "hepan").scanArticles().map((item) => item.filename), ["one.txt"]);
+    assert.deepStrictEqual(oneAdapters.find((adapter) => adapter.id === "media").scanArticles(), []);
+    assert.deepStrictEqual(twoAdapters.find((adapter) => adapter.id === "hepan").scanArticles(), []);
+    assert.deepStrictEqual(twoAdapters.find((adapter) => adapter.id === "media").scanArticles().map((item) => item.filename), ["two.txt"]);
+    assert.equal(oneContext.browserRuntime.browserChannel, "chromium");
+    assert.equal(oneContext.browserRuntime.profileDir, path.join(one, "profiles"));
+    assert.equal(twoContext.browserRuntime.browserChannel, "msedge");
+  } finally {
+    fs.rmSync(one, { recursive: true, force: true });
+    fs.rmSync(two, { recursive: true, force: true });
+  }
 });

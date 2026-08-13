@@ -71,6 +71,7 @@ function validateAdapter(adapter, id) {
 function loadPlatforms(options) {
   var opts = options || {};
   var selected = normalizePlatformIds(opts.platformIds);
+  var runtimeContext = opts.runtimeContext;
   var raw = fs.readFileSync(configPath(), "utf-8");
   var cfg = JSON.parse(raw);
   var enabled = cfg.enabled || [];
@@ -85,7 +86,12 @@ function loadPlatforms(options) {
     var adapterPath = path.resolve(__dirname, "../platforms", id, "adapter");
     var adapter;
     try {
-      adapter = require(adapterPath);
+      var adapterModule = require(adapterPath);
+      adapter =
+        runtimeContext &&
+        typeof adapterModule.createPlatformAdapter === "function"
+          ? adapterModule.createPlatformAdapter(runtimeContext)
+          : adapterModule;
     } catch (e) {
       reportDiagnostic({
         code: "PLATFORM_ADAPTER_LOAD_FAILED",

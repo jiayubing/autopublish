@@ -799,7 +799,19 @@ function createHepanAdapter(options) {
 
 const defaultAdapter = createHepanAdapter();
 
+function createPlatformAdapter(runtimeContext) {
+  const context = runtimeContext || {};
+  const workspacePaths = context.workspacePaths || {};
+  return createHepanAdapter({
+    inputDir: workspacePaths.hepanInput,
+    tempDir: workspacePaths.tmp
+      ? path.join(workspacePaths.tmp, "hepan")
+      : undefined,
+  });
+}
+
 module.exports = Object.assign({}, defaultAdapter, {
+  createPlatformAdapter,
   createHepanAdapter,
   resolveHepanRuntime,
   cleanupExpiredHepanPayloads,

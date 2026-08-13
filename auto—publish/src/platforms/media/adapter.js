@@ -175,49 +175,56 @@ function createMediaAdapter(opts) {
 
 var draftStore = new MediaDraftStore();
 
-module.exports = {
-  id: 'media',
-  publicationTarget: { kind: 'resource', granularity: 'resource' },
-  contentQueueImport: true,
-  scanDir: 'media',
+function createPlatformAdapter(runtimeContext) {
+  const context = runtimeContext || {};
+  const workspacePaths = context.workspacePaths || {};
+  const inputDir = workspacePaths.mediaInput || path.join(DIRS.inputDir, "media");
+  return {
+    id: 'media',
+    publicationTarget: { kind: 'resource', granularity: 'resource' },
+    contentQueueImport: true,
+    scanDir: 'media',
 
-  ensureSession: function() {},
+    ensureSession: function() {},
 
-  ensureLoggedIn: async function() {
-    return true;
-  },
+    ensureLoggedIn: async function() {
+      return true;
+    },
 
 
-  scanArticles: function(scanDir) {
-    var fs = require("fs");
-    var path = require("path");
-    var inputDir = path.join(DIRS.inputDir, scanDir);
-    if (!fs.existsSync(inputDir)) return [];
-    return fs.readdirSync(inputDir).filter(function(name) {
-      if (name.indexOf("~$") === 0) return false;
-      if (name === ".gitkeep") return false;
-      return name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
-    }).map(function(name) {
-      return {
-        file: path.join(inputDir, name),
-        filename: name,
-        title: path.basename(name, path.extname(name))
-      };
-    });
-  },
+    scanArticles: function() {
+      var fs = require("fs");
+      if (!fs.existsSync(inputDir)) return [];
+      return fs.readdirSync(inputDir).filter(function(name) {
+        if (name.indexOf("~$") === 0) return false;
+        if (name === ".gitkeep") return false;
+        return name.endsWith(".docx") || name.endsWith(".txt") || name.endsWith(".md");
+      }).map(function(name) {
+        return {
+          file: path.join(inputDir, name),
+          filename: name,
+          title: path.basename(name, path.extname(name))
+        };
+      });
+    },
 
-  parseArticleFiles: function(articles) {
-    return articles.map(function(a) { return a; });
-  },
+    parseArticleFiles: function(articles) {
+      return articles.map(function(a) { return a; });
+    },
 
-  closeSession: function() {},
+    closeSession: function() {},
 
-  publishArticle: async function() {
-    // Media submission is main-process only: its configured client is built
-    // from platform settings and must never be reconstructed in a worker.
-    return { status: "group_blocked", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" };
-  },
+    publishArticle: async function() {
+      // Media submission is main-process only: its configured client is built
+      // from platform settings and must never be reconstructed in a worker.
+      return { status: "group_blocked", errorCode: "MEDIA_MAIN_PROCESS_REQUIRED" };
+    },
 
-  createMediaAdapter: createMediaAdapter,
-  createMediaSupplierAdapter: createMediaSupplierAdapter,
-};
+    createMediaAdapter: createMediaAdapter,
+    createMediaSupplierAdapter: createMediaSupplierAdapter,
+  };
+}
+
+module.exports = Object.assign(createPlatformAdapter(), {
+  createPlatformAdapter: createPlatformAdapter,
+});
