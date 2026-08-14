@@ -412,6 +412,12 @@ const api = {
     pausePaidMediaBatch: function (input) {
       return ipcRenderer.invoke("content:pause-paid-media-batch", input);
     },
+    cancelRemainingPaidMediaBatchItems: function (input) {
+      return ipcRenderer.invoke(
+        "content:cancel-remaining-paid-media-batch-items",
+        input,
+      );
+    },
     cancelSubmissionBatch: function (input) {
       return ipcRenderer.invoke("content:cancel-submission-batch", input);
     },

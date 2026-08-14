@@ -19,6 +19,7 @@ test("content generation reads the template catalog independently of client rese
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
+    cancelRemainingPaidMediaBatchItems: async () => ({}),
   });
   feature.setScope({ workspaceRuntimeId: "runtime-1" });
   await feature.refresh("initial");

@@ -478,6 +478,7 @@ it("exposes paid-media batch snapshot, start, and pause as independent commands"
   const handlers = new Map();
   let finishStart;
   let pauseCalls = 0;
+  let cancelCalls = 0;
   const batch = {
     batchId: "paid-batch-1",
     mediaResourceId: "media-1",
@@ -518,6 +519,16 @@ it("exposes paid-media batch snapshot, start, and pause as independent commands"
         pauseCalls += 1;
         return { batch };
       },
+      cancelRemaining: async ({ batchId }) => {
+        cancelCalls += 1;
+        return {
+          executionStatus: "remaining_cancelled",
+          cancelledCount: 1,
+          idempotentCount: 0,
+          skippedCount: 0,
+          batch: { ...batch, batchId },
+        };
+      },
     },
   });
 
@@ -540,6 +551,12 @@ it("exposes paid-media batch snapshot, start, and pause as independent commands"
   );
   assert.equal(paused.ok, true, JSON.stringify(paused));
   assert.equal(pauseCalls, 1);
+  const cancelled = await handlers.get(
+    "content:cancel-remaining-paid-media-batch-items",
+  )({}, { batchId: batch.batchId });
+  assert.equal(cancelled.ok, true, JSON.stringify(cancelled));
+  assert.equal(cancelled.data.cancelledCount, 1);
+  assert.equal(cancelCalls, 1);
   finishStart();
   const started = await starting;
   assert.equal(started.ok, true, JSON.stringify(started));

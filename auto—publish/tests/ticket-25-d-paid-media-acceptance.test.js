@@ -73,6 +73,9 @@ function createFixture(options) {
       workspaceRoot: root,
       clock: () => new Date(NOW),
       transitionPorts,
+      internalPaidExecutionTransitionFault: (point) => {
+        if (point === value.paidFaultPoint) throw new Error(`fault:${point}`);
+      },
     });
     const articleStore = createArticleStore(root);
     contentStore = createContentStore({
@@ -379,6 +382,190 @@ test("paid media execution is serial and a pause stops only the next order", asy
     assert.equal(
       fixture.createCalls[0].systemSubmissionId,
       "system-submission-d",
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test("paid batch read model reports the reason for an uncertain system pause", async () => {
+  const fixture = createFixture({
+    createOrderBehaviors: [{ kind: "uncertain" }],
+  });
+  try {
+    const admitted = await confirmBatch(fixture, ["article-d"]);
+    const result = await fixture.application.startPaidMediaBatch({
+      batchId: admitted.batchId,
+    });
+    assert.equal(result.executionStatus, "uncertain");
+    const batch = fixture.application.getPaidMediaBatches().items[0];
+    assert.deepEqual(
+      [batch.status, batch.paused, batch.pauseReason],
+      ["needs_attention", true, "PAID_ORDER_CREATION_UNCERTAIN"],
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test("cancelling remaining paid items is atomic, idempotent, and restores safe articles", async () => {
+  const fixture = createFixture({
+    articles: [article("cancel-remaining-a"), article("cancel-remaining-b")],
+  });
+  try {
+    const admitted = await confirmBatch(fixture, [
+      "cancel-remaining-a",
+      "cancel-remaining-b",
+    ]);
+    const cancelled =
+      await fixture.application.cancelRemainingPaidMediaBatchItems({
+        batchId: admitted.batchId,
+      });
+    assert.deepEqual(
+      [
+        cancelled.executionStatus,
+        cancelled.cancelledCount,
+        cancelled.idempotentCount,
+        cancelled.skippedCount,
+        cancelled.batch.status,
+        cancelled.batch.remainingCount,
+      ],
+      ["remaining_cancelled", 2, 0, 0, "completed", 0],
+    );
+    assert.deepEqual(
+      cancelled.batch.items.map((item) => item.status),
+      ["cancelled", "cancelled"],
+    );
+    const facts = fixture.store.listArticleLifecycleFacts({
+      articleIds: ["cancel-remaining-a", "cancel-remaining-b"],
+    });
+    assert.deepEqual(
+      facts.submissionItems.map((item) => item.status),
+      ["cancelled", "cancelled"],
+    );
+    const management = await fixture.management.get({ clientId: "client-d" });
+    assert.equal(
+      management.workflowByArticle["cancel-remaining-a"].stage,
+      "pending_submission",
+    );
+    assert.equal(
+      management.workflowByArticle["cancel-remaining-a"].locks.canEdit,
+      true,
+    );
+
+    const repeated =
+      await fixture.application.cancelRemainingPaidMediaBatchItems({
+        batchId: admitted.batchId,
+      });
+    assert.deepEqual(
+      [repeated.cancelledCount, repeated.idempotentCount, repeated.skippedCount],
+      [0, 2, 0],
+    );
+
+    const rechecked = await fixture.application.preflightPaidMedia({
+      articleRefs: [{ clientId: "client-d", articleId: "cancel-remaining-a" }],
+      mediaResourceId: "media-d",
+    });
+    assert.equal(rechecked.canConfirm, true);
+    const readmitted = await fixture.application.confirmPaidMedia({
+      confirmationToken: rechecked.confirmationToken,
+      confirmed: true,
+    });
+    assert.notEqual(readmitted.batchId, admitted.batchId);
+    assert.equal(readmitted.items[0].status, "queued");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("remaining cancellation protects an in-flight order and pauses the next claim", async () => {
+  let firstStarted;
+  let releaseFirst;
+  const firstCall = new Promise((resolve) => {
+    firstStarted = resolve;
+  });
+  const firstRelease = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const fixture = createFixture({
+    articles: [article("cancel-in-flight-a"), article("cancel-in-flight-b")],
+  });
+  fixture.state.onCreateOrder = async (_input, count) => {
+    if (count === 1) {
+      firstStarted();
+      await firstRelease;
+    }
+  };
+  try {
+    const admitted = await confirmBatch(fixture, [
+      "cancel-in-flight-a",
+      "cancel-in-flight-b",
+    ]);
+    const running = fixture.application.startPaidMediaBatch({
+      batchId: admitted.batchId,
+    });
+    await firstCall;
+
+    const cancelled =
+      await fixture.application.cancelRemainingPaidMediaBatchItems({
+        batchId: admitted.batchId,
+      });
+    assert.deepEqual(
+      [
+        cancelled.cancelledCount,
+        cancelled.skippedCount,
+        cancelled.batch.paused,
+        cancelled.batch.runState,
+        cancelled.batch.actions.canStart,
+        cancelled.batch.remainingCount,
+      ],
+      [1, 1, true, "in_flight", false, 0],
+    );
+    releaseFirst();
+    const result = await running;
+    assert.equal(result.executionStatus, "order_created");
+    assert.equal(fixture.createCalls.length, 1);
+    const batch = fixture.application.getPaidMediaBatches().items[0];
+    assert.equal(batch.createdOrderCount, 1);
+    assert.deepEqual(
+      batch.items.map((item) => item.status),
+      ["completed", "cancelled"],
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test("remaining cancellation rolls back every item when its transaction fails", async () => {
+  const fixture = createFixture({
+    paidFaultPoint: "after-paid-cancel-remaining",
+    articles: [article("cancel-rollback-a"), article("cancel-rollback-b")],
+  });
+  try {
+    const admitted = await confirmBatch(fixture, [
+      "cancel-rollback-a",
+      "cancel-rollback-b",
+    ]);
+    await assert.rejects(
+      () =>
+        fixture.application.cancelRemainingPaidMediaBatchItems({
+          batchId: admitted.batchId,
+        }),
+      /fault:after-paid-cancel-remaining/,
+    );
+    const batch = fixture.application.getPaidMediaBatches().items[0];
+    assert.equal(batch.remainingCount, 2);
+    assert.deepEqual(
+      batch.items.map((item) => item.status),
+      ["queued", "queued"],
+    );
+    assert.deepEqual(
+      fixture.store
+        .listArticleLifecycleFacts({
+          articleIds: ["cancel-rollback-a", "cancel-rollback-b"],
+        })
+        .submissionItems.map((item) => item.status),
+      ["queued", "queued"],
     );
   } finally {
     fixture.close();

@@ -506,6 +506,7 @@ export interface PaidMediaExecutionItem {
   articleRef: ArticleSelection;
   status: string;
   phase: string;
+  title?: string;
 }
 
 export interface PaidMediaExecutionBatch {
@@ -515,8 +516,18 @@ export interface PaidMediaExecutionBatch {
   pauseIntent: "none" | "manual" | "system";
   paused: boolean;
   runState: "paused" | "running" | "in_flight";
-  actions: { canStart: boolean; canPause: boolean };
+  actions: {
+    canStart: boolean;
+    canPause: boolean;
+    canCancelRemaining?: boolean;
+  };
   articleCount: number;
+  mediaName?: string;
+  mediaRemarks?: string;
+  createdOrderCount?: number;
+  remainingCount?: number;
+  currentItem?: PaidMediaExecutionItem | null;
+  pauseReason?: string | null;
   quotedPrice: number;
   estimatedTotal: number;
   createdAt: string;
@@ -526,6 +537,9 @@ export interface PaidMediaExecutionBatch {
 
 export interface PaidMediaExecutionResult {
   executionStatus?: string;
+  cancelledCount?: number;
+  idempotentCount?: number;
+  skippedCount?: number;
   batch: PaidMediaExecutionBatch;
 }
 

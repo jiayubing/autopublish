@@ -385,6 +385,22 @@ function registerContentSubmissionIpc(deps) {
         });
       },
     );
+    deps.ipcMain.handle(
+      "content:cancel-remaining-paid-media-batch-items",
+      function (event, input) {
+        return wrap(async function () {
+          if (typeof paidExecution.cancelRemaining !== "function") {
+            const error = new Error("Paid-media execution is unavailable");
+            error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+            throw error;
+          }
+          const result = await paidExecution.cancelRemaining(
+            paidMediaBatchInput(input),
+          );
+          return projectPaidExecutionResult(result);
+        });
+      },
+    );
   }
 }
 module.exports = { registerContentSubmissionIpc };

@@ -33,6 +33,7 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     "listPaidMediaBatches",
     "startPaidMediaBatch",
     "pausePaidMediaBatch",
+    "cancelRemainingPaidMediaBatchItems",
   ]) {
     if (typeof adapters[name] !== "function")
       throw new TypeError(
@@ -52,6 +53,10 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     pausePaidMediaBatch: createCommandOwner({
       feature: "content",
       command: "pausePaidMediaBatch",
+    }),
+    cancelRemainingPaidMediaBatchItems: createCommandOwner({
+      feature: "content",
+      command: "cancelRemainingPaidMediaBatchItems",
     }),
     prepareBindPaidOrderNumber: createCommandOwner({
       feature: "content",
@@ -165,6 +170,8 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     commands: Object.freeze({
       startPaidMediaBatch: (input) => runCommand("startPaidMediaBatch", input),
       pausePaidMediaBatch: (input) => runCommand("pausePaidMediaBatch", input),
+      cancelRemainingPaidMediaBatchItems: (input) =>
+        runCommand("cancelRemainingPaidMediaBatchItems", input),
       prepareBindPaidOrderNumber: (input) =>
         runCommand("prepareBindPaidOrderNumber", input),
       bindPaidOrderNumber: (input) => runCommand("bindPaidOrderNumber", input),

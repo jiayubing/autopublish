@@ -51,6 +51,7 @@ function adapters(overrides = {}) {
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
+    cancelRemainingPaidMediaBatchItems: async () => ({}),
     ...overrides,
   };
 }

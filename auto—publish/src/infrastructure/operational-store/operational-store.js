@@ -121,7 +121,7 @@ function createOperationalStore(options) {
     const recover = recovery.createRecoveryAggregate(context, activeTarget);
     const order = orders.createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
-    const paidExecution = createPaidExecutionAggregate(context);
+    const paidExecution = createPaidExecutionAggregate(context, activeTarget);
     const publicationSuccess =
       successes.createPublicationSuccessPrimitive(context);
     const publishedArchiveQueries =
@@ -201,6 +201,8 @@ function createOperationalStore(options) {
       listPaidSubmissionBatches: queue.listPaidSubmissionBatches,
       setPaidSubmissionBatchPause: queue.setPaidSubmissionBatchPause,
       beginOrderCreationRemoteCall: paidExecution.beginOrderCreationRemoteCall,
+      cancelRemainingPaidSubmissionBatchItems:
+        paidExecution.cancelRemainingPaidSubmissionBatchItems,
       claimPaidSubmissionBatchItem: paidExecution.claimPaidSubmissionBatchItem,
       listPaidSubmissionBatchSnapshots:
         paidExecution.listPaidSubmissionBatchSnapshots,

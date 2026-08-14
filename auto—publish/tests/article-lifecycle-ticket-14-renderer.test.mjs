@@ -18,6 +18,7 @@ function fixture(overrides = {}) {
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
+    cancelRemainingPaidMediaBatchItems: async () => ({}),
     prepareBindPaidOrderNumber: async () => ({}),
     bindPaidOrderNumber: async () => ({}),
     prepareConfirmPaidOrderAbsent: async () => ({}),

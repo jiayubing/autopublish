@@ -11,7 +11,7 @@ const PAUSE_INTENTS = new Set(["none", "manual", "system"]);
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const FINGERPRINT = /^[a-f0-9]{64}$/u;
 
-function createPaidExecutionAggregate(context) {
+function createPaidExecutionAggregate(context, activeTarget) {
   const {
     db,
     open,
@@ -84,6 +84,35 @@ function createPaidExecutionAggregate(context) {
     return fromText(row.intent_payload) || {};
   }
 
+  function safePauseReason(value) {
+    return typeof value === "string" && /^[A-Z][A-Z0-9_.:-]{0,127}$/u.test(value)
+      ? value
+      : null;
+  }
+
+  function pauseReason(row, items) {
+    if (row.pause_intent === "none") return null;
+    for (const item of items) {
+      const status = item.status || item.item_status;
+      if (!["uncertain", "blocked"].includes(status)) continue;
+      const intent = fromText(item.intent_payload) || {};
+      const detail = intent.detail || {};
+      const reason =
+        safePauseReason(detail.pauseReason) || safePauseReason(detail.reasonCode);
+      if (reason) return reason;
+      if (status === "uncertain") return "PAID_ORDER_CREATION_UNCERTAIN";
+      return "PAID_ORDER_CREATION_BLOCKED";
+    }
+    for (const item of items) {
+      const intent = fromText(item.intent_payload) || {};
+      const reason = safePauseReason(intent.detail && intent.detail.pauseReason);
+      if (reason) return reason;
+    }
+    return row.pause_intent === "manual"
+      ? "PAID_BATCH_MANUALLY_PAUSED"
+      : "PAID_BATCH_SYSTEM_PAUSED";
+  }
+
   function rowForAttempt(orderCreationAttemptId) {
     if (
       typeof orderCreationAttemptId !== "string" ||
@@ -121,11 +150,21 @@ function createPaidExecutionAggregate(context) {
         claimUntil: item.claim_until || null,
         publicationSnapshot: Object.freeze(payload.publicationSnapshot || {}),
         mediaResourceId: target.mediaResourceId,
-        mediaName: payload.resourceNameSnapshot || "",
+        mediaName:
+          payload.resourceNameSnapshot ||
+          confirmation.resourceName ||
+          confirmation.mediaName ||
+          "",
+        title:
+          payload.publicationSnapshot &&
+          typeof payload.publicationSnapshot.title === "string"
+            ? payload.publicationSnapshot.title
+            : "",
         systemSubmissionCode: payload.systemSubmissionCode || "",
         resourceFingerprint: confirmation.resourceFingerprint || null,
         quotedPrice: payload.quotedPrice,
         estimatedTotal: payload.estimatedTotal,
+        orderId: item.order_id || null,
         phase:
           intent.detail && intent.detail.phase
             ? intent.detail.phase
@@ -133,11 +172,19 @@ function createPaidExecutionAggregate(context) {
       });
     });
     const first = items[0];
+    const inFlight = items.some((item) =>
+      ["claimed", "remote_started"].includes(item.status),
+    );
+    const remainingCount = items.filter((item) => item.status === "queued").length;
     const status = items.some((item) => item.status === "uncertain" || item.status === "blocked")
       ? "needs_attention"
       : items.every((item) => ["completed", "failed", "cancelled"].includes(item.status)) ? "completed" : "queued";
     const paused = row.pause_intent !== "none";
-    const runState = paused ? "paused" : items.some((item) => ["claimed", "remote_started"].includes(item.status)) ? "in_flight" : "running";
+    const runState = inFlight ? "in_flight" : paused ? "paused" : "running";
+    const currentItem =
+      items.find((item) => ["claimed", "remote_started"].includes(item.status)) ||
+      items.find((item) => item.status === "queued") ||
+      null;
     return Object.freeze({
       batchId: row.batch_id,
       mediaResourceId: row.media_resource_id,
@@ -145,8 +192,20 @@ function createPaidExecutionAggregate(context) {
       pauseIntent: row.pause_intent,
       paused,
       runState,
-      actions: Object.freeze({ canStart: status === "queued" && paused && runState === "paused", canPause: status === "queued" && !paused && ["running", "in_flight"].includes(runState) }),
+      actions: Object.freeze({
+        canStart: status === "queued" && paused && runState === "paused",
+        canPause:
+          status === "queued" && !paused && ["running", "in_flight"].includes(runState),
+        canCancelRemaining: remainingCount > 0,
+      }),
       articleCount: row.article_count,
+      mediaName:
+        confirmation.resourceName || confirmation.mediaName || first?.mediaName || "",
+      mediaRemarks: confirmation.resourceRemarks || confirmation.mediaRemarks || "",
+      createdOrderCount: items.filter((item) => item.orderId).length,
+      remainingCount,
+      currentItem,
+      pauseReason: pauseReason(row, itemRows || []),
       quotedPrice: row.quoted_price,
       estimatedTotal: row.estimated_total,
       systemSubmissionCode: row.system_submission_code,
@@ -161,7 +220,7 @@ function createPaidExecutionAggregate(context) {
   function itemRows(batchId) {
     return db
       .prepare(
-        "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,i.payload_json intent_payload,i.state FROM submission_items s JOIN publication_records p ON p.article_id=s.article_id AND p.target_key=s.target_key JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.attempt_id=json_extract(s.payload_json,'$.attemptId') JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE s.batch_id=? ORDER BY s.rowid LIMIT 1000",
+        "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.status publication_status,a.attempt_id,a.status attempt_status,a.finished_at attempt_finished_at,i.payload_json intent_payload,i.state,o.order_id FROM submission_items s JOIN publication_records p ON p.article_id=s.article_id AND p.target_key=s.target_key JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.attempt_id=json_extract(s.payload_json,'$.attemptId') JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN (SELECT attempt_id,MIN(order_id) order_id FROM remote_orders GROUP BY attempt_id) o ON o.attempt_id=a.attempt_id WHERE s.batch_id=? ORDER BY s.rowid LIMIT 1000",
       )
       .all(batchId);
   }
@@ -431,6 +490,9 @@ function createPaidExecutionAggregate(context) {
       const nextIntent = Object.assign({}, intent, {
         detail: Object.assign({}, intent.detail || {}, {
           phase: "paid-admitted",
+          ...(safePauseReason(value.reasonCode)
+            ? { pauseReason: value.reasonCode }
+            : {}),
         }),
         paidSubmission: Object.assign({}, intent.paidSubmission || {}, {
           batchItemId: row.item_id,
@@ -644,8 +706,172 @@ function createPaidExecutionAggregate(context) {
     });
   }
 
+  function cancelRemainingPaidSubmissionBatchItems(input) {
+    open();
+    if (!activeTarget || typeof activeTarget.release !== "function")
+      throw fail("PAID_EXECUTION_ACTIVE_TARGET_UNAVAILABLE");
+    const value = input || {};
+    const batchId = requiredText(
+      value.batchId,
+      128,
+      "PAID_EXECUTION_BATCH_INVALID",
+    );
+    const stamp = iso(clock);
+    return transaction(() => {
+      batchRow(batchId);
+      const rows = itemRows(batchId);
+      let cancelledCount = 0;
+      let idempotentCount = 0;
+      let skippedCount = 0;
+
+      for (const row of rows) {
+        if (row.item_status === "cancelled") {
+          idempotentCount += 1;
+          continue;
+        }
+        if (row.item_status !== "queued") {
+          skippedCount += 1;
+          continue;
+        }
+        if (
+          row.claim_token ||
+          row.publication_status !== "queued" ||
+          row.attempt_status !== "queued" ||
+          row.state !== "resolved"
+        ) {
+          skippedCount += 1;
+          continue;
+        }
+        const intent = intentFor(row);
+        if (intent.detail?.phase !== "paid-admitted") {
+          skippedCount += 1;
+          continue;
+        }
+        const evidence = db
+          .prepare(
+            "SELECT (SELECT COUNT(*) FROM remote_evidence WHERE attempt_id=?) + (SELECT COUNT(*) FROM remote_orders WHERE attempt_id=?) count",
+          )
+          .get(row.attempt_id, row.attempt_id).count;
+        if (evidence !== 0) {
+          skippedCount += 1;
+          continue;
+        }
+        const active = db
+          .prepare(
+            "SELECT publication_id,attempt_id,target_key,state FROM article_active_targets WHERE article_id=?",
+          )
+          .get(row.article_id);
+        if (
+          !active ||
+          active.publication_id !== row.publication_id ||
+          active.attempt_id !== row.attempt_id ||
+          active.target_key !== row.target_key ||
+          active.state !== "queued"
+        )
+          throw fail("PAID_EXECUTION_CANCELLATION_FACT_CONFLICT");
+
+        const payload = Object.assign({}, fromText(row.item_payload) || {}, {
+          cancelledAt: stamp,
+          paidCancellationReasonCode: "PAID_BATCH_REMAINING_CANCELLED",
+        });
+        const resolution = {
+          status: "cancelled",
+          reasonCode: "PAID_BATCH_REMAINING_CANCELLED",
+          batchId,
+          itemId: row.item_id,
+          articleId: row.article_id,
+          targetKey: row.target_key,
+          cancelledAt: stamp,
+        };
+        const nextIntent = Object.assign({}, intent, {
+          detail: Object.assign({}, intent.detail || {}, {
+            phase: "cancelled",
+            resolution,
+          }),
+        });
+        rejectSensitive(payload);
+        rejectSensitive(nextIntent);
+        if (
+          db
+            .prepare(
+              "UPDATE submission_items SET status='cancelled',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='queued' AND claim_token IS NULL",
+            )
+            .run(text(payload), row.item_id).changes !== 1
+        )
+          throw fail("PAID_EXECUTION_CANCELLATION_CONFLICT");
+        activeTarget.release({
+          articleId: row.article_id,
+          publicationId: row.publication_id,
+          attemptId: row.attempt_id,
+        });
+        if (
+          db
+            .prepare(
+              "UPDATE recovery_intents SET state='resolved',payload_json=?,updated_at=? WHERE attempt_id=? AND state='resolved'",
+            )
+            .run(text(nextIntent), stamp, row.attempt_id).changes !== 1
+        )
+          throw fail("PAID_EXECUTION_CANCELLATION_FACT_CONFLICT");
+        if (
+          db
+            .prepare(
+              "UPDATE publication_attempts SET finished_at=? WHERE attempt_id=? AND status='queued'",
+            )
+            .run(stamp, row.attempt_id).changes !== 1
+        )
+          throw fail("PAID_EXECUTION_CANCELLATION_FACT_CONFLICT");
+        if (
+          db
+            .prepare(
+              "UPDATE publication_records SET updated_at=? WHERE publication_id=? AND status='queued'",
+            )
+            .run(stamp, row.publication_id).changes !== 1
+        )
+          throw fail("PAID_EXECUTION_CANCELLATION_FACT_CONFLICT");
+        cancelledCount += 1;
+        paidFault("after-paid-cancel-remaining", {
+          batchId,
+          itemId: row.item_id,
+        });
+      }
+
+      if (cancelledCount > 0) {
+        db
+          .prepare(
+            "UPDATE paid_submission_batches SET pause_intent=CASE WHEN pause_intent='none' THEN 'manual' ELSE pause_intent END,updated_at=? WHERE batch_id=?",
+          )
+          .run(stamp, batchId);
+      }
+      if (cancelledCount > 0) {
+        const openItems = db
+          .prepare(
+            "SELECT COUNT(*) count FROM submission_items WHERE batch_id=? AND status NOT IN('completed','failed','blocked','uncertain','cancelled')",
+          )
+          .get(batchId).count;
+        if (
+          db
+            .prepare(
+              "UPDATE submission_batches SET status=?,revision=revision+1,updated_at=? WHERE batch_id=?",
+            )
+            .run(openItems === 0 ? "completed" : "queued", stamp, batchId)
+            .changes !== 1
+        )
+          throw fail("PAID_EXECUTION_CANCELLATION_FACT_CONFLICT");
+      }
+      return Object.freeze({
+        batchId,
+        status: "remaining_cancelled",
+        cancelledCount,
+        idempotentCount,
+        skippedCount,
+        batch: paidBatchSnapshot(batchRow(batchId), itemRows(batchId)),
+      });
+    });
+  }
+
   return Object.freeze({
     beginOrderCreationRemoteCall,
+    cancelRemainingPaidSubmissionBatchItems,
     claimPaidSubmissionBatchItem,
     listPaidSubmissionBatchSnapshots,
     pauseAllPaidSubmissionBatches,

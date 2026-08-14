@@ -15,6 +15,7 @@ const paidExecutionAdapters = Object.freeze({
   listPaidMediaBatches: async () => [],
   startPaidMediaBatch: async ({ batchId }) => ({ batch: { batchId } }),
   pausePaidMediaBatch: async ({ batchId }) => ({ batch: { batchId } }),
+  cancelRemainingPaidMediaBatchItems: async ({ batchId }) => ({ batch: { batchId } }),
 });
 
 test("content workspace source query shares identity across initial manual and invalidation refresh", async () => {
@@ -255,6 +256,10 @@ test("content workspace owns paid-media execution snapshots and independent star
       calls.push(["pause", input]);
       return { batch };
     },
+    cancelRemainingPaidMediaBatchItems: async (input) => {
+      calls.push(["cancel", input]);
+      return { batch };
+    },
   });
   feature.setScope({ workspaceRuntimeId: "runtime-1" });
   await feature.refresh("initial");
@@ -265,11 +270,13 @@ test("content workspace owns paid-media execution snapshots and independent star
 
   await feature.commands.startPaidMediaBatch({ batchId: "paid-batch-1" });
   await feature.commands.pausePaidMediaBatch({ batchId: "paid-batch-1" });
+  await feature.commands.cancelRemainingPaidMediaBatchItems({ batchId: "paid-batch-1" });
   assert.deepEqual(
     calls.filter((entry) => Array.isArray(entry)),
     [
       ["start", { batchId: "paid-batch-1" }],
       ["pause", { batchId: "paid-batch-1" }],
+      ["cancel", { batchId: "paid-batch-1" }],
     ],
   );
   assert.equal(

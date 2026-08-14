@@ -44,6 +44,7 @@ describe("empty-client template discovery", function() {
       listPaidMediaBatches: async () => [],
       startPaidMediaBatch: async () => ({}),
       pausePaidMediaBatch: async () => ({}),
+      cancelRemainingPaidMediaBatchItems: async () => ({}),
     });
     feature.setScope({ workspaceRuntimeId: "runtime-1" });
     await feature.refresh("manual");

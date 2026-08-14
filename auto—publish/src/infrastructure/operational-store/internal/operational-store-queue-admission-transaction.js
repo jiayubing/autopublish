@@ -481,6 +481,7 @@ function createQueueAdmissionTransaction(context) {
           .get(batchId);
         if (existingBatch) throw fail("PAID_ADMISSION_BATCH_CONFLICT");
 
+        const recycledPublicationIds = new Map();
         for (const item of items) {
           const active = db
             .prepare(
@@ -490,10 +491,21 @@ function createQueueAdmissionTransaction(context) {
           if (active) throw fail("PUBLICATION_TARGET_CONFLICT");
           const oldPublication = db
             .prepare(
-              "SELECT status FROM publication_records WHERE article_id=? AND target_key=?",
+              "SELECT p.publication_id,p.status,a.attempt_id,a.finished_at,i.payload_json AS intent_payload FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE p.article_id=? AND p.target_key=?",
             )
             .get(item.articleId, targetKey);
-          if (oldPublication)
+          const cancelledPublication =
+            oldPublication &&
+            oldPublication.status === "queued" &&
+            oldPublication.attempt_id &&
+            oldPublication.finished_at &&
+            cancellationResolutionFromIntent(oldPublication.intent_payload);
+          if (cancelledPublication)
+            recycledPublicationIds.set(
+              item.articleId,
+              oldPublication.publication_id,
+            );
+          else if (oldPublication)
             throw fail(
               oldPublication.status === "uncertain"
                 ? "PUBLICATION_UNCERTAIN"
@@ -509,20 +521,27 @@ function createQueueAdmissionTransaction(context) {
           stamp,
         );
         for (const item of items) {
-          db.prepare(
-            "INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)",
-          ).run(
-            item.publicationId,
-            item.articleId,
-            targetKey,
-            text(target),
-            "queued",
-            stamp,
-            stamp,
-          );
+          const publicationId =
+            recycledPublicationIds.get(item.articleId) || item.publicationId;
+          if (recycledPublicationIds.has(item.articleId))
+            db.prepare(
+              "UPDATE publication_records SET status='queued',target_json=?,updated_at=? WHERE publication_id=?",
+            ).run(text(target), stamp, publicationId);
+          else
+            db.prepare(
+              "INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)",
+            ).run(
+              publicationId,
+              item.articleId,
+              targetKey,
+              text(target),
+              "queued",
+              stamp,
+              stamp,
+            );
           db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
             item.attemptId,
-            item.publicationId,
+            publicationId,
             "queued",
             stamp,
             null,
@@ -558,7 +577,7 @@ function createQueueAdmissionTransaction(context) {
             "INSERT INTO article_active_targets(article_id,publication_id,attempt_id,target_key,target_json,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
           ).run(
             item.articleId,
-            item.publicationId,
+            publicationId,
             item.attemptId,
             targetKey,
             text(target),

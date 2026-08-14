@@ -52,6 +52,8 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   });
   holder.paidExecutionTransitions = Object.freeze({
     beginOrderCreationRemoteCall: paidExecution.beginOrderCreationRemoteCall,
+    cancelRemainingPaidSubmissionBatchItems:
+      paidExecution.cancelRemainingPaidSubmissionBatchItems,
     claimPaidSubmissionBatchItem: paidExecution.claimPaidSubmissionBatchItem,
     listPaidSubmissionBatchSnapshots:
       paidExecution.listPaidSubmissionBatchSnapshots,

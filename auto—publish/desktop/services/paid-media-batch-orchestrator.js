@@ -5,6 +5,7 @@ const domain = require("../../src/domain");
 
 const TRANSITION_METHODS = Object.freeze([
   "beginOrderCreationRemoteCall",
+  "cancelRemainingPaidSubmissionBatchItems",
   "claimPaidSubmissionBatchItem",
   "listPaidSubmissionBatchSnapshots",
   "pauseAllPaidSubmissionBatches",
@@ -172,6 +173,7 @@ function createPaidMediaBatchOrchestrator(options) {
       transitions.releasePaidOrderCreationClaim({
         orderCreationAttemptId: claim.orderCreationAttemptId,
         claimToken: claim.claimToken,
+        reasonCode: preflight.reasonCode,
       });
       transitions.setPaidSubmissionBatchRunIntent({
         batchId: claim.batchId,
@@ -333,6 +335,10 @@ function createPaidMediaBatchOrchestrator(options) {
     return runBatch(batchId);
   }
 
+  function cancelRemaining(input) {
+    return transitions.cancelRemainingPaidSubmissionBatchItems(input || {});
+  }
+
   async function startAll() {
     transitions.startAllPaidSubmissionBatches();
     const batches = snapshot({});
@@ -348,6 +354,7 @@ function createPaidMediaBatchOrchestrator(options) {
     initializePaused,
     pauseAll,
     pauseBatch,
+    cancelRemaining,
     snapshot,
     startAll,
     startBatch,

@@ -79,6 +79,7 @@ const PUBLIC_SURFACE = [
   "listPaidSubmissionBatches",
   "setPaidSubmissionBatchPause",
   "beginOrderCreationRemoteCall",
+  "cancelRemainingPaidSubmissionBatchItems",
   "claimPaidSubmissionBatchItem",
   "listPaidSubmissionBatchSnapshots",
   "pauseAllPaidSubmissionBatches",

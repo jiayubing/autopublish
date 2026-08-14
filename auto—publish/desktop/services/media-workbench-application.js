@@ -289,6 +289,32 @@ function createMediaWorkbenchApplication(options) {
         batch: paidMediaBatchOrchestrator.pauseBatch(input || {}),
       };
     },
+    cancelRemainingPaidMediaBatchItems: (input) => {
+      if (
+        !paidMediaBatchOrchestrator ||
+        typeof paidMediaBatchOrchestrator.cancelRemaining !== "function"
+      ) {
+        const error = new Error("Paid media execution is unavailable");
+        error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+        throw error;
+      }
+      return Promise.resolve()
+        .then(() => paidMediaBatchOrchestrator.cancelRemaining(input || {}))
+        .then((result) => {
+          if (invalidateData && result && result.cancelledCount > 0)
+            invalidateData("PAID_BATCH_REMAINING_CANCELLED");
+          return {
+            executionStatus:
+              result && typeof result.status === "string"
+                ? result.status
+                : "remaining_cancelled",
+            cancelledCount: result?.cancelledCount || 0,
+            idempotentCount: result?.idempotentCount || 0,
+            skippedCount: result?.skippedCount || 0,
+            batch: result && result.batch,
+          };
+        });
+    },
     prepareBindPaidOrderNumber: (input) =>
       resolutionService().prepareBindOrderNumber(input || {}),
     bindPaidOrderNumber: (input) =>

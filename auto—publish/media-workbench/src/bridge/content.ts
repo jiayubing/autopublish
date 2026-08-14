@@ -199,6 +199,9 @@ type SubmissionContentApi = {
   pausePaidMediaBatch: (input: {
     batchId: string;
   }) => Promise<ContentIpcResponse<PaidMediaExecutionResult>>;
+  cancelRemainingPaidMediaBatchItems: (input: {
+    batchId: string;
+  }) => Promise<ContentIpcResponse<PaidMediaExecutionResult>>;
   removePendingQueueItems: (
     input: PendingQueueRemovalInput,
   ) => Promise<ContentIpcResponse<PendingQueueRemovalResult>>;
@@ -658,6 +661,14 @@ export async function pausePaidMediaBatch(input: {
   return callSubmission(
     (api) => requireBridgeMethod(api.pausePaidMediaBatch)(input),
     "paid media batch pause failed",
+  );
+}
+export async function cancelRemainingPaidMediaBatchItems(input: {
+  batchId: string;
+}): Promise<PaidMediaExecutionResult> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.cancelRemainingPaidMediaBatchItems)(input),
+    "paid media remaining-item cancellation failed",
   );
 }
 export async function removePendingQueueItems(

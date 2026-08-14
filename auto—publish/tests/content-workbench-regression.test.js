@@ -19,6 +19,7 @@ test("content workbench public feature owns client, template, and refresh state"
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
+    cancelRemainingPaidMediaBatchItems: async () => ({}),
   });
   feature.setScope({ workspaceRuntimeId: "runtime-1" });
   assert.equal(await feature.refresh("initial"), true);

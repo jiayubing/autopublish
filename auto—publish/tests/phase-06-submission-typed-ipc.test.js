@@ -73,11 +73,12 @@ test("ordinary submission mutations have independent legal fixtures", () => {
   const channels = new Set([
     "content:start-paid-media-batch",
     "content:pause-paid-media-batch",
+    "content:cancel-remaining-paid-media-batch-items",
   ]);
   const fixtures = submissionContractFixtures.filter((entry) =>
     channels.has(entry.channel),
   );
-  assert.equal(fixtures.length, 2);
+  assert.equal(fixtures.length, 3);
   for (const fixture of fixtures) {
     const contract = registry.byChannel(fixture.channel);
     assert.ok(contract, fixture.channel);

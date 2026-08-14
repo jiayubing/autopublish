@@ -89,6 +89,7 @@ const paidExecutionItem = exactObject({
   articleRef,
   status: safeText(64, 1),
   phase: safeText(64, 1),
+  title: optionalField(safeText(1000)),
 });
 const paidExecutionBatch = exactObject({
   batchId: id,
@@ -97,8 +98,18 @@ const paidExecutionBatch = exactObject({
   pauseIntent: enumField(["none", "manual", "system"]),
   paused: "boolean",
   runState: enumField(["paused", "running", "in_flight"]),
-  actions: exactObject({ canStart: "boolean", canPause: "boolean" }),
+  actions: exactObject({
+    canStart: "boolean",
+    canPause: "boolean",
+    canCancelRemaining: optionalField("boolean"),
+  }),
   articleCount: count,
+  mediaName: optionalField(safeText(500)),
+  mediaRemarks: optionalField(safeText(10000)),
+  createdOrderCount: optionalField(count),
+  remainingCount: optionalField(count),
+  currentItem: optionalField(nullableField(paidExecutionItem)),
+  pauseReason: optionalField(nullableField(safeText(128, 1))),
   quotedPrice: numberField({ min: 0, max: 100000000 }),
   estimatedTotal: numberField({ min: 0, max: 1000000000 }),
   createdAt: safeText(64, 1),
@@ -107,6 +118,9 @@ const paidExecutionBatch = exactObject({
 });
 const paidExecutionResult = exactObject({
   executionStatus: optionalField(safeText(64, 1)),
+  cancelledCount: optionalField(count),
+  idempotentCount: optionalField(count),
+  skippedCount: optionalField(count),
   batch: paidExecutionBatch,
 });
 
@@ -164,33 +178,69 @@ const submissionPaidMediaContracts = Object.freeze([
     fromArgs: directArgs,
     toArgs: directInput,
   }),
+  submissionContract({
+    capability: "content.cancelRemainingPaidMediaBatchItems",
+    channel: "content:cancel-remaining-paid-media-batch-items",
+    kind: "command",
+    request: exactObject({ batchId: id }),
+    success: paidExecutionResult,
+    fromArgs: directArgs,
+    toArgs: directInput,
+  }),
 ]);
+
+function projectPaidExecutionItem(value) {
+  const input = value || {};
+  const article = input.articleIdentityV1 || input.articleRef || {};
+  const result = {
+    itemId: input.itemId,
+    articleRef: {
+      clientId: article.clientId,
+      articleId: article.articleId,
+    },
+    status: input.status,
+    phase: input.phase,
+  };
+  if (typeof input.title === "string") result.title = input.title;
+  return result;
+}
 
 function projectPaidExecutionBatch(value) {
   const input = value || {};
-  return {
+  const result = {
     batchId: input.batchId,
     mediaResourceId: input.mediaResourceId,
     status: input.status,
     pauseIntent: input.pauseIntent,
     paused: input.paused === true,
     runState: input.runState,
-    actions: { canStart: input.actions?.canStart === true, canPause: input.actions?.canPause === true },
+    actions: {
+      canStart: input.actions?.canStart === true,
+      canPause: input.actions?.canPause === true,
+      ...(input.actions && "canCancelRemaining" in input.actions
+        ? { canCancelRemaining: input.actions.canCancelRemaining === true }
+        : {}),
+    },
     articleCount: input.articleCount,
     quotedPrice: input.quotedPrice,
     estimatedTotal: input.estimatedTotal,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
-    items: (input.items || []).map((item) => ({
-      itemId: item.itemId,
-      articleRef: {
-        clientId: item.articleIdentityV1 && item.articleIdentityV1.clientId,
-        articleId: item.articleIdentityV1 && item.articleIdentityV1.articleId,
-      },
-      status: item.status,
-      phase: item.phase,
-    })),
+    items: (input.items || []).map(projectPaidExecutionItem),
   };
+  if (typeof input.mediaName === "string") result.mediaName = input.mediaName;
+  if (typeof input.mediaRemarks === "string")
+    result.mediaRemarks = input.mediaRemarks;
+  if (Number.isInteger(input.createdOrderCount))
+    result.createdOrderCount = input.createdOrderCount;
+  if (Number.isInteger(input.remainingCount))
+    result.remainingCount = input.remainingCount;
+  if (input.currentItem !== undefined)
+    result.currentItem = input.currentItem
+      ? projectPaidExecutionItem(input.currentItem)
+      : null;
+  if (input.pauseReason !== undefined) result.pauseReason = input.pauseReason;
+  return result;
 }
 
 function projectPaidArticleSummary(value) {
@@ -270,6 +320,8 @@ function projectPaidExecutionResult(value) {
   const result = { batch: projectPaidExecutionBatch(value.batch) };
   if (value.executionStatus !== undefined)
     result.executionStatus = value.executionStatus;
+  for (const name of ["cancelledCount", "idempotentCount", "skippedCount"])
+    if (Number.isInteger(value[name])) result[name] = value[name];
   return result;
 }
 
@@ -389,6 +441,20 @@ const submissionPaidMediaContractFixtures = Object.freeze([
     productionCaller: "desktopConsole.content.pausePaidMediaBatch",
     request: { batchId: "paid-batch-1" },
     result: { batch: paidExecutionBatchFixture },
+  },
+  {
+    channel: "content:cancel-remaining-paid-media-batch-items",
+    owner: "content",
+    productionCaller:
+      "desktopConsole.content.cancelRemainingPaidMediaBatchItems",
+    request: { batchId: "paid-batch-1" },
+    result: {
+      executionStatus: "remaining_cancelled",
+      cancelledCount: 1,
+      idempotentCount: 0,
+      skippedCount: 0,
+      batch: paidExecutionBatchFixture,
+    },
   },
 ]);
 

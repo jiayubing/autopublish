@@ -1460,8 +1460,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "confirmPaidMediaBatch",
   }),
   "content.listPaidMediaBatches": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    viewSymbol: "PaidMediaWorkbench",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1475,8 +1475,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "listPaidMediaBatches",
   }),
   "content.startPaidMediaBatch": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    viewSymbol: "PaidMediaWorkbench",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1490,8 +1490,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "startPaidMediaBatch",
   }),
   "content.pausePaidMediaBatch": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    viewSymbol: "PaidMediaWorkbench",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1503,6 +1503,21 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/content-submission-ipc.js",
     application: "paidExecution.pause",
     featureBinding: "pausePaidMediaBatch",
+  }),
+  "content.cancelRemainingPaidMediaBatchItems": Object.freeze({
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    viewSymbol: "PaidMediaWorkbench",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "cancelRemainingPaidMediaBatchItems",
+    preloadMethod: "cancelRemainingPaidMediaBatchItems",
+    command: "content.cancelRemainingPaidMediaBatchItems",
+    channel: "content:cancel-remaining-paid-media-batch-items",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "paidExecution.cancelRemaining",
+    featureBinding: "cancelRemainingPaidMediaBatchItems",
   }),
   "content.removePendingQueueItems": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
@@ -2392,6 +2407,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "pausePaidMediaBatch",
   ],
+  "content.cancelRemainingPaidMediaBatchItems": [
+    "direct",
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "cancelRemainingPaidMediaBatchItems",
+  ],
   "content.removePendingQueueItems": [
     "direct",
     "media-workbench/src/components/PlatformWorkbench.tsx",
@@ -2618,6 +2638,11 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "content.snapshot",
     "paidMediaExecution",
   ],
+  "content.cancelRemainingPaidMediaBatchItems": [
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "content.snapshot",
+    "paidMediaExecution",
+  ],
   "attention.listArticleAttention": [
     "media-workbench/src/components/content/ArticleAttentionPanel.tsx",
     "snapshot",
@@ -2835,6 +2860,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
         [
           "content.startPaidMediaBatch",
           "content.pausePaidMediaBatch",
+          "content.cancelRemainingPaidMediaBatchItems",
           "media.prepareBindPaidOrderNumber",
           "media.bindPaidOrderNumber",
           "media.prepareConfirmPaidOrderAbsent",
@@ -2859,7 +2885,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
 const PRODUCTION_PROP_WIRINGS = Object.freeze({
   "content.listPaidMediaBatches": [
     "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "onRefreshPaidMediaBatches",
+    "refreshPaidMediaBatches",
   ],
   "attention.previewArticleAttention": [
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -3012,6 +3038,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.confirmPaidMediaBatch",
           "content.startPaidMediaBatch",
           "content.pausePaidMediaBatch",
+          "content.cancelRemainingPaidMediaBatchItems",
         ],
       ],
       ["generationFeature", ["content.generateArticle"]],
@@ -4917,6 +4944,21 @@ const rawProductionIpcContractFixtures = [
     productionCaller: "desktop/preload.js:content:pause-paid-media-batch",
     request: { batchId: "fixture-1" },
     result: { batch: paidExecutionBatchFixture() },
+  },
+  {
+    capability: "content.cancelRemainingPaidMediaBatchItems",
+    channel: "content:cancel-remaining-paid-media-batch-items",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:cancel-remaining-paid-media-batch-items",
+    request: { batchId: "fixture-1" },
+    result: {
+      executionStatus: "remaining_cancelled",
+      cancelledCount: 1,
+      idempotentCount: 0,
+      skippedCount: 0,
+      batch: paidExecutionBatchFixture(),
+    },
   },
   {
     capability: "content.removePendingQueueItems",
