@@ -170,22 +170,11 @@ async function createWorkspaceRuntimeComposition(deps) {
     const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
     const operationalStoreTransitionPorts = {};
     let contentStore = null;
-    const articleReader = Object.freeze({
-      getArticle: function (clientId, articleId) {
-        if (!contentStore || typeof contentStore.getArticle !== "function") {
-          const error = new Error("Paid staging article reader is unavailable");
-          error.code = "PAID_STAGING_ARTICLE_STATE_UNAVAILABLE";
-          throw error;
-        }
-        return contentStore.getArticle(clientId, articleId);
-      },
-    });
     const operationalStore =
       require("../../src/infrastructure/operational-store/operational-store").createOperationalStore(
         {
           workspaceRoot,
           clock: options.clock,
-          articleReader,
           transitionPorts: operationalStoreTransitionPorts,
         },
       );
@@ -207,8 +196,6 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueTransitions,
           paidAdmissionTransitions:
             operationalStoreTransitionPorts.paidAdmissionTransitions,
-          paidStagingTransitions:
-            operationalStoreTransitionPorts.paidStagingTransitions,
           systemSubmissionCodeProvider: function () {
             try {
               return (
@@ -236,8 +223,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           regularQueueTransitions:
             operationalStoreTransitionPorts.regularQueueTransitions,
           onDataInvalidated: invalidation.invalidate,
-          paidStagingTransitions:
-            operationalStoreTransitionPorts.paidStagingTransitions,
           accountProfileResolver:
             operationalStore.assertExecutableAccountProfile,
           clientSnapshotResolver: function (clientId) {
@@ -728,10 +713,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           contentStore,
           paidAdmissionFacade: Object.freeze({
             admitPaidBatch: articleMutationCoordinator.admitPaidBatch,
-          }),
-          paidStaging: Object.freeze({
-            listPaidStagingItems: (input) =>
-              operationalStore.listPaidStagingItems(input),
           }),
           clientSnapshotResolver: function (clientId) {
             const client =

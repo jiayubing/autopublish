@@ -58,11 +58,6 @@ function fixture(options) {
     workspaceRoot: root,
     clock: () => new Date(currentNow),
     transitionPorts,
-    articleReader: {
-      getArticle(clientId, articleId) {
-        return contentStore.getArticle(clientId, articleId);
-      },
-    },
     internalPaidExecutionTransitionFault: (point) => {
       if (point === settings.faultPoint) throw new Error(`fault:${point}`);
     },
@@ -92,9 +87,6 @@ function fixture(options) {
   const preflight = createPaidMediaPreflightService({
     contentStore,
     paidAdmission: { admitPaidBatch: coordinator.admitPaidBatch },
-    paidStaging: {
-      listPaidStagingItems: (input) => store.listPaidStagingItems(input),
-    },
     mediaPoolStore: { contains: () => true },
     lifecycleFacts: transitionPorts.paidAdmissionTransitions,
     queryResource: async (input) => ({
@@ -113,12 +105,6 @@ function fixture(options) {
   });
   contentStore.createArticle(article("article-a"));
   contentStore.createArticle(article("article-b"));
-  const stagedRefs = [
-    { clientId: "client-a", articleId: "article-a" },
-    { clientId: "client-a", articleId: "article-b" },
-  ];
-  store.addPaidStagingItems(stagedRefs);
-  store.setPaidStagingMedia(stagedRefs, "media-14");
   return {
     store,
     preflight,
@@ -126,11 +112,6 @@ function fixture(options) {
     resolutions: transitionPorts.orderCreationResolutionTransitions,
     setNow(value) {
       currentNow = value;
-    },
-    stage(articleId, mediaResourceId = "media-14") {
-      const refs = [{ clientId: "client-a", articleId }];
-      store.addPaidStagingItems(refs);
-      store.setPaidStagingMedia(refs, mediaResourceId);
     },
     close() {
       store.close();
@@ -140,8 +121,6 @@ function fixture(options) {
 }
 
 async function admit(value) {
-  value.stage("article-a");
-  value.stage("article-b");
   const preview = await value.preflight.preflight({
     articleRefs: [
       { clientId: "client-a", articleId: "article-a" },
@@ -155,7 +134,6 @@ async function admit(value) {
 }
 
 async function admitArticle(value, articleId, mediaResourceId = "media-14") {
-  value.stage(articleId, mediaResourceId);
   const preview = await value.preflight.preflight({
     articleRefs: [{ clientId: "client-a", articleId }],
     mediaResourceId,

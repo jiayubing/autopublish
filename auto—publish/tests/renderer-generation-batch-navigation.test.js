@@ -196,12 +196,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
           state.submissionMutations += 1;
           return ok({});
         },
-        addPaidSubmissionStaging: () => {
-          state.submissionMutations += 1;
-          return ok({});
-        },
         listPaidMediaBatches: () => ok({ items: [] }),
-        getPaidSubmissionStaging: () => ok({ clientId: client.id, items: [] }),
         listGenerationBatches: () => ok({ batches: [batch] }),
         getGenerationBatch: () => ok({ batch }),
         getGenerationBatchState: () => ok({ status: "idle", state: "idle", batchId: null }),

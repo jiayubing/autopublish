@@ -116,7 +116,6 @@ function createMediaWorkbenchApplication(options) {
       ? createPaidMediaPreflightService({
           contentStore: values.contentStore,
           paidAdmission: values.paidAdmissionFacade,
-          paidStaging: values.paidStaging,
           mediaPoolStore: poolStore,
           lifecycleFacts: values.paidLifecycleFacts,
           resourceService,

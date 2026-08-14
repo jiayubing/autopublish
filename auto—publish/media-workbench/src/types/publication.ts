@@ -417,27 +417,6 @@ export interface RegularQueueAdmissionResult {
   conflictCount: number;
 }
 
-export interface PaidSubmissionStagingItem {
-  articleRef: ArticleSelection;
-  selectedMediaResourceId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-export interface PaidSubmissionStagingMutationItem {
-  articleRef: ArticleSelection;
-  status: string;
-  idempotent: boolean;
-  reasonCode?: string | null;
-}
-export interface PaidSubmissionStagingMutationResult {
-  addedCount?: number;
-  removedCount?: number;
-  updatedCount?: number;
-  idempotentCount: number;
-  selectedMediaResourceId?: string | null;
-  items: PaidSubmissionStagingMutationItem[];
-}
-
 export interface PaidMediaPreflightInput {
   articleRefs: ArticleSelection[];
   mediaResourceId: string;

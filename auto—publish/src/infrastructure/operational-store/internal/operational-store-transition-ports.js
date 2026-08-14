@@ -12,7 +12,6 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   const orderObservation = value.orderObservation;
   const orderCancellation = value.orderCancellation;
   const publishedArchiveQueries = value.publishedArchiveQueries;
-  const paidStaging = value.paidStaging;
   holder.publicationTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     reservePublicationTarget: publication.reservePublicationTarget,
@@ -23,9 +22,6 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
     admitRegularQueueItem: queue.admitRegularQueueItem,
     removePendingQueueItem: queue.removePendingQueueItem,
-  });
-  holder.paidStagingTransitions = Object.freeze({
-    hasPaidStagingItem: paidStaging.hasPaidStagingItem,
   });
   holder.regularQueueGroupTransitions = Object.freeze({
     listRegularQueueGroupSnapshots: queue.listRegularQueueGroupSnapshots,

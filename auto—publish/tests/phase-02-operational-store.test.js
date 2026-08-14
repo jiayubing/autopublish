@@ -28,7 +28,7 @@ function input() {
 function downgradeToSchemaV1(database) {
   const db = new DatabaseSync(database);
   db.exec(
-    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots; DELETE FROM schema_migrations WHERE version > 1;",
+    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots; DELETE FROM schema_migrations WHERE version > 1;",
   );
   db.close();
 }
@@ -191,7 +191,7 @@ test("backup verifier reads destination and missing or corrupt targets have no s
   const backup = path.join(dir, "backup.db");
   const result = store.backup(backup);
   assert.equal(result.rows, 1);
-  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 6);
+  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 7);
   const missing = path.join(dir, "missing.db");
   assert.throws(() => verifyOperationalDatabase(missing), {
     code: "OPERATIONAL_RESTORE_TARGET_INVALID",
@@ -242,7 +242,7 @@ test("database reopens after close and explicit batch writes stay isolated from 
   const db = store.databasePath;
   store.close();
   const reopened = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(reopened.verify().schemaVersion, 6);
+  assert.equal(reopened.verify().schemaVersion, 7);
   assert.equal(
     fs.existsSync(path.join(dir, ".autopublish", "publications")),
     false,
@@ -260,7 +260,7 @@ test("upgrades a real schema v1 database to the operation schema without changin
 
   const legacy = new DatabaseSync(database);
   legacy.exec(
-    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots",
+    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots",
   );
   legacy.prepare("DELETE FROM schema_migrations WHERE version > 1").run();
   const before = legacy
@@ -269,12 +269,12 @@ test("upgrades a real schema v1 database to the operation schema without changin
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(SCHEMA_VERSION, 6);
-  assert.equal(upgraded.verify().schemaVersion, 6);
+  assert.equal(SCHEMA_VERSION, 7);
+  assert.equal(upgraded.verify().schemaVersion, 7);
   upgraded.close();
 
   const verified = verifyOperationalDatabase(database);
-  assert.equal(verified.schemaVersion, 6);
+  assert.equal(verified.schemaVersion, 7);
   const reopened = new DatabaseSync(database, { readOnly: true });
   assert.deepEqual(
     reopened
@@ -294,6 +294,7 @@ test("upgrades a real schema v1 database to the operation schema without changin
       { version: 4 },
       { version: 5 },
       { version: 6 },
+      { version: 7 },
     ],
   );
   assert.ok(
@@ -338,6 +339,7 @@ test("repairs the known v1 history plus legacy operation table left by an early 
   legacy.exec(`
     DROP TABLE IF EXISTS manual_reconciliation_facts;
     DROP TABLE IF EXISTS paid_staging_items;
+    DROP TABLE IF EXISTS submission_migration_notices;
     DROP TABLE IF EXISTS migration_import_order_identities;
     DROP TABLE IF EXISTS migration_import_entries;
     DROP TABLE IF EXISTS migration_journals;
@@ -366,7 +368,7 @@ test("repairs the known v1 history plus legacy operation table left by an early 
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(upgraded.verify().schemaVersion, 6);
+  assert.equal(upgraded.verify().schemaVersion, 7);
   assert.deepEqual(
     upgraded.getSubmissionItemAction("operation-legacy-phase-05"),
     {
@@ -467,7 +469,7 @@ test("rejects a future operational schema before changing its database", () => {
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7],
+    [1, 2, 3, 4, 5, 6, 7, 8],
   );
   unchanged.close();
 });
@@ -669,6 +671,7 @@ test("v1 to v2 migration preserves every pre-v2 table and rolls back detected ol
   delete after.migration_import_order_identities;
   delete after.migration_journals;
   delete after.paid_staging_items;
+  delete after.submission_migration_notices;
   const history = after.schema_migrations;
   delete after.schema_migrations;
   delete before.schema_migrations;
@@ -676,61 +679,9 @@ test("v1 to v2 migration preserves every pre-v2 table and rolls back detected ol
   assert.deepEqual(after, before);
   assert.deepEqual(
     history.map((row) => row.version),
-    [1, 2, 3, 4, 5, 6],
+    [1, 2, 3, 4, 5, 6, 7],
   );
   assert.equal(Number.isFinite(Date.parse(history[1].applied_at)), true);
-});
-
-test("v5 to v6 paid staging migration is atomic and retryable at every fault", () => {
-  for (const point of [
-    "before-v6",
-    "after-v6-create",
-    "after-v6-verify",
-    "after-v6-record",
-  ]) {
-    const dir = root();
-    const initial = createOperationalStore({ workspaceRoot: dir });
-    const database = initial.databasePath;
-    initial.close();
-    const legacy = new DatabaseSync(database);
-    legacy.exec(
-      "DROP TABLE paid_staging_items; DELETE FROM schema_migrations WHERE version=6;",
-    );
-    legacy.close();
-
-    assert.throws(
-      () =>
-        createOperationalStore({
-          workspaceRoot: dir,
-          internalMigrationFault(actual) {
-            if (actual === point) throw new Error(point);
-          },
-        }),
-      { code: "OPERATIONAL_DATABASE_OPEN_FAILED" },
-    );
-    const failed = new DatabaseSync(database, { readOnly: true });
-    assert.equal(
-      failed
-        .prepare(
-          "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='paid_staging_items'",
-        )
-        .get().count,
-      0,
-    );
-    assert.deepEqual(
-      failed
-        .prepare("SELECT version FROM schema_migrations ORDER BY version")
-        .all()
-        .map((row) => row.version),
-      [1, 2, 3, 4, 5],
-    );
-    failed.close();
-
-    const retried = createOperationalStore({ workspaceRoot: dir });
-    assert.equal(retried.verify().schemaVersion, 6);
-    retried.close();
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 test("batch claim revision and remote order evidence are transactional", () => {

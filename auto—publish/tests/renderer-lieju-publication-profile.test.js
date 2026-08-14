@@ -37,7 +37,6 @@ function renderArticleManagement() {
           const commands = {
             cancelContentSubmissionBatch: noop,
             admitRegularQueueItems: noop,
-            addPaidSubmissionStaging: noop,
             prepareBindPaidOrderNumber: noop,
             bindPaidOrderNumber: noop,
             prepareConfirmPaidOrderAbsent: noop,

@@ -29,6 +29,7 @@ function removeV4Schema(databasePath) {
     DROP TABLE IF EXISTS migration_journals;
     DROP TABLE IF EXISTS manual_reconciliation_facts;
     DROP TABLE IF EXISTS paid_staging_items;
+    DROP TABLE IF EXISTS submission_migration_notices;
     DROP TABLE IF EXISTS paid_submission_batches;
     DROP TABLE IF EXISTS submission_queue_items;
     DROP TABLE IF EXISTS submission_queue_groups;
@@ -167,14 +168,14 @@ test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiabl
     );
     assert.deepEqual(schemaSnapshot(databasePath), before);
     store = createOperationalStore({ workspaceRoot: root });
-    assert.equal(store.verify().schemaVersion, 6);
+    assert.equal(store.verify().schemaVersion, 7);
     const backup = path.join(root, `backup-${point}.sqlite`);
-    assert.equal(store.backup(backup).schemaVersion, 6);
+    assert.equal(store.backup(backup).schemaVersion, 7);
     store.close();
-    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 6);
+    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 7);
     fs.rmSync(root, { recursive: true, force: true });
   }
-  assert.equal(SCHEMA_VERSION, 6);
+  assert.equal(SCHEMA_VERSION, 7);
 });
 
 test("v4 order snapshot extension preserves rows from a real v3 database", () => {
@@ -260,13 +261,13 @@ test("v3 migration dry-run is read-only and reports the planned v4 step", () => 
   assert.equal(report.mode, "dry-run");
   assert.equal(report.fromVersion, 3);
   assert.equal(report.toVersion, SCHEMA_VERSION);
-  assert.deepEqual(report.migrations, [4, 5, 6]);
+  assert.deepEqual(report.migrations, [4, 5, 6, 7]);
   assert.deepEqual(schemaSnapshot(databasePath), before);
   assert.equal(fileHash(databasePath), beforeHash);
   store = createOperationalStore({ workspaceRoot: root });
   store.close();
   const current = dryRunOperationalStoreMigration({ workspaceRoot: root });
-  assert.equal(current.fromVersion, 6);
+  assert.equal(current.fromVersion, 7);
   assert.deepEqual(current.migrations, []);
   fs.rmSync(root, { recursive: true, force: true });
 });

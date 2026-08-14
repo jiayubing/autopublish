@@ -16,8 +16,6 @@ import type {
   RegularQueueAdmissionPreview,
   RegularQueueAdmissionResult,
   RegularQueueGroupSnapshot,
-  PaidSubmissionStagingItem,
-  PaidSubmissionStagingMutationResult,
 } from "../types/publication";
 import type {
   ContentClient,
@@ -180,22 +178,6 @@ type DoubaoContentApi = {
   ) => () => void;
 };
 type SubmissionContentApi = {
-  addPaidSubmissionStaging: (input: {
-    articleRefs: Array<{ clientId: string; articleId: string }>;
-  }) => Promise<ContentIpcResponse<PaidSubmissionStagingMutationResult>>;
-  removePaidSubmissionStaging: (input: {
-    articleRefs: Array<{ clientId: string; articleId: string }>;
-  }) => Promise<ContentIpcResponse<PaidSubmissionStagingMutationResult>>;
-  setPaidSubmissionStagingMedia: (input: {
-    articleRefs: Array<{ clientId: string; articleId: string }>;
-    mediaResourceId: string | null;
-  }) => Promise<ContentIpcResponse<PaidSubmissionStagingMutationResult>>;
-  getPaidSubmissionStaging: (input: { clientId: string }) => Promise<
-    ContentIpcResponse<{
-      clientId: string;
-      items: PaidSubmissionStagingItem[];
-    }>
-  >;
   previewRegularQueueAdmission: (
     input: RegularQueueAdmissionInput,
   ) => Promise<ContentIpcResponse<RegularQueueAdmissionPreview>>;
@@ -571,40 +553,6 @@ export async function previewRegularQueueAdmission(
   return callSubmission(
     (api) => requireBridgeMethod(api.previewRegularQueueAdmission)(input),
     "regular queue admission preview failed",
-  );
-}
-export async function addPaidSubmissionStaging(input: {
-  articleRefs: Array<{ clientId: string; articleId: string }>;
-}): Promise<PaidSubmissionStagingMutationResult> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.addPaidSubmissionStaging)(input),
-    "paid staging admission failed",
-  );
-}
-export async function removePaidSubmissionStaging(input: {
-  articleRefs: Array<{ clientId: string; articleId: string }>;
-}): Promise<PaidSubmissionStagingMutationResult> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.removePaidSubmissionStaging)(input),
-    "paid staging removal failed",
-  );
-}
-export async function setPaidSubmissionStagingMedia(input: {
-  articleRefs: Array<{ clientId: string; articleId: string }>;
-  mediaResourceId: string | null;
-}): Promise<PaidSubmissionStagingMutationResult> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.setPaidSubmissionStagingMedia)(input),
-    "paid staging media selection failed",
-  );
-}
-export async function getPaidSubmissionStaging(
-  clientId: string,
-): Promise<PaidSubmissionStagingItem[]> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.getPaidSubmissionStaging)({ clientId }),
-    "paid staging query failed",
-    { map: (wire) => wire.items },
   );
 }
 export async function admitRegularQueueItems(

@@ -1299,66 +1299,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.getRuntimeSnapshot",
     featureBinding: "hydrate",
   }),
-  "content.addPaidSubmissionStaging": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "addPaidSubmissionStaging",
-    preloadMethod: "addPaidSubmissionStaging",
-    command: "content.addPaidSubmissionStaging",
-    channel: "content:add-paid-submission-staging",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.paidStaging.add",
-    featureBinding: "addPaidSubmissionStaging",
-  }),
-  "content.removePaidSubmissionStaging": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "removePaidSubmissionStaging",
-    preloadMethod: "removePaidSubmissionStaging",
-    command: "content.removePaidSubmissionStaging",
-    channel: "content:remove-paid-submission-staging",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.paidStaging.remove",
-    featureBinding: "removePaidSubmissionStaging",
-  }),
-  "content.setPaidSubmissionStagingMedia": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "setPaidSubmissionStagingMedia",
-    preloadMethod: "setPaidSubmissionStagingMedia",
-    command: "content.setPaidSubmissionStagingMedia",
-    channel: "content:set-paid-submission-staging-media",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.paidStaging.setMedia",
-    featureBinding: "setPaidSubmissionStagingMedia",
-  }),
-  "content.getPaidSubmissionStaging": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "getPaidSubmissionStaging",
-    preloadMethod: "getPaidSubmissionStaging",
-    command: "content.getPaidSubmissionStaging",
-    channel: "content:get-paid-submission-staging",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.paidStaging.list",
-    featureBinding: "getPaidSubmissionStaging",
-  }),
   "content.previewRegularQueueAdmission": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "useContentWorkbenchFeature",
@@ -2301,11 +2241,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
     "refreshManagement",
   ],
-  "content.getPaidSubmissionStaging": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refreshManagement",
-  ],
   "attention.listArticleAttention": [
     "lifecycle",
     "media-workbench/src/features/attention/use-attention-feature.ts",
@@ -2431,26 +2366,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "direct",
     "media-workbench/src/components/PlatformWorkbench.tsx",
     "pauseAllGroups",
-  ],
-  "content.addPaidSubmissionStaging": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "addPaidSubmissionStaging",
-  ],
-  "content.removePaidSubmissionStaging": [
-    "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "removePaidSubmissionStaging",
-  ],
-  "content.setPaidSubmissionStagingMedia": [
-    "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "setPaidSubmissionStagingMedia",
-  ],
-  "content.getPaidSubmissionStaging": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refreshManagement",
   ],
   "content.previewPaidMediaPreflight": [
     "direct",
@@ -2693,11 +2608,6 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "content.snapshot",
     "templateCatalog",
   ],
-  "content.getPaidSubmissionStaging": [
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "content.snapshot",
-    "paidStaging",
-  ],
   "content.getArticleManagementSnapshot": [
     "media-workbench/src/components/ContentWorkbench.tsx",
     "content.snapshot",
@@ -2841,14 +2751,6 @@ const PRODUCTION_NESTED_FEATURES = Object.freeze({
     binding: "loadManagement",
     stateField: "management",
   }),
-  "content.getPaidSubmissionStaging": Object.freeze({
-    source:
-      "media-workbench/src/features/content/article-management-feature.js",
-    factory: "createArticleManagementFeature",
-    method: "refreshManagement",
-    binding: "getPaidSubmissionStaging",
-    stateField: "paidStaging",
-  }),
   "content.listPaidMediaBatches": Object.freeze({
     source:
       "media-workbench/src/features/content/paid-media-execution-feature.js",
@@ -2919,9 +2821,6 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.retryArticleRemovalTransaction",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
-          "content.addPaidSubmissionStaging",
-          "content.removePaidSubmissionStaging",
-          "content.setPaidSubmissionStagingMedia",
           "content.previewPaidMediaPreflight",
           "content.confirmPaidMediaBatch",
           "content.removePendingQueueItems",
@@ -3019,7 +2918,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.listResearch",
           "content.listTemplateCatalog",
           "content.getArticleManagementSnapshot",
-          "content.getPaidSubmissionStaging",
           "content.listPaidMediaBatches",
           "attention.listArticleAttention",
           "generation.getRuntimeSnapshot",
@@ -3085,7 +2983,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.retryArticleRemovalTransaction",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
-          "content.addPaidSubmissionStaging",
           "media.prepareBindPaidOrderNumber",
           "media.bindPaidOrderNumber",
           "media.prepareConfirmPaidOrderAbsent",
@@ -3113,8 +3010,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
       [
         "content.commands",
         [
-          "content.removePaidSubmissionStaging",
-          "content.setPaidSubmissionStagingMedia",
           "content.previewPaidMediaPreflight",
           "content.confirmPaidMediaBatch",
           "content.startPaidMediaBatch",
@@ -4762,81 +4657,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "content.addPaidSubmissionStaging",
-    channel: "content:add-paid-submission-staging",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:add-paid-submission-staging",
-    request: {
-      articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
-    },
-    result: {
-      items: [
-        {
-          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
-          status: "staged",
-          idempotent: false,
-        },
-      ],
-      addedCount: 1,
-      idempotentCount: 0,
-    },
-  },
-  {
-    capability: "content.removePaidSubmissionStaging",
-    channel: "content:remove-paid-submission-staging",
-    owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:remove-paid-submission-staging",
-    request: {
-      articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
-    },
-    result: {
-      items: [
-        {
-          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
-          status: "removed",
-          idempotent: false,
-        },
-      ],
-      removedCount: 1,
-      idempotentCount: 0,
-    },
-  },
-  {
-    capability: "content.setPaidSubmissionStagingMedia",
-    channel: "content:set-paid-submission-staging-media",
-    owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:set-paid-submission-staging-media",
-    request: {
-      articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
-      mediaResourceId: "fixture-1",
-    },
-    result: {
-      items: [
-        {
-          articleRef: { clientId: "fixture-1", articleId: "fixture-1" },
-          status: "media-updated",
-          idempotent: false,
-        },
-      ],
-      updatedCount: 1,
-      idempotentCount: 0,
-      selectedMediaResourceId: "fixture-1",
-    },
-  },
-  {
-    capability: "content.getPaidSubmissionStaging",
-    channel: "content:get-paid-submission-staging",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:get-paid-submission-staging",
-    request: { clientId: "fixture-1" },
-    result: {
-      clientId: "fixture-1",
-      items: [],
-    },
-  },
-  {
     capability: "content.previewRegularQueueAdmission",
     channel: "content:preview-regular-queue-admission",
     owner: "content",
@@ -5541,7 +5361,8 @@ const rawProductionIpcContractFixtures = [
   },
 ];
 const productionIpcContractFixtures = Object.freeze(
-  rawProductionIpcContractFixtures.map((entry) =>
+  rawProductionIpcContractFixtures
+    .map((entry) =>
     Object.freeze({
       ...entry,
       productionCaller: Object.freeze({

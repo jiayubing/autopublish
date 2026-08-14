@@ -45,11 +45,6 @@ function createOperationalStoreContext(runtime, options) {
       typeof value.internalMigrationImportFault === "function"
         ? value.internalMigrationImportFault
         : null,
-    articleReader:
-      value.articleReader &&
-      typeof value.articleReader.getArticle === "function"
-        ? value.articleReader
-        : null,
     open,
     transaction: transaction.run,
     fail,

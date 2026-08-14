@@ -661,10 +661,6 @@ test("the application facade exposes only stable submission operations", () => {
     "previewRetryFailedPublication",
     "retryFailedPublication",
     "listArchiveFailures",
-    "addPaidSubmissionStaging",
-    "removePaidSubmissionStaging",
-    "setPaidSubmissionStagingMedia",
-    "getPaidSubmissionStaging",
   ])
     implementation[name] = () => name;
   implementation.createBatch = () => ({

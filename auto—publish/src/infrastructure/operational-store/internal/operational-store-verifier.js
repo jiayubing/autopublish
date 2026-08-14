@@ -12,7 +12,7 @@ const {
   verifyV3Structure,
   verifyV4Structure,
   verifyV5Structure,
-  verifyV6Structure,
+  verifyV7Structure,
   integrityOk,
 } = require("./operational-store-schema");
 
@@ -39,7 +39,7 @@ function verifyOperationalDatabase(filename) {
       throw fail("OPERATIONAL_RESTORE_INVALID");
     verifyMigrationHistory(
       db,
-      [1, 2, 3, 4, 5, 6],
+      [1, 2, 3, 4, 5, 6, 7],
       "OPERATIONAL_RESTORE_INVALID",
     );
     verifyV1Structure(db, "OPERATIONAL_RESTORE_INVALID");
@@ -49,7 +49,7 @@ function verifyOperationalDatabase(filename) {
     });
     verifyV4Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV5Structure(db, "OPERATIONAL_RESTORE_INVALID");
-    verifyV6Structure(db, "OPERATIONAL_RESTORE_INVALID");
+    verifyV7Structure(db, "OPERATIONAL_RESTORE_INVALID");
     return {
       schemaVersion: version,
       tables: tables.length,

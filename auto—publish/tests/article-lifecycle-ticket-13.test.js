@@ -48,11 +48,6 @@ function fixture(options) {
     workspaceRoot: root,
     clock: () => new Date(NOW),
     transitionPorts,
-    articleReader: {
-      getArticle(clientId, articleId) {
-        return contentStore.getArticle(clientId, articleId);
-      },
-    },
     internalPaidExecutionTransitionFault: (point) => {
       if (point === settings.faultPoint) throw new Error(`fault:${point}`);
     },
@@ -82,9 +77,6 @@ function fixture(options) {
   const preflight = createPaidMediaPreflightService({
     contentStore,
     paidAdmission: { admitPaidBatch: coordinator.admitPaidBatch },
-    paidStaging: {
-      listPaidStagingItems: (input) => store.listPaidStagingItems(input),
-    },
     mediaPoolStore: { contains: () => true },
     lifecycleFacts: transitionPorts.paidAdmissionTransitions,
     queryResource: async () => Object.assign({}, resource),
@@ -98,12 +90,6 @@ function fixture(options) {
   });
   contentStore.createArticle(article("article-a"));
   contentStore.createArticle(article("article-b"));
-  const stagedRefs = [
-    { clientId: "client-a", articleId: "article-a" },
-    { clientId: "client-a", articleId: "article-b" },
-  ];
-  store.addPaidStagingItems(stagedRefs);
-  store.setPaidStagingMedia(stagedRefs, "media-13");
   return {
     root,
     store,

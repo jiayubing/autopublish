@@ -236,50 +236,15 @@ const COMMON_ERRORS = Object.freeze({
     retryability: "never",
     userMessage: "所选文章不存在。",
   },
-  ARTICLE_NOT_SAVED: {
-    category: "validation",
-    retryability: "never",
-    userMessage: "文章尚未保存，不能加入付费投稿队列。",
-  },
-  ALREADY_STAGED: {
-    category: "conflict",
-    retryability: "safe",
-    userMessage: "文章已经在付费投稿队列中。",
-  },
   ACTIVE_PUBLICATION_CONFLICT: {
     category: "conflict",
     retryability: "safe",
     userMessage: "文章已有活动投稿目标，请先处理现有投稿。",
   },
-  NOT_IN_STAGING: {
-    category: "conflict",
-    retryability: "safe",
-    userMessage: "文章不在付费投稿队列中，请刷新后重试。",
-  },
   INVALID_MEDIA_RESOURCE_ID: {
     category: "validation",
     retryability: "never",
     userMessage: "媒体资源身份无效。",
-  },
-  STAGING_INPUT_INVALID: {
-    category: "validation",
-    retryability: "never",
-    userMessage: "付费投稿队列请求无效。",
-  },
-  PAID_STAGING_CONFLICT: {
-    category: "conflict",
-    retryability: "safe",
-    userMessage: "文章已在付费投稿队列中，请先移出后再选择普通平台。",
-  },
-  STAGING_PERSISTENCE_FAILED: {
-    category: "storage",
-    retryability: "safe",
-    userMessage: "付费投稿队列状态保存失败，请刷新后重试。",
-  },
-  PAID_STAGING_REGULAR_QUEUE_CONFLICT: {
-    category: "conflict",
-    retryability: "safe",
-    userMessage: "请先从付费投稿队列移出文章，再加入普通平台队列。",
   },
   PUBLICATION_UNCERTAIN: {
     category: "conflict",

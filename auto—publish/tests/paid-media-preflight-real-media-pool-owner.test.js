@@ -49,11 +49,6 @@ test("paid preflight application uses the real MediaPoolStore owner for prefligh
       workspaceRoot: root,
       clock: () => new Date("2026-08-07T00:00:00.000Z"),
       transitionPorts,
-      articleReader: {
-        getArticle(clientId, articleId) {
-          return contentStore.getArticle(clientId, articleId);
-        },
-      },
     });
     const articleStore = createArticleStore(root);
     contentStore = createContentStore({
@@ -63,8 +58,6 @@ test("paid preflight application uses the real MediaPoolStore owner for prefligh
     contentStore.createArticle(article("article-owner"));
 
     const articleRefs = refs("article-owner");
-    store.addPaidStagingItems(articleRefs);
-    store.setPaidStagingMedia(articleRefs, "media-owner");
 
     const poolStore = new MediaPoolStore({ paths: { data: mediaDataRoot } });
     const admissionCalls = [];
@@ -76,7 +69,6 @@ test("paid preflight application uses the real MediaPoolStore owner for prefligh
         listOrderViews: () => [],
       },
       contentStore,
-      paidStaging: store,
       paidAdmissionFacade: {
         admitPaidBatch(input) {
           admissionCalls.push(input);
@@ -139,10 +131,6 @@ test("paid preflight application uses the real MediaPoolStore owner for prefligh
     );
     assert.deepEqual(admissionCalls, []);
     assert.equal(store.listPaidSubmissionBatches().length, 0);
-    assert.equal(
-      store.listPaidStagingItems({ clientId: "client-a" }).length,
-      1,
-    );
   } finally {
     if (store) store.close();
     fs.rmSync(root, { recursive: true, force: true });

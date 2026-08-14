@@ -29,7 +29,7 @@ test("Phase 3 composition owns one OperationalStore writer and releases it on di
     publisher,
   });
   assert.deepEqual(Object.keys(composition.publicationWorkflow), ["recover"]);
-  assert.equal(composition.operationalStore.verify().schemaVersion, 6);
+  assert.equal(composition.operationalStore.verify().schemaVersion, 7);
   await composition.dispose();
   const next = createPublicationWorkflowComposition({
     workspaceRoot,

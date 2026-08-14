@@ -31,7 +31,6 @@ function createRegularQueueApplication(options) {
   const contentStore = value.contentStore;
   const coordinator = value.articleMutationCoordinator;
   const transitions = value.regularQueueTransitions;
-  const paidStagingTransitions = value.paidStagingTransitions || null;
   const accountProfileResolver = value.accountProfileResolver;
   const clientSnapshotResolver = typeof value.clientSnapshotResolver === "function"
     ? value.clientSnapshotResolver
@@ -147,24 +146,6 @@ function createRegularQueueApplication(options) {
     }) || { publications: [], submissionItems: [], orders: [], attentionItems: [] };
   }
 
-  function isPaidStaged(ref) {
-    if (
-      !paidStagingTransitions ||
-      typeof paidStagingTransitions.hasPaidStagingItem !== "function"
-    )
-      return false;
-    try {
-      return paidStagingTransitions.hasPaidStagingItem({ articleRef: ref }) === true;
-    } catch (error) {
-      const mapped = fail(
-        error && error.code === "STAGING_PERSISTENCE_FAILED"
-          ? error.code
-          : "STAGING_PERSISTENCE_FAILED",
-      );
-      throw mapped;
-    }
-  }
-
   function targetKey(target) {
     return domain.publicationTargetKey(target);
   }
@@ -186,16 +167,6 @@ function createRegularQueueApplication(options) {
       try { article = contentStore.getArticle(ref.clientId, ref.articleId); }
       catch (_) {
         return Object.freeze({ articleRef: ref, articleId: ref.articleId, status: "missing", reasonCode: "ARTICLE_NOT_FOUND" });
-      }
-      if (isPaidStaged(ref)) {
-        return Object.freeze({
-          articleRef: ref,
-          articleId: ref.articleId,
-          targetKey: key,
-          status: "conflict",
-          reasonCode: "PAID_STAGING_REGULAR_QUEUE_CONFLICT",
-          reasonCodes: Object.freeze(["PAID_STAGING_REGULAR_QUEUE_CONFLICT"]),
-        });
       }
       const existing = itemForTarget(facts, ref, key);
       if (existing && existing.status === "queued" && existing.queueGroupId) {

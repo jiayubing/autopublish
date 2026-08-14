@@ -78,11 +78,6 @@ const PUBLIC_SURFACE = [
   "getPaidSubmissionBatch",
   "listPaidSubmissionBatches",
   "setPaidSubmissionBatchPause",
-  "addPaidStagingItems",
-  "removePaidStagingItems",
-  "listPaidStagingItems",
-  "setPaidStagingMedia",
-  "hasPaidStagingItem",
   "beginOrderCreationRemoteCall",
   "claimPaidSubmissionBatchItem",
   "listPaidSubmissionBatchSnapshots",
@@ -150,7 +145,7 @@ test("OperationalStore facade persists caller-visible facts through its public c
   let store;
   try {
     store = createOperationalStore({ workspaceRoot });
-    assert.equal(SCHEMA_VERSION, 6);
+    assert.equal(SCHEMA_VERSION, 7);
     assert.deepEqual(Object.keys(store), PUBLIC_SURFACE);
     assert.equal(Object.isFrozen(store), true);
     assert.equal("db" in store, false);

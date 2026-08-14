@@ -23,13 +23,6 @@ const APPLICATION_OPERATIONS = Object.freeze([
   "listArchiveFailures",
 ]);
 
-const PAID_STAGING_APPLICATION_OPERATIONS = Object.freeze([
-  "addPaidSubmissionStaging",
-  "removePaidSubmissionStaging",
-  "setPaidSubmissionStagingMedia",
-  "getPaidSubmissionStaging",
-]);
-
 function createContentSubmissionApplication(implementation) {
   if (!implementation || typeof implementation !== "object") {
     const error = new Error("Content submission implementation is required");
@@ -63,18 +56,6 @@ function createContentSubmissionApplication(implementation) {
           })
         : result.items;
       return output;
-    };
-  });
-  PAID_STAGING_APPLICATION_OPERATIONS.forEach((name) => {
-    if (typeof implementation[name] !== "function") {
-      const error = new Error(
-        "Content submission operation is unavailable: " + name,
-      );
-      error.code = "CONTENT_SUBMISSION_OPERATION_UNAVAILABLE";
-      throw error;
-    }
-    application[name] = function (...args) {
-      return implementation[name].apply(implementation, args);
     };
   });
   return Object.freeze(application);

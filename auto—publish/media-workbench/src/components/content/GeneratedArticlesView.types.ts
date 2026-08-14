@@ -64,7 +64,6 @@ export type ArticleManagementReadModel = {
 export type GeneratedArticlesCommandName =
   | "cancelContentSubmissionBatch"
   | "admitRegularQueueItems"
-  | "addPaidSubmissionStaging"
   | "prepareBindPaidOrderNumber"
   | "bindPaidOrderNumber"
   | "prepareConfirmPaidOrderAbsent"

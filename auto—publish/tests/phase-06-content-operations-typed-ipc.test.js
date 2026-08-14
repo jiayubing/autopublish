@@ -14,10 +14,6 @@ const {
 const { loadPreloadHarness } = require("./helpers/preload-harness");
 
 const SUBMISSION_CHANNELS = [
-  "content:add-paid-submission-staging",
-  "content:remove-paid-submission-staging",
-  "content:set-paid-submission-staging-media",
-  "content:get-paid-submission-staging",
   "content:preview-regular-queue-admission",
   "content:admit-regular-queue-items",
   "content:list-regular-queue-groups",
@@ -161,8 +157,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 36 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 36);
+test("content operations inventory has 32 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 32);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);

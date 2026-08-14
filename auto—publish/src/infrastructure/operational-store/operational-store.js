@@ -55,9 +55,6 @@ const {
 const {
   createOperationalStoreMigrationImport,
 } = require("./internal/operational-store-migration-import");
-const {
-  createPaidStagingAggregate,
-} = require("./internal/operational-store-paid-staging-aggregate");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 function closeAfterFailure(context, error, operation) {
@@ -124,7 +121,6 @@ function createOperationalStore(options) {
     const recover = recovery.createRecoveryAggregate(context, activeTarget);
     const order = orders.createOrderAggregate(context, activeTarget);
     const queue = createOperationalStoreQueueAggregate(context);
-    const paidStaging = createPaidStagingAggregate(context);
     const paidExecution = createPaidExecutionAggregate(context);
     const publicationSuccess =
       successes.createPublicationSuccessPrimitive(context);
@@ -160,7 +156,6 @@ function createOperationalStore(options) {
       orderObservation,
       orderCancellation,
       publishedArchiveQueries,
-      paidStaging,
     });
     return Object.freeze({
       databasePath: runtime.filename,
@@ -205,11 +200,6 @@ function createOperationalStore(options) {
       getPaidSubmissionBatch: queue.getPaidSubmissionBatch,
       listPaidSubmissionBatches: queue.listPaidSubmissionBatches,
       setPaidSubmissionBatchPause: queue.setPaidSubmissionBatchPause,
-      addPaidStagingItems: paidStaging.addPaidStagingItems,
-      removePaidStagingItems: paidStaging.removePaidStagingItems,
-      listPaidStagingItems: paidStaging.listPaidStagingItems,
-      setPaidStagingMedia: paidStaging.setPaidStagingMedia,
-      hasPaidStagingItem: paidStaging.hasPaidStagingItem,
       beginOrderCreationRemoteCall: paidExecution.beginOrderCreationRemoteCall,
       claimPaidSubmissionBatchItem: paidExecution.claimPaidSubmissionBatchItem,
       listPaidSubmissionBatchSnapshots:

@@ -535,41 +535,6 @@ export default function GeneratedArticlesView({
     }
   }
 
-  async function addPaidStagingSelected() {
-    const requestedClientId = clientId;
-    const selectedQueueable = selectedQueueableArticles;
-    if (!selectedQueueable.length || commandBusy("addPaidSubmissionStaging"))
-      return;
-    setError("");
-    try {
-      const result = await commands.addPaidSubmissionStaging({
-        articleRefs: selectedQueueable.map((article) => ({
-          clientId: requestedClientId,
-          articleId: article.id,
-        })),
-      });
-      if (
-        isContentCommandStaleResult(result) ||
-        !isCurrentClient(requestedClientId)
-      )
-        return;
-      updateSelected([]);
-      const addedCount = result?.addedCount || 0;
-      const idempotentCount = result?.idempotentCount || 0;
-      const details = [
-        addedCount ? `已加入 ${addedCount} 篇` : "",
-        idempotentCount ? `${idempotentCount} 篇已在队列中` : "",
-      ].filter(Boolean);
-      setBatchFeedback({
-        kind: "status",
-        text: `付费媒体投稿队列：${details.join("；") || "已刷新"}。`,
-      });
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setError(value instanceof Error ? value.message : "加入付费媒体投稿队列失败");
-    }
-  }
-
   function openArticle(
     article: GeneratedContentArticle,
     source?: HTMLElement | null,
@@ -1305,22 +1270,6 @@ export default function GeneratedArticlesView({
             className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
           >
             加入投稿队列
-          </button>
-          <button
-            type="button"
-            onClick={() => void addPaidStagingSelected()}
-            title={
-              selectedDirtyArticle
-                ? "当前编辑文章有未保存修改，请先保存后投稿。"
-                : undefined
-            }
-            disabled={
-              !selectedQueueableArticles.length ||
-              commandBusy("addPaidSubmissionStaging")
-            }
-            className="shrink-0 rounded border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-40"
-          >
-            加入付费媒体投稿队列
           </button>
           <AccountProfileSelector
             platforms={submissionPlatforms}

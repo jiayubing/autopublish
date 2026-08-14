@@ -2548,7 +2548,7 @@ function classifyPackage(fileName, testName) {
     return "M05-D";
 
   if (
-    /^tests\/(?:article-lifecycle-ticket-14-renderer|article-attention-invalidation|article-attention-policy|article-attention-query|article-editor-session|content-workbench-regression|doubao-content-workbench|generation-snapshot-(?:event|order)|generation-batch-runner|generation-batch-store|content-generation-batch-service|renderer-(?:content|article|batch|generation|history|question|template)[a-z0-9-]*|react-workbench-regression|client-image-library|client-image-selector|content-workspace|phase-06-(?:attention-feature|content-feature|content-read-model|content-workbench-feature|generation-feature|query-identity)|phase-08-content-renderer-feature-races|phase-12-paid-media-preflight)\.test\./.test(
+    /^tests\/(?:article-lifecycle-ticket-14-renderer|article-attention-invalidation|article-attention-policy|article-attention-query|article-editor-session|content-workbench-regression|doubao-content-workbench|generation-snapshot-(?:event|order)|generation-batch-runner|generation-batch-store|content-generation-batch-service|renderer-(?:content|article|batch|generation|history|question|template)[a-z0-9-]*|react-workbench-regression|client-image-library|client-image-selector|content-workspace|phase-06-(?:attention-feature|content-feature|content-read-model|content-workbench-feature|generation-feature|query-identity)|phase-08-content-renderer-feature-races)\.test\./.test(
       file,
     )
   )
