@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useConfirmation } from "../../confirmation";
 import type { createAttentionFeature } from "../../features/attention/attention-feature.js";
 import type { ArticleAttentionItem } from "../../types/publication";
@@ -23,10 +23,34 @@ function actionLabel(action: string): string {
     "retry-publication": "重新投稿",
     "open-publication": "打开发布详情",
     "open-article": "打开文章",
+    "trash-article": "移入回收站",
     inspect: "查看差异",
     "retry-archive": "重试本地归档",
   };
   return labels[action] || action;
+}
+
+function attentionGroupKey(item: ArticleAttentionItem): string {
+  if (item.articleId)
+    return `article:${item.clientId || ""}:${item.articleId}`;
+  return `attention:${item.attentionId}`;
+}
+
+interface AttentionCard {
+  key: string;
+  items: ArticleAttentionItem[];
+}
+
+function groupAttentionItems(items: ArticleAttentionItem[]): AttentionCard[] {
+  const grouped = new Map<string, ArticleAttentionItem[]>();
+  items.forEach((item) => {
+    const key = attentionGroupKey(item);
+    grouped.set(key, [...(grouped.get(key) || []), item]);
+  });
+  return [...grouped.entries()].map(([key, groupedItems]) => ({
+    key,
+    items: groupedItems,
+  }));
 }
 
 function defaultTargetLabel(item: ArticleAttentionItem): string {
@@ -66,6 +90,10 @@ interface ArticleAttentionPanelProps {
   onInspect: (item: ArticleAttentionItem) => void;
   onOpenArticle: (item: ArticleAttentionItem) => void;
   getTargetLabel?: (item: ArticleAttentionItem) => string;
+  clientLabel?: string;
+  getAdditionalActions?: (item: ArticleAttentionItem) => string[];
+  onTrashArticle?: (item: ArticleAttentionItem) => void;
+  extraActionBusy?: boolean;
 }
 
 export default function ArticleAttentionPanel({
@@ -78,18 +106,33 @@ export default function ArticleAttentionPanel({
   onInspect,
   onOpenArticle,
   getTargetLabel,
+  clientLabel,
+  getAdditionalActions,
+  onTrashArticle,
+  extraActionBusy = false,
 }: ArticleAttentionPanelProps) {
   const { confirm } = useConfirmation();
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
+  const attentionCards = useMemo(
+    () => groupAttentionItems(snapshot.items as ArticleAttentionItem[]),
+    [snapshot.items],
+  );
 
   useEffect(() => {
     if (!selectedAttentionId) return;
-    const element = itemRefs.current.get(selectedAttentionId);
+    const card = attentionCards.find(({ items }) =>
+      items.some((item) => item.attentionId === selectedAttentionId),
+    );
+    const element = card ? itemRefs.current.get(card.key) : undefined;
     element?.scrollIntoView({ block: "nearest" });
     element?.focus();
-  }, [selectedAttentionId, snapshot.items]);
+  }, [attentionCards, selectedAttentionId]);
 
   async function resolve(item: ArticleAttentionItem, action: string) {
+    if (action === "trash-article") {
+      onTrashArticle?.(item);
+      return;
+    }
     if (action === "open-publication") {
       onOpenPublication(item);
       return;
@@ -132,7 +175,9 @@ export default function ArticleAttentionPanel({
   const commandError =
     snapshot.commands.execute.error || snapshot.commands.preview.error;
   const actionBusy =
-    snapshot.commands.preview.busy || snapshot.commands.execute.busy;
+    snapshot.commands.preview.busy ||
+    snapshot.commands.execute.busy ||
+    extraActionBusy;
 
   return (
     <section
@@ -172,75 +217,127 @@ export default function ArticleAttentionPanel({
         </div>
       )}
       <div className="mt-3 grid gap-2">
-        {(snapshot.items as ArticleAttentionItem[]).map((item) => (
-          <div
-            key={item.attentionId}
-            ref={(node) => {
-              if (node) itemRefs.current.set(item.attentionId, node);
-              else itemRefs.current.delete(item.attentionId);
-            }}
-            tabIndex={selectedAttentionId === item.attentionId ? -1 : undefined}
-            className={`rounded border bg-white p-2 outline-none ${selectedAttentionId === item.attentionId ? "border-blue-400 ring-2 ring-blue-100" : "border-amber-200"}`}
-          >
+        {attentionCards.map((card) => {
+          const selected = card.items.some(
+            (item) => item.attentionId === selectedAttentionId,
+          );
+          const title =
+            card.items.find((item) => item.titleSnapshot)?.titleSnapshot ||
+            card.items.find((item) => item.articleId)?.articleId ||
+            card.items[0]?.transactionId ||
+            "需处理项";
+          const status =
+            card.items.find((item) => item.status === "uncertain")?.status ||
+            card.items[0]?.status ||
+            "待处理";
+          const targetLabels = [
+            ...new Set(
+              card.items.map(
+                (item) => getTargetLabel?.(item) || defaultTargetLabel(item),
+              ),
+            ),
+          ];
+          const updatedAtValues = card.items
+            .map((item) => item.updatedAt)
+            .filter((value): value is string => Boolean(value))
+            .sort();
+          const actions = card.items.flatMap((item) => {
+            const itemActions = [
+              ...item.allowedActions,
+              ...(getAdditionalActions?.(item) || []),
+            ];
+            return [...new Set(itemActions)].map((action) => ({
+              action,
+              item,
+              label:
+                card.items.length > 1
+                  ? `${actionLabel(action)} · ${labelFor(item)}`
+                  : actionLabel(action),
+            }));
+          });
+          return (
+            <div
+              key={card.key}
+              ref={(node) => {
+                if (node) itemRefs.current.set(card.key, node);
+                else itemRefs.current.delete(card.key);
+              }}
+              tabIndex={selected ? -1 : undefined}
+              className={`rounded border bg-white p-2 outline-none ${selected ? "border-blue-400 ring-2 ring-blue-100" : "border-amber-200"}`}
+            >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
                 <h4 className="break-words text-sm font-semibold text-slate-800">
-                  {item.titleSnapshot ||
-                    item.articleId ||
-                    item.transactionId ||
-                    "需处理项"}
+                  {title}
                 </h4>
               </div>
               <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                {item.status || "待处理"}
+                {status}
               </span>
             </div>
             <dl className="mt-3 grid min-w-0 gap-2 text-xs">
               <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                <dt className="text-slate-400">客户</dt>
+                <dd className="min-w-0 break-words text-slate-700">
+                  {clientLabel || card.items[0]?.clientId || "当前客户未记录"}
+                </dd>
+              </div>
+              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
                 <dt className="text-slate-400">投稿目标</dt>
                 <dd className="min-w-0 break-words text-slate-700">
-                  {getTargetLabel?.(item) || defaultTargetLabel(item)}
+                  {targetLabels.map((label) => (
+                    <div key={label}>{label}</div>
+                  ))}
                 </dd>
               </div>
               <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
                 <dt className="text-slate-400">问题类型</dt>
                 <dd className="min-w-0 break-words text-slate-700">
-                  {labelFor(item)}
-                  {item.reasonCode ? ` · ${item.reasonCode}` : ""}
+                  {card.items.map((item) => (
+                    <div key={item.attentionId}>
+                      {labelFor(item)}
+                      {item.reasonCode ? ` · ${item.reasonCode}` : ""}
+                    </div>
+                  ))}
                 </dd>
               </div>
               <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
                 <dt className="text-slate-400">最近一次执行</dt>
                 <dd className="min-w-0 break-words text-slate-700">
-                  {formatBeijingTime(item.updatedAt)}
+                  {formatBeijingTime(
+                    updatedAtValues[updatedAtValues.length - 1],
+                  )}
                 </dd>
               </div>
             </dl>
             <div className="mt-3 rounded border border-amber-100 bg-amber-50/60 p-2 text-xs leading-5 text-amber-900">
               <div className="font-semibold">问题说明</div>
-              <p className="mt-1 break-words">
-                {item.message || "当前状态需要进一步处理。"}
-              </p>
+              {card.items.map((item) => (
+                <p key={item.attentionId} className="mt-1 break-words">
+                  {item.message || "当前状态需要进一步处理。"}
+                </p>
+              ))}
             </div>
             <div className="mt-3">
               <div className="text-xs font-semibold text-slate-700">允许操作</div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {item.allowedActions.map((action) => (
+                {actions.map(({ action, item, label }) => (
                   <button
-                    key={action}
+                    key={`${item.attentionId}:${action}`}
                     type="button"
                     disabled={actionBusy}
                     onClick={() => void resolve(item, action)}
                     className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:opacity-40"
                   >
-                    {actionLabel(action)}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
-        ))}
-        {snapshot.query.loading && !snapshot.items.length && (
+            </div>
+          );
+        })}
+        {snapshot.query.loading && !attentionCards.length && (
           <div className="rounded border border-dashed border-amber-300 bg-white p-4 text-center text-xs text-amber-800">
             正在加载需处理项…
           </div>

@@ -41,7 +41,7 @@ test('article attention actions produce visible publication/detail results', asy
     await page.addInitScript(() => {
       const ok = (data) => Promise.resolve({ ok: true, data });
       const article = { id: 'article-1', clientId: 'client-1', title: '失败后可重新投稿', content: '安全测试正文', status: 'saved', platform: 'hepan', scenario: '测试', templateId: 'template-1', createdAt: '2026-07-19T00:00:00.000Z', updatedAt: '2026-07-19T00:00:00.000Z' };
-      const attention = { attentionId: 'failed-active-1', kind: 'failed_submission', articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, message: '投稿明确失败', allowedActions: ['retry-publication', 'open-publication'] };
+      const attention = { attentionId: 'failed-active-1', kind: 'failed_submission', articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', reasonCode: 'REMOTE_REJECTED', updatedAt: article.updatedAt, message: '投稿明确失败', allowedActions: ['retry-publication', 'open-publication'] };
       const paidResolution = { attentionId: 'paid-resolution-1', kind: 'paid_order_uncertain', articleId: article.id, clientId: article.clientId, titleSnapshot: '付费订单待核对', platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-paid-1', attemptId: 'attempt-paid-1', orderCreationAttemptId: 'order-attempt-1', status: 'uncertain', message: '请核对服务商订单', allowedActions: ['open-publication'], resolutionActions: ['bind-paid-order-number', 'confirm-paid-order-absent'] };
       const repair = { attentionId: 'repair-1', kind: 'removal_needs_repair', articleId: 'article-missing', clientId: article.clientId, titleSnapshot: '删除事务待修复', transactionId: 'transaction-1', status: 'needs_repair', reasonCode: 'ARTICLE_REMOVAL_BLOCKED', message: '删除事务未完成，需要重新预检并继续', allowedActions: ['retry-removal', 'inspect'] };
       const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan:account:account-1', displayName: '蓝色河畔', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
@@ -69,11 +69,16 @@ test('article attention actions produce visible publication/detail results', asy
     });
      await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'AI内容生成' }).click();
-     await page.getByRole('button', { name: '历史文章' }).click();
+    await page.getByRole('button', { name: '历史文章' }).click();
      await page.getByRole('tab', { name: '需处理' }).click();
     await page.getByText('失败后可重新投稿', { exact: true }).waitFor({ state: 'visible' });
     assert.equal(await page.getByText('失败后可重新投稿', { exact: true }).count(), 1);
-    assert.ok(await page.getByText('蓝色河畔 / account-1', { exact: true }).isVisible());
+    const attentionRegion = page.getByRole('region', { name: '需处理页面' });
+    assert.equal(await attentionRegion.getByText('测试客户', { exact: true }).count(), 2);
+    assert.ok(await attentionRegion.getByText('蓝色河畔 / account-1', { exact: true }).isVisible());
+    assert.equal(await attentionRegion.getByRole('button', { name: /打开文章/ }).count(), 1);
+    assert.equal(await attentionRegion.getByRole('button', { name: /移入回收站/ }).count(), 1);
+    assert.equal(await attentionRegion.getByRole('button', { name: /重试本地归档/ }).count(), 0);
     assert.ok((await page.getByText('问题类型', { exact: true }).count()) > 0);
     assert.ok((await page.getByText('问题说明', { exact: true }).count()) > 0);
     assert.ok((await page.getByText('最近一次执行', { exact: true }).count()) > 0);

@@ -286,6 +286,39 @@ export default function GeneratedArticlesView({
     return allowed === true && !isPublishedArticle(article);
   }
 
+  function attentionArticleFor(item: ArticleAttentionItem) {
+    if (!item.articleId) return null;
+    return (
+      articles.find(
+        (article) =>
+          article.id === item.articleId &&
+          (!item.clientId || article.clientId === item.clientId),
+      ) || null
+    );
+  }
+
+  function attentionAdditionalActions(item: ArticleAttentionItem): string[] {
+    if (item.kind !== "failed_submission") return [];
+    const article = attentionArticleFor(item);
+    if (!article) return [];
+    const workflow = workflowForArticle(article);
+    const actions: string[] = [];
+    const editable =
+      workflow?.operations?.edit?.allowed ?? workflow?.locks.canEdit;
+    if (editable === true) actions.push("open-article");
+    if (!removalSubmitDisabled && canTrashArticle(article))
+      actions.push("trash-article");
+    return actions;
+  }
+
+  function trashAttentionArticle(item: ArticleAttentionItem) {
+    const article = attentionArticleFor(item);
+    if (!article || !canTrashArticle(article) || removalSubmitDisabled) return;
+    void previewTrashSelections([
+      { clientId: article.clientId, articleId: article.id },
+    ]);
+  }
+
   function isArticleSelectable(article: GeneratedContentArticle): boolean {
     return (
       selectableArticles([article], clientId).length > 0 &&
@@ -1282,6 +1315,12 @@ export default function GeneratedArticlesView({
           onExecutePreview={attentionFeature.executePreview}
           selectedAttentionId={selectedAttentionId}
           getTargetLabel={attentionTargetLabel}
+          clientLabel={client?.name || clientId || "当前客户"}
+          getAdditionalActions={attentionAdditionalActions}
+          onTrashArticle={trashAttentionArticle}
+          extraActionBusy={
+            commandBusy("previewContentArticleRemoval", "trashContentArticles")
+          }
           onOpenPublication={(item) => {
             // Paid-order resolution is a dedicated attention workflow. Open
             // its detail drawer so the typed media commands remain reachable
