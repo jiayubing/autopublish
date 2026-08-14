@@ -154,7 +154,6 @@ function installDesktopFixture(page, scenario) {
             workflowByArticle: {},
             publicationSummaries: {},
           }),
-        listSubmissionPlatforms: () => ok([]),
         listRegularQueueGroups: () => ok({ items: [] }),
         listSubmissionBatches: () => ok([]),
         listArticleTrash: () => ok([]),

@@ -94,7 +94,6 @@ function installDesktopFixture(page) {
       pauseRegularQueueGroup: () => response([]),
       startAllRegularQueueGroups: () => response([]),
       pauseAllRegularQueueGroups: () => response([]),
-      listSubmissionPlatforms: () => response([]),
       listSubmissionBatches: () => response([]),
       listArticleTrash: () => response([]),
       listResearch: () => response([]),

@@ -176,7 +176,6 @@ function registerIpc(deps) {
     modules.generation = require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(Object.assign({}, guarded, {
       publishEvents: values.publishGenerationEvents !== false,
     }));
-    modules.handoff = require("./generation-submission-handoff-ipc").registerGenerationSubmissionHandoffIpc(guarded);
     modules.submission = require("./content-submission-ipc").registerContentSubmissionIpc(guarded);
     // archiveService is assembled by WorkspaceRuntime, not leaked from a prior
     // registrar's return value. Registration order is no longer an interface.

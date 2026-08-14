@@ -99,7 +99,6 @@ function installQuestionFixture(page, options = {}) {
           workflowItems: [],
           publicationSummaryItems: [],
         }),
-      listSubmissionPlatforms: () => result({ platforms: [] }),
       listSubmissionBatches: () => result({ batches: [] }),
       listArticleTrash: () => result({ trash: [] }),
       listResearch: (clientId) =>

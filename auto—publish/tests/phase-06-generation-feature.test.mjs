@@ -15,9 +15,6 @@ function runtimeAdapters(overrides = {}) {
     previewBatch: async () => ({}),
     previewCancelPending: async () => ({}),
     cancelPending: async () => null,
-    listSubmissionPlatforms: async () => [],
-    previewSubmissionHandoff: async () => ({}),
-    commitSubmissionHandoff: async () => ({}),
     ...overrides,
   };
 }
@@ -59,9 +56,6 @@ test("generation rejects stale batch results after a scope switch", async () => 
     previewBatch: async () => ({}),
     previewCancelPending: async () => ({}),
     cancelPending: async () => null,
-    listSubmissionPlatforms: async () => [],
-    previewSubmissionHandoff: async () => ({}),
-    commitSubmissionHandoff: async () => ({}),
     hydrate: async (reason, scope) => {
       refreshed.push([reason, scope]);
       return {
@@ -96,9 +90,6 @@ test("generation hydrates its runtime snapshot and owns the event subscription l
     previewBatch: async () => ({}),
     previewCancelPending: async () => ({}),
     cancelPending: async () => null,
-    listSubmissionPlatforms: async () => [],
-    previewSubmissionHandoff: async () => ({}),
-    commitSubmissionHandoff: async () => ({}),
     hydrate: async () => ({
       runtimeId: "runner-1",
       sequence: 4,

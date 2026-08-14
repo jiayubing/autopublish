@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Ban, Pause, Play, RotateCcw, Square } from 'lucide-react';
-import type { GenerationBatch, GenerationBatchState, GenerationSubmissionHandoffResult } from '../../types/generation';
-import GenerationSubmissionHandoffDrawer from './GenerationSubmissionHandoffDrawer';
+import type { GenerationBatch, GenerationBatchState } from '../../types/generation';
 import { useConfirmation } from '../../confirmation';
 
 interface GenerationBatchDetailProps {
@@ -22,15 +21,14 @@ interface GenerationBatchDetailProps {
   onPreviewCancelPending: (input: { batchId: string }) => Promise<{ canCancel: boolean; pendingCount: number; runningCount: number }>;
   onCancelPending: (input: { batchId: string; confirmed: true }) => Promise<GenerationBatch>;
   onStartNew?: () => void;
+  onViewBatchArticles?: (batchId: string, clientId?: string) => void;
 }
 
-export default function GenerationBatchDetail({ batch, state, busy, onPause, onResume, onContinue, onStop, onRetry, onPreviewCancelPending, onCancelPending, onStartNew }: GenerationBatchDetailProps) {
+export default function GenerationBatchDetail({ batch, state, busy, onPause, onResume, onContinue, onStop, onRetry, onPreviewCancelPending, onCancelPending, onStartNew, onViewBatchArticles }: GenerationBatchDetailProps) {
   const { confirm } = useConfirmation();
-  const [handoffOpen, setHandoffOpen] = useState(false);
   const [cancelledBatch, setCancelledBatch] = useState<GenerationBatch | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState('');
-  const [handoffSummary, setHandoffSummary] = useState<GenerationSubmissionHandoffResult | null>(null);
   const displayedBatch = cancelledBatch?.id === batch.id ? cancelledBatch : batch;
   const runtimeStateMatches = state.batchId === batch.id && Boolean(state.status) && state.status !== 'idle';
   const counts = { total: displayedBatch.tasks.length, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0, ...(displayedBatch.counts || {}), ...(runtimeStateMatches ? (state.counts || {}) : {}) };
@@ -64,9 +62,7 @@ export default function GenerationBatchDetail({ batch, state, busy, onPause, onR
     {cancelError && <div role="alert" className="mt-2 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{cancelError}</div>}
     {canContinue && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-amber-100 bg-amber-50 p-2 text-xs text-amber-800"><span>批次尚有未完成任务，确认后继续执行。</span><button type="button" onClick={onContinue} disabled={busy.continue} className="rounded bg-amber-700 px-2 py-1 text-white">继续未完成</button></div>}
     {terminal && onStartNew && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"><span>该批次已结束，可以开始新的批量生成。</span><button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">新建批量生成</button></div>}
-    {handoffSummary?.generationBatchId === displayedBatch.id && <div data-testid="generation-handoff-summary" className="mt-4 rounded border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-900"><div className="font-semibold">投稿队列交接摘要</div><div className="mt-1">新增 {handoffSummary.createdCount} 项 · 已存在跳过 {handoffSummary.idempotentCount} 项 · 阻断 {handoffSummary.blockedCount} 项</div></div>}
-    {terminal && displayedBatch.tasks.some((task) => task.status === 'succeeded' && task.articleId) && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"><span>成功 {counts.succeeded} 篇，可按客户分组一次性交接。</span><button type="button" onClick={() => { setHandoffSummary(null); setHandoffOpen(true); }} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">将成功文章加入投稿队列</button></div>}
+    {terminal && onViewBatchArticles && displayedBatch.tasks.some((task) => task.status === 'succeeded' && task.articleId) && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"><span>成功 {counts.succeeded} 篇，可在文章库查看本批次文章。</span><button type="button" onClick={() => onViewBatchArticles(displayedBatch.id, displayedBatch.tasks.find((task) => task.status === 'succeeded' && task.articleId)?.clientId)} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">查看本批次文章</button></div>}
     <div className="generation-batch-task-list mt-4 max-h-56 space-y-1 overflow-y-auto">{displayedBatch.tasks.map((task) => <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-100 px-2 py-2 text-xs"><span className="flex min-w-0 items-center gap-2 truncate"><span className="truncate">{task.clientId} · {task.platform} · {task.templateId}</span></span><span className={task.status === 'failed' ? 'text-rose-600' : task.status === 'succeeded' ? 'text-emerald-600' : task.status === 'cancelled' ? 'text-slate-400' : 'text-slate-500'}>{task.status}{task.error?.message ? ` · ${task.error.message}` : ''}</span></div>)}</div>
-    {handoffOpen && <GenerationSubmissionHandoffDrawer batch={displayedBatch} onClose={() => setHandoffOpen(false)} onCommitted={(result) => { if (!result.failedClientGroups.length) { setHandoffSummary(result); setHandoffOpen(false); } }} />}
   </section>;
 }

@@ -16,8 +16,6 @@ const focusedGenerationTests = [
 const focusedPlanTests = [
   "tests/renderer-question-editor-session.test.js",
   "tests/article-submission-eligibility.test.js",
-  "tests/generation-submission-handoff.test.js",
-  "tests/renderer-generation-submission-handoff.test.js",
   "tests/content-submission-batch.test.js",
   "tests/submission-attempt-rebind.test.js",
   "tests/article-removal-recovery-regression.test.js",

@@ -370,9 +370,6 @@ const api = {
     permanentlyDeleteArticle: function (input) {
       return ipcRenderer.invoke("content:permanently-delete-article", input);
     },
-    listSubmissionPlatforms: function () {
-      return ipcRenderer.invoke("content:list-submission-platforms");
-    },
     addPaidSubmissionStaging: function (input) {
       return ipcRenderer.invoke("content:add-paid-submission-staging", input);
     },
@@ -585,18 +582,6 @@ const api = {
       return function () {
         ipcRenderer.removeListener("content:generation-batch-state", handler);
       };
-    },
-    previewGenerationSubmissionHandoff: function (input) {
-      return ipcRenderer.invoke(
-        "content:preview-generation-submission-handoff",
-        input || {},
-      );
-    },
-    commitGenerationSubmissionHandoff: function (input) {
-      return ipcRenderer.invoke(
-        "content:commit-generation-submission-handoff",
-        input || {},
-      );
     },
     saveManualResearch: function (input) {
       return ipcRenderer.invoke("content:save-manual-research", input);

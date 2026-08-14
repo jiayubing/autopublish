@@ -120,6 +120,8 @@ function contentManagementFixture() {
     submissionPlatforms: [],
     workflowItems: [],
     publicationSummaryItems: [],
+    attentionCountItems: [],
+    orderSummaryItems: [],
   };
 }
 
@@ -1297,51 +1299,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.getRuntimeSnapshot",
     featureBinding: "hydrate",
   }),
-  "generation.previewSubmissionHandoff": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "previewGenerationSubmissionHandoff",
-    preloadMethod: "previewGenerationSubmissionHandoff",
-    command: "generation.previewSubmissionHandoff",
-    channel: "content:preview-generation-submission-handoff",
-    registrar: "desktop/ipc/generation-submission-handoff-ipc.js",
-    application: "service.preview",
-    featureBinding: "previewSubmissionHandoff",
-  }),
-  "generation.commitSubmissionHandoff": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "commitGenerationSubmissionHandoff",
-    preloadMethod: "commitGenerationSubmissionHandoff",
-    command: "generation.commitSubmissionHandoff",
-    channel: "content:commit-generation-submission-handoff",
-    registrar: "desktop/ipc/generation-submission-handoff-ipc.js",
-    application: "service.commit",
-    featureBinding: "commitSubmissionHandoff",
-  }),
-  "content.listSubmissionPlatforms": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "listContentSubmissionPlatforms",
-    preloadMethod: "listSubmissionPlatforms",
-    command: "content.listSubmissionPlatforms",
-    channel: "content:list-submission-platforms",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.preparation.listPlatforms",
-    featureBinding: "listSubmissionPlatforms",
-  }),
   "content.addPaidSubmissionStaging": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "useContentWorkbenchFeature",
@@ -2419,21 +2376,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/generation/use-generation-feature.ts",
     "hydrate",
   ],
-  "generation.previewSubmissionHandoff": [
-    "direct",
-    "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx",
-    "previewSubmissionHandoff",
-  ],
-  "generation.commitSubmissionHandoff": [
-    "direct",
-    "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx",
-    "commitSubmissionHandoff",
-  ],
-  "content.listSubmissionPlatforms": [
-    "direct",
-    "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx",
-    "listSubmissionPlatforms",
-  ],
   "content.previewRegularQueueAdmission": [
     "direct",
     "media-workbench/src/components/content/GeneratedArticlesView.tsx",
@@ -3189,9 +3131,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.getArticleRemovalTransaction",
           "generation.previewCancelPending",
           "generation.cancelPending",
-          "generation.previewSubmissionHandoff",
-          "generation.commitSubmissionHandoff",
-          "content.listSubmissionPlatforms",
           "workspace.getRuntimeIdentity",
         ],
       ],
@@ -3306,10 +3245,6 @@ const PRODUCTION_REGISTRARS = Object.freeze({
     "registerContentGenerationBatchIpc",
     "ipcMain",
   ],
-  "desktop/ipc/generation-submission-handoff-ipc.js": [
-    "registerGenerationSubmissionHandoffIpc",
-    "ipcMain",
-  ],
   "desktop/ipc/content-submission-ipc.js": [
     "registerContentSubmissionIpc",
     "deps.ipcMain",
@@ -3382,8 +3317,6 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
     "BatchGenerationView",
   "media-workbench/src/components/content/GenerationBatchDetail.tsx":
     "GenerationBatchDetail",
-  "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx":
-    "GenerationSubmissionHandoffDrawer",
   "media-workbench/src/components/content/QuestionCollectionView.tsx":
     "QuestionCollectionView",
   "media-workbench/src/components/content/QuestionBatchControls.tsx":
@@ -4826,70 +4759,6 @@ const rawProductionIpcContractFixtures = [
         canRetry: false,
         canCancel: false,
       },
-    },
-  },
-  {
-    capability: "generation.previewSubmissionHandoff",
-    channel: "content:preview-generation-submission-handoff",
-    owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:preview-generation-submission-handoff",
-    request: {
-      generationBatchId: "fixture-1",
-      platformId: "fixture-1",
-      accountProfileId: "fixture-1",
-    },
-    result: {
-      generationBatchId: "fixture-1",
-      previewToken: "fixture-1",
-      articleCount: 0,
-      clientCount: 0,
-      platformId: "fixture-1",
-      accountProfileId: "fixture-1",
-      estimatedTaskCount: 0,
-      queueableTaskCount: 0,
-      idempotentCount: 0,
-      blockedPublishedCount: 0,
-      blockedUncertainCount: 0,
-      blockedContentCount: 0,
-      conflictCount: 0,
-      unavailableArticleCount: 0,
-      invalidArticles: [],
-      clientGroups: [],
-    },
-  },
-  {
-    capability: "generation.commitSubmissionHandoff",
-    channel: "content:commit-generation-submission-handoff",
-    owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:commit-generation-submission-handoff",
-    request: {
-      generationBatchId: "fixture-1",
-      platformId: "fixture-1",
-      accountProfileId: "fixture-1",
-      previewToken: "fixture-1",
-      confirmed: true,
-    },
-    result: {
-      generationBatchId: "fixture-1",
-      createdCount: 0,
-      idempotentCount: 0,
-      blockedCount: 0,
-      conflictCount: 0,
-      failedClientGroups: [],
-      completedClientGroups: [],
-      clientGroups: [],
-    },
-  },
-  {
-    capability: "content.listSubmissionPlatforms",
-    channel: "content:list-submission-platforms",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:list-submission-platforms",
-    request: {},
-    result: {
-      platforms: [],
     },
   },
   {

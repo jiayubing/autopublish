@@ -22,7 +22,6 @@ const SCOPES_BY_REASON = Object.freeze({
   PAID_ORDER_STATUS_ANOMALY_RESOLVED: ["articleManagement", "articleAttention", "orders"],
   PLATFORM_AUTO_TRASH_APPLIED: ["articleManagement", "articleAttention", "platformQueue"],
   ARTICLE_REMOVAL_TRANSACTION_CHANGED: ["articleManagement", "articleAttention", "platformQueue"],
-  GENERATION_SUBMISSION_HANDOFF_COMMITTED: ["articleManagement", "articleAttention", "platformQueue"],
   ARTICLE_ATTENTION_RESOLVED: ["articleManagement", "articleAttention", "platformQueue"],
   TRASHED_QUEUE_RESIDUE_RESOLVED: ["articleManagement", "articleAttention", "platformQueue"],
   FAILED_QUEUE_ITEMS_CLEANED: ["articleManagement", "articleAttention", "platformQueue"],

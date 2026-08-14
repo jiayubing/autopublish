@@ -150,7 +150,6 @@ function installDesktopFixture(page, fixture) {
       listClients: () => ok({ clients: [client] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
       getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: state.publicationRecords, attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems: state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []), publicationSummaryItems: [] }),
-      listSubmissionPlatforms: () => ok({ platforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }] }),
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: [] }),
       listResearch: () => ok({ research: [] }),

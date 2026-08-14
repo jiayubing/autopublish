@@ -81,6 +81,8 @@ export default function GeneratedArticlesView({
   removal,
   watchRemovalTransaction,
   stageFilter = "all",
+  generationBatchId,
+  onClearGenerationBatchFilter,
   dirtyArticleId,
   selectedAttentionId,
   onArticleSelect,
@@ -163,6 +165,10 @@ export default function GeneratedArticlesView({
     if (stageFilter !== "trash" && stageFilter !== "attention")
       lastNonTrashStageRef.current = stageFilter;
   }, [stageFilter]);
+
+  useEffect(() => {
+    setSelected([]);
+  }, [generationBatchId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -345,14 +351,16 @@ export default function GeneratedArticlesView({
       const stageMatches =
         selectedStage === "all" ||
         workflowByArticle.get(article.id)?.stage === selectedStage;
+      const batchMatches =
+        !generationBatchId || article.generationBatchId === generationBatchId;
       const textMatches =
         !query ||
         `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`
           .toLowerCase()
           .includes(query);
-      return stageMatches && textMatches;
+      return stageMatches && batchMatches && textMatches;
     });
-  }, [articles, filter, selectedStage, workflowByArticle]);
+  }, [articles, filter, generationBatchId, selectedStage, workflowByArticle]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(
     () => selectableArticles(filtered, clientId).filter(isArticleSelectable),
@@ -1117,6 +1125,24 @@ export default function GeneratedArticlesView({
             aria-label="筛选历史文章"
             className="h-9 min-w-0 w-full rounded-md border border-slate-300 px-2 text-xs"
           />
+          {generationBatchId && (
+            <div
+              role="status"
+              data-testid="generation-batch-filter"
+              className="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs text-blue-800"
+            >
+              <span>当前筛选：生成批次 {generationBatchId}</span>
+              {onClearGenerationBatchFilter && (
+                <button
+                  type="button"
+                  onClick={onClearGenerationBatchFilter}
+                  className="rounded border border-blue-200 px-2 py-1 text-blue-700"
+                >
+                  清除批次筛选
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {!isAttentionStage && (

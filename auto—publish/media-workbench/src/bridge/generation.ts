@@ -6,10 +6,7 @@ import type {
   GenerationBatchSourceSelection,
   GenerationBatchState,
   GenerationBatchTemplateSelection,
-  GenerationSubmissionHandoffPreview,
-  GenerationSubmissionHandoffResult,
 } from "../types/generation";
-import type { ContentSubmissionPlatform } from "../types/publication";
 import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
 
 type SafeGenerationIpcError = {
@@ -42,16 +39,6 @@ type GenerationRuntimeSnapshot = {
   batch: GenerationBatch | null;
   capabilities: GenerationBatchState["capabilities"];
 };
-type GenerationHandoffPreviewInput = {
-  generationBatchId: string;
-  platformId: string;
-  accountProfileId: string;
-};
-type GenerationHandoffCommitInput = GenerationHandoffPreviewInput & {
-  previewToken: string;
-  confirmed: true;
-};
-
 type GenerationContentApi = {
   generateArticle: (input: {
     clientId: string;
@@ -127,18 +114,6 @@ type GenerationContentApi = {
   getGenerationRuntimeSnapshot: () => Promise<
     GenerationIpcResponse<GenerationRuntimeSnapshot>
   >;
-  previewGenerationSubmissionHandoff: (
-    input: GenerationHandoffPreviewInput,
-  ) => Promise<GenerationIpcResponse<GenerationSubmissionHandoffPreview>>;
-  commitGenerationSubmissionHandoff: (
-    input: GenerationHandoffCommitInput,
-  ) => Promise<GenerationIpcResponse<GenerationSubmissionHandoffResult>>;
-};
-
-type SubmissionContentApi = {
-  listSubmissionPlatforms: () => Promise<
-    GenerationIpcResponse<{ platforms: ContentSubmissionPlatform[] }>
-  >;
 };
 
 export type SavedContentArticle = {
@@ -166,19 +141,6 @@ async function callGeneration<TWire, TResult = TWire>(
   return options?.map
     ? options.map(result.data)
     : (result.data as unknown as TResult);
-}
-
-async function callSubmission<TWire, TResult = TWire>(
-  invoke: (api: SubmissionContentApi) => Promise<GenerationIpcResponse<TWire>>,
-  message: string,
-  map?: (data: TWire) => TResult,
-): Promise<TResult> {
-  const api = requireContentApi<SubmissionContentApi>();
-  const result = await invoke(api);
-  if (result.ok === false) throw generationIpcError(result.error, message);
-  if (result.data === undefined || result.data === null)
-    throw generationIpcError(undefined, message);
-  return map ? map(result.data) : (result.data as unknown as TResult);
 }
 
 export async function generateContentArticle(input: {
@@ -349,34 +311,6 @@ export async function cancelPendingGenerationBatch(input: {
   );
 }
 
-export async function previewGenerationSubmissionHandoff(
-  input: GenerationHandoffPreviewInput,
-): Promise<GenerationSubmissionHandoffPreview> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.previewGenerationSubmissionHandoff)(input),
-    "Unable to preview generation submission handoff",
-  );
-}
-
-export async function commitGenerationSubmissionHandoff(
-  input: GenerationHandoffCommitInput,
-): Promise<GenerationSubmissionHandoffResult> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.commitGenerationSubmissionHandoff)(input),
-    "Unable to commit generation submission handoff",
-  );
-}
-
-export async function listContentSubmissionPlatforms(): Promise<
-  ContentSubmissionPlatform[]
-> {
-  return callSubmission(
-    (api) => requireBridgeMethod(api.listSubmissionPlatforms)(),
-    "submission platform discovery failed",
-    (wire) => wire.platforms,
-  );
-}
-
 export type {
   GenerationBatch,
   GenerationBatchCancelPreview,
@@ -384,7 +318,5 @@ export type {
   GenerationBatchSourceSelection,
   GenerationBatchState,
   GenerationBatchTemplateSelection,
-  GenerationSubmissionHandoffPreview,
-  GenerationSubmissionHandoffResult,
   GeneratedContentArticle,
 };

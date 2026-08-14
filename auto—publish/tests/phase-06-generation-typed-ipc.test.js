@@ -11,9 +11,6 @@ const { createAuthenticatedIpcMain } = require("../desktop/ipc/register");
 const {
   registerContentGenerationBatchIpc,
 } = require("../desktop/ipc/content-generation-batch-ipc");
-const {
-  registerGenerationSubmissionHandoffIpc,
-} = require("../desktop/ipc/generation-submission-handoff-ipc");
 const { loadPreloadHarness } = require("./helpers/preload-harness");
 const { runRendererModule } = require("./helpers/run-renderer-module");
 
@@ -28,12 +25,10 @@ const CHANNELS = [
   "content:preview-cancel-pending-generation-batch",
   "content:cancel-pending-generation-batch",
   "content:get-generation-runtime-snapshot",
-  "content:preview-generation-submission-handoff",
-  "content:commit-generation-submission-handoff",
 ];
 
-test("generation inventory has twelve invokes with real feature consumers and one event", () => {
-  assert.equal(generationContracts.length, 12);
+test("generation inventory has ten invokes with real feature consumers and one event", () => {
+  assert.equal(generationContracts.length, 10);
   assert.equal(
     generationContracts.every((contract) => contract.kind !== "event"),
     true,
@@ -48,7 +43,6 @@ test("generation inventory has twelve invokes with real feature consumers and on
     "event",
   );
 });
-
 test("generation preload forwards named methods as exact versioned requests", async () => {
   const preload = loadPreloadHarness({
     invoke: (channel) => {
@@ -80,30 +74,6 @@ test("generation preload forwards named methods as exact versioned requests", as
       [{ batchId: "batch-1", confirmed: true }],
     ],
     ["getGenerationRuntimeSnapshot", CHANNELS[9], []],
-    [
-      "previewGenerationSubmissionHandoff",
-      CHANNELS[10],
-      [
-        {
-          generationBatchId: "batch-1",
-          platformId: "toutiao",
-          accountProfileId: "account-1",
-        },
-      ],
-    ],
-    [
-      "commitGenerationSubmissionHandoff",
-      CHANNELS[11],
-      [
-        {
-          generationBatchId: "batch-1",
-          platformId: "toutiao",
-          accountProfileId: "account-1",
-          previewToken: "token-1",
-          confirmed: true,
-        },
-      ],
-    ],
   ];
   for (const [method, channel, args] of methodCalls) {
     await preload.api.content[method](...args);
@@ -426,80 +396,5 @@ test("generation service exceptions become SafeOperationalError without raw deta
   assert.doesNotMatch(
     JSON.stringify(response),
     /private|generation\.db|raw service/i,
-  );
-});
-
-test("handoff wire carries one target binding and omits private preview input", async () => {
-  const ipc = typedIpc();
-  let received;
-  registerGenerationSubmissionHandoffIpc({
-    ipcMain: ipc.ipcMain,
-    generationSubmissionHandoffService: {
-      preview(input) {
-        received = input;
-        return {
-          generationBatchId: input.generationBatchId,
-          batchRevision: 3,
-          previewToken: "handoff:00000000-0000-4000-8000-000000000001",
-          articleCount: 1,
-          clientCount: 1,
-          platformId: input.platformId,
-          accountProfileId: input.accountProfileId,
-          estimatedTaskCount: 1,
-          queueableTaskCount: 1,
-          idempotentCount: 0,
-          blockedPublishedCount: 0,
-          blockedUncertainCount: 0,
-          blockedContentCount: 0,
-          conflictCount: 0,
-          unavailableArticleCount: 0,
-          invalidArticles: [],
-          clientGroups: [
-            {
-              clientId: "client-1",
-              articleCount: 1,
-              queueableTaskCount: 1,
-              idempotentCount: 0,
-              blockedPublishedCount: 0,
-              blockedUncertainCount: 0,
-              blockedContentCount: 0,
-              conflictCount: 0,
-              items: [
-                {
-                  articleId: "article-1",
-                  targetPlatformId: "media",
-                  status: "queueable",
-                  reasonCode: null,
-                  filePath: "C:\\private\\article.md",
-                },
-              ],
-            },
-          ],
-          entries: [{ apiKey: "must-not-cross-ipc" }],
-        };
-      },
-    },
-  });
-
-  const response = await ipc.invoke(
-    "content:preview-generation-submission-handoff",
-    [
-      {
-        generationBatchId: "batch-1",
-        platformId: "media",
-        accountProfileId: "account-1",
-      },
-    ],
-  );
-  assert.equal(received.platformId, "media");
-  assert.equal(received.accountProfileId, "account-1");
-  assert.equal(response.schemaVersion, 1);
-  assert.equal(response.ok, true, JSON.stringify(response));
-  assert.equal("accountProfiles" in response.data, false);
-  assert.equal("entries" in response.data, false);
-  assert.equal("filePath" in response.data.clientGroups[0].items[0], false);
-  assert.doesNotMatch(
-    JSON.stringify(response),
-    /private|apiKey|must-not-cross/i,
   );
 });

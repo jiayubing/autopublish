@@ -2569,7 +2569,7 @@ function classifyPackage(fileName, testName) {
     return "M05-C";
 
   if (
-    /^tests\/(?:ai-content-ipc|ai-provider-ipc|auth-ipc-boundary|auth-protected-ipc|content-generation-batch-ipc|content-submission-ipc|desktop-ipc-response|doubao-collection-ipc|generation-submission-handoff-ipc|phase-03-account-profile-ipc|phase-06-.*(?:ipc|typed-ipc|bridge|caller-inventory|symbol-identity|capability)|phase-06-(?:media|platform|publication|settings|submission|workspace)-typed-ipc|phase-06-typed-ipc-production|publication-ipc|runtime-diagnostics-ipc|workspace-bootstrap-ipc|workspace-runtime-ipc)\.test\./.test(
+    /^tests\/(?:ai-content-ipc|ai-provider-ipc|auth-ipc-boundary|auth-protected-ipc|content-generation-batch-ipc|content-submission-ipc|desktop-ipc-response|doubao-collection-ipc|phase-03-account-profile-ipc|phase-06-.*(?:ipc|typed-ipc|bridge|caller-inventory|symbol-identity|capability)|phase-06-(?:media|platform|publication|settings|submission|workspace)-typed-ipc|phase-06-typed-ipc-production|publication-ipc|runtime-diagnostics-ipc|workspace-bootstrap-ipc|workspace-runtime-ipc)\.test\./.test(
       file,
     )
   )
@@ -2597,7 +2597,7 @@ function classifyPackage(fileName, testName) {
     return "M05-E1";
 
   if (
-    /^tests\/(?:article-lifecycle-ticket-(?:08|13|15|16|22)|generation-submission-handoff|order-observation-contract|phase-01-domain-contracts|phase-03-content-batch-store|phase-03-media-publication-workflow|phase-03-operational-content-submission|phase-03-post-processing|phase-03-publication-workflow|phase-05-p1-blockers|phase-07-regular-queue|phase-08-publication-submission-orchestration|publication-article-identity|publication-targets|regular-platform-outcome-service|regular-publication-evidence-contract|submission-cleanup-recovery|submission-preparation-lifecycle|ticket-24-c-runtime-outcome-vocabulary)\.test\./.test(
+    /^tests\/(?:article-lifecycle-ticket-(?:08|13|15|16|22)|order-observation-contract|phase-01-domain-contracts|phase-03-content-batch-store|phase-03-media-publication-workflow|phase-03-operational-content-submission|phase-03-post-processing|phase-03-publication-workflow|phase-05-p1-blockers|phase-07-regular-queue|phase-08-publication-submission-orchestration|publication-article-identity|publication-targets|regular-platform-outcome-service|regular-publication-evidence-contract|submission-cleanup-recovery|submission-preparation-lifecycle|ticket-24-c-runtime-outcome-vocabulary)\.test\./.test(
       file,
     )
   )

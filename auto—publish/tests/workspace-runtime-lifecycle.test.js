@@ -15,8 +15,6 @@ const serviceRequests = Object.freeze({
   submission: "../desktop/services/content-submission-service",
   content: "../desktop/services/ai-content-service",
   generation: "../desktop/services/content-generation-batch-service",
-  workbench: "../desktop/services/platform-workbench-service",
-  handoff: "../desktop/services/generation-submission-handoff-service"
 });
 const desktopTaskServicePath = require.resolve(serviceRequests.task);
 
@@ -114,7 +112,6 @@ it("workspace invalidation owns reason-to-scope policy and emits safe monotonic 
     reasonCode: "PAID_ORDER_RESOLUTION_CHANGED"
   }]);
 });
-
 it("maps every production workspace mutation reason explicitly without a broad fallback", function() {
   const submissionScopes = ["articleManagement", "articleAttention", "platformQueue"];
   [
@@ -128,7 +125,6 @@ it("maps every production workspace mutation reason explicitly without a broad f
     "PLATFORM_SUBMIT_FAILED",
     "PLATFORM_SUBMIT_STOPPED",
     "ARTICLE_REMOVAL_TRANSACTION_CHANGED",
-    "GENERATION_SUBMISSION_HANDOFF_COMMITTED",
     "ARTICLE_ATTENTION_RESOLVED",
     "TRASHED_QUEUE_RESIDUE_RESOLVED",
     "FAILED_QUEUE_ITEMS_CLEANED"
@@ -402,33 +398,6 @@ it("disposes services already created when a middle workspace factory fails", as
     const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /generation factory failed/);
     assert.deepEqual(events, ["content", "submission", "provider", "doubao", "task"]);
-    assert.equal(runtime.getState().phase, "stopped");
-    assert.equal(runtime.getState().task, null);
-    assert.throws(function() { runtime.registerIpc(); }, /not started/);
-  } finally {
-    restore();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-it("unsubscribes and disposes all started workspace resources when post-subscription setup fails", async function() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-subscription-failure-"));
-  const events = [];
-  const restore = replaceModules([
-    { request: serviceRequests.task, exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
-    { request: serviceRequests.doubao, exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); throw new Error("collection unsubscribe failed"); }; } }); } } },
-    { request: serviceRequests.provider, exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
-    { request: serviceRequests.submission, exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
-    { request: serviceRequests.content, exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
-    { request: serviceRequests.generation, exports: { createContentGenerationBatchService: function() { return lifecycleService("generation", events, { getState: function() { return {}; } }); } } },
-    { request: serviceRequests.workbench, exports: { createPlatformWorkbenchService: function() { return lifecycleService("workbench", events); } } },
-    { request: serviceRequests.handoff, exports: { createGenerationSubmissionHandoffService: function() { throw new Error("handoff setup failed"); } } }
-  ]);
-  try {
-    fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
-    const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
-    await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /handoff setup failed/);
-    assert.deepEqual(events, ["collection-unsubscribe", "workbench", "generation", "content", "submission", "provider", "doubao", "task"]);
     assert.equal(runtime.getState().phase, "stopped");
     assert.equal(runtime.getState().task, null);
     assert.throws(function() { runtime.registerIpc(); }, /not started/);

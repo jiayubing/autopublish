@@ -1,6 +1,6 @@
 import { createCommandOwner } from '../../infrastructure/query-identity/query-identity.js';
 
-const COMMANDS = Object.freeze(['previewBatch', 'start', 'pause', 'resume', 'stop', 'continue', 'retry', 'previewCancelPending', 'cancelPending', 'listSubmissionPlatforms', 'previewSubmissionHandoff', 'commitSubmissionHandoff']);
+const COMMANDS = Object.freeze(['previewBatch', 'start', 'pause', 'resume', 'stop', 'continue', 'retry', 'previewCancelPending', 'cancelPending']);
 const LIVE_STATUSES = new Set(['running', 'pausing', 'stopping']);
 
 function safeError(value) {
@@ -274,9 +274,6 @@ export function createGenerationFeature(adapters = {}) {
     retry: (input) => runCommand('retry', input),
     previewCancelPending: (input) => runCommand('previewCancelPending', input),
     cancelPending: (input) => runCommand('cancelPending', input),
-    listSubmissionPlatforms: () => runCommand('listSubmissionPlatforms'),
-    previewSubmissionHandoff: (input) => runCommand('previewSubmissionHandoff', input),
-    commitSubmissionHandoff: (input) => runCommand('commitSubmissionHandoff', input),
     dispose() {
       if (disposed) return;
       disposed = true;

@@ -1,5 +1,4 @@
 const { wrap } = require("../services/ipc-response");
-const { projectSubmissionPlatforms } = require("./contracts/submission-platform-contracts");
 const { projectSubmissionBatchResult } = require("./contracts/submission-batch-contracts");
 const {
   projectSubmissionResiduePreview,
@@ -283,11 +282,6 @@ function registerContentSubmissionIpc(deps) {
     }
     return input;
   }
-  deps.ipcMain.handle("content:list-submission-platforms", function () {
-    return wrap(function () {
-      return projectSubmissionPlatforms(workflow.preparation.listPlatforms());
-    });
-  });
   deps.ipcMain.handle(
     "content:cancel-submission-batch",
     function (event, input) {

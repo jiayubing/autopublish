@@ -9,9 +9,6 @@ import {
   retryFailedGenerationBatch,
   previewCancelPendingGenerationBatch,
   previewGenerationBatch,
-  listContentSubmissionPlatforms,
-  previewGenerationSubmissionHandoff,
-  commitGenerationSubmissionHandoff,
   stopGenerationBatch,
   subscribeGenerationBatchState,
 } from '../../bridge/generation';
@@ -33,9 +30,6 @@ export function useGenerationFeature() {
       retry: retryFailedGenerationBatch,
       previewCancelPending: previewCancelPendingGenerationBatch,
       cancelPending: cancelPendingGenerationBatch,
-      listSubmissionPlatforms: listContentSubmissionPlatforms,
-      previewSubmissionHandoff: previewGenerationSubmissionHandoff,
-      commitSubmissionHandoff: commitGenerationSubmissionHandoff,
       hydrate: getGenerationRuntimeSnapshot,
       subscribeRuntime: subscribeGenerationBatchState,
       reportDiagnostic: (code: string) => reportRuntimeDiagnostic(code, 'workspace-invalidation'),
@@ -63,8 +57,5 @@ export function useGenerationFeature() {
     retry: feature.retry,
     previewCancelPending: feature.previewCancelPending,
     cancelPending: feature.cancelPending,
-    listSubmissionPlatforms: feature.listSubmissionPlatforms,
-    previewSubmissionHandoff: feature.previewSubmissionHandoff,
-    commitSubmissionHandoff: feature.commitSubmissionHandoff,
   };
 }

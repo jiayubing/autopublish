@@ -782,7 +782,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         paidMediaBatchComposition.orderCreationResolutionService,
       aiContentService,
       contentGenerationBatchService,
-      generationSubmissionHandoffService: null,
       platformWorkbenchService,
       publicationComposition,
       attentionPorts,
@@ -808,7 +807,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       regularQueueApplication,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       contentGenerationBatchService,
-      generationSubmissionHandoffService: null,
       platformWorkbenchService,
       platformApplication,
       mediaApplication,
@@ -877,20 +875,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         );
       }),
     );
-    const generationSubmissionHandoffService =
-      require("../services/generation-submission-handoff-service").createGenerationSubmissionHandoffService(
-        {
-          generationBatchService: contentGenerationBatchService,
-          contentStore,
-          regularQueueApplication,
-          targetPlatforms: loadedPlatforms,
-        },
-      );
-    modules.generationSubmissionHandoffService =
-      generationSubmissionHandoffService;
-    ipcDeps.generationSubmissionHandoffService =
-      generationSubmissionHandoffService;
-
     return Object.freeze({
       runtime,
       modules,

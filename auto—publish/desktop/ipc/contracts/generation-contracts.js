@@ -6,7 +6,6 @@ const {
   integerField,
   literalField,
   nullableField,
-  oneOf,
   optionalField,
   stringField,
 } = require("./registry");
@@ -17,11 +16,6 @@ const id = stringField({
   min: 1,
   max: 200,
   pattern: /^(?!\.{1,2}$)(?!.*[<>:"|?*\\/])(?=\S)[^\x00-\x1f\x7f]*[^\s.]$/u,
-});
-const opaqueToken = stringField({
-  min: 1,
-  max: 200,
-  pattern: /^[A-Za-z0-9._:-]+$/u,
 });
 const code = stringField({ min: 1, max: 128, pattern: /^[A-Z][A-Z0-9_]*$/u });
 const timestamp = text(64, 1);
@@ -322,77 +316,6 @@ function validateGenerationRuntimeEvent(value) {
   return output;
 }
 
-const handoffBase = {
-  generationBatchId: id,
-  platformId: id,
-  accountProfileId: id,
-};
-const handoffPreviewRequest = exactObject(handoffBase);
-const handoffCommitRequest = exactObject({
-  ...handoffBase,
-  previewToken: opaqueToken,
-  confirmed: literalField(true),
-});
-const invalidArticle = exactObject({
-  clientId: id,
-  articleId: optionalField(nullableField(id)),
-  taskId: id,
-  reasonCode: code,
-});
-const handoffItem = exactObject({
-  articleId: id,
-  targetPlatformId: id,
-  status: text(64, 1),
-  reasonCode: optionalField(nullableField(code)),
-});
-const handoffPreviewGroup = exactObject({
-  clientId: id,
-  articleCount: integerField({ min: 0 }),
-  queueableTaskCount: integerField({ min: 0 }),
-  idempotentCount: integerField({ min: 0 }),
-  blockedPublishedCount: integerField({ min: 0 }),
-  blockedUncertainCount: integerField({ min: 0 }),
-  blockedContentCount: integerField({ min: 0 }),
-  conflictCount: integerField({ min: 0 }),
-  items: arrayField(handoffItem, { max: 10000 }),
-});
-const revision = oneOf([text(256, 1), integerField({ min: 0 })]);
-const handoffPreview = exactObject({
-  generationBatchId: id,
-  batchRevision: optionalField(revision),
-  previewToken: opaqueToken,
-  articleCount: integerField({ min: 0 }),
-  clientCount: integerField({ min: 0 }),
-  platformId: id,
-  accountProfileId: id,
-  estimatedTaskCount: integerField({ min: 0 }),
-  queueableTaskCount: integerField({ min: 0 }),
-  idempotentCount: integerField({ min: 0 }),
-  blockedPublishedCount: integerField({ min: 0 }),
-  blockedUncertainCount: integerField({ min: 0 }),
-  blockedContentCount: integerField({ min: 0 }),
-  conflictCount: integerField({ min: 0 }),
-  unavailableArticleCount: integerField({ min: 0 }),
-  invalidArticles: arrayField(invalidArticle, { max: 10000 }),
-  clientGroups: arrayField(handoffPreviewGroup, { max: 1000 }),
-});
-const handoffResultGroup = exactObject({
-  clientId: id,
-  articleCount: integerField({ min: 0 }),
-  queueableTaskCount: integerField({ min: 0 }),
-  idempotentCount: integerField({ min: 0 }),
-});
-const handoffResult = exactObject({
-  generationBatchId: id,
-  createdCount: integerField({ min: 0 }),
-  idempotentCount: integerField({ min: 0 }),
-  blockedCount: integerField({ min: 0 }),
-  conflictCount: integerField({ min: 0 }),
-  failedClientGroups: arrayField(exactObject({ clientId: id, code }), { max: 1000 }),
-  completedClientGroups: arrayField(id, { max: 1000 }),
-  clientGroups: arrayField(handoffResultGroup, { max: 1000 }),
-  changedScopes: optionalField(arrayField(id, { max: 32 })),
-});
 
 const COMMON_ERRORS = {
   AUTH_REQUIRED: { category: "authentication", retryability: "never", userMessage: "请先完成登录后再继续。" },
@@ -414,13 +337,6 @@ const GENERATION_CODES = [
   "AI_CONFIG_INVALID", "AI_UNAUTHORIZED", "AI_FORBIDDEN", "AI_MODEL_NOT_FOUND", "AI_RATE_LIMITED",
   "AI_TIMEOUT", "AI_NETWORK_ERROR", "AI_SERVER_ERROR", "AI_EMPTY_RESPONSE",
 ];
-const HANDOFF_CODES = [
-  "HANDOFF_INPUT_INVALID", "HANDOFF_TARGET_REQUIRED", "HANDOFF_BATCH_NOT_TERMINAL",
-  "HANDOFF_TARGET_UNSUPPORTED", "HANDOFF_PREVIEW_STALE", "HANDOFF_CONFIRMATION_REQUIRED",
-  "HANDOFF_ARTICLE_IDENTITY_CONFLICT", "HANDOFF_SERVICE_INVALID", "HANDOFF_CLIENT_GROUP_FAILED",
-  "ACCOUNT_PROFILE_REQUIRED", "ACCOUNT_PROFILE_NOT_FOUND", "ACCOUNT_PROFILE_PLATFORM_MISMATCH",
-  "ACCOUNT_PROFILE_PLATFORM_INVALID",
-];
 function errors(codes, userMessage) {
   return Object.freeze({
     ...COMMON_ERRORS,
@@ -432,7 +348,6 @@ function errors(codes, userMessage) {
   });
 }
 const generationErrors = errors(GENERATION_CODES, "生成操作未完成，请检查选择与任务状态。供诊断使用的错误代码已保留。");
-const handoffErrors = errors(HANDOFF_CODES, "投稿交接未完成，请重新预检并确认任务状态。");
 function contract(input, ownedErrors) {
   return defineContract({
     feature: "generation",
@@ -453,8 +368,6 @@ const generationContracts = Object.freeze([
   contract({ capability: "generation.previewCancelPending", channel: "content:preview-cancel-pending-generation-batch", kind: "query", request: batchIdRequest, success: cancelPreview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.cancelPending", channel: "content:cancel-pending-generation-batch", kind: "command", request: cancelRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.getRuntimeSnapshot", channel: "content:get-generation-runtime-snapshot", kind: "query", request: emptyRequest, success: runtimeSnapshot, fromArgs: noArgs, toArgs: noLegacyInput }, generationErrors),
-  contract({ capability: "generation.previewSubmissionHandoff", channel: "content:preview-generation-submission-handoff", kind: "query", request: handoffPreviewRequest, success: handoffPreview, fromArgs: directArgs, toArgs: directInput }, handoffErrors),
-  contract({ capability: "generation.commitSubmissionHandoff", channel: "content:commit-generation-submission-handoff", kind: "command", request: handoffCommitRequest, success: handoffResult, fromArgs: directArgs, toArgs: directInput }, handoffErrors),
 ]);
 
 const generationEventContracts = Object.freeze([

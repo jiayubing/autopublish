@@ -267,7 +267,6 @@ describe("renderer content client switching", function () {
             })),
           });
         },
-        listSubmissionPlatforms: () => ok({ platforms }),
         listSubmissionBatches: ({ clientId }) =>
           ok({ batches: state.batches[clientId] || [] }),
         listArticleTrash: () => ok({ trash: [] }),
@@ -312,51 +311,6 @@ describe("renderer content client switching", function () {
             capabilities: {},
           }),
         onGenerationBatchState: () => () => {},
-        previewGenerationSubmissionHandoff: () =>
-          ok({
-            generationBatchId: generationBatch.id,
-            previewToken: "handoff-preview",
-            articleCount: 1,
-            clientCount: 1,
-            platformId: "fixture-platform",
-            accountProfileId: "account-fixture",
-            estimatedTaskCount: 1,
-            queueableTaskCount: 1,
-            idempotentCount: 0,
-            blockedPublishedCount: 0,
-            blockedUncertainCount: 0,
-            blockedContentCount: 0,
-            conflictCount: 0,
-            unavailableArticleCount: 0,
-            invalidArticles: [],
-            clientGroups: [
-              {
-                clientId: "client-a",
-                articleCount: 1,
-                queueableTaskCount: 1,
-                idempotentCount: 0,
-              },
-            ],
-            items: [],
-          }),
-        commitGenerationSubmissionHandoff: () =>
-          ok({
-            generationBatchId: generationBatch.id,
-            createdCount: 1,
-            idempotentCount: 0,
-            blockedCount: 0,
-            conflictCount: 0,
-            failedClientGroups: [],
-            completedClientGroups: ["client-a"],
-            clientGroups: [
-              {
-                clientId: "client-a",
-                articleCount: 1,
-                queueableTaskCount: 1,
-                idempotentCount: 0,
-              },
-            ],
-          }),
         previewRegularQueueAdmission: (input) =>
           (() => {
             const stagedIds = new Set(
@@ -1502,28 +1456,8 @@ describe("renderer content client switching", function () {
         ),
         ["regular-batch-2"],
       );
-      await page.getByRole("button", { name: "文章生成" }).click();
-      await page.getByRole("tab", { name: "批量生成" }).click();
-      await page
-        .getByRole("button", { name: "将成功文章加入投稿队列" })
-        .waitFor();
-      await page
-        .getByRole("button", { name: "将成功文章加入投稿队列" })
-        .click();
-      await page
-        .getByRole("combobox", { name: "生成批次投稿目标" })
-        .selectOption("fixture-platform");
-      await page.getByRole("button", { name: "检查并确认" }).click();
-      await page
-        .getByRole("button", { name: "一次确认并加入投稿队列" })
-        .click();
-      await page.getByTestId("generation-handoff-summary").waitFor();
       await changeClient(page, contentClientSelect, "client-b");
       assert.equal(await contentClientSelect.inputValue(), "client-b");
-      assert.equal(
-        await page.getByTestId("generation-handoff-summary").count(),
-        1,
-      );
       await openArticleManagement();
       await openPaidWorkbench();
       const finalPaidPanel = page.getByRole("region", {

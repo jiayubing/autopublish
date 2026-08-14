@@ -121,6 +121,57 @@ async function waitForBatch(service, batchId, predicate) {
 }
 
 describe("content generation batch service", function() {
+  it("keeps generation owner dependencies free of submission admission paths", function() {
+    for (const relative of [
+      "desktop/services/content-generation-batch-service.js",
+      "src/content/generation-batch-runner.js",
+      "src/content/article-generator.js",
+    ]) {
+      const source = fs.readFileSync(path.join(__dirname, "..", relative), "utf8");
+      assert.doesNotMatch(
+        source,
+        /generation-submission-handoff|regularQueueApplication|previewRegularQueueAdmission|admitRegularQueueItems|paidSubmission|orderCreation/i,
+        relative,
+      );
+    }
+  });
+
+  it("removes the retired generation-to-submission capability from production", function() {
+    const productionFiles = [
+      "desktop/composition/workspace-runtime-composition.js",
+      "desktop/ipc/register.js",
+      "desktop/ipc/content-submission-ipc.js",
+      "desktop/ipc/contracts/generation-contracts.js",
+      "desktop/preload.js",
+      "media-workbench/src/bridge/generation.ts",
+      "media-workbench/src/bridge/content.ts",
+      "media-workbench/src/features/generation/generation-feature.js",
+      "media-workbench/src/features/generation/use-generation-feature.ts",
+      "media-workbench/src/components/content/GenerationBatchDetail.tsx",
+      "media-workbench/src/components/content/BatchGenerationView.tsx",
+      "media-workbench/src/components/content/ArticleGenerationView.tsx",
+      "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+      "media-workbench/src/components/ContentWorkbench.tsx",
+    ];
+    const retiredCapability =
+      /generation-submission-handoff|GenerationSubmissionHandoff|previewGenerationSubmissionHandoff|commitGenerationSubmissionHandoff|content:list-submission-platforms|listSubmissionPlatforms/i;
+    for (const relative of productionFiles) {
+      assert.doesNotMatch(
+        fs.readFileSync(path.join(__dirname, "..", relative), "utf8"),
+        retiredCapability,
+        relative,
+      );
+    }
+    for (const relative of [
+      "desktop/services/generation-submission-handoff-service.js",
+      "desktop/ipc/generation-submission-handoff-ipc.js",
+      "desktop/ipc/contracts/submission-platform-contracts.js",
+      "media-workbench/src/components/content/GenerationSubmissionHandoffDrawer.tsx",
+    ]) {
+      assert.equal(fs.existsSync(path.join(__dirname, "..", relative)), false, relative);
+    }
+  });
+
   it("continues a real persisted pending batch when article lookup requires the task client id", async function() {
     const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-batch-pending-regression-"));
     const aiCalls = [];
@@ -327,6 +378,9 @@ describe("content generation batch service", function() {
     assert.equal(calls.generate[0].generationBatchId, batch.id);
     assert.equal(calls.generate[0].generationTaskId, batch.tasks[0].id);
     assert.equal(savedArticles.length, 1);
+    assert.equal(savedArticles[0].generationBatchId, batch.id);
+    assert.equal(savedArticles[0].generationTaskId, batch.tasks[0].id);
+    assert.equal(savedArticles[0].status, "generated");
   });
 
   it("treats only article-not-found reads as missing and never generates after a corrupt read", async function() {

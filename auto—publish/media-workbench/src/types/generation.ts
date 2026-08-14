@@ -50,63 +50,6 @@ export type GenerationBatchLiveStatus =
   | "failed"
   | "completed";
 
-export interface GenerationSubmissionHandoffPreview {
-  generationBatchId: string;
-  batchRevision?: string | number;
-  previewToken: string;
-  articleCount: number;
-  clientCount: number;
-  platformId: string;
-  accountProfileId: string;
-  estimatedTaskCount: number;
-  queueableTaskCount: number;
-  idempotentCount: number;
-  blockedPublishedCount: number;
-  blockedUncertainCount: number;
-  blockedContentCount: number;
-  conflictCount: number;
-  unavailableArticleCount: number;
-  invalidArticles: Array<{
-    clientId: string;
-    articleId?: string | null;
-    taskId: string;
-    reasonCode: string;
-  }>;
-  clientGroups: Array<{
-    clientId: string;
-    articleCount: number;
-    queueableTaskCount: number;
-    idempotentCount: number;
-    blockedPublishedCount: number;
-    blockedUncertainCount: number;
-    blockedContentCount: number;
-    conflictCount: number;
-    items: Array<{
-      articleId: string;
-      targetPlatformId: string;
-      status: string;
-      reasonCode?: string | null;
-    }>;
-  }>;
-}
-
-export interface GenerationSubmissionHandoffResult {
-  generationBatchId: string;
-  createdCount: number;
-  idempotentCount: number;
-  blockedCount: number;
-  conflictCount: number;
-  failedClientGroups: Array<{ clientId: string; code: string }>;
-  completedClientGroups: string[];
-  clientGroups: Array<{
-    clientId: string;
-    articleCount: number;
-    queueableTaskCount: number;
-    idempotentCount: number;
-  }>;
-  changedScopes?: string[];
-}
-
 export interface GenerationBatchTemplateSelection {
   platform: string;
   templateId: string;

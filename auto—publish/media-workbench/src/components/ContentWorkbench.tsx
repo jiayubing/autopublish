@@ -64,6 +64,9 @@ export default function ContentWorkbench({
   const [articleStageFilter, setArticleStageFilter] = useState<
     ArticleWorkflowFilter
   >("all");
+  const [generationBatchFilter, setGenerationBatchFilter] = useState<
+    string | null
+  >(null);
   const [error, setError] = useState("");
   const historyDirtyRef = useRef(false);
   const [historyDirtyArticleId, setHistoryDirtyArticleId] = useState<
@@ -91,6 +94,7 @@ export default function ContentWorkbench({
     if (!attentionIntent) return;
     setTab("history");
     setArticleStageFilter("attention");
+    setGenerationBatchFilter(null);
     if (attentionIntent.clientId)
       content.selectClient(attentionIntent.clientId);
     onAttentionIntentConsumed?.();
@@ -193,6 +197,7 @@ export default function ContentWorkbench({
       closeHistoryEditor(true);
       content.selectClient(nextClientId);
       setError("");
+      setGenerationBatchFilter(null);
       // A client switch starts a new workbench session.  Land on the actionable
       // queue rather than retaining the previous client's broad history filter.
       setArticleStageFilter("pending_submission");
@@ -204,6 +209,18 @@ export default function ContentWorkbench({
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
       setTab(nextTab);
+    });
+  }
+
+  function openGenerationBatchArticles(batchId: string, targetClientId?: string) {
+    if (!batchId) return;
+    requestHistoryLeave(() => {
+      closeHistoryEditor(true);
+      setTab("history");
+      setArticleStageFilter("all");
+      setGenerationBatchFilter(batchId);
+      if (targetClientId && targetClientId !== clientId)
+        void content.selectClient(targetClientId);
     });
   }
 
@@ -322,6 +339,7 @@ export default function ContentWorkbench({
             commands={content.commands}
             commandStates={content.snapshot.commands}
             refreshManagement={content.refreshManagement}
+            onViewBatchArticles={openGenerationBatchArticles}
           />
         )}
         {tab === "history" && (
@@ -345,6 +363,8 @@ export default function ContentWorkbench({
                   removal={content.snapshot.removal}
                   watchRemovalTransaction={content.watchRemovalTransaction}
                   stageFilter={articleStageFilter}
+                  generationBatchId={generationBatchFilter}
+                  onClearGenerationBatchFilter={() => setGenerationBatchFilter(null)}
                   dirtyArticleId={historyDirtyArticleId}
                   selectedAttentionId={attentionIntent?.attentionId}
                   onArticleSelect={openHistoryEditor}

@@ -108,6 +108,8 @@ export interface GeneratedArticlesViewProps {
   };
   watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
   stageFilter?: ArticleWorkflowFilter;
+  generationBatchId?: string | null;
+  onClearGenerationBatchFilter?: () => void;
   dirtyArticleId?: string | null;
   selectedAttentionId?: string;
   onArticleSelect: (

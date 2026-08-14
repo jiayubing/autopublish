@@ -4,7 +4,6 @@ import type {
   ContentSubmissionBatchItem,
   ContentSubmissionBatchRecord,
   ContentSubmissionCancellationPreview,
-  ContentSubmissionPlatform,
   PaidMediaAdmissionResult,
   PaidMediaConfirmationInput,
   PaidMediaExecutionBatch,
@@ -181,9 +180,6 @@ type DoubaoContentApi = {
   ) => () => void;
 };
 type SubmissionContentApi = {
-  listSubmissionPlatforms: () => Promise<
-    ContentIpcResponse<{ platforms: ContentSubmissionPlatform[] }>
-  >;
   addPaidSubmissionStaging: (input: {
     articleRefs: Array<{ clientId: string; articleId: string }>;
   }) => Promise<ContentIpcResponse<PaidSubmissionStagingMutationResult>>;

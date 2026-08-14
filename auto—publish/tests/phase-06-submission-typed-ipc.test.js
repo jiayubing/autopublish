@@ -3,10 +3,6 @@ const assert = require("node:assert/strict");
 
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
 const {
-  submissionPlatformContracts,
-  submissionPlatformContractFixtures,
-} = require("../desktop/ipc/contracts/submission-platform-contracts");
-const {
   submissionBatchContracts,
   submissionBatchContractFixtures,
 } = require("../desktop/ipc/contracts/submission-batch-contracts");
@@ -27,14 +23,12 @@ const {
 } = require("../desktop/ipc/content-submission-ipc");
 
 const submissionContracts = Object.freeze([
-  ...submissionPlatformContracts,
   ...submissionBatchContracts,
   ...submissionMaintenanceContracts,
   ...submissionRegularContracts,
   ...submissionPaidMediaContracts,
 ]);
 const submissionContractFixtures = Object.freeze([
-  ...submissionPlatformContractFixtures,
   ...submissionBatchContractFixtures,
   ...submissionMaintenanceContractFixtures,
   ...submissionRegularContractFixtures,
@@ -45,13 +39,12 @@ const registry = createContractRegistry(submissionContracts);
 
 test("submission query contracts have independent legal fixtures and ownership records", () => {
   const queryChannels = new Set([
-    "content:list-submission-platforms",
     "content:list-paid-media-batches",
   ]);
   const fixtures = submissionContractFixtures.filter((entry) =>
     queryChannels.has(entry.channel),
   );
-  assert.equal(fixtures.length, 2);
+  assert.equal(fixtures.length, 1);
   for (const fixture of fixtures) {
     const contract = registry.byChannel(fixture.channel);
     assert.ok(contract, fixture.channel);
