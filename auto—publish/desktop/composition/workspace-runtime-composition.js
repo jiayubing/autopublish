@@ -164,17 +164,8 @@ async function createWorkspaceRuntimeComposition(deps) {
     const workspaceRoot = runtime.workspaceRoot;
     const { loadPlatforms } = require("../../src/core/platforms");
     const platformRuntimeContext =
-      require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContext(
-        {
-          workspacePaths: paths,
-          browserRuntime: {
-            browserChannel: paths.browserChannel,
-            playwrightCliJs: paths.playwrightCliJs,
-            nodeExecPath: paths.playwrightNodeExecPath,
-            profileRoot: paths.browser,
-            profileDir: paths.doubaoBrowser,
-          },
-        },
+      require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
+        paths,
       );
     const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
     const operationalStoreTransitionPorts = {};

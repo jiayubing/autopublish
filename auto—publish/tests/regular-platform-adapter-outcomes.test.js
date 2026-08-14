@@ -6,6 +6,9 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
+const {
+  createPlatformRuntimeContextFromWorkspacePaths,
+} = require("../src/platforms/platform-runtime-context");
 
 function claim(platformId) {
   return {
@@ -33,6 +36,8 @@ function loadBrowserAdapter(platformId, options) {
   let identityReady = value.identityReady !== false;
   const calls = value.calls || [];
   const codeSources = value.codeSources || [];
+  const runtimeCalls = value.runtimeCalls || [];
+  const sessionConfigs = value.sessionConfigs || [];
   const playwrightPath = require.resolve("../src/core/playwright");
   const adapterPath = require.resolve(`../src/platforms/${platformId}/adapter`);
   const previousPlaywright = require.cache[playwrightPath];
@@ -42,12 +47,20 @@ function loadBrowserAdapter(platformId, options) {
     filename: playwrightPath,
     loaded: true,
     exports: {
-      pwSessionConfig: () => ({
-        session: sessionName,
-        stateFile: value.stateFile || "synthetic-state.json",
-      }),
-      pwInvokeSync: (args) => {
+      pwSessionConfig: (input) => {
+        sessionConfigs.push(input);
+        const requested =
+          input && typeof input === "object" ? input : { session: input };
+        return {
+          session: sessionName,
+          profileDir: requested.profileDir || "synthetic-profile",
+          daemonDir: requested.daemonDir || "synthetic-daemon",
+          stateFile: requested.stateFile || value.stateFile || "synthetic-state.json",
+        };
+      },
+      pwInvokeSync: (args, options) => {
         calls.push(args);
+        runtimeCalls.push({ args, options });
         if (args[0] === "list") return alive ? sessionName : "";
         if (args[0] === "open") {
           alive = true;
@@ -77,6 +90,8 @@ function loadBrowserAdapter(platformId, options) {
   const adapter = require(adapterPath);
   return {
     adapter,
+    runtimeCalls,
+    sessionConfigs,
     restore() {
       delete require.cache[adapterPath];
       if (previousAdapter) require.cache[adapterPath] = previousAdapter;
@@ -177,6 +192,59 @@ test("Lieju fills the customer publication profile passed by preparation", async
     assert.match(source, /#atc_mobphone'\)\.fill\("13800138000"\)/);
   } finally {
     loaded.restore();
+  }
+});
+
+test("Lieju factory binds the injected runtime session and Playwright toolchain", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "regular-lieju-runtime-"));
+  const browser = path.join(root, "browser");
+  const stateFile = path.join(browser, "state", "lieju.json");
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+  fs.writeFileSync(stateFile, "{}", "utf8");
+  const runtimeCalls = [];
+  const sessionConfigs = [];
+  const loaded = loadBrowserAdapter("lieju", {
+    alive: false,
+    identityReady: false,
+    runtimeCalls,
+    sessionConfigs,
+  });
+  try {
+    const adapter = loaded.adapter.createPlatformAdapter(
+      createPlatformRuntimeContextFromWorkspacePaths({
+        browser,
+        tmp: path.join(root, "tmp"),
+        browserChannel: "chromium",
+        playwrightCliJs: path.join(root, "playwright-cli.js"),
+        playwrightNodeExecPath: path.join(root, "node.exe"),
+      }),
+    );
+
+    await adapter.ensureAccountInspectionReady();
+
+    assert.deepEqual(sessionConfigs[1], {
+      session: "lieju",
+      profileDir: path.join(browser, "profiles", "lieju"),
+      daemonDir: path.join(browser, "sessions", "lieju"),
+      stateFile,
+    });
+    const open = runtimeCalls.find((call) => call.args[0] === "open");
+    assert.ok(open);
+    assert.deepEqual(open.args, [
+      "open",
+      "https://ly.lieju.com",
+      "--browser=chromium",
+      "--headed",
+      "--persistent",
+      "--profile=" + path.join(browser, "profiles", "lieju"),
+    ]);
+    assert.equal(open.options.playwrightCli, path.join(root, "playwright-cli.js"));
+    assert.equal(open.options.nodeExecPath, path.join(root, "node.exe"));
+    assert.equal(open.options.browserChannel, "chromium");
+    assert.equal(open.options.tempDir, path.join(root, "tmp"));
+  } finally {
+    loaded.restore();
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

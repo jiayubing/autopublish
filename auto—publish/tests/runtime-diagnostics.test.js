@@ -464,6 +464,28 @@ describe("runtime diagnostics", function () {
     );
   });
 
+  it("honors explicitly injected Playwright executables and browser channel", async function () {
+    const calls = [];
+    const nodePath = path.join(workspace, "runtime-node.exe");
+    const cliPath = path.join(workspace, "runtime-playwright-cli.js");
+    const runtime = createPlaywrightRuntime({
+      session: pwSessionConfig("lieju"),
+      nodeExecPath: nodePath,
+      playwrightCli: cliPath,
+      browserChannel: "chromium",
+      execFile: function (file, args, options, callback) {
+        calls.push({ file, args, options });
+        callback(null, '### Result\n{"closed":true}\n', "");
+      },
+    });
+
+    assert.deepEqual(await runtime.close(), { closed: true });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].file, nodePath);
+    assert.deepEqual(calls[0].args.slice(0, 2), [cliPath, "-s=lieju"]);
+    assert.equal(calls[0].options.env.BROWSER_CHANNEL, "chromium");
+  });
+
   it("resolves a Windows npm wrapper to the Playwright JavaScript entrypoint", async function () {
     if (process.platform !== "win32") return;
     const npmRoot = makeTemporaryDirectory("playwright-npm-");
@@ -677,6 +699,34 @@ describe("runtime diagnostics", function () {
     });
     assert.equal(calls.length, 3);
     assert.notEqual(calls[1].args.at(-1), calls[2].args.at(-1));
+  });
+
+  it("passes explicitly injected runtime tools through synchronous commands", function () {
+    const calls = [];
+    const nodePath = path.join(workspace, "sync-runtime-node.exe");
+    const cliPath = path.join(workspace, "sync-runtime-playwright-cli.js");
+    const session = {
+      session: "lieju",
+      profileDir: path.join(workspace, "profile"),
+      daemonDir: path.join(workspace, "daemon"),
+      stateFile: path.join(workspace, "state.json"),
+    };
+
+    pwInvokeSync(["list"], {
+      session,
+      nodeExecPath: nodePath,
+      playwrightCli: cliPath,
+      browserChannel: "chromium",
+      execFileSync: (file, args, options) => {
+        calls.push({ file, args, options });
+        return "";
+      },
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].file, nodePath);
+    assert.deepEqual(calls[0].args, [cliPath, "-s=lieju", "list"]);
+    assert.equal(calls[0].options.env.BROWSER_CHANNEL, "chromium");
   });
 
   it("rejects string command construction at the synchronous runtime boundary", function () {

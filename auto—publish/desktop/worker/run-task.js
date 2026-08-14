@@ -17,7 +17,17 @@ var stopRequested = false;
 var activeRunId = null;
 var activeAbortController = null;
 var resultDisconnectScheduled = false;
+var platformRuntimeContext = null;
 const WORKER_SCHEMA_VERSION = 1;
+
+function loadWorkerPlatforms() {
+  const { loadPlatforms } = require("../../src/core/platforms");
+  return loadPlatforms(
+    platformRuntimeContext
+      ? { runtimeContext: platformRuntimeContext }
+      : undefined,
+  );
+}
 
 if (!task) {
   process.exit(1);
@@ -166,8 +176,7 @@ process.on("message", function (message) {
     );
     stopRequested = true;
     try {
-      const { loadPlatforms } = require("../../src/core/platforms");
-      const platforms = loadPlatforms();
+      const platforms = loadWorkerPlatforms();
       platforms.forEach(function (p) {
         if (typeof p.closeSession === "function") {
           try {
@@ -221,6 +230,10 @@ process.on("message", function (message) {
     if (task === "platform-submit") {
       const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
       configureWorkerEnvironment(options.paths);
+      platformRuntimeContext =
+        require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
+          options.paths,
+        );
       const { createWorkerPublisherExecutor } = require("./publisher-executor");
       const { clearStopSignal } = require("../../src/core/stop-signal");
       const plan = options.plan || { tasks: [] };
@@ -258,8 +271,7 @@ process.on("message", function (message) {
           { taskKind: "platform-submit", taskCount: plan.tasks.length },
         );
 
-        const { loadPlatforms } = require("../../src/core/platforms");
-        const loadedPlatforms = loadPlatforms();
+        const loadedPlatforms = loadWorkerPlatforms();
         const adapters = {};
         loadedPlatforms.forEach(function (platform) {
           adapters[platform.id] = platform;
@@ -320,8 +332,7 @@ process.on("message", function (message) {
         activeAbortController = null;
         restoreDiagnosticReporter();
         try {
-          const loadedPlatforms =
-            require("../../src/core/platforms").loadPlatforms();
+          const loadedPlatforms = loadWorkerPlatforms();
           loadedPlatforms.forEach(function (platform) {
             if (
               platform.id === "hepan" &&

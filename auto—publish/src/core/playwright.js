@@ -14,23 +14,37 @@ function unavailableError(code, message) {
   return error;
 }
 
-function runtimeResolution() {
+function runtimeResolution(options) {
+  const opts = options || {};
+  const env = opts.env || process.env;
   return resolvePlaywrightRuntime({
     appRoot:
-      process.env.AUTO_PUBLISH_APP_ROOT || path.resolve(__dirname, "..", ".."),
-    env: process.env,
-    packaged: process.env.AUTO_PUBLISH_PACKAGED === "1",
+      opts.appRoot ||
+      process.env.AUTO_PUBLISH_APP_ROOT ||
+      path.resolve(__dirname, "..", ".."),
+    env: env,
+    packaged:
+      opts.packaged === undefined
+        ? env.AUTO_PUBLISH_PACKAGED === "1"
+        : opts.packaged === true,
+    applicationTools: opts.applicationTools,
+    applicationValues: opts.applicationValues,
+    resourcesPath: opts.resourcesPath,
   });
 }
 
-function nodeExecPath() {
-  var resolved = runtimeResolution();
-  if (!resolved.playwrightNode.command)
+function nodeExecPath(options, resolved) {
+  const opts = options || {};
+  if (typeof opts.nodeExecPath === "string" && opts.nodeExecPath.trim()) {
+    return opts.nodeExecPath;
+  }
+  var runtime = resolved || runtimeResolution(opts);
+  if (!runtime.playwrightNode.command)
     throw unavailableError(
       "PLAYWRIGHT_NODE_UNAVAILABLE",
       "Playwright Node is unavailable",
     );
-  return resolved.playwrightNode.command;
+  return runtime.playwrightNode.command;
 }
 
 // Each Platform Adapter owns its own Platform Session: an isolated daemon
@@ -82,14 +96,21 @@ function pwSessionConfig(name, options) {
   };
 }
 
-function pwEnv(sessionCtx) {
+function pwEnv(sessionCtx, options) {
+  const opts = options || {};
   var env = {};
   Object.keys(process.env).forEach(function (key) {
     env[key] = process.env[key];
   });
+  if (opts.env && typeof opts.env === "object") {
+    Object.keys(opts.env).forEach(function (key) {
+      env[key] = opts.env[key];
+    });
+  }
   var ctx = sessionCtx || pwSessionConfig();
   env.PLAYWRIGHT_DAEMON_SESSION_DIR = ctx.daemonDir;
-  env.BROWSER_CHANNEL = env.BROWSER_CHANNEL || PW.browserChannel || "msedge";
+  env.BROWSER_CHANNEL =
+    opts.browserChannel || env.BROWSER_CHANNEL || PW.browserChannel || "msedge";
   return env;
 }
 
@@ -125,7 +146,7 @@ function pwInvokeSync(commandArgs, opts) {
   var sessionCtx = options.session || null;
   reportCommandStarted();
   try {
-    var executable = playwrightExecutable(options.playwrightCli);
+    var executable = playwrightExecutable(options.playwrightCli, options);
     return (options.execFileSync || execFileSync)(
       executable.file,
       executable.prefix.concat(
@@ -134,7 +155,7 @@ function pwInvokeSync(commandArgs, opts) {
       {
         encoding: "utf8",
         timeout: timeout,
-        env: pwEnv(sessionCtx),
+        env: pwEnv(sessionCtx, options),
       },
     ).toString();
   } catch (error) {
@@ -183,6 +204,12 @@ function runCode(jsCode, opts) {
         timeout: options.timeout || 60000,
         session: sessionCtx,
         playwrightCli: options.playwrightCli,
+        nodeExecPath: options.nodeExecPath,
+        browserChannel: options.browserChannel,
+        env: options.env,
+        appRoot: options.appRoot,
+        resourcesPath: options.resourcesPath,
+        packaged: options.packaged,
         execFileSync: options.execFileSync,
       }),
     );
@@ -335,15 +362,22 @@ function windowsNpmCliEntrypoint(cli) {
   return null;
 }
 
-function playwrightExecutable(cliOverride) {
-  var resolved = runtimeResolution();
-  var cli = String(cliOverride || resolved.playwrightCli.command || "");
+function playwrightExecutable(cliOverride, options) {
+  var opts = options || {};
+  var hasCliOverride = typeof cliOverride === "string" && cliOverride.trim();
+  var hasNodeOverride =
+    typeof opts.nodeExecPath === "string" && opts.nodeExecPath.trim();
+  var resolved =
+    hasCliOverride && hasNodeOverride ? null : runtimeResolution(opts);
+  var cli = String(
+    cliOverride || (resolved && resolved.playwrightCli.command) || "",
+  );
   if (!cli)
     throw unavailableError(
       "PLAYWRIGHT_CLI_UNAVAILABLE",
       "Playwright CLI is unavailable",
     );
-  var node = nodeExecPath();
+  var node = nodeExecPath(opts, resolved);
   if (/\.js$/i.test(cli)) return { file: node, prefix: [cli] };
   var windowsEntrypoint = windowsNpmCliEntrypoint(cli);
   if (windowsEntrypoint) return { file: node, prefix: [windowsEntrypoint] };
@@ -364,7 +398,7 @@ function createPlaywrightRuntime(options) {
 
   async function invoke(commandArgs, commandTimeout) {
     try {
-      var executable = playwrightExecutable(opts.playwrightCli);
+      var executable = playwrightExecutable(opts.playwrightCli, opts);
       var result = await execFileAsync(
         executable.file,
         executable.prefix.concat(
@@ -373,7 +407,7 @@ function createPlaywrightRuntime(options) {
         {
           encoding: "utf8",
           timeout: commandTimeout || timeout,
-          env: pwEnv(sessionCtx),
+          env: pwEnv(sessionCtx, opts),
         },
         execFileRunner,
       );

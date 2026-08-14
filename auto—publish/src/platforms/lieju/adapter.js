@@ -19,14 +19,109 @@ const {
   createBrowserSessionLifecycle,
 } = require("../shared/browser-session-lifecycle");
 
-var SESSION = pwSessionConfig("lieju");
-var SESSION_OPTS = { session: SESSION };
-
 var DEFAULT_CITY = "北京";
 var LOGIN_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
 var LOGIN_STATE_SETTLE_MS = 5000;
 var PUBLISH_PAGE_LOGIN_CHECK_MS = 2500;
 var FAST_POLL_MS = 500;
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function createLiejuRuntime(runtimeContext) {
+  var context = runtimeContext || {};
+  var browserRuntime = context.browserRuntime || {};
+  var workspacePaths = context.workspacePaths || {};
+  var profileRoot =
+    nonEmptyString(browserRuntime.profileRoot) ||
+    nonEmptyString(workspacePaths.browser);
+  var daemonRoot =
+    nonEmptyString(browserRuntime.daemonRoot) ||
+    (profileRoot ? path.join(profileRoot, "sessions") : "");
+  var stateDir =
+    nonEmptyString(browserRuntime.stateDir) ||
+    (profileRoot ? path.join(profileRoot, "state") : DIRS.stateDir);
+  var sessionInput = { session: "lieju" };
+
+  if (profileRoot) {
+    sessionInput.profileDir = path.join(profileRoot, "profiles", "lieju");
+    sessionInput.daemonDir = path.join(daemonRoot, "lieju");
+    sessionInput.stateFile = path.join(stateDir, "lieju.json");
+  } else {
+    if (nonEmptyString(browserRuntime.profileDir)) {
+      sessionInput.profileDir = browserRuntime.profileDir;
+    }
+    if (nonEmptyString(browserRuntime.daemonDir)) {
+      sessionInput.daemonDir = browserRuntime.daemonDir;
+    } else if (daemonRoot) {
+      sessionInput.daemonDir = path.join(daemonRoot, "lieju");
+    }
+    if (nonEmptyString(browserRuntime.stateFile)) {
+      sessionInput.stateFile = browserRuntime.stateFile;
+    } else if (nonEmptyString(browserRuntime.stateDir)) {
+      sessionInput.stateFile = path.join(stateDir, "lieju.json");
+    }
+  }
+
+  var session = pwSessionConfig(sessionInput);
+  var runtimeOptions = {
+    browserChannel:
+      nonEmptyString(browserRuntime.browserChannel) || PW.browserChannel,
+    tempDir:
+      nonEmptyString(browserRuntime.tempDir) ||
+      nonEmptyString(workspacePaths.tmp) ||
+      DIRS.tmpDir,
+  };
+  if (nonEmptyString(browserRuntime.playwrightCliJs)) {
+    runtimeOptions.playwrightCli = browserRuntime.playwrightCliJs;
+  }
+  if (nonEmptyString(browserRuntime.nodeExecPath)) {
+    runtimeOptions.nodeExecPath = browserRuntime.nodeExecPath;
+  }
+
+  function invoke(commandArgs, options) {
+    return pwInvokeSync(
+      commandArgs,
+      Object.assign({}, runtimeOptions, options || {}, { session: session }),
+    );
+  }
+
+  function evaluate(jsCode, options) {
+    return runCode(
+      jsCode,
+      Object.assign({}, runtimeOptions, options || {}, { session: session }),
+    );
+  }
+
+  var lifecycle = createBrowserSessionLifecycle({
+    session: session,
+    stateDir: path.dirname(session.stateFile),
+    run: invoke,
+    ensureDir: ensureDir,
+    sleep: sleep,
+    start: function () {
+      invoke(
+        [
+          "open",
+          LIEJU.base,
+          "--browser=" + runtimeOptions.browserChannel,
+          "--headed",
+          "--persistent",
+          "--profile=" + session.profileDir,
+        ],
+        { timeout: 20000 },
+      );
+    },
+  });
+
+  return {
+    session: session,
+    invoke: invoke,
+    evaluate: evaluate,
+    lifecycle: lifecycle,
+  };
+}
 
 function diagnose(code, category, action) {
   reportDiagnostic({
@@ -38,89 +133,45 @@ function diagnose(code, category, action) {
   });
 }
 
-var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
-  session: SESSION,
-  stateDir: DIRS.stateDir,
-  run: pwInvokeSync,
-  ensureDir: ensureDir,
-  sleep: sleep,
-  start: function () {
-    pwInvokeSync(
-      [
-        "open",
-        LIEJU.base,
-        "--browser=" + PW.browserChannel,
-        "--headed",
-        "--persistent",
-        "--profile=" + SESSION.profileDir,
-      ],
-      { timeout: 20000, session: SESSION },
-    );
-  },
-});
-function daemonAlive() {
-  return SESSION_LIFECYCLE.isAlive();
-}
-function ensureDaemon() {
-  return SESSION_LIFECYCLE.ensureStarted();
-}
-function loadSavedState() {
-  return SESSION_LIFECYCLE.loadSavedState();
-}
-function saveCurrentState() {
-  return SESSION_LIFECYCLE.saveState();
-}
-function closeBrowserSession() {
-  return SESSION_LIFECYCLE.close();
-}
-
-function hasLoginIndicator() {
+function hasLoginIndicator(runtime) {
   try {
-    return !!runCode(
+    return !!runtime.evaluate(
       "  var locator = page.locator(" +
         JSON.stringify(LIEJU.selectors.loginIndicator) +
         ").first();\n" +
         "  return await locator.count() > 0;\n",
-      SESSION_OPTS,
     );
   } catch (e) {
     return false;
   }
 }
 
-function getCurrentPageUrl() {
-  return runCode("  return page.url();\n", SESSION_OPTS).trim();
-}
-
-function checkLogin() {
+function checkLogin(runtime) {
   try {
-    pwInvokeSync(["goto", LIEJU.base], { timeout: 20000, session: SESSION });
-    return waitForLoginState(LOGIN_STATE_SETTLE_MS);
+    runtime.invoke(["goto", LIEJU.base], { timeout: 20000 });
+    return waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS);
   } catch (e) {
     return false;
   }
 }
 
-function openLogin() {
-  ensureDaemon();
+function openLogin(runtime) {
+  runtime.lifecycle.ensureStarted();
   try {
-    loadSavedState();
+    runtime.lifecycle.loadSavedState();
   } catch (e) {
     diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
-  pwInvokeSync(["goto", LIEJU.loginUrl], {
-    timeout: 15000,
-    session: SESSION,
-  });
+  runtime.invoke(["goto", LIEJU.loginUrl], { timeout: 15000 });
 }
 
-function checkLoginInCurrentPage() {
-  return hasLoginIndicator();
+function checkLoginInCurrentPage(runtime) {
+  return hasLoginIndicator(runtime);
 }
 
-function hasAccountIdentityIndicator() {
+function hasAccountIdentityIndicator(runtime) {
   try {
-    return runCode(
+    return runtime.evaluate(
       [
         "  var selectors = ['#um a[href*=\"uid=\"]', '.vwmy a[href*=\"uid=\"]', '.user-name a[href*=\"uid=\"]', '[data-uid]'];",
         "  for (var i = 0; i < selectors.length; i += 1) {",
@@ -128,44 +179,42 @@ function hasAccountIdentityIndicator() {
         "  }",
         "  return false;",
       ].join("\n"),
-      SESSION_OPTS,
     ) === true;
   } catch (_) {
     return false;
   }
 }
 
-async function ensureAccountInspectionReady(options) {
+async function ensureAccountInspectionReady(runtime, options) {
   var opts = options || {};
-  var wasAlive = daemonAlive();
-  ensureDaemon();
+  var wasAlive = runtime.lifecycle.isAlive();
+  runtime.lifecycle.ensureStarted();
   if (!wasAlive) {
     try {
-      loadSavedState();
+      runtime.lifecycle.loadSavedState();
     } catch (e) {
       diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
     }
   }
-  if (hasAccountIdentityIndicator()) return;
+  if (hasAccountIdentityIndicator(runtime)) return;
   if (opts.preserveCurrentPage === true) {
     var pageError = new Error("Account inspection page is not ready");
     pageError.code = "PLATFORM_ACCOUNT_INSPECTION_PAGE_NOT_READY";
     throw pageError;
   }
-  pwInvokeSync(["goto", LIEJU.base], {
-    timeout: 20000,
-    session: SESSION,
-  });
-  waitForLoginState(LOGIN_STATE_SETTLE_MS);
-  waitForCondition(hasAccountIdentityIndicator, {
+  runtime.invoke(["goto", LIEJU.base], { timeout: 20000 });
+  waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS);
+  waitForCondition(function () {
+    return hasAccountIdentityIndicator(runtime);
+  }, {
     timeoutMs: PUBLISH_PAGE_LOGIN_CHECK_MS,
     intervalMs: FAST_POLL_MS,
   });
 }
 
-function inspectAccount() {
+function inspectAccount(runtime) {
   try {
-    var evidence = runCode(
+    var evidence = runtime.evaluate(
       [
         "  var selectors = ['#um a[href*=\"uid=\"]', '.vwmy a[href*=\"uid=\"]', '.user-name a[href*=\"uid=\"]', '[data-uid]'];",
         "  var node = null;",
@@ -177,7 +226,6 @@ function inspectAccount() {
         "  var displayName = String(node.textContent || '').replace(/[\\u0000-\\u001f\\u007f]/g, '').trim();",
         "  return remoteAccountId && displayName && displayName.length <= 128 ? { verified: true, remoteAccountId: remoteAccountId, displayName: displayName } : { verified: false };",
       ].join("\n"),
-      SESSION_OPTS,
     );
     return evidence && evidence.verified === true
       ? evidence
@@ -187,29 +235,30 @@ function inspectAccount() {
   }
 }
 
-function waitForLoginState(timeoutMs) {
-  return waitForCondition(checkLoginInCurrentPage, {
+function waitForLoginState(runtime, timeoutMs) {
+  return waitForCondition(function () {
+    return checkLoginInCurrentPage(runtime);
+  }, {
     timeoutMs: timeoutMs,
     intervalMs: FAST_POLL_MS,
   });
 }
 
-function waitForLoginCompletion(timeoutMs) {
-  return waitForCondition(checkLoginInCurrentPage, {
+function waitForLoginCompletion(runtime, timeoutMs) {
+  return waitForCondition(function () {
+    return checkLoginInCurrentPage(runtime);
+  }, {
     timeoutMs: timeoutMs || LOGIN_WAIT_TIMEOUT_MS,
     intervalMs: FAST_POLL_MS,
   });
 }
 
-function doLogin(options) {
+function doLogin(runtime, options) {
   var opts = options || {};
   var interactive = resolveInteractive(opts);
   diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "login-required");
   try {
-    pwInvokeSync(["goto", LIEJU.loginUrl], {
-      timeout: 15000,
-      session: SESSION,
-    });
+    runtime.invoke(["goto", LIEJU.loginUrl], { timeout: 15000 });
   } catch (e) {
     diagnose(
       "PLATFORM_LOGIN_NAVIGATION_FAILED",
@@ -220,7 +269,7 @@ function doLogin(options) {
 
   if (!interactive) {
     diagnose("PLATFORM_LOGIN_WAITING", "authentication", "login-wait");
-    return Promise.resolve(waitForLoginCompletion(opts.timeoutMs));
+    return Promise.resolve(waitForLoginCompletion(runtime, opts.timeoutMs));
   }
 
   return new Promise(function (resolve) {
@@ -230,16 +279,16 @@ function doLogin(options) {
     });
     rl.question("Press Enter after login...", function () {
       rl.close();
-      resolve(waitForLoginCompletion(opts.timeoutMs));
+      resolve(waitForLoginCompletion(runtime, opts.timeoutMs));
     });
   });
 }
 
-function switchCity(cityName) {
+function switchCity(runtime, cityName) {
   var targetCity = (cityName || "").trim() || DEFAULT_CITY;
   diagnose("PLATFORM_CITY_SWITCH_STARTED", "remote", "city-switch");
 
-  var switchedCity = runCode(
+  var switchedCity = runtime.evaluate(
     "  var targetCity = " +
       JSON.stringify(targetCity) +
       ";\n" +
@@ -265,7 +314,6 @@ function switchCity(cityName) {
       "    return fallbackCity;\n" +
       "  }\n" +
       "  return '';\n",
-    SESSION_OPTS,
   ).trim();
 
   if (!switchedCity) {
@@ -325,10 +373,10 @@ function buildFillScript(article) {
   return code;
 }
 
-function preparedContentMatches(article) {
+function preparedContentMatches(runtime, article) {
   try {
     return (
-      runCode(
+      runtime.evaluate(
         "  var title = await page.locator('#atc_title').inputValue();\n" +
           "  var body = await page.locator('#atc_content').inputValue();\n" +
           "  return title === " +
@@ -336,7 +384,6 @@ function preparedContentMatches(article) {
           " && body === " +
           JSON.stringify(article.body) +
           ";\n",
-        SESSION_OPTS,
       ) === true
     );
   } catch (_) {
@@ -344,41 +391,35 @@ function preparedContentMatches(article) {
   }
 }
 
-async function prepareArticleSubmission(article, options) {
+async function prepareArticleSubmission(runtime, article, options) {
   var opts = options || {};
   var interactive = resolveInteractive(opts);
   throwIfStopped();
-  pwInvokeSync(["goto", LIEJU.publishUrl], {
-    timeout: 20000,
-    session: SESSION,
-  });
-  waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
+  runtime.invoke(["goto", LIEJU.publishUrl], { timeout: 20000 });
+  waitForLoginState(runtime, PUBLISH_PAGE_LOGIN_CHECK_MS);
   throwIfStopped();
 
-  if (!checkLoginInCurrentPage()) {
+  if (!checkLoginInCurrentPage(runtime)) {
     diagnose("PLATFORM_LOGIN_REQUIRED", "authentication", "publish-auth-check");
-    var relogged = await doLogin({
+    var relogged = await doLogin(runtime, {
       interactive: interactive,
       timeoutMs: opts.timeoutMs,
     });
-    if (!relogged || !checkLogin()) {
+    if (!relogged || !checkLogin(runtime)) {
       var loginError = new Error("Login failed");
       loginError.code = "LOGIN_FAILED";
       throw loginError;
     }
     throwIfStopped();
-    saveCurrentState();
-    pwInvokeSync(["goto", LIEJU.publishUrl], {
-      timeout: 20000,
-      session: SESSION,
-    });
-    waitForLoginState(PUBLISH_PAGE_LOGIN_CHECK_MS);
+    runtime.lifecycle.saveState();
+    runtime.invoke(["goto", LIEJU.publishUrl], { timeout: 20000 });
+    waitForLoginState(runtime, PUBLISH_PAGE_LOGIN_CHECK_MS);
     throwIfStopped();
   }
 
-  switchCity(article.city);
+  switchCity(runtime, article.city);
   throwIfStopped();
-  runCode(buildFillScript(article), SESSION_OPTS);
+  runtime.evaluate(buildFillScript(article));
   diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
 
   return Object.freeze({
@@ -386,12 +427,9 @@ async function prepareArticleSubmission(article, options) {
       diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
       try {
         throwIfStopped();
-        if (!preparedContentMatches(article))
+        if (!preparedContentMatches(runtime, article))
           return { status: "uncertain", errorCode: "PREPARED_CONTENT_DRIFT" };
-        pwInvokeSync(["click", LIEJU.selectors.submitBtn], {
-          timeout: 20000,
-          session: SESSION,
-        });
+        runtime.invoke(["click", LIEJU.selectors.submitBtn], { timeout: 20000 });
         // The current page URL and generic post-submit page structure cannot
         // prove that this article was created. Do not manufacture published.
         return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
@@ -403,10 +441,10 @@ async function prepareArticleSubmission(article, options) {
   });
 }
 
-async function publishArticle(article, options) {
+async function publishArticle(runtime, article, options) {
   var opts = options || {};
   try {
-    var prepared = await prepareArticleSubmission(article, opts);
+    var prepared = await prepareArticleSubmission(runtime, article, opts);
     if (opts.autoSubmit === false) {
       diagnose("PLATFORM_MANUAL_SUBMIT_WAIT", "remote", "manual-submit");
       return { status: "group_blocked", errorCode: "MANUAL_SUBMIT_REQUIRED" };
@@ -422,7 +460,7 @@ async function publishArticle(article, options) {
   }
 }
 
-async function preparePlatformSubmission(claim) {
+async function preparePlatformSubmission(runtime, claim) {
   const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
   const profile = claim && claim.publicationProfile || {};
   const preparedArticle = Object.freeze({
@@ -432,7 +470,7 @@ async function preparePlatformSubmission(claim) {
     contact: typeof profile.contact === "string" ? profile.contact : "",
     phone: typeof profile.phone === "string" ? profile.phone : "",
   });
-  const prepared = await prepareArticleSubmission(preparedArticle, {
+  const prepared = await prepareArticleSubmission(runtime, preparedArticle, {
     autoSubmit: true,
   });
   return domain.createPreparedSubmission({
@@ -445,47 +483,74 @@ function isStopError(error) {
   return Boolean(error && error.code === "STOP_REQUESTED");
 }
 
-async function ensureLoggedIn(options) {
+async function ensureLoggedIn(runtime, options) {
   var opts = options || {};
   var interactive = resolveInteractive(opts);
   var loaded = false;
 
   try {
-    loaded = loadSavedState();
+    loaded = runtime.lifecycle.loadSavedState();
   } catch (e) {
     diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
   }
 
-  if (checkLogin()) {
+  if (checkLogin(runtime)) {
     diagnose("PLATFORM_LOGIN_COMPLETED", "authentication", "login");
     return;
   }
 
-  var relogged = await doLogin({
+  var relogged = await doLogin(runtime, {
     interactive: interactive,
     timeoutMs: opts.timeoutMs,
   });
-  if (!relogged || !checkLogin()) {
+  if (!relogged || !checkLogin(runtime)) {
     throw new Error("Login failed");
   }
 
-  saveCurrentState();
+  runtime.lifecycle.saveState();
   diagnose("PLATFORM_LOGIN_COMPLETED", "authentication", "login");
 }
 
-module.exports = {
-  id: "lieju",
-  publicationTarget: { kind: "platform", granularity: "platform" },
-  contentQueueImport: true,
-  scanDir: LIEJU.selectors.articleDir,
-  ensureSession: ensureDaemon,
-  ensureLoggedIn: ensureLoggedIn,
-  openLogin: openLogin,
-  checkLogin: checkLogin,
-  ensureAccountInspectionReady: ensureAccountInspectionReady,
-  inspectAccount: inspectAccount,
-  publishArticle: publishArticle,
-  preparePlatformSubmission: preparePlatformSubmission,
-  saveSession: saveCurrentState,
-  closeSession: closeBrowserSession,
-};
+function createLiejuAdapter(runtimeContext) {
+  var runtime = createLiejuRuntime(runtimeContext);
+  return {
+    id: "lieju",
+    publicationTarget: { kind: "platform", granularity: "platform" },
+    contentQueueImport: true,
+    scanDir: LIEJU.selectors.articleDir,
+    ensureSession: function () {
+      return runtime.lifecycle.ensureStarted();
+    },
+    ensureLoggedIn: function (options) {
+      return ensureLoggedIn(runtime, options);
+    },
+    openLogin: function () {
+      return openLogin(runtime);
+    },
+    checkLogin: function () {
+      return checkLogin(runtime);
+    },
+    ensureAccountInspectionReady: function (options) {
+      return ensureAccountInspectionReady(runtime, options);
+    },
+    inspectAccount: function () {
+      return inspectAccount(runtime);
+    },
+    publishArticle: function (article, options) {
+      return publishArticle(runtime, article, options);
+    },
+    preparePlatformSubmission: function (claim) {
+      return preparePlatformSubmission(runtime, claim);
+    },
+    saveSession: function () {
+      return runtime.lifecycle.saveState();
+    },
+    closeSession: function () {
+      return runtime.lifecycle.close();
+    },
+  };
+}
+
+module.exports = Object.assign(createLiejuAdapter(), {
+  createPlatformAdapter: createLiejuAdapter,
+});

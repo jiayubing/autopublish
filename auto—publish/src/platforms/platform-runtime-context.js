@@ -1,5 +1,7 @@
 "use strict";
 
+const path = require("node:path");
+
 function browserRuntime(value) {
   if (value === undefined || value === null) return Object.freeze({});
   if (typeof value !== "object" || Array.isArray(value)) {
@@ -11,6 +13,10 @@ function browserRuntime(value) {
     "nodeExecPath",
     "profileDir",
     "profileRoot",
+    "daemonDir",
+    "daemonRoot",
+    "stateFile",
+    "stateDir",
     "downloadDir",
     "tempDir",
   ];
@@ -36,4 +42,29 @@ function createPlatformRuntimeContext(options) {
   });
 }
 
-module.exports = { createPlatformRuntimeContext };
+function createPlatformRuntimeContextFromWorkspacePaths(workspacePaths) {
+  const paths = workspacePaths || {};
+  const profileRoot =
+    typeof paths.browser === "string" && paths.browser.trim()
+      ? paths.browser
+      : undefined;
+  return createPlatformRuntimeContext({
+    workspacePaths: paths,
+    browserRuntime: {
+      browserChannel: paths.browserChannel,
+      playwrightCliJs: paths.playwrightCliJs,
+      nodeExecPath: paths.playwrightNodeExecPath,
+      profileRoot,
+      daemonRoot: profileRoot
+        ? path.join(profileRoot, "sessions")
+        : undefined,
+      stateDir: profileRoot ? path.join(profileRoot, "state") : undefined,
+      tempDir: paths.tmp,
+    },
+  });
+}
+
+module.exports = {
+  createPlatformRuntimeContext,
+  createPlatformRuntimeContextFromWorkspacePaths,
+};
