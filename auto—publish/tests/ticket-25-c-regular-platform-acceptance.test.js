@@ -506,7 +506,13 @@ test("25-C runs different platforms concurrently, serializes same-platform accou
       fixture.store.listArticleLifecycleFacts({
         articleIds: ["same-platform-second-account"],
       }).publications[0].status,
-      "failed",
+      "queued",
+    );
+    assert.equal(
+      fixture.store.listArticleLifecycleFacts({
+        articleIds: ["same-platform-second-account"],
+      }).attentionItems.length,
+      0,
     );
     assert.equal(
       fixture.store.listArticleLifecycleFacts({

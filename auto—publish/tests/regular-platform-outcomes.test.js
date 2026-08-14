@@ -916,7 +916,7 @@ test("prepared attempts cannot be mislabeled uncertain before the submission bou
   }
 });
 
-test("explicit pre-submit article/group failures close prepared claims without creating success or uncertainty", () => {
+test("explicit pre-submit article rejection closes, while recoverable group block requeues the claim", () => {
   for (const status of ["article_rejected", "group_blocked"]) {
     const f = fixture();
     try {
@@ -965,17 +965,51 @@ test("explicit pre-submit article/group failures close prepared claims without c
       const snapshot = f.transitions.getRegularOutcomeSnapshot({
         regularPublicationAttemptId: claim.regularPublicationAttemptId,
       });
-      assert.equal(snapshot.publicationStatus, "failed");
-      assert.equal(snapshot.itemStatus, "failed");
       assert.equal(snapshot.publicationEvidenceV1, null);
-      if (status === "group_blocked")
+      if (status === "group_blocked") {
+        assert.equal(snapshot.publicationStatus, "queued");
+        assert.equal(snapshot.attemptStatus, "queued");
+        assert.equal(snapshot.itemStatus, "queued");
+        assert.equal(snapshot.activeTargetState, "queued");
+        assert.equal(snapshot.intentState, "resolved");
+        assert.equal(snapshot.observation, null);
         assert.equal(
+          snapshot.queueGroupId,
+          item.queueGroupId,
+        );
+        assert.equal(
+          f.groupTransitions.listRegularQueueGroupSnapshots({})[0].pauseIntent,
+          "system",
+        );
+        assert.deepEqual(
           f.groupTransitions
             .listRegularQueueGroupSnapshots({})
             .find((group) => group.queueGroupId === item.queueGroupId)
-            .pauseIntent,
-          "system",
+            .remaining.map((entry) => entry.articleId),
+          [`article-pre-${status}-fresh`],
         );
+        const lifecycle = f.store.listArticleLifecycleFacts({
+          articleIds: [`article-pre-${status}-fresh`],
+        });
+        assert.equal(lifecycle.publications[0].status, "queued");
+        assert.equal(lifecycle.submissionItems[0].status, "queued");
+        assert.equal(lifecycle.attentionItems.length, 0);
+        f.groupTransitions.setRegularQueueGroupRunIntent({
+          queueGroupId: item.queueGroupId,
+          running: true,
+        });
+        const retryClaim = f.groupTransitions.claimRegularQueueGroupHead({
+          queueGroupId: item.queueGroupId,
+          claimToken: `claim-retry-${status}`,
+        });
+        assert.equal(
+          retryClaim.regularPublicationAttemptId,
+          claim.regularPublicationAttemptId,
+        );
+      } else {
+        assert.equal(snapshot.publicationStatus, "failed");
+        assert.equal(snapshot.itemStatus, "failed");
+      }
     } finally {
       f.close();
     }
@@ -1122,7 +1156,7 @@ test("article rejection continues the same FIFO group while accepted closes the 
   }
 });
 
-test("group-blocked closes the current article and pauses only the affected group", () => {
+test("recoverable group-blocked after submission-start releases the claim without failing the article", () => {
   const f = fixture();
   try {
     const prepared = f.prepare("article-group-blocked");
@@ -1138,12 +1172,98 @@ test("group-blocked closes the current article and pauses only the affected grou
     const snapshot = f.transitions.getRegularOutcomeSnapshot({
       regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
     });
-    assert.equal(snapshot.publicationStatus, "failed");
-    assert.equal(snapshot.itemStatus, "failed");
+    assert.equal(snapshot.publicationStatus, "queued");
+    assert.equal(snapshot.attemptStatus, "queued");
+    assert.equal(snapshot.itemStatus, "queued");
+    assert.equal(snapshot.activeTargetState, "queued");
+    assert.equal(snapshot.intentState, "resolved");
+    assert.equal(snapshot.observation, null);
     assert.equal(
       f.groupTransitions.listRegularQueueGroupSnapshots({})[0].pauseIntent,
       "system",
     );
+    assert.equal(
+      f.groupTransitions.listRegularQueueGroupSnapshots({})[0].remaining[0]
+        .regularPublicationAttemptId,
+      prepared.claim.regularPublicationAttemptId,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("recoverable group-blocked releases the queue item and allows the same attempt to retry", async () => {
+  const f = fixture();
+  try {
+    const admitted = admitForOrchestrator(f, "article-group-blocked-retry");
+    let blocked = true;
+    let preparations = 0;
+    let submissions = 0;
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: f.groupTransitions,
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          preparations += 1;
+          if (blocked)
+            return {
+              status: "group_blocked",
+              errorCode: "LOGIN_REQUIRED",
+              articleRecoverable: true,
+            };
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            async submitPreparedPublication() {
+              submissions += 1;
+              return {
+                status: "accepted",
+                remoteId: "hepan-article-retried",
+              };
+            },
+          });
+        },
+      },
+      regularPlatformOutcomeService: createRegularPlatformOutcomeService({
+        regularOutcomeTransitions: f.transitions,
+        clock: () => new Date("2026-08-07T01:00:00.000Z"),
+      }),
+    });
+
+    const blockedResult = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(blockedResult.observation.status, "group_blocked");
+    assert.equal(preparations, 1);
+    assert.equal(submissions, 0);
+    let snapshot = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(snapshot.publicationStatus, "queued");
+    assert.equal(snapshot.itemStatus, "queued");
+    assert.equal(snapshot.activeTargetState, "queued");
+    assert.equal(snapshot.pauseIntent, "system");
+    assert.equal(snapshot.observation, null);
+    assert.equal(
+      f.store.listArticleLifecycleFacts({
+        articleIds: ["article-group-blocked-retry"],
+      }).attentionItems.length,
+      0,
+    );
+
+    blocked = false;
+    const retriedResult = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(retriedResult.observation.status, "accepted");
+    assert.equal(preparations, 2);
+    assert.equal(submissions, 1);
+    snapshot = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(snapshot.publicationStatus, "published");
+    assert.equal(snapshot.itemStatus, "completed");
+    assert.equal(snapshot.activeTargetState, null);
+    assert.equal(snapshot.queueGroupId, null);
   } finally {
     f.close();
   }

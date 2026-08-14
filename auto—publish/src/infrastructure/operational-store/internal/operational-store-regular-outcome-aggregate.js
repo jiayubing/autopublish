@@ -167,6 +167,77 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     refreshBatch(row.batch_id, stamp);
   }
 
+  function canRequeueRecoverableGroupBlocked(row, status, observed) {
+    return (
+      status === "group_blocked" &&
+      observed.articleRecoverable === true &&
+      ["resolved", "remote_started"].includes(row.state) &&
+      row.intent.detail &&
+      ["prepared", "remote_call_started"].includes(row.intent.detail.phase) &&
+      ["queued", "remote_started"].includes(row.attempt_status) &&
+      ["queued", "remote_started"].includes(row.publication_status) &&
+      ["claimed", "remote_started"].includes(row.item_status) &&
+      ["queued", "remote_started"].includes(row.active_target_state) &&
+      Boolean(row.queue_group_id)
+    );
+  }
+
+  function releasedIntent(row) {
+    const next = Object.assign({}, row.intent, {
+      detail: Object.assign({}, row.intent.detail || {}, {
+        phase: "admitted",
+      }),
+    });
+    delete next.detail.observation;
+    delete next.regularSubmission;
+    delete next.preparedSubmissionEvidenceV1;
+    return next;
+  }
+
+  function requeueRecoverableGroupBlocked(row, id, stamp) {
+    const attemptChanged = db
+      .prepare(
+        "UPDATE publication_attempts SET status='queued',finished_at=NULL WHERE attempt_id=? AND status IN('queued','remote_started')",
+      )
+      .run(id).changes;
+    if (attemptChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    const publicationChanged = db
+      .prepare(
+        "UPDATE publication_records SET status='queued',updated_at=? WHERE publication_id=? AND status IN('queued','remote_started')",
+      )
+      .run(stamp, row.publication_id).changes;
+    if (publicationChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    const activeTargetChanged = db
+      .prepare(
+        "UPDATE article_active_targets SET state='queued',updated_at=? WHERE attempt_id=? AND state IN('queued','remote_started')",
+      )
+      .run(stamp, id).changes;
+    if (activeTargetChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    const itemChanged = db
+      .prepare(
+        "UPDATE submission_items SET status='queued',claim_token=NULL,claim_until=NULL,revision=revision+1 WHERE item_id=? AND status IN('claimed','remote_started')",
+      )
+      .run(row.item_id).changes;
+    if (itemChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    const queueItem = db
+      .prepare("SELECT 1 FROM submission_queue_items WHERE item_id=?")
+      .get(row.item_id);
+    if (!queueItem) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    const groupChanged = db
+      .prepare(
+        "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE queue_group_id=?",
+      )
+      .run(stamp, row.queue_group_id).changes;
+    if (groupChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    const intentChanged = db
+      .prepare(
+        "UPDATE recovery_intents SET state='resolved',payload_json=?,updated_at=? WHERE attempt_id=? AND state IN('resolved','remote_started','outcome_pending')",
+      )
+      .run(text(releasedIntent(row)), stamp, id).changes;
+    if (intentChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+    refreshBatch(row.batch_id, stamp);
+  }
+
   function snapshots(row) {
     const item = fromText(row.item_payload) || {};
     const target = fromText(row.target_json) || {};
@@ -368,10 +439,12 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
           return Object.freeze({ attemptId: id, status, idempotent: true });
         throw fail("REGULAR_OUTCOME_CONFLICT");
       }
+      const requeue = canRequeueRecoverableGroupBlocked(row, status, observed);
+      if (requeue) requeueRecoverableGroupBlocked(row, id, stamp);
       const keepFrozen =
         status === "uncertain" ||
         (status === "group_blocked" && observed.articleRecoverable === false);
-      if (keepFrozen) {
+      if (!requeue && keepFrozen) {
         db.prepare(
           "UPDATE publication_attempts SET status='uncertain',finished_at=? WHERE attempt_id=? AND status IN('queued','remote_started')",
         ).run(stamp, id);
@@ -391,7 +464,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         db.prepare(
           "UPDATE recovery_intents SET state='manual_check',payload_json=?,updated_at=? WHERE attempt_id=?",
         ).run(text(observedIntent(row, observed)), stamp, id);
-      } else {
+      } else if (!requeue) {
         const allowedStatuses =
           row.attempt_status === "queued"
             ? "('queued')"
