@@ -11,6 +11,11 @@ import type {
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
 import type {
+  ContentClient,
+  ContentCommandStaleResult,
+  LiejuPublicationProfile,
+} from "../../types/content";
+import type {
   ArticleOperation,
   ArticleWorkflowStage,
 } from "../../article-workflow";
@@ -77,6 +82,11 @@ export type GeneratedArticlesCommands = Record<
 
 export interface GeneratedArticlesViewProps {
   clientId: string;
+  client?: ContentClient;
+  saveClientLiejuPublicationProfile: (input: {
+    clientId: string;
+    profile: LiejuPublicationProfile;
+  }) => Promise<LiejuPublicationProfile | ContentCommandStaleResult>;
   management: ArticleManagementReadModel;
   query: { loading: boolean; error?: { userMessage?: string } | null };
   commands: GeneratedArticlesCommands;

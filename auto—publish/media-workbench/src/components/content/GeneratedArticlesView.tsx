@@ -32,6 +32,7 @@ import ArticleAttentionDetailDrawer from "./ArticleAttentionDetailDrawer";
 import AccountProfileSelector from "./AccountProfileSelector";
 import GeneratedArticlesList from "./GeneratedArticlesList";
 import ArticleTrashPanel from "./ArticleTrashPanel";
+import ClientLiejuPublicationProfileEditor from "./ClientLiejuPublicationProfileEditor";
 import { useAttentionFeature } from "../../features/attention/use-attention-feature";
 import { useConfirmation } from "../../confirmation";
 import { isContentCommandStaleResult } from "../../content-command-result";
@@ -71,6 +72,8 @@ function transactionReason(
 
 export default function GeneratedArticlesView({
   clientId,
+  client,
+  saveClientLiejuPublicationProfile,
   management,
   query,
   commands,
@@ -1061,6 +1064,11 @@ export default function GeneratedArticlesView({
             按文章当前阶段组织下一步操作；发布记录和队列状态仍分别保留。
           </p>
         </div>
+
+        <ClientLiejuPublicationProfileEditor
+          client={client}
+          saveProfile={saveClientLiejuPublicationProfile}
+        />
 
         <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)]">
           <input

@@ -320,7 +320,6 @@ export default function ContentWorkbench({
             selectedArticle={article}
             onArticleChange={content.setCurrentArticle}
             commands={content.commands}
-            saveClientLiejuPublicationProfile={saveClientLiejuPublicationProfile}
             commandStates={content.snapshot.commands}
             refreshManagement={content.refreshManagement}
           />
@@ -336,6 +335,8 @@ export default function ContentWorkbench({
               <div className="min-h-0 min-w-0 flex-1">
                 <GeneratedArticlesView
                   clientId={clientId}
+                  client={clients.find((item) => item.id === clientId)}
+                  saveClientLiejuPublicationProfile={saveClientLiejuPublicationProfile}
                   management={management}
                   query={managementQuery}
                   commands={content.commands}

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, LiejuPublicationProfile } from '../../types/content';
+import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog } from '../../types/content';
 import type { GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types/generation';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import GenerationBatchDetail from './GenerationBatchDetail';
@@ -17,7 +17,6 @@ interface BatchGenerationViewProps {
   commands: {
     retryMaterial: (input: Record<string, unknown>) => Promise<ContentMaterial | ContentCommandStaleResult>;
   };
-  saveClientLiejuPublicationProfile: (input: { clientId: string; profile: LiejuPublicationProfile }) => Promise<LiejuPublicationProfile | ContentCommandStaleResult>;
   commandStates: { retryMaterial: { busy: boolean } };
 }
 
@@ -26,12 +25,6 @@ type BatchViewMode = 'wizard' | 'monitoring';
 const EMPTY_STATE: GenerationBatchState = { status: 'idle', state: 'idle', batchId: null };
 const ACTIVE_BATCH_STATUSES = new Set(['running', 'pausing', 'stopping']);
 const CollapsibleSourceItem = BaseCollapsibleSourceItem as React.ComponentType<CollapsibleSourceItemProps & React.Attributes>;
-const EMPTY_LIEJU_PROFILE: LiejuPublicationProfile = { city: '', contact: '', phone: '' };
-
-function liejuProfile(client: ContentClient): LiejuPublicationProfile {
-  return { ...EMPTY_LIEJU_PROFILE, ...(client.publicationProfiles?.lieju || {}) };
-}
-
 function materialForClient(client: ContentClient, overrides: Record<string, ContentMaterial> = {}): ContentMaterial[] {
   return (client.knowledgeFiles || []).map((item) => ({
     ...item,
@@ -54,7 +47,7 @@ function errorReason(code: string) {
   return labels[code] || code;
 }
 
-export default function BatchGenerationView({ clients, currentClientId, researchByClient, templateCatalog, commands, commandStates, saveClientLiejuPublicationProfile }: BatchGenerationViewProps) {
+export default function BatchGenerationView({ clients, currentClientId, researchByClient, templateCatalog, commands, commandStates }: BatchGenerationViewProps) {
   const { confirm } = useConfirmation();
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
@@ -66,10 +59,6 @@ export default function BatchGenerationView({ clients, currentClientId, research
   const [previewResult, setPreviewResult] = useState<GenerationBatchPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [profileDrafts, setProfileDrafts] = useState<Record<string, LiejuPublicationProfile>>({});
-  const [profileDirty, setProfileDirty] = useState<Record<string, boolean>>({});
-  const [savingProfileClientId, setSavingProfileClientId] = useState('');
-  const [profileMessages, setProfileMessages] = useState<Record<string, string>>({});
   const preflightErrorRef = useRef<HTMLDivElement | null>(null);
   const clientSelectionTouchedRef = useRef(false);
   const templateSelectionTouchedRef = useRef(false);
@@ -119,11 +108,7 @@ export default function BatchGenerationView({ clients, currentClientId, research
   useEffect(() => {
     const availableClientIds = clients.map((client) => client.id);
     setSelectedClientIds((current) => preserveSelection(current, availableClientIds, clientSelectionTouchedRef.current));
-    setProfileDrafts((current) => Object.fromEntries(clients.map((client) => [
-      client.id,
-      profileDirty[client.id] ? current[client.id] || liejuProfile(client) : liejuProfile(client),
-    ])));
-  }, [clients, clientMap, profileDirty]);
+  }, [clients]);
 
   useEffect(() => {
     const nextCatalog = templateCatalog || { revision: '', platforms: [], templates: [], diagnostics: [] };
@@ -194,32 +179,6 @@ export default function BatchGenerationView({ clients, currentClientId, research
   function updateSource(clientId: string, field: 'materialIds' | 'researchQueryIds', id: string, selected: boolean) {
     setSources((current) => ({ ...current, [clientId]: { ...current[clientId], [field]: selected ? [...(current[clientId]?.[field] || []), id] : (current[clientId]?.[field] || []).filter((item) => item !== id) } }));
     setPreviewResult(null);
-  }
-
-  function updateProfile(clientId: string, field: keyof LiejuPublicationProfile, value: string) {
-    setProfileDrafts((current) => ({ ...current, [clientId]: { ...(current[clientId] || EMPTY_LIEJU_PROFILE), [field]: value } }));
-    setProfileDirty((current) => ({ ...current, [clientId]: true }));
-    setProfileMessages((current) => ({ ...current, [clientId]: '' }));
-  }
-
-  async function saveProfile(clientId: string) {
-    if (savingProfileClientId) return;
-    setSavingProfileClientId(clientId);
-    setProfileMessages((current) => ({ ...current, [clientId]: '' }));
-    try {
-      const saved = await saveClientLiejuPublicationProfile({
-        clientId,
-        profile: profileDrafts[clientId] || EMPTY_LIEJU_PROFILE,
-      });
-      if (isContentCommandStaleResult(saved)) return;
-      setProfileDrafts((current) => ({ ...current, [clientId]: saved }));
-      setProfileDirty((current) => ({ ...current, [clientId]: false }));
-      setProfileMessages((current) => ({ ...current, [clientId]: '已保存' }));
-    } catch (value) {
-      setProfileMessages((current) => ({ ...current, [clientId]: value instanceof Error ? value.message : '保存失败' }));
-    } finally {
-      setSavingProfileClientId('');
-    }
   }
 
   async function preview() {
@@ -320,11 +279,8 @@ export default function BatchGenerationView({ clients, currentClientId, research
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-semibold">选择批次客户</h2><p className="mt-1 text-xs text-slate-500">已选 {selectedCount} 个客户</p></div><div className="flex gap-2"><button type="button" onClick={toggleAllClients} className="rounded border border-slate-300 px-3 py-2 text-xs">全选客户</button><button type="button" onClick={() => { clientSelectionTouchedRef.current = true; setSelectedClientIds([]); setPreviewResult(null); }} disabled={!selectedCount} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">取消全选</button></div></div>
         <label className="mb-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={allSelected} onChange={toggleAllClients} />全选客户</label>
         <div className="grid gap-3 sm:grid-cols-2">{clients.map((client) => {
-          const profile = profileDrafts[client.id] || liejuProfile(client);
-          const message = profileMessages[client.id];
           return <article key={client.id} className="rounded border border-slate-200 p-3 text-sm">
             <label className="flex items-center gap-2"><input type="checkbox" checked={selectedClientIds.includes(client.id)} onChange={(event) => { clientSelectionTouchedRef.current = true; setSelectedClientIds((current) => event.target.checked ? [...new Set([...current, client.id])] : current.filter((id) => id !== client.id)); }} /><span className="min-w-0 flex-1"><span className="block">{client.name}</span><span className={`block text-xs ${clientReadiness(client) === '可生成' ? 'text-emerald-600' : 'text-amber-700'}`}>{clientReadiness(client)}</span></span></label>
-            <fieldset className="mt-3 border-t border-slate-100 pt-3"><legend className="px-1 text-xs font-semibold text-slate-700">列举网投递档案（客户级）</legend><p className="mb-2 text-xs text-slate-500">保存到该客户资料，不会修改文章标题或正文。</p><div className="grid gap-2 sm:grid-cols-3"><label className="text-xs text-slate-600">城市<input aria-label={`${client.name} 列举网城市`} maxLength={100} value={profile.city} onChange={(event) => updateProfile(client.id, 'city', event.target.value)} className="mt-1 h-8 w-full rounded border border-slate-300 px-2" /></label><label className="text-xs text-slate-600">联系人<input aria-label={`${client.name} 列举网联系人`} maxLength={100} value={profile.contact} onChange={(event) => updateProfile(client.id, 'contact', event.target.value)} className="mt-1 h-8 w-full rounded border border-slate-300 px-2" /></label><label className="text-xs text-slate-600">电话<input aria-label={`${client.name} 列举网电话`} maxLength={50} value={profile.phone} onChange={(event) => updateProfile(client.id, 'phone', event.target.value)} className="mt-1 h-8 w-full rounded border border-slate-300 px-2" /></label></div><div className="mt-2 flex items-center justify-between gap-2"><span role={message && message !== '已保存' ? 'alert' : 'status'} className={`text-xs ${message === '已保存' ? 'text-emerald-600' : 'text-rose-600'}`}>{message}</span><button type="button" onClick={() => void saveProfile(client.id)} disabled={!profileDirty[client.id] || Boolean(savingProfileClientId)} className="rounded border border-blue-300 px-3 py-1 text-xs text-blue-700 disabled:opacity-40">{savingProfileClientId === client.id ? '保存中…' : '保存档案'}</button></div></fieldset>
           </article>;
         })}</div>
       </section>}
