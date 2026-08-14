@@ -99,6 +99,22 @@ function createRegularQueueGroupOrchestrator(options) {
   const clearTimer = value.clearInterval || clearInterval;
   const activeGroups = new Map();
   const activePlatforms = new Map();
+  const onDataInvalidated =
+    typeof value.onDataInvalidated === "function"
+      ? value.onDataInvalidated
+      : null;
+
+  function applyOutcome(input) {
+    const transition = outcomeService.applyRegularOutcome(input);
+    if (onDataInvalidated) {
+      try {
+        onDataInvalidated("PUBLICATION_RECONCILED");
+      } catch (_) {
+        diagnose("REGULAR_DATA_INVALIDATION_FAILED", "data-invalidation");
+      }
+    }
+    return transition;
+  }
 
   function snapshot() {
     return transitions.listRegularQueueGroupSnapshots({});
@@ -137,7 +153,7 @@ function createRegularQueueGroupOrchestrator(options) {
         if (!outcomeService) return preparation;
         return Object.freeze({
           ...preparation,
-          transition: outcomeService.applyRegularOutcome({
+          transition: applyOutcome({
             regularPublicationAttemptId: claim.regularPublicationAttemptId,
             outcome: preparation,
           }),
@@ -149,7 +165,7 @@ function createRegularQueueGroupOrchestrator(options) {
       if (!preparationOutcome || !outcomeService) throw error;
       return Object.freeze({
         ...preparationOutcome,
-        transition: outcomeService.applyRegularOutcome({
+        transition: applyOutcome({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           outcome: preparationOutcome,
         }),
@@ -183,7 +199,7 @@ function createRegularQueueGroupOrchestrator(options) {
     if (!outcomeService) return observation;
     let transition;
     try {
-      transition = outcomeService.applyRegularOutcome({
+      transition = applyOutcome({
         regularPublicationAttemptId: claim.regularPublicationAttemptId,
         outcome: observation,
       });
@@ -194,7 +210,7 @@ function createRegularQueueGroupOrchestrator(options) {
         status: "uncertain",
         errorCode: "REGULAR_ADAPTER_OUTCOME_INVALID",
       });
-      transition = outcomeService.applyRegularOutcome({
+      transition = applyOutcome({
         regularPublicationAttemptId: claim.regularPublicationAttemptId,
         outcome: observation,
       });

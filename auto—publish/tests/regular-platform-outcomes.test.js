@@ -18,6 +18,9 @@ const {
   createRegularQueueGroupComposition,
 } = require("../desktop/composition/regular-queue-group-composition");
 const {
+  createArticleAttentionQuery,
+} = require("../desktop/services/article-attention-query");
+const {
   createOperationalStore,
 } = require("../src/infrastructure/operational-store/operational-store");
 
@@ -514,6 +517,31 @@ test("uncertain pauses only its group and supports the two bound resolutions", (
         }),
       { code: "REGULAR_UNCERTAIN_RESOLUTION_OPPOSITE" },
     );
+  } finally {
+    f.close();
+  }
+});
+
+test("uncertain publication attention remains visible in its client scope", () => {
+  const f = fixture();
+  try {
+    const prepared = f.prepare("article-attention-visible");
+    f.transitions.recordRegularUncertain({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      observation: {
+        status: "uncertain",
+        code: "REMOTE_RESULT_UNKNOWN",
+        observedAt: "2026-08-07T01:00:02.000Z",
+      },
+    });
+    const query = createArticleAttentionQuery({
+      operationalStore: f.store,
+    });
+    const scoped = query.list({ clientId: "client-1" });
+    assert.equal(scoped.items.length, 1);
+    assert.equal(scoped.items[0].clientId, "client-1");
+    assert.equal(scoped.items[0].articleId, "article-attention-visible");
+    assert.equal(query.list({ clientId: "other-client" }).items.length, 0);
   } finally {
     f.close();
   }
@@ -1054,8 +1082,10 @@ test("orchestrator distinguishes transport failure before and after submission-s
   try {
     const admitted = admitForOrchestrator(after, "article-after-boundary");
     let submits = 0;
+    const invalidationReasons = [];
     const orchestrator = createRegularQueueGroupOrchestrator({
       regularQueueGroupTransitions: after.groupTransitions,
+      onDataInvalidated: (reason) => invalidationReasons.push(reason),
       platformSubmissionExecutor: {
         async preparePlatformSubmission(claim) {
           return domain.createPreparedSubmission({
@@ -1078,6 +1108,7 @@ test("orchestrator distinguishes transport failure before and after submission-s
     });
     assert.equal(result.observation.status, "uncertain");
     assert.equal(submits, 1);
+    assert.deepEqual(invalidationReasons, ["PUBLICATION_RECONCILED"]);
     const snapshot = after.transitions.getRegularOutcomeSnapshot({
       regularPublicationAttemptId: admitted.attemptId,
     });

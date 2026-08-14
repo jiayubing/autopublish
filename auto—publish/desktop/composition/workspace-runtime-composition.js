@@ -657,6 +657,7 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueGroupTransitions,
           platformSubmissionExecutor,
           regularPlatformOutcomeService,
+          onDataInvalidated: invalidation.invalidate,
         },
       );
     const paidMediaBatchComposition =

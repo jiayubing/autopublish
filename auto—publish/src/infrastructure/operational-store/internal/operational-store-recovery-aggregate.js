@@ -60,6 +60,25 @@ function recoveryArticleRef(submission) {
   return { clientId: ref.clientId.trim(), articleId: ref.articleId.trim() };
 }
 
+function recoveryClientId(value) {
+  const ref = recoveryArticleRef(recoverySubmission(value));
+  if (ref) return ref.clientId;
+  const payload = fromText(value);
+  const identity =
+    payload &&
+    payload.preparedSubmissionEvidenceV1 &&
+    payload.preparedSubmissionEvidenceV1.articleIdentityV1;
+  const clientId = identity && identity.clientId;
+  if (
+    typeof clientId !== "string" ||
+    !clientId.trim() ||
+    clientId.length > 200 ||
+    /[\u0000-\u001f\\/]/.test(clientId)
+  )
+    return null;
+  return clientId.trim();
+}
+
 function safePostProcessingErrorCode(value) {
   return typeof value === "string" &&
     /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(value)
@@ -350,6 +369,7 @@ function createRecoveryAggregate(context, activeTarget) {
           return Object.freeze({
             publicationId: row.publication_id,
             articleId: row.article_id,
+            clientId: recoveryClientId(row.intent_payload),
             targetKey: row.target_key,
             status: row.status,
             updatedAt: row.updated_at,

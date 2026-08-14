@@ -10,6 +10,7 @@ function createRegularQueueGroupComposition(options) {
     regularQueueGroupTransitions: value.regularQueueGroupTransitions,
     platformSubmissionExecutor: value.platformSubmissionExecutor,
     regularPlatformOutcomeService: value.regularPlatformOutcomeService,
+    onDataInvalidated: value.onDataInvalidated,
     randomUUID: value.randomUUID,
   });
   const startupSnapshot = orchestrator.initializePaused();
