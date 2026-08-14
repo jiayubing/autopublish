@@ -20,6 +20,7 @@ import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 import { confirmAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
 import {
   listRegularQueueGroups,
+  removePendingQueueItems,
   pauseAllRegularQueueGroups,
   pauseRegularQueueGroup,
   startAllRegularQueueGroups,
@@ -48,6 +49,7 @@ function createProductionPlatformFeature(): PlatformFeature {
     listAccountProfiles,
     confirmAccountProfile,
     listRegularQueueGroups,
+    removePendingQueueItems,
     startRegularQueueGroup,
     pauseRegularQueueGroup,
     startAllRegularQueueGroups,

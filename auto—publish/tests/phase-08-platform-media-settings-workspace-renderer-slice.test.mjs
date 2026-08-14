@@ -220,6 +220,8 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
           itemId: "item-a",
           batchId: "batch-a",
           articleId: "article-a",
+          articleRef: { clientId: "client-a", articleId: "article-a" },
+          articleSummary: { title: "文章 A", customerName: "客户 A" },
           regularPublicationAttemptId: "attempt-a",
           position: 1,
         },
@@ -231,6 +233,7 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     };
     let listedGroups = [group];
     let startAllCalls = 0;
+    let removedItems = null;
     const feature = createPlatformFeature({
       platformDisplayName: (platformId) =>
         platformId === "toutiao" ? "头条" : platformId,
@@ -254,6 +257,10 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       pauseAllRegularQueueGroups: async () => [group],
       startRegularQueueGroup: async () => [group],
       pauseRegularQueueGroup: async () => [group],
+      removePendingQueueItems: async (input) => {
+        removedItems = input.items;
+        return { removedCount: 1, idempotentCount: 0, conflictCount: 0, items: [] };
+      },
     });
     feature.setScope({ workspaceRuntimeId: "platform-queue-groups" });
     await feature.refreshAccountProfiles();
@@ -282,6 +289,16 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     const second = feature.startAllGroups();
     await Promise.all([first, second]);
     assert.equal(startAllCalls, 1);
+    await feature.removePendingQueueItems([{
+      articleRef: { clientId: "client-a", articleId: "article-a" },
+      itemId: "item-a",
+      batchId: "batch-a",
+    }]);
+    assert.deepEqual(removedItems, [{
+      articleRef: { clientId: "client-a", articleId: "article-a" },
+      itemId: "item-a",
+      batchId: "batch-a",
+    }]);
     assert.equal(
       feature.getSnapshot().regularQueueGroupViews[0].pauseIntent,
       "manual",
@@ -346,6 +363,8 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
           itemId: "item-running",
           batchId: "batch-running",
           articleId: "article-running",
+          articleRef: { clientId: "client-a", articleId: "article-running" },
+          articleSummary: { title: "运行中文章", customerName: "客户 A" },
           regularPublicationAttemptId: "attempt-running",
           position: 1,
         },
@@ -413,6 +432,8 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
           itemId: "item-stale-query",
           batchId: "batch-stale-query",
           articleId: "article-stale-query",
+          articleRef: { clientId: "client-a", articleId: "article-stale-query" },
+          articleSummary: { title: "过期查询文章", customerName: "客户 A" },
           regularPublicationAttemptId: "attempt-stale-query",
           position: 1,
         },

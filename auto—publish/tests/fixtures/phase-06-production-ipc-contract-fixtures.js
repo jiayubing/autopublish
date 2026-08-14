@@ -1505,11 +1505,11 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "pausePaidMediaBatch",
   }),
   "content.removePendingQueueItems": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view: "media-workbench/src/components/PlatformWorkbench.tsx",
+    viewSymbol: "usePlatformFeature",
     feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
+    featureSymbol: "usePlatformFeature",
     bridge: "media-workbench/src/bridge/content.ts",
     bridgeSymbol: "removePendingQueueItems",
     preloadMethod: "removePendingQueueItems",
@@ -2394,7 +2394,7 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.removePendingQueueItems": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
     "removePendingQueueItems",
   ],
   "content.cancelSubmissionBatch": [
@@ -2823,7 +2823,6 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.admitRegularQueueItems",
           "content.previewPaidMediaPreflight",
           "content.confirmPaidMediaBatch",
-          "content.removePendingQueueItems",
           "content.cancelSubmissionBatch",
           "publication.prepareRegularUncertainResolution",
           "publication.confirmRegularAccepted",
@@ -2966,6 +2965,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.pauseRegularQueueGroup",
           "content.startAllRegularQueueGroups",
           "content.pauseAllRegularQueueGroups",
+          "content.removePendingQueueItems",
         ],
       ],
       [
@@ -2987,8 +2987,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "media.bindPaidOrderNumber",
           "media.prepareConfirmPaidOrderAbsent",
           "media.confirmPaidOrderAbsent",
-          "content.removePendingQueueItems",
-          "content.cancelSubmissionBatch",
           "content.createQuestion",
           "content.updateQuestion",
           "content.deleteQuestion",

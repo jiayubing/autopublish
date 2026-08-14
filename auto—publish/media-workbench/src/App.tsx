@@ -85,13 +85,6 @@ function AppContent() {
       : `资源库已刷新，共 ${mediaRefreshResult.resourceCount || 0} 项。`
     : null;
 
-  const openArticleAttention = (
-    intent: { attentionId?: string; clientId?: string } = {},
-  ) => {
-    setArticleAttentionIntent(intent);
-    setCurrentView("content");
-  };
-
   return (
     <div className="flex h-full w-full overflow-hidden bg-slate-50">
       {/* 1. Fixed Left Sidebar */}
@@ -238,6 +231,7 @@ function AppContent() {
                       setArticleAttentionIntent(null)
                     }
                     onOpenOrders={() => setCurrentView("orders")}
+                    onOpenSubmissionCenter={() => setCurrentView("platforms")}
                   />
                 </motion.div>
               )}
@@ -251,9 +245,7 @@ function AppContent() {
                   transition={{ duration: 0.15 }}
                   className="h-full"
                 >
-                  <PlatformWorkbench
-                    onOpenArticleManagement={() => openArticleAttention({})}
-                  />
+                  <PlatformWorkbench />
                 </motion.div>
               )}
 

@@ -276,6 +276,11 @@ export interface RegularQueueGroupCurrentItem {
   itemId: string;
   batchId: string;
   articleId: string;
+  articleRef: ArticleSelection;
+  articleSummary: {
+    title: string;
+    customerName: string;
+  };
   regularPublicationAttemptId: string;
   phase: string | null;
   claimUntil: string | null;
@@ -285,6 +290,11 @@ export interface RegularQueueGroupRemainingItem {
   itemId: string;
   batchId: string;
   articleId: string;
+  articleRef: ArticleSelection;
+  articleSummary: {
+    title: string;
+    customerName: string;
+  };
   regularPublicationAttemptId: string;
   position: number;
 }

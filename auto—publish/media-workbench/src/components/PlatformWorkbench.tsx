@@ -1,8 +1,11 @@
 import { RefreshCw } from "lucide-react";
+import { useState } from "react";
 import { usePlatformFeature } from "../features/platform/platform-feature-context";
+import { useConfirmation } from "../confirmation";
 import RegularQueueGroupsPanel from "./RegularQueueGroupsPanel";
 
 export default function PlatformWorkbench() {
+  const { confirm } = useConfirmation();
   const { snapshot, feature } = usePlatformFeature();
   const groups = snapshot.regularQueueGroupViews;
   const groupQuery = snapshot.regularQueueGroups.query;
@@ -10,12 +13,37 @@ export default function PlatformWorkbench() {
   const legacyRunActive = snapshot.run.isPlatformRunning;
   const residue = snapshot.residue;
   const residueBusy = residue.phase === "checking" || residue.phase === "cleaning";
+  const [actionError, setActionError] = useState("");
+
+  async function removePendingItem(item: (typeof groups)[number]["remaining"][number]) {
+    setActionError("");
+    try {
+      const title = item.articleSummary?.title || "标题不可用";
+      const customerName = item.articleSummary?.customerName || "客户信息不可用";
+      if (!(await confirm({
+        title: "确认移除待执行队列项",
+        message: `将移除“${title}”（客户：${customerName}）这一项尚未开始的普通平台投稿；文章随后恢复可编辑。`,
+        confirmLabel: "确认移除",
+        tone: "warning",
+      }))) return;
+      await feature.removePendingQueueItems([{
+        articleRef: item.articleRef,
+        itemId: item.itemId,
+        batchId: item.batchId,
+      }]);
+    } catch (error) {
+      setActionError(
+        commands.removePendingQueueItems.error?.userMessage ||
+          "移除普通平台队列项失败。",
+      );
+    }
+  }
 
   return <div className="h-full overflow-y-auto p-4">
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-lg font-bold text-slate-800">普通平台队列</h2>
-        <p className="mt-1 text-xs text-slate-500">按平台和账号串行执行；文章追加与待执行项移除在文章管理中完成。</p>
+        <p className="mt-1 text-xs text-slate-500">按平台和账号串行执行；文章库负责发起投稿，队列查看与操作集中在此处。</p>
       </div>
       <div className="flex gap-2">
         <button type="button" disabled={groupQuery.loading} onClick={() => void feature.refreshRegularQueueGroups("manual")} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><RefreshCw className={`mr-1 inline h-3.5 w-3.5 ${groupQuery.loading ? "animate-spin" : ""}`} />刷新</button>
@@ -24,12 +52,13 @@ export default function PlatformWorkbench() {
       </div>
     </div>
     {groupQuery.error && <p role="alert" className="mb-3 rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{groupQuery.error.userMessage}</p>}
+    {(actionError || commands.removePendingQueueItems.error?.userMessage) && <p role="alert" className="mb-3 rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{actionError || commands.removePendingQueueItems.error?.userMessage}</p>}
     {legacyRunActive && <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
       <span>检测到升级前已启动的平台任务；只能暂停或停止，不可创建新的旧式任务。</span>
       <button type="button" disabled={commands.pause.busy} onClick={() => void feature.pause(snapshot.run.runId)} className="rounded border border-amber-300 px-2 py-1 disabled:opacity-40">暂停旧任务</button>
       <button type="button" disabled={commands.stop.busy} onClick={() => void feature.stop(snapshot.run.runId)} className="rounded border border-rose-300 px-2 py-1 text-rose-700 disabled:opacity-40">停止旧任务</button>
     </div>}
-    <RegularQueueGroupsPanel groups={groups} loading={groupQuery.loading} startBusy={commands.startGroup.busy} pauseBusy={commands.pauseGroup.busy} onStart={(id) => void feature.startGroup(id)} onPause={(id) => void feature.pauseGroup(id)} />
+    <RegularQueueGroupsPanel groups={groups} loading={groupQuery.loading} startBusy={commands.startGroup.busy} pauseBusy={commands.pauseGroup.busy} removeBusy={commands.removePendingQueueItems.busy} onStart={(id) => void feature.startGroup(id)} onPause={(id) => void feature.pauseGroup(id)} onRemove={(item) => void removePendingItem(item)} />
     <section aria-labelledby="queue-residue-heading" className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

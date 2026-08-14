@@ -56,7 +56,7 @@ function createSubmissionInterface(service, regularQueueService, regularQueueGro
       removePending: bind(regular, "removePendingQueueItems"),
     },
     regularQueueGroups: {
-      list: bind(regularQueueGroups, "snapshot"),
+      list: bind(regular, "listRegularQueueGroups"),
       start: bind(regularQueueGroups, "startGroup"),
       pause: bind(regularQueueGroups, "pauseGroup"),
       startAll: bind(regularQueueGroups, "startAll"),

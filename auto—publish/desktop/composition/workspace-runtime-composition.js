@@ -222,6 +222,8 @@ async function createWorkspaceRuntimeComposition(deps) {
           articleMutationCoordinator,
           regularQueueTransitions:
             operationalStoreTransitionPorts.regularQueueTransitions,
+          regularQueueGroupTransitions:
+            operationalStoreTransitionPorts.regularQueueGroupTransitions,
           onDataInvalidated: invalidation.invalidate,
           accountProfileResolver:
             operationalStore.assertExecutableAccountProfile,

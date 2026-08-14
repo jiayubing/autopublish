@@ -93,6 +93,7 @@ function renderArticleManagement() {
                 removal: { transactionId: null, transaction: null, query: { loading: false } },
                 watchRemovalTransaction: noop,
                 onArticleSelect() {},
+                onOpenSubmissionCenter() {},
               }),
             ),
           );
@@ -113,4 +114,5 @@ test("article management presents the current customer's Lieju profile", () => {
   assert.match(rendered, /value="张三"/);
   assert.match(rendered, /value="13800138000"/);
   assert.match(rendered, /保存到客户档案，不会修改任何文章标题或正文/);
+  assert.match(rendered, /查看投稿中心/);
 });

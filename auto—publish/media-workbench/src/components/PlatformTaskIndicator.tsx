@@ -24,7 +24,7 @@ export default function PlatformTaskIndicator({ snapshot, compact = false, onCli
 
   if (compact) {
     return (
-      <button type="button" onClick={onClick} className="mt-3 w-full rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-left text-xs text-blue-200" title="点击左侧其他平台投稿查看详情">
+      <button type="button" onClick={onClick} className="mt-3 w-full rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-left text-xs text-blue-200" title="点击左侧投稿中心查看详情">
         <span className="font-semibold">{active ? "投稿中" : phaseLabel(snapshot.phase)}</span>
         <span className="ml-2 text-blue-300">{snapshot.processed}/{snapshot.total}</span>
         <span className="ml-2 text-blue-400">{percent}%</span>

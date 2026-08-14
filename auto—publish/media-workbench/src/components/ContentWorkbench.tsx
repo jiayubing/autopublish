@@ -20,6 +20,7 @@ interface ContentWorkbenchProps {
   attentionIntent?: { attentionId?: string; clientId?: string } | null;
   onAttentionIntentConsumed?: () => void;
   onOpenOrders?: () => void;
+  onOpenSubmissionCenter?: () => void;
 }
 
 export default function ContentWorkbench({
@@ -27,6 +28,7 @@ export default function ContentWorkbench({
   attentionIntent,
   onAttentionIntentConsumed,
   onOpenOrders,
+  onOpenSubmissionCenter,
 }: ContentWorkbenchProps) {
   const { confirm } = useConfirmation();
   const {
@@ -370,6 +372,7 @@ export default function ContentWorkbench({
                   onArticleSelect={openHistoryEditor}
                   onStageFilterChange={setArticleStageFilter}
                   onOpenOrders={onOpenOrders}
+                  onOpenSubmissionCenter={onOpenSubmissionCenter}
                 />
               </div>
               {historyEditingArticle && (

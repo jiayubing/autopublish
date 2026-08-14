@@ -18,14 +18,12 @@ import {
   previewRegularQueueAdmission,
   resumeDoubaoBatch,
   stopDoubaoBatch,
-  cancelContentSubmissionBatch,
   admitRegularQueueItems,
   previewPaidMediaPreflight,
   confirmPaidMediaBatch,
   listPaidMediaBatches,
   startPaidMediaBatch,
   pausePaidMediaBatch,
-  removePendingQueueItems,
   getCachedDoubaoLoginState,
   getDoubaoLoginStatus,
   getDoubaoQueueState,
@@ -110,11 +108,6 @@ export function useContentWorkbenchFeature() {
       bindPaidOrderNumber,
       prepareConfirmPaidOrderAbsent,
       confirmPaidOrderAbsent,
-      removePendingQueueItems,
-      cancelContentSubmissionBatch: (input: {
-        batchId: string;
-        planId: string;
-      }) => cancelContentSubmissionBatch(input.batchId, input.planId),
       previewContentArticleRemoval: (input: {
         selections: Array<{ clientId: string; articleId: string }>;
       }) => previewContentArticleRemoval(input.selections),

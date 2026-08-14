@@ -11,6 +11,7 @@ const COMMAND_NAMES = Object.freeze([
   'pauseGroup',
   'startAllGroups',
   'pauseAllGroups',
+  'removePendingQueueItems',
 ]);
 
 const IDLE_RUN = Object.freeze({
@@ -515,6 +516,27 @@ export function createPlatformFeature(bridge = {}) {
           });
         },
       );
+    },
+    removePendingQueueItems(items) {
+      regularGroupQuery.invalidate();
+      const pending = ownedCommand(
+        owners.removePendingQueueItems,
+        requireScope(),
+        () => bridge.removePendingQueueItems({ items }),
+        '移除普通平台队列项失败',
+      );
+      void pending
+        .then(
+          (result) => {
+            if (result?.ignored) return undefined;
+            return feature.refreshRegularQueueGroups('queue-item-removed');
+          },
+          () => undefined,
+        )
+        .catch(() => {
+          reportRefreshFailure(bridge, 'PLATFORM_REGULAR_GROUP_REFRESH_FAILED');
+        });
+      return pending;
     },
     pause(runId) {
       return ownedCommand(owners.pause, requireScope(), () => bridge.pause(runId), 'Unable to pause submission');

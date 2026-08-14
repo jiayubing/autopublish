@@ -93,6 +93,11 @@ const regularQueueCurrentItem = exactObject({
   itemId: id,
   batchId: id,
   articleId: id,
+  articleRef,
+  articleSummary: exactObject({
+    title: safeText(512, 1),
+    customerName: safeText(256, 1),
+  }),
   regularPublicationAttemptId: id,
   phase: nullableField(safeText(64, 1)),
   claimUntil: nullableField(safeText(64, 1)),
@@ -101,6 +106,11 @@ const regularQueueRemainingItem = exactObject({
   itemId: id,
   batchId: id,
   articleId: id,
+  articleRef,
+  articleSummary: exactObject({
+    title: safeText(512, 1),
+    customerName: safeText(256, 1),
+  }),
   regularPublicationAttemptId: id,
   position: integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }),
 });

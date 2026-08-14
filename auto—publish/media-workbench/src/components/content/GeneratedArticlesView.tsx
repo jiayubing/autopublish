@@ -88,13 +88,12 @@ export default function GeneratedArticlesView({
   onArticleSelect,
   onStageFilterChange,
   onOpenOrders,
+  onOpenSubmissionCenter,
 }: GeneratedArticlesViewProps) {
   const { confirm } = useConfirmation();
   const {
     articles,
     trash,
-    submissionBatches,
-    cancellationPlans,
     publicationRecords,
     publishedArchives = [],
     workflowByArticle: snapshotWorkflowByArticle,
@@ -112,7 +111,6 @@ export default function GeneratedArticlesView({
   );
   const [platformId, setPlatformId] = useState("");
   const [accountProfileId, setAccountProfileId] = useState("");
-  const cancellationRequestIdRef = useRef(0);
   const [drawerArticle, setDrawerArticle] =
     useState<GeneratedContentArticle | null>(null);
   const [attentionDetail, setAttentionDetail] =
@@ -131,10 +129,6 @@ export default function GeneratedArticlesView({
   // Attention is an independent read model. It is no longer an article-library
   // category; the submission-center work package owns its dedicated surface.
   const isAttentionStage = selectedStage === "attention";
-  const [cancellationPending, setCancellationPending] = useState<{
-    clientId: string;
-    count: number;
-  } | null>(null);
   const [batchFeedback, setBatchFeedback] = useState<{
     kind: "status" | "error";
     text: string;
@@ -184,8 +178,6 @@ export default function GeneratedArticlesView({
     setTrashPreview(null);
     setDrawerArticle(null);
     setAttentionDetail(null);
-    cancellationRequestIdRef.current += 1;
-    setCancellationPending(null);
   }, []);
 
   const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
@@ -267,30 +259,6 @@ export default function GeneratedArticlesView({
     );
   }
 
-  function pendingRegularQueueItemsForArticle(
-    article: GeneratedContentArticle,
-  ) {
-    return submissionBatches.flatMap((batch) =>
-      batch.items
-        .filter(
-          (item) =>
-            item.articleId === article.id &&
-            item.status === "queued" &&
-            Boolean(item.itemId && item.queueGroupId),
-        )
-        .map((item) => ({
-          articleRef: { clientId, articleId: article.id },
-          itemId: item.itemId as string,
-          batchId: batch.id,
-          ...(item.targetKey ? { targetKey: item.targetKey } : {}),
-        })),
-    );
-  }
-
-  function canRemovePendingArticle(article: GeneratedContentArticle): boolean {
-    return pendingRegularQueueItemsForArticle(article).length > 0;
-  }
-
   function canTrashArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
     const allowed =
@@ -334,9 +302,7 @@ export default function GeneratedArticlesView({
   function isArticleSelectable(article: GeneratedContentArticle): boolean {
     return (
       selectableArticles([article], clientId).length > 0 &&
-      (canQueueArticle(article) ||
-        canTrashArticle(article) ||
-        canRemovePendingArticle(article))
+      (canQueueArticle(article) || canTrashArticle(article))
     );
   }
 
@@ -376,29 +342,7 @@ export default function GeneratedArticlesView({
   const selectedQueueableArticles = selectedDirtyArticle
     ? []
     : selectedArticles.filter(canQueueArticle);
-  const selectedPendingQueueItems = selectedArticles.flatMap(
-    pendingRegularQueueItemsForArticle,
-  );
   const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
-  // Batch order is an implementation detail.  Actions must cover every safe
-  // item for this client so a newer completed batch cannot hide an older media
-  // batch that is still staged locally.
-  const cancelableBatches = useMemo(
-    () =>
-      cancellationPlans
-        .map((plan) => ({
-          plan,
-          batch: submissionBatches.find((batch) => batch.id === plan.batchId),
-          count: plan.allowedCount,
-        }))
-        .filter((entry) => entry.batch && entry.count > 0),
-    [cancellationPlans, submissionBatches],
-  );
-  const cancelableCount = cancelableBatches.reduce(
-    (total, entry) => total + entry.count,
-    0,
-  );
-  const cancellationIsPending = cancellationPending?.clientId === clientId;
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen =
     removalStatus === "pending_auto_recovery" ||
@@ -495,46 +439,6 @@ export default function GeneratedArticlesView({
     }
   }
 
-  async function removePendingSelected() {
-    const requestedClientId = clientId;
-    if (
-      !selectedPendingQueueItems.length ||
-      typeof commands.removePendingQueueItems !== "function" ||
-      commandBusy("removePendingQueueItems")
-    )
-      return;
-    if (
-      !(await confirm({
-        title: "确认移除待执行队列项",
-        message: `将从普通平台队列移除 ${selectedPendingQueueItems.length} 项尚未开始的投稿；文章随后恢复可编辑。`,
-        confirmLabel: "确认移除",
-        tone: "warning",
-      }))
-    )
-      return;
-    setError("");
-    try {
-      const result = await commands.removePendingQueueItems({
-        items: selectedPendingQueueItems,
-      });
-      if (
-        isContentCommandStaleResult(result) ||
-        !isCurrentClient(requestedClientId)
-      )
-        return;
-      updateSelected([]);
-      setBatchFeedback({
-        kind: result.conflictCount ? "error" : "status",
-        text: `已移除 ${result.removedCount || 0} 项普通平台队列；${result.conflictCount || 0} 项需要刷新核对。`,
-      });
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setError(
-          value instanceof Error ? value.message : "移除待执行队列项失败",
-        );
-    }
-  }
-
   function openArticle(
     article: GeneratedContentArticle,
     source?: HTMLElement | null,
@@ -604,127 +508,6 @@ export default function GeneratedArticlesView({
       if (isCurrentClient(requestedClientId))
         setError(value instanceof Error ? value.message : "核对发布结果失败");
     } finally {
-    }
-  }
-
-  async function cancelCancelableBatches() {
-    const requestedClientId = clientId;
-    if (commandBusy("cancelContentSubmissionBatch")) return;
-    let requestId = 0;
-    const isCurrentCancellationRequest = () =>
-      requestId !== 0 &&
-      isCurrentClient(requestedClientId) &&
-      cancellationRequestIdRef.current === requestId;
-    if (!cancelableBatches.length) return;
-    setError("");
-    try {
-      const previews = cancellationPlans.filter(
-        (preview) => preview.allowedCount > 0,
-      );
-      const total = previews.reduce(
-        (count, preview) => count + preview.allowedCount,
-        0,
-      );
-      if (!total) {
-        if (isCurrentClient(requestedClientId))
-          setBatchFeedback({
-            kind: "status",
-            text: "当前客户全部批次均无可撤销项；已发布文章和发布证据不提供清理动作。",
-          });
-        return;
-      }
-      if (!isCurrentClient(requestedClientId)) return;
-      if (
-        !(await confirm({
-          title: "确认撤销未开始投稿",
-          message: `将撤销当前客户 ${previews.length} 个批次中的 ${total} 项未开始投稿内容。`,
-          confirmLabel: "确认撤销",
-          tone: "warning",
-        }))
-      )
-        return;
-      requestId = ++cancellationRequestIdRef.current;
-      setCancellationPending({ clientId: requestedClientId, count: total });
-      setBatchFeedback(null);
-      try {
-        const results = [];
-        for (const preview of previews)
-          if (preview.allowedCount) {
-            const result = await commands.cancelContentSubmissionBatch({
-              batchId: preview.batchId,
-              planId: preview.planId,
-            });
-            if (isContentCommandStaleResult(result)) return;
-            results.push(result);
-          }
-        if (!isCurrentCancellationRequest()) return;
-        const cancelledCount = results.reduce(
-          (count, result) => count + (result.cancelledCount || 0),
-          0,
-        );
-        const idempotentCount = results.reduce(
-          (count, result) => count + (result.idempotentCount || 0),
-          0,
-        );
-        const blockedCount = results.reduce(
-          (count, result) => count + (result.blockedItems?.length || 0),
-          0,
-        );
-        const details = [
-          `已撤销 ${cancelledCount} 项未开始投稿内容`,
-          idempotentCount ? `已确认 ${idempotentCount} 项此前撤销结果` : "",
-          blockedCount ? `阻断 ${blockedCount} 项` : "",
-        ]
-          .filter(Boolean)
-          .join("；");
-        setBatchFeedback({
-          kind:
-            blockedCount || (!cancelledCount && blockedCount)
-              ? "error"
-              : "status",
-          text: `${details || "队列已刷新"}。`,
-        });
-      } catch (value) {
-        const code =
-          value && typeof value === "object" && "code" in value
-            ? String(value.code)
-            : "";
-        if (code === "SUBMISSION_ACTION_STALE") {
-          try {
-            if (isCurrentCancellationRequest())
-              setBatchFeedback({
-                kind: "error",
-                text: "队列已变化，请重新检查。",
-              });
-          } catch (refreshError) {
-            if (isCurrentCancellationRequest())
-              setBatchFeedback({
-                kind: "error",
-                text:
-                  refreshError instanceof Error
-                    ? refreshError.message
-                    : "队列已变化，请重新检查。",
-              });
-          }
-        } else if (isCurrentCancellationRequest()) {
-          setBatchFeedback({
-            kind: "error",
-            text: value instanceof Error ? value.message : "撤销投稿批次失败",
-          });
-        }
-      } finally {
-        // A late completion from client A must not clear the busy state of a
-        // newer request (including one started after switching back to A).
-        if (isCurrentCancellationRequest()) {
-          setCancellationPending(null);
-        }
-      }
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setBatchFeedback({
-          kind: "error",
-          text: value instanceof Error ? value.message : "读取撤销计划失败",
-        });
     }
   }
 
@@ -1065,7 +848,8 @@ export default function GeneratedArticlesView({
   return (
     <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">
       <div className="mb-4 grid min-w-0 gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <h2
             aria-label="历史文章"
             className="text-base font-semibold text-slate-800"
@@ -1075,6 +859,16 @@ export default function GeneratedArticlesView({
           <p className="mt-1 max-w-prose text-xs leading-5 text-slate-500">
             按文章当前阶段组织下一步操作；发布记录和队列状态仍分别保留。
           </p>
+          </div>
+          {onOpenSubmissionCenter && (
+            <button
+              type="button"
+              onClick={onOpenSubmissionCenter}
+              className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+            >
+              查看投稿中心
+            </button>
+          )}
         </div>
 
         <ClientLiejuPublicationProfileEditor
@@ -1135,42 +929,6 @@ export default function GeneratedArticlesView({
           >
             移入回收站 ({selectedTrashableArticles.length})
           </button>
-          {selectedPendingQueueItems.length > 0 && (
-            <button
-              type="button"
-              onClick={() => void removePendingSelected()}
-              disabled={commandBusy("removePendingQueueItems")}
-              className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40"
-            >
-              移除待执行队列 ({selectedPendingQueueItems.length})
-            </button>
-          )}
-          {(cancelableCount > 0 || cancellationIsPending) && (
-            <button
-              type="button"
-              title={
-                cancellationIsPending
-                  ? "正在撤销当前客户的未开始投稿内容"
-                  : `覆盖当前客户全部可撤销批次：${cancelableBatches.map(({ plan, batch, count }) => `${plan.items.find((item) => item.allowed)?.targetPlatformId || "未知目标"} ${formatBeijingTime(batch.createdAt)} (${count})`).join("；")}`
-              }
-              onClick={() => void cancelCancelableBatches()}
-              disabled={
-                cancellationIsPending ||
-                commandBusy("cancelContentSubmissionBatch")
-              }
-              className="rounded border border-amber-300 px-3 py-2 text-xs text-amber-700 disabled:opacity-40"
-            >
-              {cancellationIsPending
-                ? `正在撤销… (${cancellationPending.count})`
-                : `撤销未开始投稿 (${cancelableCount})`}
-            </button>
-          )}
-          {submissionBatches.length > 0 &&
-            !cancelableCount && (
-              <span role="status" className="text-xs text-slate-500">
-                当前客户全部批次均无可撤销的未开始项。
-              </span>
-            )}
           </div>
         )}
         {batchFeedback && (

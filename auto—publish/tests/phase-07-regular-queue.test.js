@@ -72,7 +72,13 @@ function makeFixture(options) {
       contentStore,
       articleMutationCoordinator: coordinator,
       regularQueueTransitions: transitionPorts.regularQueueTransitions,
+      regularQueueGroupTransitions: transitionPorts.regularQueueGroupTransitions,
       accountProfileResolver: store.assertExecutableAccountProfile,
+      clientSnapshotResolver: (clientId) => ({
+        version: 1,
+        clientId,
+        displayName: `客户 ${clientId}`,
+      }),
       onDataInvalidated: (reasonCode) => {
         invalidationReasons.push(reasonCode);
         if (typeof value.onDataInvalidated === "function")
@@ -365,8 +371,7 @@ test("regular admission invalidation refreshes the platform queue view with the 
     platformFeature = platformModule.createPlatformFeature({
       platformDisplayName: (platformId) => platformId,
       listAccountProfiles: async () => fixture.store.listAccountProfiles(),
-      listRegularQueueGroups: async () =>
-        fixture.transitionPorts.regularQueueGroupTransitions.listRegularQueueGroupSnapshots({}),
+      listRegularQueueGroups: async () => fixture.application.listRegularQueueGroups(),
     });
     platformFeature.setScope({ workspaceRuntimeId: "r2-platform-queue" });
     await platformFeature.refreshAccountProfiles("initial");
@@ -392,6 +397,73 @@ test("regular admission invalidation refreshes the platform queue view with the 
     assert.equal(view.accountProfileId, fixture.profiles.toutiao.accountProfileId);
   } finally {
     if (platformFeature) platformFeature.dispose();
+    fixture.close();
+  }
+});
+
+test("posting-center read model exposes safe article summaries and queue actions", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a"));
+    fixture.add(article("article-b"));
+    const admitted = fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-a"), ref("article-b")]),
+    );
+
+    const paused = fixture.application.listRegularQueueGroups();
+    assert.equal(paused.length, 1);
+    assert.equal(paused[0].runState, "paused");
+    assert.equal(paused[0].pauseIntent, "system");
+    assert.equal(paused[0].actions.canStart, true);
+    assert.equal(paused[0].actions.canPause, false);
+    assert.deepEqual(
+      paused[0].remaining.map((item) => [item.position, item.articleRef]),
+      [
+        [1, ref("article-a")],
+        [2, ref("article-b")],
+      ],
+    );
+    assert.deepEqual(paused[0].remaining[0].articleSummary, {
+      title: "Title article-a",
+      customerName: "客户 client-a",
+    });
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        paused[0].remaining[0],
+        "claimToken",
+      ),
+      false,
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        paused[0].remaining[0],
+        "publicationSnapshot",
+      ),
+      false,
+    );
+
+    fixture.transitionPorts.regularQueueGroupTransitions.setRegularQueueGroupRunIntent({
+      queueGroupId: admitted.items[0].queueGroupId,
+      running: true,
+    });
+    const running = fixture.application.listRegularQueueGroups()[0];
+    assert.equal(running.runState, "running");
+    assert.equal(running.actions.canStart, false);
+    assert.equal(running.actions.canPause, true);
+
+    fixture.transitionPorts.regularQueueGroupTransitions.setRegularQueueGroupRunIntent({
+      queueGroupId: admitted.items[0].queueGroupId,
+      running: false,
+    });
+    const pausedAgain = fixture.application.listRegularQueueGroups()[0];
+    assert.equal(pausedAgain.runState, "paused");
+    const removed = fixture.application.removePendingQueueItems(
+      removalInput(admitted, ref("article-a")),
+    );
+    assert.equal(removed.removedCount, 1);
+    const afterRemoval = fixture.application.listRegularQueueGroups()[0];
+    assert.deepEqual(afterRemoval.remaining.map((item) => item.articleId), ["article-b"]);
+  } finally {
     fixture.close();
   }
 });
@@ -662,6 +734,7 @@ test("regular queue capabilities stay isolated from the full operational store a
     ]);
     assert.deepEqual(Object.keys(fixture.application).sort(), [
       "admitRegularQueueItems",
+      "listRegularQueueGroups",
       "previewRegularQueueAdmission",
       "removePendingQueueItems",
     ]);

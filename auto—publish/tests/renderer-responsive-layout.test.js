@@ -672,7 +672,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       assert.match(measured.text, /工作区/);
       assert.match(measured.text, /运行环境/);
       assert.match(measured.text, /存储与清理/);
-      for (const label of ["付费媒体投稿", "其他平台投稿", "投稿订单记录"])
+      for (const label of ["付费媒体投稿", "投稿中心", "投稿订单记录"])
         assert.match(measured.text, new RegExp(label));
 
       await page.getByRole("button", { name: "工作区", exact: true }).click();

@@ -62,7 +62,6 @@ export type ArticleManagementReadModel = {
 };
 
 export type GeneratedArticlesCommandName =
-  | "cancelContentSubmissionBatch"
   | "admitRegularQueueItems"
   | "prepareBindPaidOrderNumber"
   | "bindPaidOrderNumber"
@@ -77,7 +76,6 @@ export type GeneratedArticlesCommandName =
   | "confirmRegularAccepted"
   | "confirmRegularNotAccepted"
   | "restoreContentArticle"
-  | "removePendingQueueItems"
   | "retryContentArticleRemovalTransaction"
   | "trashContentArticles";
 
@@ -118,4 +116,5 @@ export interface GeneratedArticlesViewProps {
   ) => void;
   onStageFilterChange?: (stage: ArticleWorkflowFilter) => void;
   onOpenOrders?: () => void;
+  onOpenSubmissionCenter?: () => void;
 }

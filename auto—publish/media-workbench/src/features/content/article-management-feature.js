@@ -33,8 +33,6 @@ const COMMAND_SCOPES = Object.freeze({
   admitRegularQueueItems: "management",
   previewPaidMediaPreflight: null,
   confirmPaidMediaBatch: "management",
-  removePendingQueueItems: "management",
-  cancelContentSubmissionBatch: "management",
   previewContentArticleRemoval: null,
   trashContentArticles: "management",
   getContentArticleRemovalTransaction: null,
@@ -65,10 +63,6 @@ const CLIENT_IDENTITY = Object.freeze({
     ),
   previewPaidMediaPreflight: (input) =>
     (input?.articleRefs || []).map((item) => item?.clientId),
-  removePendingQueueItems: (input) =>
-    (input?.items || input?.selections || []).map(
-      (item) => item?.articleRef?.clientId || item?.clientId,
-    ),
   previewContentArticleRemoval: (input) =>
     (input?.selections || []).map((item) => item?.clientId),
   trashContentArticles: (input) =>
@@ -506,10 +500,6 @@ export function createArticleManagementFeature(adapters = {}) {
       runCommand("previewPaidMediaPreflight", input),
     confirmPaidMediaBatch: (input) =>
       runCommand("confirmPaidMediaBatch", input),
-    removePendingQueueItems: (input) =>
-      runCommand("removePendingQueueItems", input),
-    cancelContentSubmissionBatch: (input) =>
-      runCommand("cancelContentSubmissionBatch", input),
     previewContentArticleRemoval: (input) =>
       runCommand("previewContentArticleRemoval", input),
     trashContentArticles: (input) => runCommand("trashContentArticles", input),
