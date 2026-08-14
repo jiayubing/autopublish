@@ -408,10 +408,13 @@ function buildPostSubmitEvidenceScript() {
     "  var bodyText = '';",
     "  try { bodyText = await page.locator('body').innerText(); } catch (_) {}",
     "  bodyText = String(bodyText || '').replace(/\\s+/g, ' ').slice(0, 20000);",
+    "  var observedResponseUrls = typeof responseUrls !== 'undefined' && Array.isArray(responseUrls) ? responseUrls : [];",
+    "  var observedDialogMessages = typeof dialogMessages !== 'undefined' && Array.isArray(dialogMessages) ? dialogMessages : [];",
     "  var rejectionPattern = " +
       JSON.stringify(POST_SUBMIT_REJECTION_PATTERN) +
       ";",
-    "  var hasExplicitRejection = new RegExp(rejectionPattern, 'i').test(bodyText);",
+    "  var rejectionMatcher = new RegExp(rejectionPattern, 'i');",
+    "  var hasExplicitRejection = rejectionMatcher.test(bodyText) || rejectionMatcher.test(observedDialogMessages.join(' '));",
     "  var hasDetailPageSignals = ['修改', '删除', '更新时间'].every(function(marker) { return bodyText.indexOf(marker) !== -1; });",
     "  var hasSubmissionForm = false;",
     "  try {",
@@ -428,7 +431,40 @@ function buildPostSubmitEvidenceScript() {
     "    });",
     "    detailUrls = detailUrls.concat(hrefs);",
     "  } catch (_) {}",
-    "  return { url: currentUrl, detailUrls: detailUrls, hasExplicitRejection: hasExplicitRejection, hasDetailPageSignals: hasDetailPageSignals, hasSubmissionForm: hasSubmissionForm };",
+    "  return { url: currentUrl, detailUrls: detailUrls, responseUrls: observedResponseUrls.slice(0, 64), dialogMessages: observedDialogMessages.slice(0, 8), hasExplicitRejection: hasExplicitRejection, hasDetailPageSignals: hasDetailPageSignals, hasSubmissionForm: hasSubmissionForm };",
+  ].join("\n");
+}
+
+function buildSubmitAndObserveScript() {
+  return [
+    "  var responseUrls = [];",
+    "  var dialogMessages = [];",
+    "  var responseHandler = function(response) {",
+    "    try {",
+    "      var responseUrl = String(response.url() || '');",
+    "      if (responseUrl) responseUrls.push(responseUrl);",
+    "      var headers = response.headers();",
+    "      var location = headers && (headers.location || headers.Location);",
+    "      if (location) responseUrls.push(new URL(String(location), page.url()).href);",
+    "    } catch (_) {}",
+    "  };",
+    "  var dialogHandler = function(dialog) {",
+    "    try { dialogMessages.push(String(dialog.message() || '')); } catch (_) {}",
+    "    try { dialog.dismiss(); } catch (_) {}",
+    "  };",
+    "  page.on('response', responseHandler);",
+    "  page.on('dialog', dialogHandler);",
+    "  try {",
+    "    await page.locator(" +
+      JSON.stringify(LIEJU.selectors.submitBtn) +
+      ").click({ noWaitAfter: true });",
+    "    try { await page.waitForLoadState('domcontentloaded', { timeout: 5000 }); } catch (_) {}",
+    "    try { await page.waitForTimeout(250); } catch (_) {}",
+    buildPostSubmitEvidenceScript(),
+    "  } finally {",
+    "    try { page.off('response', responseHandler); } catch (_) {}",
+    "    try { page.off('dialog', dialogHandler); } catch (_) {}",
+    "  }",
   ].join("\n");
 }
 
@@ -438,6 +474,13 @@ function evidenceCandidates(evidence) {
   var candidates = [];
   for (var key of ["url", "remoteUrl", "detailUrl"]) {
     if (typeof evidence[key] === "string") candidates.push(evidence[key]);
+  }
+  if (Array.isArray(evidence.responseUrls)) {
+    candidates = candidates.concat(
+      evidence.responseUrls.filter(function (value) {
+        return typeof value === "string";
+      }),
+    );
   }
   if (evidence.hasDetailPageSignals === true && Array.isArray(evidence.detailUrls)) {
     candidates = candidates.concat(
@@ -488,27 +531,32 @@ function postSubmitVerificationPoll(runtime) {
     : POST_SUBMIT_VERIFY_POLL_MS;
 }
 
-function verifyPostSubmit(runtime) {
+function verifyPostSubmit(runtime, initialEvidence) {
   var lastOutcome = null;
-  function check() {
-    var evidence = null;
-    try {
-      evidence = runtime.evaluate(buildPostSubmitEvidenceScript());
-    } catch (_) {
-      return false;
+  function check(evidence) {
+    var value = evidence;
+    if (value === undefined) {
+      value = null;
+      try {
+        value = runtime.evaluate(buildPostSubmitEvidenceScript());
+      } catch (_) {
+        return false;
+      }
     }
-    var outcome = normalizePostSubmitEvidence(evidence);
+    var outcome = normalizePostSubmitEvidence(value);
     if (!outcome) return false;
     lastOutcome = outcome;
     return true;
   }
 
-  if (check()) return lastOutcome;
+  if (check(initialEvidence)) return lastOutcome;
   var timeoutMs = postSubmitVerificationTimeout(runtime);
   if (timeoutMs === 0)
     return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
   if (
-    waitForCondition(check, {
+    waitForCondition(function () {
+      return check();
+    }, {
       timeoutMs: timeoutMs,
       intervalMs: postSubmitVerificationPoll(runtime),
     }) &&
@@ -614,17 +662,19 @@ async function prepareArticleSubmission(runtime, article, options) {
   runtime.evaluate(buildFillScript(article));
   diagnose("PLATFORM_FORM_FILLED", "remote", "form-fill");
 
+  var submitStarted = false;
   return Object.freeze({
     submitPreparedPublication: async function () {
       diagnose("PLATFORM_SUBMIT_STARTED", "remote", "submit");
       try {
         throwIfStopped();
+        if (submitStarted)
+          return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+        submitStarted = true;
         if (!preparedContentMatches(runtime, article))
           return { status: "uncertain", errorCode: "PREPARED_CONTENT_DRIFT" };
-        runtime.invoke(["click", LIEJU.selectors.submitBtn], {
-          timeout: 20000,
-        });
-        var outcome = verifyPostSubmit(runtime);
+        var initialEvidence = runtime.evaluate(buildSubmitAndObserveScript());
+        var outcome = verifyPostSubmit(runtime, initialEvidence);
         if (outcome.status === "uncertain")
           diagnose("PLATFORM_SUBMIT_UNCERTAIN", "remote", "submit");
         else if (outcome.status === "article_rejected")

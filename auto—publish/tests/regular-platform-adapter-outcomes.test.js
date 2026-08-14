@@ -37,9 +37,35 @@ function claim(platformId) {
   return value;
 }
 
-function createLiejuPageFixture() {
+function createLiejuPageFixture(options) {
+  const value = options || {};
   const fields = {};
   const events = [];
+  const state = {
+    currentUrl: value.url || "https://post.lieju.com/117/239",
+    bodyText: value.bodyText || "",
+    links: Array.isArray(value.links) ? value.links : [],
+    formVisible: value.formVisible !== false,
+  };
+  const listeners = { response: [], dialog: [] };
+
+  function emit(type, payload) {
+    for (const listener of listeners[type].slice()) listener(payload);
+  }
+
+  function emitResponse(url, headers) {
+    emit("response", {
+      url: () => url,
+      headers: () => headers || {},
+    });
+  }
+
+  function emitDialog(message) {
+    emit("dialog", {
+      message: () => message,
+      dismiss: () => events.push({ type: "dialog-dismissed" }),
+    });
+  }
 
   function fieldName(selector) {
     return {
@@ -60,6 +86,11 @@ function createLiejuPageFixture() {
         if (selector.includes("city.php?post=239")) return 1;
         if (selector === "a" && textFilter) return 1;
         if (selector === "#atc_zone_id option") return 1;
+        if (selector === "body") return 1;
+        if (selector === "a[href]") return state.links.length;
+        if (selector.includes("id=sub")) return 1;
+        if (selector.includes("#atc_title, #atc_content"))
+          return state.formVisible ? 4 : 0;
         if (fieldName(selector)) return 1;
         return 0;
       },
@@ -68,6 +99,10 @@ function createLiejuPageFixture() {
           events.push({ type: "city", value: textFilter });
         } else if (selector.includes("city.php?post=239")) {
           events.push({ type: "city-switch" });
+        } else if (selector.includes("id=sub")) {
+          events.push({ type: "submit" });
+          if (typeof value.onSubmit === "function")
+            value.onSubmit({ state, emitDialog, emitResponse });
         }
       },
       fill: (value) => {
@@ -75,8 +110,17 @@ function createLiejuPageFixture() {
         events.push({ type: "fill", field: fieldName(selector), value });
       },
       inputValue: () => fields[fieldName(selector)] || "",
-      evaluateAll: (callback) =>
-        callback([{ value: "zone-shanghai", textContent: "上海" }]),
+      innerText: () => state.bodyText,
+      evaluateAll: (callback) => {
+        if (selector === "a[href]") {
+          return callback(
+            state.links.map((href) => ({
+              getAttribute: () => href,
+            })),
+          );
+        }
+        return callback([{ value: "zone-shanghai", textContent: "上海" }]);
+      },
       selectOption: (value) => {
         fields.cityZone = value;
         events.push({ type: "zone", value });
@@ -90,18 +134,26 @@ function createLiejuPageFixture() {
     waitForLoadState: () => undefined,
     waitForSelector: () => undefined,
     waitForTimeout: () => undefined,
+    url: () => state.currentUrl,
+    on: (type, listener) => listeners[type].push(listener),
+    off: (type, listener) => {
+      listeners[type] = listeners[type].filter((candidate) => candidate !== listener);
+    },
     evaluate: (callback, selectors) => callback(selectors),
   };
 
   return {
     fields,
     events,
+    state,
+    emitDialog,
+    emitResponse,
     execute(source) {
       return new Function(
         "page",
         "document",
         source.replace(/\bawait\s+/g, ""),
-      )(page, {});
+      )(page, { baseURI: state.currentUrl });
     },
   };
 }
@@ -151,12 +203,12 @@ function loadBrowserAdapter(platformId, options) {
       },
       runCode(source) {
         codeSources.push(source);
+        if (value.pageFixture && typeof value.pageFixture.execute === "function")
+          return value.pageFixture.execute(source);
         if (source.includes("page.url()"))
           return value.postSubmitEvidence ||
             "https://mp.toutiao.com/profile_v4/graphic/publish";
         if (source.includes("targetCity") && !value.pageFixture) return "北京";
-        if (value.pageFixture && typeof value.pageFixture.execute === "function")
-          return value.pageFixture.execute(source);
         if (platformId === "lieju" && source.includes("page.evaluate")) {
           const node = identityReady
             ? {
@@ -446,6 +498,31 @@ test("Lieju accepts only a verified article detail URL and records its remote ID
   }
 });
 
+test("Lieju accepts a remote detail URL observed from the post-submit response", async () => {
+  const detailUrl = "https://ly.lieju.com/shanghai/654321.html";
+  const pageFixture = createLiejuPageFixture({
+    onSubmit: ({ emitResponse }) => emitResponse(detailUrl),
+  });
+  const loaded = loadBrowserAdapter("lieju", { pageFixture });
+  try {
+    const adapter = loaded.adapter.createPlatformAdapter({
+      postSubmitVerificationTimeoutMs: 0,
+    });
+    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
+    assert.deepEqual(await prepared.submitPreparedPublication(), {
+      status: "accepted",
+      remoteId: "654321",
+      remoteUrl: detailUrl,
+    });
+    assert.equal(
+      pageFixture.events.filter((event) => event.type === "submit").length,
+      1,
+    );
+  } finally {
+    loaded.restore();
+  }
+});
+
 test("Lieju maps an explicit form rejection to an article-level rejection", async () => {
   const loaded = loadBrowserAdapter("lieju", {
     postSubmitEvidence: {
@@ -464,6 +541,26 @@ test("Lieju maps an explicit form rejection to an article-level rejection", asyn
       status: "article_rejected",
       errorCode: "REMOTE_REJECTED",
     });
+  } finally {
+    loaded.restore();
+  }
+});
+
+test("Lieju maps an explicit browser rejection dialog to article_rejected", async () => {
+  const pageFixture = createLiejuPageFixture({
+    onSubmit: ({ emitDialog }) => emitDialog("标题不能为空"),
+  });
+  const loaded = loadBrowserAdapter("lieju", { pageFixture });
+  try {
+    const adapter = loaded.adapter.createPlatformAdapter({
+      postSubmitVerificationTimeoutMs: 0,
+    });
+    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
+    assert.deepEqual(await prepared.submitPreparedPublication(), {
+      status: "article_rejected",
+      errorCode: "REMOTE_REJECTED",
+    });
+    assert.ok(pageFixture.events.some((event) => event.type === "dialog-dismissed"));
   } finally {
     loaded.restore();
   }
@@ -488,6 +585,32 @@ test("Lieju keeps a generic success message uncertain without a remote identity"
       status: "uncertain",
       errorCode: "REMOTE_RESULT_UNKNOWN",
     });
+  } finally {
+    loaded.restore();
+  }
+});
+
+test("Lieju keeps a success-looking page uncertain and does not submit twice", async () => {
+  const pageFixture = createLiejuPageFixture({
+    bodyText: "发布成功",
+    formVisible: false,
+  });
+  const loaded = loadBrowserAdapter("lieju", { pageFixture });
+  try {
+    const adapter = loaded.adapter.createPlatformAdapter({
+      postSubmitVerificationTimeoutMs: 0,
+    });
+    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
+    const expected = {
+      status: "uncertain",
+      errorCode: "REMOTE_RESULT_UNKNOWN",
+    };
+    assert.deepEqual(await prepared.submitPreparedPublication(), expected);
+    assert.deepEqual(await prepared.submitPreparedPublication(), expected);
+    assert.equal(
+      pageFixture.events.filter((event) => event.type === "submit").length,
+      1,
+    );
   } finally {
     loaded.restore();
   }
