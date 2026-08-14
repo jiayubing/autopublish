@@ -13,6 +13,7 @@ const domainTypeSymbols = {
     "ContentCommandStaleResult",
     "ContentMaterial",
     "ContentClient",
+    "LiejuPublicationProfile",
     "ContentQuestion",
     "DoubaoBatchMode",
     "DoubaoBatchTask",
@@ -238,7 +239,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 149);
+  assert.equal(expectedOwners.size, 150);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -270,7 +271,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 149);
+  assert.equal(actualDeclarations.size, 150);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),
